@@ -92,6 +92,11 @@ ns.Prices = {
 }
 
 ns.Inventory = {
+    -- The containers the character carries, reagent bag last. Posting walks
+    -- whatever this returns rather than keeping a range of its own, which is
+    -- how a reagent bag came to be invisible to the sell list.
+    GetCarriedBags = function() return { 0, 1, 2, 3, 4, 5 } end,
+
     GetBagCount = function(_, itemID)
         local total = 0
         for _, slots in pairs(bags) do
@@ -254,6 +259,34 @@ Reset()
 Posting:SetChosenQuantity(LINEN, 3)
 check("the item chosen lists fewer", LineFor(LINEN).postQuantity, 3)
 check("another item is untouched", LineFor(SWORD).postQuantity, 1)
+
+print("")
+print("stock kept in a reagent bag")
+
+Reset()
+
+-- Everything in the reagent bag and nothing loose, which is how the bug was
+-- reported: the counts said none, and the sell list offered nothing to sell.
+bags = {
+    [5] = {
+        { itemID = LINEN, stackCount = 20 },
+        { itemID = LINEN, stackCount = 12 },
+    },
+}
+
+do
+    local line = LineFor(LINEN)
+    check("the reagent bag is offered for sale",  line ~= nil, true)
+    check("with everything in it",                line and line.maxQuantity, 32)
+end
+
+print("")
+print("bags and reagent bag together")
+
+Reset()
+bags[5] = { { itemID = LINEN, stackCount = 8 } }
+
+check("both are counted", LineFor(LINEN).maxQuantity, 40)
 
 print("")
 

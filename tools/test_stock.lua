@@ -9,6 +9,12 @@
 -- sitting in, and a crafted sword in your hand is not inventory either. The
 -- containers are the one source that cannot confuse the two, so the bag count
 -- is walked rather than asked for.
+--
+-- Which then broke the other way: the walk stopped at the fourth bag, so a
+-- reagent bag -- a sixth container, past the ordinary four -- was never opened,
+-- and reagents kept where the game most encourages you to keep them counted as
+-- reagents you do not own. The second half of this file is about which
+-- containers get walked, and about not walking into the bank by mistake.
 
 local ns = {}
 ns.COLORS = setmetatable({}, {__index = function() return "ffffffff" end})
@@ -24,6 +30,7 @@ ns.Print, ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, funct
 local bags = {}
 local bank = {}
 local equipped = {}
+local record
 
 -- Wound forward by hand: the walk is cached for a fraction of a second, and a
 -- test that never moves would read a stale count and prove nothing.
@@ -190,11 +197,110 @@ Inventory:OnBagChanged()
 check("and current once told",               Inventory:GetBagCount(CLOTH), 17)
 
 print("")
+print("a reagent bag is a container like any other")
+
+-- Retail's layout: the backpack, four bags, then the reagent bag at 5.
+Enum = { BagIndex = { ReagentBag = 5, BankBag_1 = 6 } }
+Inventory:InvalidateBagLayout()
+
+bags = {
+    [0] = { { itemID = CLOTH, stackCount = 20 } },
+    [5] = { { itemID = CLOTH, stackCount = 40 } },
+}
+bank, equipped = {}, {}
+Tick()
+
+check("the reagent bag is walked",           Inventory:GetReagentBag(), 5)
+check("and its contents counted",            Inventory:GetBagCount(CLOTH), 60)
+check("which is what the client says too",   C_Item.GetItemCount(CLOTH), 60)
+check("so nothing looks unaccounted for",    Inventory:GetOwnedCount(CLOTH), 60)
+
+-- The bug as reported: everything is in the reagent bag and nothing anywhere
+-- else, so the old walk found a count of zero and the recipe looked unmakeable.
+bags = { [5] = { { itemID = CLOTH, stackCount = 40 } } }
+Tick()
+
+check("a reagent bag on its own still counts", Inventory:GetBagCount(CLOTH), 40)
+
+print("")
+print("and it reaches the snapshot alts are read from")
+
+ns.Recipes = { GetCharacterRecord = function() return record end }
+record = {}
+Inventory:Snapshot()
+
+check("the snapshot sees it as well",        record.inventory[CLOTH], 40)
+
+print("")
+print("a client that only counts its bag slots")
+
+-- No enum to read, but the client still says it equips more bag slots than the
+-- four ordinary ones, and the extra one is the reagent bag.
+Enum = nil
+NUM_TOTAL_EQUIPPED_BAG_SLOTS = 5
+Inventory:InvalidateBagLayout()
+Tick()
+
+check("found without an enum",               Inventory:GetReagentBag(), 5)
+check("and counted",                         Inventory:GetBagCount(CLOTH), 40)
+
+print("")
+print("a client with no reagent bag at all")
+
+-- Nothing says the slot exists, so it is not walked. This matters more than it
+-- looks: where there is no reagent bag, container 5 is the first bank bag, and
+-- counting the bank as bags would say you can craft things you cannot reach.
+Enum = nil
+NUM_TOTAL_EQUIPPED_BAG_SLOTS = 4
+Inventory:InvalidateBagLayout()
+Tick()
+
+check("no reagent bag is claimed",           Inventory:GetReagentBag(), nil)
+check("and container 5 is left alone",       Inventory:GetBagCount(CLOTH), 0)
+
+print("")
+print("and an index that would reach the bank is refused")
+
+Enum = { BagIndex = { ReagentBag = 6, BankBag_1 = 6 } }
+NUM_TOTAL_EQUIPPED_BAG_SLOTS = nil
+Inventory:InvalidateBagLayout()
+
+bags = { [6] = { { itemID = CLOTH, stackCount = 40 } } }
+Tick()
+
+check("the bank is not a bag",               Inventory:GetReagentBag(), nil)
+check("so its contents are not in hand",     Inventory:GetBagCount(CLOTH), 0)
+
+print("")
+print("each container is reportable on its own")
+
+Enum = { BagIndex = { ReagentBag = 5, BankBag_1 = 6 } }
+Inventory:InvalidateBagLayout()
+
+bags = {
+    [0] = { { itemID = CLOTH, stackCount = 20 }, { itemID = LINEN_BAG, stackCount = 1 } },
+    [5] = { { itemID = CLOTH, stackCount = 40 } },
+}
+Tick()
+
+local walked = Inventory:GetCarriedBags()
+check("six containers carried",              #walked, 6)
+check("the last of them is the reagent bag", walked[#walked], 5)
+
+local inBackpack, backpackSlots = Inventory:CountInBag(0, CLOTH)
+local inReagent = Inventory:CountInBag(5, CLOTH)
+
+check("counted in the backpack",             inBackpack, 20)
+check("with its size reported",              backpackSlots, 2)
+check("and counted in the reagent bag",      inReagent, 40)
+check("an empty container reports zero",     Inventory:CountInBag(1, CLOTH), 0)
+
+print("")
 
 if failures > 0 then
     print(("FAIL -- %d check(s) failed"):format(failures))
     os.exit(1)
 end
 
-print("PASS -- what you are wearing is not what you have to sell")
+print("PASS -- every container you carry is counted, and only those")
 print("")

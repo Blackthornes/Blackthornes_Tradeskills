@@ -79,7 +79,10 @@ local commodityCache = {}
 local function LocateInBags(itemID)
     if type(_G.ItemLocation) ~= "table" then return nil end
 
-    for bag = 0, 4 do
+    -- Every container being carried, not the four ordinary bags: an item held
+    -- only in a reagent bag would otherwise have no commodity status, and
+    -- commodity status is what decides how the thing is priced and listed.
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
         local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
 
         if slotsOk and slots then
