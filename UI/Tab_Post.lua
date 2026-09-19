@@ -193,9 +193,17 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.unitPrice, { noColor = true }),
             0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
 
-        GameTooltip:AddLine(line.priceBasis == "undercut"
-            and "Undercutting the cheapest listing that is not yours"
-            or "Nothing listed to undercut -- using market value", 0.5, 0.5, 0.5)
+        local why = "Nothing listed to undercut -- using market value"
+
+        if line.priceBasis == "undercut" then
+            why = "Undercutting the cheapest listing that is not yours"
+        elseif line.priceBasis == "match" then
+            -- Worth spelling out, because "match" looks like the addon has
+            -- stopped undercutting when in fact no smaller step exists.
+            why = "Matching the cheapest listing -- an undercut here costs a whole silver"
+        end
+
+        GameTooltip:AddLine(why, 0.5, 0.5, 0.5)
     end
 
     if line.unitCost then

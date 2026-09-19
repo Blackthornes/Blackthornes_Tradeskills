@@ -403,9 +403,14 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
         Util.FormatMoney(record.market), Util.FormatMoney(record.min), record.quantity or 0))
 
     if record.rivalMin then
-        ns.PrintRaw(("  cheapest rival %s   you would post at %s"):format(
+        -- Asked of the chooser rather than worked out again here, so this
+        -- cannot drift from the price the Sell tab would actually use.
+        local postPrice, basis = ns.Profit:ChoosePostPrice(itemID)
+
+        ns.PrintRaw(("  cheapest rival %s   you would post at %s (%s)"):format(
             Util.FormatMoney(record.rivalMin),
-            Util.FormatMoney(math.max(1, record.rivalMin - (ns.Config:Get("undercutCopper") or 1)))))
+            Util.FormatMoney(postPrice or record.rivalMin),
+            basis or "no price"))
     elseif ns.Prices:HoldsLowest(itemID) then
         ns.PrintRaw(("  |c%syou hold the lowest listing|r"):format(ns.COLORS.profit))
     end

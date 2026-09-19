@@ -13,6 +13,86 @@ local Profit = ns.NewModule("Profit")
 local Util = ns.Util
 
 --------------------------------------------------------------------------------
+-- What to list at
+--------------------------------------------------------------------------------
+
+--- Net profit for one craft, if a unit sold at this price.
+--
+-- The same arithmetic Analyse does, split out so the price can be chosen by
+-- asking what each candidate would actually earn.
+local function ProfitAtPrice(recipe, cost, unitPrice)
+    if not recipe or not cost or not cost.priceable or not unitPrice then return nil end
+
+    local yield = cost.yield or 1
+    local revenue = unitPrice * yield
+    local cut = revenue * (ns.Config:Get("auctionCut") or 0.05)
+
+    local unitDeposit = ns.Posting and ns.Posting:GetCachedUnitDeposit(recipe.outputItemID)
+    local relists = ns.Config:Get("expectedRelists") or 1
+    local deposit = unitDeposit and (unitDeposit * yield * math.max(1, relists)) or 0
+
+    return (revenue - cut) - (cost.total or 0) - deposit
+end
+
+--- The unit price to list an item at, and why.
+--
+-- Commodities take any price down to the copper, so undercutting works the way
+-- it always has. Item auctions only take whole gold and silver, which makes
+-- the smallest undercut available a whole silver rather than a copper. On a
+-- cheap item that is a large fraction of the price to give away in order to
+-- beat sellers you could simply have matched.
+--
+-- So an item auction matches the cheapest rival at the silver it is listed at,
+-- and only drops the extra silver when the sale would still clear the minimum
+-- profit setting. Anything the profit cannot be worked out for matches, since
+-- the unknown case is the one where giving gold away is least defensible.
+--
+-- @return price, basis  -- basis is "undercut", "match" or "market"; nil price
+--                          when there is nothing to go on
+function Profit:ChoosePostPrice(itemID)
+    if not itemID then return nil, nil end
+
+    -- "rival" excludes your own auctions, so listing a second one does not
+    -- undercut the first.
+    local rival = ns.Prices:GetValue(itemID, "rival")
+    local isCommodity = ns.Scanner:IsCommodity(itemID)
+
+    if not rival then
+        local market = ns.Prices:GetValue(itemID, "market")
+        if not market then return nil, nil end
+
+        market = math.max(1, math.floor(market))
+        if isCommodity then return market, "market" end
+
+        return Util.RoundToSilver(market), "market"
+    end
+
+    local undercut = ns.Config:Get("undercutCopper") or 1
+
+    if isCommodity then
+        return math.max(1, math.floor(rival - undercut)), "undercut"
+    end
+
+    local matchPrice = Util.RoundToSilver(rival)
+    local underPrice = Util.RoundToSilver(math.max(1, math.floor(rival - undercut)))
+
+    -- A rival already sitting at the lowest price the server allows leaves
+    -- nothing below it, so matching is the only move.
+    if underPrice >= matchPrice then return matchPrice, "match" end
+
+    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    local recipe = recipeID and ns.Recipes:GetAny(recipeID)
+    local cost = recipeID and ns.Cost:GetCraftCost(recipeID)
+    local profit = ProfitAtPrice(recipe, cost, underPrice)
+
+    if profit and profit >= (ns.Config:Get("minProfit") or 0) then
+        return underPrice, "undercut"
+    end
+
+    return matchPrice, "match"
+end
+
+--------------------------------------------------------------------------------
 -- Single recipe
 --------------------------------------------------------------------------------
 
@@ -74,7 +154,6 @@ function Profit:Analyse(recipeID, characterKey)
     -- nobody to undercut, so we hold at market rather than walking our own
     -- price down a copper at a time.
     local competitor = ns.Prices:GetValue(recipe.outputItemID, "rival")
-    local undercut = ns.Config:Get("undercutCopper") or 1
 
     -- Shown for context so the full picture is visible: the overall cheapest
     -- listing and your own, alongside the rival price actually being undercut.
@@ -82,14 +161,19 @@ function Profit:Analyse(recipeID, characterKey)
     analysis.overallMin = priceRecord and priceRecord.min or nil
     analysis.ownListing = priceRecord and priceRecord.ownMin or nil
 
-    local unitRevenue
+    -- Priced through the same chooser the Sell tab posts at, so the profit
+    -- shown here is the profit of the listing that would actually be made.
+    -- On an item auction that may be a match rather than an undercut, because
+    -- the server will not take a price with copper in it.
+    local unitRevenue, basis = self:ChoosePostPrice(recipe.outputItemID)
+
+    analysis.priceBasis = basis
+
     if competitor then
-        -- Never post below one copper, and never undercut past free.
-        unitRevenue = math.max(1, competitor - undercut)
         analysis.competitorPrice = competitor
         analysis.undercut = true
+        analysis.matchedRival = basis == "match"
     else
-        unitRevenue = ns.Prices:GetValue(recipe.outputItemID, "market")
         analysis.undercut = false
         analysis.youHoldLowest = ns.Prices:HoldsLowest(recipe.outputItemID)
     end

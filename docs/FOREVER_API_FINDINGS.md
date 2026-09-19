@@ -100,6 +100,12 @@ were removed, then restored once the error reproduced with no addons loaded.
 The realm build (`1.60.1.69800`) is older than the client (`69913`), which
 may be related.
 
+**Partly explained since.** At least one of these errors was a price with
+copper in it on an item auction, which fails silently in exactly this way --
+see the whole-silver section below. Whether the earlier addon-disabled
+reproductions were the same cause is not known, because the prices used were
+not written down.
+
 ## The throttled channel is shared, and so is the search state
 
 Two things about `C_AuctionHouse` that the symptoms do not make obvious.
@@ -176,6 +182,55 @@ sequence may conclude that a listing failed: saying "it did not go up" when it
 did is a worse error than the one being fixed. `/bts auctions` now reports how
 many times the client has actually announced a change, so this is counted
 rather than inferred.
+
+## Item auctions take whole silver only; commodities take copper
+
+**This is Blizzard behaviour, not a Forever quirk**, and it is documented.
+Warcraft Wiki on `C_AuctionHouse.PostItem`'s `bid`/`buyout`:
+
+> Amount in copper, only accepts gold and silver and silently fails for
+> non-zero copper counts.
+
+Measured on this realm with a Linen Bag, one price per attempt:
+
+| Price | Result |
+| --- | --- |
+| 2s 50c | refused |
+| 2s 99c | refused |
+| 3s | listed |
+| 4s | listed |
+
+Every listing in the browse window ended in `0` copper, and 252 rivals sat at
+exactly 3s with nobody a copper under -- which is what a whole-silver step
+looks like from the outside.
+
+**Commodities are not affected on this client.** Linen Cloth has listed at 29c
+and 32c. The wiki carries the same sentence on `PostCommodity`'s `unitPrice`,
+so either the note is wrong there or this build differs; the observation is
+what the addon goes on. `PostCommodity` keeps copper precision, `PostItem`
+does not.
+
+**"Silently fails" is the part that costs time.** The call returns, nothing is
+listed, and the client shows an internal auction error -- the same symptom as a
+realm fault, an addon fault, or a taint problem. See the section above, which
+was written before this was understood.
+
+**What the addon does with it.** `Util.RoundToSilver` is the rounding;
+`Profit:ChoosePostPrice` is the single place the listing price is decided, and
+the Sell tab, the Profit tab and `/bts price` all ask it rather than working
+the number out again.
+
+Because a copper undercut does not exist on an item auction, the smallest step
+down is a whole silver, which against a 3s market is a third of the price.
+So an item auction **matches** the cheapest rival at its silver, and only drops
+the extra silver when the sale would still clear the `minProfit` setting. An
+item whose cost is unknown matches, since that is where giving gold away is
+least defensible. `tools/test_silverstep.lua` covers it.
+
+**Classic is different** and worth not confusing with this: Classic Era and the
+Anniversary realms use the older `StartAuction`, which does take copper. The
+1-copper undercut people remember from Classic is real there and is not
+available here.
 
 ## Still unverified
 
