@@ -81,7 +81,7 @@ GetInboxInvoiceInfo = function(index)
 
     local i = mail.invoice
     return i.invoiceType or "seller", i.itemName, i.buyer or "Someone",
-        i.bid, i.buyout, i.deposit, i.cut
+        i.bid, i.buyout, i.deposit, i.cut, i.moneyDelay
 end
 
 -- The client's own subject formats, which is what the classifier matches
@@ -591,6 +591,109 @@ check("and all three are still there",          #ranked, 3)
 
 local raw = Profit:GetRanked({ ignoreStock = true })
 check("the raw order is still available",       raw[1].name, "Overstocked")
+
+--------------------------------------------------------------------------------
+print("")
+print("a sale whose gold is still being held")
+--------------------------------------------------------------------------------
+
+-- The bug this is here for, seen in game on 2026-09-19: two Linen Reagent Bags
+-- sold and the ledger read "sold Linen Reagent Bag for 0c" against one of them.
+-- The auction house holds the gold for a while after a sale, and the mail's own
+-- money field reads zero for as long as it does -- but the invoice already
+-- knows what the thing went for.
+Reset()
+
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 0,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag",
+                  bid = 300, deposit = 40, cut = 15, moneyDelay = 3600 } },
+}
+Mail:Read()
+
+check("the sale is recorded, not skipped",      Mail:GetSummary().sold, 1)
+check("priced from the invoice, not as nothing", Mail:GetSummary().net, 325)
+check("and flagged as not yet in the pocket",   Mail:GetSummary().estimated, 1)
+check("nothing is waiting once it is priced",   Mail.awaitingAmount, 0)
+
+--------------------------------------------------------------------------------
+print("")
+print("and the payout landing is not a second sale")
+--------------------------------------------------------------------------------
+
+-- This is what made the old code dangerous rather than merely wrong. Money used
+-- to be part of a mail's fingerprint, so the same sale looked like a different
+-- mail before and after the gold was released, and a second visit to the
+-- mailbox wrote it down again. The ledger inflated every time you looked at it.
+inbox[1].money = 325
+Mail:Read()
+
+check("still one sale",                         Mail:GetSummary().sold, 1)
+check("and still one lot of gold",              Mail:GetSummary().net, 325)
+
+Mail:Read()
+Mail:Read()
+check("however many times you look",            Mail:GetSummary().sold, 1)
+
+--------------------------------------------------------------------------------
+print("")
+print("two sales of one item, paid out at different times")
+--------------------------------------------------------------------------------
+
+-- Exactly Trent's case: two of the same bag sold, one paid, one still held.
+-- These share a fingerprint deliberately, so each has to be described from its
+-- own mail. Describing both from whichever was walked first is how one of them
+-- would end up wearing the other's figure.
+Reset()
+
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 800,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag", bid = 800 } },
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 0,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag",
+                  bid = 300, deposit = 40, cut = 15, moneyDelay = 3600 } },
+}
+Mail:Read()
+
+check("both sales are there",                   Mail:GetSummary().sold, 2)
+check("each carries its own figure",            Mail:GetSummary().net, 1125)
+check("one of them is still being paid",        Mail:GetSummary().estimated, 1)
+
+local amounts = {}
+for _, entry in ipairs(Mail:GetRecent(10)) do amounts[entry.net] = true end
+check("the paid one kept its amount",           amounts[800], true)
+check("and the held one kept its own",          amounts[325], true)
+
+--------------------------------------------------------------------------------
+print("")
+print("a sale nothing can price yet waits rather than reading as free")
+--------------------------------------------------------------------------------
+
+Reset()
+
+-- No money and no invoice. A zero here is not a fact about the sale, it is the
+-- absence of one, and "sold for 0c" in the ledger is worse than a sale that
+-- shows up a minute later.
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag", money = 0 },
+}
+Mail:Read()
+
+check("nothing invented",                       Mail:GetSummary().sold, 0)
+check("and it says it is waiting",              Mail.awaitingAmount, 1)
+
+inbox[1].money = 285
+Mail:Read()
+
+check("recorded once it can be priced",         Mail:GetSummary().sold, 1)
+check("at the real amount",                     Mail:GetSummary().net, 285)
+check("and nothing waiting any more",           Mail.awaitingAmount, 0)
+
+Mail:Read()
+check("and not again on the next look",         Mail:GetSummary().sold, 1)
 
 --------------------------------------------------------------------------------
 
