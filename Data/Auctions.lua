@@ -145,6 +145,9 @@ function Auctions:Refresh(opts)
 
     Util.WhenAuctionReady(function()
         pcall(C_AuctionHouse.QueryOwnedAuctions, {})
+
+        -- The reply is never announced on this client, so go and read it.
+        Auctions:ScheduleConfirm()
     end, nil, {
         name = "owned auctions",
         key = "owned-auctions",
@@ -158,7 +161,49 @@ function Auctions:Refresh(opts)
     return true
 end
 
-function Auctions:OnOwnedAuctionsUpdated()
+-- How long after a query goes out we look for the answer ourselves, in seconds.
+--
+-- Forever never fires OWNED_AUCTIONS_UPDATED. Registering it raises no error and
+-- no event ever arrives, so a verification that waits to be told waits forever,
+-- and a listing that went up perfectly well was reported as "could not tell
+-- whether that listing went up" on every single post.
+--
+-- The reads themselves work: `/bts auctions` returns the right count and item
+-- straight after a query. So the answer is read directly rather than waited for,
+-- several times, because the server's reply lands some unpredictable moment
+-- after the query rather than at a knowable one.
+local CONFIRM_DELAYS = { 0.6, 1.4, 2.4, 3.6, 4.8 }
+
+--- Do two itemID -> quantity maps hold the same thing?
+--
+-- Reading is cheap but redrawing the UI is not, and these reads now happen on a
+-- timer rather than only when something changed.
+local function SameCounts(a, b)
+    if not a then return false end
+
+    for itemID, quantity in pairs(a) do
+        if b[itemID] ~= quantity then return false end
+    end
+
+    for itemID in pairs(b) do
+        if a[itemID] == nil then return false end
+    end
+
+    return true
+end
+
+--- Read what the client says we have listed right now, and store it.
+--
+-- Local reads only. Nothing here is throttled, so it is safe to call repeatedly
+-- while waiting for a reply to land.
+--
+-- @param opts.final  settle a pending listing with whatever is read, even if the
+--   item is not there. A read that has not seen the server's reply yet must not
+--   be allowed to say a listing failed, so only the last read of a sequence --
+--   or the client's own announcement, where there is one -- may do that.
+function Auctions:ReadOwned(opts)
+    opts = opts or {}
+
     if not Util.HasFunction("C_AuctionHouse.GetNumOwnedAuctions") then return end
 
     local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
@@ -183,23 +228,56 @@ function Auctions:OnOwnedAuctionsUpdated()
     end
 
     local record = self:GetTable()
+    local changed = record.auctionCount ~= count or not SameCounts(record.items, items)
+
     record.items = items
     record.updatedAt = time()
     record.auctionCount = count
 
-    ns.Debug(("read %d owned auction(s) covering %d item(s)"):format(
-        count, Util.Count(items)))
-
-    -- A listing waiting to be verified is resolved by this answer, which is
-    -- authoritative in a way that event timing is not.
-    local pending = ns.Posting and ns.Posting.pending
-    if pending and pending.verifying then
-        ns.Posting:ResolvePending(items[pending.itemID] or 0)
+    if changed then
+        ns.Debug(("read %d owned auction(s) covering %d item(s)"):format(
+            count, Util.Count(items)))
     end
 
-    if ns.UI then
+    -- A listing waiting to be verified is settled by what we actually hold,
+    -- which is authoritative in a way that event timing is not.
+    local pending = ns.Posting and ns.Posting.pending
+    if pending and pending.verifying then
+        local posted = items[pending.itemID] or 0
+
+        if posted > (pending.postedBefore or 0) or opts.final then
+            ns.Posting:ResolvePending(posted)
+        end
+    end
+
+    if changed and ns.UI then
         ns.UI:RefreshActiveTab()
         ns.UI:UpdateHeader()
+    end
+end
+
+--- The client announcing that owned auctions changed, where it does so.
+function Auctions:OnOwnedAuctionsUpdated()
+    -- The server has answered, so this reading is as good as it is going to get.
+    self:ReadOwned({ final = true })
+end
+
+--- Go and look for the reply, for the client that never announces it.
+--
+-- Each query supersedes the last, so a sequence still running when a newer query
+-- goes out stops rather than resolving a listing against a stale reading.
+function Auctions:ScheduleConfirm()
+    local token = (self.confirmToken or 0) + 1
+    self.confirmToken = token
+
+    for i = 1, #CONFIRM_DELAYS do
+        local isLast = (i == #CONFIRM_DELAYS)
+
+        C_Timer.After(CONFIRM_DELAYS[i], function()
+            if Auctions.confirmToken ~= token then return end
+
+            Auctions:ReadOwned({ final = isLast })
+        end)
     end
 end
 
@@ -208,7 +286,11 @@ end
 --------------------------------------------------------------------------------
 
 function Auctions:OnEnable()
-    ns.RegisterEvent(self, "OWNED_AUCTIONS_UPDATED", self.OnOwnedAuctionsUpdated)
+    -- Forever does not have this event. Registering it fails quietly, so the
+    -- answer is recorded rather than assumed: `/bts auctions` reports it, and
+    -- verification does not depend on it either way.
+    self.hasOwnedEvent = ns.RegisterEvent(
+        self, "OWNED_AUCTIONS_UPDATED", self.OnOwnedAuctionsUpdated) and true or false
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function()
         -- Slight delay: the auction house is not ready to answer queries the
@@ -247,6 +329,8 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
     ns.PrintRaw(("  QueryOwnedAuctions:   %s"):format(hasQuery and "yes" or "no"))
     ns.PrintRaw(("  GetNumOwnedAuctions:  %s"):format(hasCount and "yes" or "no"))
     ns.PrintRaw(("  GetOwnedAuctionInfo:  %s"):format(hasInfo and "yes" or "no"))
+    ns.PrintRaw(("  announces changes:    %s"):format(
+        Auctions.hasOwnedEvent and "yes" or "no (we read the answer ourselves)"))
 
     if hasCount then
         local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)

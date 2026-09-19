@@ -131,6 +131,39 @@ Blizzard's frame.** Whichever query was sent last owns it. Two consequences:
   search, and vice versa, so a pending search must always be given a timeout.
   There is no event for a request that was dropped.
 
+## Owned auctions are readable, but never announced
+
+**`OWNED_AUCTIONS_UPDATED` does not exist on this client and never fires.**
+Registering it raises no error -- `ns.RegisterEvent` wraps every registration in
+a `pcall` and records the unsupported ones -- so nothing looked wrong. The addon
+waited for an announcement that was never coming, gave up after five seconds and
+reported `could not tell whether that listing went up` after every post, while
+the auction sat in the player's Auctions tab.
+
+The reads themselves are fine. Confirmed in game on 2026-09-19, one Peacebloom
+listing up:
+
+```
+QueryOwnedAuctions:   yes
+GetNumOwnedAuctions:  yes
+GetOwnedAuctionInfo:  yes
+count right now:      1
+  1: item=2447 qty=3 status=0
+re-querying...
+after querying: 1 auction(s)
+```
+
+So verification reads the answer back itself, a few times over about five
+seconds after the query goes out, rather than waiting to be told. `status=0` is
+`Enum.AuctionStatus.Active`, which is what `Data/Auctions.lua` already assumes.
+
+The timing is the part that needs care. The server's reply lands at no knowable
+moment, so a read taken too early sees the old count. Only the last read of a
+sequence may conclude that a listing failed: saying "it did not go up" when it
+did is a worse error than the one being fixed. `/bts auctions` now reports
+whether the client announces changes at all, so this is visible rather than
+inferred.
+
 ## Still unverified
 
 **Whether `GetReplicateItemInfo`'s `buyoutPrice` is per-unit or per-stack.**
