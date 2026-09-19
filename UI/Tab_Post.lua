@@ -21,6 +21,7 @@ local ROW_HEIGHT = 26
 
 local COLUMNS = {
     { key = "action",  label = "",        width = 56 },
+    { key = "qty",     label = "LIST",    width = 44 },
     { key = "total",   label = "TOTAL",   width = 78 },
     { key = "deposit", label = "DEPOSIT", width = 62 },
     { key = "copper",  label = "C",       width = 34 },
@@ -36,6 +37,18 @@ local widgets = {}
 -- Rows
 --------------------------------------------------------------------------------
 
+-- Declared early because typing in a row's quantity box redraws that one row.
+-- Rebuilding the whole list instead would scroll it back to the top, which
+-- loses your place every time you change a number.
+local UpdateRow
+
+--- Is the player part-way through typing a number into this box?
+--
+-- Guarded rather than called outright: this client has gaps in the frame API,
+-- and a missing HasFocus would turn a redraw into an error.
+local function BeingTyped(box)
+    return box.editBox.HasFocus and box.editBox:HasFocus()
+end
 local function CreateRow(row)
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 10, 0)
@@ -46,7 +59,21 @@ local function CreateRow(row)
     local reserved = 18
 
     for _, column in ipairs(COLUMNS) do
-        if column.key ~= "action" then
+        if column.key == "qty" then
+            row.quantity = Widgets.CreateNumberBox(row, {
+                width = column.width,
+                height = 18,
+                background = "panel",
+                min = 1,
+                onChange = function(value)
+                    if not row.data then return end
+
+                    ns.Posting:ApplyQuantity(row.data, value)
+                    UpdateRow(row, row.data)
+                end,
+            })
+            row.quantity:SetPoint("RIGHT", offset, 0)
+        elseif column.key ~= "action" then
             local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
             cell:SetPoint("RIGHT", offset, 0)
             cell:SetWidth(column.width)
@@ -76,10 +103,17 @@ local function CreateRow(row)
     row.post:SetPoint("RIGHT", -8, 0)
 end
 
-local function UpdateRow(row, line)
+function UpdateRow(row, line)
     row.name:SetText(line.label)
 
     local cells = row.cells
+
+    -- Not while it is being typed into: overwriting someone mid-number is how
+    -- a field ends up refusing to accept what they meant.
+    if not BeingTyped(row.quantity) then
+        row.quantity:SetLimits(1, math.max(1, line.maxQuantity or line.count or 1))
+        row.quantity:SetValue(line.postQuantity or line.count or 1, true)
+    end
 
     cells.count:SetText(tostring(line.count))
     cells.count:SetTextColor(Theme.Unpack("text"))
@@ -129,11 +163,13 @@ local function UpdateRow(row, line)
     elseif not line.unitPrice then
         row.post.tooltipText = "No price data for this item -- scan first"
     elseif line.atALoss then
-        row.post.tooltipText =
-            "This would sell below its material cost. Blocked unless you allow it in Settings."
+        row.post.tooltipText = (line.lossReason == "vendor"
+            and "This would sell for less than a vendor pays. Blocked unless you allow it in Settings."
+            or "This would sell below its material cost. Blocked unless you allow it in Settings.")
     else
-        row.post.tooltipText = ("List %d at %s each"):format(
-            line.postQuantity, Util.FormatMoney(line.unitPrice, { noColor = true }))
+        row.post.tooltipText = ("List %d of %d at %s each"):format(
+            line.postQuantity, line.maxQuantity or line.count,
+            Util.FormatMoney(line.unitPrice, { noColor = true }))
     end
 end
 
@@ -142,6 +178,15 @@ local function ShowRowTooltip(row, line)
     GameTooltip:SetText(line.label, 1, 1, 1)
 
     GameTooltip:AddDoubleLine("In bags", tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
+
+    GameTooltip:AddDoubleLine("Listing", ("%d of %d"):format(
+        line.postQuantity, line.maxQuantity or line.count), 0.7, 0.7, 0.7, 1, 1, 1)
+
+    if line.unitPrice and line.postTotal then
+        GameTooltip:AddDoubleLine("That comes to",
+            Util.FormatMoney(line.postTotal, { noColor = true }),
+            0.7, 0.7, 0.7, 1, 1, 1)
+    end
 
     if line.unitPrice then
         GameTooltip:AddDoubleLine("List each at",
@@ -158,14 +203,23 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.unitCost, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
+    if line.vendorPrice then
+        GameTooltip:AddDoubleLine("Vendor pays, each",
+            Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+
     if line.atALoss then
-        GameTooltip:AddLine("Would sell below material cost", 0.9, 0.38, 0.31)
+        GameTooltip:AddLine(line.lossReason == "vendor"
+            and "Would sell for less than a vendor pays"
+            or "Would sell below material cost", 0.9, 0.38, 0.31)
     end
 
     -- Commodities sell from across the bags at once; gear goes up one at a time.
     GameTooltip:AddLine(line.isCommodity
         and ("Commodity -- all %d can go up together"):format(line.count)
         or "Item auction -- one listing at a time", 0.5, 0.5, 0.5)
+
+    GameTooltip:AddLine("Type into the LIST box to sell fewer than that.", 0.5, 0.5, 0.5)
 
     GameTooltip:Show()
 end
@@ -239,7 +293,7 @@ local function Build(container)
     note:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 2, -6)
     note:SetPoint("RIGHT", toolbar, "RIGHT", 0, 0)
     note:SetWordWrap(true)
-    note:SetText("List with the buttons, or type the G / S / C price into Blizzard's own Sell tab.")
+    note:SetText("Set LIST to sell part of a stack. Or type the G / S / C price into Blizzard's own Sell tab.")
 
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)

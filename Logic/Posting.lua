@@ -26,6 +26,10 @@ local BACKPACK, LAST_BAG = 0, 4
 -- immediately reads the state from before the listing.
 local POST_VERIFY_DELAY = 3
 
+-- How long a listing may stay unverified before we admit we do not know. Longer
+-- than the request's own wait in the queue plus the reads that follow it.
+local VERIFY_GIVE_UP = 15
+
 -- Confirmed against Blizzard's own Sell tab on Forever, which offers 2, 8 and
 -- 24 hours: this is a Classic auction house, not retail's 12/24/48. The choice
 -- only affects the deposit estimate, since the listing is made by hand.
@@ -277,6 +281,79 @@ function Posting:GetDeposit(itemID, quantity)
 end
 
 --------------------------------------------------------------------------------
+-- How many to list
+--------------------------------------------------------------------------------
+
+-- How many of each item the player has chosen to list, when they want fewer
+-- than everything they are holding.
+--
+-- Session-only, and deliberately so. Bags change underneath a remembered
+-- number -- a stack sold, split, or topped up by a craft -- and a saved "12"
+-- applied to a later stack of 3 would list the wrong amount without anyone
+-- asking. Every read is clamped against what is actually postable right now,
+-- and an item never touched lists everything, which is what the button did
+-- before this existed.
+Posting.chosenQuantity = {}
+
+--- How many of an item to list, given what could go up.
+-- @param maxQuantity the most that can be listed in one go
+function Posting:GetChosenQuantity(itemID, maxQuantity)
+    maxQuantity = maxQuantity or 0
+    if maxQuantity < 1 then return 0 end
+
+    local chosen = itemID and self.chosenQuantity[itemID]
+    if not chosen then return maxQuantity end
+
+    return math.max(1, math.min(chosen, maxQuantity))
+end
+
+--- Remember how many of an item to list.
+--
+-- Stored unclamped: the player may set 20 while holding 5, craft more, and
+-- expect the 20 back. Clamping happens on the way out instead.
+function Posting:SetChosenQuantity(itemID, quantity)
+    if not itemID then return end
+
+    quantity = tonumber(quantity)
+    if not quantity then return end
+
+    self.chosenQuantity[itemID] = math.max(1, math.floor(quantity))
+end
+
+--- Forget a choice, so the item goes back to listing everything.
+function Posting:ClearChosenQuantity(itemID)
+    if itemID then self.chosenQuantity[itemID] = nil end
+end
+
+--- Change how many a line will list, and everything that follows from it.
+--
+-- The line is updated in place rather than rebuilt, because rebuilding the
+-- list scrolls it back to the top -- losing your place every time you type a
+-- number is worse than the problem being solved.
+-- @return the quantity actually applied, after clamping
+function Posting:ApplyQuantity(line, quantity)
+    if not line then return end
+
+    local maxQuantity = line.maxQuantity or line.count or 1
+
+    self:SetChosenQuantity(line.itemID, quantity)
+    quantity = self:GetChosenQuantity(line.itemID, maxQuantity)
+
+    -- Asking for everything is not a choice to remember: keeping it would pin
+    -- the item at today's stack size, so crafting ten more would still list
+    -- only the old number.
+    if quantity >= maxQuantity then
+        self:ClearChosenQuantity(line.itemID)
+    end
+
+    line.postQuantity = quantity
+    line.postTotal = line.unitPrice and (line.unitPrice * quantity) or nil
+    line.deposit = self:GetDeposit(line.itemID, quantity)
+
+    return quantity
+end
+
+--------------------------------------------------------------------------------
 -- What to list
 --------------------------------------------------------------------------------
 
@@ -289,6 +366,35 @@ end
 -- @param opts { includeAll } -- by default only what your recipes make.
 --   includeAll covers everything sellable with a known price, which is what
 --   the Post All button wants: bag clearing, not just crafted stock.
+--- The lowest a listing may go before it costs the player something, and why.
+--
+-- Two different floors, and the higher one wins.
+--
+-- Material cost is the obvious one, but it only exists for things made from a
+-- recipe this account knows. Everything else in a player's bags -- gathered
+-- mats, drops, vendor trash -- has no cost to compare against, and that was the
+-- bug: `price < unitCost` cannot be true when unitCost is nil, so those lines
+-- were never flagged however little they were about to sell for.
+--
+-- What a vendor pays is the floor that always exists. Listing below it is worse
+-- than walking to a vendor, before the auction house takes its cut or keeps the
+-- deposit on a listing nobody wants at that price either.
+--
+-- @return floor   copper, or nil if neither is known
+-- @return reason  "cost" or "vendor", naming which floor applies
+-- @return vendor  the vendor price itself, for display
+function Posting:GetLossFloor(itemID, unitCost)
+    local vendorPrice = Util.GetVendorSellPrice(itemID)
+
+    local floor, reason = unitCost, unitCost and "cost" or nil
+
+    if vendorPrice and (not floor or vendorPrice > floor) then
+        floor, reason = vendorPrice, "vendor"
+    end
+
+    return floor, reason, vendorPrice
+end
+
 function Posting:GetPostable(opts)
     opts = opts or {}
 
@@ -336,15 +442,21 @@ function Posting:GetPostable(opts)
                         and ns.Profit:Analyse(outputs[itemID])
                     local unitCost = analysis and analysis.costPerUnit
 
+                    local lossFloor, lossReason, vendorPrice =
+                        self:GetLossFloor(itemID, unitCost)
+
                     local isCommodity = ns.Scanner:IsCommodity(itemID)
 
                     -- Commodities sell from across the bags at once; item
                     -- auctions come from a single slot, so gear goes up one
-                    -- listing at a time.
+                    -- listing at a time. That is the ceiling, not the amount:
+                    -- the player may have asked for fewer.
                     local _, _, slotStack = FindInBags(itemID)
-                    local postQuantity = isCommodity
+                    local maxQuantity = isCommodity
                         and count
                         or math.min(count, slotStack or 1)
+
+                    local postQuantity = self:GetChosenQuantity(itemID, maxQuantity)
 
                     -- Without a price there is nothing to list it at, and a
                     -- guess on someone's bag contents is worse than a skip.
@@ -356,9 +468,14 @@ function Posting:GetPostable(opts)
                             unitPrice = price,
                             priceBasis = basis,
                             unitCost = unitCost,
-                            atALoss = price ~= nil and unitCost ~= nil
-                                and price < unitCost,
+                            vendorPrice = vendorPrice,
+                            lossFloor = lossFloor,
+                            lossReason = lossReason,
+                            atALoss = price ~= nil and lossFloor ~= nil
+                                and price < lossFloor,
                             postQuantity = postQuantity,
+                            maxQuantity = maxQuantity,
+                            quantityChosen = postQuantity ~= maxQuantity,
                             total = price and (price * count) or nil,
                             postTotal = price and (price * postQuantity) or nil,
                             deposit = self:GetDeposit(itemID, postQuantity),
@@ -820,7 +937,12 @@ function Posting:VerifyPending()
     self.pending.verifying = true
     ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
 
-    C_Timer.After(5, function()
+    -- Refresh reads the answer back itself once the query goes out, so this is
+    -- no longer the thing that settles a listing: it is the backstop for a query
+    -- that never went out at all, which is the one case where "could not tell"
+    -- is the honest answer. It has to outlast the queue's own wait, or a slow
+    -- send gets reported as a failure while the reading is still on its way.
+    C_Timer.After(VERIFY_GIVE_UP, function()
         if Posting.pending and Posting.pending.verifying then
             Posting:ResolvePending(nil)
         end

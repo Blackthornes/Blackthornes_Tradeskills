@@ -21,42 +21,117 @@ local REAGENT_BANK = (Enum and Enum.BagIndex and Enum.BagIndex.Reagentbank) or -
 local FIRST_BANK_BAG = (Enum and Enum.BagIndex and Enum.BagIndex.BankBag_1) or 6
 local LAST_BANK_BAG = FIRST_BANK_BAG + 6
 
+-- Worn equipment, the character's bag slots included. Nothing here is stock.
+local FIRST_EQUIPPED_SLOT = 1
+local LAST_EQUIPPED_SLOT = 23
+
+-- How long a single walk of the bags may be reused. Bag updates clear it
+-- outright; this is only so a missed event cannot leave a stale count standing
+-- for long.
+local BAG_CACHE_SECONDS = 0.5
+
 --------------------------------------------------------------------------------
 -- Live bag counts
 --------------------------------------------------------------------------------
 
---- How many of an item are in bags right now.
-function Inventory:GetBagCount(itemID)
-    -- C_Item.GetItemCount is the modern replacement for GetItemCount and is the
-    -- cheapest correct answer for bags.
-    if Util.HasFunction("C_Item.GetItemCount") then
-        local ok, count = pcall(C_Item.GetItemCount, itemID, false, false, false)
-        if ok and count then return count end
-    end
+--- What the client says you are holding.
+--
+-- Useful as one half of a subtraction and not much else -- see GetBankCount.
+-- The count is not simply "in your bags": a bag the character is wearing is
+-- counted as one of that bag, which is the whole reason the walk below exists.
+-- @return count, or nil when the client cannot answer
+local function ClientCount(itemID, includeBank)
+    if not itemID then return nil end
+    if not Util.HasFunction("C_Item.GetItemCount") then return nil end
 
-    -- Fall back to walking the containers.
-    local total = 0
+    local ok, count = pcall(C_Item.GetItemCount, itemID,
+        includeBank and true or false, false, includeBank and true or false)
+
+    if ok and count then return count end
+    return nil
+end
+
+--- Everything in the bags, counted in one pass.
+--
+-- One walk answers for every item at once, which matters because the Profit tab
+-- reads a count for every recipe it analyses -- asking per item would walk the
+-- bags hundreds of times per redraw.
+local function WalkBags()
+    local counts = {}
+
     for bag = BACKPACK, LAST_BAG do
         local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
+
         if slotsOk and slots then
             for slot = 1, slots do
                 local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
-                if infoOk and info and info.itemID == itemID then
-                    total = total + (info.stackCount or 1)
+
+                if infoOk and info and info.itemID then
+                    counts[info.itemID] = (counts[info.itemID] or 0) + (info.stackCount or 1)
                 end
             end
         end
     end
+
+    return counts
+end
+
+local bagCounts, bagCountsAt = nil, 0
+
+--- Throw away the cached walk. Cheap, and safe to call on any bag event.
+function Inventory:InvalidateBagCounts()
+    bagCounts = nil
+end
+
+--- itemID -> how many are in the bags.
+function Inventory:GetBagCounts()
+    local now = GetTime and GetTime() or 0
+
+    if bagCounts and (now - bagCountsAt) < BAG_CACHE_SECONDS then
+        return bagCounts
+    end
+
+    bagCounts, bagCountsAt = WalkBags(), now
+    return bagCounts
+end
+
+--- How many of an item are in bags right now.
+--
+-- Walked rather than asked for. `C_Item.GetItemCount` counts a bag the
+-- character is wearing as one of that bag, so four Linen Bags being used as
+-- bags read as four Linen Bags in stock, and the Profit tab stopped
+-- recommending the recipe on the grounds that the shelf was already full. The
+-- same goes for a crafted weapon you are carrying in your hand rather than to
+-- market.
+--
+-- Equipped things are not stock, and the containers are the one place that
+-- cannot be confused about which is which.
+function Inventory:GetBagCount(itemID)
+    if not itemID then return 0 end
+    return self:GetBagCounts()[itemID] or 0
+end
+
+--- How many of an item the character is wearing, bags included.
+--
+-- Reported so the diagnostic can name it, and so nothing else has to guess at
+-- the difference between a count that includes equipment and one that does not.
+function Inventory:GetEquippedCount(itemID)
+    if not itemID then return 0 end
+    if not Util.HasFunction("GetInventoryItemID") then return 0 end
+
+    local total = 0
+
+    for slot = FIRST_EQUIPPED_SLOT, LAST_EQUIPPED_SLOT do
+        local ok, equipped = pcall(GetInventoryItemID, "player", slot)
+        if ok and equipped == itemID then total = total + 1 end
+    end
+
     return total
 end
 
---- Bags plus bank and reagent bank, as the client reports it.
+--- Bags plus bank and reagent bank.
 function Inventory:GetTotalCount(itemID)
-    if Util.HasFunction("C_Item.GetItemCount") then
-        local ok, count = pcall(C_Item.GetItemCount, itemID, true, false, true)
-        if ok and count then return count end
-    end
-    return self:GetBagCount(itemID)
+    return self:GetBagCount(itemID) + self:GetBankCount(itemID)
 end
 
 --- How many are sitting in the bank.
@@ -65,7 +140,17 @@ end
 -- has not been opened this session, so a cached snapshot taken the last time
 -- you visited a bank is used as a floor.
 function Inventory:GetBankCount(itemID)
-    local live = math.max(0, self:GetTotalCount(itemID) - self:GetBagCount(itemID))
+    -- Both halves come from the client, on purpose. Whatever it miscounts --
+    -- worn bags, anything else -- appears in both and cancels, leaving the
+    -- difference the bank made. Mixing the walked bag count in here instead
+    -- would leave the equipment in the answer.
+    local withBank = ClientCount(itemID, true)
+    local withoutBank = ClientCount(itemID, false)
+
+    local live = 0
+    if withBank and withoutBank then
+        live = math.max(0, withBank - withoutBank)
+    end
 
     local record = ns.Recipes:GetCharacterRecord(false)
     local cached = record and record.bank and record.bank[itemID] or 0
@@ -225,6 +310,8 @@ end
 --------------------------------------------------------------------------------
 
 function Inventory:OnBagUpdate()
+    self:InvalidateBagCounts()
+
     -- Bag events fire in bursts while looting or moving stacks; coalesce them.
     if self.snapshotTimer then return end
 
@@ -246,7 +333,55 @@ function Inventory:OnBankOpened()
     end
 end
 
+--- Bags changed, so the walk is stale.
+--
+-- Kept apart from OnBagUpdate because that one coalesces into a two-second
+-- snapshot timer, and a stale count must not survive that long.
+function Inventory:OnBagChanged()
+    self:InvalidateBagCounts()
+end
+
+--------------------------------------------------------------------------------
+-- Diagnostics
+--------------------------------------------------------------------------------
+
+ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from", function(args)
+    local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
+
+    if ambiguous then
+        ns.Print(("several recipes match '%s' -- try /bts why first"):format(args))
+        return
+    end
+
+    if not recipe or not recipe.outputItemID then
+        ns.Print(errorMessage or "give me an item name or link")
+        return
+    end
+
+    local itemID = recipe.outputItemID
+    local inBags = Inventory:GetBagCount(itemID)
+    local client = ClientCount(itemID, false)
+
+    ns.Print(Util.GetItemLabel(itemID))
+    ns.PrintRaw(("  in bags:          %d"):format(inBags))
+    ns.PrintRaw(("  equipped:         %d"):format(Inventory:GetEquippedCount(itemID)))
+    ns.PrintRaw(("  in bank:          %d"):format(Inventory:GetBankCount(itemID)))
+    ns.PrintRaw(("  counted as held:  %d"):format(Inventory:GetOwnedCount(itemID)))
+    ns.PrintRaw(("  listed:           %d"):format(ns.Auctions:GetPostedCount(itemID)))
+
+    -- The line that settles the argument: a client count above the walked one
+    -- is equipment being counted as stock, which is what this file now avoids.
+    if client then
+        ns.PrintRaw(("  client's own bag count: %d%s"):format(client,
+            client > inBags and "  <-- it counts equipment" or ""))
+    else
+        ns.PrintRaw("  client's own bag count: cannot ask")
+    end
+end)
+
 function Inventory:OnEnable()
+    ns.RegisterEvent(self, "BAG_UPDATE", self.OnBagChanged)
+    ns.RegisterEvent(self, "PLAYER_EQUIPMENT_CHANGED", self.OnBagChanged)
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", self.OnBagUpdate)
     ns.RegisterEvent(self, "PLAYER_MONEY", self.OnBagUpdate)
 

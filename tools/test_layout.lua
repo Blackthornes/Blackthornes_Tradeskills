@@ -64,8 +64,8 @@ ns.UI.window.shown = false
 check("main window closed: full height again",
   PostPanel:DesiredHeight(AH), AH_HEIGHT)
 
--- Clear to the right of the panel, which ends at 851 + 6 + 300 = 1157.
-ns.UI = { window = Window(1200, 4, 800, 580) }
+-- Clear to the right of the panel, whatever its width is today.
+ns.UI = { window = Window(1400, 4, 600, 580) }
 check("main window past the panel's right edge: no giving way",
   PostPanel:DesiredHeight(AH), AH_HEIGHT)
 
