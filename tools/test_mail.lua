@@ -296,6 +296,8 @@ check("what actually landed in the pocket",    summary.net, 285)
 check("what the buyer paid",                   summary.gross, 300)
 check("and the auction house's cut",           summary.cut, 15)
 check("half of what went out came back",       summary.sellThrough, 0.5)
+check("the return is filed as an expiry",      summary.expired, 1)
+check("and nothing was cancelled",             summary.cancelled, 0)
 
 -- A sale leaves no attachment, so the item has to be recovered from the
 -- invoice's name against the recipes the addon knows about.
@@ -738,6 +740,66 @@ check("with its gold intact",                   Mail:GetSummary().net, 285)
 
 Mail:Read()
 check("and still not twice",                    #Mail:GetLedger().entries, 2)
+
+--------------------------------------------------------------------------------
+print("")
+print("a cancelled listing is not a failure to sell")
+--------------------------------------------------------------------------------
+
+-- Trent cancelled nine listings to test something, and the sell-through number
+-- counted them as nine the market had turned down. Pulling a listing yourself
+-- is not the market's verdict, so cancellations are counted and shown but kept
+-- out of the ratio.
+
+Reset()
+
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 285,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag",
+                  bid = 300, buyout = 300, deposit = 40, cut = 15 } },
+    { sender = "Auction House", subject = "Auction cancelled: Linen Bag",
+      items = { { itemID = LINEN_BAG, count = 1 } } },
+    { sender = "Auction House", subject = "Auction cancelled: Linen Bag",
+      items = { { itemID = LINEN_BAG, count = 1 } } },
+    { sender = "Auction House", subject = "Auction cancelled: Linen Bag",
+      items = { { itemID = LINEN_BAG, count = 1 } } },
+}
+Mail:Read()
+
+local pulled = Mail:GetSummary(LINEN_BAG)
+check("all four ends are on the books",         pulled.sold + pulled.returned, 4)
+check("three came back",                        pulled.returned, 3)
+check("all three as cancellations",             pulled.cancelled, 3)
+check("none of them as an expiry",              pulled.expired, 0)
+check("so the one sale is the whole story",     pulled.sellThrough, 1)
+
+-- With nothing but cancellations there is no ratio to report at all, rather
+-- than a 0% that reads as a pricing problem.
+Reset()
+
+inbox = {
+    { sender = "Auction House", subject = "Auction cancelled: Linen Bag",
+      items = { { itemID = LINEN_BAG, count = 1 } } },
+    { sender = "Auction House", subject = "Auction cancelled: Crystal Vial",
+      items = { { itemID = VIAL, count = 1 } } },
+}
+Mail:Read()
+
+local onlyPulled = Mail:GetSummary()
+check("both cancellations are recorded",        onlyPulled.cancelled, 2)
+check("and no sell-through is claimed",         onlyPulled.sellThrough, nil)
+
+-- An expiry alongside them does give a ratio, over the expiry alone.
+inbox[#inbox + 1] = {
+    sender = "Auction House", subject = "Auction expired: Linen Bag",
+    items = { { itemID = LINEN_BAG, count = 1 } },
+}
+Mail:Read()
+
+local withExpiry = Mail:GetSummary()
+check("the expiry is told apart from them",     withExpiry.expired, 1)
+check("they still are not in the ratio",        withExpiry.sellThrough, 0)
 
 --------------------------------------------------------------------------------
 
