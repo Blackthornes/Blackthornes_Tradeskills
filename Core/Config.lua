@@ -367,9 +367,15 @@ ns.RegisterCommand("db", "report what loaded from saved variables", function()
     local diagnostics = ns.Config:GetLoadDiagnostics()
 
     ns.Print("saved data")
+    local source = ""
+    if diagnostics.restoredFromCVars then
+        source = "  (restored from CVars)"
+    elseif diagnostics.restored then
+        source = "  (restored from snapshot)"
+    end
+
     ns.PrintRaw(("  global at load:  %s%s"):format(
-        tostring(diagnostics.globalType),
-        diagnostics.restored and "  (restored from snapshot)" or ""))
+        tostring(diagnostics.globalType), source))
     ns.PrintRaw(("  loadCount found: %s"):format(tostring(diagnostics.loadCountSeen)))
     ns.PrintRaw(("  loadCount now:   %s"):format(tostring(ns.db.probe.loadCount)))
     ns.PrintRaw(("  prices:          %d item(s)"):format(ns.Prices:Count()))
@@ -382,11 +388,19 @@ ns.RegisterCommand("db", "report what loaded from saved variables", function()
         tostring(diagnostics.charCanarySeen or "none")))
 
     if diagnostics.globalType ~= "table" then
-        if diagnostics.restored then
+        -- This client loses saved variables every session, so saying so on its
+        -- own reads as data loss when the fallback has in fact just done its
+        -- job. Say which of the three sources the database came from, because
+        -- "nothing was handed back" and "nothing was recovered" are very
+        -- different situations and only the second one is a problem.
+        if diagnostics.restoredFromCVars then
+            ns.Print("the client lost your saved data; recovered it from CVars.")
+        elseif diagnostics.restored then
             ns.Warn("the client lost your saved data; restored from the snapshot.")
             ns.Warn("run tools/restore.ps1 after this session to keep it current.")
         else
-            ns.Warn("the client did not hand back any saved data this session.")
+            ns.Warn("the client did not hand back any saved data this session,")
+            ns.Warn("and nothing was recovered. This session starts empty.")
         end
 
         if diagnostics.charCanarySeen then
