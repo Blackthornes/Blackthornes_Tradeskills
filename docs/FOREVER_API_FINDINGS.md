@@ -45,6 +45,25 @@ entry and must be filtered out of any profession list.
 caching has to be opportunistic — harvest when the window opens, persist, and
 serve from cache afterwards.
 
+**Bags are not the four bags.** `C_Item.GetItemCount` counts a bag the character
+is *wearing* as one of that bag, so the addon walks the containers instead. The
+walk then has to know how many containers there are: a reagent bag is a sixth
+one sitting past the ordinary four, and a walk of 0–4 never opens it. Reagents
+kept where the game most encourages you to keep them counted as reagents you do
+not own — the Profit tab said a recipe was unmakeable, and the sell list had
+nothing to offer.
+
+The index is read from the client rather than assumed: `Enum.BagIndex.ReagentBag`
+first, then `NUM_TOTAL_EQUIPPED_BAG_SLOTS` being larger than `NUM_BAG_SLOTS`, and
+nothing if neither says so. The guard matters — on a client laid out the older
+way, container 5 is the *first bank bag*, and walking it would report bank
+contents as things you can craft with right now.
+
+`Data/Inventory.lua` owns the list (`Inventory:GetCarriedBags`); `Logic/Posting.lua`
+and `Data/Scanner.lua` read it rather than keeping ranges of their own, which is
+how the count and the sell list came to disagree. `/bts stock <item>` prints the
+containers it walked and what each held.
+
 ## Sample data
 
 604 recipes visible with Leatherworking open. Sampled schematics:

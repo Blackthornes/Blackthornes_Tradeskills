@@ -19,7 +19,6 @@ local Posting = ns.NewModule("Posting")
 
 local Util = ns.Util
 
-local BACKPACK, LAST_BAG = 0, 4
 
 -- How long to wait before asking the server what actually got listed. The
 -- auction house is throttled and the reply can lag several seconds, so asking
@@ -124,7 +123,10 @@ end
 --- Bag slot holding an item, skipping locked slots.
 -- @return bag, slot, stackCount
 local function FindInBags(itemID)
-    for bag = BACKPACK, LAST_BAG do
+    -- Inventory owns the list of containers the character is carrying, reagent
+    -- bag included. Keeping a second list here is how the sell list came to
+    -- offer a different set of items than the counts said you had.
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
         local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
 
         if slotsOk and slots then
@@ -419,7 +421,7 @@ function Posting:GetPostable(opts)
     local lines = {}
     local seen = {}
 
-    for bag = BACKPACK, LAST_BAG do
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
         local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
 
         if slotsOk and slots then
