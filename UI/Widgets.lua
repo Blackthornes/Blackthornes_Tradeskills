@@ -211,12 +211,17 @@ end
 --
 -- Values are clamped rather than rejected: silently refusing input leaves the
 -- player wondering what they typed wrong.
--- @param opts { width, min, max, decimals, onChange = function(value) }
+-- @param opts { width, height, background, min, max, decimals,
+--   onChange = function(value) }
 function Widgets.CreateNumberBox(parent, opts)
     opts = opts or {}
 
-    local container = Theme.CreatePanel(parent, "row")
-    container:SetSize(opts.width or 60, 22)
+    local container = Theme.CreatePanel(parent, opts.background or "row")
+    container:SetSize(opts.width or 60, opts.height or 22)
+
+    -- The bounds live on the container, not in opts, so a box reused across
+    -- the rows of a list can take the limits of whatever it is showing.
+    container.min, container.max = opts.min, opts.max
 
     local editBox = CreateFrame("EditBox", nil, container)
     editBox:SetPoint("TOPLEFT", 5, 0)
@@ -239,11 +244,17 @@ function Widgets.CreateNumberBox(parent, opts)
         return tonumber(editBox:GetText())
     end
 
-    function container:SetValue(value, silent)
-        value = tonumber(value) or opts.min or 0
+    --- Change the bounds, clamping what is already in the box to fit them.
+    function container:SetLimits(min, max)
+        self.min, self.max = min, max
+        if self.value then self:SetValue(self.value, true) end
+    end
 
-        if opts.min and value < opts.min then value = opts.min end
-        if opts.max and value > opts.max then value = opts.max end
+    function container:SetValue(value, silent)
+        value = tonumber(value) or self.min or 0
+
+        if self.min and value < self.min then value = self.min end
+        if self.max and value > self.max then value = self.max end
 
         self.value = value
         editBox:SetText(Format(value))
