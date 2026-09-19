@@ -283,6 +283,30 @@ function Util.HasFunction(path)
 end
 
 --- A player-readable label for an item: its clickable link when the client has
+--- What a vendor pays for one unit, or nil if the client has not cached it.
+--
+-- This is the floor under any listing. An auction below it is worse than
+-- walking to a vendor, and that is true before the auction house takes its cut
+-- or keeps the deposit, so it is a floor rather than a break-even point.
+--
+-- Not to be confused with Vendor:GetUnitPrice, which is what a merchant
+-- *charges* for the item and is several times larger. That one answers "can I
+-- buy this reagent"; this one answers "is listing this worth doing at all".
+function Util.GetVendorSellPrice(itemID)
+    if not itemID then return nil end
+    if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
+
+    -- sellPrice is the eleventh return. Items the client has not cached yet
+    -- return nothing at all, which reads the same as "no vendor value" here;
+    -- GetItemLabel already asks the client to cache anything it renders, so a
+    -- second look once the list refreshes has it.
+    local ok, _, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
+
+    if not ok or type(sellPrice) ~= "number" or sellPrice <= 0 then return nil end
+
+    return sellPrice
+end
+
 --- the item cached, its name otherwise, and only as a last resort the raw ID.
 -- Item data is loaded lazily, so an uncached item genuinely has no name to show
 -- until something requests it.

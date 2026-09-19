@@ -129,8 +129,9 @@ local function UpdateRow(row, line)
     elseif not line.unitPrice then
         row.post.tooltipText = "No price data for this item -- scan first"
     elseif line.atALoss then
-        row.post.tooltipText =
-            "This would sell below its material cost. Blocked unless you allow it in Settings."
+        row.post.tooltipText = (line.lossReason == "vendor"
+            and "This would sell for less than a vendor pays. Blocked unless you allow it in Settings."
+            or "This would sell below its material cost. Blocked unless you allow it in Settings.")
     else
         row.post.tooltipText = ("List %d at %s each"):format(
             line.postQuantity, Util.FormatMoney(line.unitPrice, { noColor = true }))
@@ -158,8 +159,15 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.unitCost, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
+    if line.vendorPrice then
+        GameTooltip:AddDoubleLine("Vendor pays, each",
+            Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+
     if line.atALoss then
-        GameTooltip:AddLine("Would sell below material cost", 0.9, 0.38, 0.31)
+        GameTooltip:AddLine(line.lossReason == "vendor"
+            and "Would sell for less than a vendor pays"
+            or "Would sell below material cost", 0.9, 0.38, 0.31)
     end
 
     -- Commodities sell from across the bags at once; gear goes up one at a time.
