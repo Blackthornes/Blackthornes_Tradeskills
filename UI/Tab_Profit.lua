@@ -19,6 +19,7 @@ local DETAIL_WIDTH = 300
 local COLUMNS = {
     { key = "age",    width = 40 },
     { key = "posted", width = 44 },
+    { key = "make",   width = 40 },
     { key = "who",    width = 58, accountWideOnly = true },
     { key = "margin", width = 46 },
     { key = "profit", width = 74 },
@@ -88,6 +89,44 @@ local function CreateRow(row)
     ApplyRowLayout(row)
 end
 
+-- Item data arrives from the server on its own schedule, so the first pass
+-- over a recipe whose output is not cached yet gets no colour back. Those rows
+-- are drawn in the plain text colour and remembered here; GET_ITEM_INFO_RECEIVED
+-- redraws them once the client has the item.
+local awaitingItemData = false
+
+--- Colour a craft's name by the rarity of the item it makes.
+--
+-- Rarity is what tells the player whether a craft is worth making at all, so it
+-- is on every row, including ones that cannot be made or priced right now.
+local function ApplyNameColor(row, analysis)
+    local r, g, b = Util.GetItemQualityColor(analysis.outputItemID)
+
+    if r then
+        row.name:SetTextColor(r, g, b)
+        return
+    end
+
+    row.name:SetTextColor(Theme.Unpack("text"))
+    if analysis.outputItemID then awaitingItemData = true end
+end
+
+--- How many of this craft the materials on hand cover.
+--
+-- This column exists because the name no longer carries it: greying the name
+-- out was the old "you are short of materials", and it drowned out rarity.
+local function UpdateMakeCell(cells, analysis)
+    local craftable = analysis.craftableNow or 0
+
+    if craftable > 0 then
+        cells.make:SetText(tostring(craftable))
+        cells.make:SetTextColor(Theme.Unpack("text"))
+    else
+        cells.make:SetText("0")
+        cells.make:SetTextColor(Theme.Unpack("loss"))
+    end
+end
+
 local function UpdateRow(row, analysis)
     -- Rows are recycled, so one built under a different column set has to
     -- be re-anchored before it is filled.
@@ -98,6 +137,11 @@ local function UpdateRow(row, analysis)
     row.name:SetText(analysis.name or ("recipe " .. analysis.recipeID))
 
     local cells = row.cells
+
+    -- Both of these hold whatever the row's price data looks like, so they are
+    -- filled before the unpriceable case takes its early exit.
+    ApplyNameColor(row, analysis)
+    UpdateMakeCell(cells, analysis)
 
     -- Only meaningful when several characters are in play.
     if state.accountWide then
@@ -121,8 +165,6 @@ local function UpdateRow(row, analysis)
     end
 
     if not analysis.priceable then
-        row.name:SetTextColor(Theme.Unpack("muted"))
-
         cells.cost:SetText("--")
         cells.sells:SetText("--")
         cells.margin:SetText("")
@@ -133,21 +175,6 @@ local function UpdateRow(row, analysis)
             and "no sales" or "no data")
         cells.profit:SetTextColor(Theme.Unpack("dim"))
         return
-    end
-
-    -- Rarity colour, but only on what you can actually make right now: the
-    -- muted name is how this tab says "not yet", and a green or blue name
-    -- would drown that out.
-    if analysis.craftableNow > 0 then
-        local r, g, b = Util.GetItemQualityColor(analysis.outputItemID)
-
-        if r then
-            row.name:SetTextColor(r, g, b)
-        else
-            row.name:SetTextColor(Theme.Unpack("text"))
-        end
-    else
-        row.name:SetTextColor(Theme.Unpack("muted"))
     end
 
     cells.cost:SetText(Util.FormatMoney(analysis.totalCost, { short = true }))
@@ -530,6 +557,9 @@ local function Refresh()
     if not widgets.list then return end
 
     local data = BuildList()
+
+    -- Rows set this again while they draw if an item is still uncached.
+    awaitingItemData = false
     widgets.list:SetData(data)
 
     widgets.emptyLabel:SetShown(#data == 0)
@@ -663,7 +693,8 @@ local function Build(container)
     nameHeading:SetText("CRAFT")
 
     local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
-                     margin = "MARGIN", age = "AGE", who = "WHO", posted = "STOCK" }
+                     margin = "MARGIN", age = "AGE", who = "WHO", posted = "STOCK",
+                     make = "MAKE" }
 
     widgets.headings = {}
     for _, column in ipairs(COLUMNS) do
@@ -731,6 +762,23 @@ local function Build(container)
     widgets.detail = detail
 
     UpdateDetail(nil)
+
+    -- A rarity colour needs the client to have the item, and it may not when
+    -- the list is first drawn. Redraw once the missing ones arrive, coalescing
+    -- a burst of arrivals into a single pass and doing nothing at all unless a
+    -- visible row is actually waiting.
+    local redrawQueued = false
+
+    ns.RegisterEvent(UI, "GET_ITEM_INFO_RECEIVED", function()
+        if redrawQueued or not awaitingItemData then return end
+        if not widgets.list:IsVisible() then return end
+
+        redrawQueued = true
+        C_Timer.After(0.2, function()
+            redrawQueued = false
+            Refresh()
+        end)
+    end)
 end
 
 local function OnShow()
