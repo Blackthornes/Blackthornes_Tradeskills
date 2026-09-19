@@ -20,7 +20,7 @@ def main() -> int:
                  "test_transfer.lua", "test_throttle.lua",
                  "test_verify.lua", "test_lossfloor.lua",
                  "test_quantity.lua", "test_stock.lua",
-                 "test_unitprice.lua"):
+                 "test_unitprice.lua", "test_layout.lua"):
         script = os.path.join(ROOT, "tools", name).replace("\\", "/")
         lua.execute("dofile([[%s]])" % script)
 
