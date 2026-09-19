@@ -1,0 +1,29 @@
+# Saved-variable data. Snapshot.lua ships empty; tools/restore.ps1 rewrites it
+# from your own SavedVariables, which contain your characters, prices and
+# auctions. Git already tracks that file, so .gitignore cannot protect it --
+# check `git diff Data/Snapshot.lua` before committing after a restore.
+
+# WoW client data, if the addon is ever worked on in place under the game folder
+WTF/
+*.lua.bak
+Blackthornes_TS.lua
+BlackthornesTSDB.lua
+BlackthornesTSCharDB.lua
+
+# Probe output and scratch scans
+probe-*.txt
+*.scan
+
+# Python tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store

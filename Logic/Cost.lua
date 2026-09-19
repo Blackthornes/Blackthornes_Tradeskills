@@ -1,0 +1,223 @@
+-- Blackthornes Tradeskills -- Logic/Cost.lua
+-- What it costs to make one of something.
+--
+-- Two rules drive everything here:
+--   * A missing price is never treated as a free reagent. A recipe with an
+--     unpriced reagent is reported as unpriceable, not as wildly profitable.
+--   * Reagents you already own still cost what they are worth, unless you
+--     explicitly switch to the cash-out-of-pocket view. Ignoring opportunity
+--     cost is the single easiest way to talk yourself into a bad craft.
+
+local _, ns = ...
+
+local Cost = ns.NewModule("Cost")
+
+-- How deep to chase "should I craft this reagent instead of buying it".
+local MAX_SUBCRAFT_DEPTH = 3
+
+--------------------------------------------------------------------------------
+-- Reagent pricing
+--------------------------------------------------------------------------------
+
+--- What one unit of a reagent costs to acquire.
+-- @return copper, source  -- source is "buy", "owned" or nil when unknown
+function Cost:GetReagentUnitCost(itemID)
+    local valueOwned = ns.Config:Get("valueOwnedMaterials")
+
+    if not valueOwned then
+        -- Cash-out-of-pocket view: anything already in the bags is sunk.
+        local owned = ns.Inventory:GetBagCount(itemID)
+        if owned > 0 then
+            return 0, "owned"
+        end
+    end
+
+    -- Buying means paying the asking price, not the smoothed market average.
+    local auction = ns.Prices:GetValue(itemID, "min")
+    local vendor = ns.Vendor:GetUnitPrice(itemID)
+
+    -- A vendor caps what any reagent can cost you. People routinely list
+    -- vendor-sold thread and vials on the auction house for many times the
+    -- shop price, and paying that is a choice, not a cost.
+    if vendor and (not auction or vendor <= auction) then
+        return vendor, "vendor"
+    end
+
+    if auction then
+        return auction, "buy"
+    end
+
+    return nil, nil
+end
+
+--------------------------------------------------------------------------------
+-- Craft cost
+--------------------------------------------------------------------------------
+
+--- Which cached recipe, if any, produces this item.
+function Cost:FindRecipeForItem(itemID)
+    if self.recipeByOutput == nil or self.recipeIndexStale then
+        self:RebuildOutputIndex()
+    end
+    return self.recipeByOutput[itemID]
+end
+
+function Cost:RebuildOutputIndex()
+    local index = {}
+
+    for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
+        if recipe.outputItemID then
+            index[recipe.outputItemID] = recipeID
+        end
+    end
+
+    self.recipeByOutput = index
+    self.recipeIndexStale = false
+end
+
+function Cost:InvalidateIndex()
+    self.recipeIndexStale = true
+end
+
+--- Total reagent cost for one craft of a recipe.
+--
+-- @return result table:
+--   total        copper cost of a single craft, or nil when unpriceable
+--   perUnit      cost per output item
+--   reagents     array of { itemID, quantity, unitCost, lineCost, source,
+--                           have, shortfall, crafted }
+--   unpriced     array of itemIDs with no price data
+--   priceable    false when any reagent has no price
+function Cost:GetCraftCost(recipeID, depth, visited)
+    depth = depth or 0
+    visited = visited or {}
+
+    -- GetAny, so a craft that lives on an alt can still be costed. Material
+    -- cost is realm-wide regardless of who does the crafting.
+    local recipe = ns.Recipes:GetAny(recipeID)
+    if not recipe then return nil end
+
+    -- A recipe whose reagent is made by a recipe that needs the first item
+    -- would otherwise recurse forever.
+    if visited[recipeID] then return nil end
+    visited[recipeID] = true
+
+    local result = {
+        recipeID = recipeID,
+        reagents = {},
+        unpriced = {},
+        priceable = true,
+        total = 0,
+    }
+
+    for _, reagent in ipairs(recipe.reagents or {}) do
+        local itemID, quantity = reagent.itemID, reagent.quantity
+
+        local unitCost, source = self:GetReagentUnitCost(itemID)
+        local crafted = false
+
+        -- If we know how to make this reagent and making it is cheaper than
+        -- buying it, price it at the cheaper option and flag it as a sub-craft
+        -- so the queue can sequence it first.
+        if depth < MAX_SUBCRAFT_DEPTH then
+            local subRecipeID = self:FindRecipeForItem(itemID)
+
+            if subRecipeID and not visited[subRecipeID] then
+                local subResult = self:GetCraftCost(subRecipeID, depth + 1, visited)
+
+                if subResult and subResult.priceable and subResult.perUnit then
+                    if not unitCost or subResult.perUnit < unitCost then
+                        unitCost = subResult.perUnit
+                        source = "craft"
+                        crafted = true
+                    end
+                end
+            end
+        end
+
+        -- Owned, not just carried: the breakdown answers "do I have this",
+        -- and bank stock counts. Whether you can craft right now is a separate
+        -- question, answered by Profit:GetCraftableCount using bags alone.
+        local inBags = ns.Inventory:GetBagCount(itemID)
+        local have = inBags + ns.Inventory:GetBankCount(itemID)
+
+        local entry = {
+            itemID = itemID,
+            quantity = quantity,
+            unitCost = unitCost,
+            lineCost = unitCost and (unitCost * quantity) or nil,
+            source = source,
+            crafted = crafted,
+            have = have,
+            inBags = inBags,
+            shortfall = math.max(0, quantity - have),
+        }
+
+        result.reagents[#result.reagents + 1] = entry
+
+        if unitCost then
+            result.total = result.total + entry.lineCost
+        else
+            result.priceable = false
+            result.unpriced[#result.unpriced + 1] = itemID
+        end
+    end
+
+    visited[recipeID] = nil
+
+    if not result.priceable then
+        result.total = nil
+        result.perUnit = nil
+        return result
+    end
+
+    -- Recipes with a variable yield are valued at the average, which is the
+    -- honest expectation over many crafts even though any single craft differs.
+    local averageYield = ((recipe.quantityMin or 1) + (recipe.quantityMax or 1)) / 2
+    if averageYield <= 0 then averageYield = 1 end
+
+    result.yield = averageYield
+    result.perUnit = result.total / averageYield
+
+    return result
+end
+
+--------------------------------------------------------------------------------
+-- Shortfalls
+--------------------------------------------------------------------------------
+
+--- Reagents missing for N crafts, aggregated and priced.
+function Cost:GetShortfall(recipeID, craftCount)
+    craftCount = craftCount or 1
+
+    local recipe = ns.Recipes:Get(recipeID)
+    if not recipe then return nil end
+
+    local missing = {}
+
+    for _, reagent in ipairs(recipe.reagents or {}) do
+        local needed = reagent.quantity * craftCount
+        local have = ns.Inventory:GetOwnedCount(reagent.itemID)
+        local short = math.max(0, needed - have)
+
+        if short > 0 then
+            local unitCost = ns.Prices:GetValue(reagent.itemID, "min")
+
+            missing[#missing + 1] = {
+                itemID = reagent.itemID,
+                needed = needed,
+                have = have,
+                shortfall = short,
+                unitCost = unitCost,
+                estimatedCost = unitCost and (unitCost * short) or nil,
+                onAlts = ns.Inventory:GetAltTotal(reagent.itemID),
+            }
+        end
+    end
+
+    return missing
+end
+
+function Cost:OnEnable()
+    self:InvalidateIndex()
+end

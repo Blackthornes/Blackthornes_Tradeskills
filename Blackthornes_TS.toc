@@ -1,0 +1,46 @@
+## Interface: 16001
+## Title: Blackthornes Tradeskills
+## Notes: Crafting profitability, auction scanning and craft queueing for WoW: Forever.
+## Author: Blackthornes
+## Version: 0.1.0
+## SavedVariables: BlackthornesTSDB
+## SavedVariablesPerCharacter: BlackthornesTSCharDB
+## IconTexture: Interface\Icons\Trade_BlackSmithing
+
+Data\Snapshot.lua
+
+Core\Init.lua
+Core\Util.lua
+Core\AHQueue.lua
+Core\Config.lua
+Core\Compat.lua
+Core\Serialize.lua
+Core\Persist.lua
+
+Data\Prices.lua
+Data\Scanner.lua
+Data\Recipes.lua
+Data\Inventory.lua
+Data\Auctions.lua
+Data\Vendor.lua
+
+Logic\Cost.lua
+Logic\Profit.lua
+Logic\Queue.lua
+Logic\Crafting.lua
+Logic\Posting.lua
+Logic\Transfer.lua
+
+UI\Theme.lua
+UI\Widgets.lua
+UI\Main.lua
+UI\PostPanel.lua
+UI\Tab_Profit.lua
+UI\Tab_Queue.lua
+UI\Tab_Gather.lua
+UI\Tab_Post.lua
+UI\Tab_Prices.lua
+UI\Tab_Characters.lua
+UI\Tab_Settings.lua
+
+Probe\Probe.lua

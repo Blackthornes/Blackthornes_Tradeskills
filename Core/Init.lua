@@ -1,0 +1,286 @@
+-- Blackthornes Tradeskills -- Core/Init.lua
+-- Namespace, module registry, event dispatch and slash-command routing.
+--
+-- Deliberately dependency-free: Ace3/LibStub are not known to be ported to
+-- WoW: Forever, and a hard dependency on somebody else's port schedule is a
+-- worse trade than ~200 lines of framework we control.
+
+local ADDON_NAME, ns = ...
+
+_G.BlackthornesTS = ns
+
+ns.ADDON_NAME = ADDON_NAME
+
+local function GetMeta(field)
+    if C_AddOns and C_AddOns.GetAddOnMetadata then
+        local ok, value = pcall(C_AddOns.GetAddOnMetadata, ADDON_NAME, field)
+        if ok then return value end
+    end
+    -- Bare GetAddOnMetadata is gone on mainline; kept only as a courtesy.
+    if type(_G.GetAddOnMetadata) == "function" then
+        local ok, value = pcall(_G.GetAddOnMetadata, ADDON_NAME, field)
+        if ok then return value end
+    end
+    return nil
+end
+
+ns.VERSION = GetMeta("Version") or "0.0.0"
+
+--------------------------------------------------------------------------------
+-- Output
+--------------------------------------------------------------------------------
+
+ns.COLORS = {
+    accent = "ffc8a44d",
+    profit = "ff4fd18b",
+    loss   = "ffe5604f",
+    muted  = "ff7a8089",
+    warn   = "ffe8c15a",
+    text   = "ffe6e8ec",
+}
+
+local PREFIX = "|c" .. ns.COLORS.accent .. "BTS|r "
+
+local function Join(...)
+    local n = select("#", ...)
+    if n == 0 then return "" end
+    local parts = {}
+    for i = 1, n do
+        parts[i] = tostring((select(i, ...)))
+    end
+    return table.concat(parts, " ")
+end
+
+function ns.Print(...)
+    local frame = DEFAULT_CHAT_FRAME
+    if frame then
+        frame:AddMessage(PREFIX .. Join(...))
+    end
+end
+
+-- Raw line with no prefix, for multi-line reports where the prefix is noise.
+function ns.PrintRaw(...)
+    local frame = DEFAULT_CHAT_FRAME
+    if frame then
+        frame:AddMessage(Join(...))
+    end
+end
+
+function ns.Debug(...)
+    if ns.db and ns.db.global and ns.db.global.debug then
+        ns.PrintRaw("|c" .. ns.COLORS.muted .. "BTS debug|r " .. Join(...))
+    end
+end
+
+function ns.Warn(...)
+    ns.Print("|c" .. ns.COLORS.warn .. Join(...) .. "|r")
+end
+
+--------------------------------------------------------------------------------
+-- Module registry
+--------------------------------------------------------------------------------
+
+ns.modules = {}
+ns.moduleOrder = {}
+
+local moduleProto = {}
+moduleProto.__index = moduleProto
+
+--- Register an event for this module.
+-- @param event  event name
+-- @param fn     handler, or nil to use self[event]
+-- @return true if the client accepted the registration
+function moduleProto:RegisterEvent(event, fn)
+    return ns.RegisterEvent(self, event, fn or self[event])
+end
+
+function moduleProto:UnregisterEvent(event)
+    return ns.UnregisterEvent(self, event)
+end
+
+function ns.NewModule(name)
+    assert(type(name) == "string", "module name must be a string")
+    assert(not ns.modules[name], "duplicate module: " .. name)
+
+    local module = setmetatable({ moduleName = name }, moduleProto)
+    ns.modules[name] = module
+    ns.moduleOrder[#ns.moduleOrder + 1] = module
+    ns[name] = module
+    return module
+end
+
+--------------------------------------------------------------------------------
+-- Event dispatch
+--------------------------------------------------------------------------------
+
+local eventFrame = CreateFrame("Frame", "BlackthornesTSEventFrame")
+ns.eventFrame = eventFrame
+
+local handlers = {}   -- event -> array of { owner = module, fn = function }
+local unknownEvents = {}
+
+--- Register an event handler.
+-- On Forever, registering an event the client does not know about raises a Lua
+-- error rather than failing quietly, so every registration goes through pcall.
+function ns.RegisterEvent(owner, event, fn)
+    if type(fn) ~= "function" then
+        ns.Debug("RegisterEvent: no handler for", event)
+        return false
+    end
+
+    local list = handlers[event]
+    if not list then
+        if unknownEvents[event] then return false end
+
+        local ok, err = pcall(eventFrame.RegisterEvent, eventFrame, event)
+        if not ok then
+            unknownEvents[event] = err or true
+            ns.Debug("event not supported by this client:", event)
+            return false
+        end
+        list = {}
+        handlers[event] = list
+    end
+
+    list[#list + 1] = { owner = owner, fn = fn }
+    return true
+end
+
+function ns.UnregisterEvent(owner, event)
+    local list = handlers[event]
+    if not list then return false end
+
+    for i = #list, 1, -1 do
+        if list[i].owner == owner then
+            table.remove(list, i)
+        end
+    end
+
+    if #list == 0 then
+        handlers[event] = nil
+        pcall(eventFrame.UnregisterEvent, eventFrame, event)
+    end
+    return true
+end
+
+--- Events the client rejected, so the probe can report them.
+function ns.GetUnknownEvents()
+    return unknownEvents
+end
+
+eventFrame:SetScript("OnEvent", function(_, event, ...)
+    local list = handlers[event]
+    if not list then return end
+
+    -- One handler erroring must not swallow the rest.
+    for i = 1, #list do
+        local entry = list[i]
+        if entry then
+            local ok, err = pcall(entry.fn, entry.owner, event, ...)
+            if not ok then
+                geterrorhandler()(err)
+            end
+        end
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- Lifecycle
+--------------------------------------------------------------------------------
+
+-- OnInitialize: saved variables are loaded and Config has run. Set up state.
+-- OnEnable:     the world is loaded. Touch game data and build UI.
+
+local initialized = false
+local enabled = false
+
+local function RunLifecycle(method)
+    for i = 1, #ns.moduleOrder do
+        local module = ns.moduleOrder[i]
+        local fn = module[method]
+        if type(fn) == "function" then
+            local ok, err = pcall(fn, module)
+            if not ok then
+                ns.Warn(("module %s:%s failed"):format(module.moduleName, method))
+                geterrorhandler()(err)
+            end
+        end
+    end
+end
+
+local bootstrap = ns.NewModule("Bootstrap")
+
+function bootstrap:ADDON_LOADED(_, loadedAddon)
+    if loadedAddon ~= ADDON_NAME or initialized then return end
+    initialized = true
+
+    -- Config installs ns.db before anything else looks at saved variables.
+    if ns.Config and ns.Config.Bootstrap then
+        ns.Config:Bootstrap()
+    end
+
+    RunLifecycle("OnInitialize")
+end
+
+function bootstrap:PLAYER_LOGIN()
+    if enabled then return end
+    enabled = true
+    RunLifecycle("OnEnable")
+end
+
+ns.RegisterEvent(bootstrap, "ADDON_LOADED", bootstrap.ADDON_LOADED)
+ns.RegisterEvent(bootstrap, "PLAYER_LOGIN", bootstrap.PLAYER_LOGIN)
+
+--------------------------------------------------------------------------------
+-- Slash commands
+--------------------------------------------------------------------------------
+
+ns.commands = {}
+ns.commandOrder = {}
+
+--- Register a `/bts <name>` subcommand.
+-- @param name  subcommand keyword (lowercase)
+-- @param usage short description shown by `/bts help`
+-- @param fn    function(argsString)
+function ns.RegisterCommand(name, usage, fn)
+    ns.commands[name] = { usage = usage, fn = fn }
+    ns.commandOrder[#ns.commandOrder + 1] = name
+end
+
+local function ShowHelp()
+    ns.Print(("|c%sBlackthornes Tradeskills|r v%s"):format(ns.COLORS.accent, ns.VERSION))
+    for i = 1, #ns.commandOrder do
+        local name = ns.commandOrder[i]
+        local command = ns.commands[name]
+        ns.PrintRaw(("  |c%s/bts %s|r  |c%s%s|r"):format(
+            ns.COLORS.accent, name, ns.COLORS.muted, command.usage or ""))
+    end
+end
+
+ns.RegisterCommand("help", "show this list", ShowHelp)
+
+SLASH_BLACKTHORNESTS1 = "/bts"
+SLASH_BLACKTHORNESTS2 = "/blackthorne"
+
+SlashCmdList["BLACKTHORNESTS"] = function(input)
+    input = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
+
+    local keyword, rest = input:match("^(%S+)%s*(.*)$")
+    if not keyword then
+        -- Bare /bts opens the window once the UI exists; until then, help.
+        if ns.UI and ns.UI.Toggle then
+            ns.UI:Toggle()
+        else
+            ShowHelp()
+        end
+        return
+    end
+
+    local command = ns.commands[keyword:lower()]
+    if not command then
+        ns.Print(("unknown command '%s'. Try |c%s/bts help|r."):format(keyword, ns.COLORS.accent))
+        return
+    end
+
+    command.fn(rest or "")
+end
