@@ -271,15 +271,28 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
     end
 
     -- Re-query, then report again: the count above may predate any reply.
+    --
+    -- Paced like every other request even though this is a diagnostic run by
+    -- hand. A command that quietly spends the player's allowance is a poor thing
+    -- to reach for when the complaint is that the allowance ran out.
     if hasQuery then
         ns.PrintRaw("  re-querying...")
 
-        pcall(C_AuctionHouse.QueryOwnedAuctions, {})
+        Util.WhenAuctionReady(function()
+            pcall(C_AuctionHouse.QueryOwnedAuctions, {})
 
-        C_Timer.After(2, function()
-            local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
-            ns.Print(("after querying: %s auction(s)"):format(
-                ok and tostring(count) or "call failed"))
-        end)
+            C_Timer.After(2, function()
+                local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
+                ns.Print(("after querying: %s auction(s)"):format(
+                    ok and tostring(count) or "call failed"))
+            end)
+        end, function()
+            ns.Warn("the auction house stayed busy; the re-query was not sent.")
+        end, {
+            name = "owned auctions (diagnostic)",
+            key = "owned-auctions",
+            priority = ns.AHQueue.PRIORITY.urgent,
+            expires = 10,
+        })
     end
 end)

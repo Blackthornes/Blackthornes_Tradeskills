@@ -151,7 +151,7 @@ function Scanner:CanFullScan()
     if self.isScanning then
         return false, "a scan is already running"
     end
-    if self.scanQueued then
+    if self.scanQueued or self.browseQueued then
         return false, "a scan is already waiting its turn"
     end
 
@@ -255,7 +255,7 @@ end
 -- the targeted search done before posting anyway.
 
 function Scanner:StartBrowseScan()
-    if self.isBrowsing then return false end
+    if self.isBrowsing or self.browseQueued then return false end
 
     if not Util.HasFunction("C_AuctionHouse.SendBrowseQuery") then
         self.isScanning = false
@@ -263,10 +263,15 @@ function Scanner:StartBrowseScan()
         return false
     end
 
-    self.isScanning = true
-    self.isBrowsing = true
     self.browsePages = 0
+    self.browseRowsSeen = nil
     self.scanStartedAt = self.scanStartedAt or GetTime()
+
+    -- isBrowsing is deliberately not set yet. It means "our browse query is out
+    -- and the next results event is ours", and setting it while the request is
+    -- still waiting its turn would make us read the player's own search as a
+    -- scan -- and then page through it, one throttled request at a time.
+    self.browseQueued = true
 
     ns.Print("browsing the auction house...")
 
@@ -283,12 +288,22 @@ function Scanner:StartBrowseScan()
         end
     end
 
-    self:QueueBrowseQuery("", function()
-        Scanner.isScanning = false
-        Scanner.isBrowsing = false
-        ns.Warn("the auction house stayed busy; the browse scan was not sent.")
-        if ns.UI then ns.UI:OnScanComplete() end
-    end)
+    self:QueueBrowseQuery("", {
+        onSend = function()
+            Scanner.browseQueued = false
+            Scanner.isScanning = true
+            Scanner.isBrowsing = true
+        end,
+
+        onGiveUp = function()
+            Scanner.browseQueued = false
+            Scanner.isScanning = false
+            Scanner.isBrowsing = false
+
+            ns.Warn("the auction house stayed busy; the browse scan was not sent.")
+            if ns.UI then ns.UI:OnScanComplete() end
+        end,
+    })
 
     return true
 end
@@ -298,15 +313,19 @@ end
 -- The timeout is armed on send rather than on queue: a request still waiting its
 -- turn has not failed to answer, and warning about it was how a polite wait
 -- looked like a hung scan.
-function Scanner:QueueBrowseQuery(searchString, onGiveUp)
+function Scanner:QueueBrowseQuery(searchString, opts)
+    opts = opts or {}
+
     ns.AHQueue:Request({
         name = "browse query",
         key = "browse",
         priority = ns.AHQueue.PRIORITY.scan,
         expires = 60,
-        onGiveUp = onGiveUp,
+        onGiveUp = opts.onGiveUp,
 
         send = function()
+            if opts.onSend then opts.onSend() end
+
             local ok = pcall(C_AuctionHouse.SendBrowseQuery, {
                 searchString = searchString or "",
                 sorts = {},
@@ -367,6 +386,18 @@ function Scanner:OnBrowseResults()
 
     self:Report(("browse page %d: %d row(s)"):format(self.browsePages + 1, #results))
 
+    -- Browse results accumulate across the pages of one query, so a set that has
+    -- shrunk is not our sweep any more: a different query -- the player's own
+    -- search, most likely -- has taken the shared results over. Paced paging made
+    -- a sweep long enough for that to be likely, so take the smaller set as the
+    -- end of ours rather than paging through somebody else's search.
+    if self.browseRowsSeen and #results < self.browseRowsSeen then
+        self:Report("browse results were replaced by another search; committing what we have")
+        self:CommitBrowseResults(results)
+        return
+    end
+
+    self.browseRowsSeen = #results
     self.browsePages = self.browsePages + 1
 
     local full = true
@@ -602,15 +633,16 @@ function Scanner:CancelScan()
 
     self.isBrowsing = false
     self.scanQueued = false
+    self.browseQueued = false
 
     self:ClearSearchState()
 
     -- Anything of ours still waiting for a turn is no longer wanted, and a
     -- request sent after the player cancelled spends their allowance for nothing.
     if ns.AHQueue then
-        ns.AHQueue:Cancel("scan")
-        ns.AHQueue:Cancel("browse")
-        ns.AHQueue:Cancel("browse-more")
+        ns.AHQueue:Cancel("scan", true)
+        ns.AHQueue:Cancel("browse", true)
+        ns.AHQueue:Cancel("browse-more", true)
     end
 
     if self.worker and self.worker:IsRunning() then
@@ -794,6 +826,9 @@ function Scanner:SettleSearchDisplay(reason)
     ns.Debug(("settling the auction house search display: %s"):format(
         reason or "no reason given"))
 
+    -- No onSend, so isBrowsing stays false and OnBrowseResults ignores what
+    -- comes back. That is the intent: this query exists to let the client finish
+    -- a search it is stuck on, not to harvest prices from the player's own.
     self:QueueBrowseQuery(GetBlizzardSearchText() or "")
 
     return true

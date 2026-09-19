@@ -119,6 +119,7 @@ local function Reset()
     AHQueue.sendTimes = {}
     AHQueue.lastSend = 0
     AHQueue.standDownUntil = 0
+    AHQueue.backoffUntil = 0
     AHQueue.sent = 0
     AHQueue.dropped = 0
 
@@ -184,6 +185,7 @@ print("the same key asked for repeatedly, as a one-second ticker would")
 
 Reset()
 local queryCount = 0
+local deepestQueue = 0
 
 for _ = 1, 20 do
     AHQueue:Request({
@@ -195,14 +197,56 @@ for _ = 1, 20 do
             return true
         end,
     })
+
+    deepestQueue = math.max(deepestQueue, AHQueue:GetPendingCount())
 end
 
 Advance(10)
 
 -- Twenty asks for the same thing must not become twenty requests: the ticker
--- that refreshes the post panel every second was one of the drains.
-Check("requests actually sent", queryCount, 1)
+-- refreshing the post panel every second was one of the drains. Two sends is
+-- correct rather than one, and the difference is the point: the first ask went
+-- straight out because nothing was in the way, and the other nineteen collapsed
+-- into the single request that followed it.
+Check("requests actually sent", queryCount, 2)
+Check("never more than one of them queued at a time", deepestQueue, 1)
 Check("nothing left queued", AHQueue:GetPendingCount(), 0)
+
+--------------------------------------------------------------------------------
+
+print("")
+print("a queued request replaced by a newer one with the same key")
+
+Reset()
+clientReady = false
+
+local firstToldItFailed = false
+local secondSent = false
+
+AHQueue:Request({
+    name = "price check for the first item",
+    key = "item-search",
+    expires = 600,
+    send = function() return true end,
+    onGiveUp = function() firstToldItFailed = true end,
+})
+
+AHQueue:Request({
+    name = "price check for the second item",
+    key = "item-search",
+    expires = 600,
+    send = function() secondSent = true return true end,
+})
+
+-- Clicking a second row supersedes the first click's price check. The first
+-- caller has to hear that, or its button waits on an answer that is not coming.
+Check("the superseded waiter was told", firstToldItFailed, true)
+Check("only one request is queued", AHQueue:GetPendingCount(), 1)
+
+clientReady = true
+Advance(5)
+
+Check("the newer request is the one that went", secondSent, true)
 
 --------------------------------------------------------------------------------
 
@@ -249,12 +293,36 @@ Reset()
 AHQueue:Yield(6, "an auction was just created")
 
 local afterYield = QueueMany(1, { priority = AHQueue.PRIORITY.scan })
+local urgentDuringYield = QueueMany(1, { priority = AHQueue.PRIORITY.urgent })
 
 Advance(4)
-Check("held while standing down", #afterYield, 0)
+
+-- Standing down is politeness towards the player, so it holds our background
+-- work and lets through the request they are waiting on.
+Check("the scan waited", #afterYield, 0)
+Check("the player's own click went anyway", #urgentDuringYield, 1)
 
 Advance(4)
-Check("sent once the stand-down expired", #afterYield, 1)
+Check("the scan went once the stand-down expired", #afterYield, 1)
+
+--------------------------------------------------------------------------------
+
+print("")
+print("backing off after the client reports a dropped message")
+
+Reset()
+AHQueue:BackOff(10, "the client dropped a throttled message")
+
+local duringBackoff = QueueMany(1, { priority = AHQueue.PRIORITY.urgent })
+
+Advance(6)
+
+-- A dropped message means we are already over the allowance, so this one holds
+-- everything: there is no urgent request worth deepening it for.
+Check("even an urgent request waited", #duringBackoff, 0)
+
+Advance(8)
+Check("sent once the backoff expired", #duringBackoff, 1)
 
 --------------------------------------------------------------------------------
 

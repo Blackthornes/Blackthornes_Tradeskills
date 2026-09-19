@@ -100,6 +100,37 @@ were removed, then restored once the error reproduced with no addons loaded.
 The realm build (`1.60.1.69800`) is older than the client (`69913`), which
 may be related.
 
+## The throttled channel is shared, and so is the search state
+
+Two things about `C_AuctionHouse` that the symptoms do not make obvious.
+
+**The throttle allowance is not per-addon.** Blizzard's Sell tab, its Create
+Auction button and its search box send down the same throttled channel the
+addon does. Going over it produced **"You're doing that too fast"** on the
+player's *own* manual listing while the addon was mid-scan. The addon was the
+one over budget; the error appeared on Blizzard's button.
+
+**`IsThrottledMessageSystemReady` reserves nothing.** It answers "may I send
+one right now". Two callers polling it on their own timers both see `true` in
+the same frame and both send, so an addon can look paced at every call site and
+still be over budget. Anything that sends has to queue behind one shared gate
+(`Core/AHQueue.lua`) rather than ask this question for itself.
+
+Worst offender found: `RequestMoreBrowseResults` fired the instant each page of
+results landed, which is one request per server reply for as long as a sweep
+ran.
+
+**Browse and search results are one slot of client state, shared with
+Blizzard's frame.** Whichever query was sent last owns it. Two consequences:
+
+- Blizzard's list shows its searching indicator for exactly as long as
+  `HasFullBrowseResults()` reports `false`, and nothing will ever set it `true`
+  if the query it was waiting on got dropped by the throttle. That is the stuck
+  spinner -- not a frame bug, a dropped request with nothing left to answer it.
+- A targeted `SendSearchQuery` from the addon supersedes the sell tab's own
+  search, and vice versa, so a pending search must always be given a timeout.
+  There is no event for a request that was dropped.
+
 ## Still unverified
 
 **Whether `GetReplicateItemInfo`'s `buyoutPrice` is per-unit or per-stack.**

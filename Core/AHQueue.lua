@@ -69,7 +69,20 @@ local SELL_FRAMES = {
 AHQueue.queue = {}
 AHQueue.sendTimes = {}
 AHQueue.lastSend = 0
+
+-- Two different waits, deliberately kept apart.
+--
+-- standDownUntil is politeness: the player just listed something, or a listing
+-- of ours is settling, so our background work gets out of the way. A request the
+-- player is actively waiting on is not in the way -- it is the player -- so
+-- urgent work goes through it.
+--
+-- backoffUntil is not politeness. The client has told us a throttled message was
+-- dropped, so we are already over the line, and nothing of any priority goes out
+-- until it passes.
 AHQueue.standDownUntil = 0
+AHQueue.backoffUntil = 0
+
 AHQueue.sent = 0
 AHQueue.dropped = 0
 
@@ -129,7 +142,12 @@ function AHQueue:WhyNotReady(priority)
 
     local now = GetTime()
 
-    if now < self.standDownUntil then
+    if now < self.backoffUntil then
+        return ("backing off for another %.1fs (a message was dropped)"):format(
+            self.backoffUntil - now)
+    end
+
+    if priority > URGENT_LIMIT and now < self.standDownUntil then
         return ("standing down for another %.1fs"):format(self.standDownUntil - now)
     end
 
@@ -153,7 +171,10 @@ function AHQueue:WhyNotReady(priority)
     return nil
 end
 
---- Stand down for a while: the player, or the client, needs the channel.
+--- Stand down for a while: the player needs the channel more than we do.
+--
+-- Background work waits; anything the player clicked still goes, paced and
+-- inside the budget as always.
 function AHQueue:Yield(seconds, reason)
     seconds = seconds or PLAYER_QUIET
 
@@ -162,6 +183,19 @@ function AHQueue:Yield(seconds, reason)
 
     self.standDownUntil = until_
     ns.Debug(("auction queue standing down %.0fs: %s"):format(
+        seconds, reason or "no reason given"))
+end
+
+--- Stop sending entirely for a while: we are over the allowance rather than
+--- merely sharing it, so there is no such thing as an urgent request right now.
+function AHQueue:BackOff(seconds, reason)
+    seconds = seconds or DROPPED_BACKOFF
+
+    local until_ = GetTime() + seconds
+    if until_ <= self.backoffUntil then return end
+
+    self.backoffUntil = until_
+    ns.Debug(("auction queue backing off %.0fs: %s"):format(
         seconds, reason or "no reason given"))
 end
 
@@ -207,7 +241,14 @@ function AHQueue:Request(opts)
     if request.key then
         for i = 1, #self.queue do
             if self.queue[i].key == request.key then
+                local replaced = self.queue[i]
                 self.queue[i] = request
+
+                -- The replaced request will never be sent, so whatever was
+                -- waiting on it hears that now. Dropping it silently is how a
+                -- button ends up sitting there doing nothing for ever.
+                if replaced.onGiveUp then pcall(replaced.onGiveUp) end
+
                 self:StartDraining()
                 return true
             end
@@ -221,8 +262,13 @@ function AHQueue:Request(opts)
     return true
 end
 
---- Drop a queued request without sending it. Its give-up callback still runs.
-function AHQueue:Cancel(key)
+--- Drop a queued request without sending it.
+--
+-- The give-up callback runs unless `silent`, which is for a caller that is
+-- already tearing the same state down itself -- otherwise cancelling a scan
+-- reports it as "the auction house stayed busy" when the player simply clicked
+-- Cancel.
+function AHQueue:Cancel(key, silent)
     if not key then return false end
 
     for i = #self.queue, 1, -1 do
@@ -230,7 +276,7 @@ function AHQueue:Cancel(key)
 
         if request.key == key then
             table.remove(self.queue, i)
-            if request.onGiveUp then pcall(request.onGiveUp) end
+            if not silent and request.onGiveUp then pcall(request.onGiveUp) end
             return true
         end
     end
@@ -364,7 +410,7 @@ function AHQueue:OnEnable()
     -- Both of these may be absent on this client; RegisterEvent handles that.
     ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED", function()
         AHQueue.dropped = AHQueue.dropped + 1
-        AHQueue:Yield(DROPPED_BACKOFF, "the client dropped a throttled message")
+        AHQueue:BackOff(DROPPED_BACKOFF, "the client dropped a throttled message")
     end)
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", function()
@@ -396,6 +442,14 @@ function AHQueue:Report()
     ns.PrintRaw(("  sell frame open:    %s"):format(
         self:PlayerIsSelling() and "yes" or "no"))
     ns.PrintRaw(("  dropped messages:   %d"):format(self.dropped))
+
+    local now = GetTime()
+    ns.PrintRaw(("  standing down:      %s"):format(
+        now < self.standDownUntil
+            and ("%.1fs left"):format(self.standDownUntil - now) or "no"))
+    ns.PrintRaw(("  backing off:        %s"):format(
+        now < self.backoffUntil
+            and ("%.1fs left"):format(self.backoffUntil - now) or "no"))
 
     local why = self:WhyNotReady(self.PRIORITY.normal)
     ns.PrintRaw(("  background work:    %s"):format(why or "clear to send"))
