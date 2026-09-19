@@ -20,6 +20,17 @@ local WINDOW_HEIGHT = 580
 -- Blizzard panel has a wide margin.
 local EDGE_PAD = 11
 
+-- The bar of controls that rides on the auction window. Tall enough that the
+-- 30px buttons inside it keep their bevel clear of its own edge.
+local AUCTION_BAR_HEIGHT = 44
+local AUCTION_BAR_PAD = 10
+local AUCTION_BAR_FALLBACK_WIDTH = 540
+
+-- How far the window sits off the screen corner while the auction house is
+-- open. Small: the three panels together are wider than the screen, so every
+-- unit of margin is a unit of overlap somewhere else.
+local AUCTION_LAYOUT_INSET = 4
+
 UI.tabs = {}
 UI.tabOrder = {}
 
@@ -50,6 +61,12 @@ function UI:Build()
     window:SetFrameStrata("HIGH")
     window:SetClampedToScreen(true)
     window:EnableMouse(true)
+
+    -- Clicking the window brings it to the front of its strata. The sell list
+    -- docked beside the auction house shares that strata, and without this
+    -- whichever was created last stays on top forever -- which is how the sell
+    -- list ended up sitting across this window's tab row.
+    if window.SetToplevel then window:SetToplevel(true) end
     window:SetMovable(true)
     window:RegisterForDrag("LeftButton")
     window:Hide()
@@ -66,6 +83,10 @@ function UI:Build()
     window:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         UI:SavePosition()
+
+        -- The sell list gives way to this window rather than overlapping it,
+        -- so it needs to know where the window came to rest.
+        if ns.PostPanel then ns.PostPanel:Reflow() end
     end)
 
     -- Escape closes it, like every other panel in the game.
@@ -283,7 +304,7 @@ function UI:OnInventoryUpdated()
     self:RefreshActiveTab()
 
     -- Crafting something new changes what there is to list.
-    if self.postButton and self.postButton:IsShown() then
+    if self.postButton and self.postButton:IsVisible() then
         self:UpdatePostButton()
     end
 end
@@ -299,20 +320,55 @@ end
 -- Position
 --------------------------------------------------------------------------------
 
+--- Which remembered position applies right now.
+--
+-- Centred is the right place for this window when it is the only thing on
+-- screen, and the wrong place the moment the auction house is open: it lands
+-- on top of Blizzard's window and the sell list docked beside it. So there are
+-- two positions. Dragging the window while the auction house is open moves
+-- only the auction-house one, and the everyday position is left alone.
+function UI:PositionKey()
+    if ns.Scanner and ns.Scanner.isAuctionHouseOpen then
+        return "auctionWindowPosition"
+    end
+
+    return "windowPosition"
+end
+
 function UI:SavePosition()
     if not ns.db or not self.window then return end
 
     local point, _, relativePoint, x, y = self.window:GetPoint()
-    ns.db.windowPosition = { point = point, relativePoint = relativePoint, x = x, y = y }
+
+    ns.db[self:PositionKey()] =
+        { point = point, relativePoint = relativePoint, x = x, y = y }
 end
 
-function UI:RestorePosition()
-    local position = ns.db and ns.db.windowPosition
-    if not position then return end
+--- @param key string|nil which slot to restore; defaults to the current state.
+-- The auction house close handler passes its slot explicitly: Scanner clears
+-- isAuctionHouseOpen on the same event, and which handler runs first is not
+-- ours to decide.
+function UI:RestorePosition(key)
+    if not self.window then return end
+
+    key = key or self:PositionKey()
+
+    local position = ns.db and ns.db[key]
 
     self.window:ClearAllPoints()
-    self.window:SetPoint(position.point or "CENTER", UIParent,
-        position.relativePoint or "CENTER", position.x or 0, position.y or 0)
+
+    if position then
+        self.window:SetPoint(position.point or "CENTER", UIParent,
+            position.relativePoint or "CENTER", position.x or 0, position.y or 0)
+    elseif key == "auctionWindowPosition" then
+        -- Never dragged at the auction house before: the bottom right corner.
+        -- The auction window owns the left of the screen and the sell list the
+        -- strip beside it, so this is the largest clear space there is.
+        self.window:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT",
+            -AUCTION_LAYOUT_INSET, AUCTION_LAYOUT_INSET)
+    else
+        self.window:SetPoint("CENTER")
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -325,10 +381,15 @@ function UI:Show()
 
     self:SelectTab(self.activeTab or (ns.db and ns.db.lastTab) or self.tabOrder[1].key)
     self:UpdateHeader()
+
+    if ns.PostPanel then ns.PostPanel:Reflow() end
 end
 
 function UI:Hide()
     if self.window then self.window:Hide() end
+
+    -- Hidden, so the sell list can have its full height back.
+    if ns.PostPanel then ns.PostPanel:Reflow() end
 end
 
 function UI:Toggle()
@@ -362,20 +423,81 @@ function UI:FindAuctionFrame()
     end
 end
 
+--- The strip of addon controls that rides on Blizzard's auction window.
+--
+-- Scan, Post Crafted and Post ALL each used to anchor themselves to the
+-- auction frame separately, which left three buttons hanging in the game world
+-- above it with nothing visibly tying them to the window they act on. They
+-- share one bar instead, flush to the auction window's top edge and the same
+-- width, so the row reads as part of that window.
+--
+-- Still parented to UIParent rather than to the auction frame, so Blizzard's
+-- own layering can never clip or bury it, and so it survives the auction UI
+-- being loaded on demand.
+function UI:GetAuctionBar()
+    if self.auctionBar then return self.auctionBar end
+
+    local bar = CreateFrame("Frame", "BlackthornesTSAuctionBar", UIParent)
+    bar:SetHeight(AUCTION_BAR_HEIGHT)
+    bar:SetFrameStrata("FULLSCREEN_DIALOG")
+    bar:SetFrameLevel(90)
+
+    -- Opaque and mouse-catching: a click meant for a button should never fall
+    -- through the gaps onto whatever is behind the bar.
+    bar:EnableMouse(true)
+    bar:Hide()
+
+    Theme.Fill(bar, "header")
+    Theme.AddGameOutline(bar, { style = "tooltip", color = "natural", edgeSize = 12 })
+
+    -- The bar is as wide as the auction window and the buttons only fill its
+    -- right end, so name it. An unlabelled strip of empty frame reads as
+    -- something that failed to load.
+    local label = Theme.CreateLabel(bar, "small", "accent")
+    label:SetPoint("LEFT", bar, "LEFT", AUCTION_BAR_PAD + 4, 0)
+    label:SetText("Blackthornes Tradeskills")
+
+    self.auctionBar = bar
+    return bar
+end
+
 --- A scan button docked to Blizzard's auction house window.
 --
 -- Scanning only works while the auction house is open, so the control belongs
 -- where the player already is rather than only inside our own window.
 --
--- The button is parented to UIParent rather than the auction frame so it cannot
--- be clipped or buried by Blizzard's own layering, and it falls back to a fixed
--- screen position if the auction frame cannot be found at all. A scan button
--- that quietly fails to appear is worse than one in a slightly odd place.
+-- Falls back to a fixed screen position if the auction frame cannot be found
+-- at all. A scan button that quietly fails to appear is worse than one in a
+-- slightly odd place.
 function UI:AttachToAuctionHouse()
+    local auctionFrame, frameName = self:FindAuctionFrame()
+    local bar = self:GetAuctionBar()
+
+    bar:ClearAllPoints()
+
+    if auctionFrame then
+        -- Overlapping the auction window's top edge by two pixels, so the two
+        -- read as one piece of furniture rather than a bar floating above it.
+        bar:SetPoint("BOTTOMLEFT", auctionFrame, "TOPLEFT", 0, -2)
+        bar:SetPoint("BOTTOMRIGHT", auctionFrame, "TOPRIGHT", 0, -2)
+
+        -- Zero means "no explicit width", so the bar takes the auction
+        -- window's even if the fallback below sized it on an earlier attach.
+        bar:SetWidth(0)
+        ns.Debug("docked auction bar to", frameName)
+    else
+        -- Nothing to dock to: put it somewhere it cannot be missed.
+        bar:SetPoint("TOP", UIParent, "TOP", 0, -140)
+        bar:SetWidth(AUCTION_BAR_FALLBACK_WIDTH)
+        ns.Debug("no auction frame found; using fallback position")
+    end
+
+    bar:Show()
+
     local button = self.auctionButton
 
     if not button then
-        button = Widgets.CreateButton(UIParent, "Scan", function()
+        button = Widgets.CreateButton(bar, "Scan", function()
             UI:TriggerScan()
             UI:UpdateAuctionButton()
         end, {
@@ -386,9 +508,6 @@ function UI:AttachToAuctionHouse()
             -- Fully opaque, so nothing behind the button shows through.
             baseColor = { 0.06, 0.07, 0.09, 1 },
         })
-
-        button:SetFrameStrata("FULLSCREEN_DIALOG")
-        button:SetFrameLevel(100)
 
         -- This button lives out in the game world, where a flat one-pixel
         -- border vanishes against Blizzard's art. Give it the familiar
@@ -406,23 +525,19 @@ function UI:AttachToAuctionHouse()
         self.auctionButton = button
     end
 
-    local auctionFrame, frameName = self:FindAuctionFrame()
-
     button:ClearAllPoints()
-
-    if auctionFrame then
-        button:SetPoint("BOTTOMRIGHT", auctionFrame, "TOPRIGHT", -4, 4)
-        ns.Debug("docked scan button to", frameName)
-    else
-        -- Nothing to dock to: put it somewhere it cannot be missed.
-        button:SetPoint("TOP", UIParent, "TOP", 0, -140)
-        ns.Debug("no auction frame found; using fallback position")
-    end
-
+    button:SetPoint("RIGHT", bar, "RIGHT", -AUCTION_BAR_PAD, 0)
     button:Show()
+
     self:UpdateAuctionButton()
 
-    self:AttachPostButton(auctionFrame)
+    self:AttachPostButton()
+
+    -- Before the sell list attaches: the list measures itself around this
+    -- window, so it needs the window where it is going to sit. Built centred,
+    -- or wherever it was last dragged with the auction house shut, it is in
+    -- the wrong place now either way.
+    self:RestorePosition("auctionWindowPosition")
 
     if ns.PostPanel then ns.PostPanel:Attach() end
 end
@@ -465,11 +580,12 @@ end
 -- Left-click lists the most valuable stack; posting needs a hardware event
 -- per listing anyway, so clicking repeatedly works down the list.
 -- Right-click opens the Post tab for the full table.
-function UI:AttachPostButton(auctionFrame)
+function UI:AttachPostButton()
+    local bar = self:GetAuctionBar()
     local button = self.postButton
 
     if not button then
-        button = Widgets.CreateButton(UIParent, "Post Crafted", function(_, mouseButton)
+        button = Widgets.CreateButton(bar, "Post Crafted", function(_, mouseButton)
             if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
                 UI:Show()
                 UI:SelectTab("post")
@@ -498,8 +614,6 @@ function UI:AttachPostButton(auctionFrame)
         })
 
         button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        button:SetFrameStrata("FULLSCREEN_DIALOG")
-        button:SetFrameLevel(100)
 
         Theme.AddGameOutline(button, {
             style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
@@ -513,10 +627,8 @@ function UI:AttachPostButton(auctionFrame)
 
     if self.auctionButton then
         button:SetPoint("RIGHT", self.auctionButton, "LEFT", -10, 0)
-    elseif auctionFrame then
-        button:SetPoint("BOTTOMRIGHT", auctionFrame, "TOPRIGHT", -120, 4)
     else
-        button:SetPoint("TOP", UIParent, "TOP", -120, -140)
+        button:SetPoint("RIGHT", bar, "RIGHT", -AUCTION_BAR_PAD, 0)
     end
 
     button:Show()
@@ -534,7 +646,7 @@ function UI:AttachPostAllButton()
     local button = self.postAllButton
 
     if not button then
-        button = Widgets.CreateButton(UIParent, "Post All", function(_, mouseButton)
+        button = Widgets.CreateButton(self:GetAuctionBar(), "Post All", function(_, mouseButton)
             if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
                 UI:Show()
                 UI:SelectTab("post")
@@ -563,8 +675,6 @@ function UI:AttachPostAllButton()
         })
 
         button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        button:SetFrameStrata("FULLSCREEN_DIALOG")
-        button:SetFrameLevel(100)
 
         Theme.AddGameOutline(button, {
             style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
@@ -1033,10 +1143,11 @@ function UI:OnEnable()
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
         UI:UpdateHeader()
-        if UI.auctionButton then UI.auctionButton:Hide() end
-        if UI.postButton then UI.postButton:Hide() end
-        if UI.postAllButton then UI.postAllButton:Hide() end
+        if UI.auctionBar then UI.auctionBar:Hide() end
         if ns.PostPanel then ns.PostPanel:Hide() end
+
+        -- Back to wherever the window normally lives.
+        UI:RestorePosition("windowPosition")
 
         if UI.postTicker then
             UI.postTicker:Cancel()
