@@ -907,7 +907,6 @@ ns.RegisterCommand("sold", "<name or link> -- what it actually earned, against t
     end
 
     ns.PrintRaw(("  sold:             %d listing(s)"):format(summary.sold))
-
     ns.PrintRaw(("  expired:          %d listing(s)"):format(summary.expired))
 
     -- Shown, but kept out of the ratio below. Pulling a listing yourself is
