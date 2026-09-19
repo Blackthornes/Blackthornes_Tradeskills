@@ -566,12 +566,17 @@ end
 --- What the ledger says about one item, or about everything.
 --
 -- @param itemID optional; nil totals the lot
--- @return { sold, soldUnits, returned, returnedUnits, net, gross, cut, deposit,
---           firstAt, lastAt }
+-- @return { sold, soldUnits, returned, returnedUnits, expired, cancelled,
+--           net, gross, cut, deposit, firstAt, lastAt }
 function Mail:GetSummary(itemID)
     local totals = {
         sold = 0, soldUnits = 0,
+        -- `returned` is everything that came back. It is split because the two
+        -- halves mean opposite things: an expiry is the auction house telling
+        -- you nobody wanted it at that price, a cancellation is you changing
+        -- your mind. Only the first is evidence about demand.
         returned = 0, returnedUnits = 0,
+        expired = 0, cancelled = 0,
         net = 0, gross = 0, cut = 0, deposit = 0,
         -- Sales priced from the invoice because the gold had not been released
         -- when they were recorded. Real, but not yet in your pocket.
@@ -591,6 +596,12 @@ function Mail:GetSummary(itemID)
             else
                 totals.returned = totals.returned + 1
                 totals.returnedUnits = totals.returnedUnits + (entry.quantity or 1)
+
+                if entry.kind == "removed" then
+                    totals.cancelled = totals.cancelled + 1
+                else
+                    totals.expired = totals.expired + 1
+                end
             end
 
             if not totals.firstAt or entry.t < totals.firstAt then totals.firstAt = entry.t end
@@ -598,10 +609,13 @@ function Mail:GetSummary(itemID)
         end
     end
 
-    -- The number the Profit tab is really being judged on: of everything that
-    -- left your hands, how much of it actually sold.
-    local finished = totals.sold + totals.returned
-    totals.sellThrough = finished > 0 and (totals.sold / finished) or nil
+    -- The number the Profit tab is really being judged on: of everything the
+    -- market got to decide on, how much of it actually sold. Cancellations are
+    -- left out on purpose -- pulling a listing yourself says nothing about
+    -- whether it would have sold, and counting it as a failure would make any
+    -- session of relisting look like the price was wrong.
+    local judged = totals.sold + totals.expired
+    totals.sellThrough = judged > 0 and (totals.sold / judged) or nil
 
     return totals
 end
@@ -797,8 +811,8 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
     end
 
     local summary = Mail:GetSummary()
-    ns.PrintRaw(("  ledger:               %d sold, %d returned"):format(
-        summary.sold, summary.returned))
+    ns.PrintRaw(("  ledger:               %d sold, %d expired, %d cancelled"):format(
+        summary.sold, summary.expired, summary.cancelled))
 
     if summary.sold > 0 then
         ns.PrintRaw(("    taken in:           %s"):format(Util.FormatMoney(summary.net)))
@@ -893,11 +907,19 @@ ns.RegisterCommand("sold", "<name or link> -- what it actually earned, against t
     end
 
     ns.PrintRaw(("  sold:             %d listing(s)"):format(summary.sold))
-    ns.PrintRaw(("  came back:        %d listing(s)"):format(summary.returned))
+
+    ns.PrintRaw(("  expired:          %d listing(s)"):format(summary.expired))
+
+    -- Shown, but kept out of the ratio below. Pulling a listing yourself is
+    -- not the market turning it down.
+    if summary.cancelled > 0 then
+        ns.PrintRaw(("  you cancelled:    %d listing(s)"):format(summary.cancelled))
+    end
 
     if summary.sellThrough then
-        ns.PrintRaw(("  sell-through:     %d%%"):format(
-            math.floor(summary.sellThrough * 100 + 0.5)))
+        ns.PrintRaw(("  sell-through:     %d%%   (of %d the market decided on)")
+            :format(math.floor(summary.sellThrough * 100 + 0.5),
+                summary.sold + summary.expired))
     end
 
     if summary.sold > 0 then
