@@ -293,6 +293,35 @@ end
 -- @param opts { includeAll } -- by default only what your recipes make.
 --   includeAll covers everything sellable with a known price, which is what
 --   the Post All button wants: bag clearing, not just crafted stock.
+--- The lowest a listing may go before it costs the player something, and why.
+--
+-- Two different floors, and the higher one wins.
+--
+-- Material cost is the obvious one, but it only exists for things made from a
+-- recipe this account knows. Everything else in a player's bags -- gathered
+-- mats, drops, vendor trash -- has no cost to compare against, and that was the
+-- bug: `price < unitCost` cannot be true when unitCost is nil, so those lines
+-- were never flagged however little they were about to sell for.
+--
+-- What a vendor pays is the floor that always exists. Listing below it is worse
+-- than walking to a vendor, before the auction house takes its cut or keeps the
+-- deposit on a listing nobody wants at that price either.
+--
+-- @return floor   copper, or nil if neither is known
+-- @return reason  "cost" or "vendor", naming which floor applies
+-- @return vendor  the vendor price itself, for display
+function Posting:GetLossFloor(itemID, unitCost)
+    local vendorPrice = Util.GetVendorSellPrice(itemID)
+
+    local floor, reason = unitCost, unitCost and "cost" or nil
+
+    if vendorPrice and (not floor or vendorPrice > floor) then
+        floor, reason = vendorPrice, "vendor"
+    end
+
+    return floor, reason, vendorPrice
+end
+
 function Posting:GetPostable(opts)
     opts = opts or {}
 
@@ -340,6 +369,9 @@ function Posting:GetPostable(opts)
                         and ns.Profit:Analyse(outputs[itemID])
                     local unitCost = analysis and analysis.costPerUnit
 
+                    local lossFloor, lossReason, vendorPrice =
+                        self:GetLossFloor(itemID, unitCost)
+
                     local isCommodity = ns.Scanner:IsCommodity(itemID)
 
                     -- Commodities sell from across the bags at once; item
@@ -360,8 +392,11 @@ function Posting:GetPostable(opts)
                             unitPrice = price,
                             priceBasis = basis,
                             unitCost = unitCost,
-                            atALoss = price ~= nil and unitCost ~= nil
-                                and price < unitCost,
+                            vendorPrice = vendorPrice,
+                            lossFloor = lossFloor,
+                            lossReason = lossReason,
+                            atALoss = price ~= nil and lossFloor ~= nil
+                                and price < lossFloor,
                             postQuantity = postQuantity,
                             total = price and (price * count) or nil,
                             postTotal = price and (price * postQuantity) or nil,
