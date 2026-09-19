@@ -28,6 +28,11 @@ local PANEL_GAP = 6
 -- Only used when Blizzard's auction window cannot be found at all.
 local PANEL_FALLBACK_HEIGHT = 420
 
+-- Short enough to still show a few rows. Below this the panel stops giving
+-- way to the main window: at that point there is no arrangement that fits,
+-- and a panel squeezed to nothing is worse than one that overlaps.
+local PANEL_MIN_HEIGHT = 200
+
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
@@ -159,7 +164,44 @@ function PostPanel:Build()
     return frame
 end
 
---- Dock to the right of the auction house, matching its height.
+--- How tall the panel can be without running into the main window.
+--
+-- The auction window's own height, normally. But the auction window, this
+-- panel and the main window together are wider than the screen on a lot of
+-- setups, so when the main window is parked under this panel the two collide.
+-- The panel is the one that gives way: it loses a row or two off the bottom,
+-- where the main window would lose its title bar and tab row.
+--
+-- Returns nil while the frames have no screen coordinates yet, which is what
+-- a frame that has never been laid out reports.
+function PostPanel:DesiredHeight(auctionFrame)
+    local top, bottom, right =
+        auctionFrame:GetTop(), auctionFrame:GetBottom(), auctionFrame:GetRight()
+
+    if not top or not bottom or not right then return nil end
+
+    local window = ns.UI and ns.UI.window
+
+    if window and window:IsShown() then
+        local windowTop, windowLeft, windowRight =
+            window:GetTop(), window:GetLeft(), window:GetRight()
+
+        -- Only when the two really do share screen space. The main window is
+        -- movable, so most of the time it is somewhere else entirely.
+        if windowTop and windowLeft and windowRight then
+            local left = right + PANEL_GAP
+
+            if windowRight > left and windowLeft < left + PANEL_WIDTH
+                and windowTop > bottom then
+                bottom = windowTop + PANEL_GAP
+            end
+        end
+    end
+
+    return math.max(top - bottom, PANEL_MIN_HEIGHT)
+end
+
+--- Dock to the right of the auction house, as tall as there is room for.
 function PostPanel:Attach()
     local frame = self:Build()
     local auctionFrame = ns.UI:FindAuctionFrame()
@@ -167,18 +209,19 @@ function PostPanel:Attach()
     frame:ClearAllPoints()
 
     if auctionFrame then
-        -- Two points down the same edge, so the panel's height follows the
-        -- auction window's. Anchoring TOPLEFT and BOTTOM instead over-
-        -- constrains it -- a BOTTOM point also fixes the horizontal centre,
-        -- which TOPLEFT has already decided -- and the client drops one of the
-        -- two. The panel kept the fallback height below and ended half as tall
-        -- as the window it is docked to.
+        -- One anchor and a measured height, rather than a point on the auction
+        -- window's top and another on its bottom. Two points would keep the
+        -- height in step on their own, but they would also pin the bottom to
+        -- the auction window, and the bottom is exactly what has to move out
+        -- of the main window's way.
+        --
+        -- (The pair to avoid is TOPLEFT with BOTTOM, which is what this used to
+        -- be: a BOTTOM point fixes the horizontal centre too, which TOPLEFT has
+        -- already decided, so the client drops one of the two and the panel
+        -- keeps whatever height it had. That is how it ended up half as tall as
+        -- the window it was docked to.)
         frame:SetPoint("TOPLEFT", auctionFrame, "TOPRIGHT", PANEL_GAP, 0)
-        frame:SetPoint("BOTTOMLEFT", auctionFrame, "BOTTOMRIGHT", PANEL_GAP, 0)
-
-        -- Zero means "no explicit height", clearing the fallback below if an
-        -- earlier attach ran before Blizzard's auction UI had loaded.
-        frame:SetHeight(0)
+        frame:SetHeight(self:DesiredHeight(auctionFrame) or PANEL_FALLBACK_HEIGHT)
     else
         -- The auction house window is load-on-demand and may not exist yet.
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -120)
@@ -189,8 +232,27 @@ function PostPanel:Attach()
     self:Refresh()
 end
 
+--- Re-measure after the main window is opened, closed or dragged.
+function PostPanel:Reflow()
+    if not self.frame or not self.frame:IsShown() then return end
+
+    local auctionFrame = ns.UI:FindAuctionFrame()
+    if not auctionFrame then return end
+
+    local height = self:DesiredHeight(auctionFrame)
+
+    -- Only when it actually moved. This runs on the auction house ticker, and
+    -- setting the height every second would relayout the list for nothing.
+    if height and math.abs(height - self.frame:GetHeight()) > 0.5 then
+        self.frame:SetHeight(height)
+    end
+end
+
 function PostPanel:Refresh()
     if not self.frame or not self.frame:IsShown() then return end
+
+    -- Cheap, and it catches the main window being dragged, which has no event.
+    self:Reflow()
 
     local lines = ns.Posting:GetPostable({ includeAll = true })
 

@@ -83,6 +83,10 @@ function UI:Build()
     window:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         UI:SavePosition()
+
+        -- The sell list gives way to this window rather than overlapping it,
+        -- so it needs to know where the window came to rest.
+        if ns.PostPanel then ns.PostPanel:Reflow() end
     end)
 
     -- Escape closes it, like every other panel in the game.
@@ -377,10 +381,15 @@ function UI:Show()
 
     self:SelectTab(self.activeTab or (ns.db and ns.db.lastTab) or self.tabOrder[1].key)
     self:UpdateHeader()
+
+    if ns.PostPanel then ns.PostPanel:Reflow() end
 end
 
 function UI:Hide()
     if self.window then self.window:Hide() end
+
+    -- Hidden, so the sell list can have its full height back.
+    if ns.PostPanel then ns.PostPanel:Reflow() end
 end
 
 function UI:Toggle()
@@ -524,11 +533,13 @@ function UI:AttachToAuctionHouse()
 
     self:AttachPostButton()
 
-    if ns.PostPanel then ns.PostPanel:Attach() end
-
-    -- The window is built centred, or wherever it was last dragged with the
-    -- auction house shut. Either way it is in the wrong place now.
+    -- Before the sell list attaches: the list measures itself around this
+    -- window, so it needs the window where it is going to sit. Built centred,
+    -- or wherever it was last dragged with the auction house shut, it is in
+    -- the wrong place now either way.
     self:RestorePosition("auctionWindowPosition")
+
+    if ns.PostPanel then ns.PostPanel:Attach() end
 end
 
 --- A Post button beside the Scan button on the auction house window.
