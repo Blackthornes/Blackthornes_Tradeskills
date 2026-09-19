@@ -131,30 +131,39 @@ Blizzard's frame.** Whichever query was sent last owns it. Two consequences:
   search, and vice versa, so a pending search must always be given a timeout.
   There is no event for a request that was dropped.
 
-## Owned auctions are readable, but never announced
+## Owned auctions are readable; the announcement is not dependable
 
-**`OWNED_AUCTIONS_UPDATED` registers successfully and then never fires.**
-Confirmed in game on 2026-09-19: `/bts auctions` reported the registration as
-accepted, so this is not an unsupported event that `ns.RegisterEvent` quietly
-swallowed -- the client takes it and simply never sends it. A registration check
-cannot tell you this, which is why the report now counts how many times the
-event has actually arrived rather than whether it was accepted.
+**`OWNED_AUCTIONS_UPDATED` exists on this client and does fire, but not when a
+listing needs confirming.** Measured in game on 2026-09-19: `/bts auctions`
+reported `announces changes: yes, 4 time(s) this session`.
 
-The addon waited for an announcement that was never coming, gave up after five
-seconds and reported `could not tell whether that listing went up` after every
-post, while the auction sat in the player's Auctions tab.
+Two earlier readings of this were wrong, and both mistakes came from the same
+place. First the event was written down as absent because `ns.RegisterEvent`
+returned true for it -- but registration is wrapped in a `pcall` and succeeds
+for nearly anything, so that says nothing either way. Then the corrected
+diagnostic was read as proving the event never arrives, when all it showed was
+a session in which none had yet. **A check that reports whether a call
+succeeded is not evidence about whether the thing happens.** Count real
+occurrences.
 
-The reads themselves are fine. Confirmed in game on 2026-09-19, one Peacebloom
-listing up:
+What is certainly true is the symptom: the addon waited five seconds for an
+announcement, gave up, and reported `could not tell whether that listing went
+up` after every post, while the auction sat in the player's Auctions tab. So
+the event is not a thing to hang a confirmation on, whatever it is doing.
+
+The reads themselves are fine, and that is what the fix uses. Confirmed in game
+on 2026-09-19 with two listings up:
 
 ```
 QueryOwnedAuctions:   yes
 GetNumOwnedAuctions:  yes
 GetOwnedAuctionInfo:  yes
-count right now:      1
-  1: item=2447 qty=3 status=0
+announces changes:    yes, 4 time(s) this session
+count right now:      2
+  1: item=117 qty=8 status=0
+  2: item=2447 qty=3 status=0
 re-querying...
-after querying: 1 auction(s)
+after querying: 2 auction(s)
 ```
 
 So verification reads the answer back itself, a few times over about five
@@ -164,9 +173,9 @@ seconds after the query goes out, rather than waiting to be told. `status=0` is
 The timing is the part that needs care. The server's reply lands at no knowable
 moment, so a read taken too early sees the old count. Only the last read of a
 sequence may conclude that a listing failed: saying "it did not go up" when it
-did is a worse error than the one being fixed. `/bts auctions` now reports
-whether the client announces changes at all, so this is visible rather than
-inferred.
+did is a worse error than the one being fixed. `/bts auctions` now reports how
+many times the client has actually announced a change, so this is counted
+rather than inferred.
 
 ## Still unverified
 

@@ -1,9 +1,10 @@
--- Verifying that a listing actually went up, on a client that never says so.
+-- Verifying that a listing actually went up, without waiting to be told.
 --
--- Forever does not fire OWNED_AUCTIONS_UPDATED. The addon used to wait for that
--- announcement and, when it never came, told the player "could not tell whether
--- that listing went up" after every single post -- while the auction sat in
--- their Auctions tab perfectly fine.
+-- Forever does fire OWNED_AUCTIONS_UPDATED, but not when a listing needs
+-- confirming. The addon used to wait for that announcement and, when it did not
+-- come, told the player "could not tell whether that listing went up" after
+-- every single post -- while the auction sat in their Auctions tab perfectly
+-- fine.
 --
 -- Reading owned auctions works on this client, so the answer is read back
 -- directly instead. The case that needs guarding is timing: the server's reply
