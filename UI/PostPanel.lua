@@ -18,28 +18,66 @@ local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
 
-local PANEL_WIDTH = 300
+-- Wider than it needs to be for the text alone: the amount to list sits beside
+-- the button, and squeezing it in would have cost the item names their width.
+local PANEL_WIDTH = 348
 local ROW_HEIGHT = 30
+
+local BUTTON_WIDTH = 46
+local QUANTITY_WIDTH = 42
+
+-- Right margin, button, gap, quantity box, gap before the text.
+local TEXT_INSET = 8 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 10
 
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
 
+-- Declared early because typing in a row's quantity box redraws that one row.
+-- Rebuilding the list instead would scroll it back to the top, and losing your
+-- place every time you change a number is worse than the problem being solved.
+local UpdateRow
+
+--- Is the player part-way through typing a number into this box?
+--
+-- Guarded rather than called outright: this client has gaps in the frame API,
+-- and a missing HasFocus would turn a redraw into an error.
+local function BeingTyped(box)
+    return box.editBox.HasFocus and box.editBox:HasFocus()
+end
 local function CreateRow(row)
+    local textWidth = PANEL_WIDTH - TEXT_INSET - 8
+
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("TOPLEFT", 8, -4)
-    row.name:SetWidth(PANEL_WIDTH - 90)
+    row.name:SetWidth(textWidth)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
     row.detail:SetPoint("TOPLEFT", 8, -17)
-    row.detail:SetWidth(PANEL_WIDTH - 90)
+    row.detail:SetWidth(textWidth)
 
     row.post = Widgets.CreateButton(row, "List", function()
         if not row.data then return end
 
         ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
-    end, { width = 46, height = 18, primary = true })
+    end, { width = BUTTON_WIDTH, height = 18, primary = true })
     row.post:SetPoint("RIGHT", -8, 0)
+
+    -- How many to list, beside the button that lists them. Empty-handed this
+    -- panel posted whole stacks with no way to say otherwise.
+    row.quantity = Widgets.CreateNumberBox(row, {
+        width = QUANTITY_WIDTH,
+        height = 18,
+        background = "panel",
+        min = 1,
+        onChange = function(value)
+            if not row.data then return end
+
+            ns.Posting:ApplyQuantity(row.data, value)
+            UpdateRow(row, row.data)
+        end,
+    })
+    row.quantity:SetPoint("RIGHT", row.post, "LEFT", -6, 0)
 end
 
 --- Why a line is a loss, in words the player can act on.
@@ -50,13 +88,25 @@ local function LossText(line)
     return "Below what the materials cost."
 end
 
-local function UpdateRow(row, line)
+function UpdateRow(row, line)
     row.name:SetText(line.label)
+
+    local maxQuantity = line.maxQuantity or line.count or 1
+
+    -- Not while it is being typed into: overwriting someone mid-number is how
+    -- a field ends up refusing to accept what they meant.
+    if not BeingTyped(row.quantity) then
+        row.quantity:SetLimits(1, math.max(1, maxQuantity))
+        row.quantity:SetValue(line.postQuantity or maxQuantity, true)
+    end
 
     -- Quantity and unit price on one line: together they are the decision,
     -- and a commodity posting 63 at once is worth noticing before clicking.
-    row.detail:SetText(("%d @ %s  =  %s"):format(
+    -- Listing part of a stack says so, since "7 @ 6c" out of 20 in the bag
+    -- reads the same as all of them otherwise.
+    row.detail:SetText(("%d%s @ %s  =  %s"):format(
         line.postQuantity,
+        line.postQuantity < maxQuantity and (" of " .. maxQuantity) or "",
         Util.FormatMoney(line.unitPrice, { noColor = true, short = true }),
         Util.FormatMoney(line.postTotal or 0, { noColor = true, short = true })))
 
@@ -80,8 +130,8 @@ local function UpdateRow(row, line)
 
     row.post.tooltipText = line.atALoss
         and LossText(line)
-        or ("List %d at %s each."):format(
-            line.postQuantity,
+        or ("List %d of %d at %s each."):format(
+            line.postQuantity, maxQuantity,
             Util.FormatMoney(line.unitPrice or 0, { noColor = true }))
 end
 
@@ -90,7 +140,8 @@ local function ShowRowTooltip(row, line)
     GameTooltip:SetText(line.label, 1, 1, 1)
 
     GameTooltip:AddDoubleLine("In bags", tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Listing", tostring(line.postQuantity), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine("Listing", ("%d of %d"):format(
+        line.postQuantity, line.maxQuantity or line.count), 0.7, 0.7, 0.7, 1, 1, 1)
 
     if line.unitCost then
         GameTooltip:AddDoubleLine("Cost each",
@@ -105,6 +156,8 @@ local function ShowRowTooltip(row, line)
     GameTooltip:AddLine(line.isCommodity
         and "Commodity: sells from every bag at once"
         or "Item auction: one stack at a time", 0.5, 0.5, 0.5)
+
+    GameTooltip:AddLine("Type in the box to list fewer than that.", 0.5, 0.5, 0.5)
 
     GameTooltip:Show()
 end
