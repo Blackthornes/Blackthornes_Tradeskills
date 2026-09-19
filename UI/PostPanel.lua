@@ -21,6 +21,13 @@ local Util = ns.Util
 local PANEL_WIDTH = 300
 local ROW_HEIGHT = 30
 
+-- Clear of the auction window's bevelled edge without opening a gap you could
+-- see the world through.
+local PANEL_GAP = 6
+
+-- Only used when Blizzard's auction window cannot be found at all.
+local PANEL_FALLBACK_HEIGHT = 420
+
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
@@ -106,6 +113,13 @@ function PostPanel:Build()
     local frame = CreateFrame("Frame", "BlackthornesTSPostPanel", UIParent)
     frame:SetWidth(PANEL_WIDTH)
     frame:SetFrameStrata("HIGH")
+
+    -- Opaque, so a click on a row cannot fall through to the auction window
+    -- underneath, and raised on click: this panel shares its strata with the
+    -- main window, and without this the two have a fixed order forever. That
+    -- order put the sell list across the main window's tab row.
+    frame:EnableMouse(true)
+    if frame.SetToplevel then frame:SetToplevel(true) end
     frame:Hide()
 
     Theme.Fill(frame, "window")
@@ -153,12 +167,22 @@ function PostPanel:Attach()
     frame:ClearAllPoints()
 
     if auctionFrame then
-        frame:SetPoint("TOPLEFT", auctionFrame, "TOPRIGHT", 6, 0)
-        frame:SetPoint("BOTTOM", auctionFrame, "BOTTOM", 0, 0)
+        -- Two points down the same edge, so the panel's height follows the
+        -- auction window's. Anchoring TOPLEFT and BOTTOM instead over-
+        -- constrains it -- a BOTTOM point also fixes the horizontal centre,
+        -- which TOPLEFT has already decided -- and the client drops one of the
+        -- two. The panel kept the fallback height below and ended half as tall
+        -- as the window it is docked to.
+        frame:SetPoint("TOPLEFT", auctionFrame, "TOPRIGHT", PANEL_GAP, 0)
+        frame:SetPoint("BOTTOMLEFT", auctionFrame, "BOTTOMRIGHT", PANEL_GAP, 0)
+
+        -- Zero means "no explicit height", clearing the fallback below if an
+        -- earlier attach ran before Blizzard's auction UI had loaded.
+        frame:SetHeight(0)
     else
         -- The auction house window is load-on-demand and may not exist yet.
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -120)
-        frame:SetHeight(420)
+        frame:SetHeight(PANEL_FALLBACK_HEIGHT)
     end
 
     frame:Show()
