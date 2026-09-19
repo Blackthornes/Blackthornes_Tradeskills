@@ -282,7 +282,6 @@ function Util.HasFunction(path)
     return found and type(value) == "function"
 end
 
---- A player-readable label for an item: its clickable link when the client has
 --- What a vendor pays for one unit, or nil if the client has not cached it.
 --
 -- This is the floor under any listing. An auction below it is worse than
@@ -307,7 +306,55 @@ function Util.GetVendorSellPrice(itemID)
     return sellPrice
 end
 
---- the item cached, its name otherwise, and only as a last resort the raw ID.
+--- The most of an item that can sit in one stack, or nil if uncached.
+--
+-- Used to tell a stack count apart from something that is not one. An auction
+-- house that reports 241 of an item whose stack size is 1 is not describing a
+-- stack, and a price divided by that number is not a unit price.
+function Util.GetMaxStackSize(itemID)
+    if not itemID then return nil end
+    if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
+
+    -- maxStack is the eighth return.
+    local ok, _, _, _, _, _, _, _, maxStack = pcall(C_Item.GetItemInfo, itemID)
+
+    if not ok or type(maxStack) ~= "number" or maxStack < 1 then return nil end
+
+    return maxStack
+end
+
+--- The price of one, given what a whole listing costs and how many it holds.
+--
+-- Item auctions quote the price of the stack, so a unit price is a division.
+-- The trap is that the quantity is not always a stack count. This client has
+-- been seen reporting the total available across every listing of the item
+-- instead: 241 Linen Bags on offer, one 3s listing, 300 / 241 = 1, and the
+-- sell list offered a bag for a copper.
+--
+-- Two things prove a quantity is not a stack count, and either means the price
+-- is already per unit:
+--
+--   * it is more than the item can stack to at all -- a Linen Bag stacks to 1,
+--     so 241 of them is a market, not a stack;
+--   * the whole listing costs less than the number of items in it, so the
+--     division would round to nothing.
+--
+-- When the stack size is not cached the old behaviour stands and the division
+-- happens. That is the case worth watching, which is why `/bts listings`
+-- prints the stack size it managed to read.
+function Util.UnitPriceFromStack(itemID, totalPrice, quantity)
+    if not quantity or quantity <= 1 then return totalPrice end
+    if totalPrice < quantity then return totalPrice end
+
+    local maxStack = Util.GetMaxStackSize(itemID)
+    if maxStack and quantity > maxStack then return totalPrice end
+
+    return math.floor(totalPrice / quantity)
+end
+
+--- A player-readable label for an item: its clickable link when the client has
+-- the item cached, its name otherwise, and only as a last resort the raw ID.
+--
 -- Item data is loaded lazily, so an uncached item genuinely has no name to show
 -- until something requests it.
 function Util.GetItemLabel(itemID)
