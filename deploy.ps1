@@ -60,6 +60,23 @@ if (-not $SkipCheck) {
 
 Write-Host "Deploying to $TargetRoot" -ForegroundColor Cyan
 
+# Refuse to touch a junction. The rebuild below is Remove-Item -Recurse -Force,
+# and pointed at a link that can delete the contents of whatever it points at --
+# which, if you have junctioned the client's addon folder to your working copy,
+# is your source. Nothing to deploy in that case anyway: the client is already
+# reading your files directly, so a reload is the whole workflow.
+$existing = Get-Item $TargetRoot -Force -ErrorAction SilentlyContinue
+
+if ($existing -and ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    Write-Host ''
+    Write-Host "$TargetRoot is a junction, not a folder." -ForegroundColor Yellow
+    Write-Host 'The client is reading your working copy directly, so there is' -ForegroundColor Yellow
+    Write-Host 'nothing to copy. Type /reload in game instead.' -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host 'Deploying would delete the files it points at. Refusing.' -ForegroundColor Yellow
+    exit 0
+}
+
 # Rebuild the target so files deleted from source do not linger in the client.
 if (Test-Path $TargetRoot) {
     Remove-Item $TargetRoot -Recurse -Force
