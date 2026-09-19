@@ -364,7 +364,9 @@ local function UpdateDetail(entry)
     detail.values.scans:SetText(tostring(record.scans or 0))
 
     local confidence, reason = ns.Prices:GetConfidence(entry.itemID)
-    detail.values.confidence:SetText(("%d%%  (%s)"):format(math.floor(confidence * 100), reason))
+    -- No reason means nothing is holding the number down, so nothing is named.
+    detail.values.confidence:SetText(("%d%%%s"):format(math.floor(confidence * 100),
+        reason and ("  (" .. reason .. ")") or ""))
     detail.values.confidence:SetTextColor(Theme.Unpack(confidence > 0.6 and "profit" or "warn"))
 
     local liquidity = ns.Prices:GetLiquidity(entry.itemID)

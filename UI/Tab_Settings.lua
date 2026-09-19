@@ -431,7 +431,7 @@ local function Refresh()
 
     widgets.recipeSummary:SetText(("%s recipes cached  ·  last scan %s"):format(
         Util.Comma(ns.Recipes:Count()),
-        lastScan and (Util.FormatAge(time() - lastScan) .. " ago") or "never"))
+        lastScan and Util.FormatAgeAgo(time() - lastScan) or "never"))
 
     -- The beta can start a session with nothing. Say so where the data
     -- counts are shown, rather than leaving it looking like the addon

@@ -244,7 +244,7 @@ function UI:UpdateHeader()
     local recipeCount = ns.Recipes:Count()
 
     local lastScan = ns.db and ns.db.lastFullScan
-    local scanText = lastScan and ("scanned " .. Util.FormatAge(time() - lastScan) .. " ago")
+    local scanText = lastScan and ("scanned " .. Util.FormatAgeAgo(time() - lastScan))
         or "never scanned"
 
     self.statusLabel:SetText(("%s items priced  ·  %s recipes known  ·  %s"):format(

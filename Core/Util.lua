@@ -484,6 +484,16 @@ function Util.FormatAge(seconds)
     return math.floor(seconds / 86400) .. "d"
 end
 
+--- The same age, phrased to sit in a sentence: "seen %s".
+--
+-- FormatAge returns "just now" and "never", which are already complete
+-- phrases, so callers that appended " ago" to it produced "just now ago".
+function Util.FormatAgeAgo(seconds)
+    local age = Util.FormatAge(seconds)
+    if age == "just now" or age == "never" then return age end
+    return age .. " ago"
+end
+
 --- Round a price down to something an item auction will actually accept.
 --
 -- C_AuctionHouse.PostItem takes whole gold and silver only: a price carrying

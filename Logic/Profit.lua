@@ -47,8 +47,10 @@ end
 -- profit setting. Anything the profit cannot be worked out for matches, since
 -- the unknown case is the one where giving gold away is least defensible.
 --
--- @return price, basis  -- basis is "undercut", "match" or "market"; nil price
---                          when there is nothing to go on
+-- @return price, basis, why  -- basis is "undercut", "match" or "market", and
+--   nil price when there is nothing to go on. why is a sentence explaining a
+--   match, since "match" alone does not say whether undercutting was rejected
+--   on the numbers or never costed at all.
 function Profit:ChoosePostPrice(itemID)
     if not itemID then return nil, nil end
 
@@ -78,18 +80,30 @@ function Profit:ChoosePostPrice(itemID)
 
     -- A rival already sitting at the lowest price the server allows leaves
     -- nothing below it, so matching is the only move.
-    if underPrice >= matchPrice then return matchPrice, "match" end
+    if underPrice >= matchPrice then
+        return matchPrice, "match", "there is no legal price below the rival's"
+    end
 
     local recipeID = ns.Cost:FindRecipeForItem(itemID)
     local recipe = recipeID and ns.Recipes:GetAny(recipeID)
     local cost = recipeID and ns.Cost:GetCraftCost(recipeID)
     local profit = ProfitAtPrice(recipe, cost, underPrice)
 
-    if profit and profit >= (ns.Config:Get("minProfit") or 0) then
-        return underPrice, "undercut"
+    if not profit then
+        return matchPrice, "match",
+            ("no cost known for this, so %s was not worth risking"):format(
+                Util.FormatMoney(matchPrice - underPrice, { noColor = true }))
     end
 
-    return matchPrice, "match"
+    local minProfit = ns.Config:Get("minProfit") or 0
+
+    if profit >= minProfit then return underPrice, "undercut" end
+
+    return matchPrice, "match",
+        ("undercutting to %s leaves %s, under your %s minimum"):format(
+            Util.FormatMoney(underPrice, { noColor = true }),
+            Util.FormatMoney(profit, { noColor = true }),
+            Util.FormatMoney(minProfit, { noColor = true }))
 end
 
 --------------------------------------------------------------------------------
@@ -386,7 +400,9 @@ ns.RegisterCommand("top", "[count] -- most profitable crafts right now", functio
         local flags = {}
         if entry.stale then flags[#flags + 1] = "stale" end
         if entry.craftableNow > 0 then flags[#flags + 1] = ("can make %d"):format(entry.craftableNow) end
-        if (entry.confidence or 0) < 0.4 then flags[#flags + 1] = entry.confidenceReason end
+        if (entry.confidence or 0) < 0.4 and entry.confidenceReason then
+            flags[#flags + 1] = entry.confidenceReason
+        end
 
         ns.PrintRaw(("  |c%s%2d.|r %s  |c%s%s|r  (%d%% margin)  %s"):format(
             ns.COLORS.accent, i,
@@ -481,7 +497,8 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
     ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% ROI)"):format(
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),
         math.floor(analysis.margin * 100), math.floor(analysis.roi * 100)))
-    ns.PrintRaw(("  |c%sconfidence %d%% (%s), data %s old|r"):format(
+    ns.PrintRaw(("  |c%sconfidence %d%%%s, data %s old|r"):format(
         ns.COLORS.muted, math.floor((analysis.confidence or 0) * 100),
-        analysis.confidenceReason or "?", Util.FormatAge(analysis.age)))
+        analysis.confidenceReason and (" (" .. analysis.confidenceReason .. ")") or "",
+        Util.FormatAge(analysis.age)))
 end)
