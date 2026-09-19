@@ -1,0 +1,1046 @@
+-- Blackthornes Tradeskills -- UI/Main.lua
+-- The single window everything lives in, plus the minimap button that opens it.
+--
+-- Tabs register themselves here rather than being hardcoded, so each tab file
+-- owns its own layout and this file only routes between them.
+
+local _, ns = ...
+
+local UI = ns.NewModule("UI")
+
+local Theme = ns.Theme
+local Widgets = ns.Widgets
+local Util = ns.Util
+
+local WINDOW_WIDTH = 1060
+local WINDOW_HEIGHT = 580
+
+-- The bevelled dialog border sits on the window's edge and reaches this far
+-- inward, so everything inside is padded by the same amount. This is why every
+-- Blizzard panel has a wide margin.
+local EDGE_PAD = 11
+
+UI.tabs = {}
+UI.tabOrder = {}
+
+--------------------------------------------------------------------------------
+-- Tab registration
+--------------------------------------------------------------------------------
+
+--- @param tab { key, text, order, build(container), refresh(), onShow() }
+function UI:RegisterTab(tab)
+    self.tabs[tab.key] = tab
+    self.tabOrder[#self.tabOrder + 1] = tab
+
+    table.sort(self.tabOrder, function(a, b)
+        return (a.order or 99) < (b.order or 99)
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- Window
+--------------------------------------------------------------------------------
+
+function UI:Build()
+    if self.window then return self.window end
+
+    local window = CreateFrame("Frame", "BlackthornesTSWindow", UIParent)
+    window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    window:SetPoint("CENTER")
+    window:SetFrameStrata("HIGH")
+    window:SetClampedToScreen(true)
+    window:EnableMouse(true)
+    window:SetMovable(true)
+    window:RegisterForDrag("LeftButton")
+    window:Hide()
+
+    Theme.Fill(window, "window")
+
+    -- The heavy bevelled gold dialog frame, so the window reads as part of the
+    -- game rather than a flat overlay pasted on top of it. Flush to the edge
+    -- and untinted: that texture already carries its own gold, and tinting it
+    -- again muddies it.
+    Theme.AddGameOutline(window, { style = "dialog", color = "natural" })
+
+    window:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    window:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        UI:SavePosition()
+    end)
+
+    -- Escape closes it, like every other panel in the game.
+    tinsert(UISpecialFrames, "BlackthornesTSWindow")
+
+    self.window = window
+
+    self:BuildHeader()
+    self:BuildTabs()
+
+    self:RestorePosition()
+
+    return window
+end
+
+function UI:BuildHeader()
+    local window = self.window
+
+    local header = CreateFrame("Frame", nil, window)
+    header:SetPoint("TOPLEFT", EDGE_PAD, -EDGE_PAD)
+    header:SetPoint("TOPRIGHT", -EDGE_PAD, -EDGE_PAD)
+    header:SetHeight(52)
+    Theme.Fill(header, "header")
+
+    local title = Theme.CreateLabel(header, "title", "accent")
+    title:SetPoint("TOPLEFT", 14, -10)
+    title:SetText("Blackthornes Tradeskills")
+
+    local status = Theme.CreateLabel(header, "small", "muted")
+    status:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    self.statusLabel = status
+
+    -- Close
+    local close = CreateFrame("Button", nil, header)
+    close:SetSize(24, 24)
+    close:SetPoint("TOPRIGHT", -8, -8)
+
+    local closeLabel = Theme.CreateLabel(close, "large", "muted", "CENTER")
+    closeLabel:SetPoint("CENTER")
+    closeLabel:SetText("x")
+
+    close:SetScript("OnEnter", function() closeLabel:SetTextColor(Theme.Unpack("loss")) end)
+    close:SetScript("OnLeave", function() closeLabel:SetTextColor(Theme.Unpack("muted")) end)
+    close:SetScript("OnClick", function() UI:Hide() end)
+
+    -- Scan.
+    --
+    -- The button stays clickable even when a scan is not currently possible:
+    -- a greyed-out control that cannot say why is worse than one that tells
+    -- you to open the auction house.
+    local scanButton = Widgets.CreateButton(header, "Scan auctions", function()
+        UI:TriggerScan()
+    end, { width = 120, height = 24, primary = true })
+
+    scanButton:SetPoint("TOPRIGHT", close, "TOPLEFT", -8, -1)
+    self.scanButton = scanButton
+
+    -- Inline explanation, so the reason appears in the window rather than only
+    -- in the chat frame.
+    local hint = Theme.CreateLabel(header, "small", "warn", "RIGHT")
+    hint:SetPoint("TOPRIGHT", scanButton, "BOTTOMRIGHT", 0, -4)
+    hint:SetWidth(260)
+    self.scanHint = hint
+
+    self.header = header
+
+    local progress = Widgets.CreateProgressBar(window)
+    progress:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, 0)
+    progress:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, 0)
+    progress:Hide()
+    self.progressBar = progress
+end
+
+--- Start or cancel a scan, explaining itself when it cannot.
+function UI:TriggerScan()
+    if ns.Scanner.isScanning then
+        ns.Scanner:CancelScan()
+        self:UpdateHeader()
+        return
+    end
+
+    local allowed, reason = ns.Scanner:CanFullScan()
+    if not allowed then
+        if self.scanHint then
+            self.scanHint:SetText(reason or "cannot scan right now")
+        end
+        ns.Print(reason or "cannot scan right now")
+        return
+    end
+
+    ns.Scanner:StartFullScan()
+    self:UpdateHeader()
+end
+
+function UI:BuildTabs()
+    local window = self.window
+
+    local definitions = {}
+    for _, tab in ipairs(self.tabOrder) do
+        definitions[#definitions + 1] = { key = tab.key, text = tab.text }
+    end
+
+    local strip = Widgets.CreateTabStrip(window, definitions, function(key)
+        UI:SelectTab(key)
+    end)
+    strip:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 8, -4)
+    self.tabStrip = strip
+
+    local content = Theme.CreatePanel(window, "panel")
+    content:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", -8, -1)
+    content:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -EDGE_PAD, EDGE_PAD)
+    self.content = content
+
+    for _, tab in ipairs(self.tabOrder) do
+        local container = CreateFrame("Frame", nil, content)
+        container:SetPoint("TOPLEFT", 1, -1)
+        container:SetPoint("BOTTOMRIGHT", -1, 1)
+        container:Hide()
+
+        tab.container = container
+
+        if tab.build then
+            tab.build(container)
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- State
+--------------------------------------------------------------------------------
+
+function UI:SelectTab(key)
+    local tab = self.tabs[key]
+    if not tab then return end
+
+    for _, other in ipairs(self.tabOrder) do
+        if other.container then
+            other.container:SetShown(other.key == key)
+        end
+    end
+
+    self.activeTab = key
+    self.tabStrip:Select(key)
+
+    if ns.db then ns.db.lastTab = key end
+
+    if tab.onShow then tab.onShow() end
+    if tab.refresh then tab.refresh() end
+end
+
+function UI:UpdateHeader()
+    if not self.statusLabel then return end
+
+    local priceCount = ns.Prices:Count()
+    local recipeCount = ns.Recipes:Count()
+
+    local lastScan = ns.db and ns.db.lastFullScan
+    local scanText = lastScan and ("scanned " .. Util.FormatAge(time() - lastScan) .. " ago")
+        or "never scanned"
+
+    self.statusLabel:SetText(("%s items priced  ·  %s recipes known  ·  %s"):format(
+        Util.Comma(priceCount), Util.Comma(recipeCount), scanText))
+
+    -- The scan button stays live and explains itself rather than greying out
+    -- into something that looks broken.
+    if ns.Scanner.isScanning then
+        self.scanButton:SetText("Cancel scan")
+        self.scanButton.tooltipText = "Stop the running scan"
+        self.scanHint:SetText("")
+    else
+        self.scanButton:SetText("Scan auctions")
+
+        local allowed, reason = ns.Scanner:CanFullScan()
+        self.scanButton.tooltipText = allowed
+            and "Take a full snapshot of the auction house"
+            or reason
+
+        self.scanHint:SetText(allowed and "" or (reason or ""))
+    end
+end
+
+function UI:SetScanProgress(fraction)
+    if self.progressBar then
+        self.progressBar:Show()
+        self.progressBar:SetProgress(fraction)
+    end
+
+    -- Progress is also surfaced on the auction-house button, which is what the
+    -- player is looking at while a scan runs.
+    if self.auctionButton then
+        self.auctionButton:SetText(("%d%%"):format(math.floor((fraction or 0) * 100)))
+    end
+
+    if self.scanHint then
+        self.scanHint:SetText(("scanning... %d%%"):format(math.floor((fraction or 0) * 100)))
+    end
+end
+
+function UI:OnScanComplete()
+    if self.progressBar then self.progressBar:Hide() end
+    if self.scanHint then self.scanHint:SetText("") end
+
+    self:UpdateAuctionButton()
+    self:UpdateHeader()
+    self:RefreshActiveTab()
+end
+
+function UI:OnRecipesUpdated()
+    ns.Cost:InvalidateIndex()
+    self:UpdateHeader()
+    self:RefreshActiveTab()
+end
+
+function UI:OnInventoryUpdated()
+    self:RefreshActiveTab()
+
+    -- Crafting something new changes what there is to list.
+    if self.postButton and self.postButton:IsShown() then
+        self:UpdatePostButton()
+    end
+end
+
+function UI:RefreshActiveTab()
+    if not self.window or not self.window:IsShown() then return end
+
+    local tab = self.tabs[self.activeTab]
+    if tab and tab.refresh then tab.refresh() end
+end
+
+--------------------------------------------------------------------------------
+-- Position
+--------------------------------------------------------------------------------
+
+function UI:SavePosition()
+    if not ns.db or not self.window then return end
+
+    local point, _, relativePoint, x, y = self.window:GetPoint()
+    ns.db.windowPosition = { point = point, relativePoint = relativePoint, x = x, y = y }
+end
+
+function UI:RestorePosition()
+    local position = ns.db and ns.db.windowPosition
+    if not position then return end
+
+    self.window:ClearAllPoints()
+    self.window:SetPoint(position.point or "CENTER", UIParent,
+        position.relativePoint or "CENTER", position.x or 0, position.y or 0)
+end
+
+--------------------------------------------------------------------------------
+-- Show / hide
+--------------------------------------------------------------------------------
+
+function UI:Show()
+    self:Build()
+    self.window:Show()
+
+    self:SelectTab(self.activeTab or (ns.db and ns.db.lastTab) or self.tabOrder[1].key)
+    self:UpdateHeader()
+end
+
+function UI:Hide()
+    if self.window then self.window:Hide() end
+end
+
+function UI:Toggle()
+    self:Build()
+
+    if self.window:IsShown() then
+        self:Hide()
+    else
+        self:Show()
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Auction house attachment
+--------------------------------------------------------------------------------
+
+-- Candidate globals for Blizzard's auction window. Forever is a retail client,
+-- so AuctionHouseFrame is expected, but the name is not worth assuming.
+local AUCTION_FRAME_NAMES = { "AuctionHouseFrame", "AuctionFrame" }
+
+--- Locate Blizzard's auction window, whatever it is called on this client.
+function UI:FindAuctionFrame()
+    for _, name in ipairs(AUCTION_FRAME_NAMES) do
+        local frame = _G[name]
+
+        -- Guard against a global that exists but is not a frame.
+        if type(frame) == "table" and frame.GetObjectType then
+            local ok = pcall(frame.GetObjectType, frame)
+            if ok then return frame, name end
+        end
+    end
+end
+
+--- A scan button docked to Blizzard's auction house window.
+--
+-- Scanning only works while the auction house is open, so the control belongs
+-- where the player already is rather than only inside our own window.
+--
+-- The button is parented to UIParent rather than the auction frame so it cannot
+-- be clipped or buried by Blizzard's own layering, and it falls back to a fixed
+-- screen position if the auction frame cannot be found at all. A scan button
+-- that quietly fails to appear is worse than one in a slightly odd place.
+function UI:AttachToAuctionHouse()
+    local button = self.auctionButton
+
+    if not button then
+        button = Widgets.CreateButton(UIParent, "Scan", function()
+            UI:TriggerScan()
+            UI:UpdateAuctionButton()
+        end, {
+            -- Tall enough that the bevel does not crowd the label.
+            width = 100,
+            height = 30,
+            primary = true,
+            -- Fully opaque, so nothing behind the button shows through.
+            baseColor = { 0.06, 0.07, 0.09, 1 },
+        })
+
+        button:SetFrameStrata("FULLSCREEN_DIALOG")
+        button:SetFrameLevel(100)
+
+        -- This button lives out in the game world, where a flat one-pixel
+        -- border vanishes against Blizzard's art. Give it the familiar
+        -- bevelled frame edge so it always reads as a control.
+        -- A lighter bevel, pushed slightly outward so it frames the button
+        -- rather than closing in on the text.
+        Theme.AddGameOutline(button, {
+            style = "tooltip",
+            color = "natural",
+            edgeSize = 12,
+            expand = 4,
+        })
+        button:ApplyBaseColor()
+
+        self.auctionButton = button
+    end
+
+    local auctionFrame, frameName = self:FindAuctionFrame()
+
+    button:ClearAllPoints()
+
+    if auctionFrame then
+        button:SetPoint("BOTTOMRIGHT", auctionFrame, "TOPRIGHT", -4, 4)
+        ns.Debug("docked scan button to", frameName)
+    else
+        -- Nothing to dock to: put it somewhere it cannot be missed.
+        button:SetPoint("TOP", UIParent, "TOP", 0, -140)
+        ns.Debug("no auction frame found; using fallback position")
+    end
+
+    button:Show()
+    self:UpdateAuctionButton()
+
+    self:AttachPostButton(auctionFrame)
+
+    if ns.PostPanel then ns.PostPanel:Attach() end
+end
+
+--- A Post button beside the Scan button on the auction house window.
+--
+-- Left-click lists the most valuable stack; posting needs a hardware event per
+-- listing anyway, so clicking repeatedly works through them. Right-click opens
+-- the Post tab for the full table when you want to pick rather than take the
+-- top of the list.
+function UI:UpdateAuctionButton()
+    local button = self.auctionButton
+    if not button then return end
+
+    if ns.Scanner.isScanning then
+        button:SetText("Cancel")
+        button.tooltipText = "Stop the running scan"
+        return
+    end
+
+    button:SetText("Scan")
+
+    local allowed, reason = ns.Scanner:CanFullScan()
+    button:SetEnabledState(allowed)
+
+    -- The bulk snapshot is rate limited; browsing is not, so say which one a
+    -- click will actually do rather than implying a wait.
+    local cooldown = ns.Scanner:GetSnapshotCooldown()
+
+    button.tooltipText = allowed
+        and (cooldown
+            and ("Browse the auction house.\nThe faster snapshot is rate limited for another %s.")
+                :format(Util.FormatAge(cooldown))
+            or "Take a full snapshot of the auction house")
+        or reason
+end
+
+--- A Post button beside the Scan button on the auction house window.
+--
+-- Left-click lists the most valuable stack; posting needs a hardware event
+-- per listing anyway, so clicking repeatedly works down the list.
+-- Right-click opens the Post tab for the full table.
+function UI:AttachPostButton(auctionFrame)
+    local button = self.postButton
+
+    if not button then
+        button = Widgets.CreateButton(UIParent, "Post Crafted", function(_, mouseButton)
+            if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
+                UI:Show()
+                UI:SelectTab("post")
+                return
+            end
+
+            local allowed, reason = ns.Posting:CanPost()
+            if not allowed then
+                ns.Print(reason or "cannot post right now")
+                return
+            end
+
+            local line = ns.Posting:GetNextPostable()
+            if line then
+                ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
+            else
+                ns.Print("nothing in your bags worth listing right now")
+            end
+
+            UI:UpdatePostButton()
+        end, {
+            width = 230,
+            height = 30,
+            primary = true,
+            baseColor = { 0.06, 0.07, 0.09, 1 },
+        })
+
+        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        button:SetFrameStrata("FULLSCREEN_DIALOG")
+        button:SetFrameLevel(100)
+
+        Theme.AddGameOutline(button, {
+            style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
+        })
+        button:ApplyBaseColor()
+
+        self.postButton = button
+    end
+
+    button:ClearAllPoints()
+
+    if self.auctionButton then
+        button:SetPoint("RIGHT", self.auctionButton, "LEFT", -10, 0)
+    elseif auctionFrame then
+        button:SetPoint("BOTTOMRIGHT", auctionFrame, "TOPRIGHT", -120, 4)
+    else
+        button:SetPoint("TOP", UIParent, "TOP", -120, -140)
+    end
+
+    button:Show()
+
+    self:AttachPostAllButton()
+    self:UpdatePostButton()
+end
+
+--- Post All: everything sellable in your bags, not just what you crafted.
+--
+-- Separate from Post Crafted on purpose. Posting crafted stock is a routine
+-- part of the loop; emptying your bags onto the auction house is not, and one
+-- button that sometimes does the second would be a nasty surprise.
+function UI:AttachPostAllButton()
+    local button = self.postAllButton
+
+    if not button then
+        button = Widgets.CreateButton(UIParent, "Post All", function(_, mouseButton)
+            if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
+                UI:Show()
+                UI:SelectTab("post")
+                return
+            end
+
+            local allowed, reason = ns.Posting:CanPost()
+            if not allowed then
+                ns.Print(reason or "cannot post right now")
+                return
+            end
+
+            local line = ns.Posting:GetNextPostable({ includeAll = true })
+            if line then
+                ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
+            else
+                ns.Print("nothing in your bags worth listing right now")
+            end
+
+            UI:UpdatePostButton()
+        end, {
+            width = 150,
+            height = 30,
+            primary = false,
+            baseColor = { 0.06, 0.07, 0.09, 1 },
+        })
+
+        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        button:SetFrameStrata("FULLSCREEN_DIALOG")
+        button:SetFrameLevel(100)
+
+        Theme.AddGameOutline(button, {
+            style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
+        })
+        button:ApplyBaseColor()
+
+        self.postAllButton = button
+    end
+
+    button:ClearAllPoints()
+    button:SetPoint("RIGHT", self.postButton, "LEFT", -10, 0)
+    button:Show()
+end
+
+function UI:UpdatePostAllButton()
+    local button = self.postAllButton
+    if not button then return end
+
+    local count, total = ns.Posting:GetSummary({ includeAll = true })
+
+    if count == 0 then
+        button:SetText("Post ALL")
+        button:SetEnabledState(true)
+        button.tooltipText = "Nothing in your bags with a known price to list."
+        return
+    end
+
+    local allowed, reason = ns.Posting:CanPost()
+
+    button:SetText("Post ALL")
+    button:SetEnabledState(true)
+
+    button.tooltipText = allowed
+        and ("Lists everything sellable in your bags: %d stack(s), about %s.\nOne click per listing.\nReagents your queue needs are left alone."):format(
+            count, Util.FormatMoney(total, { noColor = true, short = true }))
+        or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
+end
+
+function UI:UpdatePostButton()
+    self:UpdatePostAllButton()
+
+    local button = self.postButton
+    if not button then return end
+
+    local line = ns.Posting:GetNextPostable()
+
+    if not line then
+        -- Inert rather than absent, so it never looks like it failed to load.
+        button:SetText("Post Crafted")
+        button:SetEnabledState(true)
+        button.tooltipText =
+            "Nothing in your bags that one of your recipes makes, at a price worth listing."
+        return
+    end
+
+    local count, total = ns.Posting:GetSummary()
+    local allowed, reason = ns.Posting:CanPost()
+
+    button:SetText("Post Crafted")
+    button:SetEnabledState(true)
+
+    button.tooltipText = allowed
+        and ("Lists %d x %s at %s each.\n%d stack(s) to sell, worth about %s.\n\nRight-click for the full list."):format(
+            line.postQuantity, line.label,
+            Util.FormatMoney(line.unitPrice, { noColor = true }),
+            count, Util.FormatMoney(total, { noColor = true, short = true }))
+        or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
+end
+
+--------------------------------------------------------------------------------
+-- Transfer dialog
+--------------------------------------------------------------------------------
+
+--- A selectable text box for copying an export code out, or pasting one in.
+--
+-- WoW chat cannot be selected, so a code has to live in an edit box for Ctrl+C
+-- to reach it.
+function UI:ShowTransferDialog(mode)
+    local dialog = self.transferDialog
+
+    if not dialog then
+        dialog = CreateFrame("Frame", "BlackthornesTSTransferDialog", UIParent)
+        dialog:SetSize(560, 260)
+        dialog:SetPoint("CENTER")
+        dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+        dialog:EnableMouse(true)
+        dialog:SetMovable(true)
+        dialog:RegisterForDrag("LeftButton")
+        dialog:SetScript("OnDragStart", dialog.StartMoving)
+        dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
+
+        Theme.Fill(dialog, "window")
+        Theme.AddGameOutline(dialog, { style = "dialog", color = "natural" })
+
+        tinsert(UISpecialFrames, "BlackthornesTSTransferDialog")
+
+        dialog.title = Theme.CreateLabel(dialog, "large", "accent")
+        dialog.title:SetPoint("TOPLEFT", 20, -20)
+
+        dialog.hint = Theme.CreateLabel(dialog, "small", "muted")
+        dialog.hint:SetPoint("TOPLEFT", dialog.title, "BOTTOMLEFT", 0, -6)
+        dialog.hint:SetPoint("RIGHT", dialog, "RIGHT", -20, 0)
+        dialog.hint:SetWordWrap(true)
+
+        local box = Theme.CreatePanel(dialog, "row")
+        box:SetPoint("TOPLEFT", 20, -80)
+        box:SetPoint("BOTTOMRIGHT", -20, 56)
+
+        local scroll = CreateFrame("ScrollFrame", nil, box)
+        scroll:SetPoint("TOPLEFT", 6, -6)
+        scroll:SetPoint("BOTTOMRIGHT", -6, 6)
+
+        local editBox = CreateFrame("EditBox", nil, scroll)
+        editBox:SetMultiLine(true)
+        editBox:SetAutoFocus(false)
+        editBox:SetFont(Theme.FONT, Theme.sizes.small, "")
+        editBox:SetTextColor(Theme.Unpack("text"))
+        editBox:SetWidth(500)
+        editBox:SetScript("OnEscapePressed", function() dialog:Hide() end)
+
+        scroll:SetScrollChild(editBox)
+        dialog.editBox = editBox
+
+        dialog.action = Widgets.CreateButton(dialog, "Import", function()
+            local ok, message = ns.Transfer:Import(dialog.editBox:GetText())
+
+            ns.Print(message)
+            if ok then dialog:Hide() end
+        end, { width = 120, height = 26, primary = true })
+        dialog.action:SetPoint("BOTTOMRIGHT", -20, 18)
+
+        local close = Widgets.CreateButton(dialog, "Close", function()
+            dialog:Hide()
+        end, { width = 90, height = 26 })
+        close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
+
+        self.transferDialog = dialog
+    end
+
+    if mode == "export" then
+        local code = ns.Transfer:Export()
+        local queued, settings, limits = ns.Transfer:Describe()
+
+        dialog.title:SetText("Export")
+        dialog.hint:SetText(("%d craft(s), %d changed setting(s), %d posted limit(s). Press Ctrl+C to copy, then keep it somewhere until you need it."):format(
+            queued, settings, limits))
+
+        dialog.editBox:SetText(code)
+        dialog.editBox:HighlightText()
+        dialog.action:Hide()
+    else
+        dialog.title:SetText("Import")
+        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and posted limits are replaced.")
+
+        dialog.editBox:SetText("")
+        dialog.action:Show()
+    end
+
+    dialog:Show()
+    dialog.editBox:SetFocus()
+end
+
+--------------------------------------------------------------------------------
+-- Merchant attachment
+--------------------------------------------------------------------------------
+
+--- A button on Blizzard's vendor window that buys the queue's shortfalls.
+--
+-- Spending your gold is never automatic: this is one deliberate click, and the
+-- button states the exact cost before you press it.
+function UI:AttachToMerchant()
+    local button = self.merchantButton
+
+    if not button then
+        button = Widgets.CreateButton(UIParent, "Buy materials", function()
+            ns.Vendor:BuyNeeded()
+            UI:UpdateMerchantButton()
+        end, {
+            width = 170,
+            height = 30,
+            primary = true,
+            baseColor = { 0.06, 0.07, 0.09, 1 },
+        })
+
+        button:SetFrameStrata("FULLSCREEN_DIALOG")
+        button:SetFrameLevel(100)
+
+        Theme.AddGameOutline(button, {
+            style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
+        })
+        button:ApplyBaseColor()
+
+        self.merchantButton = button
+    end
+
+    local merchantFrame = _G.MerchantFrame
+
+    button:ClearAllPoints()
+    if merchantFrame then
+        button:SetPoint("BOTTOMRIGHT", merchantFrame, "TOPRIGHT", -4, 4)
+    else
+        button:SetPoint("TOP", UIParent, "TOP", 0, -180)
+    end
+
+    button:Show()
+    self:UpdateMerchantButton()
+end
+
+function UI:UpdateMerchantButton()
+    local button = self.merchantButton
+    if not button then return end
+
+    if ns.Vendor:IsBuying() then
+        button:SetText("Buying...")
+        button:SetEnabledState(false)
+        button.tooltipText = "Purchases in progress"
+        return
+    end
+
+    local lines, total = ns.Vendor:GetNeeded()
+
+    if #lines == 0 then
+        -- Present but inert, so it never looks like it failed to appear.
+        button:SetText("Nothing needed here")
+        button:SetEnabledState(false)
+        button.tooltipText = ns.Queue:Count() == 0
+            and "Your craft queue is empty"
+            or "This vendor sells none of the materials your queue needs"
+        return
+    end
+
+    button:SetText(("Buy materials  %s"):format(Util.FormatMoney(total, { short = true })))
+    button:SetEnabledState(true)
+
+    -- Spell out exactly what will be bought before any gold moves.
+    local parts = { ("Buys %d material%s for your queue:"):format(
+        #lines, #lines == 1 and "" or "s") }
+
+    for index = 1, math.min(#lines, 10) do
+        local line = lines[index]
+        parts[#parts + 1] = ("  %dx %s  (%s)%s"):format(
+            line.amount, Util.GetItemLabel(line.itemID),
+            Util.FormatMoney(line.cost, { noColor = true, short = true }),
+            line.short and "  - vendor stock limited" or "")
+    end
+
+    if #lines > 10 then
+        parts[#parts + 1] = ("  ...and %d more"):format(#lines - 10)
+    end
+
+    button.tooltipText = table.concat(parts, "\n")
+end
+
+--------------------------------------------------------------------------------
+-- Minimap button
+--------------------------------------------------------------------------------
+
+function UI:BuildMinimapButton()
+    if self.minimapButton or not Minimap then return end
+
+    local button = CreateFrame("Button", "BlackthornesTSMinimapButton", Minimap)
+    button:SetSize(31, 31)
+    button:SetFrameStrata("MEDIUM")
+    button:SetFrameLevel(8)
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+    local background = button:CreateTexture(nil, "BACKGROUND")
+    background:SetSize(20, 20)
+    background:SetPoint("CENTER")
+    background:SetColorTexture(Theme.Unpack("window"))
+
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(18, 18)
+    icon:SetPoint("CENTER")
+    icon:SetTexture([[Interface\Icons\Trade_BlackSmithing]])
+    icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+
+    local border = button:CreateTexture(nil, "OVERLAY")
+    border:SetSize(53, 53)
+    border:SetPoint("TOPLEFT")
+    border:SetTexture([[Interface\Minimap\MiniMap-TrackingBorder]])
+
+    -- Derived from the minimap's real size rather than assumed. A fixed radius
+    -- only clears the ring on a default 140px minimap; anyone running a larger
+    -- one gets the button sitting on top of the map.
+    local function GetOrbitRadius()
+        local size = Minimap:GetWidth()
+        if not size or size <= 0 then size = 140 end
+
+        return (size / 2) + (ns.db and ns.db.minimapGap or 16)
+    end
+
+    local function UpdatePosition(angle)
+        local radius = GetOrbitRadius()
+
+        button:ClearAllPoints()
+        button:SetPoint("CENTER", Minimap, "CENTER",
+            math.cos(angle) * radius, math.sin(angle) * radius)
+    end
+
+    button.UpdatePosition = UpdatePosition
+
+    local angle = (ns.db and ns.db.minimapAngle) or math.rad(200)
+    UpdatePosition(angle)
+
+    -- Dragging around the minimap edge is the expected behaviour for these.
+    button:SetMovable(true)
+    button:RegisterForDrag("LeftButton")
+    button:SetScript("OnDragStart", function(self)
+        self.dragging = true
+        self:SetScript("OnUpdate", function()
+            local mx, my = Minimap:GetCenter()
+            local cx, cy = GetCursorPosition()
+            local scale = UIParent:GetEffectiveScale()
+
+            local newAngle = math.atan2((cy / scale) - my, (cx / scale) - mx)
+            UpdatePosition(newAngle)
+
+            if ns.db then ns.db.minimapAngle = newAngle end
+        end)
+    end)
+
+    button:SetScript("OnDragStop", function(self)
+        self.dragging = false
+        self:SetScript("OnUpdate", nil)
+    end)
+
+    button:SetScript("OnClick", function()
+        UI:Toggle()
+    end)
+
+    button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine("Blackthornes Tradeskills")
+        GameTooltip:AddLine("Click to open", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+
+    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    self.minimapButton = button
+    self.lastMinimapWidth = Minimap:GetWidth()
+end
+
+--- Point Blizzard's auction browse at one item.
+--
+-- Searching is unrestricted; buying is never automated. The addon puts the item
+-- in front of you and gets out of the way.
+function UI:SearchAuctionHouse(itemID)
+    if not ns.Scanner.isAuctionHouseOpen then
+        ns.Print("open the auction house first")
+        return false
+    end
+
+    local name
+    if Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, itemName = pcall(C_Item.GetItemInfo, itemID)
+        if ok then name = itemName end
+    end
+
+    if not name then
+        ns.Print("that item is not cached yet; hover it once and try again")
+        return false
+    end
+
+    -- Queued rather than sent directly. This shares one throttled channel with
+    -- the player's own posting, and a search fired the instant a row is clicked
+    -- is a search that can cost them a listing.
+    ns.AHQueue:Request({
+        name = ("search the auction house for %s"):format(name),
+        key = "ui-search",
+        -- The player clicked this and is watching the auction house for it, so
+        -- it ranks with their other clicks.
+        priority = ns.AHQueue.PRIORITY.urgent,
+        expires = 8,
+
+        send = function()
+            local ok = pcall(C_AuctionHouse.SendBrowseQuery, {
+                searchString = name,
+                sorts = {},
+                filters = {},
+                itemClassFilters = {},
+                minLevel = 0,
+                maxLevel = 0,
+            })
+
+            if not ok then
+                ns.Warn("the client refused that search")
+                return false
+            end
+
+            return true
+        end,
+
+        onGiveUp = function()
+            ns.Warn("the auction house stayed busy; that search was not sent.")
+        end,
+    })
+
+    return true
+end
+
+--- Re-seat the minimap button at its stored angle, using the current radius.
+function UI:RepositionMinimapButton()
+    local button = self.minimapButton
+    if not button or not button.UpdatePosition then return end
+
+    button.UpdatePosition((ns.db and ns.db.minimapAngle) or math.rad(200))
+    self.lastMinimapWidth = Minimap and Minimap:GetWidth()
+end
+
+--------------------------------------------------------------------------------
+-- Lifecycle
+--------------------------------------------------------------------------------
+
+function UI:OnEnable()
+    self:Build()
+    self:BuildMinimapButton()
+
+    -- The minimap's final size is not always settled at login, and other addons
+    -- resize it afterwards, so re-seat the button once things have calmed down.
+    C_Timer.After(1, function() UI:RepositionMinimapButton() end)
+
+    -- The header is the addon's status line; keep it honest while open.
+    self.ticker = C_Timer.NewTicker(5, function()
+        if UI.window and UI.window:IsShown() then
+            UI:UpdateHeader()
+        end
+
+        -- Cheap enough to check, and catches a minimap resized at any point.
+        if Minimap and UI.lastMinimapWidth ~= Minimap:GetWidth() then
+            UI:RepositionMinimapButton()
+        end
+    end)
+
+    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function()
+        UI:UpdateHeader()
+        UI:AttachToAuctionHouse()
+
+        -- Blizzard's auction UI is load-on-demand, so on the first open of a
+        -- session the frame may not exist yet when this event arrives.
+        -- Re-anchor shortly after in case it appeared late.
+        C_Timer.After(0.5, function()
+            if ns.Scanner.isAuctionHouseOpen then
+                UI:AttachToAuctionHouse()
+            end
+        end)
+
+        -- The auction house throttle clears on its own with no event to say
+        -- so. Without this the Post button stays greyed out, explaining that
+        -- the house is busy, long after it stopped being busy.
+        if UI.postTicker then UI.postTicker:Cancel() end
+
+        UI.postTicker = C_Timer.NewTicker(1, function()
+            if not ns.Scanner.isAuctionHouseOpen then return end
+
+            UI:UpdatePostButton()
+
+            if ns.PostPanel then ns.PostPanel:Refresh() end
+
+            if UI.activeTab == "post" then
+                UI:RefreshActiveTab()
+            end
+        end)
+    end)
+
+    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
+        UI:UpdateHeader()
+        if UI.auctionButton then UI.auctionButton:Hide() end
+        if UI.postButton then UI.postButton:Hide() end
+        if UI.postAllButton then UI.postAllButton:Hide() end
+        if ns.PostPanel then ns.PostPanel:Hide() end
+
+        if UI.postTicker then
+            UI.postTicker:Cancel()
+            UI.postTicker = nil
+        end
+    end)
+end
