@@ -1,0 +1,32 @@
+name: Tests
+
+# tools/runtests.py runs the addon's pure-logic tests against a real Lua 5.1
+# runtime, so the parts that can be checked without the game client are checked
+# on every push rather than only when somebody remembers to run them.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lua:
+    name: Lua syntax, call names and logic tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the Lua runtime the tests run against
+        run: pip install lupa
+
+      - name: Every .lua file parses
+        run: python tools/syntaxcheck.py
+
+      - name: No calls to names the addon never defines
+        run: python tools/lintcalls.py
+
+      - name: Logic tests
+        run: python tools/runtests.py
