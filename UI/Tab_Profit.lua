@@ -479,6 +479,14 @@ local function UpdateDetail(analysis)
         if (analysis.onHand or 0) > 0 then
             parts[#parts + 1] = ("%d held"):format(analysis.onHand)
         end
+        -- Named separately from "held": an item in the mailbox is one that came
+        -- back from a listing that did not sell, which is worth knowing.
+        if (analysis.inMail or 0) > 0 then
+            parts[#parts + 1] = ("%d in mail"):format(analysis.inMail)
+        end
+        if (analysis.queuedElsewhere or 0) > 0 then
+            parts[#parts + 1] = ("%d queued"):format(analysis.queuedElsewhere)
+        end
 
         local where = #parts > 0 and table.concat(parts, ", ") or "none yet"
 
@@ -486,8 +494,21 @@ local function UpdateDetail(analysis)
             detail.limitHint:SetText(("%s, room for %d"):format(where, analysis.postRoom or 0))
             detail.limitHint:SetTextColor(Theme.Unpack(
                 analysis.atPostLimit and "warn" or "dim"))
+        elseif (analysis.stockDivisor or 1) > 1 then
+            -- Say out loud that the list order is not pure profit. A craft
+            -- sitting lower than its profit suggests, with no explanation, is
+            -- exactly the sort of thing that reads as a bug.
+            detail.limitHint:SetText(("%s, so ranked as %s"):format(
+                where, Util.FormatMoney(
+                    (analysis.profit or 0) > 0
+                        and (analysis.profit / analysis.stockDivisor)
+                        or analysis.profit)))
+            detail.limitHint:SetTextColor(Theme.Unpack("dim"))
+        elseif #parts > 0 then
+            detail.limitHint:SetText(where)
+            detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         else
-            detail.limitHint:SetText(("no limit (%s)"):format(where))
+            detail.limitHint:SetText("none on hand")
             detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         end
     else

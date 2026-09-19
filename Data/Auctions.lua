@@ -84,15 +84,22 @@ end
 --   posted  units listed on the auction house
 --   onHand  units in bags and bank (equipped gear is not counted -- it is in
 --           use, not stock)
+--   inMail  units waiting in the mailbox, which is where an expired auction
+--           lands; owned, but in neither of the two above
 --   queued  units the craft queue will produce, so queueing 2 and looking again
 --           does not then suggest 2 more
 --
--- @return remaining, posted, onHand, queued, limit
+-- The mailbox is reported apart from the bags rather than folded in, because
+-- "2 held" and "2 on their way back from a listing that did not sell" mean
+-- quite different things to someone deciding what to make next.
+--
+-- @return remaining, posted, onHand, queued, limit, inMail
 --         remaining is nil when uncapped
 function Auctions:GetRoom(itemID, ignoreRecipeID)
     local limit = self:GetLimit(itemID)
     local posted = self:GetPostedCount(itemID)
-    local onHand = ns.Inventory:GetOwnedCount(itemID)
+    local onHand = ns.Inventory:GetBagCount(itemID) + ns.Inventory:GetBankCount(itemID)
+    local inMail = ns.Inventory:GetMailCount(itemID)
 
     local queued = 0
     for _, entry in ipairs(ns.Queue:GetAll()) do
@@ -107,13 +114,14 @@ function Auctions:GetRoom(itemID, ignoreRecipeID)
     end
 
     if limit <= 0 then
-        return nil, posted, onHand, queued, 0
+        return nil, posted, onHand, queued, 0, inMail
     end
 
-    return math.max(0, limit - posted - onHand - queued), posted, onHand, queued, limit
+    return math.max(0, limit - posted - onHand - inMail - queued),
+        posted, onHand, queued, limit, inMail
 end
 
---- Everything you already hold of an item: listed plus in bags and bank.
+--- Everything you already hold of an item: listed, bags, bank and mailbox.
 function Auctions:GetStock(itemID)
     return self:GetPostedCount(itemID) + ns.Inventory:GetOwnedCount(itemID)
 end

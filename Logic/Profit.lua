@@ -134,6 +134,49 @@ function Profit:GetCraftableCount(recipeID, characterKey)
     return possible == math.huge and 0 or possible
 end
 
+--- How much having some already drags a craft down the ranking.
+--
+-- There is no cap to configure and deliberately so. The reason a craft you
+-- already hold ten of is a worse use of the next hour than an equally
+-- profitable one you hold none of is not a rule about inventory -- it is that
+-- the eleventh only sells once the other ten have, so the gold comes back
+-- roughly ten times slower. Profit per unit of time, not profit.
+--
+-- Hence dividing rather than filtering: hold none and nothing changes at all,
+-- hold some and the craft slides down by about as much as it deserves. Nothing
+-- is ever hidden by this, so a craft cannot silently vanish from the list.
+local function StockDivisor(pipeline)
+    local weight = ns.Config:Get("stockPenalty")
+    if weight == nil then weight = 1 end
+
+    if weight <= 0 or not pipeline or pipeline <= 0 then return 1 end
+
+    return 1 + (pipeline * weight)
+end
+
+--- The value a craft is ranked on: its profit, set against what you already
+--- have of it.
+--
+-- A loss is left alone. Dividing a negative number by a larger divisor moves it
+-- closer to zero, which would promote the worst crafts in the list for the sole
+-- reason that you are already sitting on a pile of them.
+local function RankValue(analysis, field)
+    local value = analysis[field]
+    if value == nil then return -math.huge end
+
+    if value > 0 then
+        return value / (analysis.stockDivisor or 1)
+    end
+
+    return value
+end
+
+-- Exposed for tools/test_mail.lua. These two decide the order of the list the
+-- player actually reads, and they are the part most likely to want tuning, so
+-- they are testable without standing up the whole analysis.
+Profit._StockDivisor = StockDivisor
+Profit._RankValue = RankValue
+
 --- Full profitability breakdown for one recipe.
 function Profit:Analyse(recipeID, characterKey)
     local recipe, owner = ns.Recipes:GetAny(recipeID)
@@ -243,15 +286,22 @@ function Profit:Analyse(recipeID, characterKey)
 
     -- What you already hold, listed or otherwise. Crafting past this gets
     -- you nothing you do not already own, and ties up gold doing it.
-    local room, posted, onHand, queued, limit = ns.Auctions:GetRoom(recipe.outputItemID)
+    local room, posted, onHand, queued, limit, inMail =
+        ns.Auctions:GetRoom(recipe.outputItemID)
 
     analysis.posted = posted
     analysis.onHand = onHand
-    analysis.stock = posted + onHand
+    analysis.inMail = inMail or 0
+    analysis.stock = posted + onHand + analysis.inMail
     analysis.queuedElsewhere = queued
     analysis.postLimit = limit
     analysis.postRoom = room
     analysis.atPostLimit = room ~= nil and room <= 0
+
+    -- Everything already committed to this item: what you hold, plus what the
+    -- queue is about to make. This is what pushes a craft down the list.
+    analysis.pipeline = analysis.stock + queued
+    analysis.stockDivisor = StockDivisor(analysis.pipeline)
 
     return analysis
 end
@@ -307,9 +357,14 @@ function Profit:GetRanked(opts)
     end
 
     local sortBy = opts.sortBy or "profit"
+
+    -- Ranked on profit adjusted for what you already hold; the columns still
+    -- show the real figure, because that is the number you are deciding on.
+    -- opts.ignoreStock is for callers that want the raw order, such as the
+    -- tests and anything reporting on the market rather than on your shelf.
     table.sort(results, function(a, b)
-        local left = a[sortBy] or -math.huge
-        local right = b[sortBy] or -math.huge
+        local left = opts.ignoreStock and (a[sortBy] or -math.huge) or RankValue(a, sortBy)
+        local right = opts.ignoreStock and (b[sortBy] or -math.huge) or RankValue(b, sortBy)
 
         if left == right then
             return (a.name or "") < (b.name or "")

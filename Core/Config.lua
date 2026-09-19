@@ -74,6 +74,25 @@ local DEFAULTS = {
         -- them greyed out.
         hideAtPostLimit = true,
 
+        -- Count what is sitting in the mailbox as stock you own.
+        --
+        -- An expired auction comes back as mail, and until it is collected it
+        -- is in neither your auctions nor your bags -- so without this the
+        -- addon will tell you to craft more of something already on its way
+        -- home. Off only if the mailbox reading ever misbehaves.
+        countMailAsStock = true,
+
+        -- How hard already owning some of an item pushes it down the Profit
+        -- list. The rank is profit divided by (1 + stock * this), so 1 means a
+        -- single one already held roughly halves a craft's place and 0 turns
+        -- the whole thing off. Stock covers listed, bags, bank, mailbox and
+        -- the craft queue.
+        --
+        -- There is no cap to configure anywhere: a second copy only sells once
+        -- the first has, so it is genuinely worth less right now, and that is
+        -- something the addon can work out for itself.
+        stockPenalty = 1,
+
         -- Rows whose price data is older than this are rendered as stale.
         staleAfterSeconds = 48 * 3600,
 
@@ -113,6 +132,10 @@ local DEFAULTS = {
     -- Per-item posted caps, and what is currently listed per realm.
     postLimits = {},
     postedAuctions = {},
+
+    -- realmKey -> { entries, seen }: what sold and what came back, read out of
+    -- the mailbox. See Data/Mail.lua.
+    mailLedger = {},
 
     -- Written by Core/Compat.lua and Probe/Probe.lua.
     probe = {
