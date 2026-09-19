@@ -26,6 +26,10 @@ local BACKPACK, LAST_BAG = 0, 4
 -- immediately reads the state from before the listing.
 local POST_VERIFY_DELAY = 3
 
+-- How long a listing may stay unverified before we admit we do not know. Longer
+-- than the request's own wait in the queue plus the reads that follow it.
+local VERIFY_GIVE_UP = 15
+
 -- Confirmed against Blizzard's own Sell tab on Forever, which offers 2, 8 and
 -- 24 hours: this is a Classic auction house, not retail's 12/24/48. The choice
 -- only affects the deposit estimate, since the listing is made by hand.
@@ -855,7 +859,12 @@ function Posting:VerifyPending()
     self.pending.verifying = true
     ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
 
-    C_Timer.After(5, function()
+    -- Refresh reads the answer back itself once the query goes out, so this is
+    -- no longer the thing that settles a listing: it is the backstop for a query
+    -- that never went out at all, which is the one case where "could not tell"
+    -- is the honest answer. It has to outlast the queue's own wait, or a slow
+    -- send gets reported as a failure while the reading is still on its way.
+    C_Timer.After(VERIFY_GIVE_UP, function()
         if Posting.pending and Posting.pending.verifying then
             Posting:ResolvePending(nil)
         end
