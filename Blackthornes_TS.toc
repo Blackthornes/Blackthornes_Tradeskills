@@ -21,6 +21,7 @@ Data\Prices.lua
 Data\Scanner.lua
 Data\Recipes.lua
 Data\Inventory.lua
+Data\Mail.lua
 Data\Auctions.lua
 Data\Vendor.lua
 
