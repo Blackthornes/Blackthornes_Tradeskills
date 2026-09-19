@@ -560,7 +560,7 @@ function Scanner:ReadReplicateResults(numItems)
             if self:IsCommodity(itemID) then
                 unitPrice = buyoutPrice
             else
-                unitPrice = math.floor(buyoutPrice / math.max(quantity, 1))
+                unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity)
             end
 
             if unitPrice <= 0 then
@@ -865,6 +865,8 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     if pending.itemID ~= itemID then return end
 
     local listings = {}
+    local raw = {}
+
     local ok, count = pcall(C_AuctionHouse.GetNumItemSearchResults, pending.itemKey)
 
     if ok and count then
@@ -872,20 +874,16 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
             local infoOk, info = pcall(C_AuctionHouse.GetItemSearchResultInfo, pending.itemKey, i)
             if infoOk and info and info.buyoutAmount and info.buyoutAmount > 0 then
                 local quantity = info.quantity or 1
+                local unitPrice = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
 
-                -- buyoutAmount is the price for the whole stack, so the unit
-                -- price is a division. Except when quantity is the total
-                -- available across every listing rather than this one's
-                -- stack: then the division collapses to nothing and an item
-                -- worth a silver reads as one copper.
-                --
-                -- A buyout smaller than the quantity cannot be a stack price,
-                -- so treat it as already per-unit.
-                local unitPrice = info.buyoutAmount
-
-                if quantity > 1 and info.buyoutAmount >= quantity then
-                    unitPrice = math.floor(info.buyoutAmount / quantity)
-                end
+                -- Kept as the client gave them, so `/bts listings` can show
+                -- what was read rather than what was concluded from it.
+                raw[#raw + 1] = {
+                    buyoutAmount = info.buyoutAmount,
+                    quantity = quantity,
+                    maxStack = Util.GetMaxStackSize(itemID),
+                    unitPrice = unitPrice,
+                }
 
                 listings[#listings + 1] = {
                     unitPrice = unitPrice,
@@ -895,6 +893,8 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
             end
         end
     end
+
+    self.lastItemListings = { itemID = itemID, raw = raw }
 
     self:FinishItemScan(itemID, listings, false)
 end
@@ -1029,6 +1029,38 @@ end)
 -- Proves, rather than assumes, that the bulk snapshot's prices are being read
 -- with the right units: a targeted search is authoritative, so if the two
 -- disagree the snapshot maths is wrong.
+ns.RegisterCommand("listings", "what the last price check actually read back", function()
+    local last = ns.Scanner.lastItemListings
+
+    if not last or not last.raw or #last.raw == 0 then
+        ns.Print("no item search has come back yet -- click List on something first")
+        return
+    end
+
+    ns.Print(("what the auction house said about %s"):format(Util.GetItemLabel(last.itemID)))
+
+    for i = 1, math.min(#last.raw, 10) do
+        local entry = last.raw[i]
+
+        -- A quantity above the stack size is the misreport worth seeing: it is
+        -- the total on offer, not this listing's stack, and dividing by it is
+        -- what priced a Linen Bag at one copper.
+        local suspect = entry.maxStack and entry.quantity > entry.maxStack
+
+        ns.PrintRaw(("  %2d. buyout %s  qty %d  stacks to %s  -> %s each%s"):format(
+            i,
+            Util.FormatMoney(entry.buyoutAmount, { noColor = true }),
+            entry.quantity,
+            entry.maxStack and tostring(entry.maxStack) or "unknown",
+            Util.FormatMoney(entry.unitPrice, { noColor = true }),
+            suspect and "  <-- qty is not a stack, so not divided" or ""))
+    end
+
+    if #last.raw > 10 then
+        ns.PrintRaw(("  ... and %d more"):format(#last.raw - 10))
+    end
+end)
+
 ns.RegisterCommand("verify", "<itemID> -- cross-check snapshot price against a live search", function(args)
     local itemID = tonumber(args:match("(%d+)"))
     if not itemID then
