@@ -32,7 +32,14 @@ ns.Config = {
 -- WoW's own global; outside the client it is the standard library's.
 time = time or os.time
 
+-- Commodities throughout, so the prices here are the plain undercut ones and
+-- the whole-silver step item auctions impose stays out of this test's way.
+-- tools/test_silverstep.lua is where that rule is checked.
+ns.Scanner = { IsCommodity = function() return true end }
+ns.Cost = { FindRecipeForItem = function() return nil end }
+
 assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
+assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Posting.lua"))("Blackthornes_TS", ns)
 
 local Prices, Posting = ns.Prices, ns.Posting

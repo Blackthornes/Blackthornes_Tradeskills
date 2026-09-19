@@ -104,10 +104,14 @@ ns.Inventory = {
 }
 
 ns.Recipes = { GetAccountWide = function() return {} end }
-ns.Profit = { Analyse = function() return nil end }
 ns.Queue = { GetShoppingList = function() return {} end }
 
+-- Nothing here is craftable, so the profit side stays out of the way and the
+-- prices are whatever the price table says.
+ns.Cost = { FindRecipeForItem = function() return nil end }
+
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
+assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Posting.lua"))("Blackthornes_TS", ns)
 
 local Posting = ns.Posting
