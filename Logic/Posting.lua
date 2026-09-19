@@ -281,6 +281,79 @@ function Posting:GetDeposit(itemID, quantity)
 end
 
 --------------------------------------------------------------------------------
+-- How many to list
+--------------------------------------------------------------------------------
+
+-- How many of each item the player has chosen to list, when they want fewer
+-- than everything they are holding.
+--
+-- Session-only, and deliberately so. Bags change underneath a remembered
+-- number -- a stack sold, split, or topped up by a craft -- and a saved "12"
+-- applied to a later stack of 3 would list the wrong amount without anyone
+-- asking. Every read is clamped against what is actually postable right now,
+-- and an item never touched lists everything, which is what the button did
+-- before this existed.
+Posting.chosenQuantity = {}
+
+--- How many of an item to list, given what could go up.
+-- @param maxQuantity the most that can be listed in one go
+function Posting:GetChosenQuantity(itemID, maxQuantity)
+    maxQuantity = maxQuantity or 0
+    if maxQuantity < 1 then return 0 end
+
+    local chosen = itemID and self.chosenQuantity[itemID]
+    if not chosen then return maxQuantity end
+
+    return math.max(1, math.min(chosen, maxQuantity))
+end
+
+--- Remember how many of an item to list.
+--
+-- Stored unclamped: the player may set 20 while holding 5, craft more, and
+-- expect the 20 back. Clamping happens on the way out instead.
+function Posting:SetChosenQuantity(itemID, quantity)
+    if not itemID then return end
+
+    quantity = tonumber(quantity)
+    if not quantity then return end
+
+    self.chosenQuantity[itemID] = math.max(1, math.floor(quantity))
+end
+
+--- Forget a choice, so the item goes back to listing everything.
+function Posting:ClearChosenQuantity(itemID)
+    if itemID then self.chosenQuantity[itemID] = nil end
+end
+
+--- Change how many a line will list, and everything that follows from it.
+--
+-- The line is updated in place rather than rebuilt, because rebuilding the
+-- list scrolls it back to the top -- losing your place every time you type a
+-- number is worse than the problem being solved.
+-- @return the quantity actually applied, after clamping
+function Posting:ApplyQuantity(line, quantity)
+    if not line then return end
+
+    local maxQuantity = line.maxQuantity or line.count or 1
+
+    self:SetChosenQuantity(line.itemID, quantity)
+    quantity = self:GetChosenQuantity(line.itemID, maxQuantity)
+
+    -- Asking for everything is not a choice to remember: keeping it would pin
+    -- the item at today's stack size, so crafting ten more would still list
+    -- only the old number.
+    if quantity >= maxQuantity then
+        self:ClearChosenQuantity(line.itemID)
+    end
+
+    line.postQuantity = quantity
+    line.postTotal = line.unitPrice and (line.unitPrice * quantity) or nil
+    line.deposit = self:GetDeposit(line.itemID, quantity)
+
+    return quantity
+end
+
+--------------------------------------------------------------------------------
 -- What to list
 --------------------------------------------------------------------------------
 
@@ -376,11 +449,14 @@ function Posting:GetPostable(opts)
 
                     -- Commodities sell from across the bags at once; item
                     -- auctions come from a single slot, so gear goes up one
-                    -- listing at a time.
+                    -- listing at a time. That is the ceiling, not the amount:
+                    -- the player may have asked for fewer.
                     local _, _, slotStack = FindInBags(itemID)
-                    local postQuantity = isCommodity
+                    local maxQuantity = isCommodity
                         and count
                         or math.min(count, slotStack or 1)
+
+                    local postQuantity = self:GetChosenQuantity(itemID, maxQuantity)
 
                     -- Without a price there is nothing to list it at, and a
                     -- guess on someone's bag contents is worse than a skip.
@@ -398,6 +474,8 @@ function Posting:GetPostable(opts)
                             atALoss = price ~= nil and lossFloor ~= nil
                                 and price < lossFloor,
                             postQuantity = postQuantity,
+                            maxQuantity = maxQuantity,
+                            quantityChosen = postQuantity ~= maxQuantity,
                             total = price and (price * count) or nil,
                             postTotal = price and (price * postQuantity) or nil,
                             deposit = self:GetDeposit(itemID, postQuantity),
