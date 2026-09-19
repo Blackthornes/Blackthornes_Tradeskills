@@ -322,8 +322,8 @@ end
 function Mail:ReadInvoice(index)
     if not Util.HasFunction("GetInboxInvoiceInfo") then return nil end
 
-    local ok, invoiceType, itemName, playerName, bid, buyout, deposit, consignment =
-        pcall(GetInboxInvoiceInfo, index)
+    local ok, invoiceType, itemName, playerName, bid, buyout, deposit, consignment,
+        moneyDelay = pcall(GetInboxInvoiceInfo, index)
 
     if not ok or not invoiceType then return nil end
 
@@ -335,7 +335,32 @@ function Mail:ReadInvoice(index)
         buyout = tonumber(buyout),
         deposit = tonumber(deposit),
         cut = tonumber(consignment),
+        -- How long the auction house is still holding the gold for. While that
+        -- runs, the mail's own money field reads zero.
+        moneyDelay = tonumber(moneyDelay),
     }
+end
+
+--- What a sale actually put in your pocket.
+--
+-- The header's money is the ground truth once it is there, so it wins. But a
+-- sale whose gold is still being held reads zero in the header while the
+-- invoice already knows the numbers, and recording that as a sale for nothing
+-- is how the ledger came to say "sold Linen Reagent Bag for 0c".
+--
+-- So fall back to the invoice arithmetic: what the buyer bid, less the cut the
+-- auction house takes, plus the deposit handed back because it sold.
+--
+-- @return amount, estimated -- amount nil when neither source can say yet
+local function SaleAmount(mail, invoice)
+    local money = tonumber(mail.money) or 0
+    if money > 0 then return money, false end
+
+    if invoice and invoice.bid then
+        return invoice.bid - (invoice.cut or 0) + (invoice.deposit or 0), true
+    end
+
+    return nil, false
 end
 
 --------------------------------------------------------------------------------
@@ -348,11 +373,15 @@ end
 -- built out of what a mail is rather than where it sits. Two genuinely
 -- identical mails collide on purpose: they are counted rather than matched, so
 -- a collision is handled by arithmetic instead of being a bug.
+-- Money is deliberately NOT part of this. It was, and that was a bug: the gold
+-- on a sale is held for a while and the header reads zero until it is released,
+-- so the same mail fingerprinted one way before the payout and another way
+-- after, and the ledger wrote the sale down twice. Identity has to be the
+-- things about a mail that cannot change while it sits in the box.
 local function Fingerprint(mail)
     local parts = {
         tostring(mail.sender or "?"),
         tostring(mail.subject or "?"),
-        tostring(mail.money or 0),
         tostring(mail.cod or 0),
     }
 
@@ -414,9 +443,10 @@ local function Describe(mail, kind, itemName, invoice)
     }
 
     if kind == "sold" then
-        -- The header's money is what actually landed in your pocket. The
-        -- invoice, where there is one, says how that number was arrived at.
-        entry.net = mail.money or 0
+        local amount, estimated = SaleAmount(mail, invoice)
+
+        entry.net = amount
+        entry.estimated = estimated or nil
 
         if invoice then
             entry.gross = invoice.bid
@@ -454,24 +484,27 @@ end
 function Mail:Reconcile(mails, complete)
     local ledger = self:GetLedger()
 
+    -- Counted fresh each reading, not accumulated: it answers "is anything
+    -- waiting right now", which is what the diagnostic reports.
+    self.awaitingAmount = 0
+
     local present = {}
 
+    -- Each mail is recorded from its own reading rather than from whichever
+    -- one of a matching pair happened to be walked first. Two sales of the same
+    -- item share a fingerprint on purpose, and they can still have landed
+    -- different amounts of gold -- one paid out, one still being held -- so
+    -- describing both from the first mail would have put the wrong figure on
+    -- one of them.
     for _, mail in ipairs(mails) do
         -- A mail whose attachments have not arrived yet would fingerprint as a
         -- different mail than the same one fully loaded, so it waits.
         if not mail.pending then
             local key = Fingerprint(mail)
-            present[key] = (present[key] or 0) + 1
-        end
-    end
+            local occurrence = (present[key] or 0) + 1
+            present[key] = occurrence
 
-    for _, mail in ipairs(mails) do
-        if not mail.pending then
-            local key = Fingerprint(mail)
-            local seen = ledger.seen[key] or 0
-            local now = present[key] or 0
-
-            if now > seen then
+            if occurrence > (ledger.seen[key] or 0) then
                 local kind, itemName = self:Classify(mail)
                 local invoice = self:ReadInvoice(mail.index)
 
@@ -484,29 +517,33 @@ function Mail:Reconcile(mails, complete)
                     itemName = invoice.itemName
                 end
 
-                if kind then
-                    -- A fresh table per unit rather than the same one appended
-                    -- twice: two identical sales are two rows, and sharing a
-                    -- reference between them is the sort of thing that only
-                    -- shows up later, through the serializer.
-                    for _ = seen + 1, now do
-                        ledger.entries[#ledger.entries + 1] =
-                            Describe(mail, kind, itemName, invoice)
-                    end
+                if kind == "sold" and SaleAmount(mail, invoice) == nil then
+                    -- Neither the header nor an invoice can say what this sale
+                    -- paid yet. Writing it down as nothing is worse than
+                    -- writing it down later, so it waits like an unloaded
+                    -- attachment does.
+                    mail.pending = true
+                    present[key] = occurrence - 1
+                    self.awaitingAmount = (self.awaitingAmount or 0) + 1
+
+                elseif kind then
+                    ledger.entries[#ledger.entries + 1] =
+                        Describe(mail, kind, itemName, invoice)
 
                 else
                     -- Ordinary mail from a person. Counted as stock above, and
                     -- deliberately not a ledger entry.
                     ns.Debug("mail not from the auction house:", tostring(mail.subject))
                 end
-
-                ledger.seen[key] = now
-            elseif now < seen then
-                -- Mail taken. Drop the count so an identical one arriving later
-                -- reads as new.
-                ledger.seen[key] = now
             end
         end
+    end
+
+    -- Whatever is in the box now is what has been seen. Taking a mail drops the
+    -- count back, so an identical one arriving later reads as new rather than
+    -- as one already recorded.
+    for key, count in pairs(present) do
+        ledger.seen[key] = count
     end
 
     -- Fingerprints that vanished entirely. Only safe when we saw the whole
@@ -536,6 +573,9 @@ function Mail:GetSummary(itemID)
         sold = 0, soldUnits = 0,
         returned = 0, returnedUnits = 0,
         net = 0, gross = 0, cut = 0, deposit = 0,
+        -- Sales priced from the invoice because the gold had not been released
+        -- when they were recorded. Real, but not yet in your pocket.
+        estimated = 0,
     }
 
     for _, entry in ipairs(self:GetLedger().entries) do
@@ -544,6 +584,7 @@ function Mail:GetSummary(itemID)
                 totals.sold = totals.sold + 1
                 totals.soldUnits = totals.soldUnits + (entry.quantity or 1)
                 totals.net = totals.net + (entry.net or 0)
+                if entry.estimated then totals.estimated = totals.estimated + 1 end
                 totals.gross = totals.gross + (entry.gross or entry.net or 0)
                 totals.cut = totals.cut + (entry.cut or 0)
                 totals.deposit = totals.deposit + (entry.deposit or 0)
@@ -692,6 +733,10 @@ ns.RegisterCommand("mail", "what the mailbox holds and what it says sold", funct
         ns.PrintRaw(("    taken in:           %s"):format(Util.FormatMoney(summary.net)))
     end
 
+    if (Mail.awaitingAmount or 0) > 0 then
+        ns.PrintRaw(("    waiting on payout:  %d sale(s)"):format(Mail.awaitingAmount))
+    end
+
     local recent = Mail:GetRecent(6)
     if #recent > 0 then
         ns.PrintRaw("  recent:")
@@ -700,9 +745,54 @@ ns.RegisterCommand("mail", "what the mailbox holds and what it says sold", funct
                 or (entry.name or "?")
 
             if entry.kind == "sold" then
-                ns.PrintRaw(("    sold %s for %s"):format(label, Util.FormatMoney(entry.net)))
+                ns.PrintRaw(("    sold %s for %s%s"):format(
+                    label, Util.FormatMoney(entry.net),
+                    entry.estimated and "   (from the invoice, gold still held)" or ""))
             else
                 ns.PrintRaw(("    %s came back (%s)"):format(label, entry.kind))
+            end
+        end
+    end
+
+    -- What the client actually said, mail by mail.
+    --
+    -- The ledger once recorded a Linen Reagent Bag as having sold for nothing,
+    -- and working out why from the outside was guesswork: the header's money,
+    -- the invoice's figures and how they relate are exactly the things that
+    -- cannot be seen from a summary. So they are printed raw.
+    local mails = Mail:ReadInbox()
+
+    if #mails > 0 then
+        ns.PrintRaw("  what the client says, mail by mail:")
+
+        for _, mail in ipairs(mails) do
+            local kind = Mail:Classify(mail)
+
+            ns.PrintRaw(("    %d: %s"):format(mail.index, tostring(mail.subject)))
+            ns.PrintRaw(("       from=%s  read as=%s  money=%s"):format(
+                tostring(mail.sender), kind or "not auction mail",
+                Util.FormatMoney(mail.money, { noColor = true })))
+
+            local invoice = Mail:ReadInvoice(mail.index)
+
+            if invoice then
+                ns.PrintRaw(("       invoice %s: bid=%s cut=%s deposit=%s held=%s"):format(
+                    tostring(invoice.invoiceType),
+                    Util.FormatMoney(invoice.bid, { noColor = true }),
+                    Util.FormatMoney(invoice.cut, { noColor = true }),
+                    Util.FormatMoney(invoice.deposit, { noColor = true }),
+                    tostring(invoice.moneyDelay)))
+            else
+                ns.PrintRaw("       invoice: none")
+            end
+
+            for _, attachment in ipairs(mail.attachments) do
+                ns.PrintRaw(("       attached: %dx %s"):format(
+                    attachment.quantity, Util.GetItemLabel(attachment.itemID)))
+            end
+
+            if mail.pending then
+                ns.PrintRaw("       not recorded yet -- still loading")
             end
         end
     end
@@ -740,7 +830,9 @@ ns.RegisterCommand("sold", "<name or link> -- what it actually earned, against t
     end
 
     if summary.sold > 0 then
-        ns.PrintRaw(("  taken in:         %s"):format(Util.FormatMoney(summary.net)))
+        ns.PrintRaw(("  taken in:         %s%s"):format(Util.FormatMoney(summary.net),
+            summary.estimated > 0
+                and ("   (%d still being paid out)"):format(summary.estimated) or ""))
 
         if summary.cut > 0 then
             ns.PrintRaw(("    auction cut:    %s"):format(Util.FormatMoney(summary.cut)))
