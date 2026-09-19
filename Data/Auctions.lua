@@ -146,7 +146,7 @@ function Auctions:Refresh(opts)
     Util.WhenAuctionReady(function()
         pcall(C_AuctionHouse.QueryOwnedAuctions, {})
 
-        -- The reply is never announced on this client, so go and read it.
+        -- The reply may or may not be announced, so go and read it either way.
         Auctions:ScheduleConfirm()
     end, nil, {
         name = "owned auctions",
@@ -163,10 +163,10 @@ end
 
 -- How long after a query goes out we look for the answer ourselves, in seconds.
 --
--- Forever never fires OWNED_AUCTIONS_UPDATED. Registering it raises no error and
--- no event ever arrives, so a verification that waits to be told waits forever,
--- and a listing that went up perfectly well was reported as "could not tell
--- whether that listing went up" on every single post.
+-- Forever has OWNED_AUCTIONS_UPDATED and does fire it -- measured in game, four
+-- times in one session -- but not when a listing needs confirming. Waiting five
+-- seconds to be told meant a listing that went up perfectly well was reported as
+-- "could not tell whether that listing went up" on every single post.
 --
 -- The reads themselves work: `/bts auctions` returns the right count and item
 -- straight after a query. So the answer is read directly rather than waited for,
@@ -259,16 +259,17 @@ end
 --- The client announcing that owned auctions changed, where it does so.
 function Auctions:OnOwnedAuctionsUpdated()
     -- Counted, because registering this event and actually receiving it are two
-    -- different things on this client and only the second one is any use. A
-    -- registration that succeeds and then never fires is exactly what made a
-    -- successful listing report "could not tell".
+    -- different things on this client and only the second one is any use.
+    -- Reading registration as proof of delivery is what had the addon waiting
+    -- on an announcement that did not come, and a successful listing reporting
+    -- "could not tell".
     self.ownedEventCount = (self.ownedEventCount or 0) + 1
 
     -- The server has answered, so this reading is as good as it is going to get.
     self:ReadOwned({ final = true })
 end
 
---- Go and look for the reply, for the client that never announces it.
+--- Go and look for the reply, rather than trusting it to be announced.
 --
 -- Each query supersedes the last, so a sequence still running when a newer query
 -- goes out stops rather than resolving a listing against a stale reading.
