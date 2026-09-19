@@ -24,7 +24,17 @@ local function GetMeta(field)
     return nil
 end
 
-ns.VERSION = GetMeta("Version") or "0.0.0"
+-- The TOC carries @project-version@, which the release packager rewrites to
+-- the tag it is building. Running straight from the repository there is no
+-- packager, so the keyword arrives unsubstituted and is shown as "dev".
+local function ReadVersion()
+    local value = GetMeta("Version")
+    if type(value) ~= "string" or value == "" then return "0.0.0" end
+    if value:find("@", 1, true) then return "dev" end
+    return value
+end
+
+ns.VERSION = ReadVersion()
 
 --------------------------------------------------------------------------------
 -- Output

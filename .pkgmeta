@@ -1,0 +1,23 @@
+# Packaging instructions for the BigWigs packager, which builds the zip that
+# CurseForge, Wago and WoWInterface hand to players.
+#
+# The folder inside the zip must be named exactly as the .toc file, or the
+# client will not see the addon.
+package-as: Blackthornes_TS
+
+# Development-only files. These are in the repository so the addon can be
+# worked on; none of them belong in a player's Interface\AddOns folder.
+ignore:
+  - .github
+  - .githooks
+  - .gitignore
+  - .pkgmeta
+  - docs
+  - tools
+  - deploy.ps1
+
+# Ship the licence alongside the addon rather than only in the repository.
+license-output: LICENSE
+
+# No embedded libraries: the framework in Core/ is ours, so there is nothing
+# to fetch at package time.

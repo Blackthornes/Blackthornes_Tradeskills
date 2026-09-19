@@ -2,10 +2,17 @@
 ## Title: Blackthornes Tradeskills
 ## Notes: Crafting profitability, auction scanning and craft queueing for WoW: Forever.
 ## Author: Blackthornes
-## Version: 0.1.0
+## Version: @project-version@
+## X-License: MIT
 ## SavedVariables: BlackthornesTSDB
 ## SavedVariablesPerCharacter: BlackthornesTSCharDB
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
+
+# Filled in once the project exists on each site. The packager reads these
+# to know where to upload; a line that stays commented is simply skipped.
+# X-Curse-Project-ID: 
+# X-Wago-ID: 
+# X-WoWI-ID: 
 
 Data\Snapshot.lua
 
