@@ -64,7 +64,7 @@ local function UpdateRow(row, entry)
     else
         local age = entry.inventoryAt and (time() - entry.inventoryAt)
         row.freshness:SetText(("%d recipes  ·  seen %s"):format(
-            entry.recipeCount, age and (Util.FormatAge(age) .. " ago") or "never"))
+            entry.recipeCount, Util.FormatAgeAgo(age)))
         row.freshness:SetTextColor(Theme.Unpack("dim"))
     end
 end
@@ -221,8 +221,8 @@ local function UpdateDetail(entry)
         local bankAge = entry.bankAt and (time() - entry.bankAt)
 
         detail.dataAge:SetText(("Bags read %s. Bank read %s. Figures are from the last time this character was played."):format(
-            inventoryAge and (Util.FormatAge(inventoryAge) .. " ago") or "never",
-            bankAge and (Util.FormatAge(bankAge) .. " ago") or "never"))
+            Util.FormatAgeAgo(inventoryAge),
+            Util.FormatAgeAgo(bankAge)))
     end
 end
 

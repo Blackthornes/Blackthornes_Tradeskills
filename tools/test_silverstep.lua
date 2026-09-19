@@ -168,6 +168,51 @@ end
 
 --------------------------------------------------------------------------------
 print("")
+print("saying why it matched")
+
+-- "match" on its own does not distinguish "the numbers said no" from "nobody
+-- ever costed this", and those want different things from the player.
+Reset()
+prices[BAG] = { market = 320, rival = 300 }
+
+do
+    local _, basis, why = Profit:ChoosePostPrice(BAG)
+    check("uncosted item: still a match", basis, "match")
+    check("uncosted item: blames the missing cost",
+        why and why:find("no cost known") ~= nil, true)
+end
+
+do
+    settings.minProfit = 100
+    recipeByOutput[BAG] = BAG
+    craftCost[BAG] = { priceable = true, total = 100, perUnit = 100, yield = 1 }
+
+    local _, basis, why = Profit:ChoosePostPrice(BAG)
+    check("priced out: still a match", basis, "match")
+    check("priced out: blames the minimum",
+        why and why:find("minimum") ~= nil, true)
+end
+
+do
+    settings.minProfit = 0
+
+    local _, basis, why = Profit:ChoosePostPrice(BAG)
+    check("an undercut needs no explaining", basis, "undercut")
+    check("so there is none", why, nil)
+end
+
+do
+    -- Nothing below a rival at one silver, which is its own reason.
+    Reset()
+    prices[BAG] = { market = 100, rival = 100 }
+
+    local _, _, why = Profit:ChoosePostPrice(BAG)
+    check("no legal price below: says so",
+        why and why:find("no legal price") ~= nil, true)
+end
+
+--------------------------------------------------------------------------------
+print("")
 print("rivals with nowhere below them")
 
 Reset()
