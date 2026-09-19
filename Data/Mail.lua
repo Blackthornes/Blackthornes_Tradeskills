@@ -622,6 +622,37 @@ function Mail:GetRecent(limit, itemID)
     return out
 end
 
+--- How many recorded sales carry no gold.
+--
+-- Only rows written before the payout-delay fix can look like this: a sale is
+-- now priced from the invoice when the header's money is still zero, and one
+-- that neither source can price is not recorded at all. So this counts history
+-- rather than anything the addon would write today.
+function Mail:CountUnpriced()
+    local n = 0
+
+    for _, entry in ipairs(self:GetLedger().entries) do
+        if entry.kind == "sold" and (entry.net or 0) <= 0 then n = n + 1 end
+    end
+
+    return n
+end
+
+--- Throw away this realm's ledger.
+--
+-- `seen` goes with the entries on purpose. It is the record of which mails have
+-- already been written down, and keeping it would mean anything sitting in the
+-- mailbox right now never gets recorded again.
+function Mail:ResetLedger()
+    local ledger = self:GetLedger()
+    local had = #ledger.entries
+
+    ledger.entries = {}
+    ledger.seen = {}
+
+    return had
+end
+
 --------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
@@ -655,7 +686,47 @@ end
 -- Diagnostics
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("mail", "what the mailbox holds and what it says sold", function()
+ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says sold", function(args)
+    local sub = (args or ""):lower():match("^(%S*)")
+
+    if sub == "reset" then
+        local ledger = Mail:GetLedger()
+        local entries = #ledger.entries
+
+        if entries == 0 then
+            ns.Print("the ledger is already empty")
+            return
+        end
+
+        -- Clearing it is not undoable and it is the only record of what sold,
+        -- so it takes a second word rather than happening on a typo.
+        if not (args or ""):lower():match("^reset%s+confirm") then
+            ns.Print(("this will delete %d recorded sale(s) and return(s) for %s"):format(
+                entries, ns.Config:GetRealmKey()))
+            ns.PrintRaw(("  taken in so far: %s"):format(
+                Util.FormatMoney(Mail:GetSummary().net)))
+
+            local unpriced = Mail:CountUnpriced()
+            if unpriced > 0 then
+                ns.PrintRaw(("  %d of them show no gold, from before the payout fix"):format(
+                    unpriced))
+            end
+
+            ns.PrintRaw(("  to go ahead: |c%s/bts mail reset confirm|r"):format(
+                ns.COLORS.accent))
+            return
+        end
+
+        local had = Mail:ResetLedger()
+        ns.Print(("cleared %d ledger entr%s"):format(had, had == 1 and "y" or "ies"))
+        ns.PrintRaw("  anything still in the mailbox is recorded again on the next read")
+
+        -- Whatever is in the box is unrecorded again, so read it now if we can.
+        if Mail.isOpen then Mail:Read() end
+
+        return
+    end
+
     local hasNum = Util.HasFunction("GetInboxNumItems")
     local hasHeader = Util.HasFunction("GetInboxHeaderInfo")
     local hasItem = Util.HasFunction("GetInboxItem")
