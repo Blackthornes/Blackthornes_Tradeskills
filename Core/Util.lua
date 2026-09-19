@@ -483,3 +483,25 @@ function Util.FormatAge(seconds)
     if seconds < 86400 then return math.floor(seconds / 3600) .. "h" end
     return math.floor(seconds / 86400) .. "d"
 end
+
+--- Round a price down to something an item auction will actually accept.
+--
+-- C_AuctionHouse.PostItem takes whole gold and silver only: a price carrying
+-- any copper at all silently fails, which the client surfaces as an internal
+-- error rather than anything readable. Commodities are unaffected and keep
+-- copper precision, so this is only ever applied to item auctions.
+--
+-- Below a silver there is nothing to round down to, so the floor is one
+-- silver. That can land above market value on a near-worthless item, but it
+-- is the only price the server will take.
+function Util.RoundToSilver(price)
+    if type(price) ~= "number" then return nil end
+    if price < COPPER_PER_SILVER then return COPPER_PER_SILVER end
+    return math.floor(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+end
+
+--- Is this price one an item auction will accept?
+function Util.IsWholeSilver(price)
+    return type(price) == "number" and price >= COPPER_PER_SILVER
+        and price % COPPER_PER_SILVER == 0
+end

@@ -378,7 +378,11 @@ local function UpdateDetail(analysis)
         detail.costValue:SetText(Util.FormatMoney(analysis.totalCost))
 
         if analysis.undercut then
-            detail.rivalLabel:SetText("Cheapest rival")
+            -- An item auction that cannot be undercut by less than a silver is
+            -- matched instead, and the label says so rather than implying a
+            -- price below the rival's.
+            detail.rivalLabel:SetText(analysis.matchedRival
+                and "Matching rival" or "Cheapest rival")
             detail.rivalValue:SetText(Util.FormatMoney(analysis.competitorPrice))
             detail.rivalValue:SetTextColor(Theme.Unpack("muted"))
         elseif analysis.youHoldLowest then

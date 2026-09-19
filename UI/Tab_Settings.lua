@@ -112,7 +112,10 @@ local function Build(outer)
     local pricing = CreateSection(container, "PRICING", { x = COLUMN_ONE_X, y = -16 })
 
     local undercutRow = CreateRow(container, pricing, "Undercut by",
-        "Your posting price is the cheapest rival listing minus this.")
+        "Your posting price is the cheapest rival listing minus this. " ..
+        "Stackable goods only: gear and bags can only be priced in whole " ..
+        "silver, so those match the cheapest rival unless dropping a full " ..
+        "silver still clears the minimum profit below.")
 
     widgets.undercut = Widgets.CreateNumberBox(undercutRow, {
         width = 70, min = 0, max = 1000000,
@@ -207,7 +210,9 @@ local function Build(outer)
     local filters = CreateSection(container, "FILTERS", { anchor = verifyRow })
 
     local profitRow = CreateRow(container, filters, "Minimum profit",
-        "Crafts below this are hidden from the Profit tab.")
+        "Crafts below this are hidden from the Profit tab, and it is the " ..
+        "test for whether an item auction gives up a whole silver to " ..
+        "undercut or simply matches the cheapest rival.")
 
     widgets.minProfit = Widgets.CreateNumberBox(profitRow, {
         width = 70, min = 0, max = 1000000,

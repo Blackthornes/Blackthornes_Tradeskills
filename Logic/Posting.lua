@@ -190,23 +190,15 @@ end
 --------------------------------------------------------------------------------
 
 --- The price to list one unit at, and why.
--- @return price, basis  -- basis is "undercut", "market" or nil
+--
+-- One line, so the Sell tab, the Profit tab and /bts price can never quote
+-- three different numbers for the same item. The rules live in
+-- Profit:ChoosePostPrice, which is also where the whole-silver step that item
+-- auctions impose is applied.
+--
+-- @return price, basis  -- basis is "undercut", "match", "market" or nil
 function Posting:GetPostPrice(itemID)
-    local rival = ns.Prices:GetValue(itemID, "rival")
-    local undercut = ns.Config:Get("undercutCopper") or 1
-
-    -- "rival" excludes your own auctions, so listing a second one does not
-    -- undercut the first.
-    if rival then
-        return math.max(1, math.floor(rival - undercut)), "undercut"
-    end
-
-    local market = ns.Prices:GetValue(itemID, "market")
-    if market then
-        return math.max(1, math.floor(market)), "market"
-    end
-
-    return nil, nil
+    return ns.Profit:ChoosePostPrice(itemID)
 end
 
 --------------------------------------------------------------------------------
@@ -618,6 +610,20 @@ function Posting:Post(itemID, quantity, unitPrice)
         return false
     end
 
+    -- Last line of defence on the price, wherever it came from. PostItem takes
+    -- whole gold and silver and silently swallows anything with copper in it,
+    -- which is the internal error the client shows for a listing that never
+    -- happens. A price arriving here from a caller has not necessarily been
+    -- through the chooser, so it is rounded again rather than trusted.
+    if not ns.Scanner:IsCommodity(itemID) and not Util.IsWholeSilver(unitPrice) then
+        local rounded = Util.RoundToSilver(unitPrice)
+
+        ns.Print(("item auctions only take whole silver, so %s becomes %s"):format(
+            Util.FormatMoney(unitPrice), Util.FormatMoney(rounded)))
+
+        unitPrice = rounded
+    end
+
     -- A nonsense price is caught before anything irreversible happens. This
     -- is separate from the material-cost check below: that one is about
     -- profit, this one is about the number being wrong.
@@ -827,6 +833,12 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
 
     elseif check.state == "unavailable" then
         text = text .. "\n\n|cffE5604FThe price check did not come back. This is the last price we saw, which may be out of date.|r"
+    end
+
+    -- Said plainly at the moment the gold is committed, because a price equal
+    -- to the rival's looks like the undercut simply failed.
+    if check.basis == "match" then
+        text = text .. "\n\n|cffC8A44DMatching the cheapest listing. This cannot be priced in copper, so undercutting would cost a whole silver.|r"
     end
 
     local recipeID = ns.Cost:FindRecipeForItem(itemID)
