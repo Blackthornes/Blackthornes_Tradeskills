@@ -311,6 +311,9 @@ end
 
 --- How much to trust this item's price: scan count, recency and depth.
 -- Returns 0..1 and a short reason for the weakest factor.
+-- Above this, a component is not worth calling out as a weakness.
+local WEAKNESS_THRESHOLD = 0.8
+
 function Prices:GetConfidence(itemID)
     local record = self:GetTable()[itemID]
     if not record then return 0, "never seen" end
@@ -324,10 +327,21 @@ function Prices:GetConfidence(itemID)
 
     local score = (scanScore * 0.3) + (depthScore * 0.3) + (ageScore * 0.4)
 
+    -- Name what is holding the number down, and only when something is.
+    --
+    -- This used to pick a weakest link unconditionally, off a <= comparison
+    -- that resolves ties in favour of the first branch. An item scanned
+    -- seconds ago, deep and seen often, has all three scores at 1, so every
+    -- one of those ties went to age and it reported "99% (stale data)" about
+    -- data that could not have been fresher. A diagnostic that confidently
+    -- names the wrong cause is worse than one that says nothing.
+    local weakest = math.min(scanScore, depthScore, ageScore)
+    if weakest >= WEAKNESS_THRESHOLD then return score, nil end
+
     local reason
-    if ageScore <= scanScore and ageScore <= depthScore then
+    if ageScore == weakest then
         reason = "stale data"
-    elseif depthScore <= scanScore then
+    elseif depthScore == weakest then
         reason = "thin market"
     else
         reason = "few scans"
@@ -405,18 +419,23 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
     if record.rivalMin then
         -- Asked of the chooser rather than worked out again here, so this
         -- cannot drift from the price the Sell tab would actually use.
-        local postPrice, basis = ns.Profit:ChoosePostPrice(itemID)
+        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
 
         ns.PrintRaw(("  cheapest rival %s   you would post at %s (%s)"):format(
             Util.FormatMoney(record.rivalMin),
             Util.FormatMoney(postPrice or record.rivalMin),
             basis or "no price"))
+
+        -- "match" on its own does not say whether undercutting was rejected
+        -- on the numbers or never costed at all, and those want different
+        -- things from you.
+        if why then ns.PrintRaw(("    %s"):format(why)) end
     elseif ns.Prices:HoldsLowest(itemID) then
         ns.PrintRaw(("  |c%syou hold the lowest listing|r"):format(ns.COLORS.profit))
     end
-    ns.PrintRaw(("  seen %s ago over %d scan(s)"):format(
-        Util.FormatAge(ns.Prices:GetAge(itemID)), record.scans or 0))
-    ns.PrintRaw(("  confidence %d%% (%s)   liquidity %s"):format(
-        math.floor(confidence * 100), reason,
+    ns.PrintRaw(("  seen %s over %d scan(s)"):format(
+        Util.FormatAgeAgo(ns.Prices:GetAge(itemID)), record.scans or 0))
+    ns.PrintRaw(("  confidence %d%%%s   liquidity %s"):format(
+        math.floor(confidence * 100), reason and (" (" .. reason .. ")") or "",
         liquidity and ("%d%%"):format(math.floor(liquidity * 100)) or "unknown"))
 end)
