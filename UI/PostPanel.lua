@@ -42,6 +42,14 @@ local function CreateRow(row)
     row.post:SetPoint("RIGHT", -8, 0)
 end
 
+--- Why a line is a loss, in words the player can act on.
+local function LossText(line)
+    if line.lossReason == "vendor" then
+        return "Below what a vendor would pay for it."
+    end
+    return "Below what the materials cost."
+end
+
 local function UpdateRow(row, line)
     row.name:SetText(line.label)
 
@@ -71,7 +79,7 @@ local function UpdateRow(row, line)
     row.post:SetEnabledState(line.unitPrice ~= nil)
 
     row.post.tooltipText = line.atALoss
-        and "Below what the materials cost."
+        and LossText(line)
         or ("List %d at %s each."):format(
             line.postQuantity,
             Util.FormatMoney(line.unitPrice or 0, { noColor = true }))
@@ -87,6 +95,11 @@ local function ShowRowTooltip(row, line)
     if line.unitCost then
         GameTooltip:AddDoubleLine("Cost each",
             Util.FormatMoney(line.unitCost, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+
+    if line.vendorPrice then
+        GameTooltip:AddDoubleLine("Vendor pays",
+            Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
     GameTooltip:AddLine(line.isCommodity
@@ -189,7 +202,7 @@ function PostPanel:Refresh()
     self.summary:SetText(("%d item%s, about %s%s"):format(
         #lines, #lines == 1 and "" or "s",
         Util.FormatMoney(total, { noColor = true, short = true }),
-        losses > 0 and (("  ·  %d below cost"):format(losses)) or ""))
+        losses > 0 and (("  ·  %d at a loss"):format(losses)) or ""))
 end
 
 function PostPanel:Hide()
