@@ -17,7 +17,8 @@ def main() -> int:
     lua.execute("lfs_cwd = [[%s]]" % ROOT.replace("\\", "/"))
 
     for name in ("test_pricing.lua", "test_postprice.lua", "test_buying.lua",
-                 "test_transfer.lua", "test_throttle.lua"):
+                 "test_transfer.lua", "test_throttle.lua",
+                 "test_verify.lua"):
         script = os.path.join(ROOT, "tools", name).replace("\\", "/")
         lua.execute("dofile([[%s]])" % script)
 
