@@ -696,6 +696,50 @@ Mail:Read()
 check("and not again on the next look",         Mail:GetSummary().sold, 1)
 
 --------------------------------------------------------------------------------
+print("")
+print("throwing the ledger away")
+--------------------------------------------------------------------------------
+
+-- Trent's ledger carried rows written before the payout fix, reading "sold
+-- Linen Reagent Bag for 0c". Entries are never rewritten, so the only way to be
+-- rid of them is to clear the lot and start again.
+Reset()
+
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 285,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag", bid = 300 } },
+    { sender = "Auction House", subject = "Auction expired: Crystal Vial",
+      items = { { itemID = VIAL, count = 1 } } },
+}
+Mail:Read()
+
+check("two entries to start with",              #Mail:GetLedger().entries, 2)
+
+-- A row with no gold on it cannot be written by the current code at all: a sale
+-- is priced from the invoice when the header is still zero, and one nothing can
+-- price is deferred. So a zero row is always history.
+check("and none of them looks unpriced",        Mail:CountUnpriced(), 0)
+
+table.insert(Mail:GetLedger().entries,
+    { t = 1, kind = "sold", name = "Linen Reagent Bag", net = 0 })
+check("an old zero row is spotted",             Mail:CountUnpriced(), 1)
+
+check("clearing says how much it threw away",   Mail:ResetLedger(), 3)
+check("the entries are gone",                   #Mail:GetLedger().entries, 0)
+check("and so is the summary",                  Mail:GetSummary().sold, 0)
+
+-- The record of what has already been written down goes with them, or the mail
+-- still sitting in the box would never be recorded again.
+Mail:Read()
+
+check("what is still there is recorded afresh", #Mail:GetLedger().entries, 2)
+check("with its gold intact",                   Mail:GetSummary().net, 285)
+
+Mail:Read()
+check("and still not twice",                    #Mail:GetLedger().entries, 2)
+
+--------------------------------------------------------------------------------
 
 print("")
 if failures > 0 then
