@@ -258,6 +258,12 @@ end
 
 --- The client announcing that owned auctions changed, where it does so.
 function Auctions:OnOwnedAuctionsUpdated()
+    -- Counted, because registering this event and actually receiving it are two
+    -- different things on this client and only the second one is any use. A
+    -- registration that succeeds and then never fires is exactly what made a
+    -- successful listing report "could not tell".
+    self.ownedEventCount = (self.ownedEventCount or 0) + 1
+
     -- The server has answered, so this reading is as good as it is going to get.
     self:ReadOwned({ final = true })
 end
@@ -286,9 +292,11 @@ end
 --------------------------------------------------------------------------------
 
 function Auctions:OnEnable()
-    -- Forever does not have this event. Registering it fails quietly, so the
-    -- answer is recorded rather than assumed: `/bts auctions` reports it, and
-    -- verification does not depend on it either way.
+    -- This client accepts the registration. Whether it ever sends the event is
+    -- a separate question, and the answer appears to be no -- which is not
+    -- something a registration check can tell you, so both are recorded and
+    -- `/bts auctions` reports them separately. Verification depends on neither.
+    self.ownedEventCount = 0
     self.hasOwnedEvent = ns.RegisterEvent(
         self, "OWNED_AUCTIONS_UPDATED", self.OnOwnedAuctionsUpdated) and true or false
 
@@ -329,8 +337,16 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
     ns.PrintRaw(("  QueryOwnedAuctions:   %s"):format(hasQuery and "yes" or "no"))
     ns.PrintRaw(("  GetNumOwnedAuctions:  %s"):format(hasCount and "yes" or "no"))
     ns.PrintRaw(("  GetOwnedAuctionInfo:  %s"):format(hasInfo and "yes" or "no"))
-    ns.PrintRaw(("  announces changes:    %s"):format(
-        Auctions.hasOwnedEvent and "yes" or "no (we read the answer ourselves)"))
+    local announces
+    if not Auctions.hasOwnedEvent then
+        announces = "not supported by this client"
+    elseif (Auctions.ownedEventCount or 0) > 0 then
+        announces = ("yes, %d time(s) this session"):format(Auctions.ownedEventCount)
+    else
+        announces = "registered, but never fired this session"
+    end
+
+    ns.PrintRaw(("  announces changes:    %s"):format(announces))
 
     if hasCount then
         local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)

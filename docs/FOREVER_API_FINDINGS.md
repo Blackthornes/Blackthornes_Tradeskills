@@ -133,12 +133,16 @@ Blizzard's frame.** Whichever query was sent last owns it. Two consequences:
 
 ## Owned auctions are readable, but never announced
 
-**`OWNED_AUCTIONS_UPDATED` does not exist on this client and never fires.**
-Registering it raises no error -- `ns.RegisterEvent` wraps every registration in
-a `pcall` and records the unsupported ones -- so nothing looked wrong. The addon
-waited for an announcement that was never coming, gave up after five seconds and
-reported `could not tell whether that listing went up` after every post, while
-the auction sat in the player's Auctions tab.
+**`OWNED_AUCTIONS_UPDATED` registers successfully and then never fires.**
+Confirmed in game on 2026-09-19: `/bts auctions` reported the registration as
+accepted, so this is not an unsupported event that `ns.RegisterEvent` quietly
+swallowed -- the client takes it and simply never sends it. A registration check
+cannot tell you this, which is why the report now counts how many times the
+event has actually arrived rather than whether it was accepted.
+
+The addon waited for an announcement that was never coming, gave up after five
+seconds and reported `could not tell whether that listing went up` after every
+post, while the auction sat in the player's Auctions tab.
 
 The reads themselves are fine. Confirmed in game on 2026-09-19, one Peacebloom
 listing up:
