@@ -12,7 +12,11 @@ local Inventory = ns.NewModule("Inventory")
 local Util = ns.Util
 
 local BACKPACK = 0
-local LAST_BAG = 4
+
+-- The ordinary bag slots on the character portrait. A reagent bag, where the
+-- client has one, sits past these and is found rather than assumed -- see
+-- DetectReagentBag.
+local LAST_NORMAL_BAG = tonumber(_G.NUM_BAG_SLOTS) or 4
 
 -- Bank containers. The main bank window is a single pseudo-bag, with the
 -- purchased bank bags after it, and the reagent bank separate again.
@@ -33,6 +37,74 @@ local BAG_CACHE_SECONDS = 0.5
 --------------------------------------------------------------------------------
 -- Live bag counts
 --------------------------------------------------------------------------------
+
+--- The reagent bag's container index, or nil on a client without that slot.
+--
+-- A reagent bag is a sixth equipped container sitting past the four ordinary
+-- ones, so a walk that stops at the fourth never sees inside it: reagents kept
+-- where the game most encourages you to keep them read as reagents you do not
+-- own.
+--
+-- Found rather than assumed, because the index is not the same everywhere. On
+-- a client laid out the older way the first bank bag sits exactly where a
+-- reagent bag would, and counting the bank as bags would say you can craft
+-- things you cannot reach -- so the answer is bounded below the bank and
+-- dropped when nothing confirms it.
+local function DetectReagentBag()
+    local index = Enum and Enum.BagIndex
+        and (Enum.BagIndex.ReagentBag or Enum.BagIndex.Reagentbag)
+
+    if type(index) ~= "number" then
+        -- No enum to read. The client still says how many bag slots it equips
+        -- altogether, and a total above the ordinary bags is that extra slot.
+        local total = tonumber(_G.NUM_TOTAL_EQUIPPED_BAG_SLOTS)
+        if total and total > LAST_NORMAL_BAG then
+            index = LAST_NORMAL_BAG + 1
+        end
+    end
+
+    if type(index) ~= "number" then return nil end
+    if index <= LAST_NORMAL_BAG or index >= FIRST_BANK_BAG then return nil end
+
+    return index
+end
+
+local carriedBags, reagentBagIndex
+
+--- Every container the character is carrying, in order, backpack first.
+--
+-- One list so the bag walk, the snapshot and the sell list all agree on what
+-- counts as "in your bags". They disagreed before, which is how a reagent bag
+-- could be invisible to the count and to the seller at the same time.
+function Inventory:GetCarriedBags()
+    if carriedBags then return carriedBags end
+
+    local bags = {}
+    for bag = BACKPACK, LAST_NORMAL_BAG do
+        bags[#bags + 1] = bag
+    end
+
+    reagentBagIndex = DetectReagentBag()
+    if reagentBagIndex then bags[#bags + 1] = reagentBagIndex end
+
+    carriedBags = bags
+    return carriedBags
+end
+
+--- Which of the carried containers is the reagent bag, or nil if there is none.
+function Inventory:GetReagentBag()
+    self:GetCarriedBags()
+    return reagentBagIndex
+end
+
+--- Re-read which containers the character carries.
+--
+-- The layout does not change while logged in, so this is only for enable time
+-- and for the tests.
+function Inventory:InvalidateBagLayout()
+    carriedBags, reagentBagIndex = nil, nil
+    self:InvalidateBagCounts()
+end
 
 --- What the client says you are holding.
 --
@@ -59,7 +131,7 @@ end
 local function WalkBags()
     local counts = {}
 
-    for bag = BACKPACK, LAST_BAG do
+    for _, bag in ipairs(Inventory:GetCarriedBags()) do
         local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
 
         if slotsOk and slots then
@@ -109,6 +181,28 @@ end
 function Inventory:GetBagCount(itemID)
     if not itemID then return 0 end
     return self:GetBagCounts()[itemID] or 0
+end
+
+--- How many of an item sit in one container, and how big that container is.
+--
+-- The whole-bag walk folds every container into one number, which is exactly
+-- the shape that let a missing container hide. This reports them apart so the
+-- diagnostic can show its working.
+-- @return count, slots
+function Inventory:CountInBag(bag, itemID)
+    local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
+    if not slotsOk or not slots then return 0, 0 end
+
+    local total = 0
+
+    for slot = 1, slots do
+        local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+        if infoOk and info and info.itemID == itemID then
+            total = total + (info.stackCount or 1)
+        end
+    end
+
+    return total, slots
 end
 
 --- How many of an item the character is wearing, bags included.
@@ -182,7 +276,7 @@ function Inventory:Snapshot()
 
     local counts = {}
 
-    for bag = BACKPACK, LAST_BAG do
+    for _, bag in ipairs(self:GetCarriedBags()) do
         local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
         if slotsOk and slots then
             for slot = 1, slots do
@@ -360,26 +454,55 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
 
     local itemID = recipe.outputItemID
     local inBags = Inventory:GetBagCount(itemID)
+    local worn = Inventory:GetEquippedCount(itemID)
     local client = ClientCount(itemID, false)
 
     ns.Print(Util.GetItemLabel(itemID))
     ns.PrintRaw(("  in bags:          %d"):format(inBags))
-    ns.PrintRaw(("  equipped:         %d"):format(Inventory:GetEquippedCount(itemID)))
+    ns.PrintRaw(("  equipped:         %d"):format(worn))
     ns.PrintRaw(("  in bank:          %d"):format(Inventory:GetBankCount(itemID)))
     ns.PrintRaw(("  counted as held:  %d"):format(Inventory:GetOwnedCount(itemID)))
     ns.PrintRaw(("  listed:           %d"):format(ns.Auctions:GetPostedCount(itemID)))
 
-    -- The line that settles the argument: a client count above the walked one
-    -- is equipment being counted as stock, which is what this file now avoids.
+    -- Which containers were actually opened, and what each held. A bag missing
+    -- from this list is a bag whose contents the addon does not believe you
+    -- own, which is the failure this reports rather than reasons about.
+    local reagentBag = Inventory:GetReagentBag()
+
+    ns.PrintRaw("  containers walked:")
+
+    for _, bag in ipairs(Inventory:GetCarriedBags()) do
+        local count, slots = Inventory:CountInBag(bag, itemID)
+        ns.PrintRaw(("    bag %d (%d slots):  %d%s"):format(bag, slots, count,
+            bag == reagentBag and "   reagent bag" or ""))
+    end
+
+    if not reagentBag then
+        ns.PrintRaw("    no reagent bag slot on this client")
+    end
+
+    -- The line that settles the argument. A client count above the walked one
+    -- used to mean equipment, which is why the walk exists at all; above the
+    -- walk and the equipment together it means a container nobody opened, and
+    -- that is a bug in the list above rather than in the client.
     if client then
-        ns.PrintRaw(("  client's own bag count: %d%s"):format(client,
-            client > inBags and "  <-- it counts equipment" or ""))
+        local note = ""
+
+        if client > inBags + worn then
+            note = "  <-- more than bags and equipment: a container we are not walking"
+        elseif client > inBags then
+            note = "  <-- it counts equipment"
+        end
+
+        ns.PrintRaw(("  client's own bag count: %d%s"):format(client, note))
     else
         ns.PrintRaw("  client's own bag count: cannot ask")
     end
 end)
 
 function Inventory:OnEnable()
+    self:InvalidateBagLayout()
+
     ns.RegisterEvent(self, "BAG_UPDATE", self.OnBagChanged)
     ns.RegisterEvent(self, "PLAYER_EQUIPMENT_CHANGED", self.OnBagChanged)
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", self.OnBagUpdate)
