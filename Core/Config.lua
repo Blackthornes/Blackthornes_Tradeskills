@@ -226,6 +226,47 @@ end
 -- Exposed so tools/test_snapshot.lua can exercise it against real shapes.
 Config.FillGaps = FillGaps
 
+--- Like FillGaps, but a value that still equals its default counts as absent.
+--
+-- FillGaps alone cannot restore a setting. Bootstrap applies DEFAULTS before
+-- anything late runs, so by the time Durable reads macro storage at
+-- PLAYER_LOGIN every settings key already holds something and there is no gap
+-- left to fill. A stored setting was therefore shadowed by its own default on
+-- every restart -- silently, and in a way that would have looked correct for
+-- weeks before anyone noticed a setting reverting.
+--
+-- A value still equal to its default has never been deliberately set, so it is
+-- indistinguishable from absent and the stored one may take its place. A value
+-- that differs came from somewhere real -- this session, or the CVar store
+-- carrying this session across a reload -- and still wins.
+local function FillOverDefaults(target, source, defaults, depth)
+    depth = depth or 0
+    if depth > 8 then return 0 end
+
+    local filled = 0
+
+    for key, value in pairs(source) do
+        local mine = target[key]
+        local fallback = type(defaults) == "table" and defaults[key] or nil
+
+        if type(mine) == "table" and type(value) == "table" then
+            filled = filled + FillOverDefaults(mine, value, fallback, depth + 1)
+
+        elseif mine == nil or (fallback ~= nil and mine == fallback) then
+            -- Writing the same value back is not a restore; only a real change
+            -- is worth counting, so the report cannot overstate what happened.
+            if mine ~= value then
+                target[key] = value
+                filled = filled + 1
+            end
+        end
+    end
+
+    return filled
+end
+
+Config.FillOverDefaults = FillOverDefaults
+
 --- Called from the ADDON_LOADED handler before any module initialises.
 function Config:Bootstrap()
     -- First, before Compat's capability detection registers and writes CVars
@@ -375,6 +416,35 @@ function Config:OnEnable()
     if ns.Persist then ns.Persist:RestoreSettings() end
 
     ns.Print("seeded the database from the local data addon.")
+end
+
+--- Settle the database again after something was restored into it late.
+--
+-- Durable restores at PLAYER_LOGIN, after Bootstrap has already applied
+-- defaults and read the CVar store. A value filled in after that needs the
+-- defaults run again for keys neither store had, and needs mirroring into its
+-- CVar so the rest of the session agrees with it.
+--
+-- **The mirroring goes OUT, and only out.** `Persist:RestoreSettings` reads
+-- CVars into the database, and on a cold start those CVars do not exist yet:
+-- `RegisterOne` creates each one at its default and the read hands that
+-- default straight back, over the top of whatever macro storage had just
+-- restored. Calling it here undid the entire settings restore a few
+-- milliseconds after it happened. Measured in game 2026-09-20 -- `/bts
+-- durable` reported three values restored and the settings panel still showed
+-- every default, because the report counted the fill and not the outcome.
+function Config:ReapplyAfterRestore()
+    local db = ns.db
+    if not db then return end
+
+    self:Migrate(db)
+    Util.ApplyDefaults(db, DEFAULTS)
+
+    if ns.Persist and db.settings then
+        for key, value in pairs(db.settings) do
+            ns.Persist:SaveSetting(key, value)
+        end
+    end
 end
 
 --- Did the client hand the saved table back after ADDON_LOADED?

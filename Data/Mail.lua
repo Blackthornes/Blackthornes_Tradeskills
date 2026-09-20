@@ -609,6 +609,37 @@ function Mail:GetSummary(itemID)
         end
     end
 
+    -- History carried across a client restart in macro storage, which holds a
+    -- rollup rather than the entries themselves. The ledger above is this
+    -- session's; the rollup is everything before it, and the two never
+    -- overlap because Durable rolls entries in only when it writes.
+    --
+    -- Only what a 17-character record can hold comes back: what sold, how
+    -- many, what expired, the money, and when. Deposits, the auction house
+    -- cut and cancellations are this session's alone, so `restored` is set
+    -- for anything that wants to say so rather than quietly showing a gross
+    -- that does not match the net.
+    local restored = ns.Durable and ns.Durable:GetRestoredRollup()
+
+    if restored then
+        for id, record in pairs(restored) do
+            if not itemID or id == itemID then
+                totals.sold = totals.sold + (record.sold or 0)
+                totals.soldUnits = totals.soldUnits + (record.soldUnits or 0)
+                totals.expired = totals.expired + (record.expired or 0)
+                totals.returned = totals.returned + (record.expired or 0)
+                totals.net = totals.net + (record.net or 0)
+                totals.restored = true
+
+                local at = record.lastAt
+                if at and at > 0 then
+                    if not totals.firstAt or at < totals.firstAt then totals.firstAt = at end
+                    if not totals.lastAt or at > totals.lastAt then totals.lastAt = at end
+                end
+            end
+        end
+    end
+
     -- The number the Profit tab is really being judged on: of everything the
     -- market got to decide on, how much of it actually sold. Cancellations are
     -- left out on purpose -- pulling a listing yourself says nothing about
