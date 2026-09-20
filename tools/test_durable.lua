@@ -74,11 +74,26 @@ loadfile("Core/Serialize.lua")("Blackthornes_TS", ns)
 loadfile("Core/MacroStore.lua")("Blackthornes_TS", ns)
 
 -- The real FillGaps, because Durable leans on its never-overwrite promise.
-local configNS = { Util = ns.Util, RegisterCommand = function() end }
+local configNS = { RegisterCommand = function() end }
 configNS.NewModule = function(name)
     configNS[name] = {}
     return configNS[name]
 end
+
+-- Core/Util.lua builds a worker frame at load time. Nothing here drives it;
+-- it only has to exist so the file loads outside the client.
+CreateFrame = function()
+    local frame = {}
+    for _, name in ipairs({ "SetScript", "Show", "Hide", "SetPoint", "SetSize" }) do
+        frame[name] = function() end
+    end
+    return frame
+end
+
+-- The real Util, because ReapplyAfterRestore runs ApplyDefaults and a stub of
+-- that is exactly the kind of modelling this suite exists to avoid.
+loadfile("Core/Util.lua")("Blackthornes_TS", configNS)
+configNS.Util.HasFunction = ns.Util.HasFunction
 loadfile("Core/Config.lua")("Blackthornes_TS", configNS)
 ns.Config.FillGaps = configNS.Config.FillGaps
 ns.Config.FillOverDefaults = configNS.Config.FillOverDefaults
@@ -308,6 +323,51 @@ Durable:Restore()
 Check("a setting put back to its default stays there after a restart",
     ns.db.settings.countMailAsStock == DEFAULTS.countMailAsStock,
     tostring(ns.db.settings.countMailAsStock))
+
+--------------------------------------------------------------------------------
+-- 5c. What happens straight after the restore, which is where it was undone.
+--
+-- Measured in game 2026-09-20: /bts durable reported "restored 3 value(s)"
+-- and the settings panel still showed every default. The fill had worked and
+-- something put the defaults back milliseconds later.
+--
+-- That something was Config:ReapplyAfterRestore calling
+-- Persist:RestoreSettings, which reads CVars INTO the database. On a cold
+-- start those CVars do not exist: registering each one creates it at its
+-- default and the read hands that default straight back. The mirroring after
+-- a restore has to go the other way.
+--------------------------------------------------------------------------------
+
+local Config = configNS.Config
+local pulled, pushed
+
+local function StubPersist(pullsBack)
+    pulled, pushed = false, {}
+
+    configNS.Persist = {
+        SaveSetting = function(_, key, value) pushed[key] = value; return true end,
+        -- What the real one does on a cold start: every CVar is created at its
+        -- default and read straight back.
+        RestoreSettings = function()
+            pulled = true
+            for key, value in pairs(Config.DEFAULTS.settings) do
+                configNS.db.settings[key] = value
+            end
+            return 0
+        end,
+    }
+
+    if pullsBack == false then configNS.Persist.RestoreSettings = nil end
+end
+
+StubPersist()
+configNS.db = { settings = WithDefaults({ minProfit = 5000 }), queue = {} }
+Config:ReapplyAfterRestore()
+
+Check("a restored setting is still there afterwards",
+    configNS.db.settings.minProfit == 5000, configNS.db.settings.minProfit)
+Check("and it was mirrored out to its CVar", pushed.minProfit == 5000, pushed.minProfit)
+Check("settings were not read back in from CVars", pulled == false, pulled)
 
 --------------------------------------------------------------------------------
 -- 6. What it costs, at the size that matters. A regression here is a bug.

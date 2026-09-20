@@ -421,10 +421,18 @@ end
 --- Settle the database again after something was restored into it late.
 --
 -- Durable restores at PLAYER_LOGIN, after Bootstrap has already applied
--- defaults and mirrored settings into CVars. A value filled in after that
--- would otherwise sit in the table with nothing having looked at it: no
--- default covering the keys neither store had, and no CVar mirroring the
--- setting that just arrived.
+-- defaults and read the CVar store. A value filled in after that needs the
+-- defaults run again for keys neither store had, and needs mirroring into its
+-- CVar so the rest of the session agrees with it.
+--
+-- **The mirroring goes OUT, and only out.** `Persist:RestoreSettings` reads
+-- CVars into the database, and on a cold start those CVars do not exist yet:
+-- `RegisterOne` creates each one at its default and the read hands that
+-- default straight back, over the top of whatever macro storage had just
+-- restored. Calling it here undid the entire settings restore a few
+-- milliseconds after it happened. Measured in game 2026-09-20 -- `/bts
+-- durable` reported three values restored and the settings panel still showed
+-- every default, because the report counted the fill and not the outcome.
 function Config:ReapplyAfterRestore()
     local db = ns.db
     if not db then return end
@@ -432,7 +440,11 @@ function Config:ReapplyAfterRestore()
     self:Migrate(db)
     Util.ApplyDefaults(db, DEFAULTS)
 
-    if ns.Persist then ns.Persist:RestoreSettings() end
+    if ns.Persist and db.settings then
+        for key, value in pairs(db.settings) do
+            ns.Persist:SaveSetting(key, value)
+        end
+    end
 end
 
 --- Did the client hand the saved table back after ADDON_LOADED?
