@@ -233,6 +233,15 @@ function Queue:Notify()
     if ns.UI and ns.UI.OnQueueUpdated then
         ns.UI:OnQueueUpdated()
     end
+
+    -- Get the change into macro storage, which is the only copy of the queue
+    -- that survives closing the client. Saving used to wait for the CVar
+    -- cadence or for PLAYER_LOGOUT, so emptying the queue and quitting inside
+    -- the minute never reached it, and the next login handed the crafts back.
+    -- Coalesced and skipped when nothing really changed; see Durable:SaveSoon.
+    if ns.Durable and ns.Durable.SaveSoon then
+        ns.Durable:SaveSoon()
+    end
 end
 
 --------------------------------------------------------------------------------
