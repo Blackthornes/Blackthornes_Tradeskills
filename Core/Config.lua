@@ -191,6 +191,41 @@ end
 -- Bootstrap
 --------------------------------------------------------------------------------
 
+--- Copy across only what the target does not have, recursing into tables.
+--
+-- Two stores can both be real and neither complete. The CVar store belongs to
+-- this client process, so on a /reload it holds this session's work and is
+-- usually the fresher of the two. Usually is not always: a session that
+-- started empty saves its emptiness, and that then beats a data addon holding
+-- a real price history -- which is exactly what happened on 2026-09-20, with
+-- a 2,109-byte CVar store winning over the whole database.
+--
+-- So neither store is chosen over the other. Anything already present wins,
+-- because it is this session's, and everything absent is filled from the
+-- other. Nothing is ever overwritten.
+local function FillGaps(target, source, depth)
+    depth = depth or 0
+    if depth > 8 then return 0 end      -- serialised data is a tree; belt and braces
+
+    local filled = 0
+
+    for key, value in pairs(source) do
+        local mine = target[key]
+
+        if mine == nil then
+            target[key] = value
+            filled = filled + 1
+        elseif type(mine) == "table" and type(value) == "table" then
+            filled = filled + FillGaps(mine, value, depth + 1)
+        end
+    end
+
+    return filled
+end
+
+-- Exposed so tools/test_snapshot.lua can exercise it against real shapes.
+Config.FillGaps = FillGaps
+
 --- Called from the ADDON_LOADED handler before any module initialises.
 function Config:Bootstrap()
     -- First, before Compat's capability detection registers and writes CVars
@@ -211,11 +246,19 @@ function Config:Bootstrap()
             and _G.BlackthornesTSDB.probe.loadCount or nil,
     }
 
+    -- Recorded whichever way the rest goes. On a login where the CVar store
+    -- wins, this is the only line that says whether the data addon handed a
+    -- database over at all -- and "it named the file but restored nothing"
+    -- was the shape of the bug that cost a morning.
+    self.loadDiagnostics.snapshotSeen = type(_G.BlackthornesTSSnapshot) == "table"
+
     if existing ~= "table" then
         -- The client handed back nothing. On the Forever beta that is the norm
         -- rather than a first run, so recover from the CVar store first: this
         -- build persists CVars even though it loses saved variables.
         local stored = ns.Persist and ns.Persist:LoadAll()
+        local snapshot = self.loadDiagnostics.snapshotSeen
+            and _G.BlackthornesTSSnapshot or nil
 
         if stored then
             _G.BlackthornesTSDB = stored
@@ -223,9 +266,19 @@ function Config:Bootstrap()
             self.restoredFromCVars = true
             self.loadDiagnostics.restoredFromCVars = true
 
-        elseif type(_G.BlackthornesTSSnapshot) == "table" then
-            _G.BlackthornesTSDB = _G.BlackthornesTSSnapshot
-            _G.BlackthornesTSSnapshot = nil
+            -- Both stores can be real and neither complete; see FillGaps.
+            if snapshot then
+                local filled = FillGaps(stored, snapshot)
+
+                if filled > 0 then
+                    self.restoredFromSnapshot = true
+                    self.loadDiagnostics.filledFromSnapshot = filled
+                    self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
+                end
+            end
+
+        elseif snapshot then
+            _G.BlackthornesTSDB = snapshot
 
             self.restoredFromSnapshot = true
             self.loadDiagnostics.restored = true
@@ -234,6 +287,9 @@ function Config:Bootstrap()
             _G.BlackthornesTSDB = {}
             self.freshDatabase = true
         end
+
+        -- Taken either way, so nothing downstream seeds from it twice.
+        _G.BlackthornesTSSnapshot = nil
     end
 
     -- Per-character saved variables are a separate file and a separate code
