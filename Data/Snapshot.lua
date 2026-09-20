@@ -18,5 +18,12 @@
 -- empty in the repository -- a copy with data in it would seed another
 -- player's database with someone else's characters and prices, and
 -- tools/check-snapshot.sh refuses one.
-
-BlackthornesTSSnapshot = nil
+--
+-- It is empty of code as well as of data, and that is load-bearing. It used to
+-- end with "BlackthornesTSSnapshot = nil". Blackthornes_TS_Data is an
+-- OptionalDeps, so the client loads it before this addon -- and then this
+-- file, first in the TOC, ran that line over the top of the database it had
+-- just handed over. The source string survived because a different global
+-- holds it, so /bts persist named the data addon it had loaded and said the
+-- session started empty in the same breath. tools/test_snapshot.lua holds
+-- that line down.
