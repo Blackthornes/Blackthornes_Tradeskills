@@ -164,5 +164,116 @@ Check("the appended byte is trimmed on read",
     MacroStore_Decode(Store:Read("BTSt06")) == "payload", tostring(Store:Read("BTSt06")))
 Store:Clear()
 
+--------------------------------------------------------------------------------
+-- 9. The store: one payload across many macros, and the header that says so.
+--------------------------------------------------------------------------------
+
+time = function() return 1000 end
+
+local Pack, Unpack = Store.Pack, Store.Unpack
+
+Check("a number round trips", Unpack(Pack(123456, 4)) == 123456, Unpack(Pack(123456, 4)))
+Check("zero round trips", Unpack(Pack(0, 3)) == 0)
+Check("the width is respected", #Pack(5, 4) == 4, #Pack(5, 4))
+Check("the largest value in three characters fits", Unpack(Pack(262143, 3)) == 262143)
+-- Saturating rather than wrapping: a capped count is wrong by a little, a
+-- wrapped one reads as a much smaller number and looks plausible.
+Check("an overflowing number saturates", Unpack(Pack(262144, 3)) == 262143, Unpack(Pack(262144, 3)))
+Check("text outside the alphabet unpacks to nil", Unpack("!!") == nil)
+
+local room = 255 - #"/bts macrodata "
+
+local function RoundTrip(name, payload)
+    Check(name .. " saves", (Store:SaveData(payload)))
+    local back, why = Store:LoadData()
+    Check(name .. " loads back identical", back == payload, tostring(why or back))
+end
+
+RoundTrip("an empty payload", "")
+RoundTrip("a short payload", "AbC123-.")
+RoundTrip("exactly one full chunk", string.rep("A", room))
+RoundTrip("one character more than a chunk", string.rep("B", room + 1))
+RoundTrip("five chunks", string.rep("Cd9-.", room))
+
+Check("the slot estimate matches what was written",
+    Store.SlotsFor(room * 5) == select(2, Store:SaveData(string.rep("x", room * 5))) + 1,
+    Store.SlotsFor(room * 5))
+
+-- A payload that shrank must not leave the old tail behind for a later bug to
+-- read as part of it.
+Store:SaveData(string.rep("Q", room * 4))
+Store:SaveData("short")
+Check("a shrinking payload removes its old tail", Store:Read("BTSd03") == nil,
+    tostring(Store:Read("BTSd03")))
+Check("and still reads back correctly", Store:LoadData() == "short")
+
+-- The header is written last precisely so a torn save is refusable. Both
+-- failures below are what a half-finished write looks like from the outside.
+Store:SaveData(string.rep("Zz", room))
+local index = IndexByName("BTSd01")
+macros[index].body = "/bts macrodata " .. string.rep("Yy", 50)
+local back, why = Store:LoadData()
+Check("a payload that no longer matches its header is refused", back == nil, tostring(back))
+Check("and says why", type(why) == "string" and why ~= "", tostring(why))
+
+Store:SaveData(string.rep("Ww", room))
+DeleteMacro(IndexByName("BTSd02"))
+back, why = Store:LoadData()
+Check("a missing chunk is refused, not silently truncated", back == nil, tostring(back))
+
+-- Same length, different content: only the checksum can catch this one.
+Store:SaveData("AAAABBBB")
+index = IndexByName("BTSd01")
+macros[index].body = "/bts macrodata " .. "AAAABBBC"
+Check("a same-length corruption is caught by the checksum", Store:LoadData() == nil)
+
+-- A save that dies part way has already overwritten some chunks, so what is
+-- stored is half one payload and half another. Loading that would hand back a
+-- database made of two different saves, so it must refuse instead. The
+-- checksum is what catches it: both payloads here are the same length on
+-- purpose, so the length check cannot be what does the work.
+Store:ClearData()
+Store:SaveData(string.rep("Aa", room * 2))          -- a good payload, 4 chunks
+
+local realEdit, realCreate = EditMacro, CreateMacro
+local function FailOn(name)
+    EditMacro = function(index, macroName, icon, body)
+        if macroName == name then error("client refused") end
+        return realEdit(index, macroName, icon, body)
+    end
+    CreateMacro = function(macroName, icon, body, perChar)
+        if macroName == name then error("client refused") end
+        return realCreate(macroName, icon, body, perChar)
+    end
+end
+
+FailOn("BTSd03")
+local saved, reason = Store:SaveData(string.rep("Bb", room * 2))
+EditMacro, CreateMacro = realEdit, realCreate
+
+Check("a save that dies part way reports failure", saved == false, tostring(saved))
+Check("and names the chunk", type(reason) == "string" and reason:find("3") ~= nil, tostring(reason))
+Check("an interrupted save never loads as a mixture", Store:LoadData() == nil,
+    tostring(Store:LoadData()))
+
+Store:ClearData()
+
+Check("a payload outside the alphabet is refused",
+    Store:SaveData("not safe!") == false)
+Check("nothing stored reads as nil, with a reason",
+    (Store:ClearData() >= 0) and Store:LoadData() == nil)
+
+InCombatLockdown = function() return true end
+Check("a save in combat is refused", Store:SaveData("Ab") == false)
+InCombatLockdown = function() return false end
+
+-- And through all of that, the player's own macros.
+Store:SaveData(string.rep("Mm", room * 2))
+Check("the player's macros survived the store entirely",
+    macros[1].name == "Heal" and macros[2].name == "Pull",
+    macros[1].name .. "/" .. macros[2].name)
+Check("clearing removes every data macro", Store:ClearData() > 0)
+Check("and leaves the player with exactly their two", #macros == 2, #macros)
+
 print(failures == 0 and "\nall macro storage tests passed" or ("\n" .. failures .. " failure(s)"))
 if failures > 0 then error(failures .. " macro storage failure(s)") end

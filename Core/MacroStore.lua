@@ -209,10 +209,193 @@ function MacroStore:Clear()
 end
 
 --------------------------------------------------------------------------------
--- The test
+-- The store
+--
+-- One logical payload spread over as many macros as it needs, plus a header
+-- macro carrying the chunk count, the length and a checksum.
+--
+-- The thing that has to be impossible is loading a database built from half
+-- of one save and half of another, which is what an interrupted save leaves
+-- behind. **The checksum is what makes that refusable** -- a control test
+-- confirms it, by writing the header first instead of last and watching the
+-- refusal hold anyway. The length catches the cheaper case of a lost chunk.
+--
+-- The header is still written last, so that a completed header is the commit
+-- point and a reader never sees one describing chunks that were never
+-- written. That is tidiness, not the guarantee; the checksum is the guarantee.
+-- Refusing is recoverable -- the session's own data is still in memory and the
+-- next save rewrites the store. Silent corruption is not.
 --------------------------------------------------------------------------------
 
 local DATA_BYTES = BODY_LIMIT - #COMMAND
+
+local DATA_PREFIX = "BTSd"          -- "d" for data; "t" is the measurement
+local HEADER = DATA_PREFIX .. "00"
+
+-- A ceiling, so a bug in what gets packed cannot quietly eat a player's macro
+-- bar. Measured need is about 22; this is generous and still bounded.
+local MAX_DATA_MACROS = 60
+
+local function DataName(index)
+    return ("%s%02d"):format(DATA_PREFIX, index)
+end
+
+--- A number as fixed-width text in the safe alphabet. Big end first, so
+--- records sort and compare as text.
+function MacroStore.Pack(value, width)
+    local out = {}
+
+    value = math.floor(tonumber(value) or 0)
+    if value < 0 then value = 0 end
+
+    for position = width, 1, -1 do
+        local digit = value % 64
+        out[position] = SAFE:sub(digit + 1, digit + 1)
+        value = math.floor(value / 64)
+    end
+
+    -- Anything left over did not fit the width. Saturate rather than wrap:
+    -- a capped count is wrong by a little, a wrapped one is wrong by a lot.
+    if value > 0 then
+        for position = 1, width do out[position] = SAFE:sub(64, 64) end
+    end
+
+    return table.concat(out)
+end
+
+--- And back. nil when the text holds anything outside the alphabet.
+function MacroStore.Unpack(text)
+    local value = 0
+
+    for position = 1, #text do
+        local digit = INDEX[text:sub(position, position)]
+        if not digit then return nil end
+        value = value * 64 + digit
+    end
+
+    return value
+end
+
+--- Cheap guard against a torn save, not against tampering.
+local function Checksum(text)
+    local total = 0
+    for position = 1, #text do
+        total = (total + text:byte(position) * position) % 4096
+    end
+    return total
+end
+
+--- How many macros a payload of this length would take, header included.
+function MacroStore.SlotsFor(length)
+    return 1 + math.ceil(length / DATA_BYTES)
+end
+
+--- Store one payload. The text must already be in the safe alphabet: callers
+--- that hold arbitrary bytes run them through Encode first, and callers that
+--- packed their own numbers do not pay for that twice.
+-- @return true, chunks written -- or false and why
+function MacroStore:SaveData(text)
+    if type(text) ~= "string" then return false, "not a string" end
+    if not self:Detect().usable then return false, "no macro API" end
+    if InCombatLockdown and InCombatLockdown() then return false, "in combat" end
+
+    if text ~= "" and not text:match("^[A-Za-z0-9%-%.]+$") then
+        return false, "payload is not in the safe alphabet"
+    end
+
+    local chunks = math.ceil(#text / DATA_BYTES)
+    if chunks > MAX_DATA_MACROS then return false, "payload too large" end
+
+    -- Room is counted before anything is written, so a payload that cannot
+    -- fit does not half-replace the one already stored.
+    local free, used = self:FreeSlots()
+    if free then
+        local mine = 0
+        for index = 0, MAX_DATA_MACROS do
+            local ok, found = pcall(GetMacroIndexByName, DataName(index))
+            if ok and type(found) == "number" and found > 0 then mine = mine + 1 end
+        end
+
+        if free + mine < chunks + 1 then
+            return false, ("needs %d slots, %d free"):format(chunks + 1, free + mine)
+        end
+    end
+
+    for index = 1, chunks do
+        local from = (index - 1) * DATA_BYTES + 1
+        local ok = self:Write(DataName(index), text:sub(from, from + DATA_BYTES - 1))
+        if not ok then return false, ("the client refused chunk %d"):format(index) end
+    end
+
+    -- Anything left from a longer save, so a shrinking payload does not leave
+    -- a tail that a later bug could read as part of it.
+    for index = chunks + 1, MAX_DATA_MACROS do
+        local ok, found = pcall(GetMacroIndexByName, DataName(index))
+        if ok and type(found) == "number" and found > 0 then pcall(DeleteMacro, found) end
+    end
+
+    -- Last, so a completed header is the commit point. See the section note.
+    local header = self.Pack(chunks, 2) .. self.Pack(#text, 4) .. self.Pack(Checksum(text), 2)
+    if not self:Write(HEADER, header) then return false, "the client refused the header" end
+
+    self.lastSave = { at = time(), chunks = chunks, chars = #text }
+
+    return true, chunks
+end
+
+--- Read the payload back. nil and a reason when there is nothing to read or
+--- what is there does not add up.
+function MacroStore:LoadData()
+    if not self:Detect().usable then return nil, "no macro API" end
+
+    local header = self:Read(HEADER)
+    if not header then return nil, "nothing stored" end
+    if #header ~= 8 then return nil, "the header is the wrong size" end
+
+    local chunks = self.Unpack(header:sub(1, 2))
+    local length = self.Unpack(header:sub(3, 6))
+    local sum = self.Unpack(header:sub(7, 8))
+
+    if not chunks or not length or not sum then return nil, "the header is corrupt" end
+    if chunks > MAX_DATA_MACROS then return nil, "the header claims too many chunks" end
+
+    local parts = {}
+
+    for index = 1, chunks do
+        local part = self:Read(DataName(index))
+        if not part then return nil, ("chunk %d of %d is missing"):format(index, chunks) end
+        parts[#parts + 1] = part
+    end
+
+    local text = table.concat(parts)
+
+    -- Either of these failing means a save was interrupted, so the payload is
+    -- part of one write and part of another.
+    if #text ~= length then
+        return nil, ("stored %d characters, header says %d"):format(#text, length)
+    end
+    if Checksum(text) ~= sum then return nil, "the checksum does not match" end
+
+    return text
+end
+
+--- Remove the stored payload and its header. Only ours are touched.
+function MacroStore:ClearData()
+    local removed = 0
+
+    for index = MAX_DATA_MACROS, 0, -1 do
+        local ok, found = pcall(GetMacroIndexByName, DataName(index))
+        if ok and type(found) == "number" and found > 0 then
+            if pcall(DeleteMacro, found) then removed = removed + 1 end
+        end
+    end
+
+    return removed
+end
+
+--------------------------------------------------------------------------------
+-- The test
+--------------------------------------------------------------------------------
 
 --- Write the payload, to be read back after a restart.
 function MacroStore:StartTest(count)

@@ -386,6 +386,14 @@ function Persist:SaveAll()
     end
 
     self.lastSave = { bytes = #text, chunks = chunks, dropped = dropped, at = time() }
+
+    -- The macro store rides the same cadence. It holds a different, much
+    -- smaller set -- settings, the queue and what sold -- and it is the only
+    -- one of the two that survives closing the client, so anything that is
+    -- worth writing to CVars is worth offering to it. It rate-limits and
+    -- skips an unchanged payload itself, so this costs nothing most times.
+    if ns.Durable then pcall(ns.Durable.SaveIfChanged, ns.Durable) end
+
     return true, dropped
 end
 
