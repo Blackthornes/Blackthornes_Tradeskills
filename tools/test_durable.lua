@@ -81,6 +81,8 @@ configNS.NewModule = function(name)
 end
 loadfile("Core/Config.lua")("Blackthornes_TS", configNS)
 ns.Config.FillGaps = configNS.Config.FillGaps
+ns.Config.FillOverDefaults = configNS.Config.FillOverDefaults
+ns.Config.DEFAULTS = configNS.Config.DEFAULTS
 
 loadfile("Core/Durable.lua")("Blackthornes_TS", ns)
 local Durable = ns.Durable
@@ -236,6 +238,76 @@ Check("a setting changed this session is kept", ns.db.settings.minProfit == 99,
     ns.db.settings.minProfit)
 Check("a queue with something in it is left alone",
     #ns.db.queue == 1 and ns.db.queue[1].itemID == 1, ns.db.queue[1].itemID)
+
+--------------------------------------------------------------------------------
+-- 5b. Settings, which defaults were quietly eating.
+--
+-- Measured in game 2026-09-20: /bts durable reported "restored 1 value(s)"
+-- after a restart, and that one value was the history, not the settings.
+-- Bootstrap applies every default before the restore runs at PLAYER_LOGIN, so
+-- FillGaps found no gap and the stored settings were shadowed on every
+-- restart. It looked like it worked.
+--------------------------------------------------------------------------------
+
+local DEFAULTS = ns.Config.DEFAULTS.settings
+
+local function WithDefaults(extra)
+    local settings = {}
+    for key, value in pairs(DEFAULTS) do settings[key] = value end
+    for key, value in pairs(extra or {}) do settings[key] = value end
+    return settings
+end
+
+-- A session where the player has chosen two things, then saved.
+ns.MacroStore:ClearData()
+ns.db = {
+    settings = WithDefaults({ minProfit = 5000, countMailAsStock = false }),
+    queue = {},
+}
+Durable.lastPayload, Durable.lastSaveAt = nil, nil
+Check("a session with chosen settings saves", (Durable:SaveIfChanged(true)))
+
+-- A restart: Bootstrap has applied every default before the restore runs.
+ns.db = { settings = WithDefaults(), queue = {} }
+Durable.restoredFrom = nil
+local _, settingsFilled = Durable:Restore()
+
+Check("a chosen number beats its default", ns.db.settings.minProfit == 5000,
+    ns.db.settings.minProfit)
+Check("a chosen false beats a default of true",
+    ns.db.settings.countMailAsStock == false,
+    tostring(ns.db.settings.countMailAsStock))
+Check("and the restore says it did something", settingsFilled >= 2, settingsFilled)
+Check("a setting nobody touched is still its default",
+    ns.db.settings.auctionCut == DEFAULTS.auctionCut, ns.db.settings.auctionCut)
+
+-- The other half, and the reason this is not just "overwrite settings": a
+-- value that differs from its default came from somewhere real -- this
+-- session, or the CVar store carrying it across a reload -- and must survive.
+ns.db = { settings = WithDefaults({ minProfit = 77 }), queue = {} }
+Durable:Restore()
+Check("a setting this session changed is not overwritten",
+    ns.db.settings.minProfit == 77, ns.db.settings.minProfit)
+
+-- The honest edge of the rule, written down rather than hidden: setting a
+-- value back to its own default is indistinguishable from never having set
+-- it, so the stored value would win. What closes that in practice is the
+-- save, which runs on the ordinary cadence and at logout -- so by the time
+-- anything is read back, the stored value is the default too. That is the
+-- sequence tested here, because it is the one that actually happens.
+ns.db = { settings = WithDefaults({ countMailAsStock = false }), queue = {} }
+Durable.lastPayload, Durable.lastSaveAt = nil, nil
+Durable:SaveIfChanged(true)
+
+ns.db.settings.countMailAsStock = DEFAULTS.countMailAsStock    -- changed back
+Durable.lastPayload, Durable.lastSaveAt = nil, nil
+Durable:SaveIfChanged(true)
+
+ns.db = { settings = WithDefaults(), queue = {} }
+Durable:Restore()
+Check("a setting put back to its default stays there after a restart",
+    ns.db.settings.countMailAsStock == DEFAULTS.countMailAsStock,
+    tostring(ns.db.settings.countMailAsStock))
 
 --------------------------------------------------------------------------------
 -- 6. What it costs, at the size that matters. A regression here is a bug.

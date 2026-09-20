@@ -293,7 +293,12 @@ function Durable:Restore()
         local settings = DecodeValue(found.s)
         if type(settings) == "table" then
             ns.db.settings = ns.db.settings or {}
-            filled = filled + ns.Config.FillGaps(ns.db.settings, settings)
+
+            -- Not FillGaps: Bootstrap has already applied every default, so
+            -- there is no gap left for a stored setting to fill. See the note
+            -- on Config.FillOverDefaults.
+            filled = filled + ns.Config.FillOverDefaults(ns.db.settings, settings,
+                ns.Config.DEFAULTS and ns.Config.DEFAULTS.settings)
         end
     end
 
@@ -401,7 +406,7 @@ function Durable:Report()
         end
 
         Line("stored", ("%s characters across %d macro(s)")
-            :format(ns.Util.Comma(#stored), ns.MacroStore.SlotsFor(#stored) - 1))
+            :format(ns.Util.Comma(#stored), ns.MacroStore.SlotsFor(#stored)))
         Line("holding", #sections > 0 and table.concat(sections, ", ") or "nothing readable")
     else
         Line("stored", "|c" .. ns.COLORS.warn .. tostring(why or "nothing") .. "|r")
