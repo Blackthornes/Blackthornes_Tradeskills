@@ -313,7 +313,7 @@ end
 UI:RegisterTab({
     key = "characters",
     text = "Characters",
-    order = 6,
+    order = 7,
     build = Build,
     refresh = Refresh,
 })

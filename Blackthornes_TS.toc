@@ -45,6 +45,7 @@ UI\Tab_Queue.lua
 UI\Tab_Gather.lua
 UI\Tab_Post.lua
 UI\Tab_Prices.lua
+UI\Tab_Sales.lua
 UI\Tab_Characters.lua
 UI\Tab_Settings.lua
 
