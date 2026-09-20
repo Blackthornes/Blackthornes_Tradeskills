@@ -583,8 +583,14 @@ function Mail:GetSummary(itemID)
         estimated = 0,
     }
 
+    -- An entry from before the restored history was rolled up is already in
+    -- that history, added below; counting it here as well was the bug.
+    local Durable = ns.Durable
+
     for _, entry in ipairs(self:GetLedger().entries) do
-        if not itemID or entry.itemID == itemID then
+        local rolled = Durable and Durable.IsRolledUp and Durable:IsRolledUp(entry)
+
+        if (not itemID or entry.itemID == itemID) and not rolled then
             if entry.kind == "sold" then
                 totals.sold = totals.sold + 1
                 totals.soldUnits = totals.soldUnits + (entry.quantity or 1)
@@ -708,10 +714,17 @@ function Mail:GetItems()
         return bucket
     end
 
+    local Durable = ns.Durable
+
     for _, entry in ipairs(self:GetLedger().entries) do
         local bucket = Bucket(entry.itemID, entry.name)
 
-        if entry.kind == "sold" then
+        -- Already inside the restored history added below. The row is still
+        -- made, so the item keeps its name.
+        if Durable and Durable.IsRolledUp and Durable:IsRolledUp(entry) then
+            -- nothing to add
+
+        elseif entry.kind == "sold" then
             bucket.sold = bucket.sold + 1
             bucket.soldUnits = bucket.soldUnits + (entry.quantity or 1)
             bucket.net = bucket.net + (entry.net or 0)
