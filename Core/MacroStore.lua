@@ -26,12 +26,79 @@ local NAME_PREFIX = "BTSt"          -- names must fit 16 characters
 local COMMAND = "/bts macrodata "   -- a real command, so clicking one is harmless
 local BODY_LIMIT = 255
 
--- What a serialised table actually uses, minus the two characters that are
--- dangerous in a macro body: "|" starts a UI escape sequence and a newline
--- ends the command. Whether those two survive is asked separately, because
--- finding out by corrupting the payload would tell us nothing about the rest.
-local ALPHABET = "0123456789,;=[]{}-. abcdefghijklmnopqrstuvwxyz"
+-- Measured in game on 2026-09-20, across a real client restart:
+--
+--   * macros DO come back -- 11 of 11 present after a full quit
+--   * every body came back ONE byte longer than it went in, so the client
+--     appends something, almost certainly a newline
+--   * "|n" and "|r" were eaten, and the quoting came back changed
+--
+-- So a body is not a safe place for arbitrary bytes, and exact equality is
+-- the wrong test. Everything stored here is encoded into an alphabet with
+-- nothing in it the UI could interpret -- letters, digits, "-" and "." --
+-- and reads trim trailing whitespace.
+local SAFE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-."
+local ALPHABET = SAFE
 local TRICKY = "|n|r\\ \"'%%"
+
+local INDEX = {}
+for position = 1, #SAFE do INDEX[SAFE:sub(position, position)] = position - 1 end
+
+--- Bytes to the safe alphabet, four characters per three bytes, no padding.
+function MacroStore.Encode(data)
+    local out = {}
+
+    for index = 1, #data, 3 do
+        local a, b, c = data:byte(index, index + 2)
+        local packed = a * 65536 + (b or 0) * 256 + (c or 0)
+
+        local sextets = {
+            math.floor(packed / 262144) % 64,
+            math.floor(packed / 4096) % 64,
+            math.floor(packed / 64) % 64,
+            packed % 64,
+        }
+
+        -- A trailing group of one or two bytes writes two or three characters
+        -- rather than padding, so the length alone says how many bytes it is.
+        local remaining = #data - index + 1
+        local keep = remaining >= 3 and 4 or remaining + 1
+
+        for which = 1, keep do
+            out[#out + 1] = SAFE:sub(sextets[which] + 1, sextets[which] + 1)
+        end
+    end
+
+    return table.concat(out)
+end
+
+--- Back again. nil when the text holds anything not in the alphabet.
+function MacroStore.Decode(text)
+    local out = {}
+
+    for index = 1, #text, 4 do
+        local first = INDEX[text:sub(index, index)]
+        local second = INDEX[text:sub(index + 1, index + 1)]
+
+        -- One character alone cannot be the start of a byte, so a group of
+        -- one is corruption rather than a short tail.
+        if not first or not second then return nil end
+
+        local third = INDEX[text:sub(index + 2, index + 2)]
+        local fourth = INDEX[text:sub(index + 3, index + 3)]
+
+        if text:sub(index + 2, index + 2) ~= "" and not third then return nil end
+        if text:sub(index + 3, index + 3) ~= "" and not fourth then return nil end
+
+        local packed = first * 262144 + second * 4096 + (third or 0) * 64 + (fourth or 0)
+
+        out[#out + 1] = string.char(math.floor(packed / 65536) % 256)
+        if third then out[#out + 1] = string.char(math.floor(packed / 256) % 256) end
+        if fourth then out[#out + 1] = string.char(packed % 256) end
+    end
+
+    return table.concat(out)
+end
 
 local function Payload(length)
     local pattern = ALPHABET:rep(math.ceil(length / #ALPHABET))
@@ -87,7 +154,12 @@ function MacroStore:Read(name)
 
     -- Only the payload, never the command that carries it.
     local data = body:match("^" .. COMMAND:gsub("%-", "%%-") .. "(.*)$")
-    return data
+    if not data then return nil end
+
+    -- The client appends a byte of its own; measured in game, see the note by
+    -- SAFE. Nothing in the alphabet is whitespace, so this can only remove
+    -- what the client added.
+    return (data:gsub("%s+$", ""))
 end
 
 --- Write one macro, replacing any of ours already under that name.
@@ -236,8 +308,10 @@ function MacroStore:Report()
     end
 
     if intact > 0 then
-        ns.PrintRaw(("  budget:   about %s bytes across all 120 slots")
-            :format(ns.Util.Comma(120 * DATA_BYTES)))
+        -- Three bytes per four characters, so the usable figure is smaller
+        -- than the number of characters a macro holds.
+        ns.PrintRaw(("  budget:   about %s bytes of real data across all 120 slots")
+            :format(ns.Util.Comma(math.floor(120 * DATA_BYTES * 3 / 4))))
     end
 end
 

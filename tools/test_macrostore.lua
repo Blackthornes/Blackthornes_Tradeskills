@@ -75,6 +75,7 @@ ns.Util = {
 
 loadfile("Core/MacroStore.lua")("Blackthornes_TS", ns)
 local Store = ns.MacroStore or module
+local MacroStore_Encode, MacroStore_Decode = Store.Encode, Store.Decode
 
 local failures = 0
 local function Check(name, ok, detail)
@@ -129,6 +130,39 @@ InCombatLockdown = function() return true end
 local ok, why = Store:Write("BTSt01", "x")
 Check("a write in combat is refused", ok == false and why == "in combat", tostring(why))
 InCombatLockdown = function() return false end
+
+-- 7. The encoding. Measured in game: the client appends a byte to every macro
+--    body and eats "|" escapes, so nothing raw can be stored and exact
+--    equality is the wrong test. Everything goes through the safe alphabet.
+local function RoundTrip(name, data)
+    local encoded = MacroStore_Encode(data)
+    Check(name .. " survives the alphabet", encoded:match("^[A-Za-z0-9%-%.]*$") ~= nil, encoded)
+    Check(name .. " round trips", MacroStore_Decode(encoded) == data,
+        string.format("%q -> %q", data, tostring(MacroStore_Decode(encoded))))
+end
+
+RoundTrip("empty", "")
+RoundTrip("one byte", "A")
+RoundTrip("two bytes", "AB")
+RoundTrip("three bytes", "ABC")
+RoundTrip("four bytes", "ABCD")
+RoundTrip("the serialiser's own punctuation", "t s4:name n1234; b1; ~ e")
+RoundTrip("the characters the client mangles", "|n|r\\ \"'%")
+
+local every = {}
+for byte = 0, 255 do every[#every + 1] = string.char(byte) end
+RoundTrip("every byte value", table.concat(every))
+
+Check("corrupt text decodes to nil", MacroStore_Decode("!!!!") == nil)
+Check("a lone trailing character is refused", MacroStore_Decode("AAAAA") == nil)
+
+-- 8. A body the client came back longer than we wrote it.
+Store:Write("BTSt06", MacroStore_Encode("payload"))
+local index = IndexByName("BTSt06")
+macros[index].body = macros[index].body .. "\n"          -- what the client does
+Check("the appended byte is trimmed on read",
+    MacroStore_Decode(Store:Read("BTSt06")) == "payload", tostring(Store:Read("BTSt06")))
+Store:Clear()
 
 print(failures == 0 and "\nall macro storage tests passed" or ("\n" .. failures .. " failure(s)"))
 if failures > 0 then error(failures .. " macro storage failure(s)") end
