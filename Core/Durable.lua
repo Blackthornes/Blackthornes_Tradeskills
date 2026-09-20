@@ -200,6 +200,10 @@ end
 
 Durable.PackRollup, Durable.UnpackRollup = PackRollup, UnpackRollup
 
+-- Exposed for tools/test_durable.lua, so a test can read a section back out of
+-- a real payload rather than trusting what the module says it wrote.
+Durable.DecodeForTest = DecodeValue
+
 --------------------------------------------------------------------------------
 -- Building and reading the whole payload
 --------------------------------------------------------------------------------
@@ -308,6 +312,28 @@ function Durable:SaveIfChanged(force)
     end
 
     return ok, detail
+end
+
+--- Write shortly after something changed, rather than waiting for the cadence.
+--
+-- The craft queue is the one stored thing that changes while you play, and
+-- macros are the only copy of it that crosses a restart. Saving was tied to
+-- the CVar cadence and to PLAYER_LOGOUT, which meant emptying the queue and
+-- quitting inside the minute never reached the macros at all -- and the next
+-- login restored the crafts you had just made, from a payload that had simply
+-- never been told.
+--
+-- Forced past the minimum gap, because this fires on a real change rather than
+-- on a timer. SaveIfChanged still skips an unchanged payload, so a burst of
+-- edits collapses into one write and a no-op change costs nothing.
+function Durable:SaveSoon(delay)
+    if self.soonTimer then return end
+    if not ns.MacroStore or not ns.MacroStore:Detect().usable then return end
+
+    self.soonTimer = C_Timer.NewTimer(delay or 8, function()
+        Durable.soonTimer = nil
+        Durable:SaveIfChanged(true)
+    end)
 end
 
 --- Read the payload back and fill in anything this session does not have.
@@ -435,6 +461,10 @@ function Durable:OnEnable()
     end
 
     ns.RegisterEvent(self, "PLAYER_LOGOUT", function()
+        -- Whether a macro write is even allowed this late has never been
+        -- proven on this client, which is why nothing may rely on it alone.
+        -- SaveSoon is what actually keeps the stored queue current; this stays
+        -- as the last chance to catch a change made in the final few seconds.
         Durable:SaveIfChanged(true)
     end)
 end
