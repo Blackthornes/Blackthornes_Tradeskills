@@ -352,7 +352,15 @@ local function Build(outer)
     end, true)
     widgets.autoScan:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local debugRow = CreateRow(container, autoScanRow, "Debug output",
+    local learnRow = CreateRow(container, autoScanRow, "Learn from searches",
+        "Also takes prices from searches you run in the auction house yourself.")
+
+    widgets.learnFromSearches = Widgets.CreateCheckbox(learnRow, "Enabled", function(checked)
+        Config:Set("learnFromSearches", checked)
+    end, true)
+    widgets.learnFromSearches:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local debugRow = CreateRow(container, learnRow, "Debug output",
         "Extra detail in the chat frame, for diagnosing problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
@@ -422,6 +430,7 @@ local function Refresh()
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
     widgets.debug:SetChecked(ns.db.global.debug == true)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
+    widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan = ns.db.lastFullScan
