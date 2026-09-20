@@ -17,6 +17,7 @@ Core\Config.lua
 Core\Compat.lua
 Core\Serialize.lua
 Core\Persist.lua
+Core\MacroStore.lua
 
 Data\Prices.lua
 Data\Scanner.lua
