@@ -1,16 +1,22 @@
 -- Blackthornes Tradeskills -- Data/Snapshot.lua
 --
--- An optional persistence fallback, and deliberately empty as shipped.
+-- The hook the local data fallback hangs on, and deliberately empty.
 --
--- The WoW: Forever beta writes SavedVariables correctly but does not always
--- read them back, so a session can start with no saved data. The addon does
--- not depend on this file to cope with that: recipes are re-read when a
--- profession window opens, inventory and auctions are read live, and the
--- auction scan re-runs by itself. Everything rebuilds without intervention.
+-- The WoW: Forever beta writes SavedVariables correctly but does not read them
+-- back, so a session can start with no saved data. Core/Persist.lua covers
+-- that with a CVar store, which survives a /reload and a trip to character
+-- select -- neither of which ends the client process. Closing the game does,
+-- and loses it.
 --
--- A developer can regenerate this from their own saved data with
--- tools/restore.ps1 to carry a database between sessions while the bug lasts.
--- It must never be distributed with data in it: that would seed another
--- player's database with someone else's characters and prices.
+-- So the real database is carried across a restart as a separate addon:
+-- tools\restore.ps1 writes Interface\AddOns\Blackthornes_TS_Data from the
+-- game's own saved file, and that addon sets BlackthornesTSSnapshot before
+-- this one loads. Config:Bootstrap seeds from it when the client hands back
+-- nothing, and ignores it when the real database loads.
+--
+-- That addon lives in the game folder and is never committed. This file stays
+-- empty in the repository -- a copy with data in it would seed another
+-- player's database with someone else's characters and prices, and
+-- tools/check-snapshot.sh refuses one.
 
 BlackthornesTSSnapshot = nil

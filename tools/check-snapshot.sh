@@ -1,10 +1,10 @@
 #!/bin/sh
 # Refuse a Data/Snapshot.lua that carries real saved data.
 #
-# The file ships empty and must stay empty in the repository. tools/restore.ps1
-# rewrites it from SavedVariables, and the result holds characters, prices and
-# auctions. Git already tracks the file, so .gitignore cannot protect it --
-# this check is what does.
+# The file ships empty and must stay empty in the repository. Real saved data
+# now goes to Interface\AddOns\Blackthornes_TS_Data instead, but an older copy
+# of tools/restore.ps1 still writes here, and it holds characters, prices and
+# auctions. Git tracks the file, so .gitignore cannot protect it; this does.
 #
 # Reads the file's contents on stdin. Exits 0 when it is the empty shipped
 # version, 1 when it holds data.
