@@ -520,12 +520,21 @@ end
 -- So the flag is settled against your own auctions as last read back: the
 -- row is yours only when you have this item listed at exactly that price.
 -- Otherwise the price is a rival's, and your own price is whatever is known.
--- A rival known to be above your price stays, since the row does not
--- contradict it. When your auctions have never been read the row counts as
--- a rival's: undercutting yourself by a silver costs less than never
--- undercutting anybody.
+-- When your auctions have never been read the row counts as a rival's:
+-- undercutting yourself by a silver costs less than never undercutting
+-- anybody.
+--
+-- A row at your own price says nothing about rivals AT that price. Measured
+-- 2026-09-20 on Heavy Woolen Gloves: Trent listed at 63s and 64s, and other
+-- sellers sat at 63s and 64s too. The row reads 63s, yours, and only an
+-- exact search can tell that tie from a lead. So a rival already on record
+-- at or above your price is kept -- the row does not contradict it -- and
+-- the third value asks the caller to settle the row with an exact search
+-- when nothing is on record.
+--
+-- @return rivalMin, ownMin, unsettled
 local function SplitBrowseRow(itemID, price, ownerFlag)
-    if ownerFlag ~= true then return price, nil end
+    if ownerFlag ~= true then return price, nil, false end
 
     local own = ns.Auctions and ns.Auctions.GetOwnMinPrice
         and ns.Auctions:GetOwnMinPrice(itemID) or nil
@@ -533,11 +542,11 @@ local function SplitBrowseRow(itemID, price, ownerFlag)
 
     if own and own == price then
         local rival = record and record.rivalMin
-        if rival and rival > price then return rival, price end
-        return nil, price
+        if rival and rival >= price then return rival, price, false end
+        return nil, price, true
     end
 
-    return price, own or (record and record.ownMin) or nil
+    return price, own or (record and record.ownMin) or nil, false
 end
 
 Scanner.SplitBrowseRow = SplitBrowseRow
@@ -553,6 +562,7 @@ function Scanner:CommitBrowseResults(results)
 
     local recorded, skipped = 0, 0
     local now = time()
+    local unsettled = {}
 
     for _, result in ipairs(results) do
         local itemID = result.itemKey and result.itemKey.itemID
@@ -562,10 +572,12 @@ function Scanner:CommitBrowseResults(results)
             -- A browse row is one price, not a book, so market and minimum are
             -- the same figure here. Whose price it is goes through
             -- SplitBrowseRow, and the reasons are on that function.
-            local rivalMin, ownMin = SplitBrowseRow(itemID, price, result.containsOwnerItem)
+            local rivalMin, ownMin, ask = SplitBrowseRow(itemID, price, result.containsOwnerItem)
 
             ns.Prices:Record(itemID, price, price, result.totalQuantity or 0, now,
                 rivalMin, ownMin)
+
+            if ask then unsettled[#unsettled + 1] = itemID end
 
             recorded = recorded + 1
         else
@@ -576,6 +588,8 @@ function Scanner:CommitBrowseResults(results)
     if skipped > 0 then
         self:Report(("%d row(s) had no item id or price"):format(skipped))
     end
+
+    self:FollowUpOwned(unsettled)
 
     self.verbose = false
     ns.db.lastFullScan = now
@@ -767,7 +781,54 @@ end
 -- A full snapshot gives breadth but only shallow depth per item. Before acting
 -- on a specific item it is worth asking for its real order book.
 
-function Scanner:ScanItem(itemID, callback)
+-- Rows of the addon's own browse scan that showed your price with nothing
+-- on record about rivals. Looked up one at a time with an exact search, at
+-- background priority, never over a search the player is waiting on.
+local MAX_FOLLOW_UP = 8
+
+function Scanner:FollowUpOwned(itemIDs)
+    if not itemIDs or #itemIDs == 0 then return end
+
+    self.followUp = {}
+    for i = 1, math.min(#itemIDs, MAX_FOLLOW_UP) do
+        self.followUp[i] = itemIDs[i]
+    end
+
+    self:NextFollowUp()
+end
+
+function Scanner:NextFollowUp()
+    local list = self.followUp
+    if not list or #list == 0 or not self.isAuctionHouseOpen then
+        self.followUp = nil
+        return
+    end
+
+    -- Somebody is waiting on a search. Come back rather than take the slot.
+    if self.pendingItem then
+        C_Timer.After(3, function() Scanner:NextFollowUp() end)
+        return
+    end
+
+    local itemID = table.remove(list, 1)
+
+    self:ScanItem(itemID, function(_, _, _, _, _, _, status)
+        -- Pushed aside by a click: the slot is busy, so wait before the next.
+        if status == "superseded" then
+            C_Timer.After(3, function() Scanner:NextFollowUp() end)
+        else
+            Scanner:NextFollowUp()
+        end
+    end, { priority = ns.AHQueue and ns.AHQueue.PRIORITY.scan })
+end
+
+--- Search for one item's real order book.
+--
+-- @param opts  optional; `priority` overrides the urgent default, for a
+--   follow-up nobody is waiting on.
+function Scanner:ScanItem(itemID, callback, opts)
+    opts = opts or {}
+
     if not self.isAuctionHouseOpen then
         ns.Print("the auction house must be open")
         return false
@@ -864,7 +925,7 @@ function Scanner:ScanItem(itemID, callback)
     end, {
         name = ("price check for %s"):format(Util.GetItemLabel(itemID)),
         key = "item-search",
-        priority = ns.AHQueue.PRIORITY.urgent,
+        priority = opts.priority or ns.AHQueue.PRIORITY.urgent,
         expires = 6,
     })
 
