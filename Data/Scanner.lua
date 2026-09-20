@@ -1000,7 +1000,7 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
     -- Not ours, and not wanted: leave the results alone exactly as before.
     if not ours and not self:PassiveCaptureEnabled() then return end
 
-    local listings = {}
+    local listings, raw = {}, {}
     local ok, count = pcall(C_AuctionHouse.GetNumCommoditySearchResults, itemID)
 
     if ok and count then
@@ -1012,9 +1012,20 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
                     quantity = info.quantity or 1,
                     isOwn = info.containsOwnerItem == true,
                 }
+
+                raw[#raw + 1] = {
+                    quantity = info.quantity or 1,
+                    unitPrice = info.unitPrice,
+                    ownerFlag = info.containsOwnerItem,
+                }
             end
         end
     end
+
+    -- Recorded here as well as on the item path. Without it `/bts listings`
+    -- answered a commodity search with whatever item was searched before it,
+    -- under that item's name.
+    self.lastItemListings = { itemID = itemID, raw = raw, isCommodity = true }
 
     if not ours then
         self:CapturePassiveListings(itemID, listings)
@@ -1062,6 +1073,15 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
                     quantity = quantity,
                     maxStack = Util.GetMaxStackSize(itemID),
                     unitPrice = unitPrice,
+
+                    -- Kept unnormalised, because nil and false mean different
+                    -- things here: false is "the client says this is not
+                    -- yours", nil is "the client never said". Pricing has to
+                    -- collapse them, a diagnostic must not -- undercutting
+                    -- your own listing by a silver every repost, and this
+                    -- client not reporting ownership at all, look identical
+                    -- from the chat frame and want opposite responses.
+                    ownerFlag = info.containsOwnerItem,
                 }
 
                 listings[#listings + 1] = {
@@ -1231,17 +1251,39 @@ ns.RegisterCommand("listings", "what the last price check actually read back", f
         -- what priced a Linen Bag at one copper.
         local suspect = entry.maxStack and entry.quantity > entry.maxStack
 
-        ns.PrintRaw(("  %2d. buyout %s  qty %d  stacks to %s  -> %s each%s"):format(
+        ns.PrintRaw(("  %2d. buyout %s  qty %d  stacks to %s  -> %s each%s%s"):format(
             i,
-            Util.FormatMoney(entry.buyoutAmount, { noColor = true }),
+            Util.FormatMoney(entry.buyoutAmount or entry.unitPrice, { noColor = true }),
             entry.quantity,
             entry.maxStack and tostring(entry.maxStack) or "unknown",
             Util.FormatMoney(entry.unitPrice, { noColor = true }),
+            entry.ownerFlag == true and "  <-- yours" or "",
             suspect and "  <-- qty is not a stack, so not divided" or ""))
     end
 
     if #last.raw > 10 then
         ns.PrintRaw(("  ... and %d more"):format(#last.raw - 10))
+    end
+
+    -- Pricing skips your own listings when picking a rival to undercut, which
+    -- only works if the client says which are yours. If it never says, every
+    -- repost undercuts your own auction by a silver, and nothing on screen
+    -- would look wrong. So report whether the answer was given, not just what
+    -- it was.
+    local mine, answered = 0, 0
+
+    for i = 1, #last.raw do
+        local flag = last.raw[i].ownerFlag
+        if flag ~= nil then answered = answered + 1 end
+        if flag == true then mine = mine + 1 end
+    end
+
+    if answered == 0 then
+        ns.Warn(("this client did not say who owns any of those %d listing(s), "):format(#last.raw)
+            .. "so your own auction cannot be told from a rival's.")
+    else
+        ns.PrintRaw(("  ownership reported for %d of %d; %d of them yours"):format(
+            answered, #last.raw, mine))
     end
 end)
 
