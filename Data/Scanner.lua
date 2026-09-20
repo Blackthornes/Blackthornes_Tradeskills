@@ -377,7 +377,13 @@ end
 
 function Scanner:OnBrowseResults()
     if not self.isBrowsing then
-        self:Report("browse event arrived but no browse is running")
+        -- Somebody else's query filled the shared results -- the player's own
+        -- search, most likely. There is nothing of ours to page or to finish,
+        -- but the rows are real prices and reading them is free.
+        local learned = self:CapturePassiveBrowse()
+
+        self:Report(("browse event arrived with no browse of ours running; learned %d price(s)")
+            :format(learned))
         return
     end
 
@@ -466,11 +472,21 @@ function Scanner:CommitBrowseResults(results)
             -- the same figure here. containsOwnerItem is the only clue about
             -- whose listing it is: when it is yours, the cheapest rival is
             -- genuinely unknown rather than equal to this.
-            local mine = result.containsOwnerItem == true
+            --
+            -- Spelled out in an if rather than `mine and nil or price`, which
+            -- was here and does not work: `and` returning nil falls straight
+            -- through to the `or`, so every row of your own recorded YOU as
+            -- the cheapest rival -- and the next listing undercut it.
+            local rivalMin, ownMin
+
+            if result.containsOwnerItem == true then
+                ownMin = price
+            else
+                rivalMin = price
+            end
 
             ns.Prices:Record(itemID, price, price, result.totalQuantity or 0, now,
-                mine and nil or price,
-                mine and price or nil)
+                rivalMin, ownMin)
 
             recorded = recorded + 1
         else
@@ -770,6 +786,142 @@ function Scanner:ScanItem(itemID, callback)
 end
 
 --------------------------------------------------------------------------------
+-- Passive capture
+--------------------------------------------------------------------------------
+
+-- Auction house results are one piece of shared client state, and the events
+-- that announce them are not addressed to whoever asked. When the player types
+-- into Blizzard's own search box, or clicks a row in its list, exactly the same
+-- events fire and exactly the same getters answer -- so the prices they found
+-- can be read straight out, for no request and no throttle budget at all.
+--
+-- The addon used to drop all of that on the floor, because the handlers began
+-- by checking the results were its own. They still do; this is what happens
+-- instead of the early return.
+--
+-- Two rules keep it safe:
+--
+--  * It never sends anything. Paging through somebody else's search is what
+--    the old early returns were really guarding against, and passive capture
+--    reads whatever has already arrived and stops there.
+--  * It never records an empty answer. A targeted search of ours coming back
+--    empty is information -- nothing is listed, so there is nobody to undercut
+--    -- but an empty shared results set is just as likely to be a set that was
+--    cleared for the next query. Clearing a real rival price on that guess is
+--    how the addon would talk itself into listing far under value, so a
+--    passive observation may only ever add a price, never remove one.
+
+-- The same rows arrive several times over as a search fills in, and a browse
+-- of the whole house repeats every item the player scrolls past. Recording a
+-- price we already hold at the same figure only pushes the moving average
+-- toward a number it is already at and fills the history with copies, so the
+-- same price for the same item is ignored for this long.
+local PASSIVE_REPEAT_SECONDS = 60
+
+-- How many of the most recent captures `/bts learned` shows.
+local PASSIVE_RECENT = 8
+
+function Scanner:PassiveCaptureEnabled()
+    return ns.Config:Get("learnFromSearches") ~= false
+end
+
+--- Record one price observed from a search the addon did not make.
+--
+-- Returns true only when the database actually changed, so callers can report
+-- what happened rather than what was attempted.
+function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin)
+    if not itemID or not marketValue or marketValue <= 0 then return false end
+
+    self.passiveSeen = self.passiveSeen or {}
+
+    local now = GetTime()
+    local seen = self.passiveSeen[itemID]
+
+    if seen and seen.price == marketValue and (now - seen.at) < PASSIVE_REPEAT_SECONDS then
+        return false
+    end
+
+    self.passiveSeen[itemID] = { at = now, price = marketValue }
+
+    ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin)
+
+    self.passiveCount = (self.passiveCount or 0) + 1
+
+    self.passiveItems = self.passiveItems or {}
+    if not self.passiveItems[itemID] then
+        self.passiveItems[itemID] = true
+        self.passiveItemCount = (self.passiveItemCount or 0) + 1
+    end
+
+    self.passiveRecent = self.passiveRecent or {}
+    table.insert(self.passiveRecent, 1, {
+        itemID = itemID,
+        price = minBuyout or marketValue,
+        at = time(),
+    })
+    while #self.passiveRecent > PASSIVE_RECENT do
+        table.remove(self.passiveRecent)
+    end
+
+    return true
+end
+
+--- Read the shared browse results after somebody else's query filled them.
+function Scanner:CapturePassiveBrowse()
+    if not self:PassiveCaptureEnabled() then return 0 end
+    if not Util.HasFunction("C_AuctionHouse.GetBrowseResults") then return 0 end
+
+    local ok, results = pcall(C_AuctionHouse.GetBrowseResults)
+    if not ok or type(results) ~= "table" then return 0 end
+
+    local learned = 0
+
+    for _, result in ipairs(results) do
+        local itemID = result.itemKey and result.itemKey.itemID
+        local price = result.minPrice
+
+        if itemID and price and price > 0 then
+            -- One price per row, not a book, so market and minimum are the
+            -- same figure -- the same reading CommitBrowseResults makes of the
+            -- same rows, ownership included.
+            local rivalMin, ownMin
+
+            if result.containsOwnerItem == true then
+                ownMin = price
+            else
+                rivalMin = price
+            end
+
+            if self:RecordPassive(itemID, price, price, result.totalQuantity or 0,
+                rivalMin, ownMin) then
+                learned = learned + 1
+            end
+        end
+    end
+
+    if learned > 0 and ns.Persist then ns.Persist:SaveLater() end
+
+    return learned
+end
+
+--- Record the order book of a search the player ran on a single item.
+function Scanner:CapturePassiveListings(itemID, listings)
+    if not self:PassiveCaptureEnabled() then return false end
+
+    -- Empty is not recorded; see the rules above.
+    if not listings or #listings == 0 then return false end
+
+    local marketValue, minBuyout, quantity, rivalMin, ownMin = ns.Prices:Summarise(listings)
+    if not marketValue then return false end
+
+    local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin)
+
+    if learned and ns.Persist then ns.Persist:SaveLater() end
+
+    return learned
+end
+
+--------------------------------------------------------------------------------
 -- Shared search state
 --------------------------------------------------------------------------------
 
@@ -829,17 +981,24 @@ function Scanner:SettleSearchDisplay(reason)
     ns.Debug(("settling the auction house search display: %s"):format(
         reason or "no reason given"))
 
-    -- No onSend, so isBrowsing stays false and OnBrowseResults ignores what
-    -- comes back. That is the intent: this query exists to let the client finish
-    -- a search it is stuck on, not to harvest prices from the player's own.
+    -- No onSend, so isBrowsing stays false and OnBrowseResults treats what
+    -- comes back as somebody else's results rather than a page of a sweep. That
+    -- is the intent: this query exists to let the client finish a search it is
+    -- stuck on, and it must not restart paging. Passive capture will read the
+    -- rows it returns, which is a bonus and not the reason for sending it.
     self:QueueBrowseQuery(GetBlizzardSearchText() or "")
 
     return true
 end
 
 function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
+    if not itemID then return end
+
     local pending = self.pendingItem
-    if not pending or pending.itemID ~= itemID then return end
+    local ours = pending ~= nil and pending.itemID == itemID
+
+    -- Not ours, and not wanted: leave the results alone exactly as before.
+    if not ours and not self:PassiveCaptureEnabled() then return end
 
     local listings = {}
     local ok, count = pcall(C_AuctionHouse.GetNumCommoditySearchResults, itemID)
@@ -857,24 +1016,41 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
         end
     end
 
+    if not ours then
+        self:CapturePassiveListings(itemID, listings)
+        return
+    end
+
     self:FinishItemScan(itemID, listings, true)
 end
 
 function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     local pending = self.pendingItem
-    if not pending then return end
 
-    local itemID = itemKey and itemKey.itemID or pending.itemID
-    if pending.itemID ~= itemID then return end
+    -- An event with no key at all can only be read as an answer to whatever we
+    -- asked about last; one that carries a key speaks for itself.
+    local ours = pending ~= nil
+        and (type(itemKey) ~= "table" or itemKey.itemID == nil or itemKey.itemID == pending.itemID)
+
+    -- Read the book with the key that describes it: ours when it is our search,
+    -- the event's own otherwise. The getters take the key, not the item id, so
+    -- without one there is nothing to read.
+    local key = ours and pending.itemKey or itemKey
+    if type(key) ~= "table" then return end
+
+    local itemID = key.itemID or (ours and pending.itemID)
+    if not itemID then return end
+
+    if not ours and not self:PassiveCaptureEnabled() then return end
 
     local listings = {}
     local raw = {}
 
-    local ok, count = pcall(C_AuctionHouse.GetNumItemSearchResults, pending.itemKey)
+    local ok, count = pcall(C_AuctionHouse.GetNumItemSearchResults, key)
 
     if ok and count then
         for i = 1, count do
-            local infoOk, info = pcall(C_AuctionHouse.GetItemSearchResultInfo, pending.itemKey, i)
+            local infoOk, info = pcall(C_AuctionHouse.GetItemSearchResultInfo, key, i)
             if infoOk and info and info.buyoutAmount and info.buyoutAmount > 0 then
                 local quantity = info.quantity or 1
                 local unitPrice = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
@@ -898,6 +1074,11 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     end
 
     self.lastItemListings = { itemID = itemID, raw = raw }
+
+    if not ours then
+        self:CapturePassiveListings(itemID, listings)
+        return
+    end
 
     self:FinishItemScan(itemID, listings, false)
 end
@@ -1102,4 +1283,42 @@ ns.RegisterCommand("verify", "<itemID> -- cross-check snapshot price against a l
             ns.PrintRaw("  no snapshot data yet; run /bts scan first to compare")
         end
     end)
+end)
+
+-- Reports the OUTCOME of passive capture, not that it is switched on: how many
+-- prices this session actually took from searches the addon did not make, and
+-- which items they were. A diagnostic that says "enabled" would have been true
+-- the whole time the handlers were dropping every row on the floor.
+ns.RegisterCommand("learned", "prices picked up from your own auction house searches", function()
+    local Scanner = ns.Scanner
+
+    if not Scanner:PassiveCaptureEnabled() then
+        ns.Print("learning from your searches is turned off in Settings -> Advanced")
+        return
+    end
+
+    local count = Scanner.passiveCount or 0
+
+    if count == 0 then
+        ns.Print("no prices learned from your searches yet this session")
+
+        if not Scanner.isAuctionHouseOpen then
+            ns.PrintRaw("  the auction house is closed; search for something with it open")
+        else
+            ns.PrintRaw("  type in the auction house search box and run this again")
+        end
+        return
+    end
+
+    ns.Print(("%s price update%s from %s item%s, learned from your own searches"):format(
+        Util.Comma(count), count == 1 and "" or "s",
+        Util.Comma(Scanner.passiveItemCount or 0),
+        (Scanner.passiveItemCount or 0) == 1 and "" or "s"))
+
+    for _, entry in ipairs(Scanner.passiveRecent or {}) do
+        ns.PrintRaw(("  %s  %s  %s"):format(
+            Util.GetItemLabel(entry.itemID),
+            Util.FormatMoney(entry.price, { noColor = true }),
+            Util.FormatAgeAgo(time() - entry.at)))
+    end
 end)

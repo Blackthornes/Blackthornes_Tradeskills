@@ -250,6 +250,24 @@ Blizzard's frame.** Whichever query was sent last owns it. Two consequences:
 - A targeted `SendSearchQuery` from the addon supersedes the sell tab's own
   search, and vice versa, so a pending search must always be given a timeout.
   There is no event for a request that was dropped.
+- The same sharing cuts the other way and is worth having. The results events
+  are not addressed to whoever asked: `AUCTION_HOUSE_BROWSE_RESULTS_UPDATED`,
+  `ITEM_SEARCH_RESULTS_UPDATED` and `COMMODITY_SEARCH_RESULTS_UPDATED` all fire
+  for a search the *player* ran in Blizzard's own box, and `GetBrowseResults`,
+  `GetItemSearchResultInfo` and `GetCommoditySearchResultInfo` answer with that
+  search's rows. So every search the player makes can be read into the price
+  database for no request and no throttle budget at all -- see
+  "Passive capture" in `Data/Scanner.lua`. **Inferred from how the shared state
+  behaves, not yet measured in game.**
+
+  Two rules make reading them safe. Never send anything in response, or the
+  addon pages through the player's search and spends the allowance their own
+  posting needs. And never record an *empty* passive result: an empty shared
+  set is as likely to be one cleared for the next query as an item nobody has
+  listed, and clearing a real rival price on that guess is how the addon would
+  list far under value. A passive observation may add a price, never remove
+  one. An empty answer to the addon's *own* search is different -- that is a
+  real observation and still clears the rival price.
 
 ## Owned auctions are readable; the announcement is not dependable
 
