@@ -238,6 +238,11 @@ function Auctions:ReadOwned(opts)
     local record = self:GetTable()
     local changed = record.auctionCount ~= count or not SameCounts(record.items, items)
 
+    -- Counted so `/bts auctions` can say whether a reading ever happened. An
+    -- item with nothing listed and an item never read for at all look the
+    -- same in the stored table, and only one of those is a bug.
+    self.readCount = (self.readCount or 0) + 1
+
     record.items = items
     record.updatedAt = time()
     record.auctionCount = count
@@ -259,8 +264,7 @@ function Auctions:ReadOwned(opts)
     end
 
     if changed and ns.UI then
-        ns.UI:RefreshActiveTab()
-        ns.UI:UpdateHeader()
+        ns.UI:OnAuctionsUpdated()
     end
 end
 
@@ -309,10 +313,20 @@ function Auctions:OnEnable()
     self.hasOwnedEvent = ns.RegisterEvent(
         self, "OWNED_AUCTIONS_UPDATED", self.OnOwnedAuctionsUpdated) and true or false
 
+    self.openRefreshes = 0
+
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function()
         -- Slight delay: the auction house is not ready to answer queries the
         -- instant it opens.
-        C_Timer.After(0.5, function() Auctions:Refresh() end)
+        C_Timer.After(0.5, function()
+            -- Forced past the coalescing window, which the other callers want
+            -- and this one does not. Opening the house is the moment the
+            -- stored reading is most likely to be wrong -- listings sold or
+            -- expired while it was shut -- and closing and reopening within
+            -- five seconds is an ordinary thing to do, not a duplicate.
+            Auctions.openRefreshes = (Auctions.openRefreshes or 0) + 1
+            Auctions:Refresh({ force = true })
+        end)
     end)
 
     -- Posting or cancelling changes the count, so re-read rather than drift.
@@ -377,6 +391,41 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
                 end
             end
         end
+    end
+
+    -- What the rest of the addon actually reads, as against what the calls
+    -- above can do. The complaint that started this was that the craft list
+    -- ignored posted auctions, and "nothing is listed" and "the reading never
+    -- happened" look identical in the stored table -- so report the stored
+    -- answer and how it got there, not the attempt.
+    local record = Auctions:GetTable()
+    local age = Auctions:GetAge()
+
+    ns.PrintRaw(("  stored for this realm: %d item(s), %s"):format(
+        Util.Count(record.items or {}),
+        age and ("read %ds ago"):format(age) or "never read"))
+    ns.PrintRaw(("  readings taken:       %d this session, %d on opening the house"):format(
+        Auctions.readCount or 0, Auctions.openRefreshes or 0))
+
+    -- And whether the limit is doing anything, which is the other half of
+    -- "why is it still suggesting this". A limit of zero is no limit, and a
+    -- limit nothing has reached suppresses nothing.
+    local cap = ns.Config:Get("maxPostedPerItem") or 0
+
+    if cap <= 0 then
+        ns.PrintRaw("  keep in stock:        no limit set (Settings)")
+    else
+        -- Every cached recipe, which is hundreds of calls. Acceptable in a
+        -- command run by hand, and it is the only honest way to answer "how
+        -- many crafts is this actually holding back".
+        local atLimit = 0
+        for recipeID in pairs(ns.Recipes:GetAll()) do
+            local analysis = ns.Profit:Analyse(recipeID)
+            if analysis and analysis.atPostLimit then atLimit = atLimit + 1 end
+        end
+
+        ns.PrintRaw(("  keep in stock:        %d per item"):format(cap))
+        ns.PrintRaw(("  crafts at that limit: %d, not suggested"):format(atLimit))
     end
 
     -- Re-query, then report again: the count above may predate any reply.
