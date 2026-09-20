@@ -49,12 +49,24 @@ ns.Profit = {
   GetCraftableCount = function(_, recipeID) return CRAFTABLE[recipeID] or 0 end,
 }
 
+-- The queue in the order it would actually be worked through.
+local QUEUE_ORDER = {}
+
 ns.Queue = {
   Find = function(_, recipeID)
     local entry = QUEUED[recipeID]
     if not entry then return nil end
     return 1, entry
   end,
+  GetAll = function() return QUEUE_ORDER end,
+}
+
+-- Ready means "this character has the materials", which is all the crafting
+-- engine knows. Whether the open window can make it is the pane's problem.
+local READY = {}
+
+ns.Crafting = {
+  GetReadiness = function(_, recipeID) return READY[recipeID] == true end,
 }
 
 --------------------------------------------------------------------------------
@@ -207,6 +219,66 @@ do
 end
 
 QUEUED[101] = nil
+
+--------------------------------------------------------------------------------
+-- Craft next is scoped to the window you are standing at
+--------------------------------------------------------------------------------
+
+-- This is the bug the first in-game screenshot caught: Enchanting open, and
+-- the button offering "Craft 24x Bolt of Linen Cloth". CraftRecipe on a recipe
+-- the open window does not have fails silently on this client, so the button
+-- would have done nothing at all and looked identical to a dead one.
+do
+  -- 101 and 102 are the open profession's; 501 is another profession's.
+  QUEUE_ORDER = {
+    { recipeID = 501, quantity = 24 },
+    { recipeID = 102, quantity = 2 },
+  }
+  READY = { [501] = true, [102] = true }
+
+  _G.C_TradeSkillUI = { GetAllRecipeIDs = function() return { 101, 102 } end }
+
+  local entry, elsewhere = CraftPanel:GetNextReadyHere()
+
+  check("skips a ready craft belonging to another profession",
+    entry and entry.recipeID, 102)
+  check("and counts the one it skipped, so the button can say why",
+    elsewhere, 1)
+
+  -- Nothing here to make, but the queue is not idle either. Saying "need
+  -- materials" would be a lie about a craft whose materials are in the bags.
+  QUEUE_ORDER = { { recipeID = 501, quantity = 24 } }
+
+  entry, elsewhere = CraftPanel:GetNextReadyHere()
+  check("nothing ready at this window offers nothing", entry, nil)
+  check("but reports that the queue is not idle", elsewhere, 1)
+
+  -- A craft that is not ready anywhere is not counted as ready elsewhere.
+  READY = {}
+  entry, elsewhere = CraftPanel:GetNextReadyHere()
+  check("a craft short of materials is not 'ready elsewhere'", elsewhere, 0)
+
+  -- Order is the queue's, not the recipe list's: the first workable entry wins.
+  QUEUE_ORDER = {
+    { recipeID = 102, quantity = 1 },
+    { recipeID = 101, quantity = 1 },
+  }
+  READY = { [101] = true, [102] = true }
+
+  check("takes the first workable entry in queue order",
+    CraftPanel:GetNextReadyHere().recipeID, 102)
+
+  -- No open set means the client would not say. Falling back to the first
+  -- ready craft matches what the Queue tab does, rather than refusing to work.
+  _G.C_TradeSkillUI = nil
+  QUEUE_ORDER = { { recipeID = 501, quantity = 24 } }
+  READY = { [501] = true }
+
+  check("client will not say which profession: offers it anyway",
+    CraftPanel:GetNextReadyHere().recipeID, 501)
+
+  QUEUE_ORDER, READY = {}, {}
+end
 
 --------------------------------------------------------------------------------
 -- Docking
