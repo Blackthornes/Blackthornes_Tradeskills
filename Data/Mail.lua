@@ -667,6 +667,108 @@ function Mail:GetRecent(limit, itemID)
     return out
 end
 
+--- The whole ledger folded down to one row per item.
+--
+-- The same arithmetic GetSummary does for a single item, done once for all of
+-- them. A tab drawing a list of forty items would otherwise walk four hundred
+-- ledger entries forty times over, on every redraw.
+--
+-- An entry whose item could not be resolved from its name is still counted --
+-- under its name rather than being dropped, which is the same promise
+-- ResolveItemName makes.
+--
+-- @return array of { key, itemID, name, sold, soldUnits, expired, cancelled,
+--         returned, net, gross, cut, deposit, estimated, sellThrough, lastAt,
+--         restored }
+function Mail:GetItems()
+    local byKey = {}
+    local order = {}
+
+    local function Bucket(itemID, name)
+        -- Two different unresolved names must not share a row, and an
+        -- unresolved name must not collide with item 0 either, so the string
+        -- key is prefixed rather than used bare.
+        local key = itemID or ("?" .. tostring(name or "unknown"))
+        local bucket = byKey[key]
+
+        if not bucket then
+            bucket = {
+                key = key, itemID = itemID, name = name,
+                sold = 0, soldUnits = 0, expired = 0, cancelled = 0,
+                net = 0, gross = 0, cut = 0, deposit = 0, estimated = 0,
+            }
+
+            byKey[key] = bucket
+            order[#order + 1] = bucket
+        end
+
+        -- A later entry can name an item an earlier one only had an id for.
+        if not bucket.name then bucket.name = name end
+
+        return bucket
+    end
+
+    for _, entry in ipairs(self:GetLedger().entries) do
+        local bucket = Bucket(entry.itemID, entry.name)
+
+        if entry.kind == "sold" then
+            bucket.sold = bucket.sold + 1
+            bucket.soldUnits = bucket.soldUnits + (entry.quantity or 1)
+            bucket.net = bucket.net + (entry.net or 0)
+            bucket.gross = bucket.gross + (entry.gross or entry.net or 0)
+            bucket.cut = bucket.cut + (entry.cut or 0)
+            bucket.deposit = bucket.deposit + (entry.deposit or 0)
+
+            if entry.estimated then bucket.estimated = bucket.estimated + 1 end
+
+        elseif entry.kind == "removed" then
+            -- Kept apart from an expiry all the way through: you pulling a
+            -- listing says nothing about whether it would have sold.
+            bucket.cancelled = bucket.cancelled + 1
+
+        else
+            bucket.expired = bucket.expired + 1
+        end
+
+        if entry.t and (not bucket.lastAt or entry.t > bucket.lastAt) then
+            bucket.lastAt = entry.t
+        end
+    end
+
+    -- History from before the client was last closed. It survives as a per-item
+    -- rollup rather than as entries, so it can only ever appear here and in the
+    -- totals -- never in a list of individual sales. `restored` is set so a row
+    -- carrying it can say where the numbers came from instead of showing a
+    -- gross and a cut that do not add up to the net.
+    local restored = ns.Durable and ns.Durable:GetRestoredRollup()
+
+    if restored then
+        for itemID, record in pairs(restored) do
+            local bucket = Bucket(itemID, nil)
+
+            bucket.sold = bucket.sold + (record.sold or 0)
+            bucket.soldUnits = bucket.soldUnits + (record.soldUnits or 0)
+            bucket.expired = bucket.expired + (record.expired or 0)
+            bucket.net = bucket.net + (record.net or 0)
+            bucket.restored = true
+
+            local at = record.lastAt
+            if at and at > 0 and (not bucket.lastAt or at > bucket.lastAt) then
+                bucket.lastAt = at
+            end
+        end
+    end
+
+    for _, bucket in ipairs(order) do
+        bucket.returned = bucket.expired + bucket.cancelled
+
+        local judged = bucket.sold + bucket.expired
+        bucket.sellThrough = judged > 0 and (bucket.sold / judged) or nil
+    end
+
+    return order
+end
+
 --- How many recorded sales carry no gold.
 --
 -- Only rows written before the payout-delay fix can look like this: a sale is
@@ -730,6 +832,15 @@ end
 --------------------------------------------------------------------------------
 -- Diagnostics
 --------------------------------------------------------------------------------
+
+--- Every value a call handed back, counted exactly.
+--
+-- `{ f() }` cannot be trusted to say how many returns there were: a nil in the
+-- middle leaves a hole and `#` on a table with a hole is undefined. `select`
+-- counts the arguments themselves, so a nil is counted like anything else.
+local function PackResults(...)
+    return select("#", ...), { ... }
+end
 
 ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says sold", function(args)
     local sub = (args or ""):lower():match("^(%S*)")
@@ -900,6 +1011,29 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
                     tostring(invoice.moneyDelay)))
             else
                 ns.PrintRaw("       invoice: none")
+            end
+
+            -- Everything the invoice returns past the eight ReadInvoice names.
+            --
+            -- A sale leaves no attachment -- the item is gone -- so nothing in
+            -- the ledger knows whether a stack of twenty sold or a single
+            -- item did, and the Sales tab has to leave that column blank. If
+            -- this client's invoice carries a count somewhere further along,
+            -- this is what will show it. Printed rather than guessed at: a
+            -- quantity read out of a slot nobody has looked at would be a
+            -- number the tab states with confidence and gets wrong.
+            if hasInvoice then
+                local count, results = PackResults(pcall(GetInboxInvoiceInfo, mail.index))
+
+                if results[1] and count > 9 then
+                    local tail = {}
+                    for position = 10, count do
+                        tail[#tail + 1] = ("%d=%s"):format(
+                            position - 1, tostring(results[position]))
+                    end
+                    ns.PrintRaw(("       invoice extras: %s"):format(
+                        table.concat(tail, "  ")))
+                end
             end
 
             for _, attachment in ipairs(mail.attachments) do
