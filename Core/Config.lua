@@ -226,6 +226,47 @@ end
 -- Exposed so tools/test_snapshot.lua can exercise it against real shapes.
 Config.FillGaps = FillGaps
 
+--- Like FillGaps, but a value that still equals its default counts as absent.
+--
+-- FillGaps alone cannot restore a setting. Bootstrap applies DEFAULTS before
+-- anything late runs, so by the time Durable reads macro storage at
+-- PLAYER_LOGIN every settings key already holds something and there is no gap
+-- left to fill. A stored setting was therefore shadowed by its own default on
+-- every restart -- silently, and in a way that would have looked correct for
+-- weeks before anyone noticed a setting reverting.
+--
+-- A value still equal to its default has never been deliberately set, so it is
+-- indistinguishable from absent and the stored one may take its place. A value
+-- that differs came from somewhere real -- this session, or the CVar store
+-- carrying this session across a reload -- and still wins.
+local function FillOverDefaults(target, source, defaults, depth)
+    depth = depth or 0
+    if depth > 8 then return 0 end
+
+    local filled = 0
+
+    for key, value in pairs(source) do
+        local mine = target[key]
+        local fallback = type(defaults) == "table" and defaults[key] or nil
+
+        if type(mine) == "table" and type(value) == "table" then
+            filled = filled + FillOverDefaults(mine, value, fallback, depth + 1)
+
+        elseif mine == nil or (fallback ~= nil and mine == fallback) then
+            -- Writing the same value back is not a restore; only a real change
+            -- is worth counting, so the report cannot overstate what happened.
+            if mine ~= value then
+                target[key] = value
+                filled = filled + 1
+            end
+        end
+    end
+
+    return filled
+end
+
+Config.FillOverDefaults = FillOverDefaults
+
 --- Called from the ADDON_LOADED handler before any module initialises.
 function Config:Bootstrap()
     -- First, before Compat's capability detection registers and writes CVars
