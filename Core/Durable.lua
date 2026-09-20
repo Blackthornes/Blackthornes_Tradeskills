@@ -100,14 +100,44 @@ end
 -- Sell-through
 --------------------------------------------------------------------------------
 
+--- When the restored history was rolled up to, for a realm, or nil.
+--
+-- Every ledger entry from before this moment is already inside the restored
+-- history, so it must not be added again. Written by Restore from the
+-- payload's own save stamp, and read by everything that adds the ledger to
+-- the history: BuildRollup here, and the Sales tab's totals in Data/Mail.lua.
+function Durable:LedgerCutoff(realmKey)
+    if not ns.db or type(ns.db.sellThroughRolledAt) ~= "table" then return nil end
+    return tonumber(ns.db.sellThroughRolledAt[realmKey or ns.Config:GetRealmKey()])
+end
+
+--- Is this ledger entry already inside the restored history?
+function Durable:IsRolledUp(entry, realmKey)
+    local cutoff = self:LedgerCutoff(realmKey)
+    return cutoff ~= nil and entry.t ~= nil and entry.t <= cutoff
+end
+
 --- Everything the market has judged, per item, for this realm.
 --
 -- The restored history and this session's ledger entries are added together
--- here and nowhere else. db.sellThrough holds only what was restored and is
--- never written to during a session, so building the payload twice in one
--- session cannot count the same sale twice.
-function Durable:BuildRollup(realmKey)
+-- here, in Mail:GetSummary and in Mail:GetItems, and nowhere else.
+-- db.sellThrough holds only what was restored and is never written to during
+-- a session, so building the payload twice in one session cannot count the
+-- same sale twice.
+--
+-- Across a /reload it could, and did: the CVar store carried the ledger over,
+-- and Restore then filled the history from a payload that already had those
+-- same entries rolled into it. One sale read as two, and the doubled figure
+-- was what the next logout wrote. So the payload carries the moment it was
+-- rolled up to, Restore records it, and a ledger entry from before that
+-- moment is skipped here.
+--
+-- @param upTo  count ledger entries up to this time() only. Build passes the
+--   save stamp so that an entry recorded in the same second, after the
+--   payload was built, still counts next time.
+function Durable:BuildRollup(realmKey, upTo)
     local rollup = {}
+    local cutoff = self:LedgerCutoff(realmKey)
 
     local function Entry(itemID)
         rollup[itemID] = rollup[itemID]
@@ -134,7 +164,10 @@ function Durable:BuildRollup(realmKey)
     local entries = (type(ledger) == "table" and ledger.entries) or {}
 
     for _, entry in ipairs(entries) do
-        if entry.itemID then
+        local rolled = cutoff ~= nil and entry.t ~= nil and entry.t <= cutoff
+        local later = upTo ~= nil and entry.t ~= nil and entry.t > upTo
+
+        if entry.itemID and not rolled and not later then
             local into = Entry(entry.itemID)
 
             if entry.kind == "sold" then
@@ -233,7 +266,7 @@ function Durable:Build(stamp)
     local queue = EncodeValue(ns.db.queue or {})
     if queue then parts[#parts + 1] = Section("q", queue) end
 
-    local rollup = PackRollup(self:BuildRollup(realmKey))
+    local rollup = PackRollup(self:BuildRollup(realmKey, stamp))
     if rollup ~= "" then parts[#parts + 1] = Section("r", rollup) end
 
     return table.concat(parts)
@@ -414,10 +447,34 @@ function Durable:Restore()
         local rollup = UnpackRollup(found.r)
         if rollup then
             ns.db.sellThrough = ns.db.sellThrough or {}
-            ns.db.sellThrough[realmKey] = ns.db.sellThrough[realmKey] or {}
-            filled = filled + ns.Config.FillGaps(ns.db.sellThrough[realmKey], rollup)
+            ns.db.sellThroughRolledAt = ns.db.sellThroughRolledAt or {}
+
             self.restoredItems = 0
             for _ in pairs(rollup) do self.restoredItems = self.restoredItems + 1 end
+
+            -- The payload's history is everything up to its save stamp: what
+            -- was restored before it plus the ledger entries since, rolled
+            -- in when it was written. So a payload saved after the history
+            -- this database already carries replaces that history outright,
+            -- and the stamp becomes the line the ledger is counted from.
+            -- Filling gaps was wrong here: an item's old record stayed while
+            -- its newer ledger entries were counted again on top.
+            local storedAt = found.t and Unpack(found.t) or nil
+            local rolledAt = self:LedgerCutoff(realmKey)
+
+            if storedAt and (not rolledAt or storedAt > rolledAt) then
+                ns.db.sellThrough[realmKey] = rollup
+                ns.db.sellThroughRolledAt[realmKey] = storedAt
+                filled = filled + self.restoredItems
+
+            elseif not storedAt then
+                -- A payload from before saves carried a stamp. Nothing says
+                -- what it covers, so fill gaps as before.
+                ns.db.sellThrough[realmKey] = ns.db.sellThrough[realmKey] or {}
+                filled = filled + ns.Config.FillGaps(ns.db.sellThrough[realmKey], rollup)
+            end
+            -- Otherwise the database already holds this history or a newer
+            -- one, carried across a /reload by the CVar store.
         end
     end
 
@@ -557,6 +614,36 @@ function Durable:Report()
     end
 
     Line("settings now", ("%d differ from their defaults"):format(differ))
+
+    -- The same outcome test for the history: what the restore holds, what
+    -- the ledger adds on top, and the line between them. A sale counted on
+    -- both sides of that line is the bug this exists to make visible.
+    local realmKey = ns.Config:GetRealmKey()
+    local cutoff = self:LedgerCutoff(realmKey)
+    local restoredSales, restored = 0, ns.db and ns.db.sellThrough and ns.db.sellThrough[realmKey]
+
+    if type(restored) == "table" then
+        for _, record in pairs(restored) do
+            restoredSales = restoredSales + (record.sold or 0)
+        end
+    end
+
+    local ledger = ns.db and ns.db.mailLedger and ns.db.mailLedger[realmKey]
+    local counted, skipped = 0, 0
+
+    for _, entry in ipairs((type(ledger) == "table" and ledger.entries) or {}) do
+        if entry.kind == "sold" then
+            if cutoff and entry.t and entry.t <= cutoff then
+                skipped = skipped + 1
+            else
+                counted = counted + 1
+            end
+        end
+    end
+
+    Line("history now", ("%d sale(s) restored, plus %d from this session's ledger; %d ledger sale(s) already inside the restored history%s")
+        :format(restoredSales, counted, skipped,
+            cutoff and (", rolled up " .. ns.Util.FormatAgeAgo(time() - cutoff)) or ""))
 
     -- The queue, reported as an outcome. Its two clocks are what decide
     -- whether a stale database or the macros win at login, and when they are

@@ -37,6 +37,14 @@ function Auctions:GetPostedCount(itemID)
     return self:GetTable().items[itemID] or 0
 end
 
+--- The cheapest unit price you have an item listed at, or nil when your
+--- auctions have not been read or hold none of it.
+function Auctions:GetOwnMinPrice(itemID)
+    if not itemID then return nil end
+    local prices = self:GetTable().prices
+    return prices and prices[itemID] or nil
+end
+
 --- When your auctions were last read, or nil if never.
 function Auctions:GetAge()
     local updatedAt = self:GetTable().updatedAt
@@ -218,6 +226,7 @@ function Auctions:ReadOwned(opts)
     if not ok or not count then return end
 
     local items = {}
+    local prices = {}
 
     for index = 1, count do
         local infoOk, info = pcall(C_AuctionHouse.GetOwnedAuctionInfo, index)
@@ -230,7 +239,21 @@ function Auctions:ReadOwned(opts)
             local active = info.status == nil or info.status == STATUS_ACTIVE
 
             if itemID and active then
-                items[itemID] = (items[itemID] or 0) + (info.quantity or 1)
+                local quantity = info.quantity or 1
+                items[itemID] = (items[itemID] or 0) + quantity
+
+                -- The cheapest unit price you have it listed at. A commodity
+                -- listing carries a unit price; an item auction carries the
+                -- stack's buyout. This is what lets a browse row that says
+                -- "you have a listing here" be read as yours or a rival's.
+                local unit = tonumber(info.unitPrice)
+                if not unit and tonumber(info.buyoutAmount) and info.buyoutAmount > 0 then
+                    unit = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
+                end
+
+                if unit and unit > 0 and (not prices[itemID] or unit < prices[itemID]) then
+                    prices[itemID] = unit
+                end
             end
         end
     end
@@ -244,6 +267,7 @@ function Auctions:ReadOwned(opts)
     self.readCount = (self.readCount or 0) + 1
 
     record.items = items
+    record.prices = prices
     record.updatedAt = time()
     record.auctionCount = count
 

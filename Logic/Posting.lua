@@ -663,10 +663,22 @@ function Posting:Post(itemID, quantity, unitPrice)
 
     quantity = math.max(1, math.min(quantity or available, available))
 
+    -- The slot the listing will draw from, found once and used throughout:
+    -- for the commodity question below, which the client only answers for a
+    -- location, and for the post call itself.
+    local bag, slot, slotStack = FindInBags(itemID)
+    local location = bag and MakeLocation(bag, slot)
+
+    if not location then
+        ns.Warn("could not reference that bag slot")
+        return false
+    end
+
+    local isCommodity = ns.Scanner:IsCommodity(itemID, location)
+
     -- An item auction draws from the one slot it references, so gear goes up
     -- one listing at a time.
-    if not ns.Scanner:IsCommodity(itemID) then
-        local _, _, slotStack = FindInBags(itemID)
+    if not isCommodity then
         quantity = math.min(quantity, slotStack or 1)
     end
 
@@ -686,7 +698,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     -- which is the internal error the client shows for a listing that never
     -- happens. A price arriving here from a caller has not necessarily been
     -- through the chooser, so it is rounded again rather than trusted.
-    if not ns.Scanner:IsCommodity(itemID) and not Util.IsWholeSilver(unitPrice) then
+    if not isCommodity and not Util.IsWholeSilver(unitPrice) then
         local rounded = Util.RoundToSilver(unitPrice)
 
         ns.Print(("item auctions only take whole silver, so %s becomes %s"):format(
@@ -727,16 +739,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         end
     end
 
-    local bag, slot = FindInBags(itemID)
-    local location = bag and MakeLocation(bag, slot)
-
-    if not location then
-        ns.Warn("could not reference that bag slot")
-        return false
-    end
-
     local duration = ns.Config:Get("postDuration") or 2
-    local isCommodity = ns.Scanner:IsCommodity(itemID)
 
     self.pending = {
         itemID = itemID,
@@ -968,6 +971,15 @@ function Posting:Request(itemID, quantity, unitPrice)
     local function Proceed(state)
         if settled then return end
         settled = true
+
+        -- Another search took the slot before this one answered, so the
+        -- price was never checked. Verifying is on, so nothing is listed on
+        -- an unchecked number; the click is cheap to repeat.
+        if state == "superseded" then
+            ns.Print(("the price check for %s was interrupted by another search; nothing was listed. Click it again."):format(
+                Util.GetItemLabel(itemID)))
+            return
+        end
 
         -- Read the price back after the check, never before. A search that
         -- found nothing has just cleared the rival price, and this is where

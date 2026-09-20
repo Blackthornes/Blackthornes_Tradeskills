@@ -109,7 +109,14 @@ end
 function Crafting:OnBagUpdate()
     if ns.Queue:Count() == 0 then return end
 
-    for _, entry in ipairs(ns.Queue:GetAll()) do
+    -- A copy, because SetQuantity below removes finished entries from the
+    -- live array and rebuilds it. Walking the live array while that happens
+    -- skips the entry that slides into the removed one's slot, so two crafts
+    -- finishing in one bag update left the second still on the queue.
+    local entries = {}
+    for index, entry in ipairs(ns.Queue:GetAll()) do entries[index] = entry end
+
+    for _, entry in ipairs(entries) do
         local recipe = ns.Recipes:GetAny(entry.recipeID)
 
         if recipe and recipe.outputItemID then
