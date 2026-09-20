@@ -42,6 +42,9 @@ local SECONDS_PER_DAY = 86400
 -- still in memory and in the CVar store for the rest of the session.
 local MIN_SECONDS_BETWEEN_SAVES = 60
 
+-- Characters given to the save stamp in the payload. See Build.
+local STAMP_WIDTH = 6
+
 --------------------------------------------------------------------------------
 -- The payload
 --
@@ -71,6 +74,26 @@ local function DecodeValue(text)
     local ok, value = ns.Serialize.Decode(bytes)
     if not ok then return nil end
     return value
+end
+
+--- Do two queues hold the same crafts in the same order?
+--
+-- Only so a restore that changes nothing is not counted as having restored
+-- something: "restored 1 value(s)" every login, for a queue that was already
+-- identical, is the kind of line that teaches you to stop reading them.
+local function SameQueue(a, b)
+    a, b = a or {}, b or {}
+    if #a ~= #b then return false end
+
+    for index = 1, #a do
+        local left, right = a[index], b[index]
+
+        if type(left) ~= "table" or type(right) ~= "table" then return false end
+        if left.recipeID ~= right.recipeID then return false end
+        if left.quantity ~= right.quantity then return false end
+    end
+
+    return true
 end
 
 --------------------------------------------------------------------------------
@@ -181,11 +204,21 @@ Durable.PackRollup, Durable.UnpackRollup = PackRollup, UnpackRollup
 -- Building and reading the whole payload
 --------------------------------------------------------------------------------
 
-function Durable:Build()
+--- The payload.
+--
+-- @param stamp  when this is being saved, as time(). Left out when the payload
+--   is only being built to compare against the stored one -- a stamp inside
+--   the compared text would differ every call and rewrite every macro on every
+--   cadence tick, which the player can see happen.
+function Durable:Build(stamp)
     if not ns.db then return nil end
 
     local realmKey = ns.Config:GetRealmKey()
     local parts = { Pack(FORMAT, 1) }
+
+    -- Six characters: base 64, so 68 billion, where a whole-second clock is
+    -- 1.8 billion. Four would have wrapped in 1970 and saturated ever since.
+    if stamp then parts[#parts + 1] = Section("t", Pack(stamp, STAMP_WIDTH)) end
 
     local key = ns.MacroStore.Encode(realmKey)
     if key then parts[#parts + 1] = Section("k", key) end
@@ -246,22 +279,30 @@ function Durable:SaveIfChanged(force)
         return false, "saved recently"
     end
 
-    local payload = self:Build()
-    if not payload then return false, "nothing to save" end
+    -- Built without the stamp first: that is the text worth comparing, since
+    -- a stamp differs on every call and would make every payload look changed.
+    local body = self:Build()
+    if not body then return false, "nothing to save" end
 
     -- Macro writes are the expensive part and the player can see them happen,
     -- so an unchanged payload is not rewritten.
-    if payload == self.lastPayload then
+    if body == self.lastPayload then
         self.lastSaveAt = now
         return false, "unchanged"
     end
 
-    local ok, detail = ns.MacroStore:SaveData(payload)
+    local ok, detail = ns.MacroStore:SaveData(self:Build(now))
 
     if ok then
-        self.lastPayload = payload
+        self.lastPayload = body
         self.lastSaveAt = now
-        self.lastResult = ("%d macro(s), %d characters"):format(detail, #payload)
+        self.lastResult = ("%d macro(s), %d characters"):format(detail, #body)
+
+        -- Written into the database as well, so the two can be compared on a
+        -- later login. The database travels by a different road -- the CVar
+        -- store, or the generated data addon -- and either can arrive older
+        -- than the macros. See the queue rule in Restore.
+        ns.db.durableSavedAt = now
     else
         self.lastResult = tostring(detail)
     end
@@ -304,12 +345,42 @@ function Durable:Restore()
 
     if found.q then
         local queue = DecodeValue(found.q)
-        -- An empty queue in memory is the normal case after a restart, and a
-        -- queue with entries in it is this session's -- so only seed the
-        -- empty one rather than merging two lists of things to craft.
-        if type(queue) == "table" and next(queue) and not next(ns.db.queue or {}) then
-            ns.db.queue = queue
-            filled = filled + 1
+
+        if type(queue) == "table" then
+            -- The queue is not gap-fillable data, and this is where that bit.
+            --
+            -- An empty queue is a real state -- you made everything on it --
+            -- not an absence waiting to be filled. And a queue already sitting
+            -- in memory at this point is NOT necessarily this session's work:
+            -- Bootstrap ran back at ADDON_LOADED and loaded a whole database
+            -- from the CVar store or, on a cold start, from the generated data
+            -- addon, which is frozen until tools/restore.ps1 runs again. So
+            -- "there are entries in memory, leave them alone" handed the stale
+            -- copy the win on every single login, and the crafts you had
+            -- already made came back every time.
+            --
+            -- Macros are written at PLAYER_LOGOUT, so on a cold start they are
+            -- the freshest queue that exists. The stamps settle which is which
+            -- rather than assuming: whichever was saved later wins, and when
+            -- the payload wins it wins outright, empty included.
+            local storedAt = found.t and Unpack(found.t) or nil
+            local loadedAt = tonumber(ns.db.durableSavedAt)
+
+            if storedAt and (not loadedAt or storedAt > loadedAt) then
+                if not SameQueue(queue, ns.db.queue) then
+                    ns.db.queue = queue
+                    filled = filled + 1
+                end
+
+                self.queueAuthoritative = true
+
+            -- No stamp means a payload written before saves carried one. Fall
+            -- back to the old rule, which is safe where it is not helpful:
+            -- seed an empty queue, never merge two lists of things to craft.
+            elseif next(queue) and not next(ns.db.queue or {}) then
+                ns.db.queue = queue
+                filled = filled + 1
+            end
         end
     end
 
@@ -376,6 +447,19 @@ local function Line(label, value)
     ns.PrintRaw(("  |c%s%-18s|r %s"):format(ns.COLORS.muted, label, value))
 end
 
+--- How long ago, in words. The same shape Persist:Report uses, so the two
+--- commands read alike when they are being compared line against line.
+local function Ago(stamp)
+    if not stamp then return "never" end
+
+    local seconds = time() - stamp
+    if seconds < 90 then return ("%d seconds ago"):format(math.max(0, seconds)) end
+    if seconds < 5400 then return ("%d minutes ago"):format(math.floor(seconds / 60)) end
+    if seconds < 172800 then return ("%d hours ago"):format(math.floor(seconds / 3600)) end
+
+    return ("%d days ago"):format(math.floor(seconds / 86400))
+end
+
 --- What is in macro storage and what it cost, in game, where it can be
 --- checked rather than reasoned about.
 function Durable:Report()
@@ -392,12 +476,21 @@ function Durable:Report()
 
     local stored, why = ns.MacroStore:LoadData()
 
+    local found, queueEntries
+
     if stored then
-        local found = self:Parse(stored)
+        found = self:Parse(stored)
+
+        if found and found.q then
+            local queue = DecodeValue(found.q)
+            if type(queue) == "table" then queueEntries = #queue end
+        end
+
         local sections = {}
 
-        for _, tag in ipairs({ "k", "s", "q", "r" }) do
-            local name = ({ k = "realm", s = "settings", q = "queue", r = "sell-through" })[tag]
+        for _, tag in ipairs({ "k", "t", "s", "q", "r" }) do
+            local name = ({ k = "realm", t = "save time", s = "settings",
+                            q = "queue", r = "sell-through" })[tag]
             if found and found[tag] then
                 sections[#sections + 1] = tag == "r"
                     and ("%s (%d item(s))"):format(name, math.floor(#found[tag] / RECORD))
@@ -434,6 +527,22 @@ function Durable:Report()
     end
 
     Line("settings now", ("%d differ from their defaults"):format(differ))
+
+    -- The queue, reported as an outcome. Its two clocks are what decide
+    -- whether a stale database or the macros win at login, and when they are
+    -- wrong the symptom is crafts you already made coming back -- which looks
+    -- nothing like a clock problem from the chat frame.
+    Line("queue now", ("%d entr(ies)"):format(#((ns.db and ns.db.queue) or {})))
+
+    local storedAt = found and found.t and Unpack(found.t) or nil
+    local loadedAt = ns.db and tonumber(ns.db.durableSavedAt)
+
+    Line("queue in macros", ("%d entr(ies), saved %s"):format(
+        queueEntries or 0, Ago(storedAt)))
+    Line("database saved", Ago(loadedAt))
+    Line("which won", self.queueAuthoritative
+        and "the macros, as the later save"
+        or (storedAt and "the database, as the later save" or "no stamp stored yet"))
 
     local payload = self:Build()
     if payload then
