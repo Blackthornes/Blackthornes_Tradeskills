@@ -34,6 +34,8 @@ ns.Util = {
     GetMaxStackSize = function() return 20 end,
     UnitPriceFromStack = function(_, buyout, quantity) return math.floor(buyout / (quantity or 1)) end,
     HasFunction = function(path) return path == "C_AuctionHouse.GetBrowseResults" end,
+    -- No queue here, so a follow-up search goes out at once.
+    WhenAuctionReady = function(action) action() end,
 }
 
 local settings = { learnFromSearches = true }
@@ -47,6 +49,12 @@ ns.Config = {
 
 ns.db = {}
 ns.AHQueue = { PRIORITY = { urgent = 10, normal = 50, scan = 90 } }
+
+-- Your own auctions as last read back. A browse row's owner flag only says
+-- you have SOME listing of the item among the results, so it is settled
+-- against these: yours when you have it listed at exactly that price.
+local ownListings = {}
+ns.Auctions = { GetOwnMinPrice = function(_, itemID) return ownListings[itemID] end }
 
 -- WoW globals the scanner touches. Anything that would SEND a request is
 -- recorded rather than stubbed silently, so the test can assert on it.
@@ -95,6 +103,7 @@ local function reset()
     Scanner.pendingItem = nil
     Scanner.isBrowsing = false
     settings.learnFromSearches = true
+    for k in pairs(ownListings) do ownListings[k] = nil end
 end
 
 local checks = 0
@@ -111,6 +120,7 @@ print("\npassive capture from the player's own searches")
 --------------------------------------------------------------------------------
 
 reset()
+ownListings[5498] = 900
 browseResults = {
     { itemKey = { itemID = 2589 }, minPrice = 30,  totalQuantity = 400 },
     { itemKey = { itemID = 4306 }, minPrice = 120, totalQuantity = 60 },
@@ -121,7 +131,7 @@ Scanner:OnBrowseResults()
 
 check("the player's browse is recorded", Prices:Get(2589) ~= nil and Prices:Get(2589).min == 30)
 check("every row is taken, not just the first", Prices:Get(4306) ~= nil)
-check("a row that is your own listing sets ownMin, not rivalMin",
+check("a row at the price you have it listed at sets ownMin, not rivalMin",
     Prices:Get(5498).ownMin == 900 and Prices:Get(5498).rivalMin == nil)
 check("a rival row sets rivalMin", Prices:Get(2589).rivalMin == 30)
 check("nothing was sent to the auction house", #sent == 0)
@@ -255,5 +265,96 @@ check("our own browse still commits through the scan path",
     Scanner.isBrowsing == false and Prices:Get(2589) ~= nil)
 check("and is not counted as learned from the player",
     (Scanner.passiveCount or 0) == 0)
+
+--------------------------------------------------------------------------------
+-- A rival who has undercut you
+--
+-- The row's owner flag is set because you have a listing of the item among
+-- the results; the cheapest price on the row is somebody else's. Reading the
+-- flag as "the cheapest is mine" erased that rival and said you held the
+-- lowest, and the listing sat.
+--------------------------------------------------------------------------------
+
+reset()
+ownListings[2996] = 500
+Prices:Record(2996, 500, 300, 40, time(), 300, 500)   -- a full scan had it right
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 300, totalQuantity = 40, containsOwnerItem = true },
+}
+
+Scanner:OnBrowseResults()
+
+check("the rival under you is still a rival", Prices:Get(2996).rivalMin == 300)
+check("and your own price is still yours", Prices:Get(2996).ownMin == 500)
+check("so you do not hold the lowest", not Prices:HoldsLowest(2996))
+
+-- Your auctions never read: the row counts as a rival's rather than erasing
+-- one. Undercutting yourself by a silver costs less than undercutting nobody.
+reset()
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 300, totalQuantity = 40, containsOwnerItem = true },
+}
+Scanner:OnBrowseResults()
+check("with your auctions unread the row is a rival's", Prices:Get(2996).rivalMin == 300)
+
+-- The cheapest listing is yours and a rival is known to sit above it: the
+-- row does not contradict that rival, so it stays.
+reset()
+ownListings[2996] = 300
+Prices:Record(2996, 500, 300, 40, time(), 500, 300)
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 300, totalQuantity = 40, containsOwnerItem = true },
+}
+Scanner:OnBrowseResults()
+check("a rival known to be above you is kept", Prices:Get(2996).rivalMin == 500)
+check("and you hold the lowest", Prices:HoldsLowest(2996))
+
+--------------------------------------------------------------------------------
+-- A rival tied with you
+--
+-- Measured 2026-09-20: Trent at 63s and 64s, other sellers at 63s and 64s.
+-- The row reads 63s and yours; it cannot see the tie. A rival on record at
+-- your price is not contradicted by that row, so it stays.
+--------------------------------------------------------------------------------
+
+reset()
+ownListings[2996] = 6300
+Prices:Record(2996, 6300, 6300, 17, time(), 6300, 6300)   -- an exact search saw the tie
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 6300, totalQuantity = 17, containsOwnerItem = true },
+}
+Scanner:OnBrowseResults()
+check("a rival tied at your price is kept", Prices:Get(2996).rivalMin == 6300)
+check("so a tie is not 'you hold the lowest'", not Prices:HoldsLowest(2996))
+check("a settled row sends nothing", #sent == 0)
+
+-- Nothing on record about rivals: the addon's own scan settles the row with an
+-- exact search, at background priority, rather than guessing either way.
+reset()
+ownListings[2996] = 6300
+Scanner.recentItemScans = nil
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2996 }, minPrice = 6300, totalQuantity = 17, containsOwnerItem = true },
+})
+check("an unsettled row leaves no rival rather than a wrong one", Prices:Get(2996).rivalMin == nil)
+check("and the addon's own scan follows it up with an exact search",
+    sent[1] == "SendSearchQuery" and Scanner.pendingItem and Scanner.pendingItem.itemID == 2996)
+
+-- The exact answer arrives with the tie in it.
+itemResults = {
+    { buyoutAmount = 6300, quantity = 1, containsOwnerItem = true },
+    { buyoutAmount = 6300, quantity = 1, containsOwnerItem = false },
+    { buyoutAmount = 6400, quantity = 1, containsOwnerItem = true },
+}
+Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = 2996 })
+check("the follow-up records the tied rival", Prices:Get(2996).rivalMin == 6300
+    and Prices:Get(2996).ownMin == 6300)
+check("and the follow-up list is spent", Scanner.followUp == nil)
+
+-- The player's own browse never sends anything, unsettled rows included.
+reset()
+ownListings[2996] = 6300
+Scanner:OnBrowseResults()
+check("a passive browse still sends nothing", #sent == 0)
 
 print(("\n%d check(s) passed\n"):format(checks))

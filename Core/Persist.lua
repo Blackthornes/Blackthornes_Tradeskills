@@ -463,8 +463,15 @@ function Persist:SaveLater(delay)
             return
         end
 
+        -- Inside a minute of the last write: come back when the minute is
+        -- up rather than dropping the request. Dropped, the change waited
+        -- for the next thing to ask for a save, and on a disconnect nothing
+        -- did.
         local since = Persist.lastSaveAt and (GetTime() - Persist.lastSaveAt)
-        if since and since < 60 then return end
+        if since and since < 60 then
+            Persist:SaveLater(60 - since)
+            return
+        end
 
         Persist.lastSaveAt = GetTime()
         Persist:SaveAll()
