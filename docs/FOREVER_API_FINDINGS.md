@@ -7,13 +7,51 @@ Client `1.60.1` build `69913`, interface `16001`.
 
 | Question | Answer | Consequence |
 |---|---|---|
-| Do SavedVariables persist? | **Yes.** `loadCount = 3`, session 2's canary read back in session 3 | The community report of broken persistence is wrong (or already fixed). Price DB persists normally; no export/import fallback needed. |
+| Do SavedVariables persist? | **No.** Written at logout, never handed back: `BlackthornesTSDB` and `BlackthornesTSCharDB` both read `nil` at `ADDON_LOADED`. The `loadCount = 3` that once said otherwise was counting the CVar store, inside one client process | Nothing survives on its own. See *Keeping data between sessions* below. |
 | Auction house API | **Modern retail.** 85 functions in `C_AuctionHouse`; all 16 legacy globals absent | Single scanner path. No Classic fallback needed. |
 | Commodities? | **Yes.** Linen Cloth, Copper Ore, Peacebloom, Coarse Stone, Silverleaf all `isCommodity = true` | Reagents are region-wide unit-priced pools. Unit price handling differs from per-stack items. |
 | `ReplicateItems`? | **Present** | Full sweep is one request + a read loop, not hundreds of throttled pages. |
 | Copper granularity | `SupportsCopperValues() = true` | Prices stay copper-exact; no silver rounding needed. |
 | Profession API | **Modern.** 146 functions in `C_TradeSkillUI` | Schematic-based recipe model. |
 | Reagent quality tiers? | **No.** `qualityTiersObserved = false`; every reagent slot has `reagentChoices = 1` | Cost engine stays flat — no quality-tier permutation logic. Significant simplification. |
+
+## Keeping data between sessions
+
+Three paths, and only one of them crosses a restart.
+
+**SavedVariables are written and never read.** The file on disk is correct and
+complete -- `tools\restore.ps1` reads it -- so the data is not lost, it is only
+never handed back. That makes the file the recovery point, and the reason the
+addon must not be allowed to overwrite a good one with an empty session's
+write. WoW keeps exactly one generation in `.bak`, so two empty sessions spend
+the backup.
+
+**CVars survive a `/reload` and character select, and nothing more.** Neither
+ends the client process, so a value that never leaves memory is
+indistinguishable from one the client keeps. Everything that read as proof the
+CVar store persisted -- the canary's `loadCount`, the soak test, 1321 prices
+carried across -- was measured on one of those two paths. The soak test even
+asked for character select in its own instructions, so the control varied the
+wrong thing.
+
+`Core/Persist.lua` now stamps `BTS_session` with `time() - GetTime()`, the wall
+clock at which the client process started. Same number at the next login means
+the same process; a different one means a real restart. `/bts persist` reports
+it, so no result depends on anyone remembering which they did.
+
+**Registration order matters on a cold start.** Every CVar read used to happen
+after a `RegisterCVar` call carrying a default. Within a process that is a
+no-op. On a cold start the name is not registered yet, and registering it with
+a default is indistinguishable from writing the default over whatever the
+client loaded. The addon now reads raw first, registers second, and puts back
+anything registration cleared -- counted, and reported by `/bts persist` as
+`registration`, because if it ever counts above zero that is the bug.
+
+**The restart-proof path is a second addon.** `tools\restore.ps1` writes
+`Interface\AddOns\Blackthornes_TS_Data` from the game's own saved file, under
+the global `BlackthornesTSSnapshot`. Addon files load normally on this client,
+so this is the one mechanism known to work. `tools\play.ps1` runs it and then
+starts the game, which puts the hand-off in the only gap where it fits.
 
 ## Gotchas found in real data
 

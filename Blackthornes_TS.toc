@@ -5,6 +5,7 @@
 ## Version: 0.1.0
 ## SavedVariables: BlackthornesTSDB
 ## SavedVariablesPerCharacter: BlackthornesTSCharDB
+## OptionalDeps: Blackthornes_TS_Data
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
 
 Data\Snapshot.lua

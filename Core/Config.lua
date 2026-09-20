@@ -193,6 +193,11 @@ end
 
 --- Called from the ADDON_LOADED handler before any module initialises.
 function Config:Bootstrap()
+    -- First, before Compat's capability detection registers and writes CVars
+    -- of its own: this records the client's state at login rather than the
+    -- state we left it in on the way past.
+    if ns.Persist then ns.Persist:Peek() end
+
     -- Recorded before anything is touched, so a failure to load can be told
     -- apart from a failure to save. Without this the two look identical
     -- from the outside.
@@ -224,6 +229,7 @@ function Config:Bootstrap()
 
             self.restoredFromSnapshot = true
             self.loadDiagnostics.restored = true
+            self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
         else
             _G.BlackthornesTSDB = {}
             self.freshDatabase = true
@@ -264,6 +270,46 @@ function Config:Bootstrap()
         ns.Persist:RestoreSettings()
         ns.Persist:CheckSoak()
     end
+end
+
+--- Seed from the local data addon if it loaded after we did.
+--
+-- Blackthornes_TS.toc lists Blackthornes_TS_Data as an optional dependency,
+-- which should make the client load it first. "Should" is doing a lot of work
+-- there, and a price history is not the thing to bet on this client honouring
+-- a load-order hint. Checking again costs one type() call.
+function Config:OnEnable()
+    if not self.freshDatabase then return end
+    if type(_G.BlackthornesTSSnapshot) ~= "table" then return end
+
+    local db = ns.db
+    if not db then return end
+
+    -- Mutated in place: modules that initialised before this hold a reference
+    -- to the same table, and swapping it would leave them writing to an
+    -- orphan that nothing ever saves.
+    for key, value in pairs(_G.BlackthornesTSSnapshot) do
+        if key ~= "probe" and key ~= "schema" then
+            db[key] = value
+        end
+    end
+
+    self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
+    _G.BlackthornesTSSnapshot = nil
+
+    self.freshDatabase = false
+    self.restoredFromSnapshot = true
+    self.loadDiagnostics.restored = true
+    self.loadDiagnostics.restoredLate = true
+
+    self:Migrate(db)
+    Util.ApplyDefaults(db, DEFAULTS)
+
+    -- Last, so a setting mirrored into a CVar this session still wins over the
+    -- copy frozen into the snapshot, which is as old as the last restore.
+    if ns.Persist then ns.Persist:RestoreSettings() end
+
+    ns.Print("seeded the database from the local data addon.")
 end
 
 --- Schema migrations. Each step upgrades one version to the next.
@@ -329,14 +375,23 @@ function Config:StampCVarCanary()
 
     self.cvarResult.supported = true
 
+    -- Read before registering. Registering a name the client has not seen
+    -- since launch can write the default over whatever it loaded, and this
+    -- canary is precisely the thing that would then read as "never survived"
+    -- when it had. See the note at the top of Core/Persist.lua.
+    local raw = ns.Persist and ns.Persist.ReadRaw and ns.Persist.ReadRaw(CVAR_CANARY)
+    local count = tonumber(raw or "") or 0
+
     if capable.registerVia == "RegisterAddonCVar" then
         pcall(C_CVar.RegisterAddonCVar, CVAR_CANARY)
     elseif capable.registerVia == "RegisterCVar" then
         pcall(C_CVar.RegisterCVar, CVAR_CANARY, "0")
     end
 
-    local ok, previous = pcall(C_CVar.GetCVar, CVAR_CANARY)
-    local count = (ok and tonumber(previous)) or 0
+    if count == 0 then
+        local ok, previous = pcall(C_CVar.GetCVar, CVAR_CANARY)
+        count = (ok and tonumber(previous)) or 0
+    end
 
     -- Zero means either a first run or a value that did not survive; those
     -- are the same observation from here, and the probe says so rather than
