@@ -69,8 +69,28 @@ end
 --------------------------------------------------------------------------------
 
 -- Whether an item is a commodity decides how to read its price, and the answer
--- never changes, so it is memoised for the session.
-local commodityCache = {}
+-- never changes for an item, so it is kept in the database and travels with
+-- it. It used to live only for the session, and only for items you happened
+-- to be holding: every craft you had not made yet was priced as an item
+-- auction, whole-silver step included, so a 45c commodity showed as 1s.
+local sessionCommodity = {}
+
+local function CommodityStore()
+    if not ns.db then return sessionCommodity end
+    ns.db.commodity = ns.db.commodity or {}
+    return ns.db.commodity
+end
+
+-- Items looked for in the bags and not found, cleared whenever the bags
+-- change and never trusted for long in case that event is missed. A full
+-- scan asked about every row, and for anything not held that was a walk of
+-- every bag slot per row.
+local notHeld = {}
+local NOT_HELD_SECONDS = 10
+
+function Scanner:ForgetNotHeld()
+    notHeld = {}
+end
 
 --- Find an item in the bags, as an ItemLocation.
 --
@@ -112,31 +132,68 @@ end
 -- On this client GetItemCommodityStatus takes an ItemLocation. An item ID, an
 -- item link and an item key are all rejected with "bad argument #1", which a
 -- pcall turns into a silent "not a commodity" for everything.
-function Scanner:IsCommodity(itemID)
-    local cached = commodityCache[itemID]
-    if cached ~= nil then return cached end
+function Scanner:IsCommodity(itemID, location)
+    return self:GetCommodityStatus(itemID, location) == true
+end
+
+--- Commodity or not, or nil when nobody has been able to say yet.
+--
+-- Three answers rather than two, because "not known" and "not a commodity"
+-- want different handling from anything estimating a price: the second is a
+-- whole-silver item auction, the first is a guess either way.
+--
+-- @param location  optional ItemLocation the caller already holds, as the
+--   posting path does. It is asked about directly, so a listing never
+--   depends on the bag memo below being fresh.
+function Scanner:GetCommodityStatus(itemID, location)
+    if not itemID then return nil end
+
+    local known = CommodityStore()[itemID]
+    if known ~= nil then return known end
 
     if not Util.HasFunction("C_AuctionHouse.GetItemCommodityStatus") then
-        return false
+        return nil
     end
 
-    local location = LocateInBags(itemID)
     if not location then
-        -- Not held, so there is nothing to ask about. Deliberately not cached:
-        -- the answer becomes available as soon as one is in your bags.
-        return false
+        local missedAt = notHeld[itemID]
+        if missedAt and (GetTime() - missedAt) < NOT_HELD_SECONDS then return nil end
+
+        location = LocateInBags(itemID)
+        if not location then
+            -- Not held, so there is nothing to ask about. Remembered only
+            -- briefly: the answer becomes available as soon as one is in
+            -- the bags.
+            notHeld[itemID] = GetTime()
+            return nil
+        end
     end
 
     local ok, status = pcall(C_AuctionHouse.GetItemCommodityStatus, location)
     if not ok then
-        ns.Warn("this client would not report commodity status; posting may use the wrong call.")
-        return false
+        if not self.warnedCommodityStatus then
+            self.warnedCommodityStatus = true
+            ns.Warn("this client would not report commodity status; posting may use the wrong call.")
+        end
+        return nil
     end
 
     local result = (status == COMMODITY_STATUS)
 
-    commodityCache[itemID] = result
+    self:LearnCommodity(itemID, result)
     return result
+end
+
+--- Remember what a search or the client said about an item.
+--
+-- A targeted search answers through one of two events, and which one is the
+-- status: a commodity's book arrives as COMMODITY_SEARCH_RESULTS_UPDATED and
+-- an item auction's as ITEM_SEARCH_RESULTS_UPDATED. So the status can be
+-- learned for something you have never held, which is most of what the
+-- Profit tab is pricing.
+function Scanner:LearnCommodity(itemID, isCommodity)
+    if not itemID or type(isCommodity) ~= "boolean" then return end
+    CommodityStore()[itemID] = isCommodity
 end
 
 --------------------------------------------------------------------------------
@@ -451,6 +508,40 @@ function Scanner:OnBrowseResults()
     self:CommitBrowseResults(results)
 end
 
+--- Read one browse row into a rival price and an own price.
+--
+-- A browse row is one price for the whole item, and its only clue about
+-- ownership is containsOwnerItem, which means "you have at least one listing
+-- of this item among these results". It does NOT mean the cheapest listing
+-- is yours, and reading it that way is how a rival who had undercut you got
+-- recorded as you: rivalMin went to nil, the Profit tab said you held the
+-- lowest, and the listing sat.
+--
+-- So the flag is settled against your own auctions as last read back: the
+-- row is yours only when you have this item listed at exactly that price.
+-- Otherwise the price is a rival's, and your own price is whatever is known.
+-- A rival known to be above your price stays, since the row does not
+-- contradict it. When your auctions have never been read the row counts as
+-- a rival's: undercutting yourself by a silver costs less than never
+-- undercutting anybody.
+local function SplitBrowseRow(itemID, price, ownerFlag)
+    if ownerFlag ~= true then return price, nil end
+
+    local own = ns.Auctions and ns.Auctions.GetOwnMinPrice
+        and ns.Auctions:GetOwnMinPrice(itemID) or nil
+    local record = ns.Prices.Get and ns.Prices:Get(itemID) or nil
+
+    if own and own == price then
+        local rival = record and record.rivalMin
+        if rival and rival > price then return rival, price end
+        return nil, price
+    end
+
+    return price, own or (record and record.ownMin) or nil
+end
+
+Scanner.SplitBrowseRow = SplitBrowseRow
+
 function Scanner:CommitBrowseResults(results)
     if self.browseTimeout then
         self.browseTimeout:Cancel()
@@ -469,21 +560,9 @@ function Scanner:CommitBrowseResults(results)
 
         if itemID and price and price > 0 then
             -- A browse row is one price, not a book, so market and minimum are
-            -- the same figure here. containsOwnerItem is the only clue about
-            -- whose listing it is: when it is yours, the cheapest rival is
-            -- genuinely unknown rather than equal to this.
-            --
-            -- Spelled out in an if rather than `mine and nil or price`, which
-            -- was here and does not work: `and` returning nil falls straight
-            -- through to the `or`, so every row of your own recorded YOU as
-            -- the cheapest rival -- and the next listing undercut it.
-            local rivalMin, ownMin
-
-            if result.containsOwnerItem == true then
-                ownMin = price
-            else
-                rivalMin = price
-            end
+            -- the same figure here. Whose price it is goes through
+            -- SplitBrowseRow, and the reasons are on that function.
+            local rivalMin, ownMin = SplitBrowseRow(itemID, price, result.containsOwnerItem)
 
             ns.Prices:Record(itemID, price, price, result.totalQuantity or 0, now,
                 rivalMin, ownMin)
@@ -713,8 +792,15 @@ function Scanner:ScanItem(itemID, callback)
         return true
     end
 
-    -- A new search supersedes the old one, timer and all.
+    -- A new search supersedes the old one, timer and all. Whoever was waiting
+    -- on the old one is told so now: dropped silently, its five-second
+    -- fallback fired and listed at a price nobody had checked.
+    local superseded = self.pendingItem
     self:ClearSearchState()
+
+    if superseded and superseded.callback then
+        superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
+    end
 
     self.pendingItem = { itemID = itemID, itemKey = itemKey, callback = callback }
 
@@ -884,13 +970,7 @@ function Scanner:CapturePassiveBrowse()
             -- One price per row, not a book, so market and minimum are the
             -- same figure -- the same reading CommitBrowseResults makes of the
             -- same rows, ownership included.
-            local rivalMin, ownMin
-
-            if result.containsOwnerItem == true then
-                ownMin = price
-            else
-                rivalMin = price
-            end
+            local rivalMin, ownMin = SplitBrowseRow(itemID, price, result.containsOwnerItem)
 
             if self:RecordPassive(itemID, price, price, result.totalQuantity or 0,
                 rivalMin, ownMin) then
@@ -1027,6 +1107,9 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
     -- under that item's name.
     self.lastItemListings = { itemID = itemID, raw = raw, isCommodity = true }
 
+    -- A book of unit-priced listings only ever comes back for a commodity.
+    if #listings > 0 then self:LearnCommodity(itemID, true) end
+
     if not ours then
         self:CapturePassiveListings(itemID, listings)
         return
@@ -1094,6 +1177,10 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     end
 
     self.lastItemListings = { itemID = itemID, raw = raw }
+
+    -- A listing with a stack buyout is an item auction, so the item is not a
+    -- commodity, and that is now known without ever holding one.
+    if #listings > 0 then self:LearnCommodity(itemID, false) end
 
     if not ours then
         self:CapturePassiveListings(itemID, listings)
@@ -1202,6 +1289,10 @@ function Scanner:OnEnable()
     ns.RegisterEvent(self, "AUCTION_HOUSE_BROWSE_RESULTS_ADDED", self.OnBrowseResults)
     ns.RegisterEvent(self, "COMMODITY_SEARCH_RESULTS_UPDATED", self.COMMODITY_SEARCH_RESULTS_UPDATED)
     ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", self.ITEM_SEARCH_RESULTS_UPDATED)
+
+    -- What is and is not in the bags is only worth remembering until they
+    -- change.
+    ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", self.ForgetNotHeld)
 end
 
 --------------------------------------------------------------------------------

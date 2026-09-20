@@ -47,24 +47,40 @@ end
 -- profit setting. Anything the profit cannot be worked out for matches, since
 -- the unknown case is the one where giving gold away is least defensible.
 --
--- @return price, basis, why  -- basis is "undercut", "match" or "market", and
---   nil price when there is nothing to go on. why is a sentence explaining a
---   match, since "match" alone does not say whether undercutting was rejected
---   on the numbers or never costed at all.
+-- @return price, basis, why, uncertain  -- basis is "undercut", "match" or
+--   "market", and nil price when there is nothing to go on. why is a sentence
+--   explaining a match, since "match" alone does not say whether undercutting
+--   was rejected on the numbers or never costed at all. uncertain is true
+--   when the item's commodity status is not known, see below.
 function Profit:ChoosePostPrice(itemID)
     if not itemID then return nil, nil end
 
     -- "rival" excludes your own auctions, so listing a second one does not
     -- undercut the first.
     local rival = ns.Prices:GetValue(itemID, "rival")
-    local isCommodity = ns.Scanner:IsCommodity(itemID)
+
+    -- true, false or nil. Nil is something never held and never searched
+    -- for, which is most crafts not yet made, and it is priced WITHOUT the
+    -- whole-silver step: the step floors anything under a silver up to one,
+    -- so guessing "item auction" overstated a cheap commodity's revenue by
+    -- up to double, while guessing "commodity" only understates an item
+    -- auction's by the silver it would be rounded to.
+    local status
+    if ns.Scanner.GetCommodityStatus then
+        status = ns.Scanner:GetCommodityStatus(itemID)
+    else
+        status = ns.Scanner:IsCommodity(itemID)
+    end
+
+    local isCommodity = status ~= false
+    local uncertain = status == nil
 
     if not rival then
         local market = ns.Prices:GetValue(itemID, "market")
         if not market then return nil, nil end
 
         market = math.max(1, math.floor(market))
-        if isCommodity then return market, "market" end
+        if isCommodity then return market, "market", nil, uncertain end
 
         return Util.RoundToSilver(market), "market"
     end
@@ -72,7 +88,7 @@ function Profit:ChoosePostPrice(itemID)
     local undercut = ns.Config:Get("undercutCopper") or 1
 
     if isCommodity then
-        return math.max(1, math.floor(rival - undercut)), "undercut"
+        return math.max(1, math.floor(rival - undercut)), "undercut", nil, uncertain
     end
 
     local matchPrice = Util.RoundToSilver(rival)
@@ -250,9 +266,13 @@ function Profit:Analyse(recipeID, characterKey)
     -- shown here is the profit of the listing that would actually be made.
     -- On an item auction that may be a match rather than an undercut, because
     -- the server will not take a price with copper in it.
-    local unitRevenue, basis = self:ChoosePostPrice(recipe.outputItemID)
+    local unitRevenue, basis, _, uncertain = self:ChoosePostPrice(recipe.outputItemID)
 
     analysis.priceBasis = basis
+    -- Set when nobody has been able to say whether the output sells as a
+    -- commodity or an item auction, so the price above is the plain undercut
+    -- and may round to a silver when it is actually listed.
+    analysis.priceUncertain = uncertain or nil
 
     if competitor then
         analysis.competitorPrice = competitor

@@ -48,6 +48,12 @@ ns.Config = {
 ns.db = {}
 ns.AHQueue = { PRIORITY = { urgent = 10, normal = 50, scan = 90 } }
 
+-- Your own auctions as last read back. A browse row's owner flag only says
+-- you have SOME listing of the item among the results, so it is settled
+-- against these: yours when you have it listed at exactly that price.
+local ownListings = {}
+ns.Auctions = { GetOwnMinPrice = function(_, itemID) return ownListings[itemID] end }
+
 -- WoW globals the scanner touches. Anything that would SEND a request is
 -- recorded rather than stubbed silently, so the test can assert on it.
 time = time or os.time
@@ -95,6 +101,7 @@ local function reset()
     Scanner.pendingItem = nil
     Scanner.isBrowsing = false
     settings.learnFromSearches = true
+    for k in pairs(ownListings) do ownListings[k] = nil end
 end
 
 local checks = 0
@@ -111,6 +118,7 @@ print("\npassive capture from the player's own searches")
 --------------------------------------------------------------------------------
 
 reset()
+ownListings[5498] = 900
 browseResults = {
     { itemKey = { itemID = 2589 }, minPrice = 30,  totalQuantity = 400 },
     { itemKey = { itemID = 4306 }, minPrice = 120, totalQuantity = 60 },
@@ -121,7 +129,7 @@ Scanner:OnBrowseResults()
 
 check("the player's browse is recorded", Prices:Get(2589) ~= nil and Prices:Get(2589).min == 30)
 check("every row is taken, not just the first", Prices:Get(4306) ~= nil)
-check("a row that is your own listing sets ownMin, not rivalMin",
+check("a row at the price you have it listed at sets ownMin, not rivalMin",
     Prices:Get(5498).ownMin == 900 and Prices:Get(5498).rivalMin == nil)
 check("a rival row sets rivalMin", Prices:Get(2589).rivalMin == 30)
 check("nothing was sent to the auction house", #sent == 0)
@@ -255,5 +263,48 @@ check("our own browse still commits through the scan path",
     Scanner.isBrowsing == false and Prices:Get(2589) ~= nil)
 check("and is not counted as learned from the player",
     (Scanner.passiveCount or 0) == 0)
+
+--------------------------------------------------------------------------------
+-- A rival who has undercut you
+--
+-- The row's owner flag is set because you have a listing of the item among
+-- the results; the cheapest price on the row is somebody else's. Reading the
+-- flag as "the cheapest is mine" erased that rival and said you held the
+-- lowest, and the listing sat.
+--------------------------------------------------------------------------------
+
+reset()
+ownListings[2996] = 500
+Prices:Record(2996, 500, 300, 40, time(), 300, 500)   -- a full scan had it right
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 300, totalQuantity = 40, containsOwnerItem = true },
+}
+
+Scanner:OnBrowseResults()
+
+check("the rival under you is still a rival", Prices:Get(2996).rivalMin == 300)
+check("and your own price is still yours", Prices:Get(2996).ownMin == 500)
+check("so you do not hold the lowest", not Prices:HoldsLowest(2996))
+
+-- Your auctions never read: the row counts as a rival's rather than erasing
+-- one. Undercutting yourself by a silver costs less than undercutting nobody.
+reset()
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 300, totalQuantity = 40, containsOwnerItem = true },
+}
+Scanner:OnBrowseResults()
+check("with your auctions unread the row is a rival's", Prices:Get(2996).rivalMin == 300)
+
+-- The cheapest listing is yours and a rival is known to sit above it: the
+-- row does not contradict that rival, so it stays.
+reset()
+ownListings[2996] = 300
+Prices:Record(2996, 500, 300, 40, time(), 500, 300)
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 300, totalQuantity = 40, containsOwnerItem = true },
+}
+Scanner:OnBrowseResults()
+check("a rival known to be above you is kept", Prices:Get(2996).rivalMin == 500)
+check("and you hold the lowest", Prices:HoldsLowest(2996))
 
 print(("\n%d check(s) passed\n"):format(checks))
