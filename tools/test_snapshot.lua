@@ -99,5 +99,71 @@ end
 Check("no file loaded from the TOC assigns the global at load",
     #assigners == 0, table.concat(assigners, " | "))
 
+--------------------------------------------------------------------------------
+-- 3. Filling the CVar store's gaps from the data addon.
+--
+-- Measured in game 2026-09-20: a /reload restored 2,109 bytes from CVars --
+-- the emptiness of a session that had itself started empty -- and that beat a
+-- data addon holding the whole price history, because the CVar branch came
+-- first and returned something. Neither store is chosen over the other now.
+--------------------------------------------------------------------------------
+
+local ns = { Util = {}, RegisterCommand = function() end }
+ns.NewModule = function(name)
+    ns[name] = {}
+    return ns[name]
+end
+loadfile("Core/Config.lua")("Blackthornes_TS", ns)
+local FillGaps = ns.Config.FillGaps
+
+Check("FillGaps is reachable", type(FillGaps) == "function", type(FillGaps))
+
+-- The shape of the failure: a store with the right keys and nothing under them.
+local fromCVars = {
+    schema = 1,
+    prices = { ["Classic Beta PvE 2-Horde"] = {} },
+    settings = { minProfit = 5000, valueOwnedMaterials = false },
+    queue = {},
+}
+
+local fromAddon = {
+    schema = 1,
+    prices = { ["Classic Beta PvE 2-Horde"] = {
+        [2589] = { market = 1234 }, [2592] = { market = 99 },
+    } },
+    settings = { minProfit = 100, auctionCut = 0.05 },
+    ledger = { { item = 2589, sold = 1 } },
+}
+
+local filled = FillGaps(fromCVars, fromAddon)
+
+Check("the gaps were filled", filled > 0, filled)
+Check("prices came from the data addon",
+    fromCVars.prices["Classic Beta PvE 2-Horde"][2589] ~= nil)
+Check("both prices came, not just the first",
+    fromCVars.prices["Classic Beta PvE 2-Horde"][2592] ~= nil)
+Check("a whole key the store lacked came too", fromCVars.ledger ~= nil)
+
+-- This is the half that matters more: the session's own work is not thrown
+-- away to get the history back.
+Check("this session's setting is kept, not overwritten",
+    fromCVars.settings.minProfit == 5000, fromCVars.settings.minProfit)
+Check("a false this session survives a true in the addon",
+    fromCVars.settings.valueOwnedMaterials == false,
+    tostring(fromCVars.settings.valueOwnedMaterials))
+Check("a setting only the addon had is filled in",
+    fromCVars.settings.auctionCut == 0.05, tostring(fromCVars.settings.auctionCut))
+
+-- And the ordinary case, where the session is the fresher of the two: a real
+-- price this session must not be replaced by the addon's older one.
+local live = { prices = { R = { [2589] = { market = 5000 } } } }
+FillGaps(live, { prices = { R = { [2589] = { market = 1 }, [2592] = { market = 7 } } } })
+Check("a price this session already had is untouched",
+    live.prices.R[2589].market == 5000, live.prices.R[2589].market)
+Check("and one it did not have is added", live.prices.R[2592].market == 7)
+
+Check("filling twice adds nothing the second time",
+    FillGaps(fromCVars, fromAddon) == 0)
+
 print(failures == 0 and "\nall snapshot hand-off tests passed" or ("\n" .. failures .. " failure(s)"))
 if failures > 0 then error(failures .. " snapshot hand-off failure(s)") end
