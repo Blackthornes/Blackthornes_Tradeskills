@@ -298,6 +298,10 @@ function UI:OnRecipesUpdated()
     ns.Cost:InvalidateIndex()
     self:UpdateHeader()
     self:RefreshActiveTab()
+
+    -- The craft pane lists what the profession window is showing, and the
+    -- cache it reads from fills in over several frames after that window opens.
+    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
 end
 
 function UI:OnInventoryUpdated()
@@ -307,6 +311,9 @@ function UI:OnInventoryUpdated()
     if self.postButton and self.postButton:IsVisible() then
         self:UpdatePostButton()
     end
+
+    -- And changes how many of each craft the materials still cover.
+    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
 end
 
 function UI:RefreshActiveTab()
