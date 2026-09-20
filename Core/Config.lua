@@ -145,6 +145,16 @@ local DEFAULTS = {
     -- the mailbox. See Data/Mail.lua.
     mailLedger = {},
 
+    -- realmKey -> when the history restored from macro storage was rolled up
+    -- to. Ledger entries from before that moment are already inside it. See
+    -- Core/Durable.lua.
+    sellThroughRolledAt = {},
+
+    -- itemID -> true when the auction house sells it by the unit. Learned from
+    -- the client when one is held and from searches otherwise; it never
+    -- changes for an item, so it is kept. See Scanner:GetCommodityStatus.
+    commodity = {},
+
     -- Written by Core/Compat.lua and Probe/Probe.lua.
     probe = {
         loadCount = 0,
@@ -255,12 +265,21 @@ local function FillOverDefaults(target, source, defaults, depth)
 
     for key, value in pairs(source) do
         local mine = target[key]
-        local fallback = type(defaults) == "table" and defaults[key] or nil
+
+        -- Not `defaults[key] or nil`: a default of false is a default, and
+        -- that idiom turned it into "no default", so a setting that is off by
+        -- default and stored as on was read as deliberately chosen and never
+        -- restored. Measured with allowPostingAtALoss.
+        local fallback, hasDefault
+        if type(defaults) == "table" then
+            fallback = defaults[key]
+            hasDefault = fallback ~= nil
+        end
 
         if type(mine) == "table" and type(value) == "table" then
             filled = filled + FillOverDefaults(mine, value, fallback, depth + 1)
 
-        elseif mine == nil or (fallback ~= nil and mine == fallback) then
+        elseif mine == nil or (hasDefault and mine == fallback) then
             -- Writing the same value back is not a restore; only a real change
             -- is worth counting, so the report cannot overstate what happened.
             if mine ~= value then

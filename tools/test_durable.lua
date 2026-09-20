@@ -558,5 +558,87 @@ Check("repeated changes coalesce into one pending write", Durable.soonTimer == f
 Check("and only one timer is pending", RunTimers() == 1, "more than one")
 Check("which wrote the newer queue", StoredQueueCount() == 1, StoredQueueCount())
 
+--------------------------------------------------------------------------------
+-- 8. A setting that is off by default and was turned on.
+--
+-- FillOverDefaults read the default with `defaults[key] or nil`, which turns a
+-- default of false into "no default". A value still at false then looked
+-- deliberately chosen and the stored true never went in. Measured with
+-- allowPostingAtALoss on 2026-09-20; section 5b only ever checked the other
+-- direction.
+--------------------------------------------------------------------------------
+
+ns.MacroStore:ClearData()
+ns.db = { settings = WithDefaults({ allowPostingAtALoss = true }), queue = {}, sellThrough = {} }
+Durable.lastPayload, Durable.lastSaveAt = nil, nil
+Check("a session that turned a default-off setting on saves", (Durable:SaveIfChanged(true)))
+
+ns.db = { settings = WithDefaults(), queue = {}, sellThrough = {} }
+Durable.restoredFrom = nil
+Durable:Restore()
+Check("a chosen true beats a default of false",
+    ns.db.settings.allowPostingAtALoss == true, tostring(ns.db.settings.allowPostingAtALoss))
+
+--------------------------------------------------------------------------------
+-- 9. One sale, one /reload, counted once.
+--
+-- The CVar store carries the ledger across a /reload, and Restore runs again
+-- at PLAYER_LOGIN with a payload that already has that sale rolled into it.
+-- Before the cutoff stamp, the sale was counted on both sides: sold 1 became
+-- sold 2 after the reload, and 2 was what the next logout wrote.
+--------------------------------------------------------------------------------
+
+ns.MacroStore:ClearData()
+clock = 1758000000
+ns.db = { settings = WithDefaults(), queue = {}, sellThrough = {},
+    mailLedger = { [REALM] = { entries = {
+        { kind = "sold", itemID = 2589, quantity = 20, net = 5000, t = clock - 100 },
+    }, seen = {} } } }
+Durable.lastPayload, Durable.lastSaveAt = nil, nil
+Check("session with one sale saves", (Durable:SaveIfChanged(true)))
+Check("before the reload: sold once", Durable:BuildRollup(REALM)[2589].sold == 1)
+
+-- /reload: same database back, Restore runs again.
+Durable.restoredFrom = nil
+Durable:Restore()
+local after = Durable:BuildRollup(REALM)[2589]
+Check("after the reload: still sold once", after.sold == 1 and after.soldUnits == 20,
+    ("sold=%d units=%d"):format(after.sold, after.soldUnits))
+Check("the ledger entry is known to be inside the restored history",
+    Durable:IsRolledUp(ns.db.mailLedger[REALM].entries[1], REALM))
+
+-- A second sale after the reload, then a logout save and a cold start where
+-- the data addon hands the ledger back too.
+clock = clock + 600
+ns.db.mailLedger[REALM].entries[2] =
+    { kind = "sold", itemID = 2589, quantity = 20, net = 5000, t = clock - 10 }
+Check("a sale after the reload counts", Durable:BuildRollup(REALM)[2589].sold == 2)
+Durable.lastPayload = nil
+Check("logout save", (Durable:SaveIfChanged(true)))
+
+local snapshotLedger = ns.db.mailLedger
+local snapshotHistory = ns.db.sellThrough
+local snapshotRolledAt = ns.db.sellThroughRolledAt
+ns.db = { settings = WithDefaults(), queue = {}, sellThrough = snapshotHistory,
+    sellThroughRolledAt = snapshotRolledAt, mailLedger = snapshotLedger }
+Durable.restoredFrom = nil
+Durable:Restore()
+local cold = Durable:BuildRollup(REALM)[2589]
+Check("a cold start with the ledger handed back still says two",
+    cold.sold == 2 and cold.soldUnits == 40, ("sold=%d units=%d"):format(cold.sold, cold.soldUnits))
+
+-- A sale recorded in the same second as the save, after the payload was built,
+-- is not lost: the payload counts entries up to its stamp only, and the stamp
+-- is the line, so an entry stamped one second later still counts next time.
+clock = clock + 600
+Durable.lastPayload = nil
+Durable:SaveIfChanged(true)
+ns.db.mailLedger[REALM].entries[3] =
+    { kind = "sold", itemID = 2589, quantity = 1, net = 100, t = clock + 1 }
+Durable.restoredFrom = nil
+Durable:Restore()
+Check("a sale just after a save is counted once, not lost",
+    Durable:BuildRollup(REALM)[2589].sold == 3, Durable:BuildRollup(REALM)[2589].sold)
+
 print(failures == 0 and "\nall durable storage tests passed" or ("\n" .. failures .. " failure(s)"))
 if failures > 0 then error(failures .. " durable storage failure(s)") end

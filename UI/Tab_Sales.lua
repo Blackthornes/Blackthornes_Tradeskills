@@ -451,7 +451,17 @@ local function CarriedOver()
         carried = carried + (record.sold or 0)
     end
 
-    return carried
+    -- Sales rolled into the history during this session are in the list as
+    -- well, so they are not "carried over from before".
+    if ns.Durable.IsRolledUp then
+        for _, entry in ipairs(ns.Mail:GetLedger().entries) do
+            if entry.kind == "sold" and ns.Durable:IsRolledUp(entry) then
+                carried = carried - 1
+            end
+        end
+    end
+
+    return math.max(0, carried)
 end
 
 --------------------------------------------------------------------------------
