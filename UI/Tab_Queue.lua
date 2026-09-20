@@ -475,6 +475,10 @@ UI:RegisterTab({
 })
 
 function UI:OnQueueUpdated()
+    -- The craft pane beside the profession window shows the same queue, and
+    -- is usually the thing that just changed it.
+    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
+
     if self.activeTab == "queue" then
         Refresh()
     else
