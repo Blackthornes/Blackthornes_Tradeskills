@@ -171,6 +171,66 @@ function AHQueue:WhyNotReady(priority)
     return nil
 end
 
+--- How long until a request of this priority could be sent.
+--
+-- The companion to WhyNotReady, which says why a request is waiting but not
+-- how much longer. Nothing in game could answer that, so a paced post looked
+-- like a button that had quietly stopped working.
+--
+-- The gates are simultaneous conditions rather than a sequence, so the wait is
+-- the longest of them, not the first one found.
+--
+-- Two of them have no knowable end: the client's own throttle is a yes or no
+-- with no duration attached, and the player's sell frame closes when they close
+-- it. Those return a reason with no seconds rather than a number that would be
+-- a guess. A caller showing a countdown should fall back to words when the
+-- seconds run out and a reason is still coming back.
+--
+-- @return seconds, reason
+--   0, nil       clear to send
+--   n, reason    waiting, and the wait has n seconds left
+--   0, reason    waiting on something with no knowable length
+function AHQueue:SecondsUntilReady(priority)
+    priority = priority or self.PRIORITY.normal
+
+    local now = GetTime()
+    local seconds, reason = 0, nil
+
+    local function Consider(left, why)
+        if left <= 0 then return end
+        if left > seconds then seconds, reason = left, why end
+    end
+
+    if now < self.backoffUntil then
+        Consider(self.backoffUntil - now, "a message was dropped")
+    end
+
+    if priority > URGENT_LIMIT and now < self.standDownUntil then
+        Consider(self.standDownUntil - now, "a listing is settling")
+    end
+
+    Consider(MIN_SPACING - (now - self.lastSend), "pacing our own requests")
+
+    -- Pruned first, so entry one is the oldest send still inside the window and
+    -- the moment it falls out is the moment a slot frees up.
+    if self:RecentSendCount() >= BUDGET_MAX and self.sendTimes[1] then
+        Consider((self.sendTimes[1] + BUDGET_WINDOW) - now,
+            "leaving the auction house room for you")
+    end
+
+    -- No duration to offer for either of these, so they only set a reason and
+    -- only when nothing with a real countdown is already waiting longer.
+    if not self:ClientReady() then
+        reason = reason or "the auction house is still catching up"
+    end
+
+    if priority > URGENT_LIMIT and self:PlayerIsSelling() then
+        reason = reason or "your own sell window is open"
+    end
+
+    return seconds, reason
+end
+
 --- Stand down for a while: the player needs the channel more than we do.
 --
 -- Background work waits; anything the player clicked still goes, paced and
