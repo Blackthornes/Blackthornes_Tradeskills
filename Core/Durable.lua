@@ -419,6 +419,22 @@ function Durable:Report()
         Line("restored", "nothing this session")
     end
 
+    -- An outcome, not an attempt. The line above counts what the restore put
+    -- into the database; this counts what is in there now, after everything
+    -- else has had its turn. They disagreed once, and the attempt was the
+    -- line that looked healthy.
+    local differ, defaults = 0, ns.Config.DEFAULTS and ns.Config.DEFAULTS.settings
+
+    if defaults and ns.db and ns.db.settings then
+        for key, value in pairs(defaults) do
+            if ns.db.settings[key] ~= nil and ns.db.settings[key] ~= value then
+                differ = differ + 1
+            end
+        end
+    end
+
+    Line("settings now", ("%d differ from their defaults"):format(differ))
+
     local payload = self:Build()
     if payload then
         Line("next save", ("%s characters, %d macro(s)")
