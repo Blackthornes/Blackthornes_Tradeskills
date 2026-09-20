@@ -53,6 +53,63 @@ the global `BlackthornesTSSnapshot`. Addon files load normally on this client,
 so this is the one mechanism known to work. `tools\play.ps1` runs it and then
 starts the game, which puts the hand-off in the only gap where it fits.
 
+## How the established auction addons do it
+
+Checked against current sources, September 2026, because the answer decides
+whether any of the above is necessary.
+
+**All of them use SavedVariables, and none of them has a second channel.**
+Auctionator and RECrystallize store plain uncompressed Lua tables.
+Auctioneer's `Auc-ScanData` packs its image into Lua *source text* through a
+`StringRope`, chunked at `2^22` bytes, and culls anything older than 30 days
+— for load time, not disk size. TSM3 keeps a whole realm's scan as one
+serialised string in `TSM.db.realm.scanData`; TSM4 embeds LibDeflate and
+LibSerialize. Archivist exists purely to compress large data into
+SavedVariables. There is no native compression and Blizzard has not added
+any.
+
+**The one exception is the model this addon now uses.** TSM's desktop
+application does not write SavedVariables. It rewrites
+`TradeSkillMaster_AppHelper\AppData.lua` — an ordinary Lua source file in the
+addon's load order — and the addon reads the global it defines, then nils it.
+Two independent projects on this same Forever build reached the same design
+from the other direction: `forever-addon-kit` and `forever-addon-dev` both
+copy the client's written SavedVariables into seed files that run as addon
+code before the real addon loads. `Blackthornes_TS_Data` is that pattern.
+
+**CVars were never going to work.** warcraft.wiki.gg on
+`C_CVar.RegisterCVar`: registered CVars "will persist after relogging/
+reloading but not after closing the game". `forever-addon-kit` measured the
+same thing on build 1.60.1: registered CVars survive `/reload` but never
+reach `config-cache.wtf`, even after a clean logout. So the symptom is
+documented behaviour, not a Forever bug.
+
+**Macros are the one in-game store that does survive a cold start here** —
+server-side since patch 3.0.2, and measured surviving on this build. The
+ceiling is small: 255 characters of body, 16 of name, 120 account-wide plus
+18 per character, so about 30KB in total, and it spends the player's own
+macro slots. Enough for settings, nowhere near enough for a price database.
+`ForeverCDM` in `forever-addon-kit` is a working implementation to copy if
+settings ever need to outlive a restart on their own.
+
+**Worth ruling out before building anything further:** `forever-quest-markers`
+reports the saved global arriving *late* rather than never, and got
+persistence working by binding it in place at `PLAYER_LOGIN` instead of
+creating one at `ADDON_LOADED`, preferring the per-character table.
+`Config:CheckLateSavedVariables` now watches for exactly that and says so.
+If it ever fires, the CVar store and the data addon both become unnecessary.
+
+Sources: [C_CVar.RegisterCVar](https://warcraft.wiki.gg/wiki/API_C_CVar.RegisterCVar) ·
+[Console variables](https://warcraft.wiki.gg/wiki/Console_variables) ·
+[CreateMacro](https://warcraft.wiki.gg/wiki/API_CreateMacro) ·
+[WoWUIBugs #410](https://github.com/Stanzilla/WoWUIBugs/issues/410) ·
+[forever-addon-kit](https://github.com/Thunderz96/forever-addon-kit) ·
+[forever-addon-dev](https://github.com/imperial64/forever-addon-dev) ·
+[forever-bugs #34](https://github.com/ClassicWoWCommunity/forever-bugs/issues/34) ·
+[TSM AppHelper toc](https://github.com/ddrobner/wow-addons/blob/master/TradeSkillMaster_AppHelper/TradeSkillMaster_AppHelper.toc) ·
+[Auc-ScanData](https://github.com/nanenj/wow-addons/blob/master/Auc-ScanData/ScanData.lua) ·
+[Archivist](https://github.com/Stanzilla/Archivist)
+
 ## Gotchas found in real data
 
 **`GetProfessionInfo` does not exist.** Use `GetProfessionInfoBySkillLineID` or

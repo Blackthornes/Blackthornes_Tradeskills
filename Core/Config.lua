@@ -261,6 +261,13 @@ function Config:Bootstrap()
     ns.db = db
     ns.charDb = _G.BlackthornesTSCharDB
 
+    -- Kept so OnEnable can tell whether the client replaced the global after
+    -- we installed ours. One report from another addon on this build has the
+    -- saved table arriving late rather than never; if that happens here, this
+    -- is what notices instead of quietly running on an empty database beside
+    -- a full one.
+    self.installedDB = db
+
     self:StampCanary(db)
     self:StampCVarCanary()
 
@@ -279,6 +286,8 @@ end
 -- there, and a price history is not the thing to bet on this client honouring
 -- a load-order hint. Checking again costs one type() call.
 function Config:OnEnable()
+    self:CheckLateSavedVariables()
+
     if not self.freshDatabase then return end
     if type(_G.BlackthornesTSSnapshot) ~= "table" then return end
 
@@ -310,6 +319,22 @@ function Config:OnEnable()
     if ns.Persist then ns.Persist:RestoreSettings() end
 
     ns.Print("seeded the database from the local data addon.")
+end
+
+--- Did the client hand the saved table back after ADDON_LOADED?
+--
+-- Worth a look because it would change everything: if the saved variables are
+-- late rather than absent, none of the rest of this is needed. It is reported
+-- and never acted on -- swapping the live database out from under modules
+-- that already hold a reference would be a worse bug than the one it fixes.
+function Config:CheckLateSavedVariables()
+    local current = _G.BlackthornesTSDB
+
+    if type(current) == "table" and self.installedDB and current ~= self.installedDB then
+        self.loadDiagnostics.lateSavedVariables = true
+
+        ns.Warn("the client handed back its saved database after login, not at load. That is worth reporting -- run /bts persist.")
+    end
 end
 
 --- Schema migrations. Each step upgrades one version to the next.

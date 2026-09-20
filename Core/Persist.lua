@@ -2,10 +2,28 @@
 -- Keeping settings across sessions on a client that loses SavedVariables.
 --
 -- This build writes SavedVariables at logout and never reads them back, so
--- every session starts empty. CVars survive the same cold start -- measured,
--- not assumed: /bts probe registers a session counter and reports whether it
--- grew. Settings are small scalars, so they fit; prices and recipes do not,
--- and those rebuild themselves instead.
+-- every session starts empty.
+--
+-- CVars do NOT cover that. They survive a /reload and a trip to character
+-- select, and nothing further: neither ends the client process, so a value
+-- that never leaves memory is indistinguishable from one the client keeps.
+-- The wiki says as much of C_CVar.RegisterCVar -- registered CVars "persist
+-- after relogging/reloading but not after closing the game" -- and an
+-- independent measurement on this build found they never reach
+-- config-cache.wtf at all. The session counter that once read as proof of
+-- persistence had only ever been read inside one process.
+--
+-- So this file is the within-session cache, and it is genuinely worth having:
+-- a /reload is the common case and it keeps a scan. What crosses a restart is
+-- the generated Blackthornes_TS_Data addon; see Data/Snapshot.lua.
+--
+-- One hazard, for whoever revisits the chunk size. On a client that does
+-- persist registered CVars, Blizzard's own writer corrupts Config.wtf from
+-- about 3KB per value upward -- the value is truncated unterminated and the
+-- following entries merge onto its line (WoWUIBugs #410, acknowledged). This
+-- store writes 8 x 60KB. That is harmless only for as long as these CVars
+-- never reach disk on this client. If that ever changes, cap the chunk well
+-- below 3KB or drop the mechanism; do not raise it.
 --
 -- Only keys in Config.DEFAULTS.settings are mirrored. A CVar is global client
 -- state that outlives the addon, so writing arbitrary keys into it would leave
@@ -731,6 +749,10 @@ function Persist:Report()
 
     Line("saved variables", ("account %s, per-character %s"):format(
         diagnostics.globalType or "nil", diagnostics.charGlobalType or "nil"))
+
+    if diagnostics.lateSavedVariables then
+        Line("", "|c" .. ns.COLORS.warn .. "the client handed the saved table back after login|r")
+    end
 
     if peek.coldStart == true then
         Line("this login", "|c" .. ns.COLORS.warn .. "cold start -- the client restarted since the last save|r")
