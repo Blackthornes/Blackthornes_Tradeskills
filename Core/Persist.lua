@@ -771,8 +771,14 @@ function Persist:Report()
         and (("|c%sput back %d value(s) that registering had cleared|r"):format(ns.COLORS.warn, recovered))
         or "cleared nothing that was already there")
 
+    local diagnostics = (ns.Config and ns.Config.loadDiagnostics) or {}
+    local filled = diagnostics.filledFromSnapshot or 0
+
     if ns.Config and ns.Config.restoredFromCVars then
-        Line("restored from", ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
+        Line("restored from", filled > 0
+            and ("CVars, %s bytes, plus %s value(s) the data addon had and they did not")
+                :format(ns.Util.Comma(self.loadedBytes or 0), ns.Util.Comma(filled))
+            or ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
     elseif ns.Config and ns.Config.restoredFromSnapshot then
         Line("restored from", "the local data addon")
     elseif ns.Config and ns.Config.freshDatabase then
@@ -781,9 +787,19 @@ function Persist:Report()
         Line("restored from", "the client's own saved variables")
     end
 
-    Line("local data addon", type(_G.BlackthornesTSSnapshotSource) == "string"
-        and _G.BlackthornesTSSnapshotSource
-        or (_G.BlackthornesTSSnapshot ~= nil and "loaded" or "not installed"))
+    -- Two separate facts on one line, because reading them apart is what took
+    -- a morning: which file is installed, and whether it handed anything over.
+    -- The file naming itself while handing over nothing was the whole bug.
+    local source = type(_G.BlackthornesTSSnapshotSource) == "string"
+        and _G.BlackthornesTSSnapshotSource or nil
+
+    if source then
+        Line("local data addon", diagnostics.snapshotSeen
+            and (source .. " -- handed a database over")
+            or (source .. " -- |c" .. ns.COLORS.warn .. "handed nothing over|r"))
+    else
+        Line("local data addon", "not installed")
+    end
 
     local last = self.lastSave
     Line("last save", last
