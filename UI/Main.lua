@@ -304,6 +304,19 @@ function UI:OnRecipesUpdated()
     if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
 end
 
+--- What you have listed on the auction house has changed.
+--
+-- Kept apart from OnInventoryUpdated because nothing in the bags moved, and
+-- because the craft pane needs telling. The pane ranks crafts by how many you
+-- already hold and hides the ones at their limit, so a reading taken when the
+-- auction house opened is no use to it if it is never told the number changed.
+function UI:OnAuctionsUpdated()
+    self:RefreshActiveTab()
+    self:UpdateHeader()
+
+    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
+end
+
 function UI:OnInventoryUpdated()
     self:RefreshActiveTab()
 

@@ -44,10 +44,24 @@ local QUEUED = {}
 
 ns.Recipes = { GetAll = function() return RECIPES end }
 
+-- The real one, copied rather than stubbed: how stock drags a craft down the
+-- order is the thing under test here, and a stub would only test the stub.
+local function RankValue(analysis, field)
+  local value = analysis[field]
+  if value == nil then return -math.huge end
+  if value > 0 then return value / (analysis.stockDivisor or 1) end
+  return value
+end
+
 ns.Profit = {
   Analyse = function(_, recipeID) return ANALYSIS[recipeID] end,
   GetCraftableCount = function(_, recipeID) return CRAFTABLE[recipeID] or 0 end,
+  _RankValue = RankValue,
 }
+
+local SETTINGS = { hideAtPostLimit = true }
+
+ns.Config = { Get = function(_, key) return SETTINGS[key] end }
 
 -- The queue in the order it would actually be worked through.
 local QUEUE_ORDER = {}
@@ -189,6 +203,128 @@ do
   check("and that order is by recipe ID", first[1].recipeID, 201)
 
   ns.Recipes.GetAll, ns.Profit.Analyse = realRecipes, realAnalyse
+end
+
+--------------------------------------------------------------------------------
+-- Stock you already hold
+--------------------------------------------------------------------------------
+
+-- The bug this pane shipped with: it read `profit` and nothing else, so nine
+-- of something already sitting on the auction house changed neither its place
+-- in the list nor whether it was offered at all.
+do
+  -- Copper Chain Belt pays less than the sharpening stone, but the stone is
+  -- one you already hold twenty of. Ranked on profit per unit of time rather
+  -- than profit, the belt is the better use of the next ten minutes.
+  ANALYSIS[102].stockDivisor = 21
+  ANALYSIS[102].stock, ANALYSIS[102].posted = 20, 18
+
+  check("stock you already hold sinks a craft down the order",
+    names(CraftPanel:GetRows({ sortBy = "profit" })),
+    "Copper Chain Belt, Rough Sharpening Stone, Brown Linen Shirt")
+
+  local row
+  for _, line in ipairs(CraftPanel:GetRows({})) do
+    if line.recipeID == 102 then row = line end
+  end
+
+  check("and the row carries it, so nothing is hidden by the order alone",
+    row.stock, 20)
+  check("with listings counted apart from the rest", row.posted, 18)
+
+  -- Name order is the escape hatch for finding one specific recipe, and it
+  -- must stay alphabetical whatever the stock penalty is doing.
+  check("name order is untouched by stock",
+    names(CraftPanel:GetRows({ sortBy = "name" })),
+    "Brown Linen Shirt, Copper Chain Belt, Rough Sharpening Stone")
+
+  ANALYSIS[102].stockDivisor, ANALYSIS[102].stock, ANALYSIS[102].posted = nil, nil, nil
+end
+
+-- A loss must not be promoted by already owning a pile of it. Dividing a
+-- negative by a larger divisor moves it toward zero, which would float the
+-- worst overstocked craft in the list to the top.
+do
+  ANALYSIS[101].profit = -5000
+  ANALYSIS[101].stockDivisor = 21
+
+  check("a loss is not promoted by holding a pile of it",
+    names(CraftPanel:GetRows({ sortBy = "profit" })),
+    "Rough Sharpening Stone, Copper Chain Belt, Brown Linen Shirt")
+
+  ANALYSIS[101].profit, ANALYSIS[101].stockDivisor = 5000, nil
+end
+
+--------------------------------------------------------------------------------
+-- The limit set in Settings
+--------------------------------------------------------------------------------
+
+do
+  ANALYSIS[102].atPostLimit = true
+  ANALYSIS[102].stock, ANALYSIS[102].postLimit, ANALYSIS[102].postRoom = 10, 10, 0
+
+  check("a craft at its limit is not suggested",
+    names(CraftPanel:GetRows({ sortBy = "profit" })),
+    "Copper Chain Belt, Brown Linen Shirt")
+
+  -- Searching for a recipe by name is not asking for a suggestion, and a pane
+  -- that swallowed the very thing you just typed would read as broken.
+  check("but searching for it by name still finds it",
+    names(CraftPanel:GetRows({ search = "sharpening" })), "Rough Sharpening Stone")
+
+  -- Turning the setting off is meant to show them marked, not hide them.
+  SETTINGS.hideAtPostLimit = false
+
+  check("with hiding turned off it is shown instead",
+    names(CraftPanel:GetRows({ sortBy = "profit" })),
+    "Rough Sharpening Stone, Copper Chain Belt, Brown Linen Shirt")
+
+  local row
+  for _, line in ipairs(CraftPanel:GetRows({})) do
+    if line.recipeID == 102 then row = line end
+  end
+
+  check("and marked, so it is obvious why it sits there", row.atPostLimit, true)
+  check("with no room left to queue into", row.roomInCrafts, 0)
+
+  SETTINGS.hideAtPostLimit = true
+
+  -- Room is in items but this pane queues crafts, and one craft can make
+  -- several. Twelve items of room on a recipe yielding five is two crafts,
+  -- not twelve -- that arithmetic is what turns a limit of 10 into 50.
+  ANALYSIS[102].atPostLimit = false
+  ANALYSIS[102].postRoom = 12
+  RECIPES[102].quantityMin = 5
+
+  local stone
+  for _, line in ipairs(CraftPanel:GetRows({})) do
+    if line.recipeID == 102 then stone = line end
+  end
+
+  check("room is converted from items into crafts", stone.roomInCrafts, 2)
+
+  -- Rounded down, but never to nothing: room left over should not refuse the
+  -- smallest thing you can actually make.
+  ANALYSIS[102].postRoom = 3
+
+  for _, line in ipairs(CraftPanel:GetRows({})) do
+    if line.recipeID == 102 then stone = line end
+  end
+
+  check("a part-craft of room still allows one", stone.roomInCrafts, 1)
+
+  -- No limit set at all is the default, and must stay entirely out of the way.
+  ANALYSIS[102].postRoom = nil
+  RECIPES[102].quantityMin = nil
+
+  for _, line in ipairs(CraftPanel:GetRows({})) do
+    if line.recipeID == 102 then stone = line end
+  end
+
+  check("no limit set means no clamp at all", stone.roomInCrafts, nil)
+
+  ANALYSIS[102].atPostLimit, ANALYSIS[102].stock = nil, nil
+  ANALYSIS[102].postLimit = nil
 end
 
 --------------------------------------------------------------------------------
