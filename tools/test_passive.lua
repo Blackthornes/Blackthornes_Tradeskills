@@ -34,6 +34,8 @@ ns.Util = {
     GetMaxStackSize = function() return 20 end,
     UnitPriceFromStack = function(_, buyout, quantity) return math.floor(buyout / (quantity or 1)) end,
     HasFunction = function(path) return path == "C_AuctionHouse.GetBrowseResults" end,
+    -- No queue here, so a follow-up search goes out at once.
+    WhenAuctionReady = function(action) action() end,
 }
 
 local settings = { learnFromSearches = true }
@@ -306,5 +308,53 @@ browseResults = {
 Scanner:OnBrowseResults()
 check("a rival known to be above you is kept", Prices:Get(2996).rivalMin == 500)
 check("and you hold the lowest", Prices:HoldsLowest(2996))
+
+--------------------------------------------------------------------------------
+-- A rival tied with you
+--
+-- Measured 2026-09-20: Trent at 63s and 64s, other sellers at 63s and 64s.
+-- The row reads 63s and yours; it cannot see the tie. A rival on record at
+-- your price is not contradicted by that row, so it stays.
+--------------------------------------------------------------------------------
+
+reset()
+ownListings[2996] = 6300
+Prices:Record(2996, 6300, 6300, 17, time(), 6300, 6300)   -- an exact search saw the tie
+browseResults = {
+    { itemKey = { itemID = 2996 }, minPrice = 6300, totalQuantity = 17, containsOwnerItem = true },
+}
+Scanner:OnBrowseResults()
+check("a rival tied at your price is kept", Prices:Get(2996).rivalMin == 6300)
+check("so a tie is not 'you hold the lowest'", not Prices:HoldsLowest(2996))
+check("a settled row sends nothing", #sent == 0)
+
+-- Nothing on record about rivals: the addon's own scan settles the row with an
+-- exact search, at background priority, rather than guessing either way.
+reset()
+ownListings[2996] = 6300
+Scanner.recentItemScans = nil
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2996 }, minPrice = 6300, totalQuantity = 17, containsOwnerItem = true },
+})
+check("an unsettled row leaves no rival rather than a wrong one", Prices:Get(2996).rivalMin == nil)
+check("and the addon's own scan follows it up with an exact search",
+    sent[1] == "SendSearchQuery" and Scanner.pendingItem and Scanner.pendingItem.itemID == 2996)
+
+-- The exact answer arrives with the tie in it.
+itemResults = {
+    { buyoutAmount = 6300, quantity = 1, containsOwnerItem = true },
+    { buyoutAmount = 6300, quantity = 1, containsOwnerItem = false },
+    { buyoutAmount = 6400, quantity = 1, containsOwnerItem = true },
+}
+Scanner:ITEM_SEARCH_RESULTS_UPDATED(nil, { itemID = 2996 })
+check("the follow-up records the tied rival", Prices:Get(2996).rivalMin == 6300
+    and Prices:Get(2996).ownMin == 6300)
+check("and the follow-up list is spent", Scanner.followUp == nil)
+
+-- The player's own browse never sends anything, unsettled rows included.
+reset()
+ownListings[2996] = 6300
+Scanner:OnBrowseResults()
+check("a passive browse still sends nothing", #sent == 0)
 
 print(("\n%d check(s) passed\n"):format(checks))
