@@ -122,8 +122,10 @@ local SORTS = {
         -- order, and burying them under a zero would be a lie about the money.
         if a.priceable ~= b.priceable then return a.priceable end
 
-        if a.priceable and a.profit ~= b.profit then
-            return a.profit > b.profit
+        -- Ranked, not raw. See RankOf below: a craft you already have nine of
+        -- listed is worth less right now than the number in the row says.
+        if a.priceable and a.rank ~= b.rank then
+            return a.rank > b.rank
         end
 
         if a.name ~= b.name then return a.name < b.name end
@@ -135,6 +137,43 @@ local SORTS = {
         return a.recipeID < b.recipeID
     end,
 }
+
+--- What a craft is worth *right now*, as against what one sells for.
+--
+-- The pane was sorting on raw profit, so a craft with nine already sitting on
+-- the auction house ranked level with an identical one you hold none of. It is
+-- not: the tenth only sells once the other nine have, so the gold comes back
+-- roughly ten times slower. The Profit tab has ranked this way since the stock
+-- penalty landed, and two lists answering "what should I make next" in
+-- different orders is worse than either order on its own.
+--
+-- Guarded rather than called outright so the pane still draws if the profit
+-- engine is ever loaded without it.
+local function RankOf(analysis)
+    if not analysis then return -math.huge end
+
+    local rank = ns.Profit and ns.Profit._RankValue
+    if rank then return rank(analysis, "profit") end
+
+    return analysis.profit or -math.huge
+end
+
+--- How much room the limit leaves, counted in crafts rather than in units.
+--
+-- The limit is a number of items, but this pane queues crafts, and one craft
+-- can produce several items. Clamping a craft count against a unit count is how
+-- a limit of ten turns into fifty Rough Sharpening Stones.
+--
+-- Rounded down, with a floor of one: a limit with any room left in it should
+-- never refuse the smallest thing you can actually make.
+local function RoomInCrafts(room, recipe)
+    if room == nil then return nil end
+    if room <= 0 then return 0 end
+
+    local perCraft = math.max(1, (recipe and recipe.quantityMin) or 1)
+
+    return math.max(1, math.floor(room / perCraft))
+end
 
 --- The rows to draw: one per recipe, with what it is worth and what is queued.
 --
@@ -160,16 +199,42 @@ function CraftPanel:GetRows(opts)
                 local analysis = ns.Profit:Analyse(recipeID)
                 local _, queued = ns.Queue:Find(recipeID, true)
 
-                rows[#rows + 1] = {
-                    recipeID = recipeID,
-                    name = name,
-                    outputItemID = recipe.outputItemID,
-                    priceable = (analysis and analysis.priceable) == true,
-                    profit = (analysis and analysis.profit) or 0,
-                    reason = analysis and analysis.reason or nil,
-                    craftable = ns.Profit:GetCraftableCount(recipeID) or 0,
-                    queued = (queued and queued.quantity) or 0,
-                }
+                local atLimit = (analysis and analysis.atPostLimit) == true
+
+                -- Already holding as many as the limit in Settings allows.
+                -- Suppressed here by the same setting as on the Profit tab,
+                -- because the pane's whole job is answering "what should I
+                -- make next" and a craft you have enough of is not an answer.
+                --
+                -- A search is not a suggestion, though: someone typing a name
+                -- is looking for that one recipe, and hiding the thing they
+                -- just named would read as the pane having lost it.
+                local suppressed = atLimit
+                    and search == ""
+                    and ns.Config:Get("hideAtPostLimit") ~= false
+
+                if not suppressed then
+                    rows[#rows + 1] = {
+                        recipeID = recipeID,
+                        name = name,
+                        outputItemID = recipe.outputItemID,
+                        priceable = (analysis and analysis.priceable) == true,
+                        profit = (analysis and analysis.profit) or 0,
+                        rank = RankOf(analysis),
+                        reason = analysis and analysis.reason or nil,
+                        craftable = ns.Profit:GetCraftableCount(recipeID) or 0,
+                        queued = (queued and queued.quantity) or 0,
+
+                        -- What you already hold of it, which is the number
+                        -- that was missing from this pane entirely.
+                        posted = (analysis and analysis.posted) or 0,
+                        stock = (analysis and analysis.stock) or 0,
+                        postLimit = (analysis and analysis.postLimit) or 0,
+                        atPostLimit = atLimit,
+                        roomInCrafts = RoomInCrafts(
+                            analysis and analysis.postRoom, recipe),
+                    }
+                end
             end
         end
     end
@@ -201,10 +266,33 @@ end
 local function QueueFromRow(row)
     if not row.data then return end
 
-    local quantity = math.max(1, math.floor(
-        tonumber(row.quantity:GetValue()) or CraftPanel.pending[row.data.recipeID] or 1))
+    local line = row.data
 
-    ns.Queue:Add(row.data.recipeID, quantity)
+    local quantity = math.max(1, math.floor(
+        tonumber(row.quantity:GetValue()) or CraftPanel.pending[line.recipeID] or 1))
+
+    -- The limit is the player's own answer to "how many of these do I want",
+    -- so queueing past it is nearly always a slip -- and a slip that costs
+    -- materials and a deposit, not just a wrong number on a screen. Said out
+    -- loud either way: a button that silently queues fewer than the number
+    -- beside it looks broken.
+    local room = line.roomInCrafts
+
+    if room then
+        if room <= 0 then
+            ns.Warn(("%s: you already have %d and your limit is %d, so none were queued."):format(
+                line.name, line.stock or 0, line.postLimit or 0))
+            return
+        end
+
+        if quantity > room then
+            quantity = room
+            ns.Print(("%s: queued %d -- your limit of %d has room for no more."):format(
+                line.name, quantity, line.postLimit or 0))
+        end
+    end
+
+    ns.Queue:Add(line.recipeID, quantity)
 end
 
 local function CreateRow(row)
@@ -234,6 +322,29 @@ local function CreateRow(row)
         end,
     })
     row.quantity:SetPoint("RIGHT", row.add, "LEFT", -6, 0)
+end
+
+--- How much of this you already have, as a phrase, or nil for none.
+--
+-- Listed is called out separately from the rest because the two mean different
+-- things when deciding what to make: stock in your bags is ready to list, and
+-- stock on the auction house is already competing with anything else you post.
+local function StockText(line)
+    local stock = line.stock or 0
+
+    if line.postLimit and line.postLimit > 0 then
+        local text = ("have %d of %d"):format(stock, line.postLimit)
+        if line.atPostLimit then return text .. " -- at your limit" end
+        return text
+    end
+
+    if stock <= 0 then return nil end
+
+    if (line.posted or 0) > 0 then
+        return ("have %d, %d listed"):format(stock, line.posted)
+    end
+
+    return ("have %d"):format(stock)
 end
 
 local function UpdateRow(row, line)
@@ -270,13 +381,21 @@ local function UpdateRow(row, line)
         and ("can make %d"):format(line.craftable)
         or "no materials"
 
+    -- What you already hold, listed or otherwise. This is the number the pane
+    -- was missing: "9 listed" changes the answer to "what should I make next"
+    -- more than anything else on the row does.
+    local stockText = StockText(line)
+    if stockText then parts[#parts + 1] = stockText end
+
     if line.queued > 0 then
         parts[#parts + 1] = ("queued %d"):format(line.queued)
     end
 
     row.detail:SetText(table.concat(parts, "  ·  "))
 
-    if line.priceable and line.profit < 0 then
+    if line.atPostLimit then
+        row.detail:SetTextColor(Theme.Unpack("warn"))
+    elseif line.priceable and line.profit < 0 then
         row.detail:SetTextColor(Theme.Unpack("loss"))
     elseif line.queued > 0 then
         row.detail:SetTextColor(Theme.Unpack("accent"))
@@ -284,8 +403,13 @@ local function UpdateRow(row, line)
         row.detail:SetTextColor(Theme.Unpack("muted"))
     end
 
-    row.add.tooltipText = ("Queue %d of %s. Right-click the row to take it off the queue."):format(
-        CraftPanel.pending[line.recipeID] or 1, line.name)
+    if line.atPostLimit then
+        row.add.tooltipText = ("You already have %d %s, which is your limit. Raise it in Settings to queue more."):format(
+            line.stock or 0, line.name)
+    else
+        row.add.tooltipText = ("Queue %d of %s. Right-click the row to take it off the queue."):format(
+            CraftPanel.pending[line.recipeID] or 1, line.name)
+    end
 end
 
 local function ShowRowTooltip(row, line)
@@ -301,6 +425,19 @@ local function ShowRowTooltip(row, line)
 
     GameTooltip:AddDoubleLine("Materials for", tostring(line.craftable),
         0.7, 0.7, 0.7, 1, 1, 1)
+
+    -- Stock first: it is the thing that decides whether to make more at all,
+    -- where the profit above only says what one is worth.
+    local stockText = StockText(line)
+
+    if stockText then
+        if line.atPostLimit then
+            GameTooltip:AddDoubleLine("Already have", stockText,
+                0.7, 0.7, 0.7, 0.95, 0.65, 0.25)
+        else
+            GameTooltip:AddDoubleLine("Already have", stockText, 0.7, 0.7, 0.7, 1, 1, 1)
+        end
+    end
 
     if line.queued > 0 then
         GameTooltip:AddDoubleLine("Already queued", tostring(line.queued),
