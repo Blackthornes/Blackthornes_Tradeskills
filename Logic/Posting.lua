@@ -89,6 +89,19 @@ function Posting:CanPost()
         return false, "the auction house is busy -- a moment"
     end
 
+    -- Only one listing is in flight at a time, because a second one started
+    -- before the first is confirmed cannot be told apart from it when the
+    -- owned auctions are read back.
+    --
+    -- This gate used to live in Post alone, which is the last step. So a click
+    -- spent a live price check and put up a confirmation dialog, and only after
+    -- the player clicked that did anything mention the listing still settling.
+    -- Refusing here means the buttons know, and SecondsUntilPostable can count
+    -- it down instead of the player discovering it at the end.
+    if self.pending then
+        return false, "still confirming the last listing"
+    end
+
     return true
 end
 
@@ -115,6 +128,29 @@ function Posting:SecondsUntilPostable()
 
     local seconds, reason =
         ns.AHQueue:SecondsUntilReady(ns.AHQueue.PRIORITY.urgent)
+
+    -- The wait that actually dominates a run of posts, and the one the queue
+    -- knows nothing about: each listing is confirmed against the server before
+    -- the next may start. Measured in game, the queue sat idle at 1 send of 8
+    -- allowed while posting still felt slow, because posting never got as far
+    -- as asking it for anything.
+    local pending = self.pending
+
+    if pending then
+        if pending.verifying then
+            -- The read is out. It settles when the server answers, which is
+            -- not a length we can honestly name.
+            reason = reason or "still confirming the last listing"
+        else
+            local left = (pending.startedAt or 0) + POST_VERIFY_DELAY - GetTime()
+
+            if left > seconds then
+                seconds, reason = left, "still confirming the last listing"
+            elseif left > 0 then
+                reason = reason or "still confirming the last listing"
+            end
+        end
+    end
 
     -- CanPost gates on this separately, so a countdown that ignored it would
     -- run to zero and leave the button still refusing.
