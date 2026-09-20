@@ -696,6 +696,59 @@ function UI:AttachPostAllButton()
     button:Show()
 end
 
+--- Show a button's wait on the button itself, rather than only in a tooltip.
+--
+-- Posting is paced on purpose, and with the label unchanged the only sign of
+-- that was a button that did nothing when clicked. The countdown is the whole
+-- point: a number going down reads as working, where a dead button reads as
+-- broken.
+--
+-- The button stays enabled throughout. Disabling it would swallow the
+-- right-click that opens the full list, and a left-click during the wait still
+-- prints the reason.
+--
+-- @param name the label to go back to once the wait is over
+local function ApplyWaitLabel(button, name, seconds, reason)
+    if not button then return end
+
+    if seconds and seconds > 0.05 then
+        -- Rounded up, so the last fraction of a second still shows "1s" rather
+        -- than sitting on "0s" while the wait is genuinely still running.
+        button:SetText(("%ds"):format(math.max(1, math.ceil(seconds))))
+        button.waitingLabel = true
+    elseif reason then
+        -- No number to give: the client's throttle and the player's own sell
+        -- window both end when they end. Saying "wait" beats counting down to
+        -- zero and then carrying on refusing.
+        button:SetText("wait")
+        button.waitingLabel = true
+    else
+        button:SetText(name)
+        button.waitingLabel = false
+    end
+end
+
+-- Exposed as a plain function, not a method: the tests drive it directly.
+UI.ApplyWaitLabel = ApplyWaitLabel
+
+--- Relabel the posting buttons with the current wait, and nothing else.
+--
+-- Deliberately separate from UpdatePostButton, which rebuilds summaries and
+-- walks the bags. This runs four times a second while the auction house is
+-- open, so it may only touch labels.
+function UI:UpdateWaitLabels()
+    if not ns.Scanner.isAuctionHouseOpen then return end
+
+    local seconds, reason = ns.Posting:SecondsUntilPostable()
+
+    ApplyWaitLabel(self.postAllButton, "Post ALL", seconds, reason)
+    ApplyWaitLabel(self.postButton, "Post Crafted", seconds, reason)
+
+    if ns.PostPanel then
+        ns.PostPanel:UpdateWaitLabels(seconds, reason)
+    end
+end
+
 function UI:UpdatePostAllButton()
     local button = self.postAllButton
     if not button then return end
@@ -710,14 +763,19 @@ function UI:UpdatePostAllButton()
     end
 
     local allowed, reason = ns.Posting:CanPost()
+    local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable()
 
-    button:SetText("Post ALL")
+    ApplyWaitLabel(button, "Post ALL", waitSeconds, waitReason)
     button:SetEnabledState(true)
 
     button.tooltipText = allowed
         and ("Lists everything sellable in your bags: %d stack(s), about %s.\nOne click per listing.\nReagents your queue needs are left alone."):format(
             count, Util.FormatMoney(total, { noColor = true, short = true }))
         or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
+
+    if waitReason then
+        button.tooltipText = button.tooltipText .. ("\n\nWaiting: %s."):format(waitReason)
+    end
 end
 
 function UI:UpdatePostButton()
@@ -739,8 +797,9 @@ function UI:UpdatePostButton()
 
     local count, total = ns.Posting:GetSummary()
     local allowed, reason = ns.Posting:CanPost()
+    local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable()
 
-    button:SetText("Post Crafted")
+    ApplyWaitLabel(button, "Post Crafted", waitSeconds, waitReason)
     button:SetEnabledState(true)
 
     button.tooltipText = allowed
@@ -749,6 +808,10 @@ function UI:UpdatePostButton()
             Util.FormatMoney(line.unitPrice, { noColor = true }),
             count, Util.FormatMoney(total, { noColor = true, short = true }))
         or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
+
+    if waitReason then
+        button.tooltipText = button.tooltipText .. ("\n\nWaiting: %s."):format(waitReason)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -1146,6 +1209,18 @@ function UI:OnEnable()
                 UI:RefreshActiveTab()
             end
         end)
+
+        -- A second, faster ticker purely for the countdown. One second is too
+        -- coarse for a wait that is often only a second or two: the number
+        -- would jump or sit still, which is what a broken button looks like.
+        -- Kept apart from the ticker above because that one rebuilds the sell
+        -- list and walks the bags, which is far too much to do four times a
+        -- second.
+        if UI.waitTicker then UI.waitTicker:Cancel() end
+
+        UI.waitTicker = C_Timer.NewTicker(0.25, function()
+            UI:UpdateWaitLabels()
+        end)
     end)
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
@@ -1159,6 +1234,11 @@ function UI:OnEnable()
         if UI.postTicker then
             UI.postTicker:Cancel()
             UI.postTicker = nil
+        end
+
+        if UI.waitTicker then
+            UI.waitTicker:Cancel()
+            UI.waitTicker = nil
         end
     end)
 end
