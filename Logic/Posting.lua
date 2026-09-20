@@ -92,6 +92,39 @@ function Posting:CanPost()
     return true
 end
 
+--- How long until the next listing can be attempted, and why it is waiting.
+--
+-- Posting from a click runs at urgent priority, which is deliberately exempt
+-- from the stand-down that keeps background scans out of the player's way. So
+-- the wait between two of the player's own posts is the pacing gap and the
+-- rolling budget, not the six second courtesy -- asking the queue at the wrong
+-- priority here would report a wait the player never actually serves.
+--
+-- Refusals that are not waits (no auction house, a client that will not take
+-- addon auctions) return nothing, because they have their own wording already
+-- and a countdown would imply they clear on their own.
+--
+-- @return seconds, reason
+function Posting:SecondsUntilPostable()
+    if self:IsBlocked() then return 0, nil end
+    if not ns.Scanner.isAuctionHouseOpen then return 0, nil end
+
+    if ns.Scanner.isScanning then
+        return 0, "waiting for the scan to finish"
+    end
+
+    local seconds, reason =
+        ns.AHQueue:SecondsUntilReady(ns.AHQueue.PRIORITY.urgent)
+
+    -- CanPost gates on this separately, so a countdown that ignored it would
+    -- run to zero and leave the button still refusing.
+    if self:IsThrottled() then
+        reason = reason or "the auction house is busy"
+    end
+
+    return seconds, reason
+end
+
 --- Is the auction house still catching up?
 --
 -- Advisory, not a block. A request sent while throttled can be dropped
