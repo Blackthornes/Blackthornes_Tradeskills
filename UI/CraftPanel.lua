@@ -406,7 +406,9 @@ function CraftPanel:Build()
         if ns.Crafting:IsBusy() then
             ns.Crafting:Stop()
         else
-            local entry = ns.Crafting:GetNextReady()
+            -- The same scoped lookup the button's label came from, so a
+            -- click can never start something other than what it offered.
+            local entry = CraftPanel:GetNextReadyHere()
             if entry then
                 ns.Crafting:Start(entry.recipeID, entry.quantity)
             end
@@ -488,6 +490,42 @@ function CraftPanel:Reflow()
     end
 end
 
+--- The next queued craft *this* profession window can actually make.
+--
+-- `Crafting:GetNextReady` walks the whole queue and asks only whether the
+-- character could make each entry, which is the right question for the Queue
+-- tab and the wrong one here. Standing at Enchanting with tailoring queued, it
+-- answered "Bolt of Linen Cloth", and `C_TradeSkillUI.CraftRecipe` on a recipe
+-- the open window does not have fails without saying anything -- this client
+-- shows no Lua error unless scriptErrors is on, so the button would simply
+-- have done nothing, forever, with no way to tell that from a dead button.
+--
+-- Scoped by the open window's own recipe list rather than by comparing skill
+-- line IDs: this client reports each profession under two different ID spaces
+-- (a modern one and a legacy one), so an ID comparison is a trap.
+--
+-- @return entry, readyElsewhere -- a ready craft for another profession is
+--   counted rather than offered, so the button can say which.
+function CraftPanel:GetNextReadyHere()
+    local open = self:GetOpenRecipeIDs()
+    local readyElsewhere = 0
+
+    for _, entry in ipairs(ns.Queue:GetAll()) do
+        if ns.Crafting:GetReadiness(entry.recipeID) then
+            -- No open set means the client would not say which profession is
+            -- showing. Offering the craft is then the best available guess,
+            -- and matches what the Queue tab does.
+            if not open or open[entry.recipeID] then
+                return entry, readyElsewhere
+            end
+
+            readyElsewhere = readyElsewhere + 1
+        end
+    end
+
+    return nil, readyElsewhere
+end
+
 --- Keep the Craft next button honest about what it will do, and why it cannot.
 function CraftPanel:UpdateCraftButton()
     local button = self.craftButton
@@ -507,11 +545,21 @@ function CraftPanel:UpdateCraftButton()
         return
     end
 
-    local entry = ns.Crafting:GetNextReady()
+    local entry, readyElsewhere = self:GetNextReadyHere()
 
     if not entry then
         button:SetText("Craft next")
         button:SetEnabledState(false)
+
+        if readyElsewhere > 0 then
+            -- Ready, but not at this window. Say so, rather than reporting the
+            -- first entry's obstacle: "need materials" would be a lie about a
+            -- craft whose materials are sitting in the bags.
+            button.tooltipText = ("%d queued craft%s ready, but for another profession. Open that profession to make %s."):format(
+                readyElsewhere, readyElsewhere == 1 and " is" or "s are",
+                readyElsewhere == 1 and "it" or "them")
+            return
+        end
 
         -- Report the first entry's actual obstacle rather than a generic one.
         local _, reason = ns.Crafting:GetReadiness(ns.Queue:GetAll()[1].recipeID)
