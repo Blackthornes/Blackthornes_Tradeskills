@@ -34,6 +34,26 @@ GetMacroIndexByName = IndexByName
 GetNumMacros = function() return #macros, 0 end
 InCombatLockdown = function() return false end
 
+-- Timers are run by hand, so a coalesced save can be observed rather than
+-- waited for. RunTimers fires everything currently pending, once.
+local timers = {}
+C_Timer = {
+    NewTimer = function(delay, fn)
+        local timer = { delay = delay, fn = fn, cancelled = false }
+        timers[#timers + 1] = timer
+        return { Cancel = function() timer.cancelled = true end }
+    end,
+}
+
+local function RunTimers()
+    local pending = timers
+    timers = {}
+    for _, timer in ipairs(pending) do
+        if not timer.cancelled then timer.fn() end
+    end
+    return #pending
+end
+
 local clock = 1758000000
 time = function() return clock end
 GetTime = function() return 500 end
@@ -387,7 +407,156 @@ print(("\n  200 items of history, settings and a 20-entry queue: %d characters, 
     :format(#full, slots))
 Check("the whole payload fits well inside a player's macro bar", slots <= 30, slots)
 Check("and it still saves", (Durable:SaveIfChanged(true)))
-Check("and reads back", ns.MacroStore:LoadData() == full)
+
+-- What is written is the stamped build, not the bare one. The bare build is
+-- what gets compared between saves, so that a stamp does not make an unchanged
+-- payload look changed and rewrite every macro on every cadence tick.
+Check("and reads back as the stamped payload", ns.MacroStore:LoadData() == Durable:Build(clock))
+Check("which is longer than the bare one by one section",
+    #Durable:Build(clock) - #full == 11, #Durable:Build(clock) - #full)
+Check("while the comparison text stays stamp-free", Durable.lastPayload == full)
+
+--------------------------------------------------------------------------------
+-- 7. The queue coming back from the dead.
+--
+-- Reported 2026-09-20: "The Queue keeps refilling with things i've already
+-- crafted each time i login to a character."
+--
+-- Bootstrap runs at ADDON_LOADED and loads a whole database -- from the CVar
+-- store, or on a cold start from the generated data addon, which is frozen
+-- until tools/restore.ps1 runs again. Durable then restores at PLAYER_LOGIN,
+-- by which time ns.db.queue is already full of that older copy. The old rule
+-- read "entries in memory means this session's work, leave it alone", so the
+-- stale copy won every login and crafts already made came back each time.
+--------------------------------------------------------------------------------
+
+print("\n\na queue that was emptied stays emptied")
+
+local function StoreQueue(queue, at)
+    ns.MacroStore:ClearData()
+    Durable.lastPayload, Durable.lastSaveAt = nil, nil
+    ns.db = { settings = WithDefaults({}), queue = queue, sellThrough = {} }
+    clock = at
+    Durable:SaveIfChanged(true)
+end
+
+--- Come back on a later login with `loaded` as the database Bootstrap produced.
+local function LoginWith(loaded, at)
+    clock = at
+    Durable.queueAuthoritative = nil
+    ns.db = loaded
+    return select(2, Durable:Restore())
+end
+
+local MADE = { { recipeID = 3001, quantity = 4 } }
+
+-- Yesterday's database, carrying yesterday's queue. This is the frozen data
+-- addon: it is not wrong, it is simply older than the macros.
+local function STALE()
+    return { settings = WithDefaults({}), queue = { { recipeID = 3001, quantity = 4 } },
+             sellThrough = {}, durableSavedAt = 1758000000 }
+end
+
+-- He queued four, made all four, and logged out. The macros hold the empty
+-- queue, saved an hour after that stale database was.
+StoreQueue({}, 1758003600)
+LoginWith(STALE(), 1758007200)
+
+Check("an emptied queue is not refilled from an older database",
+    #ns.db.queue == 0, #ns.db.queue)
+Check("and the later save is the one that won",
+    Durable.queueAuthoritative == true, Durable.queueAuthoritative)
+
+-- The other direction must still work, or queueing something and quitting
+-- would lose it.
+StoreQueue({ { recipeID = 3001, quantity = 4 } }, 1758003600)
+LoginWith({ settings = WithDefaults({}), queue = {}, sellThrough = {} }, 1758007200)
+
+Check("a queue saved into macros comes back on a cold start",
+    #ns.db.queue == 1, #ns.db.queue)
+Check("with the craft intact", ns.db.queue[1].recipeID == 3001, ns.db.queue[1].recipeID)
+
+-- A database saved AFTER the macros is the fresher one -- a reload, where the
+-- CVar store carried this session's work across. It must not be rolled back.
+StoreQueue({}, 1758003600)
+LoginWith({ settings = WithDefaults({}), queue = { { recipeID = 3002, quantity = 2 } },
+            sellThrough = {}, durableSavedAt = 1758005000 }, 1758007200)
+
+Check("a database saved later than the macros is left alone",
+    #ns.db.queue == 1, #ns.db.queue)
+Check("and it is still this session's craft",
+    ns.db.queue[1].recipeID == 3002, ns.db.queue[1].recipeID)
+Check("with the macros not claimed as the winner",
+    Durable.queueAuthoritative ~= true, Durable.queueAuthoritative)
+
+-- An identical queue must not be reported as having restored anything. A
+-- "restored 1 value(s)" on every login, for a list that never changed, is how
+-- a real message stops being read.
+StoreQueue(MADE, 1758003600)
+local filled = LoginWith({ settings = WithDefaults({}), queue = { { recipeID = 3001, quantity = 4 } },
+                           sellThrough = {}, durableSavedAt = 1758000000 }, 1758007200)
+
+Check("an unchanged queue restores nothing", filled == 0, filled)
+Check("but the queue is still there", #ns.db.queue == 1, #ns.db.queue)
+
+--------------------------------------------------------------------------------
+-- 8. Emptying the queue has to reach the macros before the client closes.
+--
+-- Reported 2026-09-20 with a screenshot: a queue emptied before a restart came
+-- back, and `/bts durable` showed the macros themselves holding the old seven
+-- entries. The login rule was doing its job -- the macros won -- but the
+-- macros had never been told. Saving rode the CVar cadence and PLAYER_LOGOUT,
+-- so emptying the queue and quitting inside the minute wrote nothing at all.
+--------------------------------------------------------------------------------
+
+print("\n\na queue change reaches storage without waiting for the cadence")
+
+ns.MacroStore:ClearData()
+Durable.lastPayload, Durable.lastSaveAt, Durable.soonTimer = nil, nil, nil
+ns.db = { settings = WithDefaults({}), sellThrough = {},
+          queue = { { recipeID = 3001, quantity = 4 } } }
+
+clock = 1758000000
+Durable:SaveIfChanged(true)
+
+local function StoredQueueCount()
+    local found = Durable:Parse(ns.MacroStore:LoadData() or "")
+    if not found or not found.q then return nil end
+    local queue = Durable.DecodeForTest(found.q)
+    return type(queue) == "table" and #queue or nil
+end
+
+Check("the craft is in the macros to begin with", StoredQueueCount() == 1, StoredQueueCount())
+
+-- He empties it, and quits well inside the save cadence.
+ns.Queue = ns.Queue or {}
+clock = 1758000005
+ns.db.queue = {}
+Durable:SaveSoon()
+
+Check("emptying schedules a write rather than waiting", Durable.soonTimer ~= nil,
+    Durable.soonTimer)
+
+RunTimers()
+
+Check("and the macros are told the queue is empty", StoredQueueCount() == 0, StoredQueueCount())
+Check("so the next login has nothing to hand back",
+    (Durable.lastPayload or ""):find("q") ~= nil, "no queue section")
+
+-- A burst of edits must not mean a burst of macro writes: the player can see
+-- them happen, and ten of them for one click reads as the addon misbehaving.
+Durable.soonTimer = nil
+ns.db.queue = { { recipeID = 3002, quantity = 1 } }
+
+Durable:SaveSoon()
+local first = Durable.soonTimer
+Durable:SaveSoon()
+Durable:SaveSoon()
+
+Check("repeated changes coalesce into one pending write", Durable.soonTimer == first,
+    "a second timer was scheduled")
+Check("and only one timer is pending", RunTimers() == 1, "more than one")
+Check("which wrote the newer queue", StoredQueueCount() == 1, StoredQueueCount())
 
 print(failures == 0 and "\nall durable storage tests passed" or ("\n" .. failures .. " failure(s)"))
 if failures > 0 then error(failures .. " durable storage failure(s)") end
