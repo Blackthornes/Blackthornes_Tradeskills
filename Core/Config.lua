@@ -377,6 +377,23 @@ function Config:OnEnable()
     ns.Print("seeded the database from the local data addon.")
 end
 
+--- Settle the database again after something was restored into it late.
+--
+-- Durable restores at PLAYER_LOGIN, after Bootstrap has already applied
+-- defaults and mirrored settings into CVars. A value filled in after that
+-- would otherwise sit in the table with nothing having looked at it: no
+-- default covering the keys neither store had, and no CVar mirroring the
+-- setting that just arrived.
+function Config:ReapplyAfterRestore()
+    local db = ns.db
+    if not db then return end
+
+    self:Migrate(db)
+    Util.ApplyDefaults(db, DEFAULTS)
+
+    if ns.Persist then ns.Persist:RestoreSettings() end
+end
+
 --- Did the client hand the saved table back after ADDON_LOADED?
 --
 -- Worth a look because it would change everything: if the saved variables are
