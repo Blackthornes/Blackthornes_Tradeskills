@@ -111,6 +111,14 @@ local DEFAULTS = {
         -- between sessions this is what makes the addon self-sufficient.
         autoScan = true,
 
+        -- Read prices out of the searches the player runs in Blizzard's own
+        -- auction house UI, as well as the addon's scans. The client announces
+        -- every search result the same way whoever asked for it, so this costs
+        -- no request and no throttle budget -- it is purely reading answers
+        -- that have already arrived. Off puts the addon back to learning only
+        -- from its own scans.
+        learnFromSearches = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
