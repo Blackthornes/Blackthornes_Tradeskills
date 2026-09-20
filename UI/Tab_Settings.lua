@@ -474,7 +474,7 @@ end
 UI:RegisterTab({
     key = "settings",
     text = "Settings",
-    order = 7,
+    order = 8,
     build = Build,
     refresh = Refresh,
     onShow = Refresh,
