@@ -166,7 +166,15 @@ end
 --
 -- Rounded down, with a floor of one: a limit with any room left in it should
 -- never refuse the smallest thing you can actually make.
+--
+-- Profit works the same figure out, and the two panes have to agree about the
+-- same recipe, so its answer is preferred and this is the fallback for a
+-- caller holding a recipe but no analysis.
 local function RoomInCrafts(room, recipe)
+    if ns.Profit and ns.Profit.RoomInCrafts then
+        return ns.Profit.RoomInCrafts(room, recipe)
+    end
+
     if room == nil then return nil end
     if room <= 0 then return 0 end
 

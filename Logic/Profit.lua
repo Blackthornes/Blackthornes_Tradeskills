@@ -171,11 +171,39 @@ local function RankValue(analysis, field)
     return value
 end
 
+--- How many CRAFTS fit in the room left under the posted limit.
+--
+-- The limit and the room under it are counted in ITEMS, because that is what
+-- goes up for sale. Every queue is counted in CRAFTS. A recipe that yields
+-- five per craft makes those two numbers differ by five, so clamping a craft
+-- count straight against the item room lets a limit of ten become fifty items
+-- on the auction house.
+--
+-- quantityMin rather than the average yield, matching Logic/Queue.lua,
+-- Logic/Crafting.lua and Data/Auctions.lua: the panes must agree with each
+-- other on the same recipe, and a fraction of a craft is not a thing.
+--
+-- Any room at all allows one craft. You cannot make part of one, and refusing
+-- the craft outright would stall a queue on a recipe that still has shelf
+-- space.
+local function RoomInCrafts(room, recipe)
+    if room == nil then return nil end
+    if room <= 0 then return 0 end
+
+    local perCraft = math.max(1, (recipe and recipe.quantityMin) or 1)
+
+    return math.max(1, math.floor(room / perCraft))
+end
+
 -- Exposed for tools/test_mail.lua. These two decide the order of the list the
 -- player actually reads, and they are the part most likely to want tuning, so
 -- they are testable without standing up the whole analysis.
 Profit._StockDivisor = StockDivisor
 Profit._RankValue = RankValue
+
+-- Exposed for tools/test_craftroom.lua, and called directly by the panes
+-- when they hold a recipe but no analysis.
+Profit.RoomInCrafts = RoomInCrafts
 
 --- Full profitability breakdown for one recipe.
 function Profit:Analyse(recipeID, characterKey)
@@ -296,6 +324,7 @@ function Profit:Analyse(recipeID, characterKey)
     analysis.queuedElsewhere = queued
     analysis.postLimit = limit
     analysis.postRoom = room
+    analysis.roomInCrafts = RoomInCrafts(room, recipe)
     analysis.atPostLimit = room ~= nil and room <= 0
 
     -- Everything already committed to this item: what you hold, plus what the

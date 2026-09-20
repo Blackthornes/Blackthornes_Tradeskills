@@ -299,9 +299,12 @@ local function BuildDetail(parent)
         if not state.selected then return end
 
         -- Whichever runs out first: materials, or room under the limit.
+        -- Room is counted in items and this box is counted in crafts, so it
+        -- is the converted figure that may be compared against a craft count.
         local most = math.max(1, state.selected.craftableNow or 1)
-        if state.selected.postRoom then
-            most = math.max(1, math.min(most, state.selected.postRoom))
+        local room = state.selected.roomInCrafts
+        if room then
+            most = math.max(1, math.min(most, room))
         end
 
         quantity:SetText(tostring(most))
@@ -517,9 +520,11 @@ local function UpdateDetail(analysis)
         detail.limitHint:Hide()
     end
 
+    -- Crafts, not items: see the Max button above.
     local suggested = math.max(1, analysis.craftableNow or 1)
-    if analysis.postRoom then
-        suggested = math.max(1, math.min(suggested, analysis.postRoom))
+    local suggestedRoom = analysis.roomInCrafts
+    if suggestedRoom then
+        suggested = math.max(1, math.min(suggested, suggestedRoom))
     end
     detail.quantity:SetText(tostring(suggested))
 
