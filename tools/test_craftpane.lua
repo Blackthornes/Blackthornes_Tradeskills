@@ -506,10 +506,13 @@ do
     inset - controls >= 20, true)
 
   -- The narrowest a row ever gets: panel, minus the list inset either side,
-  -- minus the scroll bar. The name still needs somewhere to go.
+  -- minus the scroll bar. The name still needs somewhere to go, once the
+  -- skill-up star's gutter has taken its bite out of the left as well.
   local narrowestRow = 322 - 28 - 10
+  local usable = narrowestRow - inset - 8 - (CraftPanel.MARK_GUTTER or 0)
+
   check("a name still has usable width on the narrowest row",
-    narrowestRow - inset >= 150, true)
+    usable >= 140, true)
 end
 
 --------------------------------------------------------------------------------

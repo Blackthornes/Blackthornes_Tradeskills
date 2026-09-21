@@ -12,6 +12,11 @@ local UI = ns.UI
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 
+-- Room at the left of every row for the skill-up star. Always reserved, shown
+-- or not, so the craft names stay in one straight line down the list -- names
+-- that shuffle sideways as the marks come and go are worse than the gap.
+local MARK_GUTTER = 16
+
 -- Right-aligned numeric columns, measured from the right edge of the list.
 -- Laid out right to left. WHO only earns its space when more than one
 -- character is in play, so it is hidden otherwise and the craft name takes
@@ -78,8 +83,11 @@ local function ApplyRowLayout(row)
 end
 
 local function CreateRow(row)
+    row.mark = Theme.CreateMark(row)
+    row.mark:SetPoint("LEFT", 7, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 8, 0)
+    row.name:SetPoint("LEFT", 8 + MARK_GUTTER, 0)
 
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
@@ -138,10 +146,16 @@ local function UpdateRow(row, analysis)
 
     local cells = row.cells
 
-    -- Both of these hold whatever the row's price data looks like, so they are
+    -- All three hold whatever the row's price data looks like, so they are
     -- filled before the unpriceable case takes its early exit.
     ApplyNameColor(row, analysis)
     UpdateMakeCell(cells, analysis)
+
+    -- The star: this craft raises your skill AND turns a profit. Set from
+    -- analysis.recommended rather than from the tier alone, so an orange
+    -- recipe that loses gold is not recommended by the back door.
+    Theme.SetMark(row.mark, analysis.recommended
+        and analysis.skillUp and analysis.skillUp.tier or nil)
 
     -- Only meaningful when several characters are in play.
     if state.accountWide then
@@ -191,6 +205,35 @@ local function UpdateRow(row, analysis)
 
     cells.age:SetText(Util.FormatAge(analysis.age))
     cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
+end
+
+--- Why this row is wearing a star.
+--
+-- The mark is small and new, so it has to be able to explain itself; a symbol
+-- nobody can interrogate is a symbol people learn to ignore.
+local function ShowMarkTooltip(row, analysis)
+    local skillUp = analysis.skillUp
+    if not skillUp then return end
+
+    GameTooltip:SetOwner(row, "ANCHOR_LEFT")
+    GameTooltip:SetText(analysis.name or "craft", 1, 1, 1)
+
+    local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
+    GameTooltip:AddDoubleLine("Skill up", ns.SkillUp:GetTierLabel(skillUp.tier),
+        0.7, 0.7, 0.7, r, g, b)
+
+    GameTooltip:AddDoubleLine("Profit each",
+        Util.FormatMoney(analysis.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+
+    -- Skill only rises, so a reading taken lower down may have gone green
+    -- since. Better said than quietly trusted.
+    if skillUp.stale then
+        GameTooltip:AddLine(("Read at skill %d, you are %d now -- open your profession to refresh."):format(
+            skillUp.skill or 0, skillUp.currentSkill or 0), 0.91, 0.76, 0.35, true)
+    end
+
+    GameTooltip:AddLine("Starred: it raises your skill and it pays.", 0.5, 0.5, 0.5)
+    GameTooltip:Show()
 end
 
 --------------------------------------------------------------------------------
@@ -344,11 +387,22 @@ local function UpdateDetail(analysis)
 
     detail.title:SetText(analysis.name or ("recipe " .. analysis.recipeID))
 
+    -- The skill-up clause is coloured inline rather than by the whole label,
+    -- because the line already carries a colour of its own for materials.
+    local skillUpText = ""
+    local skillUp = analysis.skillUp
+
+    if skillUp and skillUp.tier ~= "trivial" then
+        local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
+        skillUpText = ("  |cff%02x%02x%02x%s|r"):format(
+            r * 255, g * 255, b * 255, ns.SkillUp:GetTierLabel(skillUp.tier))
+    end
+
     if analysis.craftableNow and analysis.craftableNow > 0 then
-        detail.subtitle:SetText(("You can make %d now"):format(analysis.craftableNow))
+        detail.subtitle:SetText(("You can make %d now"):format(analysis.craftableNow) .. skillUpText)
         detail.subtitle:SetTextColor(Theme.Unpack("profit"))
     else
-        detail.subtitle:SetText("Missing materials")
+        detail.subtitle:SetText("Missing materials" .. skillUpText)
         detail.subtitle:SetTextColor(Theme.Unpack("muted"))
     end
 
@@ -719,7 +773,7 @@ local function Build(container)
     headings:SetHeight(16)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
-    nameHeading:SetPoint("LEFT", 8, 0)
+    nameHeading:SetPoint("LEFT", 8 + MARK_GUTTER, 0)
     nameHeading:SetText("CRAFT")
 
     local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
@@ -744,6 +798,17 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
+
+        -- Only starred rows get a tooltip, and it exists to explain the star.
+        -- Everything else about a row is already on the row or one click away
+        -- in the detail panel, and a tooltip over every line of a long table
+        -- is noise.
+        onEnter = function(row, analysis)
+            if not analysis.recommended then return end
+            ShowMarkTooltip(row, analysis)
+        end,
+
+        onLeave = function() GameTooltip:Hide() end,
 
         onClick = function(analysis, _, mouseButton)
             if mouseButton == "RightButton" then

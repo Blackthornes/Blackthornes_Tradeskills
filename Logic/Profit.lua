@@ -241,6 +241,10 @@ function Profit:Analyse(recipeID, characterKey)
     local cost = ns.Cost:GetCraftCost(recipeID)
     analysis.cost = cost
 
+    -- Read before the early exits below, so a craft that cannot be priced can
+    -- still say it would raise your skill.
+    analysis.skillUp = ns.SkillUp and ns.SkillUp:GetForRecipe(recipeID, recipe) or nil
+
     if not recipe.outputItemID then
         -- Enchants and similar have no sellable output item.
         analysis.reason = "no sellable output"
@@ -351,6 +355,11 @@ function Profit:Analyse(recipeID, characterKey)
     -- queue is about to make. This is what pushes a craft down the list.
     analysis.pipeline = analysis.stock + queued
     analysis.stockDivisor = StockDivisor(analysis.pipeline)
+
+    -- Worth a star: it raises your skill and it pays. Only a mark -- the
+    -- ranking is untouched, so nothing moves up the list for being a skill up
+    -- and nothing is hidden for not being one.
+    analysis.recommended = ns.SkillUp and ns.SkillUp:IsWorthIt(analysis) or false
 
     return analysis
 end

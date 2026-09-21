@@ -14,6 +14,7 @@ Client `1.60.1` build `69913`, interface `16001`.
 | Copper granularity | `SupportsCopperValues() = true` | Prices stay copper-exact; no silver rounding needed. |
 | Profession API | **Modern.** 146 functions in `C_TradeSkillUI` | Schematic-based recipe model. |
 | Reagent quality tiers? | **No.** `qualityTiersObserved = false`; every reagent slot has `reagentChoices = 1` | Cost engine stays flat — no quality-tier permutation logic. Significant simplification. |
+| Does a recipe report how hard it is? | **Yes, on `GetRecipeInfo().relativeDifficulty` only.** 60 of 60 recipes read answered, out of 477 visible; `Enum.TradeskillRelativeDifficulty` is present and the values match it by name (`0` = Optimal, `3` = Trivial). `C_TradeSkillUI.GetRecipeDifficulty` is **absent**, and so is the classic `GetTradeSkillInfo` list | Skill-up marking works. Read it through `Logic/SkillUp.lua`, which tries the other three sources too and reports which answered — see `/bts skillup`. |
 
 ## Keeping data between sessions
 

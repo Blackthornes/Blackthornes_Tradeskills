@@ -278,6 +278,13 @@ function CraftPanel:GetRows(opts)
                         outputItemID = recipe.outputItemID,
                         priceable = (analysis and analysis.priceable) == true,
                         profit = (analysis and analysis.profit) or 0,
+
+                        -- Does it still skill you up, and is it worth a star.
+                        skillUpTier = analysis and analysis.skillUp
+                            and analysis.skillUp.tier or nil,
+                        skillUpStale = analysis and analysis.skillUp
+                            and analysis.skillUp.stale or nil,
+                        recommended = (analysis and analysis.recommended) == true,
                         rank = RankOf(analysis),
                         reason = analysis and analysis.reason or nil,
                         craftable = ns.Profit:GetCraftableCount(recipeID) or 0,
@@ -353,20 +360,31 @@ local function QueueFromRow(row)
     ns.Queue:Add(line.recipeID, quantity)
 end
 
+-- Room at the left of every row for the skill-up star, reserved whether one is
+-- shown or not so the names stay in a straight line.
+local MARK_GUTTER = 15
+
+CraftPanel.MARK_GUTTER = MARK_GUTTER
+
 local function CreateRow(row)
-    -- Both lines are anchored to the row's own right edge rather than given a
-    -- width worked out from PANEL_WIDTH. A row is not the panel's width: the
-    -- list is inset 14 either side, and the scroll bar takes another 10 when it
-    -- appears. The old sum came to 214 in a space 194 wide -- 184 with the bar
-    -- -- so every recipe name and every detail line ran on underneath the
-    -- quantity box and the Add button. Anchoring makes the width follow the row
-    -- it is actually in, scroll bar and all, so the overrun cannot come back.
+    -- The left inset clears the skill-up star's gutter; the right edge is
+    -- anchored to the row rather than given a width worked out from
+    -- PANEL_WIDTH. A row is not the panel's width: the list is inset 14 either
+    -- side, and the scroll bar takes another 10 when it appears. The old sum
+    -- came to 214 in a space 194 wide -- 184 with the bar -- so every recipe
+    -- name and every detail line ran on underneath the quantity box and the
+    -- Add button. Anchoring makes the width follow the row it is actually in,
+    -- scroll bar and all, so the overrun cannot come back however the gutter
+    -- on the left changes.
+    row.mark = Theme.CreateMark(row)
+    row.mark:SetPoint("TOPLEFT", 7, -4)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("TOPLEFT", 8, -4)
+    row.name:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -4)
     row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
-    row.detail:SetPoint("TOPLEFT", 8, -17)
+    row.detail:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -17)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -17)
 
     row.add = Widgets.CreateButton(row, "Add", function()
@@ -429,6 +447,11 @@ local function UpdateRow(row, line)
         row.name:SetTextColor(Theme.Unpack("text"))
     end
 
+    -- The star, on the same terms as the Profit tab: a skill up that also
+    -- pays. The two lists have to agree, so both ask the analysis rather than
+    -- working it out themselves.
+    Theme.SetMark(row.mark, line.recommended and line.skillUpTier or nil)
+
     -- What it is worth, and whether you can make one right now: the two things
     -- that decide whether this recipe is the one you want.
     local parts = {}
@@ -484,6 +507,19 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     else
         GameTooltip:AddLine(line.reason or "No price data for this yet", 0.9, 0.38, 0.31)
+    end
+
+    -- Above materials, because on a profession still climbing it is the thing
+    -- that decides what to make with them.
+    if line.skillUpTier then
+        local r, g, b = ns.SkillUp:GetTierColor(line.skillUpTier)
+        GameTooltip:AddDoubleLine("Skill up",
+            ns.SkillUp:GetTierLabel(line.skillUpTier), 0.7, 0.7, 0.7, r, g, b)
+
+        if line.skillUpStale then
+            GameTooltip:AddLine("Read at a lower skill -- it may have gone green since.",
+                0.91, 0.76, 0.35, true)
+        end
     end
 
     GameTooltip:AddDoubleLine("Materials for", tostring(line.craftable),
