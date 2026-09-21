@@ -29,6 +29,7 @@ Data\Auctions.lua
 Data\Vendor.lua
 
 Logic\Cost.lua
+Logic\SkillUp.lua
 Logic\Profit.lua
 Logic\Queue.lua
 Logic\Crafting.lua
