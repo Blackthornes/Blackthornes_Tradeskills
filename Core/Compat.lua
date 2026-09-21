@@ -216,6 +216,16 @@ function Compat:DetectTradeskill(caps)
     trade.hasAllProfessionLines = Util.HasFunction("C_TradeSkillUI.GetAllProfessionTradeSkillLines")
 
     trade.hasRecipeItemLink  = Util.HasFunction("C_TradeSkillUI.GetRecipeItemLink")
+
+    -- Whether a recipe's difficulty -- the orange/yellow/green/grey that says
+    -- if it will still skill you up -- can be read at all. Presence only; which
+    -- of these actually answers is filled in by Logic/SkillUp.lua the first
+    -- time one does, and reported by /bts skillup.
+    trade.hasRecipeDifficulty = Util.HasFunction("C_TradeSkillUI.GetRecipeDifficulty")
+    trade.hasLegacySkillList  = Util.HasFunction("GetNumTradeSkills")
+        and Util.HasFunction("GetTradeSkillInfo")
+    trade.hasDifficultyEnum   = type(Enum) == "table"
+        and type(Enum.TradeskillRelativeDifficulty) == "table"
     trade.hasReagentSlotStatus = Util.HasFunction("C_TradeSkillUI.GetReagentSlotStatus")
 
     -- Reagent quality tiers are a Dragonflight-era retail concept. Forever is
