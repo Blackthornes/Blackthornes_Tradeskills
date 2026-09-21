@@ -560,7 +560,7 @@ function Scanner:CommitBrowseResults(results)
     self.isBrowsing = false
     self.isScanning = false
 
-    local recorded, skipped = 0, 0
+    local recorded, skipped, implausible = 0, 0, 0
     local now = time()
     local unsettled = {}
 
@@ -569,17 +569,25 @@ function Scanner:CommitBrowseResults(results)
         local price = result.minPrice
 
         if itemID and price and price > 0 then
-            -- A browse row is one price, not a book, so market and minimum are
-            -- the same figure here. Whose price it is goes through
-            -- SplitBrowseRow, and the reasons are on that function.
-            local rivalMin, ownMin, ask = SplitBrowseRow(itemID, price, result.containsOwnerItem)
+            -- A browse row carries one price and nothing to fall back on, so a
+            -- row priced past what anyone could pay is passed over whole
+            -- rather than recorded as what the item is worth.
+            if not ns.Prices.IsCredible(price) then
+                implausible = implausible + 1
+            else
+                -- A browse row is one price, not a book, so market and minimum
+                -- are the same figure here. Whose price it is goes through
+                -- SplitBrowseRow, and the reasons are on that function.
+                local rivalMin, ownMin, ask =
+                    SplitBrowseRow(itemID, price, result.containsOwnerItem)
 
-            ns.Prices:Record(itemID, price, price, result.totalQuantity or 0, now,
-                rivalMin, ownMin)
+                ns.Prices:Record(itemID, price, price, result.totalQuantity or 0, now,
+                    rivalMin, ownMin)
 
-            if ask then unsettled[#unsettled + 1] = itemID end
+                if ask then unsettled[#unsettled + 1] = itemID end
 
-            recorded = recorded + 1
+                recorded = recorded + 1
+            end
         else
             skipped = skipped + 1
         end
@@ -587,6 +595,17 @@ function Scanner:CommitBrowseResults(results)
 
     if skipped > 0 then
         self:Report(("%d row(s) had no item id or price"):format(skipped))
+    end
+
+    -- Plus anything Prices itself refused, so a price that got past the row
+    -- filter and was stopped at the database is still reported rather than
+    -- quietly dropped.
+    implausible = implausible + ns.Prices:TakeImplausibleCount()
+
+    if implausible > 0 then
+        ns.Print(("%d listing(s) ignored: priced above %s, which nobody can pay"):format(
+            implausible,
+            Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
 
     self:FollowUpOwned(unsettled)
@@ -632,6 +651,7 @@ function Scanner:ReadReplicateResults(numItems)
 
     local observations = {}
     local skipped = 0
+    local implausible = 0
 
     -- GetReplicateItemInfo is 0-based.
     local indices = {}
@@ -675,7 +695,18 @@ function Scanner:ReadReplicateResults(numItems)
                 unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity)
             end
 
+            -- A price nothing can pay is not a market observation, so it is
+            -- dropped here rather than allowed to drag the item's mean up.
+            -- Summarise's outlier pass cannot be relied on for this: it works
+            -- off the cheapest quarter of the book, and an item whose only
+            -- listing is a troll price has no cheap end to judge against.
             if unitPrice <= 0 then
+                skipped = skipped + 1
+                return
+            end
+
+            if not ns.Prices.IsCredible(unitPrice) then
+                implausible = implausible + 1
                 skipped = skipped + 1
                 return
             end
@@ -709,6 +740,14 @@ function Scanner:ReadReplicateResults(numItems)
             ns.Print(("scan complete: %s listings across %s items in %.1fs%s"):format(
                 Util.Comma(numItems - skipped), Util.Comma(recorded), elapsed,
                 skipped > 0 and (" (%s skipped)"):format(Util.Comma(skipped)) or ""))
+
+            implausible = implausible + ns.Prices:TakeImplausibleCount()
+
+            if implausible > 0 then
+                ns.Print(("%s listing(s) ignored: priced above %s, which nobody can pay"):format(
+                    Util.Comma(implausible),
+                    Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
+            end
 
             if ns.UI and ns.UI.OnScanComplete then
                 ns.UI:OnScanComplete()
@@ -1027,10 +1066,11 @@ function Scanner:CapturePassiveBrowse()
         local itemID = result.itemKey and result.itemKey.itemID
         local price = result.minPrice
 
-        if itemID and price and price > 0 then
+        if itemID and price and price > 0 and ns.Prices.IsCredible(price) then
             -- One price per row, not a book, so market and minimum are the
             -- same figure -- the same reading CommitBrowseResults makes of the
-            -- same rows, ownership included.
+            -- same rows, ownership included. A row priced past what anyone can
+            -- pay is passed over for the same reason it is there.
             local rivalMin, ownMin = SplitBrowseRow(itemID, price, result.containsOwnerItem)
 
             if self:RecordPassive(itemID, price, price, result.totalQuantity or 0,
@@ -1148,11 +1188,16 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
         for i = 1, count do
             local infoOk, info = pcall(C_AuctionHouse.GetCommoditySearchResultInfo, itemID, i)
             if infoOk and info and info.unitPrice then
-                listings[#listings + 1] = {
-                    unitPrice = info.unitPrice,
-                    quantity = info.quantity or 1,
-                    isOwn = info.containsOwnerItem == true,
-                }
+                -- Priced past what anyone can pay, it is junk rather than a
+                -- market observation, so it never reaches Summarise. It still
+                -- goes into raw: `/bts listings` reports what the client said.
+                if ns.Prices.IsCredible(info.unitPrice) then
+                    listings[#listings + 1] = {
+                        unitPrice = info.unitPrice,
+                        quantity = info.quantity or 1,
+                        isOwn = info.containsOwnerItem == true,
+                    }
+                end
 
                 raw[#raw + 1] = {
                     quantity = info.quantity or 1,
@@ -1169,7 +1214,10 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
     self.lastItemListings = { itemID = itemID, raw = raw, isCommodity = true }
 
     -- A book of unit-priced listings only ever comes back for a commodity.
-    if #listings > 0 then self:LearnCommodity(itemID, true) end
+    -- Read off the raw rows, not the priced book: whether an item is a
+    -- commodity is true regardless of what anyone listed it for, and a book
+    -- emptied by the credibility filter would otherwise unlearn it.
+    if #raw > 0 then self:LearnCommodity(itemID, true) end
 
     if not ours then
         self:CapturePassiveListings(itemID, listings)
@@ -1228,11 +1276,15 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
                     ownerFlag = info.containsOwnerItem,
                 }
 
-                listings[#listings + 1] = {
-                    unitPrice = unitPrice,
-                    quantity = quantity,
-                    isOwn = info.containsOwnerItem == true,
-                }
+                -- Junk prices stay out of the book for the same reason as on
+                -- the commodity path, and stay in raw for the same reason too.
+                if ns.Prices.IsCredible(unitPrice) then
+                    listings[#listings + 1] = {
+                        unitPrice = unitPrice,
+                        quantity = quantity,
+                        isOwn = info.containsOwnerItem == true,
+                    }
+                end
             end
         end
     end
@@ -1241,7 +1293,7 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
 
     -- A listing with a stack buyout is an item auction, so the item is not a
     -- commodity, and that is now known without ever holding one.
-    if #listings > 0 then self:LearnCommodity(itemID, false) end
+    if #raw > 0 then self:LearnCommodity(itemID, false) end
 
     if not ours then
         self:CapturePassiveListings(itemID, listings)
