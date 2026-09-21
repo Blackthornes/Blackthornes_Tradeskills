@@ -228,6 +228,13 @@ function CraftPanel:GetRows(opts)
                         outputItemID = recipe.outputItemID,
                         priceable = (analysis and analysis.priceable) == true,
                         profit = (analysis and analysis.profit) or 0,
+
+                        -- Does it still skill you up, and is it worth a star.
+                        skillUpTier = analysis and analysis.skillUp
+                            and analysis.skillUp.tier or nil,
+                        skillUpStale = analysis and analysis.skillUp
+                            and analysis.skillUp.stale or nil,
+                        recommended = (analysis and analysis.recommended) == true,
                         rank = RankOf(analysis),
                         reason = analysis and analysis.reason or nil,
                         craftable = ns.Profit:GetCraftableCount(recipeID) or 0,
@@ -303,15 +310,22 @@ local function QueueFromRow(row)
     ns.Queue:Add(line.recipeID, quantity)
 end
 
+-- Room at the left of every row for the skill-up star, reserved whether one is
+-- shown or not so the names stay in a straight line.
+local MARK_GUTTER = 15
+
 local function CreateRow(row)
-    local textWidth = PANEL_WIDTH - TEXT_INSET - 8
+    local textWidth = PANEL_WIDTH - TEXT_INSET - 8 - MARK_GUTTER
+
+    row.mark = Theme.CreateMark(row)
+    row.mark:SetPoint("TOPLEFT", 7, -4)
 
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("TOPLEFT", 8, -4)
+    row.name:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -4)
     row.name:SetWidth(textWidth)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
-    row.detail:SetPoint("TOPLEFT", 8, -17)
+    row.detail:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -17)
     row.detail:SetWidth(textWidth)
 
     row.add = Widgets.CreateButton(row, "Add", function()
@@ -374,6 +388,11 @@ local function UpdateRow(row, line)
         row.name:SetTextColor(Theme.Unpack("text"))
     end
 
+    -- The star, on the same terms as the Profit tab: a skill up that also
+    -- pays. The two lists have to agree, so both ask the analysis rather than
+    -- working it out themselves.
+    Theme.SetMark(row.mark, line.recommended and line.skillUpTier or nil)
+
     -- What it is worth, and whether you can make one right now: the two things
     -- that decide whether this recipe is the one you want.
     local parts = {}
@@ -429,6 +448,19 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     else
         GameTooltip:AddLine(line.reason or "No price data for this yet", 0.9, 0.38, 0.31)
+    end
+
+    -- Above materials, because on a profession still climbing it is the thing
+    -- that decides what to make with them.
+    if line.skillUpTier then
+        local r, g, b = ns.SkillUp:GetTierColor(line.skillUpTier)
+        GameTooltip:AddDoubleLine("Skill up",
+            ns.SkillUp:GetTierLabel(line.skillUpTier), 0.7, 0.7, 0.7, r, g, b)
+
+        if line.skillUpStale then
+            GameTooltip:AddLine("Read at a lower skill -- it may have gone green since.",
+                0.91, 0.76, 0.35, true)
+        end
     end
 
     GameTooltip:AddDoubleLine("Materials for", tostring(line.craftable),
