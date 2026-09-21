@@ -25,6 +25,35 @@ local MARKET_DEPTH = 0.25
 local OUTLIER_LOW = 0.30
 local OUTLIER_HIGH = 3.00
 
+-- The most copper a price is allowed to be before it is read as junk rather
+-- than as a market observation.
+--
+-- 2026-09-21: a full scan came back with a listing at 9,999,990,200 copper --
+-- about 999,999g -- which went into the database as that item's market value
+-- and minimum, and then failed the save outright, because the client's own
+-- number formatting cannot write a value past the signed 32-bit range.
+-- Serialize handles the writing now, but the price still had no business being
+-- treated as what the item is worth: the cap on a classic-era character's purse
+-- is the same 2^31 copper, so nobody can pay it, nobody buys at it, and a craft
+-- priced off it goes to the top of the Profit list and never sells.
+--
+-- Anything at or below this is kept exactly as the client reported it. Only the
+-- impossible is refused.
+local MAX_CREDIBLE_COPPER = 2 ^ 31 - 1
+
+Prices.MAX_CREDIBLE_COPPER = MAX_CREDIBLE_COPPER
+
+--- Could this price actually be paid, and is it a number at all?
+-- Nil is credible: "no price" is a real state and is not what this rejects.
+function Prices.IsCredible(price)
+    if price == nil then return true end
+
+    return type(price) == "number"
+        and price == price                  -- NaN fails every comparison below
+        and price >= 0
+        and price <= MAX_CREDIBLE_COPPER
+end
+
 -- Keeping full history for every item on the auction house would bloat
 -- SavedVariables badly, so history is a short ring and stale items are pruned.
 local MAX_HISTORY = 12
@@ -129,6 +158,24 @@ end
 --- Fold one item's scan result into the database.
 function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin)
     if not itemID or not marketValue then return end
+
+    -- Every path that learns a price ends up here -- browse rows, the full
+    -- replicate scan, targeted searches and the passive capture of the
+    -- player's own searches -- so this is the one place that has to hold. A
+    -- junk price is refused rather than stored; the item keeps whatever it
+    -- already had, which is worth more than a number nobody can pay.
+    if not Prices.IsCredible(marketValue) then
+        Prices.implausible = (Prices.implausible or 0) + 1
+        Prices.lastImplausible = { itemID = itemID, price = marketValue, at = time() }
+        return nil, "implausible"
+    end
+
+    -- The book's own figures are dropped individually: an item can have one
+    -- absurd listing above a shelf of sane ones, and losing the sane market
+    -- value with it would be the worse trade.
+    if not Prices.IsCredible(minBuyout) then minBuyout = nil end
+    if not Prices.IsCredible(rivalMin) then rivalMin = nil end
+    if not Prices.IsCredible(ownMin) then ownMin = nil end
 
     scannedAt = scannedAt or time()
 
@@ -377,7 +424,48 @@ function Prices:Count()
     return Util.Count(self:GetTable())
 end
 
+--- Clear out prices a restored database is already carrying that nothing can
+--- pay. One such record is what broke the save on 2026-09-21, and a database
+--- that came back from macro storage or the data addon with one in it would
+--- otherwise keep pricing off it for weeks. The per-field figures go one at a
+--- time; only a record whose market value itself is impossible is dropped.
+-- @return recordsDropped, fieldsCleared
+function Prices:Scrub()
+    local prices = self:GetTable()
+    local dropped, cleared = 0, 0
+
+    for itemID, record in pairs(prices) do
+        if not Prices.IsCredible(record.market) then
+            prices[itemID] = nil
+            dropped = dropped + 1
+        else
+            for _, field in ipairs({ "min", "rivalMin", "ownMin" }) do
+                if not Prices.IsCredible(record[field]) then
+                    record[field] = nil
+                    cleared = cleared + 1
+                end
+            end
+        end
+    end
+
+    if dropped > 0 or cleared > 0 then
+        ns.Warn(("dropped %d price record(s) and %d figure(s) above %s -- nothing can pay that"):format(
+            dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
+    end
+
+    return dropped, cleared
+end
+
+--- How many prices have been refused since the count was last taken, and the
+--- last one refused. Reset by reading, so a scan reports its own tally.
+function Prices:TakeImplausibleCount()
+    local count, last = Prices.implausible or 0, Prices.lastImplausible
+    Prices.implausible, Prices.lastImplausible = 0, nil
+    return count, last
+end
+
 function Prices:OnEnable()
+    self:Scrub()
     self:Prune()
 end
 
