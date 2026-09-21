@@ -360,7 +360,16 @@ local function Build(outer)
     end, true)
     widgets.learnFromSearches:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local debugRow = CreateRow(container, learnRow, "Debug output",
+    local professionValueRow = CreateRow(container, learnRow, "Value in profession window",
+        "Shows what one of each recipe sells for beside its name in Blizzard's own window.")
+
+    widgets.professionValue = Widgets.CreateCheckbox(professionValueRow, "Enabled", function(checked)
+        Config:Set("showValueInProfessionWindow", checked)
+        if ns.RecipeValue then ns.RecipeValue:Refresh() end
+    end, true)
+    widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local debugRow = CreateRow(container, professionValueRow, "Debug output",
         "Extra detail in the chat frame, for diagnosing problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
@@ -431,6 +440,7 @@ local function Refresh()
     widgets.debug:SetChecked(ns.db.global.debug == true)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
+    widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan = ns.db.lastFullScan
