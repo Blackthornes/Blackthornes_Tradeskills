@@ -63,6 +63,12 @@ ns.Theme = {
     -- which one a cell was painted with.
     Unpack = function(key) return key end,
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
+
+    -- The skill-up star. It remembers the tier it was last set to, so a row
+    -- can be asked whether it is wearing one -- false rather than nil, because
+    -- the stub answers a missing field with a no-op function.
+    CreateMark = function() return Stub({ tier = false }) end,
+    SetMark = function(mark, tier) mark.tier = tier or false end,
 }
 
 ns.Widgets = {
@@ -219,6 +225,40 @@ updateRow(row, {
 })
 
 checkColor("so the redraw picks up the colour", row.name.color, BLUE)
+
+print("")
+print("Profit list, the skill-up star")
+
+row = Row()
+updateRow(row, {
+    recipeID = 5, name = "Rough Grinding Stone", outputItemID = 2589,
+    priceable = true, craftableNow = 3, stock = 0,
+    totalCost = 100, revenue = 400, profit = 300, margin = 0.75, age = 60,
+    skillUp = { tier = "optimal" }, recommended = true,
+})
+
+check("a craft that skills you up and pays wears one", row.mark.tier, "optimal")
+check("and the name still carries its rarity", row.name.color[1], GREEN[1])
+
+-- The same recipe, still orange, but no longer worth the materials. The star
+-- follows the recommendation, never the difficulty on its own.
+updateRow(row, {
+    recipeID = 5, name = "Rough Grinding Stone", outputItemID = 2589,
+    priceable = true, craftableNow = 3, stock = 0,
+    totalCost = 400, revenue = 100, profit = -300, margin = -3, age = 60,
+    skillUp = { tier = "optimal" }, recommended = false,
+})
+
+check("a skill up that loses gold does not", row.mark.tier, false)
+
+-- Rows are recycled, so a marked row reused for an ordinary craft has to lose
+-- the star rather than carry it to the next recipe down the list.
+updateRow(row, {
+    recipeID = 6, name = "Linen Bandage", outputItemID = 2589,
+    priceable = false, reason = "output has no price data", craftableNow = 1,
+})
+
+check("and a recycled row does not keep one", row.mark.tier, false)
 
 print("")
 print(string.format("  %d passed, %d failed", passed, failed))
