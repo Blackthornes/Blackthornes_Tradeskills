@@ -119,6 +119,11 @@ local DEFAULTS = {
         -- from its own scans.
         learnFromSearches = true,
 
+        -- Write what one of each recipe sells for into Blizzard's own
+        -- profession window, beside the recipe's name. Off leaves that window
+        -- exactly as the client draws it.
+        showValueInProfessionWindow = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
