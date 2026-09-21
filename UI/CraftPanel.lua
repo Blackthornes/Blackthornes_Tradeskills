@@ -53,6 +53,13 @@ local PANEL_MIN_HEIGHT = 220
 -- global can be absent on the first open of a session.
 local TRADE_SKILL_FRAME_NAMES = { "ProfessionsFrame", "TradeSkillFrame" }
 
+-- Exposed so a test can hold the row geometry to its own promise: the text
+-- must stop clear of every control standing to its right.
+CraftPanel.TEXT_INSET = TEXT_INSET
+CraftPanel.QUANTITY_WIDTH = QUANTITY_WIDTH
+CraftPanel.BUTTON_WIDTH = BUTTON_WIDTH
+CraftPanel.PANEL_GAP = PANEL_GAP
+
 --------------------------------------------------------------------------------
 -- Blizzard's window
 --------------------------------------------------------------------------------
@@ -71,6 +78,49 @@ function CraftPanel:FindTradeSkillFrame()
             if ok then return frame, name end
         end
     end
+end
+
+--- How far past its own right edge a frame's visible children reach.
+--
+-- Blizzard hangs the profession tabs off the right-hand side of the profession
+-- window, as child frames anchored outside their parent's rectangle. GetRight()
+-- reports the window, not the tabs, so docking at TOPRIGHT + a small gap parks
+-- this pane straight on top of them -- which is what it did.
+--
+-- Measured rather than guessed at with a bigger fixed gap: the tabs are only
+-- there for a character with more than one profession, and a constant wide
+-- enough to clear them would strand the pane in open space for everyone else.
+--
+-- Only visible children count, and the result is capped: one stray child
+-- anchored far away should not push the pane off the side of the screen.
+local MAX_OVERHANG = 120
+
+function CraftPanel:RightOverhang(tradeSkillFrame)
+    local right = tradeSkillFrame:GetRight()
+    if not right then return 0 end
+
+    -- Guarded: GetChildren is not worth assuming on a client with API gaps,
+    -- and a pane that fails to dock is worse than one docked a little close.
+    local ok, children = pcall(function()
+        return { tradeSkillFrame:GetChildren() }
+    end)
+
+    if not ok or type(children) ~= "table" then return 0 end
+
+    local overhang = 0
+
+    for _, child in ipairs(children) do
+        if type(child) == "table" and child.GetRight and child.IsShown then
+            local shownOk, shown = pcall(child.IsShown, child)
+            local rightOk, childRight = pcall(child.GetRight, child)
+
+            if shownOk and shown and rightOk and childRight then
+                overhang = math.max(overhang, childRight - right)
+            end
+        end
+    end
+
+    return math.min(math.max(overhang, 0), MAX_OVERHANG)
 end
 
 --- As tall as the profession window it is docked to.
@@ -304,15 +354,20 @@ local function QueueFromRow(row)
 end
 
 local function CreateRow(row)
-    local textWidth = PANEL_WIDTH - TEXT_INSET - 8
-
+    -- Both lines are anchored to the row's own right edge rather than given a
+    -- width worked out from PANEL_WIDTH. A row is not the panel's width: the
+    -- list is inset 14 either side, and the scroll bar takes another 10 when it
+    -- appears. The old sum came to 214 in a space 194 wide -- 184 with the bar
+    -- -- so every recipe name and every detail line ran on underneath the
+    -- quantity box and the Add button. Anchoring makes the width follow the row
+    -- it is actually in, scroll bar and all, so the overrun cannot come back.
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("TOPLEFT", 8, -4)
-    row.name:SetWidth(textWidth)
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
     row.detail:SetPoint("TOPLEFT", 8, -17)
-    row.detail:SetWidth(textWidth)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -17)
 
     row.add = Widgets.CreateButton(row, "Add", function()
         QueueFromRow(row)
@@ -602,10 +657,17 @@ function CraftPanel:Attach()
         -- horizontal centre, which TOPLEFT has already decided -- and the
         -- client silently drops one of the two. That is how the sell list
         -- ended up docked at half the height it asked for.
-        frame:SetPoint("TOPLEFT", tradeSkillFrame, "TOPRIGHT", PANEL_GAP, 0)
+        --
+        -- Offset past the profession tabs down the window's right-hand edge,
+        -- which stick out beyond the frame GetRight() reports. Still anchored
+        -- to the frame rather than to a screen position, so the pane keeps
+        -- moving with the window.
+        local overhang = self:RightOverhang(tradeSkillFrame)
+
+        frame:SetPoint("TOPLEFT", tradeSkillFrame, "TOPRIGHT", overhang + PANEL_GAP, 0)
         frame:SetHeight(self:DesiredHeight(tradeSkillFrame) or PANEL_FALLBACK_HEIGHT)
 
-        ns.Debug("docked craft pane to", frameName)
+        ns.Debug("docked craft pane to", frameName, "clearing", overhang)
     else
         -- Blizzard's profession UI is load-on-demand and may not exist yet.
         -- A pane in a slightly odd place beats one that silently never appears.
@@ -632,6 +694,22 @@ function CraftPanel:Reflow()
     -- this runs on every refresh.
     if height and math.abs(height - self.frame:GetHeight()) > 0.5 then
         self.frame:SetHeight(height)
+    end
+
+    -- The tabs are not always laid out at the moment the window first opens,
+    -- so the clearance is re-measured rather than settled once at attach.
+    local point, relativeTo, relativePoint, x, y = self.frame:GetPoint()
+
+    -- Only ever adjusts the docked anchor. Attached before the profession
+    -- window existed, the pane is pinned to the screen edge instead, and
+    -- writing a dock offset into that anchor would fling it across the screen.
+    -- Attach puts it right; this must not be what moves it.
+    if point ~= "TOPLEFT" or relativeTo ~= tradeSkillFrame then return end
+
+    local wanted = self:RightOverhang(tradeSkillFrame) + PANEL_GAP
+
+    if x and math.abs(wanted - x) > 0.5 then
+        self.frame:SetPoint(point, relativeTo, relativePoint, wanted, y or 0)
     end
 end
 
