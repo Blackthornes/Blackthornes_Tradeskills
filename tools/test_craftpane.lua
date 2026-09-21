@@ -417,6 +417,105 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- Clearing the profession tabs on the window's right-hand edge
+--------------------------------------------------------------------------------
+
+-- Trent, 2026-09-21: "the Craft queue is also overlapping the buttons to the
+-- right of the blizzard UI. There are Profession buttons on the right hand
+-- side of the blizzard UI". Blizzard anchors those tabs OUTSIDE the frame's
+-- own rectangle, so GetRight() reports the window and not the tabs, and
+-- docking at TOPRIGHT + a small gap lands straight on them.
+local function FrameWithChildren(right, childRights)
+  local children = {}
+
+  for index, childRight in ipairs(childRights) do
+    children[index] = {
+      shown = true,
+      IsShown = function(self) return self.shown end,
+      GetRight = function() return childRight end,
+    }
+  end
+
+  return {
+    children = children,
+    GetRight = function() return right end,
+    GetTop = function() return 800 end,
+    GetBottom = function() return 300 end,
+    GetChildren = function(self) return unpack(self.children) end,
+  }, children
+end
+
+do
+  -- Tabs reaching 32 past the window's edge.
+  local frame = FrameWithChildren(900, { 932, 880, 700 })
+  check("measures how far the tabs stand out past the window",
+    CraftPanel:RightOverhang(frame), 32)
+
+  -- Nothing sticking out: the pane should not be pushed away for nothing.
+  check("a window with nothing hanging off it gets no extra gap",
+    CraftPanel:RightOverhang(FrameWithChildren(900, { 880, 700 })), 0)
+
+  check("a window with no children at all is fine",
+    CraftPanel:RightOverhang(FrameWithChildren(900, {})), 0)
+
+  -- A hidden tab takes no space, so it must not push the pane out.
+  local hiddenFrame, children = FrameWithChildren(900, { 932 })
+  children[1].shown = false
+  check("a hidden tab is not something to clear",
+    CraftPanel:RightOverhang(hiddenFrame), 0)
+
+  -- One stray child anchored far away must not fling the pane off screen.
+  check("a wildly placed child is capped rather than obeyed",
+    CraftPanel:RightOverhang(FrameWithChildren(900, { 5000 })), 120)
+
+  -- A frame not laid out yet has no right edge to measure from.
+  check("no coordinates yet means no clearance, not a wrong one",
+    CraftPanel:RightOverhang({
+      GetRight = function() return nil end,
+      GetChildren = function() end,
+    }), 0)
+
+  -- The client raising rather than answering must not take the pane down.
+  check("a client that refuses GetChildren is survivable",
+    CraftPanel:RightOverhang({
+      GetRight = function() return 900 end,
+      GetChildren = function() error("no") end,
+    }), 0)
+end
+
+--------------------------------------------------------------------------------
+-- Row text stops clear of the controls beside it
+--------------------------------------------------------------------------------
+
+-- Trent, same report: "the words on teh Craft queue extend under the buttons".
+-- The two lines used to take a width worked out from PANEL_WIDTH, but a row is
+-- narrower than the panel -- the list is inset 14 either side and the scroll
+-- bar takes 10 more -- so the text was laid out 214 wide in a 194 space, or
+-- 184 with the bar. They are anchored to the row's own right edge now, which
+-- no arithmetic here can get wrong, so what is left to pin down is the inset
+-- itself: it has to stay wide enough for everything standing to its right.
+do
+  local inset = CraftPanel.TEXT_INSET
+  local controls = CraftPanel.QUANTITY_WIDTH + CraftPanel.BUTTON_WIDTH
+
+  check("the text inset clears the quantity box and the Add button",
+    inset > controls, true)
+
+  -- Not just clear, but clear with room to breathe on both sides of the box.
+  check("and leaves a margin around them rather than touching",
+    inset - controls >= 20, true)
+
+  -- The narrowest a row ever gets: panel, minus the list inset either side,
+  -- minus the scroll bar. The name still needs somewhere to go, once the
+  -- skill-up star's gutter has taken its bite out of the left as well.
+  local narrowestRow = 322 - 28 - 10
+  local usable = narrowestRow - inset - 8 - (CraftPanel.MARK_GUTTER or 0)
+
+  check("a name still has usable width on the narrowest row",
+    usable >= 140, true)
+end
+
+--------------------------------------------------------------------------------
 -- Docking
 --------------------------------------------------------------------------------
 
