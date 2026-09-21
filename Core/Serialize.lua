@@ -24,6 +24,47 @@ ns.Serialize = Serialize
 -- Encode
 --------------------------------------------------------------------------------
 
+-- %d is the natural way to write the item IDs and copper amounts that are
+-- nearly all of this data, and it keeps them as short as they look -- but this
+-- client's string.format converts a %d argument to a signed 32-bit integer and
+-- throws past its range. On 2026-09-21 a browse row came back priced at
+-- 9,999,990,200 copper (about 999,999g), "integer overflow attempting to store
+-- 9999990200" came out of format, and the whole database save was lost with it.
+--
+-- So %d is used only where it is certainly safe, and anything larger goes
+-- through %.0f, which hands the double straight to the float formatter with no
+-- integer conversion anywhere: exact for whole numbers up to 2^53, and plain
+-- digits rather than an exponent, so tonumber reads back the same value.
+local SAFE_INTEGER_FORMAT = 2 ^ 31
+
+local function FormatNumber(value)
+    if value == math.floor(value) then
+        if math.abs(value) < SAFE_INTEGER_FORMAT then
+            return ("%d"):format(value)
+        elseif math.abs(value) < 2 ^ 53 then
+            return ("%.0f"):format(value)
+        end
+    end
+
+    -- 17 significant digits is what it takes for a double to survive the trip
+    -- exactly; 14 quietly rounds ratios like a moving average.
+    return ("%.17g"):format(value)
+end
+
+-- One unformattable number must never cost the whole database, which is what
+-- the failure above did: Persist wraps Encode in a pcall, so the throw came out
+-- as "nothing was saved" rather than as one bad field. The paths above cannot
+-- throw any more, and this makes sure no future one can either.
+local function SafeFormatNumber(value)
+    local ok, text = pcall(FormatNumber, value)
+    if ok and type(text) == "string" then return text end
+
+    local fallbackOk, fallback = pcall(string.format, "%.17g", value)
+    if fallbackOk and type(fallback) == "string" then return fallback end
+
+    return "0"
+end
+
 local function EncodeValue(value, out, seen)
     local kind = type(value)
 
@@ -40,15 +81,8 @@ local function EncodeValue(value, out, seen)
         if value ~= value or value == math.huge or value == -math.huge then
             out[#out + 1] = "~"
 
-        elseif value == math.floor(value) and math.abs(value) < 2 ^ 53 then
-            -- Item IDs and copper amounts are nearly all of this data, and
-            -- %d keeps them as short as they look.
-            out[#out + 1] = "n" .. ("%d"):format(value) .. ";"
-
         else
-            -- 17 significant digits is what it takes for a double to survive
-            -- the trip exactly; 14 quietly rounds ratios like a moving average.
-            out[#out + 1] = "n" .. ("%.17g"):format(value) .. ";"
+            out[#out + 1] = "n" .. SafeFormatNumber(value) .. ";"
         end
 
     elseif kind == "string" then
