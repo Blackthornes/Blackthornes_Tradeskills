@@ -40,6 +40,7 @@ UI\Widgets.lua
 UI\Main.lua
 UI\PostPanel.lua
 UI\CraftPanel.lua
+UI\RecipeValue.lua
 UI\Tab_Profit.lua
 UI\Tab_Queue.lua
 UI\Tab_Gather.lua
