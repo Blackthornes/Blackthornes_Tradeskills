@@ -20,9 +20,13 @@ local MAX_SUBCRAFT_DEPTH = 3
 --------------------------------------------------------------------------------
 
 --- What one unit of a reagent costs to acquire.
+--
+-- @param opts.valueOwned  force the market-price view even when the player
+--   has chosen cash-out-of-pocket. Pricing something off its materials needs
+--   what they are worth, not what is left to pay for them.
 -- @return copper, source  -- source is "buy", "owned" or nil when unknown
-function Cost:GetReagentUnitCost(itemID)
-    local valueOwned = ns.Config:Get("valueOwnedMaterials")
+function Cost:GetReagentUnitCost(itemID, opts)
+    local valueOwned = (opts and opts.valueOwned) or ns.Config:Get("valueOwnedMaterials")
 
     if not valueOwned then
         -- Cash-out-of-pocket view: anything already in the bags is sunk.
@@ -81,6 +85,9 @@ end
 
 --- Total reagent cost for one craft of a recipe.
 --
+-- @param opts.valueOwned  as GetReagentUnitCost above, carried down through
+--   sub-crafts so the whole tree is valued the same way.
+--
 -- @return result table:
 --   total        copper cost of a single craft, or nil when unpriceable
 --   perUnit      cost per output item
@@ -88,7 +95,7 @@ end
 --                           have, shortfall, crafted }
 --   unpriced     array of itemIDs with no price data
 --   priceable    false when any reagent has no price
-function Cost:GetCraftCost(recipeID, depth, visited)
+function Cost:GetCraftCost(recipeID, depth, visited, opts)
     depth = depth or 0
     visited = visited or {}
 
@@ -113,7 +120,7 @@ function Cost:GetCraftCost(recipeID, depth, visited)
     for _, reagent in ipairs(recipe.reagents or {}) do
         local itemID, quantity = reagent.itemID, reagent.quantity
 
-        local unitCost, source = self:GetReagentUnitCost(itemID)
+        local unitCost, source = self:GetReagentUnitCost(itemID, opts)
         local crafted = false
 
         -- If we know how to make this reagent and making it is cheaper than
@@ -123,7 +130,7 @@ function Cost:GetCraftCost(recipeID, depth, visited)
             local subRecipeID = self:FindRecipeForItem(itemID)
 
             if subRecipeID and not visited[subRecipeID] then
-                local subResult = self:GetCraftCost(subRecipeID, depth + 1, visited)
+                local subResult = self:GetCraftCost(subRecipeID, depth + 1, visited, opts)
 
                 if subResult and subResult.priceable and subResult.perUnit then
                     if not unitCost or subResult.perUnit < unitCost then
@@ -180,6 +187,22 @@ function Cost:GetCraftCost(recipeID, depth, visited)
     result.perUnit = result.total / averageYield
 
     return result
+end
+
+--- What the materials for one unit of a recipe's output are worth.
+--
+-- Deliberately not the same question as "what will this craft cost me now":
+-- reagents already in the bags count at market price here however the
+-- cash-out-of-pocket setting is set, because a craft does not become worth
+-- less to sell because the materials are already paid for.
+--
+-- @return perUnit copper, or nil when any reagent has no price at all
+function Cost:GetMaterialValue(recipeID)
+    local cost = self:GetCraftCost(recipeID, nil, nil, { valueOwned = true })
+
+    if not cost or not cost.priceable then return nil end
+
+    return cost.perUnit, cost
 end
 
 --------------------------------------------------------------------------------
