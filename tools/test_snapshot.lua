@@ -165,5 +165,27 @@ Check("and one it did not have is added", live.prices.R[2592].market == 7)
 Check("filling twice adds nothing the second time",
     FillGaps(fromCVars, fromAddon) == 0)
 
+--------------------------------------------------------------------------------
+-- 4. The craft queue, which is the one key here that must not be merged.
+--
+-- The fixture above has no queue at all, which is exactly why a merge of two
+-- of them went unnoticed until 2026-09-22: "The crafting queue tab is
+-- resetting to some old saved list each time i swap characters." Every swap
+-- reloads the data addon, so its frozen queue met the live one here on every
+-- one. Full coverage of the rule lives in test_durable.lua; this is the guard
+-- on the fixture that hid it.
+--------------------------------------------------------------------------------
+
+local live = { queue = { { recipeID = 4001, quantity = 2 } } }
+local frozen = { queue = {
+    { recipeID = 3001, quantity = 4 },
+    { recipeID = 3002, quantity = 4 },
+} }
+
+FillGaps(live, frozen)
+
+Check("a live queue is not merged with the data addon's",
+    #live.queue == 1 and live.queue[1].recipeID == 4001, #live.queue)
+
 print(failures == 0 and "\nall snapshot hand-off tests passed" or ("\n" .. failures .. " failure(s)"))
 if failures > 0 then error(failures .. " snapshot hand-off failure(s)") end

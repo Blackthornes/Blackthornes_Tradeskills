@@ -640,5 +640,97 @@ Durable:Restore()
 Check("a sale just after a save is counted once, not lost",
     Durable:BuildRollup(REALM)[2589].sold == 3, Durable:BuildRollup(REALM)[2589].sold)
 
+--------------------------------------------------------------------------------
+-- 9. Swapping characters, which is a login the data addon hands its frozen
+--    database over on all over again.
+--
+-- Reported 2026-09-22: "The crafting queue tab is resetting to some old saved
+-- list each time i swap characters. it wipes out whatever i was last working
+-- on."
+--
+-- A trip to character select keeps the client process alive, so the CVar store
+-- still carries this session's real queue -- but every addon reloads, so
+-- Blackthornes_TS_Data sets its global again and Bootstrap merges the two with
+-- FillGaps. The queue was merged index by index like everything else, and an
+-- ordered list of decisions has no meaningful join: a list of one merged into a
+-- frozen list of three keeps your craft at index 1, takes entries 2 and 3 from
+-- the frozen list, and silently drops that list's own first entry. The result
+-- is neither list, and it is the one Durable then measures its stamps against.
+--------------------------------------------------------------------------------
+
+print("\n\nswapping characters does not merge a frozen queue into this one")
+
+local FillGaps = ns.Config.FillGaps
+
+-- What the CVar store carries across the swap: what he was working on.
+local fromCVars = {
+    settings = WithDefaults({}),
+    queue = { { recipeID = 4001, quantity = 2 } },
+    prices = { [REALM] = {} },
+    durableSavedAt = 1758003600,
+}
+
+-- Blackthornes_TS_Data, generated days ago by tools/restore.ps1 and frozen
+-- since. Its prices are worth having; its queue is not.
+local frozen = {
+    settings = WithDefaults({}),
+    queue = {
+        { recipeID = 3001, quantity = 4 },
+        { recipeID = 3002, quantity = 4 },
+        { recipeID = 3003, quantity = 4 },
+    },
+    prices = { [REALM] = { [2589] = { market = 1234 } } },
+    deposits = { [2589] = 55 },
+}
+
+FillGaps(fromCVars, frozen)
+
+Check("his queue is the whole queue after the merge",
+    #fromCVars.queue == 1, #fromCVars.queue)
+Check("and it is still his craft",
+    fromCVars.queue[1] and fromCVars.queue[1].recipeID == 4001,
+    fromCVars.queue[1] and fromCVars.queue[1].recipeID)
+
+-- The rest of the hand-off is the reason FillGaps exists and must still work.
+Check("prices still come from the data addon",
+    fromCVars.prices[REALM][2589] ~= nil)
+Check("and a whole key the store lacked still comes too",
+    fromCVars.deposits ~= nil)
+
+-- An emptied queue is a real state -- he made everything on it -- not a gap
+-- waiting for a frozen list to fill.
+local emptied = { settings = WithDefaults({}), queue = {}, durableSavedAt = 1758003600 }
+FillGaps(emptied, frozen)
+Check("an emptied queue is not refilled by the data addon",
+    #emptied.queue == 0, #emptied.queue)
+
+-- A genuine cold start has no queue at all, and must still be seeded: this is
+-- the case the merge was doing a rough job of covering.
+local coldStart = { settings = WithDefaults({}) }
+FillGaps(coldStart, frozen)
+Check("a database with no queue is still seeded whole",
+    coldStart.queue and #coldStart.queue == 3, coldStart.queue and #coldStart.queue)
+
+-- End to end, in the order a swap runs them: Bootstrap merges, then Durable
+-- restores at PLAYER_LOGIN. The macros hold the same queue the CVar store
+-- does, saved at the same moment, so neither stamp beats the other and
+-- whatever Bootstrap left behind is what he sees in the Queue tab.
+StoreQueue({ { recipeID = 4001, quantity = 2 } }, 1758003600)
+
+local swapped = {
+    settings = WithDefaults({}),
+    queue = { { recipeID = 4001, quantity = 2 } },
+    sellThrough = {},
+    durableSavedAt = 1758003600,
+}
+FillGaps(swapped, frozen)
+LoginWith(swapped, 1758007200)
+
+Check("after a swap the Queue tab still holds only his craft",
+    #ns.db.queue == 1, #ns.db.queue)
+Check("and it is the one he was working on",
+    ns.db.queue[1] and ns.db.queue[1].recipeID == 4001,
+    ns.db.queue[1] and ns.db.queue[1].recipeID)
+
 print(failures == 0 and "\nall durable storage tests passed" or ("\n" .. failures .. " failure(s)"))
 if failures > 0 then error(failures .. " durable storage failure(s)") end

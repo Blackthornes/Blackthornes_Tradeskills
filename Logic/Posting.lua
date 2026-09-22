@@ -25,6 +25,12 @@ local Util = ns.Util
 -- immediately reads the state from before the listing.
 local POST_VERIFY_DELAY = 3
 
+-- How long a remembered deposit is served without asking the client again.
+-- Short enough that changing the listing length is felt immediately -- that is
+-- keyed separately anyway -- and long enough that a list rebuilding once a
+-- second asks once rather than sixty times.
+local DEPOSIT_CACHE_SECONDS = 30
+
 -- How long a listing may stay unverified before we admit we do not know. Longer
 -- than the request's own wait in the queue plus the reads that follow it.
 local VERIFY_GIVE_UP = 15
@@ -210,6 +216,51 @@ local function FindInBags(itemID)
     end
 end
 
+--- Everything the character is carrying, from one walk of the bags.
+--
+-- GetPostable used to ask FindInBags about every item it considered, and
+-- FindInBags walks every bag from the beginning. On crafted stock that was a
+-- handful of walks. Offering the whole bag makes it one walk per distinct
+-- item, three times a second while the auction house is open, so the list is
+-- built from a single pass instead.
+--
+-- @return order  the itemIDs found, in bag order
+-- @return slots  { [itemID] = { bag, slot, stackCount } } naming the first
+--   unlocked slot holding each -- the slot a listing is actually made from.
+--   An item held only in locked slots gets an entry with no bag, which reads
+--   the same as FindInBags finding nothing: it cannot be listed right now.
+local function IndexBags()
+    local order, slots = {}, {}
+
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
+        local slotsOk, count = pcall(C_Container.GetContainerNumSlots, bag)
+
+        if slotsOk and count then
+            for slot = 1, count do
+                local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+                local itemID = infoOk and info and info.itemID
+
+                if itemID then
+                    local entry = slots[itemID]
+
+                    if not entry then
+                        entry = {}
+                        slots[itemID] = entry
+                        order[#order + 1] = itemID
+                    end
+
+                    if not entry.bag and not info.isLocked then
+                        entry.bag, entry.slot = bag, slot
+                        entry.stackCount = info.stackCount or 1
+                    end
+                end
+            end
+        end
+    end
+
+    return order, slots
+end
+
 --- A validated ItemLocation for a bag slot, or nil.
 --
 -- IsValid matters: a location built from a slot that has since changed still
@@ -227,15 +278,53 @@ local function MakeLocation(bag, slot)
     return location
 end
 
+-- Enum.ItemBind values meaning a copy sitting in a bag is already soulbound:
+-- 1 binds on being picked up, 4 is a quest item. Written out rather than read
+-- from Enum.ItemBind, because this client's Enum tables have been patchy and
+-- a nil lookup here would hide sellable stock instead of junk.
+local BOUND_ON_PICKUP = { [1] = true, [4] = true }
+
+--- Does this item bind on pickup, so the copy in the bags cannot be auctioned?
+--
+-- Only consulted when C_AuctionHouse.IsSellItemValid is missing. That call is
+-- the real answer; this is a guess, and it exists because the Post tab now
+-- offers the whole bag -- without it, a client lacking that function would
+-- list every hearthstone and quest item as something to sell.
+--
+-- Unknown reads as not bound, so an item the client has not cached yet is
+-- offered rather than quietly missing from the list.
+local function LooksBound(itemID)
+    if not Util.HasFunction("C_Item.GetItemInfo") then return false end
+
+    -- bindType is the fourteenth return.
+    local ok, _, _, _, _, _, _, _, _, _, _, _, _, _, bindType =
+        pcall(C_Item.GetItemInfo, itemID)
+
+    if not ok or type(bindType) ~= "number" then return false end
+
+    return BOUND_ON_PICKUP[bindType] == true
+end
+
 --- Can this item be auctioned at all, and how many of it?
 --
 -- These take an ItemLocation and read the auction house's sell state, which
 -- was investigated as a cause of Blizzard's own Sell tab failing with
 -- "Internal auction error". It was ruled out: the error occurs with this addon
 -- disabled entirely, so it is a realm-side problem and these calls are safe.
+--
+-- @param held  optional { bag, slot } the caller already found, so a list
+--   building many of these does not re-walk the bags for each one. A table
+--   with no bag means the caller looked and there is no slot to list from.
 -- @return sellable, postableCount
-function Posting:GetSellInfo(itemID)
-    local bag, slot = FindInBags(itemID)
+function Posting:GetSellInfo(itemID, held)
+    local bag, slot
+
+    if held then
+        bag, slot = held.bag, held.slot
+    else
+        bag, slot = FindInBags(itemID)
+    end
+
     if not bag then return false, 0 end
 
     local location = MakeLocation(bag, slot)
@@ -245,6 +334,8 @@ function Posting:GetSellInfo(itemID)
     if Util.HasFunction("C_AuctionHouse.IsSellItemValid") then
         local ok, valid = pcall(C_AuctionHouse.IsSellItemValid, location, false)
         if ok then sellable = valid and true or false end
+    else
+        sellable = not LooksBound(itemID)
     end
 
     local count = ns.Inventory:GetBagCount(itemID)
@@ -308,6 +399,20 @@ function Posting:GetDeposit(itemID, quantity)
     if not ns.Scanner.isAuctionHouseOpen then
         local unit = self:GetCachedUnitDeposit(itemID)
         return unit and (unit * math.max(1, quantity or 1)) or nil
+    end
+
+    -- A deposit is a property of the item and the listing length, not of the
+    -- moment, so asking the client again for one worked out seconds ago buys
+    -- nothing. It matters now that the Post tab offers the whole bag and
+    -- rebuilds itself every second: without this, a bagful of items means a
+    -- hundred deposit calculations a second, at the auction house, which is
+    -- exactly where this addon must stay out of the way.
+    local record = ns.db and ns.db.deposits and ns.db.deposits[itemID]
+    local cached = self:GetCachedUnitDeposit(itemID)
+
+    if cached and record and record.at
+        and (time() - record.at) < DEPOSIT_CACHE_SECONDS then
+        return cached * math.max(1, quantity or 1)
     end
 
     local duration = ns.Config:Get("postDuration") or 2
@@ -420,15 +525,6 @@ end
 -- What to list
 --------------------------------------------------------------------------------
 
---- Everything in your bags that one of your recipes makes.
---
--- Restricted to crafted output on purpose: this is a crafting addon, and
--- offering to sell arbitrary bag contents invites expensive mistakes.
---- Items in your bags worth listing.
---
--- @param opts { includeAll } -- by default only what your recipes make.
---   includeAll covers everything sellable with a known price, which is what
---   the sell list and the Post tab want: bag clearing, not just crafted stock.
 --- The lowest a listing may go before it costs the player something, and why.
 --
 -- Two different floors, and the higher one wins.
@@ -458,6 +554,14 @@ function Posting:GetLossFloor(itemID, unitCost)
     return floor, reason, vendorPrice
 end
 
+--- Items in your bags worth listing.
+--
+-- @param opts.includeAll  everything sellable in the bags, not only what one
+--   of this account's recipes makes. Reagents a queued craft is waiting on
+--   are still held back, because listing those costs real work to undo.
+-- @param opts.includeUnpriced  keep items no scan has ever priced, which only
+--   the Post tab wants; every caller that picks something to list on the
+--   player's behalf must not see them.
 function Posting:GetPostable(opts)
     opts = opts or {}
 
@@ -480,79 +584,86 @@ function Posting:GetPostable(opts)
     end
 
     local lines = {}
-    local seen = {}
+    local order, slots = IndexBags()
 
-    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
-        local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
+    for _, itemID in ipairs(order) do
+        local wanted = outputs[itemID] ~= nil
+            or (opts.includeAll and not reserved[itemID])
 
-        if slotsOk and slots then
-            for slot = 1, slots do
-                local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
-                local itemID = infoOk and info and info.itemID
+        if wanted then
+            local held = slots[itemID]
 
-                local wanted = outputs[itemID] ~= nil
-                    or (opts.includeAll and not reserved[itemID])
+            local sellable, count = self:GetSellInfo(itemID, held)
+            local price, basis = self:GetPostPrice(itemID)
 
-                if itemID and wanted and not seen[itemID] then
-                    seen[itemID] = true
+            -- What it cost to make one, so a listing below that can be
+            -- flagged rather than quietly recommended.
+            local analysis = outputs[itemID]
+                and ns.Profit:Analyse(outputs[itemID])
+            local unitCost = analysis and analysis.costPerUnit
 
-                    local sellable, count = self:GetSellInfo(itemID)
-                    local price, basis = self:GetPostPrice(itemID)
+            local lossFloor, lossReason, vendorPrice =
+                self:GetLossFloor(itemID, unitCost)
 
-                    -- What it cost to make one, so a listing below that can be
-                    -- flagged rather than quietly recommended.
-                    local analysis = outputs[itemID]
-                        and ns.Profit:Analyse(outputs[itemID])
-                    local unitCost = analysis and analysis.costPerUnit
+            local isCommodity = ns.Scanner:IsCommodity(itemID)
 
-                    local lossFloor, lossReason, vendorPrice =
-                        self:GetLossFloor(itemID, unitCost)
+            -- Commodities sell from across the bags at once; item
+            -- auctions come from a single slot, so gear goes up one
+            -- listing at a time. That is the ceiling, not the amount:
+            -- the player may have asked for fewer.
+            local maxQuantity = isCommodity
+                and count
+                or math.min(count, (held and held.stackCount) or 1)
 
-                    local isCommodity = ns.Scanner:IsCommodity(itemID)
+            local postQuantity = self:GetChosenQuantity(itemID, maxQuantity)
 
-                    -- Commodities sell from across the bags at once; item
-                    -- auctions come from a single slot, so gear goes up one
-                    -- listing at a time. That is the ceiling, not the amount:
-                    -- the player may have asked for fewer.
-                    local _, _, slotStack = FindInBags(itemID)
-                    local maxQuantity = isCommodity
-                        and count
-                        or math.min(count, slotStack or 1)
+            -- Without a price there is nothing to list it at, and a guess on
+            -- someone's bag contents is worse than a skip -- so the buttons
+            -- that pick something to list never see one. The Post tab asks
+            -- for them anyway with includeUnpriced: it draws the row, says
+            -- there is no price and offers to go and find one, which beats an
+            -- item the player is holding being silently absent from a list
+            -- that claims to show their bags.
+            local needsPrice = opts.includeAll and not opts.includeUnpriced
 
-                    local postQuantity = self:GetChosenQuantity(itemID, maxQuantity)
-
-                    -- Without a price there is nothing to list it at, and a
-                    -- guess on someone's bag contents is worse than a skip.
-                    if sellable and count > 0 and (price or not opts.includeAll) then
-                        lines[#lines + 1] = {
-                            itemID = itemID,
-                            recipeID = outputs[itemID],
-                            count = count,
-                            unitPrice = price,
-                            priceBasis = basis,
-                            unitCost = unitCost,
-                            vendorPrice = vendorPrice,
-                            lossFloor = lossFloor,
-                            lossReason = lossReason,
-                            atALoss = price ~= nil and lossFloor ~= nil
-                                and price < lossFloor,
-                            postQuantity = postQuantity,
-                            maxQuantity = maxQuantity,
-                            quantityChosen = postQuantity ~= maxQuantity,
-                            total = price and (price * count) or nil,
-                            postTotal = price and (price * postQuantity) or nil,
-                            deposit = self:GetDeposit(itemID, postQuantity),
-                            isCommodity = isCommodity,
-                            label = Util.GetItemLabel(itemID),
-                        }
-                    end
-                end
+            if sellable and count > 0 and (price or not needsPrice) then
+                lines[#lines + 1] = {
+                    itemID = itemID,
+                    recipeID = outputs[itemID],
+                    count = count,
+                    unitPrice = price,
+                    priceBasis = basis,
+                    unitCost = unitCost,
+                    vendorPrice = vendorPrice,
+                    lossFloor = lossFloor,
+                    lossReason = lossReason,
+                    atALoss = price ~= nil and lossFloor ~= nil
+                        and price < lossFloor,
+                    postQuantity = postQuantity,
+                    maxQuantity = maxQuantity,
+                    quantityChosen = postQuantity ~= maxQuantity,
+                    total = price and (price * count) or nil,
+                    postTotal = price and (price * postQuantity) or nil,
+                    deposit = self:GetDeposit(itemID, postQuantity),
+                    isCommodity = isCommodity,
+                    -- Whether one of this account's recipes makes it, so the
+                    -- tab can tell crafted stock from the rest of the bag.
+                    isCrafted = outputs[itemID] ~= nil,
+                    label = Util.GetItemLabel(itemID),
+                }
             end
         end
     end
 
     table.sort(lines, function(a, b)
-        return (a.total or 0) > (b.total or 0)
+        local left, right = a.total or 0, b.total or 0
+        if left ~= right then return left > right end
+
+        -- Ties used to be left to table.sort, which is not stable. With the
+        -- whole bag on show, every unpriced row is worth the same nothing, so
+        -- the bottom of the list reshuffled itself once a second. itemID is
+        -- an arbitrary order, but it is the same arbitrary order every time.
+        return (a.itemID or 0) < (b.itemID or 0)
     end)
 
     return lines
@@ -933,6 +1044,67 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
         self.confirming = nil
         ns.Warn("could not open the confirmation dialog; nothing was listed.")
     end
+end
+
+--- Search the auction house for one item's price, without listing anything.
+--
+-- The Post tab offers the whole bag now, and a bag holds things no scan has
+-- ever covered: a drop, a gathered stack, something bought this morning. Such
+-- a row used to be a dead button beside a tooltip telling the player to go and
+-- scan, and on a client that shows no Lua error a button that does nothing
+-- looks exactly like a broken one.
+--
+-- This is the same single-item search the addon already makes immediately
+-- before every listing, pointed at the row the player asked about. It never
+-- posts: the price lands in the price table and the caller redraws.
+--
+-- @param onDone  called with (itemID, price, status) once the search settles.
+--   status is Scanner's -- "fresh", "recent", "empty", "unavailable" or
+--   "superseded". price is nil when nothing is listed and nothing is known.
+-- @return true if a search actually went out
+function Posting:CheckPrice(itemID, onDone)
+    if not itemID then return false end
+
+    local allowed, reason = self:CanPrice()
+    if not allowed then
+        ns.Print(reason or "cannot check prices right now")
+        if onDone then onDone(itemID, nil, "unavailable") end
+        return false
+    end
+
+    ns.Print(("checking the current price of %s..."):format(Util.GetItemLabel(itemID)))
+
+    -- One answer only. A search can settle through the callback, through the
+    -- fallback timer, or through both, and reporting twice would redraw the
+    -- row underneath a price it had already been drawn with.
+    local settled = false
+
+    local function Settle(status)
+        if settled then return end
+        settled = true
+
+        -- Read the price back after the search, never before. A search that
+        -- came back empty has just cleared the rival price, and an empty
+        -- auction house is an answer rather than a failure.
+        local price = self:GetPostPrice(itemID)
+
+        if onDone then onDone(itemID, price, status) end
+    end
+
+    C_Timer.After(5, function()
+        if settled then return end
+
+        ns.Warn("the price check did not come back.")
+        Settle("unavailable")
+    end)
+
+    local started = ns.Scanner:ScanItem(itemID, function(_, _, _, _, _, _, status)
+        Settle(status or "fresh")
+    end)
+
+    if not started then Settle("unavailable") end
+
+    return started and true or false
 end
 
 --- Check the current price, then ask, then post. This is what the buttons call.
