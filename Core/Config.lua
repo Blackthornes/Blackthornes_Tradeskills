@@ -238,6 +238,31 @@ end
 -- So neither store is chosen over the other. Anything already present wins,
 -- because it is this session's, and everything absent is filled from the
 -- other. Nothing is ever overwritten.
+--
+-- With one exception, below.
+local ATOMIC = { queue = true }
+
+-- The craft queue is taken whole or not at all, never merged.
+--
+-- Everything else in this database is a map two stores can each hold a
+-- different part of -- prices by item, sales by realm -- and joining those is
+-- the whole point of this function. An ordered list of decisions is not that,
+-- and index by index is a meaningless place to join two of them. A list of one
+-- merged into a frozen list of three keeps your craft at index 1, takes
+-- entries 2 and 3 from the frozen list, and silently drops that list's own
+-- first entry. The result is neither list.
+--
+-- Reported 2026-09-22: "The crafting queue tab is resetting to some old saved
+-- list each time i swap characters." A trip to character select keeps the
+-- client process alive, so the CVar store still carries this session's real
+-- queue -- but every addon reloads, so Blackthornes_TS_Data hands its frozen
+-- database over again on every swap and the two met here.
+--
+-- Present -- empty included, an emptied queue is a real state and not a gap --
+-- means this session's, and it is left alone. Absent means a genuine cold
+-- start, and the other store's list is taken entire. Which of two real lists
+-- is the newer is not this function's question: Durable:Restore settles that
+-- at PLAYER_LOGIN from the save stamps it keeps beside them.
 local function FillGaps(target, source, depth)
     depth = depth or 0
     if depth > 8 then return 0 end      -- serialised data is a tree; belt and braces
@@ -250,6 +275,12 @@ local function FillGaps(target, source, depth)
         if mine == nil then
             target[key] = value
             filled = filled + 1
+
+        -- Only at the top level, which is where the database's own keys are.
+        -- A "queue" deeper in somebody's data is not this one.
+        elseif depth == 0 and ATOMIC[key] then
+            -- Already has one of its own; see ATOMIC above.
+
         elseif type(mine) == "table" and type(value) == "table" then
             filled = filled + FillGaps(mine, value, depth + 1)
         end
@@ -353,6 +384,11 @@ function Config:Bootstrap()
 
             -- Both stores can be real and neither complete; see FillGaps.
             if snapshot then
+                -- Read before the fill, because the fill is what would change
+                -- it. This is the number `/bts durable` reports as declined.
+                self.loadDiagnostics.snapshotQueue =
+                    type(snapshot.queue) == "table" and #snapshot.queue or 0
+
                 local filled = FillGaps(stored, snapshot)
 
                 if filled > 0 then
@@ -362,16 +398,26 @@ function Config:Bootstrap()
                 end
             end
 
+            self.loadDiagnostics.queueSource = "the CVar store"
+
         elseif snapshot then
             _G.BlackthornesTSDB = snapshot
 
             self.restoredFromSnapshot = true
             self.loadDiagnostics.restored = true
             self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
+            self.loadDiagnostics.queueSource = "the local data addon"
         else
             _G.BlackthornesTSDB = {}
             self.freshDatabase = true
+            self.loadDiagnostics.queueSource = "a fresh database"
         end
+
+        -- The outcome, not the attempt: how long the queue actually is once
+        -- both stores have had their turn. A merge that put a frozen list
+        -- back into it is visible here and nowhere else at this point.
+        self.loadDiagnostics.queueEntries =
+            type(_G.BlackthornesTSDB.queue) == "table" and #_G.BlackthornesTSDB.queue or 0
 
         -- Taken either way, so nothing downstream seeds from it twice.
         _G.BlackthornesTSSnapshot = nil
