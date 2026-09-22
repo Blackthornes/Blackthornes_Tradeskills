@@ -192,7 +192,7 @@ local function Build(outer)
     widgets.allowLoss:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local confirmRow = CreateRow(container, lossRow, "Confirm before each listing",
-        "Off: clicking List or Post All lists immediately, with no prompt.")
+        "Off: clicking List or Post Crafted lists immediately, with no prompt.")
 
     widgets.confirmPost = Widgets.CreateCheckbox(confirmRow, "Ask first", function(checked)
         Config:Set("confirmBeforePosting", checked)

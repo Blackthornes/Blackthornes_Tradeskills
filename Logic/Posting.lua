@@ -428,7 +428,7 @@ end
 --
 -- @param opts { includeAll } -- by default only what your recipes make.
 --   includeAll covers everything sellable with a known price, which is what
---   the Post All button wants: bag clearing, not just crafted stock.
+--   the sell list and the Post tab want: bag clearing, not just crafted stock.
 --- The lowest a listing may go before it costs the player something, and why.
 --
 -- Two different floors, and the higher one wins.
