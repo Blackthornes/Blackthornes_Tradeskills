@@ -204,4 +204,248 @@ PRICES[6218] = 3000
 check("a recipe added after the first read is matched",
   RecipeValue:RecipeForRow(NamedRow("Runed Copper Rod")), 107)
 
+--------------------------------------------------------------------------------
+-- Where the value lands on the row
+--------------------------------------------------------------------------------
+
+-- Trent's screenshot of 2026-09-21 showed the price printed across the end of
+-- the name on two kinds of row:
+--
+--   "Bolt of Woolen Cloth [5]5s 56c"       -- the count is a second region
+--   "Double-stitched Woolen Shoulder6s 82c" -- the name reaches the edge
+--
+-- The first version measured the name region alone and anchored the value to
+-- it, so anything else the row was drawing was invisible to it. These checks
+-- reproduce both rows out of plain tables and fail against that version.
+
+RECIPES[201] = { recipeID = 201, name = "Bolt of Woolen Cloth",   outputItemID = 2997 }
+RECIPES[202] = { recipeID = 202, name = "Double-stitched Woolen Shoulders", outputItemID = 2998 }
+RECIPES[203] = { recipeID = 203, name = "Linen Bag",              outputItemID = 2999 }
+
+PRICES[2997] = 55600
+PRICES[2998] = 68200
+PRICES[2999] = 400
+
+local ROW_LEFT, ROW_RIGHT = 0, 230
+local CHAR = 6
+
+--- A font string that knows where it is, and remembers what was done to it.
+local function Region(text, left, opts)
+  opts = opts or {}
+
+  return {
+    text = text,
+    left = left,
+    width = nil,
+    wrap = opts.wrap,
+    shown = opts.shown ~= false,
+    justify = opts.justify,
+
+    GetText = function(self) return self.text end,
+    GetStringWidth = function(self) return #(self.text or "") * CHAR end,
+    GetLeft = function(self) return self.left end,
+    GetRight = function(self) return ROW_RIGHT end,
+    GetJustifyH = function(self) return self.justify end,
+    IsShown = function(self) return self.shown end,
+    SetWidth = function(self, w) self.width = w end,
+    SetWordWrap = function(self, w) self.wrap = w end,
+    GetWordWrap = function(self) return self.wrap end,
+  }
+end
+
+--- A row that can be decorated, and a label that records where it was put.
+local function Row(name, opts)
+  opts = opts or {}
+
+  local row = {}
+  row.Text = Region(name, opts.nameLeft or 20, opts)
+
+  local extras = {}
+  if opts.count then
+    extras[#extras + 1] = Region(opts.count, opts.countLeft or 148, opts)
+  end
+
+  row.GetLeft = function() return ROW_LEFT end
+  row.GetRight = function() return ROW_RIGHT end
+  row.IsShown = function() return true end
+
+  -- Written out rather than folded into one `and`/`or` expression: that
+  -- shape is what hid a live self-undercutting bug in Logic/Profit.lua, and
+  -- an empty `extras` is exactly the falsy middle it gets wrong.
+  local unpack_ = unpack or table.unpack
+
+  row.GetRegions = function(self)
+    local all = { row.Text }
+
+    if row.label then all[#all + 1] = row.label end
+
+    for i = 1, #extras do all[#all + 1] = extras[i] end
+
+    return unpack_(all)
+  end
+
+  row.CreateFontString = function(self)
+    local label = Region("", 0)
+
+    label.points = {}
+    label.visible = false
+    label.ClearAllPoints = function(self) self.points = {} end
+    label.SetPoint = function(self, point, rel, relPoint, x, y)
+      self.points[#self.points + 1] = { point = point, x = x }
+    end
+
+    -- A label that knows where it was put. Without this the fake cannot
+    -- reproduce the worst failure available here: a label that measures
+    -- itself steps to the right of where it already is, every refresh, and
+    -- walks off the end of the list within a second or two.
+    label.GetLeft = function(self)
+      local point = self.points[1]
+
+      if point and point.point == "LEFT" then return ROW_LEFT + point.x end
+
+      return ROW_RIGHT - RecipeValue.RIGHT_INSET - #(self.text or "") * CHAR
+    end
+    label.SetJustifyH = function(self, j) self.justify = j end
+    label.SetText = function(self, t) self.text = t end
+    label.Show = function(self) self.visible = true end
+    label.Hide = function(self) self.visible = false end
+
+    row.label = label
+    return label
+  end
+
+  return row
+end
+
+local function Placement(row)
+  local point = row.label and row.label.points[1]
+  return point and point.point, point and point.x
+end
+
+-- Row 1: a name with a separate "[5]" beside it, the shape that broke.
+do
+  local row = Row("Bolt of Woolen Cloth", { count = "[5]" })
+  local outcome, placement = RecipeValue:DecorateRow(row)
+
+  check("a counted recipe is still valued", outcome, "valued")
+  check("and its value sits beside the row's text", placement, "inline")
+
+  local point, x = Placement(row)
+  check("anchored from the row's left edge", point, "LEFT")
+
+  -- The count region runs from 148 to 166. Anything at or left of 166 is the
+  -- bug: the price printed over the "[5]".
+  local countRight = 148 + #"[5]" * CHAR
+
+  check("the value clears the count, not just the name",
+    x >= countRight + RecipeValue.NAME_GAP, true)
+
+  -- The name alone ends at 130, which is where the broken version put it.
+  check("and is not where measuring the name alone would put it",
+    x > 20 + #"Bolt of Woolen Cloth" * CHAR + RecipeValue.NAME_GAP, true)
+end
+
+-- Row 2: the label must not measure itself. Left in, it would step right by
+-- its own width every refresh until it walked off the end of the list.
+do
+  local row = Row("Bolt of Woolen Cloth", { count = "[5]" })
+
+  RecipeValue:DecorateRow(row)
+  local _, first = Placement(row)
+
+  RecipeValue:DecorateRow(row)
+  local _, second = Placement(row)
+
+  RecipeValue:DecorateRow(row)
+  local _, third = Placement(row)
+
+  check("a second pass puts the value in the same place", second, first)
+  check("and so does a third", third, first)
+end
+
+-- Row 3: a name long enough to reach the right edge. There is no room beside
+-- it, so the name gives way rather than the two being drawn over each other.
+do
+  local row = Row("Double-stitched Woolen Shoulders")
+  local _, placement = RecipeValue:DecorateRow(row)
+
+  check("a name that reaches the edge makes room", placement, "shortened")
+
+  local point = Placement(row)
+  check("the value goes to the right edge", point, "RIGHT")
+  check("the name was given a width", type(row.Text.width), "number")
+  check("word wrap was turned off first", row.Text.wrap, false)
+
+  -- It has to stop short of the value, with the gap between them.
+  local valueWidth = #row.label.text * CHAR
+  local valueLeft = ROW_RIGHT - RecipeValue.RIGHT_INSET - valueWidth
+
+  check("and stops short of the value",
+    row.Text.left + row.Text.width <= valueLeft - RecipeValue.NAME_GAP + 0.5, true)
+
+  check("but is never cut to nothing",
+    row.Text.width >= RecipeValue.MIN_NAME_WIDTH, true)
+end
+
+-- Row 4: rows are recycled. One that held a long name and now holds a short
+-- one has to get its full width back, or it stays cut for no reason.
+do
+  local row = Row("Double-stitched Woolen Shoulders")
+  RecipeValue:DecorateRow(row)
+  check("narrowed while it was long", type(row.Text.width), "number")
+
+  row.Text.text = "Linen Bag"
+  local _, placement = RecipeValue:DecorateRow(row)
+
+  check("the short name fits beside its value", placement, "inline")
+  check("and the width was handed back", row.Text.width, 0)
+end
+
+-- Row 5: a recipe with no price data shows nothing, and takes nothing from
+-- the name in exchange for it.
+do
+  local row = Row("Double-stitched Woolen Shoulders")
+  RecipeValue:DecorateRow(row)
+  check("narrowed while it had a value", type(row.Text.width), "number")
+
+  PRICES[2998] = nil
+  local outcome = RecipeValue:DecorateRow(row)
+  PRICES[2998] = 68200
+
+  check("an unpriced recipe says nothing", outcome, "unpriced")
+  check("its label is hidden", row.label.visible, false)
+  check("and the name has its width back", row.Text.width, 0)
+end
+
+-- Row 6: a region with nothing showing takes up no space, so it must not
+-- push the value across the row.
+do
+  local visible = Row("Linen Bag")
+  RecipeValue:DecorateRow(visible)
+  local _, without = Placement(visible)
+
+  local hidden = Row("Linen Bag", { count = "[10]", countLeft = 200 })
+  hidden.GetRegions = function(self)
+    local extra = Region("[10]", 200, { shown = false })
+    if self.label then return self.Text, self.label, extra end
+    return self.Text, extra
+  end
+
+  RecipeValue:DecorateRow(hidden)
+  local _, with = Placement(hidden)
+
+  check("a hidden region is not measured", with, without)
+end
+
+-- The measurement itself, for the justifications a client might use.
+do
+  local left = Region("Copper Chain Belt", 20)
+  check("left-justified text ends where it stops",
+    RecipeValue._TextRight(left), 20 + #"Copper Chain Belt" * CHAR)
+
+  local right = Region("12s", 20, { justify = "RIGHT" })
+  check("right-justified text ends at its region's edge",
+    RecipeValue._TextRight(right), ROW_RIGHT)
+end
+
 print("test_recipevalue: ok")
