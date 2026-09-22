@@ -55,6 +55,12 @@ local DEFAULTS = {
         -- affects the deposit estimate, since listings are made by hand.
         postDuration = 2,
 
+        -- Whether the Post tab lists everything in the bags or only what
+        -- one of this account's recipes makes. A view, not a safety rail:
+        -- nothing is ever listed without a click on its own row, and the
+        -- bar's Post Crafted button stays crafted-only either way.
+        postShowAllItems = true,
+
         -- Search the auction house for the item immediately before listing
         -- it. A full scan is a snapshot and goes stale; undercutting a price
         -- that moved ten minutes ago is how you end up listed above a rival.
