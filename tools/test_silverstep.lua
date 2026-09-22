@@ -116,6 +116,12 @@ check("50c has no lower step, so one silver", Util.RoundToSilver(50), 100)
 check("1c likewise", Util.RoundToSilver(1), 100)
 check("nothing in, nothing out", Util.RoundToSilver(nil), nil)
 
+-- Upwards, for a price with no rival under it to worry about.
+check("2s 99c rounds up to 3s", Util.CeilToSilver(299), 300)
+check("3s is already there", Util.CeilToSilver(300), 300)
+check("50c has no lower step, so one silver", Util.CeilToSilver(50), 100)
+check("nothing in, nothing out", Util.CeilToSilver(nil), nil)
+
 --------------------------------------------------------------------------------
 print("")
 print("the Linen Bag, as it actually happened")

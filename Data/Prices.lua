@@ -494,6 +494,18 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
     if not record then
         ns.Print(("no auction data for %s -- run |cffc8a44d/bts scan|r at the auction house")
             :format(Util.GetItemLabel(itemID)))
+
+        -- There may still be a price to give: something this account can make
+        -- is valued off its materials until a scan finds a real one. Asked of
+        -- the chooser, so this cannot quote a different number from the one
+        -- the Sell tab would list at.
+        local estimate, basis, why = ns.Profit:ChoosePostPrice(itemID)
+
+        if estimate and basis == "derived" then
+            ns.PrintRaw(("  |c%syou would list at %s -- an estimate, not a market price|r"):format(
+                ns.COLORS.warn, Util.FormatMoney(estimate)))
+            if why then ns.PrintRaw(("    %s"):format(why)) end
+        end
         return
     end
 

@@ -991,6 +991,17 @@ end
 function Posting:Confirm(itemID, quantity, unitPrice, check)
     check = check or {}
 
+    -- Which rule produced the number on the dialog. A price check hands it
+    -- over; without one, the chooser is asked, and its answer is only used
+    -- when it still agrees with the price about to be listed -- so the
+    -- sentence underneath can never describe a different number.
+    local basis = check.basis
+
+    if not basis then
+        local chosen, chosenBasis = ns.Profit:ChoosePostPrice(itemID)
+        if chosen == unitPrice then basis = chosenBasis end
+    end
+
     local deposit = self:GetDeposit(itemID, quantity)
 
     local text = ("List |cffffffff%d x %s|r\n\nat %s each, %s total%s?"):format(
@@ -1011,18 +1022,31 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
     -- was no longer selling; now there is nobody to undercut and the number
     -- above means something different, so it says which.
     if check.state == "empty" then
-        text = text .. ("\n\n|cffC8A44D%s|r"):format(
-            check.basis == "market"
-                and "Nothing else is listed right now, so this is market value rather than an undercut."
-                or "Nothing else is listed right now, and there is no market value to go on -- check this price yourself.")
+        local note = "Nothing else is listed right now, and there is no market value to go on -- check this price yourself."
+
+        if basis == "market" then
+            note = "Nothing else is listed right now, so this is market value rather than an undercut."
+        elseif basis == "derived" then
+            -- Covered in full by the estimate note below; saying there is
+            -- nothing to go on directly above it would contradict it.
+            note = "Nothing else is listed right now."
+        end
+
+        text = text .. ("\n\n|cffC8A44D%s|r"):format(note)
 
     elseif check.state == "unavailable" then
         text = text .. "\n\n|cffE5604FThe price check did not come back. This is the last price we saw, which may be out of date.|r"
     end
 
+    -- The estimate has to say so here above all: every other basis on this
+    -- dialog is something the auction house reported, and this one is not.
+    if basis == "derived" then
+        text = text .. "\n\n|cffC8A44DNo scan has ever priced this. The price above is estimated from what its materials are worth -- check it yourself before listing.|r"
+    end
+
     -- Said plainly at the moment the gold is committed, because a price equal
     -- to the rival's looks like the undercut simply failed.
-    if check.basis == "match" then
+    if basis == "match" then
         text = text .. "\n\n|cffC8A44DMatching the cheapest listing. This cannot be priced in copper, so undercutting would cost a whole silver.|r"
     end
 

@@ -510,6 +510,19 @@ function Util.RoundToSilver(price)
     return math.floor(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
 end
 
+--- Round a price UP to something an item auction will accept.
+--
+-- Rounding down is right when there is a rival to get beneath: the price has
+-- to be below theirs to sell first. With no rival there is nothing to get
+-- beneath, and rounding down instead throws away up to a silver of a price
+-- that was only ever an estimate -- enough, on a cheap craft, to put it under
+-- what the materials cost and have the listing refused.
+function Util.CeilToSilver(price)
+    if type(price) ~= "number" then return nil end
+    if price <= COPPER_PER_SILVER then return COPPER_PER_SILVER end
+    return math.ceil(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+end
+
 --- Is this price one an item auction will accept?
 function Util.IsWholeSilver(price)
     return type(price) == "number" and price >= COPPER_PER_SILVER
