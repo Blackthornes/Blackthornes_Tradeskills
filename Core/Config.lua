@@ -67,7 +67,7 @@ local DEFAULTS = {
         verifyPriceBeforePosting = true,
 
         -- Ask before each listing. Posting is irreversible without paying a
-        -- second deposit, and Post All works through a whole bag, so the
+        -- second deposit, and listing can work through a whole bag, so the
         -- default is to confirm.
         confirmBeforePosting = true,
 
