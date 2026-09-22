@@ -55,6 +55,11 @@ local NAME_GAP = 8
 -- value beside it would run off the row.
 local RIGHT_INSET = 6
 
+-- The narrowest a name is allowed to be cut to when it has to give way to the
+-- value. A name cut to nothing to make room for a price is a worse row than
+-- one with no price on it at all.
+local MIN_NAME_WIDTH = 60
+
 -- How often the visible rows are re-read while a profession window is open.
 -- Scrolling recycles rows rather than firing an event, so a row that was
 -- "Copper Chain Belt" a moment ago is now a different recipe with our old
@@ -554,47 +559,208 @@ local function LabelFor(row)
     return created
 end
 
---- Put the value just right of the name, or against the row's right edge.
+--- Every visible piece of text on a row, this module's own label excluded.
 --
--- `GetStringWidth` is how far the *text* reaches, which is not where the
--- name's own region ends: Blizzard gives that region the width of the whole
--- row, so anchoring to its RIGHT would put the value out past the list.
+-- A row is not one font string. Blizzard writes the recipe's name in one and
+-- how many it makes in another -- "Bolt of Woolen Cloth" and "[5]" -- and
+-- measuring only the first is exactly how the value ended up printed across
+-- the second.
 --
--- If the name is long enough that a value beside it would run off the row, the
--- value goes to the right edge instead. Overlapping the name would cost the
--- reader the thing they came for.
+-- `mine` is this row's value label, and leaving it in would be worse than
+-- wrong: the label would measure itself, step to the right of where it
+-- already was, and do it again a quarter of a second later until it had
+-- walked off the end of the list.
+local function TextRegions(row, mine)
+    local found, seen = {}, {}
+
+    local function add(region)
+        if region == nil or region == mine then return end
+        if not TextOf(region) then return end
+        if seen[region] then return end
+
+        -- A region with nothing showing takes up no space on the row.
+        if Try(Field(region, "IsShown"), region) == false then return end
+
+        seen[region] = true
+        found[#found + 1] = region
+    end
+
+    for i = 1, #NAME_FIELDS do
+        add(Field(row, NAME_FIELDS[i]))
+    end
+
+    local regions = Try(function() return { row:GetRegions() } end)
+
+    if type(regions) == "table" then
+        for i = 1, #regions do
+            add(regions[i])
+        end
+    end
+
+    return found
+end
+
+--- How far the text inside a region actually reaches to the right.
+--
+-- `GetStringWidth` is the width of the words; the region holding them is
+-- usually as wide as the whole row, so its own `GetRight` says nothing about
+-- where the words stop. Where they sit inside that region depends on how it
+-- is justified, so this asks rather than assuming they start at the left.
+local function TextRight(region)
+    local width = Try(Field(region, "GetStringWidth"), region)
+    if type(width) ~= "number" then return nil end
+
+    local justify = Try(Field(region, "GetJustifyH"), region)
+    local left = Try(Field(region, "GetLeft"), region)
+    local right = Try(Field(region, "GetRight"), region)
+
+    if justify == "RIGHT" then
+        return type(right) == "number" and right or nil
+    end
+
+    if justify == "CENTER" then
+        if type(left) ~= "number" or type(right) ~= "number" then return nil end
+
+        return (left + right) / 2 + width / 2
+    end
+
+    if type(left) ~= "number" then return nil end
+
+    return left + width
+end
+
+-- Name regions this module has narrowed, with what they were before. Weak
+-- keys, like the labels: when the client throws a row away the entry goes
+-- with it.
+local shortened = setmetatable({}, { __mode = "k" })
+
+--- Give a narrowed name back the width it had.
+--
+-- `SetWidth(0)` is how a region is told to size itself from its anchors and
+-- its own text again, rather than from a number this module picked.
+local function ReleaseName(region)
+    local state = region and shortened[region]
+    if not state then return false end
+
+    shortened[region] = nil
+
+    Try(Field(region, "SetWidth"), region, 0)
+
+    if state.wrap ~= nil then
+        Try(Field(region, "SetWordWrap"), region, state.wrap)
+    end
+
+    return true
+end
+
+--- Narrow a name so it stops short of the value instead of running under it.
+--
+-- Word wrap goes off first. A name given less width than its text needs would
+-- otherwise fold onto a second line inside a row only tall enough for one,
+-- which is a worse-looking row than the one this is fixing. The old setting
+-- is kept so it can be put back.
+local function ShortenName(region, maxRight)
+    if region == nil then return false end
+
+    local left = Try(Field(region, "GetLeft"), region)
+    local setWidth = Field(region, "SetWidth")
+
+    if type(left) ~= "number" or type(setWidth) ~= "function" then return false end
+
+    local width = math.max(maxRight - left, MIN_NAME_WIDTH)
+
+    if not shortened[region] then
+        shortened[region] = { wrap = Try(Field(region, "GetWordWrap"), region) }
+    end
+
+    Try(Field(region, "SetWordWrap"), region, false)
+    Try(setWidth, region, width)
+
+    return true
+end
+
+--- Put the value after everything else on the row, or against the right edge.
+--
+-- The first version of this measured the recipe's name alone and anchored the
+-- value to it. That printed the value on top of the "[5]" beside a recipe
+-- that makes more than one, and on top of the last word of any name long
+-- enough to reach the right-hand edge. Both are in Trent's screenshot of
+-- 2026-09-21. So nothing is inferred from the name here: the row is measured,
+-- all of it, and when there is genuinely no room the name gives way rather
+-- than the two being drawn over each other.
+--
+-- @return "inline", "shortened" or "right" -- how the value had to be placed,
+--   so `/bts value` can report what the rows actually look like rather than
+--   that a position was set.
 local function PositionLabel(label, row, region)
     label:ClearAllPoints()
 
-    local nameWidth = region and Try(Field(region, "GetStringWidth"), region)
+    -- Before measuring, not after: a row recycled from a long name to a short
+    -- one has to have its full width back, or it stays cut for no reason.
+    ReleaseName(region)
 
-    if type(nameWidth) ~= "number" then
-        label:SetJustifyH("RIGHT")
-        label:SetPoint("RIGHT", row, "RIGHT", -RIGHT_INSET, 0)
-        return
-    end
-
-    local valueWidth = Try(Field(label, "GetStringWidth"), label) or 0
+    local rowLeft = Try(Field(row, "GetLeft"), row)
     local rowRight = Try(Field(row, "GetRight"), row)
-    local nameLeft = Try(Field(region, "GetLeft"), region)
+    local valueWidth = Try(Field(label, "GetStringWidth"), label) or 0
 
-    local fits = true
+    local textRight
 
-    if type(rowRight) == "number" and type(nameLeft) == "number" then
-        fits = (nameLeft + nameWidth + NAME_GAP + valueWidth) < (rowRight - RIGHT_INSET)
+    local regions = TextRegions(row, label)
+
+    for i = 1, #regions do
+        local right = TextRight(regions[i])
+
+        if type(right) == "number" and (not textRight or right > textRight) then
+            textRight = right
+        end
     end
 
-    if fits then
-        label:SetJustifyH("LEFT")
-        label:SetPoint("LEFT", region, "LEFT", nameWidth + NAME_GAP, 0)
-    else
+    if type(rowLeft) ~= "number" or type(rowRight) ~= "number" or not textRight then
+        -- Nothing could be measured. The right edge is the safer of the two
+        -- guesses: a value placed beside a name whose width we do not know is
+        -- a value printed on top of it.
         label:SetJustifyH("RIGHT")
         label:SetPoint("RIGHT", row, "RIGHT", -RIGHT_INSET, 0)
+        return "right"
     end
+
+    local valueLeft = rowRight - RIGHT_INSET - valueWidth
+
+    if textRight + NAME_GAP <= valueLeft then
+        -- Anchored to the row rather than to the name region, so the offset
+        -- means the same thing whatever that region's own left edge is.
+        label:SetJustifyH("LEFT")
+        label:SetPoint("LEFT", row, "LEFT", (textRight - rowLeft) + NAME_GAP, 0)
+        return "inline"
+    end
+
+    label:SetJustifyH("RIGHT")
+    label:SetPoint("RIGHT", row, "RIGHT", -RIGHT_INSET, 0)
+
+    -- The text reaches into where the value has to go, so the text gives way.
+    -- Cutting a name short is a real cost, which is why it is the last resort
+    -- and why `/bts value` counts it -- but a name with a price written
+    -- across its last word is not readable either, and the whole name is
+    -- still there in the recipe pane beside the list.
+    if ShortenName(region, valueLeft - NAME_GAP) then
+        return "shortened"
+    end
+
+    return "right"
 end
 
+-- Exposed for tools/test_recipevalue.lua. The geometry is the half of this
+-- module that was wrong, and unlike the frame plumbing it can be measured
+-- outside the game against rows made of plain tables.
+RecipeValue._TextRight = TextRight
+RecipeValue._TextRegions = TextRegions
+RecipeValue.NAME_GAP = NAME_GAP
+RecipeValue.RIGHT_INSET = RIGHT_INSET
+RecipeValue.MIN_NAME_WIDTH = MIN_NAME_WIDTH
+
 --- Write one row's value, or take it away.
--- @return "valued", "unpriced", "unresolved" or "nolabel"
+-- @return outcome, placement -- outcome is "valued", "unpriced", "unresolved"
+--   or "nolabel"; placement is how a shown value had to be positioned.
 function RecipeValue:DecorateRow(row)
     local recipeID = self:RecipeForRow(row)
     local text = recipeID and self:TextFor(recipeID) or nil
@@ -604,6 +770,10 @@ function RecipeValue:DecorateRow(row)
     if not text then
         -- Quiet, not a zero: no price data is not a price of nothing.
         if label then Try(Field(label, "Hide"), label) end
+
+        -- And nothing to make room for, so the name takes its width back.
+        ReleaseName(NameRegion(row))
+
         return recipeID and "unpriced" or "unresolved"
     end
 
@@ -611,10 +781,10 @@ function RecipeValue:DecorateRow(row)
     if not label then return "nolabel" end
 
     label:SetText(text)
-    PositionLabel(label, row, NameRegion(row))
+    local placement = PositionLabel(label, row, NameRegion(row))
     label:Show()
 
-    return "valued"
+    return "valued", placement
 end
 
 --------------------------------------------------------------------------------
@@ -625,7 +795,10 @@ end
 --
 -- @return a report: { source, rows, valued, unpriced, unresolved, nolabel }
 function RecipeValue:Refresh()
-    local report = { rows = 0, valued = 0, unpriced = 0, unresolved = 0, nolabel = 0 }
+    local report = {
+        rows = 0, valued = 0, unpriced = 0, unresolved = 0, nolabel = 0,
+        placed = { inline = 0, shortened = 0, right = 0 },
+    }
 
     if not self:IsEnabled() then
         self:HideAll()
@@ -648,10 +821,15 @@ function RecipeValue:Refresh()
         if Try(Field(row, "IsShown"), row) then
             report.rows = report.rows + 1
 
-            local outcome = self:DecorateRow(row)
+            local outcome, placement = self:DecorateRow(row)
             report[outcome] = (report[outcome] or 0) + 1
-        elseif labels[row] then
-            Try(Field(labels[row], "Hide"), labels[row])
+
+            if placement then
+                report.placed[placement] = (report.placed[placement] or 0) + 1
+            end
+        else
+            if labels[row] then Try(Field(labels[row], "Hide"), labels[row]) end
+            ReleaseName(NameRegion(row))
         end
     end
 
@@ -662,6 +840,13 @@ end
 function RecipeValue:HideAll()
     for _, label in pairs(labels) do
         Try(Field(label, "Hide"), label)
+    end
+
+    -- Every name this module narrowed gets its width back. Switching the
+    -- setting off and being left with clipped recipe names and no values to
+    -- show for them would be the worst of both.
+    for region in pairs(shortened) do
+        ReleaseName(region)
     end
 end
 
@@ -759,6 +944,24 @@ function RecipeValue:PrintReport()
     if report.nolabel > 0 then
         ns.PrintRaw(("  |c%srows that refused a label|r  %d"):format(
             ns.COLORS.muted, report.nolabel))
+    end
+
+    -- The outcome, not the attempt: where the values actually sit right now.
+    -- "beside the name" is the good case; the other two are the rows where
+    -- the name and the price were competing for the same space.
+    local placed = report.placed or {}
+
+    ns.PrintRaw(("  |c%svalues beside the name|r  %d"):format(
+        ns.COLORS.muted, placed.inline or 0))
+
+    if (placed.shortened or 0) > 0 then
+        ns.PrintRaw(("  |c%snames cut short to fit the value|r  %d"):format(
+            ns.COLORS.muted, placed.shortened))
+    end
+
+    if (placed.right or 0) > 0 then
+        ns.PrintRaw(("  |c%svalues put at the right edge unmeasured|r  %d"):format(
+            ns.COLORS.muted, placed.right))
     end
 end
 
