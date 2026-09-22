@@ -124,6 +124,11 @@ local DEFAULTS = {
         -- exactly as the client draws it.
         showValueInProfessionWindow = true,
 
+        -- Put what an item is worth on the auction house onto the item's
+        -- own tooltip, wherever the game draws one. Off leaves every
+        -- tooltip exactly as the client writes it.
+        showValueOnItemTooltips = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
