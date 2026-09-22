@@ -645,6 +645,21 @@ function Durable:Report()
         :format(restoredSales, counted, skipped,
             cutoff and (", rolled up " .. ns.Util.FormatAgeAgo(time() - cutoff)) or ""))
 
+    -- Where the queue in memory came from before any of this ran. Bootstrap
+    -- runs back at ADDON_LOADED, and a frozen list merged into the queue there
+    -- looks from here exactly like a queue Durable rightly declined to change.
+    local diagnostics = ns.Config.GetLoadDiagnostics and ns.Config:GetLoadDiagnostics() or nil
+
+    if diagnostics and diagnostics.queueSource then
+        local declined = diagnostics.snapshotQueue or 0
+
+        Line("queue at login", ("%d entr(ies), from %s%s"):format(
+            diagnostics.queueEntries or 0, diagnostics.queueSource,
+            declined > 0
+                and (("; the data addon's %d not merged in"):format(declined))
+                or ""))
+    end
+
     -- The queue, reported as an outcome. Its two clocks are what decide
     -- whether a stale database or the macros win at login, and when they are
     -- wrong the symptom is crafts you already made coming back -- which looks
