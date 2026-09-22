@@ -445,11 +445,11 @@ end
 
 --- The strip of addon controls that rides on Blizzard's auction window.
 --
--- Scan, Post Crafted and Post ALL each used to anchor themselves to the
--- auction frame separately, which left three buttons hanging in the game world
--- above it with nothing visibly tying them to the window they act on. They
--- share one bar instead, flush to the auction window's top edge and the same
--- width, so the row reads as part of that window.
+-- Scan and Post Crafted each used to anchor themselves to the auction frame
+-- separately, which left buttons hanging in the game world above it with
+-- nothing visibly tying them to the window they act on. They share one bar
+-- instead, flush to the auction window's top edge and the same width, so the
+-- row reads as part of that window.
 --
 -- Still parented to UIParent rather than to the auction frame, so Blizzard's
 -- own layering can never clip or bury it, and so it survives the auction UI
@@ -653,60 +653,7 @@ function UI:AttachPostButton()
 
     button:Show()
 
-    self:AttachPostAllButton()
     self:UpdatePostButton()
-end
-
---- Post All: everything sellable in your bags, not just what you crafted.
---
--- Separate from Post Crafted on purpose. Posting crafted stock is a routine
--- part of the loop; emptying your bags onto the auction house is not, and one
--- button that sometimes does the second would be a nasty surprise.
-function UI:AttachPostAllButton()
-    local button = self.postAllButton
-
-    if not button then
-        button = Widgets.CreateButton(self:GetAuctionBar(), "Post All", function(_, mouseButton)
-            if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
-                UI:Show()
-                UI:SelectTab("post")
-                return
-            end
-
-            local allowed, reason = ns.Posting:CanPost()
-            if not allowed then
-                ns.Print(reason or "cannot post right now")
-                return
-            end
-
-            local line = ns.Posting:GetNextPostable({ includeAll = true })
-            if line then
-                ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
-            else
-                ns.Print("nothing in your bags worth listing right now")
-            end
-
-            UI:UpdatePostButton()
-        end, {
-            width = 150,
-            height = 30,
-            primary = false,
-            baseColor = { 0.06, 0.07, 0.09, 1 },
-        })
-
-        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-
-        Theme.AddGameOutline(button, {
-            style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
-        })
-        button:ApplyBaseColor()
-
-        self.postAllButton = button
-    end
-
-    button:ClearAllPoints()
-    button:SetPoint("RIGHT", self.postButton, "LEFT", -10, 0)
-    button:Show()
 end
 
 --- Show a button's wait on the button itself, rather than only in a tooltip.
@@ -754,7 +701,6 @@ function UI:UpdateWaitLabels()
 
     local seconds, reason = ns.Posting:SecondsUntilPostable()
 
-    ApplyWaitLabel(self.postAllButton, "Post ALL", seconds, reason)
     ApplyWaitLabel(self.postButton, "Post Crafted", seconds, reason)
 
     if ns.PostPanel then
@@ -762,38 +708,7 @@ function UI:UpdateWaitLabels()
     end
 end
 
-function UI:UpdatePostAllButton()
-    local button = self.postAllButton
-    if not button then return end
-
-    local count, total = ns.Posting:GetSummary({ includeAll = true })
-
-    if count == 0 then
-        button:SetText("Post ALL")
-        button:SetEnabledState(true)
-        button.tooltipText = "Nothing in your bags with a known price to list."
-        return
-    end
-
-    local allowed, reason = ns.Posting:CanPost()
-    local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable()
-
-    ApplyWaitLabel(button, "Post ALL", waitSeconds, waitReason)
-    button:SetEnabledState(true)
-
-    button.tooltipText = allowed
-        and ("Lists everything sellable in your bags: %d stack(s), about %s.\nOne click per listing.\nReagents your queue needs are left alone."):format(
-            count, Util.FormatMoney(total, { noColor = true, short = true }))
-        or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
-
-    if waitReason then
-        button.tooltipText = button.tooltipText .. ("\n\nWaiting: %s."):format(waitReason)
-    end
-end
-
 function UI:UpdatePostButton()
-    self:UpdatePostAllButton()
-
     local button = self.postButton
     if not button then return end
 

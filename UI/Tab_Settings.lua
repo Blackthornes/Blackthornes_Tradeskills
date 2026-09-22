@@ -192,7 +192,7 @@ local function Build(outer)
     widgets.allowLoss:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local confirmRow = CreateRow(container, lossRow, "Confirm before each listing",
-        "Off: clicking List or Post All lists immediately, with no prompt.")
+        "Off: clicking List or Post Crafted lists immediately, with no prompt.")
 
     widgets.confirmPost = Widgets.CreateCheckbox(confirmRow, "Ask first", function(checked)
         Config:Set("confirmBeforePosting", checked)
@@ -369,7 +369,15 @@ local function Build(outer)
     end, true)
     widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local debugRow = CreateRow(container, professionValueRow, "Debug output",
+    local tooltipValueRow = CreateRow(container, professionValueRow, "Value on item tooltips",
+        "Adds what an item sells for to its tooltip, wherever the game shows one.")
+
+    widgets.tooltipValue = Widgets.CreateCheckbox(tooltipValueRow, "Enabled", function(checked)
+        Config:Set("showValueOnItemTooltips", checked)
+    end, true)
+    widgets.tooltipValue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local debugRow = CreateRow(container, tooltipValueRow, "Debug output",
         "Extra detail in the chat frame, for diagnosing problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
@@ -441,6 +449,7 @@ local function Refresh()
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
+    widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan = ns.db.lastFullScan

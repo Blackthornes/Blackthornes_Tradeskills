@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- UI/PostPanel.lua
 -- The sell list, docked beside Blizzard's auction house.
 --
--- Post All can work through a whole bag, so what it is about to sell needs to
+-- Listing can work through a whole bag, so what is about to be sold needs to
 -- be visible before the first click rather than discovered one confirmation
 -- dialog at a time. This is that list: everything postable, its price, and a
 -- button per row for selling just the one.
@@ -346,10 +346,10 @@ end
 
 --- Put the current wait on every visible List button.
 --
--- The bar's Post ALL is not the only way to list something, and a row button
--- that did nothing for three seconds looked exactly as broken there as it did
--- on the bar. Every row shows the same number because the wait is the auction
--- house's, not the row's.
+-- The bar's Post Crafted is not the only way to list something, and a row
+-- button that did nothing for three seconds looked exactly as broken there as
+-- it did on the bar. Every row shows the same number because the wait is the
+-- auction house's, not the row's.
 --
 -- Labels only: called four times a second, so it must not rebuild the list or
 -- touch anything that walks the bags.
