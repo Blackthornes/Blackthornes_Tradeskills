@@ -745,8 +745,21 @@ function Widgets.CreateScrollList(parent, opts)
         end
     end
 
+    --- Replace the rows, keeping the reader where they were.
+    --
+    -- The scroll position used to reset here. Nothing noticed while the lists
+    -- were short, but the Post tab rebuilds itself once a second at the
+    -- auction house, and once it started showing a whole bagful that meant a
+    -- list that snapped back to the top every second and could not be
+    -- scrolled at all. Refresh already clamps the offset to what the new data
+    -- allows, so keeping it is safe; a caller showing a genuinely different
+    -- list asks for the top with ScrollToTop.
     function list:SetData(data)
         self.data = data or {}
+        self:Refresh()
+    end
+
+    function list:ScrollToTop()
         self.offset = 0
         self:Refresh()
     end
