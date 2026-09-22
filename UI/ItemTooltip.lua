@@ -17,6 +17,11 @@
 -- one fired and how many tooltips have actually carried a value -- not which
 -- hook was installed, because a hook that never fires installs perfectly.
 --
+-- **Answered in game 2026-09-22: it is `TooltipDataProcessor`**, 113 tooltips
+-- in one session, with the other two installed alongside and never firing.
+-- They stay installed anyway -- that is one measurement on one build, and the
+-- guard below already makes carrying them free.
+--
 -- **A price is not the same claim as no price.** An item nothing has been seen
 -- selling for prints "not scanned yet", never a zero and never silence: on a
 -- crowded recipe row silence is the only option, but a tooltip has room to say
