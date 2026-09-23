@@ -296,7 +296,7 @@ local function BuildDetail(parent)
             UI:RefreshActiveTab()
         end)
     end, { width = 110, height = 24, primary = true,
-           tooltip = "Read this item's full order book from the auction house" })
+           tooltip = "Read every listing of this item from the auction house" })
     detail.deepScan:SetPoint("BOTTOMLEFT", 12, 14)
 
     detail.searchAH = Widgets.CreateButton(detail, "Search AH", function()
@@ -379,7 +379,7 @@ local function UpdateDetail(entry)
 
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
     detail.deepScan.tooltipText = ns.Scanner.isAuctionHouseOpen
-        and "Read this item's full order book from the auction house"
+        and "Read every listing of this item from the auction house"
         or "The auction house must be open"
 
     UpdateChart(detail, record)

@@ -168,7 +168,7 @@ function MacroStore:Write(name, data)
     if InCombatLockdown and InCombatLockdown() then return false, "in combat" end
 
     local body = COMMAND .. data
-    if #body > BODY_LIMIT then return false, "body too long" end
+    if #body > BODY_LIMIT then return false, "too long for one macro" end
 
     local ok, index = pcall(GetMacroIndexByName, name)
 
@@ -296,15 +296,15 @@ end
 -- @return true, chunks written -- or false and why
 function MacroStore:SaveData(text)
     if type(text) ~= "string" then return false, "not a string" end
-    if not self:Detect().usable then return false, "no macro API" end
+    if not self:Detect().usable then return false, "macros not available" end
     if InCombatLockdown and InCombatLockdown() then return false, "in combat" end
 
     if text ~= "" and not text:match("^[A-Za-z0-9%-%.]+$") then
-        return false, "payload is not in the safe alphabet"
+        return false, "the data has characters a macro cannot hold"
     end
 
     local chunks = math.ceil(#text / DATA_BYTES)
-    if chunks > MAX_DATA_MACROS then return false, "payload too large" end
+    if chunks > MAX_DATA_MACROS then return false, "too much data to fit in macros" end
 
     -- Room is counted before anything is written, so a payload that cannot
     -- fit does not half-replace the one already stored.
@@ -317,14 +317,14 @@ function MacroStore:SaveData(text)
         end
 
         if free + mine < chunks + 1 then
-            return false, ("needs %d slots, %d free"):format(chunks + 1, free + mine)
+            return false, ("needs %d macro slots, only %d free"):format(chunks + 1, free + mine)
         end
     end
 
     for index = 1, chunks do
         local from = (index - 1) * DATA_BYTES + 1
         local ok = self:Write(DataName(index), text:sub(from, from + DATA_BYTES - 1))
-        if not ok then return false, ("the client refused chunk %d"):format(index) end
+        if not ok then return false, ("the game refused to save macro %d"):format(index) end
     end
 
     -- Anything left from a longer save, so a shrinking payload does not leave
@@ -336,7 +336,7 @@ function MacroStore:SaveData(text)
 
     -- Last, so a completed header is the commit point. See the section note.
     local header = self.Pack(chunks, 2) .. self.Pack(#text, 4) .. self.Pack(Checksum(text), 2)
-    if not self:Write(HEADER, header) then return false, "the client refused the header" end
+    if not self:Write(HEADER, header) then return false, "the game refused to save the first macro" end
 
     self.lastSave = { at = time(), chunks = chunks, chars = #text }
 
@@ -346,24 +346,24 @@ end
 --- Read the payload back. nil and a reason when there is nothing to read or
 --- what is there does not add up.
 function MacroStore:LoadData()
-    if not self:Detect().usable then return nil, "no macro API" end
+    if not self:Detect().usable then return nil, "macros not available" end
 
     local header = self:Read(HEADER)
     if not header then return nil, "nothing stored" end
-    if #header ~= 8 then return nil, "the header is the wrong size" end
+    if #header ~= 8 then return nil, "the first macro is damaged (wrong size)" end
 
     local chunks = self.Unpack(header:sub(1, 2))
     local length = self.Unpack(header:sub(3, 6))
     local sum = self.Unpack(header:sub(7, 8))
 
-    if not chunks or not length or not sum then return nil, "the header is corrupt" end
-    if chunks > MAX_DATA_MACROS then return nil, "the header claims too many chunks" end
+    if not chunks or not length or not sum then return nil, "the first macro is damaged" end
+    if chunks > MAX_DATA_MACROS then return nil, "the first macro is damaged (too many parts)" end
 
     local parts = {}
 
     for index = 1, chunks do
         local part = self:Read(DataName(index))
-        if not part then return nil, ("chunk %d of %d is missing"):format(index, chunks) end
+        if not part then return nil, ("part %d of %d is missing"):format(index, chunks) end
         parts[#parts + 1] = part
     end
 
@@ -372,9 +372,9 @@ function MacroStore:LoadData()
     -- Either of these failing means a save was interrupted, so the payload is
     -- part of one write and part of another.
     if #text ~= length then
-        return nil, ("stored %d characters, header says %d"):format(#text, length)
+        return nil, ("found %d characters, expected %d"):format(#text, length)
     end
-    if Checksum(text) ~= sum then return nil, "the checksum does not match" end
+    if Checksum(text) ~= sum then return nil, "the data does not match what was saved" end
 
     return text
 end
@@ -402,7 +402,7 @@ function MacroStore:StartTest(count)
     local caps = self:Detect()
 
     if not caps.usable then
-        ns.Print("this client does not expose enough of the macro API to store anything.")
+        ns.Print("this version of the game does not let addons use enough of the macro functions to store anything.")
         return
     end
 
@@ -421,7 +421,7 @@ function MacroStore:StartTest(count)
         local ok = self:Write(name, Payload(DATA_BYTES))
 
         if not ok then
-            ns.Print(("the client refused macro %d."):format(index))
+            ns.Print(("the game refused macro %d."):format(index))
             break
         end
 
@@ -433,7 +433,7 @@ function MacroStore:StartTest(count)
     -- escaping before it goes in.
     self:Write(NAME_PREFIX .. "X", TRICKY)
 
-    ns.Print(("wrote %d macro(s) of %d bytes, plus one of awkward characters.")
+    ns.Print(("wrote %d macro(s) of %d bytes, plus one full of unusual characters.")
         :format(written, DATA_BYTES))
     ns.Print("Now |cffffffffquit the game completely|r, start it again, and run |cffffffff/bts macrotest|r.")
     ns.Print("|cffffffff/bts macrotest clear|r removes them all afterwards.")
@@ -446,7 +446,7 @@ function MacroStore:Report()
     ns.Print("macro storage")
 
     if not caps.usable then
-        ns.PrintRaw("  the client does not expose enough of the macro API.")
+        ns.PrintRaw("  this version of the game does not let addons use enough of the macro functions.")
         return
     end
 
@@ -472,28 +472,28 @@ function MacroStore:Report()
         return
     end
 
-    ns.PrintRaw(("  payload:  %d of %d macro(s) came back byte for byte (%s of %s bytes)")
+    ns.PrintRaw(("  data:     %d of %d macro(s) came back exactly (%s of %s bytes)")
         :format(intact, found, ns.Util.Comma(returned), ns.Util.Comma(found * DATA_BYTES)))
 
     local tricky = self:Read(NAME_PREFIX .. "X")
-    ns.PrintRaw(("  awkward characters: %s"):format(
+    ns.PrintRaw(("  unusual characters: %s"):format(
         tricky == TRICKY and "survived" or
-        (tricky and ("mangled -- came back as " .. tricky) or "did not come back")))
+        (tricky and ("changed -- came back as " .. tricky) or "did not come back")))
 
     -- The session stamp from Core/Persist.lua, so this says whether the client
     -- actually restarted rather than trusting anyone to remember.
     local peek = ns.Persist and ns.Persist:Peek()
 
     if peek and peek.coldStart == true then
-        ns.PrintRaw("  the client did restart in between, so this is the real answer.")
+        ns.PrintRaw("  the game was fully restarted in between, so this result counts.")
     elseif peek and peek.coldStart == false then
-        ns.Warn("this is the same client process that wrote them, so it proves nothing. Quit fully and run it again.")
+        ns.Warn("the game has not been restarted since these were written, so this proves nothing yet. Quit the game fully and run it again.")
     end
 
     if intact > 0 then
         -- Three bytes per four characters, so the usable figure is smaller
         -- than the number of characters a macro holds.
-        ns.PrintRaw(("  budget:   about %s bytes of real data across all 120 slots")
+        ns.PrintRaw(("  room:     about %s bytes of data across all 120 slots")
             :format(ns.Util.Comma(math.floor(120 * DATA_BYTES * 3 / 4))))
     end
 end
@@ -508,7 +508,7 @@ ns.RegisterCommand("macrodata", "(stored data; nothing to run)", function()
     ns.Print("that macro is storage for this addon, not a command to run.")
 end)
 
-ns.RegisterCommand("macrotest", "test what macros keep across a restart: /bts macrotest [n|clear]", function(args)
+ns.RegisterCommand("macrotest", "test what macros keep when you quit the game: /bts macrotest [n|clear]", function(args)
     args = (args or ""):lower()
 
     if args == "clear" then

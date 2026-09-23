@@ -362,7 +362,7 @@ local function BuildDetail(parent)
 
         quantity:SetText(tostring(most))
     end, { width = 44, height = 24,
-           tooltip = "As many as your materials and posted limit allow" })
+           tooltip = "As many as your materials and stock limit allow" })
     maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 8, 0)
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
@@ -669,7 +669,7 @@ local function Refresh()
 
     if #data == 0 then
         if ns.Recipes:Count() == 0 then
-            widgets.emptyLabel:SetText("Open a profession window once so I can read your recipes.")
+            widgets.emptyLabel:SetText("Open a profession window once so your recipes can be read.")
         elseif ns.Prices:Count() == 0 then
             widgets.emptyLabel:SetText("No auction data yet.")
             widgets.emptyScan:Show()

@@ -389,7 +389,7 @@ function Prices:GetConfidence(itemID)
     if ageScore == weakest then
         reason = "stale data"
     elseif depthScore == weakest then
-        reason = "thin market"
+        reason = "few listed"
     else
         reason = "few scans"
     end
@@ -415,7 +415,7 @@ function Prices:Prune()
     end
 
     if removed > 0 then
-        ns.Debug(("pruned %d stale price record(s)"):format(removed))
+        ns.Debug(("removed %d old price(s)"):format(removed))
     end
     return removed
 end
@@ -449,7 +449,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
-        ns.Warn(("dropped %d price record(s) and %d figure(s) above %s -- nothing can pay that"):format(
+        ns.Warn(("removed %d price(s) and %d figure(s) above %s -- nobody could pay that much"):format(
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
 
@@ -535,7 +535,7 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
     end
     ns.PrintRaw(("  seen %s over %d scan(s)"):format(
         Util.FormatAgeAgo(ns.Prices:GetAge(itemID)), record.scans or 0))
-    ns.PrintRaw(("  confidence %d%%%s   liquidity %s"):format(
+    ns.PrintRaw(("  confidence %d%%%s   stock moving %s"):format(
         math.floor(confidence * 100), reason and (" (" .. reason .. ")") or "",
         liquidity and ("%d%%"):format(math.floor(liquidity * 100)) or "unknown"))
 end)

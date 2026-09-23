@@ -194,7 +194,7 @@ function Profit:ChoosePostPrice(itemID, knownCost)
     -- A rival already sitting at the lowest price the server allows leaves
     -- nothing below it, so matching is the only move.
     if underPrice >= matchPrice then
-        return matchPrice, "match", "there is no legal price below the rival's"
+        return matchPrice, "match", "the game allows no lower price than the rival's"
     end
 
     local recipeID = ns.Cost:FindRecipeForItem(itemID)
@@ -204,7 +204,7 @@ function Profit:ChoosePostPrice(itemID, knownCost)
 
     if not profit then
         return matchPrice, "match",
-            ("no cost known for this, so %s was not worth risking"):format(
+            ("the cost to make this is unknown, so dropping %s was not worth the risk"):format(
                 Util.FormatMoney(matchPrice - underPrice, { noColor = true }))
     end
 
@@ -213,7 +213,7 @@ function Profit:ChoosePostPrice(itemID, knownCost)
     if profit >= minProfit then return underPrice, "undercut" end
 
     return matchPrice, "match",
-        ("undercutting to %s leaves %s, under your %s minimum"):format(
+        ("undercutting to %s leaves %s profit, below your %s minimum"):format(
             Util.FormatMoney(underPrice, { noColor = true }),
             Util.FormatMoney(profit, { noColor = true }),
             Util.FormatMoney(minProfit, { noColor = true }))
@@ -344,7 +344,7 @@ function Profit:Analyse(recipeID, characterKey)
 
     if not recipe.outputItemID then
         -- Enchants and similar have no sellable output item.
-        analysis.reason = "no sellable output"
+        analysis.reason = "makes nothing that can be sold"
         return analysis
     end
 
@@ -572,7 +572,7 @@ function Profit:Resolve(query)
     query = (query or ""):gsub("^%s+", ""):gsub("%s+$", "")
 
     if query == "" then
-        return nil, "tell me what to look at -- a name, a shift-clicked item, or a row number from /bts top"
+        return nil, "type a name, shift-click an item, or give a row number from /bts top"
     end
 
     -- Plain small numbers are row numbers from the last listing, which is what
@@ -585,7 +585,7 @@ function Profit:Resolve(query)
     local matches = ns.Recipes:Find(query)
 
     if #matches == 0 then
-        return nil, ("nothing matching '%s' in your cached recipes"):format(query)
+        return nil, ("none of your recipes match '%s'"):format(query)
     end
 
     if #matches > 1 then
@@ -604,7 +604,7 @@ ns.RegisterCommand("top", "[count] -- most profitable crafts right now", functio
     local limit = tonumber(args:match("(%d+)")) or 10
 
     if ns.Recipes:Count() == 0 then
-        ns.Print("no recipes cached yet -- open a profession window once")
+        ns.Print("no recipes read yet -- open a profession window once")
         return
     end
 
@@ -673,7 +673,7 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
 
     local analysis = ns.Profit:Analyse(recipe.recipeID)
     if not analysis then
-        ns.Print("that recipe is no longer cached")
+        ns.Print("that recipe is no longer saved")
         return
     end
 
@@ -707,12 +707,12 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
 
     if analysis.undercut then
         ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))
-        ns.PrintRaw(("  you post at     %s  (yield %.1f)"):format(
+        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.youHoldLowest then
-        ns.PrintRaw(("  |c%syou already hold the lowest listing -- holding at market|r"):format(
+        ns.PrintRaw(("  |c%syou already have the cheapest listing -- staying at market price|r"):format(
             ns.COLORS.profit))
-        ns.PrintRaw(("  you post at     %s  (yield %.1f)"):format(
+        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.priceDerived then
         -- Said before the number, not after it: this one is the addon's own
@@ -722,7 +722,7 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
         ns.PrintRaw(("  estimate at     %s  (yield %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     else
-        ns.PrintRaw(("  none listed     posting at market %s  (yield %.1f)"):format(
+        ns.PrintRaw(("  none listed     posting at market %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     end
     ns.PrintRaw(("  auction cut     -%s"):format(Util.FormatMoney(analysis.cut)))
@@ -733,7 +733,7 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
         ns.PrintRaw(("  |c%sdeposit unknown -- visit an auction house to learn it|r")
             :format(ns.COLORS.muted))
     end
-    ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% ROI)"):format(
+    ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% return on cost)"):format(
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),
         math.floor(analysis.margin * 100), math.floor(analysis.roi * 100)))
     ns.PrintRaw(("  |c%sconfidence %d%%%s, data %s old|r"):format(

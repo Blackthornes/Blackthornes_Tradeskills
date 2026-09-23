@@ -453,7 +453,7 @@ end
 -- Diagnostics
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from", function(args)
+ns.RegisterCommand("stock", "<name or link> -- how many of an item you have, and where", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
@@ -462,7 +462,7 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
     end
 
     if not recipe or not recipe.outputItemID then
-        ns.Print(errorMessage or "give me an item name or link")
+        ns.Print(errorMessage or "type an item name, or shift-click an item")
         return
     end
 
@@ -486,7 +486,7 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
     -- own, which is the failure this reports rather than reasons about.
     local reagentBag = Inventory:GetReagentBag()
 
-    ns.PrintRaw("  containers walked:")
+    ns.PrintRaw("  bags checked:")
 
     for _, bag in ipairs(Inventory:GetCarriedBags()) do
         local count, slots = Inventory:CountInBag(bag, itemID)
@@ -495,7 +495,7 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
     end
 
     if not reagentBag then
-        ns.PrintRaw("    no reagent bag slot on this client")
+        ns.PrintRaw("    no reagent bag slot in this version of the game")
     end
 
     -- The line that settles the argument. A client count above the walked one
@@ -506,14 +506,14 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
         local note = ""
 
         if client > inBags + worn then
-            note = "  <-- more than bags and equipment: a container we are not walking"
+            note = "  <-- more than bags and equipment: a bag the addon is not checking"
         elseif client > inBags then
-            note = "  <-- it counts equipment"
+            note = "  <-- the game counts equipped items too"
         end
 
-        ns.PrintRaw(("  client's own bag count: %d%s"):format(client, note))
+        ns.PrintRaw(("  the game's own count: %d%s"):format(client, note))
     else
-        ns.PrintRaw("  client's own bag count: cannot ask")
+        ns.PrintRaw("  the game's own count: not available")
     end
 end)
 

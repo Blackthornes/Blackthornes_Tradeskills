@@ -515,7 +515,7 @@ function RecipeValue:FindRows()
         end
     end
 
-    local kept, where = consider(LegacyRows(), "legacy row globals")
+    local kept, where = consider(LegacyRows(), "old-style recipe rows")
     if kept then
         self.container = nil
         self.containerPath = LEGACY_ROW_PREFIX .. "1.."
@@ -942,7 +942,7 @@ function RecipeValue:PrintReport()
     end
 
     if report.nolabel > 0 then
-        ns.PrintRaw(("  |c%srows that refused a label|r  %d"):format(
+        ns.PrintRaw(("  |c%srows a value could not be added to|r  %d"):format(
             ns.COLORS.muted, report.nolabel))
     end
 
@@ -985,7 +985,7 @@ function RecipeValue:OnEnable()
     end)
 
     ns.RegisterCommand("value",
-        "report the recipe values shown in the profession window", function()
+        "show what the recipe values in the profession window are doing", function()
             RecipeValue:PrintReport()
         end)
 end

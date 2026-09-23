@@ -173,7 +173,7 @@ function Scanner:GetCommodityStatus(itemID, location)
     if not ok then
         if not self.warnedCommodityStatus then
             self.warnedCommodityStatus = true
-            ns.Warn("this client would not report commodity status; posting may use the wrong call.")
+            ns.Warn("the game would not say whether this item is a commodity; posting it may go wrong.")
         end
         return nil
     end
@@ -212,12 +212,12 @@ function Scanner:CanFullScan()
         return false, "a scan is already running"
     end
     if self.scanQueued or self.browseQueued then
-        return false, "a scan is already waiting its turn"
+        return false, "a scan is already waiting to start"
     end
 
     local caps = ns.Compat:Get().auction
     if not caps.hasReplicate and not caps.hasBrowseQuery then
-        return false, "this client cannot scan the auction house"
+        return false, "this version of the game does not let addons scan the auction house"
     end
 
     return true
@@ -246,14 +246,14 @@ function Scanner:StartFullScan()
     -- the same price database.
     local cooldown = self:GetSnapshotCooldown()
     if cooldown then
-        ns.Print(("snapshot is rate limited for another %s -- browsing instead")
+        ns.Print(("the quick full scan can be used again in %s -- scanning page by page instead")
             :format(Util.FormatAge(cooldown)))
         return self:StartBrowseScan()
     end
 
     ns.db.lastReplicateRequest = time()
 
-    ns.Print("requesting auction snapshot...")
+    ns.Print("asking for a quick full scan...")
 
     -- Queued rather than sent. A scan is the addon's heaviest use of a channel
     -- the player is also posting on, so it waits behind anything they clicked
@@ -262,7 +262,7 @@ function Scanner:StartFullScan()
     self.scanQueued = true
 
     ns.AHQueue:Request({
-        name = "auction snapshot",
+        name = "quick full scan",
         key = "scan",
         priority = ns.AHQueue.PRIORITY.scan,
         expires = 60,
@@ -272,7 +272,7 @@ function Scanner:StartFullScan()
             Scanner.isScanning = true
 
             if not pcall(C_AuctionHouse.ReplicateItems) then
-                ns.Print("the client refused the snapshot -- browsing instead")
+                ns.Print("the game refused the quick full scan -- scanning page by page instead")
                 Scanner:StartBrowseScan()
                 return true
             end
@@ -284,7 +284,7 @@ function Scanner:StartFullScan()
             -- back to browsing instead of leaving the player watching nothing.
             Scanner.timeoutHandle = C_Timer.NewTimer(6, function()
                 if Scanner.isScanning and not Scanner.isReading then
-                    ns.Print("snapshot did not answer (it is rate limited) -- browsing instead")
+                    ns.Print("the quick full scan did not answer (it was used too recently) -- scanning page by page instead")
                     Scanner:StartBrowseScan()
                 end
             end)
@@ -319,7 +319,7 @@ function Scanner:StartBrowseScan()
 
     if not Util.HasFunction("C_AuctionHouse.SendBrowseQuery") then
         self.isScanning = false
-        ns.Warn("this client cannot browse the auction house either")
+        ns.Warn("this version of the game does not let addons scan page by page either")
         return false
     end
 
@@ -333,7 +333,7 @@ function Scanner:StartBrowseScan()
     -- scan -- and then page through it, one throttled request at a time.
     self.browseQueued = true
 
-    ns.Print("browsing the auction house...")
+    ns.Print("scanning the auction house page by page...")
 
     if self.verbose then
         -- A rejected event registration is silent and looks exactly like a
@@ -360,7 +360,7 @@ function Scanner:StartBrowseScan()
             Scanner.isScanning = false
             Scanner.isBrowsing = false
 
-            ns.Warn("the auction house stayed busy; the browse scan was not sent.")
+            ns.Warn("the auction house stayed busy; the scan was not sent.")
             if ns.UI then ns.UI:OnScanComplete() end
         end,
     })
@@ -396,7 +396,7 @@ function Scanner:QueueBrowseQuery(searchString, opts)
             })
 
             if not ok then
-                ns.Warn("the client refused the browse query")
+                ns.Warn("the game refused the page-by-page scan")
                 return false
             end
 
@@ -410,12 +410,12 @@ function Scanner:QueueBrowseQuery(searchString, opts)
                     Scanner.isBrowsing = false
                     Scanner.verbose = false
 
-                    ns.Warn(("no browse response after 15s (%d page(s) seen)")
+                    ns.Warn(("the page-by-page scan stopped answering after 15s (%d page(s) read)")
                         :format(Scanner.browsePages or 0))
 
                     -- Blizzard's own list is waiting on the same results we are,
                     -- so a query that never answered leaves its spinner turning.
-                    Scanner:SettleSearchDisplay("the browse query did not answer")
+                    Scanner:SettleSearchDisplay("the page-by-page scan did not answer")
                 end
             end)
 
@@ -439,18 +439,18 @@ function Scanner:OnBrowseResults()
         -- but the rows are real prices and reading them is free.
         local learned = self:CapturePassiveBrowse()
 
-        self:Report(("browse event arrived with no browse of ours running; learned %d price(s)")
+        self:Report(("picked up %d price(s) from a search the addon did not start")
             :format(learned))
         return
     end
 
     local ok, results = pcall(C_AuctionHouse.GetBrowseResults)
     if not ok or type(results) ~= "table" then
-        self:Report("browse results could not be read")
+        self:Report("the search results could not be read")
         return
     end
 
-    self:Report(("browse page %d: %d row(s)"):format(self.browsePages + 1, #results))
+    self:Report(("page %d: %d row(s)"):format(self.browsePages + 1, #results))
 
     -- Browse results accumulate across the pages of one query, so a set that has
     -- shrunk is not our sweep any more: a different query -- the player's own
@@ -458,7 +458,7 @@ function Scanner:OnBrowseResults()
     -- a sweep long enough for that to be likely, so take the smaller set as the
     -- end of ours rather than paging through somebody else's search.
     if self.browseRowsSeen and #results < self.browseRowsSeen then
-        self:Report("browse results were replaced by another search; committing what we have")
+        self:Report("another search replaced the results; keeping what was read so far")
         self:CommitBrowseResults(results)
         return
     end
@@ -594,7 +594,7 @@ function Scanner:CommitBrowseResults(results)
     end
 
     if skipped > 0 then
-        self:Report(("%d row(s) had no item id or price"):format(skipped))
+        self:Report(("%d row(s) had no item or price"):format(skipped))
     end
 
     -- Plus anything Prices itself refused, so a price that got past the row
@@ -637,7 +637,7 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
 
     local ok, numItems = pcall(C_AuctionHouse.GetNumReplicateItems)
     if not ok or not numItems or numItems == 0 then
-        ns.Print("snapshot came back empty -- browsing instead")
+        ns.Print("the quick full scan came back empty -- scanning page by page instead")
         self:StartBrowseScan()
         return
     end
@@ -875,7 +875,7 @@ function Scanner:ScanItem(itemID, callback, opts)
 
     local keyOk, itemKey = pcall(C_AuctionHouse.MakeItemKey, itemID)
     if not keyOk or not itemKey then
-        ns.Warn(("could not build an item key for %s"):format(tostring(itemID)))
+        ns.Warn(("could not look up item %s"):format(tostring(itemID)))
         return false
     end
 
@@ -917,7 +917,7 @@ function Scanner:ScanItem(itemID, callback, opts)
             local refused = Scanner.pendingItem
             Scanner.pendingItem = nil
 
-            ns.Warn("the client refused the search query")
+            ns.Warn("the game refused the search")
 
             -- Say so now rather than leaving the caller to time out. A button
             -- that sits doing nothing for five seconds before admitting the
@@ -1159,8 +1159,8 @@ function Scanner:SettleSearchDisplay(reason)
 
     self.settledSearchDisplay = true
 
-    ns.Debug(("settling the auction house search display: %s"):format(
-        reason or "no reason given"))
+    ns.Debug(("tidying the auction house search results: %s"):format(
+        reason or "no reason"))
 
     -- No onSend, so isBrowsing stays false and OnBrowseResults treats what
     -- comes back as somebody else's results rather than a page of a sweep. That
@@ -1363,7 +1363,7 @@ function Scanner:ConsiderAutoScan(attempt)
     if ns.AHQueue:PlayerIsSelling() then
         if attempt > 4 then return end
 
-        ns.Debug("deferring the automatic scan: the sell frame is open")
+        ns.Debug("waiting to scan: Blizzard's Sell tab is open")
         C_Timer.After(20, function() Scanner:ConsiderAutoScan(attempt + 1) end)
         return
     end
@@ -1380,7 +1380,7 @@ function Scanner:ConsiderAutoScan(attempt)
 
     ns.Print(count == 0
         and "no price data -- scanning automatically"
-        or "price data is stale -- scanning automatically")
+        or "prices are out of date -- scanning automatically")
 
     self:StartFullScan()
 end
@@ -1422,7 +1422,7 @@ end)
 
 -- Forces the paged path, skipping the rate-limited snapshot entirely. Useful
 -- when the snapshot is unavailable and for testing the fallback on its own.
-ns.RegisterCommand("browse", "scan by browsing, skipping the bulk snapshot", function()
+ns.RegisterCommand("browse", "scan page by page, skipping the quick full scan", function()
     if not ns.Scanner.isAuctionHouseOpen then
         ns.Print("the auction house must be open")
         return
@@ -1437,11 +1437,11 @@ end)
 -- Proves, rather than assumes, that the bulk snapshot's prices are being read
 -- with the right units: a targeted search is authoritative, so if the two
 -- disagree the snapshot maths is wrong.
-ns.RegisterCommand("listings", "what the last price check actually read back", function()
+ns.RegisterCommand("listings", "what the last price check found", function()
     local last = ns.Scanner.lastItemListings
 
     if not last or not last.raw or #last.raw == 0 then
-        ns.Print("no item search has come back yet -- click List on something first")
+        ns.Print("no price check has come back yet -- click List on something first")
         return
     end
 
@@ -1462,7 +1462,7 @@ ns.RegisterCommand("listings", "what the last price check actually read back", f
             entry.maxStack and tostring(entry.maxStack) or "unknown",
             Util.FormatMoney(entry.unitPrice, { noColor = true }),
             entry.ownerFlag == true and "  <-- yours" or "",
-            suspect and "  <-- qty is not a stack, so not divided" or ""))
+            suspect and "  <-- qty is not a stack size, so the price was not divided" or ""))
     end
 
     if #last.raw > 10 then
@@ -1483,15 +1483,15 @@ ns.RegisterCommand("listings", "what the last price check actually read back", f
     end
 
     if answered == 0 then
-        ns.Warn(("this client did not say who owns any of those %d listing(s), "):format(#last.raw)
-            .. "so your own auction cannot be told from a rival's.")
+        ns.Warn(("the game did not say who owns any of those %d listing(s), "):format(#last.raw)
+            .. "so your own auctions cannot be told apart from anyone else's.")
     else
-        ns.PrintRaw(("  ownership reported for %d of %d; %d of them yours"):format(
+        ns.PrintRaw(("  owner known for %d of %d; %d of them yours"):format(
             answered, #last.raw, mine))
     end
 end)
 
-ns.RegisterCommand("verify", "<itemID> -- cross-check snapshot price against a live search", function(args)
+ns.RegisterCommand("verify", "<itemID> -- compare the scanned price with a fresh search", function(args)
     local itemID = tonumber(args:match("(%d+)"))
     if not itemID then
         ns.Print("usage: /bts verify <itemID>")
@@ -1502,31 +1502,31 @@ ns.RegisterCommand("verify", "<itemID> -- cross-check snapshot price against a l
     local snapshotMarket = before and before.market
     local snapshotMin = before and before.min
 
-    ns.Print(("verifying item %d against a live search..."):format(itemID))
+    ns.Print(("checking item %d against a fresh search..."):format(itemID))
 
     ns.Scanner:ScanItem(itemID, function(_, marketValue, minBuyout, quantity, isCommodity)
         if not marketValue then
-            ns.Warn("no live listings found for that item")
+            ns.Warn("nobody has that item listed right now")
             return
         end
 
-        ns.PrintRaw(("  live:     market %s   min %s   qty %d   %s"):format(
+        ns.PrintRaw(("  now:      market %s   min %s   qty %d   %s"):format(
             Util.FormatMoney(marketValue), Util.FormatMoney(minBuyout), quantity or 0,
             isCommodity and "commodity" or "item auction"))
 
         if snapshotMin then
-            ns.PrintRaw(("  snapshot: market %s   min %s"):format(
+            ns.PrintRaw(("  scanned:  market %s   min %s"):format(
                 Util.FormatMoney(snapshotMarket), Util.FormatMoney(snapshotMin)))
 
             local ratio = minBuyout > 0 and (snapshotMin / minBuyout) or 0
             if ratio > 0.9 and ratio < 1.1 then
-                ns.PrintRaw(("  |c%sunits agree|r"):format(ns.COLORS.profit))
+                ns.PrintRaw(("  |c%sthe two agree|r"):format(ns.COLORS.profit))
             else
-                ns.PrintRaw(("  |c%sMISMATCH -- snapshot is %.2fx the live price|r"):format(
+                ns.PrintRaw(("  |c%sMISMATCH -- the scanned price is %.2fx the price now|r"):format(
                     ns.COLORS.loss, ratio))
             end
         else
-            ns.PrintRaw("  no snapshot data yet; run /bts scan first to compare")
+            ns.PrintRaw("  no scanned price yet; run /bts scan first to compare")
         end
     end)
 end)
@@ -1539,7 +1539,7 @@ ns.RegisterCommand("learned", "prices picked up from your own auction house sear
     local Scanner = ns.Scanner
 
     if not Scanner:PassiveCaptureEnabled() then
-        ns.Print("learning from your searches is turned off in Settings -> Advanced")
+        ns.Print("learning from your searches is turned off in Settings, under Advanced")
         return
     end
 
