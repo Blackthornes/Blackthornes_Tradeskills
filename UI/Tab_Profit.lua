@@ -185,8 +185,9 @@ local function UpdateRow(row, analysis)
         cells.age:SetText("")
 
         cells.posted:SetText("")
-        cells.profit:SetText(analysis.reason == "output has no price data"
-            and "no sales" or "no data")
+        cells.profit:SetText(analysis.soulbound and "soulbound"
+            or analysis.reason == "output has no price data" and "no sales"
+            or "no data")
         cells.profit:SetTextColor(Theme.Unpack("dim"))
         return
     end
