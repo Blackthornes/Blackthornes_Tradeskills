@@ -66,7 +66,7 @@ function Posting:MarkBlocked()
     if self.blocked then return end
 
     self.blocked = true
-    ns.Warn("this client refused an addon-created auction.")
+    ns.Warn("the game will not let addons list auctions.")
     ns.Warn("the Post tab still shows what to list and at what price.")
 
     if ns.UI then ns.UI:RefreshActiveTab() end
@@ -75,7 +75,7 @@ end
 --- Whether a listing can be attempted right now, and why not when it cannot.
 function Posting:CanPost()
     if self:IsBlocked() then
-        return false, "this client refuses addon-created auctions"
+        return false, "the game will not let addons list auctions"
     end
 
     if not ns.Scanner.isAuctionHouseOpen then
@@ -92,7 +92,7 @@ function Posting:CanPost()
     -- blocks the player's own manual listings, not just ours. The one-second
     -- ticker now re-checks this, so a refusal here clears on its own.
     if self:IsThrottled() then
-        return false, "the auction house is busy -- a moment"
+        return false, "the auction house is busy -- try again in a moment"
     end
 
     -- Only one listing is in flight at a time, because a second one started
@@ -704,7 +704,7 @@ end
 
 function Posting:OnEnable()
     if self:IsBlocked() then
-        ns.Debug("addon posting is blocked on this client; running as a price helper")
+        ns.Debug("the game blocks addons from posting; the addon will only suggest prices")
     end
 
     -- Listing something by hand changes what is left to list, and what counts
@@ -725,8 +725,8 @@ end
 
 -- Kept because the answer is not obvious and the symptoms mislead: a protected
 -- call returns without error and simply does nothing.
-ns.RegisterCommand("taint", "report whether addons may call protected functions", function()
-    ns.Print("protected call status")
+ns.RegisterCommand("taint", "check whether the game lets this addon post and craft for you", function()
+    ns.Print("what the game lets addons do")
 
     local secure = issecure and issecure()
     ns.PrintRaw(("  issecure() here:              %s"):format(tostring(secure)))
@@ -762,7 +762,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     end
 
     if self.pending then
-        ns.Print("a listing is already in flight")
+        ns.Print("a listing is already going through")
         return false
     end
 
@@ -781,7 +781,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     local location = bag and MakeLocation(bag, slot)
 
     if not location then
-        ns.Warn("could not reference that bag slot")
+        ns.Warn("could not find that item in your bags")
         return false
     end
 
@@ -794,7 +794,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     end
 
     if available < 1 then
-        ns.Print("none of that available to list")
+        ns.Print("you have none of that to list")
         return false
     end
 
@@ -826,7 +826,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     if floor and unitPrice < floor then
         self.pending = nil
 
-        ns.Warn(("refusing to list %s at %s -- %s."):format(
+        ns.Warn(("not listing %s at %s -- %s."):format(
             Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or "the price looks wrong"))
         ns.Warn(("expected at least %s. Run a scan, or list it by hand."):format(
             Util.FormatMoney(floor)))
@@ -842,10 +842,10 @@ function Posting:Post(itemID, quantity, unitPrice)
         local unitCost = analysis and analysis.costPerUnit
 
         if unitCost and unitPrice < unitCost then
-            ns.Warn(("refusing to list %s at %s -- materials cost %s"):format(
+            ns.Warn(("not listing %s at %s -- the materials cost %s"):format(
                 Util.GetItemLabel(itemID),
                 Util.FormatMoney(unitPrice), Util.FormatMoney(unitCost)))
-            ns.Warn("enable 'Recommend selling at a loss' in Settings to override.")
+            ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
             return false
         end
     end
@@ -883,7 +883,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         if tostring(err):lower():find("addon") then
             self:MarkBlocked()
         else
-            ns.Warn(("the client refused the listing: %s"):format(
+            ns.Warn(("the game refused the listing: %s"):format(
                 tostring(err):gsub("^.-:%d+: ", "")))
         end
         return false
@@ -898,7 +898,7 @@ function Posting:Post(itemID, quantity, unitPrice)
 
     -- Nothing of ours competes with a listing that is settling. Verification is
     -- urgent and still gets through; scans and bookkeeping wait.
-    ns.AHQueue:Yield(POST_VERIFY_DELAY + 2, "a listing of ours is in flight")
+    ns.AHQueue:Yield(POST_VERIFY_DELAY + 2, "your listing is going through")
 
     -- The auction house is throttled and can take several seconds to reply, so
     -- wait, then ask the server what is actually listed.
@@ -1255,7 +1255,7 @@ function Posting:ResolvePending(posted)
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(("%s did not appear in your auctions."):format(
             Util.GetItemLabel(pending.itemID)))
-        ns.Warn("the auction house may be refusing listings; try Blizzard's Sell tab.")
+        ns.Warn("the auction house may be refusing listings; try Blizzard's own Sell tab.")
     else
         ns.Warn("could not tell whether that listing went up -- check your Auctions tab")
     end
@@ -1270,15 +1270,15 @@ end
 --
 -- Posting blocks while the throttle says it is busy, so if this client never
 -- reports ready that block is a bug on our side rather than a real wait.
-ns.RegisterCommand("throttle", "watch the auction house throttle", function()
+ns.RegisterCommand("throttle", "check how often the auction house is ready for requests", function()
     ns.AHQueue:Report()
 
     if not ns.Util.HasFunction("C_AuctionHouse.IsThrottledMessageSystemReady") then
-        ns.Print("this client has no throttle check; requests are paced by time alone.")
+        ns.Print("the game gives no busy signal here; requests are just spaced out over time.")
         return
     end
 
-    ns.Print("sampling the client's throttle for 10s...")
+    ns.Print("watching whether the auction house is busy for 10s...")
 
     local samples, ready = 0, 0
 
@@ -1292,10 +1292,10 @@ ns.RegisterCommand("throttle", "watch the auction house throttle", function()
         if samples >= 20 then
             ticker:Cancel()
 
-            ns.Print(("throttle ready on %d of %d samples over 10s."):format(ready, samples))
+            ns.Print(("the auction house was ready %d of %d times over 10s."):format(ready, samples))
 
             if ready == 0 then
-                ns.Warn("never ready -- posting would always be blocked. Tell me and I will stop gating on it.")
+                ns.Warn("never ready -- posting would always be blocked. Please report this so the addon stops waiting on it.")
             end
         end
     end)
@@ -1307,7 +1307,7 @@ end)
 -- causes that look identical from the chat frame: the call being refused, the
 -- call succeeding but the server dropping it, or the listing genuinely being
 -- created and the addon failing to notice.
-ns.RegisterCommand("posttest", "attempt one listing and report every step: /bts posttest [name]", function(args)
+ns.RegisterCommand("posttest", "try one listing and show every step: /bts posttest [name]", function(args)
     local line
 
     if args and args ~= "" then
@@ -1472,7 +1472,7 @@ end)
 -- ItemLocation rather than an item ID, after three wrong guesses.
 --
 -- Creates nothing: every call here is designed to fail.
-ns.RegisterCommand("sig", "print the auction API signatures this client expects", function()
+ns.RegisterCommand("sig", "show which auction functions this version of the game has", function()
     -- PostItem and PostCommodity are deliberately absent. Calling them at all
     -- outside a real click trips "Interface action failed because of an
     -- AddOn", so probing their signature costs a scary red error for a string
@@ -1483,7 +1483,7 @@ ns.RegisterCommand("sig", "print the auction API signatures this client expects"
         "MakeItemKey", "IsThrottledMessageSystemReady",
     }
 
-    ns.Print("auction API signatures")
+    ns.Print("auction functions")
 
     -- The Classic posting path, which may be what item auctions still want.
     local legacy = {}
@@ -1495,7 +1495,7 @@ ns.RegisterCommand("sig", "print the auction API signatures this client expects"
 
         legacy[#legacy + 1] = ("%s=%s"):format(name, present and "yes" or "no")
     end
-    ns.PrintRaw(("  |cffC8A44Dlegacy|r %s"):format(table.concat(legacy, " ")))
+    ns.PrintRaw(("  |cffC8A44Dold-style|r %s"):format(table.concat(legacy, " ")))
 
     for _, name in ipairs(names) do
         if not Util.HasFunction("C_AuctionHouse." .. name) then
@@ -1543,7 +1543,7 @@ local POST_VARIANTS = {
     { name = "no prices at all",
       build = function() return nil, nil end },
 
-    { name = "the Classic path: sell slot then StartAuction",
+    { name = "the old Classic way: sell slot, then StartAuction",
       legacy = true,
       build = function(price) return price, price end },
 }
@@ -1564,7 +1564,7 @@ local function TryLegacyPost(bagID, slotID, bid, buyout, duration)
     if type(pickup) ~= "function" then missing[#missing + 1] = "PickupContainerItem" end
 
     if #missing > 0 then
-        return false, "this client has no " .. table.concat(missing, ", ")
+        return false, "this version of the game has no " .. table.concat(missing, ", ")
     end
 
     -- Anything already on the cursor would be put into the slot instead.
@@ -1594,12 +1594,12 @@ local function TryLegacyPost(bagID, slotID, bid, buyout, duration)
     return true
 end
 
-ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n> [name]", function(args)
+ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n> [name]", function(args)
     local index, needle = (args or ""):match("^(%d+)%s*(.*)$")
     index = tonumber(index)
 
     if not index or not POST_VARIANTS[index] then
-        ns.Print("argument shapes to try:")
+        ns.Print("ways to try:")
         for i, variant in ipairs(POST_VARIANTS) do
             ns.PrintRaw(("  |cffC8A44D/bts posttry %d|r  %s"):format(i, variant.name))
         end
@@ -1627,7 +1627,7 @@ ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n>
     local bagID, slotID = FindInBags(itemID)
     local location = bagID and MakeLocation(bagID, slotID)
     if not location then
-        ns.Warn("could not reference that bag slot")
+        ns.Warn("could not find that item in your bags")
         return
     end
 
@@ -1643,7 +1643,7 @@ ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n>
 
     if variant.legacy then
         local worked, why = TryLegacyPost(bagID, slotID, bid, buyout, duration)
-        ns.PrintRaw(("  legacy call: %s%s"):format(
+        ns.PrintRaw(("  old-style call: %s%s"):format(
             tostring(worked), why and (" -- " .. why) or ""))
     else
         local ok, returned = pcall(C_AuctionHouse.PostItem, location, duration, quantity, bid, buyout)
@@ -1657,10 +1657,10 @@ ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n>
             local after = ns.Auctions:GetPostedCount(itemID)
 
             if after > before then
-                ns.Print(("|cff4FD18Bshape %d worked: %s.|r"):format(index, variant.name))
-                ns.Print("tell me which number worked and I will make it the default.")
+                ns.Print(("|cff4FD18Bway %d worked: %s.|r"):format(index, variant.name))
+                ns.Print("report which number worked so it can be made the default.")
             else
-                ns.Print(("|cffE5604Fshape %d did not list.|r Try the next one."):format(index))
+                ns.Print(("|cffE5604Fway %d did not list.|r Try the next one."):format(index))
             end
         end)
     end)
@@ -1675,7 +1675,7 @@ end)
 --
 -- hooksecurefunc observes without replacing, so Blizzard's call is unaffected
 -- and nothing here can taint it.
-ns.RegisterCommand("watchpost", "log what Blizzard's Sell tab passes when you post", function()
+ns.RegisterCommand("watchpost", "show what Blizzard's Sell tab sends when you post", function()
     if Posting.watching then
         ns.Print("already watching -- post something with Blizzard's Sell tab.")
         return
@@ -1728,12 +1728,12 @@ ns.RegisterCommand("watchpost", "log what Blizzard's Sell tab passes when you po
     end
 
     if #hooked == 0 then
-        ns.Warn("nothing to hook; this client exposes none of the posting calls.")
+        ns.Warn("nothing to watch; this version of the game has none of the posting functions.")
         return
     end
 
     Posting.watching = true
 
     ns.Print(("watching: %s"):format(table.concat(hooked, ", ")))
-    ns.Print("now post the scroll with Blizzard's own Sell tab, and tell me what prints.")
+    ns.Print("now post an item with Blizzard's own Sell tab, and report what prints.")
 end)

@@ -355,9 +355,9 @@ local function UpdateDetail(item, totals)
         end
 
         if item.restored then
-            detail.note:SetText("Some of these figures were carried over from before the client was last closed. Only what sold, how many, what expired and the money survive that trip, so the auction cut and cancellations here cover this session alone.")
+            detail.note:SetText("Some of these figures are from before you last quit the game. Only sales, amounts, expiries and gold are kept when you quit, so the auction cut and cancellations here are for this session only.")
         elseif item.soldUnits == item.sold and item.sold > 0 then
-            detail.note:SetText("A sale leaves no attachment behind, so the ledger cannot tell a stack of twenty from a single item. Every sale is counted as one unit until that is worked out.")
+            detail.note:SetText("The sale mail does not say how many were in the stack, so a stack of twenty looks the same as a single item. For now, every sale counts as one.")
         else
             detail.note:SetText("")
         end
@@ -394,9 +394,9 @@ local function UpdateDetail(item, totals)
         Add("Mailbox read", Util.FormatAgeAgo(age), "muted")
 
         if not ns.Mail:HasReadThisSession() then
-            detail.note:SetText("The ledger is only written while you are standing at a mailbox. Nothing that has sold since you last opened one is here yet.")
+            detail.note:SetText("Sales are only recorded when you open a mailbox. Anything that sold since you last opened one is not here yet.")
         else
-            detail.note:SetText("Click an item to see how it has done. Sell-through leaves cancellations out: pulling a listing yourself says nothing about whether it would have sold.")
+            detail.note:SetText("Click an item to see how it has done. Sell-through ignores listings you cancelled, since cancelling says nothing about whether it would have sold.")
         end
     end
 
@@ -557,7 +557,7 @@ local function Refresh()
 
     widgets.carried:SetShown(carried > 0)
     if carried > 0 then
-        widgets.carried:SetText(("plus %d sale%s carried over from before the client was last closed -- see By item"):format(
+        widgets.carried:SetText(("plus %d sale%s from before you last quit the game -- see By item"):format(
             carried, carried == 1 and "" or "s"))
     end
 end

@@ -601,10 +601,10 @@ function ItemTooltip:PrintReport(input)
 
     table.sort(firing)
 
-    ns.PrintRaw(("  |c%shooks that have fired|r  %s"):format(
+    ns.PrintRaw(("  |c%stooltip types seen|r  %s"):format(
         ns.COLORS.muted, #firing > 0 and table.concat(firing, ", ") or "none yet"))
 
-    ns.PrintRaw(("  |c%sitem tooltips decorated|r  %d"):format(
+    ns.PrintRaw(("  |c%sitem tooltips checked|r  %d"):format(
         ns.COLORS.muted, self.seen or 0))
 
     ns.PrintRaw(("  |c%sshowing a value|r  %d"):format(
@@ -621,7 +621,7 @@ function ItemTooltip:PrintReport(input)
 
         table.sort(installed)
 
-        ns.PrintRaw(("  |c%shooks installed|r  %s"):format(
+        ns.PrintRaw(("  |c%stooltip types watched|r  %s"):format(
             ns.COLORS.muted, #installed > 0 and table.concat(installed, ", ") or "none"))
 
         ns.PrintRaw(("  |c%sHover an item, then run this again.|r"):format(
@@ -644,7 +644,7 @@ function ItemTooltip:OnEnable()
     self:InstallHooks()
 
     ns.RegisterCommand("tip",
-        "report the auction values shown on item tooltips", function(input)
+        "show what the auction value on item tooltips is doing", function(input)
             ItemTooltip:PrintReport((input or ""):gsub("^%s+", ""):gsub("%s+$", ""))
         end)
 end

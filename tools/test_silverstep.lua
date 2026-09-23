@@ -185,7 +185,7 @@ do
     local _, basis, why = Profit:ChoosePostPrice(BAG)
     check("uncosted item: still a match", basis, "match")
     check("uncosted item: blames the missing cost",
-        why and why:find("no cost known") ~= nil, true)
+        why and why:find("cost to make this is unknown") ~= nil, true)
 end
 
 do
@@ -214,7 +214,7 @@ do
 
     local _, _, why = Profit:ChoosePostPrice(BAG)
     check("no legal price below: says so",
-        why and why:find("no legal price") ~= nil, true)
+        why and why:find("no lower price") ~= nil, true)
 end
 
 --------------------------------------------------------------------------------

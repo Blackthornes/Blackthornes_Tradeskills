@@ -143,7 +143,7 @@ local function BuildDetail(parent)
             end
         end)
     end, { width = 140, height = 22,
-           tooltip = "Delete this character's cached recipes and inventory" })
+           tooltip = "Delete this character's saved recipes and inventory" })
     detail.forget:SetPoint("BOTTOMLEFT", 12, 14)
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
@@ -196,7 +196,7 @@ local function UpdateDetail(entry)
 
     if #ranked == 0 then
         detail.lines[1]:Show()
-        detail.lines[1].name:SetText("Nothing priceable yet")
+        detail.lines[1].name:SetText("Nothing with a price yet")
         detail.lines[1].name:SetTextColor(Theme.Unpack("dim"))
         detail.lines[1].profit:SetText("")
     else

@@ -855,7 +855,7 @@ local function PackResults(...)
     return select("#", ...), { ... }
 end
 
-ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says sold", function(args)
+ns.RegisterCommand("mail", "[reset] -- what is in the mailbox and what has sold", function(args)
     local sub = (args or ""):lower():match("^(%S*)")
 
     if sub == "reset" then
@@ -863,7 +863,7 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
         local entries = #ledger.entries
 
         if entries == 0 then
-            ns.Print("the ledger is already empty")
+            ns.Print("the sales record is already empty")
             return
         end
 
@@ -877,7 +877,7 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
 
             local unpriced = Mail:CountUnpriced()
             if unpriced > 0 then
-                ns.PrintRaw(("  %d of them show no gold, from before the payout fix"):format(
+                ns.PrintRaw(("  %d of them show no gold (recorded before an addon fix)"):format(
                     unpriced))
             end
 
@@ -887,8 +887,8 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
         end
 
         local had = Mail:ResetLedger()
-        ns.Print(("cleared %d ledger entr%s"):format(had, had == 1 and "y" or "ies"))
-        ns.PrintRaw("  anything still in the mailbox is recorded again on the next read")
+        ns.Print(("cleared %d sales record entr%s"):format(had, had == 1 and "y" or "ies"))
+        ns.PrintRaw("  anything still in the mailbox is recorded again next time you open it")
 
         -- Whatever is in the box is unrecorded again, so read it now if we can.
         if Mail.isOpen then Mail:Read() end
@@ -925,18 +925,18 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
 
     local announces
     if not Mail.hasInboxEvent then
-        announces = "not supported by this client"
+        announces = "not in this version of the game"
     elseif (Mail.inboxEventCount or 0) > 0 then
         announces = ("yes, %d time(s) this session"):format(Mail.inboxEventCount)
     else
-        announces = "registered, but never fired this session"
+        announces = "listening, but it has not happened this session"
     end
-    ns.PrintRaw(("  announces changes:    %s"):format(announces))
+    ns.PrintRaw(("  change alerts:        %s"):format(announces))
 
     if Mail.attachmentShape then
-        ns.PrintRaw(("  attachment returns:   %s"):format(Mail.attachmentShape))
+        ns.PrintRaw(("  attachment order:     %s"):format(Mail.attachmentShape))
     elseif Mail.shapeUnknown then
-        ns.PrintRaw("  attachment returns:   could not be checked (no item link)")
+        ns.PrintRaw("  attachment order:     could not be checked (no item link)")
     end
 
     local age = Mail:GetAge()
@@ -945,12 +945,12 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
             or "never"))
 
     if not hasNum then
-        ns.Warn("this client does not expose the inbox; mail cannot be counted as stock.")
+        ns.Warn("this version of the game does not let addons read the mailbox; mail cannot be counted as stock.")
         return
     end
 
     if not Mail.isOpen then
-        ns.PrintRaw("  (stand at a mailbox for a fresh reading)")
+        ns.PrintRaw("  (open a mailbox to read it again)")
     end
 
     local counts = Mail:GetCounts()
@@ -966,7 +966,7 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
     end
 
     local summary = Mail:GetSummary()
-    ns.PrintRaw(("  ledger:               %d sold, %d expired, %d cancelled"):format(
+    ns.PrintRaw(("  sales record:         %d sold, %d expired, %d cancelled"):format(
         summary.sold, summary.expired, summary.cancelled))
 
     if summary.sold > 0 then
@@ -974,7 +974,7 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
     end
 
     if (Mail.awaitingAmount or 0) > 0 then
-        ns.PrintRaw(("    waiting on payout:  %d sale(s)"):format(Mail.awaitingAmount))
+        ns.PrintRaw(("    gold not paid yet:  %d sale(s)"):format(Mail.awaitingAmount))
     end
 
     local recent = Mail:GetRecent(6)
@@ -987,7 +987,7 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
             if entry.kind == "sold" then
                 ns.PrintRaw(("    sold %s for %s%s"):format(
                     label, Util.FormatMoney(entry.net),
-                    entry.estimated and "   (from the invoice, gold still held)" or ""))
+                    entry.estimated and "   (from the invoice, gold not paid yet)" or ""))
             else
                 ns.PrintRaw(("    %s came back (%s)"):format(label, entry.kind))
             end
@@ -1003,7 +1003,7 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
     local mails = Mail:ReadInbox()
 
     if #mails > 0 then
-        ns.PrintRaw("  what the client says, mail by mail:")
+        ns.PrintRaw("  what the game says, mail by mail:")
 
         for _, mail in ipairs(mails) do
             local kind = Mail:Classify(mail)
@@ -1061,7 +1061,7 @@ ns.RegisterCommand("mail", "[reset] -- what the mailbox holds and what it says s
     end
 end)
 
-ns.RegisterCommand("sold", "<name or link> -- what it actually earned, against the estimate", function(args)
+ns.RegisterCommand("sold", "<name or link> -- what it really earned, next to the estimate", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
@@ -1070,7 +1070,7 @@ ns.RegisterCommand("sold", "<name or link> -- what it actually earned, against t
     end
 
     if not recipe or not recipe.outputItemID then
-        ns.Print(errorMessage or "give me an item name or link")
+        ns.Print(errorMessage or "type an item name, or shift-click an item")
         return
     end
 
@@ -1094,7 +1094,7 @@ ns.RegisterCommand("sold", "<name or link> -- what it actually earned, against t
     end
 
     if summary.sellThrough then
-        ns.PrintRaw(("  sell-through:     %d%%   (of %d the market decided on)")
+        ns.PrintRaw(("  sell-through:     %d%%   (of %d that sold or expired)")
             :format(math.floor(summary.sellThrough * 100 + 0.5),
                 summary.sold + summary.expired))
     end

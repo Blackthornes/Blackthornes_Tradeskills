@@ -37,7 +37,7 @@ function Crafting:MarkBlocked()
     if self.blocked then return end
 
     self.blocked = true
-    ns.Warn("this client refused an addon-started craft; use Blizzard's own window.")
+    ns.Warn("the game will not let addons start crafts; use Blizzard's own profession window.")
 
     if ns.UI then ns.UI:RefreshActiveTab() end
 end
@@ -50,12 +50,12 @@ end
 -- @return ready, reason
 function Crafting:GetReadiness(recipeID)
     if self:IsBlocked() then
-        return false, "blocked by client"
+        return false, "blocked by the game"
     end
 
     local recipe, owner = ns.Recipes:GetAny(recipeID)
     if not recipe then
-        return false, "not cached"
+        return false, "recipe not read yet"
     end
 
     -- Queued from the account-wide view: this character simply cannot make it.
@@ -235,7 +235,7 @@ function Crafting:Start(recipeID, count)
         if tostring(err):lower():find("addon") then
             self:MarkBlocked()
         else
-            ns.Warn(("the client refused the craft: %s"):format(
+            ns.Warn(("the game refused the craft: %s"):format(
                 tostring(err):gsub("^.-:%d+: ", "")))
         end
         return false

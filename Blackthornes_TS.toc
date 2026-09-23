@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: Blackthornes Tradeskills
-## Notes: Crafting profitability, auction scanning and craft queueing for WoW: Forever.
+## Notes: Finds profitable crafts, scans the auction house and keeps a craft queue, for WoW: Forever.
 ## Author: Blackthornes
 ## Version: 0.1.0
 ## SavedVariables: BlackthornesTSDB

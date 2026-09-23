@@ -272,7 +272,7 @@ function Auctions:ReadOwned(opts)
     record.auctionCount = count
 
     if changed then
-        ns.Debug(("read %d owned auction(s) covering %d item(s)"):format(
+        ns.Debug(("read %d of your auction(s), %d different item(s)"):format(
             count, Util.Count(items)))
     end
 
@@ -370,7 +370,7 @@ end
 -- Verification of a listing rests entirely on being able to read your own
 -- auctions. If that reading is broken, a successful post looks like a failure,
 -- so it needs to be checkable on its own.
-ns.RegisterCommand("auctions", "list what the client says you have listed", function()
+ns.RegisterCommand("auctions", "show the auctions the game says you have up", function()
     if not ns.Scanner.isAuctionHouseOpen then
         ns.Print("the auction house must be open")
         return
@@ -380,20 +380,20 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
     local hasCount = Util.HasFunction("C_AuctionHouse.GetNumOwnedAuctions")
     local hasInfo = Util.HasFunction("C_AuctionHouse.GetOwnedAuctionInfo")
 
-    ns.Print("owned auctions")
+    ns.Print("your auctions")
     ns.PrintRaw(("  QueryOwnedAuctions:   %s"):format(hasQuery and "yes" or "no"))
     ns.PrintRaw(("  GetNumOwnedAuctions:  %s"):format(hasCount and "yes" or "no"))
     ns.PrintRaw(("  GetOwnedAuctionInfo:  %s"):format(hasInfo and "yes" or "no"))
     local announces
     if not Auctions.hasOwnedEvent then
-        announces = "not supported by this client"
+        announces = "not in this version of the game"
     elseif (Auctions.ownedEventCount or 0) > 0 then
         announces = ("yes, %d time(s) this session"):format(Auctions.ownedEventCount)
     else
-        announces = "registered, but never fired this session"
+        announces = "listening, but it has not happened this session"
     end
 
-    ns.PrintRaw(("  announces changes:    %s"):format(announces))
+    ns.PrintRaw(("  change alerts:        %s"):format(announces))
 
     if hasCount then
         local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
@@ -428,7 +428,7 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
     ns.PrintRaw(("  stored for this realm: %d item(s), %s"):format(
         Util.Count(record.items or {}),
         age and ("read %ds ago"):format(age) or "never read"))
-    ns.PrintRaw(("  readings taken:       %d this session, %d on opening the house"):format(
+    ns.PrintRaw(("  times read:           %d this session, %d when the auction house opened"):format(
         Auctions.readCount or 0, Auctions.openRefreshes or 0))
 
     -- And whether the limit is doing anything, which is the other half of
@@ -458,20 +458,20 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
     -- hand. A command that quietly spends the player's allowance is a poor thing
     -- to reach for when the complaint is that the allowance ran out.
     if hasQuery then
-        ns.PrintRaw("  re-querying...")
+        ns.PrintRaw("  asking the auction house again...")
 
         Util.WhenAuctionReady(function()
             pcall(C_AuctionHouse.QueryOwnedAuctions, {})
 
             C_Timer.After(2, function()
                 local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
-                ns.Print(("after querying: %s auction(s)"):format(
+                ns.Print(("after asking again: %s auction(s)"):format(
                     ok and tostring(count) or "call failed"))
             end)
         end, function()
-            ns.Warn("the auction house stayed busy; the re-query was not sent.")
+            ns.Warn("the auction house stayed busy, so it was not asked again.")
         end, {
-            name = "owned auctions (diagnostic)",
+            name = "your auctions (check)",
             key = "owned-auctions",
             priority = ns.AHQueue.PRIORITY.urgent,
             expires = 10,
