@@ -663,7 +663,7 @@ function()
     end
 
     ns.Print(("|c%sSoulbound crafts|r"):format(ns.COLORS.accent))
-    ns.PrintRaw(("  %d bind on pickup (left out), %d can be sold, %d not cached yet"):format(
+    ns.PrintRaw(("  %d bind on pickup (left out), %d can be sold, %d not loaded by the game yet"):format(
         #bound, free, unknown))
 
     local types = {}
@@ -671,7 +671,7 @@ function()
         types[#types + 1] = ("type %d: %d"):format(bindType, count)
     end
     table.sort(types)
-    ns.PrintRaw(("  |c%sbindType as read: %s  (1 pickup, 2 equip, 3 use, 4 quest)|r"):format(
+    ns.PrintRaw(("  |c%sbind type the game gave: %s  (1 pickup, 2 equip, 3 use, 4 quest)|r"):format(
         ns.COLORS.muted, #types > 0 and table.concat(types, ", ") or "nothing answered"))
 
     table.sort(bound, function(a, b)
