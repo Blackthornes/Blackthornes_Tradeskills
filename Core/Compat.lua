@@ -329,8 +329,8 @@ function Compat:OnEnable()
     local caps = self:Detect()
 
     if not self:IsSupported() then
-        ns.Warn("this client exposes an auction or profession API I do not recognise.")
-        ns.Warn("run |cffc8a44d/bts probe|r and send me the report.")
+        ns.Warn("this version of the game has auction or profession functions this addon does not recognise.")
+        ns.Warn("run |cffc8a44d/bts probe|r and report what it says.")
         return
     end
 

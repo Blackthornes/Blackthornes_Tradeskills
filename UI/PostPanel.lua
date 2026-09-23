@@ -327,7 +327,7 @@ function PostPanel:Refresh()
 
     if #lines == 0 then
         self.empty:SetText(
-            "Nothing in your bags with a known price.\n\nScan the auction house so I know what things sell for.")
+            "Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for.")
         self.summary:SetText("")
         return
     end

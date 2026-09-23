@@ -119,7 +119,7 @@ AHQueue.standDownUntil = clock + 8
 
 seconds, reason = AHQueue:SecondsUntilReady(SCAN)
 CheckAbout("reports the 8s stand-down, not the 1s back-off", seconds, 8)
-Check("and names it", reason, "a listing is settling")
+Check("and names it", reason, "your last listing is still going through")
 
 --------------------------------------------------------------------------------
 print("\nthe player's own click is exempt from the stand-down")
@@ -163,7 +163,7 @@ AHQueue.lastSend = clock - 4
 
 seconds, reason = AHQueue:SecondsUntilReady(URGENT)
 CheckAbout("waits for the oldest send to age out", seconds, 11)
-Check("and says why", reason, "leaving the auction house room for you")
+Check("and says why", reason, "leaving the auction house free for you")
 
 --------------------------------------------------------------------------------
 print("\na wait with no knowable end")
@@ -176,7 +176,7 @@ clientReady = false
 
 seconds, reason = AHQueue:SecondsUntilReady(URGENT)
 Check("no seconds offered", seconds, 0)
-Check("but a reason is", reason, "the auction house is still catching up")
+Check("but a reason is", reason, "the auction house is still busy")
 
 --------------------------------------------------------------------------------
 print("\na real countdown outranks a reason with no number")
@@ -188,7 +188,7 @@ AHQueue.lastSend = clock - 0.2
 
 seconds, reason = AHQueue:SecondsUntilReady(URGENT)
 CheckAbout("the 1s pacing gap is still counted down", seconds, 1.0)
-Check("and it is what gets named", reason, "pacing our own requests")
+Check("and it is what gets named", reason, "spacing out requests to the auction house")
 
 --------------------------------------------------------------------------------
 print("")

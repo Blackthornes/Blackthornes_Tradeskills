@@ -135,7 +135,7 @@ function ns.RegisterEvent(owner, event, fn)
         local ok, err = pcall(eventFrame.RegisterEvent, eventFrame, event)
         if not ok then
             unknownEvents[event] = err or true
-            ns.Debug("event not supported by this client:", event)
+            ns.Debug("event not in this version of the game:", event)
             return false
         end
         list = {}

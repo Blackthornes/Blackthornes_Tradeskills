@@ -248,7 +248,7 @@ local function UpdateBankNote()
     local age = ns.Inventory:GetBankAge()
 
     if age then
-        note:SetText(("Bank not checked this session -- using a snapshot from %s ago.")
+        note:SetText(("Bank not checked this session -- using what it held %s ago.")
             :format(Util.FormatAge(age)))
     else
         note:SetText("Bank never checked -- HAVE counts bags only.")
@@ -298,7 +298,7 @@ local function UpdateCraftStatus()
 
     button:SetText(("Craft %dx %s"):format(canMake, (recipe and recipe.name) or "item"))
     button:SetEnabledState(true)
-    button.tooltipText = "One click runs this entry to completion"
+    button.tooltipText = "One click makes every craft in this entry"
 
     label:SetText(("%d of %d ready"):format(ready, total))
     label:SetTextColor(Theme.Unpack("profit"))

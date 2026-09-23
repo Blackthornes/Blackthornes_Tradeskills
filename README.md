@@ -4,19 +4,19 @@ Tradeskill addon for WoW: Forever. It works out which crafts are worth making,
 scans the auction house for the prices that answer depends on, and manages a
 craft queue, a shopping list and a posting list around it.
 
-Built without Ace3 or LibStub, which are not known to be ported to Forever. The
-framework in `Core/` is about 200 lines and is ours, which is a better trade
-than a hard dependency on somebody else's port schedule.
+Built without Ace3 or LibStub, because neither is known to work on Forever yet.
+The small framework in `Core/` is written for this addon instead, so it does not
+have to wait for anyone else to update theirs.
 
 ## Layout
 
 | Folder | What is in it |
 |---|---|
-| `Core/` | Module registry, slash commands, settings, client capability detection, serialization, CVar persistence, and the auction house request queue |
+| `Core/` | Slash commands, settings, checking what the game supports, saving your data between sessions, and spacing out requests to the auction house |
 | `Data/` | Everything read from the game: prices, auction scans, recipes, bags and bank, your own listings, vendor prices |
 | `Logic/` | Craft cost, profit, the queue, starting crafts, posting, and export/import |
 | `UI/` | Theme, reusable widgets, the main window, the auction house side panel, and the seven tabs |
-| `Probe/` | `/bts probe` diagnostics, which interrogate the live client instead of assuming what the API looks like |
+| `Probe/` | `/bts probe`, which checks what the running game actually supports instead of guessing |
 
 `Blackthornes_TS.toc` lists every Lua file in load order. A file that is not in
 it does not load, and WoW says nothing about it.
@@ -37,9 +37,9 @@ python tools/lintcalls.py     # find calls to methods, and constants, never defi
 python tools/runtests.py      # run the pure-logic tests outside WoW
 ```
 
-The checks exist because WoW silently disables an addon whose first TOC file
-fails to compile, and because a call to a method that no longer exists is valid
-Lua that fails only when that line runs.
+These checks matter because WoW quietly turns off an addon when one of its
+files has a typo in it, and a call to a function that no longer exists only
+fails when that line of code runs.
 
 `tools/` requires `lupa` (`python -m pip install --user lupa`).
 
@@ -67,6 +67,6 @@ catches a snapshot pushed from a clone where the hook was never installed.
 
 ## API findings
 
-`docs/FOREVER_API_FINDINGS.md` records what the client actually does, captured
-with `/bts probe` rather than taken from documentation. Worth reading before
-changing anything that touches the auction house or profession APIs.
+`docs/FOREVER_API_FINDINGS.md` records what the game actually does, as found
+with `/bts probe` rather than taken from documentation. Read it before changing
+anything to do with the auction house or professions.

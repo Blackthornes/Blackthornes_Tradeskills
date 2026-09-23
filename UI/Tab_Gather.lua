@@ -255,7 +255,7 @@ local function Refresh()
 
     -- Unknown prices make the total an understatement, so say so.
     widgets.unknownLabel:SetText(summary.unknown.count > 0
-        and ("%d material%s with no price data -- total is understated"):format(
+        and ("%d material%s with no price data -- the real total is higher"):format(
             summary.unknown.count, summary.unknown.count == 1 and "" or "s")
         or "")
 
