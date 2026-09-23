@@ -207,7 +207,20 @@ local function Build(outer)
     end, true)
     widgets.verifyPrice:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local filters = CreateSection(container, "FILTERS", { anchor = verifyRow })
+    local saleAlarmRow = CreateRow(container, verifyRow, "Sound when an auction sells",
+        "Plays an alarm as soon as one of your auctions sells, wherever you are.")
+
+    widgets.saleAlarm = Widgets.CreateCheckbox(saleAlarmRow, "Enabled", function(checked)
+        Config:Set("saleAlarm", checked)
+    end, true)
+    widgets.saleAlarm:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local saleAlarmTest = Widgets.CreateButton(saleAlarmRow, "Test", function()
+        if ns.SaleAlarm then ns.SaleAlarm:Play() end
+    end, { width = 60, height = 20, tooltip = "Play the sale alarm now" })
+    saleAlarmTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+
+    local filters = CreateSection(container, "FILTERS", { anchor = saleAlarmRow })
 
     local profitRow = CreateRow(container, filters, "Minimum profit",
         "Crafts that make less than this are hidden from the Profit tab. " ..
@@ -450,6 +463,7 @@ local function Refresh()
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
+    widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan = ns.db.lastFullScan
