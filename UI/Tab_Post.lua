@@ -245,6 +245,9 @@ local function ShowRowTooltip(row, line)
 
         if line.priceBasis == "undercut" then
             why = "Undercutting the cheapest listing that is not yours"
+        elseif line.priceBasis == "derived" then
+            -- The one basis that is not a market observation at all.
+            why = "No scan has priced this -- estimated from what its materials are worth"
         elseif line.priceBasis == "match" then
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.
