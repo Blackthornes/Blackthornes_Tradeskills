@@ -287,6 +287,7 @@ function CraftPanel:GetRows(opts)
                         recommended = (analysis and analysis.recommended) == true,
                         rank = RankOf(analysis),
                         reason = analysis and analysis.reason or nil,
+                        soulbound = (analysis and analysis.soulbound) == true,
                         craftable = ns.Profit:GetCraftableCount(recipeID) or 0,
                         queued = (queued and queued.quantity) or 0,
 
@@ -459,6 +460,9 @@ local function UpdateRow(row, line)
     if line.priceable then
         parts[#parts + 1] = ("%s each"):format(
             Util.FormatMoney(line.profit, { noColor = true, short = true }))
+    elseif line.soulbound then
+        -- The whole reason is in the tooltip; the row has room for one word.
+        parts[#parts + 1] = "soulbound"
     else
         parts[#parts + 1] = line.reason or "no price data"
     end
