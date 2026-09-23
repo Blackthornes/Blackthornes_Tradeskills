@@ -12,6 +12,10 @@ local Profit = ns.NewModule("Profit")
 
 local Util = ns.Util
 
+-- Shown wherever an unpriceable craft says why: the Profit tab's detail
+-- panel, the craft pane's tooltip and /bts why.
+local SOULBOUND_REASON = "binds on pickup, so it cannot be sold"
+
 --------------------------------------------------------------------------------
 -- What to list at
 --------------------------------------------------------------------------------
@@ -341,6 +345,19 @@ function Profit:Analyse(recipeID, characterKey)
     if not recipe.outputItemID then
         -- Enchants and similar have no sellable output item.
         analysis.reason = "no sellable output"
+        return analysis
+    end
+
+    -- Binds on pickup: the thing made is soulbound the moment it exists, so
+    -- there is no sale to cost and no profit to rank on. Out of the list the
+    -- same way an unpriced craft is, which keeps it off the skill-up star too,
+    -- while "Show unpriced" and the craft pane still show it with its skill-up
+    -- colour for anyone levelling on it. Unknown (not cached yet) is kept: the
+    -- tab redraws when the item arrives, and a craft that may well sell should
+    -- not vanish on a guess.
+    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(recipe.outputItemID) then
+        analysis.soulbound = true
+        analysis.reason = SOULBOUND_REASON
         return analysis
     end
 
@@ -723,4 +740,59 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
         ns.COLORS.muted, math.floor((analysis.confidence or 0) * 100),
         analysis.confidenceReason and (" (" .. analysis.confidenceReason .. ")") or "",
         Util.FormatAge(analysis.age)))
+end)
+
+--- What the client says about binding, for every cached recipe's output.
+--
+-- The Profit list drops a craft on the strength of one number out of
+-- GetItemInfo. This is how to see that number rather than trust it: how many
+-- outputs read as bound, how many as sellable, how many the client has not
+-- cached yet, and which crafts were taken out.
+ns.RegisterCommand("soulbound", "which crafts are left out of the Profit list for binding on pickup",
+function()
+    local bound, free, unknown = {}, 0, 0
+    local byType = {}
+
+    for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
+        if recipe.outputItemID then
+            local isBound, bindType = Util.IsBoundOnPickup(recipe.outputItemID)
+
+            if bindType then
+                byType[bindType] = (byType[bindType] or 0) + 1
+            end
+
+            if isBound == nil then
+                unknown = unknown + 1
+            elseif isBound then
+                bound[#bound + 1] = recipeID
+            else
+                free = free + 1
+            end
+        end
+    end
+
+    ns.Print(("|c%sSoulbound crafts|r"):format(ns.COLORS.accent))
+    ns.PrintRaw(("  %d bind on pickup (left out), %d can be sold, %d not cached yet"):format(
+        #bound, free, unknown))
+
+    local types = {}
+    for bindType, count in pairs(byType) do
+        types[#types + 1] = ("type %d: %d"):format(bindType, count)
+    end
+    table.sort(types)
+    ns.PrintRaw(("  |c%sbindType as read: %s  (1 pickup, 2 equip, 3 use, 4 quest)|r"):format(
+        ns.COLORS.muted, #types > 0 and table.concat(types, ", ") or "nothing answered"))
+
+    table.sort(bound, function(a, b)
+        local left, right = ns.Recipes:GetAny(a), ns.Recipes:GetAny(b)
+        return ((left and left.name) or "") < ((right and right.name) or "")
+    end)
+
+    for i = 1, math.min(#bound, 15) do
+        ns.PrintRaw("    " .. ns.Recipes:GetDisplayLink(bound[i]))
+    end
+
+    if #bound > 15 then
+        ns.PrintRaw(("    |c%s...and %d more|r"):format(ns.COLORS.muted, #bound - 15))
+    end
 end)

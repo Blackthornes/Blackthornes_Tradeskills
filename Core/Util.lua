@@ -323,6 +323,33 @@ function Util.GetMaxStackSize(itemID)
     return maxStack
 end
 
+-- Enum.ItemBind values that bind an item the moment it exists: 1 is bind on
+-- pickup, 4 is a quest item. Written out rather than read from Enum.ItemBind,
+-- the same as Logic/Posting.lua, because this client's Enum tables have been
+-- patchy. Bind on equip (2) and bind on use (3) still sell, so they are not
+-- here.
+local BINDS_ON_PICKUP = { [1] = true, [4] = true }
+
+--- Does this item bind to whoever makes or loots it, so it can never be
+--- auctioned?
+--
+-- @return true, false, or nil when the client has not cached the item yet.
+--   Callers decide what unknown means; the Profit list keeps an unknown craft
+--   rather than quietly dropping one that may well sell.
+-- @return bindType, the raw number, for /bts soulbound to report.
+function Util.IsBoundOnPickup(itemID)
+    if not itemID then return nil end
+    if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
+
+    -- bindType is the fourteenth return.
+    local ok, _, _, _, _, _, _, _, _, _, _, _, _, _, bindType =
+        pcall(C_Item.GetItemInfo, itemID)
+
+    if not ok or type(bindType) ~= "number" then return nil end
+
+    return BINDS_ON_PICKUP[bindType] == true, bindType
+end
+
 --- The price of one, given what a whole listing costs and how many it holds.
 --
 -- Item auctions quote the price of the stack, so a unit price is a division.
