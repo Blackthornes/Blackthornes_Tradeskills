@@ -90,7 +90,7 @@ Seen(6, 308, 47 * 3600)
 check("old data is called old", select(2, Prices:GetConfidence(ITEM)), "stale data")
 
 Seen(6, 1, 0)
-check("a market of one is called thin", select(2, Prices:GetConfidence(ITEM)), "thin market")
+check("a market of one is called thin", select(2, Prices:GetConfidence(ITEM)), "few listed")
 
 Seen(1, 308, 0)
 check("a single look is called that", select(2, Prices:GetConfidence(ITEM)), "few scans")
@@ -103,7 +103,7 @@ print("the weakest one is the one named")
 -- what gets named -- not whichever branch happens to be written first.
 Seen(6, 2, 10 * 3600)
 check("the lowest score wins, not the first test",
-    select(2, Prices:GetConfidence(ITEM)), "thin market")
+    select(2, Prices:GetConfidence(ITEM)), "few listed")
 
 --------------------------------------------------------------------------------
 print("")

@@ -261,7 +261,7 @@ function UI:UpdateHeader()
 
         local allowed, reason = ns.Scanner:CanFullScan()
         self.scanButton.tooltipText = allowed
-            and "Take a full snapshot of the auction house"
+            and "Scan the whole auction house in one go"
             or reason
 
         self.scanHint:SetText(allowed and "" or (reason or ""))
@@ -589,9 +589,9 @@ function UI:UpdateAuctionButton()
 
     button.tooltipText = allowed
         and (cooldown
-            and ("Browse the auction house.\nThe faster snapshot is rate limited for another %s.")
+            and ("Scan the auction house page by page.\nThe faster full scan can be used again in %s.")
                 :format(Util.FormatAge(cooldown))
-            or "Take a full snapshot of the auction house")
+            or "Scan the whole auction house in one go")
         or reason
 end
 
@@ -817,7 +817,7 @@ function UI:ShowTransferDialog(mode)
         local queued, settings, limits = ns.Transfer:Describe()
 
         dialog.title:SetText("Export")
-        dialog.hint:SetText(("%d craft(s), %d changed setting(s), %d posted limit(s). Press Ctrl+C to copy, then keep it somewhere until you need it."):format(
+        dialog.hint:SetText(("%d craft(s), %d changed setting(s), %d stock limit(s). Press Ctrl+C to copy, then keep it somewhere until you need it."):format(
             queued, settings, limits))
 
         dialog.editBox:SetText(code)
@@ -825,7 +825,7 @@ function UI:ShowTransferDialog(mode)
         dialog.action:Hide()
     else
         dialog.title:SetText("Import")
-        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and posted limits are replaced.")
+        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits are replaced.")
 
         dialog.editBox:SetText("")
         dialog.action:Show()
@@ -1034,7 +1034,7 @@ function UI:SearchAuctionHouse(itemID)
     end
 
     if not name then
-        ns.Print("that item is not cached yet; hover it once and try again")
+        ns.Print("the game has not loaded that item yet; hover over it once and try again")
         return false
     end
 
@@ -1060,7 +1060,7 @@ function UI:SearchAuctionHouse(itemID)
             })
 
             if not ok then
-                ns.Warn("the client refused that search")
+                ns.Warn("the game refused that search")
                 return false
             end
 

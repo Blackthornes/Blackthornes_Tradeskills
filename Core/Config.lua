@@ -404,7 +404,7 @@ function Config:Bootstrap()
                 end
             end
 
-            self.loadDiagnostics.queueSource = "the CVar store"
+            self.loadDiagnostics.queueSource = "the game's saved settings (CVars)"
 
         elseif snapshot then
             _G.BlackthornesTSDB = snapshot
@@ -412,11 +412,11 @@ function Config:Bootstrap()
             self.restoredFromSnapshot = true
             self.loadDiagnostics.restored = true
             self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
-            self.loadDiagnostics.queueSource = "the local data addon"
+            self.loadDiagnostics.queueSource = "the data addon"
         else
             _G.BlackthornesTSDB = {}
             self.freshDatabase = true
-            self.loadDiagnostics.queueSource = "a fresh database"
+            self.loadDiagnostics.queueSource = "a fresh start"
         end
 
         -- The outcome, not the attempt: how long the queue actually is once
@@ -511,7 +511,7 @@ function Config:OnEnable()
     -- copy frozen into the snapshot, which is as old as the last restore.
     if ns.Persist then ns.Persist:RestoreSettings() end
 
-    ns.Print("seeded the database from the local data addon.")
+    ns.Print("loaded your saved data from the data addon.")
 end
 
 --- Settle the database again after something was restored into it late.
@@ -555,7 +555,7 @@ function Config:CheckLateSavedVariables()
     if type(current) == "table" and self.installedDB and current ~= self.installedDB then
         self.loadDiagnostics.lateSavedVariables = true
 
-        ns.Warn("the client handed back its saved database after login, not at load. That is worth reporting -- run /bts persist.")
+        ns.Warn("the game loaded your saved data late, after login instead of at load. Please report this -- run /bts persist.")
     end
 end
 
@@ -570,7 +570,7 @@ function Config:Migrate(db)
     end
 
     if from > Config.SCHEMA_VERSION then
-        ns.Warn(("saved data is from a newer version (schema %d > %d); leaving it alone")
+        ns.Warn(("your saved data is from a newer version of the addon (format %d, this version reads %d); leaving it alone")
             :format(from, Config.SCHEMA_VERSION))
         return
     end
@@ -696,27 +696,27 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("db", "report what loaded from saved variables", function()
+ns.RegisterCommand("db", "show what saved data loaded", function()
     local diagnostics = ns.Config:GetLoadDiagnostics()
 
     ns.Print("saved data")
     local source = ""
     if diagnostics.restoredFromCVars then
-        source = "  (restored from CVars)"
+        source = "  (recovered from CVars)"
     elseif diagnostics.restored then
-        source = "  (restored from snapshot)"
+        source = "  (recovered from the data addon)"
     end
 
-    ns.PrintRaw(("  global at load:  %s%s"):format(
+    ns.PrintRaw(("  saved data type: %s%s"):format(
         tostring(diagnostics.globalType), source))
-    ns.PrintRaw(("  loadCount found: %s"):format(tostring(diagnostics.loadCountSeen)))
-    ns.PrintRaw(("  loadCount now:   %s"):format(tostring(ns.db.probe.loadCount)))
+    ns.PrintRaw(("  loads before:    %s"):format(tostring(diagnostics.loadCountSeen)))
+    ns.PrintRaw(("  loads now:       %s"):format(tostring(ns.db.probe.loadCount)))
     ns.PrintRaw(("  prices:          %d item(s)"):format(ns.Prices:Count()))
     ns.PrintRaw(("  recipes:         %d"):format(ns.Recipes:Count()))
-    ns.PrintRaw(("  queue:           %d entr(ies)"):format(ns.Queue:Count()))
+    ns.PrintRaw(("  queue:           %d craft(s)"):format(ns.Queue:Count()))
     ns.PrintRaw(("  characters:      %d"):format(ns.Util.Count(ns.db.characters)))
 
-    ns.PrintRaw(("  per-character:   %s, canary %s"):format(
+    ns.PrintRaw(("  per-character:   %s, test value %s"):format(
         tostring(diagnostics.charGlobalType),
         tostring(diagnostics.charCanarySeen or "none")))
 
@@ -727,24 +727,24 @@ ns.RegisterCommand("db", "report what loaded from saved variables", function()
         -- "nothing was handed back" and "nothing was recovered" are very
         -- different situations and only the second one is a problem.
         if diagnostics.restoredFromCVars then
-            ns.Print("the client lost your saved data; recovered it from CVars.")
+            ns.Print("the game lost your saved data; it was recovered from CVars.")
         elseif diagnostics.restored then
-            ns.Warn("the client lost your saved data; restored from the snapshot.")
+            ns.Warn("the game lost your saved data; it was recovered from the data addon.")
             ns.Warn("run tools/restore.ps1 after this session to keep it current.")
         else
-            ns.Warn("the client did not hand back any saved data this session,")
+            ns.Warn("the game did not load any saved data this session,")
             ns.Warn("and nothing was recovered. This session starts empty.")
         end
 
         if diagnostics.charCanarySeen then
-            ns.Print("|cff4fd18bper-character saved data DID load|r -- the queue can live there.")
+            ns.Print("|cff4fd18bper-character saved data DID load|r -- the queue could be kept there.")
         end
     end
 end)
 
-ns.RegisterCommand("debug", "toggle debug output", function()
+ns.RegisterCommand("debug", "turn extra chat detail on or off", function()
     if not ns.db then return end
 
     ns.db.global.debug = not ns.db.global.debug
-    ns.Print("debug output " .. (ns.db.global.debug and "on" or "off"))
+    ns.Print("extra chat detail " .. (ns.db.global.debug and "on" or "off"))
 end)

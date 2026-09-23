@@ -129,15 +129,15 @@ print("\nthe longer of the two waits wins")
 -- The queue and the in-flight listing are independent. Whichever runs longer
 -- is the one the player actually serves.
 Reset()
-queueSeconds, queueReason = 9, "leaving the auction house room for you"
+queueSeconds, queueReason = 9, "leaving the auction house free for you"
 Posting.pending = { startedAt = clock - 1 }
 
 seconds, reason = Posting:SecondsUntilPostable()
 CheckAbout("the 9s queue wait beats the 2s confirmation", seconds, 9)
-Check("and it is what gets named", reason, "leaving the auction house room for you")
+Check("and it is what gets named", reason, "leaving the auction house free for you")
 
 Reset()
-queueSeconds, queueReason = 0.5, "pacing our own requests"
+queueSeconds, queueReason = 0.5, "spacing out requests to the auction house"
 Posting.pending = { startedAt = clock - 1 }
 
 seconds, reason = Posting:SecondsUntilPostable()

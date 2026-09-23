@@ -344,14 +344,14 @@ end
 -- answered and with what -- rather than that a call was made.
 function SkillUp:Probe(limit)
     if not Util.HasFunction("C_TradeSkillUI.GetAllRecipeIDs") then
-        return nil, "this client has no GetAllRecipeIDs"
+        return nil, "this version of the game has no GetAllRecipeIDs"
     end
 
     -- A harvest is already collecting these, and two runs would share one set
     -- of counters and finish each other's. The harvest's own numbers are
     -- reported instead.
     if self.capture then
-        return nil, "a recipe harvest is running, ask again in a moment"
+        return nil, "recipes are still being read, try again in a moment"
     end
 
     local ok, recipeIDs = pcall(C_TradeSkillUI.GetAllRecipeIDs)
@@ -508,30 +508,30 @@ local function ReportCapture(capture, heading)
     end
 
     for _, example in ipairs(capture.examples) do
-        ns.PrintRaw(("  %s -- %s (raw %s)"):format(
+        ns.PrintRaw(("  %s -- %s (game value %s)"):format(
             example.name, TierWord(example.tier), Muted(example.raw)))
     end
 
     local sawUnmapped = false
     for source, raw in pairs(capture.unmapped) do
         sawUnmapped = true
-        ns.PrintRaw(("  |cffE5604Funmapped|r %s returned %s"):format(source, raw))
+        ns.PrintRaw(("  |cffE5604Funknown|r %s returned %s"):format(source, raw))
     end
 
     if sawUnmapped then
-        ns.PrintRaw(Muted("  an unmapped value means the client does answer, but with"))
+        ns.PrintRaw(Muted("  an unknown value means the game does answer, but with"))
         ns.PrintRaw(Muted("  something this addon cannot read yet. Report the value above."))
     end
 end
 
 ns.RegisterCommand("skillup",
-    "what the client says about skill ups, and what is starred right now",
+    "what the game says about skill ups, and what is starred right now",
 function()
     ns.Print(("|c%sSkill ups|r"):format(ns.COLORS.accent))
 
     local trade = ns.Compat:Get().tradeskill
 
-    ns.PrintRaw(("  difficulty enum present: %s"):format(
+    ns.PrintRaw(("  difficulty list present: %s"):format(
         Accent(tostring(type(Enum) == "table"
             and type(Enum.TradeskillRelativeDifficulty) == "table"))))
     ns.PrintRaw(("  GetRecipeDifficulty: %s   classic list: %s"):format(
@@ -548,7 +548,7 @@ function()
     else
         ns.PrintRaw("  " .. Muted(why or "nothing to read"))
         if SkillUp.lastCapture then
-            ReportCapture(SkillUp.lastCapture, "from the last harvest:")
+            ReportCapture(SkillUp.lastCapture, "from the last time recipes were read:")
         end
     end
 
@@ -571,7 +571,7 @@ function()
         end
     end
 
-    ns.PrintRaw(("  cached on %s of %s recipe(s)%s"):format(
+    ns.PrintRaw(("  saved on %s of %s recipe(s)%s"):format(
         Accent(cached), Accent(ns.Util.Count(ns.Recipes:GetAll())),
         #stored > 0 and ("   " .. table.concat(stored, "   ")) or ""))
 
@@ -593,7 +593,7 @@ function()
     end
 
     if #starred == 0 then
-        ns.PrintRaw(Muted("  nothing both skills you up and turns a profit right now."))
+        ns.PrintRaw(Muted("  nothing both raises your skill and makes a profit right now."))
     end
 end)
 

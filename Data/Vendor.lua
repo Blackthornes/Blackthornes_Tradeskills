@@ -92,7 +92,7 @@ function Vendor:Scan()
     end
 
     if not countOk or not numItems or numItems == 0 then
-        ns.Debug("merchant has no readable items")
+        ns.Debug("could not read what this vendor sells")
         return 0
     end
 
@@ -136,7 +136,7 @@ function Vendor:Scan()
     end
 
     if learned > 0 then
-        ns.Debug(("learned %d vendor price(s), %d unresolved"):format(learned, unresolved))
+        ns.Debug(("learned %d vendor price(s), %d could not be read"):format(learned, unresolved))
 
         ns.Cost:InvalidateIndex()
         if ns.UI then ns.UI:RefreshActiveTab() end
@@ -157,7 +157,7 @@ function Vendor:CanBuy()
         return false, "no vendor is open"
     end
     if not Util.HasFunction("BuyMerchantItem") then
-        return false, "this client does not let addons buy from vendors"
+        return false, "this version of the game does not let addons buy from vendors"
     end
     return true
 end
@@ -256,7 +256,7 @@ function Vendor:BuyStep()
 
     self.buySteps = self.buySteps + 1
     if self.buySteps > MAX_BUY_STEPS then
-        ns.Warn("stopped buying after too many purchases; run it again if needed")
+        ns.Warn("stopped buying after a lot of purchases in a row; click again if you still need more")
         self:FinishBuying()
         return
     end

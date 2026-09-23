@@ -277,8 +277,8 @@ function Durable:Parse(text)
     if type(text) ~= "string" or text == "" then return nil, "empty" end
 
     local version = Unpack(text:sub(1, 1))
-    if not version then return nil, "unreadable version" end
-    if version > FORMAT then return nil, ("written by a newer version (%d)"):format(version) end
+    if not version then return nil, "the stored data could not be read (no version)" end
+    if version > FORMAT then return nil, ("saved by a newer version of the addon (format %d)"):format(version) end
 
     local found = { version = version }
     local position = 2
@@ -287,12 +287,12 @@ function Durable:Parse(text)
         local tag = text:sub(position, position)
         local length = Unpack(text:sub(position + 1, position + 4))
 
-        if not length then return nil, "unreadable section length" end
+        if not length then return nil, "the stored data is damaged" end
 
         local from = position + 5
         local body = text:sub(from, from + length - 1)
 
-        if #body ~= length then return nil, ("section '%s' is truncated"):format(tag) end
+        if #body ~= length then return nil, ("the stored data is cut short (part '%s')"):format(tag) end
 
         found[tag] = body
         position = from + length
@@ -553,7 +553,7 @@ function Durable:Report()
     ns.Print("macro storage")
 
     if not ns.MacroStore or not ns.MacroStore:Detect().usable then
-        ns.PrintRaw("  this client does not expose enough of the macro API.")
+        ns.PrintRaw("  this version of the game does not let addons use enough of the macro functions.")
         return
     end
 
@@ -641,9 +641,9 @@ function Durable:Report()
         end
     end
 
-    Line("history now", ("%d sale(s) restored, plus %d from this session's ledger; %d ledger sale(s) already inside the restored history%s")
+    Line("history now", ("%d sale(s) brought back, plus %d recorded this session; %d of those were already counted%s")
         :format(restoredSales, counted, skipped,
-            cutoff and (", rolled up " .. ns.Util.FormatAgeAgo(time() - cutoff)) or ""))
+            cutoff and (", totalled up " .. ns.Util.FormatAgeAgo(time() - cutoff)) or ""))
 
     -- Where the queue in memory came from before any of this ran. Bootstrap
     -- runs back at ADDON_LOADED, and a frozen list merged into the queue there
@@ -653,10 +653,10 @@ function Durable:Report()
     if diagnostics and diagnostics.queueSource then
         local declined = diagnostics.snapshotQueue or 0
 
-        Line("queue at login", ("%d entr(ies), from %s%s"):format(
+        Line("queue at login", ("%d craft(s), from %s%s"):format(
             diagnostics.queueEntries or 0, diagnostics.queueSource,
             declined > 0
-                and (("; the data addon's %d not merged in"):format(declined))
+                and (("; the %d in the data addon were left out"):format(declined))
                 or ""))
     end
 
@@ -664,17 +664,17 @@ function Durable:Report()
     -- whether a stale database or the macros win at login, and when they are
     -- wrong the symptom is crafts you already made coming back -- which looks
     -- nothing like a clock problem from the chat frame.
-    Line("queue now", ("%d entr(ies)"):format(#((ns.db and ns.db.queue) or {})))
+    Line("queue now", ("%d craft(s)"):format(#((ns.db and ns.db.queue) or {})))
 
     local storedAt = found and found.t and Unpack(found.t) or nil
     local loadedAt = ns.db and tonumber(ns.db.durableSavedAt)
 
-    Line("queue in macros", ("%d entr(ies), saved %s"):format(
+    Line("queue in macros", ("%d craft(s), saved %s"):format(
         queueEntries or 0, Ago(storedAt)))
-    Line("database saved", Ago(loadedAt))
-    Line("which won", self.queueAuthoritative
-        and "the macros, as the later save"
-        or (storedAt and "the database, as the later save" or "no stamp stored yet"))
+    Line("data last saved", Ago(loadedAt))
+    Line("queue used", self.queueAuthoritative
+        and "the macros, saved more recently"
+        or (storedAt and "your saved data, saved more recently" or "no save time stored yet"))
 
     local payload = self:Build()
     if payload then
@@ -685,7 +685,7 @@ function Durable:Report()
     Line("last save", self.lastResult or "nothing written yet this session")
 end
 
-ns.RegisterCommand("durable", "what survives a restart: /bts durable [save|clear]", function(args)
+ns.RegisterCommand("durable", "what is kept when you quit the game: /bts durable [save|clear]", function(args)
     args = (args or ""):lower()
 
     if args == "save" then

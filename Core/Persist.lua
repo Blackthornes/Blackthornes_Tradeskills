@@ -340,7 +340,7 @@ function Persist:SaveAll()
 
     local ok, text = pcall(ns.Serialize.Encode, Snapshot(ns.db))
     if not ok then
-        ns.Warn("could not serialise the database: " .. tostring(text))
+        ns.Warn("could not pack up your saved data: " .. tostring(text))
         return false
     end
 
@@ -427,7 +427,7 @@ function Persist:LoadAll()
         local got, text = pcall(C_CVar.GetCVar, name)
         if not got or type(text) ~= "string" or text == "" then
             -- A missing chunk means the rest cannot be parsed anyway.
-            ns.Warn(("stored data is incomplete (chunk %d of %d missing); starting fresh.")
+            ns.Warn(("saved data is incomplete (part %d of %d missing); starting fresh.")
                 :format(index, count))
             return nil
         end
@@ -437,7 +437,7 @@ function Persist:LoadAll()
 
     local decoded, value = ns.Serialize.Decode(table.concat(parts))
     if not decoded or type(value) ~= "table" then
-        ns.Warn("stored data could not be read; starting fresh.")
+        ns.Warn("saved data could not be read; starting fresh.")
         return nil
     end
 
@@ -478,14 +478,14 @@ function Persist:SaveLater(delay)
     end)
 end
 
-ns.RegisterCommand("save", "write the database to CVars now", function()
+ns.RegisterCommand("save", "save your data to CVars now", function()
     local ok, dropped = ns.Persist:SaveAll()
     local last = ns.Persist.lastSave
 
     if ok and last then
         ns.Print(("saved %s bytes across %d CVar(s)%s."):format(
             ns.Util.Comma(last.bytes), last.chunks,
-            (dropped or 0) > 0 and (", dropping %d stale prices to fit"):format(dropped) or ""))
+            (dropped or 0) > 0 and (", leaving out %d old prices to make it fit"):format(dropped) or ""))
     end
 end)
 
@@ -530,7 +530,7 @@ end
 function Persist:MeasureCapacity()
     local available, cvars = self:IsAvailable()
     if not available then
-        ns.Print("CVars are not usable on this client; nothing to measure.")
+        ns.Print("this version of the game does not let addons use CVars; nothing to measure.")
         return
     end
 
@@ -540,7 +540,7 @@ function Persist:MeasureCapacity()
         local ok, stored = self:TryLength(length, cvars)
 
         ns.Print(("  %8d bytes -- %s"):format(length,
-            ok and "ok" or ("truncated to " .. stored)))
+            ok and "ok" or ("cut short at " .. stored)))
 
         if ok then
             good = length
@@ -569,14 +569,14 @@ function Persist:MeasureCapacity()
 
     self.capacity = good
 
-    ns.Print(("largest CVar this client holds in memory: |c%s%s bytes|r")
+    ns.Print(("largest CVar the game will hold while running: |c%s%s bytes|r")
         :format(ns.COLORS.accent, ns.Util.Comma(good)))
 
     -- In memory only. Nothing written here has survived a logout yet, and
     -- these CVars are nowhere in the WTF folder, which points at server-side
     -- account data and its own much smaller limits. /bts cvarsoak answers
     -- the question this one cannot.
-    ns.Print("that is in-session only -- run |cffffffff/bts cvarsoak|r to test what survives a logout.")
+    ns.Print("that only lasts until you quit -- run |cffffffff/bts cvarsoak|r to test what is kept when you quit the game.")
 
     return good
 end
@@ -674,7 +674,7 @@ end
 function Persist:StartSoak(bytes, chunks)
     local available, cvars = self:IsAvailable()
     if not available then
-        ns.Print("CVars are not usable on this client.")
+        ns.Print("this version of the game does not let addons use CVars.")
         return
     end
 
@@ -687,7 +687,7 @@ function Persist:StartSoak(bytes, chunks)
         self:RegisterOne(name, "", cvars)
 
         if not pcall(C_CVar.SetCVar, name, Payload(bytes)) then
-            ns.Print(("the client refused chunk %d."):format(index))
+            ns.Print(("the game refused part %d."):format(index))
             break
         end
     end
@@ -702,27 +702,27 @@ function Persist:StartSoak(bytes, chunks)
         :format(chunks, ns.Util.Comma(bytes)))
 end
 
-ns.RegisterCommand("cvarsoak", "test how much survives a logout: /bts cvarsoak [bytes] [chunks]", function(args)
+ns.RegisterCommand("cvarsoak", "test how much is kept when you quit: /bts cvarsoak [bytes] [parts]", function(args)
     local bytes, chunks = (args or ""):match("^(%d+)%s+(%d+)$")
     if not bytes then bytes = (args or ""):match("^(%d+)$") end
 
     local result = ns.Persist.soak
 
     if result then
-        ns.Print(("soak result: %d of %d chunks survived intact (%s of %s bytes)."):format(
+        ns.Print(("result: %d of %d parts came back whole (%s of %s bytes)."):format(
             result.survived, result.chunks,
             ns.Util.Comma(result.intact), ns.Util.Comma(result.bytes * result.chunks)))
 
         if result.coldStart == false then
-            ns.Warn("this is the same client process that wrote the payload, so it proves nothing about a restart. Quit the game fully and run it again.")
+            ns.Warn("the game has not been restarted since this was written, so it proves nothing yet. Quit the game fully and run it again.")
         elseif result.coldStart == nil then
-            ns.Print("  (could not tell whether the client restarted in between)")
+            ns.Print("  (could not tell whether the game was restarted in between)")
         else
-            ns.Print("  the client did restart in between, so this is the real answer.")
+            ns.Print("  the game was fully restarted in between, so this result counts.")
         end
 
         if result.survived < result.chunks then
-            ns.Print(("|c%sthe limit is a total, not per CVar -- budget is about %s bytes.|r"):format(
+            ns.Print(("|c%sthe limit is for all CVars together, not each one -- about %s bytes in total.|r"):format(
                 ns.COLORS.warn, ns.Util.Comma(result.intact)))
         end
 
@@ -760,46 +760,46 @@ function Persist:Report()
     local diagnostics = (ns.Config and ns.Config.GetLoadDiagnostics)
         and ns.Config:GetLoadDiagnostics() or {}
 
-    ns.Print("persistence")
+    ns.Print("how your data is kept between sessions")
 
     Line("saved variables", ("account %s, per-character %s"):format(
         diagnostics.globalType or "nil", diagnostics.charGlobalType or "nil"))
 
     if diagnostics.lateSavedVariables then
-        Line("", "|c" .. ns.COLORS.warn .. "the client handed the saved table back after login|r")
+        Line("", "|c" .. ns.COLORS.warn .. "the game loaded the saved data late, after login|r")
     end
 
     if peek.coldStart == true then
-        Line("this login", "|c" .. ns.COLORS.warn .. "cold start -- the client restarted since the last save|r")
+        Line("this login", "|c" .. ns.COLORS.warn .. "first login since the game was restarted|r")
     elseif peek.coldStart == false then
-        Line("this login", "same client process as the last save (a /reload or character select)")
+        Line("this login", "the game has not been restarted since the last save (a /reload or character select)")
     else
-        Line("this login", "no session stamp from a previous save to compare against")
+        Line("this login", "no earlier save to compare against")
     end
 
-    Line("store at login", ("%d of %d chunk(s), %s bytes, count reads %d"):format(
+    Line("CVars at login", ("%d of %d part(s), %s bytes, part count %d"):format(
         peek.present, MAX_CHUNKS, ns.Util.Comma(peek.bytes), peek.count))
 
     -- The one line that would name registration as the culprit.
     local recovered = self.recovered or 0
-    Line("registration", recovered > 0
-        and (("|c%sput back %d value(s) that registering had cleared|r"):format(ns.COLORS.warn, recovered))
-        or "cleared nothing that was already there")
+    Line("setup", recovered > 0
+        and (("|c%sput back %d value(s) that setting up had wiped|r"):format(ns.COLORS.warn, recovered))
+        or "wiped nothing that was already there")
 
     local diagnostics = (ns.Config and ns.Config.loadDiagnostics) or {}
     local filled = diagnostics.filledFromSnapshot or 0
 
     if ns.Config and ns.Config.restoredFromCVars then
         Line("restored from", filled > 0
-            and ("CVars, %s bytes, plus %s value(s) the data addon had and they did not")
+            and ("CVars, %s bytes, plus %s value(s) only the data addon had")
                 :format(ns.Util.Comma(self.loadedBytes or 0), ns.Util.Comma(filled))
             or ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
     elseif ns.Config and ns.Config.restoredFromSnapshot then
-        Line("restored from", "the local data addon")
+        Line("restored from", "the data addon")
     elseif ns.Config and ns.Config.freshDatabase then
         Line("restored from", "|c" .. ns.COLORS.warn .. "nothing -- this session started empty|r")
     else
-        Line("restored from", "the client's own saved variables")
+        Line("restored from", "the game's own saved data")
     end
 
     -- Two separate facts on one line, because reading them apart is what took
@@ -809,11 +809,11 @@ function Persist:Report()
         and _G.BlackthornesTSSnapshotSource or nil
 
     if source then
-        Line("local data addon", diagnostics.snapshotSeen
-            and (source .. " -- handed a database over")
-            or (source .. " -- |c" .. ns.COLORS.warn .. "handed nothing over|r"))
+        Line("data addon", diagnostics.snapshotSeen
+            and (source .. " -- passed its data over")
+            or (source .. " -- |c" .. ns.COLORS.warn .. "passed nothing over|r"))
     else
-        Line("local data addon", "not installed")
+        Line("data addon", "not installed")
     end
 
     local last = self.lastSave
@@ -824,12 +824,12 @@ function Persist:Report()
 
     if peek.coldStart == true and peek.present == 0 then
         ns.Print("|c" .. ns.COLORS.warn ..
-            "the store was empty after a restart: the client is not keeping these CVars across a quit. " ..
-            "Check WTF\\Config.wtf for lines starting BTS_ -- if they are absent, nothing was ever written to disk.|r")
+            "nothing was saved after a restart: the game is not keeping these CVars when you quit. " ..
+            "Check WTF\\Config.wtf for lines starting BTS_ -- if there are none, nothing was ever saved to disk.|r")
     end
 end
 
-ns.RegisterCommand("persist", "report every step of how data is kept between sessions", function()
+ns.RegisterCommand("persist", "show every step of how your data is kept between sessions", function()
     ns.Persist:Report()
 end)
 

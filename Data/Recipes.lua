@@ -392,7 +392,7 @@ function Recipes:Harvest()
             if ns.SkillUp then ns.SkillUp:EndCapture() end
 
             if added > 0 or updated > 0 then
-                ns.Debug(("cached %d new and %d updated recipe(s)"):format(added, updated))
+                ns.Debug(("saved %d new and %d updated recipe(s)"):format(added, updated))
             end
 
             if ns.UI and ns.UI.OnRecipesUpdated then
@@ -503,5 +503,5 @@ ns.RegisterCommand("professions", "list this character's professions", function(
         end
     end
 
-    ns.PrintRaw(("  |c%s%d recipe(s) cached|r"):format(ns.COLORS.muted, ns.Recipes:Count()))
+    ns.PrintRaw(("  |c%s%d recipe(s) saved|r"):format(ns.COLORS.muted, ns.Recipes:Count()))
 end)

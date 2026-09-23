@@ -277,7 +277,7 @@ local function ShowRowTooltip(row, line)
     end
 
     if not line.isCrafted then
-        GameTooltip:AddLine("Not something your recipes make -- this is bag stock.",
+        GameTooltip:AddLine("Not something your recipes make -- just something in your bags.",
             0.5, 0.5, 0.5)
     end
 
@@ -430,7 +430,7 @@ local function Build(container)
 
     local showAllHint = Theme.CreateLabel(filterBar, "tiny", "dim")
     showAllHint:SetPoint("LEFT", widgets.showAll, "RIGHT", 8, 0)
-    showAllHint:SetText("untick for crafted stock only")
+    showAllHint:SetText("untick to show only things you craft")
 
     widgets.search = Widgets.CreateSearchBox(filterBar, "Find an item", function()
         Refresh()

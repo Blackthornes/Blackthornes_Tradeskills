@@ -835,7 +835,7 @@ function CraftPanel:UpdateCraftButton()
 
     button:SetText(("Craft %dx %s"):format(canMake, (recipe and recipe.name) or "item"))
     button:SetEnabledState(true)
-    button.tooltipText = "One click runs this entry to completion"
+    button.tooltipText = "One click makes every craft in this entry"
 end
 
 function CraftPanel:Refresh()
@@ -856,7 +856,7 @@ function CraftPanel:Refresh()
 
         self.empty:SetText(searching
             and "Nothing here matches that."
-            or "No recipes cached for this profession yet.\n\nThey are read from the window as it opens; give it a moment.")
+            or "No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment.")
     end
 
     self:UpdateCraftButton()
