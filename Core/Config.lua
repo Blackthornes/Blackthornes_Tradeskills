@@ -47,6 +47,21 @@ local DEFAULTS = {
         -- so it steps by a whole silver or matches; see minProfit below.
         undercutCopper = 1,
 
+        -- What to list a craft at when no scan has ever priced its output:
+        -- what its materials are worth, plus this much. A craft nobody has
+        -- ever listed has no market to read, and refusing to put any number
+        -- on it meant it was absent from the Profit tab and unlistable from
+        -- the Sell tab, which is not the same thing as it being worthless.
+        --
+        -- It is an estimate and is labelled as one everywhere it appears. It
+        -- is never written into the price database: a number we made up must
+        -- not come back later looking like something the auction house said.
+        unscannedMarkupPercent = 50,
+
+        -- Turns the above off entirely, putting crafts with no scanned price
+        -- back to having no price at all.
+        priceUnscannedCrafts = true,
+
         -- Stop recommending an item once this many are already listed.
         -- Zero means no limit. Per-item overrides live in db.postLimits.
         maxPostedPerItem = 0,

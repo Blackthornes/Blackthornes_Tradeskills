@@ -38,6 +38,78 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
     return (revenue - cut) - (cost.total or 0) - deposit
 end
 
+-- Used when the setting has never been written, so the rule still holds on a
+-- database saved before it existed.
+local DEFAULT_MARKUP_PERCENT = 50
+
+--- A price for a craft the auction house has never priced: what its materials
+--- are worth, plus a markup.
+--
+-- A craft nobody has ever listed has no market to read. That is not the same
+-- as it being worthless, and returning nothing for it meant the craft dropped
+-- out of the Profit tab and could not be listed from the Sell tab at all --
+-- which is exactly the position a new recipe starts in.
+--
+-- So the materials answer instead: whatever they are worth, plus the markup
+-- in Settings. This is an estimate and is reported as one by every caller;
+-- crucially it is never written back into the price database, because a
+-- number the addon made up must not come back an hour later looking like
+-- something the auction house said. Once a scan sees a real listing, that
+-- price wins and this is never consulted again.
+--
+-- @param knownCost  a costing the caller already has, used only when it is
+--   for this same recipe and is already the full-value one. Analyse costs
+--   every recipe before it asks for a price, and the profession panes analyse
+--   hundreds of recipes at a time, so a second walk of the same tree is worth
+--   avoiding.
+-- @return price, why  -- nil when there is no recipe, no material price, or
+--   the setting is off
+function Profit:DeriveFromMaterials(itemID, knownCost)
+    if not itemID then return nil end
+    if ns.Config:Get("priceUnscannedCrafts") == false then return nil end
+
+    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    if not recipeID then return nil end
+
+    -- Full material value, not the cash-out-of-pocket view: a craft is not
+    -- worth less to sell because its reagents happen to be paid for already.
+    -- The two are the same walk while materials are valued at market, which
+    -- is the default, so the caller's costing can stand in for it -- but only
+    -- when it is a costing of this very recipe. Two recipes can make the same
+    -- item, and pricing one off the other's materials would be a wrong number
+    -- presented as a right one.
+    local perUnit
+
+    if knownCost and knownCost.recipeID == recipeID and knownCost.priceable
+        and knownCost.perUnit and ns.Config:Get("valueOwnedMaterials") ~= false then
+        perUnit = knownCost.perUnit
+    else
+        perUnit = ns.Cost:GetMaterialValue(recipeID)
+    end
+
+    if not perUnit or perUnit <= 0 then return nil end
+
+    local markup = ns.Config:Get("unscannedMarkupPercent")
+    if type(markup) ~= "number" then markup = DEFAULT_MARKUP_PERCENT end
+
+    local price = math.floor(perUnit * (1 + markup / 100))
+
+    -- Never under what a vendor pays for it. Below that, walking to a vendor
+    -- beats the listing outright, and Posting's own floor would refuse it --
+    -- so the estimate would be a price nothing could be done with.
+    local vendor = Util.GetVendorSellPrice(itemID)
+    if vendor and vendor > price then price = vendor end
+
+    price = math.max(1, price)
+
+    -- Cheap reagents cannot produce an impossible price, but a restored
+    -- database carrying one can, and this is a price the player may post at.
+    if not ns.Prices.IsCredible(price) then return nil end
+
+    return price, ("no scan has priced this, so it is %d%% over the %s its materials are worth")
+        :format(markup, Util.FormatMoney(perUnit, { noColor = true }))
+end
+
 --- The unit price to list an item at, and why.
 --
 -- Commodities take any price down to the copper, so undercutting works the way
@@ -51,12 +123,17 @@ end
 -- profit setting. Anything the profit cannot be worked out for matches, since
 -- the unknown case is the one where giving gold away is least defensible.
 --
--- @return price, basis, why, uncertain  -- basis is "undercut", "match" or
---   "market", and nil price when there is nothing to go on. why is a sentence
---   explaining a match, since "match" alone does not say whether undercutting
---   was rejected on the numbers or never costed at all. uncertain is true
---   when the item's commodity status is not known, see below.
-function Profit:ChoosePostPrice(itemID)
+-- @return price, basis, why, uncertain  -- basis is "undercut", "match",
+--   "market" or "derived", and nil price when there is nothing to go on.
+--   "derived" is the estimate from material value, and is the one basis that
+--   is not evidence of anything the auction house did: see
+--   DeriveFromMaterials above. why is a sentence explaining a match or a
+--   derived price, since neither word says on its own where the number came
+--   from. uncertain is true when the item's commodity status is not known,
+--   see below.
+-- @param knownCost  optional, passed straight to DeriveFromMaterials; see
+--   there for when it is used and when it is ignored.
+function Profit:ChoosePostPrice(itemID, knownCost)
     if not itemID then return nil, nil end
 
     -- "rival" excludes your own auctions, so listing a second one does not
@@ -81,7 +158,23 @@ function Profit:ChoosePostPrice(itemID)
 
     if not rival then
         local market = ns.Prices:GetValue(itemID, "market")
-        if not market then return nil, nil end
+
+        -- Nothing scanned, ever. Not the same as an empty auction house: an
+        -- item seen before keeps its market value through an empty search, so
+        -- this is only reached by something the addon has never had a price
+        -- for. A stale price is still evidence and is left alone.
+        if not market then
+            local derived, why = self:DeriveFromMaterials(itemID, knownCost)
+            if not derived then return nil, nil end
+
+            if isCommodity then return derived, "derived", why, uncertain end
+
+            -- Up, not down, on an item auction: there is no rival to get
+            -- beneath here, and rounding an estimate down by up to a silver
+            -- can put a cheap craft under what its materials cost, which
+            -- Posting would then refuse to list at all.
+            return Util.CeilToSilver(derived), "derived", why
+        end
 
         market = math.max(1, math.floor(market))
         if isCommodity then return market, "market", nil, uncertain end
@@ -287,9 +380,15 @@ function Profit:Analyse(recipeID, characterKey)
     -- shown here is the profit of the listing that would actually be made.
     -- On an item auction that may be a match rather than an undercut, because
     -- the server will not take a price with copper in it.
-    local unitRevenue, basis, _, uncertain = self:ChoosePostPrice(recipe.outputItemID)
+    local unitRevenue, basis, _, uncertain =
+        self:ChoosePostPrice(recipe.outputItemID, cost)
 
     analysis.priceBasis = basis
+    -- Set when the price above is the materials-plus-markup estimate rather
+    -- than anything the auction house said. Every display of the number
+    -- checks this: an estimate presented as a market price is how you end up
+    -- crafting for a demand that was never measured.
+    analysis.priceDerived = basis == "derived" or nil
     -- Set when nobody has been able to say whether the output sells as a
     -- commodity or an item auction, so the price above is the plain undercut
     -- and may round to a silver when it is actually listed.
@@ -305,6 +404,9 @@ function Profit:Analyse(recipeID, characterKey)
     end
 
     if not unitRevenue then
+        -- A craft can land here with priced materials when the estimate is
+        -- switched off, and with unpriced ones either way; the reason below
+        -- covers both, since the output is what has no price in each.
         analysis.reason = "output has no price data"
         return analysis
     end
@@ -611,6 +713,13 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
         ns.PrintRaw(("  |c%syou already have the cheapest listing -- staying at market price|r"):format(
             ns.COLORS.profit))
         ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
+            Util.FormatMoney(analysis.unitRevenue), analysis.yield))
+    elseif analysis.priceDerived then
+        -- Said before the number, not after it: this one is the addon's own
+        -- estimate and reading it as a market price is the mistake to avoid.
+        ns.PrintRaw(("  |c%snever scanned  -- estimated from material value|r"):format(
+            ns.COLORS.warn))
+        ns.PrintRaw(("  estimate at     %s  (yield %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     else
         ns.PrintRaw(("  none listed     posting at market %s  (makes %.1f)"):format(

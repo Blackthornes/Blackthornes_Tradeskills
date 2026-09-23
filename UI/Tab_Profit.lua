@@ -204,8 +204,17 @@ local function UpdateRow(row, analysis)
     cells.margin:SetText(("%d%%"):format(math.floor((analysis.margin or 0) * 100)))
     cells.margin:SetTextColor(Theme.ProfitColor(analysis.profit))
 
-    cells.age:SetText(Util.FormatAge(analysis.age))
-    cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
+    if analysis.priceDerived then
+        -- There is no scan behind this row, so an age would be a blank or a
+        -- lie. The column says what the price actually is instead: the
+        -- materials-plus-markup estimate, which is a different kind of
+        -- number from everything else in the list.
+        cells.age:SetText("estimate")
+        cells.age:SetTextColor(Theme.Unpack("warn"))
+    else
+        cells.age:SetText(Util.FormatAge(analysis.age))
+        cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
+    end
 end
 
 --- Why this row is wearing a star.
@@ -476,6 +485,14 @@ local function UpdateDetail(analysis)
             detail.rivalLabel:SetText("You hold lowest")
             detail.rivalValue:SetText("no rival")
             detail.rivalValue:SetTextColor(Theme.Unpack("profit"))
+        elseif analysis.priceDerived then
+            -- No scan has ever priced this one, so the sale price above is
+            -- the material value plus the markup in Settings. Named
+            -- differently from "None listed" below, which is an item the
+            -- auction house has seen and simply has none of right now.
+            detail.rivalLabel:SetText("Never scanned")
+            detail.rivalValue:SetText("from materials")
+            detail.rivalValue:SetTextColor(Theme.Unpack("warn"))
         else
             -- Nothing listed means no competition to undercut, so the number
             -- shown is an estimate rather than an observed price.

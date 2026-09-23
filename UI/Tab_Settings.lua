@@ -140,7 +140,30 @@ local function Build(outer)
     widgets.cut:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(cutRow, widgets.cut, "%")
 
-    local ownedRow = CreateRow(container, cutRow, "Materials you already own",
+    local unscannedRow = CreateRow(container, cutRow, "Price unscanned crafts",
+        "A craft no scan has priced is valued at its material cost plus this. " ..
+        "It is an estimate, labelled as one, and is never stored as a price.")
+
+    widgets.unscannedMarkup = Widgets.CreateNumberBox(unscannedRow, {
+        width = 70, min = 0, max = 1000,
+        onChange = function(value)
+            Config:Set("unscannedMarkupPercent", value)
+            UI:RefreshActiveTab()
+        end,
+    })
+    widgets.unscannedMarkup:SetPoint("TOPLEFT", CONTROL_X, 0)
+    AddUnit(unscannedRow, widgets.unscannedMarkup, "% markup")
+
+    local unscannedOnRow = CreateRow(container, unscannedRow, "Use that estimate",
+        "Off: crafts with no scanned price have no price at all, as before.")
+
+    widgets.priceUnscanned = Widgets.CreateCheckbox(unscannedOnRow, "Enabled", function(checked)
+        Config:Set("priceUnscannedCrafts", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.priceUnscanned:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local ownedRow = CreateRow(container, unscannedOnRow, "Materials you already own",
         "On: they still cost market price. Off: they count as free.")
 
     widgets.valueOwned = Widgets.CreateCheckbox(ownedRow, "Charge market price", function(checked)
@@ -427,6 +450,10 @@ local function Refresh()
     widgets.minProfit:SetValue((Config:Get("minProfit") or 0) / 100, true)
     widgets.minMargin:SetValue(Config:Get("minMarginPercent") or 0, true)
     widgets.budget:SetValue(Config:Get("scanBudgetMs") or 8, true)
+
+    local markup = Config:Get("unscannedMarkupPercent")
+    widgets.unscannedMarkup:SetValue(type(markup) == "number" and markup or 50, true)
+    widgets.priceUnscanned:SetChecked(Config:Get("priceUnscannedCrafts") ~= false)
 
     widgets.minProfitPreview:SetText(
         Util.FormatMoney(Config:Get("minProfit") or 0, { short = true }))
