@@ -141,8 +141,8 @@ local function Build(outer)
     AddUnit(cutRow, widgets.cut, "%")
 
     local unscannedRow = CreateRow(container, cutRow, "Price unscanned crafts",
-        "A craft no scan has priced is valued at its material cost plus this. " ..
-        "It is an estimate, labelled as one, and is never stored as a price.")
+        "A craft with no scanned price is valued at its material cost plus this. " ..
+        "It is shown as an estimate and never saved as a real price.")
 
     widgets.unscannedMarkup = Widgets.CreateNumberBox(unscannedRow, {
         width = 70, min = 0, max = 1000,

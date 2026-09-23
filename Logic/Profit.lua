@@ -719,7 +719,7 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
         -- estimate and reading it as a market price is the mistake to avoid.
         ns.PrintRaw(("  |c%snever scanned  -- estimated from material value|r"):format(
             ns.COLORS.warn))
-        ns.PrintRaw(("  estimate at     %s  (yield %.1f)"):format(
+        ns.PrintRaw(("  estimate at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     else
         ns.PrintRaw(("  none listed     posting at market %s  (makes %.1f)"):format(

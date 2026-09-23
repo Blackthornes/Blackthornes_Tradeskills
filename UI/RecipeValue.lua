@@ -960,7 +960,7 @@ function RecipeValue:PrintReport()
     end
 
     if (placed.right or 0) > 0 then
-        ns.PrintRaw(("  |c%svalues put at the right edge unmeasured|r  %d"):format(
+        ns.PrintRaw(("  |c%svalues placed at the right edge, width unknown|r  %d"):format(
             ns.COLORS.muted, placed.right))
     end
 end
