@@ -1026,9 +1026,9 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
 
         if basis == "market" then
             note = "Nothing else is listed right now, so this is market value rather than an undercut."
-        elseif basis == "derived" then
-            -- Covered in full by the estimate note below; saying there is
-            -- nothing to go on directly above it would contradict it.
+        elseif basis == "derived" or basis == "uncontested" then
+            -- Covered in full by the note below; saying there is nothing to
+            -- go on directly above it would contradict it.
             note = "Nothing else is listed right now."
         end
 
@@ -1042,6 +1042,10 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
     -- dialog is something the auction house reported, and this one is not.
     if basis == "derived" then
         text = text .. "\n\n|cffC8A44DNo scan has ever priced this. The price above is estimated from what its materials are worth -- check it yourself before listing.|r"
+    end
+
+    if basis == "uncontested" then
+        text = text .. "\n\n|cffC8A44DNobody else is listing one, so this is your material cost plus the markup rather than market value.|r"
     end
 
     -- Said plainly at the moment the gold is committed, because a price equal
