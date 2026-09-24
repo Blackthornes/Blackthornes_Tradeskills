@@ -150,6 +150,10 @@ local DEFAULTS = {
         -- tooltip exactly as the client writes it.
         showValueOnItemTooltips = true,
 
+        -- Play a sound the moment the game says one of your auctions has
+        -- sold, wherever you are. See Logic/SaleAlarm.lua.
+        saleAlarm = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,

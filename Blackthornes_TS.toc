@@ -35,6 +35,7 @@ Logic\Queue.lua
 Logic\Crafting.lua
 Logic\Posting.lua
 Logic\Transfer.lua
+Logic\SaleAlarm.lua
 
 UI\Theme.lua
 UI\Widgets.lua
