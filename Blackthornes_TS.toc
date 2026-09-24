@@ -5,10 +5,7 @@
 ## Version: 0.1.0
 ## SavedVariables: BlackthornesTSDB
 ## SavedVariablesPerCharacter: BlackthornesTSCharDB
-## OptionalDeps: Blackthornes_TS_Data
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
-
-Data\Snapshot.lua
 
 Core\Init.lua
 Core\Util.lua
@@ -17,8 +14,7 @@ Core\Config.lua
 Core\Compat.lua
 Core\Serialize.lua
 Core\Persist.lua
-Core\MacroStore.lua
-Core\Durable.lua
+Core\OldMacros.lua
 
 Data\Prices.lua
 Data\Scanner.lua

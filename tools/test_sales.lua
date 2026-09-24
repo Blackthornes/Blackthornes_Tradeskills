@@ -145,7 +145,6 @@ ns.Profit = { Analyse = function() return nil end }
 
 -- Set per case. nil means nothing was carried over from before the restart.
 local restoredRollup
-ns.Durable = { GetRestoredRollup = function() return restoredRollup end }
 
 ns.db = { mailLedger = {} }
 
@@ -157,6 +156,9 @@ do
     local chunk = assert(loadfile(lfs_cwd .. "/Data/Mail.lua"))
     chunk("Blackthornes_TS", ns)
 end
+
+-- The carried-over history is read from the saved database; stand in for it.
+ns.Mail.GetRestoredRollup = function() return restoredRollup end
 
 local createRow, updateRow, listData
 
