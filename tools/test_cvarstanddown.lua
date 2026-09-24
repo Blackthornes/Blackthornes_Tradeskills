@@ -28,9 +28,6 @@ local Persist = ns.Persist or module
 
 ns.Compat = { Detect = function() return { cvars = { roundTrip = true, registerVia = "RegisterCVar" } } end }
 
-local durableSaves = 0
-ns.Durable = { SaveIfChanged = function() durableSaves = durableSaves + 1 end }
-
 local function Fresh(globalType)
     for k in pairs(cvars) do cvars[k] = nil end
     Persist.registered, Persist.storeCleared, Persist.clearedChunks = nil, nil, nil
@@ -61,24 +58,21 @@ assert(cvars.BTS_undercutCopper == nil, "a settings CVar was created")
 assert(Persist:SaveSetting("undercutCopper", 70) == false, "SaveSetting wrote while standing down")
 assert(cvars.BTS_undercutCopper == nil, "SaveSetting created a CVar")
 
--- 3. Saving writes no database chunks, empties old ones, and still offers
---    the save to the macro store.
+-- 3. Saving writes no database chunks, and empties old ones.
 cvars.BTS_store1 = string.rep("x", 60000)
 cvars.BTS_store2 = string.rep("y", 1000)
 cvars.BTS_storeCount = "2"
-durableSaves = 0
 local ok = Persist:SaveAll()
 assert(ok, "SaveAll reported failure")
 assert(cvars.BTS_store1 == "" and cvars.BTS_store2 == "", "old chunks were not emptied")
 assert(cvars.BTS_storeCount == "0", "store count not reset")
 assert(cvars.BTS_store3 == nil, "a new chunk was written")
 assert(Persist.clearedChunks == 2, "expected 2 chunks emptied, got " .. tostring(Persist.clearedChunks))
-assert(durableSaves == 1, "the macro store was not offered the save")
 assert(Persist.lastSave == nil, "a CVar save was recorded")
 
 -- 4. Nothing to clear on a second save.
 Persist:SaveAll()
-assert(Persist.clearedChunks == 2 and durableSaves == 2, "second save misbehaved")
+assert(Persist.clearedChunks == 2, "second save misbehaved")
 
 -- 5. And with the game losing the file, the store still works as before.
 Fresh("nil")

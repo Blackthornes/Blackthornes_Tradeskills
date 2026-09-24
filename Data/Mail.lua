@@ -560,6 +560,39 @@ function Mail:Reconcile(mails, complete)
 end
 
 --------------------------------------------------------------------------------
+-- History carried over from macro storage
+--------------------------------------------------------------------------------
+
+-- Until the game kept saved data (build 1.60.1.70009, 2026-09-24), sales
+-- history crossed a restart in macros as a per-item rollup: db.sellThrough,
+-- with db.sellThroughRolledAt as the moment it was rolled up to. The macro
+-- store is gone, but that history is in the saved file now and is still
+-- counted. It is frozen: nothing writes to it any more, so every ledger entry
+-- after the cutoff is new and every one before it is already inside it.
+
+--- When the carried-over history was rolled up to, for a realm, or nil.
+function Mail:LedgerCutoff(realmKey)
+    if not ns.db or type(ns.db.sellThroughRolledAt) ~= "table" then return nil end
+    return tonumber(ns.db.sellThroughRolledAt[realmKey or ns.Config:GetRealmKey()])
+end
+
+--- Is this ledger entry already inside the carried-over history?
+function Mail:IsRolledUp(entry, realmKey)
+    local cutoff = self:LedgerCutoff(realmKey)
+    return cutoff ~= nil and entry.t ~= nil and entry.t <= cutoff
+end
+
+--- The carried-over per-item history for this realm, or nil.
+function Mail:GetRestoredRollup()
+    if not ns.db or not ns.db.sellThrough then return nil end
+
+    local rollup = ns.db.sellThrough[ns.Config:GetRealmKey()]
+
+    if type(rollup) ~= "table" or not next(rollup) then return nil end
+    return rollup
+end
+
+--------------------------------------------------------------------------------
 -- Reading the ledger back
 --------------------------------------------------------------------------------
 
@@ -585,10 +618,8 @@ function Mail:GetSummary(itemID)
 
     -- An entry from before the restored history was rolled up is already in
     -- that history, added below; counting it here as well was the bug.
-    local Durable = ns.Durable
-
     for _, entry in ipairs(self:GetLedger().entries) do
-        local rolled = Durable and Durable.IsRolledUp and Durable:IsRolledUp(entry)
+        local rolled = self:IsRolledUp(entry)
 
         if (not itemID or entry.itemID == itemID) and not rolled then
             if entry.kind == "sold" then
@@ -615,17 +646,17 @@ function Mail:GetSummary(itemID)
         end
     end
 
-    -- History carried across a client restart in macro storage, which holds a
-    -- rollup rather than the entries themselves. The ledger above is this
-    -- session's; the rollup is everything before it, and the two never
-    -- overlap because Durable rolls entries in only when it writes.
+    -- History carried across a client restart in macro storage, which held a
+    -- rollup rather than the entries themselves. The ledger above is
+    -- everything after it; the two never overlap, because entries up to the
+    -- cutoff are skipped above.
     --
     -- Only what a 17-character record can hold comes back: what sold, how
     -- many, what expired, the money, and when. Deposits, the auction house
     -- cut and cancellations are this session's alone, so `restored` is set
     -- for anything that wants to say so rather than quietly showing a gross
     -- that does not match the net.
-    local restored = ns.Durable and ns.Durable:GetRestoredRollup()
+    local restored = self:GetRestoredRollup()
 
     if restored then
         for id, record in pairs(restored) do
@@ -714,14 +745,12 @@ function Mail:GetItems()
         return bucket
     end
 
-    local Durable = ns.Durable
-
     for _, entry in ipairs(self:GetLedger().entries) do
         local bucket = Bucket(entry.itemID, entry.name)
 
         -- Already inside the restored history added below. The row is still
         -- made, so the item keeps its name.
-        if Durable and Durable.IsRolledUp and Durable:IsRolledUp(entry) then
+        if self:IsRolledUp(entry) then
             -- nothing to add
 
         elseif entry.kind == "sold" then
@@ -753,7 +782,7 @@ function Mail:GetItems()
     -- totals -- never in a list of individual sales. `restored` is set so a row
     -- carrying it can say where the numbers came from instead of showing a
     -- gross and a cut that do not add up to the net.
-    local restored = ns.Durable and ns.Durable:GetRestoredRollup()
+    local restored = self:GetRestoredRollup()
 
     if restored then
         for itemID, record in pairs(restored) do

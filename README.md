@@ -45,25 +45,13 @@ fails when that line of code runs.
 
 ## A note on saved data
 
-`Data/Snapshot.lua` ships empty and must stay that way in this repository.
-`tools/restore.ps1` regenerates it from your own SavedVariables to carry a
-database between sessions, and the result contains your characters, your prices
-and your auctions. Git tracks the file, so `.gitignore` cannot protect it.
-
-A pre-commit hook refuses any commit that would carry it. Git does not install
-hooks when a repository is cloned, so run this once per clone:
-
-```powershell
-.\tools\install-hooks.ps1   # or: git config core.hooksPath .githooks
-```
-
-If the hook stops a commit, unstage the file with
-`git restore --staged Data/Snapshot.lua`, or put the empty version back with
-`git checkout -- Data/Snapshot.lua`. Neither touches the deployed copy in
-`Interface\AddOns`, so the snapshot keeps working in game.
-
-`.github/workflows/guard-saved-data.yml` runs the same check on GitHub, which
-catches a snapshot pushed from a clone where the hook was never installed.
+Since WoW: Forever build 1.60.1.70009 (2026-09-24) the game keeps the addon's
+saved data (`BlackthornesTSDB` and `BlackthornesTSCharDB`) across a restart,
+so nothing else is needed. The old workarounds -- a generated data addon and
+storage in macros -- were removed; `Core/OldMacros.lua` deletes the leftover
+`BTSd` macros on a login where the saved data loaded. The CVar store in
+`Core/Persist.lua` stays as a fallback and stands down whenever the saved data
+loads. `/bts db` and `/bts persist` show what loaded.
 
 ## API findings
 

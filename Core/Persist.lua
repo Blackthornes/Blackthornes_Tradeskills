@@ -14,8 +14,7 @@
 -- persistence had only ever been read inside one process.
 --
 -- So this file is the within-session cache, and it is genuinely worth having:
--- a /reload is the common case and it keeps a scan. What crosses a restart is
--- the generated Blackthornes_TS_Data addon; see Data/Snapshot.lua.
+-- a /reload is the common case and it keeps a scan.
 --
 -- One hazard, for whoever revisits the chunk size. On a client that does
 -- persist registered CVars, Blizzard's own writer corrupts Config.wtf from
@@ -215,9 +214,9 @@ end
 -- When it did, the saved file is the truth and this store has nothing to add.
 -- Worse than nothing, for settings: on a cold start RegisterOne creates each
 -- CVar at its default, and RestoreSettings read that default straight over
--- the value the saved file had just handed back. Macro storage was quietly
--- putting the settings back at PLAYER_LOGIN, which is the only reason nobody
--- saw it. And a store writing 8 x 60KB is exactly the hazard the note at the
+-- the value the saved file had just handed back. The old macro store quietly
+-- put the settings back at PLAYER_LOGIN, which is the only reason nobody saw
+-- it. And a store writing 8 x 60KB is exactly the hazard the note at the
 -- top of this file warns about, should this patch also have made CVars reach
 -- disk.
 function Persist:GameKeepsSavedData()
@@ -383,11 +382,9 @@ function Persist:SaveAll()
     local available, cvars = self:IsAvailable()
     if not available or not ns.db then return false end
 
-    -- The game writes the saved file itself. The macro store still rides this
-    -- cadence until it is retired, so it is offered the save either way.
+    -- The game writes the saved file itself.
     if self:GameKeepsSavedData() then
         ClearStore(self, cvars)
-        if ns.Durable then pcall(ns.Durable.SaveIfChanged, ns.Durable) end
         return true, 0
     end
 
@@ -439,13 +436,6 @@ function Persist:SaveAll()
     end
 
     self.lastSave = { bytes = #text, chunks = chunks, dropped = dropped, at = time() }
-
-    -- The macro store rides the same cadence. It holds a different, much
-    -- smaller set -- settings, the queue and what sold -- and it is the only
-    -- one of the two that survives closing the client, so anything that is
-    -- worth writing to CVars is worth offering to it. It rate-limits and
-    -- skips an unchanged payload itself, so this costs nothing most times.
-    if ns.Durable then pcall(ns.Durable.SaveIfChanged, ns.Durable) end
 
     return true, dropped
 end
@@ -850,35 +840,16 @@ function Persist:Report()
         and (("|c%sput back %d value(s) that setting up had wiped|r"):format(ns.COLORS.warn, recovered))
         or "wiped nothing that was already there")
 
-    local diagnostics = (ns.Config and ns.Config.loadDiagnostics) or {}
-    local filled = diagnostics.filledFromSnapshot or 0
-
     if ns.Config and ns.Config.restoredFromCVars then
-        Line("restored from", filled > 0
-            and ("CVars, %s bytes, plus %s value(s) only the data addon had")
-                :format(ns.Util.Comma(self.loadedBytes or 0), ns.Util.Comma(filled))
-            or ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
-    elseif ns.Config and ns.Config.restoredFromSnapshot then
-        Line("restored from", "the data addon")
+        Line("restored from", ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
     elseif ns.Config and ns.Config.freshDatabase then
         Line("restored from", "|c" .. ns.COLORS.warn .. "nothing -- this session started empty|r")
     else
         Line("restored from", "the game's own saved data")
     end
 
-    -- Two separate facts on one line, because reading them apart is what took
-    -- a morning: which file is installed, and whether it handed anything over.
-    -- The file naming itself while handing over nothing was the whole bug.
-    local source = type(_G.BlackthornesTSSnapshotSource) == "string"
-        and _G.BlackthornesTSSnapshotSource or nil
-
-    if source then
-        Line("data addon", diagnostics.snapshotSeen
-            and (source .. " -- passed its data over")
-            or (source .. " -- |c" .. ns.COLORS.warn .. "passed nothing over|r"))
-    else
-        Line("data addon", "not installed")
-    end
+    -- Nothing below applies when the CVar store is standing down.
+    if self:GameKeepsSavedData() then return end
 
     local last = self.lastSave
     Line("last save", last
