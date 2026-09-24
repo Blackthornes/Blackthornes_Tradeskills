@@ -189,7 +189,7 @@ local DEFAULTS = {
 
     -- realmKey -> when the history restored from macro storage was rolled up
     -- to. Ledger entries from before that moment are already inside it. See
-    -- Core/Durable.lua.
+    -- Mail:GetRestoredRollup.
     sellThroughRolledAt = {},
 
     -- itemID -> true when the auction house sells it by the unit. Learned from
@@ -251,122 +251,6 @@ end
 -- Bootstrap
 --------------------------------------------------------------------------------
 
---- Copy across only what the target does not have, recursing into tables.
---
--- Two stores can both be real and neither complete. The CVar store belongs to
--- this client process, so on a /reload it holds this session's work and is
--- usually the fresher of the two. Usually is not always: a session that
--- started empty saves its emptiness, and that then beats a data addon holding
--- a real price history -- which is exactly what happened on 2026-09-20, with
--- a 2,109-byte CVar store winning over the whole database.
---
--- So neither store is chosen over the other. Anything already present wins,
--- because it is this session's, and everything absent is filled from the
--- other. Nothing is ever overwritten.
---
--- With one exception, below.
-local ATOMIC = { queue = true }
-
--- The craft queue is taken whole or not at all, never merged.
---
--- Everything else in this database is a map two stores can each hold a
--- different part of -- prices by item, sales by realm -- and joining those is
--- the whole point of this function. An ordered list of decisions is not that,
--- and index by index is a meaningless place to join two of them. A list of one
--- merged into a frozen list of three keeps your craft at index 1, takes
--- entries 2 and 3 from the frozen list, and silently drops that list's own
--- first entry. The result is neither list.
---
--- Reported 2026-09-22: "The crafting queue tab is resetting to some old saved
--- list each time i swap characters." A trip to character select keeps the
--- client process alive, so the CVar store still carries this session's real
--- queue -- but every addon reloads, so Blackthornes_TS_Data hands its frozen
--- database over again on every swap and the two met here.
---
--- Present -- empty included, an emptied queue is a real state and not a gap --
--- means this session's, and it is left alone. Absent means a genuine cold
--- start, and the other store's list is taken entire. Which of two real lists
--- is the newer is not this function's question: Durable:Restore settles that
--- at PLAYER_LOGIN from the save stamps it keeps beside them.
-local function FillGaps(target, source, depth)
-    depth = depth or 0
-    if depth > 8 then return 0 end      -- serialised data is a tree; belt and braces
-
-    local filled = 0
-
-    for key, value in pairs(source) do
-        local mine = target[key]
-
-        if mine == nil then
-            target[key] = value
-            filled = filled + 1
-
-        -- Only at the top level, which is where the database's own keys are.
-        -- A "queue" deeper in somebody's data is not this one.
-        elseif depth == 0 and ATOMIC[key] then
-            -- Already has one of its own; see ATOMIC above.
-
-        elseif type(mine) == "table" and type(value) == "table" then
-            filled = filled + FillGaps(mine, value, depth + 1)
-        end
-    end
-
-    return filled
-end
-
--- Exposed so tools/test_snapshot.lua can exercise it against real shapes.
-Config.FillGaps = FillGaps
-
---- Like FillGaps, but a value that still equals its default counts as absent.
---
--- FillGaps alone cannot restore a setting. Bootstrap applies DEFAULTS before
--- anything late runs, so by the time Durable reads macro storage at
--- PLAYER_LOGIN every settings key already holds something and there is no gap
--- left to fill. A stored setting was therefore shadowed by its own default on
--- every restart -- silently, and in a way that would have looked correct for
--- weeks before anyone noticed a setting reverting.
---
--- A value still equal to its default has never been deliberately set, so it is
--- indistinguishable from absent and the stored one may take its place. A value
--- that differs came from somewhere real -- this session, or the CVar store
--- carrying this session across a reload -- and still wins.
-local function FillOverDefaults(target, source, defaults, depth)
-    depth = depth or 0
-    if depth > 8 then return 0 end
-
-    local filled = 0
-
-    for key, value in pairs(source) do
-        local mine = target[key]
-
-        -- Not `defaults[key] or nil`: a default of false is a default, and
-        -- that idiom turned it into "no default", so a setting that is off by
-        -- default and stored as on was read as deliberately chosen and never
-        -- restored. Measured with allowPostingAtALoss.
-        local fallback, hasDefault
-        if type(defaults) == "table" then
-            fallback = defaults[key]
-            hasDefault = fallback ~= nil
-        end
-
-        if type(mine) == "table" and type(value) == "table" then
-            filled = filled + FillOverDefaults(mine, value, fallback, depth + 1)
-
-        elseif mine == nil or (hasDefault and mine == fallback) then
-            -- Writing the same value back is not a restore; only a real change
-            -- is worth counting, so the report cannot overstate what happened.
-            if mine ~= value then
-                target[key] = value
-                filled = filled + 1
-            end
-        end
-    end
-
-    return filled
-end
-
-Config.FillOverDefaults = FillOverDefaults
-
 --- Called from the ADDON_LOADED handler before any module initialises.
 function Config:Bootstrap()
     -- First, before Compat's capability detection registers and writes CVars
@@ -387,65 +271,22 @@ function Config:Bootstrap()
             and _G.BlackthornesTSDB.probe.loadCount or nil,
     }
 
-    -- Recorded whichever way the rest goes. On a login where the CVar store
-    -- wins, this is the only line that says whether the data addon handed a
-    -- database over at all -- and "it named the file but restored nothing"
-    -- was the shape of the bug that cost a morning.
-    self.loadDiagnostics.snapshotSeen = type(_G.BlackthornesTSSnapshot) == "table"
-
     if existing ~= "table" then
-        -- The client handed back nothing. On the Forever beta that is the norm
-        -- rather than a first run, so recover from the CVar store first: this
-        -- build persists CVars even though it loses saved variables.
+        -- The client handed back nothing: a first run, or a client that loses
+        -- the saved file. Since build 1.60.1.70009 the game keeps it, so this
+        -- is the rare case. The CVar store still covers a /reload on a client
+        -- that does lose it.
         local stored = ns.Persist and ns.Persist:LoadAll()
-        local snapshot = self.loadDiagnostics.snapshotSeen
-            and _G.BlackthornesTSSnapshot or nil
 
         if stored then
             _G.BlackthornesTSDB = stored
 
             self.restoredFromCVars = true
             self.loadDiagnostics.restoredFromCVars = true
-
-            -- Both stores can be real and neither complete; see FillGaps.
-            if snapshot then
-                -- Read before the fill, because the fill is what would change
-                -- it. This is the number `/bts durable` reports as declined.
-                self.loadDiagnostics.snapshotQueue =
-                    type(snapshot.queue) == "table" and #snapshot.queue or 0
-
-                local filled = FillGaps(stored, snapshot)
-
-                if filled > 0 then
-                    self.restoredFromSnapshot = true
-                    self.loadDiagnostics.filledFromSnapshot = filled
-                    self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
-                end
-            end
-
-            self.loadDiagnostics.queueSource = "the game's saved settings (CVars)"
-
-        elseif snapshot then
-            _G.BlackthornesTSDB = snapshot
-
-            self.restoredFromSnapshot = true
-            self.loadDiagnostics.restored = true
-            self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
-            self.loadDiagnostics.queueSource = "the data addon"
         else
             _G.BlackthornesTSDB = {}
             self.freshDatabase = true
-            self.loadDiagnostics.queueSource = "a fresh start"
         end
-
-        -- The outcome, not the attempt: how long the queue actually is once
-        -- both stores have had their turn. A merge that put a frozen list
-        -- back into it is visible here and nowhere else at this point.
-        self.loadDiagnostics.queueEntries =
-            type(_G.BlackthornesTSDB.queue) == "table" and #_G.BlackthornesTSDB.queue or 0
-
-        -- Taken either way, so nothing downstream seeds from it twice.
-        _G.BlackthornesTSSnapshot = nil
     end
 
     -- Per-character saved variables are a separate file and a separate code
@@ -491,75 +332,8 @@ function Config:Bootstrap()
     end
 end
 
---- Seed from the local data addon if it loaded after we did.
---
--- Blackthornes_TS.toc lists Blackthornes_TS_Data as an optional dependency,
--- which should make the client load it first. "Should" is doing a lot of work
--- there, and a price history is not the thing to bet on this client honouring
--- a load-order hint. Checking again costs one type() call.
 function Config:OnEnable()
     self:CheckLateSavedVariables()
-
-    if not self.freshDatabase then return end
-    if type(_G.BlackthornesTSSnapshot) ~= "table" then return end
-
-    local db = ns.db
-    if not db then return end
-
-    -- Mutated in place: modules that initialised before this hold a reference
-    -- to the same table, and swapping it would leave them writing to an
-    -- orphan that nothing ever saves.
-    for key, value in pairs(_G.BlackthornesTSSnapshot) do
-        if key ~= "probe" and key ~= "schema" then
-            db[key] = value
-        end
-    end
-
-    self.loadDiagnostics.snapshotSource = _G.BlackthornesTSSnapshotSource
-    _G.BlackthornesTSSnapshot = nil
-
-    self.freshDatabase = false
-    self.restoredFromSnapshot = true
-    self.loadDiagnostics.restored = true
-    self.loadDiagnostics.restoredLate = true
-
-    self:Migrate(db)
-    Util.ApplyDefaults(db, DEFAULTS)
-
-    -- Last, so a setting mirrored into a CVar this session still wins over the
-    -- copy frozen into the snapshot, which is as old as the last restore.
-    if ns.Persist then ns.Persist:RestoreSettings() end
-
-    ns.Print("loaded your saved data from the data addon.")
-end
-
---- Settle the database again after something was restored into it late.
---
--- Durable restores at PLAYER_LOGIN, after Bootstrap has already applied
--- defaults and read the CVar store. A value filled in after that needs the
--- defaults run again for keys neither store had, and needs mirroring into its
--- CVar so the rest of the session agrees with it.
---
--- **The mirroring goes OUT, and only out.** `Persist:RestoreSettings` reads
--- CVars into the database, and on a cold start those CVars do not exist yet:
--- `RegisterOne` creates each one at its default and the read hands that
--- default straight back, over the top of whatever macro storage had just
--- restored. Calling it here undid the entire settings restore a few
--- milliseconds after it happened. Measured in game 2026-09-20 -- `/bts
--- durable` reported three values restored and the settings panel still showed
--- every default, because the report counted the fill and not the outcome.
-function Config:ReapplyAfterRestore()
-    local db = ns.db
-    if not db then return end
-
-    self:Migrate(db)
-    Util.ApplyDefaults(db, DEFAULTS)
-
-    if ns.Persist and db.settings then
-        for key, value in pairs(db.settings) do
-            ns.Persist:SaveSetting(key, value)
-        end
-    end
 end
 
 --- Did the client hand the saved table back after ADDON_LOADED?
@@ -722,8 +496,6 @@ ns.RegisterCommand("db", "show what saved data loaded", function()
     local source = ""
     if diagnostics.restoredFromCVars then
         source = "  (recovered from CVars)"
-    elseif diagnostics.restored then
-        source = "  (recovered from the data addon)"
     end
 
     ns.PrintRaw(("  saved data type: %s%s"):format(
@@ -747,9 +519,6 @@ ns.RegisterCommand("db", "show what saved data loaded", function()
         -- different situations and only the second one is a problem.
         if diagnostics.restoredFromCVars then
             ns.Print("the game lost your saved data; it was recovered from CVars.")
-        elseif diagnostics.restored then
-            ns.Warn("the game lost your saved data; it was recovered from the data addon.")
-            ns.Warn("run tools/restore.ps1 after this session to keep it current.")
         else
             ns.Warn("the game did not load any saved data this session,")
             ns.Warn("and nothing was recovered. This session starts empty.")

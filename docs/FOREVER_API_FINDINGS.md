@@ -19,6 +19,12 @@ Client `1.60.1` build `69913`, interface `16001`.
 
 ## Keeping data between sessions
 
+**Update 2026-09-24: fixed by the game.** From build 1.60.1.70009, both
+SavedVariables and SavedVariablesPerCharacter load after a full quit
+(`/bts db` read `saved data type: table` and `per-character: table`). The data
+addon and macro storage described below were removed; this section is kept
+as the history of build 1.60.1.
+
 Three paths, and only one of them crosses a restart.
 
 **SavedVariables are written and never read.** The file on disk is correct and

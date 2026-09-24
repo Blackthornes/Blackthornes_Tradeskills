@@ -14,8 +14,7 @@
 -- persistence had only ever been read inside one process.
 --
 -- So this file is the within-session cache, and it is genuinely worth having:
--- a /reload is the common case and it keeps a scan. What crosses a restart is
--- the generated Blackthornes_TS_Data addon; see Data/Snapshot.lua.
+-- a /reload is the common case and it keeps a scan.
 --
 -- One hazard, for whoever revisits the chunk size. On a client that does
 -- persist registered CVars, Blizzard's own writer corrupts Config.wtf from
@@ -24,6 +23,12 @@
 -- store writes 8 x 60KB. That is harmless only for as long as these CVars
 -- never reach disk on this client. If that ever changes, cap the chunk well
 -- below 3KB or drop the mechanism; do not raise it.
+--
+-- Since build 1.60.1.70009 (2026-09-24) the game hands SavedVariables back,
+-- and on a login where it does, this whole store stands down: nothing is read
+-- from it or written to it, and the database chunks left from earlier
+-- sessions are emptied. See Persist:GameKeepsSavedData. On a client that
+-- loses the saved file again it comes back by itself.
 --
 -- Only keys in Config.DEFAULTS.settings are mirrored. A CVar is global client
 -- state that outlives the addon, so writing arbitrary keys into it would leave
@@ -161,6 +166,7 @@ function Persist:RestoreSettings()
     self.restored = 0
     self.available = available
 
+    if self:GameKeepsSavedData() then return 0 end
     if not available or not ns.db or not ns.db.settings then return 0 end
 
     for key, default in pairs(ns.Config.DEFAULTS.settings) do
@@ -188,6 +194,8 @@ end
 
 --- Mirror one setting out. Called from Config:Set.
 function Persist:SaveSetting(key, value)
+    if self:GameKeepsSavedData() then return false end
+
     local available, cvars = self:IsAvailable()
     if not available then return false end
 
@@ -199,6 +207,21 @@ function Persist:SaveSetting(key, value)
     self:RegisterOne(name, Encode(default), cvars)
 
     return (pcall(C_CVar.SetCVar, name, Encode(value)))
+end
+
+--- Did the game hand the saved variables back this session?
+--
+-- When it did, the saved file is the truth and this store has nothing to add.
+-- Worse than nothing, for settings: on a cold start RegisterOne creates each
+-- CVar at its default, and RestoreSettings read that default straight over
+-- the value the saved file had just handed back. The old macro store quietly
+-- put the settings back at PLAYER_LOGIN, which is the only reason nobody saw
+-- it. And a store writing 8 x 60KB is exactly the hazard the note at the
+-- top of this file warns about, should this patch also have made CVars reach
+-- disk.
+function Persist:GameKeepsSavedData()
+    local diagnostics = ns.Config and ns.Config.loadDiagnostics
+    return diagnostics ~= nil and diagnostics.globalType == "table"
 end
 
 --- { available, restored }
@@ -333,10 +356,37 @@ local function TrimToFit(snapshot, budget)
     return nil
 end
 
+--- Empty the database chunks an earlier session left in CVars. Once a session.
+local function ClearStore(self, cvars)
+    if self.storeCleared then return end
+    self.storeCleared = true
+    self.clearedChunks = 0
+
+    for index = 1, MAX_CHUNKS do
+        local name = STORE_PREFIX .. index
+        if ReadRaw(name) then
+            self:RegisterOne(name, "", cvars)
+            pcall(C_CVar.SetCVar, name, "")
+            self.clearedChunks = self.clearedChunks + 1
+        end
+    end
+
+    if ReadRaw(STORE_COUNT) then
+        self:RegisterOne(STORE_COUNT, "0", cvars)
+        pcall(C_CVar.SetCVar, STORE_COUNT, "0")
+    end
+end
+
 --- Write the database out. Called at logout and after a scan.
 function Persist:SaveAll()
     local available, cvars = self:IsAvailable()
     if not available or not ns.db then return false end
+
+    -- The game writes the saved file itself.
+    if self:GameKeepsSavedData() then
+        ClearStore(self, cvars)
+        return true, 0
+    end
 
     local ok, text = pcall(ns.Serialize.Encode, Snapshot(ns.db))
     if not ok then
@@ -386,13 +436,6 @@ function Persist:SaveAll()
     end
 
     self.lastSave = { bytes = #text, chunks = chunks, dropped = dropped, at = time() }
-
-    -- The macro store rides the same cadence. It holds a different, much
-    -- smaller set -- settings, the queue and what sold -- and it is the only
-    -- one of the two that survives closing the client, so anything that is
-    -- worth writing to CVars is worth offering to it. It rate-limits and
-    -- skips an unchanged payload itself, so this costs nothing most times.
-    if ns.Durable then pcall(ns.Durable.SaveIfChanged, ns.Durable) end
 
     return true, dropped
 end
@@ -478,7 +521,12 @@ function Persist:SaveLater(delay)
     end)
 end
 
-ns.RegisterCommand("save", "save your data to CVars now", function()
+ns.RegisterCommand("save", "save your data to CVars now (only when the game loses it)", function()
+    if ns.Persist:GameKeepsSavedData() then
+        ns.Print("the game keeps your saved data now, so nothing needs saving to CVars.")
+        return
+    end
+
     local ok, dropped = ns.Persist:SaveAll()
     local last = ns.Persist.lastSave
 
@@ -769,6 +817,12 @@ function Persist:Report()
         Line("", "|c" .. ns.COLORS.warn .. "the game loaded the saved data late, after login|r")
     end
 
+    if self:GameKeepsSavedData() then
+        Line("CVar store", ("off, not needed: the game kept your saved data%s"):format(
+            (self.clearedChunks or 0) > 0
+                and (", and %d old part(s) were emptied"):format(self.clearedChunks) or ""))
+    end
+
     if peek.coldStart == true then
         Line("this login", "|c" .. ns.COLORS.warn .. "first login since the game was restarted|r")
     elseif peek.coldStart == false then
@@ -786,35 +840,16 @@ function Persist:Report()
         and (("|c%sput back %d value(s) that setting up had wiped|r"):format(ns.COLORS.warn, recovered))
         or "wiped nothing that was already there")
 
-    local diagnostics = (ns.Config and ns.Config.loadDiagnostics) or {}
-    local filled = diagnostics.filledFromSnapshot or 0
-
     if ns.Config and ns.Config.restoredFromCVars then
-        Line("restored from", filled > 0
-            and ("CVars, %s bytes, plus %s value(s) only the data addon had")
-                :format(ns.Util.Comma(self.loadedBytes or 0), ns.Util.Comma(filled))
-            or ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
-    elseif ns.Config and ns.Config.restoredFromSnapshot then
-        Line("restored from", "the data addon")
+        Line("restored from", ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
     elseif ns.Config and ns.Config.freshDatabase then
         Line("restored from", "|c" .. ns.COLORS.warn .. "nothing -- this session started empty|r")
     else
         Line("restored from", "the game's own saved data")
     end
 
-    -- Two separate facts on one line, because reading them apart is what took
-    -- a morning: which file is installed, and whether it handed anything over.
-    -- The file naming itself while handing over nothing was the whole bug.
-    local source = type(_G.BlackthornesTSSnapshotSource) == "string"
-        and _G.BlackthornesTSSnapshotSource or nil
-
-    if source then
-        Line("data addon", diagnostics.snapshotSeen
-            and (source .. " -- passed its data over")
-            or (source .. " -- |c" .. ns.COLORS.warn .. "passed nothing over|r"))
-    else
-        Line("data addon", "not installed")
-    end
+    -- Nothing below applies when the CVar store is standing down.
+    if self:GameKeepsSavedData() then return end
 
     local last = self.lastSave
     Line("last save", last
