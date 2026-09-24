@@ -140,9 +140,10 @@ local function Build(outer)
     widgets.cut:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(cutRow, widgets.cut, "%")
 
-    local unscannedRow = CreateRow(container, cutRow, "Price unscanned crafts",
-        "A craft with no scanned price is valued at its material cost plus this. " ..
-        "It is shown as an estimate and never saved as a real price.")
+    local unscannedRow = CreateRow(container, cutRow, "Markup with no competition",
+        "When nobody else is listing one -- never scanned, or every listing is " ..
+        "yours -- the price is your material cost plus this, never below market " ..
+        "value. It is shown as an estimate and never saved as a real price.")
 
     widgets.unscannedMarkup = Widgets.CreateNumberBox(unscannedRow, {
         width = 70, min = 0, max = 1000,
@@ -154,8 +155,8 @@ local function Build(outer)
     widgets.unscannedMarkup:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(unscannedRow, widgets.unscannedMarkup, "% markup")
 
-    local unscannedOnRow = CreateRow(container, unscannedRow, "Use that estimate",
-        "Off: crafts with no scanned price have no price at all, as before.")
+    local unscannedOnRow = CreateRow(container, unscannedRow, "Use that markup",
+        "Off: unscanned crafts have no price, and your own listings hold at market value.")
 
     widgets.priceUnscanned = Widgets.CreateCheckbox(unscannedOnRow, "Enabled", function(checked)
         Config:Set("priceUnscannedCrafts", checked)

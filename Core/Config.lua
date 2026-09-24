@@ -47,19 +47,22 @@ local DEFAULTS = {
         -- so it steps by a whole silver or matches; see minProfit below.
         undercutCopper = 1,
 
-        -- What to list a craft at when no scan has ever priced its output:
-        -- what its materials are worth, plus this much. A craft nobody has
-        -- ever listed has no market to read, and refusing to put any number
-        -- on it meant it was absent from the Profit tab and unlistable from
-        -- the Sell tab, which is not the same thing as it being worthless.
+        -- What to list a craft at when nothing is competing with it: what
+        -- its materials are worth, plus this much. Two cases reach it --
+        -- no scan has ever priced the output, or every listing on the book
+        -- is yours. Neither has a competitor's price to read, and holding at
+        -- market value in the second means charging whatever you charged
+        -- last time for as long as nobody turns up.
         --
-        -- It is an estimate and is labelled as one everywhere it appears. It
-        -- is never written into the price database: a number we made up must
-        -- not come back later looking like something the auction house said.
+        -- Only ever upwards: a market value above this is a real observation
+        -- and keeps the price. It is labelled everywhere it appears, and is
+        -- never written into the price database, because a number we worked
+        -- out must not come back later looking like something the auction
+        -- house said.
         unscannedMarkupPercent = 50,
 
-        -- Turns the above off entirely, putting crafts with no scanned price
-        -- back to having no price at all.
+        -- Turns the above off entirely: unscanned crafts go back to having
+        -- no price at all, and an uncontested one back to market value.
         priceUnscannedCrafts = true,
 
         -- Stop recommending an item once this many are already listed.

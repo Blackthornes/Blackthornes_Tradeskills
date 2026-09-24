@@ -530,8 +530,20 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
         -- on the numbers or never costed at all, and those want different
         -- things from you.
         if why then ns.PrintRaw(("    %s"):format(why)) end
-    elseif ns.Prices:HoldsLowest(itemID) then
-        ns.PrintRaw(("  |c%syou hold the lowest listing|r"):format(ns.COLORS.profit))
+    else
+        -- No rival on record. Asked of the chooser for the same reason as
+        -- above: this must not drift from the price the Sell tab would use.
+        local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
+
+        if ns.Prices:HoldsLowest(itemID) then
+            ns.PrintRaw(("  |c%syou hold the lowest listing|r"):format(ns.COLORS.profit))
+        end
+
+        if postPrice then
+            ns.PrintRaw(("  no rival listed   you would post at %s (%s)"):format(
+                Util.FormatMoney(postPrice), basis or "no price"))
+            if why then ns.PrintRaw(("    %s"):format(why)) end
+        end
     end
     ns.PrintRaw(("  seen %s over %d scan(s)"):format(
         Util.FormatAgeAgo(ns.Prices:GetAge(itemID)), record.scans or 0))
