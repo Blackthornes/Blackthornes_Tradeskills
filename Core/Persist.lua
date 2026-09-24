@@ -25,6 +25,12 @@
 -- never reach disk on this client. If that ever changes, cap the chunk well
 -- below 3KB or drop the mechanism; do not raise it.
 --
+-- Since build 1.60.1.70009 (2026-09-24) the game hands SavedVariables back,
+-- and on a login where it does, this whole store stands down: nothing is read
+-- from it or written to it, and the database chunks left from earlier
+-- sessions are emptied. See Persist:GameKeepsSavedData. On a client that
+-- loses the saved file again it comes back by itself.
+--
 -- Only keys in Config.DEFAULTS.settings are mirrored. A CVar is global client
 -- state that outlives the addon, so writing arbitrary keys into it would leave
 -- rubbish behind that nothing ever cleans up.
@@ -161,6 +167,7 @@ function Persist:RestoreSettings()
     self.restored = 0
     self.available = available
 
+    if self:GameKeepsSavedData() then return 0 end
     if not available or not ns.db or not ns.db.settings then return 0 end
 
     for key, default in pairs(ns.Config.DEFAULTS.settings) do
@@ -188,6 +195,8 @@ end
 
 --- Mirror one setting out. Called from Config:Set.
 function Persist:SaveSetting(key, value)
+    if self:GameKeepsSavedData() then return false end
+
     local available, cvars = self:IsAvailable()
     if not available then return false end
 
@@ -199,6 +208,21 @@ function Persist:SaveSetting(key, value)
     self:RegisterOne(name, Encode(default), cvars)
 
     return (pcall(C_CVar.SetCVar, name, Encode(value)))
+end
+
+--- Did the game hand the saved variables back this session?
+--
+-- When it did, the saved file is the truth and this store has nothing to add.
+-- Worse than nothing, for settings: on a cold start RegisterOne creates each
+-- CVar at its default, and RestoreSettings read that default straight over
+-- the value the saved file had just handed back. Macro storage was quietly
+-- putting the settings back at PLAYER_LOGIN, which is the only reason nobody
+-- saw it. And a store writing 8 x 60KB is exactly the hazard the note at the
+-- top of this file warns about, should this patch also have made CVars reach
+-- disk.
+function Persist:GameKeepsSavedData()
+    local diagnostics = ns.Config and ns.Config.loadDiagnostics
+    return diagnostics ~= nil and diagnostics.globalType == "table"
 end
 
 --- { available, restored }
@@ -333,10 +357,39 @@ local function TrimToFit(snapshot, budget)
     return nil
 end
 
+--- Empty the database chunks an earlier session left in CVars. Once a session.
+local function ClearStore(self, cvars)
+    if self.storeCleared then return end
+    self.storeCleared = true
+    self.clearedChunks = 0
+
+    for index = 1, MAX_CHUNKS do
+        local name = STORE_PREFIX .. index
+        if ReadRaw(name) then
+            self:RegisterOne(name, "", cvars)
+            pcall(C_CVar.SetCVar, name, "")
+            self.clearedChunks = self.clearedChunks + 1
+        end
+    end
+
+    if ReadRaw(STORE_COUNT) then
+        self:RegisterOne(STORE_COUNT, "0", cvars)
+        pcall(C_CVar.SetCVar, STORE_COUNT, "0")
+    end
+end
+
 --- Write the database out. Called at logout and after a scan.
 function Persist:SaveAll()
     local available, cvars = self:IsAvailable()
     if not available or not ns.db then return false end
+
+    -- The game writes the saved file itself. The macro store still rides this
+    -- cadence until it is retired, so it is offered the save either way.
+    if self:GameKeepsSavedData() then
+        ClearStore(self, cvars)
+        if ns.Durable then pcall(ns.Durable.SaveIfChanged, ns.Durable) end
+        return true, 0
+    end
 
     local ok, text = pcall(ns.Serialize.Encode, Snapshot(ns.db))
     if not ok then
@@ -478,7 +531,12 @@ function Persist:SaveLater(delay)
     end)
 end
 
-ns.RegisterCommand("save", "save your data to CVars now", function()
+ns.RegisterCommand("save", "save your data to CVars now (only when the game loses it)", function()
+    if ns.Persist:GameKeepsSavedData() then
+        ns.Print("the game keeps your saved data now, so nothing needs saving to CVars.")
+        return
+    end
+
     local ok, dropped = ns.Persist:SaveAll()
     local last = ns.Persist.lastSave
 
@@ -767,6 +825,12 @@ function Persist:Report()
 
     if diagnostics.lateSavedVariables then
         Line("", "|c" .. ns.COLORS.warn .. "the game loaded the saved data late, after login|r")
+    end
+
+    if self:GameKeepsSavedData() then
+        Line("CVar store", ("off, not needed: the game kept your saved data%s"):format(
+            (self.clearedChunks or 0) > 0
+                and (", and %d old part(s) were emptied"):format(self.clearedChunks) or ""))
     end
 
     if peek.coldStart == true then
