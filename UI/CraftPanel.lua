@@ -728,6 +728,13 @@ function CraftPanel:Build()
     summary:SetWidth(PANEL_WIDTH - 100)
     self.summary = summary
 
+    -- While a craft casts, a progress bar takes the summary line's place.
+    local progress = ns.CraftProgress:Create(frame, {
+        width = PANEL_WIDTH - 100, height = 16, covers = summary,
+    })
+    progress:SetPoint("LEFT", summary, "LEFT", 0, 0)
+    self.progress = progress
+
     local openQueue = Widgets.CreateButton(frame, "Queue tab", function()
         ns.UI:Show()
         ns.UI:SelectTab("queue")

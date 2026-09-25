@@ -18,7 +18,8 @@ local CastBar = ns.NewModule("CastBarOnTop")
 local TOP_STRATA = "TOOLTIP"
 
 -- The player's cast bar goes by different names in different clients.
-local BAR_NAMES = { "PlayerCastingBarFrame", "CastingBarFrame" }
+-- The overlay one is the bar some clients draw over the profession window.
+local BAR_NAMES = { "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame", "CastingBarFrame" }
 
 -- A run of crafts is one cast after another with a short gap between. Wait
 -- this long after a cast stops before putting the bar back, so it does not
@@ -27,6 +28,10 @@ local SETTLE = 0.4
 
 CastBar.saved = {}     -- bar name -> strata it had before it was raised
 CastBar.raised = false
+
+-- Bars already hooked. Kept here rather than marked on the bar itself: the
+-- addon never writes to the game's own frames.
+local hooked = setmetatable({}, { __mode = "k" })
 
 local function Bars()
     local found = {}
@@ -61,6 +66,15 @@ function CastBar:Raise()
             self.saved[bar.name] = ok and strata or "MEDIUM"
         end
         pcall(frame.SetFrameStrata, frame, TOP_STRATA)
+
+        -- The game may set the bar's layer again when it shows the bar for
+        -- the next cast, so lift it again whenever it shows mid-run.
+        if not hooked[frame] and type(frame.HookScript) == "function" then
+            hooked[frame] = true
+            pcall(frame.HookScript, frame, "OnShow", function(shown)
+                if CastBar.raised then pcall(shown.SetFrameStrata, shown, TOP_STRATA) end
+            end)
+        end
     end
     self.raised = true
 end

@@ -70,6 +70,22 @@ Fire("UNIT_SPELLCAST_INTERRUPTED", "player")
 RunTimers()
 assert(bar.strata == "MEDIUM", "interrupted craft should restore the bar")
 
+-- The game sets the bar's layer again as it shows it: it is lifted again.
+local onShow
+function bar:HookScript(script, fn) if script == "OnShow" then onShow = fn end end
+casting = "craft"
+Fire("UNIT_SPELLCAST_START", "player")
+assert(onShow, "bar's OnShow should be hooked")
+bar.strata = "MEDIUM"
+onShow(bar)
+assert(bar.strata == "TOOLTIP", "bar shown mid-craft should be lifted again")
+casting = nil
+Fire("UNIT_SPELLCAST_STOP", "player")
+RunTimers()
+bar.strata = "MEDIUM"
+onShow(bar)
+assert(bar.strata == "MEDIUM", "bar shown after the run is left alone")
+
 -- The diagnostic reports the bar's current layer.
 ns.cmd_castbar()
 assert(printed[1]:find("PlayerCastingBarFrame: layer MEDIUM"), printed[1])
