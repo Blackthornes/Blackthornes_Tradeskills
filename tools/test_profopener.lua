@@ -60,6 +60,8 @@ local function NewFrame()
   function f:HookScript(k, fn) self.hooks[k] = fn end
   function f:RegisterForClicks(d) self.clicks = d end
   f.strata, f.level = "MEDIUM", 3
+  function f:EnableMouse() end
+  function f:CreateTexture() return { SetAllPoints = function() end, SetColorTexture = function() end, SetPoint = function() end, SetSize = function() end } end
   function f:SetFrameStrata(v) self.strata = v end
   function f:GetFrameStrata() return self.strata end
   function f:SetFrameLevel(v) self.level = v end
@@ -72,6 +74,8 @@ local function NewFrame()
   function f:GetWidth() return 220 end
   function f:GetHeight() return 26 end
   function f:GetEffectiveScale() return 1 end
+  function f:IsMouseOver() return false end
+  function f:IsMouseEnabled() return true end
   return f
 end
 
@@ -83,6 +87,13 @@ function CreateFrame(kind, name, parent, template)
   created[#created + 1] = f
   return f
 end
+
+ns.Theme = {
+  Fill = function() return { SetColorTexture = function() end } end,
+  Border = function() end,
+  CreateLabel = function() return { SetPoint = function() end, SetText = function(self, t) self.text = t end } end,
+  Unpack = function() return 0, 0, 0, 1 end,
+}
 
 local chunk = assert(loadfile(lfs_cwd .. "/UI/ProfessionOpener.lua"))
 chunk("Blackthornes_TS", ns)
@@ -127,6 +138,7 @@ local overlay = Opener.overlay
 check(overlay.template == "SecureActionButtonTemplate", "overlay must be a secure action button")
 check(overlay.parent == UIParent, "overlay must not be parented to the addon window (it would protect it)")
 check(overlay.attrs.type == "spell" and overlay.attrs.spell == "Tailoring", "overlay casts Tailoring")
+check(overlay.label.text == "Open Tailoring", "the visible Open button names the profession")
 check(overlay.clicks == "AnyUp", "one click direction only, or the second cast closes the window")
 check(overlay.shown, "overlay shows over a visible button")
 check(overlay.point and overlay.point[4] == 10 and overlay.point[5] == 20, "overlay placed on the craft button")
