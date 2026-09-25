@@ -377,3 +377,12 @@ available here.
 The addon assumes per-unit for commodities and per-stack otherwise, and
 `/bts verify <itemID>` cross-checks that assumption against a targeted
 `SendSearchQuery` rather than trusting it.
+
+**How a profession window can be opened from the addon.** Casting is
+protected, so the Queue tab lays a `SecureActionButtonTemplate` button
+(type `spell`, the profession's name, or Smelting for Mining) over its craft
+button and lets the player's click do the cast (`UI/ProfessionOpener.lua`).
+Not yet seen working in game. Also untested: whether
+`C_TradeSkillUI.OpenTradeSkill(skillLineID)` works from addon code on this
+client; `/bts openprof` tries it and reports whether a window opened. If it
+does, one click could open and craft.
