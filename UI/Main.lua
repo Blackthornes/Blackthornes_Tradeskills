@@ -261,7 +261,7 @@ function UI:UpdateHeader()
 
         local allowed, reason = ns.Scanner:CanFullScan()
         self.scanButton.tooltipText = allowed
-            and "Take a full snapshot of the auction house"
+            and "Scan the whole auction house in one go"
             or reason
 
         self.scanHint:SetText(allowed and "" or (reason or ""))
@@ -298,6 +298,23 @@ function UI:OnRecipesUpdated()
     ns.Cost:InvalidateIndex()
     self:UpdateHeader()
     self:RefreshActiveTab()
+
+    -- The craft pane lists what the profession window is showing, and the
+    -- cache it reads from fills in over several frames after that window opens.
+    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
+end
+
+--- What you have listed on the auction house has changed.
+--
+-- Kept apart from OnInventoryUpdated because nothing in the bags moved, and
+-- because the craft pane needs telling. The pane ranks crafts by how many you
+-- already hold and hides the ones at their limit, so a reading taken when the
+-- auction house opened is no use to it if it is never told the number changed.
+function UI:OnAuctionsUpdated()
+    self:RefreshActiveTab()
+    self:UpdateHeader()
+
+    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
 end
 
 function UI:OnInventoryUpdated()
@@ -307,6 +324,9 @@ function UI:OnInventoryUpdated()
     if self.postButton and self.postButton:IsVisible() then
         self:UpdatePostButton()
     end
+
+    -- And changes how many of each craft the materials still cover.
+    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
 end
 
 function UI:RefreshActiveTab()
@@ -425,11 +445,11 @@ end
 
 --- The strip of addon controls that rides on Blizzard's auction window.
 --
--- Scan, Post Crafted and Post ALL each used to anchor themselves to the
--- auction frame separately, which left three buttons hanging in the game world
--- above it with nothing visibly tying them to the window they act on. They
--- share one bar instead, flush to the auction window's top edge and the same
--- width, so the row reads as part of that window.
+-- Scan and Post Crafted each used to anchor themselves to the auction frame
+-- separately, which left buttons hanging in the game world above it with
+-- nothing visibly tying them to the window they act on. They share one bar
+-- instead, flush to the auction window's top edge and the same width, so the
+-- row reads as part of that window.
 --
 -- Still parented to UIParent rather than to the auction frame, so Blizzard's
 -- own layering can never clip or bury it, and so it survives the auction UI
@@ -569,9 +589,9 @@ function UI:UpdateAuctionButton()
 
     button.tooltipText = allowed
         and (cooldown
-            and ("Browse the auction house.\nThe faster snapshot is rate limited for another %s.")
+            and ("Scan the auction house page by page.\nThe faster full scan can be used again in %s.")
                 :format(Util.FormatAge(cooldown))
-            or "Take a full snapshot of the auction house")
+            or "Scan the whole auction house in one go")
         or reason
 end
 
@@ -633,89 +653,62 @@ function UI:AttachPostButton()
 
     button:Show()
 
-    self:AttachPostAllButton()
     self:UpdatePostButton()
 end
 
---- Post All: everything sellable in your bags, not just what you crafted.
+--- Show a button's wait on the button itself, rather than only in a tooltip.
 --
--- Separate from Post Crafted on purpose. Posting crafted stock is a routine
--- part of the loop; emptying your bags onto the auction house is not, and one
--- button that sometimes does the second would be a nasty surprise.
-function UI:AttachPostAllButton()
-    local button = self.postAllButton
-
-    if not button then
-        button = Widgets.CreateButton(self:GetAuctionBar(), "Post All", function(_, mouseButton)
-            if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
-                UI:Show()
-                UI:SelectTab("post")
-                return
-            end
-
-            local allowed, reason = ns.Posting:CanPost()
-            if not allowed then
-                ns.Print(reason or "cannot post right now")
-                return
-            end
-
-            local line = ns.Posting:GetNextPostable({ includeAll = true })
-            if line then
-                ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
-            else
-                ns.Print("nothing in your bags worth listing right now")
-            end
-
-            UI:UpdatePostButton()
-        end, {
-            width = 150,
-            height = 30,
-            primary = false,
-            baseColor = { 0.06, 0.07, 0.09, 1 },
-        })
-
-        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-
-        Theme.AddGameOutline(button, {
-            style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
-        })
-        button:ApplyBaseColor()
-
-        self.postAllButton = button
-    end
-
-    button:ClearAllPoints()
-    button:SetPoint("RIGHT", self.postButton, "LEFT", -10, 0)
-    button:Show()
-end
-
-function UI:UpdatePostAllButton()
-    local button = self.postAllButton
+-- Posting is paced on purpose, and with the label unchanged the only sign of
+-- that was a button that did nothing when clicked. The countdown is the whole
+-- point: a number going down reads as working, where a dead button reads as
+-- broken.
+--
+-- The button stays enabled throughout. Disabling it would swallow the
+-- right-click that opens the full list, and a left-click during the wait still
+-- prints the reason.
+--
+-- @param name the label to go back to once the wait is over
+local function ApplyWaitLabel(button, name, seconds, reason)
     if not button then return end
 
-    local count, total = ns.Posting:GetSummary({ includeAll = true })
-
-    if count == 0 then
-        button:SetText("Post ALL")
-        button:SetEnabledState(true)
-        button.tooltipText = "Nothing in your bags with a known price to list."
-        return
+    if seconds and seconds > 0.05 then
+        -- Rounded up, so the last fraction of a second still shows "1s" rather
+        -- than sitting on "0s" while the wait is genuinely still running.
+        button:SetText(("%ds"):format(math.max(1, math.ceil(seconds))))
+        button.waitingLabel = true
+    elseif reason then
+        -- No number to give: the client's throttle and the player's own sell
+        -- window both end when they end. Saying "wait" beats counting down to
+        -- zero and then carrying on refusing.
+        button:SetText("wait")
+        button.waitingLabel = true
+    else
+        button:SetText(name)
+        button.waitingLabel = false
     end
+end
 
-    local allowed, reason = ns.Posting:CanPost()
+-- Exposed as a plain function, not a method: the tests drive it directly.
+UI.ApplyWaitLabel = ApplyWaitLabel
 
-    button:SetText("Post ALL")
-    button:SetEnabledState(true)
+--- Relabel the posting buttons with the current wait, and nothing else.
+--
+-- Deliberately separate from UpdatePostButton, which rebuilds summaries and
+-- walks the bags. This runs four times a second while the auction house is
+-- open, so it may only touch labels.
+function UI:UpdateWaitLabels()
+    if not ns.Scanner.isAuctionHouseOpen then return end
 
-    button.tooltipText = allowed
-        and ("Lists everything sellable in your bags: %d stack(s), about %s.\nOne click per listing.\nReagents your queue needs are left alone."):format(
-            count, Util.FormatMoney(total, { noColor = true, short = true }))
-        or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
+    local seconds, reason = ns.Posting:SecondsUntilPostable()
+
+    ApplyWaitLabel(self.postButton, "Post Crafted", seconds, reason)
+
+    if ns.PostPanel then
+        ns.PostPanel:UpdateWaitLabels(seconds, reason)
+    end
 end
 
 function UI:UpdatePostButton()
-    self:UpdatePostAllButton()
-
     local button = self.postButton
     if not button then return end
 
@@ -732,8 +725,9 @@ function UI:UpdatePostButton()
 
     local count, total = ns.Posting:GetSummary()
     local allowed, reason = ns.Posting:CanPost()
+    local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable()
 
-    button:SetText("Post Crafted")
+    ApplyWaitLabel(button, "Post Crafted", waitSeconds, waitReason)
     button:SetEnabledState(true)
 
     button.tooltipText = allowed
@@ -742,6 +736,10 @@ function UI:UpdatePostButton()
             Util.FormatMoney(line.unitPrice, { noColor = true }),
             count, Util.FormatMoney(total, { noColor = true, short = true }))
         or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
+
+    if waitReason then
+        button.tooltipText = button.tooltipText .. ("\n\nWaiting: %s."):format(waitReason)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -819,7 +817,7 @@ function UI:ShowTransferDialog(mode)
         local queued, settings, limits = ns.Transfer:Describe()
 
         dialog.title:SetText("Export")
-        dialog.hint:SetText(("%d craft(s), %d changed setting(s), %d posted limit(s). Press Ctrl+C to copy, then keep it somewhere until you need it."):format(
+        dialog.hint:SetText(("%d craft(s), %d changed setting(s), %d stock limit(s). Press Ctrl+C to copy, then keep it somewhere until you need it."):format(
             queued, settings, limits))
 
         dialog.editBox:SetText(code)
@@ -827,7 +825,7 @@ function UI:ShowTransferDialog(mode)
         dialog.action:Hide()
     else
         dialog.title:SetText("Import")
-        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and posted limits are replaced.")
+        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits are replaced.")
 
         dialog.editBox:SetText("")
         dialog.action:Show()
@@ -1036,7 +1034,7 @@ function UI:SearchAuctionHouse(itemID)
     end
 
     if not name then
-        ns.Print("that item is not cached yet; hover it once and try again")
+        ns.Print("the game has not loaded that item yet; hover over it once and try again")
         return false
     end
 
@@ -1062,7 +1060,7 @@ function UI:SearchAuctionHouse(itemID)
             })
 
             if not ok then
-                ns.Warn("the client refused that search")
+                ns.Warn("the game refused that search")
                 return false
             end
 
@@ -1139,6 +1137,18 @@ function UI:OnEnable()
                 UI:RefreshActiveTab()
             end
         end)
+
+        -- A second, faster ticker purely for the countdown. One second is too
+        -- coarse for a wait that is often only a second or two: the number
+        -- would jump or sit still, which is what a broken button looks like.
+        -- Kept apart from the ticker above because that one rebuilds the sell
+        -- list and walks the bags, which is far too much to do four times a
+        -- second.
+        if UI.waitTicker then UI.waitTicker:Cancel() end
+
+        UI.waitTicker = C_Timer.NewTicker(0.25, function()
+            UI:UpdateWaitLabels()
+        end)
     end)
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
@@ -1152,6 +1162,11 @@ function UI:OnEnable()
         if UI.postTicker then
             UI.postTicker:Cancel()
             UI.postTicker = nil
+        end
+
+        if UI.waitTicker then
+            UI.waitTicker:Cancel()
+            UI.waitTicker = nil
         end
     end)
 end

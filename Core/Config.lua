@@ -47,6 +47,21 @@ local DEFAULTS = {
         -- so it steps by a whole silver or matches; see minProfit below.
         undercutCopper = 1,
 
+        -- What to list a craft at when no scan has ever priced its output:
+        -- what its materials are worth, plus this much. A craft nobody has
+        -- ever listed has no market to read, and refusing to put any number
+        -- on it meant it was absent from the Profit tab and unlistable from
+        -- the Sell tab, which is not the same thing as it being worthless.
+        --
+        -- It is an estimate and is labelled as one everywhere it appears. It
+        -- is never written into the price database: a number we made up must
+        -- not come back later looking like something the auction house said.
+        unscannedMarkupPercent = 50,
+
+        -- Turns the above off entirely, putting crafts with no scanned price
+        -- back to having no price at all.
+        priceUnscannedCrafts = true,
+
         -- Stop recommending an item once this many are already listed.
         -- Zero means no limit. Per-item overrides live in db.postLimits.
         maxPostedPerItem = 0,
@@ -55,13 +70,19 @@ local DEFAULTS = {
         -- affects the deposit estimate, since listings are made by hand.
         postDuration = 2,
 
+        -- Whether the Post tab lists everything in the bags or only what
+        -- one of this account's recipes makes. A view, not a safety rail:
+        -- nothing is ever listed without a click on its own row, and the
+        -- bar's Post Crafted button stays crafted-only either way.
+        postShowAllItems = true,
+
         -- Search the auction house for the item immediately before listing
         -- it. A full scan is a snapshot and goes stale; undercutting a price
         -- that moved ten minutes ago is how you end up listed above a rival.
         verifyPriceBeforePosting = true,
 
         -- Ask before each listing. Posting is irreversible without paying a
-        -- second deposit, and Post All works through a whole bag, so the
+        -- second deposit, and listing can work through a whole bag, so the
         -- default is to confirm.
         confirmBeforePosting = true,
 
@@ -73,6 +94,25 @@ local DEFAULTS = {
         -- Hide crafts that have hit their posted limit rather than showing
         -- them greyed out.
         hideAtPostLimit = true,
+
+        -- Count what is sitting in the mailbox as stock you own.
+        --
+        -- An expired auction comes back as mail, and until it is collected it
+        -- is in neither your auctions nor your bags -- so without this the
+        -- addon will tell you to craft more of something already on its way
+        -- home. Off only if the mailbox reading ever misbehaves.
+        countMailAsStock = true,
+
+        -- How hard already owning some of an item pushes it down the Profit
+        -- list. The rank is profit divided by (1 + stock * this), so 1 means a
+        -- single one already held roughly halves a craft's place and 0 turns
+        -- the whole thing off. Stock covers listed, bags, bank, mailbox and
+        -- the craft queue.
+        --
+        -- There is no cap to configure anywhere: a second copy only sells once
+        -- the first has, so it is genuinely worth less right now, and that is
+        -- something the addon can work out for itself.
+        stockPenalty = 1,
 
         -- Rows whose price data is older than this are rendered as stale.
         staleAfterSeconds = 48 * 3600,
@@ -92,9 +132,38 @@ local DEFAULTS = {
         -- between sessions this is what makes the addon self-sufficient.
         autoScan = true,
 
+        -- Read prices out of the searches the player runs in Blizzard's own
+        -- auction house UI, as well as the addon's scans. The client announces
+        -- every search result the same way whoever asked for it, so this costs
+        -- no request and no throttle budget -- it is purely reading answers
+        -- that have already arrived. Off puts the addon back to learning only
+        -- from its own scans.
+        learnFromSearches = true,
+
+        -- Write what one of each recipe sells for into Blizzard's own
+        -- profession window, beside the recipe's name. Off leaves that window
+        -- exactly as the client draws it.
+        showValueInProfessionWindow = true,
+
+        -- Put what an item is worth on the auction house onto the item's
+        -- own tooltip, wherever the game draws one. Off leaves every
+        -- tooltip exactly as the client writes it.
+        showValueOnItemTooltips = true,
+
+        -- Play a sound the moment the game says one of your auctions has
+        -- sold, wherever you are. See Logic/SaleAlarm.lua.
+        saleAlarm = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
+
+        -- How the mark on a craft that both skills you up and pays is drawn:
+        -- "star" is the addon's own art, "raid" the game's raid-target star,
+        -- "pip" a plain gold square for a client that draws neither. Switched
+        -- in game with /bts star, because whether a texture resolves is the
+        -- one thing that cannot be checked outside it.
+        skillUpMarker = "star",
     },
 
     -- realmKey -> itemID -> price record
@@ -113,6 +182,20 @@ local DEFAULTS = {
     -- Per-item posted caps, and what is currently listed per realm.
     postLimits = {},
     postedAuctions = {},
+
+    -- realmKey -> { entries, seen }: what sold and what came back, read out of
+    -- the mailbox. See Data/Mail.lua.
+    mailLedger = {},
+
+    -- realmKey -> when the history restored from macro storage was rolled up
+    -- to. Ledger entries from before that moment are already inside it. See
+    -- Mail:GetRestoredRollup.
+    sellThroughRolledAt = {},
+
+    -- itemID -> true when the auction house sells it by the unit. Learned from
+    -- the client when one is held and from searches otherwise; it never
+    -- changes for an item, so it is kept. See Scanner:GetCommodityStatus.
+    commodity = {},
 
     -- Written by Core/Compat.lua and Probe/Probe.lua.
     probe = {
@@ -170,6 +253,11 @@ end
 
 --- Called from the ADDON_LOADED handler before any module initialises.
 function Config:Bootstrap()
+    -- First, before Compat's capability detection registers and writes CVars
+    -- of its own: this records the client's state at login rather than the
+    -- state we left it in on the way past.
+    if ns.Persist then ns.Persist:Peek() end
+
     -- Recorded before anything is touched, so a failure to load can be told
     -- apart from a failure to save. Without this the two look identical
     -- from the outside.
@@ -184,9 +272,10 @@ function Config:Bootstrap()
     }
 
     if existing ~= "table" then
-        -- The client handed back nothing. On the Forever beta that is the norm
-        -- rather than a first run, so recover from the CVar store first: this
-        -- build persists CVars even though it loses saved variables.
+        -- The client handed back nothing: a first run, or a client that loses
+        -- the saved file. Since build 1.60.1.70009 the game keeps it, so this
+        -- is the rare case. The CVar store still covers a /reload on a client
+        -- that does lose it.
         local stored = ns.Persist and ns.Persist:LoadAll()
 
         if stored then
@@ -194,13 +283,6 @@ function Config:Bootstrap()
 
             self.restoredFromCVars = true
             self.loadDiagnostics.restoredFromCVars = true
-
-        elseif type(_G.BlackthornesTSSnapshot) == "table" then
-            _G.BlackthornesTSDB = _G.BlackthornesTSSnapshot
-            _G.BlackthornesTSSnapshot = nil
-
-            self.restoredFromSnapshot = true
-            self.loadDiagnostics.restored = true
         else
             _G.BlackthornesTSDB = {}
             self.freshDatabase = true
@@ -232,6 +314,13 @@ function Config:Bootstrap()
     ns.db = db
     ns.charDb = _G.BlackthornesTSCharDB
 
+    -- Kept so OnEnable can tell whether the client replaced the global after
+    -- we installed ours. One report from another addon on this build has the
+    -- saved table arriving late rather than never; if that happens here, this
+    -- is what notices instead of quietly running on an empty database beside
+    -- a full one.
+    self.installedDB = db
+
     self:StampCanary(db)
     self:StampCVarCanary()
 
@@ -240,6 +329,26 @@ function Config:Bootstrap()
     if ns.Persist then
         ns.Persist:RestoreSettings()
         ns.Persist:CheckSoak()
+    end
+end
+
+function Config:OnEnable()
+    self:CheckLateSavedVariables()
+end
+
+--- Did the client hand the saved table back after ADDON_LOADED?
+--
+-- Worth a look because it would change everything: if the saved variables are
+-- late rather than absent, none of the rest of this is needed. It is reported
+-- and never acted on -- swapping the live database out from under modules
+-- that already hold a reference would be a worse bug than the one it fixes.
+function Config:CheckLateSavedVariables()
+    local current = _G.BlackthornesTSDB
+
+    if type(current) == "table" and self.installedDB and current ~= self.installedDB then
+        self.loadDiagnostics.lateSavedVariables = true
+
+        ns.Warn("the game loaded your saved data late, after login instead of at load. Please report this -- run /bts persist.")
     end
 end
 
@@ -254,7 +363,7 @@ function Config:Migrate(db)
     end
 
     if from > Config.SCHEMA_VERSION then
-        ns.Warn(("saved data is from a newer version (schema %d > %d); leaving it alone")
+        ns.Warn(("your saved data is from a newer version of the addon (format %d, this version reads %d); leaving it alone")
             :format(from, Config.SCHEMA_VERSION))
         return
     end
@@ -306,14 +415,23 @@ function Config:StampCVarCanary()
 
     self.cvarResult.supported = true
 
+    -- Read before registering. Registering a name the client has not seen
+    -- since launch can write the default over whatever it loaded, and this
+    -- canary is precisely the thing that would then read as "never survived"
+    -- when it had. See the note at the top of Core/Persist.lua.
+    local raw = ns.Persist and ns.Persist.ReadRaw and ns.Persist.ReadRaw(CVAR_CANARY)
+    local count = tonumber(raw or "") or 0
+
     if capable.registerVia == "RegisterAddonCVar" then
         pcall(C_CVar.RegisterAddonCVar, CVAR_CANARY)
     elseif capable.registerVia == "RegisterCVar" then
         pcall(C_CVar.RegisterCVar, CVAR_CANARY, "0")
     end
 
-    local ok, previous = pcall(C_CVar.GetCVar, CVAR_CANARY)
-    local count = (ok and tonumber(previous)) or 0
+    if count == 0 then
+        local ok, previous = pcall(C_CVar.GetCVar, CVAR_CANARY)
+        count = (ok and tonumber(previous)) or 0
+    end
 
     -- Zero means either a first run or a value that did not survive; those
     -- are the same observation from here, and the probe says so rather than
@@ -371,27 +489,25 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("db", "report what loaded from saved variables", function()
+ns.RegisterCommand("db", "show what saved data loaded", function()
     local diagnostics = ns.Config:GetLoadDiagnostics()
 
     ns.Print("saved data")
     local source = ""
     if diagnostics.restoredFromCVars then
-        source = "  (restored from CVars)"
-    elseif diagnostics.restored then
-        source = "  (restored from snapshot)"
+        source = "  (recovered from CVars)"
     end
 
-    ns.PrintRaw(("  global at load:  %s%s"):format(
+    ns.PrintRaw(("  saved data type: %s%s"):format(
         tostring(diagnostics.globalType), source))
-    ns.PrintRaw(("  loadCount found: %s"):format(tostring(diagnostics.loadCountSeen)))
-    ns.PrintRaw(("  loadCount now:   %s"):format(tostring(ns.db.probe.loadCount)))
+    ns.PrintRaw(("  loads before:    %s"):format(tostring(diagnostics.loadCountSeen)))
+    ns.PrintRaw(("  loads now:       %s"):format(tostring(ns.db.probe.loadCount)))
     ns.PrintRaw(("  prices:          %d item(s)"):format(ns.Prices:Count()))
     ns.PrintRaw(("  recipes:         %d"):format(ns.Recipes:Count()))
-    ns.PrintRaw(("  queue:           %d entr(ies)"):format(ns.Queue:Count()))
+    ns.PrintRaw(("  queue:           %d craft(s)"):format(ns.Queue:Count()))
     ns.PrintRaw(("  characters:      %d"):format(ns.Util.Count(ns.db.characters)))
 
-    ns.PrintRaw(("  per-character:   %s, canary %s"):format(
+    ns.PrintRaw(("  per-character:   %s, test value %s"):format(
         tostring(diagnostics.charGlobalType),
         tostring(diagnostics.charCanarySeen or "none")))
 
@@ -402,24 +518,21 @@ ns.RegisterCommand("db", "report what loaded from saved variables", function()
         -- "nothing was handed back" and "nothing was recovered" are very
         -- different situations and only the second one is a problem.
         if diagnostics.restoredFromCVars then
-            ns.Print("the client lost your saved data; recovered it from CVars.")
-        elseif diagnostics.restored then
-            ns.Warn("the client lost your saved data; restored from the snapshot.")
-            ns.Warn("run tools/restore.ps1 after this session to keep it current.")
+            ns.Print("the game lost your saved data; it was recovered from CVars.")
         else
-            ns.Warn("the client did not hand back any saved data this session,")
+            ns.Warn("the game did not load any saved data this session,")
             ns.Warn("and nothing was recovered. This session starts empty.")
         end
 
         if diagnostics.charCanarySeen then
-            ns.Print("|cff4fd18bper-character saved data DID load|r -- the queue can live there.")
+            ns.Print("|cff4fd18bper-character saved data DID load|r -- the queue could be kept there.")
         end
     end
 end)
 
-ns.RegisterCommand("debug", "toggle debug output", function()
+ns.RegisterCommand("debug", "turn extra chat detail on or off", function()
     if not ns.db then return end
 
     ns.db.global.debug = not ns.db.global.debug
-    ns.Print("debug output " .. (ns.db.global.debug and "on" or "off"))
+    ns.Print("extra chat detail " .. (ns.db.global.debug and "on" or "off"))
 end)

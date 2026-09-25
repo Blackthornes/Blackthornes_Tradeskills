@@ -322,6 +322,10 @@ function Recipes:Harvest()
 
     self.harvesting = true
 
+    -- Difficulties are only readable while this window is open, so they are
+    -- collected alongside the recipes rather than looked up later.
+    if ns.SkillUp then ns.SkillUp:BeginCapture() end
+
     local added, updated = 0, 0
 
     local worker = Util.NewWorker({
@@ -358,13 +362,24 @@ function Recipes:Harvest()
             local existing = record.recipes[recipeID]
             if existing then updated = updated + 1 else added = added + 1 end
 
+            local skillLineID = GetRecipeSkillLine(recipeID, info)
+
+            -- Whether this still skills you up, kept with the recipe so the
+            -- Profit tab can say so at the auction house, where no profession
+            -- window is open to ask.
+            local skillUp = existing and existing.skillUp or nil
+            if ns.SkillUp then
+                skillUp = ns.SkillUp:Capture(recipeID, info, skillLineID, skillUp)
+            end
+
             record.recipes[recipeID] = {
                 recipeID = recipeID,
                 name = info.name or schematic.name,
                 outputItemID = schematic.outputItemID,
                 quantityMin = schematic.quantityMin or 1,
                 quantityMax = schematic.quantityMax or schematic.quantityMin or 1,
-                skillLineID = GetRecipeSkillLine(recipeID, info),
+                skillLineID = skillLineID,
+                skillUp = skillUp,
                 reagents = reagents,
                 cachedAt = time(),
             }
@@ -374,8 +389,10 @@ function Recipes:Harvest()
             self.harvesting = false
             record.recipesCachedAt = time()
 
+            if ns.SkillUp then ns.SkillUp:EndCapture() end
+
             if added > 0 or updated > 0 then
-                ns.Debug(("cached %d new and %d updated recipe(s)"):format(added, updated))
+                ns.Debug(("saved %d new and %d updated recipe(s)"):format(added, updated))
             end
 
             if ns.UI and ns.UI.OnRecipesUpdated then
@@ -385,6 +402,7 @@ function Recipes:Harvest()
 
         onCancel = function()
             self.harvesting = false
+            if ns.SkillUp then ns.SkillUp:EndCapture() end
         end,
     })
 
@@ -485,5 +503,5 @@ ns.RegisterCommand("professions", "list this character's professions", function(
         end
     end
 
-    ns.PrintRaw(("  |c%s%d recipe(s) cached|r"):format(ns.COLORS.muted, ns.Recipes:Count()))
+    ns.PrintRaw(("  |c%s%d recipe(s) saved|r"):format(ns.COLORS.muted, ns.Recipes:Count()))
 end)

@@ -12,6 +12,10 @@ local Profit = ns.NewModule("Profit")
 
 local Util = ns.Util
 
+-- Shown wherever an unpriceable craft says why: the Profit tab's detail
+-- panel, the craft pane's tooltip and /bts why.
+local SOULBOUND_REASON = "binds on pickup, so it cannot be sold"
+
 --------------------------------------------------------------------------------
 -- What to list at
 --------------------------------------------------------------------------------
@@ -34,6 +38,78 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
     return (revenue - cut) - (cost.total or 0) - deposit
 end
 
+-- Used when the setting has never been written, so the rule still holds on a
+-- database saved before it existed.
+local DEFAULT_MARKUP_PERCENT = 50
+
+--- A price for a craft the auction house has never priced: what its materials
+--- are worth, plus a markup.
+--
+-- A craft nobody has ever listed has no market to read. That is not the same
+-- as it being worthless, and returning nothing for it meant the craft dropped
+-- out of the Profit tab and could not be listed from the Sell tab at all --
+-- which is exactly the position a new recipe starts in.
+--
+-- So the materials answer instead: whatever they are worth, plus the markup
+-- in Settings. This is an estimate and is reported as one by every caller;
+-- crucially it is never written back into the price database, because a
+-- number the addon made up must not come back an hour later looking like
+-- something the auction house said. Once a scan sees a real listing, that
+-- price wins and this is never consulted again.
+--
+-- @param knownCost  a costing the caller already has, used only when it is
+--   for this same recipe and is already the full-value one. Analyse costs
+--   every recipe before it asks for a price, and the profession panes analyse
+--   hundreds of recipes at a time, so a second walk of the same tree is worth
+--   avoiding.
+-- @return price, why  -- nil when there is no recipe, no material price, or
+--   the setting is off
+function Profit:DeriveFromMaterials(itemID, knownCost)
+    if not itemID then return nil end
+    if ns.Config:Get("priceUnscannedCrafts") == false then return nil end
+
+    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    if not recipeID then return nil end
+
+    -- Full material value, not the cash-out-of-pocket view: a craft is not
+    -- worth less to sell because its reagents happen to be paid for already.
+    -- The two are the same walk while materials are valued at market, which
+    -- is the default, so the caller's costing can stand in for it -- but only
+    -- when it is a costing of this very recipe. Two recipes can make the same
+    -- item, and pricing one off the other's materials would be a wrong number
+    -- presented as a right one.
+    local perUnit
+
+    if knownCost and knownCost.recipeID == recipeID and knownCost.priceable
+        and knownCost.perUnit and ns.Config:Get("valueOwnedMaterials") ~= false then
+        perUnit = knownCost.perUnit
+    else
+        perUnit = ns.Cost:GetMaterialValue(recipeID)
+    end
+
+    if not perUnit or perUnit <= 0 then return nil end
+
+    local markup = ns.Config:Get("unscannedMarkupPercent")
+    if type(markup) ~= "number" then markup = DEFAULT_MARKUP_PERCENT end
+
+    local price = math.floor(perUnit * (1 + markup / 100))
+
+    -- Never under what a vendor pays for it. Below that, walking to a vendor
+    -- beats the listing outright, and Posting's own floor would refuse it --
+    -- so the estimate would be a price nothing could be done with.
+    local vendor = Util.GetVendorSellPrice(itemID)
+    if vendor and vendor > price then price = vendor end
+
+    price = math.max(1, price)
+
+    -- Cheap reagents cannot produce an impossible price, but a restored
+    -- database carrying one can, and this is a price the player may post at.
+    if not ns.Prices.IsCredible(price) then return nil end
+
+    return price, ("no scan has priced this, so it is %d%% over the %s its materials are worth")
+        :format(markup, Util.FormatMoney(perUnit, { noColor = true }))
+end
+
 --- The unit price to list an item at, and why.
 --
 -- Commodities take any price down to the copper, so undercutting works the way
@@ -47,24 +123,61 @@ end
 -- profit setting. Anything the profit cannot be worked out for matches, since
 -- the unknown case is the one where giving gold away is least defensible.
 --
--- @return price, basis, why  -- basis is "undercut", "match" or "market", and
---   nil price when there is nothing to go on. why is a sentence explaining a
---   match, since "match" alone does not say whether undercutting was rejected
---   on the numbers or never costed at all.
-function Profit:ChoosePostPrice(itemID)
+-- @return price, basis, why, uncertain  -- basis is "undercut", "match",
+--   "market" or "derived", and nil price when there is nothing to go on.
+--   "derived" is the estimate from material value, and is the one basis that
+--   is not evidence of anything the auction house did: see
+--   DeriveFromMaterials above. why is a sentence explaining a match or a
+--   derived price, since neither word says on its own where the number came
+--   from. uncertain is true when the item's commodity status is not known,
+--   see below.
+-- @param knownCost  optional, passed straight to DeriveFromMaterials; see
+--   there for when it is used and when it is ignored.
+function Profit:ChoosePostPrice(itemID, knownCost)
     if not itemID then return nil, nil end
 
     -- "rival" excludes your own auctions, so listing a second one does not
     -- undercut the first.
     local rival = ns.Prices:GetValue(itemID, "rival")
-    local isCommodity = ns.Scanner:IsCommodity(itemID)
+
+    -- true, false or nil. Nil is something never held and never searched
+    -- for, which is most crafts not yet made, and it is priced WITHOUT the
+    -- whole-silver step: the step floors anything under a silver up to one,
+    -- so guessing "item auction" overstated a cheap commodity's revenue by
+    -- up to double, while guessing "commodity" only understates an item
+    -- auction's by the silver it would be rounded to.
+    local status
+    if ns.Scanner.GetCommodityStatus then
+        status = ns.Scanner:GetCommodityStatus(itemID)
+    else
+        status = ns.Scanner:IsCommodity(itemID)
+    end
+
+    local isCommodity = status ~= false
+    local uncertain = status == nil
 
     if not rival then
         local market = ns.Prices:GetValue(itemID, "market")
-        if not market then return nil, nil end
+
+        -- Nothing scanned, ever. Not the same as an empty auction house: an
+        -- item seen before keeps its market value through an empty search, so
+        -- this is only reached by something the addon has never had a price
+        -- for. A stale price is still evidence and is left alone.
+        if not market then
+            local derived, why = self:DeriveFromMaterials(itemID, knownCost)
+            if not derived then return nil, nil end
+
+            if isCommodity then return derived, "derived", why, uncertain end
+
+            -- Up, not down, on an item auction: there is no rival to get
+            -- beneath here, and rounding an estimate down by up to a silver
+            -- can put a cheap craft under what its materials cost, which
+            -- Posting would then refuse to list at all.
+            return Util.CeilToSilver(derived), "derived", why
+        end
 
         market = math.max(1, math.floor(market))
-        if isCommodity then return market, "market" end
+        if isCommodity then return market, "market", nil, uncertain end
 
         return Util.RoundToSilver(market), "market"
     end
@@ -72,7 +185,7 @@ function Profit:ChoosePostPrice(itemID)
     local undercut = ns.Config:Get("undercutCopper") or 1
 
     if isCommodity then
-        return math.max(1, math.floor(rival - undercut)), "undercut"
+        return math.max(1, math.floor(rival - undercut)), "undercut", nil, uncertain
     end
 
     local matchPrice = Util.RoundToSilver(rival)
@@ -81,7 +194,7 @@ function Profit:ChoosePostPrice(itemID)
     -- A rival already sitting at the lowest price the server allows leaves
     -- nothing below it, so matching is the only move.
     if underPrice >= matchPrice then
-        return matchPrice, "match", "there is no legal price below the rival's"
+        return matchPrice, "match", "the game allows no lower price than the rival's"
     end
 
     local recipeID = ns.Cost:FindRecipeForItem(itemID)
@@ -91,7 +204,7 @@ function Profit:ChoosePostPrice(itemID)
 
     if not profit then
         return matchPrice, "match",
-            ("no cost known for this, so %s was not worth risking"):format(
+            ("the cost to make this is unknown, so dropping %s was not worth the risk"):format(
                 Util.FormatMoney(matchPrice - underPrice, { noColor = true }))
     end
 
@@ -100,7 +213,7 @@ function Profit:ChoosePostPrice(itemID)
     if profit >= minProfit then return underPrice, "undercut" end
 
     return matchPrice, "match",
-        ("undercutting to %s leaves %s, under your %s minimum"):format(
+        ("undercutting to %s leaves %s profit, below your %s minimum"):format(
             Util.FormatMoney(underPrice, { noColor = true }),
             Util.FormatMoney(profit, { noColor = true }),
             Util.FormatMoney(minProfit, { noColor = true }))
@@ -134,6 +247,77 @@ function Profit:GetCraftableCount(recipeID, characterKey)
     return possible == math.huge and 0 or possible
 end
 
+--- How much having some already drags a craft down the ranking.
+--
+-- There is no cap to configure and deliberately so. The reason a craft you
+-- already hold ten of is a worse use of the next hour than an equally
+-- profitable one you hold none of is not a rule about inventory -- it is that
+-- the eleventh only sells once the other ten have, so the gold comes back
+-- roughly ten times slower. Profit per unit of time, not profit.
+--
+-- Hence dividing rather than filtering: hold none and nothing changes at all,
+-- hold some and the craft slides down by about as much as it deserves. Nothing
+-- is ever hidden by this, so a craft cannot silently vanish from the list.
+local function StockDivisor(pipeline)
+    local weight = ns.Config:Get("stockPenalty")
+    if weight == nil then weight = 1 end
+
+    if weight <= 0 or not pipeline or pipeline <= 0 then return 1 end
+
+    return 1 + (pipeline * weight)
+end
+
+--- The value a craft is ranked on: its profit, set against what you already
+--- have of it.
+--
+-- A loss is left alone. Dividing a negative number by a larger divisor moves it
+-- closer to zero, which would promote the worst crafts in the list for the sole
+-- reason that you are already sitting on a pile of them.
+local function RankValue(analysis, field)
+    local value = analysis[field]
+    if value == nil then return -math.huge end
+
+    if value > 0 then
+        return value / (analysis.stockDivisor or 1)
+    end
+
+    return value
+end
+
+--- How many CRAFTS fit in the room left under the posted limit.
+--
+-- The limit and the room under it are counted in ITEMS, because that is what
+-- goes up for sale. Every queue is counted in CRAFTS. A recipe that yields
+-- five per craft makes those two numbers differ by five, so clamping a craft
+-- count straight against the item room lets a limit of ten become fifty items
+-- on the auction house.
+--
+-- quantityMin rather than the average yield, matching Logic/Queue.lua,
+-- Logic/Crafting.lua and Data/Auctions.lua: the panes must agree with each
+-- other on the same recipe, and a fraction of a craft is not a thing.
+--
+-- Any room at all allows one craft. You cannot make part of one, and refusing
+-- the craft outright would stall a queue on a recipe that still has shelf
+-- space.
+local function RoomInCrafts(room, recipe)
+    if room == nil then return nil end
+    if room <= 0 then return 0 end
+
+    local perCraft = math.max(1, (recipe and recipe.quantityMin) or 1)
+
+    return math.max(1, math.floor(room / perCraft))
+end
+
+-- Exposed for tools/test_mail.lua. These two decide the order of the list the
+-- player actually reads, and they are the part most likely to want tuning, so
+-- they are testable without standing up the whole analysis.
+Profit._StockDivisor = StockDivisor
+Profit._RankValue = RankValue
+
+-- Exposed for tools/test_craftroom.lua, and called directly by the panes
+-- when they hold a recipe but no analysis.
+Profit.RoomInCrafts = RoomInCrafts
+
 --- Full profitability breakdown for one recipe.
 function Profit:Analyse(recipeID, characterKey)
     local recipe, owner = ns.Recipes:GetAny(recipeID)
@@ -154,9 +338,26 @@ function Profit:Analyse(recipeID, characterKey)
     local cost = ns.Cost:GetCraftCost(recipeID)
     analysis.cost = cost
 
+    -- Read before the early exits below, so a craft that cannot be priced can
+    -- still say it would raise your skill.
+    analysis.skillUp = ns.SkillUp and ns.SkillUp:GetForRecipe(recipeID, recipe) or nil
+
     if not recipe.outputItemID then
         -- Enchants and similar have no sellable output item.
-        analysis.reason = "no sellable output"
+        analysis.reason = "makes nothing that can be sold"
+        return analysis
+    end
+
+    -- Binds on pickup: the thing made is soulbound the moment it exists, so
+    -- there is no sale to cost and no profit to rank on. Out of the list the
+    -- same way an unpriced craft is, which keeps it off the skill-up star too,
+    -- while "Show unpriced" and the craft pane still show it with its skill-up
+    -- colour for anyone levelling on it. Unknown (not cached yet) is kept: the
+    -- tab redraws when the item arrives, and a craft that may well sell should
+    -- not vanish on a guess.
+    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(recipe.outputItemID) then
+        analysis.soulbound = true
+        analysis.reason = SOULBOUND_REASON
         return analysis
     end
 
@@ -179,9 +380,19 @@ function Profit:Analyse(recipeID, characterKey)
     -- shown here is the profit of the listing that would actually be made.
     -- On an item auction that may be a match rather than an undercut, because
     -- the server will not take a price with copper in it.
-    local unitRevenue, basis = self:ChoosePostPrice(recipe.outputItemID)
+    local unitRevenue, basis, _, uncertain =
+        self:ChoosePostPrice(recipe.outputItemID, cost)
 
     analysis.priceBasis = basis
+    -- Set when the price above is the materials-plus-markup estimate rather
+    -- than anything the auction house said. Every display of the number
+    -- checks this: an estimate presented as a market price is how you end up
+    -- crafting for a demand that was never measured.
+    analysis.priceDerived = basis == "derived" or nil
+    -- Set when nobody has been able to say whether the output sells as a
+    -- commodity or an item auction, so the price above is the plain undercut
+    -- and may round to a silver when it is actually listed.
+    analysis.priceUncertain = uncertain or nil
 
     if competitor then
         analysis.competitorPrice = competitor
@@ -193,6 +404,9 @@ function Profit:Analyse(recipeID, characterKey)
     end
 
     if not unitRevenue then
+        -- A craft can land here with priced materials when the estimate is
+        -- switched off, and with unpriced ones either way; the reason below
+        -- covers both, since the output is what has no price in each.
         analysis.reason = "output has no price data"
         return analysis
     end
@@ -243,15 +457,28 @@ function Profit:Analyse(recipeID, characterKey)
 
     -- What you already hold, listed or otherwise. Crafting past this gets
     -- you nothing you do not already own, and ties up gold doing it.
-    local room, posted, onHand, queued, limit = ns.Auctions:GetRoom(recipe.outputItemID)
+    local room, posted, onHand, queued, limit, inMail =
+        ns.Auctions:GetRoom(recipe.outputItemID)
 
     analysis.posted = posted
     analysis.onHand = onHand
-    analysis.stock = posted + onHand
+    analysis.inMail = inMail or 0
+    analysis.stock = posted + onHand + analysis.inMail
     analysis.queuedElsewhere = queued
     analysis.postLimit = limit
     analysis.postRoom = room
+    analysis.roomInCrafts = RoomInCrafts(room, recipe)
     analysis.atPostLimit = room ~= nil and room <= 0
+
+    -- Everything already committed to this item: what you hold, plus what the
+    -- queue is about to make. This is what pushes a craft down the list.
+    analysis.pipeline = analysis.stock + queued
+    analysis.stockDivisor = StockDivisor(analysis.pipeline)
+
+    -- Worth a star: it raises your skill and it pays. Only a mark -- the
+    -- ranking is untouched, so nothing moves up the list for being a skill up
+    -- and nothing is hidden for not being one.
+    analysis.recommended = ns.SkillUp and ns.SkillUp:IsWorthIt(analysis) or false
 
     return analysis
 end
@@ -307,9 +534,14 @@ function Profit:GetRanked(opts)
     end
 
     local sortBy = opts.sortBy or "profit"
+
+    -- Ranked on profit adjusted for what you already hold; the columns still
+    -- show the real figure, because that is the number you are deciding on.
+    -- opts.ignoreStock is for callers that want the raw order, such as the
+    -- tests and anything reporting on the market rather than on your shelf.
     table.sort(results, function(a, b)
-        local left = a[sortBy] or -math.huge
-        local right = b[sortBy] or -math.huge
+        local left = opts.ignoreStock and (a[sortBy] or -math.huge) or RankValue(a, sortBy)
+        local right = opts.ignoreStock and (b[sortBy] or -math.huge) or RankValue(b, sortBy)
 
         if left == right then
             return (a.name or "") < (b.name or "")
@@ -340,7 +572,7 @@ function Profit:Resolve(query)
     query = (query or ""):gsub("^%s+", ""):gsub("%s+$", "")
 
     if query == "" then
-        return nil, "tell me what to look at -- a name, a shift-clicked item, or a row number from /bts top"
+        return nil, "type a name, shift-click an item, or give a row number from /bts top"
     end
 
     -- Plain small numbers are row numbers from the last listing, which is what
@@ -353,7 +585,7 @@ function Profit:Resolve(query)
     local matches = ns.Recipes:Find(query)
 
     if #matches == 0 then
-        return nil, ("nothing matching '%s' in your cached recipes"):format(query)
+        return nil, ("none of your recipes match '%s'"):format(query)
     end
 
     if #matches > 1 then
@@ -372,7 +604,7 @@ ns.RegisterCommand("top", "[count] -- most profitable crafts right now", functio
     local limit = tonumber(args:match("(%d+)")) or 10
 
     if ns.Recipes:Count() == 0 then
-        ns.Print("no recipes cached yet -- open a profession window once")
+        ns.Print("no recipes read yet -- open a profession window once")
         return
     end
 
@@ -441,7 +673,7 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
 
     local analysis = ns.Profit:Analyse(recipe.recipeID)
     if not analysis then
-        ns.Print("that recipe is no longer cached")
+        ns.Print("that recipe is no longer saved")
         return
     end
 
@@ -475,15 +707,22 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
 
     if analysis.undercut then
         ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))
-        ns.PrintRaw(("  you post at     %s  (yield %.1f)"):format(
+        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.youHoldLowest then
-        ns.PrintRaw(("  |c%syou already hold the lowest listing -- holding at market|r"):format(
+        ns.PrintRaw(("  |c%syou already have the cheapest listing -- staying at market price|r"):format(
             ns.COLORS.profit))
-        ns.PrintRaw(("  you post at     %s  (yield %.1f)"):format(
+        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
+            Util.FormatMoney(analysis.unitRevenue), analysis.yield))
+    elseif analysis.priceDerived then
+        -- Said before the number, not after it: this one is the addon's own
+        -- estimate and reading it as a market price is the mistake to avoid.
+        ns.PrintRaw(("  |c%snever scanned  -- estimated from material value|r"):format(
+            ns.COLORS.warn))
+        ns.PrintRaw(("  estimate at     %s  (yield %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     else
-        ns.PrintRaw(("  none listed     posting at market %s  (yield %.1f)"):format(
+        ns.PrintRaw(("  none listed     posting at market %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     end
     ns.PrintRaw(("  auction cut     -%s"):format(Util.FormatMoney(analysis.cut)))
@@ -494,11 +733,66 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
         ns.PrintRaw(("  |c%sdeposit unknown -- visit an auction house to learn it|r")
             :format(ns.COLORS.muted))
     end
-    ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% ROI)"):format(
+    ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% return on cost)"):format(
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),
         math.floor(analysis.margin * 100), math.floor(analysis.roi * 100)))
     ns.PrintRaw(("  |c%sconfidence %d%%%s, data %s old|r"):format(
         ns.COLORS.muted, math.floor((analysis.confidence or 0) * 100),
         analysis.confidenceReason and (" (" .. analysis.confidenceReason .. ")") or "",
         Util.FormatAge(analysis.age)))
+end)
+
+--- What the client says about binding, for every cached recipe's output.
+--
+-- The Profit list drops a craft on the strength of one number out of
+-- GetItemInfo. This is how to see that number rather than trust it: how many
+-- outputs read as bound, how many as sellable, how many the client has not
+-- cached yet, and which crafts were taken out.
+ns.RegisterCommand("soulbound", "which crafts are left out of the Profit list for binding on pickup",
+function()
+    local bound, free, unknown = {}, 0, 0
+    local byType = {}
+
+    for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
+        if recipe.outputItemID then
+            local isBound, bindType = Util.IsBoundOnPickup(recipe.outputItemID)
+
+            if bindType then
+                byType[bindType] = (byType[bindType] or 0) + 1
+            end
+
+            if isBound == nil then
+                unknown = unknown + 1
+            elseif isBound then
+                bound[#bound + 1] = recipeID
+            else
+                free = free + 1
+            end
+        end
+    end
+
+    ns.Print(("|c%sSoulbound crafts|r"):format(ns.COLORS.accent))
+    ns.PrintRaw(("  %d bind on pickup (left out), %d can be sold, %d not loaded by the game yet"):format(
+        #bound, free, unknown))
+
+    local types = {}
+    for bindType, count in pairs(byType) do
+        types[#types + 1] = ("type %d: %d"):format(bindType, count)
+    end
+    table.sort(types)
+    ns.PrintRaw(("  |c%sbind type the game gave: %s  (1 pickup, 2 equip, 3 use, 4 quest)|r"):format(
+        ns.COLORS.muted, #types > 0 and table.concat(types, ", ") or "nothing answered"))
+
+    table.sort(bound, function(a, b)
+        local left, right = ns.Recipes:GetAny(a), ns.Recipes:GetAny(b)
+        return ((left and left.name) or "") < ((right and right.name) or "")
+    end)
+
+    for i = 1, math.min(#bound, 15) do
+        ns.PrintRaw("    " .. ns.Recipes:GetDisplayLink(bound[i]))
+    end
+
+    if #bound > 15 then
+        ns.PrintRaw(("    |c%s...and %d more|r"):format(ns.COLORS.muted, #bound - 15))
+    end
 end)

@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- UI/PostPanel.lua
 -- The sell list, docked beside Blizzard's auction house.
 --
--- Post All can work through a whole bag, so what it is about to sell needs to
+-- Listing can work through a whole bag, so what is about to be sold needs to
 -- be visible before the first click rather than discovered one confirmation
 -- dialog at a time. This is that list: everything postable, its price, and a
 -- button per row for selling just the one.
@@ -327,7 +327,7 @@ function PostPanel:Refresh()
 
     if #lines == 0 then
         self.empty:SetText(
-            "Nothing in your bags with a known price.\n\nScan the auction house so I know what things sell for.")
+            "Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for.")
         self.summary:SetText("")
         return
     end
@@ -342,6 +342,34 @@ function PostPanel:Refresh()
         #lines, #lines == 1 and "" or "s",
         Util.FormatMoney(total, { noColor = true, short = true }),
         losses > 0 and (("  ·  %d at a loss"):format(losses)) or ""))
+end
+
+--- Put the current wait on every visible List button.
+--
+-- The bar's Post Crafted is not the only way to list something, and a row
+-- button that did nothing for three seconds looked exactly as broken there as
+-- it did on the bar. Every row shows the same number because the wait is the
+-- auction house's, not the row's.
+--
+-- Labels only: called four times a second, so it must not rebuild the list or
+-- touch anything that walks the bags.
+function PostPanel:UpdateWaitLabels(seconds, reason)
+    if not self.list or not self.list.rows then return end
+    if not self.frame or not self.frame:IsShown() then return end
+
+    local Apply = ns.UI and ns.UI.ApplyWaitLabel
+    if not Apply then return end
+
+    for i = 1, #self.list.rows do
+        local row = self.list.rows[i]
+
+        -- A row with no price is disabled on its own account, and leaving it
+        -- alone keeps that reason visible rather than replacing it with a
+        -- countdown it is not really serving.
+        if row and row.data and row.post and not row.post.disabled then
+            Apply(row.post, "List", seconds, reason)
+        end
+    end
 end
 
 function PostPanel:Hide()

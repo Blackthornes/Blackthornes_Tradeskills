@@ -145,7 +145,7 @@ function ns.RegisterEvent(owner, event, fn)
         local ok, err = pcall(eventFrame.RegisterEvent, eventFrame, event)
         if not ok then
             unknownEvents[event] = err or true
-            ns.Debug("event not supported by this client:", event)
+            ns.Debug("event not in this version of the game:", event)
             return false
         end
         list = {}
@@ -292,5 +292,15 @@ SlashCmdList["BLACKTHORNESTS"] = function(input)
         return
     end
 
-    command.fn(rest or "")
+    -- Wrapped because a command that errors is otherwise completely silent:
+    -- this client does not show Lua errors unless scriptErrors is on, so a
+    -- broken command and a command that did nothing look identical from the
+    -- chat frame. "It isn't doing anything" is not a diagnosis anyone can act
+    -- on, so say which of the two it was.
+    local ok, err = pcall(command.fn, rest or "")
+
+    if not ok then
+        ns.Warn(("/bts %s failed: %s"):format(keyword, tostring(err)))
+        geterrorhandler()(err)
+    end
 end

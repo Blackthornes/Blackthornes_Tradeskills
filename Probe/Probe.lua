@@ -68,7 +68,7 @@ function Probe:SampleTradeskill()
     if not ok or type(recipeIDs) ~= "table" or #recipeIDs == 0 then
         -- Recipes are usually only enumerable with a profession window open.
         self.tradeskillMissReason = ok and "no recipes visible (open a profession window)"
-            or "GetAllRecipeIDs errored"
+            or "GetAllRecipeIDs failed"
         return nil
     end
 
@@ -260,50 +260,54 @@ function Probe:PrintReport()
     local report = self:BuildReport()
     local caps = ns.Compat:Get()
 
-    ns.Print(("probe report -- addon v%s"):format(ns.VERSION))
+    ns.Print(("game check -- addon v%s"):format(ns.VERSION))
 
-    Heading("Client")
+    Heading("Game")
     Line("version", ("%s (build %s, interface %s)"):format(
         tostring(report.client.version), tostring(report.client.build), tostring(report.client.interface)))
 
-    Heading("SavedVariables persistence")
+    Heading("Saved data (SavedVariables)")
     local persistence = report.persistence
     if persistence.loadCountBefore == 0 then
         Line("status", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r -- this is the first load")
         Line("next", "log out to character select, log back in, then run this again")
         Line("note", "a /reload does not test this; it needs a real logout")
     elseif persistence.sawPrevious then
-        Line("status", "|c" .. ns.COLORS.profit .. "WORKING|r -- previous session's data was read back")
+        Line("status", "|c" .. ns.COLORS.profit .. "WORKING|r -- last session's data loaded")
         Line("sessions", persistence.loadCountBefore)
-        Line("last write", date("%Y-%m-%d %H:%M", persistence.previousStamp or 0))
+        Line("last saved", date("%Y-%m-%d %H:%M", persistence.previousStamp or 0))
     else
-        Line("status", "|c" .. ns.COLORS.loss .. "BROKEN|r -- data was written but did not load back")
-        Line("impact", "price history cannot persist; export/import fallback needed")
+        Line("status", "|c" .. ns.COLORS.loss .. "BROKEN|r -- data was saved but did not load")
+        Line("result", "price history cannot be kept; use export and import instead")
     end
 
     -- The fallback store, if there is one. SavedVariables are known broken on
     -- this build, so whether CVars survive a logout decides whether settings
     -- can persist at all without an out-of-game helper.
-    Heading("CVar fallback")
+    Heading("Backup storage (CVars)")
     local cvars = report.cvars or {}
     local cvarResult = report.cvarPersistence or {}
 
     Line("C_CVar present", Yes(cvars.hasNamespace))
     Line("get / set", Yes(cvars.hasGet and cvars.hasSet))
-    Line("registration", cvars.registerVia or "|c" .. ns.COLORS.loss .. "none worked|r")
-    Line("write then read", Yes(cvars.roundTrip))
+    Line("set up with", cvars.registerVia or "|c" .. ns.COLORS.loss .. "none worked|r")
+    Line("save and read back", Yes(cvars.roundTrip))
 
     if not cvars.roundTrip then
-        Line("verdict", "|c" .. ns.COLORS.loss .. "UNAVAILABLE|r -- settings cannot persist on this build")
+        Line("result", "|c" .. ns.COLORS.loss .. "UNAVAILABLE|r -- settings cannot be kept on this version of the game")
     elseif cvarResult.persisted then
-        Line("verdict", "|c" .. ns.COLORS.profit .. "PERSISTS|r -- settings are mirrored here")
+        Line("result", "|c" .. ns.COLORS.profit .. "KEPT|r -- settings are copied here")
         Line("sessions seen", cvarResult.previousCount)
 
         local mirroring, restored = ns.Persist:GetStatus()
-        Line("settings mirror", mirroring and ("on, %d restored this login"):format(restored)
-            or "|c" .. ns.COLORS.loss .. "off|r")
+        if ns.Persist:GameKeepsSavedData() then
+            Line("settings copy", "off, not needed: the game keeps your saved data")
+        else
+            Line("settings copy", mirroring and ("on, %d restored this login"):format(restored)
+                or "|c" .. ns.COLORS.loss .. "off|r")
+        end
     else
-        Line("verdict", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r -- no earlier value to compare")
+        Line("result", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r -- no earlier value to compare")
         Line("next", "log out to character select, log back in, then run this again")
     end
 
@@ -311,9 +315,9 @@ function Probe:PrintReport()
     Line("mode", caps.auction.mode)
     Line("commodities", Yes(caps.auction.hasCommodities))
     Line("browse query", Yes(caps.auction.hasBrowseQuery))
-    Line("bulk replicate scan", Yes(caps.auction.hasReplicate))
-    Line("throttle check", Yes(caps.auction.hasThrottleCheck))
-    Line("legacy page scan", Yes(caps.auction.hasLegacyQuery))
+    Line("quick full scan", Yes(caps.auction.hasReplicate))
+    Line("busy check", Yes(caps.auction.hasThrottleCheck))
+    Line("old-style page scan", Yes(caps.auction.hasLegacyQuery))
     Line("copper values", Yes(caps.auction.supportsCopperValues))
 
     -- Scanning depends on these arriving; a rejected registration is silent
@@ -379,13 +383,13 @@ function Probe:PrintReport()
             (self.tradeskillMissReason or "open a profession and run this again") .. "|r")
     end
 
-    Heading("API surface")
+    Heading("Game functions found")
     for _, name in ipairs(Util.SortedKeys(caps.namespaces)) do
         local functions = caps.namespaces[name]
         if functions then
             Line(name, ("%d functions"):format(#functions))
         else
-            Line(name, "|c" .. ns.COLORS.loss .. "absent|r")
+            Line(name, "|c" .. ns.COLORS.loss .. "missing|r")
         end
     end
 
@@ -407,7 +411,7 @@ function Probe:OnEnable()
 
     local persistence = ns.Config:GetPersistenceResult()
     if persistence and persistence.loadCountBefore > 0 and not persistence.sawPrevious then
-        ns.Warn("SavedVariables did not load back from the previous session.")
+        ns.Warn("your saved data (SavedVariables) did not load from last session.")
         ns.Warn("Run |cffc8a44d/bts probe|r for details.")
     end
 end
@@ -421,7 +425,7 @@ function Probe:OnAuctionHouseShow()
     self:SampleAuction()
 end
 
-ns.RegisterCommand("probe", "report client API capabilities and data persistence", function()
+ns.RegisterCommand("probe", "check what this version of the game supports, and whether your data is kept", function()
     ns.Probe:SampleTradeskill()
     ns.Probe:SampleAuction()
     ns.Probe:PrintReport()

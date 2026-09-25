@@ -240,6 +240,12 @@ end
 --------------------------------------------------------------------------------
 
 --- Totals across the whole queue.
+--
+-- Sub-crafts count as crafts but add no cost or profit of their own. A craft's
+-- cost already prices each reagent the cheaper way, so when the bolts for a
+-- bag are cheaper to make, the bag's cost already includes the wool. Adding
+-- the bolt crafts on top paid for that wool twice. Nor are the bolts sold, so
+-- they earn no profit.
 function Queue:GetTotals()
     local totals = { crafts = 0, cost = 0, profit = 0, priceable = true }
 
@@ -248,7 +254,9 @@ function Queue:GetTotals()
 
         totals.crafts = totals.crafts + entry.quantity
 
-        if analysis and analysis.priceable then
+        if entry.isDependency then
+            -- Counted inside the craft it serves.
+        elseif analysis and analysis.priceable then
             totals.cost = totals.cost + (analysis.totalCost * entry.quantity)
             totals.profit = totals.profit + (analysis.profit * entry.quantity)
         else
@@ -263,8 +271,14 @@ end
 --
 -- Reagents are summed across the whole queue before subtracting inventory, so
 -- two recipes sharing a reagent do not each claim the same stack.
+--
+-- A reagent the queue is making itself is not bought as well. Sub-crafts are
+-- only queued when making the reagent is cheaper than buying it, and their
+-- own materials are already on this list, so listing the reagent too asked
+-- you to pay for it twice.
 function Queue:GetShoppingList()
     local required = {}
+    local queuedToMake = {}
 
     for _, entry in ipairs(self:GetAll()) do
         local recipe = ns.Recipes:Get(entry.recipeID)
@@ -275,63 +289,80 @@ function Queue:GetShoppingList()
                     + (reagent.quantity * entry.quantity)
             end
         end
+
+        -- GetAny, as RebuildDependencies sizes these from the same record.
+        local made = entry.isDependency and ns.Recipes:GetAny(entry.recipeID)
+        if made and made.outputItemID then
+            queuedToMake[made.outputItemID] = (queuedToMake[made.outputItemID] or 0)
+                + entry.quantity * math.max(1, made.quantityMin or 1)
+        end
     end
 
     local list = {}
 
     for itemID, needed in pairs(required) do
-        -- A shopping list asks "must I buy this", so it counts the bank: you
-        -- already own it, it just needs collecting.
-        local inBags = ns.Inventory:GetBagCount(itemID)
-        local inBank = ns.Inventory:GetBankCount(itemID)
-        local have = inBags + inBank
+        needed = needed - (queuedToMake[itemID] or 0)
+        if needed > 0 then
+            -- A shopping list asks "must I buy this", so it counts the bank: you
+            -- already own it, it just needs collecting.
+            local inBags = ns.Inventory:GetBagCount(itemID)
+            local inBank = ns.Inventory:GetBankCount(itemID)
+            local have = inBags + inBank
 
-        local shortfall = math.max(0, needed - have)
+            -- A sub-craft was sized against everything owned, mail included, so
+            -- whatever of this it leaves over is already owned. Counting it the
+            -- same way keeps the two from disagreeing about what is left to buy.
+            if queuedToMake[itemID] then
+                have = have + ns.Inventory:GetMailCount(itemID)
+            end
 
-        local auction = ns.Prices:GetValue(itemID, "min")
-        local vendor = ns.Vendor:GetUnitPrice(itemID)
+            local shortfall = math.max(0, needed - have)
 
-        -- Cheaper from a vendor means the shopping list should send you to
-        -- one, not to the auction house.
-        local fromVendor = vendor ~= nil and (not auction or vendor <= auction)
-        local unitCost = fromVendor and vendor or auction
+            local auction = ns.Prices:GetValue(itemID, "min")
+            local vendor = ns.Vendor:GetUnitPrice(itemID)
 
-        -- Where to go, and what the choice is worth. Only a genuine choice
-        -- when both sources actually have the item.
-        local source = "unknown"
-        if fromVendor then
-            source = "vendor"
-        elseif auction then
-            source = "auction"
+            -- Cheaper from a vendor means the shopping list should send you to
+            -- one, not to the auction house.
+            local fromVendor = vendor ~= nil and (not auction or vendor <= auction)
+            local unitCost = fromVendor and vendor or auction
+
+            -- Where to go, and what the choice is worth. Only a genuine choice
+            -- when both sources actually have the item.
+            local source = "unknown"
+            if fromVendor then
+                source = "vendor"
+            elseif auction then
+                source = "auction"
+            end
+
+            local savingPerUnit
+            if vendor and auction then
+                savingPerUnit = math.abs(auction - vendor)
+            end
+
+            list[#list + 1] = {
+                itemID = itemID,
+                needed = needed,
+                have = have,
+                inBags = inBags,
+                inBank = inBank,
+                -- True when you own enough only by counting the bank, so the row
+                -- can say "go to the bank" rather than implying you can craft now.
+                needsBankTrip = inBags < needed and have >= needed,
+                shortfall = shortfall,
+                unitCost = unitCost,
+                estimatedCost = unitCost and (unitCost * shortfall) or nil,
+                fromVendor = fromVendor,
+                vendorLimited = fromVendor and ns.Vendor:IsLimited(itemID) or false,
+                source = source,
+                vendorUnit = vendor,
+                auctionUnit = auction,
+                -- Both prices known: how much choosing the cheaper one saves.
+                savingPerUnit = savingPerUnit,
+                savingTotal = savingPerUnit and (savingPerUnit * shortfall) or nil,
+                onAlts = ns.Inventory:GetAltTotal(itemID),
+            }
         end
-
-        local savingPerUnit
-        if vendor and auction then
-            savingPerUnit = math.abs(auction - vendor)
-        end
-
-        list[#list + 1] = {
-            itemID = itemID,
-            needed = needed,
-            have = have,
-            inBags = inBags,
-            inBank = inBank,
-            -- True when you own enough only by counting the bank, so the row
-            -- can say "go to the bank" rather than implying you can craft now.
-            needsBankTrip = inBags < needed and have >= needed,
-            shortfall = shortfall,
-            unitCost = unitCost,
-            estimatedCost = unitCost and (unitCost * shortfall) or nil,
-            fromVendor = fromVendor,
-            vendorLimited = fromVendor and ns.Vendor:IsLimited(itemID) or false,
-            source = source,
-            vendorUnit = vendor,
-            auctionUnit = auction,
-            -- Both prices known: how much choosing the cheaper one saves.
-            savingPerUnit = savingPerUnit,
-            savingTotal = savingPerUnit and (savingPerUnit * shortfall) or nil,
-            onAlts = ns.Inventory:GetAltTotal(itemID),
-        }
     end
 
     table.sort(list, function(a, b)

@@ -115,7 +115,7 @@ local function Build(outer)
         "Your posting price is the cheapest rival listing minus this. " ..
         "Stackable goods only: gear and bags can only be priced in whole " ..
         "silver, so those match the cheapest rival unless dropping a full " ..
-        "silver still clears the minimum profit below.")
+        "silver still leaves the minimum profit below.")
 
     widgets.undercut = Widgets.CreateNumberBox(undercutRow, {
         width = 70, min = 0, max = 1000000,
@@ -128,7 +128,7 @@ local function Build(outer)
     AddUnit(undercutRow, widgets.undercut, "copper")
 
     local cutRow = CreateRow(container, undercutRow, "Auction house cut",
-        "Percentage taken from each sale, deducted from revenue.")
+        "The share of each sale the auction house keeps.")
 
     widgets.cut = Widgets.CreateNumberBox(cutRow, {
         width = 70, min = 0, max = 100, decimals = 1,
@@ -140,7 +140,30 @@ local function Build(outer)
     widgets.cut:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(cutRow, widgets.cut, "%")
 
-    local ownedRow = CreateRow(container, cutRow, "Materials you already own",
+    local unscannedRow = CreateRow(container, cutRow, "Price unscanned crafts",
+        "A craft no scan has priced is valued at its material cost plus this. " ..
+        "It is an estimate, labelled as one, and is never stored as a price.")
+
+    widgets.unscannedMarkup = Widgets.CreateNumberBox(unscannedRow, {
+        width = 70, min = 0, max = 1000,
+        onChange = function(value)
+            Config:Set("unscannedMarkupPercent", value)
+            UI:RefreshActiveTab()
+        end,
+    })
+    widgets.unscannedMarkup:SetPoint("TOPLEFT", CONTROL_X, 0)
+    AddUnit(unscannedRow, widgets.unscannedMarkup, "% markup")
+
+    local unscannedOnRow = CreateRow(container, unscannedRow, "Use that estimate",
+        "Off: crafts with no scanned price have no price at all, as before.")
+
+    widgets.priceUnscanned = Widgets.CreateCheckbox(unscannedOnRow, "Enabled", function(checked)
+        Config:Set("priceUnscannedCrafts", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.priceUnscanned:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local ownedRow = CreateRow(container, unscannedOnRow, "Materials you already own",
         "On: they still cost market price. Off: they count as free.")
 
     widgets.valueOwned = Widgets.CreateCheckbox(ownedRow, "Charge market price", function(checked)
@@ -175,7 +198,7 @@ local function Build(outer)
     widgets.hideMaxed:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local subCraftRow = CreateRow(container, hideMaxedRow, "Queue sub-crafts",
-        "Also queue reagents that are cheaper to craft than to buy.")
+        "Also queue materials that are cheaper to make than to buy.")
 
     widgets.subCrafts = Widgets.CreateCheckbox(subCraftRow, "Queue them", function(checked)
         Config:Set("autoQueueSubCrafts", checked)
@@ -192,7 +215,7 @@ local function Build(outer)
     widgets.allowLoss:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local confirmRow = CreateRow(container, lossRow, "Confirm before each listing",
-        "Off: clicking List or Post All lists immediately, with no prompt.")
+        "Off: clicking List or Post Crafted lists immediately, with no prompt.")
 
     widgets.confirmPost = Widgets.CreateCheckbox(confirmRow, "Ask first", function(checked)
         Config:Set("confirmBeforePosting", checked)
@@ -207,12 +230,25 @@ local function Build(outer)
     end, true)
     widgets.verifyPrice:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local filters = CreateSection(container, "FILTERS", { anchor = verifyRow })
+    local saleAlarmRow = CreateRow(container, verifyRow, "Sound when an auction sells",
+        "Plays an alarm as soon as one of your auctions sells, wherever you are.")
+
+    widgets.saleAlarm = Widgets.CreateCheckbox(saleAlarmRow, "Enabled", function(checked)
+        Config:Set("saleAlarm", checked)
+    end, true)
+    widgets.saleAlarm:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local saleAlarmTest = Widgets.CreateButton(saleAlarmRow, "Test", function()
+        if ns.SaleAlarm then ns.SaleAlarm:Play() end
+    end, { width = 60, height = 20, tooltip = "Play the sale alarm now" })
+    saleAlarmTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+
+    local filters = CreateSection(container, "FILTERS", { anchor = saleAlarmRow })
 
     local profitRow = CreateRow(container, filters, "Minimum profit",
-        "Crafts below this are hidden from the Profit tab, and it is the " ..
-        "test for whether an item auction gives up a whole silver to " ..
-        "undercut or simply matches the cheapest rival.")
+        "Crafts that make less than this are hidden from the Profit tab. " ..
+        "For gear and bags, which are priced in whole silver, it also " ..
+        "decides whether to undercut by a silver or just match the cheapest rival.")
 
     widgets.minProfit = Widgets.CreateNumberBox(profitRow, {
         width = 70, min = 0, max = 1000000,
@@ -283,9 +319,9 @@ local function Build(outer)
     widgets.loadWarning:SetWidth(COLUMN_WIDTH)
     widgets.loadWarning:SetWordWrap(true)
 
-    local pruneButton = Widgets.CreateButton(container, "Prune old prices", function()
+    local pruneButton = Widgets.CreateButton(container, "Remove old prices", function()
         local removed = ns.Prices:Prune()
-        ns.Print(("removed %d stale price record(s)"):format(removed))
+        ns.Print(("removed %d old price(s)"):format(removed))
         UI:RefreshActiveTab()
     end, { width = 140, height = 22, tooltip = "Drop items not seen on the auction house for 21 days" })
     pruneButton:SetPoint("TOPLEFT", widgets.loadWarning, "BOTTOMLEFT", 0, -18)
@@ -323,7 +359,7 @@ local function Build(outer)
     local exportButton = Widgets.CreateButton(container, "Export queue", function()
         UI:ShowTransferDialog("export")
     end, { width = 140, height = 22,
-           tooltip = "Copy your queue, settings and posted limits to a code" })
+           tooltip = "Copy your queue, settings and stock limits to a code" })
     exportButton:SetPoint("TOPLEFT", pruneButton, "BOTTOMLEFT", 0, -8)
 
     local importButton = Widgets.CreateButton(container, "Import", function()
@@ -335,7 +371,7 @@ local function Build(outer)
     local advanced = CreateSection(container, "ADVANCED", { anchor = exportButton })
 
     local budgetRow = CreateRow(container, advanced, "Scan speed",
-        "Milliseconds per frame spent reading auction data.")
+        "How long each screen refresh spends reading auction data. Higher scans faster but can make the game stutter.")
 
     widgets.budget = Widgets.CreateNumberBox(budgetRow, {
         width = 60, min = 2, max = 16,
@@ -345,15 +381,40 @@ local function Build(outer)
     AddUnit(budgetRow, widgets.budget, "ms")
 
     local autoScanRow = CreateRow(container, budgetRow, "Scan automatically",
-        "Rescans when the auction house opens and prices are missing or stale.")
+        "Scans again when the auction house opens and prices are missing or out of date.")
 
     widgets.autoScan = Widgets.CreateCheckbox(autoScanRow, "Enabled", function(checked)
         Config:Set("autoScan", checked)
     end, true)
     widgets.autoScan:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local debugRow = CreateRow(container, autoScanRow, "Debug output",
-        "Extra detail in the chat frame, for diagnosing problems.")
+    local learnRow = CreateRow(container, autoScanRow, "Learn from searches",
+        "Also takes prices from searches you run in the auction house yourself.")
+
+    widgets.learnFromSearches = Widgets.CreateCheckbox(learnRow, "Enabled", function(checked)
+        Config:Set("learnFromSearches", checked)
+    end, true)
+    widgets.learnFromSearches:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local professionValueRow = CreateRow(container, learnRow, "Value in profession window",
+        "Shows what one of each recipe sells for beside its name in Blizzard's own window.")
+
+    widgets.professionValue = Widgets.CreateCheckbox(professionValueRow, "Enabled", function(checked)
+        Config:Set("showValueInProfessionWindow", checked)
+        if ns.RecipeValue then ns.RecipeValue:Refresh() end
+    end, true)
+    widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local tooltipValueRow = CreateRow(container, professionValueRow, "Value on item tooltips",
+        "Adds what an item sells for to its tooltip, wherever the game shows one.")
+
+    widgets.tooltipValue = Widgets.CreateCheckbox(tooltipValueRow, "Enabled", function(checked)
+        Config:Set("showValueOnItemTooltips", checked)
+    end, true)
+    widgets.tooltipValue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local debugRow = CreateRow(container, tooltipValueRow, "Debug output",
+        "Extra messages in chat, to help track down problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
         ns.db.global.debug = checked
@@ -403,6 +464,10 @@ local function Refresh()
     widgets.minMargin:SetValue(Config:Get("minMarginPercent") or 0, true)
     widgets.budget:SetValue(Config:Get("scanBudgetMs") or 8, true)
 
+    local markup = Config:Get("unscannedMarkupPercent")
+    widgets.unscannedMarkup:SetValue(type(markup) == "number" and markup or 50, true)
+    widgets.priceUnscanned:SetChecked(Config:Get("priceUnscannedCrafts") ~= false)
+
     widgets.minProfitPreview:SetText(
         Util.FormatMoney(Config:Get("minProfit") or 0, { short = true }))
 
@@ -411,7 +476,7 @@ local function Refresh()
     local overrides = 0
     for _ in pairs(ns.db.postLimits or {}) do overrides = overrides + 1 end
     widgets.maxPostedHint:SetText(overrides > 0
-        and ("%d item override%s"):format(overrides, overrides == 1 and "" or "s")
+        and ("%d item%s with their own limit"):format(overrides, overrides == 1 and "" or "s")
         or "")
 
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
@@ -422,6 +487,10 @@ local function Refresh()
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
     widgets.debug:SetChecked(ns.db.global.debug == true)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
+    widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
+    widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
+    widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
+    widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan = ns.db.lastFullScan
@@ -429,7 +498,7 @@ local function Refresh()
     widgets.dataSummary:SetText(("%s items priced on %s"):format(
         Util.Comma(ns.Prices:Count()), Config:GetRealmKey()))
 
-    widgets.recipeSummary:SetText(("%s recipes cached  ·  last scan %s"):format(
+    widgets.recipeSummary:SetText(("%s recipes saved  ·  last scan %s"):format(
         Util.Comma(ns.Recipes:Count()),
         lastScan and Util.FormatAgeAgo(time() - lastScan) or "never"))
 
@@ -439,10 +508,10 @@ local function Refresh()
     local diagnostics = ns.Config:GetLoadDiagnostics()
     if diagnostics.restoredFromCVars then
         widgets.loadWarning:SetText(
-            "This client did not return saved data at login, so it was recovered from CVars instead. A known WoW: Forever beta issue.")
+            "The game did not load your saved data at login, so it was recovered from the backup in CVars. This is a known WoW: Forever beta problem.")
     elseif diagnostics.globalType ~= "table" and not diagnostics.restored then
         widgets.loadWarning:SetText(
-            "This client did not return saved data at login, so everything was rebuilt this session. A known WoW: Forever beta issue.")
+            "The game did not load your saved data at login, so this session started fresh. This is a known WoW: Forever beta problem.")
     else
         widgets.loadWarning:SetText("")
     end
@@ -465,7 +534,7 @@ end
 UI:RegisterTab({
     key = "settings",
     text = "Settings",
-    order = 7,
+    order = 8,
     build = Build,
     refresh = Refresh,
     onShow = Refresh,

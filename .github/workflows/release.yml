@@ -24,11 +24,6 @@ jobs:
           # tag, so it needs the history rather than a shallow clone.
           fetch-depth: 0
 
-      # A release is the one thing players actually download, so re-run the
-      # saved-data check here rather than trusting that it ran on the push.
-      - name: Refuse to publish saved data
-        run: sh tools/check-snapshot.sh < Data/Snapshot.lua
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

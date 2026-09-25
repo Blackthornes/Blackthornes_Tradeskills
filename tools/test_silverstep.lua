@@ -116,6 +116,12 @@ check("50c has no lower step, so one silver", Util.RoundToSilver(50), 100)
 check("1c likewise", Util.RoundToSilver(1), 100)
 check("nothing in, nothing out", Util.RoundToSilver(nil), nil)
 
+-- Upwards, for a price with no rival under it to worry about.
+check("2s 99c rounds up to 3s", Util.CeilToSilver(299), 300)
+check("3s is already there", Util.CeilToSilver(300), 300)
+check("50c has no lower step, so one silver", Util.CeilToSilver(50), 100)
+check("nothing in, nothing out", Util.CeilToSilver(nil), nil)
+
 --------------------------------------------------------------------------------
 print("")
 print("the Linen Bag, as it actually happened")
@@ -179,7 +185,7 @@ do
     local _, basis, why = Profit:ChoosePostPrice(BAG)
     check("uncosted item: still a match", basis, "match")
     check("uncosted item: blames the missing cost",
-        why and why:find("no cost known") ~= nil, true)
+        why and why:find("cost to make this is unknown") ~= nil, true)
 end
 
 do
@@ -208,7 +214,7 @@ do
 
     local _, _, why = Profit:ChoosePostPrice(BAG)
     check("no legal price below: says so",
-        why and why:find("no legal price") ~= nil, true)
+        why and why:find("no lower price") ~= nil, true)
 end
 
 --------------------------------------------------------------------------------

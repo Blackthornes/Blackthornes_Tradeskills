@@ -33,6 +33,12 @@ local cases = {
     { name = "float precision", value = { cut = 0.05, ema = 1/3, third = 2/3 } },
     { name = "non-finite dropped", value = { ok = 1 } },
     { name = "negative and big", value = { -123456789, 2147483647 } },
+
+    -- The price that broke a whole save in game on 2026-09-21: 9,999,990,200
+    -- copper, read off a browse row, past the signed 32-bit range the client's
+    -- %d conversion can take.
+    { name = "past 32-bit copper", value = { 9999990200, -9999990200 } },
+    { name = "whole numbers to 2^53", value = { 2 ^ 31, 2 ^ 31 - 1, 2 ^ 53 - 1, -(2 ^ 53 - 1) } },
 }
 
 local failures = 0
@@ -87,4 +93,78 @@ print(string.format("  chunks at 60000 bytes: %d  (8 x 64KB proven to persist)",
     math.ceil(#encoded / 60000)))
 if not same then failures = failures + 1 end
 
+
+--------------------------------------------------------------------------------
+-- The client's own %d limit
+--------------------------------------------------------------------------------
+--
+-- This test exists because the real failure cannot happen on the Lua this
+-- runner uses: on 64-bit Linux a %d argument is a long and 9,999,990,200 fits,
+-- so the encoder that broke in game passes here unchanged. Standing the check
+-- up means breaking what it checks -- string.format is replaced with one that
+-- refuses a %d past the signed 32-bit range the way the client does, and the
+-- encoder is then asked to do the thing that failed.
+--
+-- Confirmed to fail against the encoder as it was before this fix.
+
+local realFormat = string.format
+
+local function StrictFormat(fmt, ...)
+    if select("#", ...) == 1 and fmt:find("%%d") then
+        local value = ...
+        if type(value) == "number" and math.abs(value) >= 2 ^ 31 then
+            error("integer overflow attempting to store " .. realFormat("%.0f", value), 2)
+        end
+    end
+    return realFormat(fmt, ...)
+end
+
+local strictCase = {
+    prices = {
+        [2589] = { market = 12, min = 9 },
+        [3371] = { market = 9999990200, min = 9999990200 },
+    },
+    sold = { 4294967296, 1.5, -(2 ^ 40) },
+}
+
+string.format = StrictFormat
+getmetatable("").__index.format = StrictFormat
+
+local strictOk, strictEncoded = pcall(S.Encode, strictCase)
+
+string.format = realFormat
+getmetatable("").__index.format = realFormat
+
+if not strictOk then
+    print("\n  client-strict %d:            FAIL encode threw: " .. tostring(strictEncoded))
+    failures = failures + 1
+else
+    local decodeOk, decoded = S.Decode(strictEncoded)
+    local same, why = false, tostring(decoded)
+    if decodeOk then same, why = DeepEqual(strictCase, decoded, "strict") end
+    print("\n  client-strict %d:            " .. (same and "ok" or ("FAIL " .. tostring(why))))
+    if not same then failures = failures + 1 end
+end
+
+-- A number no format can write must cost only itself, never the whole save.
+local resilient = { keep = 41, huge = math.huge, nan = 0 / 0, alsoKeep = "yes" }
+local resilientOk, resilientText = pcall(S.Encode, resilient)
+local resilientDecoded
+if resilientOk then
+    local decodeOk, value = S.Decode(resilientText)
+    resilientDecoded = decodeOk and value or nil
+end
+local survived = type(resilientDecoded) == "table"
+    and resilientDecoded.keep == 41
+    and resilientDecoded.alsoKeep == "yes"
+print("  one bad field keeps the rest: " .. (survived and "ok" or "FAIL"))
+if not survived then failures = failures + 1 end
+
 print(failures == 0 and "\nall serializer tests passed" or ("\n" .. failures .. " failure(s)"))
+
+-- Reported and nothing more, until now: this suite printed FAIL and still let
+-- the run pass, so the encoder bug above would have reached `testing` through a
+-- green CI. A suite fails by raising; that is what the runner counts.
+if failures > 0 then
+    error(failures .. " serializer failure(s)")
+end

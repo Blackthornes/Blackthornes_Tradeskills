@@ -25,6 +25,12 @@ local Util = ns.Util
 -- immediately reads the state from before the listing.
 local POST_VERIFY_DELAY = 3
 
+-- How long a remembered deposit is served without asking the client again.
+-- Short enough that changing the listing length is felt immediately -- that is
+-- keyed separately anyway -- and long enough that a list rebuilding once a
+-- second asks once rather than sixty times.
+local DEPOSIT_CACHE_SECONDS = 30
+
 -- How long a listing may stay unverified before we admit we do not know. Longer
 -- than the request's own wait in the queue plus the reads that follow it.
 local VERIFY_GIVE_UP = 15
@@ -60,7 +66,7 @@ function Posting:MarkBlocked()
     if self.blocked then return end
 
     self.blocked = true
-    ns.Warn("this client refused an addon-created auction.")
+    ns.Warn("the game will not let addons list auctions.")
     ns.Warn("the Post tab still shows what to list and at what price.")
 
     if ns.UI then ns.UI:RefreshActiveTab() end
@@ -69,7 +75,7 @@ end
 --- Whether a listing can be attempted right now, and why not when it cannot.
 function Posting:CanPost()
     if self:IsBlocked() then
-        return false, "this client refuses addon-created auctions"
+        return false, "the game will not let addons list auctions"
     end
 
     if not ns.Scanner.isAuctionHouseOpen then
@@ -86,10 +92,79 @@ function Posting:CanPost()
     -- blocks the player's own manual listings, not just ours. The one-second
     -- ticker now re-checks this, so a refusal here clears on its own.
     if self:IsThrottled() then
-        return false, "the auction house is busy -- a moment"
+        return false, "the auction house is busy -- try again in a moment"
+    end
+
+    -- Only one listing is in flight at a time, because a second one started
+    -- before the first is confirmed cannot be told apart from it when the
+    -- owned auctions are read back.
+    --
+    -- This gate used to live in Post alone, which is the last step. So a click
+    -- spent a live price check and put up a confirmation dialog, and only after
+    -- the player clicked that did anything mention the listing still settling.
+    -- Refusing here means the buttons know, and SecondsUntilPostable can count
+    -- it down instead of the player discovering it at the end.
+    if self.pending then
+        return false, "still confirming the last listing"
     end
 
     return true
+end
+
+--- How long until the next listing can be attempted, and why it is waiting.
+--
+-- Posting from a click runs at urgent priority, which is deliberately exempt
+-- from the stand-down that keeps background scans out of the player's way. So
+-- the wait between two of the player's own posts is the pacing gap and the
+-- rolling budget, not the six second courtesy -- asking the queue at the wrong
+-- priority here would report a wait the player never actually serves.
+--
+-- Refusals that are not waits (no auction house, a client that will not take
+-- addon auctions) return nothing, because they have their own wording already
+-- and a countdown would imply they clear on their own.
+--
+-- @return seconds, reason
+function Posting:SecondsUntilPostable()
+    if self:IsBlocked() then return 0, nil end
+    if not ns.Scanner.isAuctionHouseOpen then return 0, nil end
+
+    if ns.Scanner.isScanning then
+        return 0, "waiting for the scan to finish"
+    end
+
+    local seconds, reason =
+        ns.AHQueue:SecondsUntilReady(ns.AHQueue.PRIORITY.urgent)
+
+    -- The wait that actually dominates a run of posts, and the one the queue
+    -- knows nothing about: each listing is confirmed against the server before
+    -- the next may start. Measured in game, the queue sat idle at 1 send of 8
+    -- allowed while posting still felt slow, because posting never got as far
+    -- as asking it for anything.
+    local pending = self.pending
+
+    if pending then
+        if pending.verifying then
+            -- The read is out. It settles when the server answers, which is
+            -- not a length we can honestly name.
+            reason = reason or "still confirming the last listing"
+        else
+            local left = (pending.startedAt or 0) + POST_VERIFY_DELAY - GetTime()
+
+            if left > seconds then
+                seconds, reason = left, "still confirming the last listing"
+            elseif left > 0 then
+                reason = reason or "still confirming the last listing"
+            end
+        end
+    end
+
+    -- CanPost gates on this separately, so a countdown that ignored it would
+    -- run to zero and leave the button still refusing.
+    if self:IsThrottled() then
+        reason = reason or "the auction house is busy"
+    end
+
+    return seconds, reason
 end
 
 --- Is the auction house still catching up?
@@ -141,6 +216,51 @@ local function FindInBags(itemID)
     end
 end
 
+--- Everything the character is carrying, from one walk of the bags.
+--
+-- GetPostable used to ask FindInBags about every item it considered, and
+-- FindInBags walks every bag from the beginning. On crafted stock that was a
+-- handful of walks. Offering the whole bag makes it one walk per distinct
+-- item, three times a second while the auction house is open, so the list is
+-- built from a single pass instead.
+--
+-- @return order  the itemIDs found, in bag order
+-- @return slots  { [itemID] = { bag, slot, stackCount } } naming the first
+--   unlocked slot holding each -- the slot a listing is actually made from.
+--   An item held only in locked slots gets an entry with no bag, which reads
+--   the same as FindInBags finding nothing: it cannot be listed right now.
+local function IndexBags()
+    local order, slots = {}, {}
+
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
+        local slotsOk, count = pcall(C_Container.GetContainerNumSlots, bag)
+
+        if slotsOk and count then
+            for slot = 1, count do
+                local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+                local itemID = infoOk and info and info.itemID
+
+                if itemID then
+                    local entry = slots[itemID]
+
+                    if not entry then
+                        entry = {}
+                        slots[itemID] = entry
+                        order[#order + 1] = itemID
+                    end
+
+                    if not entry.bag and not info.isLocked then
+                        entry.bag, entry.slot = bag, slot
+                        entry.stackCount = info.stackCount or 1
+                    end
+                end
+            end
+        end
+    end
+
+    return order, slots
+end
+
 --- A validated ItemLocation for a bag slot, or nil.
 --
 -- IsValid matters: a location built from a slot that has since changed still
@@ -158,15 +278,53 @@ local function MakeLocation(bag, slot)
     return location
 end
 
+-- Enum.ItemBind values meaning a copy sitting in a bag is already soulbound:
+-- 1 binds on being picked up, 4 is a quest item. Written out rather than read
+-- from Enum.ItemBind, because this client's Enum tables have been patchy and
+-- a nil lookup here would hide sellable stock instead of junk.
+local BOUND_ON_PICKUP = { [1] = true, [4] = true }
+
+--- Does this item bind on pickup, so the copy in the bags cannot be auctioned?
+--
+-- Only consulted when C_AuctionHouse.IsSellItemValid is missing. That call is
+-- the real answer; this is a guess, and it exists because the Post tab now
+-- offers the whole bag -- without it, a client lacking that function would
+-- list every hearthstone and quest item as something to sell.
+--
+-- Unknown reads as not bound, so an item the client has not cached yet is
+-- offered rather than quietly missing from the list.
+local function LooksBound(itemID)
+    if not Util.HasFunction("C_Item.GetItemInfo") then return false end
+
+    -- bindType is the fourteenth return.
+    local ok, _, _, _, _, _, _, _, _, _, _, _, _, _, bindType =
+        pcall(C_Item.GetItemInfo, itemID)
+
+    if not ok or type(bindType) ~= "number" then return false end
+
+    return BOUND_ON_PICKUP[bindType] == true
+end
+
 --- Can this item be auctioned at all, and how many of it?
 --
 -- These take an ItemLocation and read the auction house's sell state, which
 -- was investigated as a cause of Blizzard's own Sell tab failing with
 -- "Internal auction error". It was ruled out: the error occurs with this addon
 -- disabled entirely, so it is a realm-side problem and these calls are safe.
+--
+-- @param held  optional { bag, slot } the caller already found, so a list
+--   building many of these does not re-walk the bags for each one. A table
+--   with no bag means the caller looked and there is no slot to list from.
 -- @return sellable, postableCount
-function Posting:GetSellInfo(itemID)
-    local bag, slot = FindInBags(itemID)
+function Posting:GetSellInfo(itemID, held)
+    local bag, slot
+
+    if held then
+        bag, slot = held.bag, held.slot
+    else
+        bag, slot = FindInBags(itemID)
+    end
+
     if not bag then return false, 0 end
 
     local location = MakeLocation(bag, slot)
@@ -176,6 +334,8 @@ function Posting:GetSellInfo(itemID)
     if Util.HasFunction("C_AuctionHouse.IsSellItemValid") then
         local ok, valid = pcall(C_AuctionHouse.IsSellItemValid, location, false)
         if ok then sellable = valid and true or false end
+    else
+        sellable = not LooksBound(itemID)
     end
 
     local count = ns.Inventory:GetBagCount(itemID)
@@ -239,6 +399,20 @@ function Posting:GetDeposit(itemID, quantity)
     if not ns.Scanner.isAuctionHouseOpen then
         local unit = self:GetCachedUnitDeposit(itemID)
         return unit and (unit * math.max(1, quantity or 1)) or nil
+    end
+
+    -- A deposit is a property of the item and the listing length, not of the
+    -- moment, so asking the client again for one worked out seconds ago buys
+    -- nothing. It matters now that the Post tab offers the whole bag and
+    -- rebuilds itself every second: without this, a bagful of items means a
+    -- hundred deposit calculations a second, at the auction house, which is
+    -- exactly where this addon must stay out of the way.
+    local record = ns.db and ns.db.deposits and ns.db.deposits[itemID]
+    local cached = self:GetCachedUnitDeposit(itemID)
+
+    if cached and record and record.at
+        and (time() - record.at) < DEPOSIT_CACHE_SECONDS then
+        return cached * math.max(1, quantity or 1)
     end
 
     local duration = ns.Config:Get("postDuration") or 2
@@ -351,15 +525,6 @@ end
 -- What to list
 --------------------------------------------------------------------------------
 
---- Everything in your bags that one of your recipes makes.
---
--- Restricted to crafted output on purpose: this is a crafting addon, and
--- offering to sell arbitrary bag contents invites expensive mistakes.
---- Items in your bags worth listing.
---
--- @param opts { includeAll } -- by default only what your recipes make.
---   includeAll covers everything sellable with a known price, which is what
---   the Post All button wants: bag clearing, not just crafted stock.
 --- The lowest a listing may go before it costs the player something, and why.
 --
 -- Two different floors, and the higher one wins.
@@ -389,6 +554,14 @@ function Posting:GetLossFloor(itemID, unitCost)
     return floor, reason, vendorPrice
 end
 
+--- Items in your bags worth listing.
+--
+-- @param opts.includeAll  everything sellable in the bags, not only what one
+--   of this account's recipes makes. Reagents a queued craft is waiting on
+--   are still held back, because listing those costs real work to undo.
+-- @param opts.includeUnpriced  keep items no scan has ever priced, which only
+--   the Post tab wants; every caller that picks something to list on the
+--   player's behalf must not see them.
 function Posting:GetPostable(opts)
     opts = opts or {}
 
@@ -411,79 +584,86 @@ function Posting:GetPostable(opts)
     end
 
     local lines = {}
-    local seen = {}
+    local order, slots = IndexBags()
 
-    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
-        local slotsOk, slots = pcall(C_Container.GetContainerNumSlots, bag)
+    for _, itemID in ipairs(order) do
+        local wanted = outputs[itemID] ~= nil
+            or (opts.includeAll and not reserved[itemID])
 
-        if slotsOk and slots then
-            for slot = 1, slots do
-                local infoOk, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
-                local itemID = infoOk and info and info.itemID
+        if wanted then
+            local held = slots[itemID]
 
-                local wanted = outputs[itemID] ~= nil
-                    or (opts.includeAll and not reserved[itemID])
+            local sellable, count = self:GetSellInfo(itemID, held)
+            local price, basis = self:GetPostPrice(itemID)
 
-                if itemID and wanted and not seen[itemID] then
-                    seen[itemID] = true
+            -- What it cost to make one, so a listing below that can be
+            -- flagged rather than quietly recommended.
+            local analysis = outputs[itemID]
+                and ns.Profit:Analyse(outputs[itemID])
+            local unitCost = analysis and analysis.costPerUnit
 
-                    local sellable, count = self:GetSellInfo(itemID)
-                    local price, basis = self:GetPostPrice(itemID)
+            local lossFloor, lossReason, vendorPrice =
+                self:GetLossFloor(itemID, unitCost)
 
-                    -- What it cost to make one, so a listing below that can be
-                    -- flagged rather than quietly recommended.
-                    local analysis = outputs[itemID]
-                        and ns.Profit:Analyse(outputs[itemID])
-                    local unitCost = analysis and analysis.costPerUnit
+            local isCommodity = ns.Scanner:IsCommodity(itemID)
 
-                    local lossFloor, lossReason, vendorPrice =
-                        self:GetLossFloor(itemID, unitCost)
+            -- Commodities sell from across the bags at once; item
+            -- auctions come from a single slot, so gear goes up one
+            -- listing at a time. That is the ceiling, not the amount:
+            -- the player may have asked for fewer.
+            local maxQuantity = isCommodity
+                and count
+                or math.min(count, (held and held.stackCount) or 1)
 
-                    local isCommodity = ns.Scanner:IsCommodity(itemID)
+            local postQuantity = self:GetChosenQuantity(itemID, maxQuantity)
 
-                    -- Commodities sell from across the bags at once; item
-                    -- auctions come from a single slot, so gear goes up one
-                    -- listing at a time. That is the ceiling, not the amount:
-                    -- the player may have asked for fewer.
-                    local _, _, slotStack = FindInBags(itemID)
-                    local maxQuantity = isCommodity
-                        and count
-                        or math.min(count, slotStack or 1)
+            -- Without a price there is nothing to list it at, and a guess on
+            -- someone's bag contents is worse than a skip -- so the buttons
+            -- that pick something to list never see one. The Post tab asks
+            -- for them anyway with includeUnpriced: it draws the row, says
+            -- there is no price and offers to go and find one, which beats an
+            -- item the player is holding being silently absent from a list
+            -- that claims to show their bags.
+            local needsPrice = opts.includeAll and not opts.includeUnpriced
 
-                    local postQuantity = self:GetChosenQuantity(itemID, maxQuantity)
-
-                    -- Without a price there is nothing to list it at, and a
-                    -- guess on someone's bag contents is worse than a skip.
-                    if sellable and count > 0 and (price or not opts.includeAll) then
-                        lines[#lines + 1] = {
-                            itemID = itemID,
-                            recipeID = outputs[itemID],
-                            count = count,
-                            unitPrice = price,
-                            priceBasis = basis,
-                            unitCost = unitCost,
-                            vendorPrice = vendorPrice,
-                            lossFloor = lossFloor,
-                            lossReason = lossReason,
-                            atALoss = price ~= nil and lossFloor ~= nil
-                                and price < lossFloor,
-                            postQuantity = postQuantity,
-                            maxQuantity = maxQuantity,
-                            quantityChosen = postQuantity ~= maxQuantity,
-                            total = price and (price * count) or nil,
-                            postTotal = price and (price * postQuantity) or nil,
-                            deposit = self:GetDeposit(itemID, postQuantity),
-                            isCommodity = isCommodity,
-                            label = Util.GetItemLabel(itemID),
-                        }
-                    end
-                end
+            if sellable and count > 0 and (price or not needsPrice) then
+                lines[#lines + 1] = {
+                    itemID = itemID,
+                    recipeID = outputs[itemID],
+                    count = count,
+                    unitPrice = price,
+                    priceBasis = basis,
+                    unitCost = unitCost,
+                    vendorPrice = vendorPrice,
+                    lossFloor = lossFloor,
+                    lossReason = lossReason,
+                    atALoss = price ~= nil and lossFloor ~= nil
+                        and price < lossFloor,
+                    postQuantity = postQuantity,
+                    maxQuantity = maxQuantity,
+                    quantityChosen = postQuantity ~= maxQuantity,
+                    total = price and (price * count) or nil,
+                    postTotal = price and (price * postQuantity) or nil,
+                    deposit = self:GetDeposit(itemID, postQuantity),
+                    isCommodity = isCommodity,
+                    -- Whether one of this account's recipes makes it, so the
+                    -- tab can tell crafted stock from the rest of the bag.
+                    isCrafted = outputs[itemID] ~= nil,
+                    label = Util.GetItemLabel(itemID),
+                }
             end
         end
     end
 
     table.sort(lines, function(a, b)
-        return (a.total or 0) > (b.total or 0)
+        local left, right = a.total or 0, b.total or 0
+        if left ~= right then return left > right end
+
+        -- Ties used to be left to table.sort, which is not stable. With the
+        -- whole bag on show, every unpriced row is worth the same nothing, so
+        -- the bottom of the list reshuffled itself once a second. itemID is
+        -- an arbitrary order, but it is the same arbitrary order every time.
+        return (a.itemID or 0) < (b.itemID or 0)
     end)
 
     return lines
@@ -524,7 +704,7 @@ end
 
 function Posting:OnEnable()
     if self:IsBlocked() then
-        ns.Debug("addon posting is blocked on this client; running as a price helper")
+        ns.Debug("the game blocks addons from posting; the addon will only suggest prices")
     end
 
     -- Listing something by hand changes what is left to list, and what counts
@@ -545,8 +725,8 @@ end
 
 -- Kept because the answer is not obvious and the symptoms mislead: a protected
 -- call returns without error and simply does nothing.
-ns.RegisterCommand("taint", "report whether addons may call protected functions", function()
-    ns.Print("protected call status")
+ns.RegisterCommand("taint", "check whether the game lets this addon post and craft for you", function()
+    ns.Print("what the game lets addons do")
 
     local secure = issecure and issecure()
     ns.PrintRaw(("  issecure() here:              %s"):format(tostring(secure)))
@@ -582,7 +762,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     end
 
     if self.pending then
-        ns.Print("a listing is already in flight")
+        ns.Print("a listing is already going through")
         return false
     end
 
@@ -594,15 +774,27 @@ function Posting:Post(itemID, quantity, unitPrice)
 
     quantity = math.max(1, math.min(quantity or available, available))
 
+    -- The slot the listing will draw from, found once and used throughout:
+    -- for the commodity question below, which the client only answers for a
+    -- location, and for the post call itself.
+    local bag, slot, slotStack = FindInBags(itemID)
+    local location = bag and MakeLocation(bag, slot)
+
+    if not location then
+        ns.Warn("could not find that item in your bags")
+        return false
+    end
+
+    local isCommodity = ns.Scanner:IsCommodity(itemID, location)
+
     -- An item auction draws from the one slot it references, so gear goes up
     -- one listing at a time.
-    if not ns.Scanner:IsCommodity(itemID) then
-        local _, _, slotStack = FindInBags(itemID)
+    if not isCommodity then
         quantity = math.min(quantity, slotStack or 1)
     end
 
     if available < 1 then
-        ns.Print("none of that available to list")
+        ns.Print("you have none of that to list")
         return false
     end
 
@@ -617,7 +809,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     -- which is the internal error the client shows for a listing that never
     -- happens. A price arriving here from a caller has not necessarily been
     -- through the chooser, so it is rounded again rather than trusted.
-    if not ns.Scanner:IsCommodity(itemID) and not Util.IsWholeSilver(unitPrice) then
+    if not isCommodity and not Util.IsWholeSilver(unitPrice) then
         local rounded = Util.RoundToSilver(unitPrice)
 
         ns.Print(("item auctions only take whole silver, so %s becomes %s"):format(
@@ -634,7 +826,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     if floor and unitPrice < floor then
         self.pending = nil
 
-        ns.Warn(("refusing to list %s at %s -- %s."):format(
+        ns.Warn(("not listing %s at %s -- %s."):format(
             Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or "the price looks wrong"))
         ns.Warn(("expected at least %s. Run a scan, or list it by hand."):format(
             Util.FormatMoney(floor)))
@@ -650,24 +842,15 @@ function Posting:Post(itemID, quantity, unitPrice)
         local unitCost = analysis and analysis.costPerUnit
 
         if unitCost and unitPrice < unitCost then
-            ns.Warn(("refusing to list %s at %s -- materials cost %s"):format(
+            ns.Warn(("not listing %s at %s -- the materials cost %s"):format(
                 Util.GetItemLabel(itemID),
                 Util.FormatMoney(unitPrice), Util.FormatMoney(unitCost)))
-            ns.Warn("enable 'Recommend selling at a loss' in Settings to override.")
+            ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
             return false
         end
     end
 
-    local bag, slot = FindInBags(itemID)
-    local location = bag and MakeLocation(bag, slot)
-
-    if not location then
-        ns.Warn("could not reference that bag slot")
-        return false
-    end
-
     local duration = ns.Config:Get("postDuration") or 2
-    local isCommodity = ns.Scanner:IsCommodity(itemID)
 
     self.pending = {
         itemID = itemID,
@@ -700,7 +883,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         if tostring(err):lower():find("addon") then
             self:MarkBlocked()
         else
-            ns.Warn(("the client refused the listing: %s"):format(
+            ns.Warn(("the game refused the listing: %s"):format(
                 tostring(err):gsub("^.-:%d+: ", "")))
         end
         return false
@@ -715,7 +898,7 @@ function Posting:Post(itemID, quantity, unitPrice)
 
     -- Nothing of ours competes with a listing that is settling. Verification is
     -- urgent and still gets through; scans and bookkeeping wait.
-    ns.AHQueue:Yield(POST_VERIFY_DELAY + 2, "a listing of ours is in flight")
+    ns.AHQueue:Yield(POST_VERIFY_DELAY + 2, "your listing is going through")
 
     -- The auction house is throttled and can take several seconds to reply, so
     -- wait, then ask the server what is actually listed.
@@ -808,6 +991,17 @@ end
 function Posting:Confirm(itemID, quantity, unitPrice, check)
     check = check or {}
 
+    -- Which rule produced the number on the dialog. A price check hands it
+    -- over; without one, the chooser is asked, and its answer is only used
+    -- when it still agrees with the price about to be listed -- so the
+    -- sentence underneath can never describe a different number.
+    local basis = check.basis
+
+    if not basis then
+        local chosen, chosenBasis = ns.Profit:ChoosePostPrice(itemID)
+        if chosen == unitPrice then basis = chosenBasis end
+    end
+
     local deposit = self:GetDeposit(itemID, quantity)
 
     local text = ("List |cffffffff%d x %s|r\n\nat %s each, %s total%s?"):format(
@@ -828,18 +1022,31 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
     -- was no longer selling; now there is nobody to undercut and the number
     -- above means something different, so it says which.
     if check.state == "empty" then
-        text = text .. ("\n\n|cffC8A44D%s|r"):format(
-            check.basis == "market"
-                and "Nothing else is listed right now, so this is market value rather than an undercut."
-                or "Nothing else is listed right now, and there is no market value to go on -- check this price yourself.")
+        local note = "Nothing else is listed right now, and there is no market value to go on -- check this price yourself."
+
+        if basis == "market" then
+            note = "Nothing else is listed right now, so this is market value rather than an undercut."
+        elseif basis == "derived" then
+            -- Covered in full by the estimate note below; saying there is
+            -- nothing to go on directly above it would contradict it.
+            note = "Nothing else is listed right now."
+        end
+
+        text = text .. ("\n\n|cffC8A44D%s|r"):format(note)
 
     elseif check.state == "unavailable" then
         text = text .. "\n\n|cffE5604FThe price check did not come back. This is the last price we saw, which may be out of date.|r"
     end
 
+    -- The estimate has to say so here above all: every other basis on this
+    -- dialog is something the auction house reported, and this one is not.
+    if basis == "derived" then
+        text = text .. "\n\n|cffC8A44DNo scan has ever priced this. The price above is estimated from what its materials are worth -- check it yourself before listing.|r"
+    end
+
     -- Said plainly at the moment the gold is committed, because a price equal
     -- to the rival's looks like the undercut simply failed.
-    if check.basis == "match" then
+    if basis == "match" then
         text = text .. "\n\n|cffC8A44DMatching the cheapest listing. This cannot be priced in copper, so undercutting would cost a whole silver.|r"
     end
 
@@ -861,6 +1068,67 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
         self.confirming = nil
         ns.Warn("could not open the confirmation dialog; nothing was listed.")
     end
+end
+
+--- Search the auction house for one item's price, without listing anything.
+--
+-- The Post tab offers the whole bag now, and a bag holds things no scan has
+-- ever covered: a drop, a gathered stack, something bought this morning. Such
+-- a row used to be a dead button beside a tooltip telling the player to go and
+-- scan, and on a client that shows no Lua error a button that does nothing
+-- looks exactly like a broken one.
+--
+-- This is the same single-item search the addon already makes immediately
+-- before every listing, pointed at the row the player asked about. It never
+-- posts: the price lands in the price table and the caller redraws.
+--
+-- @param onDone  called with (itemID, price, status) once the search settles.
+--   status is Scanner's -- "fresh", "recent", "empty", "unavailable" or
+--   "superseded". price is nil when nothing is listed and nothing is known.
+-- @return true if a search actually went out
+function Posting:CheckPrice(itemID, onDone)
+    if not itemID then return false end
+
+    local allowed, reason = self:CanPrice()
+    if not allowed then
+        ns.Print(reason or "cannot check prices right now")
+        if onDone then onDone(itemID, nil, "unavailable") end
+        return false
+    end
+
+    ns.Print(("checking the current price of %s..."):format(Util.GetItemLabel(itemID)))
+
+    -- One answer only. A search can settle through the callback, through the
+    -- fallback timer, or through both, and reporting twice would redraw the
+    -- row underneath a price it had already been drawn with.
+    local settled = false
+
+    local function Settle(status)
+        if settled then return end
+        settled = true
+
+        -- Read the price back after the search, never before. A search that
+        -- came back empty has just cleared the rival price, and an empty
+        -- auction house is an answer rather than a failure.
+        local price = self:GetPostPrice(itemID)
+
+        if onDone then onDone(itemID, price, status) end
+    end
+
+    C_Timer.After(5, function()
+        if settled then return end
+
+        ns.Warn("the price check did not come back.")
+        Settle("unavailable")
+    end)
+
+    local started = ns.Scanner:ScanItem(itemID, function(_, _, _, _, _, _, status)
+        Settle(status or "fresh")
+    end)
+
+    if not started then Settle("unavailable") end
+
+    return started and true or false
 end
 
 --- Check the current price, then ask, then post. This is what the buttons call.
@@ -899,6 +1167,15 @@ function Posting:Request(itemID, quantity, unitPrice)
     local function Proceed(state)
         if settled then return end
         settled = true
+
+        -- Another search took the slot before this one answered, so the
+        -- price was never checked. Verifying is on, so nothing is listed on
+        -- an unchecked number; the click is cheap to repeat.
+        if state == "superseded" then
+            ns.Print(("the price check for %s was interrupted by another search; nothing was listed. Click it again."):format(
+                Util.GetItemLabel(itemID)))
+            return
+        end
 
         -- Read the price back after the check, never before. A search that
         -- found nothing has just cleared the rival price, and this is where
@@ -978,7 +1255,7 @@ function Posting:ResolvePending(posted)
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(("%s did not appear in your auctions."):format(
             Util.GetItemLabel(pending.itemID)))
-        ns.Warn("the auction house may be refusing listings; try Blizzard's Sell tab.")
+        ns.Warn("the auction house may be refusing listings; try Blizzard's own Sell tab.")
     else
         ns.Warn("could not tell whether that listing went up -- check your Auctions tab")
     end
@@ -993,15 +1270,15 @@ end
 --
 -- Posting blocks while the throttle says it is busy, so if this client never
 -- reports ready that block is a bug on our side rather than a real wait.
-ns.RegisterCommand("throttle", "watch the auction house throttle", function()
+ns.RegisterCommand("throttle", "check how often the auction house is ready for requests", function()
     ns.AHQueue:Report()
 
     if not ns.Util.HasFunction("C_AuctionHouse.IsThrottledMessageSystemReady") then
-        ns.Print("this client has no throttle check; requests are paced by time alone.")
+        ns.Print("the game gives no busy signal here; requests are just spaced out over time.")
         return
     end
 
-    ns.Print("sampling the client's throttle for 10s...")
+    ns.Print("watching whether the auction house is busy for 10s...")
 
     local samples, ready = 0, 0
 
@@ -1015,10 +1292,10 @@ ns.RegisterCommand("throttle", "watch the auction house throttle", function()
         if samples >= 20 then
             ticker:Cancel()
 
-            ns.Print(("throttle ready on %d of %d samples over 10s."):format(ready, samples))
+            ns.Print(("the auction house was ready %d of %d times over 10s."):format(ready, samples))
 
             if ready == 0 then
-                ns.Warn("never ready -- posting would always be blocked. Tell me and I will stop gating on it.")
+                ns.Warn("never ready -- posting would always be blocked. Please report this so the addon stops waiting on it.")
             end
         end
     end)
@@ -1030,7 +1307,7 @@ end)
 -- causes that look identical from the chat frame: the call being refused, the
 -- call succeeding but the server dropping it, or the listing genuinely being
 -- created and the addon failing to notice.
-ns.RegisterCommand("posttest", "attempt one listing and report every step: /bts posttest [name]", function(args)
+ns.RegisterCommand("posttest", "try one listing and show every step: /bts posttest [name]", function(args)
     local line
 
     if args and args ~= "" then
@@ -1195,7 +1472,7 @@ end)
 -- ItemLocation rather than an item ID, after three wrong guesses.
 --
 -- Creates nothing: every call here is designed to fail.
-ns.RegisterCommand("sig", "print the auction API signatures this client expects", function()
+ns.RegisterCommand("sig", "show which auction functions this version of the game has", function()
     -- PostItem and PostCommodity are deliberately absent. Calling them at all
     -- outside a real click trips "Interface action failed because of an
     -- AddOn", so probing their signature costs a scary red error for a string
@@ -1206,7 +1483,7 @@ ns.RegisterCommand("sig", "print the auction API signatures this client expects"
         "MakeItemKey", "IsThrottledMessageSystemReady",
     }
 
-    ns.Print("auction API signatures")
+    ns.Print("auction functions")
 
     -- The Classic posting path, which may be what item auctions still want.
     local legacy = {}
@@ -1218,7 +1495,7 @@ ns.RegisterCommand("sig", "print the auction API signatures this client expects"
 
         legacy[#legacy + 1] = ("%s=%s"):format(name, present and "yes" or "no")
     end
-    ns.PrintRaw(("  |cffC8A44Dlegacy|r %s"):format(table.concat(legacy, " ")))
+    ns.PrintRaw(("  |cffC8A44Dold-style|r %s"):format(table.concat(legacy, " ")))
 
     for _, name in ipairs(names) do
         if not Util.HasFunction("C_AuctionHouse." .. name) then
@@ -1266,7 +1543,7 @@ local POST_VARIANTS = {
     { name = "no prices at all",
       build = function() return nil, nil end },
 
-    { name = "the Classic path: sell slot then StartAuction",
+    { name = "the old Classic way: sell slot, then StartAuction",
       legacy = true,
       build = function(price) return price, price end },
 }
@@ -1287,7 +1564,7 @@ local function TryLegacyPost(bagID, slotID, bid, buyout, duration)
     if type(pickup) ~= "function" then missing[#missing + 1] = "PickupContainerItem" end
 
     if #missing > 0 then
-        return false, "this client has no " .. table.concat(missing, ", ")
+        return false, "this version of the game has no " .. table.concat(missing, ", ")
     end
 
     -- Anything already on the cursor would be put into the slot instead.
@@ -1317,12 +1594,12 @@ local function TryLegacyPost(bagID, slotID, bid, buyout, duration)
     return true
 end
 
-ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n> [name]", function(args)
+ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n> [name]", function(args)
     local index, needle = (args or ""):match("^(%d+)%s*(.*)$")
     index = tonumber(index)
 
     if not index or not POST_VARIANTS[index] then
-        ns.Print("argument shapes to try:")
+        ns.Print("ways to try:")
         for i, variant in ipairs(POST_VARIANTS) do
             ns.PrintRaw(("  |cffC8A44D/bts posttry %d|r  %s"):format(i, variant.name))
         end
@@ -1350,7 +1627,7 @@ ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n>
     local bagID, slotID = FindInBags(itemID)
     local location = bagID and MakeLocation(bagID, slotID)
     if not location then
-        ns.Warn("could not reference that bag slot")
+        ns.Warn("could not find that item in your bags")
         return
     end
 
@@ -1366,7 +1643,7 @@ ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n>
 
     if variant.legacy then
         local worked, why = TryLegacyPost(bagID, slotID, bid, buyout, duration)
-        ns.PrintRaw(("  legacy call: %s%s"):format(
+        ns.PrintRaw(("  old-style call: %s%s"):format(
             tostring(worked), why and (" -- " .. why) or ""))
     else
         local ok, returned = pcall(C_AuctionHouse.PostItem, location, duration, quantity, bid, buyout)
@@ -1380,10 +1657,10 @@ ns.RegisterCommand("posttry", "try one PostItem argument shape: /bts posttry <n>
             local after = ns.Auctions:GetPostedCount(itemID)
 
             if after > before then
-                ns.Print(("|cff4FD18Bshape %d worked: %s.|r"):format(index, variant.name))
-                ns.Print("tell me which number worked and I will make it the default.")
+                ns.Print(("|cff4FD18Bway %d worked: %s.|r"):format(index, variant.name))
+                ns.Print("report which number worked so it can be made the default.")
             else
-                ns.Print(("|cffE5604Fshape %d did not list.|r Try the next one."):format(index))
+                ns.Print(("|cffE5604Fway %d did not list.|r Try the next one."):format(index))
             end
         end)
     end)
@@ -1398,7 +1675,7 @@ end)
 --
 -- hooksecurefunc observes without replacing, so Blizzard's call is unaffected
 -- and nothing here can taint it.
-ns.RegisterCommand("watchpost", "log what Blizzard's Sell tab passes when you post", function()
+ns.RegisterCommand("watchpost", "show what Blizzard's Sell tab sends when you post", function()
     if Posting.watching then
         ns.Print("already watching -- post something with Blizzard's Sell tab.")
         return
@@ -1451,12 +1728,12 @@ ns.RegisterCommand("watchpost", "log what Blizzard's Sell tab passes when you po
     end
 
     if #hooked == 0 then
-        ns.Warn("nothing to hook; this client exposes none of the posting calls.")
+        ns.Warn("nothing to watch; this version of the game has none of the posting functions.")
         return
     end
 
     Posting.watching = true
 
     ns.Print(("watching: %s"):format(table.concat(hooked, ", ")))
-    ns.Print("now post the scroll with Blizzard's own Sell tab, and tell me what prints.")
+    ns.Print("now post an item with Blizzard's own Sell tab, and report what prints.")
 end)

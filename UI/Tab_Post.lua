@@ -5,6 +5,14 @@
 -- The price is on the row before you press it, and anything that would sell
 -- below its material cost is marked red and refused unless allowed.
 --
+-- The list is everything in your bags, not only what your recipes make. It
+-- began as crafted output alone, on the reasoning that offering to sell
+-- arbitrary bag contents invites mistakes -- but the mistake it invites is
+-- one click on one row, and the thing it was costing was every drop, every
+-- gathered stack and everything bought to resell. The crafted-only view is
+-- still there, one tick box away, and the bar's Post Crafted button never
+-- changed.
+--
 -- The price is also shown split into Blizzard's gold/silver/copper boxes, so
 -- listing by hand stays easy when the auction house is refusing addon
 -- listings -- which it has done for stretches on this beta.
@@ -87,7 +95,25 @@ local function CreateRow(row)
     row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
 
     row.post = Widgets.CreateButton(row, "List", function()
-        if not row.data then return end
+        local line = row.data
+        if not line then return end
+
+        -- A row nothing has ever priced goes and finds a price instead of
+        -- sitting there refusing. The whole bag is on show, so most of these
+        -- are simply things the scan has never had a reason to look at.
+        if not line.unitPrice then
+            ns.Posting:CheckPrice(line.itemID, function(itemID, price, status)
+                if not price then
+                    ns.Print(("%s: %s"):format(Util.GetItemLabel(itemID),
+                        status == "empty"
+                            and "nobody is selling one right now, so there is no price to go on."
+                            or "the auction house did not answer -- try again in a moment."))
+                end
+
+                UI:RefreshActiveTab()
+            end)
+            return
+        end
 
         -- Left clickable even when it cannot list, so the click produces an
         -- explanation rather than nothing at all.
@@ -97,7 +123,7 @@ local function CreateRow(row)
             return
         end
 
-        ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
+        ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
         UI:RefreshActiveTab()
     end, { width = 50, height = 18, primary = true })
     row.post:SetPoint("RIGHT", -8, 0)
@@ -151,25 +177,47 @@ function UpdateRow(row, line)
     cells.deposit:SetText(line.deposit
         and Util.FormatMoney(line.deposit, { short = true }) or "--")
 
-    row.name:SetTextColor(Theme.Unpack(line.unitPrice and "text" or "muted"))
+    -- The bag holds all sorts now, so a row is worth recognising at a glance.
+    -- Rarity is how the game itself says what a thing is.
+    local red, green, blue = Util.GetItemQualityColor(line.itemID)
+
+    if red and line.unitPrice then
+        row.name:SetTextColor(red, green, blue)
+    else
+        row.name:SetTextColor(Theme.Unpack(line.unitPrice and "text" or "muted"))
+    end
 
     -- The G/S/C columns stay either way: when the auction house refuses a
     -- listing, typing it into Blizzard's Sell tab is the fallback.
     local allowed, reason = ns.Posting:CanPost()
-    row.post:SetEnabledState(line.unitPrice ~= nil)
 
-    if not allowed then
-        row.post.tooltipText = reason
-    elseif not line.unitPrice then
-        row.post.tooltipText = "No price data for this item -- scan first"
-    elseif line.atALoss then
-        row.post.tooltipText = (line.lossReason == "vendor"
-            and "This would sell for less than a vendor pays. Blocked unless you allow it in Settings."
-            or "This would sell below its material cost. Blocked unless you allow it in Settings.")
+    if line.unitPrice then
+        row.post:SetText("List")
+        row.post:SetEnabledState(true)
+
+        if not allowed then
+            row.post.tooltipText = reason
+        elseif line.atALoss then
+            row.post.tooltipText = (line.lossReason == "vendor"
+                and "This would sell for less than a vendor pays. Blocked unless you allow it in Settings."
+                or "This would sell below its material cost. Blocked unless you allow it in Settings.")
+        else
+            row.post.tooltipText = ("List %d of %d at %s each"):format(
+                line.postQuantity, line.maxQuantity or line.count,
+                Util.FormatMoney(line.unitPrice, { noColor = true }))
+        end
     else
-        row.post.tooltipText = ("List %d of %d at %s each"):format(
-            line.postQuantity, line.maxQuantity or line.count,
-            Util.FormatMoney(line.unitPrice, { noColor = true }))
+        -- Nothing has ever priced this. The button becomes the way to fix
+        -- that, because a disabled control and a missing one look identical
+        -- on a client that prints no error.
+        local canPrice, priceReason = ns.Posting:CanPrice()
+
+        row.post:SetText("Price")
+        row.post:SetEnabledState(canPrice)
+
+        row.post.tooltipText = canPrice
+            and "No scan has priced this yet.\nSearch the auction house for it now."
+            or (priceReason or "open the auction house to check a price")
     end
 end
 
@@ -197,6 +245,9 @@ local function ShowRowTooltip(row, line)
 
         if line.priceBasis == "undercut" then
             why = "Undercutting the cheapest listing that is not yours"
+        elseif line.priceBasis == "derived" then
+            -- The one basis that is not a market observation at all.
+            why = "No scan has priced this -- estimated from what its materials are worth"
         elseif line.priceBasis == "match" then
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.
@@ -204,6 +255,12 @@ local function ShowRowTooltip(row, line)
         end
 
         GameTooltip:AddLine(why, 0.5, 0.5, 0.5)
+    end
+
+    if not line.unitPrice then
+        GameTooltip:AddLine("No scan has priced this one yet.", 0.9, 0.7, 0.3)
+        GameTooltip:AddLine("Press Price to search the auction house for it.",
+            0.5, 0.5, 0.5)
     end
 
     if line.unitCost then
@@ -222,6 +279,11 @@ local function ShowRowTooltip(row, line)
             or "Would sell below material cost", 0.9, 0.38, 0.31)
     end
 
+    if not line.isCrafted then
+        GameTooltip:AddLine("Not something your recipes make -- just something in your bags.",
+            0.5, 0.5, 0.5)
+    end
+
     -- Commodities sell from across the bags at once; gear goes up one at a time.
     GameTooltip:AddLine(line.isCommodity
         and ("Commodity -- all %d can go up together"):format(line.count)
@@ -236,26 +298,86 @@ end
 -- Refresh
 --------------------------------------------------------------------------------
 
+--- Is the tab showing the whole bag, or only what the recipes make?
+local function ShowingEverything()
+    return ns.Config:Get("postShowAllItems") ~= false
+end
+
+--- The rows to draw: what is postable, narrowed by whatever was typed.
+--
+-- The filter is on the label, which is an item link when the client has the
+-- item cached -- the name sits inside it, so a plain substring match finds it
+-- either way.
+local function VisibleLines()
+    local showAll = ShowingEverything()
+
+    local lines = ns.Posting:GetPostable(showAll
+        and { includeAll = true, includeUnpriced = true }
+        or nil)
+
+    local needle = widgets.search and widgets.search:GetText() or ""
+    if needle == "" then return lines, #lines end
+
+    needle = needle:lower()
+
+    local kept = {}
+    for _, line in ipairs(lines) do
+        if (line.label or ""):lower():find(needle, 1, true) then
+            kept[#kept + 1] = line
+        end
+    end
+
+    return kept, #lines
+end
+
 local function Refresh()
     if not widgets.list then return end
 
-    local lines = ns.Posting:GetPostable()
+    local showAll = ShowingEverything()
+
+    if widgets.showAll then widgets.showAll:SetChecked(showAll) end
+
+    local lines, found = VisibleLines()
     widgets.list:SetData(lines)
+
+    -- Ticking the box or typing in the search makes this a different list,
+    -- not the same one a second later, so it starts at the top. Everything
+    -- else keeps the reader where they were: the tab rebuilds itself once a
+    -- second at the auction house, and a list that jumps cannot be read.
+    local view = ("%s|%s"):format(tostring(showAll),
+        widgets.search and widgets.search:GetText() or "")
+
+    if view ~= widgets.view then
+        widgets.view = view
+        if widgets.list.ScrollToTop then widgets.list:ScrollToTop() end
+    end
 
     widgets.emptyLabel:SetShown(#lines == 0)
     if #lines == 0 then
-        widgets.emptyLabel:SetText(
-            "Nothing in your bags that one of your recipes makes.\nCraft something first, and it will show up here.")
+        -- Three different nothings, and telling them apart is the difference
+        -- between a tab that looks broken and one that has answered.
+        if found > 0 then
+            widgets.emptyLabel:SetText(
+                "Nothing in your bags matches that.\nClear the search box to see the rest.")
+        elseif showAll then
+            widgets.emptyLabel:SetText(
+                "Nothing in your bags can go on the auction house.\nSoulbound items and reagents your queue needs are left out.")
+        else
+            widgets.emptyLabel:SetText(
+                "Nothing in your bags that one of your recipes makes.\nTick 'Everything in my bags' to sell the rest of it.")
+        end
     end
 
-    local total, losses = 0, 0
+    local total, losses, unpriced = 0, 0, 0
     for _, line in ipairs(lines) do
         total = total + (line.total or 0)
         if line.atALoss then losses = losses + 1 end
+        if not line.unitPrice then unpriced = unpriced + 1 end
     end
 
-    widgets.summary:SetText(("%d stack%s worth about %s"):format(
-        #lines, #lines == 1 and "" or "s", Util.FormatMoney(total, { short = true })))
+    widgets.summary:SetText(("%d stack%s worth about %s%s"):format(
+        #lines, #lines == 1 and "" or "s", Util.FormatMoney(total, { short = true }),
+        unpriced > 0 and ("  ·  %d with no price yet"):format(unpriced) or ""))
 
     widgets.warning:SetText(losses > 0
         and ("%d item%s would sell below material cost"):format(
@@ -296,9 +418,32 @@ local function Build(container)
     widgets.statusLabel:SetPoint("RIGHT", 0, 0)
     widgets.statusLabel:SetWidth(340)
 
+    -- What the list covers, and a way to find one thing in a full bag.
+    local filterBar = CreateFrame("Frame", nil, container)
+    filterBar:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -6)
+    filterBar:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -6)
+    filterBar:SetHeight(22)
+
+    widgets.showAll = Widgets.CreateCheckbox(filterBar, "Everything in my bags",
+        function(checked)
+            ns.Config:Set("postShowAllItems", checked)
+            Refresh()
+        end, ns.Config:Get("postShowAllItems") ~= false)
+    widgets.showAll:SetPoint("LEFT", 2, 0)
+
+    local showAllHint = Theme.CreateLabel(filterBar, "tiny", "dim")
+    showAllHint:SetPoint("LEFT", widgets.showAll, "RIGHT", 8, 0)
+    showAllHint:SetText("untick to show only things you craft")
+
+    widgets.search = Widgets.CreateSearchBox(filterBar, "Find an item", function()
+        Refresh()
+    end)
+    widgets.search:SetPoint("RIGHT", 0, 0)
+    widgets.search:SetWidth(200)
+
     -- Stated once, plainly, rather than discovered by clicking a dead button.
     local note = Theme.CreateLabel(container, "small", "warn")
-    note:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 2, -6)
+    note:SetPoint("TOPLEFT", filterBar, "BOTTOMLEFT", 2, -6)
     note:SetPoint("RIGHT", toolbar, "RIGHT", 0, 0)
     note:SetWordWrap(true)
     note:SetText("Set LIST to sell part of a stack. Or type the G / S / C price into Blizzard's own Sell tab.")
@@ -306,12 +451,12 @@ local function Build(container)
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)
     headings:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -8)
-    headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -34)
+    headings:SetPoint("TOPRIGHT", note, "BOTTOMRIGHT", 0, -8)
     headings:SetHeight(16)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
     nameHeading:SetPoint("LEFT", 10, 0)
-    nameHeading:SetText("CRAFTED ITEM")
+    nameHeading:SetText("ITEM")
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do

@@ -12,6 +12,11 @@ local UI = ns.UI
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 
+-- Room at the left of every row for the skill-up star. Always reserved, shown
+-- or not, so the craft names stay in one straight line down the list -- names
+-- that shuffle sideways as the marks come and go are worse than the gap.
+local MARK_GUTTER = 16
+
 -- Right-aligned numeric columns, measured from the right edge of the list.
 -- Laid out right to left. WHO only earns its space when more than one
 -- character is in play, so it is hidden otherwise and the craft name takes
@@ -78,8 +83,11 @@ local function ApplyRowLayout(row)
 end
 
 local function CreateRow(row)
+    row.mark = Theme.CreateMark(row)
+    row.mark:SetPoint("LEFT", 7, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 8, 0)
+    row.name:SetPoint("LEFT", 8 + MARK_GUTTER, 0)
 
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
@@ -138,10 +146,16 @@ local function UpdateRow(row, analysis)
 
     local cells = row.cells
 
-    -- Both of these hold whatever the row's price data looks like, so they are
+    -- All three hold whatever the row's price data looks like, so they are
     -- filled before the unpriceable case takes its early exit.
     ApplyNameColor(row, analysis)
     UpdateMakeCell(cells, analysis)
+
+    -- The star: this craft raises your skill AND turns a profit. Set from
+    -- analysis.recommended rather than from the tier alone, so an orange
+    -- recipe that loses gold is not recommended by the back door.
+    Theme.SetMark(row.mark, analysis.recommended
+        and analysis.skillUp and analysis.skillUp.tier or nil)
 
     -- Only meaningful when several characters are in play.
     if state.accountWide then
@@ -171,8 +185,9 @@ local function UpdateRow(row, analysis)
         cells.age:SetText("")
 
         cells.posted:SetText("")
-        cells.profit:SetText(analysis.reason == "output has no price data"
-            and "no sales" or "no data")
+        cells.profit:SetText(analysis.soulbound and "soulbound"
+            or analysis.reason == "output has no price data" and "no sales"
+            or "no data")
         cells.profit:SetTextColor(Theme.Unpack("dim"))
         return
     end
@@ -189,8 +204,46 @@ local function UpdateRow(row, analysis)
     cells.margin:SetText(("%d%%"):format(math.floor((analysis.margin or 0) * 100)))
     cells.margin:SetTextColor(Theme.ProfitColor(analysis.profit))
 
-    cells.age:SetText(Util.FormatAge(analysis.age))
-    cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
+    if analysis.priceDerived then
+        -- There is no scan behind this row, so an age would be a blank or a
+        -- lie. The column says what the price actually is instead: the
+        -- materials-plus-markup estimate, which is a different kind of
+        -- number from everything else in the list.
+        cells.age:SetText("estimate")
+        cells.age:SetTextColor(Theme.Unpack("warn"))
+    else
+        cells.age:SetText(Util.FormatAge(analysis.age))
+        cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
+    end
+end
+
+--- Why this row is wearing a star.
+--
+-- The mark is small and new, so it has to be able to explain itself; a symbol
+-- nobody can interrogate is a symbol people learn to ignore.
+local function ShowMarkTooltip(row, analysis)
+    local skillUp = analysis.skillUp
+    if not skillUp then return end
+
+    GameTooltip:SetOwner(row, "ANCHOR_LEFT")
+    GameTooltip:SetText(analysis.name or "craft", 1, 1, 1)
+
+    local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
+    GameTooltip:AddDoubleLine("Skill up", ns.SkillUp:GetTierLabel(skillUp.tier),
+        0.7, 0.7, 0.7, r, g, b)
+
+    GameTooltip:AddDoubleLine("Profit each",
+        Util.FormatMoney(analysis.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+
+    -- Skill only rises, so a reading taken lower down may have gone green
+    -- since. Better said than quietly trusted.
+    if skillUp.stale then
+        GameTooltip:AddLine(("Read at skill %d, you are %d now -- open your profession to refresh."):format(
+            skillUp.skill or 0, skillUp.currentSkill or 0), 0.91, 0.76, 0.35, true)
+    end
+
+    GameTooltip:AddLine("Starred: it raises your skill and it pays.", 0.5, 0.5, 0.5)
+    GameTooltip:Show()
 end
 
 --------------------------------------------------------------------------------
@@ -299,14 +352,17 @@ local function BuildDetail(parent)
         if not state.selected then return end
 
         -- Whichever runs out first: materials, or room under the limit.
+        -- Room is counted in items and this box is counted in crafts, so it
+        -- is the converted figure that may be compared against a craft count.
         local most = math.max(1, state.selected.craftableNow or 1)
-        if state.selected.postRoom then
-            most = math.max(1, math.min(most, state.selected.postRoom))
+        local room = state.selected.roomInCrafts
+        if room then
+            most = math.max(1, math.min(most, room))
         end
 
         quantity:SetText(tostring(most))
     end, { width = 44, height = 24,
-           tooltip = "As many as your materials and posted limit allow" })
+           tooltip = "As many as your materials and stock limit allow" })
     maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 8, 0)
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
@@ -341,11 +397,22 @@ local function UpdateDetail(analysis)
 
     detail.title:SetText(analysis.name or ("recipe " .. analysis.recipeID))
 
+    -- The skill-up clause is coloured inline rather than by the whole label,
+    -- because the line already carries a colour of its own for materials.
+    local skillUpText = ""
+    local skillUp = analysis.skillUp
+
+    if skillUp and skillUp.tier ~= "trivial" then
+        local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
+        skillUpText = ("  |cff%02x%02x%02x%s|r"):format(
+            r * 255, g * 255, b * 255, ns.SkillUp:GetTierLabel(skillUp.tier))
+    end
+
     if analysis.craftableNow and analysis.craftableNow > 0 then
-        detail.subtitle:SetText(("You can make %d now"):format(analysis.craftableNow))
+        detail.subtitle:SetText(("You can make %d now"):format(analysis.craftableNow) .. skillUpText)
         detail.subtitle:SetTextColor(Theme.Unpack("profit"))
     else
-        detail.subtitle:SetText("Missing materials")
+        detail.subtitle:SetText("Missing materials" .. skillUpText)
         detail.subtitle:SetTextColor(Theme.Unpack("muted"))
     end
 
@@ -418,6 +485,14 @@ local function UpdateDetail(analysis)
             detail.rivalLabel:SetText("You hold lowest")
             detail.rivalValue:SetText("no rival")
             detail.rivalValue:SetTextColor(Theme.Unpack("profit"))
+        elseif analysis.priceDerived then
+            -- No scan has ever priced this one, so the sale price above is
+            -- the material value plus the markup in Settings. Named
+            -- differently from "None listed" below, which is an item the
+            -- auction house has seen and simply has none of right now.
+            detail.rivalLabel:SetText("Never scanned")
+            detail.rivalValue:SetText("from materials")
+            detail.rivalValue:SetTextColor(Theme.Unpack("warn"))
         else
             -- Nothing listed means no competition to undercut, so the number
             -- shown is an estimate rather than an observed price.
@@ -479,6 +554,14 @@ local function UpdateDetail(analysis)
         if (analysis.onHand or 0) > 0 then
             parts[#parts + 1] = ("%d held"):format(analysis.onHand)
         end
+        -- Named separately from "held": an item in the mailbox is one that came
+        -- back from a listing that did not sell, which is worth knowing.
+        if (analysis.inMail or 0) > 0 then
+            parts[#parts + 1] = ("%d in mail"):format(analysis.inMail)
+        end
+        if (analysis.queuedElsewhere or 0) > 0 then
+            parts[#parts + 1] = ("%d queued"):format(analysis.queuedElsewhere)
+        end
 
         local where = #parts > 0 and table.concat(parts, ", ") or "none yet"
 
@@ -486,8 +569,21 @@ local function UpdateDetail(analysis)
             detail.limitHint:SetText(("%s, room for %d"):format(where, analysis.postRoom or 0))
             detail.limitHint:SetTextColor(Theme.Unpack(
                 analysis.atPostLimit and "warn" or "dim"))
+        elseif (analysis.stockDivisor or 1) > 1 then
+            -- Say out loud that the list order is not pure profit. A craft
+            -- sitting lower than its profit suggests, with no explanation, is
+            -- exactly the sort of thing that reads as a bug.
+            detail.limitHint:SetText(("%s, so ranked as %s"):format(
+                where, Util.FormatMoney(
+                    (analysis.profit or 0) > 0
+                        and (analysis.profit / analysis.stockDivisor)
+                        or analysis.profit)))
+            detail.limitHint:SetTextColor(Theme.Unpack("dim"))
+        elseif #parts > 0 then
+            detail.limitHint:SetText(where)
+            detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         else
-            detail.limitHint:SetText(("no limit (%s)"):format(where))
+            detail.limitHint:SetText("none on hand")
             detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         end
     else
@@ -496,9 +592,11 @@ local function UpdateDetail(analysis)
         detail.limitHint:Hide()
     end
 
+    -- Crafts, not items: see the Max button above.
     local suggested = math.max(1, analysis.craftableNow or 1)
-    if analysis.postRoom then
-        suggested = math.max(1, math.min(suggested, analysis.postRoom))
+    local suggestedRoom = analysis.roomInCrafts
+    if suggestedRoom then
+        suggested = math.max(1, math.min(suggested, suggestedRoom))
     end
     detail.quantity:SetText(tostring(suggested))
 
@@ -571,7 +669,7 @@ local function Refresh()
 
     if #data == 0 then
         if ns.Recipes:Count() == 0 then
-            widgets.emptyLabel:SetText("Open a profession window once so I can read your recipes.")
+            widgets.emptyLabel:SetText("Open a profession window once so your recipes can be read.")
         elseif ns.Prices:Count() == 0 then
             widgets.emptyLabel:SetText("No auction data yet.")
             widgets.emptyScan:Show()
@@ -693,7 +791,7 @@ local function Build(container)
     headings:SetHeight(16)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
-    nameHeading:SetPoint("LEFT", 8, 0)
+    nameHeading:SetPoint("LEFT", 8 + MARK_GUTTER, 0)
     nameHeading:SetText("CRAFT")
 
     local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
@@ -718,6 +816,17 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
+
+        -- Only starred rows get a tooltip, and it exists to explain the star.
+        -- Everything else about a row is already on the row or one click away
+        -- in the detail panel, and a tooltip over every line of a long table
+        -- is noise.
+        onEnter = function(row, analysis)
+            if not analysis.recommended then return end
+            ShowMarkTooltip(row, analysis)
+        end,
+
+        onLeave = function() GameTooltip:Hide() end,
 
         onClick = function(analysis, _, mouseButton)
             if mouseButton == "RightButton" then

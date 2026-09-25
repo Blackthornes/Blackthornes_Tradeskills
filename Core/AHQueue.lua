@@ -143,32 +143,92 @@ function AHQueue:WhyNotReady(priority)
     local now = GetTime()
 
     if now < self.backoffUntil then
-        return ("backing off for another %.1fs (a message was dropped)"):format(
+        return ("waiting %.1fs more: the auction house dropped a request"):format(
             self.backoffUntil - now)
     end
 
     if priority > URGENT_LIMIT and now < self.standDownUntil then
-        return ("standing down for another %.1fs"):format(self.standDownUntil - now)
+        return ("paused %.1fs more while you use the auction house"):format(self.standDownUntil - now)
     end
 
     if (now - self.lastSend) < MIN_SPACING then
-        return "pacing our own requests"
+        return "spacing out requests to the auction house"
     end
 
     if not self:ClientReady() then
-        return "the auction house is still catching up"
+        return "the auction house is still busy"
     end
 
     if self:RecentSendCount() >= BUDGET_MAX then
-        return "holding back to leave the player room"
+        return "leaving the auction house free for you"
     end
 
     -- Only the thing the player just clicked jumps the sell frame.
     if priority > URGENT_LIMIT and self:PlayerIsSelling() then
-        return "Blizzard's sell frame is open"
+        return "Blizzard's Sell tab is open"
     end
 
     return nil
+end
+
+--- How long until a request of this priority could be sent.
+--
+-- The companion to WhyNotReady, which says why a request is waiting but not
+-- how much longer. Nothing in game could answer that, so a paced post looked
+-- like a button that had quietly stopped working.
+--
+-- The gates are simultaneous conditions rather than a sequence, so the wait is
+-- the longest of them, not the first one found.
+--
+-- Two of them have no knowable end: the client's own throttle is a yes or no
+-- with no duration attached, and the player's sell frame closes when they close
+-- it. Those return a reason with no seconds rather than a number that would be
+-- a guess. A caller showing a countdown should fall back to words when the
+-- seconds run out and a reason is still coming back.
+--
+-- @return seconds, reason
+--   0, nil       clear to send
+--   n, reason    waiting, and the wait has n seconds left
+--   0, reason    waiting on something with no knowable length
+function AHQueue:SecondsUntilReady(priority)
+    priority = priority or self.PRIORITY.normal
+
+    local now = GetTime()
+    local seconds, reason = 0, nil
+
+    local function Consider(left, why)
+        if left <= 0 then return end
+        if left > seconds then seconds, reason = left, why end
+    end
+
+    if now < self.backoffUntil then
+        Consider(self.backoffUntil - now, "the auction house dropped a request")
+    end
+
+    if priority > URGENT_LIMIT and now < self.standDownUntil then
+        Consider(self.standDownUntil - now, "your last listing is still going through")
+    end
+
+    Consider(MIN_SPACING - (now - self.lastSend), "spacing out requests to the auction house")
+
+    -- Pruned first, so entry one is the oldest send still inside the window and
+    -- the moment it falls out is the moment a slot frees up.
+    if self:RecentSendCount() >= BUDGET_MAX and self.sendTimes[1] then
+        Consider((self.sendTimes[1] + BUDGET_WINDOW) - now,
+            "leaving the auction house free for you")
+    end
+
+    -- No duration to offer for either of these, so they only set a reason and
+    -- only when nothing with a real countdown is already waiting longer.
+    if not self:ClientReady() then
+        reason = reason or "the auction house is still busy"
+    end
+
+    if priority > URGENT_LIMIT and self:PlayerIsSelling() then
+        reason = reason or "Blizzard's Sell tab is open"
+    end
+
+    return seconds, reason
 end
 
 --- Stand down for a while: the player needs the channel more than we do.
@@ -182,8 +242,8 @@ function AHQueue:Yield(seconds, reason)
     if until_ <= self.standDownUntil then return end
 
     self.standDownUntil = until_
-    ns.Debug(("auction queue standing down %.0fs: %s"):format(
-        seconds, reason or "no reason given"))
+    ns.Debug(("auction requests paused %.0fs: %s"):format(
+        seconds, reason or "no reason"))
 end
 
 --- Stop sending entirely for a while: we are over the allowance rather than
@@ -195,8 +255,8 @@ function AHQueue:BackOff(seconds, reason)
     if until_ <= self.backoffUntil then return end
 
     self.backoffUntil = until_
-    ns.Debug(("auction queue backing off %.0fs: %s"):format(
-        seconds, reason or "no reason given"))
+    ns.Debug(("auction requests stopped %.0fs: %s"):format(
+        seconds, reason or "no reason"))
 end
 
 --------------------------------------------------------------------------------
@@ -221,7 +281,7 @@ end
 -- @return true if the request was queued
 function AHQueue:Request(opts)
     if type(opts) ~= "table" or type(opts.send) ~= "function" then
-        ns.Debug("AHQueue:Request called without a send function")
+        ns.Debug("an auction request was made with nothing to send")
         return false
     end
 
@@ -288,8 +348,8 @@ end
 function AHQueue:Flush(reason)
     if #self.queue == 0 then return end
 
-    ns.Debug(("auction queue flushed (%d waiting): %s"):format(
-        #self.queue, reason or "no reason given"))
+    ns.Debug(("dropped %d waiting auction request(s): %s"):format(
+        #self.queue, reason or "no reason"))
 
     local queued = self.queue
     self.queue = {}
@@ -340,7 +400,7 @@ function AHQueue:Drain()
         if now >= request.expiresAt then
             table.remove(self.queue, i)
 
-            ns.Debug(("gave up on %s after %.0fs unsent"):format(
+            ns.Debug(("gave up on %s: not sent after %.0fs"):format(
                 request.name, now - request.queuedAt))
 
             if request.onGiveUp then pcall(request.onGiveUp) end
@@ -374,12 +434,12 @@ function AHQueue:Dispatch(request)
     self.sendTimes[#self.sendTimes + 1] = now
     self.sent = self.sent + 1
 
-    ns.Debug(("sending %s (%d still queued)"):format(request.name, #self.queue))
+    ns.Debug(("sending %s (%d still waiting)"):format(request.name, #self.queue))
 
     local ok, result = pcall(request.send)
 
     if not ok then
-        ns.Debug(("%s errored: %s"):format(request.name, tostring(result)))
+        ns.Debug(("%s failed: %s"):format(request.name, tostring(result)))
         if request.onGiveUp then pcall(request.onGiveUp) end
         return
     end
@@ -387,7 +447,7 @@ function AHQueue:Dispatch(request)
     -- A send function returning false means the client refused the call, which
     -- is a failure the caller has to hear about rather than a silent no-op.
     if result == false then
-        ns.Debug(("%s was refused by the client"):format(request.name))
+        ns.Debug(("the game refused %s"):format(request.name))
         if request.onGiveUp then pcall(request.onGiveUp) end
     end
 end
@@ -400,17 +460,17 @@ function AHQueue:OnEnable()
     -- The player listing or cancelling something by hand is the clearest signal
     -- that the channel is theirs for the moment.
     ns.RegisterEvent(self, "AUCTION_HOUSE_AUCTION_CREATED", function()
-        AHQueue:Yield(PLAYER_QUIET, "an auction was just created")
+        AHQueue:Yield(PLAYER_QUIET, "you just listed an auction")
     end)
 
     ns.RegisterEvent(self, "AUCTION_CANCELED", function()
-        AHQueue:Yield(PLAYER_QUIET, "an auction was just cancelled")
+        AHQueue:Yield(PLAYER_QUIET, "you just cancelled an auction")
     end)
 
     -- Both of these may be absent on this client; RegisterEvent handles that.
     ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED", function()
         AHQueue.dropped = AHQueue.dropped + 1
-        AHQueue:BackOff(DROPPED_BACKOFF, "the client dropped a throttled message")
+        AHQueue:BackOff(DROPPED_BACKOFF, "the auction house dropped a request (too many sent)")
     end)
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_THROTTLED_SYSTEM_READY", function()
@@ -431,31 +491,31 @@ end
 --- One line per queued request, plus why nothing is moving. Used by the
 --- `/bts throttle` report, which is the only view into this from in game.
 function AHQueue:Report()
-    ns.Print("auction request queue")
+    ns.Print("auction house requests")
 
     ns.PrintRaw(("  waiting:            %d"):format(#self.queue))
     ns.PrintRaw(("  sent this session:  %d"):format(self.sent))
     ns.PrintRaw(("  in the last %ds:    %d of %d allowed"):format(
         BUDGET_WINDOW, self:RecentSendCount(), BUDGET_MAX))
-    ns.PrintRaw(("  client reports:     %s"):format(
+    ns.PrintRaw(("  auction house:      %s"):format(
         self:ClientReady() and "ready" or "busy"))
-    ns.PrintRaw(("  sell frame open:    %s"):format(
+    ns.PrintRaw(("  Sell tab open:      %s"):format(
         self:PlayerIsSelling() and "yes" or "no"))
-    ns.PrintRaw(("  dropped messages:   %d"):format(self.dropped))
+    ns.PrintRaw(("  dropped requests:   %d"):format(self.dropped))
 
     local now = GetTime()
-    ns.PrintRaw(("  standing down:      %s"):format(
+    ns.PrintRaw(("  paused for you:     %s"):format(
         now < self.standDownUntil
             and ("%.1fs left"):format(self.standDownUntil - now) or "no"))
-    ns.PrintRaw(("  backing off:        %s"):format(
+    ns.PrintRaw(("  paused after drop:  %s"):format(
         now < self.backoffUntil
             and ("%.1fs left"):format(self.backoffUntil - now) or "no"))
 
     local why = self:WhyNotReady(self.PRIORITY.normal)
-    ns.PrintRaw(("  background work:    %s"):format(why or "clear to send"))
+    ns.PrintRaw(("  background work:    %s"):format(why or "can send now"))
 
     local urgentWhy = self:WhyNotReady(self.PRIORITY.urgent)
-    ns.PrintRaw(("  your clicks:        %s"):format(urgentWhy or "clear to send"))
+    ns.PrintRaw(("  your clicks:        %s"):format(urgentWhy or "can send now"))
 
     for i = 1, #self.queue do
         local request = self.queue[i]

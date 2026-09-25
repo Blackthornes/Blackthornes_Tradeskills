@@ -223,9 +223,18 @@ function Inventory:GetEquippedCount(itemID)
     return total
 end
 
+--- How many are waiting in the mailbox.
+--
+-- Asked through Mail so the "count mail as stock" setting is honoured in one
+-- place, and so this still answers 0 before Mail has loaded.
+function Inventory:GetMailCount(itemID)
+    if not ns.Mail then return 0 end
+    return ns.Mail:GetCount(itemID)
+end
+
 --- Bags plus bank and reagent bank.
 function Inventory:GetTotalCount(itemID)
-    return self:GetBagCount(itemID) + self:GetBankCount(itemID)
+    return self:GetBagCount(itemID) + self:GetBankCount(itemID) + self:GetMailCount(itemID)
 end
 
 --- How many are sitting in the bank.
@@ -252,13 +261,18 @@ function Inventory:GetBankCount(itemID)
     return math.max(live, cached)
 end
 
---- Everything this character owns: bags plus bank.
+--- Everything this character owns: bags, bank and mailbox.
 --
 -- This is the right number for "do I need to buy this", because you already
 -- own it. It is deliberately NOT the number used for "can I craft this right
--- now" -- the crafting UI cannot reach into the bank.
+-- now" -- the crafting UI cannot reach into the bank, let alone the mailbox.
+--
+-- The mailbox is in here because an auction that expires comes back as mail,
+-- and an item halfway home is still an item you own. Leaving it out meant the
+-- Profit tab recommended crafting replacements for things that had not
+-- actually sold.
 function Inventory:GetOwnedCount(itemID)
-    return self:GetBagCount(itemID) + self:GetBankCount(itemID)
+    return self:GetBagCount(itemID) + self:GetBankCount(itemID) + self:GetMailCount(itemID)
 end
 
 --------------------------------------------------------------------------------
@@ -439,7 +453,7 @@ end
 -- Diagnostics
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from", function(args)
+ns.RegisterCommand("stock", "<name or link> -- how many of an item you have, and where", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
@@ -448,7 +462,7 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
     end
 
     if not recipe or not recipe.outputItemID then
-        ns.Print(errorMessage or "give me an item name or link")
+        ns.Print(errorMessage or "type an item name, or shift-click an item")
         return
     end
 
@@ -461,6 +475,9 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
     ns.PrintRaw(("  in bags:          %d"):format(inBags))
     ns.PrintRaw(("  equipped:         %d"):format(worn))
     ns.PrintRaw(("  in bank:          %d"):format(Inventory:GetBankCount(itemID)))
+    ns.PrintRaw(("  in mailbox:       %d%s"):format(
+        Inventory:GetMailCount(itemID),
+        ns.Config:Get("countMailAsStock") == false and "   (not counted)" or ""))
     ns.PrintRaw(("  counted as held:  %d"):format(Inventory:GetOwnedCount(itemID)))
     ns.PrintRaw(("  listed:           %d"):format(ns.Auctions:GetPostedCount(itemID)))
 
@@ -469,7 +486,7 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
     -- own, which is the failure this reports rather than reasons about.
     local reagentBag = Inventory:GetReagentBag()
 
-    ns.PrintRaw("  containers walked:")
+    ns.PrintRaw("  bags checked:")
 
     for _, bag in ipairs(Inventory:GetCarriedBags()) do
         local count, slots = Inventory:CountInBag(bag, itemID)
@@ -478,7 +495,7 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
     end
 
     if not reagentBag then
-        ns.PrintRaw("    no reagent bag slot on this client")
+        ns.PrintRaw("    no reagent bag slot in this version of the game")
     end
 
     -- The line that settles the argument. A client count above the walked one
@@ -489,14 +506,14 @@ ns.RegisterCommand("stock", "<name or link> -- where an item's count comes from"
         local note = ""
 
         if client > inBags + worn then
-            note = "  <-- more than bags and equipment: a container we are not walking"
+            note = "  <-- more than bags and equipment: a bag the addon is not checking"
         elseif client > inBags then
-            note = "  <-- it counts equipment"
+            note = "  <-- the game counts equipped items too"
         end
 
-        ns.PrintRaw(("  client's own bag count: %d%s"):format(client, note))
+        ns.PrintRaw(("  the game's own count: %d%s"):format(client, note))
     else
-        ns.PrintRaw("  client's own bag count: cannot ask")
+        ns.PrintRaw("  the game's own count: not available")
     end
 end)
 

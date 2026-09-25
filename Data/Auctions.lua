@@ -37,6 +37,14 @@ function Auctions:GetPostedCount(itemID)
     return self:GetTable().items[itemID] or 0
 end
 
+--- The cheapest unit price you have an item listed at, or nil when your
+--- auctions have not been read or hold none of it.
+function Auctions:GetOwnMinPrice(itemID)
+    if not itemID then return nil end
+    local prices = self:GetTable().prices
+    return prices and prices[itemID] or nil
+end
+
 --- When your auctions were last read, or nil if never.
 function Auctions:GetAge()
     local updatedAt = self:GetTable().updatedAt
@@ -84,15 +92,22 @@ end
 --   posted  units listed on the auction house
 --   onHand  units in bags and bank (equipped gear is not counted -- it is in
 --           use, not stock)
+--   inMail  units waiting in the mailbox, which is where an expired auction
+--           lands; owned, but in neither of the two above
 --   queued  units the craft queue will produce, so queueing 2 and looking again
 --           does not then suggest 2 more
 --
--- @return remaining, posted, onHand, queued, limit
+-- The mailbox is reported apart from the bags rather than folded in, because
+-- "2 held" and "2 on their way back from a listing that did not sell" mean
+-- quite different things to someone deciding what to make next.
+--
+-- @return remaining, posted, onHand, queued, limit, inMail
 --         remaining is nil when uncapped
 function Auctions:GetRoom(itemID, ignoreRecipeID)
     local limit = self:GetLimit(itemID)
     local posted = self:GetPostedCount(itemID)
-    local onHand = ns.Inventory:GetOwnedCount(itemID)
+    local onHand = ns.Inventory:GetBagCount(itemID) + ns.Inventory:GetBankCount(itemID)
+    local inMail = ns.Inventory:GetMailCount(itemID)
 
     local queued = 0
     for _, entry in ipairs(ns.Queue:GetAll()) do
@@ -107,13 +122,14 @@ function Auctions:GetRoom(itemID, ignoreRecipeID)
     end
 
     if limit <= 0 then
-        return nil, posted, onHand, queued, 0
+        return nil, posted, onHand, queued, 0, inMail
     end
 
-    return math.max(0, limit - posted - onHand - queued), posted, onHand, queued, limit
+    return math.max(0, limit - posted - onHand - inMail - queued),
+        posted, onHand, queued, limit, inMail
 end
 
---- Everything you already hold of an item: listed plus in bags and bank.
+--- Everything you already hold of an item: listed, bags, bank and mailbox.
 function Auctions:GetStock(itemID)
     return self:GetPostedCount(itemID) + ns.Inventory:GetOwnedCount(itemID)
 end
@@ -210,6 +226,7 @@ function Auctions:ReadOwned(opts)
     if not ok or not count then return end
 
     local items = {}
+    local prices = {}
 
     for index = 1, count do
         local infoOk, info = pcall(C_AuctionHouse.GetOwnedAuctionInfo, index)
@@ -222,7 +239,21 @@ function Auctions:ReadOwned(opts)
             local active = info.status == nil or info.status == STATUS_ACTIVE
 
             if itemID and active then
-                items[itemID] = (items[itemID] or 0) + (info.quantity or 1)
+                local quantity = info.quantity or 1
+                items[itemID] = (items[itemID] or 0) + quantity
+
+                -- The cheapest unit price you have it listed at. A commodity
+                -- listing carries a unit price; an item auction carries the
+                -- stack's buyout. This is what lets a browse row that says
+                -- "you have a listing here" be read as yours or a rival's.
+                local unit = tonumber(info.unitPrice)
+                if not unit and tonumber(info.buyoutAmount) and info.buyoutAmount > 0 then
+                    unit = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
+                end
+
+                if unit and unit > 0 and (not prices[itemID] or unit < prices[itemID]) then
+                    prices[itemID] = unit
+                end
             end
         end
     end
@@ -230,12 +261,18 @@ function Auctions:ReadOwned(opts)
     local record = self:GetTable()
     local changed = record.auctionCount ~= count or not SameCounts(record.items, items)
 
+    -- Counted so `/bts auctions` can say whether a reading ever happened. An
+    -- item with nothing listed and an item never read for at all look the
+    -- same in the stored table, and only one of those is a bug.
+    self.readCount = (self.readCount or 0) + 1
+
     record.items = items
+    record.prices = prices
     record.updatedAt = time()
     record.auctionCount = count
 
     if changed then
-        ns.Debug(("read %d owned auction(s) covering %d item(s)"):format(
+        ns.Debug(("read %d of your auction(s), %d different item(s)"):format(
             count, Util.Count(items)))
     end
 
@@ -251,8 +288,7 @@ function Auctions:ReadOwned(opts)
     end
 
     if changed and ns.UI then
-        ns.UI:RefreshActiveTab()
-        ns.UI:UpdateHeader()
+        ns.UI:OnAuctionsUpdated()
     end
 end
 
@@ -301,10 +337,20 @@ function Auctions:OnEnable()
     self.hasOwnedEvent = ns.RegisterEvent(
         self, "OWNED_AUCTIONS_UPDATED", self.OnOwnedAuctionsUpdated) and true or false
 
+    self.openRefreshes = 0
+
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function()
         -- Slight delay: the auction house is not ready to answer queries the
         -- instant it opens.
-        C_Timer.After(0.5, function() Auctions:Refresh() end)
+        C_Timer.After(0.5, function()
+            -- Forced past the coalescing window, which the other callers want
+            -- and this one does not. Opening the house is the moment the
+            -- stored reading is most likely to be wrong -- listings sold or
+            -- expired while it was shut -- and closing and reopening within
+            -- five seconds is an ordinary thing to do, not a duplicate.
+            Auctions.openRefreshes = (Auctions.openRefreshes or 0) + 1
+            Auctions:Refresh({ force = true })
+        end)
     end)
 
     -- Posting or cancelling changes the count, so re-read rather than drift.
@@ -324,7 +370,7 @@ end
 -- Verification of a listing rests entirely on being able to read your own
 -- auctions. If that reading is broken, a successful post looks like a failure,
 -- so it needs to be checkable on its own.
-ns.RegisterCommand("auctions", "list what the client says you have listed", function()
+ns.RegisterCommand("auctions", "show the auctions the game says you have up", function()
     if not ns.Scanner.isAuctionHouseOpen then
         ns.Print("the auction house must be open")
         return
@@ -334,20 +380,20 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
     local hasCount = Util.HasFunction("C_AuctionHouse.GetNumOwnedAuctions")
     local hasInfo = Util.HasFunction("C_AuctionHouse.GetOwnedAuctionInfo")
 
-    ns.Print("owned auctions")
+    ns.Print("your auctions")
     ns.PrintRaw(("  QueryOwnedAuctions:   %s"):format(hasQuery and "yes" or "no"))
     ns.PrintRaw(("  GetNumOwnedAuctions:  %s"):format(hasCount and "yes" or "no"))
     ns.PrintRaw(("  GetOwnedAuctionInfo:  %s"):format(hasInfo and "yes" or "no"))
     local announces
     if not Auctions.hasOwnedEvent then
-        announces = "not supported by this client"
+        announces = "not in this version of the game"
     elseif (Auctions.ownedEventCount or 0) > 0 then
         announces = ("yes, %d time(s) this session"):format(Auctions.ownedEventCount)
     else
-        announces = "registered, but never fired this session"
+        announces = "listening, but it has not happened this session"
     end
 
-    ns.PrintRaw(("  announces changes:    %s"):format(announces))
+    ns.PrintRaw(("  change alerts:        %s"):format(announces))
 
     if hasCount then
         local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
@@ -371,26 +417,61 @@ ns.RegisterCommand("auctions", "list what the client says you have listed", func
         end
     end
 
+    -- What the rest of the addon actually reads, as against what the calls
+    -- above can do. The complaint that started this was that the craft list
+    -- ignored posted auctions, and "nothing is listed" and "the reading never
+    -- happened" look identical in the stored table -- so report the stored
+    -- answer and how it got there, not the attempt.
+    local record = Auctions:GetTable()
+    local age = Auctions:GetAge()
+
+    ns.PrintRaw(("  stored for this realm: %d item(s), %s"):format(
+        Util.Count(record.items or {}),
+        age and ("read %ds ago"):format(age) or "never read"))
+    ns.PrintRaw(("  times read:           %d this session, %d when the auction house opened"):format(
+        Auctions.readCount or 0, Auctions.openRefreshes or 0))
+
+    -- And whether the limit is doing anything, which is the other half of
+    -- "why is it still suggesting this". A limit of zero is no limit, and a
+    -- limit nothing has reached suppresses nothing.
+    local cap = ns.Config:Get("maxPostedPerItem") or 0
+
+    if cap <= 0 then
+        ns.PrintRaw("  keep in stock:        no limit set (Settings)")
+    else
+        -- Every cached recipe, which is hundreds of calls. Acceptable in a
+        -- command run by hand, and it is the only honest way to answer "how
+        -- many crafts is this actually holding back".
+        local atLimit = 0
+        for recipeID in pairs(ns.Recipes:GetAll()) do
+            local analysis = ns.Profit:Analyse(recipeID)
+            if analysis and analysis.atPostLimit then atLimit = atLimit + 1 end
+        end
+
+        ns.PrintRaw(("  keep in stock:        %d per item"):format(cap))
+        ns.PrintRaw(("  crafts at that limit: %d, not suggested"):format(atLimit))
+    end
+
     -- Re-query, then report again: the count above may predate any reply.
     --
     -- Paced like every other request even though this is a diagnostic run by
     -- hand. A command that quietly spends the player's allowance is a poor thing
     -- to reach for when the complaint is that the allowance ran out.
     if hasQuery then
-        ns.PrintRaw("  re-querying...")
+        ns.PrintRaw("  asking the auction house again...")
 
         Util.WhenAuctionReady(function()
             pcall(C_AuctionHouse.QueryOwnedAuctions, {})
 
             C_Timer.After(2, function()
                 local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
-                ns.Print(("after querying: %s auction(s)"):format(
+                ns.Print(("after asking again: %s auction(s)"):format(
                     ok and tostring(count) or "call failed"))
             end)
         end, function()
-            ns.Warn("the auction house stayed busy; the re-query was not sent.")
+            ns.Warn("the auction house stayed busy, so it was not asked again.")
         end, {
-            name = "owned auctions (diagnostic)",
+            name = "your auctions (check)",
             key = "owned-auctions",
             priority = ns.AHQueue.PRIORITY.urgent,
             expires = 10,
