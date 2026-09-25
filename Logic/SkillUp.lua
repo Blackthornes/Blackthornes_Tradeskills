@@ -517,7 +517,7 @@ local function ReportCapture(capture, heading)
     end
 
     for _, example in ipairs(capture.examples) do
-        ns.PrintRaw(("  %s -- %s (game value %s)"):format(
+        ns.PrintRaw(("  %s: %s (game value %s)"):format(
             example.name, TierWord(example.tier), Muted(example.raw)))
     end
 
@@ -595,7 +595,7 @@ function()
 
     for index = 1, math.min(8, #starred) do
         local analysis = starred[index]
-        ns.PrintRaw(("    %s -- %s, %s each"):format(
+        ns.PrintRaw(("    %s: %s, %s each"):format(
             analysis.name or "?",
             TierWord(analysis.skillUp and analysis.skillUp.tier),
             ns.Util.FormatMoney(analysis.profit, { noColor = true, short = true })))
@@ -614,9 +614,9 @@ function(args)
     if choice == "" or not styles or not styles[choice] then
         ns.Print(("the skill-up mark is drawn as %s"):format(
             Accent(ns.Config:Get("skillUpMarker") or "star")))
-        ns.PrintRaw(Muted("  /bts star star -- this addon's own gold star"))
-        ns.PrintRaw(Muted("  /bts star raid -- the game's raid-target star"))
-        ns.PrintRaw(Muted("  /bts star pip  -- a plain gold square, if neither draws"))
+        ns.PrintRaw(Muted("  /bts star star: this addon's own gold star"))
+        ns.PrintRaw(Muted("  /bts star raid: the game's raid-target star"))
+        ns.PrintRaw(Muted("  /bts star pip:  a plain gold square, if neither draws"))
         return
     end
 

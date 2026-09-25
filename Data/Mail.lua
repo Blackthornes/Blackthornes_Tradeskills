@@ -908,7 +908,7 @@ local function PackResults(...)
     return select("#", ...), { ... }
 end
 
-ns.RegisterCommand("mail", "[reset] -- what is in the mailbox and what has sold", function(args)
+ns.RegisterCommand("mail", "[reset]: what is in the mailbox and what has sold", function(args)
     local sub = (args or ""):lower():match("^(%S*)")
 
     if sub == "reset" then
@@ -1108,17 +1108,17 @@ ns.RegisterCommand("mail", "[reset] -- what is in the mailbox and what has sold"
             end
 
             if mail.pending then
-                ns.PrintRaw("       not recorded yet -- still loading")
+                ns.PrintRaw("       not recorded yet, still loading")
             end
         end
     end
 end)
 
-ns.RegisterCommand("sold", "<name or link> -- what it really earned, next to the estimate", function(args)
+ns.RegisterCommand("sold", "<name or link>: what it really earned, next to the estimate", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
-        ns.Print(("several recipes match '%s' -- try /bts why first"):format(args))
+        ns.Print(("several recipes match '%s'. Try /bts why first"):format(args))
         return
     end
 
@@ -1133,7 +1133,7 @@ ns.RegisterCommand("sold", "<name or link> -- what it really earned, next to the
     ns.Print(Util.GetItemLabel(itemID))
 
     if summary.sold == 0 and summary.returned == 0 then
-        ns.PrintRaw("  nothing recorded yet -- visit a mailbox after a listing ends")
+        ns.PrintRaw("  nothing recorded yet. Visit a mailbox after a listing ends")
         return
     end
 

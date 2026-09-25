@@ -449,7 +449,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
-        ns.Warn(("removed %d price(s) and %d figure(s) above %s -- nobody could pay that much"):format(
+        ns.Warn(("removed %d price(s) and %d figure(s) above %s, which nobody could pay"):format(
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
 
@@ -473,7 +473,7 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("price", "<item link or name> -- what the auction house says", function(args)
+ns.RegisterCommand("price", "<item link or name>: what the auction house says", function(args)
     -- Shift-clicking an item into chat is the natural way to name one.
     local itemID = tonumber(args:match("item:(%d+)")) or tonumber(args:match("^%s*(%d+)%s*$"))
 
@@ -492,7 +492,7 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
 
     local record = ns.Prices:Get(itemID)
     if not record then
-        ns.Print(("no auction data for %s -- run |cffc8a44d/bts scan|r at the auction house")
+        ns.Print(("no auction data for %s. Run |cffc8a44d/bts scan|r at the auction house")
             :format(Util.GetItemLabel(itemID)))
 
         -- There may still be a price to give: something this account can make
@@ -502,7 +502,7 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
         local estimate, basis, why = ns.Profit:ChoosePostPrice(itemID)
 
         if estimate and basis == "derived" then
-            ns.PrintRaw(("  |c%syou would list at %s -- an estimate, not a market price|r"):format(
+            ns.PrintRaw(("  |c%syou would list at %s (an estimate, not a market price)|r"):format(
                 ns.COLORS.warn, Util.FormatMoney(estimate)))
             if why then ns.PrintRaw(("    %s"):format(why)) end
         end
