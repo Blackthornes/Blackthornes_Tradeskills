@@ -15,6 +15,9 @@ ignore:
   - docs
   - tools
   - deploy.ps1
+  # Notes for Claude about working on the addon, shared with the other
+  # addon's project. Not for players.
+  - CLAUDE.md
   - README.md
 
 # Ship CHANGELOG.md as written. Without this the packager writes its own from

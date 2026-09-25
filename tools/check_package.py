@@ -33,7 +33,7 @@ ALLOWED_EXT = {".lua", ".toc", ".xml", ".tga", ".blp", ".md", ""}
 # Never shipped, wherever it turns up.
 FORBIDDEN_NAMES = {"BlackthornesTSDB.lua", "BlackthornesTSCharDB.lua",
                    "Blackthornes_TS.lua", "Snapshot.lua", "deploy.ps1",
-                   ".pkgmeta"}
+                   "CLAUDE.md", ".pkgmeta"}
 
 PRIVATE = [
     ("a Windows path", re.compile(r"\b[A-Za-z]:\\[^\s\"']")),
