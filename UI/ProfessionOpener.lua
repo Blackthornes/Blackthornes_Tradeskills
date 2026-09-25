@@ -111,16 +111,14 @@ local function InCombat()
     return type(InCombatLockdown) == "function" and InCombatLockdown() and true or false
 end
 
--- Fire on key down or up to match the game's own action buttons. Registering
--- both would cast twice on a client whose template ignores the direction,
--- and a second cast of a profession closes the window the first one opened.
-local function ClickDirection()
-    if type(GetCVarBool) == "function" then
-        local ok, down = pcall(GetCVarBool, "ActionButtonUseKeyDown")
-        if ok and down then return "AnyDown" end
-    end
-    return "AnyUp"
-end
+-- Fire on mouse release only. Seen in game: registered for key down (the
+-- game's ActionButtonUseKeyDown setting was on), this client's secure button
+-- never cast, and the release fell through to the craft button underneath.
+-- Registering both directions would cast twice on a client whose template
+-- ignores the direction, and a second cast closes the window the first one
+-- opened. The useOnKeyDown attribute tells a template that does check the
+-- direction to act on the release too.
+local CLICK_DIRECTION = "AnyUp"
 
 function Opener:CreateOverlay()
     if self.overlay then return self.overlay end
@@ -156,6 +154,12 @@ function Opener:CreateOverlay()
 
     -- Runs after the secure cast. Only notes the click, so the outcome can be
     -- reported once we know whether a window actually opened.
+    -- Noted before the secure handler runs, so a click that casts nothing
+    -- can still be told apart from a click that never arrived.
+    overlay:SetScript("PreClick", function(_, mouseButton, down)
+        Opener.lastClick = { button = tostring(mouseButton), down = down and true or false, at = GetTime() }
+    end)
+
     overlay:SetScript("PostClick", function()
         Opener:OnClicked()
     end)
@@ -241,10 +245,10 @@ function Opener:Arm(anchor, profession, recipeID)
         overlay:SetAttribute("spell", profession.spell)
     end
 
-    local direction = ClickDirection()
-    if self.direction ~= direction then
-        overlay:RegisterForClicks(direction)
-        self.direction = direction
+    if self.direction ~= CLICK_DIRECTION then
+        overlay:RegisterForClicks(CLICK_DIRECTION)
+        overlay:SetAttribute("useOnKeyDown", false)
+        self.direction = CLICK_DIRECTION
     end
 
     self.armed = profession
@@ -290,6 +294,7 @@ function Opener:OnClicked()
 
         ns.Warn(("clicked Open %s, but no profession window opened. "
             .. "Type /bts openprof and send the lines it prints."):format(profession.name))
+        Opener:DescribeLastClick()
     end)
 end
 
@@ -321,6 +326,16 @@ end
 --------------------------------------------------------------------------------
 -- /bts openprof
 --------------------------------------------------------------------------------
+
+function Opener:DescribeLastClick()
+    local click = self.lastClick
+    if not click then
+        ns.Print("Open button has not received a click yet.")
+        return
+    end
+    ns.Print(("Open button last got %s %s, %.1f seconds ago.")
+        :format(click.button, click.down and "down" or "up", GetTime() - click.at))
+end
 
 local function DescribePlacement()
     local overlay, anchor = Opener.overlay, Opener.anchor
@@ -356,6 +371,7 @@ function Opener:MissedClick()
     ns.Warn("that click missed the Open button. Click it again; if it misses twice, "
         .. "type /bts openprof and send the lines it prints.")
     DescribePlacement()
+    self:DescribeLastClick()
 
     self.placed = nil
     self:Place()
@@ -377,58 +393,11 @@ local function Describe()
         ns.Print("Open button: not in use (no queued craft needs a window opened).")
     end
     DescribePlacement()
+    Opener:DescribeLastClick()
 end
 
--- Tries the other route, C_TradeSkillUI.OpenTradeSkill, straight from addon
--- code, and reports whether a window opened. If it works, a single click could
--- one day open and craft; if the game blocks it, that is worth knowing too.
-ns.RegisterCommand("openprof", "check the Queue tab's Open profession button", function()
-    Describe()
-
-    local api = _G.C_TradeSkillUI
-    local target = Opener.armed
-    if not target then
-        local entry = ns.Crafting:GetNextReady()
-        target = entry and Opener:ProfessionFor(entry.recipeID)
-    end
-
-    if not target then
-        ns.Print("Nothing queued that needs a profession opened, so no open test was run.")
-        return
-    end
-
-    if ns.Crafting.isTradeSkillOpen then
-        ns.Print("A profession window is already open. Close it and run /bts openprof again to test opening.")
-        return
-    end
-
-    if not api or type(api.OpenTradeSkill) ~= "function" then
-        ns.Print("OpenTradeSkill: not in this version of the game.")
-        return
-    end
-
-    -- Forever has two skill-line IDs per profession; the first try used the
-    -- recipe's own one. Try the other one too, a second apart.
-    local ids = { target.skillLineID }
-    for id, name in pairs(SKILL_LINE_NAMES) do
-        if name == target.name and id ~= target.skillLineID then ids[#ids + 1] = id end
-    end
-
-    for index, skillLineID in ipairs(ids) do
-        C_Timer.After((index - 1) * 2, function()
-            if ns.Crafting.isTradeSkillOpen then return end
-
-            local ok, err = pcall(api.OpenTradeSkill, skillLineID)
-            if not ok then
-                ns.Print(("OpenTradeSkill(%d): refused: %s"):format(skillLineID, tostring(err)))
-                return
-            end
-
-            C_Timer.After(1.5, function()
-                ns.Print(("OpenTradeSkill(%d) for %s: window %s.")
-                    :format(skillLineID, target.name,
-                        ns.Crafting.isTradeSkillOpen and "OPENED" or "did NOT open"))
-            end)
-        end)
-    end
-end)
+-- C_TradeSkillUI.OpenTradeSkill was tried here from addon code: in game it
+-- opened nothing for 2945, and the game then reported "Interface action
+-- failed because of an AddOn" (most likely the 165 try). The secure button is the
+-- only way, so this command now only reports on it.
+ns.RegisterCommand("openprof", "check the Queue tab's Open profession button", Describe)
