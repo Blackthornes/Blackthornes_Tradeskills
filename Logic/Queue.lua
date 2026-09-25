@@ -230,6 +230,9 @@ function Queue:Clear()
 end
 
 function Queue:Notify()
+    if ns.Crafting and ns.Crafting.OnQueueChanged then
+        ns.Crafting:OnQueueChanged()
+    end
     if ns.UI and ns.UI.OnQueueUpdated then
         ns.UI:OnQueueUpdated()
     end
@@ -281,7 +284,9 @@ function Queue:GetShoppingList()
     local queuedToMake = {}
 
     for _, entry in ipairs(self:GetAll()) do
-        local recipe = ns.Recipes:Get(entry.recipeID)
+        -- GetAny, as everywhere else the queue is read: an alt's craft queued
+        -- from the account-wide view still needs its materials gathered.
+        local recipe = ns.Recipes:GetAny(entry.recipeID)
 
         if recipe then
             for _, reagent in ipairs(recipe.reagents or {}) do

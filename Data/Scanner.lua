@@ -902,14 +902,21 @@ function Scanner:ScanItem(itemID, callback, opts)
         superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
     end
 
-    self.pendingItem = { itemID = itemID, itemKey = itemKey, callback = callback }
+    -- Kept by identity as well as in the shared slot. The queue tells a request
+    -- it replaced to give up only after the replacement is already installed,
+    -- so a give-up that looked at the shared slot was reading its successor:
+    -- it cleared the new request, told the new caller its check had failed,
+    -- and the new search then never went out. Two List clicks a second apart
+    -- during a scan were enough to list at an unchecked price.
+    local mine = { itemID = itemID, itemKey = itemKey, callback = callback }
+    self.pendingItem = mine
 
     -- Urgent priority: this is only reached because the player clicked something
     -- and is waiting on the price, so it goes ahead of any background sweep, and
     -- it is the one kind of request allowed out while Blizzard's sell frame is
     -- open.
     Util.WhenAuctionReady(function()
-        if not Scanner.pendingItem or Scanner.pendingItem.itemID ~= itemID then return end
+        if Scanner.pendingItem ~= mine then return end
 
         Scanner.recentItemScans[itemID] = GetTime()
 
@@ -953,13 +960,15 @@ function Scanner:ScanItem(itemID, callback, opts)
         end)
     end, function()
         -- Never got a turn. Hand back what we already know rather than leaving
-        -- the caller waiting forever.
-        local pending = Scanner.pendingItem
+        -- the caller waiting forever. Only for this request, though: if a newer
+        -- search has taken the slot, this one was already told "superseded"
+        -- and the newer one is still waiting for its turn.
+        if Scanner.pendingItem ~= mine then return end
         Scanner.pendingItem = nil
 
         ns.Warn("the auction house stayed busy; using the last known price.")
-        if pending and pending.callback then
-            pending.callback(itemID, nil, nil, nil, nil, nil, "unavailable")
+        if mine.callback then
+            mine.callback(itemID, nil, nil, nil, nil, nil, "unavailable")
         end
     end, {
         name = ("price check for %s"):format(Util.GetItemLabel(itemID)),

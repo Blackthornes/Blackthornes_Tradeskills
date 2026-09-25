@@ -253,13 +253,22 @@ function Widgets.CreateNumberBox(parent, opts)
     function container:SetValue(value, silent)
         value = tonumber(value) or self.min or 0
 
+        -- A whole-number box stores a whole number. Typing 5.5 used to show
+        -- 6 but hand 5.5 to the setting behind it, and a limit of 5.5 then
+        -- broke every "%d" that printed it.
+        if (opts.decimals or 0) == 0 then value = math.floor(value + 0.5) end
+
         if self.min and value < self.min then value = self.min end
         if self.max and value > self.max then value = self.max end
 
+        local changed = value ~= self.value
         self.value = value
         editBox:SetText(Format(value))
 
-        if not silent and opts.onChange then
+        -- Only a change is reported. Clicking into a box and away again is
+        -- not a decision, and a per-item box that reported its unchanged
+        -- default wrote that default down as an override for the item.
+        if changed and not silent and opts.onChange then
             opts.onChange(value)
         end
     end
@@ -656,10 +665,15 @@ function Widgets.CreateScrollList(parent, opts)
 
     list.scrollbar = scrollbar
 
+    -- Whole rows only. This used to round up, so the last row was drawn with
+    -- its bottom hanging past the list's edge: the list is a plain frame that
+    -- clips nothing, and that overhang is what sat on top of the footer line
+    -- under the Prices and Profit tabs. Rounding down also matches how far
+    -- the scrollbar lets the list go, which was already counted in whole rows.
     local function VisibleRowCount()
         local height = list:GetHeight()
         if not height or height <= 0 then return 0 end
-        return math.ceil(height / rowHeight)
+        return math.floor(height / rowHeight)
     end
 
     local function AcquireRow(index)
