@@ -165,15 +165,20 @@ function Opener:Place()
     local x, y = left * scale, bottom * scale
     local w, h = width * scale, height * scale
 
+    -- Same layer as the craft button, just above it, so a bag or another
+    -- window lying over ours still gets its own clicks. Checked every time,
+    -- not only when the button moves: our window is a top-level frame, so
+    -- clicking it or reopening it raises its level, and a secure button left
+    -- at the old level ends up underneath the craft button. That is exactly
+    -- how the first in-game try missed.
+    local strata, level = anchor:GetFrameStrata(), anchor:GetFrameLevel() + 5
+    if overlay:GetFrameStrata() ~= strata then overlay:SetFrameStrata(strata) end
+    if overlay:GetFrameLevel() ~= level then overlay:SetFrameLevel(level) end
+
     local last = self.placed
     if last and last[1] == x and last[2] == y and last[3] == w and last[4] == h then
         return
     end
-
-    -- Same layer as the craft button, just above it, so a bag or another
-    -- window lying over ours still gets its own clicks.
-    overlay:SetFrameStrata(anchor:GetFrameStrata())
-    overlay:SetFrameLevel(anchor:GetFrameLevel() + 5)
 
     overlay:ClearAllPoints()
     overlay:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
@@ -303,6 +308,36 @@ end
 -- /bts openprof
 --------------------------------------------------------------------------------
 
+local function DescribePlacement()
+    local overlay, anchor = Opener.overlay, Opener.anchor
+    if not overlay or not anchor then return end
+
+    ns.Print(("Open button layer: %s %d over the craft button's %s %d, size %dx%d, %s.")
+        :format(overlay:GetFrameStrata(), overlay:GetFrameLevel(),
+            anchor:GetFrameStrata(), anchor:GetFrameLevel(),
+            overlay:GetWidth() or 0, overlay:GetHeight() or 0,
+            overlay:IsShown() and "showing" or "hidden"))
+end
+
+--- A click reached the craft button while it read "Open ...", so the secure
+-- button did not catch it. Say why, as far as we can tell, and put it back.
+function Opener:MissedClick()
+    if InCombat() then
+        ns.Print("the Queue cannot open a profession during combat. Open it yourself, or try again after the fight.")
+        return
+    end
+
+    ns.Warn("that click missed the Open button. Click it again; if it misses twice, "
+        .. "type /bts openprof and send the lines it prints.")
+    DescribePlacement()
+
+    self.placed = nil
+    self:Place()
+    if self.overlay and self.armed and self.anchor and self.anchor:IsVisible() then
+        self.overlay:Show()
+    end
+end
+
 local function Describe()
     local armed = Opener.armed
     if armed then
@@ -315,6 +350,7 @@ local function Describe()
     else
         ns.Print("Open button: not in use (no queued craft needs a window opened).")
     end
+    DescribePlacement()
 end
 
 -- Tries the other route, C_TradeSkillUI.OpenTradeSkill, straight from addon
