@@ -196,7 +196,11 @@ function Mail:ReadInbox()
 
         local declared = mail.itemCount or 0
 
-        for slot = 1, math.min(MAX_ATTACHMENTS, math.max(declared, 0)) do
+        -- Every slot, not the first `declared` of them. Attachments keep their
+        -- slot numbers: take the first stack of three from a mail and the two
+        -- left are in slots 2 and 3, so a walk of slots 1 and 2 found one,
+        -- called the mail "still loading" for ever and never counted the third.
+        for slot = 1, (declared > 0 and MAX_ATTACHMENTS or 0) do
             local itemID, quantity = self:ReadAttachment(index, slot)
 
             if itemID then
@@ -227,6 +231,15 @@ function Mail:Read()
     if not Util.HasFunction("GetInboxNumItems") then return end
 
     local mails, complete = self:ReadInbox()
+
+    -- An empty list before the server has answered the mailbox's first inbox
+    -- request is not an empty mailbox. Trusting it emptied the stock counts
+    -- and forgot every mail already recorded, so the next update wrote each
+    -- sale down a second time.
+    if #mails == 0 and self.isOpen and not self.inboxUpdatedThisVisit then
+        ns.Debug("mailbox: nothing listed yet, waiting for the inbox")
+        return
+    end
 
     local counts = {}
     for _, mail in ipairs(mails) do
@@ -426,9 +439,11 @@ function Mail:ResolveItemName(name)
         end
     end
 
-    -- false rather than nil, so a miss is remembered and the whole recipe list
-    -- is not walked again for every redraw.
-    self.nameCache[name] = found or false
+    -- Only a hit is remembered. The name of an item the client has not cached
+    -- yet comes back nil, and a miss remembered for the session would leave
+    -- every later sale of that item filed by name only. This runs once per
+    -- new sale, not per redraw, so the walk is affordable.
+    if found then self.nameCache[name] = found end
 
     return found
 end
@@ -525,6 +540,13 @@ function Mail:Reconcile(mails, complete)
                     mail.pending = true
                     present[key] = occurrence - 1
                     self.awaitingAmount = (self.awaitingAmount or 0) + 1
+
+                elseif kind ~= "sold" and #mail.attachments == 0 and (mail.money or 0) == 0 then
+                    -- An expired or cancelled auction whose item has just been
+                    -- taken. The emptied mail lingers for an update or two, and
+                    -- with no attachment it fingerprints as a new mail; it was
+                    -- written down when it arrived, so it is not written again.
+                    ns.Debug("mail already collected:", tostring(mail.subject))
 
                 elseif kind then
                     ledger.entries[#ledger.entries + 1] =
@@ -853,11 +875,13 @@ function Mail:OnEnable()
 
     self.hasInboxEvent = ns.RegisterEvent(self, "MAIL_INBOX_UPDATE", function()
         Mail.inboxEventCount = (Mail.inboxEventCount or 0) + 1
+        Mail.inboxUpdatedThisVisit = true
         Mail:Read()
     end) and true or false
 
     ns.RegisterEvent(self, "MAIL_SHOW", function()
         Mail.isOpen = true
+        Mail.inboxUpdatedThisVisit = false
         -- The inbox is not ready to be read the instant the frame appears.
         C_Timer.After(0.5, function() Mail:Read() end)
     end)
@@ -884,7 +908,7 @@ local function PackResults(...)
     return select("#", ...), { ... }
 end
 
-ns.RegisterCommand("mail", "[reset] -- what is in the mailbox and what has sold", function(args)
+ns.RegisterCommand("mail", "[reset]: what is in the mailbox and what has sold", function(args)
     local sub = (args or ""):lower():match("^(%S*)")
 
     if sub == "reset" then
@@ -1084,17 +1108,17 @@ ns.RegisterCommand("mail", "[reset] -- what is in the mailbox and what has sold"
             end
 
             if mail.pending then
-                ns.PrintRaw("       not recorded yet -- still loading")
+                ns.PrintRaw("       not recorded yet, still loading")
             end
         end
     end
 end)
 
-ns.RegisterCommand("sold", "<name or link> -- what it really earned, next to the estimate", function(args)
+ns.RegisterCommand("sold", "<name or link>: what it really earned, next to the estimate", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
-        ns.Print(("several recipes match '%s' -- try /bts why first"):format(args))
+        ns.Print(("several recipes match '%s'. Try /bts why first"):format(args))
         return
     end
 
@@ -1109,7 +1133,7 @@ ns.RegisterCommand("sold", "<name or link> -- what it really earned, next to the
     ns.Print(Util.GetItemLabel(itemID))
 
     if summary.sold == 0 and summary.returned == 0 then
-        ns.PrintRaw("  nothing recorded yet -- visit a mailbox after a listing ends")
+        ns.PrintRaw("  nothing recorded yet. Visit a mailbox after a listing ends")
         return
     end
 

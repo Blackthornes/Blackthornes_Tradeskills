@@ -555,7 +555,7 @@ local function Refresh()
 
     widgets.carried:SetShown(carried > 0)
     if carried > 0 then
-        widgets.carried:SetText(("plus %d sale%s from before you last quit the game -- see By item"):format(
+        widgets.carried:SetText(("plus %d sale%s from before you last quit the game. See By item"):format(
             carried, carried == 1 and "" or "s"))
     end
 end

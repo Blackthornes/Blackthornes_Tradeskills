@@ -575,6 +575,9 @@ function UI:UpdateAuctionButton()
     if ns.Scanner.isScanning then
         button:SetText("Cancel")
         button.tooltipText = "Stop the running scan"
+        -- Cancelling is always allowed, even when the button was disabled a
+        -- moment ago because a scan was waiting to start.
+        button:SetEnabledState(true)
         return
     end
 

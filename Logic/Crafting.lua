@@ -116,6 +116,11 @@ function Crafting:OnBagUpdate()
     local entries = {}
     for index, entry in ipairs(ns.Queue:GetAll()) do entries[index] = entry end
 
+    -- Queue changes made during the walk must not reset the snapshot the
+    -- walk is comparing against; see OnQueueChanged.
+    self.walking = true
+    local dependencyMade = false
+
     for _, entry in ipairs(entries) do
         local recipe = ns.Recipes:GetAny(entry.recipeID)
 
@@ -132,7 +137,17 @@ function Crafting:OnBagUpdate()
                     math.floor((held - previous) / perCraft),
                     entry.quantity)
 
-                if made > 0 then
+                if made > 0 and entry.isDependency then
+                    -- A sub-craft is sized from what its parents still need
+                    -- minus what is held, so it is re-derived rather than
+                    -- counted down. Counting it down went through SetQuantity,
+                    -- which finds the MANUAL entry for the same recipe first:
+                    -- queue 5 bolts and a bag that needs 3, make 2, and the
+                    -- bolts you asked for were written down to 1 and then
+                    -- removed.
+                    dependencyMade = true
+
+                elseif made > 0 then
                     ns.Queue:SetQuantity(entry.recipeID, entry.quantity - made)
 
                     ns.Print(("made %d of %s"):format(made,
@@ -142,6 +157,24 @@ function Crafting:OnBagUpdate()
         end
     end
 
+    if dependencyMade then
+        ns.Queue:RebuildDependencies()
+        ns.Queue:Notify()
+    end
+
+    self.walking = false
+    self:RememberOutputs()
+end
+
+--- The queue changed by hand (added to, stepped, cleared).
+--
+-- A recipe queued while the profession window was already open had no
+-- snapshot until the next bag change, so its first craft went unnoticed and
+-- the queue stayed one too high. Snapshot whenever the queue changes, except
+-- while OnBagUpdate is mid-walk, when the snapshot is the thing being
+-- compared against.
+function Crafting:OnQueueChanged()
+    if self.walking then return end
     self:RememberOutputs()
 end
 

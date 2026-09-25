@@ -348,7 +348,7 @@ function Config:CheckLateSavedVariables()
     if type(current) == "table" and self.installedDB and current ~= self.installedDB then
         self.loadDiagnostics.lateSavedVariables = true
 
-        ns.Warn("the game loaded your saved data late, after login instead of at load. Please report this -- run /bts persist.")
+        ns.Warn("the game loaded your saved data late, after login instead of at load. Please report this, then run /bts persist.")
     end
 end
 
@@ -525,7 +525,7 @@ ns.RegisterCommand("db", "show what saved data loaded", function()
         end
 
         if diagnostics.charCanarySeen then
-            ns.Print("|cff4fd18bper-character saved data DID load|r -- the queue could be kept there.")
+            ns.Print("|cff4fd18bper-character saved data DID load|r, so the queue could be kept there.")
         end
     end
 end)

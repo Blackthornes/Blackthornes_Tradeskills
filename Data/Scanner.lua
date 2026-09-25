@@ -246,7 +246,7 @@ function Scanner:StartFullScan()
     -- the same price database.
     local cooldown = self:GetSnapshotCooldown()
     if cooldown then
-        ns.Print(("the quick full scan can be used again in %s -- scanning page by page instead")
+        ns.Print(("the quick full scan can be used again in %s, so scanning page by page instead")
             :format(Util.FormatAge(cooldown)))
         return self:StartBrowseScan()
     end
@@ -272,7 +272,7 @@ function Scanner:StartFullScan()
             Scanner.isScanning = true
 
             if not pcall(C_AuctionHouse.ReplicateItems) then
-                ns.Print("the game refused the quick full scan -- scanning page by page instead")
+                ns.Print("the game refused the quick full scan, so scanning page by page instead")
                 Scanner:StartBrowseScan()
                 return true
             end
@@ -284,7 +284,7 @@ function Scanner:StartFullScan()
             -- back to browsing instead of leaving the player watching nothing.
             Scanner.timeoutHandle = C_Timer.NewTimer(6, function()
                 if Scanner.isScanning and not Scanner.isReading then
-                    ns.Print("the quick full scan did not answer (it was used too recently) -- scanning page by page instead")
+                    ns.Print("the quick full scan did not answer (it was used too recently), so scanning page by page instead")
                     Scanner:StartBrowseScan()
                 end
             end)
@@ -637,7 +637,7 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
 
     local ok, numItems = pcall(C_AuctionHouse.GetNumReplicateItems)
     if not ok or not numItems or numItems == 0 then
-        ns.Print("the quick full scan came back empty -- scanning page by page instead")
+        ns.Print("the quick full scan came back empty, so scanning page by page instead")
         self:StartBrowseScan()
         return
     end
@@ -902,14 +902,21 @@ function Scanner:ScanItem(itemID, callback, opts)
         superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
     end
 
-    self.pendingItem = { itemID = itemID, itemKey = itemKey, callback = callback }
+    -- Kept by identity as well as in the shared slot. The queue tells a request
+    -- it replaced to give up only after the replacement is already installed,
+    -- so a give-up that looked at the shared slot was reading its successor:
+    -- it cleared the new request, told the new caller its check had failed,
+    -- and the new search then never went out. Two List clicks a second apart
+    -- during a scan were enough to list at an unchecked price.
+    local mine = { itemID = itemID, itemKey = itemKey, callback = callback }
+    self.pendingItem = mine
 
     -- Urgent priority: this is only reached because the player clicked something
     -- and is waiting on the price, so it goes ahead of any background sweep, and
     -- it is the one kind of request allowed out while Blizzard's sell frame is
     -- open.
     Util.WhenAuctionReady(function()
-        if not Scanner.pendingItem or Scanner.pendingItem.itemID ~= itemID then return end
+        if Scanner.pendingItem ~= mine then return end
 
         Scanner.recentItemScans[itemID] = GetTime()
 
@@ -953,13 +960,15 @@ function Scanner:ScanItem(itemID, callback, opts)
         end)
     end, function()
         -- Never got a turn. Hand back what we already know rather than leaving
-        -- the caller waiting forever.
-        local pending = Scanner.pendingItem
+        -- the caller waiting forever. Only for this request, though: if a newer
+        -- search has taken the slot, this one was already told "superseded"
+        -- and the newer one is still waiting for its turn.
+        if Scanner.pendingItem ~= mine then return end
         Scanner.pendingItem = nil
 
         ns.Warn("the auction house stayed busy; using the last known price.")
-        if pending and pending.callback then
-            pending.callback(itemID, nil, nil, nil, nil, nil, "unavailable")
+        if mine.callback then
+            mine.callback(itemID, nil, nil, nil, nil, nil, "unavailable")
         end
     end, {
         name = ("price check for %s"):format(Util.GetItemLabel(itemID)),
@@ -1379,8 +1388,8 @@ function Scanner:ConsiderAutoScan(attempt)
     if count > 0 and not stale then return end
 
     ns.Print(count == 0
-        and "no price data -- scanning automatically"
-        or "prices are out of date -- scanning automatically")
+        and "no price data, so scanning automatically"
+        or "prices are out of date, so scanning automatically")
 
     self:StartFullScan()
 end
@@ -1441,7 +1450,7 @@ ns.RegisterCommand("listings", "what the last price check found", function()
     local last = ns.Scanner.lastItemListings
 
     if not last or not last.raw or #last.raw == 0 then
-        ns.Print("no price check has come back yet -- click List on something first")
+        ns.Print("no price check has come back yet. Click List on something first")
         return
     end
 
@@ -1491,7 +1500,7 @@ ns.RegisterCommand("listings", "what the last price check found", function()
     end
 end)
 
-ns.RegisterCommand("verify", "<itemID> -- compare the scanned price with a fresh search", function(args)
+ns.RegisterCommand("verify", "<itemID>: compare the scanned price with a fresh search", function(args)
     local itemID = tonumber(args:match("(%d+)"))
     if not itemID then
         ns.Print("usage: /bts verify <itemID>")
@@ -1522,7 +1531,7 @@ ns.RegisterCommand("verify", "<itemID> -- compare the scanned price with a fresh
             if ratio > 0.9 and ratio < 1.1 then
                 ns.PrintRaw(("  |c%sthe two agree|r"):format(ns.COLORS.profit))
             else
-                ns.PrintRaw(("  |c%sMISMATCH -- the scanned price is %.2fx the price now|r"):format(
+                ns.PrintRaw(("  |c%sMISMATCH: the scanned price is %.2fx the price now|r"):format(
                     ns.COLORS.loss, ratio))
             end
         else

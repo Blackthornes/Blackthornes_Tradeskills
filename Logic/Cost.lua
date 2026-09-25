@@ -213,7 +213,7 @@ end
 function Cost:GetShortfall(recipeID, craftCount)
     craftCount = craftCount or 1
 
-    local recipe = ns.Recipes:Get(recipeID)
+    local recipe = ns.Recipes:GetAny(recipeID)
     if not recipe then return nil end
 
     local missing = {}

@@ -238,7 +238,7 @@ local function ShowMarkTooltip(row, analysis)
     -- Skill only rises, so a reading taken lower down may have gone green
     -- since. Better said than quietly trusted.
     if skillUp.stale then
-        GameTooltip:AddLine(("Read at skill %d, you are %d now -- open your profession to refresh."):format(
+        GameTooltip:AddLine(("Read at skill %d, you are %d now. Open your profession to refresh."):format(
             skillUp.skill or 0, skillUp.currentSkill or 0), 0.91, 0.76, 0.35, true)
     end
 
@@ -403,9 +403,8 @@ local function UpdateDetail(analysis)
     local skillUp = analysis.skillUp
 
     if skillUp and skillUp.tier ~= "trivial" then
-        local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
-        skillUpText = ("  |cff%02x%02x%02x%s|r"):format(
-            r * 255, g * 255, b * 255, ns.SkillUp:GetTierLabel(skillUp.tier))
+        skillUpText = ("  %s%s|r"):format(
+            ns.SkillUp:GetTierColorCode(skillUp.tier), ns.SkillUp:GetTierLabel(skillUp.tier))
     end
 
     if analysis.craftableNow and analysis.craftableNow > 0 then
@@ -601,7 +600,7 @@ local function UpdateDetail(analysis)
     detail.quantity:SetText(tostring(suggested))
 
     if analysis.atPostLimit then
-        detail.subtitle:SetText(("You already have %d -- at your limit"):format(
+        detail.subtitle:SetText(("You already have %d, your limit"):format(
             analysis.stock or 0))
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
     end

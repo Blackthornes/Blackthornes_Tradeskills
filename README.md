@@ -47,8 +47,8 @@ fails when that line of code runs.
 
 Since WoW: Forever build 1.60.1.70009 (2026-09-24) the game keeps the addon's
 saved data (`BlackthornesTSDB` and `BlackthornesTSCharDB`) across a restart,
-so nothing else is needed. The old workarounds -- a generated data addon and
-storage in macros -- were removed; `Core/OldMacros.lua` deletes the leftover
+so nothing else is needed. The old workarounds, a generated data addon and
+storage in macros, were removed; `Core/OldMacros.lua` deletes the leftover
 `BTSd` macros on a login where the saved data loaded. The CVar store in
 `Core/Persist.lua` stays as a fallback and stands down whenever the saved data
 loads. `/bts db` and `/bts persist` show what loaded.
