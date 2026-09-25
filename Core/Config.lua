@@ -95,6 +95,10 @@ local DEFAULTS = {
         -- them greyed out.
         hideAtPostLimit = true,
 
+        -- The craft pane's "Ignore max on hand" box: list every craft and let
+        -- Add queue past the Keep in stock limit, without changing the limit.
+        craftPaneIgnoreLimit = false,
+
         -- Count what is sitting in the mailbox as stock you own.
         --
         -- An expired auction comes back as mail, and until it is collected it
