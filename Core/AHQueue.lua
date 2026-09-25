@@ -304,6 +304,12 @@ function AHQueue:Request(opts)
                 local replaced = self.queue[i]
                 self.queue[i] = request
 
+                -- The same key is asked for at different priorities (the owned
+                -- auctions refresh is routine; the /bts auctions check is
+                -- urgent), so the replacement takes its own place in line
+                -- rather than inheriting the old one's.
+                table.sort(self.queue, Compare)
+
                 -- The replaced request will never be sent, so whatever was
                 -- waiting on it hears that now. Dropping it silently is how a
                 -- button ends up sitting there doing nothing for ever.

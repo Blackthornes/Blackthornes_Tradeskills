@@ -444,7 +444,7 @@ local function Build(container)
     -- Stated once, plainly, rather than discovered by clicking a dead button.
     local note = Theme.CreateLabel(container, "small", "warn")
     note:SetPoint("TOPLEFT", filterBar, "BOTTOMLEFT", 2, -6)
-    note:SetPoint("RIGHT", toolbar, "RIGHT", 0, 0)
+    note:SetPoint("TOPRIGHT", filterBar, "BOTTOMRIGHT", 0, -6)
     note:SetWordWrap(true)
     note:SetText("Set LIST to sell part of a stack. Or type the G / S / C price into Blizzard's own Sell tab.")
 
