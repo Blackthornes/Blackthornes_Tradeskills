@@ -124,6 +124,7 @@ check(Opener:ProfessionFor(5) == nil, "no skill line, no guess")
 
 check(Opener:WindowShowsRecipe(1) == false, "closed window shows nothing")
 ns.Crafting.isTradeSkillOpen = true
+openSet = { [1] = true }
 openSet = nil
 check(Opener:WindowShowsRecipe(1) == true, "open window the client will not describe gets the benefit of the doubt")
 openSet = { [2] = true }
@@ -180,16 +181,27 @@ check(craftButton.mouse == true, "disarming gives the craft button its clicks ba
 -- Reporting -------------------------------------------------------------------
 
 Opener:Arm(craftButton, Opener:ProfessionFor(1), 1)
-overlay.scripts.PostClick(overlay)
+overlay.scripts.PreClick(overlay, "LeftButton", false)
 check(#printed == 0 and #warned == 0, "a click alone reports nothing yet")
 events.TRADE_SKILL_SHOW()
 check(printed[1] and printed[1]:find("opened your Tailoring window"), "window opening is reported")
 timers[#timers]()
 check(#warned == 0, "the timeout after a success stays quiet")
 
-overlay.scripts.PostClick(overlay)
+overlay.scripts.PreClick(overlay, "LeftButton", false)
 timers[#timers]()
 check(warned[1] and warned[1]:find("no profession window opened"), "a click that opened nothing is reported as a miss")
+
+-- The window opens but its event is not heard: the open window is what
+-- counts, so this is a success, not a miss.
+local p, wn = #printed, #warned
+overlay.scripts.PreClick(overlay, "LeftButton", false)
+ns.Crafting.isTradeSkillOpen = true
+openSet = { [1] = true }
+timers[#timers]()
+check(#warned == wn, "an open window is not reported as a miss")
+check(#printed == p + 1 and printed[#printed]:find("opened your Tailoring window"), "an open window is reported as opened")
+ns.Crafting.isTradeSkillOpen = false
 
 -- A click that reaches the craft button out of combat is a miss, not combat.
 local w = #warned

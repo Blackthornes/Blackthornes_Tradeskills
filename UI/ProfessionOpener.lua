@@ -152,8 +152,6 @@ function Opener:CreateOverlay()
         GameTooltip:Hide()
     end)
 
-    -- Runs after the secure cast. Only notes the click, so the outcome can be
-    -- reported once we know whether a window actually opened.
     -- Noted before the secure handler runs, so a click that casts nothing
     -- can still be told apart from a click that never arrived.
     -- Any press at all, registered click or not, so /bts openprof can say
@@ -162,11 +160,11 @@ function Opener:CreateOverlay()
         Opener.lastMouseDown = { button = tostring(mouseButton), at = GetTime() }
     end)
 
+    -- The click is noted before the cast, not after it: in game the window
+    -- can open during the cast itself, and a click noted afterwards missed
+    -- that and was reported as opening nothing.
     overlay:SetScript("PreClick", function(_, mouseButton, down)
         Opener.lastClick = { button = tostring(mouseButton), down = down and true or false, at = GetTime() }
-    end)
-
-    overlay:SetScript("PostClick", function()
         Opener:OnClicked()
     end)
 
@@ -311,11 +309,19 @@ function Opener:OnClicked()
     if not profession then return end
 
     local token = {}
+    local recipeID = self.armedRecipeID
     self.pending = { profession = profession, token = token, at = GetTime() }
 
     C_Timer.After(OPEN_TIMEOUT, function()
         local pending = Opener.pending
         if not pending or pending.token ~= token then return end
+
+        -- The window is what counts, not the event. If it is open now, the
+        -- click worked even though the opening was not heard.
+        if recipeID and Opener:WindowShowsRecipe(recipeID) then
+            Opener:OnTradeSkillShow()
+            return
+        end
         Opener.pending = nil
 
         ns.Warn(("clicked Open %s, but no profession window opened. "
