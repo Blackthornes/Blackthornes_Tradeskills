@@ -128,18 +128,30 @@ function Opener:CreateOverlay()
     local overlay = CreateFrame("Button", "BlackthornesTSOpenProfession", UIParent,
         "SecureActionButtonTemplate")
     overlay:Hide()
+    overlay:EnableMouse(true)
 
-    -- Hovering the invisible button should look like hovering the one under it.
-    overlay:SetScript("OnEnter", function()
+    -- Drawn as a real button rather than left invisible. When it sits where it
+    -- should it looks exactly like the craft button under it; when it does
+    -- not, you can see where it went instead of clicking something else.
+    local Theme = ns.Theme
+    overlay.background = Theme.Fill(overlay, "rowActive")
+    Theme.Border(overlay, "border")
+    overlay.label = Theme.CreateLabel(overlay, "small", "accent", "CENTER")
+    overlay.label:SetPoint("CENTER")
+
+    overlay:SetScript("OnEnter", function(self)
+        self.background:SetColorTexture(Theme.Unpack("rowHover"))
         local anchor = Opener.anchor
-        local handler = anchor and anchor:GetScript("OnEnter")
-        if handler then handler(anchor) end
+        if anchor and anchor.tooltipText then
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(anchor.tooltipText, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end
     end)
 
-    overlay:SetScript("OnLeave", function()
-        local anchor = Opener.anchor
-        local handler = anchor and anchor:GetScript("OnLeave")
-        if handler then handler(anchor) end
+    overlay:SetScript("OnLeave", function(self)
+        self.background:SetColorTexture(Theme.Unpack("rowActive"))
+        GameTooltip:Hide()
     end)
 
     -- Runs after the secure cast. Only notes the click, so the outcome can be
@@ -221,6 +233,8 @@ function Opener:Arm(anchor, profession, recipeID)
             end)
         end
     end
+
+    overlay.label:SetText(("Open %s"):format(profession.name))
 
     if overlay:GetAttribute("spell") ~= profession.spell then
         overlay:SetAttribute("type", "spell")
@@ -317,6 +331,18 @@ local function DescribePlacement()
             anchor:GetFrameStrata(), anchor:GetFrameLevel(),
             overlay:GetWidth() or 0, overlay:GetHeight() or 0,
             overlay:IsShown() and "showing" or "hidden"))
+
+    -- Both in screen pixels, so a scale mistake shows up as different numbers.
+    local function Screen(frame)
+        local scale = frame:GetEffectiveScale()
+        return (frame:GetLeft() or 0) * scale, (frame:GetBottom() or 0) * scale
+    end
+    local ox, oy = Screen(overlay)
+    local ax, ay = Screen(anchor)
+    ns.Print(("Open button at %d,%d; craft button at %d,%d. Mouse over Open: %s, over craft: %s, Open takes mouse: %s.")
+        :format(ox, oy, ax, ay,
+            tostring(overlay:IsMouseOver()), tostring(anchor:IsMouseOver()),
+            tostring(overlay:IsMouseEnabled())))
 end
 
 --- A click reached the craft button while it read "Open ...", so the secure
@@ -381,15 +407,28 @@ ns.RegisterCommand("openprof", "check the Queue tab's Open profession button", f
         return
     end
 
-    local ok, err = pcall(api.OpenTradeSkill, target.skillLineID)
-    if not ok then
-        ns.Print(("OpenTradeSkill(%d): refused: %s"):format(target.skillLineID, tostring(err)))
-        return
+    -- Forever has two skill-line IDs per profession; the first try used the
+    -- recipe's own one. Try the other one too, a second apart.
+    local ids = { target.skillLineID }
+    for id, name in pairs(SKILL_LINE_NAMES) do
+        if name == target.name and id ~= target.skillLineID then ids[#ids + 1] = id end
     end
 
-    C_Timer.After(1.5, function()
-        ns.Print(("OpenTradeSkill(%d) for %s: window %s.")
-            :format(target.skillLineID, target.name,
-                ns.Crafting.isTradeSkillOpen and "OPENED" or "did NOT open"))
-    end)
+    for index, skillLineID in ipairs(ids) do
+        C_Timer.After((index - 1) * 2, function()
+            if ns.Crafting.isTradeSkillOpen then return end
+
+            local ok, err = pcall(api.OpenTradeSkill, skillLineID)
+            if not ok then
+                ns.Print(("OpenTradeSkill(%d): refused: %s"):format(skillLineID, tostring(err)))
+                return
+            end
+
+            C_Timer.After(1.5, function()
+                ns.Print(("OpenTradeSkill(%d) for %s: window %s.")
+                    :format(skillLineID, target.name,
+                        ns.Crafting.isTradeSkillOpen and "OPENED" or "did NOT open"))
+            end)
+        end)
+    end
 end)
