@@ -248,10 +248,10 @@ local function UpdateBankNote()
     local age = ns.Inventory:GetBankAge()
 
     if age then
-        note:SetText(("Bank not checked this session -- using what it held %s ago.")
+        note:SetText(("Bank not checked this session, so using what it held %s ago.")
             :format(Util.FormatAge(age)))
     else
-        note:SetText("Bank never checked -- HAVE counts bags only.")
+        note:SetText("Bank never checked, so HAVE counts bags only.")
     end
 end
 
@@ -306,7 +306,7 @@ local function UpdateCraftStatus()
     -- Crafting works without the window open on some clients and not others;
     -- say so rather than letting a click quietly do nothing.
     if not ns.Crafting.isTradeSkillOpen then
-        label:SetText(("%d of %d ready -- open your profession"):format(ready, total))
+        label:SetText(("%d of %d ready. Open your profession"):format(ready, total))
         label:SetTextColor(Theme.Unpack("accent"))
     end
 end

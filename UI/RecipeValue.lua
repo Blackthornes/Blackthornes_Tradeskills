@@ -525,7 +525,7 @@ function RecipeValue:FindRows()
     end
 
     if emptyRows then
-        return emptyRows, ("%s -- no row named a known recipe"):format(emptyWhere)
+        return emptyRows, ("%s, no row named a known recipe"):format(emptyWhere)
     end
 
     return nil, ("no recipe rows found under %s"):format(frameName)

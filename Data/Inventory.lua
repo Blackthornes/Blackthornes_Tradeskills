@@ -479,11 +479,11 @@ end
 -- Diagnostics
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("stock", "<name or link> -- how many of an item you have, and where", function(args)
+ns.RegisterCommand("stock", "<name or link>: how many of an item you have, and where", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
-        ns.Print(("several recipes match '%s' -- try /bts why first"):format(args))
+        ns.Print(("several recipes match '%s'. Try /bts why first"):format(args))
         return
     end
 

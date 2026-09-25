@@ -590,7 +590,7 @@ function Persist:MeasureCapacity()
     for _, length in ipairs({ 256, 1024, 4096, 16384, 65536, 262144, 1048576 }) do
         local ok, stored = self:TryLength(length, cvars)
 
-        ns.Print(("  %8d bytes -- %s"):format(length,
+        ns.Print(("  %8d bytes: %s"):format(length,
             ok and "ok" or ("cut short at " .. stored)))
 
         if ok then
@@ -627,7 +627,7 @@ function Persist:MeasureCapacity()
     -- these CVars are nowhere in the WTF folder, which points at server-side
     -- account data and its own much smaller limits. /bts cvarsoak answers
     -- the question this one cannot.
-    ns.Print("that only lasts until you quit -- run |cffffffff/bts cvarsoak|r to test what is kept when you quit the game.")
+    ns.Print("that only lasts until you quit. Run |cffffffff/bts cvarsoak|r to test what is kept when you quit the game.")
 
     return good
 end
@@ -755,7 +755,7 @@ function Persist:StartSoak(bytes, chunks)
     pcall(C_CVar.SetCVar, SOAK_CVAR .. "Plan",
         ("%d,%d,%d"):format(bytes, chunks, ProcessStart() or 0))
 
-    ns.Print(("wrote %d x %s bytes. Now |cffffffffquit the game completely|r -- not to character select -- start it again, and run |cffffffff/bts cvarsoak|r.")
+    ns.Print(("wrote %d x %s bytes. Now |cffffffffquit the game completely|r (not just to character select), start it again, and run |cffffffff/bts cvarsoak|r.")
         :format(chunks, ns.Util.Comma(bytes)))
 end
 
@@ -779,7 +779,7 @@ ns.RegisterCommand("cvarsoak", "test how much is kept when you quit: /bts cvarso
         end
 
         if result.survived < result.chunks then
-            ns.Print(("|c%sthe limit is for all CVars together, not each one -- about %s bytes in total.|r"):format(
+            ns.Print(("|c%sthe limit is for all CVars together, not each one: about %s bytes in total.|r"):format(
                 ns.COLORS.warn, ns.Util.Comma(result.intact)))
         end
 
@@ -852,7 +852,7 @@ function Persist:Report()
     if ns.Config and ns.Config.restoredFromCVars then
         Line("restored from", ("CVars, %s bytes"):format(ns.Util.Comma(self.loadedBytes or 0)))
     elseif ns.Config and ns.Config.freshDatabase then
-        Line("restored from", "|c" .. ns.COLORS.warn .. "nothing -- this session started empty|r")
+        Line("restored from", "|c" .. ns.COLORS.warn .. "nothing, this session started empty|r")
     else
         Line("restored from", "the game's own saved data")
     end
@@ -869,7 +869,7 @@ function Persist:Report()
     if peek.coldStart == true and peek.present == 0 then
         ns.Print("|c" .. ns.COLORS.warn ..
             "nothing was saved after a restart: the game is not keeping these CVars when you quit. " ..
-            "Check WTF\\Config.wtf for lines starting BTS_ -- if there are none, nothing was ever saved to disk.|r")
+            "Check WTF\\Config.wtf for lines starting BTS_. If there are none, nothing was ever saved to disk.|r")
     end
 end
 
