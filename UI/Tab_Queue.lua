@@ -432,6 +432,12 @@ local function Build(container)
     widgets.craftStatus:SetPoint("LEFT", widgets.craftButton, "RIGHT", 10, 0)
     widgets.craftStatus:SetWidth(320)
 
+    -- While a craft casts, a progress bar takes the status line's place.
+    widgets.craftProgress = ns.CraftProgress:Create(container, {
+        width = 320, height = 20, covers = widgets.craftStatus,
+    })
+    widgets.craftProgress:SetPoint("LEFT", widgets.craftButton, "RIGHT", 10, 0)
+
 
     local emptyLabel = Theme.CreateLabel(container, "small", "dim", "CENTER")
     emptyLabel:SetPoint("CENTER", craftList, "CENTER")
