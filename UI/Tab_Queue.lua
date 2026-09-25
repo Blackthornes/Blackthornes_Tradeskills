@@ -258,6 +258,8 @@ end
 --- Keep the Craft button honest about what it will do, and why it cannot.
 -- @return true when the button was set to open a profession window
 local function SetCraftButton(button, label)
+    button.opensProfession = false
+
     if ns.Crafting:IsBusy() then
         button:SetText("Stop crafting")
         button:SetEnabledState(true)
@@ -310,6 +312,7 @@ local function SetCraftButton(button, label)
             label:SetText(("%d of %d ready -- click to open %s"):format(ready, total, profession.name))
             label:SetTextColor(Theme.Unpack("accent"))
 
+            button.opensProfession = true
             opener:Arm(button, profession, entry.recipeID)
             return true
         end
@@ -413,12 +416,9 @@ local function Build(container)
             ns.Crafting:Stop()
         else
             local entry = ns.Crafting:GetNextReady()
-            local opener = ns.ProfessionOpener
-            if entry and opener and not opener:WindowShowsRecipe(entry.recipeID)
-                and opener:ProfessionFor(entry.recipeID) then
-                -- The open button would have taken this click. It only is not
-                -- there while combat stops the addon placing it.
-                ns.Print("the Queue cannot open a profession during combat. Open it yourself, or try again after the fight.")
+            if widgets.craftButton.opensProfession and ns.ProfessionOpener then
+                -- The secure Open button should have taken this click.
+                ns.ProfessionOpener:MissedClick()
             elseif entry then
                 ns.Crafting:Start(entry.recipeID, entry.quantity)
             end

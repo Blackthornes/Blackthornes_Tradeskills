@@ -59,10 +59,11 @@ local function NewFrame()
   function f:GetScript(k) return self.scripts[k] end
   function f:HookScript(k, fn) self.hooks[k] = fn end
   function f:RegisterForClicks(d) self.clicks = d end
-  function f:SetFrameStrata() end
-  function f:GetFrameStrata() return "MEDIUM" end
-  function f:SetFrameLevel() end
-  function f:GetFrameLevel() return 3 end
+  f.strata, f.level = "MEDIUM", 3
+  function f:SetFrameStrata(v) self.strata = v end
+  function f:GetFrameStrata() return self.strata end
+  function f:SetFrameLevel(v) self.level = v end
+  function f:GetFrameLevel() return self.level end
   function f:ClearAllPoints() end
   function f:SetPoint(...) self.point = { ... } end
   function f:SetSize(w, h) self.w, self.h = w, h end
@@ -131,6 +132,14 @@ check(overlay.shown, "overlay shows over a visible button")
 check(overlay.point and overlay.point[4] == 10 and overlay.point[5] == 20, "overlay placed on the craft button")
 check(Opener:IsArmed(), "IsArmed")
 
+-- Our window is top-level: clicking it raises its level. The secure button
+-- must follow, or it sits under the craft button and the click misses it
+-- (the first in-game try did exactly this).
+craftButton.strata, craftButton.level = "HIGH", 40
+craftButton.hooks.OnUpdate(craftButton)
+check(overlay.strata == "HIGH" and overlay.level > 40,
+  "overlay must stay above a raised craft button, got " .. overlay.strata .. " " .. overlay.level)
+
 -- Moving to a mining recipe re-targets the same button.
 Opener:Arm(craftButton, Opener:ProfessionFor(2), 2)
 check(overlay.attrs.spell == "Smelting", "re-arm changes the spell")
@@ -162,6 +171,15 @@ check(#warned == 0, "the timeout after a success stays quiet")
 overlay.scripts.PostClick(overlay)
 timers[#timers]()
 check(warned[1] and warned[1]:find("no profession window opened"), "a click that opened nothing is reported as a miss")
+
+-- A click that reaches the craft button out of combat is a miss, not combat.
+local w = #warned
+Opener:MissedClick()
+check(#warned == w + 1 and warned[#warned]:find("missed"), "a missed click out of combat says so")
+inCombat = true
+Opener:MissedClick()
+check(printed[#printed]:find("combat"), "a missed click in combat names combat")
+inCombat = false
 
 -- A window opening with no click pending is not claimed as ours.
 local before = #printed
