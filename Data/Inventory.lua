@@ -434,6 +434,7 @@ function Inventory:OnBagUpdate()
 end
 
 function Inventory:OnBankOpened()
+    self.bankOpen = true
     self:SnapshotBank()
 
     if ns.UI and ns.UI.OnInventoryUpdated then
@@ -441,12 +442,37 @@ function Inventory:OnBankOpened()
     end
 end
 
+function Inventory:OnBankClosed()
+    self.bankOpen = false
+end
+
+--- Is this container one of the bank's?
+local function IsBankContainer(bag)
+    if type(bag) ~= "number" then return false end
+    if bag == BANK_CONTAINER or bag == REAGENT_BANK then return true end
+    return bag >= FIRST_BANK_BAG and bag <= LAST_BANK_BAG
+end
+
+Inventory.IsBankContainer = IsBankContainer
+
 --- Bags changed, so the walk is stale.
 --
 -- Kept apart from OnBagUpdate because that one coalesces into a two-second
 -- snapshot timer, and a stale count must not survive that long.
-function Inventory:OnBagChanged()
+--
+-- Taking something out of a purchased bank bag announces itself only as a
+-- BAG_UPDATE for that bag: PLAYERBANKSLOTS_CHANGED covers the main bank
+-- window and nothing else. The snapshot used to be taken when the bank
+-- opened and never again, so twenty bolts moved from a bank bag to the
+-- backpack stayed in the snapshot and were counted twice -- once in the bags
+-- and once in a bank they had already left -- until the next visit. So a
+-- bank container changing while the bank is open takes the snapshot again.
+function Inventory:OnBagChanged(event, bag)
     self:InvalidateBagCounts()
+
+    if event == "BAG_UPDATE" and self.bankOpen and IsBankContainer(bag) then
+        self:OnBankOpened()
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -526,6 +552,7 @@ function Inventory:OnEnable()
     ns.RegisterEvent(self, "PLAYER_MONEY", self.OnBagUpdate)
 
     ns.RegisterEvent(self, "BANKFRAME_OPENED", self.OnBankOpened)
+    ns.RegisterEvent(self, "BANKFRAME_CLOSED", self.OnBankClosed)
     ns.RegisterEvent(self, "PLAYERBANKSLOTS_CHANGED", self.OnBankOpened)
     ns.RegisterEvent(self, "PLAYERREAGENTBANKSLOTS_CHANGED", self.OnBankOpened)
 

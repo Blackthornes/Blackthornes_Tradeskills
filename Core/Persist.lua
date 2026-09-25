@@ -326,8 +326,11 @@ local function TrimToFit(snapshot, budget)
     if not prices then return nil end
 
     local order = {}
+    -- A price record stamps its last sighting as `seen` (Data/Prices.lua).
+    -- This read `lastSeen`, a field nothing writes, so every record tied at
+    -- zero and the trim dropped prices in whatever order the table walked.
     for itemID, record in pairs(prices) do
-        order[#order + 1] = { itemID = itemID, seen = record.lastSeen or 0 }
+        order[#order + 1] = { itemID = itemID, seen = record.seen or 0 }
     end
     table.sort(order, function(a, b) return a.seen < b.seen end)
 
@@ -691,8 +694,14 @@ function Persist:CheckSoak()
 
     local result = {
         bytes = bytes, chunks = chunks, intact = 0, returned = 0, survived = 0,
-        coldStart = (written and now) and math.abs(now - written) > 2 or nil,
+        -- Three answers: restarted, not restarted, could not tell. Written as
+        -- "a and b or nil" this could never say "not restarted", because a
+        -- false b falls through to the nil.
+        coldStart = nil,
     }
+    if written and now then
+        result.coldStart = math.abs(now - written) > 2
+    end
 
     for index = 1, chunks do
         local name = SOAK_CVAR .. index

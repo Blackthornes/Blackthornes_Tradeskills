@@ -403,9 +403,8 @@ local function UpdateDetail(analysis)
     local skillUp = analysis.skillUp
 
     if skillUp and skillUp.tier ~= "trivial" then
-        local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
-        skillUpText = ("  |cff%02x%02x%02x%s|r"):format(
-            r * 255, g * 255, b * 255, ns.SkillUp:GetTierLabel(skillUp.tier))
+        skillUpText = ("  %s%s|r"):format(
+            ns.SkillUp:GetTierColorCode(skillUp.tier), ns.SkillUp:GetTierLabel(skillUp.tier))
     end
 
     if analysis.craftableNow and analysis.craftableNow > 0 then
