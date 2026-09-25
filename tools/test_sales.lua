@@ -365,7 +365,7 @@ check("and the row says where the figures came from", linen.restored, true)
 local carried = LabelStartingWith("plus ")
 check("the list says how many sales it cannot show",
     carried and carried.text or "(no note)",
-    "plus 4 sales from before you last quit the game -- see By item")
+    "plus 4 sales from before you last quit the game. See By item")
 check("and only while there is something to say", carried.shown, true)
 
 -- The count used to be worked out by subtracting this session's sales from

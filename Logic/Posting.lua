@@ -92,7 +92,7 @@ function Posting:CanPost()
     -- blocks the player's own manual listings, not just ours. The one-second
     -- ticker now re-checks this, so a refusal here clears on its own.
     if self:IsThrottled() then
-        return false, "the auction house is busy -- try again in a moment"
+        return false, "the auction house is busy, try again in a moment"
     end
 
     -- Only one listing is in flight at a time, because a second one started
@@ -143,12 +143,21 @@ function Posting:SecondsUntilPostable()
     local pending = self.pending
 
     if pending then
+        -- The confirming read is itself a request to the auction house, and
+        -- the next post has to wait the usual spacing after it. Counting only
+        -- the delay before that read made the button count 3, 2, 1, say
+        -- "wait", then count 2, 1 again for the spacing. One countdown, then,
+        -- from the post to the earliest moment the next one can go.
+        local spacing = ns.AHQueue.MIN_SPACING or 0
+
         if pending.verifying then
-            -- The read is out. It settles when the server answers, which is
-            -- not a length we can honestly name.
-            reason = reason or "still confirming the last listing"
+            -- The read is out; the spacing after it is already in `seconds`,
+            -- and it is the same clock the countdown above was running on.
+            -- Past that it settles when the server answers, which is not a
+            -- length that can honestly be named.
+            reason = "still confirming the last listing"
         else
-            local left = (pending.startedAt or 0) + POST_VERIFY_DELAY - GetTime()
+            local left = (pending.startedAt or 0) + POST_VERIFY_DELAY + spacing - GetTime()
 
             if left > seconds then
                 seconds, reason = left, "still confirming the last listing"
@@ -800,7 +809,7 @@ function Posting:Post(itemID, quantity, unitPrice)
 
     unitPrice = math.floor(unitPrice or self:GetPostPrice(itemID) or 0)
     if unitPrice < 1 then
-        ns.Print("no price data for that item -- scan the auction house first")
+        ns.Print("no price data for that item. Scan the auction house first")
         return false
     end
 
@@ -826,7 +835,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     if floor and unitPrice < floor then
         self.pending = nil
 
-        ns.Warn(("not listing %s at %s -- %s."):format(
+        ns.Warn(("not listing %s at %s: %s."):format(
             Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or "the price looks wrong"))
         ns.Warn(("expected at least %s. Run a scan, or list it by hand."):format(
             Util.FormatMoney(floor)))
@@ -842,7 +851,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         local unitCost = analysis and analysis.costPerUnit
 
         if unitCost and unitPrice < unitCost then
-            ns.Warn(("not listing %s at %s -- the materials cost %s"):format(
+            ns.Warn(("not listing %s at %s, the materials cost %s"):format(
                 Util.GetItemLabel(itemID),
                 Util.FormatMoney(unitPrice), Util.FormatMoney(unitCost)))
             ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
@@ -1022,7 +1031,7 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
     -- was no longer selling; now there is nobody to undercut and the number
     -- above means something different, so it says which.
     if check.state == "empty" then
-        local note = "Nothing else is listed right now, and there is no market value to go on -- check this price yourself."
+        local note = "Nothing else is listed right now, and there is no market value to go on. Check this price yourself."
 
         if basis == "market" then
             note = "Nothing else is listed right now, so this is market value rather than an undercut."
@@ -1035,13 +1044,13 @@ function Posting:Confirm(itemID, quantity, unitPrice, check)
         text = text .. ("\n\n|cffC8A44D%s|r"):format(note)
 
     elseif check.state == "unavailable" then
-        text = text .. "\n\n|cffE5604FThe price check did not come back. This is the last price we saw, which may be out of date.|r"
+        text = text .. "\n\n|cffE5604FThe price check did not come back. This is the last price seen, which may be out of date.|r"
     end
 
     -- The estimate has to say so here above all: every other basis on this
     -- dialog is something the auction house reported, and this one is not.
     if basis == "derived" then
-        text = text .. "\n\n|cffC8A44DNo scan has ever priced this. The price above is estimated from what its materials are worth -- check it yourself before listing.|r"
+        text = text .. "\n\n|cffC8A44DNo scan has ever priced this. The price above is estimated from what its materials are worth. Check it yourself before listing.|r"
     end
 
     -- Said plainly at the moment the gold is committed, because a price equal
@@ -1257,7 +1266,7 @@ function Posting:ResolvePending(posted)
             Util.GetItemLabel(pending.itemID)))
         ns.Warn("the auction house may be refusing listings; try Blizzard's own Sell tab.")
     else
-        ns.Warn("could not tell whether that listing went up -- check your Auctions tab")
+        ns.Warn("could not tell whether that listing went up. Check your Auctions tab")
     end
 
     if ns.UI then
@@ -1295,7 +1304,7 @@ ns.RegisterCommand("throttle", "check how often the auction house is ready for r
             ns.Print(("the auction house was ready %d of %d times over 10s."):format(ready, samples))
 
             if ready == 0 then
-                ns.Warn("never ready -- posting would always be blocked. Please report this so the addon stops waiting on it.")
+                ns.Warn("never ready, so posting would always be blocked. Please report this so the addon stops waiting on it.")
             end
         end
     end)
@@ -1459,7 +1468,7 @@ ns.RegisterCommand("posttest", "try one listing and show every step: /bts postte
             if after > before then
                 ns.Print("|cff4FD18Bthe listing was created.|r")
             else
-                ns.Print("|cffE5604Fnothing was listed -- the server refused it.|r")
+                ns.Print("|cffE5604Fnothing was listed, the server refused it.|r")
             end
         end)
     end)
@@ -1618,7 +1627,7 @@ ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n>
     end
 
     if not line then
-        ns.Print("no item auction in your bags matching that -- commodities already work.")
+        ns.Print("no item auction in your bags matching that. Commodities already work.")
         return
     end
 
@@ -1644,7 +1653,7 @@ ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n>
     if variant.legacy then
         local worked, why = TryLegacyPost(bagID, slotID, bid, buyout, duration)
         ns.PrintRaw(("  old-style call: %s%s"):format(
-            tostring(worked), why and (" -- " .. why) or ""))
+            tostring(worked), why and (": " .. why) or ""))
     else
         local ok, returned = pcall(C_AuctionHouse.PostItem, location, duration, quantity, bid, buyout)
         ns.PrintRaw(("  call: ok=%s returned=%s"):format(tostring(ok), tostring(returned)))
@@ -1677,7 +1686,7 @@ end)
 -- and nothing here can taint it.
 ns.RegisterCommand("watchpost", "show what Blizzard's Sell tab sends when you post", function()
     if Posting.watching then
-        ns.Print("already watching -- post something with Blizzard's Sell tab.")
+        ns.Print("already watching. Post something with Blizzard's Sell tab.")
         return
     end
 

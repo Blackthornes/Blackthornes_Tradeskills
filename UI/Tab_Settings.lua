@@ -155,7 +155,7 @@ local function Build(outer)
     AddUnit(unscannedRow, widgets.unscannedMarkup, "% markup")
 
     local unscannedOnRow = CreateRow(container, unscannedRow, "Use that estimate",
-        "Off: crafts with no scanned price have no price at all, as before.")
+        "Off: crafts with no scanned price have no price at all.")
 
     widgets.priceUnscanned = Widgets.CreateCheckbox(unscannedOnRow, "Enabled", function(checked)
         Config:Set("priceUnscannedCrafts", checked)

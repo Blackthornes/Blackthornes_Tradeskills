@@ -353,7 +353,7 @@ local function QueueFromRow(row)
 
         if quantity > room then
             quantity = room
-            ns.Print(("%s: queued %d -- your limit of %d has room for no more."):format(
+            ns.Print(("%s: queued %d, your limit of %d has room for no more."):format(
                 line.name, quantity, line.postLimit or 0))
         end
     end
@@ -416,7 +416,7 @@ local function StockText(line)
 
     if line.postLimit and line.postLimit > 0 then
         local text = ("have %d of %d"):format(stock, line.postLimit)
-        if line.atPostLimit then return text .. " -- at your limit" end
+        if line.atPostLimit then return text .. ", at your limit" end
         return text
     end
 
@@ -521,7 +521,7 @@ local function ShowRowTooltip(row, line)
             ns.SkillUp:GetTierLabel(line.skillUpTier), 0.7, 0.7, 0.7, r, g, b)
 
         if line.skillUpStale then
-            GameTooltip:AddLine("Read at a lower skill -- it may have gone green since.",
+            GameTooltip:AddLine("Read at a lower skill. It may have gone green since.",
                 0.91, 0.76, 0.35, true)
         end
     end

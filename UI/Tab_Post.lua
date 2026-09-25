@@ -107,7 +107,7 @@ local function CreateRow(row)
                     ns.Print(("%s: %s"):format(Util.GetItemLabel(itemID),
                         status == "empty"
                             and "nobody is selling one right now, so there is no price to go on."
-                            or "the auction house did not answer -- try again in a moment."))
+                            or "the auction house did not answer. Try again in a moment."))
                 end
 
                 UI:RefreshActiveTab()
@@ -241,17 +241,17 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.unitPrice, { noColor = true }),
             0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
 
-        local why = "Nothing listed to undercut -- using market value"
+        local why = "Nothing listed to undercut, so using market value"
 
         if line.priceBasis == "undercut" then
             why = "Undercutting the cheapest listing that is not yours"
         elseif line.priceBasis == "derived" then
             -- The one basis that is not a market observation at all.
-            why = "No scan has priced this -- estimated from what its materials are worth"
+            why = "No scan has priced this, so it is estimated from what its materials are worth"
         elseif line.priceBasis == "match" then
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.
-            why = "Matching the cheapest listing -- an undercut here costs a whole silver"
+            why = "Matching the cheapest listing, since an undercut here costs a whole silver"
         end
 
         GameTooltip:AddLine(why, 0.5, 0.5, 0.5)
@@ -280,14 +280,14 @@ local function ShowRowTooltip(row, line)
     end
 
     if not line.isCrafted then
-        GameTooltip:AddLine("Not something your recipes make -- just something in your bags.",
+        GameTooltip:AddLine("Not something your recipes make, just something in your bags.",
             0.5, 0.5, 0.5)
     end
 
     -- Commodities sell from across the bags at once; gear goes up one at a time.
     GameTooltip:AddLine(line.isCommodity
-        and ("Commodity -- all %d can go up together"):format(line.count)
-        or "Item auction -- one listing at a time", 0.5, 0.5, 0.5)
+        and ("Commodity: all %d can go up together"):format(line.count)
+        or "Item auction: one listing at a time", 0.5, 0.5, 0.5)
 
     GameTooltip:AddLine("Type into the LIST box to sell fewer than that.", 0.5, 0.5, 0.5)
 
