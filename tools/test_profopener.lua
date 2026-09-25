@@ -62,7 +62,8 @@ local function NewFrame()
   function f:HookScript(k, fn) self.hooks[k] = fn end
   function f:RegisterForClicks(d) self.clicks = d end
   f.strata, f.level = "MEDIUM", 3
-  function f:EnableMouse() end
+  f.mouse = true
+  function f:EnableMouse(v) self.mouse = v end
   function f:CreateTexture() return { SetAllPoints = function() end, SetColorTexture = function() end, SetPoint = function() end, SetSize = function() end } end
   function f:SetFrameStrata(v) self.strata = v end
   function f:GetFrameStrata() return self.strata end
@@ -77,7 +78,7 @@ local function NewFrame()
   function f:GetHeight() return 26 end
   function f:GetEffectiveScale() return 1 end
   function f:IsMouseOver() return false end
-  function f:IsMouseEnabled() return true end
+  function f:IsMouseEnabled() return self.mouse end
   return f
 end
 
@@ -140,6 +141,7 @@ local overlay = Opener.overlay
 check(overlay.template == "SecureActionButtonTemplate", "overlay must be a secure action button")
 check(overlay.parent == UIParent, "overlay must not be parented to the addon window (it would protect it)")
 check(overlay.attrs.type == "spell" and overlay.attrs.spell == "Tailoring", "overlay casts Tailoring")
+check(craftButton.mouse == false, "the craft button under the Open button stops taking the mouse")
 check(overlay.label.text == "Open Tailoring", "the visible Open button names the profession")
 check(overlay.clicks == "AnyUp", "one click direction only, or the second cast closes the window")
 check(overlay.attrs.useOnKeyDown == false, "a template that checks direction must act on the release")
@@ -152,7 +154,7 @@ check(Opener:IsArmed(), "IsArmed")
 -- (the first in-game try did exactly this).
 craftButton.strata, craftButton.level = "HIGH", 40
 craftButton.hooks.OnUpdate(craftButton)
-check(overlay.strata == "HIGH" and overlay.level > 40,
+check(overlay.strata == "DIALOG" and overlay.level > 40,
   "overlay must stay above a raised craft button, got " .. overlay.strata .. " " .. overlay.level)
 
 -- Moving to a mining recipe re-targets the same button.
@@ -163,6 +165,7 @@ check(#created == 1, "one secure button, reused")
 -- Combat: nothing protected is touched, and the wish is remembered.
 events.PLAYER_REGEN_DISABLED()
 check(not overlay.shown, "hidden as combat starts")
+check(craftButton.mouse == true, "the craft button takes clicks again in combat")
 inCombat = true
 check(Opener:Arm(craftButton, Opener:ProfessionFor(1), 1) == false, "arm refuses in combat")
 check(Opener:Disarm() == false, "disarm refuses in combat")
@@ -172,6 +175,7 @@ inCombat = false
 
 check(Opener:Disarm(), "disarm out of combat")
 check(not overlay.shown and not Opener:IsArmed(), "disarmed overlay is hidden")
+check(craftButton.mouse == true, "disarming gives the craft button its clicks back")
 
 -- Reporting -------------------------------------------------------------------
 
