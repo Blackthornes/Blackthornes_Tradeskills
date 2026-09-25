@@ -156,6 +156,12 @@ function Opener:CreateOverlay()
     -- reported once we know whether a window actually opened.
     -- Noted before the secure handler runs, so a click that casts nothing
     -- can still be told apart from a click that never arrived.
+    -- Any press at all, registered click or not, so /bts openprof can say
+    -- whether the mouse ever reached this button.
+    overlay:HookScript("OnMouseDown", function(_, mouseButton)
+        Opener.lastMouseDown = { button = tostring(mouseButton), at = GetTime() }
+    end)
+
     overlay:SetScript("PreClick", function(_, mouseButton, down)
         Opener.lastClick = { button = tostring(mouseButton), down = down and true or false, at = GetTime() }
     end)
@@ -166,6 +172,19 @@ function Opener:CreateOverlay()
 
     self.overlay = overlay
     return overlay
+end
+
+local STRATA_ABOVE = {
+    BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG",
+    DIALOG = "FULLSCREEN", FULLSCREEN = "FULLSCREEN_DIALOG",
+    FULLSCREEN_DIALOG = "TOOLTIP", TOOLTIP = "TOOLTIP",
+}
+
+-- While the secure button is up, the craft button under it stops taking the
+-- mouse, so there is only one thing there to click. The craft button is ours
+-- and not protected, so this is allowed at any time, combat included.
+local function SetAnchorMouse(anchor, enabled)
+    if anchor and anchor.EnableMouse then anchor:EnableMouse(enabled) end
 end
 
 --- Keep the secure button exactly over the craft button.
@@ -187,7 +206,12 @@ function Opener:Place()
     -- clicking it or reopening it raises its level, and a secure button left
     -- at the old level ends up underneath the craft button. That is exactly
     -- how the first in-game try missed.
-    local strata, level = anchor:GetFrameStrata(), anchor:GetFrameLevel() + 5
+    --
+    -- One whole layer above, as well. Seen in game: at HIGH 9 over the craft
+    -- button's HIGH 4, placed exactly on it, the craft button still took
+    -- every click and the secure button never received one.
+    local strata = STRATA_ABOVE[anchor:GetFrameStrata()] or "DIALOG"
+    local level = anchor:GetFrameLevel() + 5
     if overlay:GetFrameStrata() ~= strata then overlay:SetFrameStrata(strata) end
     if overlay:GetFrameLevel() ~= level then overlay:SetFrameLevel(level) end
 
@@ -256,12 +280,14 @@ function Opener:Arm(anchor, profession, recipeID)
     self:Place()
 
     if anchor:IsVisible() then overlay:Show() end
+    SetAnchorMouse(anchor, false)
     return true
 end
 
 --- Take the secure button away, so clicks reach the craft button again.
 function Opener:Disarm()
     self.wanted = nil
+    SetAnchorMouse(self.anchor, true)
     if InCombat() then return false end
 
     self.armed = nil
@@ -311,6 +337,7 @@ function Opener:OnEnable()
     -- The last moment a secure frame may still be hidden before combat locks it.
     ns.RegisterEvent(self, "PLAYER_REGEN_DISABLED", function()
         if Opener.overlay then Opener.overlay:Hide() end
+        SetAnchorMouse(Opener.anchor, true)
     end)
 
     -- Put back whatever was wanted while combat held it.
@@ -328,6 +355,11 @@ end
 --------------------------------------------------------------------------------
 
 function Opener:DescribeLastClick()
+    local press = self.lastMouseDown
+    ns.Print(press
+        and ("Open button last felt the mouse press %s, %.1f seconds ago."):format(press.button, GetTime() - press.at)
+        or "Open button has not felt a mouse press yet.")
+
     local click = self.lastClick
     if not click then
         ns.Print("Open button has not received a click yet.")
@@ -346,6 +378,7 @@ local function DescribePlacement()
             anchor:GetFrameStrata(), anchor:GetFrameLevel(),
             overlay:GetWidth() or 0, overlay:GetHeight() or 0,
             overlay:IsShown() and "showing" or "hidden"))
+    ns.Print(("Craft button takes mouse: %s."):format(tostring(anchor:IsMouseEnabled())))
 
     -- Both in screen pixels, so a scale mistake shows up as different numbers.
     local function Screen(frame)
