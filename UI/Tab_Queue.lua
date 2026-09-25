@@ -256,10 +256,8 @@ local function UpdateBankNote()
 end
 
 --- Keep the Craft button honest about what it will do, and why it cannot.
-local function UpdateCraftStatus()
-    local button, label = widgets.craftButton, widgets.craftStatus
-    if not button then return end
-
+-- @return true when the button was set to open a profession window
+local function SetCraftButton(button, label)
     if ns.Crafting:IsBusy() then
         button:SetText("Stop crafting")
         button:SetEnabledState(true)
@@ -296,6 +294,27 @@ local function UpdateCraftStatus()
     local recipe = ns.Recipes:GetAny(entry.recipeID)
     local canMake = math.min(entry.quantity, ns.Profit:GetCraftableCount(entry.recipeID))
 
+    -- A craft only starts from its own profession window. When that is not
+    -- the one open, this click opens it instead: the game lets a player's
+    -- click cast the profession, which addon code alone may not do.
+    local opener = ns.ProfessionOpener
+    if opener and not opener:WindowShowsRecipe(entry.recipeID) then
+        local profession = opener:ProfessionFor(entry.recipeID)
+
+        if profession then
+            button:SetText(("Open %s"):format(profession.name))
+            button:SetEnabledState(true)
+            button.tooltipText = ("Opens your %s window. Click again to craft %dx %s.")
+                :format(profession.name, canMake, (recipe and recipe.name) or "item")
+
+            label:SetText(("%d of %d ready -- click to open %s"):format(ready, total, profession.name))
+            label:SetTextColor(Theme.Unpack("accent"))
+
+            opener:Arm(button, profession, entry.recipeID)
+            return true
+        end
+    end
+
     button:SetText(("Craft %dx %s"):format(canMake, (recipe and recipe.name) or "item"))
     button:SetEnabledState(true)
     button.tooltipText = "One click makes every craft in this entry"
@@ -308,6 +327,16 @@ local function UpdateCraftStatus()
     if not ns.Crafting.isTradeSkillOpen then
         label:SetText(("%d of %d ready -- open your profession"):format(ready, total))
         label:SetTextColor(Theme.Unpack("accent"))
+    end
+end
+
+local function UpdateCraftStatus()
+    local button, label = widgets.craftButton, widgets.craftStatus
+    if not button then return end
+
+    -- Every other state wants the click to reach the craft button itself.
+    if not SetCraftButton(button, label) and ns.ProfessionOpener then
+        ns.ProfessionOpener:Disarm()
     end
 end
 
@@ -384,7 +413,13 @@ local function Build(container)
             ns.Crafting:Stop()
         else
             local entry = ns.Crafting:GetNextReady()
-            if entry then
+            local opener = ns.ProfessionOpener
+            if entry and opener and not opener:WindowShowsRecipe(entry.recipeID)
+                and opener:ProfessionFor(entry.recipeID) then
+                -- The open button would have taken this click. It only is not
+                -- there while combat stops the addon placing it.
+                ns.Print("the Queue cannot open a profession during combat. Open it yourself, or try again after the fight.")
+            elseif entry then
                 ns.Crafting:Start(entry.recipeID, entry.quantity)
             end
         end
