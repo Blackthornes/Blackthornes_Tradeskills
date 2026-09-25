@@ -42,6 +42,7 @@ UI\Widgets.lua
 UI\Main.lua
 UI\PostPanel.lua
 UI\CraftPanel.lua
+UI\ProfessionOpener.lua
 UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\Tab_Profit.lua
