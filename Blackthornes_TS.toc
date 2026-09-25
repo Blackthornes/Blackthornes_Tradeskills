@@ -30,6 +30,7 @@ Data\Vendor.lua
 Logic\Cost.lua
 Logic\SkillUp.lua
 Logic\Profit.lua
+Logic\LevelUp.lua
 Logic\Queue.lua
 Logic\Crafting.lua
 Logic\Posting.lua
@@ -44,6 +45,7 @@ UI\CraftPanel.lua
 UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\Tab_Profit.lua
+UI\Tab_LevelUp.lua
 UI\Tab_Queue.lua
 UI\Tab_Gather.lua
 UI\Tab_Post.lua
