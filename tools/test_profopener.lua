@@ -32,7 +32,9 @@ ns.CraftPanel = { GetOpenRecipeIDs = function() return openSet end }
 -- The client
 local inCombat = false
 function InCombatLockdown() return inCombat end
-function GetCVarBool() return false end
+-- The game's own setting was on in the first in-game test; the secure
+-- button must still listen for the release.
+function GetCVarBool() return true end
 function GetTime() return 100 end
 
 local timers = {}
@@ -140,6 +142,7 @@ check(overlay.parent == UIParent, "overlay must not be parented to the addon win
 check(overlay.attrs.type == "spell" and overlay.attrs.spell == "Tailoring", "overlay casts Tailoring")
 check(overlay.label.text == "Open Tailoring", "the visible Open button names the profession")
 check(overlay.clicks == "AnyUp", "one click direction only, or the second cast closes the window")
+check(overlay.attrs.useOnKeyDown == false, "a template that checks direction must act on the release")
 check(overlay.shown, "overlay shows over a visible button")
 check(overlay.point and overlay.point[4] == 10 and overlay.point[5] == 20, "overlay placed on the craft button")
 check(Opener:IsArmed(), "IsArmed")
