@@ -189,7 +189,27 @@ local SORTS = {
         if a.name ~= b.name then return a.name < b.name end
         return a.recipeID < b.recipeID
     end,
+
+    -- The Level Up tab's order, so the two agree: orange, yellow, green,
+    -- then cheapest materials first. Its comparator reads `tier` and `cost`.
+    levelup = function(a, b)
+        local compare = ns.LevelUp and ns.LevelUp.Compare
+        if compare then
+            return compare(
+                { tier = a.skillUpTier, cost = a.materialCost, name = a.name, recipeID = a.recipeID },
+                { tier = b.skillUpTier, cost = b.materialCost, name = b.name, recipeID = b.recipeID })
+        end
+
+        if a.name ~= b.name then return a.name < b.name end
+        return a.recipeID < b.recipeID
+    end,
 }
+
+-- What the sort button steps through, and what it says for each.
+local SORT_ORDER = { "profit", "levelup", "name" }
+local SORT_LABEL = { profit = "Profit", levelup = "Level Up", name = "A-Z" }
+
+CraftPanel.SORT_ORDER = SORT_ORDER
 
 --- What a craft is worth *right now*, as against what one sells for.
 --
@@ -238,7 +258,7 @@ end
 
 --- The rows to draw: one per recipe, with what it is worth and what is queued.
 --
--- @param opts { search, sortBy = "profit"|"name", ignoreLimit }
+-- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit }
 function CraftPanel:GetRows(opts)
     opts = opts or {}
 
@@ -289,6 +309,8 @@ function CraftPanel:GetRows(opts)
                         skillUpStale = analysis and analysis.skillUp
                             and analysis.skillUp.stale or nil,
                         recommended = (analysis and analysis.recommended) == true,
+                        materialCost = analysis and analysis.cost
+                            and analysis.cost.priceable and analysis.cost.total or nil,
                         rank = RankOf(analysis),
                         reason = analysis and analysis.reason or nil,
                         soulbound = (analysis and analysis.soulbound) == true,
@@ -616,10 +638,14 @@ function CraftPanel:Build()
     self.sortBy = self.sortBy or "profit"
 
     local sort = Widgets.CreateButton(frame, "", function()
-        CraftPanel.sortBy = CraftPanel.sortBy == "profit" and "name" or "profit"
+        local nextIndex = 1
+        for index, key in ipairs(SORT_ORDER) do
+            if key == CraftPanel.sortBy then nextIndex = index % #SORT_ORDER + 1 end
+        end
+        CraftPanel.sortBy = SORT_ORDER[nextIndex]
         CraftPanel:UpdateSortButton()
         CraftPanel:Refresh()
-    end, { width = 104, height = 18, tooltip = "Change the order of this list" })
+    end, { width = 116, height = 18, tooltip = "Change the order of this list" })
     sort:SetPoint("TOPRIGHT", -14, -13)
     self.sortButton = sort
     self:UpdateSortButton()
@@ -715,10 +741,12 @@ end
 function CraftPanel:UpdateSortButton()
     if not self.sortButton then return end
 
-    self.sortButton:SetText(self.sortBy == "profit" and "Sort by: Profit" or "Sort by: A-Z")
-    self.sortButton.tooltipText = self.sortBy == "profit"
-        and "Sorted by profit. Click for alphabetical order."
-        or "Sorted by name. Click to put the best-paying crafts first."
+    self.sortButton:SetText("Sort by: " .. (SORT_LABEL[self.sortBy] or "Profit"))
+    self.sortButton.tooltipText = ({
+        profit = "Best-paying crafts first. Click to sort by Level Up.",
+        levelup = "Best chance of a skill up first (orange, yellow, green), cheapest materials first within each colour. Click to sort by name.",
+        name = "Sorted by name. Click to sort by profit.",
+    })[self.sortBy]
 end
 
 --- Dock to the right of the profession window, as tall as it is.

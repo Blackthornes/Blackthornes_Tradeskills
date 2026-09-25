@@ -548,6 +548,32 @@ check("a frame with no coordinates yet gets no answer, not a wrong one",
     GetBottom = function() return nil end,
   }), nil)
 
+--------------------------------------------------------------------------------
+-- Level Up order
+--------------------------------------------------------------------------------
+
+do
+  _G.C_TradeSkillUI = nil
+  ns.LevelUp = { Compare = function(a, b)
+    local band = { optimal = 1, medium = 2, easy = 3, trivial = 5 }
+    local x, y = band[a.tier or ""] or 4, band[b.tier or ""] or 4
+    if x ~= y then return x < y end
+    if a.cost ~= b.cost then return (a.cost or math.huge) < (b.cost or math.huge) end
+    return a.recipeID < b.recipeID
+  end }
+
+  ANALYSIS[101].skillUp = { tier = "easy" }
+  ANALYSIS[102].skillUp = { tier = "optimal" }
+  ANALYSIS[103].skillUp = { tier = "medium" }
+
+  check("level up order: orange, yellow, green, whatever it pays",
+    names(CraftPanel:GetRows({ sortBy = "levelup", ignoreLimit = true })),
+    "Rough Sharpening Stone, Brown Linen Shirt, Copper Chain Belt")
+
+  ANALYSIS[101].skillUp, ANALYSIS[102].skillUp, ANALYSIS[103].skillUp = nil, nil, nil
+  ns.LevelUp = nil
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))
