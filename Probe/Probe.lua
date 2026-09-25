@@ -260,7 +260,7 @@ function Probe:PrintReport()
     local report = self:BuildReport()
     local caps = ns.Compat:Get()
 
-    ns.Print(("game check -- addon v%s"):format(ns.VERSION))
+    ns.Print(("game check -- addon %s"):format(ns.VersionLabel()))
 
     Heading("Game")
     Line("version", ("%s (build %s, interface %s)"):format(
