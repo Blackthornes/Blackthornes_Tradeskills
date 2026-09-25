@@ -143,12 +143,21 @@ function Posting:SecondsUntilPostable()
     local pending = self.pending
 
     if pending then
+        -- The confirming read is itself a request to the auction house, and
+        -- the next post has to wait the usual spacing after it. Counting only
+        -- the delay before that read made the button count 3, 2, 1, say
+        -- "wait", then count 2, 1 again for the spacing. One countdown, then,
+        -- from the post to the earliest moment the next one can go.
+        local spacing = ns.AHQueue.MIN_SPACING or 0
+
         if pending.verifying then
-            -- The read is out. It settles when the server answers, which is
-            -- not a length we can honestly name.
-            reason = reason or "still confirming the last listing"
+            -- The read is out; the spacing after it is already in `seconds`,
+            -- and it is the same clock the countdown above was running on.
+            -- Past that it settles when the server answers, which is not a
+            -- length that can honestly be named.
+            reason = "still confirming the last listing"
         else
-            local left = (pending.startedAt or 0) + POST_VERIFY_DELAY - GetTime()
+            local left = (pending.startedAt or 0) + POST_VERIFY_DELAY + spacing - GetTime()
 
             if left > seconds then
                 seconds, reason = left, "still confirming the last listing"

@@ -70,6 +70,10 @@ AHQueue.queue = {}
 AHQueue.sendTimes = {}
 AHQueue.lastSend = 0
 
+-- Read by Posting, which counts the gap after its confirming read into the
+-- wait it shows on the buttons.
+AHQueue.MIN_SPACING = MIN_SPACING
+
 -- Two different waits, deliberately kept apart.
 --
 -- standDownUntil is politeness: the player just listed something, or a listing
