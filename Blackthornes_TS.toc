@@ -2,10 +2,13 @@
 ## Title: Blackthornes Tradeskills
 ## Notes: Finds profitable crafts, scans the auction house and keeps a craft queue, for WoW: Forever.
 ## Author: Blackthornes
-## Version: 0.1.0
+## Version: @project-version@
 ## SavedVariables: BlackthornesTSDB
 ## SavedVariablesPerCharacter: BlackthornesTSCharDB
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
+
+# Where tagged releases upload. The packager reads this; the client ignores it.
+## X-Curse-Project-ID: 1710638
 
 Core\Init.lua
 Core\Util.lua

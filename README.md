@@ -58,3 +58,34 @@ loads. `/bts db` and `/bts persist` show what loaded.
 `docs/FOREVER_API_FINDINGS.md` records what the game actually does, as found
 with `/bts probe` rather than taken from documentation. Read it before changing
 anything to do with the auction house or professions.
+
+## Releasing
+
+Releases are cut by pushing a tag like `v0.2.0`.
+`.github/workflows/release.yml` then:
+
+1. refuses the tag unless `CHANGELOG.md` opens with a `## 0.2.0` section
+   (`tools/check_release.py`);
+2. runs the tests;
+3. builds the player-facing zip with the
+   [BigWigs packager](https://github.com/BigWigsMods/packager), uploading
+   nothing;
+4. checks that zip is clear to post (`tools/check_package.py`): only the
+   addon's own files, and nothing that looks private, such as a Windows path,
+   an email address, a saved-variables dump or a token;
+5. only then uploads that same zip to CurseForge (project 1710638) and
+   attaches it to a GitHub release.
+
+To release from GitHub Desktop: add the new version's section to the top of
+`CHANGELOG.md` and merge it to `main`, pull `main`, then **History**, right-click
+the newest commit, **Create Tag...**, name it `v0.2.0`, and **Push origin**.
+
+The version is never typed by hand. The TOC says
+`## Version: @project-version@` and the packager fills in the tag. Running
+straight from a clone there is no packager, and the addon calls itself a
+"dev build". The middle number moves for new behaviour, the last for fixes
+alone; a tag like `v0.3.0-beta1` is uploaded as a beta.
+
+`.pkgmeta` leaves `tools/`, `docs/`, `deploy.ps1` and this README out of the
+zip. The upload needs the `CF_API_KEY` repository secret; without it the
+workflow still builds and checks the zip but uploads nothing to CurseForge.
