@@ -3,21 +3,19 @@
 Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone.
 
-## Unreleased
+## 0.1.0
 
-Nothing published yet. The addon is in testing on WoW: Forever beta
-(interface 16001) and has not had a public release.
+First public release, for WoW: Forever (interface 16001).
 
-Added since the repository was created:
-
-- Listings are verified by reading the auction back rather than waiting for an
-  event the client does not reliably fire.
-- Item auctions are priced in whole silver, matching the cheapest rival and
-  undercutting by a silver only when the sale still clears the minimum profit.
-- Prices below vendor value are flagged rather than quietly posted.
-- Craft names in the Profit list are coloured by item quality, with a column
-  showing what can be made now.
-- The reagent bag, and any container past bag 4, counts toward materials.
-- Equipped items no longer count as stock.
-- Part of a stack can be listed, with a per-item quantity box.
-- The database reports which source it was recovered from.
+- Lists every recipe you know with its material cost, sell price and profit
+  after the auction house cut and deposit, best earners first.
+- Counts an intermediate material, like a bolt of cloth, at whichever is
+  cheaper: buying it or crafting it.
+- Leaves crafts that bind on pickup off the list, since they cannot be sold.
+- Craft queue, with a pane beside the profession window and a Gather list of
+  the materials still missing.
+- Posts to the auction house, matching the cheapest other seller in whole
+  silver and undercutting only when the sale still clears your minimum profit.
+- Shows sell prices in the profession window and on item tooltips, and marks
+  crafts that still give skill points.
+- Sales tab records what sold and what came back, read from your mailbox.

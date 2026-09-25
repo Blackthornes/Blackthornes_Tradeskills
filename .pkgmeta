@@ -19,5 +19,12 @@ ignore:
 # Ship the licence alongside the addon rather than only in the repository.
 license-output: LICENSE
 
+# Ship CHANGELOG.md as written. Without this the packager writes its own from
+# the full commit history, which is the private repository's development log
+# and not something a player needs to read.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
 # No embedded libraries: the framework in Core/ is ours, so there is nothing
 # to fetch at package time.
