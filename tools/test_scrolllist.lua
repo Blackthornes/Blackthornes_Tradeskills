@@ -15,6 +15,7 @@ ns.Theme = {
     Unpack = function() return 0, 0, 0, 1 end,
     Border = function() end,
     CreateLabel = function() return {} end,
+    AccentStripe = function(frame) return frame:CreateTexture() end,
 }
 
 -- A frame that remembers its size, its points and its scripts, and answers

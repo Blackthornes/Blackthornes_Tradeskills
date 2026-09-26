@@ -26,7 +26,13 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     local baseKey = opts.primary and "rowActive" or "row"
 
     button.background = Theme.Fill(button, baseKey)
-    Theme.Border(button, "border")
+
+    -- The primary action wears a gold edge, so the one button that does the
+    -- main thing on a screen stands out from the rest without shouting.
+    local borderKey = opts.primary and "accent" or "border"
+    local borderAlpha = opts.primary and 0.55 or nil
+    Theme.Border(button, borderKey, borderAlpha)
+    button.sheen = Theme.TopSheen(button)
 
     -- An explicit resting colour, for buttons that sit over the game world and
     -- need to stay fully opaque rather than picking up the panel palette.
@@ -60,6 +66,14 @@ function Widgets.CreateButton(parent, text, onClick, opts)
             enabled and (opts.primary and "accent" or "text") or "dim"))
 
         ApplyBaseColor(self)
+
+        if not self.outline then
+            if enabled then
+                Theme.SetBorderColor(self, borderKey, borderAlpha)
+            else
+                Theme.SetBorderColor(self, "border", 0.6)
+            end
+        end
     end
 
     button:SetScript("OnEnter", function(self)
@@ -67,7 +81,7 @@ function Widgets.CreateButton(parent, text, onClick, opts)
             self.background:SetColorTexture(Theme.Unpack("rowHover"))
 
             if not self.outline then
-                Theme.SetBorderColor(self, "borderLit")
+                Theme.SetBorderColor(self, opts.primary and "accent" or "borderLit")
             end
         end
 
@@ -87,7 +101,7 @@ function Widgets.CreateButton(parent, text, onClick, opts)
         -- An outlined button keeps its own edge colour; resetting it here would
         -- undo the outline on the first mouseover.
         if not self.outline then
-            Theme.SetBorderColor(self, "border")
+            Theme.SetBorderColor(self, borderKey, borderAlpha)
         end
 
         GameTooltip:Hide()
@@ -114,6 +128,7 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
     box:SetPoint("LEFT")
     Theme.Fill(box, "row")
     Theme.Border(box, "border")
+    Theme.TopSheen(box)
 
     local tick = box:CreateTexture(nil, "OVERLAY")
     tick:SetPoint("CENTER")
@@ -126,11 +141,18 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
 
     checkbox:SetWidth(label:GetStringWidth() + 24)
     checkbox.checked = initial and true or false
-    tick:SetShown(checkbox.checked)
+
+    local function PaintBox(hovered)
+        tick:SetShown(checkbox.checked)
+        Theme.SetBorderColor(box, checkbox.checked and "accent"
+            or hovered and "borderLit" or "border")
+    end
+
+    PaintBox(false)
 
     function checkbox:SetChecked(value)
         self.checked = value and true or false
-        tick:SetShown(self.checked)
+        PaintBox(false)
     end
 
     function checkbox:GetChecked()
@@ -142,8 +164,14 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
         if onToggle then onToggle(self.checked) end
     end)
 
-    checkbox:SetScript("OnEnter", function() label:SetTextColor(Theme.Unpack("accent")) end)
-    checkbox:SetScript("OnLeave", function() label:SetTextColor(Theme.Unpack("text")) end)
+    checkbox:SetScript("OnEnter", function()
+        label:SetTextColor(Theme.Unpack("accent"))
+        PaintBox(true)
+    end)
+    checkbox:SetScript("OnLeave", function()
+        label:SetTextColor(Theme.Unpack("text"))
+        PaintBox(false)
+    end)
 
     return checkbox
 end
@@ -182,6 +210,20 @@ function Widgets.CreateSearchBox(parent, placeholder, onChange)
         clear:SetShown(text ~= "")
         if onChange then onChange(text) end
     end
+
+    -- Gold edge while typing, lit on hover, so it is clear where the keys go.
+    local function PaintEdge()
+        Theme.SetBorderColor(container, editBox:HasFocus() and "accent"
+            or container:IsMouseOver() and "borderLit" or "border")
+    end
+
+    editBox:SetScript("OnEditFocusGained", PaintEdge)
+    editBox:SetScript("OnEditFocusLost", PaintEdge)
+    container:SetScript("OnEnter", PaintEdge)
+    container:SetScript("OnLeave", PaintEdge)
+    editBox:SetScript("OnEnter", PaintEdge)
+    editBox:SetScript("OnLeave", PaintEdge)
+    container:EnableMouse(true)
 
     editBox:SetScript("OnTextChanged", Update)
     editBox:SetScript("OnEscapePressed", function(self)
@@ -313,6 +355,7 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     local dropdown = Theme.CreatePanel(parent, "row")
     dropdown:SetSize(opts.width or 140, 22)
     dropdown:EnableMouse(true)
+    Theme.TopSheen(dropdown)
 
     local label = Theme.CreateLabel(dropdown, "small", "text")
     label:SetPoint("LEFT", 6, 0)
@@ -359,6 +402,8 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
             entry:SetPoint("TOPLEFT", 1, y)
             entry:SetPoint("TOPRIGHT", -1, y)
             entry.label:SetText(option.text)
+            entry.label:SetTextColor(Theme.Unpack(
+                option.value == dropdown.selected and "accent" or "text"))
             entry:Show()
 
             entry:SetScript("OnClick", function()
@@ -415,8 +460,14 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
         end
     end)
 
-    dropdown:SetScript("OnEnter", function(self) Theme.SetBorderColor(self, "borderLit") end)
-    dropdown:SetScript("OnLeave", function(self) Theme.SetBorderColor(self, "border") end)
+    dropdown:SetScript("OnEnter", function(self)
+        Theme.SetBorderColor(self, "borderLit")
+        arrow:SetTextColor(Theme.Unpack("accent"))
+    end)
+    dropdown:SetScript("OnLeave", function(self)
+        Theme.SetBorderColor(self, "border")
+        arrow:SetTextColor(Theme.Unpack("muted"))
+    end)
 
     dropdown.menu = menu
     dropdown:SetOptions(options)
@@ -438,10 +489,18 @@ function Widgets.CreateProgressBar(parent)
     fill:SetColorTexture(Theme.Unpack("accent"))
     fill:SetWidth(1)
 
+    -- A brighter sliver at the leading edge, so the bar reads as moving.
+    local tip = bar:CreateTexture(nil, "OVERLAY")
+    tip:SetPoint("TOPRIGHT", fill, "TOPRIGHT")
+    tip:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT")
+    tip:SetWidth(2)
+    tip:SetColorTexture(1, 0.92, 0.65, 0.9)
+
     function bar:SetProgress(fraction)
         fraction = math.max(0, math.min(1, fraction or 0))
         local width = math.max(1, (self:GetWidth() - 2) * fraction)
         fill:SetWidth(width)
+        tip:SetShown(fraction > 0 and fraction < 1)
     end
 
     bar:SetProgress(0)
@@ -466,14 +525,16 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect)
         button:SetSize(tab.width or 96, 28)
 
         button.background = Theme.Fill(button, "panel")
+        button.hover = Theme.Fill(button, "rowHover", 0.45, "BORDER")
+        button.hover:Hide()
 
         button.label = Theme.CreateLabel(button, "normal", "muted", "CENTER")
         button.label:SetPoint("CENTER", 0, 0)
         button.label:SetText(tab.text)
 
         button.underline = button:CreateTexture(nil, "OVERLAY")
-        button.underline:SetPoint("BOTTOMLEFT", 6, 0)
-        button.underline:SetPoint("BOTTOMRIGHT", -6, 0)
+        button.underline:SetPoint("BOTTOMLEFT", 0, 0)
+        button.underline:SetPoint("BOTTOMRIGHT", 0, 0)
         button.underline:SetHeight(2)
         button.underline:SetColorTexture(Theme.Unpack("accent"))
         button.underline:Hide()
@@ -488,10 +549,12 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect)
         button:SetScript("OnEnter", function(self)
             if strip.selected ~= self.key then
                 self.label:SetTextColor(Theme.Unpack("text"))
+                self.hover:Show()
             end
         end)
 
         button:SetScript("OnLeave", function(self)
+            self.hover:Hide()
             if strip.selected ~= self.key then
                 self.label:SetTextColor(Theme.Unpack("muted"))
             end
@@ -509,6 +572,7 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect)
         for _, button in ipairs(self.tabs) do
             local active = button.key == key
             button.underline:SetShown(active)
+            button.hover:Hide()
             button.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
             button.background:SetColorTexture(Theme.Unpack(active and "header" or "panel"))
         end
@@ -529,6 +593,15 @@ end
 --   updateRow  function(row, data, index) -- fill a row with data
 --   onClick    function(data, index, mouseButton)
 --   onEnter / onLeave  function(row, data)
+--   isSelected function(data) -- true for the row the detail pane is showing,
+--              which is then drawn lit with a gold edge
+--- Light a scrollbar's thumb gold while the mouse is over the bar.
+function Widgets.LightThumb(bar, thumb)
+    bar:EnableMouse(true)
+    bar:HookScript("OnEnter", function() thumb:SetColorTexture(Theme.Unpack("accent")) end)
+    bar:HookScript("OnLeave", function() thumb:SetColorTexture(Theme.Unpack("borderLit")) end)
+end
+
 --------------------------------------------------------------------------------
 -- Scroll frame
 --------------------------------------------------------------------------------
@@ -568,9 +641,10 @@ function Widgets.CreateScrollFrame(parent, opts)
     track:SetColorTexture(Theme.Unpack("panel"))
 
     local thumb = bar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("border"))
+    thumb:SetColorTexture(Theme.Unpack("borderLit"))
     thumb:SetSize(8, 40)
     bar:SetThumbTexture(thumb)
+    Widgets.LightThumb(bar, thumb)
 
     scroll.scrollbar = bar
 
@@ -659,9 +733,10 @@ function Widgets.CreateScrollList(parent, opts)
     track:SetColorTexture(Theme.Unpack("panel"))
 
     local thumb = scrollbar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("border"))
+    thumb:SetColorTexture(Theme.Unpack("borderLit"))
     thumb:SetSize(8, 40)
     scrollbar:SetThumbTexture(thumb)
+    Widgets.LightThumb(scrollbar, thumb)
 
     list.scrollbar = scrollbar
 
@@ -685,7 +760,13 @@ function Widgets.CreateScrollList(parent, opts)
         row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
         row.background = Theme.Fill(row, "row")
-        row.highlight = Theme.Fill(row, "rowHover", 0, "ARTWORK")
+        row.highlight = Theme.Fill(row, "rowHover", 0, "BORDER")
+
+        -- A gold edge on the row under the mouse, as Farmer's lists do, so the
+        -- eye can follow a row across a wide table.
+        row.hoverEdge = Theme.AccentStripe(row, 2)
+        row.hoverEdge:SetDrawLayer("OVERLAY")
+        row.hoverEdge:Hide()
 
         if opts.createRow then
             opts.createRow(row)
@@ -693,17 +774,22 @@ function Widgets.CreateScrollList(parent, opts)
 
         row:SetScript("OnEnter", function(self)
             self.highlight:SetAlpha(1)
+            self.hoverEdge:Show()
             if opts.onEnter and self.data then opts.onEnter(self, self.data) end
         end)
 
         row:SetScript("OnLeave", function(self)
             self.highlight:SetAlpha(0)
+            self.hoverEdge:SetShown(self.selected and true or false)
             if opts.onLeave then opts.onLeave(self, self.data) end
         end)
 
         row:SetScript("OnClick", function(self, mouseButton)
             if self.data and opts.onClick then
                 opts.onClick(self.data, self.dataIndex, mouseButton, self)
+
+                -- A click may have changed which row is selected.
+                if opts.isSelected then list:Refresh() end
             end
         end)
 
@@ -741,8 +827,16 @@ function Widgets.CreateScrollList(parent, opts)
 
                     -- Alternating bands make a dense table far easier to track
                     -- across, and must follow the data row, not the frame.
-                    row.background:SetColorTexture(Theme.Unpack(
-                        dataIndex % 2 == 0 and "rowAlt" or "row"))
+                    row.selected = opts.isSelected and opts.isSelected(entry) or false
+
+                    if row.selected then
+                        row.background:SetColorTexture(Theme.Unpack("rowActive"))
+                    else
+                        row.background:SetColorTexture(Theme.Unpack(
+                            dataIndex % 2 == 0 and "rowAlt" or "row"))
+                    end
+
+                    row.hoverEdge:SetShown(row.selected or row:IsMouseOver())
 
                     if opts.updateRow then
                         opts.updateRow(row, entry, dataIndex)

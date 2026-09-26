@@ -83,6 +83,11 @@ ns.Theme = {
     CreateDivider = function() return Stub() end,
     Unpack = function(key) return key end,
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
+
+    -- The house trim: drawn, never asserted on.
+    AccentStripe = function() return Stub() end,
+    CreateItemIcon = function() return Stub() end,
+    SetItemIcon = function() end,
 }
 
 -- The tab's only way to change view is the dropdown's callback, so the stub

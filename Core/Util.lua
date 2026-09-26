@@ -403,6 +403,35 @@ function Util.GetItemLabel(itemID)
     return ("item %d"):format(itemID)
 end
 
+--- The item's icon texture, or nil when the game has not got the item yet.
+--
+-- GetItemIconByID answers from the item's static data, so it usually works
+-- before the item is fully cached; GetItemInfoInstant is the fallback. A miss
+-- is not cached, so a later redraw picks the icon up.
+local itemIcons = {}
+
+function Util.GetItemIcon(itemID)
+    if not itemID then return end
+
+    local cached = itemIcons[itemID]
+    if cached then return cached end
+
+    local icon
+
+    if Util.HasFunction("C_Item.GetItemIconByID") then
+        local ok, value = pcall(C_Item.GetItemIconByID, itemID)
+        if ok and value then icon = value end
+    end
+
+    if not icon and Util.HasFunction("C_Item.GetItemInfoInstant") then
+        local ok, _, _, _, _, value = pcall(C_Item.GetItemInfoInstant, itemID)
+        if ok and value then icon = value end
+    end
+
+    if icon then itemIcons[itemID] = icon end
+    return icon
+end
+
 --- The item's rarity colour, as the game itself draws it.
 --
 -- Returns nothing when the item is not in the client's cache yet, so callers

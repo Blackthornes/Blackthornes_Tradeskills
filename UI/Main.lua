@@ -111,8 +111,16 @@ function UI:BuildHeader()
     header:SetHeight(52)
     Theme.Fill(header, "header")
 
+    -- The house header, shared with Farmer: a gold stripe down the left edge
+    -- and a lit rule underneath.
+    Theme.AccentStripe(header, 3)
+
+    local rule = Theme.CreateDivider(header, "borderLit")
+    rule:SetPoint("BOTTOMLEFT")
+    rule:SetPoint("BOTTOMRIGHT")
+
     local title = Theme.CreateLabel(header, "title", "accent")
-    title:SetPoint("TOPLEFT", 14, -10)
+    title:SetPoint("TOPLEFT", 16, -10)
     title:SetText("Blackthornes Tradeskills")
 
     local status = Theme.CreateLabel(header, "small", "muted")
@@ -124,12 +132,23 @@ function UI:BuildHeader()
     close:SetSize(24, 24)
     close:SetPoint("TOPRIGHT", -8, -8)
 
-    local closeLabel = Theme.CreateLabel(close, "large", "muted", "CENTER")
-    closeLabel:SetPoint("CENTER")
-    closeLabel:SetText("x")
+    local closeFill = Theme.Fill(close, "row")
+    Theme.Border(close, "border")
 
-    close:SetScript("OnEnter", function() closeLabel:SetTextColor(Theme.Unpack("loss")) end)
-    close:SetScript("OnLeave", function() closeLabel:SetTextColor(Theme.Unpack("muted")) end)
+    local closeLabel = Theme.CreateLabel(close, "normal", "muted", "CENTER")
+    closeLabel:SetPoint("CENTER", 0, 0)
+    closeLabel:SetText("X")
+
+    close:SetScript("OnEnter", function()
+        closeLabel:SetTextColor(Theme.Unpack("loss"))
+        closeFill:SetColorTexture(Theme.Unpack("rowHover"))
+        Theme.SetBorderColor(close, "loss", 0.7)
+    end)
+    close:SetScript("OnLeave", function()
+        closeLabel:SetTextColor(Theme.Unpack("muted"))
+        closeFill:SetColorTexture(Theme.Unpack("row"))
+        Theme.SetBorderColor(close, "border")
+    end)
     close:SetScript("OnClick", function() UI:Hide() end)
 
     -- Scan.
