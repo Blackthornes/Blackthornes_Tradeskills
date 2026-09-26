@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.4.0
+
+For WoW: Forever (interface 16001).
+
+- Level Up: the recipe panel has a number box with Craft, Queue and Max.
+  Craft makes that many right away, up to what your bags hold, and opens the
+  profession window first if it is closed. While it runs the button reads
+  Stop and the craft progress bar shows under it. Queue adds that many to
+  the craft queue.
+- Fixed: Lua errors inside dungeons from the cast bar, the sale alarm, item
+  tooltips and the craft progress bar. A tooltip the game will not let the
+  addon read now just skips its price line.
+- The number typed in the recipe panel no longer resets when your bags
+  change.
+
 ## 0.3.0
 
 For WoW: Forever (interface 16001).
