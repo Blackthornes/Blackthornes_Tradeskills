@@ -14,12 +14,7 @@ local Progress = ns.NewModule("CraftProgress")
 
 Progress.bars = {}
 
---- What is being crafted right now.
--- @return nil when no craft is casting, else
---   { name, fraction (0..1), secondsLeft, remaining (crafts after this one, or nil) }
-function Progress:Read()
-    if type(UnitCastingInfo) ~= "function" then return nil end
-
+local function ReadUnsafe()
     local ok, name, text, _, startMS, endMS = pcall(UnitCastingInfo, "player")
     if not ok or not name then return nil end
 
@@ -41,7 +36,23 @@ function Progress:Read()
     end
 
     local label = (type(text) == "string" and text ~= "") and text or name
+    -- A plain string, or this raises here, inside Read's pcall, rather than
+    -- later on the bar every frame.
+    label = label .. ""
     return { name = label, fraction = fraction, secondsLeft = secondsLeft, remaining = remaining }
+end
+
+--- What is being crafted right now.
+-- @return nil when no craft is casting, else
+--   { name, fraction (0..1), secondsLeft, remaining (crafts after this one, or nil) }
+--
+-- Runs every frame while a bar shows. Anything the game will not let the addon
+-- read (a cast inside a dungeon) means no bar, never an error per frame.
+function Progress:Read()
+    if type(UnitCastingInfo) ~= "function" then return nil end
+    local ok, cast = pcall(ReadUnsafe)
+    if ok then return cast end
+    return nil
 end
 
 --- The line of text on the bar.

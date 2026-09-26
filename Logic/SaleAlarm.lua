@@ -83,8 +83,14 @@ function SaleAlarm:MatchSoldLine(text)
     local pattern = GetSoldPattern()
     if not pattern or type(text) ~= "string" then return nil end
 
-    local item = text:match(pattern)
-    return item
+    -- Inside a dungeon a system line can be one the game will not let the
+    -- addon read, and matching it would raise. Such a line is not a sale.
+    local ok, item = pcall(string.match, text, pattern)
+    if not ok or item == nil then return nil end
+
+    -- Hand back a plain string, or nothing.
+    local plain, copy = pcall(function() return item .. "" end)
+    return plain and copy or nil
 end
 
 --- Whether an auction house notice is the "sold" one.

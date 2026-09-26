@@ -44,13 +44,31 @@ local function Bars()
     return found
 end
 
+--- Is this event about the player's own cast?
+-- These events fire for every unit, and inside a dungeon the game hands the
+-- addon a unit token it may not compare: `unit ~= "player"` raised a Lua error
+-- on every cast by every mob and party member. The comparison happens inside
+-- the pcall, and a token that cannot be read is not the player.
+local function IsPlayer(unit)
+    local ok, yes = pcall(function() return unit == "player" end)
+    return ok and yes == true
+end
+CastBar.IsPlayer = IsPlayer
+
 --- Whether the player is casting a craft right now.
 function CastBar:IsCrafting()
     if type(UnitCastingInfo) ~= "function" then return false end
 
-    local ok, name, _, _, _, _, isTradeSkill = pcall(UnitCastingInfo, "player")
-    if not ok or not name then return false end
-    if isTradeSkill then return true end
+    -- The cast's name and craft flag are tested inside the pcall too, for the
+    -- same reason: a value the game will not let us read is not a craft.
+    local ok, flag = pcall(function()
+        local name, _, _, _, _, isTradeSkill = UnitCastingInfo("player")
+        if not name then return false end
+        if isTradeSkill then return true end
+        return nil
+    end)
+    if not ok or flag == false then return false end
+    if flag == true then return true end
 
     -- Some clients leave isTradeSkill empty. A cast with the profession
     -- window open, or one the addon itself started, is a craft too.
@@ -91,12 +109,12 @@ function CastBar:Restore()
 end
 
 function CastBar:OnCastStart(_, unit)
-    if unit ~= "player" then return end
+    if not IsPlayer(unit) then return end
     if self:IsCrafting() then self:Raise() end
 end
 
 function CastBar:OnCastEnd(_, unit)
-    if unit ~= "player" or not self.raised then return end
+    if not self.raised or not IsPlayer(unit) then return end
 
     C_Timer.After(SETTLE, function()
         if CastBar.raised and not CastBar:IsCrafting() then
