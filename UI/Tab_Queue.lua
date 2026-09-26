@@ -33,8 +33,12 @@ local widgets = {}
 --------------------------------------------------------------------------------
 
 local function CreateCraftRow(row)
+    -- The item's icon beside its name, as the bags draw it.
+    row.icon = Theme.CreateItemIcon(row, 16)
+    row.icon:SetPoint("LEFT", 8, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 8, 0)
+    row.name:SetPoint("LEFT", 28, 0)
     row.name:SetPoint("RIGHT", row, "RIGHT", -150, 0)
 
     row.profit = Theme.CreateLabel(row, "small", "text", "RIGHT")
@@ -70,6 +74,7 @@ local function UpdateCraftRow(row, entry)
     local analysis = ns.Profit:Analyse(entry.recipeID)
 
     local label = (recipe and recipe.name) or ("recipe " .. entry.recipeID)
+    Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
 
     -- Marked so a craft the player did not add directly is explicable.
     if entry.isDependency then
@@ -120,8 +125,11 @@ end
 --------------------------------------------------------------------------------
 
 local function CreateMaterialRow(row)
+    row.icon = Theme.CreateItemIcon(row, 14)
+    row.icon:SetPoint("LEFT", 6, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 8, 0)
+    row.name:SetPoint("LEFT", 24, 0)
     row.name:SetPoint("RIGHT", row, "RIGHT", MATERIAL_NAME_INSET, 0)
 
     row.cells = {}
@@ -140,6 +148,7 @@ end
 
 local function UpdateMaterialRow(row, line)
     row.name:SetText(Util.GetItemLabel(line.itemID))
+    Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells
 
@@ -387,7 +396,7 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
-    local heading = Theme.CreateLabel(container, "tiny", "dim")
+    local heading = Theme.CreateLabel(container, "tiny", "accent")
     heading:SetPoint("TOPLEFT", 8, -10)
     heading:SetText("QUEUED CRAFTS")
 
@@ -456,7 +465,7 @@ local function Build(container)
     materials:SetPoint("BOTTOMRIGHT", -8, 8)
     materials:SetWidth(MATERIALS_WIDTH)
 
-    local materialsHeading = Theme.CreateLabel(materials, "tiny", "dim")
+    local materialsHeading = Theme.CreateLabel(materials, "tiny", "accent")
     materialsHeading:SetPoint("TOPLEFT", 10, -10)
     materialsHeading:SetText("MATERIALS NEEDED")
 
@@ -466,12 +475,12 @@ local function Build(container)
     columnHeader:SetPoint("TOPRIGHT", -10, -28)
     columnHeader:SetHeight(14)
 
-    local nameHeading = Theme.CreateLabel(columnHeader, "tiny", "dim")
-    nameHeading:SetPoint("LEFT", 8, 0)
+    local nameHeading = Theme.CreateLabel(columnHeader, "tiny", "muted")
+    nameHeading:SetPoint("LEFT", 24, 0)
     nameHeading:SetText("MATERIAL")
 
     for _, column in ipairs(MATERIAL_COLUMNS) do
-        local heading = Theme.CreateLabel(columnHeader, "tiny", "dim", "RIGHT")
+        local heading = Theme.CreateLabel(columnHeader, "tiny", "muted", "RIGHT")
         heading:SetPoint("RIGHT", column.offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)

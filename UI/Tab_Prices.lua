@@ -113,8 +113,12 @@ end
 --------------------------------------------------------------------------------
 
 local function CreateRow(row)
+    -- The item's icon beside its name, as the bags draw it.
+    row.icon = Theme.CreateItemIcon(row, 16)
+    row.icon:SetPoint("LEFT", 8, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 8, 0)
+    row.name:SetPoint("LEFT", 28, 0)
 
     row.cells = {}
 
@@ -137,6 +141,7 @@ end
 
 local function UpdateRow(row, entry)
     row.name:SetText(entry.label)
+    Theme.SetItemIcon(row.icon, entry.itemID)
 
     local stale = ns.Prices:IsStale(entry.itemID)
     row.name:SetTextColor(Theme.Unpack(stale and "muted" or "text"))
@@ -230,6 +235,8 @@ local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
 
+    Theme.AccentStripe(detail, 2, 0.6)
+
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetPoint("TOPRIGHT", -12, -12)
@@ -268,6 +275,7 @@ local function BuildDetail(parent)
     local chartHeading = Theme.CreateLabel(detail, "tiny", "dim")
     chartHeading:SetPoint("TOPLEFT", rowsAnchor, "BOTTOMLEFT", 0, -16)
     chartHeading:SetText("MARKET VALUE HISTORY")
+    Theme.StyleHeading(chartHeading, detail)
 
     local chart = CreateFrame("Frame", nil, detail)
     chart:SetPoint("TOPLEFT", chartHeading, "BOTTOMLEFT", 0, -6)
@@ -450,20 +458,20 @@ local function Build(container)
     headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
     headings:SetHeight(16)
 
-    local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
-    nameHeading:SetPoint("LEFT", 8, 0)
+    local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
+    nameHeading:SetPoint("LEFT", 28, 0)
     nameHeading:SetText("ITEM")
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "dim", "RIGHT")
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)
         offset = offset - column.width - 6
     end
 
-    local divider = Theme.CreateDivider(container)
+    local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
@@ -471,6 +479,11 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
+        -- The row the detail pane is showing stays lit.
+        isSelected = function(entry)
+            return state.selected ~= nil and entry.itemID == state.selected.itemID
+        end,
+
         onClick = function(entry)
             state.selected = entry
             UpdateDetail(entry)

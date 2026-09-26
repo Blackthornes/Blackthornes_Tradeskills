@@ -28,8 +28,10 @@ Theme.colors = {
     warn      = { 0.910, 0.757, 0.353 },
 
     text      = { 0.902, 0.910, 0.925 },   -- #E6E8EC
-    muted     = { 0.478, 0.502, 0.541 },   -- #7A8089
-    dim       = { 0.330, 0.350, 0.390 },
+    -- Secondary text, a step brighter than Farmer's so the small print in
+    -- the dense tables (ages, column headings, hints) is readable.
+    muted     = { 0.545, 0.569, 0.608 },   -- #8B919B
+    dim       = { 0.420, 0.440, 0.482 },   -- #6B707B
 
     -- Untinted, for Blizzard border textures that already carry their own
     -- gold colouring and only look muddy when tinted again.
@@ -218,6 +220,133 @@ function Theme.CreateDivider(parent, key)
     divider:SetColorTexture(Theme.Unpack(key or "border"))
     divider:SetHeight(1)
     return divider
+end
+
+--------------------------------------------------------------------------------
+-- House trim, shared with Blackthornes Farmer
+--
+-- The two addons are worn together, so they share the same few touches: a
+-- gold stripe down the left of a header, headings in the accent colour over a
+-- thin rule, item icons beside item names, and thin bars under a number that
+-- is a share of something.
+--------------------------------------------------------------------------------
+
+--- A gold stripe down the left edge of a header or band.
+function Theme.AccentStripe(frame, width, alpha)
+    local stripe = frame:CreateTexture(nil, "ARTWORK")
+    stripe:SetPoint("TOPLEFT")
+    stripe:SetPoint("BOTTOMLEFT")
+    stripe:SetWidth(width or 3)
+    stripe:SetColorTexture(Theme.Unpack("accent", alpha))
+    return stripe
+end
+
+--- A faint lighter line along the top edge, so a flat fill reads as a raised
+--- surface rather than a hole.
+function Theme.TopSheen(frame, alpha)
+    local sheen = frame:CreateTexture(nil, "BORDER")
+    sheen:SetPoint("TOPLEFT", 1, -1)
+    sheen:SetPoint("TOPRIGHT", -1, -1)
+    sheen:SetHeight(1)
+    sheen:SetColorTexture(1, 1, 1, alpha or 0.05)
+    return sheen
+end
+
+--- A section heading: small accent capitals with a rule running off to the
+--- right, the way Farmer's settings sections read.
+--
+-- Returns the label; the rule hangs off it as label.rule.
+function Theme.CreateHeading(parent, text, size)
+    local label = Theme.CreateLabel(parent, size or "tiny", "accent")
+    label:SetText(text)
+    return Theme.StyleHeading(label, parent)
+end
+
+--- Restyle a heading label made elsewhere as a section heading: accent, with
+--- the rule. Showing or hiding the label takes the rule with it.
+function Theme.StyleHeading(label, parent)
+    label:SetTextColor(Theme.Unpack("accent"))
+    if label.rule then return label end
+
+    parent = parent or label:GetParent()
+
+    local rule = parent:CreateTexture(nil, "ARTWORK")
+    rule:SetColorTexture(Theme.Unpack("border"))
+    rule:SetHeight(1)
+    rule:SetPoint("LEFT", label, "RIGHT", 6, 0)
+    rule:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
+    label.rule = rule
+
+    local show, hide, setShown = label.Show, label.Hide, label.SetShown
+    function label:Show() show(self); rule:Show() end
+    function label:Hide() hide(self); rule:Hide() end
+    function label:SetShown(on) setShown(self, on); rule:SetShown(on) end
+
+    return label
+end
+
+local FALLBACK_ICON = [[Interface\Icons\INV_Misc_QuestionMark]]
+
+--- An item icon, trimmed of its built-in border the way the bags draw it.
+function Theme.CreateItemIcon(parent, size)
+    local icon = parent:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(size or 16, size or 16)
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    icon:Hide()
+    return icon
+end
+
+--- Show an item's icon, or the question mark while the game has not sent it.
+--- Hidden when there is no item at all.
+function Theme.SetItemIcon(icon, itemID)
+    if not icon then return end
+
+    if not itemID then
+        icon:Hide()
+        return
+    end
+
+    icon:SetTexture((ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(itemID))
+        or FALLBACK_ICON)
+    icon:Show()
+end
+
+--- A thin bar: a dark track with a coloured fill, for a number that is a share
+--- of something (a margin, a sell-through, progress toward a goal).
+function Theme.CreateBar(parent, width, height)
+    local track = parent:CreateTexture(nil, "BORDER")
+    track:SetSize(width or 40, height or 2)
+    track:SetColorTexture(Theme.Unpack("rowAlt"))
+
+    local fill = parent:CreateTexture(nil, "ARTWORK")
+    fill:SetPoint("TOPLEFT", track, "TOPLEFT")
+    fill:SetPoint("BOTTOMLEFT", track, "BOTTOMLEFT")
+    fill:SetWidth(1)
+
+    local bar = { track = track, fill = fill, width = width or 40 }
+
+    --- `fraction` 0 to 1, or nil to hide the bar.
+    function bar:Set(fraction, colorKey)
+        if not fraction then
+            self.track:Hide()
+            self.fill:Hide()
+            return
+        end
+
+        fraction = math.max(0, math.min(1, fraction))
+        self.fill:SetWidth(math.max(1, self.width * fraction))
+        self.fill:SetColorTexture(Theme.Unpack(colorKey or "accent"))
+        self.track:Show()
+        self.fill:SetShown(fraction > 0)
+    end
+
+    function bar:SetPoint(...)
+        self.track:ClearAllPoints()
+        self.track:SetPoint(...)
+    end
+
+    bar:Set(nil)
+    return bar
 end
 
 --------------------------------------------------------------------------------
