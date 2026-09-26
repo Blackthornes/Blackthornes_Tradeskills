@@ -125,8 +125,8 @@ local function StaleNote(skillUp)
 end
 
 local function ShowRowTooltip(row, entry)
-    GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-    GameTooltip:SetText(entry.name or "craft", 1, 1, 1)
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.outputItemID, entry.name or "craft")
+    GameTooltip:AddLine(" ")
 
     local r, g, b = TierColor(entry.tier)
     local chance = entry.tier == "unknown" and "not read yet"

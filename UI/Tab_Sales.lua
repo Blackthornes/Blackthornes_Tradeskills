@@ -601,6 +601,8 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
+        onEnter = function(row, data) Widgets.ShowItemOnly(row, data.itemID, data.name) end,
+        onLeave = function() GameTooltip:Hide() end,
         onClick = function(data)
             -- Both views select the same thing: an item. Clicking one sale
             -- asks about that item, not about that one listing.

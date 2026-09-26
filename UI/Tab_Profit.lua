@@ -225,8 +225,8 @@ local function ShowMarkTooltip(row, analysis)
     local skillUp = analysis.skillUp
     if not skillUp then return end
 
-    GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-    GameTooltip:SetText(analysis.name or "craft", 1, 1, 1)
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", analysis.outputItemID, analysis.name or "craft")
+    GameTooltip:AddLine(" ")
 
     local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
     GameTooltip:AddDoubleLine("Skill up", ns.SkillUp:GetTierLabel(skillUp.tier),
@@ -824,13 +824,14 @@ local function Build(container)
         createRow = CreateRow,
         updateRow = UpdateRow,
 
-        -- Only starred rows get a tooltip, and it exists to explain the star.
-        -- Everything else about a row is already on the row or one click away
-        -- in the detail panel, and a tooltip over every line of a long table
-        -- is noise.
+        -- Every row shows the item it makes, as the bags would. A starred
+        -- row adds why it wears the star underneath.
         onEnter = function(row, analysis)
-            if not analysis.recommended then return end
-            ShowMarkTooltip(row, analysis)
+            if analysis.recommended and analysis.skillUp then
+                ShowMarkTooltip(row, analysis)
+            else
+                Widgets.ShowItemOnly(row, analysis.outputItemID, analysis.name)
+            end
         end,
 
         onLeave = function() GameTooltip:Hide() end,

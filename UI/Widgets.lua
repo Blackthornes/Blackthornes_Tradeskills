@@ -102,6 +102,41 @@ function Widgets.CreateButton(parent, text, onClick, opts)
 end
 
 --------------------------------------------------------------------------------
+-- Item tooltip
+--------------------------------------------------------------------------------
+
+--- Start a tooltip for an item row with the game's own tooltip for the item,
+--- the one the bags show, so hovering a name inside the addon shows the item
+--- itself (Trent, 2026-09-26). The addon's value lines join it the same way
+--- they join any item tooltip. Falls back to the plain name when the game
+--- cannot draw the item.
+--
+-- The caller adds its own lines after this and calls GameTooltip:Show().
+function Widgets.ShowItemTooltip(owner, anchor, itemID, fallback)
+    GameTooltip:SetOwner(owner, anchor or "ANCHOR_RIGHT")
+
+    local shown = false
+    if itemID and GameTooltip.SetItemByID then
+        shown = pcall(GameTooltip.SetItemByID, GameTooltip, itemID)
+    end
+
+    local ok, count = pcall(GameTooltip.NumLines, GameTooltip)
+    if not shown or not ok or (tonumber(count) or 0) == 0 then
+        GameTooltip:SetText(fallback or "item", 1, 1, 1)
+        return false
+    end
+
+    return true
+end
+
+--- A row whose whole tooltip is the item's own.
+function Widgets.ShowItemOnly(owner, itemID, fallback)
+    if not itemID then return end
+    Widgets.ShowItemTooltip(owner, "ANCHOR_RIGHT", itemID, fallback)
+    GameTooltip:Show()
+end
+
+--------------------------------------------------------------------------------
 -- Checkbox
 --------------------------------------------------------------------------------
 

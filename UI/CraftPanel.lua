@@ -546,8 +546,8 @@ local function UpdateRow(row, line)
 end
 
 local function ShowRowTooltip(row, line)
-    GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-    GameTooltip:SetText(line.name, 1, 1, 1)
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.outputItemID, line.name)
+    GameTooltip:AddLine(" ")
 
     if line.priceable then
         GameTooltip:AddDoubleLine("Profit each",

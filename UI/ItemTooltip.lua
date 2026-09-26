@@ -279,14 +279,43 @@ function ItemTooltip:LinesFor(itemID, count)
 
     lines[#lines + 1] = { "Auction value", text }
 
+    local lowest = self:LowestLine(itemID)
+    if lowest then lines[#lines + 1] = lowest end
+
     if count and count > 1 then
         lines[#lines + 1] = {
             ("Stack of %d"):format(count),
             Util.FormatMoney(value * count, { short = true }),
+            stack = true,
         }
     end
 
     return lines
+end
+
+--- The cheapest listing the last scan saw, beside the smoothed value (Trent,
+--- 2026-09-26: "items should show the lowest seller value in addition to
+--- auction value"). The same number the List confirmation calls the lowest
+--- posting, marked when the cheapest one is your own.
+function ItemTooltip:LowestLine(itemID)
+    if type(ns.Prices.Get) ~= "function" then return nil end
+
+    local record = ns.Prices:Get(itemID)
+    if type(record) ~= "table" then return nil end
+
+    local lowest = record.min
+    if not lowest or lowest <= 0 then
+        -- Scanned, and nobody had one up: say so rather than leave it out.
+        return { "Lowest posting", "none listed", true }
+    end
+
+    local text = Util.FormatMoney(lowest, { short = true })
+
+    if record.ownMin and record.ownMin <= lowest then
+        text = text .. "  (yours)"
+    end
+
+    return { "Lowest posting", text }
 end
 
 --------------------------------------------------------------------------------
@@ -417,14 +446,17 @@ function ItemTooltip:AddStackLine(tooltip, count)
 
     local lines = self:LinesFor(mark.itemID, count)
 
-    -- Two lines means there is a price and a stack total to go with it. One
-    -- means the item has no price, and "a stack of 20 of nothing" is not worth
-    -- saying.
-    if #lines < 2 then return false end
+    -- No stack line means the item has no price, and "a stack of 20 of
+    -- nothing" is not worth saying.
+    local stackLine
+    for _, line in ipairs(lines) do
+        if line.stack then stackLine = line end
+    end
+    if not stackLine then return false end
 
     self.writing = true
 
-    WriteLine(tooltip, lines[2])
+    WriteLine(tooltip, stackLine)
     Try(Field(tooltip, "Show"), tooltip)
 
     self.writing = false
