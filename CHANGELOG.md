@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.5.0
+
+For WoW: Forever (interface 16001).
+
+- Queue All on the Profit tab: queues every craft in the list, after your
+  filters and search, up to its Max on hand less what you already hold, have
+  listed, have in the mail or have queued. Crafts with no Max on hand are
+  skipped.
+- A single low listing from one seller, under a third of the next listing
+  up, is no longer the price to beat. Undercuts match the next real seller
+  and it is left out of market value. Two or more low listings still count
+  as a real price drop.
+
 ## 0.4.0
 
 For WoW: Forever (interface 16001).
