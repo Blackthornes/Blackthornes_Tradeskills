@@ -1030,6 +1030,13 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
         if own and own > 0 then lowestText = Money(own) .. " (yours)" end
     end
 
+    -- A lone listing far below the rest is not undercut. Say so, or the
+    -- dialog disagrees with the auction house the player is looking at.
+    local record = ns.Prices:Get(itemID)
+    if record and record.ignoredLow then
+        lowestText = lowestText .. (" (ignored a lone one at %s)"):format(Money(record.ignoredLow))
+    end
+
     if check.state == "unavailable" then
         lowestText = lowestText .. " (could not check, last seen)"
     end
