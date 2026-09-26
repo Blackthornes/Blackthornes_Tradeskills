@@ -118,6 +118,11 @@ Prices:Record(4306, 900, 800, 3, time(), nil, 800)
 local own = lines(Posting:BuildConfirmText(4306, 1, 800, { state = "fresh" }))
 check("only yours says so", own[2] == "Lowest Market Posting: 800 (yours)")
 
+-- A lone low listing was skipped: the line says so.
+Prices:Record(2770, 5000, 100, 6, time(), 5000, nil, 100)
+local lone = lines(Posting:BuildConfirmText(2770, 1, 4900, { state = "fresh" }))
+check("a skipped lone listing is named", lone[2] == "Lowest Market Posting: 5000 (ignored a lone one at 100)" and #lone == 4)
+
 -- A check that never answered.
 Prices:Record(3530, 300, 250, 3, time(), 250, nil)
 local stale = lines(Posting:BuildConfirmText(3530, 1, 240, { state = "unavailable" }))
