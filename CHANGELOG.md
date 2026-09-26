@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.5.1
+
+For WoW: Forever (interface 16001).
+
+- Fixed: a page-by-page scan stalled at page 8, threw away the pages it had
+  read and left the progress bar stuck at 40%. A page that really never
+  answers now keeps what was read and ends the scan properly.
+- Fixed: a quick full scan that was cancelled, or gave up while waiting
+  behind posting, still started the fifteen minute cooldown and blocked the
+  next scan. The cooldown now starts only when the scan is actually sent.
+
 ## 0.5.0
 
 For WoW: Forever (interface 16001).
