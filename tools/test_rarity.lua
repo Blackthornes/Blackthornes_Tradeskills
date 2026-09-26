@@ -69,6 +69,14 @@ ns.Theme = {
     -- the stub answers a missing field with a no-op function.
     CreateMark = function() return Stub({ tier = false }) end,
     SetMark = function(mark, tier) mark.tier = tier or false end,
+
+    -- The house trim: drawn, never asserted on.
+    AccentStripe = function() return Stub() end,
+    CreateItemIcon = function() return Stub() end,
+    SetItemIcon = function() end,
+    CreateBar = function() return Stub() end,
+    CreateHeading = function() return Stub({ rule = Stub() }) end,
+    StyleHeading = function(label) label.rule = Stub(); return label end,
 }
 
 ns.Widgets = {

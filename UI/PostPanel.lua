@@ -60,9 +60,13 @@ end
 local function CreateRow(row)
     local textWidth = PANEL_WIDTH - TEXT_INSET - 8
 
+    -- The item's icon at the start of the name line, as the bags draw it.
+    row.icon = Theme.CreateItemIcon(row, 13)
+    row.icon:SetPoint("TOPLEFT", 8, -3)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("TOPLEFT", 8, -4)
-    row.name:SetWidth(textWidth)
+    row.name:SetPoint("TOPLEFT", 25, -4)
+    row.name:SetWidth(textWidth - 17)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
     row.detail:SetPoint("TOPLEFT", 8, -17)
@@ -102,6 +106,7 @@ end
 
 function UpdateRow(row, line)
     row.name:SetText(line.label)
+    Theme.SetItemIcon(row.icon, line.itemID)
 
     local maxQuantity = line.maxQuantity or line.count or 1
 
