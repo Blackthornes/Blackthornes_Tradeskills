@@ -36,6 +36,9 @@ local state = {
 
 local widgets = {}
 
+-- Defined with the detail panel, used by the controls built inside it.
+local UpdateCraftButton
+
 -- Profession name -> set of skill-line IDs carrying it. Forever lists every
 -- profession under two IDs and a recipe may be tagged with either, so the
 -- dropdown works in names and filters by the whole set.
@@ -145,6 +148,40 @@ end
 -- Detail panel
 --------------------------------------------------------------------------------
 
+--- Set the Craft button for the selected recipe: craft, open its profession
+--- window first, stop a craft under way, or say why it cannot.
+UpdateCraftButton = function()
+    local detail = widgets.detail
+    local button = detail and detail.craftButton
+    if not button then return end
+
+    local entry = state.selected
+    local opener = ns.ProfessionOpener
+    button.opensProfession = false
+
+    if not entry or not button:IsVisible() then
+        if opener and opener.anchor == button then opener:Disarm() end
+        return
+    end
+
+    local action = ns.LevelUp:CraftAction(entry.recipeID, detail.quantity:GetText())
+
+    button:SetText(action.text)
+    button:SetEnabledState(action.kind ~= "none")
+    button.tooltipText = action.status
+    detail.craftStatus:SetText(action.status or "")
+    detail.craftStatus:SetTextColor(Theme.Unpack(action.kind == "none" and "warn" or "accent"))
+
+    if action.kind == "open" and opener then
+        button.opensProfession = true
+        opener:Arm(button, action.profession, entry.recipeID)
+    elseif opener and opener.anchor == button then
+        -- Only our own button: the Queue tab may be holding the secure
+        -- button over its Craft button.
+        opener:Disarm()
+    end
+end
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
@@ -175,8 +212,8 @@ local function BuildDetail(parent)
     detail.reagentLines = {}
 
     local summary = CreateFrame("Frame", nil, detail)
-    summary:SetPoint("BOTTOMLEFT", 12, 50)
-    summary:SetPoint("BOTTOMRIGHT", -12, 50)
+    summary:SetPoint("BOTTOMLEFT", 12, 72)
+    summary:SetPoint("BOTTOMRIGHT", -12, 72)
     summary:SetHeight(36)
     detail.summary = summary
 
@@ -194,8 +231,20 @@ local function BuildDetail(parent)
     detail.costValue = SummaryRow(1, "Materials for one")
     detail.makeValue = SummaryRow(2, "You can make now")
 
+    -- What the Craft button will do, or why it cannot. A craft's progress bar
+    -- takes this line's place while it casts.
+    local craftStatus = Theme.CreateLabel(detail, "tiny", "accent")
+    craftStatus:SetPoint("BOTTOMLEFT", 12, 46)
+    craftStatus:SetPoint("BOTTOMRIGHT", -12, 46)
+    detail.craftStatus = craftStatus
+
+    detail.craftProgress = ns.CraftProgress:Create(detail, {
+        width = DETAIL_WIDTH - 24, height = 18, covers = craftStatus,
+    })
+    detail.craftProgress:SetPoint("BOTTOMLEFT", 12, 42)
+
     local quantityBox = Theme.CreatePanel(detail, "row")
-    quantityBox:SetSize(46, 24)
+    quantityBox:SetSize(40, 24)
     quantityBox:SetPoint("BOTTOMLEFT", 12, 14)
     detail.quantityBox = quantityBox
 
@@ -209,23 +258,52 @@ local function BuildDetail(parent)
     quantity:SetText("1")
     quantity:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     quantity:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    -- The Craft button names the number it will make, so it follows the box.
+    quantity:SetScript("OnTextChanged", function(_, userInput)
+        if userInput then UpdateCraftButton() end
+    end)
     detail.quantity = quantity
 
-    local addButton = Widgets.CreateButton(detail, "Add to queue", function()
+    local function Wanted()
+        return math.max(1, tonumber(quantity:GetText()) or 1)
+    end
+
+    -- Crafting needs a real click, so this runs straight from the button.
+    -- When the recipe's window is not open, the secure Open button laid over
+    -- this one takes the click instead and this handler never runs.
+    local craftButton = Widgets.CreateButton(detail, "Craft", function(button)
+        local entry = state.selected
+        if not entry then return end
+
+        if ns.Crafting:IsBusy() then
+            ns.Crafting:Stop()
+        elseif button.opensProfession and ns.ProfessionOpener then
+            ns.ProfessionOpener:MissedClick()
+        else
+            ns.Crafting:Start(entry.recipeID, Wanted())
+        end
+
+        UpdateCraftButton()
+    end, { width = 110, primary = true, height = 24 })
+    craftButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 6, 0)
+    detail.craftButton = craftButton
+
+    local addButton = Widgets.CreateButton(detail, "Queue", function()
         if not state.selected then return end
 
-        local count = math.max(1, tonumber(quantity:GetText()) or 1)
+        local count = Wanted()
         ns.Queue:Add(state.selected.recipeID, count)
         ns.Print(("queued %dx %s"):format(count, state.selected.name or "craft"))
-    end, { width = 130, primary = true, height = 24 })
-    addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
+    end, { width = 64, height = 24, tooltip = "Add this many to the craft queue" })
+    addButton:SetPoint("BOTTOMLEFT", craftButton, "BOTTOMRIGHT", 6, 0)
     detail.addButton = addButton
 
     local maxButton = Widgets.CreateButton(detail, "Max", function()
         if not state.selected then return end
         quantity:SetText(tostring(math.max(1, state.selected.craftableNow or 1)))
-    end, { width = 44, height = 24, tooltip = "As many as the materials in your bags make" })
-    maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 8, 0)
+        UpdateCraftButton()
+    end, { width = 40, height = 24, tooltip = "As many as the materials in your bags make" })
+    maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 6, 0)
     detail.maxButton = maxButton
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
@@ -250,11 +328,18 @@ local function UpdateDetail(entry)
 
     for _, part in ipairs({ detail.title, detail.subtitle, detail.note, detail.reagentHeading,
                             detail.summary, detail.quantityBox, detail.addButton,
-                            detail.maxButton }) do
+                            detail.maxButton, detail.craftButton }) do
         part:SetShown(shown)
     end
 
-    if not shown then return end
+    if not shown then
+        detail.shownRecipeID = nil
+        -- Emptied rather than hidden: the progress bar hides and shows this
+        -- line itself while a craft casts.
+        detail.craftStatus:SetText("")
+        UpdateCraftButton()
+        return
+    end
 
     detail.title:SetText(entry.name or ("recipe " .. entry.recipeID))
 
@@ -325,7 +410,14 @@ local function UpdateDetail(entry)
     detail.makeValue:SetText(tostring(craftable))
     detail.makeValue:SetTextColor(Theme.Unpack(craftable > 0 and "profit" or "loss"))
 
-    detail.quantity:SetText(tostring(math.max(1, craftable)))
+    -- Only when a different recipe is picked. The list refreshes on every
+    -- bag change, and a number the player typed must survive that.
+    if detail.shownRecipeID ~= entry.recipeID then
+        detail.shownRecipeID = entry.recipeID
+        detail.quantity:SetText(tostring(math.max(1, craftable)))
+    end
+
+    UpdateCraftButton()
 end
 
 --------------------------------------------------------------------------------
