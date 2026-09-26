@@ -412,8 +412,12 @@ local function CreateRow(row)
     row.mark = Theme.CreateMark(row)
     row.mark:SetPoint("TOPLEFT", 7, -4)
 
+    -- The made item's icon at the start of the name line, as the bags draw it.
+    row.icon = Theme.CreateItemIcon(row, 13)
+    row.icon:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -3)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -4)
+    row.name:SetPoint("TOPLEFT", 8 + MARK_GUTTER + 17, -4)
     row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
 
     -- Full width: nothing stands to the right of this line any more, and it
@@ -469,6 +473,7 @@ end
 
 local function UpdateRow(row, line)
     row.name:SetText(line.name)
+    Theme.SetItemIcon(row.icon, line.outputItemID)
 
     -- Not while it is being typed into: overwriting someone mid-number is how
     -- a field ends up refusing to accept what they meant.

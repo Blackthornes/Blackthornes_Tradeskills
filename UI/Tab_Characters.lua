@@ -90,6 +90,7 @@ local function BuildDetail(parent)
     local heading = Theme.CreateLabel(detail, "tiny", "dim")
     heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -14)
     heading:SetText("BEST CRAFTS ON THIS CHARACTER")
+    Theme.StyleHeading(heading, detail)
     detail.heading = heading
 
     detail.lines = {}
@@ -271,7 +272,7 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
-    local heading = Theme.CreateLabel(container, "tiny", "dim")
+    local heading = Theme.CreateLabel(container, "tiny", "accent")
     heading:SetPoint("TOPLEFT", 8, -10)
     heading:SetText("CHARACTERS")
 
@@ -283,6 +284,11 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
+        -- The row the detail pane is showing stays lit.
+        isSelected = function(entry)
+            return state.selected ~= nil and entry.key == state.selected.key
+        end,
+
         onClick = function(entry)
             state.selected = entry
             UpdateDetail(entry)

@@ -100,8 +100,12 @@ end
 -- line of context under it. What goes in each is all that changes, so the two
 -- views cannot drift apart in how they look.
 local function CreateRow(row)
+    -- The item's icon beside both lines, as the bags draw it.
+    row.icon = Theme.CreateItemIcon(row, 24)
+    row.icon:SetPoint("LEFT", 8, 0)
+
     row.name = Theme.CreateLabel(row, "normal", "text")
-    row.name:SetPoint("TOPLEFT", 10, -4)
+    row.name:SetPoint("TOPLEFT", 40, -4)
     row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -130, -4)
     row.name:SetJustifyH("LEFT")
 
@@ -110,7 +114,7 @@ local function CreateRow(row)
     row.amount:SetWidth(115)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
-    row.detail:SetPoint("TOPLEFT", 10, -19)
+    row.detail:SetPoint("TOPLEFT", 40, -19)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -130, -19)
     row.detail:SetJustifyH("LEFT")
 
@@ -206,6 +210,7 @@ local function UpdateItemRow(row, item)
 end
 
 local function UpdateRow(row, data)
+    Theme.SetItemIcon(row.icon, data.itemID)
     if data.kind then
         UpdateEventRow(row, data)
     else

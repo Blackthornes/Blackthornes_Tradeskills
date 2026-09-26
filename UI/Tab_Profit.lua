@@ -17,6 +17,10 @@ local DETAIL_WIDTH = 300
 -- that shuffle sideways as the marks come and go are worse than the gap.
 local MARK_GUTTER = 16
 
+-- The made item's icon, between the star and the name.
+local ICON_SIZE = 16
+local ICON_GUTTER = ICON_SIZE + 4
+
 -- Right-aligned numeric columns, measured from the right edge of the list.
 -- Laid out right to left. WHO only earns its space when more than one
 -- character is in play, so it is hidden otherwise and the craft name takes
@@ -79,6 +83,10 @@ local function ApplyRowLayout(row)
     end
 
     row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+
+    -- The margin's bar sits under its number, as long as the margin is wide.
+    row.marginBar:SetPoint("TOPRIGHT", row.cells.margin, "BOTTOMRIGHT", 0, -1)
+
     row.layoutVersion = layoutVersion
 end
 
@@ -86,13 +94,18 @@ local function CreateRow(row)
     row.mark = Theme.CreateMark(row)
     row.mark:SetPoint("LEFT", 7, 0)
 
+    row.icon = Theme.CreateItemIcon(row, ICON_SIZE)
+    row.icon:SetPoint("LEFT", 8 + MARK_GUTTER, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 8 + MARK_GUTTER, 0)
+    row.name:SetPoint("LEFT", 8 + MARK_GUTTER + ICON_GUTTER, 0)
 
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
         row.cells[column.key] = Theme.CreateLabel(row, "small", "text", "RIGHT")
     end
+
+    row.marginBar = Theme.CreateBar(row, 40, 2)
 
     ApplyRowLayout(row)
 end
@@ -143,6 +156,8 @@ local function UpdateRow(row, analysis)
     end
 
     row.name:SetText(analysis.name or ("recipe " .. analysis.recipeID))
+    Theme.SetItemIcon(row.icon, analysis.outputItemID)
+    row.marginBar:Set(nil)
 
     local cells = row.cells
 
@@ -204,6 +219,11 @@ local function UpdateRow(row, analysis)
     cells.margin:SetText(("%d%%"):format(math.floor((analysis.margin or 0) * 100)))
     cells.margin:SetTextColor(Theme.ProfitColor(analysis.profit))
 
+    -- Full at 100% and over; a loss draws no bar, its red number says it.
+    if (analysis.profit or 0) > 0 then
+        row.marginBar:Set(math.min(1, analysis.margin or 0), "profit")
+    end
+
     if analysis.priceDerived then
         -- There is no scan behind this row, so an age would be a blank or a
         -- lie. The column says what the price actually is instead: the
@@ -254,8 +274,14 @@ local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
 
+    Theme.AccentStripe(detail, 2, 0.6)
+
+    local icon = Theme.CreateItemIcon(detail, 30)
+    icon:SetPoint("TOPLEFT", 12, -12)
+    detail.icon = icon
+
     local title = Theme.CreateLabel(detail, "large", "accent")
-    title:SetPoint("TOPLEFT", 12, -12)
+    title:SetPoint("TOPLEFT", 50, -12)
     title:SetPoint("TOPRIGHT", -12, -12)
     title:SetWordWrap(true)
     detail.title = title
@@ -264,9 +290,9 @@ local function BuildDetail(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
     detail.subtitle = subtitle
 
-    local reagentHeading = Theme.CreateLabel(detail, "tiny", "dim")
-    reagentHeading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -12)
-    reagentHeading:SetText("MATERIALS")
+    local reagentHeading = Theme.CreateHeading(detail, "MATERIALS")
+    -- Back out under the icon, so the list of materials starts at the edge.
+    reagentHeading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.reagentHeading = reagentHeading
 
     detail.reagentLines = {}
@@ -364,6 +390,7 @@ local function BuildDetail(parent)
     end, { width = 44, height = 24,
            tooltip = "As many as your materials and stock limit allow" })
     maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 8, 0)
+    detail.maxButton = maxButton
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
@@ -386,6 +413,8 @@ local function UpdateDetail(analysis)
     detail.title:SetShown(hasSelection)
     detail.subtitle:SetShown(hasSelection)
     detail.reagentHeading:SetShown(hasSelection)
+    detail.maxButton:SetShown(hasSelection)
+    detail.icon:SetShown(hasSelection)
     detail.summary:SetShown(hasSelection)
     detail.addButton:SetShown(hasSelection)
     detail.limitLabel:SetShown(hasSelection)
@@ -396,6 +425,7 @@ local function UpdateDetail(analysis)
     if not hasSelection then return end
 
     detail.title:SetText(analysis.name or ("recipe " .. analysis.recipeID))
+    Theme.SetItemIcon(detail.icon, analysis.outputItemID)
 
     -- The skill-up clause is coloured inline rather than by the whole label,
     -- because the line already carries a colour of its own for materials.
@@ -432,14 +462,17 @@ local function UpdateDetail(analysis)
             local frame = CreateFrame("Frame", nil, detail)
             frame:SetHeight(16)
 
+            local icon = Theme.CreateItemIcon(frame, 14)
+            icon:SetPoint("LEFT", 0, 0)
+
             local name = Theme.CreateLabel(frame, "small", "text")
-            name:SetPoint("LEFT", 0, 0)
+            name:SetPoint("LEFT", 18, 0)
             name:SetPoint("RIGHT", -70, 0)
 
             local value = Theme.CreateLabel(frame, "small", "muted", "RIGHT")
             value:SetPoint("RIGHT", 0, 0)
 
-            line = { frame = frame, name = name, value = value }
+            line = { frame = frame, icon = icon, name = name, value = value }
             detail.reagentLines[index] = line
         end
 
@@ -448,6 +481,7 @@ local function UpdateDetail(analysis)
         line.frame:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
 
         local label = Util.GetItemLabel(reagent.itemID)
+        Theme.SetItemIcon(line.icon, reagent.itemID)
 
         -- Showing have/need inline is the whole point: it answers "can I make
         -- this" without a second screen.
@@ -797,8 +831,8 @@ local function Build(container)
     headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
     headings:SetHeight(16)
 
-    local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
-    nameHeading:SetPoint("LEFT", 8 + MARK_GUTTER, 0)
+    local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
+    nameHeading:SetPoint("LEFT", 8 + MARK_GUTTER + ICON_GUTTER, 0)
     nameHeading:SetText("CRAFT")
 
     local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
@@ -807,14 +841,14 @@ local function Build(container)
 
     widgets.headings = {}
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "dim", "RIGHT")
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetText(labels[column.key])
         widgets.headings[column.key] = heading
     end
 
     ApplyHeadingLayout()
 
-    local divider = Theme.CreateDivider(container)
+    local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
@@ -835,6 +869,11 @@ local function Build(container)
         end,
 
         onLeave = function() GameTooltip:Hide() end,
+
+        -- The row the detail pane is showing stays lit.
+        isSelected = function(entry)
+            return state.selected ~= nil and entry.recipeID == state.selected.recipeID
+        end,
 
         onClick = function(analysis, _, mouseButton)
             if mouseButton == "RightButton" then

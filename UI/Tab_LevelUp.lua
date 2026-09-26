@@ -74,8 +74,12 @@ end
 --------------------------------------------------------------------------------
 
 local function CreateRow(row)
+    -- The item's icon beside its name, as the bags draw it.
+    row.icon = Theme.CreateItemIcon(row, 16)
+    row.icon:SetPoint("LEFT", 8, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 8, 0)
+    row.name:SetPoint("LEFT", 28, 0)
 
     row.cells = {}
 
@@ -98,6 +102,7 @@ local function UpdateRow(row, entry)
     -- the same as the game without being told what orange means.
     row.name:SetText(entry.name or ("recipe " .. entry.recipeID))
     row.name:SetTextColor(TierColor(entry.tier))
+    Theme.SetItemIcon(row.icon, entry.outputItemID)
 
     cells.chance:SetText(ns.LevelUp.CHANCE_LABEL[entry.tier] or "")
     cells.chance:SetTextColor(TierColor(entry.tier))
@@ -186,8 +191,14 @@ local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
 
+    Theme.AccentStripe(detail, 2, 0.6)
+
+    local icon = Theme.CreateItemIcon(detail, 30)
+    icon:SetPoint("TOPLEFT", 12, -12)
+    detail.icon = icon
+
     local title = Theme.CreateLabel(detail, "large", "accent")
-    title:SetPoint("TOPLEFT", 12, -12)
+    title:SetPoint("TOPLEFT", 50, -12)
     title:SetPoint("TOPRIGHT", -12, -12)
     title:SetWordWrap(true)
     detail.title = title
@@ -205,8 +216,10 @@ local function BuildDetail(parent)
     detail.note = note
 
     local reagentHeading = Theme.CreateLabel(detail, "tiny", "dim")
-    reagentHeading:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -12)
+    -- Back out under the icon, so the list of materials starts at the edge.
+    reagentHeading:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -38, -12)
     reagentHeading:SetText("MATERIALS")
+    Theme.StyleHeading(reagentHeading, detail)
     detail.reagentHeading = reagentHeading
 
     detail.reagentLines = {}
@@ -326,6 +339,8 @@ local function UpdateDetail(entry)
         line.frame:Hide()
     end
 
+    detail.icon:SetShown(shown)
+
     for _, part in ipairs({ detail.title, detail.subtitle, detail.note, detail.reagentHeading,
                             detail.summary, detail.quantityBox, detail.addButton,
                             detail.maxButton, detail.craftButton }) do
@@ -342,6 +357,7 @@ local function UpdateDetail(entry)
     end
 
     detail.title:SetText(entry.name or ("recipe " .. entry.recipeID))
+    Theme.SetItemIcon(detail.icon, entry.outputItemID)
 
     local r, g, b = TierColor(entry.tier)
     if entry.tier == "unknown" then
@@ -364,14 +380,17 @@ local function UpdateDetail(entry)
             local frame = CreateFrame("Frame", nil, detail)
             frame:SetHeight(16)
 
+            local icon = Theme.CreateItemIcon(frame, 14)
+            icon:SetPoint("LEFT", 0, 0)
+
             local name = Theme.CreateLabel(frame, "small", "text")
-            name:SetPoint("LEFT", 0, 0)
+            name:SetPoint("LEFT", 18, 0)
             name:SetPoint("RIGHT", -74, 0)
 
             local value = Theme.CreateLabel(frame, "small", "muted", "RIGHT")
             value:SetPoint("RIGHT", 0, 0)
 
-            line = { frame = frame, name = name, value = value }
+            line = { frame = frame, icon = icon, name = name, value = value }
             detail.reagentLines[index] = line
         end
 
@@ -382,6 +401,7 @@ local function UpdateDetail(entry)
         local label = ("%dx %s"):format(reagent.quantity, Util.GetItemLabel(reagent.itemID))
         if reagent.crafted then label = label .. " (make it)" end
         line.name:SetText(label)
+        Theme.SetItemIcon(line.icon, reagent.itemID)
 
         -- Have or need first: it answers "can I make this" without a second
         -- screen. Bank stock counts here, the same as on the Profit tab.
@@ -555,22 +575,22 @@ local function Build(container)
     headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
     headings:SetHeight(16)
 
-    local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
-    nameHeading:SetPoint("LEFT", 8, 0)
+    local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
+    nameHeading:SetPoint("LEFT", 28, 0)
     nameHeading:SetText("RECIPE")
 
     local labels = { chance = "SKILL UP", cost = "COST", make = "MAKE" }
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "dim", "RIGHT")
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetText(labels[column.key])
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
         offset = offset - column.width - 6
     end
 
-    local divider = Theme.CreateDivider(container)
+    local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
@@ -581,6 +601,11 @@ local function Build(container)
 
         onEnter = function(row, entry) ShowRowTooltip(row, entry) end,
         onLeave = function() GameTooltip:Hide() end,
+
+        -- The row the detail pane is showing stays lit.
+        isSelected = function(entry)
+            return state.selected ~= nil and entry.recipeID == state.selected.recipeID
+        end,
 
         onClick = function(entry, _, mouseButton)
             if mouseButton == "RightButton" then
