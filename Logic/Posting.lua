@@ -993,81 +993,70 @@ end
 
 --- Show the confirmation for a listing whose price is already settled.
 --
+-- Four lines, in the player's words: what it normally sells for, the cheapest
+-- listing from anyone else, what is about to go up, and the question. Anything
+-- more buried the one number that matters.
+--
 -- @param check what the price check found, or nil when there was none:
---   { state, previousPrice, basis }. state is "fresh" (the auction house
---   answered and had listings), "recent" (answered moments ago), "empty"
---   (answered, nothing listed) or "unavailable" (no answer).
+--   { state }. state is "fresh" (the auction house answered and had
+--   listings), "recent" (answered moments ago), "empty" (answered, nothing
+--   listed) or "unavailable" (no answer).
 function Posting:Confirm(itemID, quantity, unitPrice, check)
+    self:ShowConfirm(itemID, quantity, unitPrice, self:BuildConfirmText(itemID, quantity, unitPrice, check))
+end
+
+--- The confirmation's text, kept apart from the dialog so it can be tested.
+function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     check = check or {}
 
-    -- Which rule produced the number on the dialog. A price check hands it
-    -- over; without one, the chooser is asked, and its answer is only used
-    -- when it still agrees with the price about to be listed -- so the
-    -- sentence underneath can never describe a different number.
-    local basis = check.basis
-
-    if not basis then
-        local chosen, chosenBasis = ns.Profit:ChoosePostPrice(itemID)
-        if chosen == unitPrice then basis = chosenBasis end
+    local function Money(copper)
+        return Util.FormatMoney(copper, { noColor = true })
     end
 
-    local deposit = self:GetDeposit(itemID, quantity)
+    local market = ns.Prices:GetValue(itemID, "market")
+    local marketText = (market and market > 0) and Money(market) or "none"
 
-    local text = ("List |cffffffff%d x %s|r\n\nat %s each, %s total%s?"):format(
-        quantity, Util.GetItemLabel(itemID),
-        Util.FormatMoney(unitPrice, { noColor = true }),
-        Util.FormatMoney(unitPrice * quantity, { noColor = true }),
-        deposit and (", deposit " .. Util.FormatMoney(deposit, { noColor = true })) or "")
+    -- Someone else's cheapest, never the player's own: the price being
+    -- competed with. The check has just rewritten it, and an empty auction
+    -- house has just cleared it, so nil here really does mean nobody.
+    local lowest = ns.Prices:GetValue(itemID, "rival")
+    local lowestText = (lowest and lowest > 0) and Money(lowest) or "none"
 
-    -- Say so when the check moved the price, rather than quietly listing at
-    -- something different from what the row showed a moment ago.
-    if check.previousPrice and check.previousPrice ~= unitPrice then
-        text = text .. ("\n\n|cffC8A44DPrice checked just now: was %s.|r"):format(
-            Util.FormatMoney(check.previousPrice, { noColor = true }))
+    -- Only the player's own listings are up: say so, rather than "none"
+    -- beside an auction house that plainly has one.
+    if lowestText == "none" then
+        local record = ns.Prices:Get(itemID)
+        local own = record and record.ownMin
+        if own and own > 0 then lowestText = Money(own) .. " (yours)" end
     end
 
-    -- An empty auction house is the case this check exists for. Before, the
-    -- last scan's rival price survived and the listing undercut somebody who
-    -- was no longer selling; now there is nobody to undercut and the number
-    -- above means something different, so it says which.
-    if check.state == "empty" then
-        local note = "Nothing else is listed right now, and there is no market value to go on. Check this price yourself."
-
-        if basis == "market" then
-            note = "Nothing else is listed right now, so this is market value rather than an undercut."
-        elseif basis == "derived" then
-            -- Covered in full by the estimate note below; saying there is
-            -- nothing to go on directly above it would contradict it.
-            note = "Nothing else is listed right now."
-        end
-
-        text = text .. ("\n\n|cffC8A44D%s|r"):format(note)
-
-    elseif check.state == "unavailable" then
-        text = text .. "\n\n|cffE5604FThe price check did not come back. This is the last price seen, which may be out of date.|r"
+    if check.state == "unavailable" then
+        lowestText = lowestText .. " (could not check, last seen)"
     end
 
-    -- The estimate has to say so here above all: every other basis on this
-    -- dialog is something the auction house reported, and this one is not.
-    if basis == "derived" then
-        text = text .. "\n\n|cffC8A44DNo scan has ever priced this. The price above is estimated from what its materials are worth. Check it yourself before listing.|r"
+    local postingText = Money(unitPrice)
+    if quantity > 1 then
+        postingText = ("%s each, %d x %s"):format(postingText, quantity, Util.GetItemLabel(itemID))
+    else
+        postingText = ("%s, %s"):format(postingText, Util.GetItemLabel(itemID))
     end
 
-    -- Said plainly at the moment the gold is committed, because a price equal
-    -- to the rival's looks like the undercut simply failed.
-    if basis == "match" then
-        text = text .. "\n\n|cffC8A44DMatching the cheapest listing. This cannot be priced in copper, so undercutting would cost a whole silver.|r"
-    end
+    local text = ("Average Market Value: %s\nLowest Market Posting: %s\nPosting at: %s"):format(
+        marketText, lowestText, postingText)
 
+    -- The one case worth a fifth line: this listing loses gold.
     local recipeID = ns.Cost:FindRecipeForItem(itemID)
     local analysis = recipeID and ns.Profit:Analyse(recipeID)
     local unitCost = analysis and analysis.costPerUnit
 
     if unitCost and unitPrice < unitCost then
-        text = text .. ("\n\n|cffE5604FThis is below the %s it cost to make.|r"):format(
-            Util.FormatMoney(unitCost, { noColor = true }))
+        text = text .. ("\n|cffE5604FBelow the %s it cost to make.|r"):format(Money(unitCost))
     end
 
+    return text .. "\n\nDo you wish to continue?"
+end
+
+function Posting:ShowConfirm(itemID, quantity, unitPrice, text)
     self.confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice }
 
     local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text)
@@ -1190,15 +1179,9 @@ function Posting:Request(itemID, quantity, unitPrice)
         -- found nothing has just cleared the rival price, and this is where
         -- that becomes a listing at market value instead of an undercut of
         -- a seller who is not there.
-        local price, basis = self:GetPostPrice(itemID)
-        price = price or unitPrice
+        local price = self:GetPostPrice(itemID) or unitPrice
 
-        self:Confirm(itemID, quantity, price, {
-            state = state,
-            basis = basis,
-            -- Only meaningful when something was actually checked.
-            previousPrice = state ~= "unavailable" and unitPrice or nil,
-        })
+        self:Confirm(itemID, quantity, price, { state = state })
     end
 
     C_Timer.After(5, function()
