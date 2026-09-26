@@ -479,6 +479,8 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
+        onEnter = function(row, entry) Widgets.ShowItemOnly(row, entry.itemID, entry.label) end,
+        onLeave = function() GameTooltip:Hide() end,
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
             return state.selected ~= nil and entry.itemID == state.selected.itemID

@@ -191,8 +191,8 @@ end
 
 --- Full numbers on hover, including surplus and anything held by alts.
 local function ShowMaterialTooltip(row, line)
-    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-    GameTooltip:SetText(Util.GetItemLabel(line.itemID), 1, 1, 1)
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", line.itemID, Util.GetItemLabel(line.itemID))
+    GameTooltip:AddLine(" ")
 
     if line.fromVendor then
         GameTooltip:AddLine(line.vendorLimited
@@ -413,6 +413,13 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateCraftRow,
         updateRow = UpdateCraftRow,
+
+        -- The item the craft makes, as the bags would show it.
+        onEnter = function(row, entry)
+            local recipe = ns.Recipes:GetAny(entry.recipeID)
+            Widgets.ShowItemOnly(row, recipe and recipe.outputItemID, recipe and recipe.name)
+        end,
+        onLeave = function() GameTooltip:Hide() end,
     })
     craftList:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     craftList:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -MATERIALS_WIDTH - 16, 62)

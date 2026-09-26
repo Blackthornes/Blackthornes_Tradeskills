@@ -326,4 +326,42 @@ check("not even a stack total", ItemTooltip:AddStackLine(tooltip, 20), false)
 ns.settings.showValueOnItemTooltips = true
 check("on when switched on", ItemTooltip:IsEnabled(), true)
 
+--------------------------------------------------------------------------------
+-- The lowest posting, beside the market value (Trent, 2026-09-26)
+--------------------------------------------------------------------------------
+
+local RECORDS = {
+  [LINEN_CLOTH] = { market = 2300, min = 1900 },
+  [COPPER_BAR]  = { market = 1500, min = 1400, ownMin = 1400 },
+  [SILK_CLOTH]  = { market = 0 },
+}
+ns.Prices.Get = function(_, itemID) return RECORDS[itemID] end
+
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("the lowest posting follows the value", lines[2][1], "Lowest posting")
+check("at the cheapest listing", lines[2][2], "<1900>")
+
+lines = ItemTooltip:LinesFor(COPPER_BAR, nil)
+check("the cheapest one yours says so", lines[2][2], "<1400>  (yours)")
+
+RECORDS[LINEN_CLOTH].min = nil
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("nobody listing says so", lines[2][2], "none listed")
+check("quietly", lines[2][3], true)
+RECORDS[LINEN_CLOTH].min = 1900
+
+lines = ItemTooltip:LinesFor(SILK_CLOTH, nil)
+check("an unpriced item gets no lowest line", #lines, 1)
+
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
+check("a stack total comes after it", lines[3][1], "Stack of 20")
+
+tooltip = Tooltip(LINEN_CLOTH)
+ItemTooltip:Decorate(tooltip, nil, nil)
+check("value and lowest go on together", #tooltip.lines, 2)
+check("the late stack total still lands", ItemTooltip:AddStackLine(tooltip, 20), true)
+check("as the stack line, not the lowest again", tooltip.lines[3][2], ("<%d>"):format(2300 * 20))
+
+ns.Prices.Get = nil
+
 print("test_itemtooltip: ok")

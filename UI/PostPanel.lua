@@ -153,8 +153,8 @@ function UpdateRow(row, line)
 end
 
 local function ShowRowTooltip(row, line)
-    GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-    GameTooltip:SetText(line.label, 1, 1, 1)
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label)
+    GameTooltip:AddLine(" ")
 
     GameTooltip:AddDoubleLine("In bags", tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
     GameTooltip:AddDoubleLine("Listing", ("%d of %d"):format(
