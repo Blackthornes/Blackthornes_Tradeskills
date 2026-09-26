@@ -24,6 +24,10 @@ local MAX_BROWSE_PAGES = 40
 -- will. Leaving the wait open is what left the searching indicator turning.
 local SEARCH_TIMEOUT = 8
 
+-- How long one page of a page-by-page sweep may take to answer, timed from
+-- when that page was asked for.
+local BROWSE_TIMEOUT = 15
+
 -- Enum.ItemCommodityStatus.Commodity, hardcoded only as a fallback.
 local COMMODITY_STATUS = (Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity) or 2
 
@@ -246,12 +250,13 @@ function Scanner:StartFullScan()
     -- the same price database.
     local cooldown = self:GetSnapshotCooldown()
     if cooldown then
-        ns.Print(("the quick full scan can be used again in %s, so scanning page by page instead")
-            :format(Util.FormatAge(cooldown)))
+        -- Says when it was last used as well, so a cooldown nobody remembers
+        -- starting can be checked against what the player was doing then.
+        ns.Print(("the quick full scan was last used %s and can be used again in %s, so scanning page by page instead")
+            :format(Util.FormatAgeAgo(REPLICATE_COOLDOWN - cooldown),
+                cooldown < 60 and "under a minute" or Util.FormatAge(cooldown)))
         return self:StartBrowseScan()
     end
-
-    ns.db.lastReplicateRequest = time()
 
     ns.Print("asking for a quick full scan...")
 
@@ -270,6 +275,14 @@ function Scanner:StartFullScan()
         send = function()
             Scanner.scanQueued = false
             Scanner.isScanning = true
+
+            -- Stamped here, when the request really goes out, and not when it
+            -- was queued. A queued scan can wait behind the player's posting
+            -- and then give up, or be cancelled by closing the auction house,
+            -- and stamping it at queue time started a fifteen minute cooldown
+            -- for a scan the server never heard about.
+            ns.db.lastReplicateRequest = time()
+            ns.db.lastReplicateAnswered = nil
 
             if not pcall(C_AuctionHouse.ReplicateItems) then
                 ns.Print("the game refused the quick full scan, so scanning page by page instead")
@@ -400,28 +413,47 @@ function Scanner:QueueBrowseQuery(searchString, opts)
                 return false
             end
 
-            if Scanner.browseTimeout then Scanner.browseTimeout:Cancel() end
-
-            Scanner.browseTimeout = C_Timer.NewTimer(15, function()
-                Scanner.browseTimeout = nil
-
-                if Scanner.isBrowsing then
-                    Scanner.isScanning = false
-                    Scanner.isBrowsing = false
-                    Scanner.verbose = false
-
-                    ns.Warn(("the page-by-page scan stopped answering after 15s (%d page(s) read)")
-                        :format(Scanner.browsePages or 0))
-
-                    -- Blizzard's own list is waiting on the same results we are,
-                    -- so a query that never answered leaves its spinner turning.
-                    Scanner:SettleSearchDisplay("the page-by-page scan did not answer")
-                end
-            end)
+            Scanner:ArmBrowseTimeout()
 
             return true
         end,
     })
+end
+
+--- Start (or restart) the wait for the next page of a sweep to answer.
+--
+-- Armed each time a request actually goes out, the first query and every
+-- page after it, and stopped when a page lands. It used to be armed once, on
+-- the first query, and never again. Paging is paced at eight requests in
+-- fifteen seconds, so a sweep still going strong reached page 8 just as that
+-- one timer ran out, and was declared dead while it was waiting its turn.
+function Scanner:ArmBrowseTimeout()
+    if self.browseTimeout then self.browseTimeout:Cancel() end
+
+    self.browseTimeout = C_Timer.NewTimer(BROWSE_TIMEOUT, function()
+        Scanner.browseTimeout = nil
+        if not Scanner.isBrowsing then return end
+
+        ns.Warn(("the page-by-page scan stopped answering after %ds, so keeping the %d page(s) read")
+            :format(BROWSE_TIMEOUT, Scanner.browsePages or 0))
+
+        -- Finish it properly rather than just stopping: save what was read,
+        -- hide the progress bar and give the Scan button back. Only setting
+        -- the flags left the bar sitting at its last value for good.
+        local ok, partial = pcall(C_AuctionHouse.GetBrowseResults)
+        Scanner:CommitBrowseResults((ok and type(partial) == "table") and partial or {})
+
+        -- Blizzard's own list is waiting on the same results we are, so a
+        -- query that never answered leaves its spinner turning.
+        Scanner:SettleSearchDisplay("the page-by-page scan did not answer")
+    end)
+end
+
+function Scanner:StopBrowseTimeout()
+    if self.browseTimeout then
+        self.browseTimeout:Cancel()
+        self.browseTimeout = nil
+    end
 end
 
 function Scanner:Report(...)
@@ -449,6 +481,10 @@ function Scanner:OnBrowseResults()
         self:Report("the search results could not be read")
         return
     end
+
+    -- A page arrived, so the wait for it is over. The next one is timed from
+    -- when it is actually asked for, not from now.
+    self:StopBrowseTimeout()
 
     self:Report(("page %d: %d row(s)"):format(self.browsePages + 1, #results))
 
@@ -490,7 +526,10 @@ function Scanner:OnBrowseResults()
 
             send = function()
                 if not Scanner.isBrowsing then return true end
-                return pcall(C_AuctionHouse.RequestMoreBrowseResults) and true or false
+                if not pcall(C_AuctionHouse.RequestMoreBrowseResults) then return false end
+
+                Scanner:ArmBrowseTimeout()
+                return true
             end,
 
             onGiveUp = function()
@@ -552,10 +591,7 @@ end
 Scanner.SplitBrowseRow = SplitBrowseRow
 
 function Scanner:CommitBrowseResults(results)
-    if self.browseTimeout then
-        self.browseTimeout:Cancel()
-        self.browseTimeout = nil
-    end
+    self:StopBrowseTimeout()
 
     self.isBrowsing = false
     self.isScanning = false
@@ -636,6 +672,10 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     end
 
     local ok, numItems = pcall(C_AuctionHouse.GetNumReplicateItems)
+    if ok and numItems and numItems > 0 then
+        ns.db.lastReplicateAnswered = time()
+    end
+
     if not ok or not numItems or numItems == 0 then
         ns.Print("the quick full scan came back empty, so scanning page by page instead")
         self:StartBrowseScan()
@@ -1429,6 +1469,40 @@ end)
 
 ns.RegisterCommand("cancel", "stop the running scan", function()
     ns.Scanner:CancelScan()
+end)
+
+-- What the addon knows about the quick full scan's cooldown, and what a
+-- running scan is doing. The cooldown is the server's, so this can only say
+-- when the addon last really sent the request and whether anything came back.
+ns.RegisterCommand("scanstatus", "show when the quick full scan was last used and what a scan is doing", function()
+    local S = ns.Scanner
+    local sent = ns.db and ns.db.lastReplicateRequest
+    local answered = ns.db and ns.db.lastReplicateAnswered
+
+    if not sent then
+        ns.Print("quick full scan: not used since this was recorded")
+    else
+        ns.Print(("quick full scan: last sent %s, %s"):format(
+            Util.FormatAgeAgo(time() - sent),
+            answered and answered >= sent and "and it answered" or "and it did not answer"))
+    end
+
+    local cooldown = S:GetSnapshotCooldown()
+    ns.Print(cooldown and ("the addon will wait %s before asking again"):format(
+            cooldown < 60 and "under a minute" or Util.FormatAge(cooldown))
+        or "the addon will ask for it on the next scan")
+
+    if S.isBrowsing or S.browseQueued then
+        ns.Print(("page-by-page scan running: %d page(s) read, %s"):format(
+            S.browsePages or 0,
+            S.browseTimeout and "waiting for the next page to answer" or "waiting its turn to ask for the next page"))
+    elseif S.scanQueued then
+        ns.Print("quick full scan waiting its turn to be sent")
+    elseif S.isScanning then
+        ns.Print("a scan is running")
+    else
+        ns.Print("no scan running")
+    end
 end)
 
 -- Forces the paged path, skipping the rate-limited snapshot entirely. Useful
