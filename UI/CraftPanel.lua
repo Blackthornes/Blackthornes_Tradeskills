@@ -26,8 +26,11 @@ local Util = ns.Util
 
 -- Wide enough for a recipe name beside a quantity box and a button. Recipe
 -- names on this client run long ("Heavy Scorpid Bracers"), so the name gets
--- its own line and the numbers sit under it.
-local PANEL_WIDTH = 322
+-- its own line and the numbers sit under it. The quantity box and Add button
+-- sit on the name's line, so the line under it can run the full width of the
+-- row: at 322 wide with the buttons beside it, that line was cut off on
+-- almost every recipe.
+local PANEL_WIDTH = 350
 local ROW_HEIGHT = 30
 
 local QUANTITY_WIDTH = 34
@@ -186,7 +189,27 @@ local SORTS = {
         if a.name ~= b.name then return a.name < b.name end
         return a.recipeID < b.recipeID
     end,
+
+    -- The Level Up tab's order, so the two agree: orange, yellow, green,
+    -- then cheapest materials first. Its comparator reads `tier` and `cost`.
+    levelup = function(a, b)
+        local compare = ns.LevelUp and ns.LevelUp.Compare
+        if compare then
+            return compare(
+                { tier = a.skillUpTier, cost = a.materialCost, name = a.name, recipeID = a.recipeID },
+                { tier = b.skillUpTier, cost = b.materialCost, name = b.name, recipeID = b.recipeID })
+        end
+
+        if a.name ~= b.name then return a.name < b.name end
+        return a.recipeID < b.recipeID
+    end,
 }
+
+-- What the sort button steps through, and what it says for each.
+local SORT_ORDER = { "profit", "levelup", "name" }
+local SORT_LABEL = { profit = "Profit", levelup = "Level Up", name = "A-Z" }
+
+CraftPanel.SORT_ORDER = SORT_ORDER
 
 --- What a craft is worth *right now*, as against what one sells for.
 --
@@ -235,7 +258,7 @@ end
 
 --- The rows to draw: one per recipe, with what it is worth and what is queued.
 --
--- @param opts { search, sortBy = "profit"|"name" }
+-- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit }
 function CraftPanel:GetRows(opts)
     opts = opts or {}
 
@@ -269,6 +292,7 @@ function CraftPanel:GetRows(opts)
                 -- just named would read as the pane having lost it.
                 local suppressed = atLimit
                     and search == ""
+                    and not opts.ignoreLimit
                     and ns.Config:Get("hideAtPostLimit") ~= false
 
                 if not suppressed then
@@ -285,6 +309,8 @@ function CraftPanel:GetRows(opts)
                         skillUpStale = analysis and analysis.skillUp
                             and analysis.skillUp.stale or nil,
                         recommended = (analysis and analysis.recommended) == true,
+                        materialCost = analysis and analysis.cost
+                            and analysis.cost.priceable and analysis.cost.total or nil,
                         rank = RankOf(analysis),
                         reason = analysis and analysis.reason or nil,
                         soulbound = (analysis and analysis.soulbound) == true,
@@ -329,6 +355,11 @@ local function BeingTyped(box)
     return box.editBox.HasFocus and box.editBox:HasFocus()
 end
 
+--- Is the "Ignore max on hand" box ticked?
+function CraftPanel:IgnoringLimit()
+    return ns.Config:Get("craftPaneIgnoreLimit") == true
+end
+
 local function QueueFromRow(row)
     if not row.data then return end
 
@@ -342,7 +373,8 @@ local function QueueFromRow(row)
     -- materials and a deposit, not just a wrong number on a screen. Said out
     -- loud either way: a button that silently queues fewer than the number
     -- beside it looks broken.
-    local room = line.roomInCrafts
+    -- Unless the player has ticked the box that says to ignore it.
+    local room = not CraftPanel:IgnoringLimit() and line.roomInCrafts or nil
 
     if room then
         if room <= 0 then
@@ -353,7 +385,7 @@ local function QueueFromRow(row)
 
         if quantity > room then
             quantity = room
-            ns.Print(("%s: queued %d -- your limit of %d has room for no more."):format(
+            ns.Print(("%s: queued %d, your limit of %d has room for no more."):format(
                 line.name, quantity, line.postLimit or 0))
         end
     end
@@ -384,18 +416,20 @@ local function CreateRow(row)
     row.name:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -4)
     row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
 
+    -- Full width: nothing stands to the right of this line any more, and it
+    -- is the one that carries the numbers.
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
     row.detail:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -17)
-    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -17)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -17)
 
     row.add = Widgets.CreateButton(row, "Add", function()
         QueueFromRow(row)
-    end, { width = BUTTON_WIDTH, height = 18, primary = true })
-    row.add:SetPoint("RIGHT", -8, 0)
+    end, { width = BUTTON_WIDTH, height = 15, primary = true })
+    row.add:SetPoint("TOPRIGHT", -8, -1)
 
     row.quantity = Widgets.CreateNumberBox(row, {
         width = QUANTITY_WIDTH,
-        height = 18,
+        height = 15,
         background = "panel",
         min = 1,
         onChange = function(value)
@@ -414,13 +448,17 @@ end
 local function StockText(line)
     local stock = line.stock or 0
 
-    if line.postLimit and line.postLimit > 0 then
+    -- Nothing held says nothing: "have 0 of 5" on every row was most of what
+    -- pushed the line off the end.
+    if line.postLimit and line.postLimit > 0 and (stock > 0 or line.atPostLimit) then
         local text = ("have %d of %d"):format(stock, line.postLimit)
-        if line.atPostLimit then return text .. " -- at your limit" end
+        if line.atPostLimit then return text .. ", at your limit" end
         return text
     end
 
     if stock <= 0 then return nil end
+
+    if line.postLimit and line.postLimit > 0 then return nil end
 
     if (line.posted or 0) > 0 then
         return ("have %d, %d listed"):format(stock, line.posted)
@@ -448,10 +486,13 @@ local function UpdateRow(row, line)
         row.name:SetTextColor(Theme.Unpack("text"))
     end
 
-    -- The star, on the same terms as the Profit tab: a skill up that also
-    -- pays. The two lists have to agree, so both ask the analysis rather than
-    -- working it out themselves.
-    Theme.SetMark(row.mark, line.recommended and line.skillUpTier or nil)
+    -- The star marks every recipe that can still level you, orange, yellow or
+    -- green, the way the game's own list does, sized by how likely the point
+    -- is. Here, beside the profession window, the question is often "what
+    -- levels me" rather than "what pays", so the Profit tab's rule (a skill
+    -- up that also pays) hid nearly every star. Grey never gets one.
+    local tier = line.skillUpTier
+    Theme.SetMark(row.mark, tier ~= "trivial" and tier or nil)
 
     -- What it is worth, and whether you can make one right now: the two things
     -- that decide whether this recipe is the one you want.
@@ -481,9 +522,11 @@ local function UpdateRow(row, line)
         parts[#parts + 1] = ("queued %d"):format(line.queued)
     end
 
-    row.detail:SetText(table.concat(parts, "  ·  "))
+    row.detail:SetText(table.concat(parts, " · "))
 
-    if line.atPostLimit then
+    local limitApplies = line.atPostLimit and not CraftPanel:IgnoringLimit()
+
+    if limitApplies then
         row.detail:SetTextColor(Theme.Unpack("warn"))
     elseif line.priceable and line.profit < 0 then
         row.detail:SetTextColor(Theme.Unpack("loss"))
@@ -493,8 +536,8 @@ local function UpdateRow(row, line)
         row.detail:SetTextColor(Theme.Unpack("muted"))
     end
 
-    if line.atPostLimit then
-        row.add.tooltipText = ("You already have %d %s, which is your limit. Raise it in Settings to queue more."):format(
+    if limitApplies then
+        row.add.tooltipText = ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
             line.stock or 0, line.name)
     else
         row.add.tooltipText = ("Queue %d of %s. Right-click the row to take it off the queue."):format(
@@ -521,7 +564,7 @@ local function ShowRowTooltip(row, line)
             ns.SkillUp:GetTierLabel(line.skillUpTier), 0.7, 0.7, 0.7, r, g, b)
 
         if line.skillUpStale then
-            GameTooltip:AddLine("Read at a lower skill -- it may have gone green since.",
+            GameTooltip:AddLine("Read at a lower skill. It may have gone green since.",
                 0.91, 0.76, 0.35, true)
         end
     end
@@ -595,10 +638,14 @@ function CraftPanel:Build()
     self.sortBy = self.sortBy or "profit"
 
     local sort = Widgets.CreateButton(frame, "", function()
-        CraftPanel.sortBy = CraftPanel.sortBy == "profit" and "name" or "profit"
+        local nextIndex = 1
+        for index, key in ipairs(SORT_ORDER) do
+            if key == CraftPanel.sortBy then nextIndex = index % #SORT_ORDER + 1 end
+        end
+        CraftPanel.sortBy = SORT_ORDER[nextIndex]
         CraftPanel:UpdateSortButton()
         CraftPanel:Refresh()
-    end, { width = 66, height = 18, tooltip = "Change the order of this list" })
+    end, { width = 116, height = 18, tooltip = "Change the order of this list" })
     sort:SetPoint("TOPRIGHT", -14, -13)
     self.sortButton = sort
     self:UpdateSortButton()
@@ -630,7 +677,7 @@ function CraftPanel:Build()
         onLeave = function() GameTooltip:Hide() end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
-    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 74)
+    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 94)
     self.list = list
 
     local empty = Theme.CreateLabel(frame, "small", "dim", "CENTER")
@@ -659,10 +706,34 @@ function CraftPanel:Build()
     craft:SetPoint("BOTTOMLEFT", 14, 40)
     self.craftButton = craft
 
+    -- The Keep in stock limit (Settings) hides crafts you already hold enough
+    -- of and caps what Add will queue. Ticking this lifts both, for this pane
+    -- only, without changing the limit itself. Remembered between sessions.
+    local ignoreLimit = Widgets.CreateCheckbox(frame, "Ignore max on hand", function(checked)
+        ns.Config:Set("craftPaneIgnoreLimit", checked)
+        CraftPanel:Refresh()
+    end, self:IgnoringLimit())
+    ignoreLimit:SetPoint("BOTTOMLEFT", 14, 70)
+    ignoreLimit:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_TOP")
+        GameTooltip:SetText("Ignore max on hand", 1, 1, 1)
+        GameTooltip:AddLine("Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and Add queues the full number you type. Your setting is not changed.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    self.ignoreLimitBox = ignoreLimit
+
     local summary = Theme.CreateLabel(frame, "tiny", "muted")
     summary:SetPoint("BOTTOMLEFT", 14, 22)
     summary:SetWidth(PANEL_WIDTH - 100)
     self.summary = summary
+
+    -- While a craft casts, a progress bar takes the summary line's place.
+    local progress = ns.CraftProgress:Create(frame, {
+        width = PANEL_WIDTH - 100, height = 16, covers = summary,
+    })
+    progress:SetPoint("LEFT", summary, "LEFT", 0, 0)
+    self.progress = progress
 
     local openQueue = Widgets.CreateButton(frame, "Queue tab", function()
         ns.UI:Show()
@@ -677,10 +748,12 @@ end
 function CraftPanel:UpdateSortButton()
     if not self.sortButton then return end
 
-    self.sortButton:SetText(self.sortBy == "profit" and "Profit" or "A-Z")
-    self.sortButton.tooltipText = self.sortBy == "profit"
-        and "Sorted by profit. Click for alphabetical order."
-        or "Sorted by name. Click to put the best-paying crafts first."
+    self.sortButton:SetText("Sort by: " .. (SORT_LABEL[self.sortBy] or "Profit"))
+    self.sortButton.tooltipText = ({
+        profit = "Best-paying crafts first. Click to sort by Level Up.",
+        levelup = "Best chance of a skill up first (orange, yellow, green), cheapest materials first within each colour. Click to sort by name.",
+        name = "Sorted by name. Click to sort by profit.",
+    })[self.sortBy]
 end
 
 --- Dock to the right of the profession window, as tall as it is.
@@ -846,6 +919,7 @@ function CraftPanel:Refresh()
     local rows = self:GetRows({
         search = self.search and self.search:GetText() or "",
         sortBy = self.sortBy,
+        ignoreLimit = self:IgnoringLimit(),
     })
 
     self.list:SetData(rows)
@@ -922,7 +996,7 @@ function CraftPanel:Toggle()
 
         ns.Print(("craft pane shown%s, %d recipe(s) listed."):format(
             frameName and (", docked to " .. frameName) or " (no profession window open)",
-            #self:GetRows({ sortBy = self.sortBy })))
+            #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit() })))
     else
         ns.Warn("the craft pane would not show.")
     end

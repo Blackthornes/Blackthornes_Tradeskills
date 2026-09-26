@@ -641,16 +641,16 @@ function Profit:Resolve(query)
     return matches[1]
 end
 
-ns.RegisterCommand("top", "[count] -- most profitable crafts right now", function(args)
+ns.RegisterCommand("top", "[count]: most profitable crafts right now", function(args)
     local limit = tonumber(args:match("(%d+)")) or 10
 
     if ns.Recipes:Count() == 0 then
-        ns.Print("no recipes read yet -- open a profession window once")
+        ns.Print("no recipes read yet. Open a profession window once")
         return
     end
 
     if ns.Prices:Count() == 0 then
-        ns.Print("no price data yet -- run |cffc8a44d/bts scan|r at the auction house")
+        ns.Print("no price data yet. Run |cffc8a44d/bts scan|r at the auction house")
         return
     end
 
@@ -689,7 +689,7 @@ ns.RegisterCommand("top", "[count] -- most profitable crafts right now", functio
         :format(ns.COLORS.muted, ns.COLORS.accent, ns.COLORS.muted))
 end)
 
-ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", function(args)
+ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
@@ -753,19 +753,19 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
     elseif analysis.priceUncontested then
         -- Said before the number: nobody is competing, so this price is your
         -- own materials plus the markup, not what the market is doing.
-        ns.PrintRaw(("  |c%snobody else is listing one -- priced off your materials|r"):format(
+        ns.PrintRaw(("  |c%snobody else is listing one, so this is priced off your materials|r"):format(
             ns.COLORS.profit))
         ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.youHoldLowest then
-        ns.PrintRaw(("  |c%syou already have the cheapest listing -- staying at market price|r"):format(
+        ns.PrintRaw(("  |c%syou already have the cheapest listing, so staying at market price|r"):format(
             ns.COLORS.profit))
         ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.priceDerived then
         -- Said before the number, not after it: this one is the addon's own
         -- estimate and reading it as a market price is the mistake to avoid.
-        ns.PrintRaw(("  |c%snever scanned  -- estimated from material value|r"):format(
+        ns.PrintRaw(("  |c%snever scanned, so estimated from material value|r"):format(
             ns.COLORS.warn))
         ns.PrintRaw(("  estimate at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
@@ -778,7 +778,7 @@ ns.RegisterCommand("why", "<name, link or row number> -- full cost breakdown", f
     if analysis.depositKnown then
         ns.PrintRaw(("  deposit         -%s"):format(Util.FormatMoney(analysis.deposit)))
     else
-        ns.PrintRaw(("  |c%sdeposit unknown -- visit an auction house to learn it|r")
+        ns.PrintRaw(("  |c%sdeposit unknown until you visit an auction house|r")
             :format(ns.COLORS.muted))
     end
     ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% return on cost)"):format(

@@ -376,7 +376,7 @@ ns.RegisterCommand("vendor", "show learned vendor prices", function()
     local count = ns.Vendor:Count()
 
     if count == 0 then
-        ns.Print("no vendor prices learned yet -- open a trade goods vendor once")
+        ns.Print("no vendor prices learned yet. Open a trade goods vendor once")
         return
     end
 

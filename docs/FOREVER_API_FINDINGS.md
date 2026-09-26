@@ -18,6 +18,12 @@ Client `1.60.1` build `69913`, interface `16001`.
 
 ## Keeping data between sessions
 
+**Update 2026-09-24: fixed by the game.** From build 1.60.1.70009, both
+SavedVariables and SavedVariablesPerCharacter load after a full quit
+(`/bts db` read `saved data type: table` and `per-character: table`). The data
+addon and macro storage described below were removed; this section is kept
+as the history of build 1.60.1.
+
 Three paths, and only one of them crosses a restart.
 
 **SavedVariables are written and never read.** The file on disk is correct and
@@ -371,3 +377,14 @@ available here.
 The addon assumes per-unit for commodities and per-stack otherwise, and
 `/bts verify <itemID>` cross-checks that assumption against a targeted
 `SendSearchQuery` rather than trusting it.
+
+**How a profession window can be opened from the addon.** Casting is
+protected, so the Queue tab lays a `SecureActionButtonTemplate` button
+(type `spell`, the profession's name, or Smelting for Mining) over its craft
+button and lets the player's click do the cast (`UI/ProfessionOpener.lua`).
+`C_TradeSkillUI.OpenTradeSkill(skillLineID)` does NOT work from addon code:
+seen in game 2026-09-25, 2945 opened nothing, and the game then reported
+"Interface action failed because of an AddOn" (most likely the 165 try). Registered for key down
+(with `ActionButtonUseKeyDown` on), the secure button never cast and the
+mouse release fell through to the frame underneath; it now registers
+`AnyUp` with `useOnKeyDown` false.

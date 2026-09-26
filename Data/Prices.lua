@@ -25,6 +25,10 @@ local MARKET_DEPTH = 0.25
 local OUTLIER_LOW = 0.30
 local OUTLIER_HIGH = 3.00
 
+-- A lone listing this far under everything else is not the price to beat.
+-- Trent, 2026-09-26: "make undercut ignore a lone low posting".
+local LONE_LOW = 1 / 3
+
 -- The most copper a price is allowed to be before it is read as junk rather
 -- than as a market observation.
 --
@@ -63,12 +67,37 @@ local PRUNE_AFTER_SECONDS = 21 * 24 * 3600
 -- Market value
 --------------------------------------------------------------------------------
 
+--- Is the cheapest listing a lone one far below the rest of the book?
+--
+-- Someone else's single listing under a third of the next listing up, and
+-- under a third of what the item has been selling for when that is known.
+-- Following it down would list well under value to chase one seller, and
+-- anyone buying clears it in one purchase anyway. Two listings down there
+-- are a real price drop and are left alone, as is a listing with nothing
+-- above it to compare against.
+--
+-- @param listings sorted cheapest first
+-- @param reference the item's stored market value, or nil
+local function IsLoneLow(listings, reference)
+    local first, second = listings[1], listings[2]
+    if not first or not second or first.isOwn then return false end
+
+    if first.unitPrice >= second.unitPrice * LONE_LOW then return false end
+    if reference and reference > 0 and first.unitPrice >= reference * LONE_LOW then return false end
+
+    return true
+end
+
 --- Collapse one item's listings into a single representative unit price.
 -- @param listings array of { unitPrice = copper, quantity = n, isOwn = bool }
--- @return marketValue, minBuyout, totalQuantity, rivalMin, ownMin
-function Prices:Summarise(listings)
+-- @param reference the item's stored market value, when known. Only used to
+--   decide whether the cheapest listing is a lone low one.
+-- @return marketValue, minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow
+--   ignoredLow is the price of a lone low listing left out of rivalMin and
+--   market value, or nil.
+function Prices:Summarise(listings, reference)
     if not listings or #listings == 0 then
-        return nil, nil, 0, nil, nil
+        return nil, nil, 0, nil, nil, nil
     end
 
     table.sort(listings, function(a, b) return a.unitPrice < b.unitPrice end)
@@ -78,7 +107,20 @@ function Prices:Summarise(listings)
         totalQuantity = totalQuantity + (listings[i].quantity or 1)
     end
 
+    -- What it costs to buy one right now is still the true cheapest.
     local minBuyout = listings[1].unitPrice
+
+    -- Everything below works on the book without the lone low listing, so it
+    -- is neither undercut nor allowed to drag market value down. The caller's
+    -- table is left as it was.
+    local ignoredLow
+    if IsLoneLow(listings, reference) then
+        ignoredLow = listings[1].unitPrice
+
+        local rest = {}
+        for i = 2, #listings do rest[#rest + 1] = listings[i] end
+        listings = rest
+    end
 
     -- The price to undercut is the cheapest listing that is not yours.
     --
@@ -118,7 +160,7 @@ function Prices:Summarise(listings)
     end
 
     if takenQuantity == 0 then
-        return minBuyout, minBuyout, totalQuantity, rivalMin, ownMin
+        return minBuyout, minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow
     end
 
     local firstPass = weightedSum / takenQuantity
@@ -144,7 +186,7 @@ function Prices:Summarise(listings)
 
     local marketValue = keptQuantity > 0 and (keptSum / keptQuantity) or firstPass
 
-    return math.floor(marketValue + 0.5), minBuyout, totalQuantity, rivalMin, ownMin
+    return math.floor(marketValue + 0.5), minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow
 end
 
 --------------------------------------------------------------------------------
@@ -156,7 +198,7 @@ function Prices:GetTable()
 end
 
 --- Fold one item's scan result into the database.
-function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin)
+function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow)
     if not itemID or not marketValue then return end
 
     -- Every path that learns a price ends up here -- browse rows, the full
@@ -176,6 +218,7 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     if not Prices.IsCredible(minBuyout) then minBuyout = nil end
     if not Prices.IsCredible(rivalMin) then rivalMin = nil end
     if not Prices.IsCredible(ownMin) then ownMin = nil end
+    if not Prices.IsCredible(ignoredLow) then ignoredLow = nil end
 
     scannedAt = scannedAt or time()
 
@@ -199,6 +242,7 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     -- there is nobody to undercut.
     record.rivalMin = rivalMin
     record.ownMin = ownMin
+    record.ignoredLow = ignoredLow
     record.quantity = quantity
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
@@ -242,6 +286,7 @@ function Prices:RecordEmpty(itemID, scannedAt)
     -- market value on its own.
     record.rivalMin = nil
     record.ownMin = nil
+    record.ignoredLow = nil
     record.quantity = 0
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
@@ -264,9 +309,10 @@ function Prices:CommitScan(observations, scannedAt)
 
     local recorded = 0
     for itemID, listings in pairs(observations) do
-        local marketValue, minBuyout, quantity, rivalMin, ownMin = self:Summarise(listings)
+        local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow =
+            self:Summarise(listings, self:GetValue(itemID, "market"))
         if marketValue then
-            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin)
+            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow)
             recorded = recorded + 1
         end
     end
@@ -449,7 +495,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
-        ns.Warn(("removed %d price(s) and %d figure(s) above %s -- nobody could pay that much"):format(
+        ns.Warn(("removed %d price(s) and %d figure(s) above %s, which nobody could pay"):format(
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
 
@@ -473,7 +519,7 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("price", "<item link or name> -- what the auction house says", function(args)
+ns.RegisterCommand("price", "<item link or name>: what the auction house says", function(args)
     -- Shift-clicking an item into chat is the natural way to name one.
     local itemID = tonumber(args:match("item:(%d+)")) or tonumber(args:match("^%s*(%d+)%s*$"))
 
@@ -492,7 +538,7 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
 
     local record = ns.Prices:Get(itemID)
     if not record then
-        ns.Print(("no auction data for %s -- run |cffc8a44d/bts scan|r at the auction house")
+        ns.Print(("no auction data for %s. Run |cffc8a44d/bts scan|r at the auction house")
             :format(Util.GetItemLabel(itemID)))
 
         -- There may still be a price to give: something this account can make
@@ -502,7 +548,7 @@ ns.RegisterCommand("price", "<item link or name> -- what the auction house says"
         local estimate, basis, why = ns.Profit:ChoosePostPrice(itemID)
 
         if estimate and basis == "derived" then
-            ns.PrintRaw(("  |c%syou would list at %s -- an estimate, not a market price|r"):format(
+            ns.PrintRaw(("  |c%syou would list at %s (an estimate, not a market price)|r"):format(
                 ns.COLORS.warn, Util.FormatMoney(estimate)))
             if why then ns.PrintRaw(("    %s"):format(why)) end
         end

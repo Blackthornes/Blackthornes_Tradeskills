@@ -196,7 +196,11 @@ function Mail:ReadInbox()
 
         local declared = mail.itemCount or 0
 
-        for slot = 1, math.min(MAX_ATTACHMENTS, math.max(declared, 0)) do
+        -- Every slot, not the first `declared` of them. Attachments keep their
+        -- slot numbers: take the first stack of three from a mail and the two
+        -- left are in slots 2 and 3, so a walk of slots 1 and 2 found one,
+        -- called the mail "still loading" for ever and never counted the third.
+        for slot = 1, (declared > 0 and MAX_ATTACHMENTS or 0) do
             local itemID, quantity = self:ReadAttachment(index, slot)
 
             if itemID then
@@ -227,6 +231,15 @@ function Mail:Read()
     if not Util.HasFunction("GetInboxNumItems") then return end
 
     local mails, complete = self:ReadInbox()
+
+    -- An empty list before the server has answered the mailbox's first inbox
+    -- request is not an empty mailbox. Trusting it emptied the stock counts
+    -- and forgot every mail already recorded, so the next update wrote each
+    -- sale down a second time.
+    if #mails == 0 and self.isOpen and not self.inboxUpdatedThisVisit then
+        ns.Debug("mailbox: nothing listed yet, waiting for the inbox")
+        return
+    end
 
     local counts = {}
     for _, mail in ipairs(mails) do
@@ -426,9 +439,11 @@ function Mail:ResolveItemName(name)
         end
     end
 
-    -- false rather than nil, so a miss is remembered and the whole recipe list
-    -- is not walked again for every redraw.
-    self.nameCache[name] = found or false
+    -- Only a hit is remembered. The name of an item the client has not cached
+    -- yet comes back nil, and a miss remembered for the session would leave
+    -- every later sale of that item filed by name only. This runs once per
+    -- new sale, not per redraw, so the walk is affordable.
+    if found then self.nameCache[name] = found end
 
     return found
 end
@@ -526,6 +541,13 @@ function Mail:Reconcile(mails, complete)
                     present[key] = occurrence - 1
                     self.awaitingAmount = (self.awaitingAmount or 0) + 1
 
+                elseif kind ~= "sold" and #mail.attachments == 0 and (mail.money or 0) == 0 then
+                    -- An expired or cancelled auction whose item has just been
+                    -- taken. The emptied mail lingers for an update or two, and
+                    -- with no attachment it fingerprints as a new mail; it was
+                    -- written down when it arrived, so it is not written again.
+                    ns.Debug("mail already collected:", tostring(mail.subject))
+
                 elseif kind then
                     ledger.entries[#ledger.entries + 1] =
                         Describe(mail, kind, itemName, invoice)
@@ -560,6 +582,39 @@ function Mail:Reconcile(mails, complete)
 end
 
 --------------------------------------------------------------------------------
+-- History carried over from macro storage
+--------------------------------------------------------------------------------
+
+-- Until the game kept saved data (build 1.60.1.70009, 2026-09-24), sales
+-- history crossed a restart in macros as a per-item rollup: db.sellThrough,
+-- with db.sellThroughRolledAt as the moment it was rolled up to. The macro
+-- store is gone, but that history is in the saved file now and is still
+-- counted. It is frozen: nothing writes to it any more, so every ledger entry
+-- after the cutoff is new and every one before it is already inside it.
+
+--- When the carried-over history was rolled up to, for a realm, or nil.
+function Mail:LedgerCutoff(realmKey)
+    if not ns.db or type(ns.db.sellThroughRolledAt) ~= "table" then return nil end
+    return tonumber(ns.db.sellThroughRolledAt[realmKey or ns.Config:GetRealmKey()])
+end
+
+--- Is this ledger entry already inside the carried-over history?
+function Mail:IsRolledUp(entry, realmKey)
+    local cutoff = self:LedgerCutoff(realmKey)
+    return cutoff ~= nil and entry.t ~= nil and entry.t <= cutoff
+end
+
+--- The carried-over per-item history for this realm, or nil.
+function Mail:GetRestoredRollup()
+    if not ns.db or not ns.db.sellThrough then return nil end
+
+    local rollup = ns.db.sellThrough[ns.Config:GetRealmKey()]
+
+    if type(rollup) ~= "table" or not next(rollup) then return nil end
+    return rollup
+end
+
+--------------------------------------------------------------------------------
 -- Reading the ledger back
 --------------------------------------------------------------------------------
 
@@ -585,10 +640,8 @@ function Mail:GetSummary(itemID)
 
     -- An entry from before the restored history was rolled up is already in
     -- that history, added below; counting it here as well was the bug.
-    local Durable = ns.Durable
-
     for _, entry in ipairs(self:GetLedger().entries) do
-        local rolled = Durable and Durable.IsRolledUp and Durable:IsRolledUp(entry)
+        local rolled = self:IsRolledUp(entry)
 
         if (not itemID or entry.itemID == itemID) and not rolled then
             if entry.kind == "sold" then
@@ -615,17 +668,17 @@ function Mail:GetSummary(itemID)
         end
     end
 
-    -- History carried across a client restart in macro storage, which holds a
-    -- rollup rather than the entries themselves. The ledger above is this
-    -- session's; the rollup is everything before it, and the two never
-    -- overlap because Durable rolls entries in only when it writes.
+    -- History carried across a client restart in macro storage, which held a
+    -- rollup rather than the entries themselves. The ledger above is
+    -- everything after it; the two never overlap, because entries up to the
+    -- cutoff are skipped above.
     --
     -- Only what a 17-character record can hold comes back: what sold, how
     -- many, what expired, the money, and when. Deposits, the auction house
     -- cut and cancellations are this session's alone, so `restored` is set
     -- for anything that wants to say so rather than quietly showing a gross
     -- that does not match the net.
-    local restored = ns.Durable and ns.Durable:GetRestoredRollup()
+    local restored = self:GetRestoredRollup()
 
     if restored then
         for id, record in pairs(restored) do
@@ -714,14 +767,12 @@ function Mail:GetItems()
         return bucket
     end
 
-    local Durable = ns.Durable
-
     for _, entry in ipairs(self:GetLedger().entries) do
         local bucket = Bucket(entry.itemID, entry.name)
 
         -- Already inside the restored history added below. The row is still
         -- made, so the item keeps its name.
-        if Durable and Durable.IsRolledUp and Durable:IsRolledUp(entry) then
+        if self:IsRolledUp(entry) then
             -- nothing to add
 
         elseif entry.kind == "sold" then
@@ -753,7 +804,7 @@ function Mail:GetItems()
     -- totals -- never in a list of individual sales. `restored` is set so a row
     -- carrying it can say where the numbers came from instead of showing a
     -- gross and a cut that do not add up to the net.
-    local restored = ns.Durable and ns.Durable:GetRestoredRollup()
+    local restored = self:GetRestoredRollup()
 
     if restored then
         for itemID, record in pairs(restored) do
@@ -824,11 +875,13 @@ function Mail:OnEnable()
 
     self.hasInboxEvent = ns.RegisterEvent(self, "MAIL_INBOX_UPDATE", function()
         Mail.inboxEventCount = (Mail.inboxEventCount or 0) + 1
+        Mail.inboxUpdatedThisVisit = true
         Mail:Read()
     end) and true or false
 
     ns.RegisterEvent(self, "MAIL_SHOW", function()
         Mail.isOpen = true
+        Mail.inboxUpdatedThisVisit = false
         -- The inbox is not ready to be read the instant the frame appears.
         C_Timer.After(0.5, function() Mail:Read() end)
     end)
@@ -855,7 +908,7 @@ local function PackResults(...)
     return select("#", ...), { ... }
 end
 
-ns.RegisterCommand("mail", "[reset] -- what is in the mailbox and what has sold", function(args)
+ns.RegisterCommand("mail", "[reset]: what is in the mailbox and what has sold", function(args)
     local sub = (args or ""):lower():match("^(%S*)")
 
     if sub == "reset" then
@@ -1055,17 +1108,17 @@ ns.RegisterCommand("mail", "[reset] -- what is in the mailbox and what has sold"
             end
 
             if mail.pending then
-                ns.PrintRaw("       not recorded yet -- still loading")
+                ns.PrintRaw("       not recorded yet, still loading")
             end
         end
     end
 end)
 
-ns.RegisterCommand("sold", "<name or link> -- what it really earned, next to the estimate", function(args)
+ns.RegisterCommand("sold", "<name or link>: what it really earned, next to the estimate", function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
-        ns.Print(("several recipes match '%s' -- try /bts why first"):format(args))
+        ns.Print(("several recipes match '%s'. Try /bts why first"):format(args))
         return
     end
 
@@ -1080,7 +1133,7 @@ ns.RegisterCommand("sold", "<name or link> -- what it really earned, next to the
     ns.Print(Util.GetItemLabel(itemID))
 
     if summary.sold == 0 and summary.returned == 0 then
-        ns.PrintRaw("  nothing recorded yet -- visit a mailbox after a listing ends")
+        ns.PrintRaw("  nothing recorded yet. Visit a mailbox after a listing ends")
         return
     end
 

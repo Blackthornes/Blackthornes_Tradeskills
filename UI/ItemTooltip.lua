@@ -568,7 +568,7 @@ local function DescribeItem(itemID)
     local lines = ItemTooltip:LinesFor(itemID, nil)
 
     if #lines == 0 then
-        ns.PrintRaw(("  |c%snothing would be shown -- no price, and it is not"
+        ns.PrintRaw(("  |c%snothing would be shown: no price, and it is not"
             .. " something you could auction|r"):format(ns.COLORS.muted))
         return
     end

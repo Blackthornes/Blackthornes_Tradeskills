@@ -289,6 +289,12 @@ do
 
   SETTINGS.hideAtPostLimit = true
 
+  -- The pane's own "Ignore max on hand" box lists it again without touching
+  -- the setting, so the Profit tab keeps hiding it.
+  check("ignoring max on hand lists it with hiding still on",
+    names(CraftPanel:GetRows({ sortBy = "profit", ignoreLimit = true })),
+    "Rough Sharpening Stone, Copper Chain Belt, Brown Linen Shirt")
+
   -- Room is in items but this pane queues crafts, and one craft can make
   -- several. Twelve items of room on a recipe yielding five is two crafts,
   -- not twelve -- that arithmetic is what turns a limit of 10 into 50.
@@ -508,7 +514,7 @@ do
   -- The narrowest a row ever gets: panel, minus the list inset either side,
   -- minus the scroll bar. The name still needs somewhere to go, once the
   -- skill-up star's gutter has taken its bite out of the left as well.
-  local narrowestRow = 322 - 28 - 10
+  local narrowestRow = 350 - 28 - 10
   local usable = narrowestRow - inset - 8 - (CraftPanel.MARK_GUTTER or 0)
 
   check("a name still has usable width on the narrowest row",
@@ -541,6 +547,32 @@ check("a frame with no coordinates yet gets no answer, not a wrong one",
     GetTop = function() return nil end,
     GetBottom = function() return nil end,
   }), nil)
+
+--------------------------------------------------------------------------------
+-- Level Up order
+--------------------------------------------------------------------------------
+
+do
+  _G.C_TradeSkillUI = nil
+  ns.LevelUp = { Compare = function(a, b)
+    local band = { optimal = 1, medium = 2, easy = 3, trivial = 5 }
+    local x, y = band[a.tier or ""] or 4, band[b.tier or ""] or 4
+    if x ~= y then return x < y end
+    if a.cost ~= b.cost then return (a.cost or math.huge) < (b.cost or math.huge) end
+    return a.recipeID < b.recipeID
+  end }
+
+  ANALYSIS[101].skillUp = { tier = "easy" }
+  ANALYSIS[102].skillUp = { tier = "optimal" }
+  ANALYSIS[103].skillUp = { tier = "medium" }
+
+  check("level up order: orange, yellow, green, whatever it pays",
+    names(CraftPanel:GetRows({ sortBy = "levelup", ignoreLimit = true })),
+    "Rough Sharpening Stone, Brown Linen Shirt, Copper Chain Belt")
+
+  ANALYSIS[101].skillUp, ANALYSIS[102].skillUp, ANALYSIS[103].skillUp = nil, nil, nil
+  ns.LevelUp = nil
+end
 
 print("")
 if failed > 0 then

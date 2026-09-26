@@ -1,0 +1,126 @@
+-- Blackthornes Tradeskills -- UI/CraftProgress.lua
+-- A craft progress bar of the addon's own, in the Queue tab and the craft pane.
+--
+-- The game's cast bar can end up under other windows, so the addon shows the
+-- craft where the player is already looking: which item is being made, how
+-- far along it is, and how many are left in the run. It reads the same cast
+-- the game's bar does, so the two always agree.
+
+local _, ns = ...
+
+local Theme = ns.Theme
+
+local Progress = ns.NewModule("CraftProgress")
+
+Progress.bars = {}
+
+--- What is being crafted right now.
+-- @return nil when no craft is casting, else
+--   { name, fraction (0..1), secondsLeft, remaining (crafts after this one, or nil) }
+function Progress:Read()
+    if type(UnitCastingInfo) ~= "function" then return nil end
+
+    local ok, name, text, _, startMS, endMS = pcall(UnitCastingInfo, "player")
+    if not ok or not name then return nil end
+
+    local castBar = ns.CastBarOnTop
+    if castBar and not castBar:IsCrafting() then return nil end
+
+    local now = GetTime() * 1000
+    local fraction, secondsLeft = 0, 0
+    if type(startMS) == "number" and type(endMS) == "number" and endMS > startMS then
+        fraction = math.max(0, math.min(1, (now - startMS) / (endMS - startMS)))
+        secondsLeft = math.max(0, (endMS - now) / 1000)
+    end
+
+    local remaining
+    local api = _G.C_TradeSkillUI
+    if api and type(api.GetRemainingRecasts) == "function" then
+        local okCount, count = pcall(api.GetRemainingRecasts)
+        if okCount and type(count) == "number" and count > 0 then remaining = count end
+    end
+
+    local label = (type(text) == "string" and text ~= "") and text or name
+    return { name = label, fraction = fraction, secondsLeft = secondsLeft, remaining = remaining }
+end
+
+--- The line of text on the bar.
+function Progress.Describe(cast)
+    local line = cast.name
+    if cast.remaining then
+        line = line .. (", %d more after this"):format(cast.remaining)
+    end
+    return line, ("%.1fs"):format(cast.secondsLeft)
+end
+
+--- Create a bar. It shows itself while a craft casts and hides otherwise.
+-- @param parent  frame to sit in
+-- @param opts    { width, height, covers = a region to hide while the bar shows }
+function Progress:Create(parent, opts)
+    opts = opts or {}
+
+    local bar = Theme.CreatePanel(parent, "panel")
+    bar:SetSize(opts.width or 200, opts.height or 16)
+    bar:Hide()
+
+    local fill = bar:CreateTexture(nil, "ARTWORK")
+    fill:SetPoint("TOPLEFT", 1, -1)
+    fill:SetPoint("BOTTOMLEFT", 1, 1)
+    fill:SetColorTexture(Theme.Unpack("profit", 0.55))
+    fill:SetWidth(1)
+    bar.fill = fill
+
+    local label = Theme.CreateLabel(bar, "small", "text")
+    label:SetPoint("LEFT", 6, 0)
+    label:SetPoint("RIGHT", -44, 0)
+    bar.label = label
+
+    local timer = Theme.CreateLabel(bar, "small", "text", "RIGHT")
+    timer:SetPoint("RIGHT", -6, 0)
+    bar.timer = timer
+
+    bar.covers = opts.covers
+    self.bars[#self.bars + 1] = bar
+    return bar
+end
+
+local function Update(bar, cast)
+    if not cast then
+        if bar:IsShown() then
+            bar:Hide()
+            if bar.covers then bar.covers:Show() end
+        end
+        return
+    end
+
+    if not bar:IsShown() then
+        bar:Show()
+        if bar.covers then bar.covers:Hide() end
+    end
+
+    local line, time = Progress.Describe(cast)
+    bar.label:SetText(line)
+    bar.timer:SetText(time)
+    bar.fill:SetWidth(math.max(1, (bar:GetWidth() - 2) * cast.fraction))
+end
+
+--- Bring every bar up to date. Called every frame, but cheap: one cast read,
+-- and only bars whose window is on screen are touched.
+function Progress:Tick()
+    local cast
+    local read = false
+
+    for _, bar in ipairs(self.bars) do
+        local parent = bar:GetParent()
+        if parent and parent:IsVisible() then
+            if not read then cast = self:Read(); read = true end
+            Update(bar, cast)
+        elseif bar:IsShown() then
+            Update(bar, nil)
+        end
+    end
+end
+
+-- A hidden bar gets no OnUpdate of its own, so one small frame drives them all.
+local driver = CreateFrame("Frame")
+driver:SetScript("OnUpdate", function() Progress:Tick() end)

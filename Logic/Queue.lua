@@ -191,6 +191,60 @@ function Queue:Add(recipeID, quantity, options)
     return true
 end
 
+--- Queue each of these crafts up to its Max on hand (Keep in stock per item).
+--
+-- Room is read fresh for every craft rather than taken from the analyses,
+-- because two recipes can make the same item and the first one queued uses up
+-- the second one's room. Crafts with no limit set are skipped, not queued
+-- without end. The queue is rebuilt and announced once, at the end.
+--
+-- @param analyses list of Profit:Analyse results (the rows on screen)
+-- @return crafts queued, items those make, crafts skipped for having no limit
+function Queue:AddUpToLimit(analyses)
+    local crafts, items, noLimit = 0, 0, 0
+    local queue = self:GetAll()
+
+    for _, analysis in ipairs(analyses or {}) do
+        local recipe = analysis.recipeID and ns.Recipes:GetAny(analysis.recipeID)
+
+        if recipe and recipe.outputItemID then
+            local room = ns.Auctions:GetRoom(recipe.outputItemID)
+
+            if room == nil then
+                noLimit = noLimit + 1
+            else
+                local count = ns.Profit.RoomInCrafts(room, recipe) or 0
+
+                if count > 0 then
+                    local _, existing = self:Find(analysis.recipeID, true)
+                    if existing then
+                        existing.quantity = existing.quantity + count
+                    else
+                        local current = ns.Profit:Analyse(analysis.recipeID)
+                        queue[#queue + 1] = {
+                            recipeID = analysis.recipeID,
+                            quantity = count,
+                            addedAt = time(),
+                            snapshotCost = current and current.totalCost or nil,
+                            snapshotProfit = current and current.profit or nil,
+                        }
+                    end
+
+                    crafts = crafts + count
+                    items = items + count * math.max(1, recipe.quantityMin or 1)
+                end
+            end
+        end
+    end
+
+    if crafts > 0 then
+        self:RebuildDependencies()
+        self:Notify()
+    end
+
+    return crafts, items, noLimit
+end
+
 function Queue:SetQuantity(recipeID, quantity)
     quantity = math.floor(tonumber(quantity) or 0)
 
@@ -230,17 +284,11 @@ function Queue:Clear()
 end
 
 function Queue:Notify()
+    if ns.Crafting and ns.Crafting.OnQueueChanged then
+        ns.Crafting:OnQueueChanged()
+    end
     if ns.UI and ns.UI.OnQueueUpdated then
         ns.UI:OnQueueUpdated()
-    end
-
-    -- Get the change into macro storage, which is the only copy of the queue
-    -- that survives closing the client. Saving used to wait for the CVar
-    -- cadence or for PLAYER_LOGOUT, so emptying the queue and quitting inside
-    -- the minute never reached it, and the next login handed the crafts back.
-    -- Coalesced and skipped when nothing really changed; see Durable:SaveSoon.
-    if ns.Durable and ns.Durable.SaveSoon then
-        ns.Durable:SaveSoon()
     end
 end
 
@@ -290,7 +338,9 @@ function Queue:GetShoppingList()
     local queuedToMake = {}
 
     for _, entry in ipairs(self:GetAll()) do
-        local recipe = ns.Recipes:Get(entry.recipeID)
+        -- GetAny, as everywhere else the queue is read: an alt's craft queued
+        -- from the account-wide view still needs its materials gathered.
+        local recipe = ns.Recipes:GetAny(entry.recipeID)
 
         if recipe then
             for _, reagent in ipairs(recipe.reagents or {}) do
