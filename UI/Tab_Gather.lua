@@ -85,8 +85,12 @@ end
 --------------------------------------------------------------------------------
 
 local function CreateRow(row)
+    -- The item's icon beside its name, as the bags draw it.
+    row.icon = Theme.CreateItemIcon(row, 16)
+    row.icon:SetPoint("LEFT", 10, 0)
+
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 10, 0)
+    row.name:SetPoint("LEFT", 30, 0)
 
     row.cells = {}
 
@@ -115,6 +119,7 @@ end
 
 local function UpdateRow(row, line)
     row.name:SetText(line.label)
+    Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells
     local done = line.shortfall <= 0
@@ -299,14 +304,14 @@ local function Build(container)
     headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     headings:SetHeight(16)
 
-    local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
-    nameHeading:SetPoint("LEFT", 10, 0)
+    local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
+    nameHeading:SetPoint("LEFT", 30, 0)
     nameHeading:SetText("MATERIAL")
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do
         if column.label ~= "" then
-            local heading = Theme.CreateLabel(headings, "tiny", "dim", "RIGHT")
+            local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
             heading:SetPoint("RIGHT", offset, 0)
             heading:SetWidth(column.width)
             heading:SetText(column.label)
@@ -314,7 +319,7 @@ local function Build(container)
         offset = offset - column.width - 6
     end
 
-    local divider = Theme.CreateDivider(container)
+    local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
