@@ -4,6 +4,23 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.6.0
+
+For WoW: Forever (interface 16001).
+
+- When you are the only seller of a craft, it is now priced at the higher of
+  market value and material cost plus your markup, instead of holding at
+  market value forever. A rival listing still beats both. The Profit tab
+  says "No competition" for these, and `/bts why`, `/bts price`, the Sell
+  tab tooltip and the posting confirmation all name the rule.
+- The posting confirmation is now four plain lines: Average Market Value,
+  Lowest Market Posting, Posting at, and Do you wish to continue?, with one
+  extra line only when the price is below what the item cost to make. When a
+  lone low listing was skipped, it says so.
+- Fixed: prices in the profession window's recipe list printed over recipe
+  names and counts. A name that would run into its price is now cut short
+  to fit.
+
 ## 0.5.1
 
 For WoW: Forever (interface 16001).
