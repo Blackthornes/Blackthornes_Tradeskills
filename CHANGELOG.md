@@ -4,6 +4,20 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.7.0
+
+For WoW: Forever (interface 16001).
+
+- Hovering an item or craft anywhere in the addon now shows the game's own
+  item tooltip, with the addon's lines under it.
+- Item tooltips show the lowest posting from your last scan under the
+  auction value, marked "(yours)" when the cheapest listing is yours, or
+  "none listed" when nobody was selling.
+- A new look to match Blackthornes Farmer: item icons beside every item and
+  craft, a lit gold edge on the selected row, gold section headings and
+  trim, and a margin bar on the Profit tab.
+- Fixed: the Profit tab's Max button showed with nothing selected.
+
 ## 0.6.0
 
 For WoW: Forever (interface 16001).
