@@ -147,4 +147,41 @@ local b = { name = "Same", tier = "optimal", cost = 100, recipeID = 2 }
 check("recipe ID settles a full tie", LevelUp.Compare(a, b) and not LevelUp.Compare(b, a))
 check("a row is never before itself", not LevelUp.Compare(a, a))
 
+print("\nthe Craft button")
+
+local busy, ready, reason, windowShows = false, true, nil, true
+ns.Crafting = {
+    IsBusy = function() return busy end,
+    GetReadiness = function() return ready, reason end,
+}
+ns.ProfessionOpener = {
+    WindowShowsRecipe = function() return windowShows end,
+    ProfessionFor = function() return { name = "Tailoring", spell = "Tailoring" } end,
+}
+
+-- Linen Belt: the bags hold 4 linen and 2 thread, so one craft.
+local action = LevelUp:CraftAction(1, "5")
+check("crafts, clamped to what the bags make", action.kind == "craft" and action.count == 1)
+check("and says so", action.status == "Your bags only have materials for 1.")
+check("the button names the number", action.text == "Craft 1")
+
+action = LevelUp:CraftAction(4, "3")
+check("a number the bags cover is kept", action.count == 3 and action.status == "Makes 3 now.")
+
+windowShows = false
+action = LevelUp:CraftAction(1, "1")
+check("the wrong window open means open the right one first",
+    action.kind == "open" and action.text == "Open Tailoring" and action.profession.spell == "Tailoring")
+windowShows = true
+
+ready, reason = false, "need materials"
+action = LevelUp:CraftAction(6, "1")
+check("short of materials: no craft, and says why",
+    action.kind == "none" and action.status == "You are short of materials for this one.")
+ready, reason = true, nil
+
+busy = true
+check("while crafting, the button stops it", LevelUp:CraftAction(1, "1").kind == "stop")
+busy = false
+
 print("\n  all level up checks passed\n")
