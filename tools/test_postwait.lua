@@ -35,6 +35,7 @@ local queueSeconds, queueReason = 0, nil
 ns.AHQueue = {
     PRIORITY = { urgent = 10, normal = 50, scan = 90 },
     SecondsUntilReady = function() return queueSeconds, queueReason end,
+    MIN_SPACING = 1.2,
 }
 
 local clock = 100
@@ -97,8 +98,10 @@ Check("no reason", reason, nil)
 print("\na listing is still being confirmed")
 --------------------------------------------------------------------------------
 
--- Posted one second ago. Verification starts three seconds after the post, so
--- two seconds of the wait are left and they are a real, countable two seconds.
+-- Posted one second ago. The confirming read goes out three seconds after
+-- the post, and the next post must wait the usual 1.2s after that read, so
+-- 3.2 seconds are left and they are one real, countable wait: the button
+-- used to count 3, 2, 1, say "wait", then count 2, 1 again.
 Reset()
 Posting.pending = { startedAt = clock - 1 }
 
@@ -107,19 +110,29 @@ Check("posting is refused", allowed, false)
 Check("and says why", reason, "still confirming the last listing")
 
 seconds, reason = Posting:SecondsUntilPostable()
-CheckAbout("counts the remaining 2s down", seconds, 2)
+CheckAbout("counts the remaining 3.2s down as one wait", seconds, 3.2)
 Check("naming the listing being confirmed", reason, "still confirming the last listing")
 
 --------------------------------------------------------------------------------
 print("\nthe read has gone out and we are waiting on the server")
 --------------------------------------------------------------------------------
 
--- No honest number here: it clears when the server answers.
+-- The spacing after the read is the queue's to count, and it carries on the
+-- same countdown; past it there is no honest number, it clears when the
+-- server answers.
 Reset()
-Posting.pending = { startedAt = clock - 4, verifying = true }
+queueSeconds, queueReason = 0.9, "spacing out requests to the auction house"
+Posting.pending = { startedAt = clock - 3.3, verifying = true }
 
 seconds, reason = Posting:SecondsUntilPostable()
-Check("no seconds invented", seconds, 0)
+CheckAbout("the spacing after the read carries the count on", seconds, 0.9)
+Check("still named as the listing being confirmed", reason, "still confirming the last listing")
+
+Reset()
+Posting.pending = { startedAt = clock - 4.5, verifying = true }
+
+seconds, reason = Posting:SecondsUntilPostable()
+Check("no seconds invented once that has passed", seconds, 0)
 Check("but the reason still shows", reason, "still confirming the last listing")
 
 --------------------------------------------------------------------------------
@@ -133,7 +146,7 @@ queueSeconds, queueReason = 9, "leaving the auction house free for you"
 Posting.pending = { startedAt = clock - 1 }
 
 seconds, reason = Posting:SecondsUntilPostable()
-CheckAbout("the 9s queue wait beats the 2s confirmation", seconds, 9)
+CheckAbout("the 9s queue wait beats the 3.2s confirmation", seconds, 9)
 Check("and it is what gets named", reason, "leaving the auction house free for you")
 
 Reset()
@@ -141,7 +154,7 @@ queueSeconds, queueReason = 0.5, "spacing out requests to the auction house"
 Posting.pending = { startedAt = clock - 1 }
 
 seconds, reason = Posting:SecondsUntilPostable()
-CheckAbout("the 2s confirmation beats the 0.5s pacing gap", seconds, 2)
+CheckAbout("the 3.2s confirmation beats the 0.5s pacing gap", seconds, 3.2)
 Check("and it is what gets named", reason, "still confirming the last listing")
 
 --------------------------------------------------------------------------------

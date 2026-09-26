@@ -24,7 +24,25 @@ local function GetMeta(field)
     return nil
 end
 
-ns.VERSION = GetMeta("Version") or "0.0.0"
+-- The TOC carries @project-version@, which the release packager rewrites to
+-- the tag it is building, "v0.2.0" say. Running straight from the repository
+-- there is no packager, so the keyword arrives unsubstituted and is shown as
+-- "dev".
+local function ReadVersion()
+    local value = GetMeta("Version")
+    if type(value) ~= "string" or value == "" then return "0.0.0" end
+    if value:find("@", 1, true) then return "dev" end
+    -- Tags start with a "v"; the version itself does not.
+    return (value:gsub("^[vV]", ""))
+end
+
+ns.VERSION = ReadVersion()
+
+--- The version as players see it: "v0.2.0", or "dev build" from a checkout.
+function ns.VersionLabel()
+    if ns.VERSION == "dev" then return "dev build" end
+    return "v" .. ns.VERSION
+end
 
 --------------------------------------------------------------------------------
 -- Output
@@ -248,7 +266,7 @@ function ns.RegisterCommand(name, usage, fn)
 end
 
 local function ShowHelp()
-    ns.Print(("|c%sBlackthornes Tradeskills|r v%s"):format(ns.COLORS.accent, ns.VERSION))
+    ns.Print(("|c%sBlackthornes Tradeskills|r %s"):format(ns.COLORS.accent, ns.VersionLabel()))
     for i = 1, #ns.commandOrder do
         local name = ns.commandOrder[i]
         local command = ns.commands[name]

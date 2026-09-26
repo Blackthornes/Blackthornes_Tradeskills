@@ -58,6 +58,16 @@ function SkillUp:GetTierColor(tier)
     return colour[1], colour[2], colour[3]
 end
 
+--- The same colour as an inline "|cffRRGGBB" escape.
+--
+-- The components are fractions, so they are rounded before formatting: this
+-- client's string.format refuses a non-integer for %x, and 0.5 * 255 is one.
+function SkillUp:GetTierColorCode(tier)
+    local r, g, b = self:GetTierColor(tier)
+    return ("|cff%02x%02x%02x"):format(
+        math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+end
+
 function SkillUp:GetTierLabel(tier)
     return self.TIER_LABEL[tier or ""] or "unknown"
 end
@@ -473,8 +483,7 @@ local function Muted(text)
 end
 
 local function TierWord(tier)
-    local r, g, b = SkillUp:GetTierColor(tier or "trivial")
-    return ("|cff%02x%02x%02x%s|r"):format(r * 255, g * 255, b * 255, tostring(tier))
+    return ("%s%s|r"):format(SkillUp:GetTierColorCode(tier or "trivial"), tostring(tier))
 end
 
 local function ReportCapture(capture, heading)
@@ -508,7 +517,7 @@ local function ReportCapture(capture, heading)
     end
 
     for _, example in ipairs(capture.examples) do
-        ns.PrintRaw(("  %s -- %s (game value %s)"):format(
+        ns.PrintRaw(("  %s: %s (game value %s)"):format(
             example.name, TierWord(example.tier), Muted(example.raw)))
     end
 
@@ -586,7 +595,7 @@ function()
 
     for index = 1, math.min(8, #starred) do
         local analysis = starred[index]
-        ns.PrintRaw(("    %s -- %s, %s each"):format(
+        ns.PrintRaw(("    %s: %s, %s each"):format(
             analysis.name or "?",
             TierWord(analysis.skillUp and analysis.skillUp.tier),
             ns.Util.FormatMoney(analysis.profit, { noColor = true, short = true })))
@@ -605,9 +614,9 @@ function(args)
     if choice == "" or not styles or not styles[choice] then
         ns.Print(("the skill-up mark is drawn as %s"):format(
             Accent(ns.Config:Get("skillUpMarker") or "star")))
-        ns.PrintRaw(Muted("  /bts star star -- this addon's own gold star"))
-        ns.PrintRaw(Muted("  /bts star raid -- the game's raid-target star"))
-        ns.PrintRaw(Muted("  /bts star pip  -- a plain gold square, if neither draws"))
+        ns.PrintRaw(Muted("  /bts star star: this addon's own gold star"))
+        ns.PrintRaw(Muted("  /bts star raid: the game's raid-target star"))
+        ns.PrintRaw(Muted("  /bts star pip:  a plain gold square, if neither draws"))
         return
     end
 

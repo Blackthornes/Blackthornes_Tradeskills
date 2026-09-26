@@ -248,17 +248,17 @@ local function UpdateBankNote()
     local age = ns.Inventory:GetBankAge()
 
     if age then
-        note:SetText(("Bank not checked this session -- using what it held %s ago.")
+        note:SetText(("Bank not checked this session, so using what it held %s ago.")
             :format(Util.FormatAge(age)))
     else
-        note:SetText("Bank never checked -- HAVE counts bags only.")
+        note:SetText("Bank never checked, so HAVE counts bags only.")
     end
 end
 
 --- Keep the Craft button honest about what it will do, and why it cannot.
-local function UpdateCraftStatus()
-    local button, label = widgets.craftButton, widgets.craftStatus
-    if not button then return end
+-- @return true when the button was set to open a profession window
+local function SetCraftButton(button, label)
+    button.opensProfession = false
 
     if ns.Crafting:IsBusy() then
         button:SetText("Stop crafting")
@@ -296,6 +296,28 @@ local function UpdateCraftStatus()
     local recipe = ns.Recipes:GetAny(entry.recipeID)
     local canMake = math.min(entry.quantity, ns.Profit:GetCraftableCount(entry.recipeID))
 
+    -- A craft only starts from its own profession window. When that is not
+    -- the one open, this click opens it instead: the game lets a player's
+    -- click cast the profession, which addon code alone may not do.
+    local opener = ns.ProfessionOpener
+    if opener and not opener:WindowShowsRecipe(entry.recipeID) then
+        local profession = opener:ProfessionFor(entry.recipeID)
+
+        if profession then
+            button:SetText(("Open %s"):format(profession.name))
+            button:SetEnabledState(true)
+            button.tooltipText = ("Opens your %s window. Click again to craft %dx %s.")
+                :format(profession.name, canMake, (recipe and recipe.name) or "item")
+
+            label:SetText(("%d of %d ready -- click to open %s"):format(ready, total, profession.name))
+            label:SetTextColor(Theme.Unpack("accent"))
+
+            button.opensProfession = true
+            opener:Arm(button, profession, entry.recipeID)
+            return true
+        end
+    end
+
     button:SetText(("Craft %dx %s"):format(canMake, (recipe and recipe.name) or "item"))
     button:SetEnabledState(true)
     button.tooltipText = "One click makes every craft in this entry"
@@ -306,8 +328,18 @@ local function UpdateCraftStatus()
     -- Crafting works without the window open on some clients and not others;
     -- say so rather than letting a click quietly do nothing.
     if not ns.Crafting.isTradeSkillOpen then
-        label:SetText(("%d of %d ready -- open your profession"):format(ready, total))
+        label:SetText(("%d of %d ready. Open your profession"):format(ready, total))
         label:SetTextColor(Theme.Unpack("accent"))
+    end
+end
+
+local function UpdateCraftStatus()
+    local button, label = widgets.craftButton, widgets.craftStatus
+    if not button then return end
+
+    -- Every other state wants the click to reach the craft button itself.
+    if not SetCraftButton(button, label) and ns.ProfessionOpener then
+        ns.ProfessionOpener:Disarm()
     end
 end
 
@@ -384,7 +416,10 @@ local function Build(container)
             ns.Crafting:Stop()
         else
             local entry = ns.Crafting:GetNextReady()
-            if entry then
+            if widgets.craftButton.opensProfession and ns.ProfessionOpener then
+                -- The secure Open button should have taken this click.
+                ns.ProfessionOpener:MissedClick()
+            elseif entry then
                 ns.Crafting:Start(entry.recipeID, entry.quantity)
             end
         end
@@ -396,6 +431,12 @@ local function Build(container)
     widgets.craftStatus = Theme.CreateLabel(container, "small", "accent")
     widgets.craftStatus:SetPoint("LEFT", widgets.craftButton, "RIGHT", 10, 0)
     widgets.craftStatus:SetWidth(320)
+
+    -- While a craft casts, a progress bar takes the status line's place.
+    widgets.craftProgress = ns.CraftProgress:Create(container, {
+        width = 320, height = 20, covers = widgets.craftStatus,
+    })
+    widgets.craftProgress:SetPoint("LEFT", widgets.craftButton, "RIGHT", 10, 0)
 
 
     local emptyLabel = Theme.CreateLabel(container, "small", "dim", "CENTER")

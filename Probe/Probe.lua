@@ -260,7 +260,7 @@ function Probe:PrintReport()
     local report = self:BuildReport()
     local caps = ns.Compat:Get()
 
-    ns.Print(("game check -- addon v%s"):format(ns.VERSION))
+    ns.Print(("game check -- addon %s"):format(ns.VersionLabel()))
 
     Heading("Game")
     Line("version", ("%s (build %s, interface %s)"):format(
@@ -300,8 +300,12 @@ function Probe:PrintReport()
         Line("sessions seen", cvarResult.previousCount)
 
         local mirroring, restored = ns.Persist:GetStatus()
-        Line("settings copy", mirroring and ("on, %d restored this login"):format(restored)
-            or "|c" .. ns.COLORS.loss .. "off|r")
+        if ns.Persist:GameKeepsSavedData() then
+            Line("settings copy", "off, not needed: the game keeps your saved data")
+        else
+            Line("settings copy", mirroring and ("on, %d restored this login"):format(restored)
+                or "|c" .. ns.COLORS.loss .. "off|r")
+        end
     else
         Line("result", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r -- no earlier value to compare")
         Line("next", "log out to character select, log back in, then run this again")

@@ -70,6 +70,10 @@ AHQueue.queue = {}
 AHQueue.sendTimes = {}
 AHQueue.lastSend = 0
 
+-- Read by Posting, which counts the gap after its confirming read into the
+-- wait it shows on the buttons.
+AHQueue.MIN_SPACING = MIN_SPACING
+
 -- Two different waits, deliberately kept apart.
 --
 -- standDownUntil is politeness: the player just listed something, or a listing
@@ -303,6 +307,12 @@ function AHQueue:Request(opts)
             if self.queue[i].key == request.key then
                 local replaced = self.queue[i]
                 self.queue[i] = request
+
+                -- The same key is asked for at different priorities (the owned
+                -- auctions refresh is routine; the /bts auctions check is
+                -- urgent), so the replacement takes its own place in line
+                -- rather than inheriting the old one's.
+                table.sort(self.queue, Compare)
 
                 -- The replaced request will never be sent, so whatever was
                 -- waiting on it hears that now. Dropping it silently is how a

@@ -253,6 +253,11 @@ Theme.marks = {
 local MARK_TIERS = {
     optimal = { scale = 1.00, alpha = 1.00 },
     medium  = { scale = 0.80, alpha = 0.75 },
+
+    -- Green: a skill up is possible but not likely. Only the craft pane draws
+    -- it, since that pane marks every recipe that can still level you; the
+    -- Profit tab only ever asks for the two tiers above.
+    easy    = { scale = 0.65, alpha = 0.55 },
 }
 
 function Theme.CurrentMarkStyle()

@@ -145,7 +145,6 @@ ns.Profit = { Analyse = function() return nil end }
 
 -- Set per case. nil means nothing was carried over from before the restart.
 local restoredRollup
-ns.Durable = { GetRestoredRollup = function() return restoredRollup end }
 
 ns.db = { mailLedger = {} }
 
@@ -157,6 +156,9 @@ do
     local chunk = assert(loadfile(lfs_cwd .. "/Data/Mail.lua"))
     chunk("Blackthornes_TS", ns)
 end
+
+-- The carried-over history is read from the saved database; stand in for it.
+ns.Mail.GetRestoredRollup = function() return restoredRollup end
 
 local createRow, updateRow, listData
 
@@ -363,7 +365,7 @@ check("and the row says where the figures came from", linen.restored, true)
 local carried = LabelStartingWith("plus ")
 check("the list says how many sales it cannot show",
     carried and carried.text or "(no note)",
-    "plus 4 sales from before you last quit the game -- see By item")
+    "plus 4 sales from before you last quit the game. See By item")
 check("and only while there is something to say", carried.shown, true)
 
 -- The count used to be worked out by subtracting this session's sales from

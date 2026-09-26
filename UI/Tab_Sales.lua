@@ -18,7 +18,7 @@
 --
 -- The split matters for a second reason. History from before the client was
 -- last closed survives as a per-item rollup rather than as individual sales
--- (see Core/Durable.lua), so it can appear in the By item view and in the
+-- (see Mail:GetRestoredRollup), so it can appear in the By item view and in the
 -- totals but never in a list of events. Rather than let that read as sales
 -- going missing, the Recent view says how many are being held back and where
 -- to find them.
@@ -443,7 +443,7 @@ end
 -- it. The rollup is the pre-restart half on its own, which is exactly what
 -- this is asking for.
 local function CarriedOver()
-    local rollup = ns.Durable and ns.Durable:GetRestoredRollup()
+    local rollup = ns.Mail:GetRestoredRollup()
     if not rollup then return 0 end
 
     local carried = 0
@@ -453,11 +453,9 @@ local function CarriedOver()
 
     -- Sales rolled into the history during this session are in the list as
     -- well, so they are not "carried over from before".
-    if ns.Durable.IsRolledUp then
-        for _, entry in ipairs(ns.Mail:GetLedger().entries) do
-            if entry.kind == "sold" and ns.Durable:IsRolledUp(entry) then
-                carried = carried - 1
-            end
+    for _, entry in ipairs(ns.Mail:GetLedger().entries) do
+        if entry.kind == "sold" and ns.Mail:IsRolledUp(entry) then
+            carried = carried - 1
         end
     end
 
@@ -557,7 +555,7 @@ local function Refresh()
 
     widgets.carried:SetShown(carried > 0)
     if carried > 0 then
-        widgets.carried:SetText(("plus %d sale%s from before you last quit the game -- see By item"):format(
+        widgets.carried:SetText(("plus %d sale%s from before you last quit the game. See By item"):format(
             carried, carried == 1 and "" or "s"))
     end
 end

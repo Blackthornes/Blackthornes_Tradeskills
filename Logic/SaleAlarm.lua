@@ -83,8 +83,14 @@ function SaleAlarm:MatchSoldLine(text)
     local pattern = GetSoldPattern()
     if not pattern or type(text) ~= "string" then return nil end
 
-    local item = text:match(pattern)
-    return item
+    -- Inside a dungeon a system line can be one the game will not let the
+    -- addon read, and matching it would raise. Such a line is not a sale.
+    local ok, item = pcall(string.match, text, pattern)
+    if not ok or item == nil then return nil end
+
+    -- Hand back a plain string, or nothing.
+    local plain, copy = pcall(function() return item .. "" end)
+    return plain and copy or nil
 end
 
 --- Whether an auction house notice is the "sold" one.
@@ -152,11 +158,21 @@ function SaleAlarm:CHAT_MSG_SYSTEM(_, text)
     if item then self:OnSale("chat", item) end
 end
 
+--- Every notice the auction house sends, sold or not.
+-- Counted so that /bts salealarm can tell "the notice never fired" from "it
+-- fired and was not the sold one", which the sold count alone cannot.
+function SaleAlarm:CountNotice(notification)
+    self.heard.anyNotice = (self.heard.anyNotice or 0) + 1
+    self.lastNotice = notification
+end
+
 function SaleAlarm:AUCTION_HOUSE_SHOW_NOTIFICATION(_, notification)
+    self:CountNotice(notification)
     if self:IsSoldNotice(notification) then self:OnSale("notice") end
 end
 
 function SaleAlarm:AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION(_, notification, text)
+    self:CountNotice(notification)
     if self:IsSoldNotice(notification) then
         self:OnSale("notice", type(text) == "string" and text or nil)
     end
@@ -207,6 +223,17 @@ function SaleAlarm:Report()
         muted, Yes(self.listening.notice)))
     ns.PrintRaw(("  |c%ssales heard this session:|r chat line %d, notice %d"):format(
         muted, self.heard.chat or 0, self.heard.notice or 0))
+
+    -- Which number means "sold" comes from the game's enum. Without it every
+    -- notice is ignored, and that has to be said, or "notice 0" reads as the
+    -- event never firing.
+    local names = _G.Enum and _G.Enum.AuctionHouseNotification
+    local sold = names and names.AuctionSold
+    ns.PrintRaw(("  |c%sauction house notices of any kind this session:|r %d%s"):format(
+        muted, self.heard.anyNotice or 0,
+        self.lastNotice ~= nil and (", last was %s"):format(tostring(self.lastNotice)) or ""))
+    ns.PrintRaw(("  |c%sthe game says the sold notice is:|r %s"):format(
+        muted, sold ~= nil and tostring(sold) or "unknown (no enum), so the notice route cannot fire"))
     ns.PrintRaw(("  |c%salarms played this session:|r %d"):format(muted, self.played))
 
     if self.lastSale then

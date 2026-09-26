@@ -45,28 +45,47 @@ fails when that line of code runs.
 
 ## A note on saved data
 
-`Data/Snapshot.lua` ships empty and must stay that way in this repository.
-`tools/restore.ps1` regenerates it from your own SavedVariables to carry a
-database between sessions, and the result contains your characters, your prices
-and your auctions. Git tracks the file, so `.gitignore` cannot protect it.
-
-A pre-commit hook refuses any commit that would carry it. Git does not install
-hooks when a repository is cloned, so run this once per clone:
-
-```powershell
-.\tools\install-hooks.ps1   # or: git config core.hooksPath .githooks
-```
-
-If the hook stops a commit, unstage the file with
-`git restore --staged Data/Snapshot.lua`, or put the empty version back with
-`git checkout -- Data/Snapshot.lua`. Neither touches the deployed copy in
-`Interface\AddOns`, so the snapshot keeps working in game.
-
-`.github/workflows/guard-saved-data.yml` runs the same check on GitHub, which
-catches a snapshot pushed from a clone where the hook was never installed.
+Since WoW: Forever build 1.60.1.70009 (2026-09-24) the game keeps the addon's
+saved data (`BlackthornesTSDB` and `BlackthornesTSCharDB`) across a restart,
+so nothing else is needed. The old workarounds, a generated data addon and
+storage in macros, were removed; `Core/OldMacros.lua` deletes the leftover
+`BTSd` macros on a login where the saved data loaded. The CVar store in
+`Core/Persist.lua` stays as a fallback and stands down whenever the saved data
+loads. `/bts db` and `/bts persist` show what loaded.
 
 ## API findings
 
 `docs/FOREVER_API_FINDINGS.md` records what the game actually does, as found
 with `/bts probe` rather than taken from documentation. Read it before changing
 anything to do with the auction house or professions.
+
+## Releasing
+
+Releases are cut by pushing a tag like `v0.2.0`.
+`.github/workflows/release.yml` then:
+
+1. refuses the tag unless `CHANGELOG.md` opens with a `## 0.2.0` section
+   (`tools/check_release.py`);
+2. runs the tests;
+3. builds the player-facing zip with the
+   [BigWigs packager](https://github.com/BigWigsMods/packager), uploading
+   nothing;
+4. checks that zip is clear to post (`tools/check_package.py`): only the
+   addon's own files, and nothing that looks private, such as a Windows path,
+   an email address, a saved-variables dump or a token;
+5. only then uploads that same zip to CurseForge (project 1710638) and
+   attaches it to a GitHub release.
+
+To release from GitHub Desktop: add the new version's section to the top of
+`CHANGELOG.md` and merge it to `main`, pull `main`, then **History**, right-click
+the newest commit, **Create Tag...**, name it `v0.2.0`, and **Push origin**.
+
+The version is never typed by hand. The TOC says
+`## Version: @project-version@` and the packager fills in the tag. Running
+straight from a clone there is no packager, and the addon calls itself a
+"dev build". The middle number moves for new behaviour, the last for fixes
+alone; a tag like `v0.3.0-beta1` is uploaded as a beta.
+
+`.pkgmeta` leaves `tools/`, `docs/`, `deploy.ps1` and this README out of the
+zip. The upload needs the `CF_API_KEY` repository secret; without it the
+workflow still builds and checks the zip but uploads nothing to CurseForge.

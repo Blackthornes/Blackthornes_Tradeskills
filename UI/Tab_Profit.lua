@@ -238,7 +238,7 @@ local function ShowMarkTooltip(row, analysis)
     -- Skill only rises, so a reading taken lower down may have gone green
     -- since. Better said than quietly trusted.
     if skillUp.stale then
-        GameTooltip:AddLine(("Read at skill %d, you are %d now -- open your profession to refresh."):format(
+        GameTooltip:AddLine(("Read at skill %d, you are %d now. Open your profession to refresh."):format(
             skillUp.skill or 0, skillUp.currentSkill or 0), 0.91, 0.76, 0.35, true)
     end
 
@@ -403,9 +403,8 @@ local function UpdateDetail(analysis)
     local skillUp = analysis.skillUp
 
     if skillUp and skillUp.tier ~= "trivial" then
-        local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
-        skillUpText = ("  |cff%02x%02x%02x%s|r"):format(
-            r * 255, g * 255, b * 255, ns.SkillUp:GetTierLabel(skillUp.tier))
+        skillUpText = ("  %s%s|r"):format(
+            ns.SkillUp:GetTierColorCode(skillUp.tier), ns.SkillUp:GetTierLabel(skillUp.tier))
     end
 
     if analysis.craftableNow and analysis.craftableNow > 0 then
@@ -609,7 +608,7 @@ local function UpdateDetail(analysis)
     detail.quantity:SetText(tostring(suggested))
 
     if analysis.atPostLimit then
-        detail.subtitle:SetText(("You already have %d -- at your limit"):format(
+        detail.subtitle:SetText(("You already have %d, your limit"):format(
             analysis.stock or 0))
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
     end
@@ -872,8 +871,31 @@ local function Build(container)
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)
     widgets.countLabel = countLabel
 
+    -- Queues every row on screen, so the filters and search above decide
+    -- what it covers. Each craft goes up to its Max on hand, less what is
+    -- already held, listed, in the mail or queued.
+    local queueAll = Widgets.CreateButton(container, "Queue All", function()
+        local rows = BuildList()
+        local crafts, items, noLimit = ns.Queue:AddUpToLimit(rows)
+
+        if crafts > 0 then
+            ns.Print(("queued %d craft%s (%d item%s) from %d listed"):format(
+                crafts, crafts == 1 and "" or "s",
+                items, items == 1 and "" or "s", #rows))
+        elseif #rows == 0 then
+            ns.Print("nothing listed to queue")
+        elseif noLimit == #rows then
+            ns.Print("nothing queued: set Keep in stock per item in Settings first")
+        else
+            ns.Print("nothing queued: every listed craft is already at its Max on hand")
+        end
+    end, { width = 90, height = 20,
+           tooltip = "Queue every craft in this list up to your Max on hand (Keep in stock per item in Settings), less what you already have or have queued" })
+    queueAll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 2)
+    widgets.queueAll = queueAll
+
     local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
-    hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
+    hint:SetPoint("RIGHT", queueAll, "LEFT", -10, 0)
     hint:SetText("Right-click a row to queue one")
 
     -- Detail panel
