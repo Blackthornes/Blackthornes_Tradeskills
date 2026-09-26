@@ -478,6 +478,14 @@ local function UpdateDetail(analysis)
                 and "Matching rival" or "Cheapest rival")
             detail.rivalValue:SetText(Util.FormatMoney(analysis.competitorPrice))
             detail.rivalValue:SetTextColor(Theme.Unpack("muted"))
+        elseif analysis.priceUncontested then
+            -- Nobody is competing, so the price above is the markup over
+            -- materials rather than anything the book says. Checked before
+            -- "You hold lowest" below, which is the same situation described
+            -- less usefully: what matters is where the price came from.
+            detail.rivalLabel:SetText("No competition")
+            detail.rivalValue:SetText("materials + markup")
+            detail.rivalValue:SetTextColor(Theme.Unpack("profit"))
         elseif analysis.youHoldLowest then
             -- Your own auction is the cheapest. Undercutting it would just walk
             -- your own price down, so we hold at market and say so.
