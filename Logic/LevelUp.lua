@@ -139,6 +139,62 @@ function LevelUp:GetRanked(opts)
 end
 
 --------------------------------------------------------------------------------
+-- The Craft button
+--------------------------------------------------------------------------------
+
+--- What the Craft button should do for this recipe right now.
+--
+-- The same rules the Queue tab's Craft button follows, so the two never
+-- disagree: a craft only starts from its own profession window, so when that
+-- window is not the one open the click opens it instead (through
+-- ProfessionOpener's secure button, since addon code may not cast); a craft
+-- never asks for more than the bags make, or the game stops partway.
+--
+-- @param wanted  how many the player typed
+-- @return { kind = "stop"|"open"|"craft"|"none", text, status, count, profession }
+function LevelUp:CraftAction(recipeID, wanted)
+    local Crafting = ns.Crafting
+
+    if Crafting:IsBusy() then
+        return { kind = "stop", text = "Stop", status = "Crafting. Click Stop to end after this one." }
+    end
+
+    local ready, reason = Crafting:GetReadiness(recipeID)
+
+    if not ready then
+        local status = reason == "need materials"
+            and "You are short of materials for this one."
+            or ("Cannot craft: %s."):format(reason or "unknown reason")
+        return { kind = "none", text = "Craft", status = status }
+    end
+
+    local craftable = ns.Profit:GetCraftableCount(recipeID)
+    local count = math.max(1, math.min(tonumber(wanted) or 1, craftable))
+
+    local opener = ns.ProfessionOpener
+    if opener and not opener:WindowShowsRecipe(recipeID) then
+        local profession = opener:ProfessionFor(recipeID)
+
+        if profession then
+            return {
+                kind = "open",
+                text = ("Open %s"):format(profession.name),
+                status = ("Opens your %s window. Click again to craft."):format(profession.name),
+                count = count,
+                profession = profession,
+            }
+        end
+    end
+
+    local status = ("Makes %d now."):format(count)
+    if (tonumber(wanted) or 1) > craftable then
+        status = ("Your bags only have materials for %d."):format(craftable)
+    end
+
+    return { kind = "craft", text = ("Craft %d"):format(count), status = status, count = count }
+end
+
+--------------------------------------------------------------------------------
 -- The profession last open
 --------------------------------------------------------------------------------
 
