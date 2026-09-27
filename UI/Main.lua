@@ -21,10 +21,18 @@ local WINDOW_HEIGHT = 580
 local EDGE_PAD = 11
 
 -- The bar of controls that rides on the auction window. Tall enough that the
--- 30px buttons inside it keep their bevel clear of its own edge.
+-- 28px buttons inside it keep their bevel clear of its own edge.
 local AUCTION_BAR_HEIGHT = 44
 local AUCTION_BAR_PAD = 10
-local AUCTION_BAR_FALLBACK_WIDTH = 540
+local AUCTION_BAR_WIDTH = 460
+
+-- Blizzard's auction window has its portrait sticking up out of the top left
+-- corner. The bar keeps at least this far in from the window's left edge so
+-- it never sits on top of it.
+local AUCTION_BAR_CLEAR_LEFT = 80
+
+-- How long "Scan complete" stays on the bar before it goes back to idle.
+local SCAN_DONE_HOLD = 5
 
 -- How far the window sits off the screen corner while the auction house is
 -- open. Small: the three panels together are wider than the screen, so every
@@ -293,20 +301,22 @@ function UI:SetScanProgress(fraction)
         self.progressBar:SetProgress(fraction)
     end
 
-    -- Progress is also surfaced on the auction-house button, which is what the
-    -- player is looking at while a scan runs.
-    if self.auctionButton then
-        self.auctionButton:SetText(("%d%%"):format(math.floor((fraction or 0) * 100)))
-    end
+    -- The auction house bar reads the scanner's own state for its progress,
+    -- so it only needs telling that something moved.
+    self:RefreshAuctionStatus()
 
     if self.scanHint then
         self.scanHint:SetText(("scanning... %d%%"):format(math.floor((fraction or 0) * 100)))
     end
 end
 
-function UI:OnScanComplete()
+--- @param result nil when the scan was cancelled or gave up; on a finished
+--- scan, { items = how many prices it recorded }.
+function UI:OnScanComplete(result)
     if self.progressBar then self.progressBar:Hide() end
     if self.scanHint then self.scanHint:SetText("") end
+
+    if result then self:CelebrateScan(result) end
 
     self:UpdateAuctionButton()
     self:UpdateHeader()
@@ -467,8 +477,12 @@ end
 -- Scan and Post Crafted each used to anchor themselves to the auction frame
 -- separately, which left buttons hanging in the game world above it with
 -- nothing visibly tying them to the window they act on. They share one bar
--- instead, flush to the auction window's top edge and the same width, so the
--- row reads as part of that window.
+-- instead, sitting on the auction window's top edge at its right end.
+--
+-- It used to run the full width of the auction window, and its left end
+-- covered Blizzard's portrait. Now it is only as wide as what is on it:
+-- the addon's name, a status line with the scan's progress under it, and the
+-- two buttons.
 --
 -- Still parented to UIParent rather than to the auction frame, so Blizzard's
 -- own layering can never clip or bury it, and so it survives the auction UI
@@ -477,7 +491,7 @@ function UI:GetAuctionBar()
     if self.auctionBar then return self.auctionBar end
 
     local bar = CreateFrame("Frame", "BlackthornesTSAuctionBar", UIParent)
-    bar:SetHeight(AUCTION_BAR_HEIGHT)
+    bar:SetSize(AUCTION_BAR_WIDTH, AUCTION_BAR_HEIGHT)
     bar:SetFrameStrata("FULLSCREEN_DIALOG")
     bar:SetFrameLevel(90)
 
@@ -487,17 +501,127 @@ function UI:GetAuctionBar()
     bar:Hide()
 
     Theme.Fill(bar, "header")
+    Theme.TopSheen(bar, 0.07)
+    Theme.AccentStripe(bar, 3)
     Theme.AddGameOutline(bar, { style = "tooltip", color = "natural", edgeSize = 12 })
 
-    -- The bar is as wide as the auction window and the buttons only fill its
-    -- right end, so name it. An unlabelled strip of empty frame reads as
-    -- something that failed to load.
-    local label = Theme.CreateLabel(bar, "small", "accent")
-    label:SetPoint("LEFT", bar, "LEFT", AUCTION_BAR_PAD + 4, 0)
-    label:SetText("Blackthornes Tradeskills")
+    local left = AUCTION_BAR_PAD + 4
+
+    local title = Theme.CreateLabel(bar, "small", "accent")
+    title:SetPoint("TOPLEFT", bar, "TOPLEFT", left, -8)
+    title:SetText("Blackthornes Tradeskills")
+
+    -- One line under the name: when the last scan was, or what the running
+    -- scan is doing.
+    local status = Theme.CreateLabel(bar, "tiny", "muted")
+    status:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+    status:SetWordWrap(false)
+    bar.status = status
+
+    -- The scan's progress, along the bottom of the text column. Shown only
+    -- while a scan runs, and for a moment after one finishes.
+    local progress = Widgets.CreateProgressBar(bar)
+    progress:SetHeight(4)
+    progress:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", left, 7)
+    progress:Hide()
+    bar.progress = progress
+
+    -- While there is nothing to measure yet (the scan is waiting its turn, or
+    -- waiting for the quick scan to answer), a glint runs along the track so
+    -- the bar still reads as busy.
+    local glint = progress:CreateTexture(nil, "OVERLAY")
+    glint:SetSize(28, 2)
+    glint:SetColorTexture(1, 0.92, 0.65, 0.8)
+    glint:Hide()
+    bar.glint = glint
+
+    -- A gold wash over the whole bar that fades out when a scan finishes.
+    local flash = bar:CreateTexture(nil, "OVERLAY")
+    flash:SetAllPoints()
+    flash:SetColorTexture(Theme.Unpack("accent"))
+    flash:SetBlendMode("ADD")
+    flash:SetAlpha(0)
+    bar.flash = flash
+
+    local sinceRefresh, glintAt = 0, 0
+
+    bar:SetScript("OnUpdate", function(frame, elapsed)
+        if frame.flashLeft and frame.flashLeft > 0 then
+            frame.flashLeft = math.max(0, frame.flashLeft - elapsed)
+            flash:SetAlpha(0.35 * frame.flashLeft)
+        end
+
+        if glint:IsShown() then
+            local span = math.max(1, progress:GetWidth() - glint:GetWidth() - 2)
+            glintAt = (glintAt + elapsed * 90) % span
+            glint:ClearAllPoints()
+            glint:SetPoint("LEFT", progress, "LEFT", 1 + glintAt, 0)
+        end
+
+        -- The scanner is read a few times a second rather than every frame.
+        -- The Scan button comes along too: a queued scan starts on its own
+        -- turn, with no click to say the button should now read Cancel.
+        sinceRefresh = sinceRefresh + elapsed
+        if sinceRefresh >= 0.2 then
+            sinceRefresh = 0
+            UI:UpdateAuctionButton()
+        end
+    end)
 
     self.auctionBar = bar
     return bar
+end
+
+--- Bring the bar's status line and progress bar up to date with the scanner.
+function UI:RefreshAuctionStatus()
+    local bar = self.auctionBar
+    if not (bar and bar.status) then return end
+
+    local scan = ns.Scanner and ns.Scanner.GetScanStatus and ns.Scanner:GetScanStatus()
+
+    if scan then
+        bar.doneUntil = nil
+        bar.status:SetText(scan.text)
+        bar.status:SetTextColor(Theme.Unpack("text"))
+        bar.progress:Show()
+        bar.progress:SetProgress(scan.fraction or 0)
+        bar.glint:SetShown(scan.fraction == nil)
+        return
+    end
+
+    bar.glint:Hide()
+
+    -- A finished scan keeps its full bar and its line for a moment.
+    if bar.doneUntil and GetTime() < bar.doneUntil then return end
+    bar.doneUntil = nil
+
+    bar.progress:Hide()
+    bar.status:SetTextColor(Theme.Unpack("muted"))
+
+    local lastScan = ns.db and ns.db.lastFullScan
+    bar.status:SetText(lastScan
+        and ("Last scan " .. Util.FormatAgeAgo(time() - lastScan))
+        or "No scan yet. Click Scan to price everything.")
+end
+
+--- The finish of a scan: the bar fills, flashes gold, says what it found and
+--- plays a short sound.
+function UI:CelebrateScan(result)
+    local bar = self.auctionBar
+    if not (bar and bar.status and bar:IsShown()) then return end
+
+    bar.doneUntil = GetTime() + SCAN_DONE_HOLD
+    bar.glint:Hide()
+    bar.progress:Show()
+    bar.progress:SetProgress(1)
+    bar.status:SetText(("Scan complete: %s prices updated"):format(Util.Comma(result.items or 0)))
+    bar.status:SetTextColor(Theme.Unpack("profit"))
+    bar.flashLeft = 1
+
+    if type(PlaySound) == "function" then
+        local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
+        pcall(PlaySound, kits.IG_QUEST_LIST_COMPLETE or 878)
+    end
 end
 
 --- A scan button docked to Blizzard's auction house window.
@@ -514,20 +638,25 @@ function UI:AttachToAuctionHouse()
 
     bar:ClearAllPoints()
 
+    bar:SetWidth(AUCTION_BAR_WIDTH)
+
     if auctionFrame then
-        -- Overlapping the auction window's top edge by two pixels, so the two
-        -- read as one piece of furniture rather than a bar floating above it.
-        bar:SetPoint("BOTTOMLEFT", auctionFrame, "TOPLEFT", 0, -2)
+        -- On the right end of the auction window's top edge, overlapping it by
+        -- two pixels so the two read as one piece of furniture rather than a
+        -- bar floating above it. Anchored by one corner only, so the bar keeps
+        -- its own width instead of stretching to the window's.
         bar:SetPoint("BOTTOMRIGHT", auctionFrame, "TOPRIGHT", 0, -2)
 
-        -- Zero means "no explicit width", so the bar takes the auction
-        -- window's even if the fallback below sized it on an earlier attach.
-        bar:SetWidth(0)
+        -- A narrow auction window still keeps its portrait clear.
+        local frameWidth = auctionFrame:GetWidth() or 0
+        if frameWidth > 0 and frameWidth - AUCTION_BAR_CLEAR_LEFT < AUCTION_BAR_WIDTH then
+            bar:SetWidth(math.max(360, frameWidth - AUCTION_BAR_CLEAR_LEFT))
+        end
+
         ns.Debug("docked auction bar to", frameName)
     else
         -- Nothing to dock to: put it somewhere it cannot be missed.
         bar:SetPoint("TOP", UIParent, "TOP", 0, -140)
-        bar:SetWidth(AUCTION_BAR_FALLBACK_WIDTH)
         ns.Debug("no auction frame found; using fallback position")
     end
 
@@ -541,8 +670,8 @@ function UI:AttachToAuctionHouse()
             UI:UpdateAuctionButton()
         end, {
             -- Tall enough that the bevel does not crowd the label.
-            width = 100,
-            height = 30,
+            width = 84,
+            height = 28,
             primary = true,
             -- Fully opaque, so nothing behind the button shows through.
             baseColor = { 0.06, 0.07, 0.09, 1 },
@@ -588,6 +717,8 @@ end
 -- the Post tab for the full table when you want to pick rather than take the
 -- top of the list.
 function UI:UpdateAuctionButton()
+    self:RefreshAuctionStatus()
+
     local button = self.auctionButton
     if not button then return end
 
@@ -649,8 +780,8 @@ function UI:AttachPostButton()
 
             UI:UpdatePostButton()
         end, {
-            width = 230,
-            height = 30,
+            width = 116,
+            height = 28,
             primary = true,
             baseColor = { 0.06, 0.07, 0.09, 1 },
         })
@@ -668,12 +799,31 @@ function UI:AttachPostButton()
     button:ClearAllPoints()
 
     if self.auctionButton then
-        button:SetPoint("RIGHT", self.auctionButton, "LEFT", -10, 0)
+        button:SetPoint("RIGHT", self.auctionButton, "LEFT", -12, 0)
     else
         button:SetPoint("RIGHT", bar, "RIGHT", -AUCTION_BAR_PAD, 0)
     end
 
     button:Show()
+
+    -- The progress bar and status line run up to the buttons and no further.
+    -- Corner to corner, never a bare RIGHT or BOTTOM point: those also fix the
+    -- centre on the other axis, and the client drops one of two points that
+    -- disagree.
+    if bar.progress then
+        local left = AUCTION_BAR_PAD + 4
+        local gap = 12
+
+        bar.progress:ClearAllPoints()
+        bar.progress:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", left, 7)
+        bar.progress:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT",
+            -(AUCTION_BAR_PAD + (self.auctionButton and self.auctionButton:GetWidth() + 12 or 0)
+                + button:GetWidth() + gap), 7)
+
+        bar.status:SetWidth(math.max(40, bar:GetWidth() - left - AUCTION_BAR_PAD
+            - (self.auctionButton and self.auctionButton:GetWidth() + 12 or 0)
+            - button:GetWidth() - gap))
+    end
 
     self:UpdatePostButton()
 end
