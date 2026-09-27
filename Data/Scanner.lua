@@ -20,6 +20,11 @@ local REPLICATE_COOLDOWN = 15 * 60
 -- ever, one throttled request at a time.
 local MAX_BROWSE_PAGES = 40
 
+-- How many pages a page-by-page sweep is drawn against. The game never says
+-- how many pages there are, so the bar fills toward this and the label gives
+-- the real count read so far.
+local BROWSE_PAGES_FOR_BAR = 20
+
 -- How long to wait for a targeted search to answer before deciding it never
 -- will. Leaving the wait open is what left the searching indicator turning.
 local SEARCH_TIMEOUT = 8
@@ -511,7 +516,7 @@ function Scanner:OnBrowseResults()
     if not full and self.browsePages < MAX_BROWSE_PAGES then
         -- Results accumulate, so simply ask for the next page.
         if ns.UI and ns.UI.SetScanProgress then
-            ns.UI:SetScanProgress(math.min(0.95, self.browsePages / 20))
+            ns.UI:SetScanProgress(math.min(0.95, self.browsePages / BROWSE_PAGES_FOR_BAR))
         end
 
         -- Paced like everything else. This used to fire the instant each page
@@ -653,7 +658,7 @@ function Scanner:CommitBrowseResults(results)
     ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
 
     if ns.UI and ns.UI.OnScanComplete then
-        ns.UI:OnScanComplete()
+        ns.UI:OnScanComplete({ items = recorded })
     end
 
     -- Written out rather than held until logout, because this client loses
@@ -790,7 +795,7 @@ function Scanner:ReadReplicateResults(numItems)
             end
 
             if ns.UI and ns.UI.OnScanComplete then
-                ns.UI:OnScanComplete()
+                ns.UI:OnScanComplete({ items = recorded })
             end
         end,
 
@@ -850,6 +855,41 @@ function Scanner:GetProgress()
     if self.worker and self.worker:IsRunning() then
         return self.worker:GetProgress()
     end
+    return nil
+end
+
+--- What the scan is doing right now, read from the scanner's own state, for
+--- the progress bar on the auction house bar.
+--
+-- Returns nil when no scan is running or waiting. Otherwise a table:
+--   text      what to show beside the bar
+--   fraction  0 to 1, or nil while there is nothing to measure yet
+function Scanner:GetScanStatus()
+    if self.isReading then
+        local fraction = self:GetProgress() or 0
+        return {
+            text = ("Reading listings %d%%"):format(math.floor(fraction * 100)),
+            fraction = fraction,
+        }
+    end
+
+    if self.isBrowsing then
+        local pages = self.browsePages or 0
+        return {
+            text = pages == 0 and "Scanning page 1"
+                or ("Scanning page %d (%d read)"):format(pages + 1, pages),
+            fraction = math.min(0.95, pages / BROWSE_PAGES_FOR_BAR),
+        }
+    end
+
+    if self.isScanning then
+        return { text = "Asking for a quick scan" }
+    end
+
+    if self.scanQueued or self.browseQueued then
+        return { text = "Waiting to start the scan" }
+    end
+
     return nil
 end
 
