@@ -154,32 +154,65 @@ end
 -- Reading an item
 --------------------------------------------------------------------------------
 
+-- What the client has told us about each item, kept for the session. An
+-- item's quality, level and slot never change, and the client's own item
+-- cache can let go of an item it answered a moment ago: reading it fresh
+-- every time made the Disenchanting tab's list grow and shrink on every
+-- redraw (Trent, 2026-09-27: "flipping between 36 deals then 54 deals").
+local knownFacts = {}
+
+-- Items already asked for, so a redraw does not ask again for thousands of
+-- items and keep the client's cache churning.
+local requested = {}
+
 --- What the game says about an item that decides its disenchant.
 --
--- @return facts { quality, itemLevel, isWeapon, equipLoc }, or nil when the
---   client has not cached the item yet.
+-- @return facts { quality, itemLevel, isWeapon, equipLoc }, a fresh copy the
+--   caller may add to, or nil when the client has not sent the item yet.
 function Disenchant:GetItemFacts(itemID)
     if not itemID then return nil end
-    if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
 
-    local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID =
-        pcall(C_Item.GetItemInfo, itemID)
+    local known = knownFacts[itemID]
 
-    if not ok or not name or type(quality) ~= "number" or type(itemLevel) ~= "number" then
-        -- Ask for it, so the next look (the tabs redraw when it arrives) has it.
-        if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
-            pcall(C_Item.RequestLoadItemDataByID, itemID)
+    if not known then
+        if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
+
+        local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID =
+            pcall(C_Item.GetItemInfo, itemID)
+
+        if not ok or not name or type(quality) ~= "number" or type(itemLevel) ~= "number" then
+            -- Ask for it once, so a later look (the tabs redraw when it
+            -- arrives) has it.
+            if not requested[itemID] and Util.HasFunction("C_Item.RequestLoadItemDataByID") then
+                requested[itemID] = true
+                pcall(C_Item.RequestLoadItemDataByID, itemID)
+            end
+            return nil
         end
-        return nil
+
+        known = {
+            name = name,
+            quality = quality,
+            itemLevel = itemLevel,
+            classID = classID,
+            isWeapon = classID == CLASS_WEAPON,
+            equipLoc = equipLoc,
+        }
+        knownFacts[itemID] = known
     end
 
     return {
-        quality = quality,
-        itemLevel = itemLevel,
-        classID = classID,
-        isWeapon = classID == CLASS_WEAPON,
-        equipLoc = equipLoc,
+        quality = known.quality,
+        itemLevel = known.itemLevel,
+        classID = known.classID,
+        isWeapon = known.isWeapon,
+        equipLoc = known.equipLoc,
     }
+end
+
+--- Forget what was read about items (for tests).
+function Disenchant:_ForgetItems()
+    knownFacts, requested = {}, {}
 end
 
 --- Can this item be disenchanted at all? Only green, blue and purple armour
@@ -408,6 +441,8 @@ end
 
 --- An item's plain name, for a list row that colours it by rarity itself.
 function Disenchant:ItemName(itemID)
+    if knownFacts[itemID] then return knownFacts[itemID].name end
+
     if Util.HasFunction("C_Item.GetItemInfo") then
         local ok, name = pcall(C_Item.GetItemInfo, itemID)
         if ok and name then return name end
