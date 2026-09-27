@@ -190,6 +190,39 @@ check("Enchanting 50 can", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant
 ns.db.characters = {}
 check("no enchanter at all is nil, not false", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant == nil)
 
+print("\nthe list holds steady while the client's cache comes and goes")
+
+-- The client's item cache can let go of an item it answered a moment ago.
+-- Every other read of item 2001 now comes back empty; the list must not
+-- lose it, or the tab flips between counts on every redraw.
+local realInfo = C_Item.GetItemInfo
+local loads = {}
+local flip = false
+C_Item.GetItemInfo = function(itemID)
+    if itemID == 2001 then
+        flip = not flip
+        if flip then return nil end
+    end
+    return realInfo(itemID)
+end
+C_Item.RequestLoadItemDataByID = function(itemID) loads[itemID] = (loads[itemID] or 0) + 1 end
+
+local counts = {}
+for pass = 1, 4 do counts[pass] = #Disenchant:GetAuctionRows() end
+check("the same count on every redraw", counts[1] == counts[2] and counts[2] == counts[3] and counts[3] == counts[4])
+check("the chest stays listed", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
+
+-- An item the client has not sent yet is asked for once, not on every redraw.
+Disenchant:_ForgetItems()
+items[2008] = nil
+records[2008] = { rivalMin = 10 }
+C_Item.GetItemInfoInstant = function(itemID) return itemID, "Armor", "Cloth", "INVTYPE_CHEST", 1, 4, 1 end
+for _ = 1, 5 do Disenchant:GetAuctionRows() end
+check("an uncached item is asked for once", loads[2008] == 1)
+records[2008] = nil
+C_Item.GetItemInfo = realInfo
+C_Item.RequestLoadItemDataByID = nil
+
 print("\nthe scan message")
 
 Enchanter(50)
