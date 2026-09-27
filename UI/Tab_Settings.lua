@@ -206,7 +206,16 @@ local function Build(outer)
     end, true)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local lossRow = CreateRow(container, subCraftRow, "Recommend selling at a loss",
+    local altCraftRow = CreateRow(container, subCraftRow, "Suggest other characters",
+        "Point out materials one of your other characters can make for less than buying them.")
+
+    widgets.altCrafts = Widgets.CreateCheckbox(altCraftRow, "Suggest swapping", function(checked)
+        Config:Set("suggestAltCrafts", checked)
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local lossRow = CreateRow(container, altCraftRow, "Recommend selling at a loss",
         "Off: the Post tab still lists them, marked red, but does not recommend them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
@@ -485,6 +494,7 @@ local function Refresh()
     widgets.confirmPost:SetChecked(Config:Get("confirmBeforePosting") ~= false)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
+    widgets.altCrafts:SetChecked(Config:Get("suggestAltCrafts") == true)
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
     widgets.debug:SetChecked(ns.db.global.debug == true)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
