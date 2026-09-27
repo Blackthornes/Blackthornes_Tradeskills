@@ -636,9 +636,7 @@ function CraftPanel:Build()
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
 
-    local title = Theme.CreateLabel(frame, "normal", "accent")
-    title:SetPoint("TOPLEFT", 14, -14)
-    title:SetText("Craft queue")
+    local header, title = ns.Collapse.CreateHeader(frame, "Craft queue")
     self.title = title
 
     -- Everything under the title, so the collapse button can fold it away in
@@ -649,6 +647,7 @@ function CraftPanel:Build()
 
     ns.Collapse.Attach(frame, {
         key = COLLAPSE_KEY,
+        header = header,
         title = title,
         body = body,
         onToggle = function()
@@ -671,7 +670,8 @@ function CraftPanel:Build()
         CraftPanel:UpdateSortButton()
         CraftPanel:Refresh()
     end, { width = 116, height = 18, tooltip = "Change the order of this list" })
-    sort:SetPoint("TOPRIGHT", -14, -13)
+    -- On the header strip, though it folds away with the body.
+    sort:SetPoint("RIGHT", header, "RIGHT", -6, 0)
     self.sortButton = sort
     self:UpdateSortButton()
 
@@ -685,7 +685,7 @@ function CraftPanel:Build()
     -- TOPRIGHT on the frame would set this box's top twice, from two frames
     -- that disagree about where it is, and the client resolves that by
     -- quietly dropping one of the two.
-    search:SetPoint("TOPLEFT", title, "BOTTOMLEFT", -ns.Collapse.TITLE_SHIFT, -8)
+    search:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
     search:SetSize(PANEL_WIDTH - 28, 22)
     self.search = search
 
@@ -714,6 +714,10 @@ function CraftPanel:Build()
     -- Crafting needs a hardware event, so this is a real click each time: one
     -- click runs one queue entry to completion. Same call the Queue tab makes,
     -- so working from either place behaves identically.
+    -- A shelf behind the controls along the bottom, under a lit rule, so the
+    -- list ends clearly where the buttons begin.
+    ns.Collapse.CreateFooter(body, 78)
+
     local craft = Widgets.CreateButton(body, "Craft next", function()
         if ns.Crafting:IsBusy() then
             ns.Crafting:Stop()
@@ -998,8 +1002,10 @@ function CraftPanel:Refresh()
 
     local totals = ns.Queue:GetTotals()
 
-    self.summary:SetText(("%d craft%s queued  ·  profit %s%s"):format(
+    -- The profit in its own colour: green when the queue pays, red when not.
+    self.summary:SetText(("%d craft%s queued  ·  profit |c%s%s|r%s"):format(
         totals.crafts, totals.crafts == 1 and "" or "s",
+        (totals.profit or 0) < 0 and ns.COLORS.loss or ns.COLORS.profit,
         Util.FormatMoney(totals.profit, { noColor = true, short = true }),
         totals.priceable and "" or "  (some unpriced)"))
     self.summary:SetTextColor(Theme.Unpack("muted"))
