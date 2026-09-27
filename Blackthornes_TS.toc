@@ -29,6 +29,7 @@ Data\Vendor.lua
 
 Logic\Cost.lua
 Logic\Disenchant.lua
+Logic\DisenchantLog.lua
 Logic\SkillUp.lua
 Logic\Profit.lua
 Logic\LevelUp.lua
