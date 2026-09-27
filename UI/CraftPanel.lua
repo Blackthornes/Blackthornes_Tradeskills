@@ -50,6 +50,9 @@ local PANEL_FALLBACK_HEIGHT = 460
 -- the pane wants to be.
 local PANEL_MIN_HEIGHT = 220
 
+-- Remembers whether the pane is folded down to its title (UI/Collapse.lua).
+local COLLAPSE_KEY = "craftPaneCollapsed"
+
 -- Candidate globals for Blizzard's profession window. This client's
 -- C_TradeSkillUI is the modern one, so ProfessionsFrame is expected, but the
 -- name is not worth assuming -- and both frames are load-on-demand, so the
@@ -633,16 +636,32 @@ function CraftPanel:Build()
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
 
-    local title = Theme.CreateLabel(frame, "normal", "accent")
-    title:SetPoint("TOPLEFT", 14, -14)
-    title:SetText("Craft queue")
+    local header, title = ns.Collapse.CreateHeader(frame, "Craft queue")
+    self.title = title
+
+    -- Everything under the title, so the collapse button can fold it away in
+    -- one go and leave the title strip showing.
+    local body = CreateFrame("Frame", nil, frame)
+    body:SetAllPoints(frame)
+    self.body = body
+
+    ns.Collapse.Attach(frame, {
+        key = COLLAPSE_KEY,
+        header = header,
+        title = title,
+        body = body,
+        onToggle = function()
+            CraftPanel:ApplyHeight()
+            CraftPanel:Refresh()
+        end,
+    })
 
     -- Profit order is the useful default -- it answers "what should I make" --
     -- but a pane you came to in order to find one specific recipe needs the
     -- alphabet, so the order is a single click away rather than a setting.
     self.sortBy = self.sortBy or "profit"
 
-    local sort = Widgets.CreateButton(frame, "", function()
+    local sort = Widgets.CreateButton(body, "", function()
         local nextIndex = 1
         for index, key in ipairs(SORT_ORDER) do
             if key == CraftPanel.sortBy then nextIndex = index % #SORT_ORDER + 1 end
@@ -651,29 +670,30 @@ function CraftPanel:Build()
         CraftPanel:UpdateSortButton()
         CraftPanel:Refresh()
     end, { width = 116, height = 18, tooltip = "Change the order of this list" })
-    sort:SetPoint("TOPRIGHT", -14, -13)
+    -- On the header strip, though it folds away with the body.
+    sort:SetPoint("RIGHT", header, "RIGHT", -6, 0)
     self.sortButton = sort
     self:UpdateSortButton()
 
     -- Coalesced rather than refreshed per keystroke: every refresh prices
     -- every recipe the profession is showing, and typing "copper" would
     -- otherwise do that six times before the word is finished.
-    local search = Widgets.CreateSearchBox(frame, "Search recipes", function()
+    local search = Widgets.CreateSearchBox(body, "Search recipes", function()
         CraftPanel:RequestRefresh()
     end)
     -- One anchor and an explicit size. A TOPLEFT under the title plus a
     -- TOPRIGHT on the frame would set this box's top twice, from two frames
     -- that disagree about where it is, and the client resolves that by
     -- quietly dropping one of the two.
-    search:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    search:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
     search:SetSize(PANEL_WIDTH - 28, 22)
     self.search = search
 
-    local divider = Theme.CreateDivider(frame)
+    local divider = Theme.CreateDivider(body)
     divider:SetPoint("TOPLEFT", search, "BOTTOMLEFT", 0, -8)
     divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, 0)
 
-    local list = Widgets.CreateScrollList(frame, {
+    local list = Widgets.CreateScrollList(body, {
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
@@ -685,7 +705,7 @@ function CraftPanel:Build()
     list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 94)
     self.list = list
 
-    local empty = Theme.CreateLabel(frame, "small", "dim", "CENTER")
+    local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
     empty:SetPoint("CENTER", list, "CENTER")
     empty:SetWidth(PANEL_WIDTH - 40)
     empty:SetWordWrap(true)
@@ -694,7 +714,11 @@ function CraftPanel:Build()
     -- Crafting needs a hardware event, so this is a real click each time: one
     -- click runs one queue entry to completion. Same call the Queue tab makes,
     -- so working from either place behaves identically.
-    local craft = Widgets.CreateButton(frame, "Craft next", function()
+    -- A shelf behind the controls along the bottom, under a lit rule, so the
+    -- list ends clearly where the buttons begin.
+    ns.Collapse.CreateFooter(body, 78)
+
+    local craft = Widgets.CreateButton(body, "Craft next", function()
         if ns.Crafting:IsBusy() then
             ns.Crafting:Stop()
         else
@@ -714,7 +738,7 @@ function CraftPanel:Build()
     -- The Keep in stock limit (Settings) hides crafts you already hold enough
     -- of and caps what Add will queue. Ticking this lifts both, for this pane
     -- only, without changing the limit itself. Remembered between sessions.
-    local ignoreLimit = Widgets.CreateCheckbox(frame, "Ignore max on hand", function(checked)
+    local ignoreLimit = Widgets.CreateCheckbox(body, "Ignore max on hand", function(checked)
         ns.Config:Set("craftPaneIgnoreLimit", checked)
         CraftPanel:Refresh()
     end, self:IgnoringLimit())
@@ -728,19 +752,19 @@ function CraftPanel:Build()
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
     self.ignoreLimitBox = ignoreLimit
 
-    local summary = Theme.CreateLabel(frame, "tiny", "muted")
+    local summary = Theme.CreateLabel(body, "tiny", "muted")
     summary:SetPoint("BOTTOMLEFT", 14, 22)
     summary:SetWidth(PANEL_WIDTH - 100)
     self.summary = summary
 
     -- While a craft casts, a progress bar takes the summary line's place.
-    local progress = ns.CraftProgress:Create(frame, {
+    local progress = ns.CraftProgress:Create(body, {
         width = PANEL_WIDTH - 100, height = 16, covers = summary,
     })
     progress:SetPoint("LEFT", summary, "LEFT", 0, 0)
     self.progress = progress
 
-    local openQueue = Widgets.CreateButton(frame, "Queue tab", function()
+    local openQueue = Widgets.CreateButton(body, "Queue tab", function()
         ns.UI:Show()
         ns.UI:SelectTab("queue")
     end, { width = 64, height = 18, tooltip = "Open the full queue, with its shopping list" })
@@ -783,20 +807,35 @@ function CraftPanel:Attach()
         local overhang = self:RightOverhang(tradeSkillFrame)
 
         frame:SetPoint("TOPLEFT", tradeSkillFrame, "TOPRIGHT", overhang + PANEL_GAP, 0)
-        frame:SetHeight(self:DesiredHeight(tradeSkillFrame) or PANEL_FALLBACK_HEIGHT)
+        frame:SetHeight(ns.Collapse.Height(COLLAPSE_KEY,
+            self:DesiredHeight(tradeSkillFrame) or PANEL_FALLBACK_HEIGHT))
 
         ns.Debug("docked craft pane to", frameName, "clearing", overhang)
     else
         -- Blizzard's profession UI is load-on-demand and may not exist yet.
         -- A pane in a slightly odd place beats one that silently never appears.
         frame:SetPoint("RIGHT", UIParent, "RIGHT", -40, 0)
-        frame:SetHeight(PANEL_FALLBACK_HEIGHT)
+        frame:SetHeight(ns.Collapse.Height(COLLAPSE_KEY, PANEL_FALLBACK_HEIGHT))
 
         ns.Debug("no profession frame found; using fallback position")
     end
 
     frame:Show()
     self:Refresh()
+end
+
+function CraftPanel:IsCollapsed()
+    return ns.Collapse.IsCollapsed(COLLAPSE_KEY)
+end
+
+--- Set the height outright, after folding or unfolding.
+function CraftPanel:ApplyHeight()
+    if not self.frame then return end
+
+    local tradeSkillFrame = self:FindTradeSkillFrame()
+    local full = tradeSkillFrame and self:DesiredHeight(tradeSkillFrame)
+
+    self.frame:SetHeight(ns.Collapse.Height(COLLAPSE_KEY, full or PANEL_FALLBACK_HEIGHT))
 end
 
 --- Re-measure, for a profession window that changed size after it opened.
@@ -807,6 +846,7 @@ function CraftPanel:Reflow()
     if not tradeSkillFrame then return end
 
     local height = self:DesiredHeight(tradeSkillFrame)
+    if height then height = ns.Collapse.Height(COLLAPSE_KEY, height) end
 
     -- Only when it actually moved: setting the height relayouts the list, and
     -- this runs on every refresh.
@@ -921,6 +961,18 @@ function CraftPanel:Refresh()
 
     self:Reflow()
 
+    -- Folded away there is nothing to fill in, and filling it in prices every
+    -- recipe the profession shows. The title carries the queue count instead.
+    if self:IsCollapsed() then
+        local queued = ns.Queue:Count()
+        self.title:SetText(queued > 0
+            and ("Craft queue (%d queued)"):format(queued)
+            or "Craft queue")
+        return
+    end
+
+    self.title:SetText("Craft queue")
+
     local rows = self:GetRows({
         search = self.search and self.search:GetText() or "",
         sortBy = self.sortBy,
@@ -950,8 +1002,10 @@ function CraftPanel:Refresh()
 
     local totals = ns.Queue:GetTotals()
 
-    self.summary:SetText(("%d craft%s queued  ·  profit %s%s"):format(
+    -- The profit in its own colour: green when the queue pays, red when not.
+    self.summary:SetText(("%d craft%s queued  ·  profit |c%s%s|r%s"):format(
         totals.crafts, totals.crafts == 1 and "" or "s",
+        (totals.profit or 0) < 0 and ns.COLORS.loss or ns.COLORS.profit,
         Util.FormatMoney(totals.profit, { noColor = true, short = true }),
         totals.priceable and "" or "  (some unpriced)"))
     self.summary:SetTextColor(Theme.Unpack("muted"))

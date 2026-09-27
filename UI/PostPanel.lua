@@ -41,6 +41,9 @@ local PANEL_FALLBACK_HEIGHT = 420
 -- and a panel squeezed to nothing is worse than one that overlaps.
 local PANEL_MIN_HEIGHT = 200
 
+-- Remembers whether the panel is folded down to its title (UI/Collapse.lua).
+local COLLAPSE_KEY = "postPanelCollapsed"
+
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
@@ -239,20 +242,42 @@ function PostPanel:Build()
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
 
-    local title = Theme.CreateLabel(frame, "normal", "accent")
-    title:SetPoint("TOPLEFT", 14, -14)
-    title:SetText("Ready to sell")
+    local header, title = ns.Collapse.CreateHeader(frame, "Ready to sell")
+    self.title = title
 
-    local summary = Theme.CreateLabel(frame, "tiny", "muted")
-    summary:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+    -- What everything listed here would fetch, in gold on the header, so it
+    -- is still there to see with the panel folded away.
+    local worth = Theme.CreateLabel(header, "small", "accent", "RIGHT")
+    worth:SetPoint("RIGHT", header, "RIGHT", -10, 0)
+    self.worth = worth
+
+    -- Everything under the title, so the collapse button can fold it away in
+    -- one go and leave the title strip showing.
+    local body = CreateFrame("Frame", nil, frame)
+    body:SetAllPoints(frame)
+    self.body = body
+
+    ns.Collapse.Attach(frame, {
+        key = COLLAPSE_KEY,
+        header = header,
+        title = title,
+        body = body,
+        onToggle = function()
+            PostPanel:ApplyHeight()
+            PostPanel:Refresh()
+        end,
+    })
+
+    local summary = Theme.CreateLabel(body, "tiny", "muted")
+    summary:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
     summary:SetWidth(PANEL_WIDTH - 28)
     self.summary = summary
 
-    local divider = Theme.CreateDivider(frame)
+    local divider = Theme.CreateDivider(body)
     divider:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -6)
     divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, 0)
 
-    local list = Widgets.CreateScrollList(frame, {
+    local list = Widgets.CreateScrollList(body, {
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
@@ -263,7 +288,7 @@ function PostPanel:Build()
     list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
     self.list = list
 
-    local empty = Theme.CreateLabel(frame, "small", "dim", "CENTER")
+    local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
     empty:SetPoint("CENTER", list, "CENTER")
     empty:SetWidth(PANEL_WIDTH - 40)
     empty:SetWordWrap(true)
@@ -330,25 +355,50 @@ function PostPanel:Attach()
         -- keeps whatever height it had. That is how it ended up half as tall as
         -- the window it was docked to.)
         frame:SetPoint("TOPLEFT", auctionFrame, "TOPRIGHT", PANEL_GAP, 0)
-        frame:SetHeight(self:DesiredHeight(auctionFrame) or PANEL_FALLBACK_HEIGHT)
     else
         -- The auction house window is load-on-demand and may not exist yet.
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -120)
-        frame:SetHeight(PANEL_FALLBACK_HEIGHT)
     end
+
+    self:ApplyHeight(true)
 
     frame:Show()
     self:Refresh()
+end
+
+--- The height to be right now: the title strip when collapsed, otherwise as
+-- tall as there is room for.
+--
+-- @param fallback  use the fallback height when nothing can be measured,
+--   rather than leaving the height alone
+-- @return nil when there is nothing to go on
+function PostPanel:TargetHeight(fallback)
+    local auctionFrame = ns.UI:FindAuctionFrame()
+    local full = auctionFrame and self:DesiredHeight(auctionFrame)
+
+    if not full and fallback then full = PANEL_FALLBACK_HEIGHT end
+    if not full then return nil end
+
+    return ns.Collapse.Height(COLLAPSE_KEY, full)
+end
+
+function PostPanel:IsCollapsed()
+    return ns.Collapse.IsCollapsed(COLLAPSE_KEY)
+end
+
+--- Set the height outright, after attaching or folding.
+function PostPanel:ApplyHeight(fallback)
+    if not self.frame then return end
+
+    local height = self:TargetHeight(fallback ~= false)
+    if height then self.frame:SetHeight(height) end
 end
 
 --- Re-measure after the main window is opened, closed or dragged.
 function PostPanel:Reflow()
     if not self.frame or not self.frame:IsShown() then return end
 
-    local auctionFrame = ns.UI:FindAuctionFrame()
-    if not auctionFrame then return end
-
-    local height = self:DesiredHeight(auctionFrame)
+    local height = self:TargetHeight(false)
 
     -- Only when it actually moved. This runs on the auction house ticker, and
     -- setting the height every second would relayout the list for nothing.
@@ -365,6 +415,15 @@ function PostPanel:Refresh()
 
     local lines = ns.Posting:GetPostable({ includeAll = true })
 
+    -- Folded away, the title is all there is to read, so it carries the count.
+    if self:IsCollapsed() then
+        self.title:SetText(#lines > 0
+            and ("Ready to sell (%d)"):format(#lines)
+            or "Ready to sell")
+    else
+        self.title:SetText("Ready to sell")
+    end
+
     self.list:SetData(lines)
     self.empty:SetShown(#lines == 0)
 
@@ -372,6 +431,7 @@ function PostPanel:Refresh()
         self.empty:SetText(
             "Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for.")
         self.summary:SetText("")
+        self.worth:SetText("")
         return
     end
 
@@ -381,10 +441,13 @@ function PostPanel:Refresh()
         if line.atALoss then losses = losses + 1 end
     end
 
-    self.summary:SetText(("%d item%s, about %s%s"):format(
+    self.worth:SetText(Util.FormatMoney(total, { noColor = true, short = true }))
+
+    self.summary:SetText(("%d item%s, about |c%s%s|r%s"):format(
         #lines, #lines == 1 and "" or "s",
+        ns.COLORS.accent,
         Util.FormatMoney(total, { noColor = true, short = true }),
-        losses > 0 and (("  ·  %d at a loss"):format(losses)) or ""))
+        losses > 0 and (("  ·  |c%s%d at a loss|r"):format(ns.COLORS.loss, losses)) or ""))
 end
 
 --- Put the current wait on every visible List button.
