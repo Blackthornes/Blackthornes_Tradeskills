@@ -28,6 +28,8 @@ Data\Auctions.lua
 Data\Vendor.lua
 
 Logic\Cost.lua
+Logic\Disenchant.lua
+Logic\DisenchantLog.lua
 Logic\SkillUp.lua
 Logic\Profit.lua
 Logic\LevelUp.lua
@@ -43,12 +45,14 @@ UI\Main.lua
 UI\PostPanel.lua
 UI\CraftPanel.lua
 UI\ProfessionOpener.lua
+UI\Disenchanter.lua
 UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
+UI\Tab_Enchanting.lua
 UI\Tab_Queue.lua
 UI\Tab_Gather.lua
 UI\Tab_Post.lua

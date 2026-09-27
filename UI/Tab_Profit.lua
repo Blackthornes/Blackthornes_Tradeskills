@@ -32,6 +32,9 @@ local COLUMNS = {
     { key = "who",    width = 58, accountWideOnly = true },
     { key = "margin", width = 46 },
     { key = "profit", width = 74 },
+    -- Beside SELLS so the two read against each other. Only shown when
+    -- something in the list can be disenchanted.
+    { key = "disenchant", width = 62, disenchantOnly = true },
     { key = "sells",  width = 70 },
     { key = "cost",   width = 70 },
 }
@@ -46,6 +49,7 @@ local ApplyHeadingLayout
 local state = {
     search = "",
     accountWide = false,
+    showDisenchant = false,
     ignorePostLimit = false,
     profession = nil,
     craftableOnly = false,
@@ -62,6 +66,7 @@ local widgets = {}
 
 local function IsColumnVisible(column)
     if column.accountWideOnly then return state.accountWide end
+    if column.disenchantOnly then return state.showDisenchant end
     return true
 end
 
@@ -148,6 +153,32 @@ local function UpdateMakeCell(cells, analysis)
     end
 end
 
+--- What the craft is worth disenchanted. Green when that beats selling it,
+--- so the rows where it does stand out down the column.
+local function UpdateDisenchantCell(cells, analysis)
+    local cell = cells.disenchant
+
+    if analysis.disenchantValue then
+        cell:SetText(Util.FormatMoney(analysis.disenchantValue, { short = true }))
+        cell:SetTextColor(Theme.Unpack(analysis.disenchantBeatsSale and "profit" or "muted"))
+    elseif analysis.disenchantable then
+        cell:SetText("no price")
+        cell:SetTextColor(Theme.Unpack("dim"))
+    else
+        cell:SetText("")
+    end
+end
+
+--- Say so on the row's tooltip when disenchanting pays more than selling.
+local function AddDisenchantLine(analysis)
+    if not analysis.disenchantBeatsSale or not GameTooltip:IsShown() then return end
+
+    GameTooltip:AddLine(("Disenchanting it is worth %s more than selling it."):format(
+        Util.FormatMoney(analysis.disenchantValue - (analysis.unitRevenue or 0), { noColor = true })),
+        0.35, 0.85, 0.45, true)
+    GameTooltip:Show()
+end
+
 local function UpdateRow(row, analysis)
     -- Rows are recycled, so one built under a different column set has to
     -- be re-anchored before it is filled.
@@ -165,6 +196,7 @@ local function UpdateRow(row, analysis)
     -- filled before the unpriceable case takes its early exit.
     ApplyNameColor(row, analysis)
     UpdateMakeCell(cells, analysis)
+    UpdateDisenchantCell(cells, analysis)
 
     -- The star: this craft raises your skill AND turns a profit. Set from
     -- analysis.recommended rather than from the tier alone, so an orange
@@ -302,7 +334,7 @@ local function BuildDetail(parent)
     local summary = CreateFrame("Frame", nil, detail)
     summary:SetPoint("BOTTOMLEFT", 12, 84)
     summary:SetPoint("BOTTOMRIGHT", -12, 84)
-    summary:SetHeight(124)
+    summary:SetHeight(141)
     detail.summary = summary
 
     local function SummaryRow(index, labelText)
@@ -323,6 +355,7 @@ local function BuildDetail(parent)
     detail.cutValue = SummaryRow(5, "Auction cut")
     detail.depositValue, detail.depositLabel = SummaryRow(6, "Deposit")
     detail.profitValue = SummaryRow(7, "Profit")
+    detail.disenchantValue, detail.disenchantLabel = SummaryRow(8, "Disenchant value")
 
     -- Per-item posted limit. Sits with the queue controls because it is the
     -- thing that decides how many you should be adding.
@@ -577,6 +610,27 @@ local function UpdateDetail(analysis)
 
         detail.profitValue:SetText(Util.FormatMoney(analysis.profit))
         detail.profitValue:SetTextColor(Theme.ProfitColor(analysis.profit))
+
+        -- What one is worth disenchanted, against the listing price above.
+        -- Only for things that can be disenchanted at all.
+        local showDisenchant = analysis.disenchantable == true
+        detail.disenchantLabel:SetShown(showDisenchant)
+        detail.disenchantValue:SetShown(showDisenchant)
+
+        if analysis.disenchantValue then
+            local text = Util.FormatMoney(analysis.disenchantValue)
+            if analysis.disenchantBeatsSale then
+                text = text .. "  beats selling"
+            elseif analysis.disenchantPartial then
+                text = text .. "  or more"
+            end
+            detail.disenchantValue:SetText(text)
+            detail.disenchantValue:SetTextColor(Theme.Unpack(
+                analysis.disenchantBeatsSale and "profit" or "muted"))
+        elseif showDisenchant then
+            detail.disenchantValue:SetText("materials not scanned")
+            detail.disenchantValue:SetTextColor(Theme.Unpack("dim"))
+        end
     end
 
     -- Limit control reflects the override if there is one, else the default.
@@ -700,6 +754,22 @@ local function Refresh()
     if not widgets.list then return end
 
     local data = BuildList()
+
+    -- The DISENCHANT column earns its space only when something listed can
+    -- be disenchanted: an alchemist's list would otherwise carry an empty one.
+    local anyDisenchantable = false
+    for _, analysis in ipairs(data) do
+        if analysis.disenchantable then
+            anyDisenchantable = true
+            break
+        end
+    end
+
+    if anyDisenchantable ~= state.showDisenchant then
+        state.showDisenchant = anyDisenchantable
+        layoutVersion = layoutVersion + 1
+        ApplyHeadingLayout()
+    end
 
     -- Rows set this again while they draw if an item is still uncached.
     awaitingItemData = false
@@ -837,7 +907,7 @@ local function Build(container)
 
     local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
                      margin = "MARGIN", age = "AGE", who = "WHO", posted = "STOCK",
-                     make = "MAKE" }
+                     make = "MAKE", disenchant = "DISENCHANT" }
 
     widgets.headings = {}
     for _, column in ipairs(COLUMNS) do
@@ -866,6 +936,7 @@ local function Build(container)
             else
                 Widgets.ShowItemOnly(row, analysis.outputItemID, analysis.name)
             end
+            AddDisenchantLine(analysis)
         end,
 
         onLeave = function() GameTooltip:Hide() end,
