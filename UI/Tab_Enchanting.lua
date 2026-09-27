@@ -21,7 +21,7 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
-local SOURCE_NOTE = "Chances come from the Classic disenchant table built into the addon, since the game does not tell addons what an item breaks into. Values use your scanned auction prices."
+local SOURCE_NOTE = "Chances come from the Classic table built into the addon, since the game does not tell addons what an item breaks into. Your own disenchants replace it once you have done %d like this (%d so far). Values use your scanned auction prices."
 
 -- Right-aligned columns per view, laid out right to left.
 local VIEWS = {
@@ -475,7 +475,13 @@ local function UpdateDetail(entry)
         detail.verdict:SetTextColor(Theme.Unpack("warn"))
     end
 
-    local note = SOURCE_NOTE
+    local note
+    if facts.source == "yours" then
+        note = ("Chances come from your own %d disenchants of items like this. Values use your scanned auction prices.")
+            :format(facts.casts or 0)
+    else
+        note = SOURCE_NOTE:format(ns.Disenchant.LEARN_AFTER or 10, facts.casts or 0)
+    end
     if entry.kind == "bag" and not entry.soulbound then
         note = note .. " If it is already bound to you, only a vendor will buy it."
     end
