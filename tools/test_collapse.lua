@@ -1,0 +1,148 @@
+-- The collapse button on the side panels (UI/Collapse.lua), without a game
+-- client: that a click folds the body away and back, that the state is
+-- remembered in settings, and that the sell list and craft pane ask for the
+-- title strip's height while folded rather than their measured one.
+
+local passed, failed = 0, 0
+
+local function check(label, got, want)
+  local ok = got == want
+  if ok then passed = passed + 1 else failed = failed + 1 end
+  print(string.format("  %-56s %-8s %s", label, tostring(got), ok and "ok" or
+    ("WRONG, wanted " .. tostring(want))))
+end
+
+local settings = {}
+
+local ns = {}
+ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
+ns.Theme, ns.Util = {}, {}
+ns.Config = {
+  Get = function(_, key) return settings[key] end,
+  Set = function(_, key, value) settings[key] = value end,
+}
+
+-- Just enough of a frame and a button for Attach to work on.
+local function Frame()
+  local f = { shown = true, points = {} }
+  function f:SetShown(v) self.shown = v and true or false end
+  function f:IsShown() return self.shown end
+  function f:ClearAllPoints() self.points = {} end
+  function f:SetPoint(...) self.points[#self.points + 1] = { ... } end
+  function f:SetHeight(h) self.height = h end
+  function f:GetHeight() return self.height end
+  return f
+end
+
+ns.Widgets = {
+  CreateButton = function(_, text, onClick)
+    local b = Frame()
+    b.text = text
+    function b:SetText(v) self.text = v end
+    function b:Click() onClick(self, "LeftButton") end
+    return b
+  end,
+}
+
+assert(loadfile(lfs_cwd .. "/UI/Collapse.lua"))("Blackthornes_TS", ns)
+local Collapse = ns.Collapse
+
+print("")
+
+local panel, title, body = Frame(), Frame(), Frame()
+local toggled = {}
+
+local button = Collapse.Attach(panel, {
+  key = "testCollapsed",
+  title = title,
+  body = body,
+  onToggle = function(collapsed) toggled[#toggled + 1] = collapsed end,
+})
+
+check("starts open: body showing", body:IsShown(), true)
+check("starts open: button offers to collapse", button.text, "-")
+check("open: the panel keeps its measured height", Collapse.Height("testCollapsed", 500), 500)
+check("the title moves over for the button", title.points[1][2], 14 + Collapse.TITLE_SHIFT)
+
+button:Click()
+check("one click: body hidden", body:IsShown(), false)
+check("one click: button offers to expand", button.text, "+")
+check("one click: remembered in settings", settings.testCollapsed, true)
+check("one click: the panel is told it folded", toggled[1], true)
+check("folded: the height is the title strip", Collapse.Height("testCollapsed", 500), Collapse.HEIGHT)
+
+button:Click()
+check("second click: body back", body:IsShown(), true)
+check("second click: remembered as open", settings.testCollapsed, false)
+check("second click: the panel is told it opened", toggled[2], false)
+
+-- A panel built after a reload comes up the way it was left.
+settings.laterCollapsed = true
+local later, laterBody = Frame(), Frame()
+local laterButton = Collapse.Attach(later, { key = "laterCollapsed", title = Frame(), body = laterBody })
+check("built folded after a reload: body hidden", laterBody:IsShown(), false)
+check("built folded after a reload: button offers to expand", laterButton.text, "+")
+
+--------------------------------------------------------------------------------
+-- The sell list uses it
+--------------------------------------------------------------------------------
+
+local PostPanel
+do
+  local realNew = ns.NewModule
+  ns.NewModule = function(name) local m = realNew(name); PostPanel = m; return m end
+  assert(loadfile(lfs_cwd .. "/UI/PostPanel.lua"))("Blackthornes_TS", ns)
+  ns.NewModule = realNew
+end
+
+local AH = {
+  GetTop = function() return 1091 end,
+  GetBottom = function() return 551 end,
+  GetRight = function() return 851 end,
+}
+
+ns.UI = { window = nil, FindAuctionFrame = function() return AH end }
+
+settings.postPanelCollapsed = false
+check("sell list open: auction window's height", PostPanel:TargetHeight(), 1091 - 551)
+
+settings.postPanelCollapsed = true
+check("sell list folded: title strip", PostPanel:TargetHeight(), Collapse.HEIGHT)
+
+ns.UI.FindAuctionFrame = function() return nil end
+check("sell list folded, no auction window: still the strip",
+  PostPanel:TargetHeight(true), Collapse.HEIGHT)
+check("no auction window, not asked for a fallback: leave it alone",
+  PostPanel:TargetHeight(false), nil)
+
+--------------------------------------------------------------------------------
+-- The craft pane skips its expensive refresh while folded
+--------------------------------------------------------------------------------
+
+local CraftPanel
+do
+  local realNew = ns.NewModule
+  ns.NewModule = function(name) local m = realNew(name); CraftPanel = m; return m end
+  assert(loadfile(lfs_cwd .. "/UI/CraftPanel.lua"))("Blackthornes_TS", ns)
+  ns.NewModule = realNew
+end
+
+local rowsAsked = 0
+CraftPanel.GetRows = function() rowsAsked = rowsAsked + 1; return {} end
+CraftPanel.FindTradeSkillFrame = function() return nil end
+CraftPanel.frame = Frame()
+CraftPanel.title = Frame()
+function CraftPanel.title:SetText(v) self.text = v end
+ns.Queue = { Count = function() return 3 end }
+
+settings.craftPaneCollapsed = true
+CraftPanel:Refresh()
+check("craft pane folded: no recipes priced", rowsAsked, 0)
+check("craft pane folded: the title carries the queue count",
+  CraftPanel.title.text, "Craft queue (3 queued)")
+
+CraftPanel:ApplyHeight()
+check("craft pane folded: title strip height", CraftPanel.frame.height, Collapse.HEIGHT)
+
+print(("\ncollapse: %d checks passed, %d wrong"):format(passed, failed))
+if failed > 0 then error(("collapse: %d check(s) wrong"):format(failed)) end

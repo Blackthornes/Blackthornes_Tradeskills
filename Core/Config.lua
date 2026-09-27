@@ -102,6 +102,11 @@ local DEFAULTS = {
         -- Add queue past the Keep in stock limit, without changing the limit.
         craftPaneIgnoreLimit = false,
 
+        -- Side panels folded down to their title strip by the small button at
+        -- their top left (UI/Collapse.lua). Remembered between sessions.
+        postPanelCollapsed = false,
+        craftPaneCollapsed = false,
+
         -- Count what is sitting in the mailbox as stock you own.
         --
         -- An expired auction comes back as mail, and until it is collected it
