@@ -384,6 +384,17 @@ function Profit:Analyse(recipeID, characterKey)
         return analysis
     end
 
+    -- What the craft is worth disenchanted, read before the early exits
+    -- below: a craft that cannot be sold may still be worth breaking down.
+    -- Shown beside the sale price, never ranked on.
+    if ns.Disenchant then
+        analysis.disenchantable = ns.Disenchant:IsDisenchantable(recipe.outputItemID) or nil
+        if analysis.disenchantable then
+            analysis.disenchantValue, analysis.disenchantPartial =
+                ns.Disenchant:GetValue(recipe.outputItemID)
+        end
+    end
+
     -- Binds on pickup: the thing made is soulbound the moment it exists, so
     -- there is no sale to cost and no profit to rank on. Out of the list the
     -- same way an unpriced craft is, which keeps it off the skill-up star too,
@@ -462,6 +473,11 @@ function Profit:Analyse(recipeID, characterKey)
 
     analysis.yield = yield
     analysis.unitRevenue = unitRevenue
+
+    -- One item disenchanted against one item sold at the price above.
+    if analysis.disenchantValue and analysis.disenchantValue > unitRevenue then
+        analysis.disenchantBeatsSale = true
+    end
     analysis.revenue = unitRevenue * yield
 
     local auctionCut = ns.Config:Get("auctionCut") or 0.05

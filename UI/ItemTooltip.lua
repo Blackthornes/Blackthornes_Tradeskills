@@ -241,6 +241,9 @@ function ItemTooltip:LinesFor(itemID, count)
             lines[#lines + 1] = { "Auction value", "not scanned yet", true }
         end
 
+        local disenchant = self:DisenchantLine(itemID)
+        if disenchant then lines[#lines + 1] = disenchant end
+
         return lines
     end
 
@@ -268,7 +271,25 @@ function ItemTooltip:LinesFor(itemID, count)
         }
     end
 
+    local disenchant = self:DisenchantLine(itemID)
+    if disenchant then lines[#lines + 1] = disenchant end
+
     return lines
+end
+
+--- What one of the item is worth disenchanted, for anything that can be.
+--- Nothing at all for an item that cannot, or when none of what it breaks
+--- into has been scanned yet.
+function ItemTooltip:DisenchantLine(itemID)
+    if not ns.Disenchant then return nil end
+
+    local value, partial = ns.Disenchant:GetValue(itemID)
+    if not value then return nil end
+
+    local text = Util.FormatMoney(value, { short = true })
+    if partial then text = text .. " or more" end
+
+    return { "Disenchant value", text }
 end
 
 --- The cheapest listing the last scan saw, beside the smoothed value (Trent,
