@@ -1,0 +1,321 @@
+-- The Disenchanting tab: items on the auction house worth buying to
+-- disenchant (Trent, 2026-09-27).
+--
+-- What this pins down:
+--   * profit is the disenchant value, less the auction house cut on the
+--     materials, less the cheapest listing from someone else;
+--   * a lone low listing that pricing ignores is still the price to buy at;
+--   * his own listings, trade goods and items with no priced materials are
+--     left out;
+--   * the Minimum profit and margin from Settings hold rows back, and the
+--     count of those is reported;
+--   * items his best enchanter cannot break yet are kept but marked;
+--   * the tab draws those rows, and the scan message names the best deal.
+
+local ns = {}
+ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
+ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
+ns.RegisterCommand = function() end
+ns.RegisterEvent = function() end
+
+local printed = {}
+ns.Print = function(text) printed[#printed + 1] = text end
+ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, function() end
+
+-- Put back at the end: every suite shares one Lua runtime.
+local saved = { C_Item = C_Item, GetTime = GetTime, CreateFrame = CreateFrame,
+                PlaySound = PlaySound, SOUNDKIT = SOUNDKIT, GameTooltip = GameTooltip,
+                C_Timer = C_Timer }
+
+CreateFrame = function()
+    local frame = {}
+    for _, name in ipairs({ "SetScript", "Show", "Hide", "SetPoint", "SetSize" }) do
+        frame[name] = function() end
+    end
+    return frame
+end
+
+GetTime = function() return 1 end
+time = time or os.time
+
+local STRANGE_DUST, LESSER_ASTRAL, SMALL_GLIMMERING = 10940, 10998, 10978
+
+-- itemID -> quality, itemLevel, equipLoc, classID
+local items = {
+    [2001] = { 2, 22, "INVTYPE_CHEST", 4 },   -- green armour, needs Enchanting 25
+    [2002] = { 2, 22, "INVTYPE_LEGS", 4 },    -- only his own listing
+    [2003] = { 2, 22, "INVTYPE_HAND", 4 },    -- a lone low listing
+    [2004] = { 2, 22, "", 7 },                -- trade goods
+    [2005] = { 3, 33, "INVTYPE_FEET", 4 },    -- blue, its shard has no price
+    [2006] = { 2, 22, "INVTYPE_WAIST", 4 },   -- costs more than it gives
+    [2007] = { 2, 12, "INVTYPE_WRIST", 4 },   -- low level, needs Enchanting 1
+}
+
+local instantAsked = {}
+
+C_Item = {
+    GetItemInfo = function(itemID)
+        local item = items[itemID]
+        if not item then return nil end
+        return "item" .. itemID, nil, item[1], item[2], 1, "Armor", "Cloth", 1,
+            item[3], 1, 50, item[4], 1, 2
+    end,
+    GetItemInfoInstant = function(itemID)
+        instantAsked[itemID] = true
+        local item = items[itemID]
+        if not item then return nil end
+        return itemID, "Armor", "Cloth", item[3], 1, item[4], 1
+    end,
+}
+
+assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
+
+local materialPrices = { [STRANGE_DUST] = 100, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000 }
+
+local records = {
+    [2001] = { rivalMin = 500, quantity = 3 },
+    [2002] = { ownMin = 100, quantity = 1 },
+    [2003] = { rivalMin = 900, ignoredLow = 300, quantity = 2 },
+    [2004] = { rivalMin = 1 },
+    [2005] = { rivalMin = 1 },
+    [2006] = { rivalMin = 5000 },
+    [2007] = { rivalMin = 10 },
+}
+
+local config = { auctionCut = 0.05, minProfit = 0, minMarginPercent = 0 }
+
+ns.Config = {
+    Get = function(_, key) return config[key] end,
+    GetCharacterKey = function() return "Tester-Realm" end,
+}
+ns.Prices = {
+    GetTable = function() return records end,
+    GetValue = function(_, itemID) return materialPrices[itemID] end,
+    GetAge = function() return 600 end,
+    IsStale = function(_, itemID) return itemID == 2003 end,
+    Count = function() return 7 end,
+}
+ns.Recipes = {
+    GetCharacterName = function(_, key) return (key:match("^([^-]+)")) end,
+}
+
+ns.db = { characters = {} }
+
+local function Enchanter(level)
+    ns.db.characters = {
+        ["Alt-Realm"] = { professions = { { name = "Enchanting", skillLevel = level, learned = true } } },
+        ["Main-Realm"] = { professions = { { name = "Tailoring", skillLevel = 150, learned = true } } },
+    }
+end
+
+assert(loadfile(lfs_cwd .. "/Logic/Disenchant.lua"))("Blackthornes_TS", ns)
+
+local Disenchant = ns.Disenchant
+
+local checks = 0
+local function check(label, condition)
+    checks = checks + 1
+    if not condition then error(("FAILED: %s"):format(label), 2) end
+    print(("  ok  %s"):format(label))
+end
+
+local function Find(rows, itemID)
+    for _, row in ipairs(rows) do
+        if row.itemID == itemID then return row end
+    end
+end
+
+print("\nwhich auctions are listed")
+
+Enchanter(50)
+local rows = Disenchant:GetAuctionRows()
+
+-- A level 22 green chest: 75% x 5 dust at 100, 15% x 1.5 essence at 1000,
+-- 10% x 1 shard at 2000 = 375 + 225 + 200 = 800. Less 5% cut: 760.
+local chest = Find(rows, 2001)
+check("the green chest is listed", chest ~= nil)
+check("its disenchant value is 800", chest.value == 800)
+check("the auction cut comes off: 760", chest.net == 760)
+check("bought at the cheapest rival listing", chest.buy == 500)
+check("profit is 760 - 500 = 260", chest.gain == 260)
+check("margin is profit over the buy price", math.abs(chest.margin - 0.52) < 1e-9)
+check("it says how many are listed", chest.listed == 3)
+
+check("his own listing is not a deal", Find(rows, 2002) == nil)
+
+local gloves = Find(rows, 2003)
+check("a lone low listing is the one to buy", gloves and gloves.buy == 300 and gloves.loneLow)
+check("and an old scan is marked stale", gloves.stale == true)
+
+check("trade goods are left out", Find(rows, 2004) == nil)
+check("an item with no priced material is left out", Find(rows, 2005) == nil)
+check("trade goods were skipped before loading them", instantAsked[2004] == true)
+
+local belt = Find(rows, 2006)
+check("a loss is still listed without the deals filter", belt and belt.gain < 0 and not belt.beatsSale)
+
+check("best profit first", rows[1].gain >= rows[2].gain and rows[#rows].itemID == 2006)
+
+print("\nonly deals, and the minimums from Settings")
+
+local deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
+check("a loss is not a deal", Find(deals, 2006) == nil)
+check("nothing held back with no minimums", hidden == 0)
+
+config.minProfit = 300
+deals, hidden = Disenchant:GetAuctionRows({ profitableOnly = true })
+check("Minimum profit holds the 260 chest back", Find(deals, 2001) == nil)
+check("the gloves still clear it", Find(deals, 2003) ~= nil)
+check("and it says how many were held back", hidden >= 1)
+config.minProfit = 0
+
+config.minMarginPercent = 100
+deals = Disenchant:GetAuctionRows({ profitableOnly = true })
+check("Minimum margin holds the 52% chest back", Find(deals, 2001) == nil)
+config.minMarginPercent = 0
+
+print("\nwho can disenchant it")
+
+Enchanter(10)
+rows = Disenchant:GetAuctionRows()
+chest = Find(rows, 2001)
+check("the chest needs 25", chest.needs == 25)
+check("Enchanting 10 cannot break it, but it is still shown", chest.canDisenchant == false)
+check("it names the enchanter", chest.enchanter == "Alt" and chest.enchanterSkill == 10)
+check("the low level bracers need 1, so 10 can", Find(rows, 2007).canDisenchant == true)
+
+Enchanter(50)
+check("Enchanting 50 can", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant == true)
+
+ns.db.characters = {}
+check("no enchanter at all is nil, not false", Find(Disenchant:GetAuctionRows(), 2001).canDisenchant == nil)
+
+print("\nthe scan message")
+
+Enchanter(50)
+local chimed
+SOUNDKIT = { UI_EPICLOOT_TOAST = 1 }
+PlaySound = function(kit) chimed = kit end
+
+printed = {}
+local count = Disenchant:AnnounceDeals()
+check("it counts the deals", count >= 2)
+check("it names the best one", printed[1] and printed[1]:find("Disenchant deals", 1, true)
+    and printed[1]:find("item2003", 1, true))
+check("with a chime", chimed == 1)
+
+local backup = records
+records = { [2006] = { rivalMin = 5000 } }
+printed, chimed = {}, nil
+check("no deals, no message", Disenchant:AnnounceDeals() == 0 and #printed == 0 and chimed == nil)
+records = backup
+
+--------------------------------------------------------------------------------
+-- The tab
+--------------------------------------------------------------------------------
+
+print("\nthe Disenchanting tab")
+
+local function Stub(fields)
+    local frame = fields or {}
+    frame.IsVisible = frame.IsVisible or function() return true end
+    return setmetatable(frame, { __index = function(self, key)
+        local noop = function() end
+        rawset(self, key, noop)
+        return noop
+    end })
+end
+
+local function Label()
+    return Stub({
+        text = "",
+        SetText = function(self, value) self.text = tostring(value) end,
+        SetTextColor = function(self, a) self.color = a end,
+        SetShown = function(self, value) self.shown = value end,
+    })
+end
+
+CreateFrame = function() return Stub() end
+C_Timer = { After = function() end }
+GameTooltip = Stub()
+
+ns.Theme = {
+    CreateLabel = function() return Label() end,
+    CreatePanel = function() return Stub() end,
+    CreateDivider = function() return Stub() end,
+    Unpack = function(key) return key end,
+    ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
+    AccentStripe = function() return Stub() end,
+    CreateItemIcon = function() return Stub() end,
+    SetItemIcon = function() end,
+    CreateHeading = function() return Stub() end,
+}
+
+local checkboxes, lists = {}, {}
+ns.Widgets = {
+    CreateSearchBox = function() return Stub() end,
+    CreateCheckbox = function(_, text, onToggle) local box = Stub({ onToggle = onToggle }); checkboxes[text] = box; return box end,
+    CreateButton = function() return Stub() end,
+    ShowItemTooltip = function() return true end,
+    CreateScrollList = function(_, opts)
+        local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end })
+        lists[#lists + 1] = list
+        return list
+    end,
+}
+
+local sent = {}
+ns.Scanner = { isAuctionHouseOpen = true, QueueBrowseQuery = function(_, text) sent[#sent + 1] = text end }
+
+local tabs = {}
+ns.UI = Stub({ RegisterTab = function(_, tab) tabs[tab.key] = tab end })
+
+assert(loadfile(lfs_cwd .. "/UI/Tab_Disenchanting.lua"))("Blackthornes_TS", ns)
+
+local tab = tabs.disenchanting
+check("the tab registers as Disenchanting", tab and tab.text == "Disenchanting")
+check("it sits after Enchanting", tab.order > 1.7 and tab.order < 2)
+
+tab.build(Stub())
+tab.refresh()
+
+local list = lists[#lists]
+check("deals only by default: no loss listed", list.data and Find(list.data, 2006) == nil)
+check("a deal is listed", Find(list.data, 2001) ~= nil)
+
+local row = Stub()
+list.opts.createRow(row)
+list.opts.updateRow(row, Find(list.data, 2001))
+
+-- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, SKILL, AGE.
+check("PROFIT shows 260 in green", row.cells[1].text:find("60", 1, true) and row.cells[1].color == "profit")
+check("MARGIN shows 52%", row.cells[2].text == "52%")
+check("BUY shows the price", row.cells[4].text ~= "")
+check("SKILL shows what it needs", row.cells[5].text == "25" and row.cells[5].color == "dim")
+
+checkboxes["Only deals over my minimums"].onToggle(false)
+check("unticking shows the loss too", Find(list.data, 2006) ~= nil)
+
+Enchanter(10)
+tab.refresh()
+list.opts.updateRow(row, Find(list.data, 2001))
+check("too high for his enchanters: SKILL in red", row.cells[5].color == "loss")
+
+checkboxes["Only ones I can disenchant"].onToggle(true)
+check("and hidden when asked", Find(list.data, 2001) == nil and Find(list.data, 2007) ~= nil)
+checkboxes["Only ones I can disenchant"].onToggle(false)
+
+list.opts.onClick(Find(list.data, 2003), 1, "RightButton")
+check("right-click searches the auction house for it", sent[#sent] == "item2003")
+
+ns.Scanner.isAuctionHouseOpen = false
+printed = {}
+list.opts.onClick(Find(list.data, 2003), 1, "RightButton")
+check("with the auction house shut it says to open it", #sent == 1 and printed[1]:find("Open the auction house", 1, true))
+
+for _, key in ipairs({ "C_Item", "GetTime", "CreateFrame", "PlaySound", "SOUNDKIT",
+                      "GameTooltip", "C_Timer" }) do
+    _G[key] = saved[key]
+end
+
+print(("\n%d checks passed"):format(checks))
