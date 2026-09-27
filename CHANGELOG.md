@@ -4,6 +4,29 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.8.0
+
+For WoW: Forever (interface 16001). This version adds files, so fully
+restart the game after updating; `/reload` is not enough.
+
+- Disenchanting comes to the addon. The Profit tab gains a Disenchant column,
+  green when breaking one beats selling it, and item tooltips show a
+  "Disenchant value" line. Disenchant materials are priced at their lowest
+  posting.
+- A new Enchanting tab lists your crafts, the items in your bags, or the
+  enchanting materials, with what each breaks into and whether that beats
+  selling.
+- A Disenchant button on the Enchanting tab breaks the best item in your
+  bags with each click.
+- The addon learns from your own disenchants. After ten of a kind, the
+  chances and counts come from your own results instead of the built-in
+  table. Chat says what each disenchant gave and what it was worth, and a
+  new material or an unusually good result gets a message and a sound.
+  `/bts delog` shows what was recorded.
+- For a character that knows Disenchant, the Ready to sell list shows each
+  item's disenchant value beside the listing price.
+- `/bts de <item>` prints what an item breaks into.
+
 ## 0.7.0
 
 For WoW: Forever (interface 16001).
