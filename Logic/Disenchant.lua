@@ -580,6 +580,165 @@ function Disenchant:GetMaterialRows()
 end
 
 --------------------------------------------------------------------------------
+-- Auction house deals, for the Disenchanting tab
+--------------------------------------------------------------------------------
+
+--- The best Enchanting skill among your characters, and whose it is.
+--
+-- Read from what each character last recorded, so an alt's enchanter counts
+-- without logging in. nil when none of them has Enchanting.
+function Disenchant:GetBestEnchanter()
+    local best, who
+
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" then return nil end
+
+    for characterKey, record in pairs(characters) do
+        for _, profession in ipairs(type(record) == "table" and record.professions or {}) do
+            if profession.name == "Enchanting" and profession.learned ~= false then
+                local level = profession.skillLevel or 0
+                if not best or level > best then
+                    best = level
+                    who = ns.Recipes and ns.Recipes:GetCharacterName(characterKey) or characterKey
+                end
+            end
+        end
+    end
+
+    return best, who
+end
+
+--- Weapons and armour only, asked of the instant lookup, which answers
+--- without the item being cached. Saves asking the client to load thousands
+--- of scanned items that could never be disenchanted.
+local function CouldBeGear(itemID)
+    if not Util.HasFunction("C_Item.GetItemInfoInstant") then return true end
+
+    local ok, _, _, _, _, _, classID = pcall(C_Item.GetItemInfoInstant, itemID)
+    if not ok or classID == nil then return true end
+
+    return classID == CLASS_WEAPON or classID == CLASS_ARMOR
+end
+
+--- What buying one from someone else costs right now: their cheapest
+--- listing at the last look. A lone low listing that pricing leaves out is
+--- still one you can buy, and the best buy of all, so it counts here.
+local function BuyPrice(record)
+    local price = record.rivalMin
+    if record.ignoredLow and (not price or record.ignoredLow < price) then
+        price = record.ignoredLow
+    end
+    if price and price > 0 then return price end
+end
+
+Disenchant._BuyPrice = BuyPrice
+
+--- Can your best enchanter break this? nil when no character has Enchanting.
+local function CanDisenchant(skill, needs)
+    if skill == nil then return nil end
+    return needs == nil or skill >= needs
+end
+
+--- Every disenchantable item someone else has on the auction house, with
+--- what buying and disenchanting one makes.
+--
+-- Profit is the disenchant value less the auction house cut you pay when
+-- you sell the materials, less the buy price. Margin is that profit over the
+-- buy price. Your own listings are left out: buying back your own item is
+-- not a deal.
+--
+-- @param opts { profitableOnly, minProfit, minMargin }
+--   profitableOnly keeps rows that clear minProfit (at least 1 copper) and
+--   minMargin (a percent); both default to Settings.
+-- @return rows best profit first, and how many profitable rows were held
+--   back by the minimums
+function Disenchant:GetAuctionRows(opts)
+    opts = opts or {}
+
+    local rows, hidden = {}, 0
+    local prices = ns.Prices and ns.Prices:GetTable() or {}
+    local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
+    local minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0
+    local minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100
+    local skill, enchanter = self:GetBestEnchanter()
+
+    for itemID, record in pairs(prices) do
+        local buy = type(record) == "table" and BuyPrice(record)
+
+        if buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID) then
+            local value, partial, breakdown = self:GetValue(itemID)
+
+            if value then
+                local facts = breakdown.facts or {}
+                local net = math.floor(value * (1 - cut) + 0.5)
+                local gain = net - buy
+
+                local row = {
+                    kind = "auction",
+                    itemID = itemID,
+                    name = self:ItemName(itemID),
+                    buy = buy,
+                    loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
+                    listed = record.quantity,
+                    value = value,
+                    net = net,
+                    partial = partial,
+                    breakdown = breakdown,
+                    gain = gain,
+                    margin = gain / buy,
+                    beatsSale = gain > 0,
+                    needs = facts.skill,
+                    enchanter = enchanter,
+                    enchanterSkill = skill,
+                    -- nil when no character has Enchanting at all.
+                    canDisenchant = CanDisenchant(skill, facts.skill),
+                    age = ns.Prices:GetAge(itemID),
+                    stale = ns.Prices:IsStale(itemID),
+                }
+
+                local clears = gain > 0 and gain >= minProfit and row.margin >= minMargin
+
+                if not opts.profitableOnly or clears then
+                    rows[#rows + 1] = row
+                elseif gain > 0 then
+                    hidden = hidden + 1
+                end
+            end
+        end
+    end
+
+    table.sort(rows, function(a, b)
+        if a.gain ~= b.gain then return a.gain > b.gain end
+        return a.itemID < b.itemID
+    end)
+
+    return rows, hidden
+end
+
+--- After a scan: say how many deals it found and the best one, with a chime
+--- when there is at least one worth having. Quiet when there are none.
+function Disenchant:AnnounceDeals()
+    local ok, rows = pcall(self.GetAuctionRows, self, { profitableOnly = true })
+    if not ok or type(rows) ~= "table" or #rows == 0 then return 0 end
+
+    local best = rows[1]
+    local total = 0
+    for _, row in ipairs(rows) do total = total + row.gain end
+
+    ns.Print(("Disenchant deals: %d on the auction house worth %s together. Best: %s for %s, makes %s. See the Disenchanting tab."):format(
+        #rows, Util.FormatMoney(total, { noColor = true }),
+        Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
+        Util.FormatMoney(best.gain, { noColor = true })))
+
+    if type(PlaySound) == "function" then
+        local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
+        if kits.UI_EPICLOOT_TOAST then pcall(PlaySound, kits.UI_EPICLOOT_TOAST) end
+    end
+
+    return #rows
+end
+
+--------------------------------------------------------------------------------
 -- Command
 --------------------------------------------------------------------------------
 
