@@ -40,6 +40,7 @@ Logic\FarmerGoals.lua
 
 UI\Theme.lua
 UI\Widgets.lua
+UI\Collapse.lua
 UI\Main.lua
 UI\PostPanel.lua
 UI\CraftPanel.lua
