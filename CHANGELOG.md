@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.8.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Fixed: characters that share a first name were treated as one character
+  on the Characters tab, sharing recipes, bags and gold. Each character is
+  now kept separately. Your existing records carry over to the first
+  character that logs in under that name; nothing is deleted or merged.
+- Characters that still look alike on the Characters tab show their level
+  and class.
+
 ## 0.8.0
 
 For WoW: Forever (interface 16001). This version adds files, so fully
