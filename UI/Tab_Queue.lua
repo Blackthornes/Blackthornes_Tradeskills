@@ -242,7 +242,7 @@ local function ShowMaterialTooltip(row, line)
                 Util.FormatMoney(offer.saving, { noColor = true }),
                 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
-        GameTooltip:AddLine(("Swap to that character, craft %d x %s and mail it across.")
+        GameTooltip:AddLine(("Log in on that character and %d x %s is queued there, with its materials to buy. Mail it across once made.")
             :format(offer.crafts, offer.recipeName or "it"), 0.7, 0.7, 0.7, true)
     end
 
@@ -384,7 +384,7 @@ local function AnnounceAltCrafts(lines)
             announcedAltCrafts[key] = true
             found = true
 
-            ns.Print(("Cheaper way found: %s can make %s%s. Swap over, craft it there and mail it across.")
+            ns.Print(("Cheaper way found: %s can make %s%s. Log in there and it will be in your queue.")
                 :format(offer.characterName, Util.GetItemLabel(line.itemID),
                     offer.saving and offer.saving > 0
                         and (" and save you %s"):format(Util.FormatMoney(offer.saving))

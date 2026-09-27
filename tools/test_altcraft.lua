@@ -180,4 +180,32 @@ settings.suggestOtherCharacters = nil
 queueOneBag()
 check("a swap is suggested with the setting unset", row(BOLT).altCraft ~= nil)
 
+print("\nlogging in on the tailor")
+
+settings.suggestOtherCharacters = true
+Cost:InvalidateIndex()
+ns.db = { queue = {}, characters = freshCharacters() }
+Queue:Add(10, 1)
+check("on the bag maker, the bolts are to buy", row(BOLT) and row(BOLT).altCraft ~= nil
+    and Queue:Find(20) == nil)
+
+currentKey = "Player-ALT"
+Cost:InvalidateIndex()
+local added = Queue:RefreshForCharacter()
+local _, bolts = Queue:Find(20)
+check("the bolt crafts are queued on the tailor", bolts and bolts.isDependency and bolts.quantity == 3)
+check("and announced as new", #added == 1 and added[1].recipeID == 20)
+check("the wool to make them is on the shopping list", row(WOOL) and row(WOOL).shortfall == 9)
+check("the bolts are not also to buy", row(BOLT) == nil)
+check("the bag is still queued", Queue:Find(10, true) ~= nil)
+
+check("a second refresh announces nothing", #Queue:RefreshForCharacter() == 0)
+
+currentKey = "Player-ME"
+Cost:InvalidateIndex()
+Queue:RefreshForCharacter()
+check("back on the bag maker, the bolt crafts are gone", Queue:Find(20) == nil)
+check("and the bolts are to buy again, with the swap suggested", row(BOLT)
+    and row(BOLT).shortfall == 3 and row(BOLT).altCraft ~= nil)
+
 print(("\n%d check(s) passed\n"):format(checks))
