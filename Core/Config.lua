@@ -256,8 +256,14 @@ function Config:GetRealmKey()
     return self.realmKey
 end
 
+-- Checked and copied inside the pcall for the same dungeon reason as the name.
 local function SafeGUID()
-    return PlainString(UnitGUID, "player")
+    local ok, guid = pcall(function()
+        local v = UnitGUID("player")
+        if type(v) == "string" and v ~= "" then return v .. "" end
+    end)
+    if ok then return guid end
+    return nil
 end
 
 --- How characters used to be filed: first name and realm. Saved data from
