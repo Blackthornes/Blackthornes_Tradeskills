@@ -74,15 +74,20 @@ function DisenchantLog:Record(itemID, results, from)
     local _, facts = ns.Disenchant:GetOutcomes(itemID)
     if not facts or not facts.key then return false, "that item cannot be disenchanted" end
 
+    -- What one of these was expected to give, before this one counts.
+    local usual = ns.Disenchant:GetValue(itemID)
+
     local log = self:GetTable()
     local band = log.bands[facts.key] or { casts = 0, got = {} }
     log.bands[facts.key] = band
 
     band.casts = band.casts + 1
 
+    local newFinds = {}
     for materialID, count in pairs(results) do
         local got = band.got[materialID] or { times = 0, total = 0 }
         band.got[materialID] = got
+        if got.times == 0 and band.casts > 1 then newFinds[#newFinds + 1] = materialID end
 
         got.times = got.times + 1
         got.total = got.total + count
@@ -96,9 +101,125 @@ function DisenchantLog:Record(itemID, results, from)
     })
     while #log.recent > RECENT_KEPT do table.remove(log.recent) end
 
+    self:Announce(itemID, results, facts.key, band, usual, newFinds)
+
     if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
 
     return true
+end
+
+--------------------------------------------------------------------------------
+-- Telling you what was learnt
+--------------------------------------------------------------------------------
+
+-- A disenchant counts as lucky when it gave this much more than usual.
+local LUCKY = 1.5
+
+local function Colour(key, text)
+    return ("|c%s%s|r"):format(ns.COLORS[key], text)
+end
+
+local function MaterialLabel(materialID)
+    return ns.Disenchant:MaterialName(materialID) or Util.GetItemLabel(materialID)
+end
+
+--- What the materials would sell for, or nil when none has a price.
+local function Worth(results)
+    local total, priced = 0, false
+    for materialID, count in pairs(results) do
+        local price = ns.Disenchant:GetMaterialPrice(materialID)
+        if price then
+            total = total + price * count
+            priced = true
+        end
+    end
+    return priced and total or nil
+end
+
+--- A line across the middle of the screen, where the game shows quest updates.
+local function Flash(text)
+    local frame = _G.UIErrorsFrame
+    if type(frame) == "table" and type(frame.AddMessage) == "function" then
+        pcall(frame.AddMessage, frame, text, 0.31, 0.82, 0.55, 1)
+    end
+end
+
+--- A sound: the level up fanfare for a kind of item learnt, a softer one for
+--- anything else worth noticing.
+local function Chime(big)
+    if type(PlaySound) ~= "function" then return end
+    local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
+    local kit = big and (kits.LEVELUPSOUND or 888) or kits.UI_EPICLOOT_TOAST
+    if kit then pcall(PlaySound, kit) end
+end
+
+DisenchantLog._Flash, DisenchantLog._Chime = Flash, Chime
+
+--- Say what that disenchant gave and what it taught.
+function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds)
+    local Disenchant = ns.Disenchant
+    local learnAfter = Disenchant.LEARN_AFTER
+    local kind = Disenchant:DescribeKey(key)
+
+    local parts = {}
+    for materialID, count in pairs(results) do
+        parts[#parts + 1] = ("%d %s"):format(count, MaterialLabel(materialID))
+    end
+    table.sort(parts)
+
+    local worth = Worth(results)
+    local progress
+    if band.casts < learnAfter then
+        progress = ("learning %s: %d of %d"):format(kind, band.casts, learnAfter)
+    else
+        progress = ("%s: %d recorded"):format(kind, band.casts)
+    end
+
+    ns.Print(("%s %s: %s%s. %s.")
+        :format(Colour("profit", "Disenchanted"), Util.GetItemLabel(itemID), table.concat(parts, ", "),
+            worth and (", worth " .. Util.FormatMoney(worth)) or "", Colour("muted", progress)))
+
+    local big = false
+
+    if band.casts == learnAfter then
+        local odds = {}
+        for materialID, got in pairs(band.got) do
+            odds[#odds + 1] = { name = MaterialLabel(materialID), chance = got.times / band.casts }
+        end
+        table.sort(odds, function(a, b)
+            if a.chance ~= b.chance then return a.chance > b.chance end
+            return a.name < b.name
+        end)
+        for index, odd in ipairs(odds) do
+            odds[index] = ("%s %d%%"):format(odd.name, math.floor(odd.chance * 100 + 0.5))
+        end
+
+        ns.Print(("%s %s now uses your own results: %s. Values for these follow what you get from now on.")
+            :format(Colour("accent", "Learned!"), kind, table.concat(odds, ", ")))
+        Flash(("Learned: %s"):format(kind))
+        big = true
+    end
+
+    for _, materialID in ipairs(newFinds or {}) do
+        ns.Print(("%s %s can come from %s."):format(Colour("accent", "New find!"),
+            MaterialLabel(materialID), kind))
+        Flash(("New find: %s"):format(MaterialLabel(materialID)))
+    end
+
+    local lucky = worth and usual and usual > 0 and worth >= usual * LUCKY
+    if lucky then
+        ns.Print(("%s That one was worth %s; about %s is usual.")
+            :format(Colour("accent", "Lucky!"), Util.FormatMoney(worth), Util.FormatMoney(usual)))
+        if #(newFinds or {}) == 0 then
+            Flash(("Lucky disenchant: %s"):format(Util.FormatMoney(worth, { noColor = true })))
+        end
+    end
+
+    if big then
+        Chime(true)
+    elseif lucky or #(newFinds or {}) > 0 then
+        Chime(false)
+    end
 end
 
 --- A disenchant that finished but could not be recorded, and why.
