@@ -166,8 +166,10 @@ local DEFAULTS = {
         autoQueueSubCrafts = true,
 
         -- Point out a material another of your characters can make for less
-        -- than it costs to buy. Only a suggestion; the queue still buys it.
-        suggestAltCrafts = false,
+        -- than it costs to buy. Only a suggestion; the queue still buys it, so
+        -- it is on by default. Named anew when the default changed, so a false
+        -- the old default wrote into saved settings does not keep it off.
+        suggestOtherCharacters = true,
 
         -- How the mark on a craft that both skills you up and pays is drawn:
         -- "star" is the addon's own art, "raid" the game's raid-target star,
