@@ -141,6 +141,53 @@ function Queue:RebuildDependencies()
     end
 end
 
+--- Re-derive the sub-crafts for the character just logged in.
+--
+-- The queue is shared by every character, but which materials are cheaper to
+-- make depends on who is making them. Sub-crafts were only re-derived when the
+-- queue changed, so logging into the tailor the Queue tab had suggested left
+-- the bolts off its queue. With "Suggest other characters" on, that character
+-- now finds the bolts queued and their wool on the shopping list, and the one
+-- that cannot make them goes back to buying them.
+function Queue:OnEnable()
+    if ns.Config:Get("suggestOtherCharacters") == false then return end
+    if not (C_Timer and C_Timer.After) then return end
+
+    -- A moment's grace so the bags have been read: sub-crafts are sized
+    -- against what is already owned.
+    C_Timer.After(3, function() Queue:RefreshForCharacter() end)
+end
+
+--- Rebuild the sub-crafts and say which ones this character now makes.
+-- @return the sub-craft entries that were not in the queue before
+function Queue:RefreshForCharacter()
+    if self:Count() == 0 then return {} end
+
+    local before = {}
+    for _, entry in ipairs(self:GetAll()) do
+        if entry.isDependency then before[entry.recipeID] = true end
+    end
+
+    self:RebuildDependencies()
+
+    local added = {}
+    for _, entry in ipairs(self:GetAll()) do
+        if entry.isDependency and not before[entry.recipeID] then
+            added[#added + 1] = entry
+
+            local recipe = ns.Recipes:GetAny(entry.recipeID)
+            local parents = self:GetDependencyParents(entry)
+
+            ns.Print(("queued %d x %s for %s. This character makes it for less than buying it; its materials are on the shopping list.")
+                :format(entry.quantity, (recipe and recipe.name) or "a sub-craft",
+                    #parents > 0 and table.concat(parents, ", ") or "another craft"))
+        end
+    end
+
+    self:Notify()
+    return added
+end
+
 --- The crafts this dependency exists to serve, for display.
 function Queue:GetDependencyParents(entry)
     local names = {}
