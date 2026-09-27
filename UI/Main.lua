@@ -211,9 +211,14 @@ end
 function UI:BuildTabs()
     local window = self.window
 
+    -- Every tab the same width, as wide as fits across the window: eleven
+    -- at the old 96 would run off the right edge.
+    local stripWidth = WINDOW_WIDTH - 2 * EDGE_PAD - 16
+    local tabWidth = math.min(96, math.floor(stripWidth / math.max(1, #self.tabOrder)))
+
     local definitions = {}
     for _, tab in ipairs(self.tabOrder) do
-        definitions[#definitions + 1] = { key = tab.key, text = tab.text }
+        definitions[#definitions + 1] = { key = tab.key, text = tab.text, width = tabWidth }
     end
 
     local strip = Widgets.CreateTabStrip(window, definitions, function(key)
@@ -316,7 +321,14 @@ function UI:OnScanComplete(result)
     if self.progressBar then self.progressBar:Hide() end
     if self.scanHint then self.scanHint:SetText("") end
 
-    if result then self:CelebrateScan(result) end
+    if result then
+        self:CelebrateScan(result)
+
+        -- A moment later, so its chime does not land on the scan's own.
+        if ns.Disenchant and C_Timer and C_Timer.After then
+            C_Timer.After(1.5, function() ns.Disenchant:AnnounceDeals() end)
+        end
+    end
 
     self:UpdateAuctionButton()
     self:UpdateHeader()
