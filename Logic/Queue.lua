@@ -359,9 +359,9 @@ function Queue:GetShoppingList()
 
     local list = {}
 
-    -- Off unless ticked in Settings. Shared across lines so the alts' recipes
+    -- On unless unticked in Settings. Shared across lines so the alts' recipes
     -- are gathered once per list, not once per material.
-    local altContext = ns.Config:Get("suggestAltCrafts") == true and {} or nil
+    local altContext = ns.Config:Get("suggestOtherCharacters") ~= false and {} or nil
 
     for itemID, needed in pairs(required) do
         needed = needed - (queuedToMake[itemID] or 0)

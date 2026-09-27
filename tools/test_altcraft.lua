@@ -22,7 +22,7 @@ local BAG, BOLT, WOOL, DYE, THREAD = 5000, 2997, 2592, 3825, 2321
 local bound = {}
 ns.Util = { IsBoundOnPickup = function(itemID) return bound[itemID] == true end }
 
-local settings = { valueOwnedMaterials = true, suggestAltCrafts = false }
+local settings = { valueOwnedMaterials = true, suggestOtherCharacters = false }
 local currentKey = "Player-ME"
 ns.Config = {
     Get = function(_, key) return settings[key] end,
@@ -112,7 +112,7 @@ local function queueOneBag()
     Queue:Add(10, 1)
 end
 
-print("\nsetting off")
+print("\nsetting unticked")
 
 queueOneBag()
 check("the bolts are bought, as before", row(BOLT) and row(BOLT).shortfall == 3)
@@ -120,7 +120,7 @@ check("no swap is suggested", row(BOLT).altCraft == nil)
 
 print("\nsetting on, the alt makes them for less")
 
-settings.suggestAltCrafts = true
+settings.suggestOtherCharacters = true
 queueOneBag()
 local offer = row(BOLT) and row(BOLT).altCraft
 check("a swap is suggested", offer ~= nil)
@@ -172,5 +172,12 @@ ns.db.characters["Player-ME"].recipes[20] = BOLT_RECIPE
 Queue:Add(10, 1)
 check("the bolts are queued here instead, no swap needed", row(BOLT) == nil
     and Queue:Find(20) ~= nil)
+
+
+print("\nnever touched, so on by default")
+
+settings.suggestOtherCharacters = nil
+queueOneBag()
+check("a swap is suggested with the setting unset", row(BOLT).altCraft ~= nil)
 
 print(("\n%d check(s) passed\n"):format(checks))
