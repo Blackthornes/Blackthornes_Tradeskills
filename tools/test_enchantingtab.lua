@@ -77,10 +77,11 @@ ns.Theme = {
 }
 
 local checkboxes = {}
+local lastDropdown
 
 ns.Widgets = {
     CreateSearchBox = function() return Stub() end,
-    CreateDropdown = function() return Stub() end,
+    CreateDropdown = function(_, _, onSelect) lastDropdown = onSelect; return Stub() end,
     CreateCheckbox = function(_, text) local box = Stub({ shown = true, SetShown = function(self, v) self.shown = v end }); checkboxes[text] = box; return box end,
     ShowItemTooltip = function() return true end,
     CreateNumberBox = function() return Stub() end,
@@ -144,12 +145,30 @@ local craftRows = {
 
 ns.Disenchant = {
     GetCraftRows = function() return craftRows end,
-    GetBagRows = function() return {} end,
+    GetBagRows = function()
+        return { { kind = "bag", itemID = 21, name = "Belt", count = 1, value = 500, sells = 100,
+                   sellsAt = "auction", gain = 400, beatsSale = true,
+                   breakdown = { facts = { itemLevel = 20, qualityName = "uncommon", skill = 1 }, outcomes = {} } } }
+    end,
     GetMaterialRows = function()
         return { { kind = "material", itemID = 10940, name = "Strange Dust", price = 100, have = 7, age = 60 } }
     end,
 }
 ns.Queue = { Add = function() end }
+
+-- The Disenchant button's secure half, which needs a game client: this only
+-- records what the tab asked of it.
+local armed = {}
+local carrying = { [11] = true, [21] = true }
+ns.Disenchanter = {
+    FindSlot = function(_, itemID) if carrying[itemID] then return 0, 1 end end,
+    Check = function(_, itemID)
+        if carrying[itemID] then return { ok = true, bag = 0, slot = 1 } end
+        return { ok = false, why = "That item is no longer in your bags." }
+    end,
+    Arm = function(_, anchor, itemID) armed[#armed + 1] = itemID; return true end,
+    Disarm = function() end,
+}
 
 local lists = {}
 ns.Widgets.CreateScrollList = function(_, opts)
@@ -191,6 +210,23 @@ check("and shows it cannot be made now", row.cells[5].text == "0" and row.cells[
 -- Picking a row fills the detail panel without an error.
 list.opts.onClick(craftRows[1], 1, "LeftButton")
 check("picking a row fills the detail panel", true)
+check("a craft you carry gets the Disenchant button", armed[#armed] == 11)
+
+local before = #armed
+list.opts.onClick(craftRows[2], 2, "LeftButton")
+check("a craft you do not carry does not", #armed == before)
+
+-- The bags list picks its top row by itself, ready to disenchant.
+local viewPicker = lastDropdown
+before = #armed
+viewPicker("bag")
+check("the bags list arms Disenchant on its top row unasked", armed[#armed] == 21 and #armed > before)
+
+carrying[21] = nil
+before = #armed
+enchanting.refresh()
+check("an item that has left the bags is not armed", #armed == before)
+viewPicker("craft")
 
 --------------------------------------------------------------------------------
 -- The Profit tab's column

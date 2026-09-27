@@ -306,9 +306,30 @@ local function BuildDetail(parent)
         local count = math.max(1, tonumber(quantity:GetText()) or 1)
         ns.Queue:Add(entry.recipeID, count)
         ns.Print(("queued %dx %s"):format(count, entry.name or "craft"))
-    end, { width = 130, primary = true, height = 24 })
+    end, { width = 100, primary = true, height = 24 })
     addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
     detail.addButton = addButton
+
+    -- Disenchant, for an item in the bags. The click itself is taken by the
+    -- secure button UI/Disenchanter.lua lays over this one; this handler
+    -- only runs when that button is not there, so it says why.
+    local disenchantButton = Widgets.CreateButton(detail, "Disenchant", function()
+        local entry = state.selected
+        local check = ns.Disenchanter:Check(entry and entry.itemID)
+
+        if not check.ok then
+            ns.Print(check.why)
+        else
+            ns.Warn("that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints.")
+        end
+    end, { width = 100, primary = true, height = 24 })
+    detail.disenchantButton = disenchantButton
+
+    local disenchantStatus = Theme.CreateLabel(detail, "tiny", "warn")
+    disenchantStatus:SetPoint("LEFT", disenchantButton, "RIGHT", 8, 0)
+    disenchantStatus:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    disenchantStatus:SetWordWrap(true)
+    detail.disenchantStatus = disenchantStatus
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
@@ -330,6 +351,26 @@ local function SetLine(line, label, value, color)
     line.value:SetTextColor(Theme.Unpack(color or "text"))
 end
 
+--- Arm the Disenchant button for a bag item, or say why it cannot be.
+local function UpdateDisenchantButton(entry)
+    local detail = widgets.detail
+    local button = detail.disenchantButton
+    local disenchanter = ns.Disenchanter
+
+    local check = disenchanter:Check(entry and entry.itemID)
+
+    button:SetEnabledState(check.ok)
+    button.tooltipText = check.ok
+        and ("Disenchant one %s from your bags."):format(entry.name or "item") or check.why
+    detail.disenchantStatus:SetText(check.ok and "" or check.why)
+
+    if check.ok then
+        disenchanter:Arm(button, entry.itemID, check.bag, check.slot)
+    elseif disenchanter.anchor == button then
+        disenchanter:Disarm()
+    end
+end
+
 local function UpdateDetail(entry)
     local detail = widgets.detail
     local shown = entry ~= nil
@@ -348,6 +389,24 @@ local function UpdateDetail(entry)
     local isCraft = shown and entry.kind == "craft"
     detail.quantityBox:SetShown(isCraft)
     detail.addButton:SetShown(isCraft)
+
+    -- Disenchant: always for a bag item, and for a craft while one is in
+    -- the bags, beside its queue button. Hiding the button takes the secure
+    -- button away with it.
+    local isBag = shown and entry.kind == "bag"
+    local carried = isCraft and ns.Disenchanter:FindSlot(entry.itemID) ~= nil
+    local button = detail.disenchantButton
+
+    button:ClearAllPoints()
+    if isBag then
+        button:SetPoint("BOTTOMLEFT", detail, "BOTTOMLEFT", 12, 14)
+    else
+        button:SetPoint("BOTTOMLEFT", detail.addButton, "BOTTOMRIGHT", 8, 0)
+    end
+
+    button:SetShown(isBag or carried)
+    detail.disenchantStatus:SetShown(isBag)
+    if isBag or carried then UpdateDisenchantButton(entry) end
 
     if not shown then return end
 
@@ -566,7 +625,9 @@ local function ApplyHeadings()
     end
 
     widgets.beatsOnly:SetShown(state.view ~= "material")
-    widgets.hint:SetShown(state.view == "craft")
+    widgets.hint:SetShown(state.view ~= "material")
+    widgets.hint:SetText(state.view == "craft" and "Right-click a craft to queue one"
+        or "Pick an item, then click Disenchant")
 end
 
 local function Refresh()
@@ -609,6 +670,13 @@ local function Refresh()
                 break
             end
         end
+    end
+
+    -- In the bags list, the top row is picked when nothing else is, so the
+    -- Disenchant button is always ready on the best one to break. After a
+    -- disenchant the item leaves the list and the next one takes its place.
+    if not fresh and state.view == "bag" and rows[1] then
+        fresh = rows[1]
     end
 
     state.selected = fresh
