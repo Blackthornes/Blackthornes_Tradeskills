@@ -197,9 +197,32 @@ function Disenchant:IsDisenchantable(itemID)
     return true
 end
 
+-- Your own results take over from the table for a group of items once this
+-- many of them have been disenchanted and recorded.
+Disenchant.LEARN_AFTER = 10
+
+--- Which row of the table an item falls in, as a key for recording results.
+--
+-- Items in the same row break into the same things, so results are pooled
+-- by row rather than by item: ten different level 22 green chests teach as
+-- much as ten of the same one.
+local function BandKey(facts, band)
+    local top = band.upTo == math.huge and "top" or tostring(band.upTo)
+
+    if facts.quality == 2 then
+        return ("%d:%s:%s"):format(facts.quality, facts.isWeapon and "weapon" or "armor", top)
+    end
+
+    return ("%d:any:%s"):format(facts.quality, top)
+end
+
 --- What one disenchant of this item can give.
 --
--- @return outcomes { { itemID, chance, min, max }, ... }, facts
+-- From your own recorded disenchants when there are enough of them for this
+-- kind of item (facts.source == "yours"), otherwise from the built-in table
+-- (facts.source == "table"). facts.casts is how many of yours are recorded.
+--
+-- @return outcomes { { itemID, chance, min, max, average }, ... }, facts
 --   nil when the item cannot be disenchanted or is not cached yet.
 function Disenchant:GetOutcomes(itemID)
     if not self:IsDisenchantable(itemID) then return nil end
@@ -207,9 +230,10 @@ function Disenchant:GetOutcomes(itemID)
     local facts = self:GetItemFacts(itemID)
     local level = facts.itemLevel
     local outcomes = {}
+    local band
 
     if facts.quality == 2 then
-        local band = Band(UNCOMMON, level)
+        band = Band(UNCOMMON, level)
         local dustChance, essenceChance, shardChance =
             band.chances[1], band.chances[2], band.chances[3]
 
@@ -231,7 +255,7 @@ function Disenchant:GetOutcomes(itemID)
             outcomes[3] = { band.shard, shardChance, 1, 1 }
         end
     else
-        local band = Band(facts.quality == 3 and RARE or EPIC, level)
+        band = Band(facts.quality == 3 and RARE or EPIC, level)
 
         for index, outcome in ipairs(band.outcomes) do
             outcomes[index] = outcome
@@ -247,6 +271,35 @@ function Disenchant:GetOutcomes(itemID)
     end
 
     facts.skill = Band(SKILL, level).skill
+    facts.key = BandKey(facts, band)
+    facts.source = "table"
+    facts.casts = 0
+
+    -- Your own results, once there are enough to trust over the table.
+    local learned = ns.DisenchantLog and ns.DisenchantLog:GetBand(facts.key)
+    if learned then
+        facts.casts = learned.casts or 0
+
+        if facts.casts >= self.LEARN_AFTER then
+            shaped = {}
+
+            for materialID, got in pairs(learned.got or {}) do
+                shaped[#shaped + 1] = {
+                    itemID = materialID,
+                    chance = got.times / learned.casts,
+                    min = got.min, max = got.max,
+                    average = got.total / got.times,
+                }
+            end
+
+            table.sort(shaped, function(a, b)
+                if a.chance ~= b.chance then return a.chance > b.chance end
+                return a.itemID < b.itemID
+            end)
+
+            facts.source = "yours"
+        end
+    end
     facts.qualityName = QUALITY_NAME[facts.quality]
 
     return shaped, facts
@@ -281,7 +334,7 @@ function Disenchant:GetValue(itemID)
     local lines = {}
 
     for index, outcome in ipairs(outcomes) do
-        local average = (outcome.min + outcome.max) / 2
+        local average = outcome.average or (outcome.min + outcome.max) / 2
         local price = self:GetMaterialPrice(outcome.itemID)
         local worth = price and (price * outcome.chance * average) or nil
 
@@ -309,6 +362,11 @@ function Disenchant:GetValue(itemID)
     if priced == 0 then return nil, nil, breakdown end
 
     return math.floor(total + 0.5), missing > 0 or nil, breakdown
+end
+
+--- Is this item an enchanting material a disenchant can give?
+function Disenchant:IsMaterial(itemID)
+    return MATERIAL_NAME[itemID] ~= nil
 end
 
 --- A material's name, whether or not the client has it cached.
@@ -518,6 +576,13 @@ local function Report(input)
     ns.Print(("%s: item level %d, %s %s, needs Enchanting about %d"):format(
         Util.GetItemLabel(itemID), facts.itemLevel or 0, facts.qualityName or "?",
         facts.isWeapon and "weapon" or "armor", facts.skill or 0))
+
+    if facts.source == "yours" then
+        ns.Print(("  from your own %d disenchants of items like this"):format(facts.casts or 0))
+    else
+        ns.Print(("  from the built-in table (%d of yours recorded, yours are used from %d)")
+            :format(facts.casts or 0, Disenchant.LEARN_AFTER))
+    end
 
     for _, line in ipairs(breakdown and breakdown.outcomes or {}) do
         local count = line.min == line.max and tostring(line.min)
