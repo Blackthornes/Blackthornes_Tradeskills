@@ -313,6 +313,20 @@ local function Build(container)
     sort:SetPoint("RIGHT", 0, 0)
     sort:SetValue("source")
 
+    -- With Blackthornes Farmer loaded: every material still needed becomes a
+    -- Farmer goal in one click, in the order the list shows them.
+    if ns.FarmerGoals:Available() then
+        local setAll = Widgets.CreateButton(toolbar, "Set all goals", function()
+            local needed = {}
+            for _, line in ipairs(BuildList()) do
+                if line.shortfall > 0 then needed[#needed + 1] = line end
+            end
+            ns.FarmerGoals:SetGoals(needed)
+        end, { width = 100, height = 22,
+            tooltip = "Make a Blackthornes Farmer goal for every material you still need" })
+        setAll:SetPoint("RIGHT", sort, "LEFT", -8, 0)
+    end
+
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)
     headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
