@@ -256,11 +256,152 @@ function Config:GetRealmKey()
     return self.realmKey
 end
 
+-- Checked and copied inside the pcall for the same dungeon reason as the name.
+local function SafeGUID()
+    local ok, guid = pcall(function()
+        local v = UnitGUID("player")
+        if type(v) == "string" and v ~= "" then return v .. "" end
+    end)
+    if ok then return guid end
+    return nil
+end
+
+--- How characters used to be filed: first name and realm. Saved data from
+--- then stays under this key until its character next logs in.
+function Config:GetLegacyCharacterKey()
+    return SafeUnitName() .. "-" .. SafeRealmName()
+end
+
+--- Forever lets any number of characters share a first name; only the first
+--- and last name together are unique. Name and realm therefore filed
+--- "Voldar Ash" and "Voldar Stone" as one character. The character's GUID is
+--- unique and never changes, so it is the key now.
+---
+--- The game has always handed the GUID over by PLAYER_LOGIN. Asked any
+--- earlier, this answers with the old key and does not remember it.
 function Config:GetCharacterKey()
-    if not self.characterKey then
-        self.characterKey = SafeUnitName() .. "-" .. SafeRealmName()
+    if self.characterKey then return self.characterKey end
+
+    local guid = SafeGUID()
+    if not guid or not ns.db then
+        return self:GetLegacyCharacterKey()
     end
-    return self.characterKey
+
+    self.characterKey = guid
+    self:AdoptLegacyCharacter(guid)
+    return guid
+end
+
+--- Move this character's saved record from the old name-realm key to its GUID.
+---
+--- Nothing is deleted or merged. An old record already claimed by a different
+--- character is left for that character, and if this one already has a record
+--- under its GUID the old one stays where it is.
+function Config:AdoptLegacyCharacter(guid)
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" then return end
+
+    local legacy = self:GetLegacyCharacterKey()
+    local old = characters[legacy]
+
+    if type(old) ~= "table" then return end
+    if old.guid and old.guid ~= guid then return end
+    if characters[guid] ~= nil then return end
+
+    old.guid = guid
+    characters[guid] = old
+    characters[legacy] = nil
+
+    self.adoptedFrom = legacy
+end
+
+--- The last name, when the game will say what it is.
+---
+--- Nothing documents how Forever hands a last name to addons, so this looks
+--- in the likely places: any name the unit functions return that starts with
+--- the first name and a space, then any getter whose name mentions a last,
+--- secondary or surname. `/bts whoami` shows what each of them said.
+local SURNAME_PATTERNS = { "surname", "secondaryname", "lastname" }
+
+function Config:FindSurnameFunctions()
+    local found = {}
+
+    local function Consider(label, name, fn)
+        if type(fn) ~= "function" or type(name) ~= "string" then return end
+        local lower = name:lower()
+        if not (lower:find("^get") or lower:find("^unit")) then return end
+        for _, pattern in ipairs(SURNAME_PATTERNS) do
+            if lower:find(pattern, 1, true) then
+                found[#found + 1] = { label = label, fn = fn }
+                return
+            end
+        end
+    end
+
+    pcall(function()
+        for name, value in pairs(_G) do
+            Consider(name, name, value)
+        end
+        if type(C_PlayerInfo) == "table" then
+            for name, value in pairs(C_PlayerInfo) do
+                Consider("C_PlayerInfo." .. name, name, value)
+            end
+        end
+    end)
+
+    table.sort(found, function(a, b) return a.label < b.label end)
+    return found
+end
+
+local function SurnameFrom(first, value)
+    if type(value) ~= "string" or value == "" then return nil end
+    local rest = value:match("^" .. first:gsub("%p", "%%%0") .. " (.+)$")
+    if rest and rest ~= "" then return rest end
+end
+
+--- @return surname or nil, and a list of { label, values } describing what was asked
+function Config:ReadSurname()
+    local first = SafeUnitName()
+    local asked, surname = {}, nil
+
+    local function Ask(label, fn, ...)
+        if type(fn) ~= "function" then
+            asked[#asked + 1] = { label = label, missing = true }
+            return
+        end
+        local results = { pcall(fn, ...) }
+        local values = {}
+        for i = 2, #results do
+            values[#values + 1] = tostring(results[i])
+        end
+        asked[#asked + 1] = { label = label, ok = results[1], values = values }
+
+        if not results[1] or surname then return end
+        for i = 2, #results do
+            local found = SurnameFrom(first, results[i])
+            if found then surname = found return end
+        end
+    end
+
+    Ask("UnitName", UnitName, "player")
+    Ask("UnitFullName", UnitFullName, "player")
+    Ask("GetUnitName", GetUnitName, "player", true)
+
+    for _, candidate in ipairs(self:FindSurnameFunctions()) do
+        local before = surname
+        Ask(candidate.label, candidate.fn, "player")
+
+        -- A getter named for the last name may return it bare.
+        local last = asked[#asked]
+        if not before and not surname and last.ok then
+            local value = last.values[1]
+            if value and value ~= "nil" and value ~= first and not value:find("[%s%-]") then
+                surname = value
+            end
+        end
+    end
+
+    return surname, asked
 end
 
 --------------------------------------------------------------------------------
@@ -544,6 +685,45 @@ ns.RegisterCommand("db", "show what saved data loaded", function()
             ns.Print("|cff4fd18bper-character saved data DID load|r, so the queue could be kept there.")
         end
     end
+end)
+
+ns.RegisterCommand("whoami", "show what the game says this character is called", function()
+    local Config = ns.Config
+    local key = Config:GetCharacterKey()
+    local surname, asked = Config:ReadSurname()
+
+    ns.Print("this character")
+    ns.PrintRaw(("  saved as:        %s"):format(key))
+    ns.PrintRaw(("  old style key:   %s"):format(Config:GetLegacyCharacterKey()))
+    ns.PrintRaw(("  last name found: %s"):format(surname or "none"))
+
+    if Config.adoptedFrom then
+        ns.PrintRaw(("  moved saved data from %s this session"):format(Config.adoptedFrom))
+    end
+
+    local realmOk, realm = pcall(GetRealmName)
+    ns.PrintRaw(("  GetRealmName:    %s"):format(realmOk and tostring(realm) or "error"))
+
+    for _, entry in ipairs(asked) do
+        local answer
+        if entry.missing then
+            answer = "not in this client"
+        elseif not entry.ok then
+            answer = "error"
+        elseif #entry.values == 0 then
+            answer = "nothing"
+        else
+            answer = table.concat(entry.values, ", ")
+        end
+        ns.PrintRaw(("  %s: %s"):format(entry.label, answer))
+    end
+
+    local sameName = 0
+    local first = key and ns.db.characters[key] and ns.db.characters[key].name
+    for _, record in pairs(ns.db.characters) do
+        if first and record.name == first then sameName = sameName + 1 end
+    end
+    ns.PrintRaw(("  saved characters with this first name: %d"):format(sameName))
 end)
 
 ns.RegisterCommand("debug", "turn extra chat detail on or off", function()

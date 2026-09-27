@@ -91,6 +91,10 @@ local function GetCharacterRecord(create)
         characters[key] = record
     end
 
+    if record and not Recipes.identityStamped and key == ns.Config.characterKey then
+        Recipes:StampIdentity(record)
+    end
+
     return record
 end
 
@@ -127,10 +131,52 @@ function Recipes:GetAny(recipeID)
     end
 end
 
---- Just the character's name, for display. Keys are "Name-Realm".
+--- Who a record belongs to, written once a session so that characters
+--- sharing a first name can be told apart on screen.
+function Recipes:StampIdentity(record)
+    self.identityStamped = true
+
+    local guid = ns.Config.characterKey
+    if guid then record.guid = guid end
+
+    local ok, name = pcall(UnitName, "player")
+    if ok and type(name) == "string" and name ~= "" then record.name = name end
+
+    local surname = ns.Config:ReadSurname()
+    if surname then record.surname = surname end
+
+    local classOk, className = pcall(UnitClass, "player")
+    if classOk and type(className) == "string" then record.class = className end
+
+    local levelOk, level = pcall(UnitLevel, "player")
+    if levelOk and tonumber(level) then record.level = tonumber(level) end
+end
+
+--- The character's name, for display: first and last name when the last one
+--- is known. Old keys are "Name-Realm"; new ones are the character's GUID.
 function Recipes:GetCharacterName(characterKey)
     if not characterKey then return "?" end
+
+    local record = ns.db and ns.db.characters[characterKey]
+    if type(record) == "table" and type(record.name) == "string" then
+        if record.surname then
+            return record.name .. " " .. record.surname
+        end
+        return record.name
+    end
+
     return (characterKey:match("^([^-]+)")) or characterKey
+end
+
+--- What to add after a name that another character also has.
+local function Distinguish(record)
+    if type(record) ~= "table" then return nil end
+
+    if record.level and record.class then
+        return ("level %d %s"):format(record.level, record.class)
+    end
+    if record.class then return record.class end
+    if not record.guid then return "saved before last names" end
 end
 
 --- Every known character, newest data first.
@@ -154,9 +200,25 @@ function Recipes:GetCharacters()
         }
     end
 
+    -- Two characters showing the same name get told apart by level and class.
+    local seen = {}
+    for _, entry in ipairs(characters) do
+        seen[entry.name] = (seen[entry.name] or 0) + 1
+    end
+
+    for _, entry in ipairs(characters) do
+        if seen[entry.name] > 1 then
+            local extra = Distinguish(ns.db.characters[entry.key])
+            if extra then
+                entry.name = ("%s (%s)"):format(entry.name, extra)
+            end
+        end
+    end
+
     table.sort(characters, function(a, b)
         if a.isCurrent ~= b.isCurrent then return a.isCurrent end
-        return a.name < b.name
+        if a.name ~= b.name then return a.name < b.name end
+        return a.key < b.key
     end)
 
     return characters
