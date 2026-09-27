@@ -96,6 +96,23 @@ local function CreateRow(row)
     row.quantity:SetPoint("RIGHT", row.post, "LEFT", -6, 0)
 end
 
+--- What one of this item is worth disenchanted, for an enchanter.
+--
+-- Only for a character that knows Disenchant (or a client that will not
+-- say), since to anyone else it is not a choice they have.
+-- @return value, beatsSale  -- nil when it does not apply
+local function DisenchantFor(line)
+    if not ns.Disenchant or not ns.Disenchanter then return nil end
+    if ns.Disenchanter:Knows() == false then return nil end
+
+    local value = ns.Disenchant:GetValue(line.itemID)
+    if not value then return nil end
+
+    return value, line.unitPrice ~= nil and value > line.unitPrice
+end
+
+PostPanel._DisenchantFor = DisenchantFor
+
 --- Why a line is a loss, in words the player can act on.
 local function LossText(line)
     if line.lossReason == "vendor" then
@@ -121,11 +138,22 @@ function UpdateRow(row, line)
     -- and a commodity posting 63 at once is worth noticing before clicking.
     -- Listing part of a stack says so, since "7 @ 6c" out of 20 in the bag
     -- reads the same as all of them otherwise.
-    row.detail:SetText(("%d%s @ %s  =  %s"):format(
+    local detail = ("%d%s @ %s  =  %s"):format(
         line.postQuantity,
         line.postQuantity < maxQuantity and (" of " .. maxQuantity) or "",
         Util.FormatMoney(line.unitPrice, { noColor = true, short = true }),
-        Util.FormatMoney(line.postTotal or 0, { noColor = true, short = true })))
+        Util.FormatMoney(line.postTotal or 0, { noColor = true, short = true }))
+
+    -- Beside the price, so selling and disenchanting read against each
+    -- other: green when disenchanting one is worth more than listing it.
+    local disenchant, beats = DisenchantFor(line)
+    if disenchant then
+        local text = "DE " .. Util.FormatMoney(disenchant, { noColor = true, short = true })
+        if beats then text = ("|c%s%s|r"):format(ns.COLORS.profit, text) end
+        detail = detail .. "   " .. text
+    end
+
+    row.detail:SetText(detail)
 
     if line.atALoss then
         row.name:SetTextColor(Theme.Unpack("loss"))
@@ -168,6 +196,16 @@ local function ShowRowTooltip(row, line)
     if line.vendorPrice then
         GameTooltip:AddDoubleLine("Vendor pays",
             Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+
+    local disenchant, beats = DisenchantFor(line)
+    if disenchant then
+        GameTooltip:AddDoubleLine("Disenchant value",
+            Util.FormatMoney(disenchant, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+        if beats then
+            GameTooltip:AddLine(("Disenchanting it is worth %s more than listing it."):format(
+                Util.FormatMoney(disenchant - line.unitPrice, { noColor = true })), 0.35, 0.85, 0.45, true)
+        end
     end
 
     GameTooltip:AddLine(line.isCommodity
