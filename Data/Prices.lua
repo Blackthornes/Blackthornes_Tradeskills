@@ -347,6 +347,14 @@ function Prices:GetValue(itemID, which)
         return record.min or record.market
     elseif which == "rival" then
         return record.rivalMin
+    elseif which == "lowest" then
+        -- The cheapest posting, yours included, leaving out a lone one far
+        -- below the rest (see IsLoneLow). With nothing listed at the last
+        -- look, the market value is the best there is.
+        local lowest = record.rivalMin
+        if record.ownMin and (not lowest or record.ownMin < lowest) then lowest = record.ownMin end
+        if not lowest and not record.ignoredLow then lowest = record.min end
+        return lowest or record.market
     end
 
     return record.market or record.min
