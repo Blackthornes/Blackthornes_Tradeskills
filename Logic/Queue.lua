@@ -141,6 +141,53 @@ function Queue:RebuildDependencies()
     end
 end
 
+--- Re-derive the sub-crafts for the character just logged in.
+--
+-- The queue is shared by every character, but which materials are cheaper to
+-- make depends on who is making them. Sub-crafts were only re-derived when the
+-- queue changed, so logging into the tailor the Queue tab had suggested left
+-- the bolts off its queue. With "Suggest other characters" on, that character
+-- now finds the bolts queued and their wool on the shopping list, and the one
+-- that cannot make them goes back to buying them.
+function Queue:OnEnable()
+    if ns.Config:Get("suggestOtherCharacters") == false then return end
+    if not (C_Timer and C_Timer.After) then return end
+
+    -- A moment's grace so the bags have been read: sub-crafts are sized
+    -- against what is already owned.
+    C_Timer.After(3, function() Queue:RefreshForCharacter() end)
+end
+
+--- Rebuild the sub-crafts and say which ones this character now makes.
+-- @return the sub-craft entries that were not in the queue before
+function Queue:RefreshForCharacter()
+    if self:Count() == 0 then return {} end
+
+    local before = {}
+    for _, entry in ipairs(self:GetAll()) do
+        if entry.isDependency then before[entry.recipeID] = true end
+    end
+
+    self:RebuildDependencies()
+
+    local added = {}
+    for _, entry in ipairs(self:GetAll()) do
+        if entry.isDependency and not before[entry.recipeID] then
+            added[#added + 1] = entry
+
+            local recipe = ns.Recipes:GetAny(entry.recipeID)
+            local parents = self:GetDependencyParents(entry)
+
+            ns.Print(("queued %d x %s for %s. This character makes it for less than buying it; its materials are on the shopping list.")
+                :format(entry.quantity, (recipe and recipe.name) or "a sub-craft",
+                    #parents > 0 and table.concat(parents, ", ") or "another craft"))
+        end
+    end
+
+    self:Notify()
+    return added
+end
+
 --- The crafts this dependency exists to serve, for display.
 function Queue:GetDependencyParents(entry)
     local names = {}
@@ -359,6 +406,10 @@ function Queue:GetShoppingList()
 
     local list = {}
 
+    -- On unless unticked in Settings. Shared across lines so the alts' recipes
+    -- are gathered once per list, not once per material.
+    local altContext = ns.Config:Get("suggestOtherCharacters") ~= false and {} or nil
+
     for itemID, needed in pairs(required) do
         needed = needed - (queuedToMake[itemID] or 0)
         if needed > 0 then
@@ -420,6 +471,9 @@ function Queue:GetShoppingList()
                 savingPerUnit = savingPerUnit,
                 savingTotal = savingPerUnit and (savingPerUnit * shortfall) or nil,
                 onAlts = ns.Inventory:GetAltTotal(itemID),
+                -- Cheaper to make on another character, when asked to look.
+                altCraft = altContext and shortfall > 0
+                    and self:GetAltCraftOffer(itemID, shortfall, unitCost, altContext) or nil,
             }
         end
     end
@@ -432,6 +486,101 @@ function Queue:GetShoppingList()
     end)
 
     return list
+end
+
+--------------------------------------------------------------------------------
+-- Making a material on another character
+--------------------------------------------------------------------------------
+
+--- Every recipe your other characters know, by the item it makes.
+--
+-- The logged-in character is left out: whatever it can make, the cost engine
+-- already weighs against buying and queues as a sub-craft when cheaper.
+local function AltRecipesByOutput()
+    local byOutput = {}
+    if not (ns.db and ns.db.characters) then return byOutput end
+
+    local selfKey = ns.Config:GetCharacterKey()
+
+    for characterKey, record in pairs(ns.db.characters) do
+        if characterKey ~= selfKey and type(record) == "table" then
+            for recipeID, recipe in pairs(record.recipes or {}) do
+                local itemID = recipe.outputItemID
+                if itemID then
+                    local list = byOutput[itemID] or {}
+                    list[#list + 1] = { characterKey = characterKey, recipeID = recipeID, recipe = recipe }
+                    byOutput[itemID] = list
+                end
+            end
+        end
+    end
+
+    return byOutput
+end
+
+--- Display names that tell apart two characters sharing a name.
+local function CharacterNames()
+    local names = {}
+    if ns.Recipes.GetCharacters then
+        for _, entry in ipairs(ns.Recipes:GetCharacters()) do
+            names[entry.key] = entry.name
+        end
+    end
+    return names
+end
+
+--- The cheapest way another of your characters can make a material this
+--- character has to buy, when that beats buying it.
+--
+-- Only ever a suggestion. The queue cannot craft on another character, so the
+-- shopping list still says buy it; this is the reason to log over, make it
+-- there and mail it across. Items that bind on pickup cannot be mailed, so they
+-- are never suggested.
+--
+-- @param units how many are still needed
+-- @param buyUnitCost what one costs to buy, or nil when nobody sells it
+-- @return nil, or { characterKey, characterName, recipeID, recipeName,
+--                   unitCost, crafts, saving }  (saving nil when unpriced)
+function Queue:GetAltCraftOffer(itemID, units, buyUnitCost, context)
+    if not itemID or not units or units <= 0 then return nil end
+    if ns.Cost:FindRecipeForItem(itemID) then return nil end
+    if ns.Util.IsBoundOnPickup and ns.Util.IsBoundOnPickup(itemID) == true then return nil end
+
+    context = context or {}
+    context.byOutput = context.byOutput or AltRecipesByOutput()
+
+    local candidates = context.byOutput[itemID]
+    if not candidates then return nil end
+
+    context.names = context.names or CharacterNames()
+
+    local best
+    for _, candidate in ipairs(candidates) do
+        local cost = ns.Cost:GetCraftCost(candidate.recipeID)
+        local unitCost = cost and cost.priceable and cost.perUnit
+
+        if unitCost and (not buyUnitCost or unitCost < buyUnitCost) then
+            local name = context.names[candidate.characterKey]
+                or ns.Recipes:GetCharacterName(candidate.characterKey)
+
+            if not best or unitCost < best.unitCost
+                or (unitCost == best.unitCost and name < best.characterName) then
+                local perCraft = math.max(1, candidate.recipe.quantityMin or 1)
+
+                best = {
+                    characterKey = candidate.characterKey,
+                    characterName = name,
+                    recipeID = candidate.recipeID,
+                    recipeName = candidate.recipe.name,
+                    unitCost = unitCost,
+                    crafts = math.ceil(units / perCraft),
+                    saving = buyUnitCost and math.floor((buyUnitCost - unitCost) * units) or nil,
+                }
+            end
+        end
+    end
+
+    return best
 end
 
 function Queue:GetShoppingTotal()

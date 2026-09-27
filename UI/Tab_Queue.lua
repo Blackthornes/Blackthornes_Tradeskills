@@ -175,7 +175,8 @@ local function UpdateMaterialRow(row, line)
             and Util.FormatMoney(line.estimatedCost, { short = true }) or "?")
         cells.cost:SetTextColor(Theme.Unpack(line.fromVendor and "accent" or "muted"))
 
-        row.name:SetTextColor(Theme.Unpack("text"))
+        -- Green: another of your characters can make it for less.
+        row.name:SetTextColor(Theme.Unpack(line.altCraft and "profit" or "text"))
 
         -- Buying a vendor reagent off the auction house is a mistake, so do
         -- not offer the search for it.
@@ -227,6 +228,22 @@ local function ShowMaterialTooltip(row, line)
         else
             GameTooltip:AddLine("No auction data for this material", 0.9, 0.38, 0.31)
         end
+    end
+
+    local offer = line.altCraft
+    if offer then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(("Cheaper to make on %s"):format(offer.characterName), 0.31, 0.82, 0.55)
+        GameTooltip:AddDoubleLine("Cost to make",
+            Util.FormatMoney(offer.unitCost * line.shortfall, { noColor = true }),
+            0.7, 0.7, 0.7, 1, 1, 1)
+        if offer.saving then
+            GameTooltip:AddDoubleLine("You save",
+                Util.FormatMoney(offer.saving, { noColor = true }),
+                0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
+        end
+        GameTooltip:AddLine(("Log in on that character and %d x %s is queued there, with its materials to buy. Mail it across once made.")
+            :format(offer.crafts, offer.recipeName or "it"), 0.7, 0.7, 0.7, true)
     end
 
     -- Alt-held stock is never counted as yours automatically: it is not in
@@ -352,6 +369,73 @@ local function UpdateCraftStatus()
     end
 end
 
+-- Suggestions already announced in chat this session, so each is said once.
+local announcedAltCrafts = {}
+
+--- Say in chat, once, each time a new cheaper way turns up on another character.
+local function AnnounceAltCrafts(lines)
+    local found = false
+
+    for _, line in ipairs(lines) do
+        local offer = line.altCraft
+        local key = offer and (line.itemID .. ":" .. offer.characterKey)
+
+        if key and not announcedAltCrafts[key] then
+            announcedAltCrafts[key] = true
+            found = true
+
+            ns.Print(("Cheaper way found: %s can make %s%s. Log in there and it will be in your queue.")
+                :format(offer.characterName, Util.GetItemLabel(line.itemID),
+                    offer.saving and offer.saving > 0
+                        and (" and save you %s"):format(Util.FormatMoney(offer.saving))
+                        or ""))
+        end
+    end
+
+    if found and type(PlaySound) == "function" then
+        local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
+        local kit = kits.LOOT_WINDOW_COIN_SOUND or 120
+        pcall(PlaySound, kit)
+    end
+end
+
+--- The line under the materials naming each character worth swapping to.
+local MAX_ALT_NOTES = 3
+
+local function UpdateAltNote(lines)
+    local note = widgets.altNote
+    if not note then return end
+
+    local notes, extra = {}, 0
+    for _, line in ipairs(lines) do
+        local offer = line.altCraft
+        if offer then
+            if #notes < MAX_ALT_NOTES then
+                notes[#notes + 1] = ("Swap to %s to make %s%s"):format(
+                    offer.characterName, Util.GetItemLabel(line.itemID),
+                    offer.saving and offer.saving > 0
+                        and (", saves %s"):format(Util.FormatMoney(offer.saving, { short = true }))
+                        or "")
+            else
+                extra = extra + 1
+            end
+        end
+    end
+
+    if extra > 0 then
+        notes[#notes + 1] = ("and %d more, shown in green"):format(extra)
+    end
+
+    note:SetText(table.concat(notes, "\n"))
+
+    -- The list makes room for the note rather than running under it.
+    local reserve = 48
+    if #notes > 0 then
+        reserve = reserve + (note:GetStringHeight() or 0) + 4
+    end
+    widgets.materialList:SetPoint("BOTTOMRIGHT", widgets.materials, "BOTTOMRIGHT", -10, reserve)
+end
+
 local function Refresh()
     if not widgets.craftList then return end
 
@@ -364,7 +448,10 @@ local function Refresh()
     end
 
     widgets.craftList:SetData(entries)
-    widgets.materialList:SetData(ns.Queue:GetShoppingList())
+    local shopping = ns.Queue:GetShoppingList()
+    widgets.materialList:SetData(shopping)
+    UpdateAltNote(shopping)
+    AnnounceAltCrafts(shopping)
 
     widgets.emptyLabel:SetShown(#entries == 0)
 
@@ -471,6 +558,7 @@ local function Build(container)
     materials:SetPoint("TOPRIGHT", -8, -8)
     materials:SetPoint("BOTTOMRIGHT", -8, 8)
     materials:SetWidth(MATERIALS_WIDTH)
+    widgets.materials = materials
 
     local materialsHeading = Theme.CreateLabel(materials, "tiny", "accent")
     materialsHeading:SetPoint("TOPLEFT", 10, -10)
@@ -517,6 +605,15 @@ local function Build(container)
     bankNote:SetWordWrap(true)
     bankNote:SetJustifyV("BOTTOM")
     widgets.bankNote = bankNote
+
+    -- Materials another character can make for less, when Settings asks.
+    -- Grows upward from just above the bank note.
+    local altNote = Theme.CreateLabel(materials, "tiny", "profit")
+    altNote:SetPoint("BOTTOMLEFT", 10, 48)
+    altNote:SetPoint("BOTTOMRIGHT", -10, 48)
+    altNote:SetWordWrap(true)
+    altNote:SetJustifyV("BOTTOM")
+    widgets.altNote = altNote
 
     local shoppingLabel = Theme.CreateLabel(materials, "small", "text")
     shoppingLabel:SetPoint("BOTTOMLEFT", 10, 10)
