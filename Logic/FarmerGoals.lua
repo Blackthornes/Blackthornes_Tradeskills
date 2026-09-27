@@ -58,20 +58,11 @@ local function Cheer()
     pcall(PlaySound, kits.IG_QUEST_LIST_COMPLETE or 878)
 end
 
---- Make (or change) a Farmer goal to have `amount` of `itemID`.
--- Returns true, or false and why not. Says the outcome in chat either way.
-function FarmerGoals:SetGoal(itemID, amount)
-    local farmer = self:Farmer()
-    if not farmer then
-        ns.Print("Blackthornes Farmer is not loaded, so there is nowhere to put a goal.")
-        return false, "no farmer"
-    end
-
+--- Hand one goal to Farmer. Returns the goal and whether it already
+--- existed, or nil and why not. Prints nothing.
+local function Apply(farmer, itemID, amount)
     local name = ItemName(itemID)
-    if not name then
-        ns.Print("The game has not sent that item's name yet. Try again in a moment.")
-        return false, "no name"
-    end
+    if not name then return nil, "the game has not sent its name yet" end
 
     amount = math.floor(tonumber(amount) or 0)
 
@@ -83,26 +74,83 @@ function FarmerGoals:SetGoal(itemID, amount)
     end
 
     local ok, goal, why = pcall(Goals.Set, Goals, name, amount)
-    if not ok then
-        ns.Print("Farmer could not make that goal. It may need updating.")
-        return false, "error"
+    if not ok then return nil, "Farmer could not make it. It may need updating" end
+    if type(goal) ~= "table" then return nil, tostring(why or "Farmer said no"), name end
+
+    return goal, existed
+end
+
+local function ShowPanel(farmer)
+    local ui = farmer.GoalsUI
+    if type(ui) == "table" and type(ui.Show) == "function" then
+        pcall(ui.Show, ui)
     end
-    if type(goal) ~= "table" then
-        ns.Print(("No Farmer goal set: %s."):format(tostring(why or "Farmer said no")))
-        return false, why
+end
+
+--- Make (or change) a Farmer goal to have `amount` of `itemID`.
+-- Returns true, or false and why not. Says the outcome in chat either way.
+function FarmerGoals:SetGoal(itemID, amount)
+    local farmer = self:Farmer()
+    if not farmer then
+        ns.Print("Blackthornes Farmer is not loaded, so there is nowhere to put a goal.")
+        return false, "no farmer"
+    end
+
+    local goal, existed = Apply(farmer, itemID, amount)
+    if not goal then
+        ns.Print(("No Farmer goal set: %s."):format(existed))
+        return false, existed
     end
 
     local target = tonumber(goal.target) or amount
     local have = tonumber(goal.have) or 0
     ns.Print(("|c%sFarmer goal %s:|r %d %s. You have %d, %d to go."):format(
         ns.COLORS.profit or ns.COLORS.accent, existed and "updated" or "set",
-        target, tostring(goal.item or name), have, math.max(0, target - have)))
+        target, tostring(goal.item), have, math.max(0, target - have)))
 
-    local ui = farmer.GoalsUI
-    if type(ui) == "table" and type(ui.Show) == "function" then
-        pcall(ui.Show, ui)
-    end
-
+    ShowPanel(farmer)
     Cheer()
     return true
+end
+
+--- A goal for every line in `lines` ({ itemID, needed }), in order.
+-- Farmer holds only so many goals at once; the rest are named as not set.
+-- One summary in chat and one sound, however many there are.
+-- Returns how many were set.
+function FarmerGoals:SetGoals(lines)
+    local farmer = self:Farmer()
+    if not farmer then
+        ns.Print("Blackthornes Farmer is not loaded, so there is nowhere to put goals.")
+        return 0
+    end
+
+    local set, missed = {}, {}
+    for _, line in ipairs(lines or {}) do
+        local goal, existed, name = Apply(farmer, line.itemID, line.needed)
+        if goal then
+            set[#set + 1] = tostring(goal.item)
+        else
+            missed[#missed + 1] = ("%s (%s)"):format(
+                name or ItemName(line.itemID) or ("item " .. tostring(line.itemID)), existed)
+        end
+    end
+
+    if #set == 0 and #missed == 0 then
+        ns.Print("Nothing still needed, so no Farmer goals to set.")
+        return 0
+    end
+
+    if #set > 0 then
+        ns.Print(("|c%s%d Farmer goal%s set:|r %s."):format(
+            ns.COLORS.profit or ns.COLORS.accent, #set, #set == 1 and "" or "s",
+            table.concat(set, ", ")))
+        ShowPanel(farmer)
+        Cheer()
+    end
+
+    if #missed > 0 then
+        ns.Print(("Not set: %s."):format(table.concat(missed, "; ")))
+    end
+
+    return #set
 end
