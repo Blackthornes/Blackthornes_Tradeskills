@@ -115,6 +115,16 @@ local function CreateRow(row)
         if row.data then UI:SearchAuctionHouse(row.data.itemID) end
     end, { width = 26, height = 16, tooltip = "Search the auction house for this" })
     row.search:SetPoint("RIGHT", -8, 0)
+
+    -- With Blackthornes Farmer loaded: turn the shortfall into a Farmer
+    -- gathering goal, shown on Farmer's Goals panel.
+    row.goal = Widgets.CreateButton(row, "Set goal", function()
+        local line = row.data
+        if line then ns.FarmerGoals:SetGoal(line.itemID, line.needed) end
+    end, { width = 52, height = 16,
+        tooltip = "Make a Blackthornes Farmer goal to gather what you need of this" })
+    row.goal:SetPoint("RIGHT", -38, 0)
+    row.goal:Hide()
 end
 
 local function UpdateRow(row, line)
@@ -137,6 +147,7 @@ local function UpdateRow(row, line)
         cells.cost:SetText("")
 
         row.search:Hide()
+        row.goal:Hide()
         return
     end
 
@@ -156,6 +167,7 @@ local function UpdateRow(row, line)
     -- No auction search for something a vendor sells cheaper: following it
     -- would be acting against the recommendation the row just made.
     row.search:SetShown(line.source == "auction")
+    row.goal:SetShown(ns.FarmerGoals:Available())
 end
 
 local function ShowRowTooltip(row, line)
@@ -276,6 +288,9 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Room for the Set goal button beside AH, only when Farmer is there to take it.
+    COLUMNS[1].width = ns.FarmerGoals:Available() and 88 or 30
+
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
@@ -297,6 +312,20 @@ local function Build(container)
     end, { width = 150 })
     sort:SetPoint("RIGHT", 0, 0)
     sort:SetValue("source")
+
+    -- With Blackthornes Farmer loaded: every material still needed becomes a
+    -- Farmer goal in one click, in the order the list shows them.
+    if ns.FarmerGoals:Available() then
+        local setAll = Widgets.CreateButton(toolbar, "Set all goals", function()
+            local needed = {}
+            for _, line in ipairs(BuildList()) do
+                if line.shortfall > 0 then needed[#needed + 1] = line end
+            end
+            ns.FarmerGoals:SetGoals(needed)
+        end, { width = 100, height = 22,
+            tooltip = "Make a Blackthornes Farmer goal for every material you still need" })
+        setAll:SetPoint("RIGHT", sort, "LEFT", -8, 0)
+    end
 
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)

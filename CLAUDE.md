@@ -50,6 +50,23 @@ to the smoothed market value (`Data/Prices.lua`). If one has to change, change
 Farmer's `Logic/Value.lua` in the same breath and tell Trent both need
 updating.
 
+## How Tradeskills uses Farmer
+
+The Gather tab's **Set goal** button (`Logic/FarmerGoals.lua`) turns a
+material the queue still needs into a Farmer gathering goal. It shows only
+when Farmer is loaded (`## OptionalDeps: Blackthornes_Farmer` in the TOC) and
+calls, inside a pcall:
+
+```lua
+_G.BlackthornesFarmer.Goals:Find(name)            -- optional, to say "updated"
+_G.BlackthornesFarmer.Goals:Set(name, amount)     -- goal table, or nil and why
+_G.BlackthornesFarmer.GoalsUI:Show()              -- opens Farmer's Goals panel
+```
+
+`name` is the item's plain name and `amount` the row's NEED. Farmer's
+`CLAUDE.md` asks its side to keep these stable; if one changes, change
+`Logic/FarmerGoals.lua` in the same breath.
+
 ## Trent's standing rules (both addons)
 
 - **"Always check that it's clear to post."** Anything that goes public (a
