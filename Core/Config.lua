@@ -165,6 +165,10 @@ local DEFAULTS = {
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
 
+        -- Point out a material another of your characters can make for less
+        -- than it costs to buy. Only a suggestion; the queue still buys it.
+        suggestAltCrafts = false,
+
         -- How the mark on a craft that both skills you up and pays is drawn:
         -- "star" is the addon's own art, "raid" the game's raid-target star,
         -- "pip" a plain gold square for a client that draws neither. Switched
