@@ -576,7 +576,7 @@ local function Build(container)
         if redrawQueued or not widgets.list:IsVisible() then return end
 
         redrawQueued = true
-        C_Timer.After(0.5, function()
+        C_Timer.After(1, function()
             redrawQueued = false
             Refresh()
         end)
