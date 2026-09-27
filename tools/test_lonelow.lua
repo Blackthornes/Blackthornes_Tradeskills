@@ -89,8 +89,18 @@ local listings = { L(100), L(5000, 5), L(5100, 5) }
 local m2, mn2, q2, r2, o2, i2 = Prices:Summarise(listings)
 Prices:Record(2589, m2, mn2, q2, time(), r2, o2, i2)
 check("the ignored price is stored", priceTable[2589].ignoredLow == 100 and priceTable[2589].rivalMin == 5000)
+check("the lowest posting leaves the lone one out", Prices:GetValue(2589, "lowest") == 5000)
+check("while the plain value is still market value", Prices:GetValue(2589) == priceTable[2589].market)
 Prices:RecordEmpty(2589)
 check("an empty search clears it", priceTable[2589].ignoredLow == nil)
+
+-- Lowest posting counts your own listing, and falls back to market value.
+priceTable[3000] = { market = 900, min = 700, rivalMin = 800, ownMin = 700, scans = 1, history = {} }
+check("your own cheaper listing is the lowest posting", Prices:GetValue(3000, "lowest") == 700)
+priceTable[3001] = { market = 900, scans = 1, history = {} }
+check("nothing listed falls back to market value", Prices:GetValue(3001, "lowest") == 900)
+priceTable[3002] = { market = 900, min = 100, ignoredLow = 100, scans = 1, history = {} }
+check("only a lone low one listed is not taken as the lowest", Prices:GetValue(3002, "lowest") == 900)
 
 -- A full scan passes the stored market value in.
 priceTable[4306] = { market = 1100, scans = 1, history = {} }

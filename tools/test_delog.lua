@@ -24,7 +24,21 @@ local saved = {
     SpellIsTargeting = SpellIsTargeting, GetNumLootItems = GetNumLootItems,
     GetLootSlotLink = GetLootSlotLink, GetLootSlotInfo = GetLootSlotInfo,
     GetLootSourceInfo = GetLootSourceInfo,
+    UIErrorsFrame = UIErrorsFrame, PlaySound = PlaySound, SOUNDKIT = SOUNDKIT,
 }
+
+-- What was said on screen and which sounds played.
+local flashed, sounds = {}, {}
+UIErrorsFrame = { AddMessage = function(_, text) flashed[#flashed + 1] = text end }
+SOUNDKIT = { LEVELUPSOUND = 888, UI_EPICLOOT_TOAST = 31578 }
+PlaySound = function(kit) sounds[#sounds + 1] = kit end
+
+local function Said(pattern, from)
+    for index = from or 1, #printed do
+        if printed[index]:find(pattern) then return printed[index] end
+    end
+    return nil
+end
 
 CreateFrame = function()
     local frame = {}
@@ -127,6 +141,10 @@ print("\ntelling which item went in")
 Disenchantment({ click = 1, loot = { { STRANGE_DUST, 5 } } })
 check("a bag click names the item", Casts(CHEST_KEY) == 1)
 check("found by the click, and counted once across both loot events", Log:GetTable().recent[1].from == "click")
+check("chat says what it gave", Said("Disenchanted.-5 Strange Dust") ~= nil)
+check("and how far along learning that kind of item is",
+    Said("learning green armor, item level 21 to 25: 1 of 10") ~= nil)
+check("a first disenchant is not a new find", Said("New find") == nil and #sounds == 0)
 
 Disenchantment({ loot = { { STRANGE_DUST, 4 } }, source = "Item-1002-0-ABC" })
 check("the loot window's source names the item", Casts(CHEST_KEY) == 2
@@ -171,11 +189,29 @@ check("with 4 recorded, the table is still used", facts.source == "table" and fa
 check("and says how many of yours there are", facts.key == CHEST_KEY)
 
 -- Six more, one of which also gave a shard, to reach ten.
+local before = #printed
 for index = 1, 6 do
     local got = { { STRANGE_DUST, 5 } }
     if index == 1 then got[2] = { SMALL_GLIMMERING, 1 } end
     Disenchantment({ click = 2, loot = got })
 end
+
+check("a material not seen before from that kind of item is a new find",
+    Said("New find!.-Small Glimmering Shard can come from green armor", before) ~= nil)
+check("a disenchant worth well over the usual is lucky", Said("Lucky!", before) ~= nil)
+check("reaching ten says it was learnt, with the odds",
+    Said("Learned!.-green armor, item level 21 to 25 now uses your own results: Strange Dust 100%%, Small Glimmering Shard 10%%", before) ~= nil)
+check("each of those shows on screen too", #flashed == 2
+    and flashed[1]:find("New find") and flashed[2]:find("Learned"))
+check("with a soft sound for the find and the fanfare for learning",
+    #sounds == 2 and sounds[1] == 31578 and sounds[2] == 888)
+check("after ten the count goes on without 'of 10'",
+    Said("green armor, item level 21 to 25: 10 recorded", before) ~= nil)
+
+print("\nnaming kinds of item")
+check("the lowest band", Disenchant:DescribeKey("2:weapon:15") == "green weapon, item level 15 and below")
+check("the highest band", Disenchant:DescribeKey("3:any:top") == "blue items, item level 56 and up")
+check("a middle band", Disenchant:DescribeKey("4:any:50") == "purple items, item level 46 to 50")
 
 outcomes, facts = Disenchant:GetOutcomes(1002)
 check("at ten, your results are used", facts.source == "yours" and facts.casts == 10)
@@ -194,5 +230,6 @@ C_Item, C_Container, GetTime, CreateFrame = saved.C_Item, saved.C_Container, sav
 SpellIsTargeting, GetNumLootItems = saved.SpellIsTargeting, saved.GetNumLootItems
 GetLootSlotLink, GetLootSlotInfo, GetLootSourceInfo =
     saved.GetLootSlotLink, saved.GetLootSlotInfo, saved.GetLootSourceInfo
+UIErrorsFrame, PlaySound, SOUNDKIT = saved.UIErrorsFrame, saved.PlaySound, saved.SOUNDKIT
 
 print(("\n%d check(s) passed\n"):format(checks))

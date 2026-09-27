@@ -216,6 +216,36 @@ local function BandKey(facts, band)
     return ("%d:any:%s"):format(facts.quality, top)
 end
 
+local COLOUR_WORD = { [2] = "green", [3] = "blue", [4] = "purple" }
+
+--- A key from BandKey in words: "green armor, item level 21 to 25".
+function Disenchant:DescribeKey(key)
+    local quality, kind, top = tostring(key or ""):match("^(%d):(%a+):(%w+)$")
+    quality = tonumber(quality)
+    if not quality or not COLOUR_WORD[quality] then return tostring(key) end
+
+    local bands = quality == 2 and UNCOMMON or quality == 3 and RARE or EPIC
+    local upTo = top == "top" and math.huge or tonumber(top)
+
+    local from = 1
+    for _, band in ipairs(bands) do
+        if band.upTo == upTo then break end
+        from = band.upTo + 1
+    end
+
+    local levels
+    if upTo == math.huge then
+        levels = ("item level %d and up"):format(from)
+    elseif from <= 1 then
+        levels = ("item level %d and below"):format(upTo)
+    else
+        levels = ("item level %d to %d"):format(from, upTo)
+    end
+
+    local what = kind == "any" and "items" or kind
+    return ("%s %s, %s"):format(COLOUR_WORD[quality], what, levels)
+end
+
 --- What one disenchant of this item can give.
 --
 -- From your own recorded disenchants when there are enough of them for this
@@ -310,9 +340,11 @@ end
 --------------------------------------------------------------------------------
 
 --- The auction value of one of a material, or nil when it has never been
---- priced. The smoothed market value, the same number the item tooltip shows.
+--- priced. Its lowest posting, leaving out a lone one far below the rest
+--- (Trent, 2026-09-27: "based on DE mat's lowest posting value disregarding
+--- outliers"), since that is what the materials would sell for today.
 function Disenchant:GetMaterialPrice(itemID)
-    local value = ns.Prices and ns.Prices:GetValue(itemID, "market")
+    local value = ns.Prices and ns.Prices:GetValue(itemID, "lowest")
     if not value or value <= 0 then return nil end
     return value
 end

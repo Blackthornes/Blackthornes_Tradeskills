@@ -93,7 +93,11 @@ ns.Cost = {
     GetMaterialValue = function() return nil end,
 }
 ns.Prices = {
-    GetValue = function(_, itemID) return prices[itemID] end,
+    GetValue = function(_, itemID, which)
+        -- Materials are priced at their lowest posting.
+        if ns.Disenchant and ns.Disenchant:IsMaterial(itemID) then assert(which == "lowest", which) end
+        return prices[itemID]
+    end,
     Get = function(_, itemID) return prices[itemID] and { min = prices[itemID] } or nil end,
     HoldsLowest = function() return false end,
     GetConfidence = function() return 1 end,

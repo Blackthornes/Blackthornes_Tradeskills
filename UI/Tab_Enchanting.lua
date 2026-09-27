@@ -21,7 +21,7 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
-local SOURCE_NOTE = "Chances come from the Classic table built into the addon, since the game does not tell addons what an item breaks into. Your own disenchants replace it once you have done %d like this (%d so far). Values use your scanned auction prices."
+local SOURCE_NOTE = "Chances come from the Classic table built into the addon, since the game does not tell addons what an item breaks into. Your own disenchants replace it once you have done %d like this (%d so far). Materials are priced at their lowest auction posting, leaving out a lone one far below the rest."
 
 -- Right-aligned columns per view, laid out right to left.
 local VIEWS = {
@@ -420,7 +420,7 @@ local function UpdateDetail(entry)
         detail.subtitle:SetText("Enchanting material")
         detail.verdict:SetText("")
 
-        SetLine(lines[1], "Auction value",
+        SetLine(lines[1], "Lowest posting",
             entry.price and Util.FormatMoney(entry.price) or "not scanned yet",
             entry.price and "text" or "dim")
         SetLine(lines[2], "Last scanned",
@@ -536,7 +536,7 @@ local function UpdateDetail(entry)
 
     local note
     if facts.source == "yours" then
-        note = ("Chances come from your own %d disenchants of items like this. Values use your scanned auction prices.")
+        note = ("Chances come from your own %d disenchants of items like this. Materials are priced at their lowest auction posting, leaving out a lone one far below the rest.")
             :format(facts.casts or 0)
     else
         note = SOURCE_NOTE:format(ns.Disenchant.LEARN_AFTER or 10, facts.casts or 0)
