@@ -4,6 +4,22 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.9.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- When a material on the Queue tab's shopping list is cheaper for another of
+  your characters to make, it shows in green, with that character, the cost
+  and the saving on hover, a note under the list and a one-time chat line.
+  It only suggests: the queue and shopping list don't change on their own.
+  Bind-on-pickup materials are never suggested, since they can't be mailed.
+  Turn it off in Settings under Suggest other characters.
+- The queue now works out in-between crafts again a moment after you log in,
+  so the character who can make a material gets it queued with its own
+  materials on the shopping list, and one who can't goes back to buying it.
+  Each newly queued in-between craft is named in chat.
+
 ## 0.8.1
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
