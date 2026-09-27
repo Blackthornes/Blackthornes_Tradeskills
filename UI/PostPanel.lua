@@ -242,10 +242,14 @@ function PostPanel:Build()
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
 
-    local title = Theme.CreateLabel(frame, "normal", "accent")
-    title:SetPoint("TOPLEFT", 14, -14)
-    title:SetText("Ready to sell")
+    local header, title = ns.Collapse.CreateHeader(frame, "Ready to sell")
     self.title = title
+
+    -- What everything listed here would fetch, in gold on the header, so it
+    -- is still there to see with the panel folded away.
+    local worth = Theme.CreateLabel(header, "small", "accent", "RIGHT")
+    worth:SetPoint("RIGHT", header, "RIGHT", -10, 0)
+    self.worth = worth
 
     -- Everything under the title, so the collapse button can fold it away in
     -- one go and leave the title strip showing.
@@ -255,6 +259,7 @@ function PostPanel:Build()
 
     ns.Collapse.Attach(frame, {
         key = COLLAPSE_KEY,
+        header = header,
         title = title,
         body = body,
         onToggle = function()
@@ -264,7 +269,7 @@ function PostPanel:Build()
     })
 
     local summary = Theme.CreateLabel(body, "tiny", "muted")
-    summary:SetPoint("TOPLEFT", title, "BOTTOMLEFT", -ns.Collapse.TITLE_SHIFT, -3)
+    summary:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
     summary:SetWidth(PANEL_WIDTH - 28)
     self.summary = summary
 
@@ -426,6 +431,7 @@ function PostPanel:Refresh()
         self.empty:SetText(
             "Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for.")
         self.summary:SetText("")
+        self.worth:SetText("")
         return
     end
 
@@ -435,10 +441,13 @@ function PostPanel:Refresh()
         if line.atALoss then losses = losses + 1 end
     end
 
-    self.summary:SetText(("%d item%s, about %s%s"):format(
+    self.worth:SetText(Util.FormatMoney(total, { noColor = true, short = true }))
+
+    self.summary:SetText(("%d item%s, about |c%s%s|r%s"):format(
         #lines, #lines == 1 and "" or "s",
+        ns.COLORS.accent,
         Util.FormatMoney(total, { noColor = true, short = true }),
-        losses > 0 and (("  ·  %d at a loss"):format(losses)) or ""))
+        losses > 0 and (("  ·  |c%s%d at a loss|r"):format(ns.COLORS.loss, losses)) or ""))
 end
 
 --- Put the current wait on every visible List button.

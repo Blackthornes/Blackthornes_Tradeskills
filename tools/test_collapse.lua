@@ -49,11 +49,12 @@ local Collapse = ns.Collapse
 
 print("")
 
-local panel, title, body = Frame(), Frame(), Frame()
+local panel, header, title, body = Frame(), Frame(), Frame(), Frame()
 local toggled = {}
 
 local button = Collapse.Attach(panel, {
   key = "testCollapsed",
+  header = header,
   title = title,
   body = body,
   onToggle = function(collapsed) toggled[#toggled + 1] = collapsed end,
@@ -62,7 +63,8 @@ local button = Collapse.Attach(panel, {
 check("starts open: body showing", body:IsShown(), true)
 check("starts open: button offers to collapse", button.text, "-")
 check("open: the panel keeps its measured height", Collapse.Height("testCollapsed", 500), 500)
-check("the title moves over for the button", title.points[1][2], 14 + Collapse.TITLE_SHIFT)
+check("the title sits just right of the button", title.points[1][2], button)
+check("folded height is no less than the bevel needs", Collapse.HEIGHT >= 44, true)
 
 button:Click()
 check("one click: body hidden", body:IsShown(), false)
@@ -79,7 +81,7 @@ check("second click: the panel is told it opened", toggled[2], false)
 -- A panel built after a reload comes up the way it was left.
 settings.laterCollapsed = true
 local later, laterBody = Frame(), Frame()
-local laterButton = Collapse.Attach(later, { key = "laterCollapsed", title = Frame(), body = laterBody })
+local laterButton = Collapse.Attach(later, { key = "laterCollapsed", header = Frame(), title = Frame(), body = laterBody })
 check("built folded after a reload: body hidden", laterBody:IsShown(), false)
 check("built folded after a reload: button offers to expand", laterButton.text, "+")
 
