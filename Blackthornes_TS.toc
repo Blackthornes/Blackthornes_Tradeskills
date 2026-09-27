@@ -5,6 +5,7 @@
 ## Version: @project-version@
 ## SavedVariables: BlackthornesTSDB
 ## SavedVariablesPerCharacter: BlackthornesTSCharDB
+## OptionalDeps: Blackthornes_Farmer
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
 
 # Where tagged releases upload. The packager reads this; the client ignores it.
@@ -38,6 +39,7 @@ Logic\Crafting.lua
 Logic\Posting.lua
 Logic\Transfer.lua
 Logic\SaleAlarm.lua
+Logic\FarmerGoals.lua
 
 UI\Theme.lua
 UI\Widgets.lua
