@@ -45,6 +45,7 @@ UI\Main.lua
 UI\PostPanel.lua
 UI\CraftPanel.lua
 UI\ProfessionOpener.lua
+UI\Disenchanter.lua
 UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
