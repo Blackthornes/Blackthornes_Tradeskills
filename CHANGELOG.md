@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.10.0
+
+For WoW: Forever (interface 16001). This version adds a file, so fully
+restart the game after updating; `/reload` is not enough.
+
+- With Blackthornes Farmer 0.8.0 or later loaded, each material you still
+  need on the Gather tab gets a Set goal button. It makes a Farmer gathering
+  goal for the amount you need and opens Farmer's Goals panel.
+- Set all goals does the same for every material still needed, in list
+  order. Farmer holds six goals at most, so any it turns down are named in
+  chat with the reason.
+
 ## 0.9.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
