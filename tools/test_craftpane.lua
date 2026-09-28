@@ -504,7 +504,7 @@ do
   local inset = CraftPanel.TEXT_INSET
   local controls = CraftPanel.QUANTITY_WIDTH + CraftPanel.BUTTON_WIDTH
 
-  check("the text inset clears the quantity box and the Add button",
+  check("the text inset clears the quantity box and the - and + buttons",
     inset > controls, true)
 
   -- Not just clear, but clear with room to breathe on both sides of the box.
@@ -572,6 +572,144 @@ do
 
   ANALYSIS[101].skillUp, ANALYSIS[102].skillUp, ANALYSIS[103].skillUp = nil, nil, nil
   ns.LevelUp = nil
+end
+
+--------------------------------------------------------------------------------
+-- The queued crafts list beside the pane
+--------------------------------------------------------------------------------
+
+do
+  local open = { [101] = true, [102] = true }
+  READY[101], READY[103] = true, true
+
+  local text, _, craftable = CraftPanel:QueuedStatus({ recipeID = 101, quantity = 5 }, open)
+  check("ready here: says so, with how many the bags make", text, "ready, materials for 3")
+  check("and its Craft button can be pressed", craftable, true)
+
+  text, _, craftable = CraftPanel:QueuedStatus({ recipeID = 103, quantity = 1 }, open)
+  check("ready but for another profession: says so", text, "ready, in another profession")
+  check("and cannot be crafted from this window", craftable, false)
+
+  text, _, craftable = CraftPanel:QueuedStatus({ recipeID = 102, quantity = 1 }, open)
+  check("not ready: cannot be crafted", craftable, false)
+
+  ns.Crafting.active = { recipeID = 102 }
+  text = CraftPanel:QueuedStatus({ recipeID = 102, quantity = 1 }, open)
+  check("the craft under way says so", text, "crafting now")
+  ns.Crafting.active = nil
+
+  READY[101], READY[103] = nil, nil
+end
+
+--------------------------------------------------------------------------------
+-- Rows stay put while the list is held
+--------------------------------------------------------------------------------
+
+-- Queueing a craft ranks it lower in the profit order (more of it coming).
+-- With the order held, the row stays where it was clicked.
+do
+  local savedOpen = _G.C_TradeSkillUI
+  _G.C_TradeSkillUI = nil
+  local held = { [103] = 1, [101] = 2 }
+
+  check("a held order keeps rows where they were",
+    names(CraftPanel:GetRows({ sortBy = "name", keepOrder = held })),
+    "Brown Linen Shirt, Copper Chain Belt, Rough Sharpening Stone")
+
+  check("with nothing held, the sort decides",
+    names(CraftPanel:GetRows({ sortBy = "name" })),
+    "Brown Linen Shirt, Copper Chain Belt, Rough Sharpening Stone")
+
+  check("a new row goes after the held ones",
+    names(CraftPanel:GetRows({ sortBy = "name", keepOrder = { [102] = 1, [101] = 2 } })),
+    "Rough Sharpening Stone, Copper Chain Belt, Brown Linen Shirt")
+
+  check("changing the sort changes what the order is held for",
+    CraftPanel:OrderKey({ sortBy = "name" }) ~= CraftPanel:OrderKey({ sortBy = "profit" }), true)
+
+  check("changing the search does too",
+    CraftPanel:OrderKey({ sortBy = "name", search = "" }) ~= CraftPanel:OrderKey({ sortBy = "name", search = "belt" }), true)
+
+  _G.C_TradeSkillUI = savedOpen
+end
+
+--------------------------------------------------------------------------------
+-- The box on each row is how many are queued
+--------------------------------------------------------------------------------
+
+-- Typing a number, or pressing - and +, sets the recipe's own entry to it.
+do
+  local calls = {}
+  local savedFind = ns.Queue.Find
+  local entries = { [101] = { recipeID = 101, quantity = 3 } }
+  ns.Queue.Find = function(_, recipeID) local e = entries[recipeID]; if e then return 1, e end end
+  ns.Queue.Add = function(_, recipeID, n) calls[#calls + 1] = ("add %d %d"):format(recipeID, n) end
+  ns.Queue.SetQuantity = function(_, recipeID, n) calls[#calls + 1] = ("set %d %d"):format(recipeID, n) end
+  ns.Warn, ns.Print = function() end, function() end
+
+  local line = { recipeID = 101, name = "Copper Chain Belt", queued = 3 }
+
+  CraftPanel:SetQueued(line, 5)
+  check("typing 5 over 3 queued queues 2 more", calls[#calls], "add 101 2")
+
+  CraftPanel:SetQueued(line, 1)
+  check("typing 1 over 3 queued lowers it to 1", calls[#calls], "set 101 1")
+
+  CraftPanel:SetQueued(line, 0)
+  check("typing 0 takes it off", calls[#calls], "set 101 0")
+
+  local before = #calls
+  CraftPanel:SetQueued(line, 3)
+  check("typing the same number changes nothing", #calls, before)
+
+  CraftPanel:SetQueued({ recipeID = 102, name = "Rough Sharpening Stone", queued = 0 }, 4)
+  check("typing into a row with nothing queued queues that many", calls[#calls], "add 102 4")
+
+  -- The Keep in stock limit still caps what the box can add.
+  CraftPanel:SetQueued({ recipeID = 102, name = "Rough Sharpening Stone", queued = 0,
+    roomInCrafts = 2, postLimit = 2 }, 5)
+  check("the stock limit still caps it", calls[#calls], "add 102 2")
+
+  ns.Queue.Find = savedFind
+end
+
+--------------------------------------------------------------------------------
+-- Clear queue asks first
+--------------------------------------------------------------------------------
+
+-- A queue can take a while to build, so one stray click must not empty it.
+do
+  local now, cleared, count = 100, 0, 3
+  local savedGetTime, savedTimer = _G.GetTime, _G.C_Timer
+  _G.GetTime = function() return now end
+  _G.C_Timer = { After = function() end }
+  ns.Print = function() end
+  ns.Queue.Count = function() return count end
+  ns.Queue.Clear = function() cleared = cleared + 1; count = 0 end
+
+  local button = { SetText = function(self, text) self.text = text end,
+    SetEnabledState = function(self, on) self.enabled = on end,
+    label = { SetTextColor = function() end } }
+  ns.Theme.Unpack = function() return 1, 1, 1 end
+  CraftPanel.clearButton = button
+
+  CraftPanel:OnClearClicked()
+  check("the first click on Clear queue empties nothing", cleared, 0)
+  check("and asks for a second click", button.text, "Click to clear")
+
+  CraftPanel:OnClearClicked()
+  check("a second click soon after empties the queue", cleared, 1)
+  check("and the button reads Clear queue again", button.text, "Clear queue")
+
+  count = 3
+  CraftPanel:UpdateClearButton()
+  CraftPanel:OnClearClicked()
+  now = now + 10
+  CraftPanel:OnClearClicked()
+  check("a second click long after only asks again", cleared, 1)
+
+  CraftPanel.clearButton, CraftPanel.clearArmedUntil = nil, nil
+  _G.GetTime, _G.C_Timer = savedGetTime, savedTimer
 end
 
 print("")

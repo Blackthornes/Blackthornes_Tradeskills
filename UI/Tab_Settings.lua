@@ -266,7 +266,15 @@ local function Build(outer)
     end, { width = 70, height = 20, tooltip = "Show a sample report" })
     mailReportTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
 
-    local filters = CreateSection(container, "FILTERS", { anchor = mailReportRow })
+    local scanSoundsRow = CreateRow(container, mailReportRow, "Sound when a scan finishes",
+        "Plays a chime when an auction house scan finishes, and another when it finds disenchant or vendor deals.")
+
+    widgets.scanSounds = Widgets.CreateCheckbox(scanSoundsRow, "Enabled", function(checked)
+        Config:Set("scanSounds", checked)
+    end, true)
+    widgets.scanSounds:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local filters = CreateSection(container, "FILTERS", { anchor = scanSoundsRow })
 
     local profitRow = CreateRow(container, filters, "Minimum profit",
         "Crafts that make less than this are hidden from the Profit tab. " ..
@@ -516,6 +524,7 @@ local function Refresh()
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
+    widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan = ns.db.lastFullScan

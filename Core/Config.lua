@@ -171,6 +171,11 @@ local DEFAULTS = {
         -- Also the running tally over the mailbox. See UI/MailReport.lua.
         mailReport = true,
 
+        -- The sounds that play when an auction house scan finishes: the scan
+        -- itself, and the Disenchanting and Vendor Flips finds after it. Off
+        -- keeps the scan silent; the chat lines and the bar still show.
+        scanSounds = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,

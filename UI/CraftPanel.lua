@@ -26,22 +26,40 @@ local Util = ns.Util
 
 -- Wide enough for a recipe name beside a quantity box and a button. Recipe
 -- names on this client run long ("Heavy Scorpid Bracers"), so the name gets
--- its own line and the numbers sit under it. The quantity box and Add button
--- sit on the name's line, so the line under it can run the full width of the
+-- its own line and the numbers sit under it. The - and + buttons and the
+-- quantity box between them sit on the name's line, so the line under it can run the full width of the
 -- row: at 322 wide with the buttons beside it, that line was cut off on
 -- almost every recipe.
 local PANEL_WIDTH = 350
 local ROW_HEIGHT = 30
 
 local QUANTITY_WIDTH = 34
-local BUTTON_WIDTH = 42
 
--- Right margin, button, gap, quantity box, gap before the text.
-local TEXT_INSET = 8 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 10
+-- The - and + buttons either side of the quantity box, and the gap between
+-- each button and the box.
+local STEP_WIDTH = 18
+local STEP_GAP = 3
+
+-- Both step buttons and their gaps: everything beside the box.
+local BUTTON_WIDTH = STEP_WIDTH * 2 + STEP_GAP * 2
+
+-- The Craft button left of the -, shown only on rows with something queued.
+local CRAFT_WIDTH = 36
+local CRAFT_GAP = 5
+local CRAFT_INSET = CRAFT_WIDTH + CRAFT_GAP
+
+-- Right margin, the buttons and box, gap before the text.
+local TEXT_INSET = 8 + BUTTON_WIDTH + QUANTITY_WIDTH + 14
 
 -- Clear of the profession window's bevelled edge without opening a gap you
 -- could see the world through.
 local PANEL_GAP = 6
+
+-- The two buttons at the bottom right, and how long Clear queue waits for its
+-- second click.
+local QUEUE_TAB_WIDTH = 64
+local CLEAR_WIDTH = 84
+local CLEAR_CONFIRM_SECONDS = 4
 
 -- Only used when Blizzard's profession window cannot be found at all.
 local PANEL_FALLBACK_HEIGHT = 460
@@ -64,6 +82,7 @@ local TRADE_SKILL_FRAME_NAMES = { "ProfessionsFrame", "TradeSkillFrame" }
 CraftPanel.TEXT_INSET = TEXT_INSET
 CraftPanel.QUANTITY_WIDTH = QUANTITY_WIDTH
 CraftPanel.BUTTON_WIDTH = BUTTON_WIDTH
+CraftPanel.CRAFT_INSET = CRAFT_INSET
 CraftPanel.PANEL_GAP = PANEL_GAP
 
 --------------------------------------------------------------------------------
@@ -293,9 +312,13 @@ function CraftPanel:GetRows(opts)
                 -- A search is not a suggestion, though: someone typing a name
                 -- is looking for that one recipe, and hiding the thing they
                 -- just named would read as the pane having lost it.
+                --
+                -- Nor is a row already on screen: queueing up to the limit
+                -- would otherwise make the row vanish under the cursor.
                 local suppressed = atLimit
                     and search == ""
                     and not opts.ignoreLimit
+                    and not (opts.keepOrder and opts.keepOrder[recipeID])
                     and ns.Config:Get("hideAtPostLimit") ~= false
 
                 if not suppressed then
@@ -334,21 +357,47 @@ function CraftPanel:GetRows(opts)
         end
     end
 
-    table.sort(rows, SORTS[opts.sortBy] or SORTS.profit)
+    local sort = SORTS[opts.sortBy] or SORTS.profit
+    local keep = opts.keepOrder
+
+    if keep then
+        -- Rows already on screen keep their places; anything new goes after
+        -- them, in the chosen order.
+        table.sort(rows, function(a, b)
+            local ka, kb = keep[a.recipeID], keep[b.recipeID]
+            if ka and kb then return ka < kb end
+            if ka or kb then return ka ~= nil end
+            return sort(a, b)
+        end)
+    else
+        table.sort(rows, sort)
+    end
 
     return rows
+end
+
+--- What the list's order was worked out for. While this stays the same, rows
+--- keep their places.
+--
+-- Queueing a craft counts it as stock you will have, and the profit order
+-- ranks a craft lower the more of it you have coming (see RankOf). So adding
+-- a row to the queue used to drop it down the list the moment it was clicked.
+-- The order is now worked out once and held until the sort, the search, the
+-- Ignore max on hand box or the profession changes, or the pane closes.
+function CraftPanel:OrderKey(opts)
+    local open = self:GetOpenRecipeIDs()
+    local count, sum = 0, 0
+    for recipeID in pairs(open or {}) do
+        count, sum = count + 1, sum + recipeID
+    end
+
+    return table.concat({ tostring(opts.sortBy), opts.search or "",
+        tostring(opts.ignoreLimit), count, sum }, "|")
 end
 
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
-
---- How many of each recipe the Add button will queue.
---
--- Kept by recipe ID rather than on the row, because the scroll list recycles
--- its rows: scroll down and row 1 becomes a different recipe, and a number
--- left on the frame would follow the frame instead of the craft.
-CraftPanel.pending = {}
 
 --- Is the player part-way through typing a number into this box?
 --
@@ -363,19 +412,15 @@ function CraftPanel:IgnoringLimit()
     return ns.Config:Get("craftPaneIgnoreLimit") == true
 end
 
-local function QueueFromRow(row)
-    if not row.data then return end
-
-    local line = row.data
-
-    local quantity = math.max(1, math.floor(
-        tonumber(row.quantity:GetValue()) or CraftPanel.pending[line.recipeID] or 1))
+--- Queue this many more of the row's recipe, within the Keep in stock limit.
+local function QueueMore(line, quantity)
+    quantity = math.max(1, math.floor(tonumber(quantity) or 1))
 
     -- The limit is the player's own answer to "how many of these do I want",
     -- so queueing past it is nearly always a slip -- and a slip that costs
     -- materials and a deposit, not just a wrong number on a screen. Said out
-    -- loud either way: a button that silently queues fewer than the number
-    -- beside it looks broken.
+    -- loud either way: a button that silently queues fewer than asked for
+    -- looks broken.
     -- Unless the player has ticked the box that says to ignore it.
     local room = not CraftPanel:IgnoringLimit() and line.roomInCrafts or nil
 
@@ -394,6 +439,56 @@ local function QueueFromRow(row)
     end
 
     ns.Queue:Add(line.recipeID, quantity)
+end
+
+--- Set this recipe's own queue entry to exactly this many.
+--
+-- The box on each row shows how many are queued, so typing into it or
+-- pressing - and + all come here. Only the entry the player queued is
+-- changed. A sub-craft the queue added to make something else is sized from
+-- that parent and would come straight back, so it is left alone and the
+-- player is told where to change it instead.
+function CraftPanel:SetQueued(line, wanted)
+    wanted = math.max(0, math.floor(tonumber(wanted) or 0))
+
+    local _, entry = ns.Queue:Find(line.recipeID, true)
+    local current = entry and entry.quantity or 0
+
+    if wanted > current then
+        QueueMore(line, wanted - current)
+    elseif wanted < current then
+        -- SetQuantity takes the entry off the queue once it reaches zero.
+        ns.Queue:SetQuantity(line.recipeID, wanted)
+    elseif not entry and wanted == 0 and ns.Queue:Find(line.recipeID) then
+        ns.Print(("%s is only queued as a material for another craft. Lower that craft to need fewer."):format(line.name))
+    end
+end
+
+--- The row's Craft button: make this recipe's queued crafts now.
+--
+-- A real click, so the game accepts it, the same as Craft next. One click
+-- makes as many of the queued number as the bags have materials for.
+function CraftPanel:CraftRow(line)
+    if ns.Crafting:IsBusy() then
+        ns.Crafting:Stop()
+        self:Refresh()
+        return
+    end
+
+    local _, entry = ns.Queue:Find(line.recipeID)
+    if not entry then return end
+
+    self:CraftEntry(entry)
+end
+
+--- Start one queue entry, from a row here or in the queued crafts list.
+function CraftPanel:CraftEntry(entry)
+    if ns.Crafting:IsBusy() then
+        ns.Crafting:Stop()
+    else
+        ns.Crafting:Start(entry.recipeID, entry.quantity)
+    end
+    self:Refresh()
 end
 
 -- Room at the left of every row for the skill-up star, reserved whether one is
@@ -429,22 +524,37 @@ local function CreateRow(row)
     row.detail:SetPoint("TOPLEFT", 8 + MARK_GUTTER, -17)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -17)
 
-    row.add = Widgets.CreateButton(row, "Add", function()
-        QueueFromRow(row)
-    end, { width = BUTTON_WIDTH, height = 15, primary = true })
+    -- Reads - [box] +, the way a number you nudge up and down usually looks.
+    -- The box is how many are queued: + and - change it by one, or type the
+    -- number you want.
+    row.add = Widgets.CreateButton(row, "+", function()
+        if row.data then QueueMore(row.data, 1) end
+    end, { width = STEP_WIDTH, height = 15, primary = true })
     row.add:SetPoint("TOPRIGHT", -8, -1)
 
     row.quantity = Widgets.CreateNumberBox(row, {
         width = QUANTITY_WIDTH,
         height = 15,
         background = "panel",
-        min = 1,
+        min = 0,
         onChange = function(value)
-            if not row.data then return end
-            CraftPanel.pending[row.data.recipeID] = value
+            if row.data then CraftPanel:SetQueued(row.data, value) end
         end,
     })
-    row.quantity:SetPoint("RIGHT", row.add, "LEFT", -6, 0)
+    row.quantity:SetPoint("RIGHT", row.add, "LEFT", -STEP_GAP, 0)
+
+    row.remove = Widgets.CreateButton(row, "-", function()
+        if row.data then CraftPanel:SetQueued(row.data, row.data.queued - 1) end
+    end, { width = STEP_WIDTH, height = 15 })
+    row.remove:SetPoint("RIGHT", row.quantity, "LEFT", -STEP_GAP, 0)
+
+    -- Only on rows with something queued, so the names on the rest keep
+    -- their room.
+    row.craft = Widgets.CreateButton(row, "Craft", function()
+        if row.data then CraftPanel:CraftRow(row.data) end
+    end, { width = CRAFT_WIDTH, height = 15, primary = true })
+    row.craft:SetPoint("RIGHT", row.remove, "LEFT", -CRAFT_GAP, 0)
+    row.craft:Hide()
 end
 
 --- How much of this you already have, as a phrase, or nil for none.
@@ -481,7 +591,31 @@ local function UpdateRow(row, line)
     -- Not while it is being typed into: overwriting someone mid-number is how
     -- a field ends up refusing to accept what they meant.
     if not BeingTyped(row.quantity) then
-        row.quantity:SetValue(CraftPanel.pending[line.recipeID] or 1, true)
+        row.quantity:SetValue(line.queued, true)
+    end
+
+    -- A queued number stands out from the zeros around it.
+    row.quantity.editBox:SetTextColor(Theme.Unpack(line.queued > 0 and "accent" or "dim"))
+
+    -- The Craft button, and room for it on the name line, only while there
+    -- is something of this queued.
+    local canCraftRow = line.queued > 0
+    row.craft:SetShown(canCraftRow)
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT",
+        -(TEXT_INSET + (canCraftRow and CRAFT_INSET or 0)), -4)
+
+    if canCraftRow then
+        local busy = ns.Crafting:IsBusy()
+        local ready, reason = ns.Crafting:GetReadiness(line.recipeID)
+        local open = CraftPanel:GetOpenRecipeIDs()
+        local here = not open or open[line.recipeID]
+
+        row.craft:SetText(busy and "Stop" or "Craft")
+        row.craft:SetEnabledState(busy or (ready and here) or false)
+        row.craft.tooltipText = busy and "Stop crafting"
+            or not here and "Open the profession that makes this to craft it"
+            or not ready and (reason or "Nothing to make it with yet")
+            or ("Craft the %d queued, as many as your materials make"):format(line.queued)
     end
 
     -- Rarity, the same as the Profit tab and the sell list, so the three read
@@ -548,9 +682,15 @@ local function UpdateRow(row, line)
         row.add.tooltipText = ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
             line.stock or 0, line.name)
     else
-        row.add.tooltipText = ("Queue %d of %s. Right-click the row to take it off the queue."):format(
-            CraftPanel.pending[line.recipeID] or 1, line.name)
+        row.add.tooltipText = ("Queue one more %s. Or type how many you want in the box."):format(line.name)
     end
+
+    -- Greyed out with nothing of this recipe's own in the queue, so the
+    -- button never looks like it did something when it could not.
+    row.remove:SetEnabledState(line.queued > 0)
+    row.remove.tooltipText = line.queued > 0
+        and ("Queue one fewer %s. Right-click the row to take all of it off."):format(line.name)
+        or "Nothing of this queued yet"
 end
 
 local function ShowRowTooltip(row, line)
@@ -604,7 +744,7 @@ end
 
 --- Left-click queues, right-click takes it back off.
 --
--- The Add button is the discoverable way in; this is for working down a list
+-- The + button is the discoverable way in; this is for working down a list
 -- quickly, where reaching for the same small button every time is the slow part.
 local function OnRowClick(line, _, mouseButton, row)
     if mouseButton == "RightButton" then
@@ -612,7 +752,7 @@ local function OnRowClick(line, _, mouseButton, row)
         return
     end
 
-    QueueFromRow(row)
+    QueueMore(line, 1)
 end
 
 --------------------------------------------------------------------------------
@@ -632,6 +772,11 @@ function CraftPanel:Build()
     frame:EnableMouse(true)
     if frame.SetToplevel then frame:SetToplevel(true) end
     frame:Hide()
+
+    -- Opening the pane again sorts afresh (see CraftPanel:OrderKey).
+    frame:HookScript("OnHide", function()
+        CraftPanel.orderKey, CraftPanel.heldOrder = nil, nil
+    end)
 
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
@@ -736,7 +881,7 @@ function CraftPanel:Build()
     self.craftButton = craft
 
     -- The Keep in stock limit (Settings) hides crafts you already hold enough
-    -- of and caps what Add will queue. Ticking this lifts both, for this pane
+    -- of and caps what + will queue. Ticking this lifts both, for this pane
     -- only, without changing the limit itself. Remembered between sessions.
     local ignoreLimit = Widgets.CreateCheckbox(body, "Ignore max on hand", function(checked)
         ns.Config:Set("craftPaneIgnoreLimit", checked)
@@ -746,20 +891,23 @@ function CraftPanel:Build()
     ignoreLimit:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
         GameTooltip:SetText("Ignore max on hand", 1, 1, 1)
-        GameTooltip:AddLine("Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and Add queues the full number you type. Your setting is not changed.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and the boxes queue the full number you type. Your setting is not changed.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
     self.ignoreLimitBox = ignoreLimit
 
+    -- Room left of the two buttons at the bottom right.
+    local summaryWidth = PANEL_WIDTH - 28 - QUEUE_TAB_WIDTH - CLEAR_WIDTH - 12
+
     local summary = Theme.CreateLabel(body, "tiny", "muted")
     summary:SetPoint("BOTTOMLEFT", 14, 22)
-    summary:SetWidth(PANEL_WIDTH - 100)
+    summary:SetWidth(summaryWidth)
     self.summary = summary
 
     -- While a craft casts, a progress bar takes the summary line's place.
     local progress = ns.CraftProgress:Create(body, {
-        width = PANEL_WIDTH - 100, height = 16, covers = summary,
+        width = summaryWidth, height = 16, covers = summary,
     })
     progress:SetPoint("LEFT", summary, "LEFT", 0, 0)
     self.progress = progress
@@ -767,11 +915,63 @@ function CraftPanel:Build()
     local openQueue = Widgets.CreateButton(body, "Queue tab", function()
         ns.UI:Show()
         ns.UI:SelectTab("queue")
-    end, { width = 64, height = 18, tooltip = "Open the full queue, with its shopping list" })
+    end, { width = QUEUE_TAB_WIDTH, height = 18, tooltip = "Open the full queue, with its shopping list" })
     openQueue:SetPoint("BOTTOMRIGHT", -14, 18)
+
+    -- A queue can take a while to build, so emptying it takes a second click.
+    local clear = Widgets.CreateButton(body, "Clear queue", function()
+        CraftPanel:OnClearClicked()
+    end, { width = CLEAR_WIDTH, height = 18 })
+    clear:SetPoint("RIGHT", openQueue, "LEFT", -6, 0)
+    self.clearButton = clear
 
     self.frame = frame
     return frame
+end
+
+--- Clear queue: the first click asks, a second click within a few seconds
+--- empties the queue. Left alone, the button goes back to how it was.
+function CraftPanel:OnClearClicked()
+    local now = GetTime()
+
+    if self.clearArmedUntil and now < self.clearArmedUntil then
+        self.clearArmedUntil = nil
+        local count = ns.Queue:Count()
+        ns.Queue:Clear()
+        ns.Print(("Craft queue cleared (%d entr%s)."):format(count, count == 1 and "y" or "ies"))
+        self:UpdateClearButton()
+        return
+    end
+
+    self.clearArmedUntil = now + CLEAR_CONFIRM_SECONDS
+    self:UpdateClearButton()
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(CLEAR_CONFIRM_SECONDS, function()
+            if CraftPanel.clearArmedUntil and GetTime() >= CraftPanel.clearArmedUntil then
+                CraftPanel.clearArmedUntil = nil
+            end
+            CraftPanel:UpdateClearButton()
+        end)
+    end
+end
+
+function CraftPanel:UpdateClearButton()
+    local button = self.clearButton
+    if not button then return end
+
+    local empty = ns.Queue:Count() == 0
+    if empty then self.clearArmedUntil = nil end
+
+    local armed = self.clearArmedUntil ~= nil and GetTime() < self.clearArmedUntil
+
+    button:SetText(armed and "Click to clear" or "Clear queue")
+    button:SetEnabledState(not empty)
+    if armed then button.label:SetTextColor(Theme.Unpack("loss")) end
+
+    button.tooltipText = empty and "The queue is empty"
+        or armed and "Click again to empty the whole craft queue"
+        or "Empty the whole craft queue. Asks you to click again first."
 end
 
 function CraftPanel:UpdateSortButton()
@@ -968,16 +1168,30 @@ function CraftPanel:Refresh()
         self.title:SetText(queued > 0
             and ("Craft queue (%d queued)"):format(queued)
             or "Craft queue")
+        self:RefreshQueued()
         return
     end
 
     self.title:SetText("Craft queue")
 
-    local rows = self:GetRows({
+    local opts = {
         search = self.search and self.search:GetText() or "",
         sortBy = self.sortBy,
         ignoreLimit = self:IgnoringLimit(),
-    })
+    }
+
+    local key = self:OrderKey(opts)
+    if key ~= self.orderKey then
+        self.orderKey, self.heldOrder = key, nil
+    end
+    opts.keepOrder = self.heldOrder
+
+    local rows = self:GetRows(opts)
+
+    self.heldOrder = {}
+    for index, row in ipairs(rows) do
+        self.heldOrder[row.recipeID] = index
+    end
 
     self.list:SetData(rows)
     self.empty:SetShown(#rows == 0)
@@ -991,6 +1205,8 @@ function CraftPanel:Refresh()
     end
 
     self:UpdateCraftButton()
+    self:UpdateClearButton()
+    self:RefreshQueued()
 
     local queued = ns.Queue:Count()
 
@@ -1003,12 +1219,163 @@ function CraftPanel:Refresh()
     local totals = ns.Queue:GetTotals()
 
     -- The profit in its own colour: green when the queue pays, red when not.
-    self.summary:SetText(("%d craft%s queued  ·  profit |c%s%s|r%s"):format(
-        totals.crafts, totals.crafts == 1 and "" or "s",
+    -- Kept short: it shares the bottom line with Clear queue and Queue tab.
+    self.summary:SetText(("%d queued · profit |c%s%s|r%s"):format(
+        totals.crafts,
         (totals.profit or 0) < 0 and ns.COLORS.loss or ns.COLORS.profit,
         Util.FormatMoney(totals.profit, { noColor = true, short = true }),
-        totals.priceable and "" or "  (some unpriced)"))
+        totals.priceable and "" or " (some unpriced)"))
     self.summary:SetTextColor(Theme.Unpack("muted"))
+end
+
+--------------------------------------------------------------------------------
+-- Queued crafts, beside the pane
+--------------------------------------------------------------------------------
+
+-- Trent, 2026-09-28: "show the crafting queue out to the right of this Craft
+-- queue window once things are queued." The queue itself, in the order it is
+-- worked through, each entry with its own Craft button, so nothing here needs
+-- the main window. A child of the pane, so it hides whenever the pane does.
+
+local QUEUED_WIDTH = 250
+local QUEUED_ROW_HEIGHT = 30
+local QUEUED_GAP = 4
+
+CraftPanel.QUEUED_WIDTH = QUEUED_WIDTH
+
+--- What the queued list says under an entry's name, and whether its Craft
+--- button can be pressed.
+--
+-- @param open the open profession's recipe set, or nil when the game will not say
+-- @return text, colour key, craftable here
+function CraftPanel:QueuedStatus(entry, open)
+    local active = ns.Crafting.active
+    if active and active.recipeID == entry.recipeID then
+        return "crafting now", "accent", true
+    end
+
+    local ready, reason = ns.Crafting:GetReadiness(entry.recipeID)
+    local here = not open or open[entry.recipeID]
+
+    if ready and here then
+        local canMake = math.min(entry.quantity,
+            ns.Profit:GetCraftableCount(entry.recipeID) or 0)
+        return ("ready, materials for %d"):format(canMake), "profit", true
+    end
+
+    if ready then return "ready, in another profession", "muted", false end
+
+    return reason or "missing materials", "muted", false
+end
+
+local function CreateQueuedRow(row)
+    row.icon = Theme.CreateItemIcon(row, 13)
+    row.icon:SetPoint("TOPLEFT", 8, -3)
+
+    row.name = Theme.CreateLabel(row, "small", "text")
+    row.name:SetPoint("TOPLEFT", 25, -4)
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -(8 + 16 + 4 + CRAFT_WIDTH + 6), -4)
+
+    row.detail = Theme.CreateLabel(row, "tiny", "muted")
+    row.detail:SetPoint("TOPLEFT", 8, -17)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -17)
+
+    row.remove = Widgets.CreateButton(row, "x", function()
+        if row.data then ns.Queue:Remove(row.data.recipeID) end
+    end, { width = 16, height = 15, tooltip = "Take this off the queue" })
+    row.remove:SetPoint("TOPRIGHT", -8, -1)
+
+    row.craft = Widgets.CreateButton(row, "Craft", function()
+        if row.data then CraftPanel:CraftEntry(row.data) end
+    end, { width = CRAFT_WIDTH, height = 15, primary = true })
+    row.craft:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
+end
+
+local function UpdateQueuedRow(row, entry)
+    local recipe = ns.Recipes:GetAny(entry.recipeID)
+
+    row.name:SetText(("%dx %s"):format(entry.quantity,
+        (recipe and recipe.name) or ("recipe " .. tostring(entry.recipeID))))
+    Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
+
+    local r, g, b = Util.GetItemQualityColor(recipe and recipe.outputItemID)
+    if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
+
+    local status, colour, craftable = CraftPanel:QueuedStatus(entry, CraftPanel.queuedOpen)
+
+    -- A material the queue added for another craft says which, as the Queue
+    -- tab does, and has no x: it is sized from that craft.
+    if entry.isDependency then
+        local parents = ns.Queue:GetDependencyParents(entry)
+        status = ("for %s · %s"):format(
+            #parents > 0 and table.concat(parents, ", ") or "another craft", status)
+    end
+
+    row.detail:SetText(status)
+    row.detail:SetTextColor(Theme.Unpack(colour))
+
+    row.remove:SetShown(not entry.isDependency)
+
+    local busy = ns.Crafting:IsBusy()
+    row.craft:SetText(busy and "Stop" or "Craft")
+    row.craft:SetEnabledState(busy or craftable)
+    row.craft.tooltipText = busy and "Stop crafting"
+        or craftable and "Craft these now, as many as your materials make"
+        or status
+end
+
+function CraftPanel:BuildQueued()
+    if self.queuedFrame then return self.queuedFrame end
+
+    local frame = CreateFrame("Frame", nil, self.frame)
+    frame:SetWidth(QUEUED_WIDTH)
+    frame:SetPoint("TOPLEFT", self.frame, "TOPRIGHT", QUEUED_GAP, 0)
+    frame:EnableMouse(true)
+    frame:Hide()
+
+    Theme.Fill(frame, "window")
+    Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+
+    local _, title = ns.Collapse.CreateHeader(frame, "Queued crafts")
+    self.queuedTitle = title
+
+    local list = Widgets.CreateScrollList(frame, {
+        rowHeight = QUEUED_ROW_HEIGHT,
+        createRow = CreateQueuedRow,
+        updateRow = UpdateQueuedRow,
+        onClick = function(entry, _, mouseButton)
+            if mouseButton == "RightButton" and not entry.isDependency then
+                ns.Queue:Remove(entry.recipeID)
+            end
+        end,
+    })
+    list:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
+    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    self.queuedList = list
+
+    self.queuedFrame = frame
+    return frame
+end
+
+--- Show the queued crafts beside the pane while anything is queued.
+function CraftPanel:RefreshQueued()
+    local wanted = self.frame and self.frame:IsShown()
+        and not self:IsCollapsed() and ns.Queue:Count() > 0
+
+    if not wanted then
+        if self.queuedFrame then self.queuedFrame:Hide() end
+        return
+    end
+
+    local entries = ns.Queue:GetAll()
+
+    local frame = self:BuildQueued()
+    frame:SetHeight(self.frame:GetHeight())
+    frame:Show()
+
+    self.queuedTitle:SetText(("Queued crafts (%d)"):format(#entries))
+    self.queuedOpen = self:GetOpenRecipeIDs()
+    self.queuedList:SetData(entries)
 end
 
 --- Ask for a refresh soon, rather than taking one now.
