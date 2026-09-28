@@ -595,15 +595,30 @@ function Posting:GetPostable(opts)
     local lines = {}
     local order, slots = IndexBags()
 
+    -- Why each item in the bags was left out, for /bts readysell.
+    local skipped = {}
+
     for _, itemID in ipairs(order) do
         local wanted = outputs[itemID] ~= nil
             or (opts.includeAll and not reserved[itemID])
+
+        if not wanted then
+            skipped[itemID] = reserved[itemID] and "kept for a queued craft" or "not asked for"
+        end
 
         if wanted then
             local held = slots[itemID]
 
             local sellable, count = self:GetSellInfo(itemID, held)
             local price, basis = self:GetPostPrice(itemID)
+
+            if not sellable then
+                skipped[itemID] = "the auction house says it cannot be sold"
+            elseif not count or count <= 0 then
+                skipped[itemID] = "the auction house says none can be posted"
+            elseif not price and opts.includeAll and not opts.includeUnpriced then
+                skipped[itemID] = "no price"
+            end
 
             -- What it cost to make one, so a listing below that can be
             -- flagged rather than quietly recommended.
@@ -675,8 +690,77 @@ function Posting:GetPostable(opts)
         return (a.itemID or 0) < (b.itemID or 0)
     end)
 
+    if opts.includeAll and not opts.includeUnpriced then
+        self:WatchReadyToSell(lines, skipped)
+    end
+
     return lines
 end
+
+--------------------------------------------------------------------------------
+-- /bts readysell: what comes and goes on Ready to sell, and why
+--------------------------------------------------------------------------------
+
+local readyWatch = { untilTime = nil, last = nil }
+
+--- Compare this Ready to sell list with the last one while a watch runs,
+--- and say which items appeared or dropped out and why.
+function Posting:WatchReadyToSell(lines, skipped)
+    if not readyWatch.untilTime then return end
+
+    if GetTime() > readyWatch.untilTime then
+        readyWatch.untilTime, readyWatch.last = nil, nil
+        ns.Print(("readysell: watch finished, %d change(s) seen"):format(readyWatch.changes or 0))
+
+        -- Whether the Disenchanting list walked every scanned item meanwhile.
+        if ns.Disenchant then
+            ns.Print(("readysell: the Disenchanting list was rebuilt %d time(s) during the watch")
+                :format((ns.Disenchant.rowBuilds or 0) - (readyWatch.builds or 0)))
+        end
+        return
+    end
+
+    local now = {}
+    for _, line in ipairs(lines) do now[line.itemID] = true end
+
+    local last = readyWatch.last
+    readyWatch.last = now
+    if not last then
+        ns.Print(("readysell: watching for %d seconds, %d item(s) listed now")
+            :format(readyWatch.seconds, #lines))
+        return
+    end
+
+    for itemID in pairs(last) do
+        if not now[itemID] then
+            readyWatch.changes = (readyWatch.changes or 0) + 1
+            ns.Print(("readysell: %s dropped out: %s"):format(Util.GetItemLabel(itemID),
+                skipped[itemID] or "no longer in your bags"))
+        end
+    end
+
+    for itemID in pairs(now) do
+        if not last[itemID] then
+            readyWatch.changes = (readyWatch.changes or 0) + 1
+            ns.Print(("readysell: %s came back"):format(Util.GetItemLabel(itemID)))
+        end
+    end
+end
+
+ns.RegisterCommand("readysell", "watch Ready to sell for 15 seconds and say why items come and go", function()
+    readyWatch.seconds = 15
+    readyWatch.untilTime = GetTime() + readyWatch.seconds
+    readyWatch.last, readyWatch.changes = nil, 0
+    readyWatch.builds = ns.Disenchant and ns.Disenchant.rowBuilds or 0
+
+    if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then
+        ns.Print("readysell: open the auction house first, Ready to sell only updates there")
+        readyWatch.untilTime = nil
+        return
+    end
+
+    ns.Print("readysell: watching, leave the windows as they are for 15 seconds")
+end)
 
 --- The most valuable stack worth listing right now.
 --
