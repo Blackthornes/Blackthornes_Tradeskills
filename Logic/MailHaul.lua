@@ -144,14 +144,24 @@ local function Removed(before, after)
     return gone
 end
 
---- What was collected between two readings.
--- @return array of { kind, name, monies = { amount, ... }, items = { itemID = count } }
+--- What was collected between two readings, and what came back into view.
+--
+-- "Came back" is gold or items that went missing from a reading and then
+-- showed up again. The game does this while a take is going through: the
+-- mail drops out of the list, the inbox is refreshed from the server with it
+-- still there, and then it goes for good. Counting each disappearance once
+-- doubled the tally (Trent, 2026-09-28), so Observe undoes a collection
+-- whose gold or item comes back.
+-- @return taken, appeared: arrays of
+--   { key, kind, name, monies = { amount, ... }, items = { itemID = count } }
 function MailHaul:Diff(before, after, itemsReliable)
-    local taken = {}
+    local taken, appeared = {}, {}
+    local empty = { monies = {}, items = {} }
 
     for key, old in pairs(before) do
-        local new = after[key] or { monies = {}, items = {} }
-        local event = { kind = old.kind, name = old.name, monies = Removed(old.monies, new.monies), items = {} }
+        local new = after[key] or empty
+        local event = { key = key, kind = old.kind, name = old.name,
+            monies = Removed(old.monies, new.monies), items = {} }
         local any = #event.monies > 0
 
         if itemsReliable then
@@ -167,18 +177,52 @@ function MailHaul:Diff(before, after, itemsReliable)
         if any then taken[#taken + 1] = event end
     end
 
-    return taken
+    for key, new in pairs(after) do
+        local old = before[key] or empty
+        local event = { key = key, kind = new.kind, name = new.name,
+            monies = Removed(new.monies, old.monies), items = {} }
+        local any = #event.monies > 0
+
+        if itemsReliable then
+            for itemID, count in pairs(new.items) do
+                local more = count - (old.items[itemID] or 0)
+                if more > 0 then
+                    event.items[itemID] = more
+                    any = true
+                end
+            end
+        end
+
+        if any then appeared[#appeared + 1] = event end
+    end
+
+    return taken, appeared
 end
 
 --------------------------------------------------------------------------------
 -- A visit
 --------------------------------------------------------------------------------
 
+--- Your gold right now, or nil where the game will not say.
+local function Money()
+    if type(GetMoney) ~= "function" then return nil end
+    local ok, money = pcall(GetMoney)
+    return ok and tonumber(money) or nil
+end
+
+-- Lines of the visit's log kept for /bts haul log.
+local MAX_LOG = 80
+
 local function NewVisit()
     return {
         startedAt = time(),
         gold = { sold = 0, outbid = 0, other = 0 },
         total = 0,
+        mailTotal = 0,     -- gold worked out from the mail itself
+        moneyIn = 0,       -- gold your purse actually went up by
+        lastMoney = Money(),
+        collected = {},    -- bucket key -> { amounts = {...}, items = { itemID = n } }
+        log = {},
         sales = {},        -- { name, amount }
         items = {},        -- kind -> itemID -> count
         senders = {},      -- sender -> gold, for mail from people
@@ -191,6 +235,73 @@ end
 function MailHaul:BeginVisit()
     self.visit = NewVisit()
     self.baseline = nil
+    self.readings = 0
+    self.shownTotal = 0
+end
+
+--- A line in the visit's log, for /bts haul log.
+function MailHaul:Log(text)
+    local visit = self.visit
+    if not visit then return end
+    if #visit.log >= MAX_LOG then table.remove(visit.log, 1) end
+    visit.log[#visit.log + 1] = ("%d: %s"):format(self.readings or 0, text)
+end
+
+--- Take in any rise in your gold since last looked.
+-- @return how much it went up by
+function MailHaul:CheckMoney()
+    local visit = self.visit
+    if not visit then return 0 end
+
+    local money = Money()
+    if not money then return 0 end
+
+    local gained = 0
+    if visit.lastMoney and money > visit.lastMoney then
+        gained = money - visit.lastMoney
+        visit.moneyIn = visit.moneyIn + gained
+        self:Log(("gold went up by %d"):format(gained))
+    end
+    visit.lastMoney = money
+
+    self:Settle()
+    return gained
+end
+
+--- The visit's total, and its split, from the two sources.
+--
+-- Your purse is the truth for how much gold came in: it cannot count a mail
+-- twice. The mail says where it came from. When the mail adds up to more than
+-- the purse went up by, the split is scaled down to fit.
+function MailHaul:Settle()
+    local visit = self.visit
+    if not visit then return end
+
+    local mailGold = visit.gold.sold + visit.gold.outbid + visit.gold.other
+    visit.mailTotal = mailGold
+
+    if visit.moneyIn > 0 then
+        visit.total = visit.moneyIn
+    else
+        visit.total = mailGold
+    end
+end
+
+--- The split of the gold, scaled to the total where the mail overcounts.
+function MailHaul:Split(visit)
+    local gold = visit.gold
+    local sum = gold.sold + gold.outbid + gold.other
+
+    if sum <= visit.total or sum <= 0 then
+        return { sold = gold.sold, outbid = gold.outbid, other = gold.other }
+    end
+
+    local scale = visit.total / sum
+    return {
+        sold = math.floor(gold.sold * scale + 0.5),
+        outbid = math.floor(gold.outbid * scale + 0.5),
+        other = math.floor(gold.other * scale + 0.5),
+    }
 end
 
 --- Is there a visit being watched?
@@ -213,8 +324,13 @@ function MailHaul:Record(events)
         local bucket = (event.kind == "sold" or event.kind == "outbid") and event.kind or "other"
         local eventGold = 0
 
+        local collected = visit.collected[event.key or "?"] or { amounts = {}, items = {} }
+        visit.collected[event.key or "?"] = collected
+
         for _, amount in ipairs(event.monies) do
             eventGold = eventGold + amount
+            collected.amounts[#collected.amounts + 1] = amount
+            self:Log(("took %d from %s"):format(amount, tostring(event.key)))
 
             if event.kind == "sold" then
                 visit.sales[#visit.sales + 1] = { name = event.name, amount = amount }
@@ -230,6 +346,8 @@ function MailHaul:Record(events)
         for itemID, count in pairs(event.items) do
             visit.items[itemKind] = visit.items[itemKind] or {}
             visit.items[itemKind][itemID] = (visit.items[itemKind][itemID] or 0) + count
+            collected.items[itemID] = (collected.items[itemID] or 0) + count
+            self:Log(("took %dx item %d from %s"):format(count, itemID, tostring(event.key)))
             hadItems = true
         end
 
@@ -242,8 +360,63 @@ function MailHaul:Record(events)
         end
     end
 
-    visit.total = visit.total + gained
+    self:Settle()
     return gained
+end
+
+--- Undo collections whose gold or items have come back into the mailbox.
+-- @return gold taken back off the tally
+function MailHaul:Reverse(events)
+    local visit = self.visit
+    local undone = 0
+
+    for _, event in ipairs(events) do
+        local collected = visit.collected[event.key]
+
+        if collected then
+            local bucket = (event.kind == "sold" or event.kind == "outbid") and event.kind or "other"
+
+            for _, amount in ipairs(event.monies) do
+                for index, was in ipairs(collected.amounts) do
+                    if was == amount then
+                        table.remove(collected.amounts, index)
+                        visit.gold[bucket] = math.max(0, visit.gold[bucket] - amount)
+                        undone = undone + amount
+                        self:Log(("%d came back to %s, not counted"):format(amount, event.key))
+
+                        if event.kind == "sold" then
+                            for saleIndex = #visit.sales, 1, -1 do
+                                local sale = visit.sales[saleIndex]
+                                if sale.name == event.name and sale.amount == amount then
+                                    table.remove(visit.sales, saleIndex)
+                                    break
+                                end
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+
+            local itemKind = (event.kind == "sold" or event.kind == "outbid") and "other" or event.kind
+            for itemID, count in pairs(event.items) do
+                local back = math.min(count, collected.items[itemID] or 0)
+                if back > 0 then
+                    collected.items[itemID] = collected.items[itemID] - back
+                    local held = visit.items[itemKind]
+                    if held and held[itemID] then
+                        held[itemID] = held[itemID] - back
+                        if held[itemID] <= 0 then held[itemID] = nil end
+                        if not next(held) then visit.items[itemKind] = nil end
+                    end
+                    self:Log(("%dx item %d came back to %s, not counted"):format(back, itemID, event.key))
+                end
+            end
+        end
+    end
+
+    self:Settle()
+    return undone
 end
 
 --- A new reading of the inbox. Data/Mail.lua calls this every time it reads.
@@ -256,13 +429,15 @@ function MailHaul:Observe(mails, complete)
     end
 
     local now = self:Snapshot(mails)
+    self.readings = (self.readings or 0) + 1
 
     if not self.baseline then
         self.baseline = now
+        self:Log(("first reading, %d mail(s)"):format(#mails))
         return
     end
 
-    local events = self:Diff(self.baseline, now, complete)
+    local events, appeared = self:Diff(self.baseline, now, complete)
 
     -- Items only move on from a complete reading, so one still loading is
     -- compared with the last reading that could be trusted.
@@ -275,12 +450,27 @@ function MailHaul:Observe(mails, complete)
 
     self.baseline = now
 
-    if #events == 0 then return end
+    if #appeared > 0 then self:Reverse(appeared) end
+    if #events > 0 then self:Record(events) end
 
-    local gained = self:Record(events)
+    local before = self.shownTotal or 0
+    self:CheckMoney()
+
+    if #events > 0 or #appeared > 0 or self.visit.total ~= before then
+        self:Tally()
+    end
+end
+
+--- Tell the tally over the mailbox how the visit stands.
+function MailHaul:Tally()
+    local visit = self.visit
+    if not visit then return end
+
+    local gained = visit.total - (self.shownTotal or 0)
+    self.shownTotal = visit.total
 
     if ns.MailReport and ns.MailReport.OnCollected then
-        local ok, err = pcall(ns.MailReport.OnCollected, ns.MailReport, self.visit, gained, events)
+        local ok, err = pcall(ns.MailReport.OnCollected, ns.MailReport, visit, math.max(0, gained))
         if not ok then ns.Debug("mail tally:", tostring(err)) end
     end
 end
@@ -401,7 +591,7 @@ function MailHaul:Finish(visit, history)
         t = now,
         who = ns.Config:GetCharacterKey(),
         total = visit.total,
-        gold = { sold = visit.gold.sold, outbid = visit.gold.outbid, other = visit.gold.other },
+        gold = self:Split(visit),
         salesCount = #sales,
         sales = sales,
         best = sales[1],
@@ -446,9 +636,17 @@ end
 --- The mailbox closed. Save the visit and show the report.
 -- @return the haul, or nil when nothing was collected
 function MailHaul:EndVisit()
+    self:CheckMoney()
+
     local visit = self.visit
     self.visit = nil
     self.baseline = nil
+
+    if visit then
+        visit.log[#visit.log + 1] = ("closed: purse up %d, mail says %d"):format(
+            visit.moneyIn, visit.mailTotal)
+        self.lastLog = visit.log
+    end
 
     local haul = self:Finish(visit)
     if not haul then return nil end
@@ -503,13 +701,39 @@ function MailHaul:OnEnable()
         end
     end)
 
-    ns.RegisterEvent(self, "MAIL_CLOSED", function()
-        if ns.MailReport and ns.MailReport.OnMailboxClosed then
-            pcall(ns.MailReport.OnMailboxClosed, ns.MailReport)
-        end
-        -- The game can send this twice; the second finds no visit.
-        if MailHaul.visit then MailHaul:EndVisit() end
+    ns.RegisterEvent(self, "MAIL_CLOSED", function() MailHaul:Closed() end)
+
+    -- Gold arriving is the tally's truth, and the moment to update it.
+    ns.RegisterEvent(self, "PLAYER_MONEY", function()
+        if not MailHaul.visit then return end
+        if MailHaul:CheckMoney() > 0 then MailHaul:Tally() end
     end)
+
+    -- The newer way the game says a window like the mailbox closed, in case
+    -- MAIL_CLOSED is not sent. 17 is the mailbox.
+    ns.RegisterEvent(self, "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(_, _, kind)
+        local mailbox = (_G.Enum and _G.Enum.PlayerInteractionType
+            and _G.Enum.PlayerInteractionType.MailInfo) or 17
+        if kind == mailbox then MailHaul:Closed() end
+    end)
+
+    -- And the mailbox window itself going away. Hooking a script adds to it
+    -- without touching the game's own.
+    local mailFrame = _G.MailFrame
+    if mailFrame and mailFrame.HookScript then
+        pcall(mailFrame.HookScript, mailFrame, "OnHide", function() MailHaul:Closed() end)
+    end
+end
+
+--- The mailbox closed, by whichever signal came first. The rest find no visit.
+function MailHaul:Closed()
+    if ns.Mail then ns.Mail.isOpen = false end
+
+    if ns.MailReport and ns.MailReport.OnMailboxClosed then
+        pcall(ns.MailReport.OnMailboxClosed, ns.MailReport)
+    end
+
+    if self.visit then self:EndVisit() end
 end
 
 --- A made-up haul, for seeing the report without a trip to the mailbox.
@@ -549,13 +773,24 @@ function MailHaul:Sample()
     }
 end
 
-ns.RegisterCommand("haul", "[test]: show the report from your last mailbox visit (test: a made-up one)", function(args)
+ns.RegisterCommand("haul", "[test|log]: show the report from your last mailbox visit (test: a made-up one, log: what was counted)", function(args)
     local word = (args or ""):lower():match("^%s*(%S*)")
 
     if not ns.MailReport then return end
 
     if word == "test" then
         ns.MailReport:Show(MailHaul:Sample())
+        return
+    end
+
+    if word == "log" then
+        local log = (MailHaul.visit and MailHaul.visit.log) or MailHaul.lastLog
+        if not log or #log == 0 then
+            ns.Print("no mailbox visit to show yet. Open a mailbox, take some mail, then try again.")
+            return
+        end
+        ns.Print(("mailbox visit, reading by reading (%d lines):"):format(#log))
+        for _, line in ipairs(log) do ns.PrintRaw("  " .. line) end
         return
     end
 

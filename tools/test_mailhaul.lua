@@ -19,6 +19,10 @@ local printed = {}
 ns.Print = function(text) printed[#printed + 1] = tostring(text) end
 ns.PrintRaw = function(text) printed[#printed + 1] = tostring(text) end
 
+-- Other suites leave a GetMoney behind. These first checks are about what the
+-- mail alone says, so the purse is taken away until the section that uses it.
+GetMoney = nil
+
 local now = 1790000000
 time = function() return now end
 date = os.date
@@ -398,6 +402,117 @@ local historyBefore = #MailHaul:GetHistory()
 MailReport:Show(sample)
 Settle()
 check("showing it saves nothing",                      #MailHaul:GetHistory(), historyBefore)
+
+--------------------------------------------------------------------------------
+print("")
+print("a mail that drops out and comes back is not counted twice")
+--------------------------------------------------------------------------------
+
+-- Trent, 2026-09-28: the tally read 12g 24s 44c where the game said he had
+-- gained 6g 12s 22c. A take going through makes the mail vanish, reappear
+-- when the inbox is refreshed, then vanish for good.
+
+inbox = { Sold("Linen Bag", 5000), Sold("Linen Bag", 3000) }
+Open()
+
+local first = table.remove(inbox, 1)
+Mail:Read()
+check("gone once: counted",                            MailHaul:Current().total, 5000)
+table.insert(inbox, 1, first)
+Mail:Read()
+check("back again: taken off",                         MailHaul:Current().total, 0)
+check("and its sale with it",                          #MailHaul:Current().sales, 0)
+table.remove(inbox, 1)
+Mail:Read()
+check("gone for good: counted once",                   MailHaul:Current().total, 5000)
+Take(1)
+check("the next sale adds normally",                   MailHaul:Current().total, 8000)
+check("two sales, not three",                          #MailHaul:Current().sales, 2)
+local logged = MailHaul:Current().log
+check("the log says what happened",                    logged[3] ~= nil and logged[3]:find("came back", 1, true) ~= nil, true)
+Close()
+check("the log is kept for /bts haul log",             MailHaul.lastLog ~= nil, true)
+
+--------------------------------------------------------------------------------
+print("")
+print("your purse is the truth for how much came in")
+--------------------------------------------------------------------------------
+
+local purse = 100000
+GetMoney = function() return purse end
+
+inbox = { Sold("Linen Bag", 5000), Sold("Wool Bag", 3000) }
+Open()
+
+-- Whatever the mail says, gold only counts once the purse shows it.
+purse = purse + 5000
+Take(1)
+check("the tally follows the purse",                   MailHaul:Current().total, 5000)
+
+-- A reading that somehow counts the other sale twice cannot push the
+-- total past what actually arrived.
+MailHaul:Current().gold.sold = MailHaul:Current().gold.sold + 3000
+purse = purse + 3000
+Take(1)
+check("the total is what the purse gained",            MailHaul:Current().total, 8000)
+local purseHaul = Close()
+check("the report agrees",                             purseHaul.total, 8000)
+check("and the split is scaled to fit",                purseHaul.gold.sold, 8000)
+
+-- Sending mail or paying postage takes gold out; that is not collected, and
+-- does not cancel what was.
+inbox = { Sold("Linen Bag", 2000) }
+Open()
+purse = purse - 30
+MailHaul:CheckMoney()
+purse = purse + 2000
+Take(1)
+check("gold spent at the mailbox is left out",         MailHaul:Current().total, 2000)
+Close()
+
+GetMoney = nil
+
+--------------------------------------------------------------------------------
+print("")
+print("however the mailbox closes, the visit ends once")
+--------------------------------------------------------------------------------
+
+inbox = { Sold("Linen Bag", 900) }
+Open()
+Take(1)
+local reportsNow = #shownReports
+MailHaul:Closed()
+MailHaul:Closed()
+check("one report for two close signals",              #shownReports, reportsNow + 1)
+check("the mailbox counts as closed",                  Mail.isOpen, false)
+
+--------------------------------------------------------------------------------
+print("")
+print("the tally can be closed, and goes when the mailbox does")
+--------------------------------------------------------------------------------
+
+inbox = { Sold("Linen Bag", 500), Sold("Linen Bag", 600) }
+Open()
+Take(1)
+local tally = MailReport.tally
+check("the tally is up",                               tally.shown, true)
+-- The stub answers every unknown field with a function, "disabled" too.
+tally.close.disabled = false
+tally.close.scripts.OnClick(tally.close, "LeftButton")
+check("its X hides it",                                tally.shown, false)
+Take(1)
+check("and it stays hidden for this visit",            tally.shown, false)
+Close()
+
+inbox = { Sold("Linen Bag", 700) }
+Open()
+Take(1)
+check("back on the next visit",                        tally.shown, true)
+-- The game never says the mailbox closed; the once-a-second check notices.
+Mail.isOpen = false
+tally.scripts.OnUpdate(tally, 1.1)
+check("gone once the mailbox is",                      tally.shown, false)
+MailHaul:Closed()
 
 MailHaul:InvalidateMatchers()
 
