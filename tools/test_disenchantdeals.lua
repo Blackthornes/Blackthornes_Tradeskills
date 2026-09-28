@@ -302,6 +302,17 @@ ns.Scanner = nil
 C_Item.RequestLoadItemDataByID, C_Item.IsItemDataCachedByID = nil, nil
 Disenchant:_ForgetItems()
 
+print("\nonly what the last scan saw")
+
+ns.db.lastFullScan = 1000
+records[2001].seen = 999      -- gone from the last scan: sold or expired
+check("a listing the last scan did not see is not a deal", Find(Disenchant:GetAuctionRows(), 2001) == nil)
+records[2001].seen = 1000
+check("one it did see is", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
+records[2001].seen = 1200     -- a search after the scan
+check("and so is one a later search saw", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
+records[2001].seen, ns.db.lastFullScan = nil, nil
+
 print("\nthe scan message")
 
 Enchanter(50)
