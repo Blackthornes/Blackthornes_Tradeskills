@@ -38,6 +38,7 @@ local VIEWS = {
     { text = "Recent sales",   value = "sales" },
     { text = "Recent, all",    value = "all" },
     { text = "By item",        value = "item" },
+    { text = "Mailbox visits", value = "visits" },
 }
 
 local state = { view = "sales", search = "", selected = nil }
@@ -209,7 +210,48 @@ local function UpdateItemRow(row, item)
     end
 end
 
+--- One mailbox visit: what was collected, and the best sale in it.
+local function UpdateVisitRow(row, haul)
+    local best = haul.best
+
+    Theme.SetItemIcon(row.icon, best and best.itemID)
+
+    local head = ("Collected %s"):format(Util.FormatMoney(haul.total, { short = true }))
+    if haul.recordHaul then head = head .. ("  |c%sbest haul|r"):format(ns.COLORS.accent) end
+    row.name:SetText(head)
+    row.name:SetTextColor(Theme.Unpack("text"))
+
+    row.amount:SetText(Util.FormatMoney(haul.total, { short = true }))
+    row.amount:SetTextColor(Theme.Unpack("accent"))
+
+    local parts = {}
+    if (haul.salesCount or 0) > 0 then
+        parts[#parts + 1] = ("%d sale%s"):format(haul.salesCount, haul.salesCount == 1 and "" or "s")
+    end
+    if best then
+        parts[#parts + 1] = ("best %s %s"):format(best.name or "item",
+            Util.FormatMoney(best.amount, { short = true, noColor = true }))
+    end
+    if (haul.itemCount or 0) > 0 then
+        parts[#parts + 1] = ("%d item%s"):format(haul.itemCount, haul.itemCount == 1 and "" or "s")
+    end
+
+    local who = tostring(haul.who or ""):match("^([^%-]+)")
+    if who then parts[#parts + 1] = who end
+
+    row.detail:SetText(table.concat(parts, "  ·  "))
+    row.detail:SetTextColor(Theme.Unpack("muted"))
+
+    row.when:SetText(Util.FormatAgeAgo(haul.t and (time() - haul.t)))
+    row.when:SetTextColor(Theme.Unpack("dim"))
+end
+
 local function UpdateRow(row, data)
+    if data.haul then
+        UpdateVisitRow(row, data)
+        return
+    end
+
     Theme.SetItemIcon(row.icon, data.itemID)
     if data.kind then
         UpdateEventRow(row, data)
@@ -482,7 +524,19 @@ local function Refresh()
 
     local data = {}
 
-    if state.view == "item" then
+    if state.view == "visits" then
+        local history = ns.MailHaul and ns.MailHaul:GetHistory() or {}
+
+        for index = #history, 1, -1 do
+            -- Flagged on a view of it, so nothing is written into saved data.
+            local haul = setmetatable({ haul = true }, { __index = history[index] })
+
+            local best = haul.best
+            if query == "" or (best and Matches(best.itemID, best.name, query)) then
+                data[#data + 1] = haul
+            end
+        end
+    elseif state.view == "item" then
         for _, item in ipairs(items) do
             if Matches(item.itemID, item.name, query) then
                 data[#data + 1] = item
@@ -532,17 +586,33 @@ local function Refresh()
     if #data == 0 then
         widgets.emptyLabel:Show()
 
-        if totals.sold == 0 and totals.expired == 0 and totals.cancelled == 0 then
+        if state.view ~= "visits" and totals.sold == 0 and totals.expired == 0 and totals.cancelled == 0 then
             widgets.emptyLabel:SetText(ns.Mail:HasReadThisSession()
                 and "Nothing recorded yet. Sales and expiries are written down when you open the mailbox they arrive in."
                 or "Nothing recorded yet. Visit a mailbox after a listing has ended and it will appear here.")
         elseif query ~= "" then
             widgets.emptyLabel:SetText(("Nothing here matches '%s'."):format(state.search))
+        elseif state.view == "visits" then
+            widgets.emptyLabel:SetText("No mailbox visits yet. Collect mail and each visit is kept here. Click one to see its report again.")
         else
             widgets.emptyLabel:SetText("Nothing sold yet. Switch to 'Recent, all' to see what came back.")
         end
     else
         widgets.emptyLabel:Hide()
+    end
+
+    if state.view == "visits" then
+        local history = ns.MailHaul and ns.MailHaul:GetHistory() or {}
+        local collected = 0
+        for _, haul in ipairs(history) do collected = collected + (haul.total or 0) end
+        local best = ns.MailHaul and ns.MailHaul:Records() or 0
+
+        widgets.summary:SetText(("%d visit%s  ·  collected %s  ·  best haul %s"):format(
+            #history, #history == 1 and "" or "s",
+            Util.FormatMoney(collected, { short = true }),
+            Util.FormatMoney(best, { short = true })))
+        widgets.carried:Hide()
+        return
     end
 
     widgets.summary:SetText(("%d sold  ·  taken in %s%s"):format(
@@ -606,9 +676,22 @@ local function Build(container)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
-        onEnter = function(row, data) Widgets.ShowItemOnly(row, data.itemID, data.name) end,
+        onEnter = function(row, data)
+            if data.haul then
+                GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Click to see this visit's report again", 1, 1, 1)
+                GameTooltip:Show()
+                return
+            end
+            Widgets.ShowItemOnly(row, data.itemID, data.name)
+        end,
         onLeave = function() GameTooltip:Hide() end,
         onClick = function(data)
+            if data.haul then
+                if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end
+                return
+            end
+
             -- Both views select the same thing: an item. Clicking one sale
             -- asks about that item, not about that one listing.
             local key = data.key or data.itemID
@@ -654,6 +737,14 @@ local function Build(container)
         end)
     end)
 end
+
+-- The mail report's "See all visits" button opens this view.
+ns.SalesTab = {
+    ShowVisits = function()
+        state.view = "visits"
+        if widgets.view then widgets.view:SetValue("visits") end
+    end,
+}
 
 UI:RegisterTab({
     key = "sales",

@@ -259,6 +259,10 @@ function Mail:Read()
 
     self:Reconcile(mails, complete)
 
+    -- What left the mailbox since the last reading is what was collected,
+    -- which is what the report after a mailbox visit is made of.
+    if ns.MailHaul then ns.MailHaul:Observe(mails, complete) end
+
     ns.Debug(("mailbox: %d mail(s), %d item stack(s)%s"):format(
         #mails, Util.Count(counts), complete and "" or " (still loading)"))
 
@@ -289,6 +293,9 @@ local function SubjectPattern(format)
 
     return "^" .. pattern
 end
+
+-- Logic/MailHaul.lua classifies mail for the collection report the same way.
+Mail.SubjectPattern = SubjectPattern
 
 local subjectMatchers
 
