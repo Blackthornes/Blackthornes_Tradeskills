@@ -232,6 +232,9 @@ evicted[2001] = true   -- and gone again straight after
 check("read the moment it arrives", reads[2001] == 1)
 check("the tab redraws for an item it asked for", Disenchant:WasRequested(2001))
 check("but not for items it never asked about", not Disenchant:WasRequested(999999))
+GetTime = function() return 60 end
+check("nor for one read long ago that something else reloads", not Disenchant:WasRequested(2001))
+GetTime = function() return 1 end
 check("it is listed from then on", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
 
 -- A big scan asks for a few new items a second, not all of them at once.
@@ -277,13 +280,18 @@ local knownCount = #Disenchant:GetAuctionRows()
 ns.Scanner = { isAuctionHouseOpen = true }
 local fetched = {}
 C_Item.RequestLoadItemDataByID = function(itemID) fetched[itemID] = true end
-C_Item.IsItemDataCachedByID = function(itemID) return itemID ~= 2008 end
+local askedCached = 0
+C_Item.IsItemDataCachedByID = function(itemID)
+    if itemID == 2008 then askedCached = askedCached + 1 end
+    return itemID ~= 2008
+end
 records[2008] = { rivalMin = 10 }
 
 local openRows, _, pending = Disenchant:GetAuctionRows()
 check("items already known still list at the auction house", #openRows == knownCount)
 check("a new item is not fetched while it is open", next(fetched) == nil)
 check("and is counted as waiting", pending == 1)
+check("the client is not even asked whether it holds it", askedCached == 0)
 
 ns.Scanner.isAuctionHouseOpen = false
 Disenchant:GetAuctionRows()
@@ -411,6 +419,17 @@ checkboxes["Only ones I can disenchant"].onToggle(false)
 
 list.opts.onClick(Find(list.data, 2003), 1, "RightButton")
 check("right-click searches the auction house for it", sent[#sent] == "item2003")
+
+-- Redraws for bag changes and auction events reuse the list; walking every
+-- scanned item each time pushed bag items out of the client's memory.
+local builds = Disenchant.rowBuilds
+tab.refresh()
+tab.refresh()
+check("a redraw with nothing changed does not walk every item again", Disenchant.rowBuilds == builds)
+ns.Prices.changes = 1
+tab.refresh()
+check("new prices do", Disenchant.rowBuilds == builds + 1)
+ns.Prices.changes = nil
 
 ns.Scanner.isAuctionHouseOpen = false
 printed = {}

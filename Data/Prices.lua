@@ -199,6 +199,9 @@ end
 
 --- Fold one item's scan result into the database.
 function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow)
+    -- Lets a list know prices moved without comparing every record.
+    Prices.changes = (Prices.changes or 0) + 1
+
     if not itemID or not marketValue then return end
 
     -- Every path that learns a price ends up here -- browse rows, the full
@@ -268,6 +271,9 @@ end
 -- not become unknown the moment nobody happens to be selling one. What does
 -- go is everything that describes the current book, because there isn't one.
 function Prices:RecordEmpty(itemID, scannedAt)
+    -- Lets a list know prices moved without comparing every record.
+    Prices.changes = (Prices.changes or 0) + 1
+
     if not itemID then return end
 
     scannedAt = scannedAt or time()

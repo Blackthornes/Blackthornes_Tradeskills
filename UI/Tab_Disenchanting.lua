@@ -124,8 +124,10 @@ local function FillCell(cell, key, entry)
         -- Red when none of your characters can break it yet.
         color = entry.canDisenchant == false and "loss" or "dim"
     elseif key == "age" then
-        text = entry.age and Util.FormatAge(entry.age) or ""
-        color = entry.stale and "warn" or "dim"
+        -- Read now, as the list itself can be kept for a while.
+        local age = ns.Prices:GetAge(entry.itemID) or entry.age
+        text = age and Util.FormatAge(age) or ""
+        color = ns.Prices:IsStale(entry.itemID) and "warn" or "dim"
     end
 
     cell:SetText(text or "")
@@ -382,10 +384,40 @@ end
 -- List
 --------------------------------------------------------------------------------
 
+-- The last full list and what it was built from. Walking every scanned item
+-- is only done again when something it depends on has changed: a redraw for
+-- a bag change or an auction event reuses it. At the auction house those
+-- redraws come often, and walking thousands of items each time pushed bag
+-- items out of the client's memory, so Ready to sell kept losing them.
+local built = { key = nil, rows = nil, hidden = 0, pending = 0 }
+
+local function BuildKey()
+    local skill = ns.Disenchant:GetBestEnchanter()
+
+    return table.concat({
+        tostring(ns.Prices and ns.Prices.changes or 0),
+        tostring(ns.Prices and ns.Prices:Count() or 0),
+        tostring(ns.Disenchant.factsVersion or 0),
+        tostring(state.dealsOnly),
+        tostring(ns.Config:Get("minProfit")),
+        tostring(ns.Config:Get("minMarginPercent")),
+        tostring(ns.Config:Get("auctionCut")),
+        tostring(skill),
+        tostring(ns.Scanner and ns.Scanner.isAuctionHouseOpen and true or false),
+    }, "|")
+end
+
 local function BuildRows()
-    local rows, hidden, pending = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
-    state.hidden = hidden or 0
-    state.pending = pending or 0
+    local key = BuildKey()
+
+    if key ~= built.key then
+        local rows, hidden, pending = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
+        built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
+    end
+
+    local rows = built.rows
+    state.hidden = built.hidden
+    state.pending = built.pending
 
     if state.search == "" and not state.hideTooHigh then return rows end
 
