@@ -769,7 +769,7 @@ function MailReport:BuildTally()
         since = since + (tonumber(elapsed) or 0)
         if since < 1 then return end
         since = 0
-        if not MailReport.MailboxOpen() then MailReport:HideTally() end
+        if not MailReport.MailboxOpen() then MailReport:FadeTally() end
     end)
 
     local amount = Theme.CreateLabel(tally, 16, "accent")
@@ -833,19 +833,48 @@ end
 
 function MailReport:HideTally()
     StopAll("tally")
-    if self.tally then self.tally:Hide() end
+    self.tallyFading = false
+    if self.tally then
+        self.tally:Hide()
+        self.tally:SetAlpha(1)
+    end
     self.tallyDismissed = true
 end
 
+-- Trent, 2026-09-28: "it should fade on it's own 30sec after leaving mailbox".
+local TALLY_LINGER = 30
+local TALLY_FADE = 1.5
+
+--- Leave the tally up for a while after the mailbox closes, then fade it.
+function MailReport:FadeTally()
+    local tally = self.tally
+    if not (tally and tally:IsShown()) or self.tallyFading then return end
+
+    self.tallyFading = true
+    MailReport.Start({ slot = "tally:fade", duration = TALLY_FADE, delay = TALLY_LINGER,
+        apply = function(p)
+            tally:SetAlpha(1 - p)
+            if p >= 1 then
+                tally:Hide()
+                tally:SetAlpha(1)
+                MailReport.tallyFading = false
+            end
+        end,
+        stop = function()
+            tally:SetAlpha(1)
+            MailReport.tallyFading = false
+        end })
+end
+
 function MailReport:OnMailboxOpened()
+    StopAll("tally")
     if self.tally then self.tally:Hide() end
     self.tallyShown = 0
     self.tallyDismissed = false
 end
 
 function MailReport:OnMailboxClosed()
-    StopAll("tally")
-    if self.tally then self.tally:Hide() end
+    self:FadeTally()
 end
 
 --- Something was just collected. Logic/MailHaul.lua calls this.
