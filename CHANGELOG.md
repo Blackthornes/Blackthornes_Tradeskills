@@ -4,6 +4,23 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.14.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- In the Craft queue pane beside the profession window, each recipe has
+  - and + buttons around a box showing how many are queued. Type in the box
+  to set the number. Keep in stock limits still apply.
+- Queued recipes get a Craft button (Stop while crafting).
+- A Clear queue button empties the queue; click it twice to confirm.
+- While anything is queued, a Queued crafts list sits beside the pane, each
+  entry with Craft and remove buttons.
+- The pane's list keeps its order while you queue from it, so rows no
+  longer jump around or disappear.
+- Settings has "Sound when a scan finishes" (on by default) to turn off the
+  scan chime.
+
 ## 0.13.0
 
 For WoW: Forever (interface 16001). This version adds files, so fully
