@@ -486,6 +486,34 @@ MailHaul:Closed()
 check("one report for two close signals",              #shownReports, reportsNow + 1)
 check("the mailbox counts as closed",                  Mail.isOpen, false)
 
+--------------------------------------------------------------------------------
+print("")
+print("the tally can be closed, and goes when the mailbox does")
+--------------------------------------------------------------------------------
+
+inbox = { Sold("Linen Bag", 500), Sold("Linen Bag", 600) }
+Open()
+Take(1)
+local tally = MailReport.tally
+check("the tally is up",                               tally.shown, true)
+-- The stub answers every unknown field with a function, "disabled" too.
+tally.close.disabled = false
+tally.close.scripts.OnClick(tally.close, "LeftButton")
+check("its X hides it",                                tally.shown, false)
+Take(1)
+check("and it stays hidden for this visit",            tally.shown, false)
+Close()
+
+inbox = { Sold("Linen Bag", 700) }
+Open()
+Take(1)
+check("back on the next visit",                        tally.shown, true)
+-- The game never says the mailbox closed; the once-a-second check notices.
+Mail.isOpen = false
+tally.scripts.OnUpdate(tally, 1.1)
+check("gone once the mailbox is",                      tally.shown, false)
+MailHaul:Closed()
+
 MailHaul:InvalidateMatchers()
 
 if failures > 0 then

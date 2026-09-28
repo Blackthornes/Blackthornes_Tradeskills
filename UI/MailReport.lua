@@ -751,9 +751,26 @@ function MailReport:BuildTally()
     heading:SetPoint("TOPLEFT", 12, -6)
     heading:SetText("COLLECTED THIS VISIT")
 
+    -- Trent, 2026-09-28: "i see no way to get rid of the message". A close
+    -- button, and the tally also goes by itself once the mailbox is gone.
+    local close = Widgets.CreateButton(tally, "X", function() MailReport:HideTally() end,
+        { width = 18, height = 16, fontSize = "tiny", tooltip = "Hide this until the next mailbox visit" })
+    close:SetPoint("TOPRIGHT", -4, -4)
+    tally.close = close
+
     local count = Theme.CreateLabel(tally, "tiny", "muted", "RIGHT")
-    count:SetPoint("TOPRIGHT", -10, -6)
+    count:SetPoint("TOPRIGHT", close, "TOPLEFT", -6, -2)
     tally.count = count
+
+    -- A check once a second that the mailbox is still there, whatever the
+    -- game did or did not say when it closed.
+    local since = 0
+    tally:SetScript("OnUpdate", function(_, elapsed)
+        since = since + (tonumber(elapsed) or 0)
+        if since < 1 then return end
+        since = 0
+        if not MailReport.MailboxOpen() then MailReport:HideTally() end
+    end)
 
     local amount = Theme.CreateLabel(tally, 16, "accent")
     pcall(amount.SetFont, amount, Theme.FONT, 16, "OUTLINE")
@@ -804,9 +821,26 @@ local function Float(tally, text)
         stop = function() float:Hide() end })
 end
 
+--- Is a mailbox open right now? The game's own window is the first word.
+function MailReport.MailboxOpen()
+    local mailFrame = _G.MailFrame
+    if mailFrame and mailFrame.IsShown then
+        local ok, shown = pcall(mailFrame.IsShown, mailFrame)
+        if ok then return shown and true or false end
+    end
+    return ns.Mail and ns.Mail.isOpen == true
+end
+
+function MailReport:HideTally()
+    StopAll("tally")
+    if self.tally then self.tally:Hide() end
+    self.tallyDismissed = true
+end
+
 function MailReport:OnMailboxOpened()
     if self.tally then self.tally:Hide() end
     self.tallyShown = 0
+    self.tallyDismissed = false
 end
 
 function MailReport:OnMailboxClosed()
@@ -818,6 +852,7 @@ end
 function MailReport:OnCollected(visit, gained)
     if ns.Config:Get("mailReport") == false then return end
     if (visit.total or 0) <= 0 then return end
+    if self.tallyDismissed then return end
 
     local tally = self:BuildTally()
     if not tally:IsShown() then
