@@ -4,6 +4,36 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.11.0
+
+For WoW: Forever (interface 16001). This version adds files, so fully
+restart the game after updating; `/reload` is not enough.
+
+- New Disenchanting tab: weapons and armor on the auction house that are
+  worth buying to disenchant, with the buy price, disenchant value, profit,
+  margin, the Enchanting skill needed and how old the price is. It shows
+  deals over your minimum profit and margin. Items your best enchanter
+  can't disenchant yet stay listed with the skill in red. Right-click a row
+  to search the auction house for it. After a scan, chat names how many
+  deals it found and the best one.
+- The tab only lists items the last scan (or a search since) actually saw,
+  so sold and expired auctions drop off. It updates as soon as you close
+  the auction house.
+- Ready to sell and the craft queue pane have a header strip with a button
+  that folds them down. Folded, the header shows a count, and the choice is
+  remembered. Ready to sell shows its total worth and how many would sell
+  at a loss; the craft queue shows its profit in green or red.
+- The auction house bar is narrower and no longer covers the portrait.
+  While a scan runs, a progress bar shows what it's doing; when it
+  finishes, it says how many prices it updated.
+- `/bts readysell` watches Ready to sell for 15 seconds and says why each
+  item leaves or comes back. `/bts dedeals` says why each deal is on the
+  Disenchanting tab.
+- Fixed: Lesser and Greater Magic Wand and Lesser and Greater Mystic Wand
+  no longer get a disenchant value, since the game won't disenchant them.
+- Fixed: Ready to sell no longer flips between two different lists while
+  the auction house is open.
+
 ## 0.10.0
 
 For WoW: Forever (interface 16001). This version adds a file, so fully
