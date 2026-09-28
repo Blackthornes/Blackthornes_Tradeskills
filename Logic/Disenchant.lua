@@ -179,7 +179,10 @@ end
 -- says it has them, since reading an item it has not got makes it fetch the
 -- item all over again. And how many times each was asked for, so an item
 -- that never arrives is given up on rather than asked for for ever.
-local waiting, attempts = {}, {}
+local waiting, attempts, arrived = {}, {}, {}
+
+-- Whether each item is a weapon or armour, from the instant lookup.
+local gearMemo = {}
 
 -- An answer that never comes should not strand an item: ask again after this,
 -- up to MAX_ATTEMPTS times in all.
@@ -230,19 +233,26 @@ local function Remember(itemID)
     local facts = { n = name, q = quality, l = itemLevel, c = classID, e = equipLoc }
     Store()[itemID] = facts
     waiting[itemID], attempts[itemID] = nil, nil
+
+    -- Lets a list know its rows may have changed without walking every item.
+    Disenchant.factsVersion = (Disenchant.factsVersion or 0) + 1
     return facts
 end
 
---- Did this addon ask the client for this item? The tabs redraw only for
---- those, not for every item any window loads.
+--- Did this addon ask the client for this item, and is it on its way or
+--- just arrived? The tabs redraw only for those. Not for items read long
+--- ago: Ready to sell reloads bag items all the time at the auction house,
+--- and redrawing the whole list for each of those kept it churning.
 function Disenchant:WasRequested(itemID)
-    return attempts[itemID] ~= nil or Store()[itemID] ~= nil
+    if waiting[itemID] or attempts[itemID] then return true end
+    return arrived[itemID] ~= nil and Now() - arrived[itemID] < WAIT_SECONDS
 end
 
 --- The client has sent an item: read it now, while it is certainly there.
 function Disenchant:OnItemInfoReceived(itemID, success)
     if not itemID or not waiting[itemID] then return end
     waiting[itemID] = nil
+    arrived[itemID] = Now()
     if success ~= false then Remember(itemID) end
 end
 
@@ -259,6 +269,10 @@ function Disenchant:GetItemFacts(itemID)
         -- On its way: wait for the client to say so.
         if waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS then return nil end
         if (attempts[itemID] or 0) >= MAX_ATTEMPTS then return nil end
+
+        -- Nothing new is looked at while the auction house is open, not even
+        -- to ask whether the client holds it: Ready to sell needs the room.
+        if AuctionHouseOpen() then return nil end
 
         -- Only an item the client says it already holds is read straight
         -- away. Without that answer, reading it could set off a fetch, so it
@@ -296,7 +310,8 @@ end
 
 --- Forget what was read about items (for tests).
 function Disenchant:_ForgetItems()
-    sessionFacts, waiting, attempts = {}, {}, {}
+    sessionFacts, waiting, attempts, arrived = {}, {}, {}, {}
+    gearMemo = {}
     if ns.db then ns.db.itemFacts = {} end
     budget.second, budget.used = nil, 0
 end
@@ -738,12 +753,17 @@ end
 --- without the item being cached. Saves asking the client to load thousands
 --- of scanned items that could never be disenchanted.
 local function CouldBeGear(itemID)
+    local known = gearMemo[itemID]
+    if known ~= nil then return known end
+
     if not Util.HasFunction("C_Item.GetItemInfoInstant") then return true end
 
     local ok, _, _, _, _, _, classID = pcall(C_Item.GetItemInfoInstant, itemID)
     if not ok or classID == nil then return true end
 
-    return classID == CLASS_WEAPON or classID == CLASS_ARMOR
+    -- Asked once a session: an item's class never changes.
+    gearMemo[itemID] = classID == CLASS_WEAPON or classID == CLASS_ARMOR
+    return gearMemo[itemID]
 end
 
 --- What buying one from someone else costs right now: their cheapest
@@ -781,6 +801,9 @@ end
 --   are read while the auction house is open)
 function Disenchant:GetAuctionRows(opts)
     opts = opts or {}
+
+    -- Counted for /bts readysell, which says how often this ran.
+    self.rowBuilds = (self.rowBuilds or 0) + 1
 
     local rows, hidden, pending = {}, 0, 0
     local prices = ns.Prices and ns.Prices:GetTable() or {}
