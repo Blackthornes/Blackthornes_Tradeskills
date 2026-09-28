@@ -48,13 +48,16 @@ local items = {
     [1006] = { 2, 22, "INVTYPE_BODY", 4, 2, 50 },     -- a shirt: cannot
     [1007] = { 2, 22, "", 7, 0, 50 },                 -- trade goods: cannot
     [1008] = { 2, 22, "INVTYPE_CHEST", 4, 1, 500 },   -- green, bind on pickup
+    [1009] = { 2, 20, "INVTYPE_RANGEDRIGHT", 2, 0, 50 }, -- a green wand from a mob: can
+    [11288] = { 2, 21, "INVTYPE_RANGEDRIGHT", 2, 0, 50, "Greater Magic Wand" },
+    [1010] = { 2, 31, "INVTYPE_RANGEDRIGHT", 2, 0, 50, "Lesser Mystic Wand" },
 }
 
 C_Item = {
     GetItemInfo = function(itemID)
         local item = items[itemID]
         if not item then return nil end
-        return "item" .. itemID, nil, item[1], item[2], 1, "Armor", "Cloth", 1,
+        return item[7] or ("item" .. itemID), nil, item[1], item[2], 1, "Armor", "Cloth", 1,
             item[3], 1, item[6], item[4], 1, item[5]
     end,
 }
@@ -139,6 +142,10 @@ check("blue and purple can", Disenchant:IsDisenchantable(1003) and Disenchant:Is
 check("a white item cannot", Disenchant:IsDisenchantable(1005) == false)
 check("a shirt cannot", Disenchant:IsDisenchantable(1006) == false)
 check("trade goods cannot", Disenchant:IsDisenchantable(1007) == false)
+check("a wand from a mob can", Disenchant:IsDisenchantable(1009) == true)
+check("a wand made by Enchanting cannot", Disenchant:IsDisenchantable(11288) == false)
+check("nor one the client numbers differently", Disenchant:IsDisenchantable(1010) == false)
+check("so it has no disenchant value", Disenchant:GetValue(11288) == nil)
 check("an uncached item is unknown, not false", Disenchant:IsDisenchantable(99999) == nil)
 
 print("\nwhat it breaks into")

@@ -142,6 +142,20 @@ local CLASS_WEAPON, CLASS_ARMOR = 2, 4
 -- Worn in a slot, but never disenchantable: shirts and tabards.
 local NOT_DISENCHANTABLE_SLOT = { INVTYPE_BODY = true, INVTYPE_TABARD = true }
 
+-- Wands made by Enchanting cannot be disenchanted (found in game), though
+-- they look like any other wand. By item ID, and by name in case the client
+-- numbers them differently.
+local NOT_DISENCHANTABLE_ITEM = {
+    [11287] = true, -- Lesser Magic Wand
+    [11288] = true, -- Greater Magic Wand
+    [11289] = true, -- Lesser Mystic Wand
+    [11290] = true, -- Greater Mystic Wand
+}
+local NOT_DISENCHANTABLE_NAME = {
+    ["Lesser Magic Wand"] = true, ["Greater Magic Wand"] = true,
+    ["Lesser Mystic Wand"] = true, ["Greater Mystic Wand"] = true,
+}
+
 local QUALITY_NAME = { [2] = "uncommon", [3] = "rare", [4] = "epic" }
 
 local function Band(bands, itemLevel)
@@ -331,6 +345,10 @@ function Disenchant:IsDisenchantable(itemID)
     if not QUALITY_NAME[facts.quality] then return false end
     if facts.classID ~= CLASS_WEAPON and facts.classID ~= CLASS_ARMOR then return false end
     if NOT_DISENCHANTABLE_SLOT[facts.equipLoc] then return false end
+    if NOT_DISENCHANTABLE_ITEM[itemID] then return false end
+
+    local known = Store()[itemID]
+    if known and NOT_DISENCHANTABLE_NAME[known.n] then return false end
 
     return true
 end
