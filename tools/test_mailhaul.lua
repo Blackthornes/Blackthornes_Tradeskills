@@ -301,7 +301,7 @@ check("but it is the first",                           haul.first, true)
 check("the returned cloth is valued",                  haul.returnedValue, 200)
 check("saved to the realm's history",                  #MailHaul:GetHistory(), 1)
 check("the report opened",                             #shownReports, 1)
-check("the tally is gone",                             MailReport.tally.shown, false)
+check("the tally lingers after you leave",             MailReport.tally.shown, true)
 check("the haul sound played",                         played[1], MailReport.SOUNDS.haul)
 
 Settle()
@@ -508,10 +508,24 @@ inbox = { Sold("Linen Bag", 700) }
 Open()
 Take(1)
 check("back on the next visit",                        tally.shown, true)
--- The game never says the mailbox closed; the once-a-second check notices.
+-- The game never says the mailbox closed; the once-a-second check notices,
+-- and the tally stays for 30 seconds before it fades.
 Mail.isOpen = false
 tally.scripts.OnUpdate(tally, 1.1)
-check("gone once the mailbox is",                      tally.shown, false)
+check("still up just after leaving",                   tally.shown, true)
+local function Wait(seconds)
+    for _, frame in ipairs(frames) do
+        local step = frame.scripts.OnUpdate
+        if step and frame.shown and frame ~= tally then
+            for _ = 1, math.floor(seconds / 0.5) do step(frame, 0.5) end
+        end
+    end
+end
+Wait(29)
+check("still up at 29 seconds",                        tally.shown, true)
+Wait(3)
+check("faded out after 30",                            tally.shown, false)
+check("and ready to show fully next time",             tally.alpha, 1)
 MailHaul:Closed()
 
 MailHaul:InvalidateMatchers()
