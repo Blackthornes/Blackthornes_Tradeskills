@@ -313,6 +313,11 @@ local function Snapshot(db)
         snapshot.probe = { canary = db.probe.canary, loadCount = db.probe.loadCount }
     end
 
+    -- What the client said about items, kept by Logic/Disenchant.lua. The
+    -- game's own saved data keeps it; the client can tell it again, so it
+    -- does not spend this budget.
+    snapshot.itemFacts = nil
+
     return snapshot
 end
 
