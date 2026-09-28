@@ -154,28 +154,41 @@ end
 -- Reading an item
 --------------------------------------------------------------------------------
 
--- What the client has told us about each item, kept for the session. An
--- item's quality, level and slot never change, and the client's own item
--- cache can let go of an item it answered a moment ago: reading it fresh
--- every time made the Disenchanting tab's list grow and shrink on every
--- redraw (Trent, 2026-09-27: "flipping between 36 deals then 54 deals").
-local knownFacts = {}
+-- What the client has told us about each item. An item's quality, level
+-- and slot never change, so they are kept in the saved data once read and
+-- the client is never asked about that item again.
+--
+-- Why it matters (Trent, 2026-09-27 and 28): the client's item cache is
+-- small. Reading a thousand scanned weapons and armour through it pushed the
+-- items in his bags out, and while an item is out the auction house calls it
+-- unsellable, so Ready to sell dropped half its rows every other second. An
+-- item the tab had just read could also be gone again a moment later, so
+-- the tab's own count flipped too. Reading each item once, the moment the
+-- client sends it, and remembering it for good ends both.
+local sessionFacts = {}
 
--- Items asked for and not yet answered, and items the client could not
--- find. Neither is read again until the client says it has something:
--- asking about an item it has not got makes it fetch the item again, and a
--- redraw asking about a thousand of those kept the client's item cache
--- churning, which made other windows (Ready to sell) flicker too (Trent,
--- 2026-09-28).
-local waiting, missing, answered = {}, {}, {}
+local function Store()
+    if ns.db then
+        ns.db.itemFacts = ns.db.itemFacts or {}
+        return ns.db.itemFacts
+    end
+    return sessionFacts
+end
 
--- An answer that never comes should not strand an item: ask again after this.
+-- Items asked for and not yet answered: never read again until the client
+-- says it has them, since reading an item it has not got makes it fetch the
+-- item all over again. And how many times each was asked for, so an item
+-- that never arrives is given up on rather than asked for for ever.
+local waiting, attempts = {}, {}
+
+-- An answer that never comes should not strand an item: ask again after this,
+-- up to MAX_ATTEMPTS times in all.
 local WAIT_SECONDS = 10
+local MAX_ATTEMPTS = 2
 
--- New items asked for per second. The Disenchanting tab reads every scanned
--- weapon and piece of armour, and asking for all of them at once floods the
--- client; a steady trickle fills the list over a few seconds instead.
-Disenchant.REQUESTS_PER_SECOND = 60
+-- New items asked for per second. Few enough that the client can hold them
+-- beside everything else it has loaded.
+Disenchant.REQUESTS_PER_SECOND = 20
 
 local budget = { second = nil, used = 0 }
 
@@ -193,18 +206,35 @@ local function TakeRequest()
     return true
 end
 
---- Did this addon ask the client for this item? The tabs redraw only for
---- those, not for every item any addon loads.
-function Disenchant:WasRequested(itemID)
-    return waiting[itemID] ~= nil or answered[itemID] ~= nil or knownFacts[itemID] ~= nil
+--- Read an item from the client and keep it, or nil when the client does
+--- not have it right now.
+local function Remember(itemID)
+    if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
+
+    local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID =
+        pcall(C_Item.GetItemInfo, itemID)
+
+    if not ok or not name or type(quality) ~= "number" or type(itemLevel) ~= "number" then
+        return nil
+    end
+
+    local facts = { n = name, q = quality, l = itemLevel, c = classID, e = equipLoc }
+    Store()[itemID] = facts
+    waiting[itemID], attempts[itemID] = nil, nil
+    return facts
 end
 
---- The client has answered for an item.
+--- Did this addon ask the client for this item? The tabs redraw only for
+--- those, not for every item any window loads.
+function Disenchant:WasRequested(itemID)
+    return attempts[itemID] ~= nil or Store()[itemID] ~= nil
+end
+
+--- The client has sent an item: read it now, while it is certainly there.
 function Disenchant:OnItemInfoReceived(itemID, success)
     if not itemID or not waiting[itemID] then return end
     waiting[itemID] = nil
-    answered[itemID] = true
-    if success == false then missing[itemID] = true end
+    if success ~= false then Remember(itemID) end
 end
 
 --- What the game says about an item that decides its disenchant.
@@ -214,16 +244,12 @@ end
 function Disenchant:GetItemFacts(itemID)
     if not itemID then return nil end
 
-    local known = knownFacts[itemID]
+    local known = Store()[itemID]
 
     if not known then
-        -- Still on its way, or the client has no such item: do not ask again.
-        if missing[itemID] then return nil end
+        -- On its way: wait for the client to say so.
         if waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS then return nil end
-
-        -- Items this addon has not asked for yet are only read while the
-        -- budget lasts, since reading an uncached one sets off a fetch.
-        if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
+        if (attempts[itemID] or 0) >= MAX_ATTEMPTS then return nil end
 
         local cached = true
         if Util.HasFunction("C_Item.IsItemDataCachedByID") then
@@ -231,42 +257,34 @@ function Disenchant:GetItemFacts(itemID)
             cached = not ok or answer ~= false
         end
 
-        if not cached and not TakeRequest() then return nil end
+        if cached then known = Remember(itemID) end
 
-        local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID =
-            pcall(C_Item.GetItemInfo, itemID)
+        if not known then
+            -- Asked for a few at a time, and read when it arrives.
+            if not TakeRequest() then return nil end
 
-        if not ok or not name or type(quality) ~= "number" or type(itemLevel) ~= "number" then
+            attempts[itemID] = (attempts[itemID] or 0) + 1
             waiting[itemID] = Now()
             if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
                 pcall(C_Item.RequestLoadItemDataByID, itemID)
             end
             return nil
         end
-
-        known = {
-            name = name,
-            quality = quality,
-            itemLevel = itemLevel,
-            classID = classID,
-            isWeapon = classID == CLASS_WEAPON,
-            equipLoc = equipLoc,
-        }
-        knownFacts[itemID] = known
     end
 
     return {
-        quality = known.quality,
-        itemLevel = known.itemLevel,
-        classID = known.classID,
-        isWeapon = known.isWeapon,
-        equipLoc = known.equipLoc,
+        quality = known.q,
+        itemLevel = known.l,
+        classID = known.c,
+        isWeapon = known.c == CLASS_WEAPON,
+        equipLoc = known.e,
     }
 end
 
 --- Forget what was read about items (for tests).
 function Disenchant:_ForgetItems()
-    knownFacts, waiting, missing, answered = {}, {}, {}, {}
+    sessionFacts, waiting, attempts = {}, {}, {}
+    if ns.db then ns.db.itemFacts = {} end
     budget.second, budget.used = nil, 0
 end
 
@@ -500,7 +518,8 @@ end
 
 --- An item's plain name, for a list row that colours it by rarity itself.
 function Disenchant:ItemName(itemID)
-    if knownFacts[itemID] then return knownFacts[itemID].name end
+    local known = Store()[itemID]
+    if known and known.n then return known.n end
 
     if Util.HasFunction("C_Item.GetItemInfo") then
         local ok, name = pcall(C_Item.GetItemInfo, itemID)
