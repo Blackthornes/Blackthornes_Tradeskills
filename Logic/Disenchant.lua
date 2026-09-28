@@ -830,8 +830,14 @@ function Disenchant:GetAuctionRows(opts)
     local minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100
     local skill, enchanter = self:GetBestEnchanter()
 
+    -- Only what the last scan (or a search since) actually saw. A listing
+    -- missing from the last scan has sold or expired, but its record keeps
+    -- the old price, so without this it stays listed as a deal for days.
+    local since = ns.db and ns.db.lastFullScan
+
     for itemID, record in pairs(prices) do
         local buy = type(record) == "table" and BuyPrice(record)
+        if buy and since and (record.seen or 0) < since then buy = nil end
 
         local disenchantable = buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID)
         if buy and disenchantable == nil and CouldBeGear(itemID) then pending = pending + 1 end
