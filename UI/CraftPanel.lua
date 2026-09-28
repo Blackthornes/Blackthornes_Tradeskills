@@ -43,6 +43,11 @@ local STEP_GAP = 3
 -- Both step buttons and their gaps: everything beside the box.
 local BUTTON_WIDTH = STEP_WIDTH * 2 + STEP_GAP * 2
 
+-- The Craft button left of the -, shown only on rows with something queued.
+local CRAFT_WIDTH = 36
+local CRAFT_GAP = 5
+local CRAFT_INSET = CRAFT_WIDTH + CRAFT_GAP
+
 -- Right margin, the buttons and box, gap before the text.
 local TEXT_INSET = 8 + BUTTON_WIDTH + QUANTITY_WIDTH + 14
 
@@ -77,6 +82,7 @@ local TRADE_SKILL_FRAME_NAMES = { "ProfessionsFrame", "TradeSkillFrame" }
 CraftPanel.TEXT_INSET = TEXT_INSET
 CraftPanel.QUANTITY_WIDTH = QUANTITY_WIDTH
 CraftPanel.BUTTON_WIDTH = BUTTON_WIDTH
+CraftPanel.CRAFT_INSET = CRAFT_INSET
 CraftPanel.PANEL_GAP = PANEL_GAP
 
 --------------------------------------------------------------------------------
@@ -356,13 +362,6 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
---- How many of each recipe the + and - buttons add or take off.
---
--- Kept by recipe ID rather than on the row, because the scroll list recycles
--- its rows: scroll down and row 1 becomes a different recipe, and a number
--- left on the frame would follow the frame instead of the craft.
-CraftPanel.pending = {}
-
 --- Is the player part-way through typing a number into this box?
 --
 -- Guarded rather than called outright: this client has gaps in the frame API,
@@ -376,19 +375,15 @@ function CraftPanel:IgnoringLimit()
     return ns.Config:Get("craftPaneIgnoreLimit") == true
 end
 
-local function QueueFromRow(row)
-    if not row.data then return end
-
-    local line = row.data
-
-    local quantity = math.max(1, math.floor(
-        tonumber(row.quantity:GetValue()) or CraftPanel.pending[line.recipeID] or 1))
+--- Queue this many more of the row's recipe, within the Keep in stock limit.
+local function QueueMore(line, quantity)
+    quantity = math.max(1, math.floor(tonumber(quantity) or 1))
 
     -- The limit is the player's own answer to "how many of these do I want",
     -- so queueing past it is nearly always a slip -- and a slip that costs
     -- materials and a deposit, not just a wrong number on a screen. Said out
-    -- loud either way: a button that silently queues fewer than the number
-    -- beside it looks broken.
+    -- loud either way: a button that silently queues fewer than asked for
+    -- looks broken.
     -- Unless the player has ticked the box that says to ignore it.
     local room = not CraftPanel:IgnoringLimit() and line.roomInCrafts or nil
 
@@ -409,29 +404,45 @@ local function QueueFromRow(row)
     ns.Queue:Add(line.recipeID, quantity)
 end
 
---- The - button: take the number in the box back off this recipe's entry.
+--- Set this recipe's own queue entry to exactly this many.
 --
--- Only the entry the player queued. A sub-craft the queue added to make
--- something else is sized from that parent and would come straight back, so
--- it is left alone and the player is told where to change it instead.
-local function TakeFromRow(row)
-    if not row.data then return end
-
-    local line = row.data
+-- The box on each row shows how many are queued, so typing into it or
+-- pressing - and + all come here. Only the entry the player queued is
+-- changed. A sub-craft the queue added to make something else is sized from
+-- that parent and would come straight back, so it is left alone and the
+-- player is told where to change it instead.
+function CraftPanel:SetQueued(line, wanted)
+    wanted = math.max(0, math.floor(tonumber(wanted) or 0))
 
     local _, entry = ns.Queue:Find(line.recipeID, true)
-    if not entry then
-        if ns.Queue:Find(line.recipeID) then
-            ns.Print(("%s is only queued as a material for another craft. Lower that craft to need fewer."):format(line.name))
-        end
+    local current = entry and entry.quantity or 0
+
+    if wanted > current then
+        QueueMore(line, wanted - current)
+    elseif wanted < current then
+        -- SetQuantity takes the entry off the queue once it reaches zero.
+        ns.Queue:SetQuantity(line.recipeID, wanted)
+    elseif not entry and wanted == 0 and ns.Queue:Find(line.recipeID) then
+        ns.Print(("%s is only queued as a material for another craft. Lower that craft to need fewer."):format(line.name))
+    end
+end
+
+--- The row's Craft button: make this recipe's queued crafts now.
+--
+-- A real click, so the game accepts it, the same as Craft next. One click
+-- makes as many of the queued number as the bags have materials for.
+function CraftPanel:CraftRow(line)
+    if ns.Crafting:IsBusy() then
+        ns.Crafting:Stop()
+        self:Refresh()
         return
     end
 
-    local quantity = math.max(1, math.floor(
-        tonumber(row.quantity:GetValue()) or CraftPanel.pending[line.recipeID] or 1))
+    local _, entry = ns.Queue:Find(line.recipeID)
+    if not entry then return end
 
-    -- SetQuantity takes the entry off the queue once it reaches zero.
-    ns.Queue:SetQuantity(line.recipeID, entry.quantity - quantity)
+    ns.Crafting:Start(entry.recipeID, entry.quantity)
+    self:Refresh()
 end
 
 -- Room at the left of every row for the skill-up star, reserved whether one is
@@ -468,8 +479,10 @@ local function CreateRow(row)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -17)
 
     -- Reads - [box] +, the way a number you nudge up and down usually looks.
+    -- The box is how many are queued: + and - change it by one, or type the
+    -- number you want.
     row.add = Widgets.CreateButton(row, "+", function()
-        QueueFromRow(row)
+        if row.data then QueueMore(row.data, 1) end
     end, { width = STEP_WIDTH, height = 15, primary = true })
     row.add:SetPoint("TOPRIGHT", -8, -1)
 
@@ -477,18 +490,25 @@ local function CreateRow(row)
         width = QUANTITY_WIDTH,
         height = 15,
         background = "panel",
-        min = 1,
+        min = 0,
         onChange = function(value)
-            if not row.data then return end
-            CraftPanel.pending[row.data.recipeID] = value
+            if row.data then CraftPanel:SetQueued(row.data, value) end
         end,
     })
     row.quantity:SetPoint("RIGHT", row.add, "LEFT", -STEP_GAP, 0)
 
     row.remove = Widgets.CreateButton(row, "-", function()
-        TakeFromRow(row)
+        if row.data then CraftPanel:SetQueued(row.data, row.data.queued - 1) end
     end, { width = STEP_WIDTH, height = 15 })
     row.remove:SetPoint("RIGHT", row.quantity, "LEFT", -STEP_GAP, 0)
+
+    -- Only on rows with something queued, so the names on the rest keep
+    -- their room.
+    row.craft = Widgets.CreateButton(row, "Craft", function()
+        if row.data then CraftPanel:CraftRow(row.data) end
+    end, { width = CRAFT_WIDTH, height = 15, primary = true })
+    row.craft:SetPoint("RIGHT", row.remove, "LEFT", -CRAFT_GAP, 0)
+    row.craft:Hide()
 end
 
 --- How much of this you already have, as a phrase, or nil for none.
@@ -525,7 +545,31 @@ local function UpdateRow(row, line)
     -- Not while it is being typed into: overwriting someone mid-number is how
     -- a field ends up refusing to accept what they meant.
     if not BeingTyped(row.quantity) then
-        row.quantity:SetValue(CraftPanel.pending[line.recipeID] or 1, true)
+        row.quantity:SetValue(line.queued, true)
+    end
+
+    -- A queued number stands out from the zeros around it.
+    row.quantity.editBox:SetTextColor(Theme.Unpack(line.queued > 0 and "accent" or "dim"))
+
+    -- The Craft button, and room for it on the name line, only while there
+    -- is something of this queued.
+    local canCraftRow = line.queued > 0
+    row.craft:SetShown(canCraftRow)
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT",
+        -(TEXT_INSET + (canCraftRow and CRAFT_INSET or 0)), -4)
+
+    if canCraftRow then
+        local busy = ns.Crafting:IsBusy()
+        local ready, reason = ns.Crafting:GetReadiness(line.recipeID)
+        local open = CraftPanel:GetOpenRecipeIDs()
+        local here = not open or open[line.recipeID]
+
+        row.craft:SetText(busy and "Stop" or "Craft")
+        row.craft:SetEnabledState(busy or (ready and here) or false)
+        row.craft.tooltipText = busy and "Stop crafting"
+            or not here and "Open the profession that makes this to craft it"
+            or not ready and (reason or "Nothing to make it with yet")
+            or ("Craft the %d queued, as many as your materials make"):format(line.queued)
     end
 
     -- Rarity, the same as the Profit tab and the sell list, so the three read
@@ -592,16 +636,14 @@ local function UpdateRow(row, line)
         row.add.tooltipText = ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
             line.stock or 0, line.name)
     else
-        row.add.tooltipText = ("Add %d %s to the queue."):format(
-            CraftPanel.pending[line.recipeID] or 1, line.name)
+        row.add.tooltipText = ("Queue one more %s. Or type how many you want in the box."):format(line.name)
     end
 
     -- Greyed out with nothing of this recipe's own in the queue, so the
     -- button never looks like it did something when it could not.
     row.remove:SetEnabledState(line.queued > 0)
     row.remove.tooltipText = line.queued > 0
-        and ("Take %d %s off the queue. Right-click the row to take all of it off."):format(
-            CraftPanel.pending[line.recipeID] or 1, line.name)
+        and ("Queue one fewer %s. Right-click the row to take all of it off."):format(line.name)
         or "Nothing of this queued yet"
 end
 
@@ -664,7 +706,7 @@ local function OnRowClick(line, _, mouseButton, row)
         return
     end
 
-    QueueFromRow(row)
+    QueueMore(line, 1)
 end
 
 --------------------------------------------------------------------------------
@@ -798,7 +840,7 @@ function CraftPanel:Build()
     ignoreLimit:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
         GameTooltip:SetText("Ignore max on hand", 1, 1, 1)
-        GameTooltip:AddLine("Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and + queues the full number you type. Your setting is not changed.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and the boxes queue the full number you type. Your setting is not changed.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
