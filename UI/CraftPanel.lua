@@ -312,9 +312,13 @@ function CraftPanel:GetRows(opts)
                 -- A search is not a suggestion, though: someone typing a name
                 -- is looking for that one recipe, and hiding the thing they
                 -- just named would read as the pane having lost it.
+                --
+                -- Nor is a row already on screen: queueing up to the limit
+                -- would otherwise make the row vanish under the cursor.
                 local suppressed = atLimit
                     and search == ""
                     and not opts.ignoreLimit
+                    and not (opts.keepOrder and opts.keepOrder[recipeID])
                     and ns.Config:Get("hideAtPostLimit") ~= false
 
                 if not suppressed then
@@ -353,9 +357,42 @@ function CraftPanel:GetRows(opts)
         end
     end
 
-    table.sort(rows, SORTS[opts.sortBy] or SORTS.profit)
+    local sort = SORTS[opts.sortBy] or SORTS.profit
+    local keep = opts.keepOrder
+
+    if keep then
+        -- Rows already on screen keep their places; anything new goes after
+        -- them, in the chosen order.
+        table.sort(rows, function(a, b)
+            local ka, kb = keep[a.recipeID], keep[b.recipeID]
+            if ka and kb then return ka < kb end
+            if ka or kb then return ka ~= nil end
+            return sort(a, b)
+        end)
+    else
+        table.sort(rows, sort)
+    end
 
     return rows
+end
+
+--- What the list's order was worked out for. While this stays the same, rows
+--- keep their places.
+--
+-- Queueing a craft counts it as stock you will have, and the profit order
+-- ranks a craft lower the more of it you have coming (see RankOf). So adding
+-- a row to the queue used to drop it down the list the moment it was clicked.
+-- The order is now worked out once and held until the sort, the search, the
+-- Ignore max on hand box or the profession changes, or the pane closes.
+function CraftPanel:OrderKey(opts)
+    local open = self:GetOpenRecipeIDs()
+    local count, sum = 0, 0
+    for recipeID in pairs(open or {}) do
+        count, sum = count + 1, sum + recipeID
+    end
+
+    return table.concat({ tostring(opts.sortBy), opts.search or "",
+        tostring(opts.ignoreLimit), count, sum }, "|")
 end
 
 --------------------------------------------------------------------------------
@@ -726,6 +763,11 @@ function CraftPanel:Build()
     frame:EnableMouse(true)
     if frame.SetToplevel then frame:SetToplevel(true) end
     frame:Hide()
+
+    -- Opening the pane again sorts afresh (see CraftPanel:OrderKey).
+    frame:HookScript("OnHide", function()
+        CraftPanel.orderKey, CraftPanel.heldOrder = nil, nil
+    end)
 
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
@@ -1122,11 +1164,24 @@ function CraftPanel:Refresh()
 
     self.title:SetText("Craft queue")
 
-    local rows = self:GetRows({
+    local opts = {
         search = self.search and self.search:GetText() or "",
         sortBy = self.sortBy,
         ignoreLimit = self:IgnoringLimit(),
-    })
+    }
+
+    local key = self:OrderKey(opts)
+    if key ~= self.orderKey then
+        self.orderKey, self.heldOrder = key, nil
+    end
+    opts.keepOrder = self.heldOrder
+
+    local rows = self:GetRows(opts)
+
+    self.heldOrder = {}
+    for index, row in ipairs(rows) do
+        self.heldOrder[row.recipeID] = index
+    end
 
     self.list:SetData(rows)
     self.empty:SetShown(#rows == 0)
