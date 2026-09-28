@@ -478,7 +478,16 @@ function CraftPanel:CraftRow(line)
     local _, entry = ns.Queue:Find(line.recipeID)
     if not entry then return end
 
-    ns.Crafting:Start(entry.recipeID, entry.quantity)
+    self:CraftEntry(entry)
+end
+
+--- Start one queue entry, from a row here or in the queued crafts list.
+function CraftPanel:CraftEntry(entry)
+    if ns.Crafting:IsBusy() then
+        ns.Crafting:Stop()
+    else
+        ns.Crafting:Start(entry.recipeID, entry.quantity)
+    end
     self:Refresh()
 end
 
@@ -1159,6 +1168,7 @@ function CraftPanel:Refresh()
         self.title:SetText(queued > 0
             and ("Craft queue (%d queued)"):format(queued)
             or "Craft queue")
+        self:RefreshQueued()
         return
     end
 
@@ -1196,6 +1206,7 @@ function CraftPanel:Refresh()
 
     self:UpdateCraftButton()
     self:UpdateClearButton()
+    self:RefreshQueued()
 
     local queued = ns.Queue:Count()
 
@@ -1215,6 +1226,156 @@ function CraftPanel:Refresh()
         Util.FormatMoney(totals.profit, { noColor = true, short = true }),
         totals.priceable and "" or " (some unpriced)"))
     self.summary:SetTextColor(Theme.Unpack("muted"))
+end
+
+--------------------------------------------------------------------------------
+-- Queued crafts, beside the pane
+--------------------------------------------------------------------------------
+
+-- Trent, 2026-09-28: "show the crafting queue out to the right of this Craft
+-- queue window once things are queued." The queue itself, in the order it is
+-- worked through, each entry with its own Craft button, so nothing here needs
+-- the main window. A child of the pane, so it hides whenever the pane does.
+
+local QUEUED_WIDTH = 250
+local QUEUED_ROW_HEIGHT = 30
+local QUEUED_GAP = 4
+
+CraftPanel.QUEUED_WIDTH = QUEUED_WIDTH
+
+--- What the queued list says under an entry's name, and whether its Craft
+--- button can be pressed.
+--
+-- @param open the open profession's recipe set, or nil when the game will not say
+-- @return text, colour key, craftable here
+function CraftPanel:QueuedStatus(entry, open)
+    local active = ns.Crafting.active
+    if active and active.recipeID == entry.recipeID then
+        return "crafting now", "accent", true
+    end
+
+    local ready, reason = ns.Crafting:GetReadiness(entry.recipeID)
+    local here = not open or open[entry.recipeID]
+
+    if ready and here then
+        local canMake = math.min(entry.quantity,
+            ns.Profit:GetCraftableCount(entry.recipeID) or 0)
+        return ("ready, materials for %d"):format(canMake), "profit", true
+    end
+
+    if ready then return "ready, in another profession", "muted", false end
+
+    return reason or "missing materials", "muted", false
+end
+
+local function CreateQueuedRow(row)
+    row.icon = Theme.CreateItemIcon(row, 13)
+    row.icon:SetPoint("TOPLEFT", 8, -3)
+
+    row.name = Theme.CreateLabel(row, "small", "text")
+    row.name:SetPoint("TOPLEFT", 25, -4)
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -(8 + 16 + 4 + CRAFT_WIDTH + 6), -4)
+
+    row.detail = Theme.CreateLabel(row, "tiny", "muted")
+    row.detail:SetPoint("TOPLEFT", 8, -17)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -17)
+
+    row.remove = Widgets.CreateButton(row, "x", function()
+        if row.data then ns.Queue:Remove(row.data.recipeID) end
+    end, { width = 16, height = 15, tooltip = "Take this off the queue" })
+    row.remove:SetPoint("TOPRIGHT", -8, -1)
+
+    row.craft = Widgets.CreateButton(row, "Craft", function()
+        if row.data then CraftPanel:CraftEntry(row.data) end
+    end, { width = CRAFT_WIDTH, height = 15, primary = true })
+    row.craft:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
+end
+
+local function UpdateQueuedRow(row, entry)
+    local recipe = ns.Recipes:GetAny(entry.recipeID)
+
+    row.name:SetText(("%dx %s"):format(entry.quantity,
+        (recipe and recipe.name) or ("recipe " .. tostring(entry.recipeID))))
+    Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
+
+    local r, g, b = Util.GetItemQualityColor(recipe and recipe.outputItemID)
+    if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
+
+    local status, colour, craftable = CraftPanel:QueuedStatus(entry, CraftPanel.queuedOpen)
+
+    -- A material the queue added for another craft says which, as the Queue
+    -- tab does, and has no x: it is sized from that craft.
+    if entry.isDependency then
+        local parents = ns.Queue:GetDependencyParents(entry)
+        status = ("for %s · %s"):format(
+            #parents > 0 and table.concat(parents, ", ") or "another craft", status)
+    end
+
+    row.detail:SetText(status)
+    row.detail:SetTextColor(Theme.Unpack(colour))
+
+    row.remove:SetShown(not entry.isDependency)
+
+    local busy = ns.Crafting:IsBusy()
+    row.craft:SetText(busy and "Stop" or "Craft")
+    row.craft:SetEnabledState(busy or craftable)
+    row.craft.tooltipText = busy and "Stop crafting"
+        or craftable and "Craft these now, as many as your materials make"
+        or status
+end
+
+function CraftPanel:BuildQueued()
+    if self.queuedFrame then return self.queuedFrame end
+
+    local frame = CreateFrame("Frame", nil, self.frame)
+    frame:SetWidth(QUEUED_WIDTH)
+    frame:SetPoint("TOPLEFT", self.frame, "TOPRIGHT", QUEUED_GAP, 0)
+    frame:EnableMouse(true)
+    frame:Hide()
+
+    Theme.Fill(frame, "window")
+    Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+
+    local _, title = ns.Collapse.CreateHeader(frame, "Queued crafts")
+    self.queuedTitle = title
+
+    local list = Widgets.CreateScrollList(frame, {
+        rowHeight = QUEUED_ROW_HEIGHT,
+        createRow = CreateQueuedRow,
+        updateRow = UpdateQueuedRow,
+        onClick = function(entry, _, mouseButton)
+            if mouseButton == "RightButton" and not entry.isDependency then
+                ns.Queue:Remove(entry.recipeID)
+            end
+        end,
+    })
+    list:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
+    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    self.queuedList = list
+
+    self.queuedFrame = frame
+    return frame
+end
+
+--- Show the queued crafts beside the pane while anything is queued.
+function CraftPanel:RefreshQueued()
+    local wanted = self.frame and self.frame:IsShown()
+        and not self:IsCollapsed() and ns.Queue:Count() > 0
+
+    if not wanted then
+        if self.queuedFrame then self.queuedFrame:Hide() end
+        return
+    end
+
+    local entries = ns.Queue:GetAll()
+
+    local frame = self:BuildQueued()
+    frame:SetHeight(self.frame:GetHeight())
+    frame:Show()
+
+    self.queuedTitle:SetText(("Queued crafts (%d)"):format(#entries))
+    self.queuedOpen = self:GetOpenRecipeIDs()
+    self.queuedList:SetData(entries)
 end
 
 --- Ask for a refresh soon, rather than taking one now.

@@ -575,6 +575,33 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- The queued crafts list beside the pane
+--------------------------------------------------------------------------------
+
+do
+  local open = { [101] = true, [102] = true }
+  READY[101], READY[103] = true, true
+
+  local text, _, craftable = CraftPanel:QueuedStatus({ recipeID = 101, quantity = 5 }, open)
+  check("ready here: says so, with how many the bags make", text, "ready, materials for 3")
+  check("and its Craft button can be pressed", craftable, true)
+
+  text, _, craftable = CraftPanel:QueuedStatus({ recipeID = 103, quantity = 1 }, open)
+  check("ready but for another profession: says so", text, "ready, in another profession")
+  check("and cannot be crafted from this window", craftable, false)
+
+  text, _, craftable = CraftPanel:QueuedStatus({ recipeID = 102, quantity = 1 }, open)
+  check("not ready: cannot be crafted", craftable, false)
+
+  ns.Crafting.active = { recipeID = 102 }
+  text = CraftPanel:QueuedStatus({ recipeID = 102, quantity = 1 }, open)
+  check("the craft under way says so", text, "crafting now")
+  ns.Crafting.active = nil
+
+  READY[101], READY[103] = nil, nil
+end
+
+--------------------------------------------------------------------------------
 -- Rows stay put while the list is held
 --------------------------------------------------------------------------------
 
