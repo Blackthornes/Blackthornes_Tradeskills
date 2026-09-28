@@ -237,14 +237,17 @@ end
 local function Remember(itemID)
     if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
 
-    local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID =
+    local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, sellPrice, classID =
         pcall(C_Item.GetItemInfo, itemID)
 
     if not ok or not name or type(quality) ~= "number" or type(itemLevel) ~= "number" then
         return nil
     end
 
-    local facts = { n = name, q = quality, l = itemLevel, c = classID, e = equipLoc }
+    -- v is what a vendor pays for one, 0 when it buys nothing. Kept for the
+    -- Vendor Flips tab; items read before it existed have none yet.
+    local facts = { n = name, q = quality, l = itemLevel, c = classID, e = equipLoc,
+                    v = type(sellPrice) == "number" and sellPrice or 0 }
     Store()[itemID] = facts
     waiting[itemID], attempts[itemID] = nil, nil
 
@@ -270,6 +273,47 @@ function Disenchant:OnItemInfoReceived(itemID, success)
     if success ~= false then Remember(itemID) end
 end
 
+--- Read an item the saved facts do not have (or have without a sell price):
+--- straight away when the client already holds it, otherwise ask for it and
+--- return nil until it arrives.
+local function Fetch(itemID)
+    local known
+
+    -- On its way: wait for the client to say so.
+    if waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS then return nil end
+    if (attempts[itemID] or 0) >= MAX_ATTEMPTS then return nil end
+
+    -- Nothing new is looked at while the auction house is open, not even
+    -- to ask whether the client holds it: Ready to sell needs the room.
+    if AuctionHouseOpen() then return nil end
+
+    -- Only an item the client says it already holds is read straight
+    -- away. Without that answer, reading it could set off a fetch, so it
+    -- waits its turn like any other.
+    if Util.HasFunction("C_Item.IsItemDataCachedByID") then
+        local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
+        if ok and answer == true then known = Remember(itemID) end
+    elseif TakeRequest() then
+        -- A client that cannot say: a read may fetch, so it spends the
+        -- same allowance a request would.
+        known = Remember(itemID)
+    end
+
+    if not known then
+        -- Asked for a few at a time, and read when it arrives.
+        if not TakeRequest() then return nil end
+
+        attempts[itemID] = (attempts[itemID] or 0) + 1
+        waiting[itemID] = Now()
+        if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
+            pcall(C_Item.RequestLoadItemDataByID, itemID)
+        end
+        return nil
+    end
+
+    return known
+end
+
 --- What the game says about an item that decides its disenchant.
 --
 -- @return facts { quality, itemLevel, isWeapon, equipLoc }, a fresh copy the
@@ -277,41 +321,8 @@ end
 function Disenchant:GetItemFacts(itemID)
     if not itemID then return nil end
 
-    local known = Store()[itemID]
-
-    if not known then
-        -- On its way: wait for the client to say so.
-        if waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS then return nil end
-        if (attempts[itemID] or 0) >= MAX_ATTEMPTS then return nil end
-
-        -- Nothing new is looked at while the auction house is open, not even
-        -- to ask whether the client holds it: Ready to sell needs the room.
-        if AuctionHouseOpen() then return nil end
-
-        -- Only an item the client says it already holds is read straight
-        -- away. Without that answer, reading it could set off a fetch, so it
-        -- waits its turn like any other.
-        if Util.HasFunction("C_Item.IsItemDataCachedByID") then
-            local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
-            if ok and answer == true then known = Remember(itemID) end
-        elseif TakeRequest() then
-            -- A client that cannot say: a read may fetch, so it spends the
-            -- same allowance a request would.
-            known = Remember(itemID)
-        end
-
-        if not known then
-            -- Asked for a few at a time, and read when it arrives.
-            if not TakeRequest() then return nil end
-
-            attempts[itemID] = (attempts[itemID] or 0) + 1
-            waiting[itemID] = Now()
-            if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
-                pcall(C_Item.RequestLoadItemDataByID, itemID)
-            end
-            return nil
-        end
-    end
+    local known = Store()[itemID] or Fetch(itemID)
+    if not known then return nil end
 
     return {
         quality = known.q,
@@ -320,6 +331,22 @@ function Disenchant:GetItemFacts(itemID)
         isWeapon = known.c == CLASS_WEAPON,
         equipLoc = known.e,
     }
+end
+
+--- What a vendor pays for one of an item, from the same saved facts, so a
+--- list of thousands of scanned items never reads them through the client's
+--- small item cache on a redraw.
+--
+-- @return copper (0 when a vendor will not buy it), or nil while the item
+--   has not been read yet. Items remembered before sell prices were kept
+--   are read again, a few a second like any other.
+function Disenchant:GetSellPrice(itemID)
+    if not itemID then return nil end
+
+    local known = Store()[itemID]
+    if not known or known.v == nil then known = Fetch(itemID) end
+
+    return known and known.v
 end
 
 --- Forget what was read about items (for tests).
