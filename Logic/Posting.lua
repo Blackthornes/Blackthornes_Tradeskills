@@ -711,6 +711,12 @@ function Posting:WatchReadyToSell(lines, skipped)
     if GetTime() > readyWatch.untilTime then
         readyWatch.untilTime, readyWatch.last = nil, nil
         ns.Print(("readysell: watch finished, %d change(s) seen"):format(readyWatch.changes or 0))
+
+        -- Whether the Disenchanting list walked every scanned item meanwhile.
+        if ns.Disenchant then
+            ns.Print(("readysell: the Disenchanting list was rebuilt %d time(s) during the watch")
+                :format((ns.Disenchant.rowBuilds or 0) - (readyWatch.builds or 0)))
+        end
         return
     end
 
@@ -745,6 +751,7 @@ ns.RegisterCommand("readysell", "watch Ready to sell for 15 seconds and say why 
     readyWatch.seconds = 15
     readyWatch.untilTime = GetTime() + readyWatch.seconds
     readyWatch.last, readyWatch.changes = nil, 0
+    readyWatch.builds = ns.Disenchant and ns.Disenchant.rowBuilds or 0
 
     if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then
         ns.Print("readysell: open the auction house first, Ready to sell only updates there")
