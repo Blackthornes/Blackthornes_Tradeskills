@@ -16,7 +16,8 @@ local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = function() end
-ns.RegisterEvent = function() end
+local handlers = {}
+ns.RegisterEvent = function(_, event, fn) handlers[event] = handlers[event] or {}; table.insert(handlers[event], fn) end
 
 local printed = {}
 ns.Print = function(text) printed[#printed + 1] = text end
@@ -430,6 +431,17 @@ ns.Prices.changes = 1
 tab.refresh()
 check("new prices do", Disenchant.rowBuilds == builds + 1)
 ns.Prices.changes = nil
+
+-- Items that waited while the auction house was open are read once it shuts.
+local later = {}
+C_Timer.After = function(_, fn) later[#later + 1] = fn end
+builds = Disenchant.rowBuilds
+ns.Scanner.isAuctionHouseOpen = false
+for _, fn in ipairs(handlers.AUCTION_HOUSE_CLOSED or {}) do fn(ns.UI, "AUCTION_HOUSE_CLOSED") end
+for _, fn in ipairs(later) do fn() end
+check("closing the auction house rebuilds the list", Disenchant.rowBuilds == builds + 1)
+ns.Scanner.isAuctionHouseOpen = true
+C_Timer.After = function() end
 
 ns.Scanner.isAuctionHouseOpen = false
 printed = {}
