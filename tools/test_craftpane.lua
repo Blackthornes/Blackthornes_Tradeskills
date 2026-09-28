@@ -504,7 +504,7 @@ do
   local inset = CraftPanel.TEXT_INSET
   local controls = CraftPanel.QUANTITY_WIDTH + CraftPanel.BUTTON_WIDTH
 
-  check("the text inset clears the quantity box and the Add button",
+  check("the text inset clears the quantity box and the - and + buttons",
     inset > controls, true)
 
   -- Not just clear, but clear with room to breathe on both sides of the box.
@@ -572,6 +572,45 @@ do
 
   ANALYSIS[101].skillUp, ANALYSIS[102].skillUp, ANALYSIS[103].skillUp = nil, nil, nil
   ns.LevelUp = nil
+end
+
+--------------------------------------------------------------------------------
+-- Clear queue asks first
+--------------------------------------------------------------------------------
+
+-- A queue can take a while to build, so one stray click must not empty it.
+do
+  local now, cleared, count = 100, 0, 3
+  local savedGetTime, savedTimer = _G.GetTime, _G.C_Timer
+  _G.GetTime = function() return now end
+  _G.C_Timer = { After = function() end }
+  ns.Print = function() end
+  ns.Queue.Count = function() return count end
+  ns.Queue.Clear = function() cleared = cleared + 1; count = 0 end
+
+  local button = { SetText = function(self, text) self.text = text end,
+    SetEnabledState = function(self, on) self.enabled = on end,
+    label = { SetTextColor = function() end } }
+  ns.Theme.Unpack = function() return 1, 1, 1 end
+  CraftPanel.clearButton = button
+
+  CraftPanel:OnClearClicked()
+  check("the first click on Clear queue empties nothing", cleared, 0)
+  check("and asks for a second click", button.text, "Click to clear")
+
+  CraftPanel:OnClearClicked()
+  check("a second click soon after empties the queue", cleared, 1)
+  check("and the button reads Clear queue again", button.text, "Clear queue")
+
+  count = 3
+  CraftPanel:UpdateClearButton()
+  CraftPanel:OnClearClicked()
+  now = now + 10
+  CraftPanel:OnClearClicked()
+  check("a second click long after only asks again", cleared, 1)
+
+  CraftPanel.clearButton, CraftPanel.clearArmedUntil = nil, nil
+  _G.GetTime, _G.C_Timer = savedGetTime, savedTimer
 end
 
 print("")

@@ -106,7 +106,8 @@ function VendorFlips:AnnounceDeals()
         Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
         Util.FormatMoney(best.vendor, { noColor = true })))
 
-    if type(PlaySound) == "function" then
+    -- Settings: Sound when a scan finishes.
+    if (not ns.Config or ns.Config:Get("scanSounds") ~= false) and type(PlaySound) == "function" then
         local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
         local sound = kits.LOOT_WINDOW_COIN_SOUND or kits.UI_EPICLOOT_TOAST
         if sound then pcall(PlaySound, sound) end
