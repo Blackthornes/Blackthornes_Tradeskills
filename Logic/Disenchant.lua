@@ -154,33 +154,171 @@ end
 -- Reading an item
 --------------------------------------------------------------------------------
 
---- What the game says about an item that decides its disenchant.
+-- What the client has told us about each item. An item's quality, level
+-- and slot never change, so they are kept in the saved data once read and
+-- the client is never asked about that item again.
 --
--- @return facts { quality, itemLevel, isWeapon, equipLoc }, or nil when the
---   client has not cached the item yet.
-function Disenchant:GetItemFacts(itemID)
-    if not itemID then return nil end
+-- Why it matters (Trent, 2026-09-27 and 28): the client's item cache is
+-- small. Reading a thousand scanned weapons and armour through it pushed the
+-- items in his bags out, and while an item is out the auction house calls it
+-- unsellable, so Ready to sell dropped half its rows every other second. An
+-- item the tab had just read could also be gone again a moment later, so
+-- the tab's own count flipped too. Reading each item once, the moment the
+-- client sends it, and remembering it for good ends both.
+local sessionFacts = {}
+
+local function Store()
+    if ns.db then
+        ns.db.itemFacts = ns.db.itemFacts or {}
+        return ns.db.itemFacts
+    end
+    return sessionFacts
+end
+
+-- Items asked for and not yet answered: never read again until the client
+-- says it has them, since reading an item it has not got makes it fetch the
+-- item all over again. And how many times each was asked for, so an item
+-- that never arrives is given up on rather than asked for for ever.
+local waiting, attempts, arrived = {}, {}, {}
+
+-- Whether each item is a weapon or armour, from the instant lookup.
+local gearMemo = {}
+
+-- An answer that never comes should not strand an item: ask again after this,
+-- up to MAX_ATTEMPTS times in all.
+local WAIT_SECONDS = 10
+local MAX_ATTEMPTS = 2
+
+-- New items asked for per second. Few enough that the client can hold them
+-- beside everything else it has loaded.
+Disenchant.REQUESTS_PER_SECOND = 20
+
+local budget = { second = nil, used = 0 }
+
+local function Now()
+    return type(GetTime) == "function" and GetTime() or 0
+end
+
+--- Is the auction house open? Nothing new is read then: that is when the
+--- items in the bags must stay loaded, since the auction house refuses to
+--- sell one the client has let go of.
+local function AuctionHouseOpen()
+    return ns.Scanner ~= nil and ns.Scanner.isAuctionHouseOpen == true
+end
+
+local function TakeRequest()
+    if AuctionHouseOpen() then return false end
+
+    local now = math.floor(Now())
+    if budget.second ~= now then
+        budget.second, budget.used = now, 0
+    end
+    if budget.used >= Disenchant.REQUESTS_PER_SECOND then return false end
+    budget.used = budget.used + 1
+    return true
+end
+
+--- Read an item from the client and keep it, or nil when the client does
+--- not have it right now.
+local function Remember(itemID)
     if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
 
     local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID =
         pcall(C_Item.GetItemInfo, itemID)
 
     if not ok or not name or type(quality) ~= "number" or type(itemLevel) ~= "number" then
-        -- Ask for it, so the next look (the tabs redraw when it arrives) has it.
-        if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
-            pcall(C_Item.RequestLoadItemDataByID, itemID)
-        end
         return nil
     end
 
+    local facts = { n = name, q = quality, l = itemLevel, c = classID, e = equipLoc }
+    Store()[itemID] = facts
+    waiting[itemID], attempts[itemID] = nil, nil
+
+    -- Lets a list know its rows may have changed without walking every item.
+    Disenchant.factsVersion = (Disenchant.factsVersion or 0) + 1
+    return facts
+end
+
+--- Did this addon ask the client for this item, and is it on its way or
+--- just arrived? The tabs redraw only for those. Not for items read long
+--- ago: Ready to sell reloads bag items all the time at the auction house,
+--- and redrawing the whole list for each of those kept it churning.
+function Disenchant:WasRequested(itemID)
+    if waiting[itemID] or attempts[itemID] then return true end
+    return arrived[itemID] ~= nil and Now() - arrived[itemID] < WAIT_SECONDS
+end
+
+--- The client has sent an item: read it now, while it is certainly there.
+function Disenchant:OnItemInfoReceived(itemID, success)
+    if not itemID or not waiting[itemID] then return end
+    waiting[itemID] = nil
+    arrived[itemID] = Now()
+    if success ~= false then Remember(itemID) end
+end
+
+--- What the game says about an item that decides its disenchant.
+--
+-- @return facts { quality, itemLevel, isWeapon, equipLoc }, a fresh copy the
+--   caller may add to, or nil when the client has not sent the item yet.
+function Disenchant:GetItemFacts(itemID)
+    if not itemID then return nil end
+
+    local known = Store()[itemID]
+
+    if not known then
+        -- On its way: wait for the client to say so.
+        if waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS then return nil end
+        if (attempts[itemID] or 0) >= MAX_ATTEMPTS then return nil end
+
+        -- Nothing new is looked at while the auction house is open, not even
+        -- to ask whether the client holds it: Ready to sell needs the room.
+        if AuctionHouseOpen() then return nil end
+
+        -- Only an item the client says it already holds is read straight
+        -- away. Without that answer, reading it could set off a fetch, so it
+        -- waits its turn like any other.
+        if Util.HasFunction("C_Item.IsItemDataCachedByID") then
+            local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
+            if ok and answer == true then known = Remember(itemID) end
+        elseif TakeRequest() then
+            -- A client that cannot say: a read may fetch, so it spends the
+            -- same allowance a request would.
+            known = Remember(itemID)
+        end
+
+        if not known then
+            -- Asked for a few at a time, and read when it arrives.
+            if not TakeRequest() then return nil end
+
+            attempts[itemID] = (attempts[itemID] or 0) + 1
+            waiting[itemID] = Now()
+            if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
+                pcall(C_Item.RequestLoadItemDataByID, itemID)
+            end
+            return nil
+        end
+    end
+
     return {
-        quality = quality,
-        itemLevel = itemLevel,
-        classID = classID,
-        isWeapon = classID == CLASS_WEAPON,
-        equipLoc = equipLoc,
+        quality = known.q,
+        itemLevel = known.l,
+        classID = known.c,
+        isWeapon = known.c == CLASS_WEAPON,
+        equipLoc = known.e,
     }
 end
+
+--- Forget what was read about items (for tests).
+function Disenchant:_ForgetItems()
+    sessionFacts, waiting, attempts, arrived = {}, {}, {}, {}
+    gearMemo = {}
+    if ns.db then ns.db.itemFacts = {} end
+    budget.second, budget.used = nil, 0
+end
+
+ns.RegisterEvent(Disenchant, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+    Disenchant:OnItemInfoReceived(itemID, success)
+end)
 
 --- Can this item be disenchanted at all? Only green, blue and purple armour
 --- and weapons can.
@@ -408,6 +546,9 @@ end
 
 --- An item's plain name, for a list row that colours it by rarity itself.
 function Disenchant:ItemName(itemID)
+    local known = Store()[itemID]
+    if known and known.n then return known.n end
+
     if Util.HasFunction("C_Item.GetItemInfo") then
         local ok, name = pcall(C_Item.GetItemInfo, itemID)
         if ok and name then return name end
@@ -577,6 +718,177 @@ function Disenchant:GetMaterialRows()
     end
 
     return rows
+end
+
+--------------------------------------------------------------------------------
+-- Auction house deals, for the Disenchanting tab
+--------------------------------------------------------------------------------
+
+--- The best Enchanting skill among your characters, and whose it is.
+--
+-- Read from what each character last recorded, so an alt's enchanter counts
+-- without logging in. nil when none of them has Enchanting.
+function Disenchant:GetBestEnchanter()
+    local best, who
+
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" then return nil end
+
+    for characterKey, record in pairs(characters) do
+        for _, profession in ipairs(type(record) == "table" and record.professions or {}) do
+            if profession.name == "Enchanting" and profession.learned ~= false then
+                local level = profession.skillLevel or 0
+                if not best or level > best then
+                    best = level
+                    who = ns.Recipes and ns.Recipes:GetCharacterName(characterKey) or characterKey
+                end
+            end
+        end
+    end
+
+    return best, who
+end
+
+--- Weapons and armour only, asked of the instant lookup, which answers
+--- without the item being cached. Saves asking the client to load thousands
+--- of scanned items that could never be disenchanted.
+local function CouldBeGear(itemID)
+    local known = gearMemo[itemID]
+    if known ~= nil then return known end
+
+    if not Util.HasFunction("C_Item.GetItemInfoInstant") then return true end
+
+    local ok, _, _, _, _, _, classID = pcall(C_Item.GetItemInfoInstant, itemID)
+    if not ok or classID == nil then return true end
+
+    -- Asked once a session: an item's class never changes.
+    gearMemo[itemID] = classID == CLASS_WEAPON or classID == CLASS_ARMOR
+    return gearMemo[itemID]
+end
+
+--- What buying one from someone else costs right now: their cheapest
+--- listing at the last look. A lone low listing that pricing leaves out is
+--- still one you can buy, and the best buy of all, so it counts here.
+local function BuyPrice(record)
+    local price = record.rivalMin
+    if record.ignoredLow and (not price or record.ignoredLow < price) then
+        price = record.ignoredLow
+    end
+    if price and price > 0 then return price end
+end
+
+Disenchant._BuyPrice = BuyPrice
+
+--- Can your best enchanter break this? nil when no character has Enchanting.
+local function CanDisenchant(skill, needs)
+    if skill == nil then return nil end
+    return needs == nil or skill >= needs
+end
+
+--- Every disenchantable item someone else has on the auction house, with
+--- what buying and disenchanting one makes.
+--
+-- Profit is the disenchant value less the auction house cut you pay when
+-- you sell the materials, less the buy price. Margin is that profit over the
+-- buy price. Your own listings are left out: buying back your own item is
+-- not a deal.
+--
+-- @param opts { profitableOnly, minProfit, minMargin }
+--   profitableOnly keeps rows that clear minProfit (at least 1 copper) and
+--   minMargin (a percent); both default to Settings.
+-- @return rows best profit first, how many profitable rows were held back
+--   by the minimums, and how many listed items are still to be read (none
+--   are read while the auction house is open)
+function Disenchant:GetAuctionRows(opts)
+    opts = opts or {}
+
+    -- Counted for /bts readysell, which says how often this ran.
+    self.rowBuilds = (self.rowBuilds or 0) + 1
+
+    local rows, hidden, pending = {}, 0, 0
+    local prices = ns.Prices and ns.Prices:GetTable() or {}
+    local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
+    local minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0
+    local minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100
+    local skill, enchanter = self:GetBestEnchanter()
+
+    for itemID, record in pairs(prices) do
+        local buy = type(record) == "table" and BuyPrice(record)
+
+        local disenchantable = buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID)
+        if buy and disenchantable == nil and CouldBeGear(itemID) then pending = pending + 1 end
+
+        if disenchantable then
+            local value, partial, breakdown = self:GetValue(itemID)
+
+            if value then
+                local facts = breakdown.facts or {}
+                local net = math.floor(value * (1 - cut) + 0.5)
+                local gain = net - buy
+
+                local row = {
+                    kind = "auction",
+                    itemID = itemID,
+                    name = self:ItemName(itemID),
+                    buy = buy,
+                    loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
+                    listed = record.quantity,
+                    value = value,
+                    net = net,
+                    partial = partial,
+                    breakdown = breakdown,
+                    gain = gain,
+                    margin = gain / buy,
+                    beatsSale = gain > 0,
+                    needs = facts.skill,
+                    enchanter = enchanter,
+                    enchanterSkill = skill,
+                    -- nil when no character has Enchanting at all.
+                    canDisenchant = CanDisenchant(skill, facts.skill),
+                    age = ns.Prices:GetAge(itemID),
+                    stale = ns.Prices:IsStale(itemID),
+                }
+
+                local clears = gain > 0 and gain >= minProfit and row.margin >= minMargin
+
+                if not opts.profitableOnly or clears then
+                    rows[#rows + 1] = row
+                elseif gain > 0 then
+                    hidden = hidden + 1
+                end
+            end
+        end
+    end
+
+    table.sort(rows, function(a, b)
+        if a.gain ~= b.gain then return a.gain > b.gain end
+        return a.itemID < b.itemID
+    end)
+
+    return rows, hidden, pending
+end
+
+--- After a scan: say how many deals it found and the best one, with a chime
+--- when there is at least one worth having. Quiet when there are none.
+function Disenchant:AnnounceDeals()
+    local ok, rows = pcall(self.GetAuctionRows, self, { profitableOnly = true })
+    if not ok or type(rows) ~= "table" or #rows == 0 then return 0 end
+
+    local best = rows[1]
+    local total = 0
+    for _, row in ipairs(rows) do total = total + row.gain end
+
+    ns.Print(("Disenchant deals: %d on the auction house worth %s together. Best: %s for %s, makes %s. See the Disenchanting tab."):format(
+        #rows, Util.FormatMoney(total, { noColor = true }),
+        Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
+        Util.FormatMoney(best.gain, { noColor = true })))
+
+    if type(PlaySound) == "function" then
+        local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
+        if kits.UI_EPICLOOT_TOAST then pcall(PlaySound, kits.UI_EPICLOOT_TOAST) end
+    end
+
+    return #rows
 end
 
 --------------------------------------------------------------------------------
