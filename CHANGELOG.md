@@ -4,6 +4,22 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.13.0
+
+For WoW: Forever (interface 16001). This version adds files, so fully
+restart the game after updating; `/reload` is not enough.
+
+- While the mailbox is open, a tally above it counts up the gold you
+  collect. When you walk away, a report shows the total, where it came
+  from (sales, refunded bids, other mail), your best sale, what else sold,
+  the items that came back, and today's and this week's totals. Beat your
+  best haul or best sale ever and it celebrates. A one-line summary goes to
+  chat too.
+- Every mailbox visit is kept under Sales, "Mailbox visits"; click one to
+  see its report again. `/bts haul` reopens the last report.
+- Settings has "Report after collecting mail" (on by default) with a
+  Preview button.
+
 ## 0.12.0
 
 For WoW: Forever (interface 16001). This version adds files, so fully
