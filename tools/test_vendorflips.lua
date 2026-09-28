@@ -231,6 +231,13 @@ check("it names the best one", printed[1] and printed[1]:find("Vendor flips", 1,
     and printed[1]:find("item3003", 1, true))
 check("with the sound of coins", chimed == 7)
 
+-- Settings: Sound when a scan finishes, turned off. The message still shows.
+config.scanSounds = false
+printed, chimed = {}, nil
+VendorFlips:AnnounceDeals()
+check("with scan sounds off, the message and no sound", #printed == 1 and chimed == nil)
+config.scanSounds = nil
+
 local backup = records
 records = { [3004] = { rivalMin = 80 } }
 printed, chimed = {}, nil

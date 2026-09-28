@@ -340,6 +340,13 @@ check("it names the best one", printed[1] and printed[1]:find("Disenchant deals"
     and printed[1]:find("item2003", 1, true))
 check("with a chime", chimed == 1)
 
+-- Settings: Sound when a scan finishes, turned off. The message still shows.
+config.scanSounds = false
+printed, chimed = {}, nil
+Disenchant:AnnounceDeals()
+check("with scan sounds off, the message and no sound", #printed == 1 and chimed == nil)
+config.scanSounds = nil
+
 local backup = records
 records = { [2006] = { rivalMin = 5000 } }
 printed, chimed = {}, nil

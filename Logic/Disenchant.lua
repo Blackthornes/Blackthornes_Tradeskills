@@ -934,7 +934,8 @@ function Disenchant:AnnounceDeals()
         Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
         Util.FormatMoney(best.gain, { noColor = true })))
 
-    if type(PlaySound) == "function" then
+    -- Settings: Sound when a scan finishes.
+    if (not ns.Config or ns.Config:Get("scanSounds") ~= false) and type(PlaySound) == "function" then
         local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
         if kits.UI_EPICLOOT_TOAST then pcall(PlaySound, kits.UI_EPICLOOT_TOAST) end
     end
