@@ -328,6 +328,9 @@ function UI:OnScanComplete(result)
         if ns.Disenchant and C_Timer and C_Timer.After then
             C_Timer.After(1.5, function() ns.Disenchant:AnnounceDeals() end)
         end
+        if ns.VendorFlips and C_Timer and C_Timer.After then
+            C_Timer.After(3, function() ns.VendorFlips:AnnounceDeals() end)
+        end
     end
 
     self:UpdateAuctionButton()

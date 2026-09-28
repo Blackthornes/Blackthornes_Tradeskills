@@ -37,6 +37,7 @@ Logic\Posting.lua
 Logic\Transfer.lua
 Logic\SaleAlarm.lua
 Logic\FarmerGoals.lua
+Logic\VendorFlips.lua
 
 UI\Theme.lua
 UI\Widgets.lua
@@ -54,6 +55,7 @@ UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
 UI\Tab_Enchanting.lua
 UI\Tab_Disenchanting.lua
+UI\Tab_VendorFlips.lua
 UI\Tab_Queue.lua
 UI\Tab_Gather.lua
 UI\Tab_Post.lua
