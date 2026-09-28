@@ -196,7 +196,16 @@ local function Now()
     return type(GetTime) == "function" and GetTime() or 0
 end
 
+--- Is the auction house open? Nothing new is read then: that is when the
+--- items in the bags must stay loaded, since the auction house refuses to
+--- sell one the client has let go of.
+local function AuctionHouseOpen()
+    return ns.Scanner ~= nil and ns.Scanner.isAuctionHouseOpen == true
+end
+
 local function TakeRequest()
+    if AuctionHouseOpen() then return false end
+
     local now = math.floor(Now())
     if budget.second ~= now then
         budget.second, budget.used = now, 0
@@ -251,13 +260,17 @@ function Disenchant:GetItemFacts(itemID)
         if waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS then return nil end
         if (attempts[itemID] or 0) >= MAX_ATTEMPTS then return nil end
 
-        local cached = true
+        -- Only an item the client says it already holds is read straight
+        -- away. Without that answer, reading it could set off a fetch, so it
+        -- waits its turn like any other.
         if Util.HasFunction("C_Item.IsItemDataCachedByID") then
             local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
-            cached = not ok or answer ~= false
+            if ok and answer == true then known = Remember(itemID) end
+        elseif TakeRequest() then
+            -- A client that cannot say: a read may fetch, so it spends the
+            -- same allowance a request would.
+            known = Remember(itemID)
         end
-
-        if cached then known = Remember(itemID) end
 
         if not known then
             -- Asked for a few at a time, and read when it arrives.
@@ -763,12 +776,13 @@ end
 -- @param opts { profitableOnly, minProfit, minMargin }
 --   profitableOnly keeps rows that clear minProfit (at least 1 copper) and
 --   minMargin (a percent); both default to Settings.
--- @return rows best profit first, and how many profitable rows were held
---   back by the minimums
+-- @return rows best profit first, how many profitable rows were held back
+--   by the minimums, and how many listed items are still to be read (none
+--   are read while the auction house is open)
 function Disenchant:GetAuctionRows(opts)
     opts = opts or {}
 
-    local rows, hidden = {}, 0
+    local rows, hidden, pending = {}, 0, 0
     local prices = ns.Prices and ns.Prices:GetTable() or {}
     local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
     local minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0
@@ -778,7 +792,10 @@ function Disenchant:GetAuctionRows(opts)
     for itemID, record in pairs(prices) do
         local buy = type(record) == "table" and BuyPrice(record)
 
-        if buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID) then
+        local disenchantable = buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID)
+        if buy and disenchantable == nil and CouldBeGear(itemID) then pending = pending + 1 end
+
+        if disenchantable then
             local value, partial, breakdown = self:GetValue(itemID)
 
             if value then
@@ -825,7 +842,7 @@ function Disenchant:GetAuctionRows(opts)
         return a.itemID < b.itemID
     end)
 
-    return rows, hidden
+    return rows, hidden, pending
 end
 
 --- After a scan: say how many deals it found and the best one, with a chime
