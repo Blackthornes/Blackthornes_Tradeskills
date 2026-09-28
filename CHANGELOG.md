@@ -4,6 +4,20 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.12.0
+
+For WoW: Forever (interface 16001). This version adds files, so fully
+restart the game after updating; `/reload` is not enough.
+
+- New Vendor Flips tab, next to Disenchanting: items other sellers have on
+  the auction house for less than a vendor pays for them. It shows the
+  profit, margin, vendor price, buy price, how many are listed and how old
+  the price is. Pick a row to see the flip; the button or a right-click
+  searches the auction house for it. Your own listings and anything the
+  last scan didn't see are left out, and your minimum profit and margin
+  apply. After a scan, chat names the best flip.
+- `/bts vendordeals` says why each item is on the Vendor Flips tab.
+
 ## 0.11.0
 
 For WoW: Forever (interface 16001). This version adds files, so fully
