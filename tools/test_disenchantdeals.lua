@@ -15,7 +15,8 @@
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
-ns.RegisterCommand = function() end
+local commands = {}
+ns.RegisterCommand = function(name, _, fn) commands[name] = fn end
 local handlers = {}
 ns.RegisterEvent = function(_, event, fn) handlers[event] = handlers[event] or {}; table.insert(handlers[event], fn) end
 
@@ -312,6 +313,17 @@ records[2001].seen = 1000
 check("one it did see is", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
 records[2001].seen = 1200     -- a search after the scan
 check("and so is one a later search saw", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
+records[2001].seen, ns.db.lastFullScan = nil, nil
+
+print("\n/bts dedeals")
+
+ns.db.lastFullScan = 1000
+records[2001].seen = 999
+printed = {}
+commands.dedeals()
+local said = table.concat(printed, "\n")
+check("it says when the last scan was", said:find("last full scan", 1, true) ~= nil)
+check("and what a fresh build would show", said:find("built fresh now", 1, true) ~= nil)
 records[2001].seen, ns.db.lastFullScan = nil, nil
 
 print("\nthe scan message")

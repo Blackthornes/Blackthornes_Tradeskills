@@ -972,3 +972,43 @@ end
 Disenchant._Report = Report
 
 ns.RegisterCommand("de", "<item link or ID>: what an item disenchants into and its value", Report)
+
+--------------------------------------------------------------------------------
+-- /bts dedeals: why each deal is on the Disenchanting tab
+--------------------------------------------------------------------------------
+
+local function Ago(stamp)
+    if not stamp then return "never" end
+    return Util.FormatAge(math.max(0, time() - stamp)) .. " ago"
+end
+
+ns.RegisterCommand("dedeals", "say why each deal on the Disenchanting tab is there", function()
+    local lastScan = ns.db and ns.db.lastFullScan
+    ns.Print(("dedeals: last full scan %s, price records changed %d time(s) since /reload")
+        :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
+
+    local shown = Disenchant.shownRows
+    if shown then
+        ns.Print(("dedeals: the tab's list was built %s, %d row(s)")
+            :format(Ago(Disenchant.shownBuiltAt), #shown))
+    else
+        ns.Print("dedeals: the tab has not built its list since /reload (open the Disenchanting tab)")
+    end
+
+    local fresh = Disenchant:GetAuctionRows({ profitableOnly = true })
+    ns.Print(("dedeals: built fresh now it would have %d deal(s)"):format(#fresh))
+
+    local prices = ns.Prices and ns.Prices:GetTable() or {}
+    for index, row in ipairs(shown or fresh) do
+        if index > 5 then break end
+        local record = prices[row.itemID] or {}
+        ns.Print(("dedeals: %s (%d): buy %s, last seen %s%s, cheapest other seller %s, lone low %s, yours %s")
+            :format(row.name or "?", row.itemID,
+                Util.FormatMoney(row.buy, { noColor = true }),
+                Ago(record.seen),
+                (lastScan and record.seen and record.seen < lastScan) and " (NOT in the last scan)" or "",
+                record.rivalMin and Util.FormatMoney(record.rivalMin, { noColor = true }) or "none",
+                record.ignoredLow and Util.FormatMoney(record.ignoredLow, { noColor = true }) or "none",
+                record.ownMin and Util.FormatMoney(record.ownMin, { noColor = true }) or "none"))
+    end
+end)
