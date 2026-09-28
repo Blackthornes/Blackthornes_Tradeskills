@@ -265,6 +265,35 @@ C_Item.GetItemInfo = realInfo
 C_Item.RequestLoadItemDataByID = nil
 Disenchant:_ForgetItems()
 
+print("\nnothing new is read while the auction house is open")
+
+-- The auction house refuses to sell an item the client has let go of, so
+-- reading new items there pushed his bag items out and Ready to sell lost
+-- rows (Trent, 2026-09-28). What is already known still lists.
+Disenchant:_ForgetItems()
+Disenchant:GetAuctionRows()               -- the known items, read while it is shut
+local knownCount = #Disenchant:GetAuctionRows()
+
+ns.Scanner = { isAuctionHouseOpen = true }
+local fetched = {}
+C_Item.RequestLoadItemDataByID = function(itemID) fetched[itemID] = true end
+C_Item.IsItemDataCachedByID = function(itemID) return itemID ~= 2008 end
+records[2008] = { rivalMin = 10 }
+
+local openRows, _, pending = Disenchant:GetAuctionRows()
+check("items already known still list at the auction house", #openRows == knownCount)
+check("a new item is not fetched while it is open", next(fetched) == nil)
+check("and is counted as waiting", pending == 1)
+
+ns.Scanner.isAuctionHouseOpen = false
+Disenchant:GetAuctionRows()
+check("it is fetched once the auction house closes", fetched[2008] == true)
+
+records[2008] = nil
+ns.Scanner = nil
+C_Item.RequestLoadItemDataByID, C_Item.IsItemDataCachedByID = nil, nil
+Disenchant:_ForgetItems()
+
 print("\nthe scan message")
 
 Enchanter(50)
