@@ -413,6 +413,9 @@ local function BuildRows()
     if key ~= built.key then
         local rows, hidden, pending = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
         built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
+
+        -- For /bts dedeals: what the tab is showing and when it was built.
+        ns.Disenchant.shownRows, ns.Disenchant.shownBuiltAt = rows, time()
     end
 
     local rows = built.rows
