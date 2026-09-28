@@ -253,7 +253,20 @@ local function Build(outer)
     end, { width = 60, height = 20, tooltip = "Play the sale alarm now" })
     saleAlarmTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
 
-    local filters = CreateSection(container, "FILTERS", { anchor = saleAlarmRow })
+    local mailReportRow = CreateRow(container, saleAlarmRow, "Report after collecting mail",
+        "Counts up what you collected at the mailbox and shows it when you walk away, with your best sale.")
+
+    widgets.mailReport = Widgets.CreateCheckbox(mailReportRow, "Enabled", function(checked)
+        Config:Set("mailReport", checked)
+    end, true)
+    widgets.mailReport:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local mailReportTest = Widgets.CreateButton(mailReportRow, "Preview", function()
+        if ns.MailReport and ns.MailHaul then ns.MailReport:Show(ns.MailHaul:Sample()) end
+    end, { width = 70, height = 20, tooltip = "Show a sample report" })
+    mailReportTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+
+    local filters = CreateSection(container, "FILTERS", { anchor = mailReportRow })
 
     local profitRow = CreateRow(container, filters, "Minimum profit",
         "Crafts that make less than this are hidden from the Profit tab. " ..
@@ -502,6 +515,7 @@ local function Refresh()
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
+    widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan = ns.db.lastFullScan

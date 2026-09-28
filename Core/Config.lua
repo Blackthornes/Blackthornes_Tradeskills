@@ -166,6 +166,11 @@ local DEFAULTS = {
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
         saleAlarm = true,
 
+        -- After collecting mail, a report of what came in: the gold counting
+        -- up, the best sale, what came back, and a fanfare on a new record.
+        -- Also the running tally over the mailbox. See UI/MailReport.lua.
+        mailReport = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
