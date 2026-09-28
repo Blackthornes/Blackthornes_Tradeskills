@@ -575,6 +575,46 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- The box on each row is how many are queued
+--------------------------------------------------------------------------------
+
+-- Typing a number, or pressing - and +, sets the recipe's own entry to it.
+do
+  local calls = {}
+  local savedFind = ns.Queue.Find
+  local entries = { [101] = { recipeID = 101, quantity = 3 } }
+  ns.Queue.Find = function(_, recipeID) local e = entries[recipeID]; if e then return 1, e end end
+  ns.Queue.Add = function(_, recipeID, n) calls[#calls + 1] = ("add %d %d"):format(recipeID, n) end
+  ns.Queue.SetQuantity = function(_, recipeID, n) calls[#calls + 1] = ("set %d %d"):format(recipeID, n) end
+  ns.Warn, ns.Print = function() end, function() end
+
+  local line = { recipeID = 101, name = "Copper Chain Belt", queued = 3 }
+
+  CraftPanel:SetQueued(line, 5)
+  check("typing 5 over 3 queued queues 2 more", calls[#calls], "add 101 2")
+
+  CraftPanel:SetQueued(line, 1)
+  check("typing 1 over 3 queued lowers it to 1", calls[#calls], "set 101 1")
+
+  CraftPanel:SetQueued(line, 0)
+  check("typing 0 takes it off", calls[#calls], "set 101 0")
+
+  local before = #calls
+  CraftPanel:SetQueued(line, 3)
+  check("typing the same number changes nothing", #calls, before)
+
+  CraftPanel:SetQueued({ recipeID = 102, name = "Rough Sharpening Stone", queued = 0 }, 4)
+  check("typing into a row with nothing queued queues that many", calls[#calls], "add 102 4")
+
+  -- The Keep in stock limit still caps what the box can add.
+  CraftPanel:SetQueued({ recipeID = 102, name = "Rough Sharpening Stone", queued = 0,
+    roomInCrafts = 2, postLimit = 2 }, 5)
+  check("the stock limit still caps it", calls[#calls], "add 102 2")
+
+  ns.Queue.Find = savedFind
+end
+
+--------------------------------------------------------------------------------
 -- Clear queue asks first
 --------------------------------------------------------------------------------
 
