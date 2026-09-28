@@ -628,6 +628,12 @@ local function Build(container)
             Refresh()
         end)
     end)
+    -- Items new to the tab wait while the auction house is open. Read them
+    -- as soon as it closes rather than whenever something next redraws.
+    ns.RegisterEvent(UI, "AUCTION_HOUSE_CLOSED", function()
+        if not widgets.list:IsVisible() then return end
+        C_Timer.After(0.5, Refresh)
+    end)
 end
 
 UI:RegisterTab({
