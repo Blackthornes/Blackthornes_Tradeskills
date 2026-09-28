@@ -410,6 +410,33 @@ check("says where sales come from rather than showing a blank list",
     empty ~= nil, true)
 contains("and names the mailbox", empty.text, "mailbox")
 
+print("")
+print("The Mailbox visits view")
+
+local savedHaul = { t = NOW - 60, who = "Tester Surname-Realm", total = 52000, salesCount = 3,
+    best = { name = "Bolt of Linen Cloth", itemID = 2589, amount = 30000 }, itemCount = 2 }
+local reopened
+ns.MailHaul = {
+    GetHistory = function() return { { t = NOW - 7200, total = 900 }, savedHaul } end,
+    Records = function() return 52000 end,
+}
+ns.MailReport = { Show = function(_, haul) reopened = haul end }
+
+selectView("visits")
+check("one row per visit", #listData, 2)
+check("newest first", listData[1].total, 52000)
+check("nothing is written into the saved visit", rawget(savedHaul, "haul"), nil)
+
+local visitRow = Row(listData[1])
+contains("says what was collected", visitRow.name.text, "Collected")
+contains("names the best sale", visitRow.detail.text, "best Bolt of Linen Cloth")
+contains("and the character, first name and all", visitRow.detail.text, "Tester Surname")
+
+contains("the footer counts the visits", LabelStartingWith("2 visits").text, "best haul")
+
+ns.MailHaul, ns.MailReport = nil, nil
+selectView("sales")
+
 --------------------------------------------------------------------------------
 
 print("")

@@ -39,6 +39,7 @@ Logic\Crafting.lua
 Logic\Posting.lua
 Logic\Transfer.lua
 Logic\SaleAlarm.lua
+Logic\MailHaul.lua
 Logic\FarmerGoals.lua
 Logic\VendorFlips.lua
 
@@ -54,6 +55,7 @@ UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
 UI\ItemTooltip.lua
+UI\MailReport.lua
 UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
 UI\Tab_Enchanting.lua

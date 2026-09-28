@@ -28,7 +28,7 @@ ADDON = "Blackthornes_TS"
 # What a player's install is made of. Anything else is refused.
 ALLOWED_TOP = {"Blackthornes_TS.toc", "Core", "Data", "Logic", "UI",
                "Media", "Probe", "LICENSE", "CHANGELOG.md"}
-ALLOWED_EXT = {".lua", ".toc", ".xml", ".tga", ".blp", ".md", ""}
+ALLOWED_EXT = {".lua", ".toc", ".xml", ".tga", ".blp", ".ogg", ".md", ""}
 
 # Never shipped, wherever it turns up.
 FORBIDDEN_NAMES = {"BlackthornesTSDB.lua", "BlackthornesTSCharDB.lua",
