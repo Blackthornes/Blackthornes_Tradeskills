@@ -383,8 +383,9 @@ end
 --------------------------------------------------------------------------------
 
 local function BuildRows()
-    local rows, hidden = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
+    local rows, hidden, pending = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
     state.hidden = hidden or 0
+    state.pending = pending or 0
 
     if state.search == "" and not state.hideTooHigh then return rows end
 
@@ -452,6 +453,16 @@ local function Refresh()
             deals, deals == 1 and "" or "s", Util.FormatMoney(total, { noColor = true, short = true })))
     else
         widgets.countLabel:SetText(("%d item%s"):format(#rows, #rows == 1 and "" or "s"))
+    end
+
+    -- Items not read yet wait for the auction house to close, so reading
+    -- them cannot upset Ready to sell. Say so, or the list looks short.
+    if (state.pending or 0) > 0 then
+        local waiting = ns.Scanner and ns.Scanner.isAuctionHouseOpen
+            and "they are read once the auction house is closed"
+            or "reading them now"
+        widgets.countLabel:SetText(("%s  ·  %d more listed items not checked yet, %s"):format(
+            widgets.countLabel:GetText() or "", state.pending, waiting))
     end
 
     local fresh
