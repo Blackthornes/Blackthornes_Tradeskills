@@ -219,7 +219,38 @@ records[2008] = { rivalMin = 10 }
 C_Item.GetItemInfoInstant = function(itemID) return itemID, "Armor", "Cloth", "INVTYPE_CHEST", 1, 4, 1 end
 for _ = 1, 5 do Disenchant:GetAuctionRows() end
 check("an uncached item is asked for once", loads[2008] == 1)
+
+-- Nor is it read again while the client is fetching it: reading an item the
+-- client has not got sets off another fetch, which kept its cache churning
+-- and made Ready to sell flicker beside the auction house.
+local reads = 0
+C_Item.GetItemInfo = function(itemID)
+    if itemID == 2008 then reads = reads + 1 end
+    return realInfo(itemID)
+end
+for _ = 1, 5 do Disenchant:GetAuctionRows() end
+check("not read again while it is on its way", reads == 0)
+
+Disenchant:OnItemInfoReceived(2008, true)
+check("the tab redraws for an item it asked for", Disenchant:WasRequested(2008))
+check("but not for items it never asked about", not Disenchant:WasRequested(999999))
+Disenchant:GetAuctionRows()
+check("once it arrives it is read again", reads == 1)
 records[2008] = nil
+
+-- A big scan asks for a few dozen new items a second, not all of them at once.
+Disenchant:_ForgetItems()
+C_Item.GetItemInfo = function() return nil end
+C_Item.IsItemDataCachedByID = function() return false end
+loads = {}
+for itemID = 5001, 5200 do records[itemID] = { rivalMin = 10 } end
+Disenchant:GetAuctionRows()
+local asked = 0
+for _ in pairs(loads) do asked = asked + 1 end
+check("only the per-second budget is asked for", asked == Disenchant.REQUESTS_PER_SECOND)
+for itemID = 5001, 5200 do records[itemID] = nil end
+C_Item.IsItemDataCachedByID = nil
+Disenchant:_ForgetItems()
 C_Item.GetItemInfo = realInfo
 C_Item.RequestLoadItemDataByID = nil
 
