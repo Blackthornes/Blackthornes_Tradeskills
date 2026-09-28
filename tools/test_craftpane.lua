@@ -575,6 +575,38 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- Rows stay put while the list is held
+--------------------------------------------------------------------------------
+
+-- Queueing a craft ranks it lower in the profit order (more of it coming).
+-- With the order held, the row stays where it was clicked.
+do
+  local savedOpen = _G.C_TradeSkillUI
+  _G.C_TradeSkillUI = nil
+  local held = { [103] = 1, [101] = 2 }
+
+  check("a held order keeps rows where they were",
+    names(CraftPanel:GetRows({ sortBy = "name", keepOrder = held })),
+    "Brown Linen Shirt, Copper Chain Belt, Rough Sharpening Stone")
+
+  check("with nothing held, the sort decides",
+    names(CraftPanel:GetRows({ sortBy = "name" })),
+    "Brown Linen Shirt, Copper Chain Belt, Rough Sharpening Stone")
+
+  check("a new row goes after the held ones",
+    names(CraftPanel:GetRows({ sortBy = "name", keepOrder = { [102] = 1, [101] = 2 } })),
+    "Rough Sharpening Stone, Copper Chain Belt, Brown Linen Shirt")
+
+  check("changing the sort changes what the order is held for",
+    CraftPanel:OrderKey({ sortBy = "name" }) ~= CraftPanel:OrderKey({ sortBy = "profit" }), true)
+
+  check("changing the search does too",
+    CraftPanel:OrderKey({ sortBy = "name", search = "" }) ~= CraftPanel:OrderKey({ sortBy = "name", search = "belt" }), true)
+
+  _G.C_TradeSkillUI = savedOpen
+end
+
+--------------------------------------------------------------------------------
 -- The box on each row is how many are queued
 --------------------------------------------------------------------------------
 
