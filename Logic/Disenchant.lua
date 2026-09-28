@@ -161,9 +161,51 @@ end
 -- redraw (Trent, 2026-09-27: "flipping between 36 deals then 54 deals").
 local knownFacts = {}
 
--- Items already asked for, so a redraw does not ask again for thousands of
--- items and keep the client's cache churning.
-local requested = {}
+-- Items asked for and not yet answered, and items the client could not
+-- find. Neither is read again until the client says it has something:
+-- asking about an item it has not got makes it fetch the item again, and a
+-- redraw asking about a thousand of those kept the client's item cache
+-- churning, which made other windows (Ready to sell) flicker too (Trent,
+-- 2026-09-28).
+local waiting, missing, answered = {}, {}, {}
+
+-- An answer that never comes should not strand an item: ask again after this.
+local WAIT_SECONDS = 10
+
+-- New items asked for per second. The Disenchanting tab reads every scanned
+-- weapon and piece of armour, and asking for all of them at once floods the
+-- client; a steady trickle fills the list over a few seconds instead.
+Disenchant.REQUESTS_PER_SECOND = 60
+
+local budget = { second = nil, used = 0 }
+
+local function Now()
+    return type(GetTime) == "function" and GetTime() or 0
+end
+
+local function TakeRequest()
+    local now = math.floor(Now())
+    if budget.second ~= now then
+        budget.second, budget.used = now, 0
+    end
+    if budget.used >= Disenchant.REQUESTS_PER_SECOND then return false end
+    budget.used = budget.used + 1
+    return true
+end
+
+--- Did this addon ask the client for this item? The tabs redraw only for
+--- those, not for every item any addon loads.
+function Disenchant:WasRequested(itemID)
+    return waiting[itemID] ~= nil or answered[itemID] ~= nil or knownFacts[itemID] ~= nil
+end
+
+--- The client has answered for an item.
+function Disenchant:OnItemInfoReceived(itemID, success)
+    if not itemID or not waiting[itemID] then return end
+    waiting[itemID] = nil
+    answered[itemID] = true
+    if success == false then missing[itemID] = true end
+end
 
 --- What the game says about an item that decides its disenchant.
 --
@@ -175,16 +217,28 @@ function Disenchant:GetItemFacts(itemID)
     local known = knownFacts[itemID]
 
     if not known then
+        -- Still on its way, or the client has no such item: do not ask again.
+        if missing[itemID] then return nil end
+        if waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS then return nil end
+
+        -- Items this addon has not asked for yet are only read while the
+        -- budget lasts, since reading an uncached one sets off a fetch.
         if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
+
+        local cached = true
+        if Util.HasFunction("C_Item.IsItemDataCachedByID") then
+            local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
+            cached = not ok or answer ~= false
+        end
+
+        if not cached and not TakeRequest() then return nil end
 
         local ok, name, _, quality, itemLevel, _, _, _, _, equipLoc, _, _, classID =
             pcall(C_Item.GetItemInfo, itemID)
 
         if not ok or not name or type(quality) ~= "number" or type(itemLevel) ~= "number" then
-            -- Ask for it once, so a later look (the tabs redraw when it
-            -- arrives) has it.
-            if not requested[itemID] and Util.HasFunction("C_Item.RequestLoadItemDataByID") then
-                requested[itemID] = true
+            waiting[itemID] = Now()
+            if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
                 pcall(C_Item.RequestLoadItemDataByID, itemID)
             end
             return nil
@@ -212,8 +266,13 @@ end
 
 --- Forget what was read about items (for tests).
 function Disenchant:_ForgetItems()
-    knownFacts, requested = {}, {}
+    knownFacts, waiting, missing, answered = {}, {}, {}, {}
+    budget.second, budget.used = nil, 0
 end
+
+ns.RegisterEvent(Disenchant, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+    Disenchant:OnItemInfoReceived(itemID, success)
+end)
 
 --- Can this item be disenchanted at all? Only green, blue and purple armour
 --- and weapons can.

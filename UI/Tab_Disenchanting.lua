@@ -569,11 +569,15 @@ local function Build(container)
     UpdateDetail(nil)
 
     -- Scanned items the client has not cached are left out until it has
-    -- them. Redraw once they arrive, coalescing a burst into one pass.
+    -- them, and are asked for a few dozen a second. Redraw as they arrive,
+    -- coalescing a burst into one pass.
     local redrawQueued = false
 
-    ns.RegisterEvent(UI, "GET_ITEM_INFO_RECEIVED", function()
+    ns.RegisterEvent(UI, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
         if redrawQueued or not widgets.list:IsVisible() then return end
+
+        -- Only for items this tab asked for, not every item any window loads.
+        if itemID and not ns.Disenchant:WasRequested(itemID) then return end
 
         redrawQueued = true
         C_Timer.After(1, function()
