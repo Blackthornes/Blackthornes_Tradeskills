@@ -171,4 +171,21 @@ byItem = {}
 for _, line in ipairs(lines) do byItem[line.itemID] = line end
 expect("same price: the vendor buys it", byItem[THREAD] and byItem[THREAD].amount, 10)
 
+-- The only cheaper listing is his own: nothing to buy there, so the vendor.
+records[THREAD] = { market = 10, min = 4, ownMin = 4, quantity = 40 }
+lines = Vendor:GetNeeded()
+byItem = {}
+for _, line in ipairs(lines) do byItem[line.itemID] = line end
+expect("his own cheaper listing: the vendor buys it", byItem[THREAD] and byItem[THREAD].amount, 10)
+
+-- A rival is cheaper, but most of what is listed is his own and the rest
+-- does not cover the shortfall.
+records[THREAD] = { market = 6, min = 4, rivalMin = 4, ownMin = 5, quantity = 40 }
+ns.Auctions = { GetPostedCount = function(_, itemID) return itemID == THREAD and 35 or 0 end }
+lines = Vendor:GetNeeded()
+byItem = {}
+for _, line in ipairs(lines) do byItem[line.itemID] = line end
+expect("his own units do not cover the shortfall", byItem[THREAD] and byItem[THREAD].amount, 10)
+ns.Auctions = nil
+
 ns.Prices = nil

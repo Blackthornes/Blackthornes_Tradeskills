@@ -169,19 +169,34 @@ end
 --- Is this material cheaper on the auction house than at this vendor, with
 --- enough listed there to cover what is short?
 --
--- The auction price is the cheapest posting at the last look, leaving out a
--- lone low one, the same figure material cost uses. Only what was actually
--- listed counts: with nothing up, the market value is no price anyone can
--- buy at, and the vendor is the only place to get it. A tie goes to the
--- vendor, which is a sure purchase.
+-- The auction price is the cheapest posting from someone else at the last
+-- look, leaving out a lone low one. Only what was actually listed counts:
+-- with nothing up, the market value is no price anyone can buy at, and the
+-- vendor is the only place to get it. A tie goes to the vendor, which is a
+-- sure purchase.
+--
+-- The player's own listings are left out of both the price and the count.
+-- Counted, his own auction was "the cheaper one" and the vendor buy was
+-- skipped when nobody else had any cheaper.
 local function CheaperAtAuction(itemID, stock, shortfall)
     local Prices = ns.Prices
-    if not Prices or not Prices.Get or not Prices.LowestListed then return false end
+    if not Prices or not Prices.Get then return false end
 
     local record = Prices:Get(itemID)
-    local auction = Prices.LowestListed(record)
+    if type(record) ~= "table" then return false end
+
+    -- A book read with no owners (rivalMin, ownMin and a lone low all unset)
+    -- still has its cheapest listing as a rival price.
+    local auction = record.rivalMin
+    if not auction and not record.ownMin and not record.ignoredLow then auction = record.min end
     if not auction or auction <= 0 then return false end
-    if (record.quantity or 0) < shortfall then return false end
+
+    local own = 0
+    if ns.Auctions and ns.Auctions.GetPostedCount then
+        local ok, count = pcall(ns.Auctions.GetPostedCount, ns.Auctions, itemID)
+        own = ok and tonumber(count) or 0
+    end
+    if (record.quantity or 0) - own < shortfall then return false end
 
     -- What one really costs here. A bundle's stored unit price is floored,
     -- so it is worked out from the bundle price instead.
