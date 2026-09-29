@@ -178,7 +178,7 @@ function Transfer:Import(code)
 
     if skipped > 0 then
         -- Said plainly: silently dropping crafts would look like data loss.
-        summary = summary .. ("; skipped %d recipe(s) this character does not know")
+        summary = summary .. ("; skipped %d recipe(s) none of your characters know")
             :format(skipped)
     end
 

@@ -74,7 +74,15 @@ local function CreateRow(parent, anchor, labelText, description)
         local hint = Theme.CreateLabel(row, "tiny", "dim")
         hint:SetPoint("TOPLEFT", 0, -24)
         hint:SetWidth(COLUMN_WIDTH)
+        -- Wrapped, with the row grown to fit: on one line the longer ones
+        -- (Undercut by, Minimum profit) were cut off halfway with "...".
+        hint:SetWordWrap(true)
         hint:SetText(description)
+
+        local height = hint.GetStringHeight and hint:GetStringHeight() or 0
+        if type(height) == "number" and height > 0 then
+            row:SetHeight(math.max(40, 24 + math.ceil(height) + 2))
+        end
     end
 
     return row
@@ -552,12 +560,12 @@ local function Refresh()
 
     local auctionAge = ns.Auctions:GetAge()
     widgets.auctionSummary:SetText(auctionAge
-        and ("Your auctions last read " .. Util.FormatAge(auctionAge) .. " ago.")
+        and ("Your auctions last read " .. Util.FormatAgeAgo(auctionAge) .. ".")
         or "Your auctions have never been read. Open the auction house once.")
 
     local bankAge = ns.Inventory:GetBankAge()
     widgets.bankSummary:SetText(bankAge
-        and ("Bank contents last read " .. Util.FormatAge(bankAge) .. " ago.")
+        and ("Bank contents last read " .. Util.FormatAgeAgo(bankAge) .. ".")
         or "Bank never read. Visit a bank so material counts include it.")
 
     -- Last: the warnings above wrap to different heights depending on what

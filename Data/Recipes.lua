@@ -82,9 +82,12 @@ local function GetCharacterRecord(create)
 
     local record = characters[key]
     if not record and create then
+        -- Plain copies: inside a dungeon the client can hand back names
+        -- that raise when compared, and a stored one would raise forever.
+        local Plain = ns.Config.PlainString
         record = {
-            name = UnitName("player"),
-            realm = GetRealmName and GetRealmName() or "?",
+            name = Plain and Plain(UnitName, "player") or "Unknown",
+            realm = GetRealmName and Plain and Plain(GetRealmName) or "?",
             recipes = {},
             inventory = {},
         }
@@ -92,7 +95,9 @@ local function GetCharacterRecord(create)
     end
 
     if record and not Recipes.identityStamped and key == ns.Config.characterKey then
-        Recipes:StampIdentity(record)
+        -- Protected: a name the client will not let us compare must not stop
+        -- the recipe cache from loading.
+        pcall(Recipes.StampIdentity, Recipes, record)
     end
 
     return record
@@ -139,8 +144,8 @@ function Recipes:StampIdentity(record)
     local guid = ns.Config.characterKey
     if guid then record.guid = guid end
 
-    local ok, name = pcall(UnitName, "player")
-    if ok and type(name) == "string" and name ~= "" then record.name = name end
+    local name = ns.Config.PlainString and ns.Config.PlainString(UnitName, "player")
+    if name then record.name = name end
 
     local surname = ns.Config:ReadSurname()
     if surname then record.surname = surname end
@@ -502,6 +507,7 @@ end
 -- So a read with nothing learned is only accepted when there is nothing
 -- better already stored.
 -- @return true if the cache now holds a learned profession
+-- @return true if this read itself found one (the login retry waits for that)
 function Recipes:RefreshProfessions()
     local record = GetCharacterRecord(true)
     if not record then return false end
@@ -519,7 +525,7 @@ function Recipes:RefreshProfessions()
         record.professions = fresh
     end
 
-    return AnyLearned(record.professions)
+    return AnyLearned(record.professions), AnyLearned(fresh)
 end
 
 function Recipes:OnEnable()
@@ -535,7 +541,11 @@ function Recipes:OnEnable()
     self.professionTimer = C_Timer.NewTicker(3, function()
         attempts = attempts + 1
 
-        if Recipes:RefreshProfessions() or attempts >= 5 then
+        -- Stopped on a fresh read that found something: the saved list
+        -- already holds last session's professions, so it proves nothing
+        -- about whether this session's skill levels have arrived yet.
+        local _, freshLearned = Recipes:RefreshProfessions()
+        if freshLearned or attempts >= 5 then
             if Recipes.professionTimer then
                 Recipes.professionTimer:Cancel()
                 Recipes.professionTimer = nil

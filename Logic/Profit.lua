@@ -797,13 +797,13 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
         ns.PrintRaw(("  |c%sdeposit unknown until you visit an auction house|r")
             :format(ns.COLORS.muted))
     end
-    ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% return on cost)"):format(
+    ns.PrintRaw(("  |c%sprofit          %s|r  (%.0f%% margin, %.0f%% return on cost)"):format(
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),
         math.floor(analysis.margin * 100), math.floor(analysis.roi * 100)))
-    ns.PrintRaw(("  |c%sconfidence %d%%%s, data %s old|r"):format(
+    ns.PrintRaw(("  |c%sconfidence %d%%%s, data read %s|r"):format(
         ns.COLORS.muted, math.floor((analysis.confidence or 0) * 100),
         analysis.confidenceReason and (" (" .. analysis.confidenceReason .. ")") or "",
-        Util.FormatAge(analysis.age)))
+        Util.FormatAgeAgo(analysis.age)))
 end)
 
 --- What the client says about binding, for every cached recipe's output.

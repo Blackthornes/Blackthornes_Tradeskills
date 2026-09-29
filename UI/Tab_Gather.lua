@@ -71,7 +71,11 @@ local function BuildList()
             if aCost ~= bCost then return aCost > bCost end
 
         elseif state.sortBy == "name" then
-            return a.label < b.label
+            -- By the name inside the link: the link itself opens with a
+            -- colour code, which sorted by rarity instead.
+            local aName = (a.label or ""):match("%[(.-)%]") or a.label or ""
+            local bName = (b.label or ""):match("%[(.-)%]") or b.label or ""
+            if aName ~= bName then return aName < bName end
         end
 
         return (a.estimatedCost or 0) > (b.estimatedCost or 0)

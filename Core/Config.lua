@@ -245,6 +245,9 @@ local function SafeUnitName()
     return "Unknown"
 end
 
+-- For the character record, which must not store a value that raises later.
+Config.PlainString = PlainString
+
 local function SafeRealmName()
     if type(GetRealmName) == "function" then
         local ok, realm = pcall(GetRealmName)

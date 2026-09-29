@@ -124,7 +124,9 @@ local function BuildDetail(parent)
         local button = detail.forget
         if not state.selected then return end
 
-        if button.armed then
+        -- Armed for one character only: arming on one alt and clicking again
+        -- after selecting another must ask again, not delete the second.
+        if button.armed and button.armed == state.selected.key then
             ns.Recipes:ForgetCharacter(state.selected.key)
             button.armed = false
             button:SetText("Forget character")
@@ -134,11 +136,12 @@ local function BuildDetail(parent)
             return
         end
 
-        button.armed = true
+        local armedFor = state.selected.key
+        button.armed = armedFor
         button:SetText("Really forget?")
 
         C_Timer.After(4, function()
-            if button.armed then
+            if button.armed == armedFor then
                 button.armed = false
                 button:SetText("Forget character")
             end
@@ -169,6 +172,12 @@ local function UpdateDetail(entry)
 
     -- Only an alt can be forgotten; you cannot discard the character you are on.
     detail.forget:SetShown(shown and not entry.isCurrent)
+
+    -- Showing another character disarms the button.
+    if detail.forget.armed and (not entry or detail.forget.armed ~= entry.key) then
+        detail.forget.armed = false
+        detail.forget:SetText("Forget character")
+    end
 
     for _, line in ipairs(detail.lines) do
         line:Hide()

@@ -314,7 +314,9 @@ function Scanner:StartFullScan()
             Scanner.scanQueued = false
 
             if not Scanner.isScanning then
-                ns.Print("the auction house stayed busy; the scan was not sent.")
+                if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                    ns.Print("the auction house stayed busy; the scan was not sent.")
+                end
                 if ns.UI then ns.UI:OnScanComplete() end
             end
         end,
@@ -378,7 +380,9 @@ function Scanner:StartBrowseScan()
             Scanner.isScanning = false
             Scanner.isBrowsing = false
 
-            ns.Warn("the auction house stayed busy; the scan was not sent.")
+            if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                ns.Warn("the auction house stayed busy; the scan was not sent.")
+            end
             if ns.UI then ns.UI:OnScanComplete() end
         end,
     })
@@ -671,6 +675,11 @@ end
 function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     if not self.isScanning or self.isReading then return end
 
+    -- A late answer after the six-second fallback already started the page
+    -- by page scan: reading it too would run two scans at once, and the
+    -- quick scan finishing would end the other one halfway.
+    if self.isBrowsing or self.browseQueued then return end
+
     if self.timeoutHandle then
         self.timeoutHandle:Cancel()
         self.timeoutHandle = nil
@@ -938,7 +947,7 @@ function Scanner:NextFollowUp()
         else
             Scanner:NextFollowUp()
         end
-    end, { priority = ns.AHQueue and ns.AHQueue.PRIORITY.scan })
+    end, { priority = ns.AHQueue and ns.AHQueue.PRIORITY.scan, quiet = true })
 end
 
 --- Search for one item's real order book.
@@ -978,8 +987,15 @@ function Scanner:ScanItem(itemID, callback, opts)
     local superseded = self.pendingItem
     self:ClearSearchState()
 
-    if superseded and superseded.callback then
-        superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
+    if superseded then
+        -- Its answer will never be read, so it is not a recent check: asked
+        -- about again within twenty seconds, it has to be searched again
+        -- rather than served as "recent" at the old price.
+        self.recentItemScans[superseded.itemID] = nil
+
+        if superseded.callback then
+            superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
+        end
     end
 
     -- Kept by identity as well as in the shared slot. The queue tells a request
@@ -988,7 +1004,9 @@ function Scanner:ScanItem(itemID, callback, opts)
     -- it cleared the new request, told the new caller its check had failed,
     -- and the new search then never went out. Two List clicks a second apart
     -- during a scan were enough to list at an unchecked price.
-    local mine = { itemID = itemID, itemKey = itemKey, callback = callback }
+    -- quiet: a background follow-up nobody clicked for says nothing when it
+    -- goes unanswered, since there is no price the player is waiting on.
+    local mine = { itemID = itemID, itemKey = itemKey, callback = callback, quiet = opts.quiet }
     self.pendingItem = mine
 
     -- Urgent priority: this is only reached because the player clicked something
@@ -1031,7 +1049,9 @@ function Scanner:ScanItem(itemID, callback, opts)
             -- price for the next twenty seconds.
             Scanner.recentItemScans[itemID] = nil
 
-            ns.Warn("the auction house did not answer that search; using the last known price.")
+            if not pending.quiet then
+                ns.Warn("the auction house did not answer that search; using the last known price.")
+            end
             Scanner:SettleSearchDisplay("a search did not answer")
 
             if pending.callback then
@@ -1046,7 +1066,9 @@ function Scanner:ScanItem(itemID, callback, opts)
         if Scanner.pendingItem ~= mine then return end
         Scanner.pendingItem = nil
 
-        ns.Warn("the auction house stayed busy; using the last known price.")
+        if not mine.quiet and not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+            ns.Warn("the auction house stayed busy; using the last known price.")
+        end
         if mine.callback then
             mine.callback(itemID, nil, nil, nil, nil, nil, "unavailable")
         end
@@ -1242,6 +1264,11 @@ function Scanner:SettleSearchDisplay(reason)
     if not self.isAuctionHouseOpen then return false end
     if self.settledSearchDisplay then return false end
 
+    -- A page-by-page scan waiting its turn shares the "browse" slot in the
+    -- queue: this query would replace it, and the scan would never run. Its
+    -- own queries settle the display anyway.
+    if self.browseQueued or self.isBrowsing then return false end
+
     if not Util.HasFunction("C_AuctionHouse.HasFullBrowseResults") then return false end
 
     local ok, hasFull = pcall(C_AuctionHouse.HasFullBrowseResults)
@@ -1282,17 +1309,36 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
                 -- market observation, so it never reaches Summarise. It still
                 -- goes into raw: `/bts listings` reports what the client said.
                 if ns.Prices.IsCredible(info.unitPrice) then
-                    listings[#listings + 1] = {
-                        unitPrice = info.unitPrice,
-                        quantity = info.quantity or 1,
-                        isOwn = info.containsOwnerItem == true,
-                    }
+                    local quantity = info.quantity or 1
+                    local ownUnits = tonumber(info.numOwnerItems)
+
+                    -- A price level holds everyone's units at that price. When
+                    -- the client says how many of them are yours, only those
+                    -- are yours: a level you share with a rival is still a
+                    -- rival price, and calling it all yours had the next
+                    -- listing undercut the level above instead.
+                    if info.containsOwnerItem == true and ownUnits and ownUnits > 0
+                        and ownUnits < quantity then
+                        listings[#listings + 1] = {
+                            unitPrice = info.unitPrice, quantity = ownUnits, isOwn = true,
+                        }
+                        listings[#listings + 1] = {
+                            unitPrice = info.unitPrice, quantity = quantity - ownUnits, isOwn = false,
+                        }
+                    else
+                        listings[#listings + 1] = {
+                            unitPrice = info.unitPrice,
+                            quantity = quantity,
+                            isOwn = info.containsOwnerItem == true,
+                        }
+                    end
                 end
 
                 raw[#raw + 1] = {
                     quantity = info.quantity or 1,
                     unitPrice = info.unitPrice,
                     ownerFlag = info.containsOwnerItem,
+                    ownUnits = info.numOwnerItems,
                 }
             end
         end
@@ -1629,7 +1675,16 @@ ns.RegisterCommand("verify", "<itemID>: compare the scanned price with a fresh s
 
     ns.Print(("checking item %d against a fresh search..."):format(itemID))
 
-    ns.Scanner:ScanItem(itemID, function(_, marketValue, minBuyout, quantity, isCommodity)
+    ns.Scanner:ScanItem(itemID, function(_, marketValue, minBuyout, quantity, isCommodity, _, status)
+        -- Only an answered search can say nobody is selling it.
+        if status == "recent" then
+            ns.Print("that item was searched under 20 seconds ago; run this again shortly.")
+            return
+        elseif status == "superseded" or status == "unavailable" then
+            ns.Warn("the search did not get an answer; try again in a moment.")
+            return
+        end
+
         if not marketValue then
             ns.Warn("nobody has that item listed right now")
             return

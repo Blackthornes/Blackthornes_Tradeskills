@@ -1103,7 +1103,7 @@ function UI:UpdateMerchantButton()
         parts[#parts + 1] = ("  %dx %s  (%s)%s"):format(
             line.amount, Util.GetItemLabel(line.itemID),
             Util.FormatMoney(line.cost, { noColor = true, short = true }),
-            line.short and "  - vendor stock limited" or "")
+            line.short and "  (vendor stock limited)" or "")
     end
 
     if #lines > 10 then
@@ -1255,7 +1255,9 @@ function UI:SearchAuctionHouse(itemID)
         end,
 
         onGiveUp = function()
-            ns.Warn("the auction house stayed busy; that search was not sent.")
+            if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                ns.Warn("the auction house stayed busy; that search was not sent.")
+            end
         end,
     })
 

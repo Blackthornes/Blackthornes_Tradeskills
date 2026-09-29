@@ -61,19 +61,20 @@ local function BeingTyped(box)
     return box.editBox.HasFocus and box.editBox:HasFocus()
 end
 local function CreateRow(row)
-    local textWidth = PANEL_WIDTH - TEXT_INSET - 8
-
     -- The item's icon at the start of the name line, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 13)
     row.icon:SetPoint("TOPLEFT", 8, -3)
 
+    -- Right edges tied to the row, which is narrower than the panel (the
+    -- list is inset, and narrower again with the scrollbar). Widths taken
+    -- from the panel ran the text under the quantity box and List button.
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("TOPLEFT", 25, -4)
-    row.name:SetWidth(textWidth - 17)
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
     row.detail:SetPoint("TOPLEFT", 8, -17)
-    row.detail:SetWidth(textWidth)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -17)
 
     row.post = Widgets.CreateButton(row, "List", function()
         if not row.data then return end

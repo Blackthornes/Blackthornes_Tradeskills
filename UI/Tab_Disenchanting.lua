@@ -446,6 +446,12 @@ local function EmptyText()
         return "Scan the auction house to find items worth buying to disenchant."
     end
 
+    -- The skill filter first: with both ticked, an empty list is usually
+    -- down to what your enchanters can disenchant, not the minimums.
+    if state.hideTooHigh and state.dealsOnly and state.hidden == 0 then
+        return "Nothing listed that your enchanters can disenchant yet."
+    end
+
     if state.dealsOnly then
         local text = "Nothing on the auction house is worth buying to disenchant right now."
 

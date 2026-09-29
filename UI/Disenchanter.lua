@@ -273,6 +273,16 @@ function Disenchanter:OnEnable()
         if Disenchanter.overlay then Disenchanter.overlay:Hide() end
         SetAnchorMouse(Disenchanter.anchor, true)
     end)
+
+    -- Put the button back once combat ends. Nothing else re-armed it, so
+    -- every click on Disenchant said it missed until the bags changed.
+    ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function()
+        local anchor, itemID = Disenchanter.anchor, Disenchanter.itemID
+        if not anchor or not itemID or not anchor:IsVisible() then return end
+
+        local bag, slot = Disenchanter:FindSlot(itemID)
+        if bag and slot then Disenchanter:Arm(anchor, itemID, bag, slot) end
+    end)
 end
 
 --------------------------------------------------------------------------------

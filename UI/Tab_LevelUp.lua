@@ -65,8 +65,11 @@ local function TierColor(tier)
     return ns.SkillUp:GetTierColor(tier)
 end
 
+-- Rounded: this client refuses a fraction for %x, and the tier colours
+-- scale to 127.5 and the like.
 local function ColorCode(r, g, b)
-    return ("|cff%02x%02x%02x"):format(r * 255, g * 255, b * 255)
+    return ("|cff%02x%02x%02x"):format(math.floor(r * 255 + 0.5),
+        math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
 end
 
 --------------------------------------------------------------------------------

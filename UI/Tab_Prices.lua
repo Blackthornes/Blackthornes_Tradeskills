@@ -55,9 +55,32 @@ local function GetReagentSet()
     return reagents
 end
 
+--- An item's plain name without fetching it: the saved facts first, then
+--- the client only for an item it already holds. The whole price table is
+--- thousands of items, and reading each through the client on every redraw
+--- pushed bag items out of its small cache (Ready to sell then flickers).
+local function PlainName(itemID)
+    local name = ns.Disenchant and ns.Disenchant.KnownName and ns.Disenchant:KnownName(itemID)
+    if name then return name end
+
+    if Util.HasFunction("C_Item.IsItemDataCachedByID") then
+        local ok, cached = pcall(C_Item.IsItemDataCachedByID, itemID)
+        if not ok or cached ~= true then return nil end
+    else
+        return nil
+    end
+
+    local ok, itemName = pcall(C_Item.GetItemInfo, itemID)
+    return ok and itemName or nil
+end
+
 local function BuildList()
     local rows = {}
     local reagents = state.reagentsOnly and GetReagentSet() or nil
+
+    -- Names are only needed to search or sort by; the label itself is read
+    -- for the rows on screen, in UpdateRow.
+    local wantNames = state.search ~= "" or state.sortBy == "name"
 
     for itemID, record in pairs(ns.Prices:GetTable()) do
         if not reagents or reagents[itemID] then
@@ -69,7 +92,7 @@ local function BuildList()
                 quantity = record.quantity or 0,
                 age = ns.Prices:GetAge(itemID) or math.huge,
                 liquidity = ns.Prices:GetLiquidity(itemID),
-                label = Util.GetItemLabel(itemID),
+                name = wantNames and (PlainName(itemID) or ("~item %d"):format(itemID)) or "",
             }
         end
     end
@@ -79,7 +102,7 @@ local function BuildList()
         local filtered = {}
 
         for _, row in ipairs(rows) do
-            if row.label:lower():find(needle, 1, true) then
+            if row.name:lower():find(needle, 1, true) then
                 filtered[#filtered + 1] = row
             end
         end
@@ -95,13 +118,14 @@ local function BuildList()
         end
 
         if sortBy == "name" then
-            return a.label < b.label
+            if a.name ~= b.name then return a.name < b.name end
+            return a.itemID < b.itemID
         end
 
         local left = a[sortBy] or 0
         local right = b[sortBy] or 0
 
-        if left == right then return a.label < b.label end
+        if left == right then return a.itemID < b.itemID end
         return left > right
     end)
 
@@ -140,6 +164,7 @@ local function CreateRow(row)
 end
 
 local function UpdateRow(row, entry)
+    entry.label = Util.GetItemLabel(entry.itemID)
     row.name:SetText(entry.label)
     Theme.SetItemIcon(row.icon, entry.itemID)
 
@@ -237,13 +262,26 @@ local function BuildDetail(parent)
 
     Theme.AccentStripe(detail, 2, 0.6)
 
+    -- The item's icon beside its name, as on the other detail panes.
+    local icon = Theme.CreateItemIcon(detail, 30)
+    icon:SetPoint("TOPLEFT", 12, -12)
+    detail.icon = icon
+
     local title = Theme.CreateLabel(detail, "large", "accent")
-    title:SetPoint("TOPLEFT", 12, -12)
+    title:SetPoint("TOPLEFT", 50, -12)
     title:SetPoint("TOPRIGHT", -12, -12)
     title:SetWordWrap(true)
     detail.title = title
 
-    local rowsAnchor = title
+    -- Rows start under the icon or the title, whichever is lower, back at
+    -- the pane's left edge.
+    local titleBlock = CreateFrame("Frame", nil, detail)
+    titleBlock:SetPoint("TOPLEFT", 12, -12)
+    titleBlock:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    titleBlock:SetHeight(30)
+    detail.titleBlock = titleBlock
+
+    local rowsAnchor = titleBlock
 
     detail.values = {}
 
@@ -258,6 +296,8 @@ local function BuildDetail(parent)
         label:SetText(labelText)
 
         detail.values[key] = value
+        detail.labels = detail.labels or {}
+        detail.labels[key] = label
         rowsAnchor = label
         return value
     end
@@ -276,6 +316,7 @@ local function BuildDetail(parent)
     chartHeading:SetPoint("TOPLEFT", rowsAnchor, "BOTTOMLEFT", 0, -16)
     chartHeading:SetText("MARKET VALUE HISTORY")
     Theme.StyleHeading(chartHeading, detail)
+    detail.historyHeading = chartHeading
 
     local chart = CreateFrame("Frame", nil, detail)
     chart:SetPoint("TOPLEFT", chartHeading, "BOTTOMLEFT", 0, -6)
@@ -329,6 +370,7 @@ local function UpdateDetail(entry)
 
     detail.empty:SetShown(not shown)
     detail.title:SetShown(shown)
+    detail.icon:SetShown(shown)
     detail.chart:SetShown(shown)
     detail.chartRange:SetShown(shown)
     detail.deepScan:SetShown(shown)
@@ -337,6 +379,13 @@ local function UpdateDetail(entry)
     for _, value in pairs(detail.values) do
         value:SetShown(shown)
     end
+
+    -- The labels go with their values: left up with nothing selected, they
+    -- stood around the "Select an item" line saying nothing.
+    for _, label in pairs(detail.labels or {}) do
+        label:SetShown(shown)
+    end
+    if detail.historyHeading then detail.historyHeading:SetShown(shown) end
 
     if not shown then
         for _, bar in ipairs(detail.bars) do bar:Hide() end
@@ -347,6 +396,11 @@ local function UpdateDetail(entry)
     local record = ns.Prices:Get(entry.itemID) or entry.record
 
     detail.title:SetText(Util.GetItemLabel(entry.itemID))
+    Theme.SetItemIcon(detail.icon, entry.itemID)
+
+    -- A name that wraps to two lines pushes the rows down with it.
+    local titleHeight = detail.title.GetStringHeight and detail.title:GetStringHeight() or 0
+    detail.titleBlock:SetHeight(math.max(30, tonumber(titleHeight) or 0))
 
     detail.values.market:SetText(Util.FormatMoney(record.market))
     detail.values.min:SetText(Util.FormatMoney(record.min))
@@ -380,6 +434,7 @@ local function UpdateDetail(entry)
     local liquidity = ns.Prices:GetLiquidity(entry.itemID)
     if liquidity then
         detail.values.liquidity:SetText(("%d%% per scan"):format(math.floor(liquidity * 100)))
+        detail.values.liquidity:SetTextColor(Theme.Unpack("text"))
     else
         detail.values.liquidity:SetText("not enough scans")
         detail.values.liquidity:SetTextColor(Theme.Unpack("dim"))

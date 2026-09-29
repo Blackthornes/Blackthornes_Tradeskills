@@ -953,6 +953,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         -- Measured against afterwards, so success is verified rather than
         -- inferred from an event that fires for any auction at all.
         postedBefore = ns.Auctions:GetPostedCount(itemID),
+        idsBefore = ns.Auctions.GetOwnedIDs and ns.Auctions:GetOwnedIDs(itemID) or nil,
         startedAt = GetTime(),
     }
 
@@ -1311,13 +1312,17 @@ function Posting:VerifyPending()
     self.pending.verifying = true
     ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
 
+    -- This listing's own give-up: a later listing being verified when the
+    -- timer runs is not this one, and must not be settled by it.
+    local token = self.pending
+
     -- Refresh reads the answer back itself once the query goes out, so this is
     -- no longer the thing that settles a listing: it is the backstop for a query
     -- that never went out at all, which is the one case where "could not tell"
     -- is the honest answer. It has to outlast the queue's own wait, or a slow
     -- send gets reported as a failure while the reading is still on its way.
     C_Timer.After(VERIFY_GIVE_UP, function()
-        if Posting.pending and Posting.pending.verifying then
+        if Posting.pending == token and token.verifying then
             Posting:ResolvePending(nil)
         end
     end)
@@ -1325,13 +1330,14 @@ end
 
 --- Called once the owned-auction list has been re-read.
 -- @param posted number now listed, or nil if that could not be determined
-function Posting:ResolvePending(posted)
+-- @param appeared true when a listing of the item not there before was seen
+function Posting:ResolvePending(posted, appeared)
     local pending = self.pending
     if not pending then return end
 
     self.pending = nil
 
-    if posted and posted > (pending.postedBefore or 0) then
+    if posted and (appeared or posted > (pending.postedBefore or 0)) then
         ns.Print(("listed %s"):format(Util.GetItemLabel(pending.itemID)))
 
     elseif posted then
