@@ -1242,8 +1242,16 @@ function Posting:CheckPrice(itemID, onDone)
         if onDone then onDone(itemID, price, status) end
     end
 
+    local function OnAnswer(_, _, _, _, _, _, status)
+        Settle(status or "fresh")
+    end
+
     C_Timer.After(5, function()
         if settled then return end
+
+        -- The search may still answer after this. It is no longer this
+        -- check's answer, so it must not be served as a checked price later.
+        ns.Scanner:AbandonItemScan(OnAnswer)
 
         ns.Warn("the price check did not come back.")
         Settle("unavailable")
@@ -1251,9 +1259,7 @@ function Posting:CheckPrice(itemID, onDone)
 
     -- quiet: this check says for itself when nothing came back, and the
     -- search's own "using the last known price" is wrong here, with no price.
-    local started = ns.Scanner:ScanItem(itemID, function(_, _, _, _, _, _, status)
-        Settle(status or "fresh")
-    end, { quiet = true })
+    local started = ns.Scanner:ScanItem(itemID, OnAnswer, { quiet = true })
 
     if not started then Settle("unavailable") end
 
@@ -1353,8 +1359,18 @@ function Posting:Request(itemID, quantity, unitPrice)
         self:Confirm(itemID, quantity, price, { state = state })
     end
 
+    local function OnAnswer(_, _, _, _, _, _, status)
+        Proceed(status or "fresh")
+    end
+
     C_Timer.After(5, function()
         if settled then return end
+
+        -- The search can still answer for up to three more seconds. By then
+        -- the confirm is up at the last known price, so that answer is not
+        -- this click's any more: no second warning when it gives up, and not
+        -- a "recent" check that would let the next click skip searching.
+        ns.Scanner:AbandonItemScan(OnAnswer)
 
         if ns.Scanner.isAuctionHouseOpen == false then
             Proceed("closed")
@@ -1365,9 +1381,7 @@ function Posting:Request(itemID, quantity, unitPrice)
         Proceed("unavailable")
     end)
 
-    local started = ns.Scanner:ScanItem(itemID, function(_, _, _, _, _, _, status)
-        Proceed(status or "fresh")
-    end)
+    local started = ns.Scanner:ScanItem(itemID, OnAnswer)
 
     if not started then
         Proceed("unavailable")

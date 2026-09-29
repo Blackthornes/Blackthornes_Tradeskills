@@ -1344,6 +1344,27 @@ end
 -- go missing, settle the shared state on the way out.
 
 --- Forget any search of ours that is in flight, timer included.
+--- Drop a search whose caller has stopped waiting for it.
+--
+-- A price check gives up at five seconds and goes on with the last known
+-- price, while the search itself may still answer up to three seconds later.
+-- That late answer is not a check of the price the player was already shown,
+-- so it is no longer this caller's: it is read like anybody else's results.
+-- The search is also forgotten as a recent one, or the next click within
+-- twenty seconds was told "recent" and treated as checked when it never was.
+--
+-- Matched by the caller's own callback, so a newer search for the same item
+-- from somewhere else is left alone.
+function Scanner:AbandonItemScan(callback)
+    local pending = self.pendingItem
+    if callback == nil or not pending or pending.callback ~= callback then return false end
+
+    self:ClearSearchState()
+    if self.recentItemScans then self.recentItemScans[pending.itemID] = nil end
+
+    return true
+end
+
 function Scanner:ClearSearchState()
     if self.searchTimeout then
         self.searchTimeout:Cancel()
