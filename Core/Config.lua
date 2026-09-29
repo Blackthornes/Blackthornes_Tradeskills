@@ -521,6 +521,13 @@ function Config:Bootstrap()
     self:CheckAccountDataLost(db)
     self:StampCVarCanary()
 
+    -- The CVar canary counts logins apart from both saved files. Found set,
+    -- the addon has run here before, so this is lost data and not a first
+    -- run: the welcome would be the wrong thing to say.
+    if self.cvarResult and self.cvarResult.persisted then
+        self.loadDiagnostics.firstRun = nil
+    end
+
     -- After the defaults are in place, so a mirrored value wins over its
     -- default, and after the canary, which establishes whether CVars work.
     if ns.Persist then
@@ -619,6 +626,10 @@ function Config:CheckLateSavedVariables()
 
     if type(current) == "table" and self.installedDB and current ~= self.installedDB then
         self.loadDiagnostics.lateSavedVariables = true
+
+        -- The saved data did exist, it only arrived late, so this is no
+        -- first run. Left set, the welcome printed beside this warning.
+        self.loadDiagnostics.firstRun = nil
 
         ns.Warn("the game loaded your saved data late, after login instead of at load. Please report this, then run /bts persist.")
     end

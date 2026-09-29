@@ -155,6 +155,36 @@ Check("and still warns", lost.Config.accountDataLost ~= nil)
 
 local normal = Boot({ probe = { loadCount = 5 } }, { accountLoads = 4 })
 Check("a normal login is not a first run", normal.Config:IsFirstRun() == false)
+
+-- The saved data arriving after load: it existed, so no welcome beside the
+-- warning about it arriving late.
+local late = Boot(nil, nil)
+BlackthornesTSDB = { probe = { loadCount = 9 } }
+late.Config:CheckLateSavedVariables()
+Check("saved data that arrives late is not a first run", late.Config:IsFirstRun() == false)
+
+-- Both saved files missing, but the CVar canary counts earlier logins: the
+-- addon has run here before.
+local savedCVar = C_CVar
+C_CVar = {
+    GetCVar = function() return "7" end,
+    SetCVar = function() return true end,
+    RegisterCVar = function() return true end,
+}
+local function BootWithCVars()
+    local booted = Load({})
+    booted.Util.ApplyDefaults = function() end
+    booted.Compat.Detect = function() return { cvars = { roundTrip = true, registerVia = "RegisterCVar" } } end
+    BlackthornesTSDB, BlackthornesTSCharDB = nil, nil
+    booted.Config:Bootstrap()
+    return booted
+end
+local seenBefore = BootWithCVars()
+Check("a CVar canary from earlier logins is not a first run", seenBefore.Config:IsFirstRun() == false)
+C_CVar.GetCVar = function() return nil end
+local reallyNew = BootWithCVars()
+Check("with no earlier count it still is", reallyNew.Config:IsFirstRun() == true)
+C_CVar = savedCVar
 BlackthornesTSDB, BlackthornesTSCharDB = savedAccount, savedChar
 
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end
