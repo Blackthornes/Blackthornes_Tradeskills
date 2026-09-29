@@ -277,8 +277,11 @@ function UI:UpdateHeader()
     local priceCount = ns.Prices:Count()
     local recipeCount = ns.Recipes:Count()
 
-    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
-    local scanText = lastScan and ("scanned " .. Util.FormatAgeAgo(time() - lastScan))
+    -- A sweep stopped at the page limit counts as a scan here. On a big
+    -- auction house every sweep stops there, and "never scanned" was wrong.
+    local lastScan, capped = ns.Prices:GetLastScan()
+    local scanText = lastScan and ("scanned " .. Util.FormatAgeAgo(time() - lastScan)
+        .. (capped and " (stopped at the page limit)" or ""))
         or "never scanned"
 
     self.statusLabel:SetText(("%s items priced  ·  %s recipes known  ·  %s"):format(
@@ -624,9 +627,10 @@ function UI:RefreshAuctionStatus()
     bar.progress:Hide()
     bar.status:SetTextColor(Theme.Unpack("muted"))
 
-    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
+    local lastScan, capped = ns.Prices:GetLastScan()
     bar.status:SetText(lastScan
-        and ("Last scan " .. Util.FormatAgeAgo(time() - lastScan))
+        and ("Last scan " .. Util.FormatAgeAgo(time() - lastScan)
+            .. (capped and ", stopped at the page limit" or ""))
         or "No scan yet. Click Scan to price everything.")
 end
 
@@ -1098,7 +1102,18 @@ function UI:UpdateMerchantButton()
         return
     end
 
-    local lines, total = ns.Vendor:GetNeeded()
+    local lines, total, cheaperElsewhere = ns.Vendor:GetNeeded()
+    cheaperElsewhere = cheaperElsewhere or 0
+
+    -- Materials this vendor has but the auction house sells for less are
+    -- left for the auction house, and the tooltip says so, or the button
+    -- reads as though the vendor did not have them.
+    local cheaperNote = cheaperElsewhere > 0
+        and ("%d material%s this vendor has %s cheaper on the auction house, so %s not bought here"):format(
+            cheaperElsewhere, cheaperElsewhere == 1 and "" or "s",
+            cheaperElsewhere == 1 and "is" or "are",
+            cheaperElsewhere == 1 and "it is" or "they are")
+        or nil
 
     if #lines == 0 then
         -- Present but inert, so it never looks like it failed to appear.
@@ -1106,6 +1121,7 @@ function UI:UpdateMerchantButton()
         button:SetEnabledState(false)
         button.tooltipText = ns.Queue:Count() == 0
             and "Your craft queue is empty"
+            or cheaperNote
             or "This vendor sells none of the materials your queue needs"
         return
     end
@@ -1128,6 +1144,8 @@ function UI:UpdateMerchantButton()
     if #lines > 10 then
         parts[#parts + 1] = ("  ...and %d more"):format(#lines - 10)
     end
+
+    if cheaperNote then parts[#parts + 1] = cheaperNote end
 
     button.tooltipText = table.concat(parts, "\n")
 end

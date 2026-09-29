@@ -74,6 +74,31 @@ local function PlainName(itemID)
     return ok and itemName or nil
 end
 
+--- Names the addon saved itself, for items the game has not loaded: the
+--- sales history's item names and what your recipes make. Read from saved
+--- data only, so a search never asks the game to load anything.
+local function StoredNames()
+    local names = {}
+
+    if ns.Mail and ns.Mail.GetLedger then
+        local ok, ledger = pcall(ns.Mail.GetLedger, ns.Mail)
+        for _, entry in ipairs(ok and type(ledger) == "table" and ledger.entries or {}) do
+            if entry.itemID and type(entry.name) == "string" then names[entry.itemID] = entry.name end
+        end
+    end
+
+    for _, record in pairs(ns.db and ns.db.characters or {}) do
+        for _, recipe in pairs(type(record) == "table" and record.recipes or {}) do
+            local itemID = type(recipe) == "table" and recipe.outputItemID
+            if itemID and not names[itemID] and type(recipe.name) == "string" then
+                names[itemID] = recipe.name
+            end
+        end
+    end
+
+    return names
+end
+
 local function BuildList()
     local rows = {}
     local reagents = state.reagentsOnly and GetReagentSet() or nil
@@ -81,6 +106,7 @@ local function BuildList()
     -- Names are only needed to search or sort by; the label itself is read
     -- for the rows on screen, in UpdateRow.
     local wantNames = state.search ~= "" or state.sortBy == "name"
+    local stored = wantNames and StoredNames() or {}
 
     for itemID, record in pairs(ns.Prices:GetTable()) do
         if not reagents or reagents[itemID] then
@@ -92,7 +118,8 @@ local function BuildList()
                 quantity = record.quantity or 0,
                 age = ns.Prices:GetAge(itemID) or math.huge,
                 liquidity = ns.Prices:GetLiquidity(itemID),
-                name = wantNames and (PlainName(itemID) or ("~item %d"):format(itemID)) or "",
+                name = wantNames and (PlainName(itemID) or stored[itemID]
+                    or ("~item %d"):format(itemID)) or "",
             }
         end
     end
@@ -460,6 +487,12 @@ local function UpdateDetail(entry)
         or "The auction house must be open"
 
     UpdateChart(detail, record)
+end
+
+--- The list a search would show, for the tests.
+function UI._PricesList(search)
+    state.search = search or ""
+    return BuildList()
 end
 
 --------------------------------------------------------------------------------

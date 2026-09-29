@@ -308,8 +308,10 @@ end
 
 --- The cheapest listing the last scan saw, beside the smoothed value (Trent,
 --- 2026-09-26: "items should show the lowest seller value in addition to
---- auction value"). The same number the List confirmation calls the lowest
---- posting, marked when the cheapest one is your own.
+--- auction value"). Marked when the cheapest one is your own. A lone
+--- listing far below the rest is left out, as the Enchanting pane and the
+--- undercut leave it out, so the tooltip does not quote a price that one
+--- purchase would clear.
 function ItemTooltip:LowestLine(itemID)
     if type(ns.Prices.Get) ~= "function" then return nil end
 
@@ -317,6 +319,9 @@ function ItemTooltip:LowestLine(itemID)
     if type(record) ~= "table" then return nil end
 
     local lowest = record.min
+    if lowest and ns.Prices.LowestListed then
+        lowest = ns.Prices.LowestListed(record) or lowest
+    end
     if not lowest or lowest <= 0 then
         -- Scanned, and nobody had one up: say so rather than leave it out.
         return { "Lowest posting", "none listed", true }

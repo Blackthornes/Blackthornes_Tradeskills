@@ -72,28 +72,44 @@ function Widgets.CreateButton(parent, text, onClick, opts)
         self.label:SetText(value)
     end
 
+    -- The edge at rest: red while the button waits for its second click.
+    local function ApplyBorder(self)
+        if self.outline then return end
+        if self.disabled then
+            Theme.SetBorderColor(self, "border", 0.6)
+        elseif self.confirming then
+            Theme.SetBorderColor(self, "loss")
+        else
+            Theme.SetBorderColor(self, borderKey, borderAlpha)
+        end
+    end
+
+    local function ApplyLabelColor(self)
+        self.label:SetTextColor(Theme.Unpack(
+            self.disabled and "dim" or self.confirming and "loss"
+            or (opts.primary and "accent" or "text")))
+    end
+
     function button:SetEnabledState(enabled)
         self.disabled = not enabled
-
-        self.label:SetTextColor(Theme.Unpack(
-            enabled and (opts.primary and "accent" or "text") or "dim"))
-
+        ApplyLabelColor(self)
         ApplyBaseColor(self)
+        ApplyBorder(self)
+    end
 
-        if not self.outline then
-            if enabled then
-                Theme.SetBorderColor(self, borderKey, borderAlpha)
-            else
-                Theme.SetBorderColor(self, "border", 0.6)
-            end
-        end
+    --- Waiting for a second click to confirm ("Really clear?"): red label
+    --- and a red edge until it is set back.
+    function button:SetConfirming(on)
+        self.confirming = on and true or false
+        ApplyLabelColor(self)
+        ApplyBorder(self)
     end
 
     button:SetScript("OnEnter", function(self)
         if not self.disabled then
             self.background:SetColorTexture(Theme.Unpack("rowHover"))
 
-            if not self.outline then
+            if not self.outline and not self.confirming then
                 Theme.SetBorderColor(self, opts.primary and "accent" or "borderLit")
             end
         end
@@ -113,9 +129,7 @@ function Widgets.CreateButton(parent, text, onClick, opts)
 
         -- An outlined button keeps its own edge colour; resetting it here would
         -- undo the outline on the first mouseover.
-        if not self.outline then
-            Theme.SetBorderColor(self, borderKey, borderAlpha)
-        end
+        ApplyBorder(self)
 
         GameTooltip:Hide()
     end)

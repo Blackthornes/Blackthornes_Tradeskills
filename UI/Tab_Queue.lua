@@ -503,7 +503,7 @@ local function Build(container)
     local function Disarm()
         armedUntil = nil
         clear:SetText("Clear all")
-        clear.label:SetTextColor(Theme.Unpack("text"))
+        clear:SetConfirming(false)
         clear.tooltipText = "Empty the whole craft queue. Asks you to click again first."
     end
 
@@ -520,7 +520,7 @@ local function Build(container)
 
         armedUntil = GetTime() + 4
         clear:SetText("Really clear?")
-        clear.label:SetTextColor(Theme.Unpack("loss"))
+        clear:SetConfirming(true)
         clear.tooltipText = "Click again to empty the whole craft queue"
 
         C_Timer.After(4, function()

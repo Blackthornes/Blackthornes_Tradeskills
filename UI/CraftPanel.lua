@@ -1011,7 +1011,7 @@ function CraftPanel:UpdateClearButton()
 
     button:SetText(armed and "Click to clear" or "Clear queue")
     button:SetEnabledState(not empty)
-    if armed then button.label:SetTextColor(Theme.Unpack("loss")) end
+    button:SetConfirming(armed)
 
     button.tooltipText = empty and "The queue is empty"
         or armed and "Click again to empty the whole craft queue"

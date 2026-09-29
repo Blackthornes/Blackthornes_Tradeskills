@@ -166,20 +166,68 @@ function Vendor:CanBuy()
     return true
 end
 
---- Queue shortfalls that this vendor can actually supply.
--- @return lines, totalCost
+--- Is this material cheaper on the auction house than at this vendor, with
+--- enough listed there to cover what is short?
+--
+-- The auction price is the cheapest posting from someone else at the last
+-- look, leaving out a lone low one. Only what was actually listed counts:
+-- with nothing up, the market value is no price anyone can buy at, and the
+-- vendor is the only place to get it. A tie goes to the vendor, which is a
+-- sure purchase.
+--
+-- The player's own listings are left out of both the price and the count.
+-- Counted, his own auction was "the cheaper one" and the vendor buy was
+-- skipped when nobody else had any cheaper.
+local function CheaperAtAuction(itemID, stock, shortfall)
+    local Prices = ns.Prices
+    if not Prices or not Prices.Get then return false end
+
+    local record = Prices:Get(itemID)
+    if type(record) ~= "table" then return false end
+
+    -- A book read with no owners (rivalMin, ownMin and a lone low all unset)
+    -- still has its cheapest listing as a rival price.
+    local auction = record.rivalMin
+    if not auction and not record.ownMin and not record.ignoredLow then auction = record.min end
+    if not auction or auction <= 0 then return false end
+
+    local own = 0
+    if ns.Auctions and ns.Auctions.GetPostedCount then
+        local ok, count = pcall(ns.Auctions.GetPostedCount, ns.Auctions, itemID)
+        own = ok and tonumber(count) or 0
+    end
+    if (record.quantity or 0) - own < shortfall then return false end
+
+    -- What one really costs here. A bundle's stored unit price is floored,
+    -- so it is worked out from the bundle price instead.
+    local vendorUnit = stock.price
+    if stock.stack and stock.stack > 1 and stock.bundlePrice then
+        vendorUnit = stock.bundlePrice / stock.stack
+    end
+
+    return auction < vendorUnit
+end
+
+--- Queue shortfalls that this vendor can actually supply, where it is the
+--- cheaper place to buy them.
+-- @return lines, totalCost, how many were left for the auction house because
+--   they are cheaper there
 function Vendor:GetNeeded()
-    local lines, total = {}, 0
+    local lines, total, cheaperElsewhere = {}, 0, 0
 
     if not self.isMerchantOpen or not self.merchantItems then
-        return lines, 0
+        return lines, 0, 0
     end
 
     for _, line in ipairs(ns.Queue:GetShoppingList()) do
         local stock = self.merchantItems[line.itemID]
 
         -- Items bought with tokens or honour cannot be paid for in gold.
-        if line.shortfall > 0 and stock and not stock.extendedCost then
+        local buyable = line.shortfall > 0 and stock and not stock.extendedCost
+
+        if buyable and CheaperAtAuction(line.itemID, stock, line.shortfall) then
+            cheaperElsewhere = cheaperElsewhere + 1
+        elseif buyable then
             local affordable = line.shortfall
 
             -- Limited stock: never ask for more than the vendor has.
@@ -209,7 +257,7 @@ function Vendor:GetNeeded()
         end
     end
 
-    return lines, total
+    return lines, total, cheaperElsewhere
 end
 
 --- Buy everything the queue needs from the open vendor.
@@ -229,9 +277,13 @@ function Vendor:BuyNeeded()
         return false
     end
 
-    local lines, total = self:GetNeeded()
+    local lines, total, cheaperElsewhere = self:GetNeeded()
     if #lines == 0 then
-        ns.Print("this vendor has nothing the queue needs")
+        if cheaperElsewhere > 0 then
+            ns.Print("the auction house is cheaper for everything this vendor has that the queue needs")
+        else
+            ns.Print("this vendor has nothing the queue needs")
+        end
         return false
     end
 

@@ -360,7 +360,25 @@ function Prices:GetLastFullScan()
     return key and byRealm[key] or nil
 end
 
+--- When this realm and faction last had a scan of any kind: a full one, or a
+--- sweep that stopped at the page limit.
+--
+-- On a big auction house every sweep stops at the page limit, so it never
+-- gets a full scan stamp. Deal lists judged by the full scan stamp alone
+-- kept days-old listings, and the header said "never scanned". Only clearing
+-- sold-out items needs a real full scan; that still reads GetLastFullScan.
+-- The second value is true when the newest scan is the one that stopped at
+-- the page limit.
+function Prices:GetLastScan()
+    local full = self:GetLastFullScan()
+    local db = ns.db
+    local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
+    local capped = db and key and db.lastCappedScanByRealm and db.lastCappedScanByRealm[key]
+    if capped and (not full or capped > full) then return capped, true end
+    return full, false
+end
 function Prices:SetLastFullScan(at)
+
     local db = ns.db
     if not db then return end
     local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
@@ -444,6 +462,22 @@ function Prices:Get(itemID)
     return self:GetTable()[itemID]
 end
 
+--- The cheapest posting at the last look, yours included, leaving out a lone
+--- one far below the rest (see IsLoneLow). nil when nothing was listed.
+--
+-- The one reading of "what does it cost" that material cost, the tooltip and
+-- the Enchanting tab share, so a single troll listing cannot make a craft
+-- look cheap to make in one place and not in another. Two or more low
+-- listings are a real price and count.
+function Prices.LowestListed(record)
+    if type(record) ~= "table" then return nil end
+
+    local lowest = record.rivalMin
+    if record.ownMin and (not lowest or record.ownMin < lowest) then lowest = record.ownMin end
+    if not lowest and not record.ignoredLow then lowest = record.min end
+    return lowest
+end
+
 --- Best estimate of what one unit is worth.
 --
 -- `which` is one of:
@@ -463,13 +497,10 @@ function Prices:GetValue(itemID, which)
     elseif which == "rival" then
         return record.rivalMin
     elseif which == "lowest" then
-        -- The cheapest posting, yours included, leaving out a lone one far
-        -- below the rest (see IsLoneLow). With nothing listed at the last
-        -- look, the market value is the best there is.
-        local lowest = record.rivalMin
-        if record.ownMin and (not lowest or record.ownMin < lowest) then lowest = record.ownMin end
-        if not lowest and not record.ignoredLow then lowest = record.min end
-        return lowest or record.market
+        -- The cheapest posting, leaving out a lone one far below the rest.
+        -- With nothing listed at the last look, the market value is the best
+        -- there is.
+        return Prices.LowestListed(record) or record.market
     end
 
     return record.market or record.min
