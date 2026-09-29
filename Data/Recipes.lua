@@ -74,6 +74,19 @@ end
 -- Cache access
 --------------------------------------------------------------------------------
 
+-- A plain, non-empty string from a client call, or nil. Tested and copied
+-- inside the pcall: in a dungeon the client can hand back a name that raises
+-- when compared or joined, and a stored one would raise forever.
+local function PlainString(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(function(...)
+        local v = fn(...)
+        if type(v) == "string" and v ~= "" then return v .. "" end
+    end, ...)
+    if ok then return value end
+    return nil
+end
+
 local function GetCharacterRecord(create)
     if not ns.db then return nil end
 
@@ -84,10 +97,9 @@ local function GetCharacterRecord(create)
     if not record and create then
         -- Plain copies: inside a dungeon the client can hand back names
         -- that raise when compared, and a stored one would raise forever.
-        local Plain = ns.Config.PlainString
         record = {
-            name = Plain and Plain(UnitName, "player") or "Unknown",
-            realm = GetRealmName and Plain and Plain(GetRealmName) or "?",
+            name = PlainString(UnitName, "player") or "Unknown",
+            realm = PlainString(GetRealmName) or "?",
             recipes = {},
             inventory = {},
         }
@@ -144,7 +156,7 @@ function Recipes:StampIdentity(record)
     local guid = ns.Config.characterKey
     if guid then record.guid = guid end
 
-    local name = ns.Config.PlainString and ns.Config.PlainString(UnitName, "player")
+    local name = PlainString(UnitName, "player")
     if name then record.name = name end
 
     local surname = ns.Config:ReadSurname()

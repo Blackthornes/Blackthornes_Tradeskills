@@ -255,9 +255,6 @@ local function SafeUnitName()
     return PlainString(UnitName, "player") or "Unknown"
 end
 
--- For the character record, which must not store a value that raises later.
-Config.PlainString = PlainString
-
 local function SafeRealmName()
     if type(GetRealmName) == "function" then
         return PlainString(GetRealmName) or "UnknownRealm"
