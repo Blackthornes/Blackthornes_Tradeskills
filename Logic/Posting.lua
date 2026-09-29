@@ -979,7 +979,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         isCommodity = isCommodity,
         -- Measured against afterwards, so success is verified rather than
         -- inferred from an event that fires for any auction at all.
-        postedBefore = ns.Auctions:GetPostedCount(itemID),
+        postedBefore = ns.Auctions:GetOwnPostedCount(itemID),
         idsBefore = ns.Auctions.GetOwnedIDs and ns.Auctions:GetOwnedIDs(itemID) or nil,
         startedAt = GetTime(),
     }
@@ -1593,7 +1593,7 @@ ns.RegisterCommand("posttest", "try one listing and show every step: /bts postte
             tostring(deposit):gsub("Usage:.*", "Usage omitted")))
     end
 
-    local before = ns.Auctions:GetPostedCount(itemID)
+    local before = ns.Auctions:GetOwnPostedCount(itemID)
     ns.PrintRaw(("  listed before: %d"):format(before))
 
     local duration = ns.Config:Get("postDuration") or 2
@@ -1615,7 +1615,7 @@ ns.RegisterCommand("posttest", "try one listing and show every step: /bts postte
         ns.Auctions:Refresh()
 
         C_Timer.After(2, function()
-            local after = ns.Auctions:GetPostedCount(itemID)
+            local after = ns.Auctions:GetOwnPostedCount(itemID)
 
             ns.PrintRaw(("  listed after: %d"):format(after))
 
@@ -1802,7 +1802,7 @@ ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n>
         index, variant.name, Util.GetItemLabel(itemID), quantity,
         tostring(bid), tostring(buyout), tostring(duration)))
 
-    local before = ns.Auctions:GetPostedCount(itemID)
+    local before = ns.Auctions:GetOwnPostedCount(itemID)
 
     if variant.legacy then
         local worked, why = TryLegacyPost(bagID, slotID, bid, buyout, duration)
@@ -1817,7 +1817,7 @@ ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n>
         ns.Auctions:Refresh()
 
         C_Timer.After(2, function()
-            local after = ns.Auctions:GetPostedCount(itemID)
+            local after = ns.Auctions:GetOwnPostedCount(itemID)
 
             if after > before then
                 ns.Print(("|cff4FD18Bway %d worked: %s.|r"):format(index, variant.name))

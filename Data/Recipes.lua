@@ -257,6 +257,14 @@ function Recipes:ForgetCharacter(characterKey)
     if not ns.db or characterKey == ns.Config:GetCharacterKey() then return false end
 
     ns.db.characters[characterKey] = nil
+
+    -- Its listings stop counting toward Keep in stock too.
+    for _, record in pairs(ns.db.postedAuctions or {}) do
+        if type(record) == "table" and record.byCharacter then
+            record.byCharacter[characterKey] = nil
+        end
+    end
+
     ns.Cost:InvalidateIndex()
     return true
 end

@@ -244,6 +244,30 @@ check("a second item is kept apart", Auctions:GetPostedCount(2589), 20)
 check("an item with none listed reads zero", Auctions:GetPostedCount(9999), 0)
 
 print("")
+print("listings on more than one character")
+
+-- The game shows each character only its own auctions. The alt's reading
+-- used to replace the main's, and Keep in stock forgot the main's listings.
+ns.db.postedAuctions = nil
+local who = "Main"
+ns.Config.GetCharacterKey = function() return who end
+listed = { { itemID = 2447, quantity = 8 } }
+Auctions:ReadOwned({ final = true })
+
+who = "Alt"
+listed = { { itemID = 2447, quantity = 2 } }
+Auctions:ReadOwned({ final = true })
+
+check("both characters' listings count", Auctions:GetPostedCount(2447), 10)
+check("this character's own count stays its own", Auctions:GetOwnPostedCount(2447), 2)
+
+who = "Main"
+listed = {}
+Auctions:ReadOwned({ final = true })
+check("a character that sold out drops out of the total", Auctions:GetPostedCount(2447), 2)
+ns.Config.GetCharacterKey = nil
+
+print("")
 
 if failures > 0 then
     print(("FAIL -- %d check(s) failed"):format(failures))
