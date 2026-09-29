@@ -459,6 +459,10 @@ local function QueueMore(line, quantity)
     end
 
     ns.Queue:Add(line.recipeID, quantity)
+
+    -- Until the next full refresh re-reads it, so quick clicks cannot run
+    -- past the limit on a number read before the first of them.
+    if line.roomInCrafts then line.roomInCrafts = line.roomInCrafts - quantity end
 end
 
 --- Set this recipe's own queue entry to exactly this many.
@@ -479,6 +483,7 @@ function CraftPanel:SetQueued(line, wanted)
     elseif wanted < current then
         -- SetQuantity takes the entry off the queue once it reaches zero.
         ns.Queue:SetQuantity(line.recipeID, wanted)
+        if line.roomInCrafts then line.roomInCrafts = line.roomInCrafts + (current - wanted) end
     elseif not entry and wanted == 0 and ns.Queue:Find(line.recipeID) then
         ns.Print(("%s is only queued as a material for another craft. Lower that craft to need fewer."):format(line.name))
     end
@@ -1248,6 +1253,12 @@ function CraftPanel:Refresh()
     self:UpdateCraftButton()
     self:UpdateClearButton()
     self:RefreshQueued()
+    self:UpdateSummary()
+end
+
+--- The queue total along the bottom of the pane.
+function CraftPanel:UpdateSummary()
+    if not self.summary then return end
 
     local queued = ns.Queue:Count()
 
@@ -1425,6 +1436,32 @@ function CraftPanel:RefreshQueued()
     self.queuedTitle:SetText(("Queued crafts (%d)"):format(#entries))
     self.queuedOpen = self:GetOpenRecipeIDs()
     self.queuedList:SetData(entries)
+end
+
+--- The queue just changed: show it now.
+--
+-- A full refresh prices every recipe the profession shows, so it waits a
+-- moment (RequestRefresh) to take a burst of changes in one pass. A player
+-- clicking + three times does not want to wait for it. kronosbest on
+-- CurseForge: "a noticeable ~1s delay from the button is pressed to when it
+-- shows up in queued crafts". So the cheap parts, the queued numbers on the
+-- rows already on screen, the queued crafts list, the buttons and the total,
+-- are redrawn on the spot, and the full refresh follows as before.
+function CraftPanel:OnQueueChanged()
+    if self.frame and self.frame:IsShown() and not self:IsCollapsed() and self.list then
+        for _, line in ipairs(self.list:GetData() or {}) do
+            local _, entry = ns.Queue:Find(line.recipeID, true)
+            line.queued = entry and entry.quantity or 0
+        end
+        self.list:Refresh()
+
+        self:UpdateCraftButton()
+        self:UpdateClearButton()
+        self:UpdateSummary()
+    end
+
+    self:RefreshQueued()
+    self:RequestRefresh()
 end
 
 --- Ask for a refresh soon, rather than taking one now.
