@@ -286,12 +286,17 @@ function UI:UpdateHeader()
 
     -- The scan button stays live and explains itself rather than greying out
     -- into something that looks broken.
-    if ns.Scanner.isScanning then
+    local scanner = ns.Scanner
+    if scanner.isScanning or scanner.scanQueued or scanner.browseQueued then
+        -- A scan waiting its turn is cancelled by this button too, so it
+        -- says so rather than offering to start one.
         self.scanButton:SetText("Cancel scan")
         self.scanButton.tooltipText = "Stop the running scan"
         -- The progress ("scanning... 42%") lives here while a scan runs, and
         -- clearing it on this five-second tick made it blink out.
-        if not (self.scanHint:GetText() or ""):find("^scanning") then
+        if not scanner.isScanning then
+            self.scanHint:SetText("|c" .. ns.COLORS.warn .. "waiting to start...|r")
+        elseif not (self.scanHint:GetText() or ""):find("^scanning") then
             self.scanHint:SetText("scanning...")
         end
     else
@@ -1239,6 +1244,13 @@ function UI:SearchAuctionHouse(itemID)
     if Util.HasFunction("C_Item.GetItemInfo") then
         local ok, itemName = pcall(C_Item.GetItemInfo, itemID)
         if ok then name = itemName end
+    end
+
+    -- Deal rows are mostly items the player has never hovered, so the name
+    -- the addon saved when it last saw the item will do.
+    if not name and ns.Disenchant and ns.Disenchant.KnownName then
+        local ok, known = pcall(ns.Disenchant.KnownName, ns.Disenchant, itemID)
+        if ok and type(known) == "string" and known ~= "" then name = known end
     end
 
     if not name then

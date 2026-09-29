@@ -94,7 +94,7 @@ end
 ns.Theme = {
   Fill = function() return { SetColorTexture = function() end } end,
   Border = function() end,
-  CreateLabel = function() return { SetPoint = function() end, SetText = function(self, t) self.text = t end } end,
+  CreateLabel = function() return { SetPoint = function() end, SetWordWrap = function() end, SetText = function(self, t) self.text = t end } end,
   Unpack = function() return 0, 0, 0, 1 end,
 }
 

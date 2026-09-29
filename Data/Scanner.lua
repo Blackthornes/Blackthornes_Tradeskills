@@ -348,6 +348,7 @@ function Scanner:StartBrowseScan()
 
     self.browsePages = 0
     self.browseRowsSeen = nil
+    self.browseLast = nil
     self.scanStartedAt = self.scanStartedAt or GetTime()
 
     -- isBrowsing is deliberately not set yet. It means "our browse query is out
@@ -939,6 +940,10 @@ function Scanner:CancelScan()
     self.isBrowsing = false
     self.scanQueued = false
     self.browseQueued = false
+
+    -- A cancelled sweep's last page must not stand in for the next sweep's
+    -- rows, where it would be recorded as prices read just now.
+    self.browseLast = nil
 
     self:ClearSearchState()
 
@@ -1646,13 +1651,19 @@ function Scanner:OnEnable()
     -- out means the next results may be that search's, so the sweep can no
     -- longer claim to have seen the whole auction house. hooksecurefunc
     -- watches without replacing, so Blizzard's own call is untouched.
-    if type(hooksecurefunc) == "function" and type(C_AuctionHouse) == "table"
-        and type(C_AuctionHouse.SendBrowseQuery) == "function" then
-        pcall(hooksecurefunc, C_AuctionHouse, "SendBrowseQuery", function()
+    -- Favourites and item-key searches fill the same results slot (the Buy
+    -- tab runs a favourites search by itself), so they count too.
+    if type(hooksecurefunc) == "function" and type(C_AuctionHouse) == "table" then
+        local function Foreign()
             if Scanner.isBrowsing and not Scanner.sendingOwnBrowse then
                 Scanner.browseForeign = true
             end
-        end)
+        end
+        for _, name in ipairs({ "SendBrowseQuery", "SearchForFavorites", "SearchForItemKeys" }) do
+            if type(C_AuctionHouse[name]) == "function" then
+                pcall(hooksecurefunc, C_AuctionHouse, name, Foreign)
+            end
+        end
     end
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", self.AUCTION_HOUSE_SHOW)

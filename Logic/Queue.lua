@@ -385,7 +385,7 @@ end
 -- only queued when making the reagent is cheaper than buying it, and their
 -- own materials are already on this list, so listing the reagent too asked
 -- you to pay for it twice.
---- Every material a queued craft still needs, as a set of item IDs.
+--- Every material a queued craft still needs: { [itemID] = how many }.
 --
 -- The same items the shopping list covers, without its pricing, stock counts
 -- or alt offers. Posting asks this every second at the auction house to keep
@@ -409,7 +409,8 @@ function Queue:GetReservedItems()
 
     local reserved = {}
     for itemID, needed in pairs(required) do
-        if needed - (queuedToMake[itemID] or 0) > 0 then reserved[itemID] = true end
+        local short = needed - (queuedToMake[itemID] or 0)
+        if short > 0 then reserved[itemID] = short end
     end
     return reserved
 end

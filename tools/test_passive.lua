@@ -379,6 +379,7 @@ check("a partial sweep leaves an unseen item as it was", Prices:Get(2589).rivalM
     and Prices:Get(2589).quantity == 5)
 
 Prices:Record(2593, 700, 700, 4, time(), 700)     -- a search during the scan
+ns.db.sweepSeenByRealm = { TestRealm = 1 }
 Scanner:CommitBrowseResults({
     { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
 }, true)
@@ -408,6 +409,40 @@ Scanner:CommitBrowseResults({
 }, true)
 check("the next sweep of that size is trusted", Prices:Get(5001).rivalMin == nil
     and Prices:Get(5039).quantity == 0)
+
+-- One stray search is not taken as the new size. It was, and a second
+-- stray search of a different size was then trusted and cleared the rest.
+reset()
+ns.db.sweepSeenByRealm, ns.db.sweepRefusedByRealm = { TestRealm = 40 }, nil
+for id = 5000, 5039 do Prices:Record(id, 400, 400, 5, before, 400) end
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+    { itemKey = { itemID = 5001 }, minPrice = 400, totalQuantity = 5 },
+    { itemKey = { itemID = 5002 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("two small stray sweeps in a row clear nothing", Prices:Get(5039).quantity == 5)
+
+-- The first whole sweep on a realm has no size to compare with, so what
+-- the saved prices say is listed stands in for it.
+reset()
+ns.db.sweepSeenByRealm, ns.db.sweepRefusedByRealm = nil, nil
+for id = 5000, 5039 do Prices:Record(id, 400, 400, 5, before, 400) end
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("a first sweep far smaller than the saved book clears nothing",
+    Prices:Get(5039).quantity == 5)
+
+-- The scan stamp is per realm and faction. The old account-wide one is
+-- read only until some realm has a stamp of its own; after that it is just
+-- whichever realm scanned last.
+ns.db.lastFullScan, ns.db.lastFullScanByRealm = 1000, { OtherRealm = 1000 }
+check("another realm's scan is not this realm's", Prices:GetLastFullScan() == nil)
+ns.db.lastFullScanByRealm = nil
+check("the old stamp still counts before any realm has its own", Prices:GetLastFullScan() == 1000)
 
 -- A sweep cut short is not a full scan: no stamp, so deals it never reached
 -- are not hidden as older than it.

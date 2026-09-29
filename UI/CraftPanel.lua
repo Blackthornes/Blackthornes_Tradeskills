@@ -1241,7 +1241,7 @@ function CraftPanel:Refresh()
         self.empty:SetText(searching
             and "Nothing here matches that."
             or (self.hiddenAtLimit or 0) > 0
-                and "Every recipe here is at your Keep in stock limit.\n\nTick Ignore max on hand to see them."
+                and "Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."
             or "No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment.")
     end
 

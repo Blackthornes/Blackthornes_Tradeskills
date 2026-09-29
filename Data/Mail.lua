@@ -531,11 +531,11 @@ function Mail:SettleHeldSale(mail)
     local invoice = self:ReadInvoice(mail.index)
     if not (invoice and invoice.bid) then return end
 
+    -- The name as Describe wrote it down: the invoice's, which has no stack
+    -- size in it, ahead of the subject's.
     local kind, itemName = self:Classify(mail)
-    if kind ~= "sold" then
-        if invoice.invoiceType ~= "seller" then return end
-        itemName = invoice.itemName
-    end
+    if kind ~= "sold" and invoice.invoiceType ~= "seller" then return end
+    itemName = invoice.itemName or itemName
 
     local estimate = invoice.bid - (invoice.cut or 0) + (invoice.deposit or 0)
 

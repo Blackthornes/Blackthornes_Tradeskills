@@ -50,6 +50,7 @@ ns.Util = {
     FormatAgeAgo = function() return "" end,
     GetItemLabel = function(i) return "item" .. tostring(i) end,
     GetMaxStackSize = function() return 20 end,
+    GetVendorSellPrice = function() return nil end,
     UnitPriceFromStack = function(_, buyout, quantity) return math.floor(buyout / (quantity or 1)) end,
     HasFunction = function() return false end,
     RoundToSilver = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,

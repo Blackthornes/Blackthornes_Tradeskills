@@ -589,6 +589,8 @@ function Posting:GetPostable(opts)
     -- own reagents is the one mistake here that costs real work to undo.
     -- Crafted stock included: a bolt made for a queued bag is still a
     -- reagent, and Post Crafted offered it when it was the priciest stack.
+    -- Only the number the queue needs is held back, so one queued bag does
+    -- not keep sixty bolts off the list.
     local reserved = {}
 
     if ns.Queue.GetReservedItems then
@@ -606,7 +608,8 @@ function Posting:GetPostable(opts)
     local skipped = {}
 
     for _, itemID in ipairs(order) do
-        local wanted = (outputs[itemID] ~= nil or opts.includeAll) and not reserved[itemID]
+        local wanted = outputs[itemID] ~= nil
+            or (opts.includeAll and not reserved[itemID])
 
         if not wanted then
             skipped[itemID] = reserved[itemID] and "kept for a queued craft" or "not asked for"
@@ -618,7 +621,14 @@ function Posting:GetPostable(opts)
             local sellable, count = self:GetSellInfo(itemID, held)
             local price, basis = self:GetPostPrice(itemID)
 
-            if not sellable then
+            local keep = reserved[itemID]
+            if keep and count then
+                count = count - (type(keep) == "number" and keep or count)
+            end
+
+            if keep and count and count <= 0 then
+                skipped[itemID] = "kept for a queued craft"
+            elseif not sellable then
                 skipped[itemID] = "the auction house says it cannot be sold"
             elseif not count or count <= 0 then
                 skipped[itemID] = "the auction house says none can be posted"
@@ -768,10 +778,6 @@ ns.RegisterCommand("readysell", "watch Ready to sell for 15 seconds and say why 
     ns.Print("readysell: watching, leave the windows as they are for 15 seconds")
 end)
 
---- The most valuable stack worth listing right now.
---
--- Skips anything unpriced, and anything that would sell below material cost
--- unless losses are explicitly allowed.
 --- Would Post refuse this line's price outright (under the price floor)?
 --- Such a line is never next: Post Crafted kept offering the same item,
 --- refusing it after the price check and confirm, with everything else
@@ -781,6 +787,11 @@ function Posting:IsUnderFloor(line)
     local floor = self:GetPriceFloor(line.itemID)
     return floor ~= nil and line.unitPrice < floor
 end
+
+--- The most valuable stack worth listing right now.
+--
+-- Skips anything unpriced, anything under the price floor, and anything
+-- that would sell below material cost unless losses are explicitly allowed.
 
 function Posting:GetNextPostable(opts)
     local allowLoss = ns.Config:Get("allowPostingAtALoss") == true
@@ -1032,8 +1043,10 @@ function Posting:GetPriceFloor(itemID)
     local floor, why = 0, nil
 
     -- Below what a vendor pays, selling it to a vendor is strictly better.
-    local ok, _, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
-    if ok and sellPrice and sellPrice > 0 then
+    -- Remembered for the session: this runs for every line, every second,
+    -- at the auction house.
+    local sellPrice = Util.GetVendorSellPrice(itemID)
+    if sellPrice and sellPrice > 0 then
         floor, why = sellPrice, "a vendor pays more than that"
     end
 
@@ -1276,6 +1289,13 @@ function Posting:Request(itemID, quantity, unitPrice)
 
     ns.Print(("checking the current price of %s..."):format(Util.GetItemLabel(itemID)))
 
+    -- Whether an earlier click on this item is still waiting for its check.
+    -- Only then is a "recent" answer already on its way to a dialog; the
+    -- search still out may be anybody's (a scan's follow-up, a deep scan).
+    self.requesting = self.requesting or {}
+    local alreadyAsking = (self.requesting[itemID] or 0) > 0
+    self.requesting[itemID] = (self.requesting[itemID] or 0) + 1
+
     -- A search that never answers must not leave the click doing nothing, so
     -- fall back to the price we already had and say that is what happened.
     local settled = false
@@ -1283,6 +1303,7 @@ function Posting:Request(itemID, quantity, unitPrice)
     local function Proceed(state)
         if settled then return end
         settled = true
+        Posting.requesting[itemID] = math.max(0, (Posting.requesting[itemID] or 1) - 1)
 
         -- Another search took the slot before this one answered, so the
         -- price was never checked. Verifying is on, so nothing is listed on
@@ -1297,7 +1318,7 @@ function Posting:Request(itemID, quantity, unitPrice)
         -- will bring up the dialog when it answers; showing one now would be
         -- at the price from before the check, and then a second dialog for
         -- the same item would follow it.
-        if state == "recent" then
+        if state == "recent" and alreadyAsking then
             local pending = ns.Scanner.pendingItem
             if pending and pending.itemID == itemID then return end
         end
