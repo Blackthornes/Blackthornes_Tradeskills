@@ -667,6 +667,9 @@ function MailHaul:EndVisit()
     self.last = haul
     self:Announce(haul)
 
+    -- The Sales tab's Mailbox visits list gains a row.
+    if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+
     if ns.Config:Get("mailReport") ~= false and ns.MailReport then
         local ok, err = pcall(ns.MailReport.Show, ns.MailReport, haul)
         if not ok then ns.Debug("mail report:", tostring(err)) end

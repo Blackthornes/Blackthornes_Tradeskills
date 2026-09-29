@@ -54,7 +54,9 @@ function VendorFlips:GetAuctionRows(opts)
         if buy and since and (record.seen or 0) < since then buy = nil end
 
         local vendor = buy and ns.Disenchant:GetSellPrice(itemID)
-        if buy and vendor == nil then pending = pending + 1 end
+        if buy and vendor == nil and not (ns.Disenchant.GaveUp and ns.Disenchant:GaveUp(itemID)) then
+            pending = pending + 1
+        end
 
         if vendor and vendor > buy then
             local gain = vendor - buy

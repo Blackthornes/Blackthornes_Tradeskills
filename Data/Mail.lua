@@ -514,6 +514,29 @@ local function Describe(mail, kind, itemName, invoice)
     return entry
 end
 
+--- A sale recorded while its gold was held, now paid: the newest estimated
+--- entry for the same item takes the mail's real amount.
+function Mail:SettleHeldSale(mail)
+    local ledger = self:GetLedger()
+    if not ledger or not ledger.entries then return end
+
+    local kind, itemName = self:Classify(mail)
+    if kind ~= "sold" then
+        local invoice = self:ReadInvoice(mail.index)
+        if not (invoice and invoice.invoiceType == "seller") then return end
+        itemName = invoice.itemName
+    end
+
+    for index = #ledger.entries, 1, -1 do
+        local entry = ledger.entries[index]
+        if entry.kind == "sold" and entry.estimated and entry.name == itemName then
+            entry.net = mail.money
+            entry.estimated = nil
+            return
+        end
+    end
+end
+
 --- Fold a reading of the inbox into the ledger.
 --
 -- Works by difference, not by presence: for each fingerprint we hold the number
@@ -585,6 +608,12 @@ function Mail:Reconcile(mails, complete)
                     -- deliberately not a ledger entry.
                     ns.Debug("mail not from the auction house:", tostring(mail.subject))
                 end
+
+            elseif (mail.money or 0) > 0 then
+                -- A sale already written down from its invoice while its gold
+                -- was held. The gold has now been released, so the entry takes
+                -- the real amount and stops saying "gold still held".
+                self:SettleHeldSale(mail)
             end
         end
     end

@@ -584,12 +584,12 @@ function Posting:GetPostable(opts)
 
     -- Never offer to sell what a queued craft is waiting on. Listing your
     -- own reagents is the one mistake here that costs real work to undo.
+    -- Crafted stock included: a bolt made for a queued bag is still a
+    -- reagent, and Post Crafted offered it when it was the priciest stack.
     local reserved = {}
 
-    if opts.includeAll then
-        for _, entry in ipairs(ns.Queue:GetShoppingList() or {}) do
-            if entry.itemID then reserved[entry.itemID] = true end
-        end
+    for _, entry in ipairs(ns.Queue:GetShoppingList() or {}) do
+        if entry.itemID then reserved[entry.itemID] = true end
     end
 
     local lines = {}
@@ -599,8 +599,7 @@ function Posting:GetPostable(opts)
     local skipped = {}
 
     for _, itemID in ipairs(order) do
-        local wanted = outputs[itemID] ~= nil
-            or (opts.includeAll and not reserved[itemID])
+        local wanted = (outputs[itemID] ~= nil or opts.includeAll) and not reserved[itemID]
 
         if not wanted then
             skipped[itemID] = reserved[itemID] and "kept for a queued craft" or "not asked for"
@@ -766,11 +765,21 @@ end)
 --
 -- Skips anything unpriced, and anything that would sell below material cost
 -- unless losses are explicitly allowed.
+--- Would Post refuse this line's price outright (under the price floor)?
+--- Such a line is never next: Post Crafted kept offering the same item,
+--- refusing it after the price check and confirm, with everything else
+--- stuck behind it.
+function Posting:IsUnderFloor(line)
+    if not line.unitPrice then return false end
+    local floor = self:GetPriceFloor(line.itemID)
+    return floor ~= nil and line.unitPrice < floor
+end
+
 function Posting:GetNextPostable(opts)
     local allowLoss = ns.Config:Get("allowPostingAtALoss") == true
 
     for _, line in ipairs(self:GetPostable(opts)) do
-        if line.unitPrice and (allowLoss or not line.atALoss) then
+        if line.unitPrice and (allowLoss or not line.atALoss) and not self:IsUnderFloor(line) then
             return line
         end
     end
@@ -782,7 +791,7 @@ function Posting:GetSummary(opts)
 
     local count, total = 0, 0
     for _, line in ipairs(self:GetPostable(opts)) do
-        if line.unitPrice and (allowLoss or not line.atALoss) then
+        if line.unitPrice and (allowLoss or not line.atALoss) and not self:IsUnderFloor(line) then
             count = count + 1
             total = total + (line.total or 0)
         end
@@ -1068,7 +1077,11 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
         Posting:Post(data.itemID, data.quantity, data.unitPrice)
     end,
 
-    OnCancel = function()
+    -- "override" is the game replacing this dialog with the next one (a
+    -- second List click while it was open): not a skip, and clearing the
+    -- listing here left the new dialog's Yes with nothing to list.
+    OnCancel = function(_, _, reason)
+        if reason == "override" then return end
         Posting.confirming = nil
         ns.Print("skipped.")
     end,
@@ -1149,11 +1162,15 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
 end
 
 function Posting:ShowConfirm(itemID, quantity, unitPrice, text)
-    self.confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice }
+    local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice }
+    self.confirming = confirming
 
-    local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text)
+    local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text, nil, confirming)
     if dialog then
-        dialog.data = self.confirming
+        -- Set again after showing: replacing an open dialog cancels the old
+        -- one first, on clients that do not say it was an override.
+        self.confirming = confirming
+        dialog.data = confirming
     else
         self.confirming = nil
         ns.Warn("could not open the confirmation dialog; nothing was listed.")
@@ -1212,9 +1229,11 @@ function Posting:CheckPrice(itemID, onDone)
         Settle("unavailable")
     end)
 
+    -- quiet: this check says for itself when nothing came back, and the
+    -- search's own "using the last known price" is wrong here, with no price.
     local started = ns.Scanner:ScanItem(itemID, function(_, _, _, _, _, _, status)
         Settle(status or "fresh")
-    end)
+    end, { quiet = true })
 
     if not started then Settle("unavailable") end
 
@@ -1310,6 +1329,12 @@ function Posting:VerifyPending()
     end
 
     self.pending.verifying = true
+
+    -- Stop any read-back still running from the last listing: its readings
+    -- come from a query sent before this listing existed, and its final one
+    -- would report this listing as missing.
+    ns.Auctions.confirmToken = (ns.Auctions.confirmToken or 0) + 1
+
     ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
 
     -- This listing's own give-up: a later listing being verified when the

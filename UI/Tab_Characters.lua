@@ -63,8 +63,9 @@ local function UpdateRow(row, entry)
         row.freshness:SetTextColor(Theme.Unpack("profit"))
     else
         local age = entry.inventoryAt and (time() - entry.inventoryAt)
-        row.freshness:SetText(("%d recipes  ·  seen %s"):format(
-            entry.recipeCount, Util.FormatAgeAgo(age)))
+        row.freshness:SetText(age
+            and ("%d recipes  ·  seen %s"):format(entry.recipeCount, Util.FormatAgeAgo(age))
+            or ("%d recipes  ·  bags never read"):format(entry.recipeCount))
         row.freshness:SetTextColor(Theme.Unpack("dim"))
     end
 end

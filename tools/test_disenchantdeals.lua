@@ -411,7 +411,10 @@ local sent = {}
 ns.Scanner = { isAuctionHouseOpen = true, QueueBrowseQuery = function(_, text) sent[#sent + 1] = text end }
 
 local tabs = {}
-ns.UI = Stub({ RegisterTab = function(_, tab) tabs[tab.key] = tab end })
+ns.UI = Stub({
+    RegisterTab = function(_, tab) tabs[tab.key] = tab end,
+    SearchAuctionHouse = function(_, itemID) sent[#sent + 1] = "item" .. itemID; return true end,
+})
 
 assert(loadfile(lfs_cwd .. "/UI/Tab_Disenchanting.lua"))("Blackthornes_TS", ns)
 

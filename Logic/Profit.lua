@@ -455,6 +455,23 @@ function Profit:Analyse(recipeID, characterKey)
         analysis.youHoldLowest = ns.Prices:HoldsLowest(recipe.outputItemID)
     end
 
+    -- What you already hold, listed or otherwise. Crafting past this gets
+    -- you nothing you do not already own, and ties up gold doing it. Read
+    -- before the price checks below, since none of it needs a price: a craft
+    -- with no price still has a Keep in stock limit.
+    local room, posted, onHand, queued, limit, inMail =
+        ns.Auctions:GetRoom(recipe.outputItemID)
+
+    analysis.posted = posted
+    analysis.onHand = onHand
+    analysis.inMail = inMail or 0
+    analysis.stock = posted + onHand + analysis.inMail
+    analysis.queuedElsewhere = queued
+    analysis.postLimit = limit
+    analysis.postRoom = room
+    analysis.roomInCrafts = RoomInCrafts(room, recipe)
+    analysis.atPostLimit = room ~= nil and room <= 0
+
     if not unitRevenue then
         -- A craft can land here with priced materials when the estimate is
         -- switched off, and with unpriced ones either way; the reason below
@@ -511,21 +528,6 @@ function Profit:Analyse(recipeID, characterKey)
 
     analysis.craftableNow = self:GetCraftableCount(recipeID, crafter)
     analysis.priceable = true
-
-    -- What you already hold, listed or otherwise. Crafting past this gets
-    -- you nothing you do not already own, and ties up gold doing it.
-    local room, posted, onHand, queued, limit, inMail =
-        ns.Auctions:GetRoom(recipe.outputItemID)
-
-    analysis.posted = posted
-    analysis.onHand = onHand
-    analysis.inMail = inMail or 0
-    analysis.stock = posted + onHand + analysis.inMail
-    analysis.queuedElsewhere = queued
-    analysis.postLimit = limit
-    analysis.postRoom = room
-    analysis.roomInCrafts = RoomInCrafts(room, recipe)
-    analysis.atPostLimit = room ~= nil and room <= 0
 
     -- Everything already committed to this item: what you hold, plus what the
     -- queue is about to make. This is what pushes a craft down the list.

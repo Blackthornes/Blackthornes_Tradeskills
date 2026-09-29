@@ -707,8 +707,16 @@ local function UpdateDetail(analysis)
     if newCraft then detail.quantity:SetText(tostring(suggested)) end
 
     if analysis.atPostLimit then
-        detail.subtitle:SetText(("You already have %d, your limit"):format(
-            analysis.stock or 0))
+        -- Queued crafts count toward the limit too, and "You already have 0,
+        -- your limit" read as nonsense when they were all that filled it.
+        local queued = analysis.queuedElsewhere or 0
+        if queued > 0 then
+            detail.subtitle:SetText(("You have %d and %d more queued, your limit"):format(
+                analysis.stock or 0, queued))
+        else
+            detail.subtitle:SetText(("You already have %d, your limit"):format(
+                analysis.stock or 0))
+        end
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
     end
 end

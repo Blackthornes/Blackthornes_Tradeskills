@@ -278,7 +278,14 @@ function Disenchanter:OnEnable()
     -- every click on Disenchant said it missed until the bags changed.
     ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function()
         local anchor, itemID = Disenchanter.anchor, Disenchanter.itemID
-        if not anchor or not itemID or not anchor:IsVisible() then return end
+
+        -- A refresh during combat disarms the button and forgets the item, so
+        -- the tab is redrawn to set it up again from the selection.
+        if not itemID then
+            if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+            return
+        end
+        if not anchor or not anchor:IsVisible() then return end
 
         local bag, slot = Disenchanter:FindSlot(itemID)
         if bag and slot then Disenchanter:Arm(anchor, itemID, bag, slot) end
