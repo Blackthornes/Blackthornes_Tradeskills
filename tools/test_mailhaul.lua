@@ -489,6 +489,32 @@ Take(1)
 check("gold spent at the mailbox is left out",         MailHaul:Current().total, 2000)
 Close()
 
+-- A look-alike moving into view after the first sale's gold reached the
+-- purse is a new mail. Taking it too is a second sale, not the first again.
+inbox = { Sold("Runecloth Bag", 90000), Sold("Linen Bag", 1000) }
+Open()
+purse = purse + 90000
+Take(1)
+table.insert(inbox, 1, Sold("Runecloth Bag", 90000))
+Mail:Read()
+purse = purse + 90000
+Take(1)
+local twice = Close()
+check("two look-alike sales taken are two sales",      twice.salesCount, 2)
+check("and both count toward the total",               twice.total, 180000)
+
+-- Without the gold arriving, the same shape is one mail coming back.
+inbox = { Sold("Runecloth Bag", 90000) }
+Open()
+local bag = table.remove(inbox, 1)
+Mail:Read()
+table.insert(inbox, 1, bag)
+Mail:Read()
+purse = purse + 90000
+Take(1)
+local once = Close()
+check("a sale whose gold never left the mail counts once", once.salesCount, 1)
+
 GetMoney = nil
 
 --------------------------------------------------------------------------------

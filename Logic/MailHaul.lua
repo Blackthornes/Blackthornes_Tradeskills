@@ -335,10 +335,13 @@ function MailHaul:Record(events)
 
             if event.kind == "sold" then
                 -- The same sale going for good after it came back is the
-                -- one already written down, not a second one.
+                -- one already written down, not a second one. One whose gold
+                -- reached the purse was really collected: the mail that
+                -- looked like it coming back was a new one, so this is a
+                -- second sale.
                 local sale
                 for index, was in ipairs(visit.cameBack) do
-                    if was.name == event.name and was.amount == amount then
+                    if was.name == event.name and was.amount == amount and not was.paid then
                         sale = table.remove(visit.cameBack, index)
                         break
                     end
@@ -380,6 +383,13 @@ function MailHaul:Reverse(events)
     local visit = self.visit
     local undone = 0
 
+    -- Whether the purse already holds everything counted so far, for the
+    -- sales set aside below. If it does, the gold really arrived and the
+    -- mail that appeared is a new one that only looks the same.
+    self:CheckMoney()
+    local counted = visit.gold.sold + visit.gold.outbid + visit.gold.other
+    local paid = Money() ~= nil and visit.moneyIn >= counted and counted > 0
+
     for _, event in ipairs(events) do
         local collected = visit.collected[event.key]
 
@@ -404,6 +414,7 @@ function MailHaul:Reverse(events)
                                 local sale = visit.sales[saleIndex]
                                 if sale.name == event.name and sale.amount == amount then
                                     table.remove(visit.sales, saleIndex)
+                                    sale.paid = paid or nil
                                     visit.cameBack[#visit.cameBack + 1] = sale
                                     break
                                 end
