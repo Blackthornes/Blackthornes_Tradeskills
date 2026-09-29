@@ -570,14 +570,15 @@ local function Refresh()
     widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
-    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
+    local lastScan, capped = ns.Prices:GetLastScan()
 
     widgets.dataSummary:SetText(("%s items priced on %s"):format(
         Util.Comma(ns.Prices:Count()), Config:GetRealmKey()))
 
     widgets.recipeSummary:SetText(("%s recipes saved  ·  last scan %s"):format(
         Util.Comma(ns.Recipes:Count()),
-        lastScan and Util.FormatAgeAgo(time() - lastScan) or "never"))
+        lastScan and (Util.FormatAgeAgo(time() - lastScan)
+            .. (capped and " (stopped at the page limit)" or "")) or "never"))
 
     -- The beta can start a session with nothing. Say so where the data
     -- counts are shown, rather than leaving it looking like the addon

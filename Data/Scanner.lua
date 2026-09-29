@@ -1710,12 +1710,9 @@ function Scanner:ConsiderAutoScan(attempt)
     if not allowed then return end
 
     local count = ns.Prices:Count()
-    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     -- A sweep that stopped at the page limit is not a full scan, but it is
     -- as far as a sweep can get here, so repeating it at once gains nothing.
-    local capped = ns.db and ns.db.lastCappedScanByRealm
-        and ns.Config.GetRealmKey and ns.db.lastCappedScanByRealm[ns.Config:GetRealmKey()]
-    if capped and (not lastScan or capped > lastScan) then lastScan = capped end
+    local lastScan = ns.Prices:GetLastScan()
 
     local stale = not lastScan
         or (time() - lastScan) > (ns.Config:Get("staleAfterSeconds") or 172800)

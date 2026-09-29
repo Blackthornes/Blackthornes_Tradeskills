@@ -315,6 +315,15 @@ records[2001].seen = 1200     -- a search after the scan
 check("and so is one a later search saw", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
 records[2001].seen, ns.db.lastFullScan = nil, nil
 
+-- On a big auction house every sweep stops at the page limit and never gets
+-- a full scan stamp. That sweep still decides what counts as seen.
+ns.Prices.GetLastScan = function() return 1000, true end
+records[2001].seen = 999
+check("a listing a capped sweep did not see is not a deal", Find(Disenchant:GetAuctionRows(), 2001) == nil)
+records[2001].seen = 1200
+check("one a later search saw still is", Find(Disenchant:GetAuctionRows(), 2001) ~= nil)
+records[2001].seen, ns.Prices.GetLastScan = nil, nil
+
 print("\n/bts dedeals")
 
 ns.db.lastFullScan = 1000
@@ -322,7 +331,7 @@ records[2001].seen = 999
 printed = {}
 commands.dedeals()
 local said = table.concat(printed, "\n")
-check("it says when the last scan was", said:find("last full scan", 1, true) ~= nil)
+check("it says when the last scan was", said:find("last scan", 1, true) ~= nil)
 check("and what a fresh build would show", said:find("built fresh now", 1, true) ~= nil)
 records[2001].seen, ns.db.lastFullScan = nil, nil
 

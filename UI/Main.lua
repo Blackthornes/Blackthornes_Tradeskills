@@ -277,8 +277,11 @@ function UI:UpdateHeader()
     local priceCount = ns.Prices:Count()
     local recipeCount = ns.Recipes:Count()
 
-    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
-    local scanText = lastScan and ("scanned " .. Util.FormatAgeAgo(time() - lastScan))
+    -- A sweep stopped at the page limit counts as a scan here. On a big
+    -- auction house every sweep stops there, and "never scanned" was wrong.
+    local lastScan, capped = ns.Prices:GetLastScan()
+    local scanText = lastScan and ("scanned " .. Util.FormatAgeAgo(time() - lastScan)
+        .. (capped and " (stopped at the page limit)" or ""))
         or "never scanned"
 
     self.statusLabel:SetText(("%s items priced  ·  %s recipes known  ·  %s"):format(
@@ -624,9 +627,10 @@ function UI:RefreshAuctionStatus()
     bar.progress:Hide()
     bar.status:SetTextColor(Theme.Unpack("muted"))
 
-    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
+    local lastScan, capped = ns.Prices:GetLastScan()
     bar.status:SetText(lastScan
-        and ("Last scan " .. Util.FormatAgeAgo(time() - lastScan))
+        and ("Last scan " .. Util.FormatAgeAgo(time() - lastScan)
+            .. (capped and ", stopped at the page limit" or ""))
         or "No scan yet. Click Scan to price everything.")
 end
 

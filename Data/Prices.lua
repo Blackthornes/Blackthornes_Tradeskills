@@ -360,7 +360,25 @@ function Prices:GetLastFullScan()
     return key and byRealm[key] or nil
 end
 
+--- When this realm and faction last had a scan of any kind: a full one, or a
+--- sweep that stopped at the page limit.
+--
+-- On a big auction house every sweep stops at the page limit, so it never
+-- gets a full scan stamp. Deal lists judged by the full scan stamp alone
+-- kept days-old listings, and the header said "never scanned". Only clearing
+-- sold-out items needs a real full scan; that still reads GetLastFullScan.
+-- The second value is true when the newest scan is the one that stopped at
+-- the page limit.
+function Prices:GetLastScan()
+    local full = self:GetLastFullScan()
+    local db = ns.db
+    local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
+    local capped = db and key and db.lastCappedScanByRealm and db.lastCappedScanByRealm[key]
+    if capped and (not full or capped > full) then return capped, true end
+    return full, false
+end
 function Prices:SetLastFullScan(at)
+
     local db = ns.db
     if not db then return end
     local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
