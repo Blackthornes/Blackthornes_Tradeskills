@@ -840,6 +840,8 @@ function Scanner:ReadReplicateResults(numItems)
     -- not be read at all. See the sold-out pass in onDone.
     local seen = {}
     local unreadable = 0
+    -- Commodities read in this scan; see the one-off reset in onDone.
+    local commodities = {}
 
     -- GetReplicateItemInfo is 0-based.
     local indices = {}
@@ -881,13 +883,20 @@ function Scanner:ReadReplicateResults(numItems)
 
             local quantity = count or 1
 
-            -- Commodities are priced per unit; item auctions quote the whole
-            -- stack. Getting this backwards would scale every reagent cost by
-            -- the stack size, so /bts verify cross-checks it against a targeted
-            -- search rather than trusting the assumption.
+            -- Every row quotes its whole quantity, commodities included. They
+            -- were read as priced per unit, and /bts verify in game on Linen
+            -- Cloth (2026-09-29) settled it: a fresh search said 40c each, the
+            -- quick scan had stored 83c, and the market was 16 times too high.
+            -- A commodity row can hold more than a stack, so the stack-size
+            -- guard item auctions use does not apply to it.
             local unitPrice
             if self:IsCommodity(itemID) then
-                unitPrice = buyoutPrice
+                commodities[itemID] = true
+                if quantity > 1 and buyoutPrice >= quantity then
+                    unitPrice = math.floor(buyoutPrice / quantity + 0.5)
+                else
+                    unitPrice = buyoutPrice
+                end
             else
                 unitPrice = Util.UnitPriceFromStack(itemID, buyoutPrice, quantity)
             end
@@ -930,6 +939,21 @@ function Scanner:ReadReplicateResults(numItems)
         onDone = function()
             local startedWall = self.scanStartedWall
             local now = time()
+
+            -- Market value is an average carried from scan to scan, so the
+            -- ones built from whole-row prices would take many scans to come
+            -- down. Once, the first time this reading runs, a commodity it
+            -- priced starts its market afresh from this scan. Its history
+            -- is kept.
+            if ns.db and not ns.db.commodityRowPriceFixed then
+                local table_ = ns.Prices:GetTable()
+                for itemID in pairs(commodities) do
+                    local record = table_ and table_[itemID]
+                    if record and observations[itemID] then record.market = nil end
+                end
+                ns.db.commodityRowPriceFixed = true
+            end
+
             local recorded = ns.Prices:CommitScan(observations, now)
             local elapsed = GetTime() - (self.scanStartedAt or GetTime())
 

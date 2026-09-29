@@ -372,12 +372,13 @@ Anniversary realms use the older `StartAuction`, which does take copper. The
 1-copper undercut people remember from Classic is real there and is not
 available here.
 
-## Still unverified
+**`GetReplicateItemInfo`'s `buyoutPrice` is the whole row's price, commodities
+included** (confirmed 2026-09-29 with `/bts verify 2589`: a fresh search gave
+Linen Cloth 40c each, the quick scan had stored 83c as the cheapest and a
+market 16 times too high). Every row is divided by its count; a commodity row
+can be bigger than a stack, so it skips the stack-size guard.
 
-**Whether `GetReplicateItemInfo`'s `buyoutPrice` is per-unit or per-stack.**
-The addon assumes per-unit for commodities and per-stack otherwise, and
-`/bts verify <itemID>` cross-checks that assumption against a targeted
-`SendSearchQuery` rather than trusting it.
+## Still unverified
 
 **How a profession window can be opened from the addon.** Casting is
 protected, so the Queue tab lays a `SecureActionButtonTemplate` button
