@@ -60,6 +60,50 @@ function Recipes:GetProfessions()
     return professions
 end
 
+--- Every skill line the client lists, learned or not, under BOTH ID spaces.
+--
+-- Unlike GetProfessions this keeps both of Forever's IDs for a profession,
+-- because a cached recipe may carry either one.
+-- @return { [skillLineID] = learned }, true when anything read as learned
+local function ReadProfessionLines()
+    local lines, anyLearned = {}, false
+
+    local trade = ns.Compat:Get().tradeskill
+    if not trade.hasAllProfessionLines then return lines, false end
+
+    local ok, skillLines = pcall(C_TradeSkillUI.GetAllProfessionTradeSkillLines)
+    if not ok or type(skillLines) ~= "table" then return lines, false end
+
+    for _, skillLineID in ipairs(skillLines) do
+        local infoOk, info = pcall(C_TradeSkillUI.GetProfessionInfoBySkillLineID, skillLineID)
+        if infoOk and info and type(skillLineID) == "number" then
+            local learned = (info.maxSkillLevel or 0) > 0
+            lines[skillLineID] = learned
+            if learned then anyLearned = true end
+        end
+    end
+
+    return lines, anyLearned
+end
+
+--- Is this cached recipe from a profession the character has since dropped?
+--
+-- Only when the last reliable read of that character's professions listed
+-- the recipe's skill line as not learned. Anything unknown (no read yet, a
+-- recipe with no skill line, a skill line the list did not name) counts as
+-- kept. Nothing is deleted: learn the profession again and its crafts come
+-- back on the next read.
+function Recipes:IsDropped(recipe, characterKey)
+    if type(recipe) ~= "table" or not recipe.skillLineID then return false end
+
+    local record = ns.db and ns.db.characters
+        and ns.db.characters[characterKey or ns.Config:GetCharacterKey()]
+    local lines = type(record) == "table" and record.professionLines
+    if type(lines) ~= "table" then return false end
+
+    return lines[recipe.skillLineID] == false
+end
+
 function Recipes:GetLearnedProfessions()
     local learned = {}
     for _, profession in ipairs(self:GetProfessions()) do
@@ -146,11 +190,23 @@ end
 -- @return recipe, characterKey
 function Recipes:GetAny(recipeID)
     local mine = self:GetAll()[recipeID]
-    if mine then
-        return mine, ns.Config:GetCharacterKey()
+    local selfKey = ns.Config:GetCharacterKey()
+    if mine and not self:IsDropped(mine, selfKey) then
+        return mine, selfKey
     end
 
-    if not ns.db then return nil end
+    if not ns.db then return mine, mine and selfKey or nil end
+
+    -- A profession this character dropped: an alt who still has it is the
+    -- one who can make it.
+    for characterKey, record in pairs(ns.db.characters) do
+        local recipe = record.recipes and record.recipes[recipeID]
+        if recipe and characterKey ~= selfKey and not self:IsDropped(recipe, characterKey) then
+            return recipe, characterKey
+        end
+    end
+
+    if mine then return mine, selfKey end
 
     for characterKey, record in pairs(ns.db.characters) do
         local recipe = record.recipes and record.recipes[recipeID]
@@ -195,6 +251,32 @@ function Recipes:GetCharacterName(characterKey)
     end
 
     return (characterKey:match("^([^-]+)")) or characterKey
+end
+
+--- The character's name for a narrow column: the first name alone, unless
+--- another known character has the same first name, and then the first name
+--- and the last name's initial ("Trent B."). The full name is for tooltips.
+function Recipes:GetShortCharacterName(characterKey)
+    local full = self:GetCharacterName(characterKey)
+    local first, rest = full:match("^(%S+)%s+(.+)$")
+    if not first then return full end
+
+    local shared = false
+    if ns.db and ns.db.characters then
+        for otherKey in pairs(ns.db.characters) do
+            if otherKey ~= characterKey
+                and self:GetCharacterName(otherKey):match("^%S+") == first then
+                shared = true
+                break
+            end
+        end
+    end
+
+    if not shared then return first end
+    -- The first whole letter, not the first byte: "Élan" starts with two
+    -- bytes, and cutting it after one left half a letter on screen.
+    local initial = rest:match("^[%z\1-\127\194-\244][\128-\191]*") or rest:sub(1, 1)
+    return ("%s %s."):format(first, initial)
 end
 
 --- What to add after a name that another character also has.
@@ -274,14 +356,17 @@ function Recipes:Count()
 end
 
 --- Every cached recipe across all characters, tagged with who knows it.
-function Recipes:GetAccountWide()
+-- @param skipDropped  leave out crafts of professions a character dropped
+function Recipes:GetAccountWide(skipDropped)
     local results = {}
     if not ns.db then return results end
 
     for characterKey, record in pairs(ns.db.characters) do
         for recipeID, recipe in pairs(record.recipes or {}) do
             local existing = results[recipeID]
-            if existing then
+            if skipDropped and self:IsDropped(recipe, characterKey) then
+                -- Left out, as if this character did not know it.
+            elseif existing then
                 existing.knownBy[#existing.knownBy + 1] = characterKey
             else
                 local copy = Util.CopyDeep(recipe)
@@ -577,12 +662,38 @@ function Recipes:RefreshProfessions()
         record.professions = fresh
     end
 
+    -- Which skill lines are learned, for hiding the crafts of a dropped
+    -- profession. Taken only from a read that found something learned: at
+    -- login everything reads as unlearned until skill levels arrive, and
+    -- trusting that would hide every craft this character has.
+    local lines, linesLearned = ReadProfessionLines()
+    if linesLearned then
+        -- The sub-craft index is built from the crafts not dropped, so it is
+        -- rebuilt when the lines change. Left alone, a dropped profession's
+        -- crafts stayed on offer as sub-crafts until the next harvest.
+        local changed = false
+        local old = record.professionLines or {}
+        for skillLineID, learned in pairs(lines) do
+            if old[skillLineID] ~= learned then changed = true end
+        end
+        for skillLineID in pairs(old) do
+            if lines[skillLineID] == nil then changed = true end
+        end
+        record.professionLines = lines
+        if changed and ns.Cost and ns.Cost.InvalidateIndex then ns.Cost:InvalidateIndex() end
+    end
+
     return AnyLearned(record.professions), AnyLearned(fresh)
 end
 
 function Recipes:OnEnable()
     ns.RegisterEvent(self, "TRADE_SKILL_LIST_UPDATE", self.OnTradeSkillUpdate)
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", self.OnTradeSkillUpdate)
+
+    -- Learning or dropping a profession, read at once rather than at the
+    -- next profession window. Not every client has this event; RegisterEvent
+    -- says so by returning false, and the reads above still cover it.
+    ns.RegisterEvent(self, "SKILL_LINES_CHANGED", function() Recipes:RefreshProfessions() end)
 
     -- Skill levels arrive after login, so the first read is usually zeroes.
     -- Retried a few times rather than once: how long it takes varies, and

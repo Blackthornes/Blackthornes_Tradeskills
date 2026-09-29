@@ -749,6 +749,7 @@ do
 
   local button = { SetText = function(self, text) self.text = text end,
     SetEnabledState = function(self, on) self.enabled = on end,
+    SetConfirming = function(self, on) self.confirming = on end,
     label = { SetTextColor = function() end } }
   ns.Theme.Unpack = function() return 1, 1, 1 end
   CraftPanel.clearButton = button
@@ -756,10 +757,12 @@ do
   CraftPanel:OnClearClicked()
   check("the first click on Clear queue empties nothing", cleared, 0)
   check("and asks for a second click", button.text, "Click to clear")
+  check("with a red border while it waits", button.confirming, true)
 
   CraftPanel:OnClearClicked()
   check("a second click soon after empties the queue", cleared, 1)
   check("and the button reads Clear queue again", button.text, "Clear queue")
+  check("and its border is back to normal", button.confirming, false)
 
   count = 3
   CraftPanel:UpdateClearButton()

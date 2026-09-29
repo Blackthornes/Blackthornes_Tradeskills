@@ -264,6 +264,33 @@ itemNames[VIAL] = vialName
 check("and is resolved once the client has it", Mail:ResolveItemName("Crystal Vial"), VIAL)
 
 --------------------------------------------------------------------------------
+print("")
+print("a sale filed by name gets its item when the game loads it")
+--------------------------------------------------------------------------------
+
+Reset()
+itemNames[VIAL] = nil
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Crystal Vial",
+      money = 500, invoice = { itemName = "Crystal Vial", bid = 500, deposit = 0, cut = 25 } },
+}
+Mail.isOpen = true
+Mail.inboxUpdatedThisVisit = true
+Mail:Read()
+local nameOnly = Mail:GetLedger().entries[1]
+check("filed by name while the item is not loaded", nameOnly and nameOnly.itemID, nil)
+
+-- Some other item loading changes nothing.
+Mail:FillItemID(LINEN_BAG)
+check("another item loading leaves it alone",   nameOnly.itemID, nil)
+
+itemNames[VIAL] = vialName
+Mail:FillItemID(VIAL)
+check("the game loading it fills in the item",  nameOnly.itemID, VIAL)
+check("and the sale counts for that item",      Mail:GetSummary(VIAL).sold, 1)
+Mail.isOpen = false
+
+--------------------------------------------------------------------------------
 
 print("")
 if failures > 0 then

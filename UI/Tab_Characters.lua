@@ -133,7 +133,7 @@ local function BuildDetail(parent)
             ns.Recipes:ForgetCharacter(state.selected.key)
             button.armed = false
             button:SetText("Forget character")
-            button.label:SetTextColor(Theme.Unpack("text"))
+            button:SetConfirming(false)
 
             state.selected = nil
             UI:RefreshActiveTab()
@@ -144,13 +144,13 @@ local function BuildDetail(parent)
         button.armed = armedFor
         button:SetText("Really forget?")
         -- Red while armed, like the craft pane's Clear queue.
-        button.label:SetTextColor(Theme.Unpack("loss"))
+        button:SetConfirming(true)
 
         C_Timer.After(4, function()
             if button.armed == armedFor then
                 button.armed = false
                 button:SetText("Forget character")
-                button.label:SetTextColor(Theme.Unpack("text"))
+                button:SetConfirming(false)
             end
         end)
     end, { width = 140, height = 22,
@@ -184,7 +184,7 @@ local function UpdateDetail(entry)
     if detail.forget.armed and (not entry or detail.forget.armed ~= entry.key) then
         detail.forget.armed = false
         detail.forget:SetText("Forget character")
-        detail.forget.label:SetTextColor(Theme.Unpack("text"))
+        detail.forget:SetConfirming(false)
     end
 
     for _, line in ipairs(detail.lines) do

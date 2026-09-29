@@ -643,6 +643,9 @@ function Disenchant:GetCraftRows(opts)
     opts = opts or {}
 
     local rows = {}
+    -- The materials a disenchant gives still have to be sold, so the profit
+    -- here is net of the auction house cut, as it is on the Disenchanting tab.
+    local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         local itemID = recipe.outputItemID
@@ -662,12 +665,15 @@ function Disenchant:GetCraftRows(opts)
                 sellsAt = analysis.priceDerived and "estimate" or "auction"
             end
 
+            local net = value and math.floor(value * (1 - cut) + 0.5) or nil
+
             local row = {
                 kind = "craft",
                 recipeID = recipeID,
                 itemID = itemID,
                 name = recipe.name,
                 value = value,
+                net = net,
                 partial = partial,
                 breakdown = breakdown,
                 cost = costEach,
@@ -676,7 +682,7 @@ function Disenchant:GetCraftRows(opts)
                 soulbound = analysis.soulbound,
                 craftableNow = analysis.craftableNow
                     or (ns.Profit.GetCraftableCount and ns.Profit:GetCraftableCount(recipeID)) or 0,
-                gain = (value and costEach) and (value - costEach) or nil,
+                gain = (net and costEach) and (net - costEach) or nil,
                 beatsSale = Beats(value, sells),
             }
 
@@ -875,7 +881,7 @@ function Disenchant:GetAuctionRows(opts)
     -- Only what the last scan (or a search since) actually saw. A listing
     -- missing from the last scan has sold or expired, but its record keeps
     -- the old price, so without this it stays listed as a deal for days.
-    local since = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
+    local since = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
 
     for itemID, record in pairs(prices) do
         local buy = type(record) == "table" and BuyPrice(record)
@@ -939,8 +945,18 @@ end
 --- After a scan: say how many deals it found and the best one, with a chime
 --- when there is at least one worth having. Quiet when there are none.
 function Disenchant:AnnounceDeals()
-    local ok, rows = pcall(self.GetAuctionRows, self, { profitableOnly = true })
-    if not ok or type(rows) ~= "table" or #rows == 0 then return 0 end
+    local ok, all = pcall(self.GetAuctionRows, self, { profitableOnly = true })
+    if not ok or type(all) ~= "table" then return 0 end
+
+    -- Only deals one of your characters can break at their Enchanting skill
+    -- today. The tab still lists the rest, marked; the message is what says
+    -- "go and buy", so it leaves them out. With no enchanter known at all,
+    -- canDisenchant is nil and every deal counts, as before.
+    local rows = {}
+    for _, row in ipairs(all) do
+        if row.canDisenchant ~= false then rows[#rows + 1] = row end
+    end
+    if #rows == 0 then return 0 end
 
     local best = rows[1]
     local total = 0
@@ -1028,8 +1044,8 @@ local function Ago(stamp)
 end
 
 ns.RegisterCommand("dedeals", "say why each deal on the Disenchanting tab is there", function()
-    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
-    ns.Print(("dedeals: last full scan %s, price records changed %d time(s) since /reload")
+    local lastScan = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
+    ns.Print(("dedeals: last scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
 
     local shown = Disenchant.shownRows

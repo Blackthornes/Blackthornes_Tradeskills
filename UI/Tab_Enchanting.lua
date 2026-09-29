@@ -509,7 +509,7 @@ local function UpdateDetail(entry)
     if entry.kind == "craft" then
         SetLine(lines[3], "Materials", entry.cost and Util.FormatMoney(entry.cost) or "no price",
             entry.cost and "muted" or "dim")
-        SetLine(lines[4], entry.gain and "Disenchant profit" or nil,
+        SetLine(lines[4], entry.gain and "Profit after the auction cut" or nil,
             entry.gain and Util.FormatMoney(entry.gain) or nil,
             entry.gain and (entry.gain > 0 and "profit" or "loss") or nil)
     else

@@ -265,17 +265,35 @@ function ns.RegisterCommand(name, usage, fn)
     ns.commandOrder[#ns.commandOrder + 1] = name
 end
 
-local function ShowHelp()
-    ns.Print(("|c%sBlackthornes Tradeskills|r %s"):format(ns.COLORS.accent, ns.VersionLabel()))
-    for i = 1, #ns.commandOrder do
-        local name = ns.commandOrder[i]
-        local command = ns.commands[name]
-        ns.PrintRaw(("  |c%s/bts %s|r  |c%s%s|r"):format(
-            ns.COLORS.accent, name, ns.COLORS.muted, command.usage or ""))
-    end
+-- The commands a player uses day to day, in the order /bts help shows them.
+-- Everything else is a check or a developer tool, listed by /bts help all.
+local PLAYER_COMMANDS = {
+    "scan", "cancel", "top", "why", "price", "stock", "sold", "de",
+    "haul", "mail", "salealarm", "pane", "professions", "export", "import",
+}
+
+local function HelpLine(name)
+    local command = ns.commands[name]
+    if not command then return end
+    ns.PrintRaw(("  |c%s/bts %s|r  |c%s%s|r"):format(
+        ns.COLORS.accent, name, ns.COLORS.muted, command.usage or ""))
 end
 
-ns.RegisterCommand("help", "show this list", ShowHelp)
+local function ShowHelp(args)
+    ns.Print(("|c%sBlackthornes Tradeskills|r %s"):format(ns.COLORS.accent, ns.VersionLabel()))
+
+    if (args or ""):lower():match("^%s*all") then
+        for i = 1, #ns.commandOrder do HelpLine(ns.commandOrder[i]) end
+        return
+    end
+
+    ns.PrintRaw(("  |c%s/bts|r  |c%sopen or close the window|r"):format(ns.COLORS.accent, ns.COLORS.muted))
+    for _, name in ipairs(PLAYER_COMMANDS) do HelpLine(name) end
+    ns.PrintRaw(("  |c%s/bts help all|r shows more, including checks and developer tools."):format(
+        ns.COLORS.accent))
+end
+
+ns.RegisterCommand("help", "show the main commands (/bts help all: every command)", ShowHelp)
 
 SLASH_BLACKTHORNESTS1 = "/bts"
 SLASH_BLACKTHORNESTS2 = "/blackthorne"

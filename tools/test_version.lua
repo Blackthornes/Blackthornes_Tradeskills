@@ -58,5 +58,29 @@ check("and says so", ns.VersionLabel() == "dev build", ns.VersionLabel())
 ns = LoadWith(nil)
 check("no version at all", ns.VERSION == "0.0.0", ns.VERSION)
 
+-- /bts help: the player commands first and short, everything with "all".
+ns = LoadWith("v0.2.0")
+ns.RegisterCommand("scan", "scan the auction house", function() end)
+ns.RegisterCommand("taint", "check whether the game lets this addon post", function() end)
+local lines = {}
+ns.Print = function(text) lines[#lines + 1] = text end
+ns.PrintRaw = ns.Print
+local function Shown(word)
+    for _, line in ipairs(lines) do
+        if line:find("/bts " .. word .. "|r", 1, true) then return true end
+    end
+    return false
+end
+
+ns.commands.help.fn("")
+check("short help lists a player command", Shown("scan"), table.concat(lines, "\n"))
+check("short help leaves out developer tools", not Shown("taint"), table.concat(lines, "\n"))
+check("short help ends by pointing to /bts help all",
+    lines[#lines]:find("/bts help all", 1, true) ~= nil, lines[#lines])
+
+lines = {}
+ns.commands.help.fn("all")
+check("help all lists developer tools too", Shown("taint") and Shown("scan"), table.concat(lines, "\n"))
+
 if failures > 0 then error(("version: %d failure(s)"):format(failures), 0) end
-print("  version: 7 checks passed")
+print("  version and help: all checks passed")
