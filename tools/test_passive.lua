@@ -357,4 +357,105 @@ ownListings[2996] = 6300
 Scanner:OnBrowseResults()
 check("a passive browse still sends nothing", #sent == 0)
 
+--------------------------------------------------------------------------------
+-- Sold out since the last scan
+--
+-- Trent, 2026-09-29: "Full scans should clear items that sold out." A sweep
+-- that read the whole auction house marks every item it did not see as having
+-- nothing listed. One cut short leaves the rest alone.
+--------------------------------------------------------------------------------
+
+print("\nsold out since the last scan")
+
+reset()
+local before = time() - 600
+Prices:Record(2589, 400, 400, 5, before, 400)     -- listed last scan, gone now
+Prices:Record(2592, 900, 900, 3, before, 900)     -- still listed
+Scanner.scanStartedWall = time() - 60
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+})
+check("a partial sweep leaves an unseen item as it was", Prices:Get(2589).rivalMin == 400
+    and Prices:Get(2589).quantity == 5)
+
+Prices:Record(2593, 700, 700, 4, time(), 700)     -- a search during the scan
+ns.db.sweepSeenByRealm = { TestRealm = 1 }
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+}, true)
+check("a whole sweep marks the unseen item sold out", Prices:Get(2589).rivalMin == nil
+    and Prices:Get(2589).min == nil and Prices:Get(2589).quantity == 0)
+check("and keeps what it is worth", Prices:Get(2589).market == 400)
+check("the item it saw is updated, not cleared", Prices:Get(2592).rivalMin == 950)
+check("a price read during the scan is left alone", Prices:Get(2593).rivalMin == 700)
+
+-- A sweep that saw far fewer items than the last whole one on this realm is
+-- a search, not the auction house. Seen in review: a search typed while page
+-- 1 was out came back as "the whole sweep" and would have cleared the rest.
+reset()
+ns.db.sweepSeenByRealm = { TestRealm = 40 }
+for id = 5000, 5039 do Prices:Record(id, 400, 400, 5, before, 400) end
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("a sweep much smaller than the last clears nothing", Prices:Get(5001).rivalMin == 400
+    and Prices:Get(5039).quantity == 5)
+
+-- But the check heals: a market that really shrank is refused once, not for
+-- ever. The first guard used a share of the book, and as listings aged the
+-- share only grew, so nothing was ever marked sold out again.
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("the next sweep of that size is trusted", Prices:Get(5001).rivalMin == nil
+    and Prices:Get(5039).quantity == 0)
+
+-- One stray search is not taken as the new size. It was, and a second
+-- stray search of a different size was then trusted and cleared the rest.
+reset()
+ns.db.sweepSeenByRealm, ns.db.sweepRefusedByRealm = { TestRealm = 40 }, nil
+for id = 5000, 5039 do Prices:Record(id, 400, 400, 5, before, 400) end
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+    { itemKey = { itemID = 5001 }, minPrice = 400, totalQuantity = 5 },
+    { itemKey = { itemID = 5002 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("two small stray sweeps in a row clear nothing", Prices:Get(5039).quantity == 5)
+
+-- The first whole sweep on a realm has no size to compare with, so what
+-- the saved prices say is listed stands in for it.
+reset()
+ns.db.sweepSeenByRealm, ns.db.sweepRefusedByRealm = nil, nil
+for id = 5000, 5039 do Prices:Record(id, 400, 400, 5, before, 400) end
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("a first sweep far smaller than the saved book clears nothing",
+    Prices:Get(5039).quantity == 5)
+
+-- The scan stamp is per realm and faction. The old account-wide one is
+-- read only until some realm has a stamp of its own; after that it is just
+-- whichever realm scanned last.
+ns.db.lastFullScan, ns.db.lastFullScanByRealm = 1000, { OtherRealm = 1000 }
+check("another realm's scan is not this realm's", Prices:GetLastFullScan() == nil)
+ns.db.lastFullScanByRealm = nil
+check("the old stamp still counts before any realm has its own", Prices:GetLastFullScan() == 1000)
+
+-- A sweep cut short is not a full scan: no stamp, so deals it never reached
+-- are not hidden as older than it.
+reset()
+ns.db.lastFullScan, ns.db.lastFullScanByRealm = nil, nil
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+})
+check("a cut-short sweep is not stamped as a full scan", Prices:GetLastFullScan() == nil)
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+}, { ended = true })
+check("one that ran to its end is", Prices:GetLastFullScan() ~= nil
+    and ns.db.lastFullScanByRealm.TestRealm ~= nil)
+
 print(("\n%d check(s) passed\n"):format(checks))

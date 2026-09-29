@@ -37,6 +37,15 @@ function Auctions:GetPostedCount(itemID)
     return self:GetTable().items[itemID] or 0
 end
 
+--- The auction IDs of an item you had listed at the last read this session,
+--- as a set, or nil when nothing has been read since login.
+function Auctions:GetOwnedIDs(itemID)
+    if not self.ownedIDs or not itemID then return nil end
+    local copy = {}
+    for auctionID in pairs(self.ownedIDs[itemID] or {}) do copy[auctionID] = true end
+    return copy
+end
+
 --- The cheapest unit price you have an item listed at, or nil when your
 --- auctions have not been read or hold none of it.
 function Auctions:GetOwnMinPrice(itemID)
@@ -220,6 +229,11 @@ end
 function Auctions:ReadOwned(opts)
     opts = opts or {}
 
+    -- A read-back timed for a listing can land after the auction house has
+    -- closed, when the game's list of your auctions reads empty. Storing that
+    -- said nothing was listed, and Keep in stock suggested crafting more.
+    if ns.Scanner and ns.Scanner.isAuctionHouseOpen == false then return end
+
     if not Util.HasFunction("C_AuctionHouse.GetNumOwnedAuctions") then return end
 
     local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
@@ -227,6 +241,7 @@ function Auctions:ReadOwned(opts)
 
     local items = {}
     local prices = {}
+    local ids = {}
 
     for index = 1, count do
         local infoOk, info = pcall(C_AuctionHouse.GetOwnedAuctionInfo, index)
@@ -242,13 +257,25 @@ function Auctions:ReadOwned(opts)
                 local quantity = info.quantity or 1
                 items[itemID] = (items[itemID] or 0) + quantity
 
+                if info.auctionID then
+                    ids[itemID] = ids[itemID] or {}
+                    ids[itemID][info.auctionID] = true
+                end
+
                 -- The cheapest unit price you have it listed at. A commodity
                 -- listing carries a unit price; an item auction carries the
                 -- stack's buyout. This is what lets a browse row that says
                 -- "you have a listing here" be read as yours or a rival's.
                 local unit = tonumber(info.unitPrice)
                 if not unit and tonumber(info.buyoutAmount) and info.buyoutAmount > 0 then
-                    unit = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
+                    -- A commodity's buyout is already the price of one (it is
+                    -- listed by unit price); dividing it by the quantity read
+                    -- 20 Linen at 30c as 1c each.
+                    if ns.Scanner and ns.Scanner.IsCommodity and ns.Scanner:IsCommodity(itemID) then
+                        unit = info.buyoutAmount
+                    else
+                        unit = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
+                    end
                 end
 
                 if unit and unit > 0 and (not prices[itemID] or unit < prices[itemID]) then
@@ -268,6 +295,8 @@ function Auctions:ReadOwned(opts)
 
     record.items = items
     record.prices = prices
+    -- This session only: auction IDs are for telling a new listing apart.
+    self.ownedIDs = ids
     record.updatedAt = time()
     record.auctionCount = count
 
@@ -282,8 +311,18 @@ function Auctions:ReadOwned(opts)
     if pending and pending.verifying then
         local posted = items[pending.itemID] or 0
 
-        if posted > (pending.postedBefore or 0) or opts.final then
-            ns.Posting:ResolvePending(posted)
+        -- A listing of this item that was not there before is the new one.
+        -- The count alone can miss it: one of yours selling since the last
+        -- read leaves the count where it was.
+        local appeared = false
+        if pending.idsBefore then
+            for auctionID in pairs(ids[pending.itemID] or {}) do
+                if not pending.idsBefore[auctionID] then appeared = true break end
+            end
+        end
+
+        if appeared or posted > (pending.postedBefore or 0) or opts.final then
+            ns.Posting:ResolvePending(posted, appeared)
         end
     end
 
@@ -469,7 +508,9 @@ ns.RegisterCommand("auctions", "show the auctions the game says you have up", fu
                     ok and tostring(count) or "call failed"))
             end)
         end, function()
-            ns.Warn("the auction house stayed busy, so it was not asked again.")
+            if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                ns.Warn("the auction house stayed busy, so it was not asked again.")
+            end
         end, {
             name = "your auctions (check)",
             key = "owned-auctions",

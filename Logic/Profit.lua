@@ -33,7 +33,7 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
 
     local unitDeposit = ns.Posting and ns.Posting:GetCachedUnitDeposit(recipe.outputItemID)
     local relists = ns.Config:Get("expectedRelists") or 1
-    local deposit = unitDeposit and (unitDeposit * yield * math.max(1, relists)) or 0
+    local deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
 
     return (revenue - cut) - (cost.total or 0) - deposit
 end
@@ -455,6 +455,23 @@ function Profit:Analyse(recipeID, characterKey)
         analysis.youHoldLowest = ns.Prices:HoldsLowest(recipe.outputItemID)
     end
 
+    -- What you already hold, listed or otherwise. Crafting past this gets
+    -- you nothing you do not already own, and ties up gold doing it. Read
+    -- before the price checks below, since none of it needs a price: a craft
+    -- with no price still has a Keep in stock limit.
+    local room, posted, onHand, queued, limit, inMail =
+        ns.Auctions:GetRoom(recipe.outputItemID)
+
+    analysis.posted = posted
+    analysis.onHand = onHand
+    analysis.inMail = inMail or 0
+    analysis.stock = posted + onHand + analysis.inMail
+    analysis.queuedElsewhere = queued
+    analysis.postLimit = limit
+    analysis.postRoom = room
+    analysis.roomInCrafts = RoomInCrafts(room, recipe)
+    analysis.atPostLimit = room ~= nil and room <= 0
+
     if not unitRevenue then
         -- A craft can land here with priced materials when the estimate is
         -- switched off, and with unpriced ones either way; the reason below
@@ -494,7 +511,7 @@ function Profit:Analyse(recipeID, characterKey)
     local relists = ns.Config:Get("expectedRelists") or 1
 
     analysis.depositKnown = unitDeposit ~= nil
-    analysis.deposit = unitDeposit and (unitDeposit * yield * math.max(1, relists)) or 0
+    analysis.deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
 
     analysis.profit = analysis.netRevenue - cost.total - analysis.deposit
     analysis.profitPerUnit = analysis.profit / yield
@@ -511,21 +528,6 @@ function Profit:Analyse(recipeID, characterKey)
 
     analysis.craftableNow = self:GetCraftableCount(recipeID, crafter)
     analysis.priceable = true
-
-    -- What you already hold, listed or otherwise. Crafting past this gets
-    -- you nothing you do not already own, and ties up gold doing it.
-    local room, posted, onHand, queued, limit, inMail =
-        ns.Auctions:GetRoom(recipe.outputItemID)
-
-    analysis.posted = posted
-    analysis.onHand = onHand
-    analysis.inMail = inMail or 0
-    analysis.stock = posted + onHand + analysis.inMail
-    analysis.queuedElsewhere = queued
-    analysis.postLimit = limit
-    analysis.postRoom = room
-    analysis.roomInCrafts = RoomInCrafts(room, recipe)
-    analysis.atPostLimit = room ~= nil and room <= 0
 
     -- Everything already committed to this item: what you hold, plus what the
     -- queue is about to make. This is what pushes a craft down the list.
@@ -797,13 +799,13 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
         ns.PrintRaw(("  |c%sdeposit unknown until you visit an auction house|r")
             :format(ns.COLORS.muted))
     end
-    ns.PrintRaw(("  |c%sprofit          %s|r  (%d%% margin, %d%% return on cost)"):format(
+    ns.PrintRaw(("  |c%sprofit          %s|r  (%.0f%% margin, %.0f%% return on cost)"):format(
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),
         math.floor(analysis.margin * 100), math.floor(analysis.roi * 100)))
-    ns.PrintRaw(("  |c%sconfidence %d%%%s, data %s old|r"):format(
+    ns.PrintRaw(("  |c%sconfidence %d%%%s, data read %s|r"):format(
         ns.COLORS.muted, math.floor((analysis.confidence or 0) * 100),
         analysis.confidenceReason and (" (" .. analysis.confidenceReason .. ")") or "",
-        Util.FormatAge(analysis.age)))
+        Util.FormatAgeAgo(analysis.age)))
 end)
 
 --- What the client says about binding, for every cached recipe's output.

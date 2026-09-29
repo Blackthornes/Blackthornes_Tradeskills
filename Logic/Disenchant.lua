@@ -273,6 +273,14 @@ function Disenchant:OnItemInfoReceived(itemID, success)
     if success ~= false then Remember(itemID) end
 end
 
+--- Has the client been asked for this item as often as it will be, with no
+--- answer? Such an item is not "still being read": counting it that way kept
+--- "N more listed items not checked yet" on screen all session.
+function Disenchant:GaveUp(itemID)
+    if (attempts[itemID] or 0) < MAX_ATTEMPTS then return false end
+    return not (waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS)
+end
+
 --- Read an item the saved facts do not have (or have without a sell price):
 --- straight away when the client already holds it, otherwise ask for it and
 --- return nil until it arrives.
@@ -589,6 +597,13 @@ function Disenchant:MaterialName(itemID)
     return MATERIAL_NAME[itemID]
 end
 
+--- An item's plain name from the saved facts alone, never asking the client:
+--- safe to call for every row of a long list. nil when never read.
+function Disenchant:KnownName(itemID)
+    local known = itemID and Store()[itemID]
+    return known and known.n or nil
+end
+
 --- An item's plain name, for a list row that colours it by rarity itself.
 function Disenchant:ItemName(itemID)
     local known = Store()[itemID]
@@ -860,14 +875,16 @@ function Disenchant:GetAuctionRows(opts)
     -- Only what the last scan (or a search since) actually saw. A listing
     -- missing from the last scan has sold or expired, but its record keeps
     -- the old price, so without this it stays listed as a deal for days.
-    local since = ns.db and ns.db.lastFullScan
+    local since = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
 
     for itemID, record in pairs(prices) do
         local buy = type(record) == "table" and BuyPrice(record)
         if buy and since and (record.seen or 0) < since then buy = nil end
 
         local disenchantable = buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID)
-        if buy and disenchantable == nil and CouldBeGear(itemID) then pending = pending + 1 end
+        if buy and disenchantable == nil and CouldBeGear(itemID) and not self:GaveUp(itemID) then
+            pending = pending + 1
+        end
 
         if disenchantable then
             local value, partial, breakdown = self:GetValue(itemID)
@@ -1007,11 +1024,11 @@ ns.RegisterCommand("de", "<item link or ID>: what an item disenchants into and i
 
 local function Ago(stamp)
     if not stamp then return "never" end
-    return Util.FormatAge(math.max(0, time() - stamp)) .. " ago"
+    return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
 ns.RegisterCommand("dedeals", "say why each deal on the Disenchanting tab is there", function()
-    local lastScan = ns.db and ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     ns.Print(("dedeals: last full scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
 

@@ -71,8 +71,10 @@ local function SearchAuctionHouse(entry)
         return
     end
 
-    local name = ns.Disenchant:ItemName(entry.itemID)
-    scanner:QueueBrowseQuery(name)
+    -- The same search as the rest of the addon's item clicks: its own slot
+    -- in the queue, at click priority. The scan's slot was shared, so this
+    -- could replace a waiting scan (or a scan could drop this search).
+    if not ns.UI:SearchAuctionHouse(entry.itemID) then return end
 
     ns.Print(("Searching the auction house for %s. Buy it in the auction house window at %s or less. If the list there does not change, type the name into its search box."):format(
         Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.buy, { noColor = true })))
@@ -398,6 +400,8 @@ local function BuildKey()
         tostring(ns.Prices and ns.Prices.changes or 0),
         tostring(ns.Prices and ns.Prices:Count() or 0),
         tostring(ns.Disenchant.factsVersion or 0),
+        -- Your own disenchants taking over from the built-in table.
+        tostring(ns.DisenchantLog and ns.DisenchantLog.version or 0),
         tostring(state.dealsOnly),
         tostring(ns.Config:Get("minProfit")),
         tostring(ns.Config:Get("minMarginPercent")),
@@ -569,6 +573,10 @@ local function Build(container)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
     local list = Widgets.CreateScrollList(container, {
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
@@ -606,6 +614,12 @@ local function Build(container)
     hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
     hint:SetText("Right-click an item to search the auction house for it")
     widgets.hint = hint
+
+    -- The count line grows a long "not checked yet" note while items load,
+    -- and ran under this hint. It stops short of it now and ends in "...".
+    countLabel:SetPoint("RIGHT", hint, "LEFT", -12, 0)
+    countLabel:SetJustifyH("LEFT")
+    countLabel:SetWordWrap(false)
 
     local detail = BuildDetail(container)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)

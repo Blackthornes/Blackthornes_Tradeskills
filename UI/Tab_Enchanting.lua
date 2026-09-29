@@ -21,7 +21,9 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
-local SOURCE_NOTE = "Chances come from the Classic table built into the addon, since the game does not tell addons what an item breaks into. Your own disenchants replace it once you have done %d like this (%d so far). Materials are priced at their lowest auction posting, leaving out a lone one far below the rest."
+-- Short enough to leave room for the bound-item warning in the bag view:
+-- the longer wording filled the note's four lines and pushed that off.
+local SOURCE_NOTE = "Chances come from the built-in Classic table until you have done %d disenchants like this (%d so far). Materials are priced at their lowest posting, leaving out a lone low one."
 
 -- Right-aligned columns per view, laid out right to left.
 local VIEWS = {
@@ -429,7 +431,7 @@ local function UpdateDetail(entry)
         SetLine(lines[4], (entry.have or 0) > 0 and entry.price and "Bags worth" or nil,
             entry.price and Util.FormatMoney(entry.price * (entry.have or 0)) or nil)
 
-        detail.note:SetText("Values are the smoothed auction value from your scans, the same number item tooltips show.")
+        detail.note:SetText("Priced at the lowest posting from your last scan, leaving out a lone one far below the rest.")
         return
     end
 
@@ -741,6 +743,10 @@ local function Build(container)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
     local list = Widgets.CreateScrollList(container, {
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
@@ -796,8 +802,13 @@ local function Build(container)
     -- coalescing a burst of arrivals into one pass.
     local redrawQueued = false
 
-    ns.RegisterEvent(UI, "GET_ITEM_INFO_RECEIVED", function()
+    ns.RegisterEvent(UI, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
         if redrawQueued or not widgets.list:IsVisible() then return end
+
+        -- Only items this addon asked for. At the auction house, Ready to
+        -- sell reloads bag items all the time, and redrawing for each of
+        -- those re-read every recipe a few times a second.
+        if itemID and ns.Disenchant.WasRequested and not ns.Disenchant:WasRequested(itemID) then return end
 
         redrawQueued = true
         C_Timer.After(0.3, function()

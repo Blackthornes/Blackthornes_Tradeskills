@@ -69,8 +69,8 @@ local DEFAULTS = {
         -- Zero means no limit. Per-item overrides live in db.postLimits.
         maxPostedPerItem = 0,
 
-        -- Auction duration: 1 = 2h, 2 = 8h, 3 = 24h on this server. Only
-        -- affects the deposit estimate, since listings are made by hand.
+        -- Auction duration: 1 = 2h, 2 = 8h, 3 = 24h on this server. How long
+        -- each listing stays up, and so what its deposit is.
         postDuration = 2,
 
         -- Whether the Post tab lists everything in the bags or only what
@@ -263,18 +263,30 @@ local function SafeRealmName()
 end
 
 local function SafeFaction()
-    local ok, faction = pcall(UnitFactionGroup, "player")
-    if ok and faction then return faction end
-    return "Neutral"
+    -- Copied inside the pcall like the name: a faction handed back as a
+    -- secret value would raise at the join below on every call.
+    local faction = PlainString(UnitFactionGroup, "player")
+    return faction or "Neutral", faction == nil
 end
 
 --- Prices are per realm AND per faction: a neutral AH still prices differently
 --- across factions on split-auction realms, and merging them would be wrong.
 function Config:GetRealmKey()
-    if not self.realmKey then
-        self.realmKey = SafeRealmName() .. "-" .. SafeFaction()
-    end
-    return self.realmKey
+    if self.realmKey then return self.realmKey end
+
+    local faction, factionUnread = SafeFaction()
+    local key = SafeRealmName() .. "-" .. faction
+
+    -- Not remembered while the realm could not be read (a /reload inside a
+    -- dungeon can do that): the whole session's prices and mail would have
+    -- gone under "UnknownRealm", apart from everything saved before. The
+    -- next call tries the real name again.
+    -- Likewise a faction that could not be read: "Realm-Neutral" is an empty
+    -- bucket for anyone who is not actually Neutral.
+    if key:find("^UnknownRealm%-") or factionUnread then return key end
+
+    self.realmKey = key
+    return key
 end
 
 -- Checked and copied inside the pcall for the same dungeon reason as the name.

@@ -123,6 +123,10 @@ function Vendor:Scan()
                 self.merchantItems[itemID] = {
                     index = index,
                     price = math.floor(info.price / stack),
+                    -- What one click actually costs. The unit price above is
+                    -- floored, so a bundle of 5 for 1s read as 20c each and 3
+                    -- of them as 60c, when the vendor charges the whole 1s.
+                    bundlePrice = info.price,
                     stack = stack,
                     numAvailable = info.numAvailable or -1,
                     extendedCost = info.hasExtendedCost == true,
@@ -185,6 +189,9 @@ function Vendor:GetNeeded()
 
             if affordable > 0 then
                 local cost = affordable * stock.price
+                if stock.stack > 1 and stock.bundlePrice then
+                    cost = math.ceil(affordable / stock.stack) * stock.bundlePrice
+                end
 
                 lines[#lines + 1] = {
                     itemID = line.itemID,
@@ -193,6 +200,7 @@ function Vendor:GetNeeded()
                     unitPrice = stock.price,
                     cost = cost,
                     stack = stock.stack,
+                    bundlePrice = stock.bundlePrice,
                     short = affordable < line.shortfall,
                 }
 
@@ -297,8 +305,16 @@ function Vendor:BuyStep()
         return
     end
 
-    -- One merchant stack per call is the reliable maximum.
-    local amount = math.min(remaining, math.max(1, line.stack))
+    -- One merchant stack per call is the reliable maximum. An item sold one
+    -- at a time (thread, vials) can still be bought a bag stack at once, up to
+    -- what the merchant says one purchase may hold; one per click turned a
+    -- queue needing 40 thread into 40 purchases and hit the stop below.
+    local perCall = math.max(1, line.stack)
+    if perCall == 1 and Util.HasFunction("GetMerchantItemMaxStack") then
+        local ok, most = pcall(GetMerchantItemMaxStack, line.index)
+        if ok and type(most) == "number" and most > 1 then perCall = most end
+    end
+    local amount = math.min(remaining, perCall)
 
     local ok = pcall(BuyMerchantItem, line.index, amount)
     if not ok then
@@ -306,7 +322,13 @@ function Vendor:BuyStep()
         self.buyIndex = self.buyIndex + 1
     else
         self.buyPurchased[line.itemID] = purchased + amount
-        self.buySpent = self.buySpent + (amount * line.unitPrice)
+        -- By the bundle where the vendor sells in bundles: the unit price is
+        -- floored, and "about 60c spent" for 3 of a 5-for-1s bundle was 1s.
+        if line.stack and line.stack > 1 and line.bundlePrice then
+            self.buySpent = self.buySpent + math.ceil(amount / line.stack) * line.bundlePrice
+        else
+            self.buySpent = self.buySpent + (amount * line.unitPrice)
+        end
     end
 
     -- Long enough for BAG_UPDATE to land, so the live check above is meaningful

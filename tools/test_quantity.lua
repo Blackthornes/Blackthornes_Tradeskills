@@ -289,6 +289,28 @@ bags[5] = { { itemID = LINEN, stackCount = 8 } }
 check("both are counted", LineFor(LINEN).maxQuantity, 40)
 
 print("")
+print("crafted stock a queued craft needs")
+
+-- Linen is made by one of the account's recipes here, and a queued craft
+-- needs 3 of it. Only those 3 are held back: holding back all 32 kept a
+-- stack off Post Crafted for the sake of one queued bag.
+Reset()
+ns.Recipes.GetAccountWide = function() return { [100] = { recipeID = 100, outputItemID = LINEN } } end
+ns.Profit.Analyse = function() return nil end
+ns.Queue.GetReservedItems = function() return { [LINEN] = 3 } end
+
+do
+    local line = LineFor(LINEN)
+    check("the rest of a crafted stack still lists", line and line.maxQuantity, 29)
+end
+
+ns.Queue.GetReservedItems = function() return { [LINEN] = 40 } end
+check("a stack the queue needs all of is kept", LineFor(LINEN), nil)
+
+ns.Recipes.GetAccountWide = function() return {} end
+ns.Queue.GetReservedItems = nil
+
+print("")
 
 if failures > 0 then
     print(("FAIL -- %d check(s) failed"):format(failures))

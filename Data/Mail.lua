@@ -236,7 +236,9 @@ function Mail:Read()
     -- request is not an empty mailbox. Trusting it emptied the stock counts
     -- and forgot every mail already recorded, so the next update wrote each
     -- sale down a second time.
-    if #mails == 0 and self.isOpen and not self.inboxUpdatedThisVisit then
+    -- The same holds when the mailbox was shut before the server answered:
+    -- bumping one and pressing Escape used to land here with nothing listed.
+    if #mails == 0 and not self.inboxUpdatedThisVisit then
         ns.Debug("mailbox: nothing listed yet, waiting for the inbox")
         return
     end
@@ -437,10 +439,31 @@ function Mail:ResolveItemName(name)
     local source = ns.Recipes and ns.Recipes.GetAccountWide
         and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
 
+    -- Each output once.
+    local outputs, seen = {}, {}
     for _, recipe in pairs(source) do
-        local itemID = recipe.outputItemID
+        local itemID = type(recipe) == "table" and recipe.outputItemID
+        if itemID and not seen[itemID] then
+            seen[itemID] = true
+            outputs[#outputs + 1] = itemID
+        end
+    end
 
-        if itemID and not found then
+    -- Only items the client already holds are looked at. Asking about one it
+    -- does not would fetch it into the small item cache, and a walk over
+    -- hundreds of outputs for every new sale pushed bag items out of it.
+    local canAsk = Util.HasFunction("C_Item.IsItemDataCachedByID")
+
+    for _, itemID in ipairs(outputs) do
+        if found then break end
+
+        local cached = true
+        if canAsk then
+            local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
+            cached = ok and answer == true
+        end
+
+        if cached then
             local ok, itemName = pcall(C_Item.GetItemInfo, itemID)
             if ok and itemName == name then found = itemID end
         end
@@ -491,6 +514,40 @@ local function Describe(mail, kind, itemName, invoice)
     end
 
     return entry
+end
+
+--- A sale recorded while its gold was held, now paid: the estimated entry
+--- for this same sale takes the mail's real amount.
+--
+-- Every paid sale mail comes through here on each inbox read, including ones
+-- that were paid when first seen. Matching on the item name alone let one of
+-- those settle a different, still-held sale of the same item with its own
+-- amount. So the entry must also carry this mail's invoice estimate: that is
+-- what it was written down as while the gold was held.
+function Mail:SettleHeldSale(mail)
+    local ledger = self:GetLedger()
+    if not ledger or not ledger.entries then return end
+
+    local invoice = self:ReadInvoice(mail.index)
+    if not (invoice and invoice.bid) then return end
+
+    -- The name as Describe wrote it down: the invoice's, which has no stack
+    -- size in it, ahead of the subject's.
+    local kind, itemName = self:Classify(mail)
+    if kind ~= "sold" and invoice.invoiceType ~= "seller" then return end
+    itemName = invoice.itemName or itemName
+
+    local estimate = invoice.bid - (invoice.cut or 0) + (invoice.deposit or 0)
+
+    for index = #ledger.entries, 1, -1 do
+        local entry = ledger.entries[index]
+        if entry.kind == "sold" and entry.estimated and entry.name == itemName
+            and entry.net == estimate then
+            entry.net = mail.money
+            entry.estimated = nil
+            return
+        end
+    end
 end
 
 --- Fold a reading of the inbox into the ledger.
@@ -564,6 +621,12 @@ function Mail:Reconcile(mails, complete)
                     -- deliberately not a ledger entry.
                     ns.Debug("mail not from the auction house:", tostring(mail.subject))
                 end
+
+            elseif (mail.money or 0) > 0 then
+                -- A sale already written down from its invoice while its gold
+                -- was held. The gold has now been released, so the entry takes
+                -- the real amount and stops saying "gold still held".
+                self:SettleHeldSale(mail)
             end
         end
     end
@@ -630,6 +693,23 @@ end
 -- @param itemID optional; nil totals the lot
 -- @return { sold, soldUnits, returned, returnedUnits, expired, cancelled,
 --           net, gross, cut, deposit, firstAt, lastAt }
+--- Item IDs by name, learned from ledger entries that carry both.
+--
+-- A sale mail names its item but has no attachment, so a sale gets an id only
+-- when the name matches a cached recipe output. Its expiries always have one,
+-- from the item that came back. Without this, anything not crafted (cloth
+-- sold from the whole-bag Post tab) showed as two rows on the Sales tab, one
+-- with the sales and one with the expiries, each with the wrong sell-through.
+function Mail:NameIndex()
+    local index = {}
+    for _, entry in ipairs(self:GetLedger().entries) do
+        if entry.itemID and entry.name and not index[entry.name] then
+            index[entry.name] = entry.itemID
+        end
+    end
+    return index
+end
+
 function Mail:GetSummary(itemID)
     local totals = {
         sold = 0, soldUnits = 0,
@@ -645,12 +725,15 @@ function Mail:GetSummary(itemID)
         estimated = 0,
     }
 
+    local names = itemID and self:NameIndex() or {}
+
     -- An entry from before the restored history was rolled up is already in
     -- that history, added below; counting it here as well was the bug.
     for _, entry in ipairs(self:GetLedger().entries) do
         local rolled = self:IsRolledUp(entry)
+        local entryItemID = entry.itemID or names[entry.name]
 
-        if (not itemID or entry.itemID == itemID) and not rolled then
+        if (not itemID or entryItemID == itemID) and not rolled then
             if entry.kind == "sold" then
                 totals.sold = totals.sold + 1
                 totals.soldUnits = totals.soldUnits + (entry.quantity or 1)
@@ -774,8 +857,10 @@ function Mail:GetItems()
         return bucket
     end
 
+    local names = self:NameIndex()
+
     for _, entry in ipairs(self:GetLedger().entries) do
-        local bucket = Bucket(entry.itemID, entry.name)
+        local bucket = Bucket(entry.itemID or names[entry.name], entry.name)
 
         -- Already inside the restored history added below. The row is still
         -- made, so the item keeps its name.
@@ -890,7 +975,7 @@ function Mail:OnEnable()
         Mail.isOpen = true
         Mail.inboxUpdatedThisVisit = false
         -- The inbox is not ready to be read the instant the frame appears.
-        C_Timer.After(0.5, function() Mail:Read() end)
+        C_Timer.After(0.5, function() if Mail.isOpen then Mail:Read() end end)
     end)
 
     ns.RegisterEvent(self, "MAIL_CLOSED", function()
@@ -1168,8 +1253,10 @@ ns.RegisterCommand("sold", "<name or link>: what it really earned, next to the e
             ns.PrintRaw(("    auction cut:    %s"):format(Util.FormatMoney(summary.cut)))
         end
 
+        -- Per listing sold: a sale records no quantity, so this is not a
+        -- per-unit figure and is labelled so beside the estimate below.
         local perSale = summary.net / summary.sold
-        ns.PrintRaw(("  average sale:     %s"):format(Util.FormatMoney(perSale)))
+        ns.PrintRaw(("  average per sale: %s"):format(Util.FormatMoney(perSale)))
 
         -- The comparison worth having: what the Profit tab promised against
         -- what the auction house paid. Deposits lost on listings that came

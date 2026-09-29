@@ -132,7 +132,9 @@ function Disenchanter:CreateOverlay()
     overlay.background = Theme.Fill(overlay, "rowActive")
     Theme.Border(overlay, "border")
     overlay.label = Theme.CreateLabel(overlay, "small", "accent", "CENTER")
-    overlay.label:SetPoint("CENTER")
+    overlay.label:SetPoint("LEFT", 4, 0)
+    overlay.label:SetPoint("RIGHT", -4, 0)
+    overlay.label:SetWordWrap(false)
     overlay.label:SetText("Disenchant")
 
     overlay:SetScript("OnEnter", function(self)
@@ -272,6 +274,23 @@ function Disenchanter:OnEnable()
     ns.RegisterEvent(self, "PLAYER_REGEN_DISABLED", function()
         if Disenchanter.overlay then Disenchanter.overlay:Hide() end
         SetAnchorMouse(Disenchanter.anchor, true)
+    end)
+
+    -- Put the button back once combat ends. Nothing else re-armed it, so
+    -- every click on Disenchant said it missed until the bags changed.
+    ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function()
+        local anchor, itemID = Disenchanter.anchor, Disenchanter.itemID
+
+        -- A refresh during combat disarms the button and forgets the item, so
+        -- the tab is redrawn to set it up again from the selection.
+        if not itemID then
+            if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+            return
+        end
+        if not anchor or not anchor:IsVisible() then return end
+
+        local bag, slot = Disenchanter:FindSlot(itemID)
+        if bag and slot then Disenchanter:Arm(anchor, itemID, bag, slot) end
     end)
 end
 

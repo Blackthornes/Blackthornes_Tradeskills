@@ -65,8 +65,11 @@ local function TierColor(tier)
     return ns.SkillUp:GetTierColor(tier)
 end
 
+-- Rounded: this client refuses a fraction for %x, and the tier colours
+-- scale to 127.5 and the like.
 local function ColorCode(r, g, b)
-    return ("|cff%02x%02x%02x"):format(r * 255, g * 255, b * 255)
+    return ("|cff%02x%02x%02x"):format(math.floor(r * 255 + 0.5),
+        math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
 end
 
 --------------------------------------------------------------------------------
@@ -486,11 +489,18 @@ local function Refresh()
         if row.tier == "unknown" then unread = unread + 1 end
     end
 
+    -- Its own words: the CHANCE column's "Small" and "None" read as "25
+    -- small  200 none" down here.
+    local FOOTER_WORDS = {
+        optimal = "guaranteed", medium = "likely", easy = "small chance",
+        unknown = "not read", trivial = "no skill-up",
+    }
+
     local parts = {}
     for _, tier in ipairs({ "optimal", "medium", "easy", "unknown", "trivial" }) do
         if counts[tier] then
             parts[#parts + 1] = ("%s%d %s|r"):format(ColorCode(TierColor(tier)), counts[tier],
-                ns.LevelUp.CHANCE_LABEL[tier]:lower())
+                FOOTER_WORDS[tier] or ns.LevelUp.CHANCE_LABEL[tier]:lower())
         end
     end
     widgets.countLabel:SetText(table.concat(parts, "   "))
@@ -595,6 +605,10 @@ local function Build(container)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
     local list = Widgets.CreateScrollList(container, {
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,

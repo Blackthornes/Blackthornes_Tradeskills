@@ -125,7 +125,17 @@ check("no level to compare against", SkillUp:GetForRecipe(1, recipe).stale, nil)
 
 SkillUp.levels = { [164] = 140 }
 SkillUp.levelsAt = time()
+
+-- The logged-in character knows recipe 1 (the account-wide view hands in a
+-- copy, so it is matched by content). Recipe 2 lives only on an alt.
+local altRecipe = { skillLineID = 164, skillUp = { tier = "optimal", skill = 100 } }
+ns.Recipes = { Get = function(_, id)
+    if id == 1 then return { skillLineID = 164, skillUp = { tier = "optimal", skill = 100 } } end
+end }
+
 check("skill has risen since the reading", SkillUp:GetForRecipe(1, recipe).stale, true)
+check("an alt's reading is not judged by this character's skill",
+    SkillUp:GetForRecipe(2, altRecipe).stale, nil)
 
 SkillUp.levels = { [164] = 100 }
 check("same skill as the reading", SkillUp:GetForRecipe(1, recipe).stale, nil)

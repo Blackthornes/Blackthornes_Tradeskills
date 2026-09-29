@@ -406,8 +406,16 @@ function SkillUp:GetForRecipe(recipeID, recipe)
     -- Skill only ever rises, so a reading taken at a lower level is an upper
     -- bound: what was orange then may be yellow or green now. Said out loud in
     -- the tooltip rather than quietly trusted or quietly dropped.
+    -- Only against the logged-in character's own reading: the skill level
+    -- read here is theirs, and an alt's recipe says nothing about it.
     local stale = nil
-    if stored.skill and current and current > stored.skill then stale = true end
+    -- Compared by content, since the account-wide view hands in copies.
+    local mine = ns.Recipes and ns.Recipes:Get(recipeID)
+    local own = mine and type(mine.skillUp) == "table" and mine.skillUp.skill == stored.skill
+        and mine.skillUp.at == stored.at
+    if own and stored.skill and current and current > stored.skill then
+        stale = true
+    end
 
     return {
         tier = stored.tier,

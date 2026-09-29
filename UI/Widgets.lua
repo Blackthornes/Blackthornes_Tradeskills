@@ -52,7 +52,20 @@ function Widgets.CreateButton(parent, text, onClick, opts)
 
     button.label = Theme.CreateLabel(button, opts.fontSize or "small",
         opts.primary and "accent" or "text", "CENTER")
-    button.label:SetPoint("CENTER")
+    -- Held inside the button, so a label longer than the button ends in
+    -- "..." instead of spilling over whatever sits beside it. The little
+    -- symbol buttons (+, -, x) stay centred: their insets would leave no
+    -- room for the symbol itself.
+    -- Narrow buttons ("Set goal", "Queue tab") get thinner insets, or their
+    -- labels would be the ones cut short.
+    if (opts.width or 90) >= 40 then
+        local inset = (opts.width or 90) < 70 and 2 or 4
+        button.label:SetPoint("LEFT", inset, 0)
+        button.label:SetPoint("RIGHT", -inset, 0)
+        button.label:SetWordWrap(false)
+    else
+        button.label:SetPoint("CENTER")
+    end
     button.label:SetText(text)
 
     function button:SetText(value)
@@ -563,7 +576,10 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect)
         button.hover = Theme.Fill(button, "rowHover", 0.45, "BORDER")
         button.hover:Hide()
 
-        button.label = Theme.CreateLabel(button, "normal", "muted", "CENTER")
+        -- A step smaller once the tabs get narrow, so "Disenchanting" stays
+        -- inside its own tab.
+        local labelSize = (tab.width or 96) < 90 and "small" or "normal"
+        button.label = Theme.CreateLabel(button, labelSize, "muted", "CENTER")
         button.label:SetPoint("CENTER", 0, 0)
         button.label:SetText(tab.text)
 
@@ -841,6 +857,16 @@ function Widgets.CreateScrollList(parent, opts)
 
         scrollbar:SetMinMaxValues(0, maxOffset)
         scrollbar:SetShown(maxOffset > 0)
+
+        -- Rows give up 10px to the scrollbar while it shows. A table whose
+        -- column headings sit outside the list is told, so its headings can
+        -- move in step; otherwise every right-aligned value sat 10px left of
+        -- its heading whenever the list scrolled.
+        local hasScrollbar = maxOffset > 0
+        if opts.onScrollbarShown and self.hadScrollbar ~= hasScrollbar then
+            self.hadScrollbar = hasScrollbar
+            opts.onScrollbarShown(hasScrollbar)
+        end
         if scrollbar:GetValue() ~= self.offset then
             scrollbar:SetValue(self.offset)
         end

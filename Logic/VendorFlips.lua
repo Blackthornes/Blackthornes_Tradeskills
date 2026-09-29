@@ -47,14 +47,16 @@ function VendorFlips:GetAuctionRows(opts)
     -- Only what the last scan (or a search since) actually saw. A listing
     -- missing from the last scan has sold or expired, but its record keeps
     -- the old price, so without this it stays listed as a deal for days.
-    local since = ns.db and ns.db.lastFullScan
+    local since = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
 
     for itemID, record in pairs(prices) do
         local buy = type(record) == "table" and BuyPrice(record)
         if buy and since and (record.seen or 0) < since then buy = nil end
 
         local vendor = buy and ns.Disenchant:GetSellPrice(itemID)
-        if buy and vendor == nil then pending = pending + 1 end
+        if buy and vendor == nil and not (ns.Disenchant.GaveUp and ns.Disenchant:GaveUp(itemID)) then
+            pending = pending + 1
+        end
 
         if vendor and vendor > buy then
             local gain = vendor - buy
@@ -122,11 +124,11 @@ end
 
 local function Ago(stamp)
     if not stamp then return "never" end
-    return Util.FormatAge(math.max(0, time() - stamp)) .. " ago"
+    return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
 ns.RegisterCommand("vendordeals", "say why each item on the Vendor Flips tab is there", function()
-    local lastScan = ns.db and ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     ns.Print(("vendordeals: last full scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
 

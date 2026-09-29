@@ -233,7 +233,7 @@ local function UpdateRow(row, analysis)
 
         cells.posted:SetText("")
         cells.profit:SetText(analysis.soulbound and "soulbound"
-            or analysis.reason == "output has no price data" and "no sales"
+            or analysis.reason == "output has no price data" and "no price"
             or "no data")
         cells.profit:SetTextColor(Theme.Unpack("dim"))
         return
@@ -320,6 +320,8 @@ local function BuildDetail(parent)
 
     local subtitle = Theme.CreateLabel(detail, "small", "muted")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    -- Held inside the pane, so a long line ends in "..." at its edge.
+    subtitle:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
     detail.subtitle = subtitle
 
     local reagentHeading = Theme.CreateHeading(detail, "MATERIALS")
@@ -378,7 +380,9 @@ local function BuildDetail(parent)
 
     detail.limitHint = Theme.CreateLabel(detail, "tiny", "dim")
     detail.limitHint:SetPoint("LEFT", detail.limitBox, "RIGHT", 6, 0)
-    detail.limitHint:SetWidth(150)
+    -- Out to the pane's edge: "3 listed, 1 in mail, room for 2" did not fit
+    -- in a fixed 150.
+    detail.limitHint:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 
     -- Queue controls
     local quantityBox = Theme.CreatePanel(detail, "row")
@@ -400,9 +404,15 @@ local function BuildDetail(parent)
     local addButton = Widgets.CreateButton(detail, "Add to queue", function()
         if not state.selected then return end
 
-        local count = tonumber(quantity:GetText()) or 1
+        -- Whole crafts, one at least: Queue:Add clamps the same way, and the
+        -- line printed should say what was queued.
+        local count = math.max(1, math.floor(tonumber(quantity:GetText()) or 1))
         ns.Queue:Add(state.selected.recipeID, count)
         ns.Print(("queued %dx %s"):format(count, state.selected.name or "craft"))
+
+        -- The next redraw suggests again from what is now queued. Kept as
+        -- it was, a second click queued the full amount over the limit.
+        detail.shownRecipeID = nil
     end, { width = 130, primary = true, height = 24 })
     addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
     detail.addButton = addButton
@@ -438,6 +448,11 @@ local function UpdateDetail(analysis)
 
     local hasSelection = analysis ~= nil
     detail.empty:SetShown(not hasSelection)
+
+    -- A new craft starts the box at a suggestion; the same craft redrawn
+    -- (a bag change, an auction update) keeps what was typed there.
+    local newCraft = not analysis or detail.shownRecipeID ~= analysis.recipeID
+    detail.shownRecipeID = analysis and analysis.recipeID or nil
 
     for _, line in ipairs(detail.reagentLines) do
         line.frame:Hide()
@@ -639,7 +654,18 @@ local function UpdateDetail(analysis)
         detail.limitBox:Show()
         detail.limitHint:Show()
 
-        detail.limitBox:SetValue(analysis.postLimit or 0, true)
+        -- Not over a number being typed: a bag update mid-typing put the
+        -- old limit back and the next key landed after it (1, then 5 from
+        -- the redraw, then 2, saved as 52). A different craft does replace
+        -- it, and drops the half-typed number with it.
+        local box = detail.limitBox
+        local typing = box.editBox.HasFocus and box.editBox:HasFocus()
+        if not typing then
+            box:SetValue(analysis.postLimit or 0, true)
+        elseif newCraft then
+            box:SetValue(analysis.postLimit or 0, true)
+            box.editBox:ClearFocus()
+        end
 
         -- Spell out where the stock is, so a hidden craft is explicable.
         local parts = {}
@@ -693,11 +719,19 @@ local function UpdateDetail(analysis)
     if suggestedRoom then
         suggested = math.max(1, math.min(suggested, suggestedRoom))
     end
-    detail.quantity:SetText(tostring(suggested))
+    if newCraft then detail.quantity:SetText(tostring(suggested)) end
 
     if analysis.atPostLimit then
-        detail.subtitle:SetText(("You already have %d, your limit"):format(
-            analysis.stock or 0))
+        -- Queued crafts count toward the limit too, and "You already have 0,
+        -- your limit" read as nonsense when they were all that filled it.
+        local queued = analysis.queuedElsewhere or 0
+        if queued > 0 then
+            detail.subtitle:SetText(("You have %d and %d more queued, your limit"):format(
+                analysis.stock or 0, queued))
+        else
+            detail.subtitle:SetText(("You already have %d, your limit"):format(
+                analysis.stock or 0))
+        end
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
     end
 end
@@ -801,7 +835,11 @@ local function Refresh()
             local minProfit = ns.Config:Get("minProfit") or 0
             local minMargin = ns.Config:Get("minMarginPercent") or 0
 
-            if #hidden > 0 and (minProfit > 0 or minMargin > 0) then
+            -- A search that matches nothing says so first: the minimums
+            -- message would be about crafts the search never named.
+            if state.search ~= "" then
+                widgets.emptyLabel:SetText(("Nothing matching \"%s\"."):format(state.search))
+            elseif #hidden > 0 and (minProfit > 0 or minMargin > 0) then
                 local best = hidden[1]
 
                 widgets.emptyLabel:SetText((
@@ -811,8 +849,6 @@ local function Refresh()
                     minMargin,
                     Util.FormatMoney(best.profit or 0, { noColor = true, short = true })))
 
-            elseif state.search ~= "" then
-                widgets.emptyLabel:SetText(("Nothing matching \"%s\"."):format(state.search))
             else
                 widgets.emptyLabel:SetText("Nothing matches these filters.")
             end
@@ -821,7 +857,11 @@ local function Refresh()
 
     -- Keep the detail panel in step with the refreshed numbers.
     if state.selected then
-        UpdateDetail(ns.Profit:Analyse(state.selected.recipeID))
+        -- Written back, so Max reads what can be made now and not what could
+        -- be made when the row was clicked.
+        local fresh = ns.Profit:Analyse(state.selected.recipeID)
+        if fresh then state.selected = fresh end
+        UpdateDetail(fresh)
     else
         UpdateDetail(nil)
     end
@@ -924,6 +964,10 @@ local function Build(container)
 
     -- List
     local list = Widgets.CreateScrollList(container, {
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,

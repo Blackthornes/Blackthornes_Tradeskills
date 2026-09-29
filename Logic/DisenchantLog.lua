@@ -103,6 +103,9 @@ function DisenchantLog:Record(itemID, results, from)
 
     self:Announce(itemID, results, facts.key, band, usual, newFinds)
 
+    -- Lists built from these results know to rebuild.
+    self.version = (self.version or 0) + 1
+
     if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
 
     return true
@@ -432,6 +435,7 @@ local function Report(input)
 
     if (input or ""):lower() == "reset" then
         ns.db.disenchantLog = nil
+        DisenchantLog.version = (DisenchantLog.version or 0) + 1
         ns.Print("your recorded disenchants are cleared; values use the built-in table again")
         if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
         return

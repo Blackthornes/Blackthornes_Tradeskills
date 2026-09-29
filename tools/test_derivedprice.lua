@@ -124,6 +124,7 @@ local function Reset()
 
     bags = {}
     vendorSells = {}
+    Util._ForgetItemMemo()
     commodityStatus = { [POTION] = true, [BELT] = false }
 
     for key in pairs(priceTable) do priceTable[key] = nil end
@@ -257,6 +258,7 @@ do
         (Profit:ChoosePostPrice(POTION)), 300)
 
     vendorSells[POTION] = 100
+    Util._ForgetItemMemo()
     check("a vendor paying less changes nothing",
         (Profit:ChoosePostPrice(POTION)), 150)
 end

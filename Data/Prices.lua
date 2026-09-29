@@ -308,6 +308,115 @@ function Prices:RecordEmpty(itemID, scannedAt)
     return record
 end
 
+--- After a complete full scan, mark every item it did not see as sold out.
+--
+-- A full scan used to update only the items it found. Anything that had sold
+-- out or expired since the last scan kept its old listing on record, so the
+-- tabs went on showing a cheapest price nobody was selling at, and the next
+-- listing undercut a seller who was already gone.
+--
+-- Only a scan that read the whole auction house may do this. A scan cut
+-- short (page cap, timeout, another search taking the results over) did not
+-- look everywhere, so what it missed is unknown, not sold out. Records
+-- written since the scan started are left alone too: a search made during
+-- the scan is newer than anything the scan read.
+--
+-- @param seen      { [itemID] = true } for every item the scan read a row of
+-- @param startedAt time() when the scan began
+-- @return how many items were marked sold out
+function Prices:ClearMissing(seen, startedAt, scannedAt)
+    scannedAt = scannedAt or time()
+    startedAt = startedAt or scannedAt
+
+    local gone = {}
+    for itemID, record in pairs(self:GetTable()) do
+        local listed = (record.quantity or 0) > 0 or record.min or record.rivalMin or record.ownMin
+        if listed and not seen[itemID] and (record.seen or 0) < startedAt then
+            gone[#gone + 1] = itemID
+        end
+    end
+
+    for _, itemID in ipairs(gone) do
+        self:RecordEmpty(itemID, scannedAt)
+    end
+
+    return #gone
+end
+
+--- When this realm and faction last had a full scan.
+--
+-- Prices are kept per realm and faction, so the stamp is too. One stamp for
+-- the whole account made an Alliance scan at 10:00 read as "scanned 5m ago"
+-- on a Horde character with two-day-old prices, hid that character's deals
+-- (they looked older than the scan) and skipped its automatic scan. The old
+-- account-wide stamp is read only until the first scan after the update:
+-- after that it belongs to whichever realm wrote it last, not to this one.
+function Prices:GetLastFullScan()
+    local db = ns.db
+    if not db then return nil end
+    local byRealm = db.lastFullScanByRealm
+    if not byRealm then return db.lastFullScan end
+    local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
+    return key and byRealm[key] or nil
+end
+
+function Prices:SetLastFullScan(at)
+    local db = ns.db
+    if not db then return end
+    local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
+    if key then
+        db.lastFullScanByRealm = db.lastFullScanByRealm or {}
+        db.lastFullScanByRealm[key] = at
+    end
+end
+
+--- ClearMissing, for a scan that believes it read the whole auction house.
+--
+-- The last line of defence for the player's prices. A scan that saw far
+-- fewer items than the last whole one on this realm is not trusted to say
+-- what sold out: that is what a stray search looks like. Unlike a fixed
+-- share of the book, the check heals itself: a market that really did
+-- shrink is refused once, and accepted when the next scan finds about the
+-- same smaller number. One small stray search is not taken as the new size,
+-- so it cannot open the way for the next one.
+--
+-- With no whole scan remembered yet on this realm, what the saved prices
+-- say is listed stands in for it.
+--
+-- @return how many items were marked sold out, and why none were if so
+function Prices:ClearMissingIfWhole(seen, startedAt, scannedAt)
+    local count = 0
+    for _ in pairs(seen) do count = count + 1 end
+
+    local db = ns.db or {}
+    local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey() or "?"
+    db.sweepSeenByRealm = db.sweepSeenByRealm or {}
+    db.sweepRefusedByRealm = db.sweepRefusedByRealm or {}
+
+    local last = db.sweepSeenByRealm[key]
+    if not last then
+        last = 0
+        for _, record in pairs(self:GetTable()) do
+            if (record.quantity or 0) > 0 or record.min or record.rivalMin or record.ownMin then
+                last = last + 1
+            end
+        end
+    end
+
+    if count < last / 2 then
+        local refused = db.sweepRefusedByRealm[key]
+        local agrees = refused and math.abs(count - refused) <= refused * 0.1
+        if not agrees then
+            db.sweepRefusedByRealm[key] = count
+            return 0, ("the scan saw %d items against %d last time"):format(count, last)
+        end
+    end
+
+    db.sweepSeenByRealm[key] = count
+    db.sweepRefusedByRealm[key] = nil
+    return self:ClearMissing(seen, startedAt, scannedAt)
+end
+
 --- Commit a whole scan at once: { [itemID] = { {unitPrice, quantity}, ... } }.
 -- Returns the number of items recorded.
 function Prices:CommitScan(observations, scannedAt)
@@ -323,7 +432,7 @@ function Prices:CommitScan(observations, scannedAt)
         end
     end
 
-    ns.db.lastFullScan = scannedAt
+    self:SetLastFullScan(scannedAt)
     return recorded
 end
 

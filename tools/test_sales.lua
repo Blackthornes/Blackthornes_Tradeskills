@@ -113,6 +113,8 @@ local BLUE = { 0.00, 0.44, 0.87 }
 local quality = {}
 
 ns.Util = {
+    -- An old "Name-Realm" key reads as the name (Core/Util.lua).
+    CharacterName = function(key) return (key or ""):match("^([^%-]+)") or "" end,
     GetItemQualityColor = function(itemID)
         local color = quality[itemID]
         if not color then return end

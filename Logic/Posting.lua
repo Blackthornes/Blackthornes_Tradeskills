@@ -37,7 +37,7 @@ local VERIFY_GIVE_UP = 15
 
 -- Confirmed against Blizzard's own Sell tab on Forever, which offers 2, 8 and
 -- 24 hours: this is a Classic auction house, not retail's 12/24/48. The choice
--- only affects the deposit estimate, since the listing is made by hand.
+-- is the length every listing goes up for, and sets its deposit.
 local DURATIONS = {
     { text = "2 hours", value = 1 },
     { text = "8 hours", value = 2 },
@@ -397,7 +397,10 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
 
     ns.db.deposits = ns.db.deposits or {}
     ns.db.deposits[itemID] = {
-        unit = math.floor(deposit / math.max(1, quantity or 1)),
+        -- Kept exact. A deposit is worked out on the whole stack and rarely
+        -- divides evenly: flooring 39c for 20 to 1c each made the next
+        -- refresh show 20c, and a cheap stack could cache a deposit of 0.
+        unit = deposit / math.max(1, quantity or 1),
         duration = duration,
         at = time(),
     }
@@ -407,7 +410,7 @@ function Posting:GetDeposit(itemID, quantity)
     -- Away from an auction house the cached figure is the only honest answer.
     if not ns.Scanner.isAuctionHouseOpen then
         local unit = self:GetCachedUnitDeposit(itemID)
-        return unit and (unit * math.max(1, quantity or 1)) or nil
+        return unit and math.floor(unit * math.max(1, quantity or 1) + 0.5) or nil
     end
 
     -- A deposit is a property of the item and the listing length, not of the
@@ -421,7 +424,7 @@ function Posting:GetDeposit(itemID, quantity)
 
     if cached and record and record.at
         and (time() - record.at) < DEPOSIT_CACHE_SECONDS then
-        return cached * math.max(1, quantity or 1)
+        return math.floor(cached * math.max(1, quantity or 1) + 0.5)
     end
 
     local duration = ns.Config:Get("postDuration") or 2
@@ -584,9 +587,15 @@ function Posting:GetPostable(opts)
 
     -- Never offer to sell what a queued craft is waiting on. Listing your
     -- own reagents is the one mistake here that costs real work to undo.
+    -- Crafted stock included: a bolt made for a queued bag is still a
+    -- reagent, and Post Crafted offered it when it was the priciest stack.
+    -- Only the number the queue needs is held back, so one queued bag does
+    -- not keep sixty bolts off the list.
     local reserved = {}
 
-    if opts.includeAll then
+    if ns.Queue.GetReservedItems then
+        reserved = ns.Queue:GetReservedItems()
+    else
         for _, entry in ipairs(ns.Queue:GetShoppingList() or {}) do
             if entry.itemID then reserved[entry.itemID] = true end
         end
@@ -612,7 +621,14 @@ function Posting:GetPostable(opts)
             local sellable, count = self:GetSellInfo(itemID, held)
             local price, basis = self:GetPostPrice(itemID)
 
-            if not sellable then
+            local keep = reserved[itemID]
+            if keep and count then
+                count = count - (type(keep) == "number" and keep or count)
+            end
+
+            if keep and count and count <= 0 then
+                skipped[itemID] = "kept for a queued craft"
+            elseif not sellable then
                 skipped[itemID] = "the auction house says it cannot be sold"
             elseif not count or count <= 0 then
                 skipped[itemID] = "the auction house says none can be posted"
@@ -762,15 +778,26 @@ ns.RegisterCommand("readysell", "watch Ready to sell for 15 seconds and say why 
     ns.Print("readysell: watching, leave the windows as they are for 15 seconds")
 end)
 
+--- Would Post refuse this line's price outright (under the price floor)?
+--- Such a line is never next: Post Crafted kept offering the same item,
+--- refusing it after the price check and confirm, with everything else
+--- stuck behind it.
+function Posting:IsUnderFloor(line)
+    if not line.unitPrice then return false end
+    local floor = self:GetPriceFloor(line.itemID)
+    return floor ~= nil and line.unitPrice < floor
+end
+
 --- The most valuable stack worth listing right now.
 --
--- Skips anything unpriced, and anything that would sell below material cost
--- unless losses are explicitly allowed.
+-- Skips anything unpriced, anything under the price floor, and anything
+-- that would sell below material cost unless losses are explicitly allowed.
+
 function Posting:GetNextPostable(opts)
     local allowLoss = ns.Config:Get("allowPostingAtALoss") == true
 
     for _, line in ipairs(self:GetPostable(opts)) do
-        if line.unitPrice and (allowLoss or not line.atALoss) then
+        if line.unitPrice and (allowLoss or not line.atALoss) and not self:IsUnderFloor(line) then
             return line
         end
     end
@@ -782,7 +809,7 @@ function Posting:GetSummary(opts)
 
     local count, total = 0, 0
     for _, line in ipairs(self:GetPostable(opts)) do
-        if line.unitPrice and (allowLoss or not line.atALoss) then
+        if line.unitPrice and (allowLoss or not line.atALoss) and not self:IsUnderFloor(line) then
             count = count + 1
             total = total + (line.total or 0)
         end
@@ -953,6 +980,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         -- Measured against afterwards, so success is verified rather than
         -- inferred from an event that fires for any auction at all.
         postedBefore = ns.Auctions:GetPostedCount(itemID),
+        idsBefore = ns.Auctions.GetOwnedIDs and ns.Auctions:GetOwnedIDs(itemID) or nil,
         startedAt = GetTime(),
     }
 
@@ -1015,8 +1043,10 @@ function Posting:GetPriceFloor(itemID)
     local floor, why = 0, nil
 
     -- Below what a vendor pays, selling it to a vendor is strictly better.
-    local ok, _, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
-    if ok and sellPrice and sellPrice > 0 then
+    -- Remembered for the session: this runs for every line, every second,
+    -- at the auction house.
+    local sellPrice = Util.GetVendorSellPrice(itemID)
+    if sellPrice and sellPrice > 0 then
         floor, why = sellPrice, "a vendor pays more than that"
     end
 
@@ -1067,7 +1097,11 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
         Posting:Post(data.itemID, data.quantity, data.unitPrice)
     end,
 
-    OnCancel = function()
+    -- "override" is the game replacing this dialog with the next one (a
+    -- second List click while it was open): not a skip, and clearing the
+    -- listing here left the new dialog's Yes with nothing to list.
+    OnCancel = function(_, _, reason)
+        if reason == "override" then return end
         Posting.confirming = nil
         ns.Print("skipped.")
     end,
@@ -1148,11 +1182,15 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
 end
 
 function Posting:ShowConfirm(itemID, quantity, unitPrice, text)
-    self.confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice }
+    local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice }
+    self.confirming = confirming
 
-    local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text)
+    local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text, nil, confirming)
     if dialog then
-        dialog.data = self.confirming
+        -- Set again after showing: replacing an open dialog cancels the old
+        -- one first, on clients that do not say it was an override.
+        self.confirming = confirming
+        dialog.data = confirming
     else
         self.confirming = nil
         ns.Warn("could not open the confirmation dialog; nothing was listed.")
@@ -1211,9 +1249,11 @@ function Posting:CheckPrice(itemID, onDone)
         Settle("unavailable")
     end)
 
+    -- quiet: this check says for itself when nothing came back, and the
+    -- search's own "using the last known price" is wrong here, with no price.
     local started = ns.Scanner:ScanItem(itemID, function(_, _, _, _, _, _, status)
         Settle(status or "fresh")
-    end)
+    end, { quiet = true })
 
     if not started then Settle("unavailable") end
 
@@ -1249,6 +1289,13 @@ function Posting:Request(itemID, quantity, unitPrice)
 
     ns.Print(("checking the current price of %s..."):format(Util.GetItemLabel(itemID)))
 
+    -- Whether an earlier click on this item is still waiting for its check.
+    -- Only then is a "recent" answer already on its way to a dialog; the
+    -- search still out may be anybody's (a scan's follow-up, a deep scan).
+    self.requesting = self.requesting or {}
+    local alreadyAsking = (self.requesting[itemID] or 0) > 0
+    self.requesting[itemID] = (self.requesting[itemID] or 0) + 1
+
     -- A search that never answers must not leave the click doing nothing, so
     -- fall back to the price we already had and say that is what happened.
     local settled = false
@@ -1256,6 +1303,7 @@ function Posting:Request(itemID, quantity, unitPrice)
     local function Proceed(state)
         if settled then return end
         settled = true
+        Posting.requesting[itemID] = math.max(0, (Posting.requesting[itemID] or 1) - 1)
 
         -- Another search took the slot before this one answered, so the
         -- price was never checked. Verifying is on, so nothing is listed on
@@ -1266,11 +1314,32 @@ function Posting:Request(itemID, quantity, unitPrice)
             return
         end
 
+        -- A second click while this item's search is still out. That search
+        -- will bring up the dialog when it answers; showing one now would be
+        -- at the price from before the check, and then a second dialog for
+        -- the same item would follow it.
+        if state == "recent" and alreadyAsking then
+            local pending = ns.Scanner.pendingItem
+            if pending and pending.itemID == itemID then return end
+        end
+
         -- Read the price back after the check, never before. A search that
         -- found nothing has just cleared the rival price, and this is where
         -- that becomes a listing at market value instead of an undercut of
         -- a seller who is not there.
         local price = self:GetPostPrice(itemID) or unitPrice
+
+        -- A price the listing step will refuse (under what a vendor pays, or
+        -- a fraction of market after a rival's dump) is said now. Asking
+        -- "Do you wish to continue?" and refusing after Yes was the same
+        -- answer, one click later and after a question it had no use for.
+        local floor, why = self:GetPriceFloor(itemID)
+        if floor and price and price < floor then
+            ns.Warn(("not listing %s at %s: %s. Expected at least %s."):format(
+                Util.GetItemLabel(itemID), Util.FormatMoney(price), why or "the price looks wrong",
+                Util.FormatMoney(floor)))
+            return
+        end
 
         self:Confirm(itemID, quantity, price, { state = state })
     end
@@ -1309,7 +1378,17 @@ function Posting:VerifyPending()
     end
 
     self.pending.verifying = true
+
+    -- Stop any read-back still running from the last listing: its readings
+    -- come from a query sent before this listing existed, and its final one
+    -- would report this listing as missing.
+    ns.Auctions.confirmToken = (ns.Auctions.confirmToken or 0) + 1
+
     ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
+
+    -- This listing's own give-up: a later listing being verified when the
+    -- timer runs is not this one, and must not be settled by it.
+    local token = self.pending
 
     -- Refresh reads the answer back itself once the query goes out, so this is
     -- no longer the thing that settles a listing: it is the backstop for a query
@@ -1317,7 +1396,7 @@ function Posting:VerifyPending()
     -- is the honest answer. It has to outlast the queue's own wait, or a slow
     -- send gets reported as a failure while the reading is still on its way.
     C_Timer.After(VERIFY_GIVE_UP, function()
-        if Posting.pending and Posting.pending.verifying then
+        if Posting.pending == token and token.verifying then
             Posting:ResolvePending(nil)
         end
     end)
@@ -1325,13 +1404,14 @@ end
 
 --- Called once the owned-auction list has been re-read.
 -- @param posted number now listed, or nil if that could not be determined
-function Posting:ResolvePending(posted)
+-- @param appeared true when a listing of the item not there before was seen
+function Posting:ResolvePending(posted, appeared)
     local pending = self.pending
     if not pending then return end
 
     self.pending = nil
 
-    if posted and posted > (pending.postedBefore or 0) then
+    if posted and (appeared or posted > (pending.postedBefore or 0)) then
         ns.Print(("listed %s"):format(Util.GetItemLabel(pending.itemID)))
 
     elseif posted then

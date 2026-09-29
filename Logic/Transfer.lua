@@ -94,8 +94,13 @@ function Transfer:Describe()
 
     for _ in pairs(ns.db.postLimits or {}) do limits = limits + 1 end
 
+    -- Counted the way the code writes them: only switches and numbers
+    -- travel, so a changed text setting is not promised.
     for key, default in pairs(ns.Config.DEFAULTS.settings) do
-        if ns.Config:Get(key) ~= default then settings = settings + 1 end
+        local value = ns.Config:Get(key)
+        if value ~= default and (type(value) == "boolean" or type(value) == "number") then
+            settings = settings + 1
+        end
     end
 
     return queued, settings, limits
@@ -178,7 +183,7 @@ function Transfer:Import(code)
 
     if skipped > 0 then
         -- Said plainly: silently dropping crafts would look like data loss.
-        summary = summary .. ("; skipped %d recipe(s) this character does not know")
+        summary = summary .. ("; skipped %d recipe(s) none of your characters know")
             :format(skipped)
     end
 

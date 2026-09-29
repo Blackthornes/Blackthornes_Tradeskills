@@ -288,6 +288,9 @@ function CraftPanel:GetRows(opts)
     local open = self:GetOpenRecipeIDs()
 
     local rows = {}
+    -- How many were left out for being at the Keep in stock limit, so an
+    -- empty pane can say that rather than blame the recipes not being read.
+    self.hiddenAtLimit = 0
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         -- Only what this profession window is showing, when it will say. The
@@ -321,7 +324,9 @@ function CraftPanel:GetRows(opts)
                     and not (opts.keepOrder and opts.keepOrder[recipeID])
                     and ns.Config:Get("hideAtPostLimit") ~= false
 
-                if not suppressed then
+                if suppressed then
+                    self.hiddenAtLimit = self.hiddenAtLimit + 1
+                else
                     rows[#rows + 1] = {
                         recipeID = recipeID,
                         name = name,
@@ -349,6 +354,7 @@ function CraftPanel:GetRows(opts)
                         stock = (analysis and analysis.stock) or 0,
                         postLimit = (analysis and analysis.postLimit) or 0,
                         atPostLimit = atLimit,
+                        queuedElsewhere = (analysis and analysis.queuedElsewhere) or 0,
                         roomInCrafts = RoomInCrafts(
                             analysis and analysis.postRoom, recipe),
                     }
@@ -424,10 +430,24 @@ local function QueueMore(line, quantity)
     -- Unless the player has ticked the box that says to ignore it.
     local room = not CraftPanel:IgnoringLimit() and line.roomInCrafts or nil
 
+    -- Read again now rather than from the row: the pane redraws a moment
+    -- after a change, and three quick clicks on + all saw the same room.
+    local queuedNow = 0
+    if room and line.outputItemID then
+        local fresh, _, _, queued = ns.Auctions:GetRoom(line.outputItemID)
+        queuedNow = queued or 0
+        room = RoomInCrafts(fresh, ns.Recipes:GetAny(line.recipeID)) or room
+    end
+
     if room then
         if room <= 0 then
-            ns.Warn(("%s: you already have %d and your limit is %d, so none were queued."):format(
-                line.name, line.stock or 0, line.postLimit or 0))
+            if queuedNow > 0 then
+                ns.Warn(("%s: you have %d and %d queued, which fills your limit of %d, so none were queued."):format(
+                    line.name, line.stock or 0, queuedNow, line.postLimit or 0))
+            else
+                ns.Warn(("%s: you already have %d and your limit is %d, so none were queued."):format(
+                    line.name, line.stock or 0, line.postLimit or 0))
+            end
             return
         end
 
@@ -544,7 +564,11 @@ local function CreateRow(row)
     row.quantity:SetPoint("RIGHT", row.add, "LEFT", -STEP_GAP, 0)
 
     row.remove = Widgets.CreateButton(row, "-", function()
-        if row.data then CraftPanel:SetQueued(row.data, row.data.queued - 1) end
+        -- From the queue as it is now, not the row: a second quick click
+        -- would otherwise ask for the same number again.
+        if not row.data then return end
+        local _, entry = ns.Queue:Find(row.data.recipeID, true)
+        CraftPanel:SetQueued(row.data, (entry and entry.quantity or 0) - 1)
     end, { width = STEP_WIDTH, height = 15 })
     row.remove:SetPoint("RIGHT", row.quantity, "LEFT", -STEP_GAP, 0)
 
@@ -569,6 +593,11 @@ local function StockText(line)
     -- pushed the line off the end.
     if line.postLimit and line.postLimit > 0 and (stock > 0 or line.atPostLimit) then
         local text = ("have %d of %d"):format(stock, line.postLimit)
+        -- Queued crafts count toward the limit too; without saying so,
+        -- "have 0 of 5, at your limit" contradicted itself.
+        if line.atPostLimit and (line.queuedElsewhere or 0) > 0 then
+            return ("have %d, %d queued, limit %d"):format(stock, line.queuedElsewhere, line.postLimit)
+        end
         if line.atPostLimit then return text .. ", at your limit" end
         return text
     end
@@ -590,9 +619,16 @@ local function UpdateRow(row, line)
 
     -- Not while it is being typed into: overwriting someone mid-number is how
     -- a field ends up refusing to accept what they meant.
-    if not BeingTyped(row.quantity) then
+    -- A reused row now showing another recipe drops the half-typed number,
+    -- though: it was for the recipe that scrolled away, and pressing Enter
+    -- would have queued that many of this one.
+    if BeingTyped(row.quantity) and row.boundRecipeID ~= line.recipeID then
+        row.quantity:SetValue(line.queued, true)
+        row.quantity.editBox:ClearFocus()
+    elseif not BeingTyped(row.quantity) then
         row.quantity:SetValue(line.queued, true)
     end
+    row.boundRecipeID = line.recipeID
 
     -- A queued number stands out from the zeros around it.
     row.quantity.editBox:SetTextColor(Theme.Unpack(line.queued > 0 and "accent" or "dim"))
@@ -679,8 +715,11 @@ local function UpdateRow(row, line)
     end
 
     if limitApplies then
-        row.add.tooltipText = ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
-            line.stock or 0, line.name)
+        row.add.tooltipText = ((line.queuedElsewhere or 0) > 0
+            and ("You have %d %s and %d queued, which fills your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
+                line.stock or 0, line.name, line.queuedElsewhere)
+            or ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
+                line.stock or 0, line.name))
     else
         row.add.tooltipText = ("Queue one more %s. Or type how many you want in the box."):format(line.name)
     end
@@ -1201,6 +1240,8 @@ function CraftPanel:Refresh()
 
         self.empty:SetText(searching
             and "Nothing here matches that."
+            or (self.hiddenAtLimit or 0) > 0
+                and "Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."
             or "No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment.")
     end
 
@@ -1330,6 +1371,9 @@ function CraftPanel:BuildQueued()
     local frame = CreateFrame("Frame", nil, self.frame)
     frame:SetWidth(QUEUED_WIDTH)
     frame:SetPoint("TOPLEFT", self.frame, "TOPRIGHT", QUEUED_GAP, 0)
+    -- Kept on screen: beside a wide profession window on a narrow screen it
+    -- would otherwise hang off the right edge.
+    frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:Hide()
 
@@ -1343,6 +1387,11 @@ function CraftPanel:BuildQueued()
         rowHeight = QUEUED_ROW_HEIGHT,
         createRow = CreateQueuedRow,
         updateRow = UpdateQueuedRow,
+        -- The craft being made right now is the lit row.
+        isSelected = function(entry)
+            local active = ns.Crafting and ns.Crafting.active
+            return active ~= nil and active.recipeID == entry.recipeID
+        end,
         onClick = function(entry, _, mouseButton)
             if mouseButton == "RightButton" and not entry.isDependency then
                 ns.Queue:Remove(entry.recipeID)
@@ -1421,7 +1470,7 @@ function CraftPanel:Toggle()
         local _, frameName = self:FindTradeSkillFrame()
 
         ns.Print(("craft pane shown%s, %d recipe(s) listed."):format(
-            frameName and (", docked to " .. frameName) or " (no profession window open)",
+            frameName and ", docked to the profession window" or " (no profession window open)",
             #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit() })))
     else
         ns.Warn("the craft pane would not show.")
