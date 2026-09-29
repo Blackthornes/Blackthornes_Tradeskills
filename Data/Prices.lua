@@ -308,6 +308,38 @@ function Prices:RecordEmpty(itemID, scannedAt)
     return record
 end
 
+--- After a complete full scan, mark every item it did not see as sold out.
+--
+-- A full scan used to update only the items it found. Anything that had sold
+-- out or expired since the last scan kept its old listing on record, so the
+-- tabs went on showing a cheapest price nobody was selling at, and the next
+-- listing undercut a seller who was already gone.
+--
+-- Only a scan that read the whole auction house may do this. A scan cut
+-- short (page cap, timeout, another search taking the results over) did not
+-- look everywhere, so what it missed is unknown, not sold out. Records
+-- written since the scan started are left alone too: a search made during
+-- the scan is newer than anything the scan read.
+--
+-- @param seen      { [itemID] = true } for every item the scan read a row of
+-- @param startedAt time() when the scan began
+-- @return how many items were marked sold out
+function Prices:ClearMissing(seen, startedAt, scannedAt)
+    scannedAt = scannedAt or time()
+    startedAt = startedAt or scannedAt
+
+    local cleared = 0
+    for itemID, record in pairs(self:GetTable()) do
+        local listed = (record.quantity or 0) > 0 or record.min or record.rivalMin or record.ownMin
+        if listed and not seen[itemID] and (record.seen or 0) < startedAt then
+            self:RecordEmpty(itemID, scannedAt)
+            cleared = cleared + 1
+        end
+    end
+
+    return cleared
+end
+
 --- Commit a whole scan at once: { [itemID] = { {unitPrice, quantity}, ... } }.
 -- Returns the number of items recorded.
 function Prices:CommitScan(observations, scannedAt)

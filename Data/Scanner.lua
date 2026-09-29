@@ -250,6 +250,9 @@ function Scanner:StartFullScan()
     end
 
     self.scanStartedAt = GetTime()
+    -- Wall-clock start, so a finished scan can tell its own records from
+    -- ones a search wrote while it ran (Prices:ClearMissing).
+    self.scanStartedWall = time()
 
     -- Snapshot when it is available, browse when it is not. Both end up in
     -- the same price database.
@@ -553,7 +556,9 @@ function Scanner:OnBrowseResults()
         return
     end
 
-    self:CommitBrowseResults(results)
+    -- Only a sweep the game says is whole may mark missing items sold out.
+    -- One stopped at the page cap has not looked everywhere.
+    self:CommitBrowseResults(results, full)
 end
 
 --- Read one browse row into a rival price and an own price.
@@ -599,7 +604,9 @@ end
 
 Scanner.SplitBrowseRow = SplitBrowseRow
 
-function Scanner:CommitBrowseResults(results)
+--- @param complete true when the sweep read the whole auction house, so an
+--- item it did not see has sold out. Partial sweeps leave the rest alone.
+function Scanner:CommitBrowseResults(results, complete)
     self:StopBrowseTimeout()
 
     self.isBrowsing = false
@@ -608,10 +615,13 @@ function Scanner:CommitBrowseResults(results)
     local recorded, skipped, implausible = 0, 0, 0
     local now = time()
     local unsettled = {}
+    local seen = {}
 
     for _, result in ipairs(results) do
         local itemID = result.itemKey and result.itemKey.itemID
         local price = result.minPrice
+
+        if itemID then seen[itemID] = true end
 
         if itemID and price and price > 0 then
             -- A browse row carries one price and nothing to fall back on, so a
@@ -655,11 +665,19 @@ function Scanner:CommitBrowseResults(results)
 
     self:FollowUpOwned(unsettled)
 
+    local soldOut = 0
+    if complete then
+        soldOut = ns.Prices:ClearMissing(seen, self.scanStartedWall, now)
+    end
+
     self.verbose = false
     ns.db.lastFullScan = now
 
     local elapsed = GetTime() - (self.scanStartedAt or GetTime())
     ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+    if soldOut > 0 then
+        ns.Print(("%s item(s) sold out since they were last seen"):format(Util.Comma(soldOut)))
+    end
 
     if ns.UI and ns.UI.OnScanComplete then
         ns.UI:OnScanComplete({ items = recorded })
@@ -706,6 +724,10 @@ function Scanner:ReadReplicateResults(numItems)
     local observations = {}
     local skipped = 0
     local implausible = 0
+    -- Every item with a live listing, priced or not, and the rows that could
+    -- not be read at all. See the sold-out pass in onDone.
+    local seen = {}
+    local unreadable = 0
 
     -- GetReplicateItemInfo is 0-based.
     local indices = {}
@@ -725,13 +747,22 @@ function Scanner:ReadReplicateResults(numItems)
                   _, _, _, owner, ownerFullName, saleStatus, itemID =
                       pcall(C_AuctionHouse.GetReplicateItemInfo, index)
 
-            if not ok or not itemID or not buyoutPrice or buyoutPrice <= 0 then
+            if not ok or not itemID then
+                unreadable = unreadable + 1
                 skipped = skipped + 1
                 return
             end
 
             -- saleStatus 1 means the auction already sold; it is not on offer.
             if saleStatus == 1 then
+                skipped = skipped + 1
+                return
+            end
+
+            -- On offer, so not sold out, even when it has no buyout to read.
+            seen[itemID] = true
+
+            if not buyoutPrice or buyoutPrice <= 0 then
                 skipped = skipped + 1
                 return
             end
@@ -785,8 +816,21 @@ function Scanner:ReadReplicateResults(numItems)
         end,
 
         onDone = function()
-            local recorded = ns.Prices:CommitScan(observations)
+            local startedWall = self.scanStartedWall
+            local now = time()
+            local recorded = ns.Prices:CommitScan(observations, now)
             local elapsed = GetTime() - (self.scanStartedAt or GetTime())
+
+            -- The snapshot is the whole auction house, so an item it did not
+            -- list has sold out. A row that could not be read at all might be
+            -- any item, though, so a snapshot with more than a handful of
+            -- those does not get to decide.
+            local soldOut = 0
+            if unreadable <= numItems / 200 then
+                soldOut = ns.Prices:ClearMissing(seen, startedWall, now)
+            else
+                self:Report(("%d row(s) could not be read, so no item is marked sold out this time"):format(unreadable))
+            end
 
             self.isScanning = false
             self.isReading = false
@@ -794,6 +838,10 @@ function Scanner:ReadReplicateResults(numItems)
             ns.Print(("scan complete: %s listings across %s items in %.1fs%s"):format(
                 Util.Comma(numItems - skipped), Util.Comma(recorded), elapsed,
                 skipped > 0 and (" (%s skipped)"):format(Util.Comma(skipped)) or ""))
+
+            if soldOut > 0 then
+                ns.Print(("%s item(s) sold out since they were last seen"):format(Util.Comma(soldOut)))
+            end
 
             implausible = implausible + ns.Prices:TakeImplausibleCount()
 
@@ -1018,7 +1066,13 @@ function Scanner:ScanItem(itemID, callback, opts)
 
         Scanner.recentItemScans[itemID] = GetTime()
 
-        if not pcall(C_AuctionHouse.SendSearchQuery, itemKey, {}, true) then
+        -- Cheapest first, as Blizzard's own search asks: with no order a
+        -- deep listing could come back without its cheapest rows.
+        local sorts = {}
+        local order = Enum and Enum.AuctionHouseSortOrder and Enum.AuctionHouseSortOrder.Price
+        if order ~= nil then sorts[1] = { sortOrder = order, reverseSort = false } end
+
+        if not pcall(C_AuctionHouse.SendSearchQuery, itemKey, sorts, true) then
             local refused = Scanner.pendingItem
             Scanner.pendingItem = nil
 
@@ -1601,6 +1655,7 @@ ns.RegisterCommand("browse", "scan page by page, skipping the quick full scan", 
 
     ns.Scanner:CancelScan()
     ns.Scanner.scanStartedAt = GetTime()
+    ns.Scanner.scanStartedWall = time()
     ns.Scanner.verbose = true
     ns.Scanner:StartBrowseScan()
 end)

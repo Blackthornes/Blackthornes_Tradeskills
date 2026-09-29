@@ -273,6 +273,14 @@ function Disenchant:OnItemInfoReceived(itemID, success)
     if success ~= false then Remember(itemID) end
 end
 
+--- Has the client been asked for this item as often as it will be, with no
+--- answer? Such an item is not "still being read": counting it that way kept
+--- "N more listed items not checked yet" on screen all session.
+function Disenchant:GaveUp(itemID)
+    if (attempts[itemID] or 0) < MAX_ATTEMPTS then return false end
+    return not (waiting[itemID] and Now() - waiting[itemID] < WAIT_SECONDS)
+end
+
 --- Read an item the saved facts do not have (or have without a sell price):
 --- straight away when the client already holds it, otherwise ask for it and
 --- return nil until it arrives.
@@ -874,7 +882,9 @@ function Disenchant:GetAuctionRows(opts)
         if buy and since and (record.seen or 0) < since then buy = nil end
 
         local disenchantable = buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID)
-        if buy and disenchantable == nil and CouldBeGear(itemID) then pending = pending + 1 end
+        if buy and disenchantable == nil and CouldBeGear(itemID) and not self:GaveUp(itemID) then
+            pending = pending + 1
+        end
 
         if disenchantable then
             local value, partial, breakdown = self:GetValue(itemID)

@@ -328,7 +328,8 @@ function Probe:PrintReport()
         "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED",
         "AUCTION_HOUSE_BROWSE_RESULTS_ADDED",
     }) do
-        Line(event:lower():gsub("_", " "), Yes(not unknown[event]))
+        -- Bracketed: gsub also returns a count, which took the value's place.
+        Line((event:lower():gsub("_", " ")), Yes(not unknown[event]))
     end
     Line("post commodity", Yes(caps.auction.hasPostCommodity))
     Line("post item", Yes(caps.auction.hasPostItem))

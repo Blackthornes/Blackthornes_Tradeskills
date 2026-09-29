@@ -545,9 +545,17 @@ local function DrawLine(row, line)
     end
 end
 
+--- The character's name for a haul's key. Keys are now the character's GUID
+--- ("Player-..."), where the text before the first dash is just "Player", so
+--- the name comes from the character's record; old "Name-Realm" keys still
+--- work. Empty when the character is unknown.
+function MailReport.WhoName(key)
+    return Util.CharacterName(key)
+end
+
 --- "Blackthornes, just now" or "Blackthornes, 2h ago"
 local function WhoWhen(haul)
-    local name = tostring(haul.who or ""):match("^([^%-]+)") or ""
+    local name = MailReport.WhoName(haul.who)
     local age = haul.t and (time() - haul.t) or 0
     local when = age < 60 and "just now" or Util.FormatAgeAgo(age)
     if name == "" then return when end
@@ -567,11 +575,13 @@ function MailReport:Show(haul, opts)
 
     -- The record ribbon.
     local ribbonText
+    -- Reopened from the Sales tab, a record is told as one it was then,
+    -- not as news.
     if haul.recordHaul then
-        ribbonText = ("NEW BEST HAUL!  Old best %s"):format(
+        ribbonText = (opts.replay and "BEST HAUL AT THE TIME!  Old best %s" or "NEW BEST HAUL!  Old best %s"):format(
             Util.FormatMoney(haul.previousBest or 0, { short = true }))
     elseif haul.recordSale then
-        ribbonText = "YOUR BEST SALE EVER!"
+        ribbonText = opts.replay and "BEST SALE AT THE TIME!" or "YOUR BEST SALE EVER!"
     elseif haul.first then
         ribbonText = "YOUR FIRST HAUL ON RECORD"
     end

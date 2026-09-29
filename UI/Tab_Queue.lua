@@ -275,8 +275,8 @@ local function UpdateBankNote()
     local age = ns.Inventory:GetBankAge()
 
     if age then
-        note:SetText(("Bank not checked this session, so using what it held %s ago.")
-            :format(Util.FormatAge(age)))
+        note:SetText(("Bank not checked this session, so using what it held %s.")
+            :format(Util.FormatAgeAgo(age)))
     else
         note:SetText("Bank never checked, so HAVE counts bags only.")
     end

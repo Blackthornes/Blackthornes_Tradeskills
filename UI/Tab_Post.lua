@@ -109,7 +109,9 @@ local function CreateRow(row)
             ns.Posting:CheckPrice(line.itemID, function(itemID, price, status)
                 if not price then
                     ns.Print(("%s: %s"):format(Util.GetItemLabel(itemID),
-                        status == "empty"
+                        -- "recent": searched moments ago, and that search
+                        -- found nobody selling it.
+                        (status == "empty" or status == "recent")
                             and "nobody is selling one right now, so there is no price to go on."
                             or "the auction house did not answer. Try again in a moment."))
                 end
@@ -206,7 +208,7 @@ function UpdateRow(row, line)
             row.post.tooltipText = reason
         elseif line.atALoss then
             row.post.tooltipText = (line.lossReason == "vendor"
-                and "This would sell for less than a vendor pays. Blocked unless you allow it in Settings."
+                and "This would sell for less than a vendor pays, so it will not be listed. Sell it to a vendor instead."
                 or "This would sell below its material cost. Blocked unless you allow it in Settings.")
         else
             row.post.tooltipText = ("List %d of %d at %s each"):format(

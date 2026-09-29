@@ -357,4 +357,35 @@ ownListings[2996] = 6300
 Scanner:OnBrowseResults()
 check("a passive browse still sends nothing", #sent == 0)
 
+--------------------------------------------------------------------------------
+-- Sold out since the last scan
+--
+-- Trent, 2026-09-29: "Full scans should clear items that sold out." A sweep
+-- that read the whole auction house marks every item it did not see as having
+-- nothing listed. One cut short leaves the rest alone.
+--------------------------------------------------------------------------------
+
+print("\nsold out since the last scan")
+
+reset()
+local before = time() - 600
+Prices:Record(2589, 400, 400, 5, before, 400)     -- listed last scan, gone now
+Prices:Record(2592, 900, 900, 3, before, 900)     -- still listed
+Scanner.scanStartedWall = time() - 60
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+})
+check("a partial sweep leaves an unseen item as it was", Prices:Get(2589).rivalMin == 400
+    and Prices:Get(2589).quantity == 5)
+
+Prices:Record(2593, 700, 700, 4, time(), 700)     -- a search during the scan
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+}, true)
+check("a whole sweep marks the unseen item sold out", Prices:Get(2589).rivalMin == nil
+    and Prices:Get(2589).min == nil and Prices:Get(2589).quantity == 0)
+check("and keeps what it is worth", Prices:Get(2589).market == 400)
+check("the item it saw is updated, not cleared", Prices:Get(2592).rivalMin == 950)
+check("a price read during the scan is left alone", Prices:Get(2593).rivalMin == 700)
+
 print(("\n%d check(s) passed\n"):format(checks))

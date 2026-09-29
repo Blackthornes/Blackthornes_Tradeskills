@@ -263,7 +263,14 @@ function Auctions:ReadOwned(opts)
                 -- "you have a listing here" be read as yours or a rival's.
                 local unit = tonumber(info.unitPrice)
                 if not unit and tonumber(info.buyoutAmount) and info.buyoutAmount > 0 then
-                    unit = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
+                    -- A commodity's buyout is already the price of one (it is
+                    -- listed by unit price); dividing it by the quantity read
+                    -- 20 Linen at 30c as 1c each.
+                    if ns.Scanner and ns.Scanner.IsCommodity and ns.Scanner:IsCommodity(itemID) then
+                        unit = info.buyoutAmount
+                    else
+                        unit = Util.UnitPriceFromStack(itemID, info.buyoutAmount, quantity)
+                    end
                 end
 
                 if unit and unit > 0 and (not prices[itemID] or unit < prices[itemID]) then

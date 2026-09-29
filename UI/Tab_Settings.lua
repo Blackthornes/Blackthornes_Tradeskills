@@ -550,10 +550,10 @@ local function Refresh()
     local diagnostics = ns.Config:GetLoadDiagnostics()
     if diagnostics.restoredFromCVars then
         widgets.loadWarning:SetText(
-            "The game did not load your saved data at login, so it was recovered from the backup in CVars. This is a known WoW: Forever beta problem.")
+            "The game did not load your saved data at login, so it was recovered from the backup in CVars.")
     elseif diagnostics.globalType ~= "table" and not diagnostics.restored then
         widgets.loadWarning:SetText(
-            "The game did not load your saved data at login, so this session started fresh. This is a known WoW: Forever beta problem.")
+            "The game did not load your saved data at login, so this session started fresh.")
     else
         widgets.loadWarning:SetText("")
     end

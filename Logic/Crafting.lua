@@ -289,6 +289,7 @@ function Crafting:Stop()
     self:StopWatching()
 
     if ns.UI then ns.UI:RefreshActiveTab() end
+    if ns.CraftPanel and ns.CraftPanel.RequestRefresh then ns.CraftPanel:RequestRefresh() end
 end
 
 function Crafting:IsBusy()
@@ -315,6 +316,10 @@ function Crafting:StartWatching()
         Crafting:StopWatching()
 
         if ns.UI then ns.UI:RefreshActiveTab() end
+        -- The craft pane beside the profession window too: RefreshActiveTab
+        -- only redraws the main window, and a failed or interrupted craft
+        -- left the pane saying "Stop crafting" (whose click started one).
+        if ns.CraftPanel and ns.CraftPanel.RequestRefresh then ns.CraftPanel:RequestRefresh() end
     end)
 end
 

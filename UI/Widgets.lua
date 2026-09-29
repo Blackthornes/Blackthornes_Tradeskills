@@ -563,7 +563,10 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect)
         button.hover = Theme.Fill(button, "rowHover", 0.45, "BORDER")
         button.hover:Hide()
 
-        button.label = Theme.CreateLabel(button, "normal", "muted", "CENTER")
+        -- A step smaller once the tabs get narrow, so "Disenchanting" stays
+        -- inside its own tab.
+        local labelSize = (tab.width or 96) < 90 and "small" or "normal"
+        button.label = Theme.CreateLabel(button, labelSize, "muted", "CENTER")
         button.label:SetPoint("CENTER", 0, 0)
         button.label:SetText(tab.text)
 

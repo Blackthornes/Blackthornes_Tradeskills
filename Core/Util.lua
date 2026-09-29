@@ -434,6 +434,23 @@ function Util.GetItemLabel(itemID)
     return ("item %d"):format(itemID)
 end
 
+--- A character's name for display from a saved key, or "" when unknown.
+--- Keys are now the character's GUID ("Player-..."), where the text before
+--- the first dash is just "Player"; the name then comes from the character's
+--- record. Old "Name-Realm" keys still read as the name.
+function Util.CharacterName(key)
+    if type(key) ~= "string" or key == "" then return "" end
+
+    local record = ns.db and ns.db.characters and ns.db.characters[key]
+    if type(record) == "table" and ns.Recipes and ns.Recipes.GetCharacterName then
+        local name = ns.Recipes:GetCharacterName(key)
+        if type(name) == "string" and name ~= "?" then return name end
+    end
+
+    if key:match("^Player%-") then return "" end
+    return key:match("^([^%-]+)") or ""
+end
+
 --- The item's icon texture, or nil when the game has not got the item yet.
 --
 -- GetItemIconByID answers from the item's static data, so it usually works
