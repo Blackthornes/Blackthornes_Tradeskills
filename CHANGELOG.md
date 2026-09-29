@@ -4,6 +4,35 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.15.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+A big bug-fixing pass across the whole addon.
+
+- A full scan that reads the whole auction house now marks items it didn't
+  see as having nothing listed, so sold-out items stop showing old prices.
+  It only does this when the scan really was complete and agrees with the
+  last one; cut-short scans and quick searches leave prices alone.
+- The last scan time is kept per realm and faction, so another faction's
+  scan no longer counts as yours.
+- Posting: new listings undercut the real cheapest rival, a second List
+  click waits for the price check instead of doing nothing, and a price
+  under the floor is refused before the dialog.
+- Post Crafted only holds back as many items as a queued craft needs.
+- Enchants and other crafts that make no item now count down the queue,
+  and crafts that finish after the profession window closes leave it.
+- Mail: sales held by the auction house settle when their gold arrives,
+  and closing the mailbox quickly no longer forgets recorded mail.
+- The Profit, Prices and Enchanting tabs no longer re-read hundreds of
+  items on every redraw.
+- Grey items get no auction lines in tooltips, only the vendor price.
+- The header button reads Cancel scan while a scan waits to start.
+- Many layout fixes: labels stay inside their buttons, headings follow the
+  scrollbar, settings text wraps instead of being cut off, and notes and
+  totals no longer overlap.
+
 ## 0.14.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
