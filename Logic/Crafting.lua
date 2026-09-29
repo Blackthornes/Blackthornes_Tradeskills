@@ -212,9 +212,11 @@ function Crafting:OnEnable()
     ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", self.OnTradeSkillClose)
 
     -- Only while a profession window is open: bags change constantly otherwise,
-    -- and a looted item is not a completed craft.
+    -- and a looted item is not a completed craft. Or while a batch the addon
+    -- started is still casting: closing the window does not stop it, and the
+    -- crafts made after that were never taken off the queue.
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", function()
-        if Crafting.isTradeSkillOpen then
+        if Crafting.isTradeSkillOpen or Crafting.active then
             Crafting:OnBagUpdate()
         end
     end)

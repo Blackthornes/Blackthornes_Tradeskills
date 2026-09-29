@@ -376,6 +376,7 @@ local function Build(outer)
 
             button.armed = false
             button:SetText("Clear price data")
+            button.label:SetTextColor(Theme.Unpack("text"))
 
             ns.Print("price data cleared for this realm")
             UI:RefreshActiveTab()
@@ -385,11 +386,14 @@ local function Build(outer)
 
         button.armed = true
         button:SetText("Really clear?")
+        -- Red while armed, like the craft pane's Clear queue.
+        button.label:SetTextColor(Theme.Unpack("loss"))
 
         C_Timer.After(4, function()
             if button.armed then
                 button.armed = false
                 button:SetText("Clear price data")
+                button.label:SetTextColor(Theme.Unpack("text"))
             end
         end)
     end, { width = 140, height = 22, tooltip = "Delete every stored price for this realm" })
@@ -515,7 +519,9 @@ local function Refresh()
     local overrides = 0
     for _ in pairs(ns.db.postLimits or {}) do overrides = overrides + 1 end
     widgets.maxPostedHint:SetText(overrides > 0
-        and ("%d item%s with their own limit"):format(overrides, overrides == 1 and "" or "s")
+        -- Short enough for the 120 pixels beside the box; the longer wording
+        -- was cut off with "...".
+        and ("%d set per item"):format(overrides)
         or "")
 
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)

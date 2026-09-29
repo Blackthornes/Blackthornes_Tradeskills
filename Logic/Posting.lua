@@ -397,7 +397,10 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
 
     ns.db.deposits = ns.db.deposits or {}
     ns.db.deposits[itemID] = {
-        unit = math.floor(deposit / math.max(1, quantity or 1)),
+        -- Kept exact. A deposit is worked out on the whole stack and rarely
+        -- divides evenly: flooring 39c for 20 to 1c each made the next
+        -- refresh show 20c, and a cheap stack could cache a deposit of 0.
+        unit = deposit / math.max(1, quantity or 1),
         duration = duration,
         at = time(),
     }
@@ -407,7 +410,7 @@ function Posting:GetDeposit(itemID, quantity)
     -- Away from an auction house the cached figure is the only honest answer.
     if not ns.Scanner.isAuctionHouseOpen then
         local unit = self:GetCachedUnitDeposit(itemID)
-        return unit and (unit * math.max(1, quantity or 1)) or nil
+        return unit and math.floor(unit * math.max(1, quantity or 1) + 0.5) or nil
     end
 
     -- A deposit is a property of the item and the listing length, not of the
@@ -421,7 +424,7 @@ function Posting:GetDeposit(itemID, quantity)
 
     if cached and record and record.at
         and (time() - record.at) < DEPOSIT_CACHE_SECONDS then
-        return cached * math.max(1, quantity or 1)
+        return math.floor(cached * math.max(1, quantity or 1) + 0.5)
     end
 
     local duration = ns.Config:Get("postDuration") or 2
@@ -588,8 +591,12 @@ function Posting:GetPostable(opts)
     -- reagent, and Post Crafted offered it when it was the priciest stack.
     local reserved = {}
 
-    for _, entry in ipairs(ns.Queue:GetShoppingList() or {}) do
-        if entry.itemID then reserved[entry.itemID] = true end
+    if ns.Queue.GetReservedItems then
+        reserved = ns.Queue:GetReservedItems()
+    else
+        for _, entry in ipairs(ns.Queue:GetShoppingList() or {}) do
+            if entry.itemID then reserved[entry.itemID] = true end
+        end
     end
 
     local lines = {}

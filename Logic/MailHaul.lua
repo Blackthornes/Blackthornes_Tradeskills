@@ -260,7 +260,7 @@ function MailHaul:CheckMoney()
     if visit.lastMoney and money > visit.lastMoney then
         gained = money - visit.lastMoney
         visit.moneyIn = visit.moneyIn + gained
-        self:Log(("gold went up by %d"):format(gained))
+        self:Log(("gold went up by %.0f"):format(gained))
     end
     visit.lastMoney = money
 
@@ -330,7 +330,7 @@ function MailHaul:Record(events)
         for _, amount in ipairs(event.monies) do
             eventGold = eventGold + amount
             collected.amounts[#collected.amounts + 1] = amount
-            self:Log(("took %d from %s"):format(amount, tostring(event.key)))
+            self:Log(("took %.0f from %s"):format(amount, tostring(event.key)))
 
             if event.kind == "sold" then
                 visit.sales[#visit.sales + 1] = { name = event.name, amount = amount }
@@ -382,7 +382,7 @@ function MailHaul:Reverse(events)
                         table.remove(collected.amounts, index)
                         visit.gold[bucket] = math.max(0, visit.gold[bucket] - amount)
                         undone = undone + amount
-                        self:Log(("%d came back to %s, not counted"):format(amount, event.key))
+                        self:Log(("%.0f came back to %s, not counted"):format(amount, event.key))
 
                         if event.kind == "sold" then
                             for saleIndex = #visit.sales, 1, -1 do
@@ -652,7 +652,7 @@ function MailHaul:EndVisit()
     self.baseline = nil
 
     if visit then
-        visit.log[#visit.log + 1] = ("closed: purse up %d, mail says %d"):format(
+        visit.log[#visit.log + 1] = ("closed: purse up %.0f, mail says %.0f"):format(
             visit.moneyIn, visit.mailTotal)
         self.lastLog = visit.log
     end

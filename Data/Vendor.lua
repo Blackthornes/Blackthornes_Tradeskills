@@ -123,6 +123,10 @@ function Vendor:Scan()
                 self.merchantItems[itemID] = {
                     index = index,
                     price = math.floor(info.price / stack),
+                    -- What one click actually costs. The unit price above is
+                    -- floored, so a bundle of 5 for 1s read as 20c each and 3
+                    -- of them as 60c, when the vendor charges the whole 1s.
+                    bundlePrice = info.price,
                     stack = stack,
                     numAvailable = info.numAvailable or -1,
                     extendedCost = info.hasExtendedCost == true,
@@ -185,6 +189,9 @@ function Vendor:GetNeeded()
 
             if affordable > 0 then
                 local cost = affordable * stock.price
+                if stock.stack > 1 and stock.bundlePrice then
+                    cost = math.ceil(affordable / stock.stack) * stock.bundlePrice
+                end
 
                 lines[#lines + 1] = {
                     itemID = line.itemID,

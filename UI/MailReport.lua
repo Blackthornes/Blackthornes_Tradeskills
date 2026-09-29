@@ -365,6 +365,9 @@ function MailReport:Build()
 
     local who = Theme.CreateLabel(header, "tiny", "muted", "RIGHT")
     who:SetPoint("RIGHT", close, "LEFT", -8, 0)
+    -- A full two-part name with its time ran back under the title.
+    who:SetPoint("LEFT", title, "RIGHT", 8, 0)
+    who:SetWordWrap(false)
     frame.who = who
 
     local shine = header:CreateTexture(nil, "OVERLAY")

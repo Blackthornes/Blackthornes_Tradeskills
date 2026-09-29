@@ -388,4 +388,25 @@ check("and keeps what it is worth", Prices:Get(2589).market == 400)
 check("the item it saw is updated, not cleared", Prices:Get(2592).rivalMin == 950)
 check("a price read during the scan is left alone", Prices:Get(2593).rivalMin == 700)
 
+-- A sweep far smaller than the last whole one is a search, not the auction
+-- house. Seen in review: a search typed while page 1 was out came back as
+-- "the whole sweep" and would have cleared every other item.
+reset()
+ns.db.lastSweepRows = 100
+Prices:Record(2589, 400, 400, 5, before, 400)
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+}, true)
+check("a sweep much smaller than the last clears nothing", Prices:Get(2589).rivalMin == 400)
+
+-- And however it got there, most of the book vanishing at once is refused.
+reset()
+ns.db.lastSweepRows = nil
+for id = 5000, 5039 do Prices:Record(id, 400, 400, 5, before, 400) end
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("39 of 40 items gone at once clears none", Prices:Get(5001).rivalMin == 400
+    and Prices:Get(5039).quantity == 5)
+
 print(("\n%d check(s) passed\n"):format(checks))

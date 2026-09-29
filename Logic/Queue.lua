@@ -385,6 +385,35 @@ end
 -- only queued when making the reagent is cheaper than buying it, and their
 -- own materials are already on this list, so listing the reagent too asked
 -- you to pay for it twice.
+--- Every material a queued craft still needs, as a set of item IDs.
+--
+-- The same items the shopping list covers, without its pricing, stock counts
+-- or alt offers. Posting asks this every second at the auction house to keep
+-- queued reagents off the sale list, and the full list is too heavy for that.
+function Queue:GetReservedItems()
+    local required, queuedToMake = {}, {}
+
+    for _, entry in ipairs(self:GetAll()) do
+        local recipe = ns.Recipes:GetAny(entry.recipeID)
+        if recipe then
+            for _, reagent in ipairs(recipe.reagents or {}) do
+                required[reagent.itemID] = (required[reagent.itemID] or 0)
+                    + (reagent.quantity * entry.quantity)
+            end
+            if entry.isDependency and recipe.outputItemID then
+                queuedToMake[recipe.outputItemID] = (queuedToMake[recipe.outputItemID] or 0)
+                    + entry.quantity * math.max(1, recipe.quantityMin or 1)
+            end
+        end
+    end
+
+    local reserved = {}
+    for itemID, needed in pairs(required) do
+        if needed - (queuedToMake[itemID] or 0) > 0 then reserved[itemID] = true end
+    end
+    return reserved
+end
+
 function Queue:GetShoppingList()
     local required = {}
     local queuedToMake = {}

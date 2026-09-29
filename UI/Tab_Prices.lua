@@ -210,6 +210,8 @@ local function UpdateChart(detail, record)
 
     if #history < 2 then
         detail.chartEmpty:Show()
+        -- Or the last item's price range stays under "needs two scans".
+        detail.chartRange:SetText("")
         return
     end
 

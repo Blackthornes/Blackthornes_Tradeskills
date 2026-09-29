@@ -52,7 +52,17 @@ function Widgets.CreateButton(parent, text, onClick, opts)
 
     button.label = Theme.CreateLabel(button, opts.fontSize or "small",
         opts.primary and "accent" or "text", "CENTER")
-    button.label:SetPoint("CENTER")
+    -- Held inside the button, so a label longer than the button ends in
+    -- "..." instead of spilling over whatever sits beside it. The little
+    -- symbol buttons (+, -, x) stay centred: their insets would leave no
+    -- room for the symbol itself.
+    if (opts.width or 90) >= 40 then
+        button.label:SetPoint("LEFT", 4, 0)
+        button.label:SetPoint("RIGHT", -4, 0)
+        button.label:SetWordWrap(false)
+    else
+        button.label:SetPoint("CENTER")
+    end
     button.label:SetText(text)
 
     function button:SetText(value)

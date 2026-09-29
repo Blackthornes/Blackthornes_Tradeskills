@@ -236,7 +236,9 @@ function Mail:Read()
     -- request is not an empty mailbox. Trusting it emptied the stock counts
     -- and forgot every mail already recorded, so the next update wrote each
     -- sale down a second time.
-    if #mails == 0 and self.isOpen and not self.inboxUpdatedThisVisit then
+    -- The same holds when the mailbox was shut before the server answered:
+    -- bumping one and pressing Escape used to land here with nothing listed.
+    if #mails == 0 and not self.inboxUpdatedThisVisit then
         ns.Debug("mailbox: nothing listed yet, waiting for the inbox")
         return
     end
@@ -514,22 +516,33 @@ local function Describe(mail, kind, itemName, invoice)
     return entry
 end
 
---- A sale recorded while its gold was held, now paid: the newest estimated
---- entry for the same item takes the mail's real amount.
+--- A sale recorded while its gold was held, now paid: the estimated entry
+--- for this same sale takes the mail's real amount.
+--
+-- Every paid sale mail comes through here on each inbox read, including ones
+-- that were paid when first seen. Matching on the item name alone let one of
+-- those settle a different, still-held sale of the same item with its own
+-- amount. So the entry must also carry this mail's invoice estimate: that is
+-- what it was written down as while the gold was held.
 function Mail:SettleHeldSale(mail)
     local ledger = self:GetLedger()
     if not ledger or not ledger.entries then return end
 
+    local invoice = self:ReadInvoice(mail.index)
+    if not (invoice and invoice.bid) then return end
+
     local kind, itemName = self:Classify(mail)
     if kind ~= "sold" then
-        local invoice = self:ReadInvoice(mail.index)
-        if not (invoice and invoice.invoiceType == "seller") then return end
+        if invoice.invoiceType ~= "seller" then return end
         itemName = invoice.itemName
     end
 
+    local estimate = invoice.bid - (invoice.cut or 0) + (invoice.deposit or 0)
+
     for index = #ledger.entries, 1, -1 do
         local entry = ledger.entries[index]
-        if entry.kind == "sold" and entry.estimated and entry.name == itemName then
+        if entry.kind == "sold" and entry.estimated and entry.name == itemName
+            and entry.net == estimate then
             entry.net = mail.money
             entry.estimated = nil
             return
@@ -940,7 +953,7 @@ function Mail:OnEnable()
         Mail.isOpen = true
         Mail.inboxUpdatedThisVisit = false
         -- The inbox is not ready to be read the instant the frame appears.
-        C_Timer.After(0.5, function() Mail:Read() end)
+        C_Timer.After(0.5, function() if Mail.isOpen then Mail:Read() end end)
     end)
 
     ns.RegisterEvent(self, "MAIL_CLOSED", function()

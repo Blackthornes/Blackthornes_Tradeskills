@@ -76,6 +76,8 @@ end
 
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
+    -- The gold edge every other detail pane has.
+    Theme.AccentStripe(detail, 2, 0.6)
     detail:SetWidth(DETAIL_WIDTH)
 
     local title = Theme.CreateLabel(detail, "large", "accent")
@@ -131,6 +133,7 @@ local function BuildDetail(parent)
             ns.Recipes:ForgetCharacter(state.selected.key)
             button.armed = false
             button:SetText("Forget character")
+            button.label:SetTextColor(Theme.Unpack("text"))
 
             state.selected = nil
             UI:RefreshActiveTab()
@@ -140,11 +143,14 @@ local function BuildDetail(parent)
         local armedFor = state.selected.key
         button.armed = armedFor
         button:SetText("Really forget?")
+        -- Red while armed, like the craft pane's Clear queue.
+        button.label:SetTextColor(Theme.Unpack("loss"))
 
         C_Timer.After(4, function()
             if button.armed == armedFor then
                 button.armed = false
                 button:SetText("Forget character")
+                button.label:SetTextColor(Theme.Unpack("text"))
             end
         end)
     end, { width = 140, height = 22,
@@ -289,6 +295,12 @@ local function Build(container)
     local divider = Theme.CreateDivider(container)
     divider:SetPoint("TOPLEFT", 8, -26)
     divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -DETAIL_WIDTH - 16, -26)
+    -- Kept as the list's anchor, but the heading carries the house rule now.
+    divider:Hide()
+    Theme.StyleHeading(heading, container)
+    heading.rule:ClearAllPoints()
+    heading.rule:SetPoint("LEFT", heading, "RIGHT", 6, 0)
+    heading.rule:SetPoint("RIGHT", container, "RIGHT", -DETAIL_WIDTH - 16, 0)
 
     local list = Widgets.CreateScrollList(container, {
         rowHeight = ROW_HEIGHT,

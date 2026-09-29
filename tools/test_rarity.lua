@@ -208,7 +208,7 @@ updateRow(row, {
 
 checkColor("rarity shows on an unpriceable craft too", row.name.color, GREEN)
 check("MAKE is filled before the early exit", row.cells.make.text, "2")
-check("and the missing price is still reported", row.cells.profit.text, "no sales")
+check("and the missing price is still reported", row.cells.profit.text, "no price")
 
 print("")
 print("Profit list, an item the client has not sent yet")

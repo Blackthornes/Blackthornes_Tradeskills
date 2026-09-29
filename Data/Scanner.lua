@@ -376,6 +376,7 @@ function Scanner:StartBrowseScan()
             Scanner.browseQueued = false
             Scanner.isScanning = true
             Scanner.isBrowsing = true
+            Scanner.browseForeign = false
         end,
 
         onGiveUp = function()
@@ -411,6 +412,9 @@ function Scanner:QueueBrowseQuery(searchString, opts)
         send = function()
             if opts.onSend then opts.onSend() end
 
+            -- Marked so the watch on every browse send (OnEnable) can tell
+            -- this one from a search somebody else started.
+            Scanner.sendingOwnBrowse = true
             local ok = pcall(C_AuctionHouse.SendBrowseQuery, {
                 searchString = searchString or "",
                 sorts = {},
@@ -419,6 +423,7 @@ function Scanner:QueueBrowseQuery(searchString, opts)
                 minLevel = 0,
                 maxLevel = 0,
             })
+            Scanner.sendingOwnBrowse = false
 
             if not ok then
                 ns.Warn("the game refused the page-by-page scan")
@@ -515,9 +520,14 @@ function Scanner:OnBrowseResults()
     self.browsePages = self.browsePages + 1
 
     local full = true
+    -- Whether the game said, in so many words, that this set is whole. Only
+    -- that may mark unseen items sold out; assuming it (no function, or a
+    -- call that failed) is fine for "stop paging" but not for clearing.
+    local saidWhole = false
     if Util.HasFunction("C_AuctionHouse.HasFullBrowseResults") then
         local fullOk, hasFull = pcall(C_AuctionHouse.HasFullBrowseResults)
         full = (not fullOk) or hasFull
+        saidWhole = fullOk and hasFull == true
     end
 
     if not full and self.browsePages < MAX_BROWSE_PAGES then
@@ -557,8 +567,10 @@ function Scanner:OnBrowseResults()
     end
 
     -- Only a sweep the game says is whole may mark missing items sold out.
-    -- One stopped at the page cap has not looked everywhere.
-    self:CommitBrowseResults(results, full)
+    -- One stopped at the page cap has not looked everywhere, and results
+    -- after anybody else's search went out may be that search's, not ours:
+    -- the results slot is shared, and a first page cannot tell them apart.
+    self:CommitBrowseResults(results, full and saidWhole and not self.browseForeign)
 end
 
 --- Read one browse row into a rival price and an own price.
@@ -667,7 +679,15 @@ function Scanner:CommitBrowseResults(results, complete)
 
     local soldOut = 0
     if complete then
-        soldOut = ns.Prices:ClearMissing(seen, self.scanStartedWall, now)
+        -- A sweep far smaller than the last whole one is somebody's search
+        -- that slipped past the checks above, not the auction house.
+        local lastRows = ns.db.lastSweepRows
+        if lastRows and #results < lastRows / 2 then
+            self:Report(("%d row(s) against %d last time, so no item is marked sold out"):format(#results, lastRows))
+        else
+            ns.db.lastSweepRows = #results
+            soldOut = ns.Prices:ClearMissing(seen, self.scanStartedWall, now)
+        end
     end
 
     self.verbose = false
@@ -824,9 +844,10 @@ function Scanner:ReadReplicateResults(numItems)
             -- The snapshot is the whole auction house, so an item it did not
             -- list has sold out. A row that could not be read at all might be
             -- any item, though, so a snapshot with more than a handful of
-            -- those does not get to decide.
+            -- those does not get to decide. (Prices:ClearMissing also refuses
+            -- to clear a large share of the book in one go.)
             local soldOut = 0
-            if unreadable <= numItems / 200 then
+            if unreadable <= 5 then
                 soldOut = ns.Prices:ClearMissing(seen, startedWall, now)
             else
                 self:Report(("%d row(s) could not be read, so no item is marked sold out this time"):format(unreadable))
@@ -1583,6 +1604,19 @@ function Scanner:AUCTION_HOUSE_CLOSED()
 end
 
 function Scanner:OnEnable()
+    -- Every browse search, whoever sends it. A search sent while a sweep is
+    -- out means the next results may be that search's, so the sweep can no
+    -- longer claim to have seen the whole auction house. hooksecurefunc
+    -- watches without replacing, so Blizzard's own call is untouched.
+    if type(hooksecurefunc) == "function" and type(C_AuctionHouse) == "table"
+        and type(C_AuctionHouse.SendBrowseQuery) == "function" then
+        pcall(hooksecurefunc, C_AuctionHouse, "SendBrowseQuery", function()
+            if Scanner.isBrowsing and not Scanner.sendingOwnBrowse then
+                Scanner.browseForeign = true
+            end
+        end)
+    end
+
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", self.AUCTION_HOUSE_SHOW)
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", self.AUCTION_HOUSE_CLOSED)
     ns.RegisterEvent(self, "REPLICATE_ITEM_LIST_UPDATE", self.REPLICATE_ITEM_LIST_UPDATE)

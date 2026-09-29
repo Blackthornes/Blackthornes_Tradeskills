@@ -99,7 +99,14 @@ local function UpdateCraftRow(row, entry)
     row.remove:SetShown(not entry.isDependency)
     row.count:SetText(tostring(entry.quantity))
 
-    if analysis and analysis.priceable then
+    if entry.isDependency then
+        -- Made to go into another craft, not sold, so it earns nothing of
+        -- its own. The footer already counts it that way; a sale profit here
+        -- made the column add up to more than the total under it.
+        row.profit:SetText("used")
+        row.profit:SetTextColor(Theme.Unpack("dim"))
+        row.name:SetTextColor(Theme.Unpack("text"))
+    elseif analysis and analysis.priceable then
         local total = analysis.profit * entry.quantity
         row.profit:SetText(Util.FormatMoney(total, { short = true }))
         row.profit:SetTextColor(Theme.ProfitColor(total))
@@ -496,6 +503,13 @@ local function Build(container)
     local divider = Theme.CreateDivider(container)
     divider:SetPoint("TOPLEFT", 8, -26)
     divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -26)
+    -- Kept as the list's anchor, but the heading carries the house rule now,
+    -- running from the words to the Clear all button, like MATERIALS NEEDED.
+    divider:Hide()
+    Theme.StyleHeading(heading, container)
+    heading.rule:ClearAllPoints()
+    heading.rule:SetPoint("LEFT", heading, "RIGHT", 6, 0)
+    heading.rule:SetPoint("RIGHT", clear, "LEFT", -8, 0)
 
     local craftList = Widgets.CreateScrollList(container, {
         rowHeight = ROW_HEIGHT,

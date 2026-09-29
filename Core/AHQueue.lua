@@ -310,8 +310,11 @@ function AHQueue:Request(opts)
 
                 -- The same key is asked for at different priorities (the owned
                 -- auctions refresh is routine; the /bts auctions check is
-                -- urgent), so the replacement takes its own place in line
-                -- rather than inheriting the old one's.
+                -- urgent), so the replacement takes the more urgent of the
+                -- two. Taking its own let a routine refresh push a listing's
+                -- urgent read-back to the back of the line, where it waited
+                -- out the check and reported it could not tell.
+                request.priority = math.min(request.priority, replaced.priority or request.priority)
                 table.sort(self.queue, Compare)
 
                 -- The replaced request will never be sent, so whatever was
