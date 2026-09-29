@@ -267,6 +267,25 @@ Auctions:ReadOwned({ final = true })
 check("a character that sold out drops out of the total", Auctions:GetPostedCount(2447), 2)
 ns.Config.GetCharacterKey = nil
 
+-- A listing that expired since the reading: the stack is back in the mail,
+-- so it is no longer listed. It used to count in both places until the next
+-- auction house visit.
+ns.db.postedAuctions = nil
+who = "Main"
+ns.Config.GetCharacterKey = function() return who end
+listed = { { itemID = 2447, quantity = 8 } }
+Auctions:ReadOwned({ final = true })
+local readAt = Auctions:GetTable().byCharacter.Main.updatedAt
+ns.Mail = { GetLedger = function() return { entries = {
+    { t = readAt - 100, kind = "expired", who = "Main", itemID = 2447, quantity = 5 },
+    { t = readAt + 60, kind = "expired", who = "Main", itemID = 2447, quantity = 3 },
+    { t = readAt + 60, kind = "expired", who = "Alt", itemID = 2447, quantity = 4 },
+} } end }
+check("a stack back in the mail is no longer listed", Auctions:GetPostedCount(2447), 5)
+check("verifying a listing still reads the raw count", Auctions:GetOwnPostedCount(2447), 8)
+ns.Mail = nil
+ns.Config.GetCharacterKey = nil
+
 print("")
 
 if failures > 0 then

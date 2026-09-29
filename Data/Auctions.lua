@@ -36,6 +36,35 @@ local function CharacterKey()
     return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or "?"
 end
 
+--- Units of an item that came back in the mail (expired or cancelled) for a
+--- character since its auctions were last read.
+--
+-- A reading only changes at the auction house. Between visits, a listing
+-- that expired was still counted as listed while the same stack also sat in
+-- the mailbox, so Keep in stock counted it twice until the next visit.
+local function ReturnedSince(itemID, who, since)
+    if not since or not (ns.Mail and ns.Mail.GetLedger) then return 0 end
+
+    local ok, ledger = pcall(ns.Mail.GetLedger, ns.Mail)
+    if not ok or type(ledger) ~= "table" or not ledger.entries then return 0 end
+
+    local returned = 0
+    local entries = ledger.entries
+
+    -- Oldest first, so walk back only as far as the reading.
+    for index = #entries, 1, -1 do
+        local entry = entries[index]
+        if (entry.t or 0) <= since then break end
+
+        if entry.itemID == itemID and (entry.kind == "expired" or entry.kind == "removed")
+            and (who == nil or entry.who == who) then
+            returned = returned + (entry.quantity or 0)
+        end
+    end
+
+    return returned
+end
+
 --- How many units of an item you currently have listed, on every character
 --- on this realm and faction.
 --
@@ -52,12 +81,16 @@ function Auctions:GetPostedCount(itemID)
     -- Saved before readings were kept per character: nobody knows whose it
     -- is, so it stands until a character reads its own.
     if not byCharacter or next(byCharacter) == nil then
-        return record.items[itemID] or 0
+        local listed = record.items[itemID] or 0
+        return math.max(0, listed - ReturnedSince(itemID, nil, record.updatedAt))
     end
 
     local total = 0
-    for _, reading in pairs(byCharacter) do
-        total = total + ((reading.items and reading.items[itemID]) or 0)
+    for who, reading in pairs(byCharacter) do
+        local listed = (reading.items and reading.items[itemID]) or 0
+        if listed > 0 then
+            total = total + math.max(0, listed - ReturnedSince(itemID, who, reading.updatedAt))
+        end
     end
     return total
 end
@@ -437,8 +470,10 @@ function Auctions:OnEnable()
         C_Timer.After(0.5, function() Auctions:Refresh() end)
     end)
 
+    -- Forced: cancelling several in a row fell inside the five-second
+    -- window, and the count kept the later ones as still listed.
     ns.RegisterEvent(self, "AUCTION_CANCELED", function()
-        C_Timer.After(0.5, function() Auctions:Refresh() end)
+        C_Timer.After(0.5, function() Auctions:Refresh({ force = true }) end)
     end)
 end
 

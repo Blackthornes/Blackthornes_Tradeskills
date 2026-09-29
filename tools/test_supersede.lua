@@ -124,4 +124,19 @@ check("the follow-up is out", Scanner.pendingItem and Scanner.pendingItem.itemID
 Posting:Request(2589, 1)
 check("the click still brings up the dialog", #confirmed == 1 and confirmed[1].itemID == 2589)
 
+-- Walking away from the auction house while a check is out. The scanner
+-- drops its search on close without calling back, so the five-second
+-- fallback used to pop a confirm up out in the world.
+print("\nwalking away while a check is out")
+confirmed, timers = {}, {}
+Scanner:ClearSearchState()
+Scanner.recentItemScans = {}
+Posting.requesting = {}
+Posting:Request(4306, 1)
+Scanner.isAuctionHouseOpen = false
+Scanner:ClearSearchState()
+for _, fn in ipairs(timers) do fn() end
+check("no confirm once the auction house has closed", #confirmed == 0)
+Scanner.isAuctionHouseOpen = true
+
 print(("\n%d check(s) passed\n"):format(checks))
