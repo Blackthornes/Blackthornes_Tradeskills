@@ -120,4 +120,17 @@ check("nothing for a character without Disenchant", DisenchantFor({ itemID = 1, 
 known = nil
 check("shown when the client will not say", DisenchantFor({ itemID = 1, unitPrice = 700 }) == 800)
 
+-- The list waits while a LIST box is being typed into: redrawn mid-number,
+-- the row could be showing a different item when the number is entered.
+local function Row(focused, shown)
+    return {
+        IsShown = function() return shown ~= false end,
+        quantity = { editBox = { HasFocus = function() return focused end } },
+    }
+end
+local TypingInList = PostPanel._TypingInList
+check("typing in a LIST box holds the redraw", TypingInList({ rows = { Row(false), Row(true) } }))
+check("otherwise the list redraws", not TypingInList({ rows = { Row(false), Row(false) } }))
+check("a hidden row does not count", not TypingInList({ rows = { Row(true, false) } }))
+
 print(("\n%d check(s) passed\n"):format(checks))

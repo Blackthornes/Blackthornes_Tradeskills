@@ -24,7 +24,11 @@ time = time or os.time
 ns.Config = { Get = function() return nil end }
 
 local BOLT, BAG, GLOVES = 100, 200, 300
+local OIL_A, OIL_B = 400, 401
 local recipes = {
+    -- Two recipes that make the same item.
+    [OIL_A] = { recipeID = OIL_A, outputItemID = 4000, quantityMin = 1, reagents = {} },
+    [OIL_B] = { recipeID = OIL_B, outputItemID = 4000, quantityMin = 1, reagents = {} },
     [BOLT] = { recipeID = BOLT, outputItemID = 1000, quantityMin = 1,
         reagents = { { itemID = 10, quantity = 2 } } },
     [BAG] = { recipeID = BAG, outputItemID = 2000, quantityMin = 1,
@@ -112,5 +116,19 @@ bags[3000] = 1
 Crafting:OnBagUpdate()
 
 check("the first pair of gloves counted down", Manual(GLOVES) and Manual(GLOVES).quantity == 1)
+
+print("\ntwo recipes that make the same item")
+
+-- One craft used to count down both, since each compared the same bag count.
+Queue:Add(OIL_A, 2)
+Queue:Add(OIL_B, 2)
+Crafting:RememberOutputs()
+Crafting.isTradeSkillOpen = true
+Crafting:OnCastSucceeded(nil, "player", nil, OIL_B)
+bags[4000] = 1
+Crafting:OnBagUpdate()
+
+check("the recipe that was cast counted down", Manual(OIL_B) and Manual(OIL_B).quantity == 1)
+check("the other one did not", Manual(OIL_A) and Manual(OIL_A).quantity == 2)
 
 print(("\n%d check(s) passed\n"):format(checks))

@@ -60,6 +60,21 @@ local UpdateRow
 local function BeingTyped(box)
     return box.editBox.HasFocus and box.editBox:HasFocus()
 end
+
+--- Is a LIST box anywhere in this list being typed into?
+--
+-- The list is redrawn every second at the auction house, sorted by value,
+-- and rows are reused. Redrawn mid-number, the box being typed in could end
+-- up on a different item, and the number went to that one when it was
+-- entered. So the redraw waits until the typing is done.
+local function TypingInList(list)
+    for _, row in ipairs((list and list.rows) or {}) do
+        if row.quantity and row:IsShown() and BeingTyped(row.quantity) then
+            return true
+        end
+    end
+    return false
+end
 local function CreateRow(row)
     -- The item's icon at the start of the name line, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 13)
@@ -116,6 +131,7 @@ local function DisenchantFor(line)
 end
 
 PostPanel._DisenchantFor = DisenchantFor
+PostPanel._TypingInList = TypingInList
 
 --- Why a line is a loss, in words the player can act on.
 local function LossText(line)
@@ -413,6 +429,8 @@ function PostPanel:Refresh()
 
     -- Cheap, and it catches the main window being dragged, which has no event.
     self:Reflow()
+
+    if TypingInList(self.list) then return end
 
     local lines = ns.Posting:GetPostable({ includeAll = true })
 
