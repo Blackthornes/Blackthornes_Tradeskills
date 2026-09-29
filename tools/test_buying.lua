@@ -87,3 +87,88 @@ else
     print("FAIL -- over-bought; the purchase tally is not holding")
 end
 print("")
+
+--------------------------------------------------------------------------------
+-- Vendor or auction house, whichever is cheaper (item 6, 2026-09-29).
+--
+-- The Buy materials button bought every shortfall the vendor stocked, even
+-- when the auction house had the same material for less. A material that is
+-- cheaper there, with enough listed to cover what is short, is left for the
+-- auction house. With nothing listed, or too few, the vendor still buys it.
+--------------------------------------------------------------------------------
+
+local function expect(label, got, want)
+    if got ~= want then
+        error(("%s: expected %s, got %s"):format(label, tostring(want), tostring(got)), 2)
+    end
+    print(("  ok  %s"):format(label))
+end
+
+-- The real reading of the book, borrowed from Data/Prices.lua, so the lone
+-- low rule is the one the rest of the addon uses.
+local LowestListed
+do
+    local module
+    local priceNs = {
+        NewModule = function() module = {}; return module end,
+        Util = {}, RegisterCommand = function() end,
+    }
+    assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", priceNs)
+    LowestListed = module.LowestListed
+end
+
+local THREAD, VIAL, FLUX = 2320, 3371, 2880
+local records = {}
+ns.Prices = {
+    Get = function(_, itemID) return records[itemID] end,
+    LowestListed = LowestListed,
+}
+
+local shopping = {
+    { itemID = THREAD, shortfall = 10 },
+    { itemID = VIAL,   shortfall = 5 },
+    { itemID = FLUX,   shortfall = 4 },
+}
+ns.Queue.GetShoppingList = function() return shopping end
+
+Vendor.merchantItems = {
+    [THREAD] = { index = 1, price = 10, stack = 1, numAvailable = -1, extendedCost = false },
+    [VIAL]   = { index = 2, price = 20, stack = 1, numAvailable = -1, extendedCost = false },
+    [FLUX]   = { index = 3, price = 100, stack = 1, numAvailable = -1, extendedCost = false },
+}
+
+print("")
+print("vendor or auction house")
+
+-- Thread: 4c each on the auction house, 40 listed. Cheaper there.
+records[THREAD] = { market = 6, min = 4, rivalMin = 4, quantity = 40 }
+-- Vials: cheaper there, but only 2 listed against 5 short.
+records[VIAL] = { market = 20, min = 5, rivalMin = 5, quantity = 2 }
+-- Flux: one lone listing at 10c, the rest at 150c. The lone one is left out,
+-- so the vendor's 100c is cheaper.
+records[FLUX] = { market = 150, min = 10, rivalMin = 150, ignoredLow = 10, quantity = 30 }
+
+local lines, _, cheaper = Vendor:GetNeeded()
+local byItem = {}
+for _, line in ipairs(lines) do byItem[line.itemID] = line end
+
+expect("thread is left for the auction house", byItem[THREAD], nil)
+expect("and counted as cheaper there", cheaper, 1)
+expect("vials too few listed: bought from the vendor", byItem[VIAL] and byItem[VIAL].amount, 5)
+expect("flux beside a lone low listing: bought from the vendor", byItem[FLUX] and byItem[FLUX].amount, 4)
+
+-- Nothing listed: market value is no price anyone can buy at.
+records[THREAD] = { market = 2, quantity = 0 }
+lines = Vendor:GetNeeded()
+byItem = {}
+for _, line in ipairs(lines) do byItem[line.itemID] = line end
+expect("nothing listed: the vendor buys it", byItem[THREAD] and byItem[THREAD].amount, 10)
+
+-- A tie goes to the vendor.
+records[THREAD] = { market = 10, min = 10, rivalMin = 10, quantity = 40 }
+lines = Vendor:GetNeeded()
+byItem = {}
+for _, line in ipairs(lines) do byItem[line.itemID] = line end
+expect("same price: the vendor buys it", byItem[THREAD] and byItem[THREAD].amount, 10)
+
+ns.Prices = nil
