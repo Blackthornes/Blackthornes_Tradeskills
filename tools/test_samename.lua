@@ -105,4 +105,30 @@ Check("no GUID yet: old key, not cached", ns.Config:GetCharacterKey() == "Voldar
 local realmOk, realmKey = pcall(ns.Config.GetRealmKey, ns.Config)
 Check("prices are filed by realm and faction", realmOk and realmKey == "Forever PvE-Horde", tostring(realmKey))
 
+-- The account-wide file coming back emptier than this character remembers.
+-- A fresh install's new character remembers nothing, so it never warns.
+local savedChar = BlackthornesTSCharDB
+BlackthornesTSCharDB = {}
+ns.Config.accountDataLost = nil
+ns.Config:CheckAccountDataLost({ probe = { loadCount = 1 } })
+Check("a new character does not warn", ns.Config.accountDataLost == nil)
+Check("and remembers the account file's sessions", BlackthornesTSCharDB.accountLoads == 1)
+
+ns.Config:CheckAccountDataLost({ probe = { loadCount = 2 } })
+Check("a normal login does not warn", ns.Config.accountDataLost == nil and BlackthornesTSCharDB.accountLoads == 2)
+
+BlackthornesTSCharDB.accountLoads = 300
+ns.Config:CheckAccountDataLost({ probe = { loadCount = 1 } })
+Check("an account file that came back empty warns", ns.Config.accountDataLost ~= nil)
+Check("and the character keeps what it remembered", BlackthornesTSCharDB.accountLoads == 300)
+
+ns.Config.accountDataLost = nil
+ns.Config:CheckAccountDataLost({ probe = { loadCount = 2 } })
+Check("the next session still warns", ns.Config.accountDataLost ~= nil)
+
+ns.Config.accountDataLost = nil
+ns.Config:CheckAccountDataLost({ probe = { loadCount = 301 } })
+Check("the restored file stops the warning", ns.Config.accountDataLost == nil)
+BlackthornesTSCharDB = savedChar
+
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end

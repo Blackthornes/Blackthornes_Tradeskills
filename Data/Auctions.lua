@@ -31,10 +31,47 @@ function Auctions:GetTable()
     return ns.db.postedAuctions[realmKey]
 end
 
---- How many units of an item you currently have listed.
+--- Who is reading: listings are kept per character within the realm.
+local function CharacterKey()
+    return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or "?"
+end
+
+--- How many units of an item you currently have listed, on every character
+--- on this realm and faction.
+--
+-- The game only shows each character its own auctions. The stored reading
+-- used to be whichever character last opened the auction house, so Keep in
+-- stock forgot an alt's listings the moment another character looked.
+-- Each character's last reading is now kept and added up.
 function Auctions:GetPostedCount(itemID)
     if not itemID then return 0 end
-    return self:GetTable().items[itemID] or 0
+
+    local record = self:GetTable()
+    local byCharacter = record.byCharacter
+
+    -- Saved before readings were kept per character: nobody knows whose it
+    -- is, so it stands until a character reads its own.
+    if not byCharacter or next(byCharacter) == nil then
+        return record.items[itemID] or 0
+    end
+
+    local total = 0
+    for _, reading in pairs(byCharacter) do
+        total = total + ((reading.items and reading.items[itemID]) or 0)
+    end
+    return total
+end
+
+--- How many units of an item this character has listed. Verifying a new
+--- listing compares against this, since a reading only ever shows your own.
+function Auctions:GetOwnPostedCount(itemID)
+    if not itemID then return 0 end
+
+    local record = self:GetTable()
+    local reading = record.byCharacter and record.byCharacter[CharacterKey()]
+    if reading then return (reading.items and reading.items[itemID]) or 0 end
+
+    return record.items[itemID] or 0
 end
 
 --- The auction IDs of an item you had listed at the last read this session,
@@ -295,6 +332,9 @@ function Auctions:ReadOwned(opts)
 
     record.items = items
     record.prices = prices
+
+    record.byCharacter = record.byCharacter or {}
+    record.byCharacter[CharacterKey()] = { items = items, updatedAt = time() }
     -- This session only: auction IDs are for telling a new listing apart.
     self.ownedIDs = ids
     record.updatedAt = time()

@@ -157,6 +157,16 @@ for _, analysis in ipairs(withUnpriced) do
     if analysis.recipeID == 100 then shown = analysis end
 end
 check("Show unpriced still lists a soulbound craft", shown ~= nil)
+
+-- Rows already on screen keep their places (Profit tab right-click to queue).
+-- The order handed in is the reverse of the usual one, so a list that sorted
+-- afresh would fail this.
+local usual = Profit:GetRanked({})
+local reversed = {}
+for index, analysis in ipairs(usual) do reversed[analysis.recipeID] = #usual - index + 1 end
+local held = Profit:GetRanked({ keepOrder = reversed })
+check("rows on screen keep the order they were shown in", #usual > 1
+    and held[1].recipeID == usual[#usual].recipeID and held[#held].recipeID == usual[1].recipeID)
 check("with its skill-up tier for levelling on it", shown and shown.skillUp.tier == "optimal")
 
 local starred = ids(ns.SkillUp:GetRecommended())

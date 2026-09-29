@@ -514,6 +514,7 @@ function Config:Bootstrap()
     self.installedDB = db
 
     self:StampCanary(db)
+    self:CheckAccountDataLost(db)
     self:StampCVarCanary()
 
     -- After the defaults are in place, so a mirrored value wins over its
@@ -526,6 +527,63 @@ end
 
 function Config:OnEnable()
     self:CheckLateSavedVariables()
+
+    -- A few seconds in, so it is not lost in the login chat.
+    if self.accountDataLost and C_Timer and C_Timer.After then
+        C_Timer.After(6, function() Config:WarnAccountDataLost() end)
+    end
+end
+
+--- Did the account-wide saved file come back with fewer sessions in it than
+--- this character remembers it having?
+--
+-- The account-wide file holds prices, recipes, the queue and the sales
+-- history. The per-character file is separate, so it can remember how many
+-- sessions the account-wide one had last time. If that file comes back empty
+-- or older, the data did not load, and it is not a fresh install: a new
+-- character remembers nothing, so it never warns.
+--
+-- The loss is kept until the data comes back or the player says to start
+-- fresh, so it is not forgotten after the one session where the empty file
+-- got saved over the old one.
+function Config:CheckAccountDataLost(db)
+    local charDb = _G.BlackthornesTSCharDB
+    if type(charDb) ~= "table" then return end
+
+    local loadsNow = (db.probe and db.probe.loadCount) or 0
+    local remembered = tonumber(charDb.accountLoads)
+
+    if remembered and loadsNow <= remembered then
+        self.accountDataLost = { remembered = remembered, now = loadsNow - 1 }
+        return
+    end
+
+    charDb.accountLoads = loadsNow
+end
+
+--- Loud on purpose: every logout or /reload saves the file, and the game
+--- keeps only one older copy, so the second save after a loss overwrites the
+--- last good copy.
+function Config:WarnAccountDataLost()
+    local lost = self.accountDataLost
+    if not lost then return end
+
+    ns.Warn("YOUR SAVED DATA DID NOT LOAD. Prices, recipes, your queue and sales history are missing this session.")
+    ns.Warn(("This character remembers %d sessions of it; the game handed back %d."):format(
+        lost.remembered, math.max(0, lost.now)))
+    ns.Warn("To get it back: quit the game now, without a /reload first. Then open your World of Warcraft game folder, then WTF, Account, your account name and SavedVariables, and copy Blackthornes_TS.lua.bak over Blackthornes_TS.lua. Then start the game.")
+    ns.Warn("Do this before you log out a second time: each save replaces the .bak with the newer, empty file.")
+    ns.Warn("If you meant to start fresh, type /bts db fresh and this warning stops.")
+
+    local frame = _G.UIErrorsFrame
+    if type(frame) == "table" and type(frame.AddMessage) == "function" then
+        pcall(frame.AddMessage, frame, "Blackthornes Tradeskills: your saved data did not load. See chat.", 1, 0.3, 0.3, 1)
+    end
+
+    if type(PlaySound) == "function" then
+        local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
+        pcall(PlaySound, kits.RAID_WARNING or 8959)
+    end
 end
 
 --- Did the client hand the saved table back after ADDON_LOADED?
@@ -681,7 +739,18 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("db", "show what saved data loaded", function()
+ns.RegisterCommand("db", "show what saved data loaded (/bts db fresh: stop the missing data warning)", function(args)
+    -- Starting over on purpose: this session's data is the data from now on.
+    if (args or ""):lower():match("^%s*fresh") then
+        local charDb = _G.BlackthornesTSCharDB
+        if type(charDb) == "table" and ns.db and ns.db.probe then
+            charDb.accountLoads = ns.db.probe.loadCount or 0
+        end
+        ns.Config.accountDataLost = nil
+        ns.Print("starting fresh: the missing saved data warning will not show again.")
+        return
+    end
+
     local diagnostics = ns.Config:GetLoadDiagnostics()
 
     ns.Print("saved data")
