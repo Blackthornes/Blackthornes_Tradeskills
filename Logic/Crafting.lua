@@ -106,6 +106,12 @@ end
 -- the queue reconciles from what appears in your bags. That keeps the list
 -- honest whichever way you work, and survives interrupts and partial runs.
 
+--- The end of a "made N of X" line: how many are still queued.
+local function LeftText(left)
+    if left and left > 0 then return (", %d left"):format(left) end
+    return ", all done"
+end
+
 function Crafting:OnBagUpdate()
     if ns.Queue:Count() == 0 then return end
 
@@ -133,6 +139,19 @@ function Crafting:OnBagUpdate()
     -- Items that turned up and are not yet put down to a craft, per item.
     local unclaimed = {}
 
+    -- Finished casts per recipe since the last bag update. A recipe that can
+    -- make more than one item per craft sometimes gives a lucky extra, and
+    -- counting items alone took that extra off the queue as another craft.
+    -- When a cast of a queued recipe was seen, each entry is capped at its
+    -- own casts. When none was (crafted where the addon could not see the
+    -- cast), the item count is all there is to go on.
+    local casts = self.casts or {}
+    self.casts = {}
+    local castsKnown = false
+    for _, entry in ipairs(entries) do
+        if casts[entry.recipeID] then castsKnown = true end
+    end
+
     -- Queue changes made during the walk must not reset the snapshot the
     -- walk is comparing against; see OnQueueChanged.
     self.walking = true
@@ -156,6 +175,10 @@ function Crafting:OnBagUpdate()
                 local made = math.min(
                     math.floor(unclaimed[output] / perCraft),
                     entry.quantity)
+                if castsKnown then
+                    made = math.min(made, casts[entry.recipeID] or 0)
+                    if made > 0 then casts[entry.recipeID] = casts[entry.recipeID] - made end
+                end
 
                 if made > 0 and entry.isDependency then
                     -- A sub-craft is sized from what its parents still need
@@ -179,10 +202,12 @@ function Crafting:OnBagUpdate()
 
                 elseif made > 0 then
                     unclaimed[output] = unclaimed[output] - made * perCraft
-                    ns.Queue:SetQuantity(entry.recipeID, entry.quantity - made)
+                    -- Worked out first: SetQuantity changes the entry itself.
+                    local left = entry.quantity - made
+                    ns.Queue:SetQuantity(entry.recipeID, left)
 
-                    ns.Print(("made %d of %s"):format(made,
-                        ns.Recipes:GetDisplayLink(entry.recipeID)))
+                    ns.Print(("made %d of %s%s"):format(made,
+                        ns.Recipes:GetDisplayLink(entry.recipeID), LeftText(left)))
                 end
             end
         end
@@ -257,13 +282,22 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
     local okSpell, copied = pcall(function() return spellID + 0 end)
     self.lastCastSpell = okSpell and copied or nil
 
+    -- Counted for the bag walk, which caps what it puts down to a recipe by
+    -- how many times it was actually cast.
+    if okSpell and copied then
+        self.casts = self.casts or {}
+        self.casts[copied] = (self.casts[copied] or 0) + 1
+    end
+
     for _, entry in ipairs(ns.Queue:GetAll()) do
         local ok, same = pcall(function() return entry.recipeID == spellID end)
         if ok and same and not entry.isDependency then
             local recipe = ns.Recipes:GetAny(entry.recipeID)
             if recipe and not recipe.outputItemID then
-                ns.Queue:SetQuantity(entry.recipeID, entry.quantity - 1)
-                ns.Print(("made 1 of %s"):format(ns.Recipes:GetDisplayLink(entry.recipeID)))
+                local left = entry.quantity - 1
+                ns.Queue:SetQuantity(entry.recipeID, left)
+                ns.Print(("made 1 of %s%s"):format(ns.Recipes:GetDisplayLink(entry.recipeID),
+                    LeftText(left)))
             end
             return
         end
