@@ -747,12 +747,9 @@ function MailHaul:OnEnable()
         if kind == mailbox then MailHaul:Closed() end
     end)
 
-    -- And the mailbox window itself going away. Hooking a script adds to it
-    -- without touching the game's own.
-    local mailFrame = _G.MailFrame
-    if mailFrame and mailFrame.HookScript then
-        pcall(mailFrame.HookScript, mailFrame, "OnHide", function() MailHaul:Closed() end)
-    end
+    -- Not the mailbox window hiding: other mail addons hide or replace it
+    -- while you are still at the mailbox, which ended the visit early and
+    -- showed the report halfway through collecting.
 end
 
 --- The mailbox closed, by whichever signal came first. The rest find no visit.

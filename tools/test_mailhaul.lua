@@ -507,6 +507,29 @@ check("the mailbox counts as closed",                  Mail.isOpen, false)
 
 --------------------------------------------------------------------------------
 print("")
+print("another addon hiding the mail window does not end the visit")
+--------------------------------------------------------------------------------
+
+local handlers, hooks = {}, {}
+local realRegister = ns.RegisterEvent
+ns.RegisterEvent = function(_, event, fn) handlers[event] = fn; return true end
+MailFrame = { HookScript = function(_, script, fn) hooks[script] = fn end }
+MailHaul:OnEnable()
+ns.RegisterEvent = realRegister
+
+inbox = { Sold("Linen Bag", 800), Sold("Linen Bag", 400) }
+Open()
+Take(1)
+if hooks.OnHide then hooks.OnHide() end
+check("still at the mailbox after the window hides",   MailHaul:InVisit(), true)
+Take(1)
+check("both sales in the same visit",                  #MailHaul:Current().sales, 2)
+handlers.MAIL_CLOSED()
+check("the game saying it closed ends it",             MailHaul:InVisit(), false)
+MailFrame = nil
+
+--------------------------------------------------------------------------------
+print("")
 print("the tally can be closed, and goes when the mailbox does")
 --------------------------------------------------------------------------------
 
