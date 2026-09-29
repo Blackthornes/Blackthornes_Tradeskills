@@ -1,5 +1,5 @@
 -- Blackthornes Tradeskills -- UI/Disenchanter.lua
--- The Enchanting tab's Disenchant button.
+-- The Disenchant button on the Disenchanting and Enchanting tabs.
 --
 -- Addon code may not cast a spell, but the player's own click on a secure
 -- action button may. So the tab's Disenchant button has a secure button laid
@@ -216,6 +216,9 @@ function Disenchanter:Arm(anchor, itemID, bag, slot)
     local overlay = self:CreateOverlay()
 
     if self.anchor ~= anchor then
+        -- Two tabs have a Disenchant button. The one given up takes clicks
+        -- again, or it stays dead if it is shown without being armed.
+        SetAnchorMouse(self.anchor, true)
         self.anchor = anchor
         self.placed = nil
 
@@ -304,7 +307,7 @@ local function Describe()
 
     local overlay, anchor = Disenchanter.overlay, Disenchanter.anchor
     if not overlay or not Disenchanter.itemID then
-        ns.Print("Disenchant button: not in use. Pick an item on the Enchanting tab's bags list.")
+        ns.Print("Disenchant button: not in use. Pick an item in your bags on the Disenchanting or Enchanting tab.")
         return
     end
 
@@ -324,4 +327,4 @@ local function Describe()
         or "not clicked yet.")
 end
 
-ns.RegisterCommand("disenchant", "check the Enchanting tab's Disenchant button", Describe)
+ns.RegisterCommand("disenchant", "check the Disenchant button", Describe)
