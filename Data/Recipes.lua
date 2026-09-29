@@ -197,6 +197,29 @@ function Recipes:GetCharacterName(characterKey)
     return (characterKey:match("^([^-]+)")) or characterKey
 end
 
+--- The character's name for a narrow column: the first name alone, unless
+--- another known character has the same first name, and then the first name
+--- and the last name's initial ("Trent B."). The full name is for tooltips.
+function Recipes:GetShortCharacterName(characterKey)
+    local full = self:GetCharacterName(characterKey)
+    local first, rest = full:match("^(%S+)%s+(.+)$")
+    if not first then return full end
+
+    local shared = false
+    if ns.db and ns.db.characters then
+        for otherKey in pairs(ns.db.characters) do
+            if otherKey ~= characterKey
+                and self:GetCharacterName(otherKey):match("^%S+") == first then
+                shared = true
+                break
+            end
+        end
+    end
+
+    if not shared then return first end
+    return ("%s %s."):format(first, rest:sub(1, 1))
+end
+
 --- What to add after a name that another character also has.
 local function Distinguish(record)
     if type(record) ~= "table" then return nil end

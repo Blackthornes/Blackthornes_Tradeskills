@@ -379,6 +379,9 @@ function Profit:Analyse(recipeID, characterKey)
         skillLineID = recipe.skillLineID,
         owner = crafter,
         ownerName = ns.Recipes:GetCharacterName(crafter),
+        -- For the narrow WHO column; the full name goes in the row's tooltip.
+        ownerShortName = ns.Recipes.GetShortCharacterName
+            and ns.Recipes:GetShortCharacterName(crafter) or nil,
         isMine = crafter == ns.Config:GetCharacterKey(),
     }
 

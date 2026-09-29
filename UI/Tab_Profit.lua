@@ -179,6 +179,14 @@ local function AddDisenchantLine(analysis)
     GameTooltip:Show()
 end
 
+--- The full name of who can make it, since the WHO column shows it shortened.
+local function AddOwnerLine(analysis)
+    if not state.accountWide or not analysis.ownerName or not GameTooltip:IsShown() then return end
+
+    GameTooltip:AddLine(("Crafted by %s"):format(analysis.ownerName), 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end
+
 local function UpdateRow(row, analysis)
     -- Rows are recycled, so one built under a different column set has to
     -- be re-anchored before it is filled.
@@ -206,7 +214,7 @@ local function UpdateRow(row, analysis)
 
     -- Only meaningful when several characters are in play.
     if state.accountWide then
-        cells.who:SetText(analysis.ownerName or "")
+        cells.who:SetText(analysis.ownerShortName or analysis.ownerName or "")
         cells.who:SetTextColor(Theme.Unpack(analysis.isMine and "accent" or "muted"))
     else
         cells.who:SetText("")
@@ -331,6 +339,29 @@ local function BuildDetail(parent)
 
     detail.reagentLines = {}
 
+    -- The last line when the materials do not all fit above the summary. The
+    -- whole list is in its tooltip.
+    local more = CreateFrame("Frame", nil, detail)
+    more:SetHeight(16)
+    more:EnableMouse(true)
+    more.label = Theme.CreateLabel(more, "small", "muted")
+    more.label:SetPoint("LEFT", 18, 0)
+    more:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Materials", 1, 1, 1)
+        for _, reagent in ipairs(self.reagents or {}) do
+            GameTooltip:AddDoubleLine(
+                ("%dx %s"):format(reagent.quantity, Util.GetItemLabel(reagent.itemID)),
+                reagent.shortfall > 0 and ("need %d"):format(reagent.shortfall)
+                    or Util.FormatMoney(reagent.lineCost, { short = true }),
+                1, 1, 1, 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    more:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    more:Hide()
+    detail.moreLine = more
+
     -- Summary block, anchored to the bottom so it never collides with a long
     -- reagent list.
     local summary = CreateFrame("Frame", nil, detail)
@@ -453,6 +484,25 @@ local function BuildDetail(parent)
     return detail
 end
 
+-- How many material lines fit between the MATERIALS heading and the summary.
+-- Six always fit, which is what is assumed when the pane has not been laid
+-- out yet; a seventh ran into the summary.
+local REAGENT_LINE_HEIGHT = 16
+local REAGENT_LINES_FALLBACK = 6
+
+local function ReagentRoom(detail)
+    local ok, top, bottom = pcall(function()
+        return detail.reagentHeading:GetBottom(), detail.summary:GetTop()
+    end)
+    if not (ok and type(top) == "number" and type(bottom) == "number") then
+        return REAGENT_LINES_FALLBACK
+    end
+
+    -- 6 above the first line (its anchor offset) and a little air above the
+    -- summary.
+    return math.max(2, math.floor((top - bottom - 6 - 4) / REAGENT_LINE_HEIGHT))
+end
+
 local function UpdateDetail(analysis)
     local detail = widgets.detail
 
@@ -467,6 +517,7 @@ local function UpdateDetail(analysis)
     for _, line in ipairs(detail.reagentLines) do
         line.frame:Hide()
     end
+    detail.moreLine:Hide()
 
     detail.title:SetShown(hasSelection)
     detail.subtitle:SetShown(hasSelection)
@@ -509,11 +560,18 @@ local function UpdateDetail(analysis)
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
     end
 
-    -- Reagent lines
+    -- Reagent lines. When there are more than fit, the last line that fits
+    -- says how many more there are instead.
     local y = -12
     local anchor = detail.reagentHeading
 
-    for index, reagent in ipairs((analysis.cost and analysis.cost.reagents) or {}) do
+    local reagents = (analysis.cost and analysis.cost.reagents) or {}
+    local shownCount = #reagents
+    local room = ReagentRoom(detail)
+    if shownCount > room then shownCount = room - 1 end
+
+    for index = 1, shownCount do
+        local reagent = reagents[index]
         local line = detail.reagentLines[index]
 
         if not line then
@@ -556,6 +614,16 @@ local function UpdateDetail(analysis)
         line.frame:Show()
         anchor = line.frame
         y = y - 16
+    end
+
+    if shownCount < #reagents then
+        local more = detail.moreLine
+        more:ClearAllPoints()
+        more:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, shownCount == 0 and -6 or 0)
+        more:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
+        more.label:SetText(("+%d more materials"):format(#reagents - shownCount))
+        more.reagents = reagents
+        more:Show()
     end
 
     if analysis.priceable then
@@ -1015,6 +1083,7 @@ local function Build(container)
                 Widgets.ShowItemOnly(row, analysis.outputItemID, analysis.name)
             end
             AddDisenchantLine(analysis)
+            AddOwnerLine(analysis)
         end,
 
         onLeave = function() GameTooltip:Hide() end,
