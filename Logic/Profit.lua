@@ -574,10 +574,13 @@ function Profit:GetRanked(opts)
                 if keep and analysis.margin < minMargin then keep = false end
                 if keep and opts.craftableOnly and analysis.craftableNow < 1 then keep = false end
 
-                -- Already holding as many as you want listed.
+                -- Already holding as many as you want listed. Not a row
+                -- already on screen, though: queueing up to the limit would
+                -- make it vanish under the cursor.
                 if keep and analysis.atPostLimit
                    and ns.Config:Get("hideAtPostLimit") ~= false
-                   and not opts.ignorePostLimit then
+                   and not opts.ignorePostLimit
+                   and not (opts.keepOrder and opts.keepOrder[recipeID]) then
                     keep = false
                 end
             end
@@ -598,7 +601,20 @@ function Profit:GetRanked(opts)
     -- show the real figure, because that is the number you are deciding on.
     -- opts.ignoreStock is for callers that want the raw order, such as the
     -- tests and anything reporting on the market rather than on your shelf.
+    --
+    -- opts.keepOrder ({ [recipeID] = place }) holds rows already on screen
+    -- where they are, and anything new goes after them in the usual order.
+    -- Queueing counts as stock you will have, so without it a right-click
+    -- to queue dropped the row and the next click queued something else.
+    local keepOrder = opts.keepOrder
+
     table.sort(results, function(a, b)
+        if keepOrder then
+            local ka, kb = keepOrder[a.recipeID], keepOrder[b.recipeID]
+            if ka and kb then return ka < kb end
+            if ka or kb then return ka ~= nil end
+        end
+
         local left = opts.ignoreStock and (a[sortBy] or -math.huge) or RankValue(a, sortBy)
         local right = opts.ignoreStock and (b[sortBy] or -math.huge) or RankValue(b, sortBy)
 

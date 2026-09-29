@@ -866,6 +866,47 @@ check("one row for the cloth",                  clothRows, 1)
 check("its summary counts the sale too",        Mail:GetSummary(CLOTH).sold, 1)
 
 --------------------------------------------------------------------------------
+print("")
+print("two characters with the same kind of mail")
+--------------------------------------------------------------------------------
+
+-- The list of mails already written down was shared by every character on
+-- the realm, and a fingerprint does not say whose mailbox it is in. The alt's
+-- identical sale read as already seen and was never written down.
+Reset()
+local whoIsOn = "Main-Testrealm"
+ns.Config.GetCharacterKey = function() return whoIsOn end
+
+inbox = { SoldBag() }
+Mail:Read()
+check("the main's sale is written down",        #Mail:GetLedger().entries, 1)
+
+whoIsOn = "Alt-Testrealm"
+inbox = { SoldBag() }
+Mail:Read()
+check("the alt's identical sale is too",        #Mail:GetLedger().entries, 2)
+
+-- And the alt's complete reading no longer wipes the main's list, so the
+-- main's sale still in its box is not written down a second time.
+whoIsOn = "Main-Testrealm"
+inbox = { SoldBag() }
+Mail:Read()
+check("going back to the main adds nothing",    #Mail:GetLedger().entries, 2)
+
+-- Saved before the lists were per character: a sale the main wrote down,
+-- missing from the old shared list because another character read last.
+Reset()
+ns.db.mailLedger["Testrealm-Alliance"] = {
+    entries = { { t = 1, kind = "sold", who = "Main-Testrealm", name = "Linen Bag", net = 285 } },
+    seen = {},
+}
+inbox = { SoldBag() }
+Mail:Read()
+check("the switch does not write it down twice", #Mail:GetLedger().entries, 1)
+
+ns.Config.GetCharacterKey = function() return "Tester-Testrealm" end
+
+--------------------------------------------------------------------------------
 
 print("")
 if failures > 0 then

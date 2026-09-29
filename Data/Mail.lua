@@ -560,8 +560,52 @@ end
 -- The upshot is that re-reading the same inbox any number of times changes
 -- nothing, which matters because MAIL_INBOX_UPDATE fires repeatedly and a
 -- half-loaded inbox is a normal thing to be handed.
+--- Which mails this character has already written down.
+--
+-- Kept per character. It was one list for the whole realm, and a mail
+-- fingerprint does not say whose mailbox it is in: another character's
+-- identical sale read as already seen and was never recorded, and a complete
+-- reading by one character wiped the other's list, so its mails were written
+-- down a second time on its next visit.
+--
+-- @return the list, and true when this character has none of its own yet
+local function SeenFor(ledger, who)
+    ledger.seenBy = ledger.seenBy or {}
+
+    local seen = ledger.seenBy[who]
+    if seen then return seen, false end
+
+    -- First reading since lists were kept per character. The old shared list
+    -- is the best start there is: it is right for whoever read last.
+    seen = {}
+    for key, count in pairs(ledger.seen or {}) do seen[key] = count end
+    ledger.seenBy[who] = seen
+    return seen, true
+end
+
+--- On a character's first reading with its own list, a mail missing from the
+--- old shared list may still have been written down before the shared list
+--- lost it. An entry this character already has for the same thing counts
+--- as that mail, once each, so the switch never writes a sale down twice.
+local function AlreadyWritten(entries, upTo, used, who, kind, name)
+    for index = upTo, 1, -1 do
+        local entry = entries[index]
+        if not used[index] and entry.who == who and entry.kind == kind and entry.name == name then
+            used[index] = true
+            return true
+        end
+    end
+    return false
+end
+
 function Mail:Reconcile(mails, complete)
     local ledger = self:GetLedger()
+    local who = ns.Config:GetCharacterKey()
+    local seen, firstReading = SeenFor(ledger, who)
+    local used = {}
+    -- Only entries from earlier visits: two identical sales in this reading
+    -- are two sales.
+    local earlier = #ledger.entries
 
     -- Counted fresh each reading, not accumulated: it answers "is anything
     -- waiting right now", which is what the diagnostic reports.
@@ -583,7 +627,7 @@ function Mail:Reconcile(mails, complete)
             local occurrence = (present[key] or 0) + 1
             present[key] = occurrence
 
-            if occurrence > (ledger.seen[key] or 0) then
+            if occurrence > (seen[key] or 0) then
                 local kind, itemName = self:Classify(mail)
                 local invoice = self:ReadInvoice(mail.index)
 
@@ -612,6 +656,10 @@ function Mail:Reconcile(mails, complete)
                     -- written down when it arrived, so it is not written again.
                     ns.Debug("mail already collected:", tostring(mail.subject))
 
+                elseif kind and firstReading and AlreadyWritten(ledger.entries, earlier, used, who, kind,
+                    (kind == "sold" and invoice and invoice.itemName) or itemName) then
+                    ns.Debug("mail written down before:", tostring(mail.subject))
+
                 elseif kind then
                     ledger.entries[#ledger.entries + 1] =
                         Describe(mail, kind, itemName, invoice)
@@ -635,14 +683,14 @@ function Mail:Reconcile(mails, complete)
     -- count back, so an identical one arriving later reads as new rather than
     -- as one already recorded.
     for key, count in pairs(present) do
-        ledger.seen[key] = count
+        seen[key] = count
     end
 
     -- Fingerprints that vanished entirely. Only safe when we saw the whole
     -- inbox: zeroing on a half-loaded reading would re-record everything.
     if complete then
-        for key in pairs(ledger.seen) do
-            if not present[key] then ledger.seen[key] = nil end
+        for key in pairs(seen) do
+            if not present[key] then seen[key] = nil end
         end
     end
 
@@ -952,6 +1000,7 @@ function Mail:ResetLedger()
 
     ledger.entries = {}
     ledger.seen = {}
+    ledger.seenBy = {}
 
     return had
 end
