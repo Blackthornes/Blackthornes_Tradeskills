@@ -20,7 +20,9 @@ ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = function() end
 ns.RegisterEvent = function() return true end
 local warnings = {}
-ns.Print, ns.PrintRaw, ns.Debug = function() end, function() end, function() end
+local printed = {}
+ns.Print = function(msg) printed[#printed + 1] = msg end
+ns.PrintRaw, ns.Debug = function() end, function() end
 ns.Warn = function(msg) warnings[#warnings + 1] = msg end
 
 ns.Util = {
@@ -184,6 +186,42 @@ check("the scan says it stopped", #warnings == 1)
 check("the scan is no longer running", not Scanner.isScanning and not Scanner.isBrowsing)
 check("the progress bar is cleared and the Scan button given back", ui.completes == 1)
 check("the pages that were read are kept", Prices:Get(10301) ~= nil and Prices:Get(10101) ~= nil)
+
+--------------------------------------------------------------------------------
+-- A sweep stopped at the 40 page limit is not a full scan
+--------------------------------------------------------------------------------
+
+-- Stamped as one, it hid the deals on the pages it never reached: they
+-- looked older than the scan.
+for k in pairs(priceTable) do priceTable[k] = nil end
+browseResults, full, timers, warnings, queue, printed = {}, false, {}, {}, {}, {}
+ui.completes = 0
+ns.db.lastFullScanByRealm = nil
+ns.db.lastFullScan = nil
+
+Scanner:StartBrowseScan()
+sendNext()
+for page = 1, 40 do
+    addPage(page)
+    Scanner:OnBrowseResults()
+    if page < 40 then sendNext() end
+end
+
+check("paging stops at the limit", not Scanner.isScanning and #queue == 0 and ui.completes == 1)
+check("the pages read are kept", Prices:Get(14001) ~= nil)
+check("it is not stamped as a full scan", Prices:GetLastFullScan() == nil)
+local said = printed[#printed] or ""
+check("chat says it stopped at the page limit", said:find("page limit", 1, true) ~= nil)
+check("and not that the scan is complete", said:find("scan complete", 1, true) == nil)
+
+-- One the game says is whole on its last page is still a full scan.
+browseResults, full, queue, printed = {}, false, {}, {}
+Scanner:StartBrowseScan()
+sendNext()
+addPage(1)
+full = true
+Scanner:OnBrowseResults()
+check("a sweep that reaches the end is stamped", Prices:GetLastFullScan() ~= nil)
 
 --------------------------------------------------------------------------------
 -- The quick scan cooldown starts only when the scan is really sent

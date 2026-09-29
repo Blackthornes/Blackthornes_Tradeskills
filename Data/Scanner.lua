@@ -49,7 +49,7 @@ Scanner.isScanning = false
 
 local function GetPlayerIdentity()
     if Scanner.playerName then
-        return Scanner.playerName, Scanner.playerFullName
+        return Scanner.playerName, Scanner.playerFullName, Scanner.playerSurname, Scanner.playerRealm
     end
 
     local ok, name = pcall(UnitName, "player")
@@ -58,15 +58,52 @@ local function GetPlayerIdentity()
     local realmOk, realm = pcall(GetRealmName)
     if realmOk and realm then
         -- ownerFullName arrives as Name-Realm with spaces stripped.
-        Scanner.playerFullName = Scanner.playerName .. "-" .. realm:gsub("%s", "")
+        Scanner.playerRealm = realm:gsub("%s", "")
+        Scanner.playerFullName = Scanner.playerName .. "-" .. Scanner.playerRealm
     end
 
-    return Scanner.playerName, Scanner.playerFullName
+    -- Forever lets any number of characters share a first name, so a first
+    -- name alone is not you. Asked once a session: finding it looks through
+    -- the game's functions, which is far too slow to do for every row.
+    if ns.Config and ns.Config.ReadSurname then
+        local surnameOk, surname = pcall(ns.Config.ReadSurname, ns.Config)
+        if surnameOk and type(surname) == "string" and surname ~= "" then
+            Scanner.playerSurname = surname
+        end
+    end
+
+    return Scanner.playerName, Scanner.playerFullName, Scanner.playerSurname, Scanner.playerRealm
+end
+
+-- A seller's name and realm, from "Name" or "Name-Realm".
+local function SplitOwner(text)
+    if type(text) ~= "string" or text == "" then return nil end
+
+    local name, realm = text:match("^(.-)%-([^%-]+)$")
+    if not name or name == "" then return text, nil end
+
+    return name, (realm:gsub("%s", ""))
 end
 
 function Scanner:IsOwnAuction(owner, ownerFullName)
-    local name, fullName = GetPlayerIdentity()
+    local name, fullName, surname, realm = GetPlayerIdentity()
 
+    -- With a last name known, only the whole name is you. A rival who shares
+    -- your first name used to be read as you, and your own listings were then
+    -- never undercut against theirs.
+    if surname then
+        local wanted = name .. " " .. surname
+
+        local function Matches(text)
+            local rowName, rowRealm = SplitOwner(text)
+            return rowName == wanted and (not rowRealm or not realm or rowRealm == realm)
+        end
+
+        return Matches(ownerFullName) or Matches(owner)
+    end
+
+    -- No last name to go on (a character without one, or a client that will
+    -- not say), so the first name is all there is.
     if ownerFullName and fullName and ownerFullName == fullName then return true end
     if owner and owner == name then return true end
 
@@ -581,8 +618,14 @@ function Scanner:OnBrowseResults()
     -- One stopped at the page cap has not looked everywhere, and results
     -- after anybody else's search went out may be that search's, not ours:
     -- the results slot is shared, and a first page cannot tell them apart.
+    --
+    -- Nor is one stopped at the cap a full scan at all. Stamped as one, it
+    -- hid the deals on the pages it never reached (they looked older than
+    -- the scan), so it is reported as stopped at the page limit instead.
+    local capped = not full
     self:CommitBrowseResults(results, {
-        ended = true,
+        ended = not capped,
+        capped = capped,
         whole = full and saidWhole and not self.browseForeign,
     })
 end
@@ -639,6 +682,8 @@ Scanner.SplitBrowseRow = SplitBrowseRow
 
 --- @param opts.ended true when paging reached its natural end, so this was
 ---   a full scan rather than one cut short.
+--- @param opts.capped true when paging stopped at the page limit, so the
+---   end of the auction house was never reached.
 --- @param opts.whole true when the sweep read the whole auction house, so an
 ---   item it did not see has sold out. Partial sweeps leave the rest alone.
 ---   Passing true is the same as both.
@@ -722,6 +767,9 @@ function Scanner:CommitBrowseResults(results, opts)
     if opts.ended then
         ns.Prices:SetLastFullScan(now)
         ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+    elseif opts.capped then
+        ns.Print(("scan stopped at the %d page limit: %s items updated in %.1fs. Items on later pages were not reached, so this does not count as a full scan.")
+            :format(MAX_BROWSE_PAGES, Util.Comma(recorded), elapsed))
     else
         ns.Print(("scan stopped early: %s items updated in %.1fs"):format(Util.Comma(recorded), elapsed))
     end
@@ -1344,6 +1392,27 @@ end
 -- go missing, settle the shared state on the way out.
 
 --- Forget any search of ours that is in flight, timer included.
+--- Drop a search whose caller has stopped waiting for it.
+--
+-- A price check gives up at five seconds and goes on with the last known
+-- price, while the search itself may still answer up to three seconds later.
+-- That late answer is not a check of the price the player was already shown,
+-- so it is no longer this caller's: it is read like anybody else's results.
+-- The search is also forgotten as a recent one, or the next click within
+-- twenty seconds was told "recent" and treated as checked when it never was.
+--
+-- Matched by the caller's own callback, so a newer search for the same item
+-- from somewhere else is left alone.
+function Scanner:AbandonItemScan(callback)
+    local pending = self.pendingItem
+    if callback == nil or not pending or pending.callback ~= callback then return false end
+
+    self:ClearSearchState()
+    if self.recentItemScans then self.recentItemScans[pending.itemID] = nil end
+
+    return true
+end
+
 function Scanner:ClearSearchState()
     if self.searchTimeout then
         self.searchTimeout:Cancel()
