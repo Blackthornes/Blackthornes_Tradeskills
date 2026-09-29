@@ -16,6 +16,9 @@ ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, function() end
 ns.Util = {}
 
 time = time or os.time
+local clock = 100
+local savedGetTime = GetTime
+GetTime = function() return clock end
 
 ns.Config = { Get = function() return nil end }
 
@@ -81,6 +84,27 @@ Crafting:OnBagUpdate()
 check("with no cast seen, the item count is used", quantity(100) == nil)
 check("the last one says all done", printed[#printed] == "made 2 of recipe100, all done")
 
+print("\nthe made item arriving in a later bag update")
+
+-- The reagents leave in one bag update and the made item arrives in the
+-- next. The cast still caps the count: one craft with a lucky extra is one.
+ns.db.queue = { { recipeID = 100, quantity = 5 } }
+bags[1000] = 0
+Crafting:RememberOutputs()
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 100)
+Crafting:OnBagUpdate()
+bags[1000] = 2
+Crafting:OnBagUpdate()
+check("a reagent-only update keeps the cast for the next", quantity(100) == 4)
+
+-- A cast whose items never showed up stops capping after a short while.
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 100)
+Crafting:OnBagUpdate()
+clock = clock + 11
+bags[1000] = 4
+Crafting:OnBagUpdate()
+check("a stale cast no longer caps the count", quantity(100) == 2)
+
 print("\nenchants say how many are left too")
 
 ns.db.queue = { { recipeID = 400, quantity = 2 } }
@@ -88,5 +112,7 @@ Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
 check("an enchant line has the count", printed[#printed] == "made 1 of recipe400, 1 left")
 Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
 check("the last enchant says all done", printed[#printed] == "made 1 of recipe400, all done")
+
+GetTime = savedGetTime
 
 print(("\n%d check(s) passed\n"):format(checks))

@@ -106,6 +106,10 @@ end
 -- the queue reconciles from what appears in your bags. That keeps the list
 -- honest whichever way you work, and survives interrupts and partial runs.
 
+-- How long a finished cast waits for its items to reach the bags before it
+-- no longer caps what the bag walk counts, in seconds.
+local CAST_KEPT_FOR = 10
+
 --- The end of a "made N of X" line: how many are still queued.
 local function LeftText(left)
     if left and left > 0 then return (", %d left"):format(left) end
@@ -139,14 +143,23 @@ function Crafting:OnBagUpdate()
     -- Items that turned up and are not yet put down to a craft, per item.
     local unclaimed = {}
 
-    -- Finished casts per recipe since the last bag update. A recipe that can
+    -- Finished casts per recipe not yet matched to items. A recipe that can
     -- make more than one item per craft sometimes gives a lucky extra, and
     -- counting items alone took that extra off the queue as another craft.
     -- When a cast of a queued recipe was seen, each entry is capped at its
     -- own casts. When none was (crafted where the addon could not see the
     -- cast), the item count is all there is to go on.
+    --
+    -- Only the casts that count a craft are used up. The reagents leaving
+    -- the bags can be a bag update of their own, before the made item
+    -- arrives, and wiping the casts on that one lost the cap for the next.
+    -- A cast no items turned up for is let go after a short while.
     local casts = self.casts or {}
-    self.casts = {}
+    self.casts = casts
+    local now = GetTime()
+    for recipeID, cast in pairs(casts) do
+        if now - cast.at > CAST_KEPT_FOR then casts[recipeID] = nil end
+    end
     local castsKnown = false
     for _, entry in ipairs(entries) do
         if casts[entry.recipeID] then castsKnown = true end
@@ -176,8 +189,12 @@ function Crafting:OnBagUpdate()
                     math.floor(unclaimed[output] / perCraft),
                     entry.quantity)
                 if castsKnown then
-                    made = math.min(made, casts[entry.recipeID] or 0)
-                    if made > 0 then casts[entry.recipeID] = casts[entry.recipeID] - made end
+                    local cast = casts[entry.recipeID]
+                    made = math.min(made, cast and cast.count or 0)
+                    if made > 0 then
+                        cast.count = cast.count - made
+                        if cast.count <= 0 then casts[entry.recipeID] = nil end
+                    end
                 end
 
                 if made > 0 and entry.isDependency then
@@ -286,7 +303,10 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
     -- how many times it was actually cast.
     if okSpell and copied then
         self.casts = self.casts or {}
-        self.casts[copied] = (self.casts[copied] or 0) + 1
+        local cast = self.casts[copied] or { count = 0 }
+        cast.count = cast.count + 1
+        cast.at = GetTime()
+        self.casts[copied] = cast
     end
 
     for _, entry in ipairs(ns.Queue:GetAll()) do
