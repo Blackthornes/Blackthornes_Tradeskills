@@ -347,6 +347,24 @@ Disenchant:AnnounceDeals()
 check("with scan sounds off, the message and no sound", #printed == 1 and chimed == nil)
 config.scanSounds = nil
 
+-- Only deals a character can break at today's skill count.
+local function Breakable()
+    local n = 0
+    for _, row in ipairs(Disenchant:GetAuctionRows({ profitableOnly = true })) do
+        if row.canDisenchant ~= false then n = n + 1 end
+    end
+    return n
+end
+Enchanter(10)
+local allDeals = #Disenchant:GetAuctionRows({ profitableOnly = true })
+check("some deals need more skill than Enchanting 10", Breakable() < allDeals)
+printed = {}
+check("the message counts only deals Enchanting 10 can break",
+    Disenchant:AnnounceDeals() == Breakable())
+ns.db.characters = {}
+check("with no enchanter known, every deal counts", Disenchant:AnnounceDeals() == allDeals)
+Enchanter(50)
+
 local backup = records
 records = { [2006] = { rivalMin = 5000 } }
 printed, chimed = {}, nil
