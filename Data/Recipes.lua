@@ -94,6 +94,18 @@ local function GetCharacterRecord(create)
     local characters = ns.db.characters
 
     local record = characters[key]
+
+    -- No record is made under the old name-and-realm key. That key is only
+    -- handed out when the game would not give the character's GUID (a
+    -- /reload inside a dungeon), and a record made then stayed for good as a
+    -- second copy of this character: its bags counted again as an alt's, its
+    -- recipes listed twice. The next read, with the GUID, makes the real one.
+    local config = ns.Config
+    if not record and create and config.characterKey == nil
+        and config.GetLegacyCharacterKey and key == config:GetLegacyCharacterKey() then
+        create = false
+    end
+
     if not record and create then
         -- Plain copies: inside a dungeon the client can hand back names
         -- that raise when compared, and a stored one would raise forever.
@@ -386,10 +398,30 @@ end
 --------------------------------------------------------------------------------
 
 --- Read every recipe the open profession window exposes into the cache.
+--- Is the open profession window someone else's?
+--
+-- A [Tailoring] link in chat, a guild member's list or an NPC crafter all
+-- open the same window, and their recipes read as learned. Saved as this
+-- character's, they put crafts in Profit and Level Up that nobody here can
+-- make, with no way to remove them.
+local function ShowingSomeoneElses()
+    for _, name in ipairs({ "IsTradeSkillLinked", "IsTradeSkillGuild", "IsNPCCrafting" }) do
+        local fn = C_TradeSkillUI and C_TradeSkillUI[name]
+        if type(fn) == "function" then
+            local ok, yes = pcall(function() return fn() == true end)
+            if ok and yes then return true end
+        end
+    end
+    return false
+end
+
+Recipes.ShowingSomeoneElses = ShowingSomeoneElses
+
 function Recipes:Harvest()
     local trade = ns.Compat:Get().tradeskill
     if trade.mode ~= "modern" then return false end
     if self.harvesting then return false end
+    if ShowingSomeoneElses() then return false end
 
     local ok, recipeIDs = pcall(C_TradeSkillUI.GetAllRecipeIDs)
     if not ok or type(recipeIDs) ~= "table" or #recipeIDs == 0 then

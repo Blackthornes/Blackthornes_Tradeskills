@@ -842,6 +842,30 @@ Mail:Read()
 check("and not again on the next visit",        Mail:GetSummary().sold, 1)
 
 --------------------------------------------------------------------------------
+print("")
+print("sales and expiries of an uncrafted item share one row")
+--------------------------------------------------------------------------------
+
+-- Cloth sold from the whole-bag Post tab: the sale mail names it but has no
+-- item, and no recipe makes it, so the sale had no id. Its expiry has one.
+-- The Sales tab showed them as two items, each with the wrong sell-through.
+Reset()
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Cloth",
+      money = 90, invoice = { invoiceType = "seller", itemName = "Linen Cloth", bid = 100 } },
+    { sender = "Auction House", subject = "Auction expired: Linen Cloth",
+      items = { { itemID = CLOTH, count = 20 } } },
+}
+Mail:Read()
+
+local clothRows = 0
+for _, bucket in ipairs(Mail:GetItems()) do
+    if bucket.name == "Linen Cloth" or bucket.itemID == CLOTH then clothRows = clothRows + 1 end
+end
+check("one row for the cloth",                  clothRows, 1)
+check("its summary counts the sale too",        Mail:GetSummary(CLOTH).sold, 1)
+
+--------------------------------------------------------------------------------
 
 print("")
 if failures > 0 then

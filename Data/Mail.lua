@@ -693,6 +693,23 @@ end
 -- @param itemID optional; nil totals the lot
 -- @return { sold, soldUnits, returned, returnedUnits, expired, cancelled,
 --           net, gross, cut, deposit, firstAt, lastAt }
+--- Item IDs by name, learned from ledger entries that carry both.
+--
+-- A sale mail names its item but has no attachment, so a sale gets an id only
+-- when the name matches a cached recipe output. Its expiries always have one,
+-- from the item that came back. Without this, anything not crafted (cloth
+-- sold from the whole-bag Post tab) showed as two rows on the Sales tab, one
+-- with the sales and one with the expiries, each with the wrong sell-through.
+function Mail:NameIndex()
+    local index = {}
+    for _, entry in ipairs(self:GetLedger().entries) do
+        if entry.itemID and entry.name and not index[entry.name] then
+            index[entry.name] = entry.itemID
+        end
+    end
+    return index
+end
+
 function Mail:GetSummary(itemID)
     local totals = {
         sold = 0, soldUnits = 0,
@@ -708,12 +725,15 @@ function Mail:GetSummary(itemID)
         estimated = 0,
     }
 
+    local names = itemID and self:NameIndex() or {}
+
     -- An entry from before the restored history was rolled up is already in
     -- that history, added below; counting it here as well was the bug.
     for _, entry in ipairs(self:GetLedger().entries) do
         local rolled = self:IsRolledUp(entry)
+        local entryItemID = entry.itemID or names[entry.name]
 
-        if (not itemID or entry.itemID == itemID) and not rolled then
+        if (not itemID or entryItemID == itemID) and not rolled then
             if entry.kind == "sold" then
                 totals.sold = totals.sold + 1
                 totals.soldUnits = totals.soldUnits + (entry.quantity or 1)
@@ -837,8 +857,10 @@ function Mail:GetItems()
         return bucket
     end
 
+    local names = self:NameIndex()
+
     for _, entry in ipairs(self:GetLedger().entries) do
-        local bucket = Bucket(entry.itemID, entry.name)
+        local bucket = Bucket(entry.itemID or names[entry.name], entry.name)
 
         -- Already inside the restored history added below. The row is still
         -- made, so the item keeps its name.

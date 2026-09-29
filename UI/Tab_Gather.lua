@@ -78,7 +78,12 @@ local function BuildList()
             if aName ~= bName then return aName < bName end
         end
 
-        return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        -- A last tie-break, so equal rows (every "no data" one at 0) keep
+        -- their places between refreshes instead of swapping.
+        if (a.estimatedCost or 0) ~= (b.estimatedCost or 0) then
+            return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        end
+        return (a.itemID or 0) < (b.itemID or 0)
     end)
 
     return lines
@@ -392,7 +397,8 @@ local function Build(container)
     widgets.auctionTotal = Theme.CreateLabel(container, "small", "text")
     widgets.auctionTotal:SetPoint("BOTTOMLEFT", 220, 38)
 
-    widgets.grandTotal = Theme.CreateLabel(container, "small", "text")
+    -- In gold, like the other headline figures: it is the answer here.
+    widgets.grandTotal = Theme.CreateLabel(container, "small", "accent")
     widgets.grandTotal:SetPoint("BOTTOMLEFT", 430, 38)
 
     widgets.savingLabel = Theme.CreateLabel(container, "tiny", "profit")

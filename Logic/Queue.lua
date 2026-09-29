@@ -516,7 +516,12 @@ function Queue:GetShoppingList()
         if (a.shortfall > 0) ~= (b.shortfall > 0) then
             return a.shortfall > 0
         end
-        return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        -- A last tie-break, so equal rows (every "no data" one at 0) keep
+        -- their places between refreshes instead of swapping.
+        if (a.estimatedCost or 0) ~= (b.estimatedCost or 0) then
+            return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        end
+        return (a.itemID or 0) < (b.itemID or 0)
     end)
 
     return list

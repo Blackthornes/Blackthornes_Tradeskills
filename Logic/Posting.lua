@@ -37,7 +37,7 @@ local VERIFY_GIVE_UP = 15
 
 -- Confirmed against Blizzard's own Sell tab on Forever, which offers 2, 8 and
 -- 24 hours: this is a Classic auction house, not retail's 12/24/48. The choice
--- only affects the deposit estimate, since the listing is made by hand.
+-- is the length every listing goes up for, and sets its deposit.
 local DURATIONS = {
     { text = "2 hours", value = 1 },
     { text = "8 hours", value = 2 },
@@ -1293,11 +1293,32 @@ function Posting:Request(itemID, quantity, unitPrice)
             return
         end
 
+        -- A second click while this item's search is still out. That search
+        -- will bring up the dialog when it answers; showing one now would be
+        -- at the price from before the check, and then a second dialog for
+        -- the same item would follow it.
+        if state == "recent" then
+            local pending = ns.Scanner.pendingItem
+            if pending and pending.itemID == itemID then return end
+        end
+
         -- Read the price back after the check, never before. A search that
         -- found nothing has just cleared the rival price, and this is where
         -- that becomes a listing at market value instead of an undercut of
         -- a seller who is not there.
         local price = self:GetPostPrice(itemID) or unitPrice
+
+        -- A price the listing step will refuse (under what a vendor pays, or
+        -- a fraction of market after a rival's dump) is said now. Asking
+        -- "Do you wish to continue?" and refusing after Yes was the same
+        -- answer, one click later and after a question it had no use for.
+        local floor, why = self:GetPriceFloor(itemID)
+        if floor and price and price < floor then
+            ns.Warn(("not listing %s at %s: %s. Expected at least %s."):format(
+                Util.GetItemLabel(itemID), Util.FormatMoney(price), why or "the price looks wrong",
+                Util.FormatMoney(floor)))
+            return
+        end
 
         self:Confirm(itemID, quantity, price, { state = state })
     end

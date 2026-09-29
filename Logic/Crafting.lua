@@ -207,7 +207,34 @@ function Crafting:OnTradeSkillClose()
     if ns.UI then ns.UI:RefreshActiveTab() end
 end
 
+--- A craft that makes no item, such as an enchant, finished casting.
+--
+-- The queue counts crafts down by the made item turning up in the bags, and
+-- an enchant never puts one there, so ten queued enchants stayed at ten for
+-- good however many were cast. For those alone the finished cast is the
+-- count. The spell is compared inside a pcall: inside an instance it can be
+-- a value the game will not let an addon compare.
+function Crafting:OnCastSucceeded(_, unit, _, spellID)
+    if not (self.isTradeSkillOpen or self.active) then return end
+
+    local okUnit, isPlayer = pcall(function() return unit == "player" end)
+    if not (okUnit and isPlayer) then return end
+
+    for _, entry in ipairs(ns.Queue:GetAll()) do
+        local ok, same = pcall(function() return entry.recipeID == spellID end)
+        if ok and same and not entry.isDependency then
+            local recipe = ns.Recipes:GetAny(entry.recipeID)
+            if recipe and not recipe.outputItemID then
+                ns.Queue:SetQuantity(entry.recipeID, entry.quantity - 1)
+                ns.Print(("made 1 of %s"):format(ns.Recipes:GetDisplayLink(entry.recipeID)))
+            end
+            return
+        end
+    end
+end
+
 function Crafting:OnEnable()
+    ns.RegisterEvent(self, "UNIT_SPELLCAST_SUCCEEDED", self.OnCastSucceeded)
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", self.OnTradeSkillShow)
     ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", self.OnTradeSkillClose)
 

@@ -875,7 +875,7 @@ function Disenchant:GetAuctionRows(opts)
     -- Only what the last scan (or a search since) actually saw. A listing
     -- missing from the last scan has sold or expired, but its record keeps
     -- the old price, so without this it stays listed as a deal for days.
-    local since = ns.db and ns.db.lastFullScan
+    local since = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
 
     for itemID, record in pairs(prices) do
         local buy = type(record) == "table" and BuyPrice(record)
@@ -1028,7 +1028,7 @@ local function Ago(stamp)
 end
 
 ns.RegisterCommand("dedeals", "say why each deal on the Disenchanting tab is there", function()
-    local lastScan = ns.db and ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     ns.Print(("dedeals: last full scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
 

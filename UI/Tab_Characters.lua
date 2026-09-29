@@ -184,6 +184,7 @@ local function UpdateDetail(entry)
     if detail.forget.armed and (not entry or detail.forget.armed ~= entry.key) then
         detail.forget.armed = false
         detail.forget:SetText("Forget character")
+        detail.forget.label:SetTextColor(Theme.Unpack("text"))
     end
 
     for _, line in ipairs(detail.lines) do
@@ -213,7 +214,11 @@ local function UpdateDetail(entry)
 
     if #ranked == 0 then
         detail.lines[1]:Show()
-        detail.lines[1].name:SetText("Nothing with a price yet")
+        -- A character with no recipes read needs a profession window
+        -- opened, not a scan.
+        detail.lines[1].name:SetText((entry.recipeCount or 0) == 0
+            and "No recipes read yet. Open a profession window on this character."
+            or "Nothing with a price yet")
         detail.lines[1].name:SetTextColor(Theme.Unpack("dim"))
         detail.lines[1].profit:SetText("")
     else
