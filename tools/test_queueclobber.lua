@@ -103,10 +103,20 @@ bags[1000] = 2
 printed = {}
 Crafting:OnBagUpdate()
 
-check("the bolts you asked for counted down to 3", Manual(BOLT) and Manual(BOLT).quantity == 3)
+-- The two bolts go to the bag first. They were also taken off the 5 you
+-- asked for, so one craft counted twice: 8 bolts wanted, 2 made, 4 left.
 check("the bag now wants 1 more bolt made", Derived(BOLT) and Derived(BOLT).quantity == 1)
+check("the bolts you asked for are all still to make", Manual(BOLT) and Manual(BOLT).quantity == 5)
 check("the bag is still queued", Manual(BAG) and Manual(BAG).quantity == 1)
 check("the crafts were reported once", #printed == 1)
+
+-- Two more: one finishes the bag's share, the other is the first of yours.
+bags[1000] = 4
+printed = {}
+Crafting:OnBagUpdate()
+
+check("the bag needs no more bolts", Derived(BOLT) == nil)
+check("one of yours counted down", Manual(BOLT) and Manual(BOLT).quantity == 4)
 
 print("\nthe first craft of something queued with the window open")
 

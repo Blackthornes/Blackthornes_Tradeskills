@@ -130,6 +130,7 @@ function Transfer:Import(code)
 
     local queued, settingsApplied, limitsApplied = 0, 0, 0
     local skipped = 0
+    local resized = false
 
     for index = 2, #sections do
         local section = sections[index]
@@ -144,7 +145,16 @@ function Transfer:Import(code)
                     -- another character would otherwise queue crafts that can
                     -- never be made.
                     if ns.Recipes:GetAny(tonumber(recipeID)) then
-                        ns.Queue:Add(tonumber(recipeID), tonumber(quantity))
+                        -- A craft already queued is set to the code's
+                        -- amount, not added to. Adding meant importing the
+                        -- same code twice doubled the queue.
+                        local _, existing = ns.Queue:Find(tonumber(recipeID), true)
+                        if existing then
+                            existing.quantity = math.max(1, math.floor(tonumber(quantity) or 1))
+                            resized = true
+                        else
+                            ns.Queue:Add(tonumber(recipeID), tonumber(quantity))
+                        end
                         queued = queued + 1
                     else
                         skipped = skipped + 1
@@ -176,6 +186,11 @@ function Transfer:Import(code)
                 end
             end
         end
+    end
+
+    if resized then
+        ns.Queue:RebuildDependencies()
+        ns.Queue:Notify()
     end
 
     local summary = ("restored %d craft(s), %d setting(s), %d limit(s)")

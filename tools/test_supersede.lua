@@ -14,7 +14,9 @@ ns.RegisterCommand = function() end
 ns.RegisterEvent = function() return true end
 local printed = {}
 ns.Print = function(text) printed[#printed + 1] = text end
-ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, function() end
+local warned = {}
+ns.PrintRaw, ns.Debug = function() end, function() end
+ns.Warn = function(text) warned[#warned + 1] = text end
 
 ns.Util = {
     Clamp = function(v, l, h) return math.max(l, math.min(h, v)) end,
@@ -138,5 +140,26 @@ Scanner:ClearSearchState()
 for _, fn in ipairs(timers) do fn() end
 check("no confirm once the auction house has closed", #confirmed == 0)
 Scanner.isAuctionHouseOpen = true
+
+-- Listed before your auctions had been read this visit. The count it was
+-- measured against was last session's, and two of those have since sold, so
+-- a listing that went up read as "did not appear in your auctions".
+print("\na listing made before the first read of your auctions")
+warned = {}
+Posting.pending = { itemID = 2589, postedBefore = 3, idsBefore = nil }
+Posting:ResolvePending(2, false)
+check("not reported as failed", #warned == 0)
+
+-- With a reading from this visit to compare against, missing is missing.
+warned = {}
+Posting.pending = { itemID = 2589, postedBefore = 3, idsBefore = { [11] = true } }
+Posting:ResolvePending(3, false)
+check("a checked listing that is not there still warns", #warned > 0)
+
+-- And nothing there at all is a failure either way.
+warned = {}
+Posting.pending = { itemID = 2589, postedBefore = 3, idsBefore = nil }
+Posting:ResolvePending(0, false)
+check("nothing listed at all still warns", #warned > 0)
 
 print(("\n%d check(s) passed\n"):format(checks))
