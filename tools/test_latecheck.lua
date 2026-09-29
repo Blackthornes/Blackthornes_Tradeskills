@@ -113,9 +113,16 @@ check("the search is no longer waited on for this click", Scanner.pendingItem ==
 
 -- The scanner's eight-second give-up must not warn a second time about a
 -- check the player was already told about.
+-- It still settles Blizzard's results panel, though: that timer is the only
+-- thing that does when the auction house drops a query without a word.
 warned = {}
+local settled = {}
+local realSettle = Scanner.SettleSearchDisplay
+Scanner.SettleSearchDisplay = function(_, reason) settled[#settled + 1] = reason end
 for _, t in ipairs(searchTimers) do if not t.cancelled then t.fn() end end
+Scanner.SettleSearchDisplay = realSettle
 check("no second warning at eight seconds", #warned == 0)
+check("the search results panel is still settled", #settled == 1)
 check("still only one confirm", #confirmed == 1)
 
 -- Clicking again within twenty seconds must search again. The unanswered

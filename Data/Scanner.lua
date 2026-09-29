@@ -1220,6 +1220,15 @@ function Scanner:ScanItem(itemID, callback, opts)
         Scanner.searchTimeout = C_Timer.NewTimer(SEARCH_TIMEOUT, function()
             Scanner.searchTimeout = nil
 
+            -- A search its caller gave up on still gets its display settled:
+            -- this timer is the only thing that does it when the auction house
+            -- drops a query without a word.
+            if Scanner.abandonedItem == mine then
+                Scanner.abandonedItem = nil
+                Scanner:SettleSearchDisplay("a search did not answer")
+                return
+            end
+
             local pending = Scanner.pendingItem
             if not pending or pending.itemID ~= itemID then return end
 
@@ -1421,7 +1430,11 @@ function Scanner:AbandonItemScan(callback)
     local pending = self.pendingItem
     if callback == nil or not pending or pending.callback ~= callback then return false end
 
-    self:ClearSearchState()
+    -- The timer is kept, with nobody waiting on it: it is what settles
+    -- Blizzard's results panel if the auction house never answers. Cancelled
+    -- here, the panel could sit on "searching" for the rest of the visit.
+    self.pendingItem = nil
+    self.abandonedItem = pending
     if self.recentItemScans then self.recentItemScans[pending.itemID] = nil end
 
     return true
@@ -1434,6 +1447,7 @@ function Scanner:ClearSearchState()
     end
 
     self.pendingItem = nil
+    self.abandonedItem = nil
 end
 
 --- What the player has typed into Blizzard's search box, if it can be read.
