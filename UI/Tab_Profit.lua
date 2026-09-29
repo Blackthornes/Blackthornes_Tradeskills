@@ -907,6 +907,71 @@ end
 -- Build
 --------------------------------------------------------------------------------
 
+--- Fill the profession dropdown from the skill lines the listed recipes carry.
+--
+-- Built from the recipes themselves, not from the profession list. Forever
+-- reports each profession under two skill-line IDs (Leatherworking is both
+-- 2945 and 165) and a recipe may be tagged with either, so matching the two
+-- lists against each other drops entries.
+--
+-- With "All characters" ticked the list shows every character's recipes, so
+-- the choices come from all of them too; otherwise an alt's profession could
+-- not be picked at all.
+local function RefreshProfessionOptions()
+    local dropdown = widgets.professionDropdown
+    if not dropdown then return end
+
+    local recipes = state.accountWide and ns.Recipes:GetAccountWide() or ns.Recipes:GetAll()
+
+    -- Names the characters' own profession reads saved, for a skill line the
+    -- client will not name for this character.
+    local savedNames = {}
+    for _, record in pairs(ns.db and ns.db.characters or {}) do
+        if type(record) == "table" and type(record.professions) == "table" then
+            for _, profession in ipairs(record.professions) do
+                if type(profession) == "table" and profession.skillLineID and profession.name then
+                    savedNames[profession.skillLineID] = profession.name
+                end
+            end
+        end
+    end
+
+    local options = { { text = "All professions", value = nil } }
+
+    local seen = {}
+    for _, recipe in pairs(recipes) do
+        local skillLineID = recipe.skillLineID
+
+        if skillLineID and not seen[skillLineID] then
+            seen[skillLineID] = true
+
+            local name
+            if ns.Util.HasFunction("C_TradeSkillUI.GetProfessionInfoBySkillLineID") then
+                local ok, info = pcall(C_TradeSkillUI.GetProfessionInfoBySkillLineID, skillLineID)
+                if ok and info and info.professionName ~= "" then name = info.professionName end
+            end
+
+            options[#options + 1] = {
+                text = name or savedNames[skillLineID] or ("Skill line " .. skillLineID),
+                value = skillLineID,
+            }
+        end
+    end
+
+    table.sort(options, function(a, b)
+        if a.value == nil then return true end
+        if b.value == nil then return false end
+        return a.text < b.text
+    end)
+
+    dropdown:SetOptions(options)
+
+    -- Unticking can take away the profession that was picked. The dropdown
+    -- falls back to "All professions" on its own, and the filter has to
+    -- follow it or the list would stay filtered to a choice no longer shown.
+    state.profession = dropdown:GetValue()
+end
+
 local function Build(container)
     -- Toolbar
     local toolbar = CreateFrame("Frame", nil, container)
@@ -943,6 +1008,7 @@ local function Build(container)
 
     local accountWide = Widgets.CreateCheckbox(toolbar, "All characters", function(checked)
         state.accountWide = checked
+        RefreshProfessionOptions()
 
         -- The WHO column appears or disappears with this.
         layoutVersion = layoutVersion + 1
@@ -1117,39 +1183,7 @@ local function OnShow()
     -- Opening the tab again sorts afresh.
     state.orderKey, state.heldOrder = nil, nil
 
-    -- Built from the skill lines the cached recipes actually carry, not from
-    -- the profession list. Forever reports each profession under two skill-line
-    -- IDs (Leatherworking is both 2945 and 165) and a recipe may be tagged with
-    -- either, so matching the two lists against each other drops entries.
-    local options = { { text = "All professions", value = nil } }
-
-    local seen = {}
-    for _, recipe in pairs(ns.Recipes:GetAll()) do
-        local skillLineID = recipe.skillLineID
-
-        if skillLineID and not seen[skillLineID] then
-            seen[skillLineID] = true
-
-            local name
-            if ns.Util.HasFunction("C_TradeSkillUI.GetProfessionInfoBySkillLineID") then
-                local ok, info = pcall(C_TradeSkillUI.GetProfessionInfoBySkillLineID, skillLineID)
-                if ok and info then name = info.professionName end
-            end
-
-            options[#options + 1] = {
-                text = name or ("Skill line " .. skillLineID),
-                value = skillLineID,
-            }
-        end
-    end
-
-    table.sort(options, function(a, b)
-        if a.value == nil then return true end
-        if b.value == nil then return false end
-        return a.text < b.text
-    end)
-
-    widgets.professionDropdown:SetOptions(options)
+    RefreshProfessionOptions()
 end
 
 UI:RegisterTab({
