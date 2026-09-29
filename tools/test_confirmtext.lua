@@ -8,7 +8,7 @@
 -- the text that dialog is built from.
 
 local ns = {}
-ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
+ns.COLORS = setmetatable({ accent = "ffc8a44d" }, { __index = function() return "ffffffff" end })
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = function() end
 ns.RegisterEvent = function() return true end
@@ -85,9 +85,14 @@ local function check(label, condition)
     print(("  ok  %s"):format(label))
 end
 
+-- Colour codes are left out, so the words can be compared exactly.
+local function plain(text)
+    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
 local function lines(text)
     local out = {}
-    for line in (text .. "\n"):gmatch("(.-)\n") do
+    for line in (plain(text) .. "\n"):gmatch("(.-)\n") do
         if line ~= "" then out[#out + 1] = line end
     end
     return out
@@ -103,6 +108,13 @@ check("market value first", l[1] == "Average Market Value: 500")
 check("cheapest rival second", l[2] == "Lowest Market Posting: 450")
 check("the price being listed third", l[3] == "Posting at: 400, item2589")
 check("the question last", l[4] == "Do you wish to continue?")
+
+-- The price about to go up is drawn in gold, and only the price.
+local raw = Posting:BuildConfirmText(2589, 1, 400, { state = "fresh" })
+check("the posting price is in gold",
+    raw:find("Posting at: |c" .. ns.COLORS.accent .. "400|r, item2589", 1, true) ~= nil)
+check("the other two prices are not", raw:find("Average Market Value: 500\n", 1, true) ~= nil
+    and raw:find("Lowest Market Posting: 450\n", 1, true) ~= nil)
 
 local stack = lines(Posting:BuildConfirmText(2589, 5, 400, { state = "fresh" }))
 check("a stack says each and how many", stack[3] == "Posting at: 400 each, 5 x item2589")

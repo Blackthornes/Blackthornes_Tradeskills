@@ -66,6 +66,26 @@ check("setting the same value again reports nothing", #reported, before)
 box:SetValue(7)
 check("a real change is reported",          reported[#reported], 7)
 
+-- A button waiting for its second click ("Really clear?") wears a red edge,
+-- and a mouse passing over it does not take the red away.
+local edge = {}
+ns.Theme.SetBorderColor = function(frame, key) edge[frame] = key end
+ns.Theme.CreateLabel = function() return Frame() end
+ns.Theme.TopSheen = function() end
+GameTooltip = GameTooltip or Frame()
+
+local armedButton = Widgets.CreateButton(Frame(), "Clear all", function() end)
+-- The stub frame answers every unknown field; this button has no outline.
+armedButton.outline, armedButton.disabled, armedButton.baseColor = false, false, false
+armedButton:SetConfirming(true)
+check("an armed button has a red edge",         edge[armedButton], "loss")
+armedButton.scripts.OnEnter(armedButton)
+check("hovering keeps it red",                  edge[armedButton], "loss")
+armedButton.scripts.OnLeave(armedButton)
+check("and so does leaving",                    edge[armedButton], "loss")
+armedButton:SetConfirming(false)
+check("back to normal once disarmed",           edge[armedButton], "border")
+
 print("")
 if failed > 0 then error(("%d check(s) failed"):format(failed), 0) end
 print(("all %d number box checks passed"):format(passed))

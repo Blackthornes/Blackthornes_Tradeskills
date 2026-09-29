@@ -435,6 +435,25 @@ check("the log is kept for /bts haul log",             MailHaul.lastLog ~= nil, 
 
 --------------------------------------------------------------------------------
 print("")
+print("a new mail that looks like one coming back keeps the real sale")
+--------------------------------------------------------------------------------
+
+-- Over 50 mails the game shows 50. Take one and the next moves into view; if
+-- it is the same item for the same amount it looks like the taken one coming
+-- back. The sale taken was still real, so the best sale must not lose it.
+
+inbox = { Sold("Runecloth Bag", 90000), Sold("Linen Bag", 1000) }
+Open()
+Take(1)
+table.insert(inbox, Sold("Runecloth Bag", 90000))
+Mail:Read()
+Take(1)
+local backlog = Close()
+check("the best sale is the one taken",                backlog.best and backlog.best.amount, 90000)
+check("both sales are counted",                        backlog.salesCount, 2)
+
+--------------------------------------------------------------------------------
+print("")
 print("your purse is the truth for how much came in")
 --------------------------------------------------------------------------------
 
@@ -470,6 +489,32 @@ Take(1)
 check("gold spent at the mailbox is left out",         MailHaul:Current().total, 2000)
 Close()
 
+-- A look-alike moving into view after the first sale's gold reached the
+-- purse is a new mail. Taking it too is a second sale, not the first again.
+inbox = { Sold("Runecloth Bag", 90000), Sold("Linen Bag", 1000) }
+Open()
+purse = purse + 90000
+Take(1)
+table.insert(inbox, 1, Sold("Runecloth Bag", 90000))
+Mail:Read()
+purse = purse + 90000
+Take(1)
+local twice = Close()
+check("two look-alike sales taken are two sales",      twice.salesCount, 2)
+check("and both count toward the total",               twice.total, 180000)
+
+-- Without the gold arriving, the same shape is one mail coming back.
+inbox = { Sold("Runecloth Bag", 90000) }
+Open()
+local bag = table.remove(inbox, 1)
+Mail:Read()
+table.insert(inbox, 1, bag)
+Mail:Read()
+purse = purse + 90000
+Take(1)
+local once = Close()
+check("a sale whose gold never left the mail counts once", once.salesCount, 1)
+
 GetMoney = nil
 
 --------------------------------------------------------------------------------
@@ -485,6 +530,29 @@ MailHaul:Closed()
 MailHaul:Closed()
 check("one report for two close signals",              #shownReports, reportsNow + 1)
 check("the mailbox counts as closed",                  Mail.isOpen, false)
+
+--------------------------------------------------------------------------------
+print("")
+print("another addon hiding the mail window does not end the visit")
+--------------------------------------------------------------------------------
+
+local handlers, hooks = {}, {}
+local realRegister = ns.RegisterEvent
+ns.RegisterEvent = function(_, event, fn) handlers[event] = fn; return true end
+MailFrame = { HookScript = function(_, script, fn) hooks[script] = fn end }
+MailHaul:OnEnable()
+ns.RegisterEvent = realRegister
+
+inbox = { Sold("Linen Bag", 800), Sold("Linen Bag", 400) }
+Open()
+Take(1)
+if hooks.OnHide then hooks.OnHide() end
+check("still at the mailbox after the window hides",   MailHaul:InVisit(), true)
+Take(1)
+check("both sales in the same visit",                  #MailHaul:Current().sales, 2)
+handlers.MAIL_CLOSED()
+check("the game saying it closed ends it",             MailHaul:InVisit(), false)
+MailFrame = nil
 
 --------------------------------------------------------------------------------
 print("")

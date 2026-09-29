@@ -478,6 +478,69 @@ function Mail:ResolveItemName(name)
     return found
 end
 
+--- Crafted items the addon knows of, as a set. Kept for the session: it is
+--- asked on every item the game loads, and walking every recipe each time
+--- would be wasted work.
+function Mail:OutputSet()
+    if self.outputSet then return self.outputSet end
+
+    local source = ns.Recipes and ns.Recipes.GetAccountWide
+        and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
+
+    local set = {}
+    for _, recipe in pairs(source) do
+        local itemID = type(recipe) == "table" and recipe.outputItemID
+        if itemID then set[itemID] = true end
+    end
+
+    self.outputSet = set
+    return set
+end
+
+--- A sale filed by name only gets its item once the game loads that item.
+--
+-- A sale mail names its item but has no attachment, and ResolveItemName only
+-- looks at items the game already holds. So a crafted item sold before the
+-- game had loaded it was filed by name. GET_ITEM_INFO_RECEIVED calls this for
+-- each item the game loads for any reason (bags, tooltips, a scan), which
+-- fills those sales in without asking the game to load anything itself.
+function Mail:FillItemID(itemID)
+    if type(itemID) ~= "number" or not ns.db then return end
+
+    local ledger = self:GetLedger()
+
+    -- The names still waiting, worked out again only when the ledger gains
+    -- an entry. Nothing waiting is the usual case, and costs nothing.
+    if self.unresolvedFor ~= ledger then
+        self.unresolved = {}
+        for _, entry in ipairs(ledger.entries) do
+            if entry.kind == "sold" and not entry.itemID and entry.name then
+                self.unresolved[entry.name] = true
+            end
+        end
+        self.unresolvedFor = ledger
+    end
+
+    if not next(self.unresolved) or not self:OutputSet()[itemID] then return end
+
+    -- The game just loaded this item, so reading its name asks for nothing.
+    local ok, name = pcall(C_Item.GetItemInfo, itemID)
+    if not ok or type(name) ~= "string" or not self.unresolved[name] then return end
+
+    local filled = 0
+    for _, entry in ipairs(ledger.entries) do
+        if entry.kind == "sold" and not entry.itemID and entry.name == name then
+            entry.itemID = itemID
+            filled = filled + 1
+        end
+    end
+
+    self.unresolved[name] = nil
+    self.nameCache = self.nameCache or {}
+    self.nameCache[name] = itemID
+    ns.Debug(("mail: %d sale(s) of %s now know their item"):format(filled, name))
+end
+
 --- Record what a new mail tells us, if anything.
 local function Describe(mail, kind, itemName, invoice)
     local entry = {
@@ -742,6 +805,7 @@ function Mail:Reconcile(mails, complete)
                 elseif kind then
                     ledger.entries[#ledger.entries + 1] =
                         Describe(mail, kind, itemName, invoice)
+                    self.unresolvedFor = nil
 
                 else
                     -- Ordinary mail from a person. Counted as stock above, and
@@ -1118,6 +1182,10 @@ function Mail:OnEnable()
 
     ns.RegisterEvent(self, "MAIL_CLOSED", function()
         Mail.isOpen = false
+    end)
+
+    ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+        if success ~= false then Mail:FillItemID(itemID) end
     end)
 
     -- Taking an attachment moves stock from the mailbox to the bags, and both

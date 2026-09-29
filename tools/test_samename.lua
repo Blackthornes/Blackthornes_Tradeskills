@@ -131,4 +131,65 @@ ns.Config:CheckAccountDataLost({ probe = { loadCount = 301 } })
 Check("the restored file stops the warning", ns.Config.accountDataLost == nil)
 BlackthornesTSCharDB = savedChar
 
+-- A fresh install: neither saved file came back and there is no backup. That
+-- is a welcome, not the saved data warning. Real loss keeps the warning.
+local function Boot(accountDB, charDB)
+    local booted = Load({})
+    booted.Util.ApplyDefaults = function() end
+    booted.Compat.Detect = function() return {} end
+    local printed = {}
+    booted.Print = function(text) printed[#printed + 1] = tostring(text) end
+    booted.Warn = booted.Print
+    booted.COLORS = { accent = "ffffffff" }
+    BlackthornesTSDB, BlackthornesTSCharDB = accountDB, charDB
+    booted.Config:Bootstrap()
+    return booted, printed
+end
+
+local savedAccount = BlackthornesTSDB
+local fresh, freshPrinted = Boot(nil, nil)
+Check("a fresh install is a first run", fresh.Config:IsFirstRun() == true)
+Check("and does not warn about lost data", fresh.Config.accountDataLost == nil)
+fresh.Config:Welcome()
+Check("the welcome is friendly", freshPrinted[1] ~= nil and freshPrinted[1]:find("welcome", 1, true) ~= nil
+    and not freshPrinted[1]:find("did not load", 1, true), freshPrinted[1])
+
+local lost = Boot(nil, { accountLoads = 40 })
+Check("real loss is not a first run", lost.Config:IsFirstRun() == false)
+Check("and still warns", lost.Config.accountDataLost ~= nil)
+
+local normal = Boot({ probe = { loadCount = 5 } }, { accountLoads = 4 })
+Check("a normal login is not a first run", normal.Config:IsFirstRun() == false)
+
+-- The saved data arriving after load: it existed, so no welcome beside the
+-- warning about it arriving late.
+local late = Boot(nil, nil)
+BlackthornesTSDB = { probe = { loadCount = 9 } }
+late.Config:CheckLateSavedVariables()
+Check("saved data that arrives late is not a first run", late.Config:IsFirstRun() == false)
+
+-- Both saved files missing, but the CVar canary counts earlier logins: the
+-- addon has run here before.
+local savedCVar = C_CVar
+C_CVar = {
+    GetCVar = function() return "7" end,
+    SetCVar = function() return true end,
+    RegisterCVar = function() return true end,
+}
+local function BootWithCVars()
+    local booted = Load({})
+    booted.Util.ApplyDefaults = function() end
+    booted.Compat.Detect = function() return { cvars = { roundTrip = true, registerVia = "RegisterCVar" } } end
+    BlackthornesTSDB, BlackthornesTSCharDB = nil, nil
+    booted.Config:Bootstrap()
+    return booted
+end
+local seenBefore = BootWithCVars()
+Check("a CVar canary from earlier logins is not a first run", seenBefore.Config:IsFirstRun() == false)
+C_CVar.GetCVar = function() return nil end
+local reallyNew = BootWithCVars()
+Check("with no earlier count it still is", reallyNew.Config:IsFirstRun() == true)
+C_CVar = savedCVar
+BlackthornesTSDB, BlackthornesTSCharDB = savedAccount, savedChar
+
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end

@@ -168,6 +168,15 @@ records[3001].seen = 1200
 check("one a later search saw is", Find(VendorFlips:GetAuctionRows(), 3001) ~= nil)
 records[3001].seen, ns.db.lastFullScan = nil, nil
 
+-- On a big auction house every sweep stops at the page limit and never gets
+-- a full scan stamp. That sweep still decides what counts as seen.
+ns.Prices.GetLastScan = function() return 1000, true end
+records[3001].seen = 999
+check("a listing a capped sweep did not see is not a flip", Find(VendorFlips:GetAuctionRows(), 3001) == nil)
+records[3001].seen = 1200
+check("one it saw is", Find(VendorFlips:GetAuctionRows(), 3001) ~= nil)
+records[3001].seen, ns.Prices.GetLastScan = nil, nil
+
 print("\nvendor prices come from the saved item facts")
 
 check("the sell price is kept in the saved data", ns.db.itemFacts[3001] and ns.db.itemFacts[3001].v == 500)
@@ -214,7 +223,7 @@ print("\n/bts vendordeals")
 printed = {}
 commands.vendordeals()
 local said = table.concat(printed, "\n")
-check("it says when the last scan was", said:find("last full scan", 1, true) ~= nil)
+check("it says when the last scan was", said:find("last scan", 1, true) ~= nil)
 check("and what a fresh build would show", said:find("built fresh now", 1, true) ~= nil)
 check("and what a vendor pays for each", said:find("vendor pays", 1, true) ~= nil)
 

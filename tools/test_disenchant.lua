@@ -217,7 +217,10 @@ check("a soulbound craft is listed against its vendor price", byID[1008]
     and byID[1008].sells == 500 and byID[1008].sellsAt == "vendor")
 check("one worth more sold is not", byID[1002] == nil)
 check("nor one that cannot be disenchanted", byID[1005] == nil)
-check("profit is disenchant value less materials", byID[1001].gain == 700)
+-- 800 of materials, less the 5% auction cut when they are sold: 760. Less
+-- the 100 the craft costs: 660, the same sum the Disenchanting tab does.
+check("the auction cut comes off the disenchant value", byID[1001].net == 760)
+check("profit is that less materials", byID[1001].gain == 660)
 
 check("unticked, every disenchantable craft shows",
     #Disenchant:GetCraftRows({ beatsOnly = false }) == 3)

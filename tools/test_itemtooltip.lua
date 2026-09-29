@@ -353,6 +353,32 @@ RECORDS[LINEN_CLOTH].min = 1900
 lines = ItemTooltip:LinesFor(SILK_CLOTH, nil)
 check("an unpriced item gets no lowest line", #lines, 1)
 
+-- A lone listing far below the rest is left out, as the Enchanting pane
+-- leaves it out. The real helper is borrowed from Data/Prices.lua, so this
+-- reads the book the same way the rest of the addon does.
+do
+  local module
+  local priceNs = {
+    NewModule = function() module = {}; return module end,
+    Util = {}, RegisterCommand = function() end,
+  }
+  assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", priceNs)
+  ns.Prices.LowestListed = module.LowestListed
+end
+
+-- As Summarise records a book of 200, 1900, 1900: the 200 is ignored.
+RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 1900, ignoredLow = 200 }
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("a lone low listing is left out", lines[2][2], "<1900>")
+
+-- Two low ones are a real price and count.
+RECORDS[LINEN_CLOTH] = { market = 2300, min = 200, rivalMin = 200 }
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("two low listings count", lines[2][2], "<200>")
+
+RECORDS[LINEN_CLOTH] = { market = 2300, min = 1900 }
+ns.Prices.LowestListed = nil
+
 lines = ItemTooltip:LinesFor(LINEN_CLOTH, 20)
 check("a stack total comes after it", lines[3][1], "Stack of 20")
 

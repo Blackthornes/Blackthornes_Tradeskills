@@ -117,6 +117,9 @@ function LevelUp:GetRanked(opts)
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         local keep = not opts.skillLines or opts.skillLines[recipe.skillLineID]
 
+        -- Not a profession this character has dropped.
+        if keep and ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe) then keep = false end
+
         if keep and needle then
             keep = (recipe.name or ""):lower():find(needle, 1, true) ~= nil
         end

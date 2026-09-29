@@ -379,6 +379,9 @@ function Profit:Analyse(recipeID, characterKey)
         skillLineID = recipe.skillLineID,
         owner = crafter,
         ownerName = ns.Recipes:GetCharacterName(crafter),
+        -- For the narrow WHO column; the full name goes in the row's tooltip.
+        ownerShortName = ns.Recipes.GetShortCharacterName
+            and ns.Recipes:GetShortCharacterName(crafter) or nil,
         isMine = crafter == ns.Config:GetCharacterKey(),
     }
 
@@ -570,10 +573,13 @@ function Profit:GetRanked(opts)
 
     -- Account-wide pulls in every character's cached recipes, each analysed
     -- against the bags of whoever actually knows it.
-    local source = opts.accountWide and ns.Recipes:GetAccountWide() or ns.Recipes:GetAll()
+    -- Crafts of a profession the character has dropped are left out.
+    local source = opts.accountWide and ns.Recipes:GetAccountWide(true) or ns.Recipes:GetAll()
 
-    for recipeID in pairs(source) do
-        local analysis = self:Analyse(recipeID)
+    for recipeID, recipe in pairs(source) do
+        local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
+            and ns.Recipes:IsDropped(recipe)
+        local analysis = not dropped and self:Analyse(recipeID) or nil
 
         if analysis then
             local keep = true
