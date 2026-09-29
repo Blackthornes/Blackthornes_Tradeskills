@@ -157,6 +157,11 @@ check("the cast's item name finds it in the bags", Casts(CHEST_KEY) == 3
 Disenchantment({ name = "item1001 of the Bear", loot = { { STRANGE_DUST, 6 } } })
 check("a random-suffix name still finds it", Casts(CHEST_KEY) == 4)
 
+-- The Disenchanting tab's running total for this session.
+local sessionCount, sessionWorth = Log:GetSession()
+check("the session tally counts each disenchant", sessionCount == 4)
+check("and adds up what the materials are worth", sessionWorth == Disenchant:GetMaterialPrice(STRANGE_DUST) * 21)
+
 -- A click aimed at an enchant, then a Disenchant with nothing to go on.
 clock = clock + 60
 targeting = true
@@ -175,6 +180,7 @@ check("but counted as missed", Log:GetTable().missed == 2)
 -- Any other spell's loot is none of this module's business.
 Disenchantment({ click = 1, spell = 2575, loot = { { STRANGE_DUST, 5 } } })
 check("loot after some other spell is ignored", Casts(CHEST_KEY) == 4 and Log:GetTable().missed == 2)
+check("a missed disenchant is not added to the session tally", (Log:GetSession()) == 4)
 
 -- A value the game will not let us compare, as inside an instance.
 local secret = setmetatable({}, { __eq = function() error("secret") end,

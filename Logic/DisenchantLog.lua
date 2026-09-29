@@ -102,6 +102,7 @@ function DisenchantLog:Record(itemID, results, from)
     while #log.recent > RECENT_KEPT do table.remove(log.recent) end
 
     self:Announce(itemID, results, facts.key, band, usual, newFinds)
+    self:AddToSession(results)
 
     -- Lists built from these results know to rebuild.
     self.version = (self.version or 0) + 1
@@ -223,6 +224,23 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds)
     elseif lucky or #(newFinds or {}) > 0 then
         Chime(false)
     end
+end
+
+--- This session's running total, for the Disenchanting tab's bags list.
+-- Kept in memory only: it starts again at zero after a /reload.
+function DisenchantLog:AddToSession(results)
+    local session = self.session or { count = 0, worth = 0 }
+    self.session = session
+
+    session.count = session.count + 1
+    session.worth = session.worth + (Worth(results) or 0)
+end
+
+--- How many disenchants this session and what their materials are worth.
+function DisenchantLog:GetSession()
+    local session = self.session
+    if not session then return 0, 0 end
+    return session.count, session.worth
 end
 
 --- A disenchant that finished but could not be recorded, and why.

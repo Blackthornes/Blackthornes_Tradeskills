@@ -10,6 +10,10 @@
 -- The addon cannot buy for you: the game wants a real click on its own Buy
 -- button for every purchase. What it can do is send the search, so the item
 -- is in the auction house list ready to click.
+--
+-- The second view lists what you carry that can be disenchanted, against what
+-- it would sell for, with a Disenchant button. That button is the same secure
+-- one the Enchanting tab uses (UI/Disenchanter.lua): one disenchant per click.
 
 local _, ns = ...
 
@@ -23,20 +27,38 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
--- Right-aligned columns, laid out right to left.
-local COLUMNS = {
-    { key = "gain",   label = "PROFIT",     width = 66 },
-    { key = "margin", label = "MARGIN",     width = 50 },
-    { key = "value",  label = "DISENCHANT", width = 70 },
-    { key = "buy",    label = "BUY",        width = 66 },
-    { key = "skill",  label = "SKILL",      width = 40 },
-    { key = "age",    label = "AGE",        width = 44 },
+-- Right-aligned columns per view, laid out right to left.
+local VIEWS = {
+    auction = {
+        columns = {
+            { key = "gain",   label = "PROFIT",     width = 66 },
+            { key = "margin", label = "MARGIN",     width = 50 },
+            { key = "value",  label = "DISENCHANT", width = 70 },
+            { key = "buy",    label = "BUY",        width = 66 },
+            { key = "skill",  label = "SKILL",      width = 40 },
+            { key = "age",    label = "AGE",        width = 44 },
+        },
+        hint = "Right-click an item to search the auction house for it",
+    },
+    bag = {
+        columns = {
+            { key = "difference", label = "DIFFERENCE", width = 74 },
+            { key = "value",      label = "DISENCHANT", width = 70 },
+            { key = "sells",      label = "SELLS",      width = 70 },
+            { key = "count",      label = "HAVE",       width = 40 },
+        },
+        hint = "Pick an item, then click Disenchant",
+    },
 }
 
+local MAX_COLUMNS = 6
+
 local state = {
+    view = "auction",
     search = "",
     dealsOnly = true,
     hideTooHigh = false,
+    beatsOnly = false,
     selected = nil,
     hidden = 0,
 }
@@ -53,6 +75,19 @@ end
 
 local function MarginText(margin)
     return ("%d%%"):format(math.floor((margin or 0) * 100))
+end
+
+local function SameRow(a, b)
+    return a and b and a.kind == b.kind and a.itemID == b.itemID
+end
+
+--- How many disenchants this session and what they gave, or 0 before the first.
+local function Session()
+    local log = ns.DisenchantLog
+    if not log or not log.GetSession then return 0, 0 end
+
+    local count, worth = log:GetSession()
+    return count or 0, worth or 0
 end
 
 --- Send a search for this item, so it shows in the auction house list ready
@@ -84,6 +119,30 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+local function ApplyRowLayout(row)
+    local columns = VIEWS[state.view].columns
+    local offset = -8
+
+    for index = 1, MAX_COLUMNS do
+        local cell = row.cells[index]
+        local column = columns[index]
+
+        cell:ClearAllPoints()
+
+        if column then
+            cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
+            cell:SetWidth(column.width)
+            cell:Show()
+            offset = offset - column.width - 6
+        else
+            cell:Hide()
+        end
+    end
+
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    row.view = state.view
+end
+
 local function CreateRow(row)
     row.icon = Theme.CreateItemIcon(row, 16)
     row.icon:SetPoint("LEFT", 8, 0)
@@ -92,16 +151,11 @@ local function CreateRow(row)
     row.name:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
 
     row.cells = {}
-    local offset = -8
-    for index, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "text", "RIGHT")
-        cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
-        cell:SetWidth(column.width)
-        row.cells[index] = cell
-        offset = offset - column.width - 6
+    for index = 1, MAX_COLUMNS do
+        row.cells[index] = Theme.CreateLabel(row, "small", "text", "RIGHT")
     end
 
-    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    ApplyRowLayout(row)
 end
 
 local function FillCell(cell, key, entry)
@@ -117,8 +171,30 @@ local function FillCell(cell, key, entry)
         cell:SetTextColor(Theme.ProfitColor(entry.gain))
         return
     elseif key == "value" then
-        text = Money(entry.value) .. (entry.partial and "+" or "")
-        color = "text"
+        if entry.value then
+            text = Money(entry.value) .. (entry.partial and "+" or "")
+            color = entry.kind == "bag" and entry.beatsSale and "profit" or "text"
+        else
+            text, color = "no price", "dim"
+        end
+    elseif key == "difference" then
+        -- How much more disenchanting pays than selling, or less.
+        if entry.value and entry.sells then
+            cell:SetText(Money(entry.value - entry.sells))
+            cell:SetTextColor(Theme.ProfitColor(entry.value - entry.sells))
+            return
+        end
+        text, color = "", "dim"
+    elseif key == "sells" then
+        if entry.sells then
+            text = Money(entry.sells)
+        elseif entry.soulbound then
+            text, color = "soulbound", "dim"
+        else
+            text, color = "no price", "dim"
+        end
+    elseif key == "count" then
+        text = tostring(entry.count or 0)
     elseif key == "buy" then
         text = Money(entry.buy)
     elseif key == "skill" then
@@ -137,6 +213,8 @@ local function FillCell(cell, key, entry)
 end
 
 local function UpdateRow(row, entry)
+    if row.view ~= state.view then ApplyRowLayout(row) end
+
     row.name:SetText(entry.name or ("item " .. tostring(entry.itemID)))
     Theme.SetItemIcon(row.icon, entry.itemID)
 
@@ -147,13 +225,35 @@ local function UpdateRow(row, entry)
         row.name:SetTextColor(Theme.Unpack("text"))
     end
 
-    for index, column in ipairs(COLUMNS) do
+    for index, column in ipairs(VIEWS[state.view].columns) do
         FillCell(row.cells[index], column.key, entry)
     end
 end
 
+local function ShowBagTooltip(entry)
+    if entry.value and entry.sells then
+        GameTooltip:AddLine(" ")
+        if entry.beatsSale then
+            GameTooltip:AddLine(("Disenchanting it is worth %s more than selling it."):format(
+                Util.FormatMoney(entry.value - entry.sells, { noColor = true })), 0.35, 0.85, 0.45, true)
+        else
+            GameTooltip:AddLine(("Selling it is worth %s more than disenchanting it."):format(
+                Util.FormatMoney(entry.sells - entry.value, { noColor = true })), 0.7, 0.7, 0.7, true)
+        end
+    end
+
+    if entry.sellsAt == "vendor" then
+        GameTooltip:AddLine("Its sale price is what a vendor pays.", 0.7, 0.7, 0.7, true)
+    end
+
+    GameTooltip:AddLine("Click to pick it, then click Disenchant.", 0.5, 0.5, 0.5)
+    GameTooltip:Show()
+end
+
 local function ShowRowTooltip(row, entry)
     Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID, entry.name)
+
+    if entry.kind == "bag" then return ShowBagTooltip(entry) end
 
     GameTooltip:AddLine(" ")
     if entry.gain > 0 then
@@ -251,6 +351,28 @@ local function BuildDetail(parent)
     searchButton.tooltipText = "Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."
     detail.searchButton = searchButton
 
+    -- Disenchant, for an item in the bags. The click itself is taken by the
+    -- secure button UI/Disenchanter.lua lays over this one; this handler
+    -- only runs when that button is not there, so it says why.
+    local disenchantButton = Widgets.CreateButton(detail, "Disenchant", function()
+        local entry = state.selected
+        local check = ns.Disenchanter:Check(entry and entry.itemID)
+
+        if not check.ok then
+            ns.Print(check.why)
+        else
+            ns.Warn("that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints.")
+        end
+    end, { width = 120, primary = true, height = 24 })
+    disenchantButton:SetPoint("BOTTOMLEFT", 12, 14)
+    detail.disenchantButton = disenchantButton
+
+    local disenchantStatus = Theme.CreateLabel(detail, "tiny", "warn")
+    disenchantStatus:SetPoint("LEFT", disenchantButton, "RIGHT", 8, 0)
+    disenchantStatus:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    disenchantStatus:SetWordWrap(true)
+    detail.disenchantStatus = disenchantStatus
+
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
@@ -271,41 +393,28 @@ local function SetLine(line, label, value, color)
     line.value:SetTextColor(Theme.Unpack(color or "text"))
 end
 
-local function UpdateDetail(entry)
+--- Arm the Disenchant button for a bag item, or say why it cannot be.
+local function UpdateDisenchantButton(entry)
     local detail = widgets.detail
-    local shown = entry ~= nil
+    local button = detail.disenchantButton
+    local disenchanter = ns.Disenchanter
 
-    detail.empty:SetShown(not shown)
+    local check = disenchanter:Check(entry and entry.itemID)
 
-    for _, line in ipairs(detail.outcomeLines) do
-        line.frame:Hide()
+    button:SetEnabledState(check.ok)
+    button.tooltipText = check.ok
+        and ("Disenchant one %s from your bags."):format(entry.name or "item") or check.why
+    detail.disenchantStatus:SetText(check.ok and "" or check.why)
+
+    if check.ok then
+        disenchanter:Arm(button, entry.itemID, check.bag, check.slot)
+    elseif disenchanter.anchor == button then
+        disenchanter:Disarm()
     end
+end
 
-    for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.heading,
-                            detail.summary, detail.verdict, detail.note, detail.searchButton }) do
-        part:SetShown(shown)
-    end
-
-    if not shown then return end
-
-    detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
-    Theme.SetItemIcon(detail.icon, entry.itemID)
-
-    local breakdown = entry.breakdown or {}
-    local facts = breakdown.facts or {}
-
-    local who
-    if entry.canDisenchant == nil then
-        who = "None of your characters has Enchanting."
-    else
-        who = ("Your best is %d (%s)."):format(entry.enchanterSkill or 0, entry.enchanter or "?")
-    end
-
-    detail.subtitle:SetText(("Item level %d %s %s. Needs Enchanting about %d. %s"):format(
-        facts.itemLevel or 0, facts.qualityName or "", facts.isWeapon and "weapon" or "armor",
-        facts.skill or 0, who))
-    detail.subtitle:SetTextColor(Theme.Unpack(entry.canDisenchant == true and "muted" or "loss"))
-
+--- Draw what the chances and prices are for one outcome list, under the heading.
+local function DrawOutcomes(detail, breakdown)
     local anchor = detail.heading
     for index, outcome in ipairs(breakdown.outcomes or {}) do
         local line = detail.outcomeLines[index]
@@ -350,6 +459,125 @@ local function UpdateDetail(entry)
         line.frame:Show()
         anchor = line.frame
     end
+end
+
+--- The detail panel for an item in the bags.
+local function UpdateBagDetail(entry)
+    local detail = widgets.detail
+    local breakdown = entry.breakdown or {}
+    local facts = breakdown.facts or {}
+
+    detail.subtitle:SetText(("Item level %d %s %s. Needs Enchanting about %d."):format(
+        facts.itemLevel or 0, facts.qualityName or "", facts.isWeapon and "weapon" or "armor",
+        facts.skill or 0))
+    detail.subtitle:SetTextColor(Theme.Unpack("muted"))
+
+    DrawOutcomes(detail, breakdown)
+
+    local lines = detail.lines
+    if entry.value then
+        SetLine(lines[1], "Disenchant value",
+            Util.FormatMoney(entry.value) .. (entry.partial and "  or more" or ""),
+            entry.beatsSale and "profit" or "text")
+    else
+        SetLine(lines[1], "Disenchant value", "materials not scanned", "dim")
+    end
+
+    if entry.sells then
+        SetLine(lines[2], entry.sellsAt == "vendor" and "Vendor pays" or "Sells for",
+            Util.FormatMoney(entry.sells), "muted")
+    else
+        SetLine(lines[2], "Sells for", entry.soulbound and "soulbound, no vendor price" or "no price", "dim")
+    end
+
+    SetLine(lines[3], "In your bags", tostring(entry.count or 0), "muted")
+
+    -- A running total that grows with every click.
+    local count, worth = Session()
+    if count > 0 then
+        SetLine(lines[4], "Disenchanted this session", ("%d, worth %s"):format(count,
+            Util.FormatMoney(worth, { noColor = true, short = true })), "profit")
+    else
+        SetLine(lines[4], nil)
+    end
+
+    if entry.value and entry.sells then
+        if entry.beatsSale then
+            detail.verdict:SetText(("Disenchanting pays %s more than selling."):format(
+                Util.FormatMoney(entry.value - entry.sells, { noColor = true })))
+            detail.verdict:SetTextColor(Theme.Unpack("profit"))
+        else
+            detail.verdict:SetText(("Selling pays %s more than disenchanting."):format(
+                Util.FormatMoney(entry.sells - entry.value, { noColor = true })))
+            detail.verdict:SetTextColor(Theme.Unpack("muted"))
+        end
+    elseif entry.value then
+        detail.verdict:SetText("Nothing to compare it with: it has no sale price.")
+        detail.verdict:SetTextColor(Theme.Unpack("muted"))
+    else
+        detail.verdict:SetText("Scan the auction house to price its materials.")
+        detail.verdict:SetTextColor(Theme.Unpack("warn"))
+    end
+
+    local note
+    if facts.source == "yours" then
+        note = ("Chances come from your own %d disenchants of items like this."):format(facts.casts or 0)
+    else
+        note = "Chances come from the Classic table built into the addon until you have done enough disenchants of your own."
+    end
+    if not entry.soulbound then
+        note = note .. " If it is already bound to you, only a vendor will buy it."
+    end
+    detail.note:SetText(note)
+
+    UpdateDisenchantButton(entry)
+end
+
+local function UpdateDetail(entry)
+    local detail = widgets.detail
+    local shown = entry ~= nil
+    local isBag = shown and entry.kind == "bag"
+
+    detail.empty:SetShown(not shown)
+
+    for _, line in ipairs(detail.outcomeLines) do
+        line.frame:Hide()
+    end
+
+    for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.heading,
+                            detail.summary, detail.verdict, detail.note }) do
+        part:SetShown(shown)
+    end
+
+    detail.searchButton:SetShown(shown and not isBag)
+
+    -- Hiding the button takes the secure button away with it.
+    detail.disenchantButton:SetShown(isBag)
+    detail.disenchantStatus:SetShown(isBag)
+
+    if not shown then return end
+
+    detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
+    Theme.SetItemIcon(detail.icon, entry.itemID)
+
+    if isBag then return UpdateBagDetail(entry) end
+
+    local breakdown = entry.breakdown or {}
+    local facts = breakdown.facts or {}
+
+    local who
+    if entry.canDisenchant == nil then
+        who = "None of your characters has Enchanting."
+    else
+        who = ("Your best is %d (%s)."):format(entry.enchanterSkill or 0, entry.enchanter or "?")
+    end
+
+    detail.subtitle:SetText(("Item level %d %s %s. Needs Enchanting about %d. %s"):format(
+        facts.itemLevel or 0, facts.qualityName or "", facts.isWeapon and "weapon" or "armor",
+        facts.skill or 0, who))
+    detail.subtitle:SetTextColor(Theme.Unpack(entry.canDisenchant == true and "muted" or "loss"))
+
+    DrawOutcomes(detail, breakdown)
 
     local lines = detail.lines
     SetLine(lines[1], entry.loneLow and "Buy for (a lone low listing)" or "Buy for",
@@ -411,7 +639,25 @@ local function BuildKey()
     }, "|")
 end
 
+--- Everything in the bags that can be disenchanted. Only a bagful, and
+--- facts are cached per item, so this is cheap to build on every redraw.
+local function BuildBagRows()
+    local rows = ns.Disenchant:GetBagRows({ beatsOnly = state.beatsOnly })
+    if state.search == "" then return rows end
+
+    local needle = state.search:lower()
+    local filtered = {}
+
+    for _, row in ipairs(rows) do
+        if (row.name or ""):lower():find(needle, 1, true) then filtered[#filtered + 1] = row end
+    end
+
+    return filtered
+end
+
 local function BuildRows()
+    if state.view == "bag" then return BuildBagRows() end
+
     local key = BuildKey()
 
     if key ~= built.key then
@@ -446,6 +692,20 @@ local function EmptyText()
         return ("Nothing matching \"%s\"."):format(state.search)
     end
 
+    if state.view == "bag" then
+        local count, worth = Session()
+        if count > 0 then
+            return ("All done! You disenchanted %d item%s this session, worth about %s."):format(
+                count, count == 1 and "" or "s", Util.FormatMoney(worth, { noColor = true, short = true }))
+                .. (state.beatsOnly and " Untick \"Only where disenchanting pays more\" to see the rest." or "")
+        end
+
+        if state.beatsOnly then
+            return "Nothing in your bags is worth more disenchanted than sold. Untick \"Only where disenchanting pays more\" to see them all."
+        end
+        return "Nothing in your bags can be disenchanted."
+    end
+
     if (ns.Prices and ns.Prices:Count() or 0) == 0 then
         return "Scan the auction house to find items worth buying to disenchant."
     end
@@ -470,6 +730,38 @@ local function EmptyText()
     return "No weapons or armor from other sellers in your last scan."
 end
 
+--- The count line and the picked row, for the bags list.
+local function RefreshBags(rows)
+    local beats = 0
+    for _, row in ipairs(rows) do
+        if row.beatsSale then beats = beats + 1 end
+    end
+
+    local text = ("%d item%s, %d worth more disenchanted"):format(#rows, #rows == 1 and "" or "s", beats)
+    local count, worth = Session()
+    if count > 0 then
+        text = text .. ("  ·  %d disenchanted this session, worth %s"):format(count,
+            Util.FormatMoney(worth, { noColor = true, short = true }))
+    end
+    widgets.countLabel:SetText(text)
+
+    local fresh
+    for _, row in ipairs(rows) do
+        if SameRow(row, state.selected) then
+            fresh = row
+            break
+        end
+    end
+
+    -- The top row is picked when nothing else is, so the Disenchant button is
+    -- always ready on the best one to break. After a disenchant the item
+    -- leaves the list and the next one takes its place under the same button.
+    if not fresh then fresh = rows[1] end
+
+    state.selected = fresh
+    UpdateDetail(fresh)
+end
+
 local function Refresh()
     if not widgets.list then return end
 
@@ -478,6 +770,8 @@ local function Refresh()
 
     widgets.emptyLabel:SetShown(#rows == 0)
     if #rows == 0 then widgets.emptyLabel:SetText(EmptyText()) end
+
+    if state.view == "bag" then return RefreshBags(rows) end
 
     local deals, total = 0, 0
     for _, row in ipairs(rows) do
@@ -507,7 +801,7 @@ local function Refresh()
     local fresh
     if state.selected then
         for _, row in ipairs(rows) do
-            if row.itemID == state.selected.itemID then
+            if SameRow(row, state.selected) then
                 fresh = row
                 break
             end
@@ -522,18 +816,60 @@ end
 -- Build
 --------------------------------------------------------------------------------
 
+--- Headings, tick boxes and hint for the view being shown.
+local function ApplyView()
+    local view = VIEWS[state.view]
+
+    local offset = -8
+    for index = 1, MAX_COLUMNS do
+        local heading = widgets.headings[index]
+        local column = view.columns[index]
+
+        heading:ClearAllPoints()
+
+        if column then
+            heading:SetText(column.label)
+            heading:SetPoint("RIGHT", offset, 0)
+            heading:SetWidth(column.width)
+            heading:Show()
+            offset = offset - column.width - 6
+        else
+            heading:Hide()
+        end
+    end
+
+    local isBag = state.view == "bag"
+    widgets.dealsOnly:SetShown(not isBag)
+    widgets.hideTooHigh:SetShown(not isBag)
+    widgets.beatsOnly:SetShown(isBag)
+    widgets.hint:SetText(view.hint)
+end
+
 local function Build(container)
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
+    local view = Widgets.CreateDropdown(toolbar, {
+        { text = "Show: Deals on the auction house", value = "auction" },
+        { text = "Show: Items in your bags", value = "bag" },
+    }, function(value)
+        state.view = value == "bag" and "bag" or "auction"
+        state.selected = nil
+        ApplyView()
+        widgets.list:ScrollToTop()
+        Refresh()
+    end, { width = 210 })
+    view:SetPoint("LEFT", 0, 0)
+    view:SetValue(state.view)
+
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
         Refresh()
     end)
-    search:SetPoint("LEFT", 0, 0)
-    search:SetWidth(180)
+    search:SetPoint("LEFT", view, "RIGHT", 8, 0)
+    search:SetWidth(150)
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
         state.dealsOnly = checked
@@ -549,6 +885,15 @@ local function Build(container)
     hideTooHigh:SetPoint("LEFT", dealsOnly, "RIGHT", 12, 0)
     widgets.hideTooHigh = hideTooHigh
 
+    -- In the bags list: off by default, so everything that can be broken is
+    -- there to break, best first.
+    local beatsOnly = Widgets.CreateCheckbox(toolbar, "Only where disenchanting pays more", function(checked)
+        state.beatsOnly = checked
+        Refresh()
+    end, state.beatsOnly)
+    beatsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
+    widgets.beatsOnly = beatsOnly
+
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)
     headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
@@ -559,13 +904,9 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
     nameHeading:SetText("ITEM")
 
-    local offset = -8
-    for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
-        heading:SetText(column.label)
-        heading:SetPoint("RIGHT", offset, 0)
-        heading:SetWidth(column.width)
-        offset = offset - column.width - 6
+    widgets.headings = {}
+    for index = 1, MAX_COLUMNS do
+        widgets.headings[index] = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
     end
 
     local divider = Theme.CreateDivider(container, "borderLit")
@@ -585,14 +926,14 @@ local function Build(container)
         onLeave = function() GameTooltip:Hide() end,
 
         isSelected = function(entry)
-            return state.selected and entry.itemID == state.selected.itemID
+            return SameRow(entry, state.selected)
         end,
 
         onClick = function(entry, _, mouseButton)
             state.selected = entry
             UpdateDetail(entry)
 
-            if mouseButton == "RightButton" then SearchAuctionHouse(entry) end
+            if mouseButton == "RightButton" and entry.kind ~= "bag" then SearchAuctionHouse(entry) end
         end,
     })
 
@@ -612,7 +953,6 @@ local function Build(container)
 
     local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText("Right-click an item to search the auction house for it")
     widgets.hint = hint
 
     -- The count line grows a long "not checked yet" note while items load,
@@ -626,6 +966,7 @@ local function Build(container)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
+    ApplyView()
     UpdateDetail(nil)
 
     -- Scanned items the client has not cached are left out until it has
