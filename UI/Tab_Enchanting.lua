@@ -429,7 +429,7 @@ local function UpdateDetail(entry)
         SetLine(lines[4], (entry.have or 0) > 0 and entry.price and "Bags worth" or nil,
             entry.price and Util.FormatMoney(entry.price * (entry.have or 0)) or nil)
 
-        detail.note:SetText("Values are the smoothed auction value from your scans, the same number item tooltips show.")
+        detail.note:SetText("Priced at the lowest posting from your last scan, leaving out a lone one far below the rest.")
         return
     end
 
@@ -796,8 +796,13 @@ local function Build(container)
     -- coalescing a burst of arrivals into one pass.
     local redrawQueued = false
 
-    ns.RegisterEvent(UI, "GET_ITEM_INFO_RECEIVED", function()
+    ns.RegisterEvent(UI, "GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
         if redrawQueued or not widgets.list:IsVisible() then return end
+
+        -- Only items this addon asked for. At the auction house, Ready to
+        -- sell reloads bag items all the time, and redrawing for each of
+        -- those re-read every recipe a few times a second.
+        if itemID and ns.Disenchant.WasRequested and not ns.Disenchant:WasRequested(itemID) then return end
 
         redrawQueued = true
         C_Timer.After(0.3, function()

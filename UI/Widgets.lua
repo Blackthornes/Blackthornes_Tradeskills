@@ -841,6 +841,16 @@ function Widgets.CreateScrollList(parent, opts)
 
         scrollbar:SetMinMaxValues(0, maxOffset)
         scrollbar:SetShown(maxOffset > 0)
+
+        -- Rows give up 10px to the scrollbar while it shows. A table whose
+        -- column headings sit outside the list is told, so its headings can
+        -- move in step; otherwise every right-aligned value sat 10px left of
+        -- its heading whenever the list scrolled.
+        local hasScrollbar = maxOffset > 0
+        if opts.onScrollbarShown and self.hadScrollbar ~= hasScrollbar then
+            self.hadScrollbar = hasScrollbar
+            opts.onScrollbarShown(hasScrollbar)
+        end
         if scrollbar:GetValue() ~= self.offset then
             scrollbar:SetValue(self.offset)
         end

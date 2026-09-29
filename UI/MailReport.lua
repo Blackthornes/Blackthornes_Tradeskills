@@ -188,8 +188,12 @@ end
 local function ItemText(itemID, fallback)
     if not itemID then return fallback or "an item" end
 
+    -- GetItemLabel says "item 1234" for an item the client has not cached,
+    -- which a sold item usually is. The name the mail carried reads better.
     local label = Util.GetItemLabel(itemID)
-    if type(label) == "string" and label ~= "" then return label end
+    if type(label) == "string" and label ~= "" and not (fallback and label == ("item %d"):format(itemID)) then
+        return label
+    end
 
     return fallback or ("item " .. itemID)
 end

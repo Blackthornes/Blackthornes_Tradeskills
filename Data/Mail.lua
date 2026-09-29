@@ -437,10 +437,31 @@ function Mail:ResolveItemName(name)
     local source = ns.Recipes and ns.Recipes.GetAccountWide
         and ns.Recipes:GetAccountWide() or (ns.Recipes and ns.Recipes:GetAll()) or {}
 
+    -- Each output once.
+    local outputs, seen = {}, {}
     for _, recipe in pairs(source) do
-        local itemID = recipe.outputItemID
+        local itemID = type(recipe) == "table" and recipe.outputItemID
+        if itemID and not seen[itemID] then
+            seen[itemID] = true
+            outputs[#outputs + 1] = itemID
+        end
+    end
 
-        if itemID and not found then
+    -- Only items the client already holds are looked at. Asking about one it
+    -- does not would fetch it into the small item cache, and a walk over
+    -- hundreds of outputs for every new sale pushed bag items out of it.
+    local canAsk = Util.HasFunction("C_Item.IsItemDataCachedByID")
+
+    for _, itemID in ipairs(outputs) do
+        if found then break end
+
+        local cached = true
+        if canAsk then
+            local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
+            cached = ok and answer == true
+        end
+
+        if cached then
             local ok, itemName = pcall(C_Item.GetItemInfo, itemID)
             if ok and itemName == name then found = itemID end
         end
@@ -1168,8 +1189,10 @@ ns.RegisterCommand("sold", "<name or link>: what it really earned, next to the e
             ns.PrintRaw(("    auction cut:    %s"):format(Util.FormatMoney(summary.cut)))
         end
 
+        -- Per listing sold: a sale records no quantity, so this is not a
+        -- per-unit figure and is labelled so beside the estimate below.
         local perSale = summary.net / summary.sold
-        ns.PrintRaw(("  average sale:     %s"):format(Util.FormatMoney(perSale)))
+        ns.PrintRaw(("  average per sale: %s"):format(Util.FormatMoney(perSale)))
 
         -- The comparison worth having: what the Profit tab promised against
         -- what the auction house paid. Deposits lost on listings that came

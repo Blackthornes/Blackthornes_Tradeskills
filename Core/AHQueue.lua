@@ -364,9 +364,20 @@ function AHQueue:Flush(reason)
     local queued = self.queue
     self.queue = {}
 
+    -- Waiters still tidy up, but say nothing: a request dropped because the
+    -- auction house closed was not refused for being busy, and a string of
+    -- "stayed busy" warnings on walking away read as something going wrong.
+    self.flushing = reason or true
     for i = 1, #queued do
         if queued[i].onGiveUp then pcall(queued[i].onGiveUp) end
     end
+    self.flushing = nil
+end
+
+--- True while Flush is telling waiters their request is not coming, so a
+--- give-up can keep quiet about a window the player closed.
+function AHQueue:IsFlushing()
+    return self.flushing ~= nil
 end
 
 function AHQueue:GetPendingCount()

@@ -122,7 +122,7 @@ end
 
 local function Ago(stamp)
     if not stamp then return "never" end
-    return Util.FormatAge(math.max(0, time() - stamp)) .. " ago"
+    return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
 ns.RegisterCommand("vendordeals", "say why each item on the Vendor Flips tab is there", function()

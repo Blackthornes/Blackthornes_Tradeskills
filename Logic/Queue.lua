@@ -126,7 +126,12 @@ function Queue:RebuildDependencies()
     end
 
     -- Deepest first: a sub-craft's own sub-crafts have to come before it.
-    table.sort(derived, function(a, b) return a.depth > b.depth end)
+    -- Ties go by recipe, so a rebuild never swaps sub-crafts of the same
+    -- depth around (table.sort is not stable, and rows must not jump).
+    table.sort(derived, function(a, b)
+        if a.depth ~= b.depth then return a.depth > b.depth end
+        return a.recipeID < b.recipeID
+    end)
 
     for index = #queue, 1, -1 do
         queue[index] = nil

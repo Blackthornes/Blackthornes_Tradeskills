@@ -446,6 +446,15 @@ function MailHaul:Observe(mails, complete)
             local old = self.baseline[key]
             bucket.items = old and old.items or {}
         end
+
+        -- A mail gone entirely keeps its items too, with its money already
+        -- counted above. Dropped here, taking an expired auction's items
+        -- while another mail was still loading lost them from the haul.
+        for key, old in pairs(self.baseline) do
+            if not now[key] and next(old.items or {}) then
+                now[key] = { kind = old.kind, name = old.name, monies = {}, items = old.items }
+            end
+        end
     end
 
     self.baseline = now

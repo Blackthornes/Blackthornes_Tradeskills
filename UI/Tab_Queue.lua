@@ -39,7 +39,8 @@ local function CreateCraftRow(row)
 
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 28, 0)
-    row.name:SetPoint("RIGHT", row, "RIGHT", -150, 0)
+    -- Ends short of the profit column, so a long amount never draws over it.
+    row.name:SetPoint("RIGHT", row, "RIGHT", -180, 0)
 
     row.profit = Theme.CreateLabel(row, "small", "text", "RIGHT")
     row.profit:SetPoint("RIGHT", -96, 0)
@@ -335,7 +336,7 @@ local function SetCraftButton(button, label)
             button.tooltipText = ("Opens your %s window. Click again to craft %dx %s.")
                 :format(profession.name, canMake, (recipe and recipe.name) or "item")
 
-            label:SetText(("%d of %d ready -- click to open %s"):format(ready, total, profession.name))
+            label:SetText(("%d of %d ready. Click to open %s"):format(ready, total, profession.name))
             label:SetTextColor(Theme.Unpack("accent"))
 
             button.opensProfession = true
@@ -563,6 +564,8 @@ local function Build(container)
     local materialsHeading = Theme.CreateLabel(materials, "tiny", "accent")
     materialsHeading:SetPoint("TOPLEFT", 10, -10)
     materialsHeading:SetText("MATERIALS NEEDED")
+    -- The house heading: gold, with the rule running off to the right.
+    Theme.StyleHeading(materialsHeading, materials)
 
     -- Column headings, so NEED and HAVE are labelled rather than inferred.
     local columnHeader = CreateFrame("Frame", nil, materials)
@@ -591,6 +594,10 @@ local function Build(container)
         updateRow = UpdateMaterialRow,
         onEnter = ShowMaterialTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            columnHeader:SetPoint("TOPRIGHT", shown and -20 or -10, -28)
+        end,
     })
     materialList:SetPoint("TOPLEFT", materialsDivider, "BOTTOMLEFT", 0, -4)
     materialList:SetPoint("BOTTOMRIGHT", materials, "BOTTOMRIGHT", -10, 48)

@@ -254,6 +254,17 @@ function ItemTooltip:LinesFor(itemID, count)
 
     if not itemID or not ns.Prices then return lines end
 
+    -- Grey (poor) items are worth what a vendor pays, never an auction
+    -- price (a standing rule for both addons), and the game's own tooltip
+    -- already gives the vendor price. So nothing is added for them.
+    -- Read and compared inside the pcall: in a dungeon the game can hand
+    -- back values that raise when compared.
+    local poorOk, poor = pcall(function()
+        local _, _, quality = C_Item.GetItemInfo(itemID)
+        return quality == 0
+    end)
+    if poorOk and poor then return lines end
+
     local value = ns.Prices:GetValue(itemID, "market")
 
     -- A stored zero is a scan that saw no listings, not an item the market

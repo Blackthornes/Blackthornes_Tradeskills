@@ -37,6 +37,15 @@ function Auctions:GetPostedCount(itemID)
     return self:GetTable().items[itemID] or 0
 end
 
+--- The auction IDs of an item you had listed at the last read this session,
+--- as a set, or nil when nothing has been read since login.
+function Auctions:GetOwnedIDs(itemID)
+    if not self.ownedIDs or not itemID then return nil end
+    local copy = {}
+    for auctionID in pairs(self.ownedIDs[itemID] or {}) do copy[auctionID] = true end
+    return copy
+end
+
 --- The cheapest unit price you have an item listed at, or nil when your
 --- auctions have not been read or hold none of it.
 function Auctions:GetOwnMinPrice(itemID)
@@ -227,6 +236,7 @@ function Auctions:ReadOwned(opts)
 
     local items = {}
     local prices = {}
+    local ids = {}
 
     for index = 1, count do
         local infoOk, info = pcall(C_AuctionHouse.GetOwnedAuctionInfo, index)
@@ -241,6 +251,11 @@ function Auctions:ReadOwned(opts)
             if itemID and active then
                 local quantity = info.quantity or 1
                 items[itemID] = (items[itemID] or 0) + quantity
+
+                if info.auctionID then
+                    ids[itemID] = ids[itemID] or {}
+                    ids[itemID][info.auctionID] = true
+                end
 
                 -- The cheapest unit price you have it listed at. A commodity
                 -- listing carries a unit price; an item auction carries the
@@ -268,6 +283,8 @@ function Auctions:ReadOwned(opts)
 
     record.items = items
     record.prices = prices
+    -- This session only: auction IDs are for telling a new listing apart.
+    self.ownedIDs = ids
     record.updatedAt = time()
     record.auctionCount = count
 
@@ -282,8 +299,18 @@ function Auctions:ReadOwned(opts)
     if pending and pending.verifying then
         local posted = items[pending.itemID] or 0
 
-        if posted > (pending.postedBefore or 0) or opts.final then
-            ns.Posting:ResolvePending(posted)
+        -- A listing of this item that was not there before is the new one.
+        -- The count alone can miss it: one of yours selling since the last
+        -- read leaves the count where it was.
+        local appeared = false
+        if pending.idsBefore then
+            for auctionID in pairs(ids[pending.itemID] or {}) do
+                if not pending.idsBefore[auctionID] then appeared = true break end
+            end
+        end
+
+        if appeared or posted > (pending.postedBefore or 0) or opts.final then
+            ns.Posting:ResolvePending(posted, appeared)
         end
     end
 
@@ -469,7 +496,9 @@ ns.RegisterCommand("auctions", "show the auctions the game says you have up", fu
                     ok and tostring(count) or "call failed"))
             end)
         end, function()
-            ns.Warn("the auction house stayed busy, so it was not asked again.")
+            if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                ns.Warn("the auction house stayed busy, so it was not asked again.")
+            end
         end, {
             name = "your auctions (check)",
             key = "owned-auctions",

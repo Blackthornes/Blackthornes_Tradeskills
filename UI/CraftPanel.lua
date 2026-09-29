@@ -349,6 +349,7 @@ function CraftPanel:GetRows(opts)
                         stock = (analysis and analysis.stock) or 0,
                         postLimit = (analysis and analysis.postLimit) or 0,
                         atPostLimit = atLimit,
+                        queuedElsewhere = (analysis and analysis.queuedElsewhere) or 0,
                         roomInCrafts = RoomInCrafts(
                             analysis and analysis.postRoom, recipe),
                     }
@@ -424,10 +425,24 @@ local function QueueMore(line, quantity)
     -- Unless the player has ticked the box that says to ignore it.
     local room = not CraftPanel:IgnoringLimit() and line.roomInCrafts or nil
 
+    -- Read again now rather than from the row: the pane redraws a moment
+    -- after a change, and three quick clicks on + all saw the same room.
+    local queuedNow = 0
+    if room and line.outputItemID then
+        local fresh, _, _, queued = ns.Auctions:GetRoom(line.outputItemID)
+        queuedNow = queued or 0
+        room = RoomInCrafts(fresh, ns.Recipes:GetAny(line.recipeID)) or room
+    end
+
     if room then
         if room <= 0 then
-            ns.Warn(("%s: you already have %d and your limit is %d, so none were queued."):format(
-                line.name, line.stock or 0, line.postLimit or 0))
+            if queuedNow > 0 then
+                ns.Warn(("%s: you have %d and %d queued, which fills your limit of %d, so none were queued."):format(
+                    line.name, line.stock or 0, queuedNow, line.postLimit or 0))
+            else
+                ns.Warn(("%s: you already have %d and your limit is %d, so none were queued."):format(
+                    line.name, line.stock or 0, line.postLimit or 0))
+            end
             return
         end
 
@@ -544,7 +559,11 @@ local function CreateRow(row)
     row.quantity:SetPoint("RIGHT", row.add, "LEFT", -STEP_GAP, 0)
 
     row.remove = Widgets.CreateButton(row, "-", function()
-        if row.data then CraftPanel:SetQueued(row.data, row.data.queued - 1) end
+        -- From the queue as it is now, not the row: a second quick click
+        -- would otherwise ask for the same number again.
+        if not row.data then return end
+        local _, entry = ns.Queue:Find(row.data.recipeID, true)
+        CraftPanel:SetQueued(row.data, (entry and entry.quantity or 0) - 1)
     end, { width = STEP_WIDTH, height = 15 })
     row.remove:SetPoint("RIGHT", row.quantity, "LEFT", -STEP_GAP, 0)
 
@@ -569,6 +588,11 @@ local function StockText(line)
     -- pushed the line off the end.
     if line.postLimit and line.postLimit > 0 and (stock > 0 or line.atPostLimit) then
         local text = ("have %d of %d"):format(stock, line.postLimit)
+        -- Queued crafts count toward the limit too; without saying so,
+        -- "have 0 of 5, at your limit" contradicted itself.
+        if line.atPostLimit and (line.queuedElsewhere or 0) > 0 then
+            return ("have %d, %d queued, limit %d"):format(stock, line.queuedElsewhere, line.postLimit)
+        end
         if line.atPostLimit then return text .. ", at your limit" end
         return text
     end
@@ -679,8 +703,11 @@ local function UpdateRow(row, line)
     end
 
     if limitApplies then
-        row.add.tooltipText = ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
-            line.stock or 0, line.name)
+        row.add.tooltipText = ((line.queuedElsewhere or 0) > 0
+            and ("You have %d %s and %d queued, which fills your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
+                line.stock or 0, line.name, line.queuedElsewhere)
+            or ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
+                line.stock or 0, line.name))
     else
         row.add.tooltipText = ("Queue one more %s. Or type how many you want in the box."):format(line.name)
     end
@@ -1330,6 +1357,9 @@ function CraftPanel:BuildQueued()
     local frame = CreateFrame("Frame", nil, self.frame)
     frame:SetWidth(QUEUED_WIDTH)
     frame:SetPoint("TOPLEFT", self.frame, "TOPRIGHT", QUEUED_GAP, 0)
+    -- Kept on screen: beside a wide profession window on a narrow screen it
+    -- would otherwise hang off the right edge.
+    frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:Hide()
 
@@ -1343,6 +1373,11 @@ function CraftPanel:BuildQueued()
         rowHeight = QUEUED_ROW_HEIGHT,
         createRow = CreateQueuedRow,
         updateRow = UpdateQueuedRow,
+        -- The craft being made right now is the lit row.
+        isSelected = function(entry)
+            local active = ns.Crafting and ns.Crafting.active
+            return active ~= nil and active.recipeID == entry.recipeID
+        end,
         onClick = function(entry, _, mouseButton)
             if mouseButton == "RightButton" and not entry.isDependency then
                 ns.Queue:Remove(entry.recipeID)

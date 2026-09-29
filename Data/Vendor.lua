@@ -297,8 +297,16 @@ function Vendor:BuyStep()
         return
     end
 
-    -- One merchant stack per call is the reliable maximum.
-    local amount = math.min(remaining, math.max(1, line.stack))
+    -- One merchant stack per call is the reliable maximum. An item sold one
+    -- at a time (thread, vials) can still be bought a bag stack at once, up to
+    -- what the merchant says one purchase may hold; one per click turned a
+    -- queue needing 40 thread into 40 purchases and hit the stop below.
+    local perCall = math.max(1, line.stack)
+    if perCall == 1 and Util.HasFunction("GetMerchantItemMaxStack") then
+        local ok, most = pcall(GetMerchantItemMaxStack, line.index)
+        if ok and type(most) == "number" and most > 1 then perCall = most end
+    end
+    local amount = math.min(remaining, perCall)
 
     local ok = pcall(BuyMerchantItem, line.index, amount)
     if not ok then

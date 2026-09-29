@@ -291,15 +291,35 @@ end
 -- Not to be confused with Vendor:GetUnitPrice, which is what a merchant
 -- *charges* for the item and is several times larger. That one answers "can I
 -- buy this reagent"; this one answers "is listing this worth doing at all".
+-- Answers kept for the session: neither a vendor price nor a binding ever
+-- changes, and the Profit list asks about every recipe's output on every
+-- redraw. Asking the client again each time pulls those items back into its
+-- small item cache, which pushes bag items out (Ready to sell then flickers).
+local sellPriceMemo, bindTypeMemo, maxStackMemo = {}, {}, {}
+
+--- Forget the kept answers (for tests, whose pretend items change).
+function Util._ForgetItemMemo()
+    sellPriceMemo, bindTypeMemo, maxStackMemo = {}, {}, {}
+end
+
 function Util.GetVendorSellPrice(itemID)
     if not itemID then return nil end
+
+    local known = sellPriceMemo[itemID]
+    if known ~= nil then return known or nil end
+
     if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
 
     -- sellPrice is the eleventh return. Items the client has not cached yet
     -- return nothing at all, which reads the same as "no vendor value" here;
     -- GetItemLabel already asks the client to cache anything it renders, so a
     -- second look once the list refreshes has it.
-    local ok, _, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
+    local ok, name, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
+
+    -- Only a real answer is kept: an item not cached yet returns no name.
+    if ok and name and type(sellPrice) == "number" then
+        sellPriceMemo[itemID] = sellPrice > 0 and sellPrice or false
+    end
 
     if not ok or type(sellPrice) ~= "number" or sellPrice <= 0 then return nil end
 
@@ -313,6 +333,11 @@ end
 -- stack, and a price divided by that number is not a unit price.
 function Util.GetMaxStackSize(itemID)
     if not itemID then return nil end
+
+    -- Kept, like the vendor price: a full scan asks this for nearly every
+    -- row, and most items appear in many rows.
+    if maxStackMemo[itemID] then return maxStackMemo[itemID] end
+
     if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
 
     -- maxStack is the eighth return.
@@ -320,6 +345,7 @@ function Util.GetMaxStackSize(itemID)
 
     if not ok or type(maxStack) ~= "number" or maxStack < 1 then return nil end
 
+    maxStackMemo[itemID] = maxStack
     return maxStack
 end
 
@@ -339,6 +365,10 @@ local BINDS_ON_PICKUP = { [1] = true, [4] = true }
 -- @return bindType, the raw number, for /bts soulbound to report.
 function Util.IsBoundOnPickup(itemID)
     if not itemID then return nil end
+
+    local known = bindTypeMemo[itemID]
+    if known then return BINDS_ON_PICKUP[known] == true, known end
+
     if not Util.HasFunction("C_Item.GetItemInfo") then return nil end
 
     -- bindType is the fourteenth return.
@@ -346,6 +376,7 @@ function Util.IsBoundOnPickup(itemID)
         pcall(C_Item.GetItemInfo, itemID)
 
     if not ok or type(bindType) ~= "number" then return nil end
+    bindTypeMemo[itemID] = bindType
 
     return BINDS_ON_PICKUP[bindType] == true, bindType
 end

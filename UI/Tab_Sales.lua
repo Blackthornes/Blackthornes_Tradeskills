@@ -87,7 +87,10 @@ local function Matches(itemID, name, query)
         -- GetItemLabel hands back a link once the client has the item, and a
         -- link carries the name inside it, so searching the label works for
         -- both shapes without having to take the link apart.
-        haystack = haystack .. " " .. tostring(Util.GetItemLabel(itemID)):lower()
+        -- Only the name inside the link: its colour code and item number
+        -- matched "ff" or a digit on every row.
+        local label = tostring(Util.GetItemLabel(itemID))
+        haystack = haystack .. " " .. (label:match("%[(.-)%]") or label):lower()
     end
 
     return haystack:find(query, 1, true) ~= nil
@@ -686,6 +689,12 @@ local function Build(container)
             Widgets.ShowItemOnly(row, data.itemID, data.name)
         end,
         onLeave = function() GameTooltip:Hide() end,
+        -- The item the detail pane is showing is lit, as on every other tab.
+        isSelected = function(data)
+            if data.haul or not state.selected then return false end
+            local key = data.key or data.itemID or ("?" .. tostring(data.name or "unknown"))
+            return key == state.selected
+        end,
         onClick = function(data)
             if data.haul then
                 if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end

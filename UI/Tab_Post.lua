@@ -167,7 +167,9 @@ function UpdateRow(row, line)
             cells[key]:SetTextColor(Theme.Unpack(priceColour))
         end
 
-        cells.total:SetText(Util.FormatMoney(line.total, { short = true }))
+        -- What this listing comes to at the LIST amount, the same figure the
+        -- tooltip gives, not the whole stack's.
+        cells.total:SetText(Util.FormatMoney(line.postTotal or line.total, { short = true }))
         cells.total:SetTextColor(Theme.Unpack(line.atALoss and "loss" or "profit"))
     else
         for _, key in ipairs({ "gold", "silver", "copper" }) do
@@ -329,7 +331,11 @@ local function VisibleLines()
 
     local kept = {}
     for _, line in ipairs(lines) do
-        if (line.label or ""):lower():find(needle, 1, true) then
+        -- The name only: the label is an item link, and its colour code and
+        -- item number matched "ff" or "20" on nearly every row.
+        local label = line.label or ""
+        local name = label:match("%[(.-)%]") or label
+        if name:lower():find(needle, 1, true) then
             kept[#kept + 1] = line
         end
     end
@@ -387,7 +393,7 @@ local function Refresh()
         unpriced > 0 and ("  ·  %d with no price yet"):format(unpriced) or ""))
 
     widgets.warning:SetText(losses > 0
-        and ("%d item%s would sell below material cost"):format(
+        and ("%d item%s would sell at a loss"):format(
             losses, losses == 1 and "" or "s")
         or "")
 
@@ -485,6 +491,10 @@ local function Build(container)
         updateRow = UpdateRow,
         onEnter = ShowRowTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", note, "BOTTOMRIGHT", shown and -10 or 0, -8)
+        end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     list:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 54)

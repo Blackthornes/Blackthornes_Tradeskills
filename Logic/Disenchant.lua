@@ -589,6 +589,13 @@ function Disenchant:MaterialName(itemID)
     return MATERIAL_NAME[itemID]
 end
 
+--- An item's plain name from the saved facts alone, never asking the client:
+--- safe to call for every row of a long list. nil when never read.
+function Disenchant:KnownName(itemID)
+    local known = itemID and Store()[itemID]
+    return known and known.n or nil
+end
+
 --- An item's plain name, for a list row that colours it by rarity itself.
 function Disenchant:ItemName(itemID)
     local known = Store()[itemID]
@@ -1007,7 +1014,7 @@ ns.RegisterCommand("de", "<item link or ID>: what an item disenchants into and i
 
 local function Ago(stamp)
     if not stamp then return "never" end
-    return Util.FormatAge(math.max(0, time() - stamp)) .. " ago"
+    return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
 ns.RegisterCommand("dedeals", "say why each deal on the Disenchanting tab is there", function()
