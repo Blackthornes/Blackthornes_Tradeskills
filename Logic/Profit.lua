@@ -33,7 +33,7 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
 
     local unitDeposit = ns.Posting and ns.Posting:GetCachedUnitDeposit(recipe.outputItemID)
     local relists = ns.Config:Get("expectedRelists") or 1
-    local deposit = unitDeposit and (unitDeposit * yield * math.max(1, relists)) or 0
+    local deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
 
     return (revenue - cut) - (cost.total or 0) - deposit
 end
@@ -511,7 +511,7 @@ function Profit:Analyse(recipeID, characterKey)
     local relists = ns.Config:Get("expectedRelists") or 1
 
     analysis.depositKnown = unitDeposit ~= nil
-    analysis.deposit = unitDeposit and (unitDeposit * yield * math.max(1, relists)) or 0
+    analysis.deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
 
     analysis.profit = analysis.netRevenue - cost.total - analysis.deposit
     analysis.profitPerUnit = analysis.profit / yield

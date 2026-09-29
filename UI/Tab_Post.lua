@@ -107,7 +107,13 @@ local function CreateRow(row)
         -- are simply things the scan has never had a reason to look at.
         if not line.unitPrice then
             ns.Posting:CheckPrice(line.itemID, function(itemID, price, status)
-                if not price then
+                -- "recent" while that same search is still out means a
+                -- second click before the answer: it will redraw the row
+                -- itself, and saying nobody sells one would be a guess.
+                local pending = ns.Scanner.pendingItem
+                local stillAsking = status == "recent" and pending and pending.itemID == itemID
+
+                if not price and not stillAsking then
                     ns.Print(("%s: %s"):format(Util.GetItemLabel(itemID),
                         -- "recent": searched moments ago, and that search
                         -- found nobody selling it.

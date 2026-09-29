@@ -21,7 +21,9 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
-local SOURCE_NOTE = "Chances come from the Classic table built into the addon, since the game does not tell addons what an item breaks into. Your own disenchants replace it once you have done %d like this (%d so far). Materials are priced at their lowest auction posting, leaving out a lone one far below the rest."
+-- Short enough to leave room for the bound-item warning in the bag view:
+-- the longer wording filled the note's four lines and pushed that off.
+local SOURCE_NOTE = "Chances come from the built-in Classic table until you have done %d disenchants like this (%d so far). Materials are priced at their lowest posting, leaving out a lone low one."
 
 -- Right-aligned columns per view, laid out right to left.
 local VIEWS = {

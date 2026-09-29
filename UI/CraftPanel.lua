@@ -288,6 +288,9 @@ function CraftPanel:GetRows(opts)
     local open = self:GetOpenRecipeIDs()
 
     local rows = {}
+    -- How many were left out for being at the Keep in stock limit, so an
+    -- empty pane can say that rather than blame the recipes not being read.
+    self.hiddenAtLimit = 0
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         -- Only what this profession window is showing, when it will say. The
@@ -321,7 +324,9 @@ function CraftPanel:GetRows(opts)
                     and not (opts.keepOrder and opts.keepOrder[recipeID])
                     and ns.Config:Get("hideAtPostLimit") ~= false
 
-                if not suppressed then
+                if suppressed then
+                    self.hiddenAtLimit = self.hiddenAtLimit + 1
+                else
                     rows[#rows + 1] = {
                         recipeID = recipeID,
                         name = name,
@@ -614,9 +619,16 @@ local function UpdateRow(row, line)
 
     -- Not while it is being typed into: overwriting someone mid-number is how
     -- a field ends up refusing to accept what they meant.
-    if not BeingTyped(row.quantity) then
+    -- A reused row now showing another recipe drops the half-typed number,
+    -- though: it was for the recipe that scrolled away, and pressing Enter
+    -- would have queued that many of this one.
+    if BeingTyped(row.quantity) and row.boundRecipeID ~= line.recipeID then
+        row.quantity:SetValue(line.queued, true)
+        row.quantity.editBox:ClearFocus()
+    elseif not BeingTyped(row.quantity) then
         row.quantity:SetValue(line.queued, true)
     end
+    row.boundRecipeID = line.recipeID
 
     -- A queued number stands out from the zeros around it.
     row.quantity.editBox:SetTextColor(Theme.Unpack(line.queued > 0 and "accent" or "dim"))
@@ -1228,6 +1240,8 @@ function CraftPanel:Refresh()
 
         self.empty:SetText(searching
             and "Nothing here matches that."
+            or (self.hiddenAtLimit or 0) > 0
+                and "Every recipe here is at your Keep in stock limit.\n\nTick Ignore max on hand to see them."
             or "No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment.")
     end
 
@@ -1456,7 +1470,7 @@ function CraftPanel:Toggle()
         local _, frameName = self:FindTradeSkillFrame()
 
         ns.Print(("craft pane shown%s, %d recipe(s) listed."):format(
-            frameName and (", docked to " .. frameName) or " (no profession window open)",
+            frameName and ", docked to the profession window" or " (no profession window open)",
             #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit() })))
     else
         ns.Warn("the craft pane would not show.")

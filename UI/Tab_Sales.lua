@@ -274,6 +274,8 @@ local LINE_COUNT = 11
 
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
+    -- The gold edge every other detail pane has.
+    Theme.AccentStripe(detail, 2, 0.6)
     detail:SetWidth(DETAIL_WIDTH)
 
     local title = Theme.CreateLabel(detail, "large", "accent")

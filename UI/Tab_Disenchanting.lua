@@ -615,6 +615,12 @@ local function Build(container)
     hint:SetText("Right-click an item to search the auction house for it")
     widgets.hint = hint
 
+    -- The count line grows a long "not checked yet" note while items load,
+    -- and ran under this hint. It stops short of it now and ends in "...".
+    countLabel:SetPoint("RIGHT", hint, "LEFT", -12, 0)
+    countLabel:SetJustifyH("LEFT")
+    countLabel:SetWordWrap(false)
+
     local detail = BuildDetail(container)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)

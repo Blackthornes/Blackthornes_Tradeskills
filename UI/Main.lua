@@ -287,7 +287,11 @@ function UI:UpdateHeader()
     if ns.Scanner.isScanning then
         self.scanButton:SetText("Cancel scan")
         self.scanButton.tooltipText = "Stop the running scan"
-        self.scanHint:SetText("")
+        -- The progress ("scanning... 42%") lives here while a scan runs, and
+        -- clearing it on this five-second tick made it blink out.
+        if not (self.scanHint:GetText() or ""):find("^scanning") then
+            self.scanHint:SetText("scanning...")
+        end
     else
         self.scanButton:SetText("Scan auctions")
 
@@ -995,6 +999,7 @@ function UI:ShowTransferDialog(mode)
             dialog:Hide()
         end, { width = 90, height = 26 })
         close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
+        dialog.close = close
 
         self.transferDialog = dialog
     end
@@ -1010,12 +1015,18 @@ function UI:ShowTransferDialog(mode)
         dialog.editBox:SetText(code)
         dialog.editBox:HighlightText()
         dialog.action:Hide()
+        -- Import is hidden here, so Close takes its corner rather than
+        -- floating where Import would have been beside it.
+        dialog.close:ClearAllPoints()
+        dialog.close:SetPoint("BOTTOMRIGHT", -20, 18)
     else
         dialog.title:SetText("Import")
         dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits are replaced.")
 
         dialog.editBox:SetText("")
         dialog.action:Show()
+        dialog.close:ClearAllPoints()
+        dialog.close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
     end
 
     dialog:Show()

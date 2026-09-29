@@ -212,7 +212,8 @@ local function ShowRowTooltip(row, line)
 
     if line.savingTotal and line.savingTotal > 0 then
         GameTooltip:AddDoubleLine(
-            ("Saved by buying from the %s"):format(line.source),
+            ("Saved by buying from the %s"):format(
+                line.source == "auction" and "auction house" or line.source),
             Util.FormatMoney(line.savingTotal, { noColor = true }),
             0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
     end
@@ -357,6 +358,10 @@ local function Build(container)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
     local list = Widgets.CreateScrollList(container, {
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -(shown and 10 or 0), -8)
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,

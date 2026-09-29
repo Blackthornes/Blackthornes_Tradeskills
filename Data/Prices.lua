@@ -328,16 +328,31 @@ function Prices:ClearMissing(seen, startedAt, scannedAt)
     scannedAt = scannedAt or time()
     startedAt = startedAt or scannedAt
 
-    local cleared = 0
+    local gone, listedCount = {}, 0
     for itemID, record in pairs(self:GetTable()) do
         local listed = (record.quantity or 0) > 0 or record.min or record.rivalMin or record.ownMin
-        if listed and not seen[itemID] and (record.seen or 0) < startedAt then
-            self:RecordEmpty(itemID, scannedAt)
-            cleared = cleared + 1
+        if listed then
+            listedCount = listedCount + 1
+            if not seen[itemID] and (record.seen or 0) < startedAt then
+                gone[#gone + 1] = itemID
+            end
         end
     end
 
-    return cleared
+    -- A last guard for the player's data. Items do sell out between scans,
+    -- but not a quarter of the auction house at once: that many means the
+    -- scan did not read what it thinks it read, and clearing would wipe good
+    -- prices. Nothing is cleared, and the next scan tries again.
+    if #gone > 20 and #gone > listedCount / 4 then
+        ns.Debug(("%d of %d listed items missing from the scan; not marking any sold out"):format(#gone, listedCount))
+        return 0
+    end
+
+    for _, itemID in ipairs(gone) do
+        self:RecordEmpty(itemID, scannedAt)
+    end
+
+    return #gone
 end
 
 --- Commit a whole scan at once: { [itemID] = { {unitPrice, quantity}, ... } }.
