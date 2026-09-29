@@ -674,6 +674,66 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- A queue change shows on the spot
+--------------------------------------------------------------------------------
+
+-- kronosbest: "a noticeable ~1s delay from the button is pressed to when it
+-- shows up". The rows on screen and the queued list update on the change
+-- itself; only the full re-pricing waits.
+do
+  local savedFind, savedCount, savedGetAll = ns.Queue.Find, ns.Queue.Count, ns.Queue.GetAll
+  local entries = { [101] = { recipeID = 101, quantity = 4 } }
+  ns.Queue.Find = function(_, recipeID) local e = entries[recipeID]; if e then return 1, e end end
+  ns.Queue.Count = function() return 1 end
+  ns.Queue.GetAll = function() return { entries[101] } end
+
+  local data = { { recipeID = 101, queued = 3 }, { recipeID = 102, queued = 0 } }
+  local redrawn, requested, queuedDrawn = 0, 0, 0
+  local saved = { frame = CraftPanel.frame, list = CraftPanel.list, IsCollapsed = CraftPanel.IsCollapsed,
+    UpdateCraftButton = CraftPanel.UpdateCraftButton, UpdateClearButton = CraftPanel.UpdateClearButton,
+    UpdateSummary = CraftPanel.UpdateSummary, RefreshQueued = CraftPanel.RefreshQueued,
+    RequestRefresh = CraftPanel.RequestRefresh }
+
+  CraftPanel.frame = { IsShown = function() return true end }
+  CraftPanel.list = { GetData = function() return data end, Refresh = function() redrawn = redrawn + 1 end }
+  CraftPanel.IsCollapsed = function() return false end
+  CraftPanel.UpdateCraftButton, CraftPanel.UpdateClearButton, CraftPanel.UpdateSummary =
+    function() end, function() end, function() end
+  CraftPanel.RefreshQueued = function() queuedDrawn = queuedDrawn + 1 end
+  CraftPanel.RequestRefresh = function() requested = requested + 1 end
+
+  CraftPanel:OnQueueChanged()
+  check("the row's queued number is the queue's, straight away", data[1].queued, 4)
+  check("a row with nothing queued reads zero", data[2].queued, 0)
+  check("the rows on screen are redrawn at once", redrawn, 1)
+  check("so is the queued crafts list", queuedDrawn, 1)
+  check("and the full refresh still follows", requested, 1)
+
+  for key, value in pairs(saved) do CraftPanel[key] = value end
+  ns.Queue.Find, ns.Queue.Count, ns.Queue.GetAll = savedFind, savedCount, savedGetAll
+end
+
+-- Quick + clicks cannot run past the stock limit read before the first one.
+do
+  local added = 0
+  local savedAdd = ns.Queue.Add
+  ns.Queue.Add = function(_, _, n) added = added + n end
+  ns.Warn, ns.Print = function() end, function() end
+  local savedFind = ns.Queue.Find
+  local entry
+  ns.Queue.Find = function() if entry then return 1, entry end end
+
+  local line = { recipeID = 101, name = "Copper Chain Belt", queued = 0, roomInCrafts = 2, postLimit = 2 }
+  for _ = 1, 3 do
+    CraftPanel:SetQueued(line, added + 1)
+    entry = { recipeID = 101, quantity = added }
+  end
+  check("three quick + clicks with room for two queue two", added, 2)
+
+  ns.Queue.Add, ns.Queue.Find = savedAdd, savedFind
+end
+
+--------------------------------------------------------------------------------
 -- Clear queue asks first
 --------------------------------------------------------------------------------
 

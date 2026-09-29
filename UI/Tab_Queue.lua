@@ -657,7 +657,7 @@ UI:RegisterTab({
 function UI:OnQueueUpdated()
     -- The craft pane beside the profession window shows the same queue, and
     -- is usually the thing that just changed it.
-    if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
+    if ns.CraftPanel then ns.CraftPanel:OnQueueChanged() end
 
     -- Only while the window is showing: redrawing a hidden Queue tab also
     -- ran its alt-craft announcement, chat line and coin sound included,
