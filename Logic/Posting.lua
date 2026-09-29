@@ -1159,7 +1159,9 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
         lowestText = lowestText .. " (could not check, last seen)"
     end
 
-    local postingText = Money(unitPrice)
+    -- The price about to go up is the one number that matters, so it is
+    -- drawn in gold to stand out from the two it is being compared with.
+    local postingText = ("|c%s%s|r"):format(ns.COLORS.accent, Money(unitPrice))
     if quantity > 1 then
         postingText = ("%s each, %d x %s"):format(postingText, quantity, Util.GetItemLabel(itemID))
     else
