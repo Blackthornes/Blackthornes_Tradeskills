@@ -253,6 +253,17 @@ local function SafeRealmName()
     return "UnknownRealm"
 end
 
+-- Called inside a pcall, and a string copied there: in a dungeon the game
+-- can hand back a secret value that raises when joined or compared outside.
+local function PlainString(fn, ...)
+    local ok, value = pcall(function(...)
+        local v = fn(...)
+        if type(v) == "string" and v ~= "" then return v .. "" end
+    end, ...)
+    if ok then return value end
+    return nil
+end
+
 local function SafeFaction()
     -- Copied inside the pcall like the name: a faction handed back as a
     -- secret value would raise at the join below on every call.

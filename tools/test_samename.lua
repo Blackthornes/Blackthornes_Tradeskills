@@ -100,4 +100,9 @@ player.guid = nil
 ns = Load({ characters = {} })
 Check("no GUID yet: old key, not cached", ns.Config:GetCharacterKey() == "Voldar-Forever PvE" and ns.Config.characterKey == nil)
 
+-- Prices are filed by realm and faction. This raised "attempt to call a nil
+-- value" at login on testing, where a helper it used had not been copied over.
+local realmOk, realmKey = pcall(ns.Config.GetRealmKey, ns.Config)
+Check("prices are filed by realm and faction", realmOk and realmKey == "Forever PvE-Horde", tostring(realmKey))
+
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end
