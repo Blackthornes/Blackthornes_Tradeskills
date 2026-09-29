@@ -583,7 +583,12 @@ local function Refresh()
     -- counts are shown, rather than leaving it looking like the addon
     -- forgot everything on its own.
     local diagnostics = ns.Config:GetLoadDiagnostics()
-    if diagnostics.restoredFromCVars then
+    widgets.loadWarning:SetTextColor(Theme.Unpack("warn"))
+    if ns.Config:IsFirstRun() then
+        widgets.loadWarning:SetTextColor(Theme.Unpack("text"))
+        widgets.loadWarning:SetText(
+            "Welcome! This is the first time the addon has run here, so there is no saved data yet.")
+    elseif diagnostics.restoredFromCVars then
         widgets.loadWarning:SetText(
             "The game did not load your saved data at login, so it was recovered from the backup in CVars.")
     elseif diagnostics.globalType ~= "table" and not diagnostics.restored then
