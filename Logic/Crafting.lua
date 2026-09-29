@@ -116,6 +116,23 @@ function Crafting:OnBagUpdate()
     local entries = {}
     for index, entry in ipairs(ns.Queue:GetAll()) do entries[index] = entry end
 
+    -- Two recipes can make the same item, and one craft's items used to count
+    -- down both. What turned up is now shared out once, and the recipe just
+    -- cast (or started from here) is first in line for it.
+    local preferred = (self.active and self.active.recipeID) or self.lastCastSpell
+    if preferred then
+        local first, rest = {}, {}
+        for _, entry in ipairs(entries) do
+            if entry.recipeID == preferred then first[#first + 1] = entry
+            else rest[#rest + 1] = entry end
+        end
+        for _, entry in ipairs(rest) do first[#first + 1] = entry end
+        entries = first
+    end
+
+    -- Items that turned up and are not yet put down to a craft, per item.
+    local unclaimed = {}
+
     -- Queue changes made during the walk must not reset the snapshot the
     -- walk is comparing against; see OnQueueChanged.
     self.walking = true
@@ -131,10 +148,13 @@ function Crafting:OnBagUpdate()
             if previous and held > previous then
                 local perCraft = math.max(1, recipe.quantityMin or 1)
 
+                local output = recipe.outputItemID
+                if unclaimed[output] == nil then unclaimed[output] = held - previous end
+
                 -- A variable-yield recipe can produce more than its minimum,
                 -- which would otherwise read as extra crafts completed.
                 local made = math.min(
-                    math.floor((held - previous) / perCraft),
+                    math.floor(unclaimed[output] / perCraft),
                     entry.quantity)
 
                 if made > 0 and entry.isDependency then
@@ -148,6 +168,7 @@ function Crafting:OnBagUpdate()
                     dependencyMade = true
 
                 elseif made > 0 then
+                    unclaimed[output] = unclaimed[output] - made * perCraft
                     ns.Queue:SetQuantity(entry.recipeID, entry.quantity - made)
 
                     ns.Print(("made %d of %s"):format(made,
@@ -219,6 +240,12 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
 
     local okUnit, isPlayer = pcall(function() return unit == "player" end)
     if not (okUnit and isPlayer) then return end
+
+    -- Which recipe was just made, so the bag change it causes is put down to
+    -- that one when two recipes make the same item. Copied inside a pcall
+    -- for the same reason as the compare below.
+    local okSpell, copied = pcall(function() return spellID + 0 end)
+    self.lastCastSpell = okSpell and copied or nil
 
     for _, entry in ipairs(ns.Queue:GetAll()) do
         local ok, same = pcall(function() return entry.recipeID == spellID end)

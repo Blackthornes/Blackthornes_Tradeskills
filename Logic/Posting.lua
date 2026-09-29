@@ -1314,6 +1314,15 @@ function Posting:Request(itemID, quantity, unitPrice)
             return
         end
 
+        -- The auction house closed while the check was out. A listing can
+        -- only be made there, and a confirm popping up after walking away
+        -- asks about something that cannot happen.
+        if ns.Scanner.isAuctionHouseOpen == false then
+            ns.Print(("the auction house closed before the price check for %s came back; nothing was listed."):format(
+                Util.GetItemLabel(itemID)))
+            return
+        end
+
         -- A second click while this item's search is still out. That search
         -- will bring up the dialog when it answers; showing one now would be
         -- at the price from before the check, and then a second dialog for
@@ -1346,6 +1355,11 @@ function Posting:Request(itemID, quantity, unitPrice)
 
     C_Timer.After(5, function()
         if settled then return end
+
+        if ns.Scanner.isAuctionHouseOpen == false then
+            Proceed("closed")
+            return
+        end
 
         ns.Warn("the price check did not come back; using the last known price.")
         Proceed("unavailable")

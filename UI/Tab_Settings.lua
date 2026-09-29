@@ -470,7 +470,28 @@ local function Build(outer)
     end, false)
     widgets.debug:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local resetButton = Widgets.CreateButton(container, "Reset to defaults", function()
+    -- Every setting at once, so it arms first like Clear price data.
+    local resetButton
+    resetButton = Widgets.CreateButton(container, "Reset to defaults", function()
+        if not resetButton.armed then
+            resetButton.armed = true
+            resetButton:SetText("Really reset?")
+            resetButton.label:SetTextColor(Theme.Unpack("loss"))
+
+            C_Timer.After(4, function()
+                if resetButton.armed then
+                    resetButton.armed = false
+                    resetButton:SetText("Reset to defaults")
+                    resetButton.label:SetTextColor(Theme.Unpack("text"))
+                end
+            end)
+            return
+        end
+
+        resetButton.armed = false
+        resetButton:SetText("Reset to defaults")
+        resetButton.label:SetTextColor(Theme.Unpack("text"))
+
         -- Through Config:Set, as every other setting change is, so a session
         -- keeping its settings in the backup store saves these too.
         for key, value in pairs(ns.Config.DEFAULTS.settings) do
@@ -479,7 +500,7 @@ local function Build(outer)
 
         ns.Print("settings reset to defaults")
         UI:RefreshActiveTab()
-    end, { width = 140, height = 22 })
+    end, { width = 140, height = 22, tooltip = "Put every setting back to how it started. Asks you to click again first." })
     resetButton:SetPoint("BOTTOMLEFT", COLUMN_TWO_X, 12)
 end
 
