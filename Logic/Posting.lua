@@ -1428,6 +1428,14 @@ function Posting:ResolvePending(posted, appeared)
     if posted and (appeared or posted > (pending.postedBefore or 0)) then
         ns.Print(("listed %s"):format(Util.GetItemLabel(pending.itemID)))
 
+    elseif posted and posted > 0 and not pending.idsBefore then
+        -- Listed before your auctions had been read this visit, so the count
+        -- it is measured against is from last time. Listings that sold since
+        -- then made a good listing read as missing. What is there can only be
+        -- reported, not told apart.
+        ns.Print(("%s: you have %d listed now. This was the first check since the auction house opened, so the new listing could not be told apart from older ones.")
+            :format(Util.GetItemLabel(pending.itemID), posted))
+
     elseif posted then
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(("%s did not appear in your auctions."):format(

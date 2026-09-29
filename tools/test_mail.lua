@@ -909,6 +909,44 @@ ns.Config.GetCharacterKey = function() return "Tester-Testrealm" end
 --------------------------------------------------------------------------------
 
 print("")
+print("a returned listing in several stacks is written down once")
+--------------------------------------------------------------------------------
+
+Reset()
+
+local function ExpiredCloth(stacks)
+    local items = {}
+    for i = 1, stacks do items[i] = { itemID = CLOTH, count = 20 } end
+    return { sender = "Auction House", subject = "Auction expired: Linen Cloth", items = items }
+end
+
+inbox = { ExpiredCloth(3) }
+Mail:Read()
+check("the expiry is written down",             #Mail:GetLedger().entries, 1)
+check("with all three stacks",                  Mail:GetLedger().entries[1].quantity, 60)
+
+-- Take the stacks one at a time.
+inbox = { ExpiredCloth(2) }
+Tick()
+Mail:Read()
+check("taking a stack writes nothing new",      #Mail:GetLedger().entries, 1)
+
+inbox = { ExpiredCloth(1) }
+Tick()
+Mail:Read()
+check("nor does taking the next one",           #Mail:GetLedger().entries, 1)
+check("still one expiry",                       Mail:GetSummary().expired, 1)
+
+-- A fresh return of the same item later is a new expiry.
+inbox = {}
+Tick()
+Mail:Read()
+inbox = { ExpiredCloth(2) }
+Tick()
+Mail:Read()
+check("a new return after that is new",         Mail:GetSummary().expired, 2)
+
+print("")
 if failures > 0 then
     error(("%d check(s) failed"):format(failures), 0)
 end

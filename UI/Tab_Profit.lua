@@ -407,6 +407,15 @@ local function BuildDetail(parent)
         -- Whole crafts, one at least: Queue:Add clamps the same way, and the
         -- line printed should say what was queued.
         local count = math.max(1, math.floor(tonumber(quantity:GetText()) or 1))
+
+        -- Max writes 0 when the stock limit leaves no room. Queue:Add would
+        -- still make that one craft, which is not what the box says.
+        if tonumber(quantity:GetText()) == 0 then
+            ns.Print(("nothing queued: the amount for %s is 0"):format(
+                state.selected.name or "that craft"))
+            return
+        end
+
         ns.Queue:Add(state.selected.recipeID, count)
         ns.Print(("queued %dx %s"):format(count, state.selected.name or "craft"))
 
@@ -423,10 +432,11 @@ local function BuildDetail(parent)
         -- Whichever runs out first: materials, or room under the limit.
         -- Room is counted in items and this box is counted in crafts, so it
         -- is the converted figure that may be compared against a craft count.
-        local most = math.max(1, state.selected.craftableNow or 1)
-        local room = state.selected.roomInCrafts
-        if room then
-            most = math.max(1, math.min(most, room))
+        local most = ns.Profit.MaxCrafts(state.selected.craftableNow,
+            state.selected.roomInCrafts)
+        if most == 0 then
+            ns.Print(("no room for more %s: you already hold your Max on hand (Keep in stock in Settings)")
+                :format(state.selected.name or "of that craft"))
         end
 
         quantity:SetText(tostring(most))

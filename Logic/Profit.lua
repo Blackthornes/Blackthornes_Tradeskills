@@ -354,6 +354,17 @@ Profit._RankValue = RankValue
 -- when they hold a recipe but no analysis.
 Profit.RoomInCrafts = RoomInCrafts
 
+--- What the Profit tab's Max button fills in: whichever runs out first,
+--- materials or room under the limit. Room left at all allows one craft,
+--- but none left is 0. It said 1 there, and Add queued one past the limit.
+function Profit.MaxCrafts(craftableNow, roomInCrafts)
+    if roomInCrafts and roomInCrafts <= 0 then return 0 end
+
+    local most = math.max(1, craftableNow or 1)
+    if roomInCrafts then most = math.max(1, math.min(most, roomInCrafts)) end
+    return most
+end
+
 --- Full profitability breakdown for one recipe.
 function Profit:Analyse(recipeID, characterKey)
     local recipe, owner = ns.Recipes:GetAny(recipeID)

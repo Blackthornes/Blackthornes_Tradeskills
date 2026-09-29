@@ -165,7 +165,17 @@ function Crafting:OnBagUpdate()
                     -- queue 5 bolts and a bag that needs 3, make 2, and the
                     -- bolts you asked for were written down to 1 and then
                     -- removed.
+                    --
+                    -- The items still go to it first, and are taken out of
+                    -- what the manual entry can count. The re-derive already
+                    -- sees them as held, so counting the manual entry down as
+                    -- well took one craft's items off both: 5 bolts asked for
+                    -- plus 3 for a bag, make 3, and only 2 were left to make.
                     dependencyMade = true
+                    unclaimed[output] = unclaimed[output] - made * perCraft
+
+                    ns.Print(("made %d of %s, as materials for another craft"):format(made,
+                        ns.Recipes:GetDisplayLink(entry.recipeID)))
 
                 elseif made > 0 then
                     unclaimed[output] = unclaimed[output] - made * perCraft
