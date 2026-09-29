@@ -297,6 +297,47 @@ end
 
 --------------------------------------------------------------------------------
 print("")
+print("a lone low listing does not set the material cost")
+
+-- Trent, 2026-09-26: a single listing under a third of the next one up, and
+-- of market when known, is ignored; two or more low listings count. Material
+-- cost and the only-seller price follow the same rule the undercut does.
+local function ScanWool(prices)
+    local listings = {}
+    for _, price in ipairs(prices) do
+        listings[#listings + 1] = { unitPrice = price, quantity = 20 }
+    end
+    local market, min, quantity, rival, own, ignored =
+        Prices:Summarise(listings, Prices:GetValue(WOOL, "market"))
+    Prices:Record(WOOL, market, min, quantity, time(), rival, own, ignored)
+end
+
+Reset()
+Prices:Record(WOOL, 50, 50, 200, time(), 50, nil)
+ScanWool({ 5, 50, 50, 50 })
+ScanWithOnlyMine(BAG, 600)
+
+do
+    check("the lone 5c wool was seen as one", Prices:Get(WOOL).ignoredLow, 5)
+    check("wool costs the 50c the rest are at", (Cost:GetReagentUnitCost(WOOL)), 50)
+
+    local price, basis = Profit:ChoosePostPrice(BAG)
+    check("only seller: marked up off 50c wool", price, 800)
+    check("only seller: basis is uncontested", basis, "uncontested")
+    check("the Profit tab costs it off 50c wool", Profit:Analyse(BAG_RECIPE).cost.total, 500)
+end
+
+Reset()
+Prices:Record(WOOL, 50, 50, 200, time(), 50, nil)
+ScanWool({ 5, 5, 50, 50 })
+
+do
+    check("two low listings are a real price", Prices:Get(WOOL).ignoredLow, nil)
+    check("and wool costs 5c", (Cost:GetReagentUnitCost(WOOL)), 5)
+end
+
+--------------------------------------------------------------------------------
+print("")
 if failures > 0 then
     error(("%d uncontested-price check(s) failed"):format(failures), 0)
 end

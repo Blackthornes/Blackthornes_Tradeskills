@@ -463,7 +463,9 @@ function Queue:GetShoppingList()
 
             local shortfall = math.max(0, needed - have)
 
-            local auction = ns.Prices:GetValue(itemID, "min")
+            -- The same auction price material cost uses, so a lone listing far
+            -- below the rest is left out here too.
+            local auction = ns.Prices:GetValue(itemID, "lowest")
             local vendor = ns.Vendor:GetUnitPrice(itemID)
 
             -- Cheaper from a vendor means the shopping list should send you to

@@ -37,7 +37,11 @@ function Cost:GetReagentUnitCost(itemID, opts)
     end
 
     -- Buying means paying the asking price, not the smoothed market average.
-    local auction = ns.Prices:GetValue(itemID, "min")
+    -- A lone listing far below the rest is left out, as the undercut rule
+    -- leaves it out (Trent, 2026-09-26): one seller's single cheap unit is
+    -- gone after one purchase and cannot supply a run of crafts, so pricing
+    -- every craft off it overstated profit and the only-seller price.
+    local auction = ns.Prices:GetValue(itemID, "lowest")
     local vendor = ns.Vendor:GetUnitPrice(itemID)
 
     -- A vendor caps what any reagent can cost you. People routinely list
@@ -224,7 +228,8 @@ function Cost:GetShortfall(recipeID, craftCount)
         local short = math.max(0, needed - have)
 
         if short > 0 then
-            local unitCost = ns.Prices:GetValue(reagent.itemID, "min")
+            -- Priced as GetReagentUnitCost prices it, lone low listing aside.
+            local unitCost = ns.Prices:GetValue(reagent.itemID, "lowest")
 
             missing[#missing + 1] = {
                 itemID = reagent.itemID,
