@@ -4,6 +4,36 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.16.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Fixed: a quick full scan read commodity prices (cloth, herbs, ore and
+  the like) as if each whole row cost the price of one, so they came out
+  far too high. For example, Linen Cloth showed about 16 times its real
+  price. Each commodity's market value starts fresh on your next quick
+  scan; its price history is kept.
+- A single cheap listing no longer sets the material cost, the only-seller
+  price or the tooltip's lowest posting.
+- Enchanting profit takes the auction house cut off.
+- Buy materials skips anything rivals sell cheaper on the auction house.
+- With All characters ticked, the Profit tab's profession list includes
+  your other characters.
+- A craft counts down the queue once per cast, even when it makes extra
+  items. The queue says "made 1 of X, 4 left".
+- Crafts from a profession you dropped are hidden (not deleted).
+- WHO shows first names, adding the last name's initial when two
+  characters share one.
+- The listing confirmation shows the item's icon and the price in gold.
+- A scan stopped at the 40-page limit no longer counts as a full scan.
+- Two sales that look alike at the mailbox now count as two.
+- A fresh install gets a welcome message instead of a saved data warning.
+- `/bts help` lists the everyday commands; `/bts help all` lists them all.
+- The Prices tab search finds items the game hasn't loaded yet.
+- The cast bar only moves for crafts, not for things like Hearthstone.
+- Buttons that need a second click get a red border while armed.
+
 ## 0.15.1
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
