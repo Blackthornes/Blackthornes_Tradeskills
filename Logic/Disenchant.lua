@@ -643,6 +643,9 @@ function Disenchant:GetCraftRows(opts)
     opts = opts or {}
 
     local rows = {}
+    -- The materials a disenchant gives still have to be sold, so the profit
+    -- here is net of the auction house cut, as it is on the Disenchanting tab.
+    local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         local itemID = recipe.outputItemID
@@ -662,12 +665,15 @@ function Disenchant:GetCraftRows(opts)
                 sellsAt = analysis.priceDerived and "estimate" or "auction"
             end
 
+            local net = value and math.floor(value * (1 - cut) + 0.5) or nil
+
             local row = {
                 kind = "craft",
                 recipeID = recipeID,
                 itemID = itemID,
                 name = recipe.name,
                 value = value,
+                net = net,
                 partial = partial,
                 breakdown = breakdown,
                 cost = costEach,
@@ -676,7 +682,7 @@ function Disenchant:GetCraftRows(opts)
                 soulbound = analysis.soulbound,
                 craftableNow = analysis.craftableNow
                     or (ns.Profit.GetCraftableCount and ns.Profit:GetCraftableCount(recipeID)) or 0,
-                gain = (value and costEach) and (value - costEach) or nil,
+                gain = (net and costEach) and (net - costEach) or nil,
                 beatsSale = Beats(value, sells),
             }
 
