@@ -1088,6 +1088,10 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
     hideOnEscape = true,
     -- Above the default dialogs, so it is not buried by the auction house.
     preferredIndex = 3,
+    -- Widens the popup and keeps the text to the middle, which leaves room
+    -- on the left for the item's icon beside the four lines. The icon is
+    -- drawn over the alert sign that goes there (ShowConfirmIcon).
+    showAlert = true,
 
     OnAccept = function(self)
         local data = (self and self.data) or Posting.confirming
@@ -1104,6 +1108,12 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
         if reason == "override" then return end
         Posting.confirming = nil
         ns.Print("skipped.")
+    end,
+
+    -- The game lends this popup frame to other dialogs later, so the icon
+    -- goes with this one.
+    OnHide = function(self)
+        Posting:HideConfirmIcon(self)
     end,
 }
 
@@ -1183,6 +1193,58 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     return text .. "\n\nDo you wish to continue?"
 end
 
+-- The item's icon in the confirmation, one texture per popup frame it has
+-- been shown in. Kept here rather than written onto the game's frames.
+local confirmIcons = setmetatable({}, { __mode = "k" })
+
+-- The question mark icon, for an item whose icon the game has not got yet.
+local UNKNOWN_ICON = 134400
+
+-- Narrower than this, the popup did not make room beside its text, and an
+-- icon would sit on top of the words.
+local WIDE_POPUP = 400
+
+--- Put the item's icon beside the confirmation's text. It is not a line of
+--- its own: the four lines stay exactly as they were.
+function Posting:ShowConfirmIcon(dialog, itemID)
+    if type(dialog) ~= "table" or type(dialog.CreateTexture) ~= "function" then return false end
+
+    local ok, shown = pcall(function()
+        local width = dialog:GetWidth()
+        if not width or width < WIDE_POPUP then return false end
+
+        local icon = confirmIcons[dialog]
+        if not icon then
+            icon = dialog:CreateTexture(nil, "OVERLAY", nil, 7)
+            confirmIcons[dialog] = icon
+        end
+
+        -- Over the alert sign when there is one, so the sign never shows
+        -- through; otherwise where it would have been.
+        local name = dialog.GetName and dialog:GetName()
+        local alert = dialog.AlertIcon or (name and _G[name .. "AlertIcon"])
+
+        icon:ClearAllPoints()
+        if type(alert) == "table" and alert.IsShown and alert:IsShown() then
+            icon:SetAllPoints(alert)
+        else
+            icon:SetSize(36, 36)
+            icon:SetPoint("LEFT", dialog, "LEFT", 24, 0)
+        end
+
+        icon:SetTexture(Util.GetItemIcon(itemID) or UNKNOWN_ICON)
+        icon:Show()
+        return true
+    end)
+
+    return ok and shown or false
+end
+
+function Posting:HideConfirmIcon(dialog)
+    local icon = dialog and confirmIcons[dialog]
+    if icon then pcall(icon.Hide, icon) end
+end
+
 function Posting:ShowConfirm(itemID, quantity, unitPrice, text)
     local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice }
     self.confirming = confirming
@@ -1193,6 +1255,13 @@ function Posting:ShowConfirm(itemID, quantity, unitPrice, text)
         -- one first, on clients that do not say it was an override.
         self.confirming = confirming
         dialog.data = confirming
+
+        -- Only the dialog now showing carries an icon, whichever frame an
+        -- earlier one used.
+        for frame in pairs(confirmIcons) do
+            if frame ~= dialog then self:HideConfirmIcon(frame) end
+        end
+        self:ShowConfirmIcon(dialog, itemID)
     else
         self.confirming = nil
         ns.Warn("could not open the confirmation dialog; nothing was listed.")
