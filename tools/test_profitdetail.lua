@@ -42,6 +42,8 @@ do
         ["Player-1-C"] = { name = "Mirel", surname = "Blackthorne" },
         ["Player-1-D"] = { name = "Tomas" },
         ["Old-Forever PvE"] = { name = "Grunt" },
+        ["Player-1-E"] = { name = "Aria", surname = "\195\137lan" },
+        ["Player-1-F"] = { name = "Aria", surname = "Stone" },
     } }
 
     local Recipes = ns.Recipes
@@ -54,6 +56,8 @@ do
     check("a character with no last name known keeps its name",
         Recipes:GetShortCharacterName("Player-1-D") == "Tomas")
     check("an old record keeps its name", Recipes:GetShortCharacterName("Old-Forever PvE") == "Grunt")
+    check("an accented initial keeps its whole letter",
+        Recipes:GetShortCharacterName("Player-1-E") == "Aria \195\137.")
 end
 
 --------------------------------------------------------------------------------

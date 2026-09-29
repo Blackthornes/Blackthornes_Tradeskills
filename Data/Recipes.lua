@@ -273,7 +273,10 @@ function Recipes:GetShortCharacterName(characterKey)
     end
 
     if not shared then return first end
-    return ("%s %s."):format(first, rest:sub(1, 1))
+    -- The first whole letter, not the first byte: "Élan" starts with two
+    -- bytes, and cutting it after one left half a letter on screen.
+    local initial = rest:match("^[%z\1-\127\194-\244][\128-\191]*") or rest:sub(1, 1)
+    return ("%s %s."):format(first, initial)
 end
 
 --- What to add after a name that another character also has.
