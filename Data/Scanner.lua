@@ -618,8 +618,14 @@ function Scanner:OnBrowseResults()
     -- One stopped at the page cap has not looked everywhere, and results
     -- after anybody else's search went out may be that search's, not ours:
     -- the results slot is shared, and a first page cannot tell them apart.
+    --
+    -- Nor is one stopped at the cap a full scan at all. Stamped as one, it
+    -- hid the deals on the pages it never reached (they looked older than
+    -- the scan), so it is reported as stopped at the page limit instead.
+    local capped = not full
     self:CommitBrowseResults(results, {
-        ended = true,
+        ended = not capped,
+        capped = capped,
         whole = full and saidWhole and not self.browseForeign,
     })
 end
@@ -676,6 +682,8 @@ Scanner.SplitBrowseRow = SplitBrowseRow
 
 --- @param opts.ended true when paging reached its natural end, so this was
 ---   a full scan rather than one cut short.
+--- @param opts.capped true when paging stopped at the page limit, so the
+---   end of the auction house was never reached.
 --- @param opts.whole true when the sweep read the whole auction house, so an
 ---   item it did not see has sold out. Partial sweeps leave the rest alone.
 ---   Passing true is the same as both.
@@ -759,6 +767,9 @@ function Scanner:CommitBrowseResults(results, opts)
     if opts.ended then
         ns.Prices:SetLastFullScan(now)
         ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+    elseif opts.capped then
+        ns.Print(("scan stopped at the %d page limit: %s items updated in %.1fs. Items on later pages were not reached, so this does not count as a full scan.")
+            :format(MAX_BROWSE_PAGES, Util.Comma(recorded), elapsed))
     else
         ns.Print(("scan stopped early: %s items updated in %.1fs"):format(Util.Comma(recorded), elapsed))
     end
