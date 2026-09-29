@@ -435,6 +435,25 @@ check("the log is kept for /bts haul log",             MailHaul.lastLog ~= nil, 
 
 --------------------------------------------------------------------------------
 print("")
+print("a new mail that looks like one coming back keeps the real sale")
+--------------------------------------------------------------------------------
+
+-- Over 50 mails the game shows 50. Take one and the next moves into view; if
+-- it is the same item for the same amount it looks like the taken one coming
+-- back. The sale taken was still real, so the best sale must not lose it.
+
+inbox = { Sold("Runecloth Bag", 90000), Sold("Linen Bag", 1000) }
+Open()
+Take(1)
+table.insert(inbox, Sold("Runecloth Bag", 90000))
+Mail:Read()
+Take(1)
+local backlog = Close()
+check("the best sale is the one taken",                backlog.best and backlog.best.amount, 90000)
+check("both sales are counted",                        backlog.salesCount, 2)
+
+--------------------------------------------------------------------------------
+print("")
 print("your purse is the truth for how much came in")
 --------------------------------------------------------------------------------
 
