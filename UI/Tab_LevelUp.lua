@@ -669,6 +669,9 @@ local function OnShow()
     for _, recipe in pairs(ns.Recipes:GetAll()) do
         local skillLineID = recipe.skillLineID
 
+        -- A dropped profession has no crafts left to list.
+        if ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe) then skillLineID = nil end
+
         if skillLineID and not nameBySkillLine[skillLineID] then
             local info = ProfessionInfo(skillLineID)
             local name = (info and info.professionName) or ("Skill line " .. skillLineID)

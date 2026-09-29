@@ -74,7 +74,9 @@ function Cost:RebuildOutputIndex()
     local index = {}
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
-        if recipe.outputItemID then
+        -- A dropped profession's crafts are not offered as sub-crafts.
+        local dropped = ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe)
+        if recipe.outputItemID and not dropped then
             index[recipe.outputItemID] = recipeID
         end
     end

@@ -548,7 +548,9 @@ local function AltRecipesByOutput()
         if characterKey ~= selfKey and type(record) == "table" then
             for recipeID, recipe in pairs(record.recipes or {}) do
                 local itemID = recipe.outputItemID
-                if itemID then
+                -- Not from a profession that character has dropped.
+                local dropped = ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe, characterKey)
+                if itemID and not dropped then
                     local list = byOutput[itemID] or {}
                     list[#list + 1] = { characterKey = characterKey, recipeID = recipeID, recipe = recipe }
                     byOutput[itemID] = list
