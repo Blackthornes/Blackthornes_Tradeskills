@@ -509,7 +509,15 @@ local function Describe(mail, kind, itemName, invoice)
 
         if attachment then
             entry.itemID = attachment.itemID
-            entry.quantity = attachment.quantity
+
+            -- One listing can come back as several stacks in one mail. The
+            -- first stack alone undercounted what came back.
+            entry.quantity = 0
+            for _, stack in ipairs(mail.attachments) do
+                if stack.itemID == attachment.itemID then
+                    entry.quantity = entry.quantity + (stack.quantity or 0)
+                end
+            end
         end
     end
 
@@ -598,6 +606,53 @@ local function AlreadyWritten(entries, upTo, used, who, kind, name)
     return false
 end
 
+--- A returned auction's mail with some of its stacks taken.
+---
+--- Its fingerprint lists the stacks, so taking one of three made it read as
+--- a new mail, and the expiry was written down once per stack taken. It is
+--- the same mail when an earlier one from the same sender with the same
+--- subject held every stack this one holds and more, and that earlier one is
+--- no longer in the box.
+--
+-- @param gone fingerprint -> how many of it were seen before but are not now
+-- @return the earlier fingerprint, or nil
+local function Split(key)
+    local prefix, stacks = key:match("^(.*)|([^|]*)$")
+    if not prefix then return nil end
+
+    local counts = {}
+    for stack in stacks:gmatch("[^,]+") do counts[stack] = (counts[stack] or 0) + 1 end
+    return prefix, counts
+end
+
+local function ShrunkFrom(key, gone)
+    local prefix, stacks = Split(key)
+    if not prefix or next(stacks) == nil then return nil end
+
+    for earlier, count in pairs(gone) do
+        if count > 0 then
+            local earlierPrefix, earlierStacks = Split(earlier)
+
+            if earlierPrefix == prefix then
+                local holdsAll, holdsMore = true, false
+
+                for stack, n in pairs(stacks) do
+                    if (earlierStacks[stack] or 0) < n then holdsAll = false break end
+                end
+                for stack, n in pairs(earlierStacks) do
+                    if n > (stacks[stack] or 0) then holdsMore = true end
+                end
+
+                if holdsAll and holdsMore then return earlier end
+            end
+        end
+    end
+
+    return nil
+end
+
+Mail._ShrunkFrom = ShrunkFrom
+
 function Mail:Reconcile(mails, complete)
     local ledger = self:GetLedger()
     local who = ns.Config:GetCharacterKey()
@@ -612,6 +667,22 @@ function Mail:Reconcile(mails, complete)
     self.awaitingAmount = 0
 
     local present = {}
+
+    -- Mails seen before and missing from this reading. A returned auction
+    -- with a stack taken is one of these under its old fingerprint.
+    local inBox = {}
+    for _, mail in ipairs(mails) do
+        if not mail.pending then
+            local key = Fingerprint(mail)
+            inBox[key] = (inBox[key] or 0) + 1
+        end
+    end
+    local gone = {}
+    for key, count in pairs(seen) do
+        if count > (inBox[key] or 0) then gone[key] = count - (inBox[key] or 0) end
+    end
+    -- How many of each old fingerprint turned out to be a shrunk mail.
+    local shrunk = {}
 
     -- Each mail is recorded from its own reading rather than from whichever
     -- one of a matching pair happened to be walked first. Two sales of the same
@@ -656,6 +727,14 @@ function Mail:Reconcile(mails, complete)
                     -- written down when it arrived, so it is not written again.
                     ns.Debug("mail already collected:", tostring(mail.subject))
 
+                elseif kind and kind ~= "sold" and ShrunkFrom(key, gone) then
+                    -- Some of its stacks were taken; written down when it
+                    -- arrived, so not again.
+                    local earlier = ShrunkFrom(key, gone)
+                    gone[earlier] = gone[earlier] - 1
+                    shrunk[earlier] = (shrunk[earlier] or 0) + 1
+                    ns.Debug("mail with stacks taken:", tostring(mail.subject))
+
                 elseif kind and firstReading and AlreadyWritten(ledger.entries, earlier, used, who, kind,
                     (kind == "sold" and invoice and invoice.itemName) or itemName) then
                     ns.Debug("mail written down before:", tostring(mail.subject))
@@ -684,6 +763,16 @@ function Mail:Reconcile(mails, complete)
     -- as one already recorded.
     for key, count in pairs(present) do
         seen[key] = count
+    end
+
+    -- A mail that shrank lives on under its new fingerprint, so its old one
+    -- is let go even on a half-loaded reading. Kept, it could pass a later,
+    -- genuinely new return of the same item off as this one.
+    for key, count in pairs(shrunk) do
+        if not present[key] and seen[key] then
+            seen[key] = seen[key] - count
+            if seen[key] <= 0 then seen[key] = nil end
+        end
     end
 
     -- Fingerprints that vanished entirely. Only safe when we saw the whole

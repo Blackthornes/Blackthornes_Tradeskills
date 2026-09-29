@@ -114,22 +114,19 @@ check("a zero yield does not swallow the room", RoomInCrafts(6, { quantityMin = 
 
 print("\nthe clamp the Max button performs")
 
--- Both the Max button and the quantity box in UI/Tab_Profit.lua run this
--- arithmetic, and so does UI/CraftPanel.lua. Written out here because the
--- numbers are the part worth reading: materials for twenty crafts, room for
--- ten items, five items a craft.
+-- The Max button in UI/Tab_Profit.lua calls Profit.MaxCrafts with the room
+-- already turned into crafts. Materials for twenty crafts, room for ten
+-- items, five items a craft.
 local function MaxButton(craftableNow, room, recipe)
-    local most = math.max(1, craftableNow or 1)
-    local allowed = RoomInCrafts(room, recipe)
-    if allowed then most = math.max(1, math.min(most, allowed)) end
-    return most
+    return ns.Profit.MaxCrafts(craftableNow, RoomInCrafts(room, recipe))
 end
 
 check("materials for 20, room for 10 items at 5 each", MaxButton(20, 10, FIVE_EACH), 2)
 check("which lists 10 items, exactly the limit", MaxButton(20, 10, FIVE_EACH) * 5, 10)
 check("materials are still the other ceiling", MaxButton(1, 100, ONE_EACH), 1)
 check("no limit set leaves materials in charge", MaxButton(20, nil, FIVE_EACH), 20)
-check("a full shelf still offers the smallest craft", MaxButton(20, 0, FIVE_EACH), 1)
+check("a full shelf offers nothing, not one past the limit", MaxButton(20, 0, FIVE_EACH), 0)
+check("room for less than one craft still offers one", MaxButton(20, 3, FIVE_EACH), 1)
 
 print("")
 if failures > 0 then

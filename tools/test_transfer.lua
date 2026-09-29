@@ -28,7 +28,24 @@ ns.Config = {
 local queue = {}
 ns.Queue = {
     GetAll = function() return queue end,
-    Add = function(_, id, qty) queue[#queue + 1] = { recipeID = id, quantity = qty } end,
+    Add = function(_, id, qty)
+        for _, entry in ipairs(queue) do
+            if entry.recipeID == id and not entry.isDependency then
+                entry.quantity = entry.quantity + qty
+                return
+            end
+        end
+        queue[#queue + 1] = { recipeID = id, quantity = qty }
+    end,
+    Find = function(_, id, manualOnly)
+        for index, entry in ipairs(queue) do
+            if entry.recipeID == id and not (manualOnly and entry.isDependency) then
+                return index, entry
+            end
+        end
+    end,
+    RebuildDependencies = function() end,
+    Notify = function() end,
 }
 
 local limits = {}
@@ -79,5 +96,18 @@ check("first recipe", queue[1] and queue[1].recipeID, 1263079)
 check("first quantity", queue[1] and queue[1].quantity, 5)
 check("post limit 2589", limits[2589], 4)
 
+-- The same code pasted a second time restores the same queue. It used to add
+-- to it, so importing twice doubled every craft.
+ns.Transfer:Import(code)
+check("entries after a second import", #queue, 2)
+check("first quantity, not doubled", queue[1] and queue[1].quantity, 5)
+check("second quantity, not doubled", queue[2] and queue[2].quantity, 2)
+
+-- A craft queued since keeps its place and takes the code's amount.
+queue[1].quantity = 11
+ns.Transfer:Import(code)
+check("a changed amount is set back", queue[1] and queue[1].quantity, 5)
+
 print("\n" .. (pass and "PASS -- survives a wipe intact" or "FAIL"))
 print("")
+if not pass then error("transfer checks failed", 0) end
