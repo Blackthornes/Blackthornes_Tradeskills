@@ -495,9 +495,39 @@ local function Build(container)
     heading:SetPoint("TOPLEFT", 8, -10)
     heading:SetText("QUEUED CRAFTS")
 
-    local clear = Widgets.CreateButton(container, "Clear all", function()
-        ns.Queue:Clear()
-    end, { width = 70, height = 18 })
+    -- A queue can take a while to build, so emptying it takes a second click,
+    -- the same as Clear queue on the craft pane.
+    local clear
+    local armedUntil
+
+    local function Disarm()
+        armedUntil = nil
+        clear:SetText("Clear all")
+        clear.label:SetTextColor(Theme.Unpack("text"))
+        clear.tooltipText = "Empty the whole craft queue. Asks you to click again first."
+    end
+
+    clear = Widgets.CreateButton(container, "Clear all", function()
+        if armedUntil and GetTime() < armedUntil then
+            local count = ns.Queue:Count()
+            Disarm()
+            ns.Queue:Clear()
+            ns.Print(("Craft queue cleared (%d entr%s)."):format(count, count == 1 and "y" or "ies"))
+            return
+        end
+
+        if ns.Queue:Count() == 0 then return end
+
+        armedUntil = GetTime() + 4
+        clear:SetText("Really clear?")
+        clear.label:SetTextColor(Theme.Unpack("loss"))
+        clear.tooltipText = "Click again to empty the whole craft queue"
+
+        C_Timer.After(4, function()
+            if armedUntil and GetTime() >= armedUntil then Disarm() end
+        end)
+    end, { width = 84, height = 18 })
+    clear.tooltipText = "Empty the whole craft queue. Asks you to click again first."
     clear:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -8)
 
     local divider = Theme.CreateDivider(container)

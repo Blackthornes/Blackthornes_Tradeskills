@@ -759,7 +759,25 @@ ApplyHeadingLayout = function()
     end
 end
 
+--- What the list's order was worked out for. While it stays the same, rows
+--- keep their places: queueing a craft counts it as stock you will have and
+--- ranks it lower, so a right-click to queue dropped the row from under the
+--- cursor and the next click queued a different craft. The order is worked
+--- out afresh when a filter, the sort or the search changes, or when the tab
+--- is opened again.
+local function OrderKey()
+    return table.concat({ tostring(state.accountWide), tostring(state.ignorePostLimit),
+        tostring(state.sortBy), tostring(state.craftableOnly),
+        tostring(state.includeUnpriceable), tostring(state.profession),
+        state.search or "" }, "|")
+end
+
 local function BuildList()
+    local key = OrderKey()
+    if key ~= state.orderKey then
+        state.orderKey, state.heldOrder = key, nil
+    end
+
     local ranked = ns.Profit:GetRanked({
         accountWide = state.accountWide,
         ignorePostLimit = state.ignorePostLimit,
@@ -767,6 +785,7 @@ local function BuildList()
         craftableOnly = state.craftableOnly,
         includeUnpriceable = state.includeUnpriceable,
         skillLineID = state.profession,
+        keepOrder = state.heldOrder,
     })
 
     if state.search ~= "" then
@@ -779,6 +798,11 @@ local function BuildList()
             end
         end
         ranked = filtered
+    end
+
+    state.heldOrder = {}
+    for index, analysis in ipairs(ranked) do
+        state.heldOrder[analysis.recipeID] = index
     end
 
     return ranked
@@ -1080,6 +1104,9 @@ local function Build(container)
 end
 
 local function OnShow()
+    -- Opening the tab again sorts afresh.
+    state.orderKey, state.heldOrder = nil, nil
+
     -- Built from the skill lines the cached recipes actually carry, not from
     -- the profession list. Forever reports each profession under two skill-line
     -- IDs (Leatherworking is both 2945 and 165) and a recipe may be tagged with
