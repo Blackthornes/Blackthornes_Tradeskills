@@ -382,7 +382,7 @@ local function Build(outer)
 
             button.armed = false
             button:SetText("Clear price data")
-            button.label:SetTextColor(Theme.Unpack("text"))
+            button:SetConfirming(false)
 
             ns.Print("price data cleared for this realm")
             UI:RefreshActiveTab()
@@ -393,13 +393,13 @@ local function Build(outer)
         button.armed = true
         button:SetText("Really clear?")
         -- Red while armed, like the craft pane's Clear queue.
-        button.label:SetTextColor(Theme.Unpack("loss"))
+        button:SetConfirming(true)
 
         C_Timer.After(4, function()
             if button.armed then
                 button.armed = false
                 button:SetText("Clear price data")
-                button.label:SetTextColor(Theme.Unpack("text"))
+                button:SetConfirming(false)
             end
         end)
     end, { width = 140, height = 22, tooltip = "Delete every stored price for this realm" })
@@ -476,13 +476,13 @@ local function Build(outer)
         if not resetButton.armed then
             resetButton.armed = true
             resetButton:SetText("Really reset?")
-            resetButton.label:SetTextColor(Theme.Unpack("loss"))
+            resetButton:SetConfirming(true)
 
             C_Timer.After(4, function()
                 if resetButton.armed then
                     resetButton.armed = false
                     resetButton:SetText("Reset to defaults")
-                    resetButton.label:SetTextColor(Theme.Unpack("text"))
+                    resetButton:SetConfirming(false)
                 end
             end)
             return
@@ -490,7 +490,7 @@ local function Build(outer)
 
         resetButton.armed = false
         resetButton:SetText("Reset to defaults")
-        resetButton.label:SetTextColor(Theme.Unpack("text"))
+        resetButton:SetConfirming(false)
 
         -- Through Config:Set, as every other setting change is, so a session
         -- keeping its settings in the backup store saves these too.
