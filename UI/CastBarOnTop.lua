@@ -55,25 +55,62 @@ local function IsPlayer(unit)
 end
 CastBar.IsPlayer = IsPlayer
 
+--- Is this spell one of the character's recipes, the craft the addon
+--- started, or a queued craft? A recipe's ID is its spell's ID, and the name
+--- is checked too in case a client hands back no spell ID.
+-- @return true, false, or nil when no recipes are known to check against
+function CastBar:IsRecipeCast(name, spellID)
+    local crafting = ns.Crafting
+    if spellID and crafting and crafting.active and crafting.active.recipeID == spellID then
+        return true
+    end
+
+    local recipes = ns.Recipes and ns.Recipes.GetAll and ns.Recipes:GetAll() or {}
+    if spellID and recipes[spellID] then return true end
+
+    local any = false
+    for _, recipe in pairs(recipes) do
+        any = true
+        if type(recipe) == "table" and name and recipe.name == name then return true end
+    end
+
+    for _, entry in ipairs(ns.Queue and ns.Queue.GetAll and ns.Queue:GetAll() or {}) do
+        any = true
+        if spellID and entry.recipeID == spellID then return true end
+    end
+
+    if not any then return nil end
+    return false
+end
+
 --- Whether the player is casting a craft right now.
 function CastBar:IsCrafting()
     if type(UnitCastingInfo) ~= "function" then return false end
 
     -- The cast's name and craft flag are tested inside the pcall too, for the
     -- same reason: a value the game will not let us read is not a craft.
-    local ok, flag = pcall(function()
-        local name, _, _, _, _, isTradeSkill = UnitCastingInfo("player")
-        if not name then return false end
+    local ok, flag, name, spellID = pcall(function()
+        local castName, _, _, _, _, isTradeSkill, _, _, castSpellID = UnitCastingInfo("player")
+        if not castName then return false end
         if isTradeSkill then return true end
-        return nil
+        -- Copied out as plain values, still inside the pcall.
+        return nil, castName .. "", tonumber(castSpellID)
     end)
     if not ok or flag == false then return false end
     if flag == true then return true end
 
-    -- Some clients leave isTradeSkill empty. A cast with the profession
-    -- window open, or one the addon itself started, is a craft too.
+    -- Some clients leave isTradeSkill empty. Then a cast with the profession
+    -- window open, or while the addon is crafting, counts only when the spell
+    -- is a recipe: a Hearthstone with the window open is not a craft.
     local crafting = ns.Crafting
-    return crafting ~= nil and (crafting.isTradeSkillOpen or crafting.active ~= nil)
+    if not (crafting ~= nil and (crafting.isTradeSkillOpen or crafting.active ~= nil)) then
+        return false
+    end
+
+    local okRecipe, isRecipe = pcall(self.IsRecipeCast, self, name, spellID)
+    if not okRecipe then return false end
+    -- No recipes saved yet to tell by: any cast counts, as before.
+    return isRecipe ~= false
 end
 
 function CastBar:Raise()
