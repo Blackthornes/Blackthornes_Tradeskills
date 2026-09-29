@@ -493,6 +493,12 @@ function Config:Bootstrap()
         _G.BlackthornesTSCharDB = {}
     end
 
+    -- Neither file came back and there was no backup: the addon has never
+    -- saved anything here. Real loss looks different, because the
+    -- per-character file remembers the account one (CheckAccountDataLost).
+    self.loadDiagnostics.firstRun =
+        self.freshDatabase == true and existingChar ~= "table" or nil
+
     -- Stamped every login so the next one can tell whether it survived.
     _G.BlackthornesTSCharDB.canary = (_G.BlackthornesTSCharDB.canary or 0) + 1
 
@@ -526,10 +532,28 @@ end
 function Config:OnEnable()
     self:CheckLateSavedVariables()
 
+    if self:IsFirstRun() and C_Timer and C_Timer.After then
+        C_Timer.After(6, function() Config:Welcome() end)
+    end
+
     -- A few seconds in, so it is not lost in the login chat.
     if self.accountDataLost and C_Timer and C_Timer.After then
         C_Timer.After(6, function() Config:WarnAccountDataLost() end)
     end
+end
+
+--- Is this the first time the addon has run here, with nothing ever saved?
+function Config:IsFirstRun()
+    local diagnostics = self.loadDiagnostics or {}
+    return diagnostics.firstRun == true and not self.accountDataLost
+end
+
+--- A first run has no saved data because there never was any, which is not
+--- something to warn about.
+function Config:Welcome()
+    ns.Print(("welcome! Type |c%s/bts|r to open the window, or |c%s/bts help|r for the commands."):format(
+        ns.COLORS.accent, ns.COLORS.accent))
+    ns.Print("Open each profession once and visit the auction house to fill in recipes and prices.")
 end
 
 --- Did the account-wide saved file come back with fewer sessions in it than
@@ -770,7 +794,9 @@ ns.RegisterCommand("db", "show what saved data loaded (/bts db fresh: stop the m
         tostring(diagnostics.charGlobalType),
         tostring(diagnostics.charCanarySeen or "none")))
 
-    if diagnostics.globalType ~= "table" then
+    if ns.Config:IsFirstRun() then
+        ns.Print("first time the addon has run here, so there was no saved data to load yet.")
+    elseif diagnostics.globalType ~= "table" then
         -- This client loses saved variables every session, so saying so on its
         -- own reads as data loss when the fallback has in fact just done its
         -- job. Say which of the three sources the database came from, because

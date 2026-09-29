@@ -945,8 +945,18 @@ end
 --- After a scan: say how many deals it found and the best one, with a chime
 --- when there is at least one worth having. Quiet when there are none.
 function Disenchant:AnnounceDeals()
-    local ok, rows = pcall(self.GetAuctionRows, self, { profitableOnly = true })
-    if not ok or type(rows) ~= "table" or #rows == 0 then return 0 end
+    local ok, all = pcall(self.GetAuctionRows, self, { profitableOnly = true })
+    if not ok or type(all) ~= "table" then return 0 end
+
+    -- Only deals one of your characters can break at their Enchanting skill
+    -- today. The tab still lists the rest, marked; the message is what says
+    -- "go and buy", so it leaves them out. With no enchanter known at all,
+    -- canDisenchant is nil and every deal counts, as before.
+    local rows = {}
+    for _, row in ipairs(all) do
+        if row.canDisenchant ~= false then rows[#rows + 1] = row end
+    end
+    if #rows == 0 then return 0 end
 
     local best = rows[1]
     local total = 0

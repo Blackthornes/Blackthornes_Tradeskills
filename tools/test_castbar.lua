@@ -21,6 +21,8 @@ local function RunTimers() local t = timers; timers = {}; for _, fn in ipairs(t)
 local casting = nil   -- nil, "craft", "craft-noflag" or "other"
 function UnitCastingInfo(unit)
   if unit ~= "player" or not casting then return nil end
+  if casting == "hearth" then return "Hearthstone", nil, nil, 0, 1, nil, 1, false, 8690 end
+  if casting == "bag" then return "Linen Bag", nil, nil, 0, 1, nil, 1, false, 3755 end
   return "Cast", nil, nil, 0, 1, casting == "craft"
 end
 
@@ -69,6 +71,22 @@ casting = nil
 Fire("UNIT_SPELLCAST_INTERRUPTED", "player")
 RunTimers()
 assert(bar.strata == "MEDIUM", "interrupted craft should restore the bar")
+
+-- Once recipes are known, only a recipe's cast counts with the window open:
+-- a Hearthstone does not lift the bar, the Linen Bag craft does.
+ns.Recipes = { GetAll = function() return { [3755] = { name = "Linen Bag" } } end }
+ns.Crafting.isTradeSkillOpen = true
+casting = "hearth"
+Fire("UNIT_SPELLCAST_START", "player")
+assert(bar.strata == "MEDIUM", "a Hearthstone with the profession window open lifted the bar")
+casting = "bag"
+Fire("UNIT_SPELLCAST_START", "player")
+assert(bar.strata == "TOOLTIP", "a known recipe's cast should lift the bar")
+casting = nil
+Fire("UNIT_SPELLCAST_STOP", "player")
+RunTimers()
+assert(bar.strata == "MEDIUM", "bar not restored after the recipe cast")
+ns.Recipes = nil
 
 -- The game sets the bar's layer again as it shows it: it is lifted again.
 local onShow

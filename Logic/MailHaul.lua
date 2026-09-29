@@ -224,6 +224,7 @@ local function NewVisit()
         collected = {},    -- bucket key -> { amounts = {...}, items = { itemID = n } }
         log = {},
         sales = {},        -- { name, amount }
+        cameBack = {},     -- sales taken off by Reverse, until taken again
         items = {},        -- kind -> itemID -> count
         senders = {},      -- sender -> gold, for mail from people
         letters = 0,       -- people whose mail held gold or items
@@ -333,7 +334,16 @@ function MailHaul:Record(events)
             self:Log(("took %.0f from %s"):format(amount, tostring(event.key)))
 
             if event.kind == "sold" then
-                visit.sales[#visit.sales + 1] = { name = event.name, amount = amount }
+                -- The same sale going for good after it came back is the
+                -- one already written down, not a second one.
+                local sale
+                for index, was in ipairs(visit.cameBack) do
+                    if was.name == event.name and was.amount == amount then
+                        sale = table.remove(visit.cameBack, index)
+                        break
+                    end
+                end
+                visit.sales[#visit.sales + 1] = sale or { name = event.name, amount = amount }
             end
         end
 
@@ -384,11 +394,17 @@ function MailHaul:Reverse(events)
                         undone = undone + amount
                         self:Log(("%.0f came back to %s, not counted"):format(amount, event.key))
 
+                        -- The sale is set aside rather than forgotten. With
+                        -- more than 50 mails a new mail of the same item and
+                        -- amount can move into view after one is taken, and
+                        -- looks just like one coming back. That sale was still
+                        -- real, so Finish counts it unless it is taken again.
                         if event.kind == "sold" then
                             for saleIndex = #visit.sales, 1, -1 do
                                 local sale = visit.sales[saleIndex]
                                 if sale.name == event.name and sale.amount == amount then
                                     table.remove(visit.sales, saleIndex)
+                                    visit.cameBack[#visit.cameBack + 1] = sale
                                     break
                                 end
                             end
@@ -587,8 +603,10 @@ function MailHaul:Finish(visit, history)
 
     local names = NameIndex()
     local sales = {}
-    for _, sale in ipairs(visit.sales) do
-        sales[#sales + 1] = { name = sale.name, amount = sale.amount, itemID = names[sale.name or ""] }
+    for _, list in ipairs({ visit.sales, visit.cameBack or {} }) do
+        for _, sale in ipairs(list) do
+            sales[#sales + 1] = { name = sale.name, amount = sale.amount, itemID = names[sale.name or ""] }
+        end
     end
     table.sort(sales, function(a, b) return a.amount > b.amount end)
 
@@ -729,12 +747,9 @@ function MailHaul:OnEnable()
         if kind == mailbox then MailHaul:Closed() end
     end)
 
-    -- And the mailbox window itself going away. Hooking a script adds to it
-    -- without touching the game's own.
-    local mailFrame = _G.MailFrame
-    if mailFrame and mailFrame.HookScript then
-        pcall(mailFrame.HookScript, mailFrame, "OnHide", function() MailHaul:Closed() end)
-    end
+    -- Not the mailbox window hiding: other mail addons hide or replace it
+    -- while you are still at the mailbox, which ended the visit early and
+    -- showed the report halfway through collecting.
 end
 
 --- The mailbox closed, by whichever signal came first. The rest find no visit.
