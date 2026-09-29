@@ -371,10 +371,14 @@ local function Build(outer)
         local button = widgets.clearButton
 
         if button.armed then
-            ns.db.prices[ns.Config:GetRealmKey()] = {}
+            -- This realm only: the other realms keep their prices, so they
+            -- keep their scan times and sizes too.
+            local realmKey = ns.Config:GetRealmKey()
+            ns.db.prices[realmKey] = {}
             ns.db.lastFullScan = nil
-            ns.db.lastFullScanByRealm = nil
-            ns.db.sweepSeenByRealm = nil
+            for _, field in ipairs({ "lastFullScanByRealm", "sweepSeenByRealm", "sweepRefusedByRealm" }) do
+                if ns.db[field] then ns.db[field][realmKey] = nil end
+            end
 
             button.armed = false
             button:SetText("Clear price data")

@@ -176,7 +176,9 @@ local function UpdateRow(row, entry)
     cells.market:SetText(Util.FormatMoney(entry.record.market, { short = true }))
     cells.market:SetTextColor(Theme.Unpack("text"))
 
-    cells.min:SetText(Util.FormatMoney(entry.record.min, { short = true }))
+    local listedMin = entry.record.min ~= nil
+    cells.min:SetText(listedMin and Util.FormatMoney(entry.record.min, { short = true }) or "none")
+    cells.min:SetTextColor(Theme.Unpack(listedMin and "text" or "dim"))
 
     -- Sold out reads as sold out, apart from a thin shelf at a glance.
     local listed = (entry.quantity or 0) > 0

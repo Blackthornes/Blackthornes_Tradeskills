@@ -135,7 +135,11 @@ function Opener:CreateOverlay()
     overlay.background = Theme.Fill(overlay, "rowActive")
     Theme.Border(overlay, "border")
     overlay.label = Theme.CreateLabel(overlay, "small", "accent", "CENTER")
-    overlay.label:SetPoint("CENTER")
+    -- Held inside the button like every other label: "Open Leatherworking"
+    -- ran over its edges.
+    overlay.label:SetPoint("LEFT", 4, 0)
+    overlay.label:SetPoint("RIGHT", -4, 0)
+    overlay.label:SetWordWrap(false)
 
     overlay:SetScript("OnEnter", function(self)
         self.background:SetColorTexture(Theme.Unpack("rowHover"))

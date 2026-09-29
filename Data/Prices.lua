@@ -349,20 +349,20 @@ end
 -- the whole account made an Alliance scan at 10:00 read as "scanned 5m ago"
 -- on a Horde character with two-day-old prices, hid that character's deals
 -- (they looked older than the scan) and skipped its automatic scan. The old
--- account-wide stamp is still read until this realm has one of its own.
+-- account-wide stamp is read only until the first scan after the update:
+-- after that it belongs to whichever realm wrote it last, not to this one.
 function Prices:GetLastFullScan()
     local db = ns.db
     if not db then return nil end
     local byRealm = db.lastFullScanByRealm
+    if not byRealm then return db.lastFullScan end
     local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
-    if byRealm and key and byRealm[key] then return byRealm[key] end
-    return db.lastFullScan
+    return key and byRealm[key] or nil
 end
 
 function Prices:SetLastFullScan(at)
     local db = ns.db
     if not db then return end
-    db.lastFullScan = at
     local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
     if key then
         db.lastFullScanByRealm = db.lastFullScanByRealm or {}
@@ -375,9 +375,13 @@ end
 -- The last line of defence for the player's prices. A scan that saw far
 -- fewer items than the last whole one on this realm is not trusted to say
 -- what sold out: that is what a stray search looks like. Unlike a fixed
--- share of the book, the check heals itself. The size is remembered either
--- way, so a market that really did shrink is refused once and accepted on
--- the next scan, rather than being refused for ever as more listings age.
+-- share of the book, the check heals itself: a market that really did
+-- shrink is refused once, and accepted when the next scan finds about the
+-- same smaller number. One small stray search is not taken as the new size,
+-- so it cannot open the way for the next one.
+--
+-- With no whole scan remembered yet on this realm, what the saved prices
+-- say is listed stands in for it.
 --
 -- @return how many items were marked sold out, and why none were if so
 function Prices:ClearMissingIfWhole(seen, startedAt, scannedAt)
@@ -387,13 +391,29 @@ function Prices:ClearMissingIfWhole(seen, startedAt, scannedAt)
     local db = ns.db or {}
     local key = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey() or "?"
     db.sweepSeenByRealm = db.sweepSeenByRealm or {}
-    local last = db.sweepSeenByRealm[key]
-    db.sweepSeenByRealm[key] = count
+    db.sweepRefusedByRealm = db.sweepRefusedByRealm or {}
 
-    if last and count < last / 2 then
-        return 0, ("the scan saw %d items against %d last time"):format(count, last)
+    local last = db.sweepSeenByRealm[key]
+    if not last then
+        last = 0
+        for _, record in pairs(self:GetTable()) do
+            if (record.quantity or 0) > 0 or record.min or record.rivalMin or record.ownMin then
+                last = last + 1
+            end
+        end
     end
 
+    if count < last / 2 then
+        local refused = db.sweepRefusedByRealm[key]
+        local agrees = refused and math.abs(count - refused) <= refused * 0.1
+        if not agrees then
+            db.sweepRefusedByRealm[key] = count
+            return 0, ("the scan saw %d items against %d last time"):format(count, last)
+        end
+    end
+
+    db.sweepSeenByRealm[key] = count
+    db.sweepRefusedByRealm[key] = nil
     return self:ClearMissing(seen, startedAt, scannedAt)
 end
 

@@ -217,7 +217,7 @@ local function UpdateDetail(entry)
         -- A character with no recipes read needs a profession window
         -- opened, not a scan.
         detail.lines[1].name:SetText((entry.recipeCount or 0) == 0
-            and "No recipes read yet. Open a profession window on this character."
+            and "No recipes read. Open a profession."
             or "Nothing with a price yet")
         detail.lines[1].name:SetTextColor(Theme.Unpack("dim"))
         detail.lines[1].profit:SetText("")

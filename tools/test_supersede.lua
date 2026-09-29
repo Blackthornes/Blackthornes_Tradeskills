@@ -25,6 +25,7 @@ ns.Util = {
     FormatAgeAgo = function() return "" end,
     GetItemLabel = function(i) return "item" .. tostring(i) end,
     GetMaxStackSize = function() return 20 end,
+    GetVendorSellPrice = function() return nil end,
     UnitPriceFromStack = function(_, buyout, quantity) return math.floor(buyout / (quantity or 1)) end,
     HasFunction = function() return false end,
     RoundToSilver = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,
@@ -109,5 +110,18 @@ check("and the player was told to click again",
 for _, fn in ipairs(timers) do fn() end
 check("the first fallback listed nothing", #confirmed == 1 and confirmed[1].itemID == 4306)
 check("the second is honest about its check", confirmed[1].state == "unavailable")
+
+-- A search that is somebody else's (a scan's follow-up for an item already
+-- listed) is still out when the player clicks List on that item. The click
+-- is answered as "recent" and must still bring up the dialog: waiting for
+-- that search to do it left the click doing nothing at all.
+print("\na search still out that is not a click's")
+confirmed, timers = {}, {}
+Scanner:ClearSearchState()
+Scanner.recentItemScans = {}
+Scanner:ScanItem(2589, nil)
+check("the follow-up is out", Scanner.pendingItem and Scanner.pendingItem.itemID == 2589)
+Posting:Request(2589, 1)
+check("the click still brings up the dialog", #confirmed == 1 and confirmed[1].itemID == 2589)
 
 print(("\n%d check(s) passed\n"):format(checks))

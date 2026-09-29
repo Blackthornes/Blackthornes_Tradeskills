@@ -409,6 +409,10 @@ local function BuildDetail(parent)
         local count = math.max(1, math.floor(tonumber(quantity:GetText()) or 1))
         ns.Queue:Add(state.selected.recipeID, count)
         ns.Print(("queued %dx %s"):format(count, state.selected.name or "craft"))
+
+        -- The next redraw suggests again from what is now queued. Kept as
+        -- it was, a second click queued the full amount over the limit.
+        detail.shownRecipeID = nil
     end, { width = 130, primary = true, height = 24 })
     addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
     detail.addButton = addButton

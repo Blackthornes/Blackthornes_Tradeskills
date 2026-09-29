@@ -56,9 +56,12 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     -- "..." instead of spilling over whatever sits beside it. The little
     -- symbol buttons (+, -, x) stay centred: their insets would leave no
     -- room for the symbol itself.
+    -- Narrow buttons ("Set goal", "Queue tab") get thinner insets, or their
+    -- labels would be the ones cut short.
     if (opts.width or 90) >= 40 then
-        button.label:SetPoint("LEFT", 4, 0)
-        button.label:SetPoint("RIGHT", -4, 0)
+        local inset = (opts.width or 90) < 70 and 2 or 4
+        button.label:SetPoint("LEFT", inset, 0)
+        button.label:SetPoint("RIGHT", -inset, 0)
         button.label:SetWordWrap(false)
     else
         button.label:SetPoint("CENTER")
