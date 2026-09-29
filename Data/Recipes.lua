@@ -665,7 +665,19 @@ function Recipes:RefreshProfessions()
     -- trusting that would hide every craft this character has.
     local lines, linesLearned = ReadProfessionLines()
     if linesLearned then
+        -- The sub-craft index is built from the crafts not dropped, so it is
+        -- rebuilt when the lines change. Left alone, a dropped profession's
+        -- crafts stayed on offer as sub-crafts until the next harvest.
+        local changed = false
+        local old = record.professionLines or {}
+        for skillLineID, learned in pairs(lines) do
+            if old[skillLineID] ~= learned then changed = true end
+        end
+        for skillLineID in pairs(old) do
+            if lines[skillLineID] == nil then changed = true end
+        end
         record.professionLines = lines
+        if changed and ns.Cost and ns.Cost.InvalidateIndex then ns.Cost:InvalidateIndex() end
     end
 
     return AnyLearned(record.professions), AnyLearned(fresh)
@@ -674,6 +686,11 @@ end
 function Recipes:OnEnable()
     ns.RegisterEvent(self, "TRADE_SKILL_LIST_UPDATE", self.OnTradeSkillUpdate)
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", self.OnTradeSkillUpdate)
+
+    -- Learning or dropping a profession, read at once rather than at the
+    -- next profession window. Not every client has this event; RegisterEvent
+    -- says so by returning false, and the reads above still cover it.
+    ns.RegisterEvent(self, "SKILL_LINES_CHANGED", function() Recipes:RefreshProfessions() end)
 
     -- Skill levels arrive after login, so the first read is usually zeroes.
     -- Retried a few times rather than once: how long it takes varies, and

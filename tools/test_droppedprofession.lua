@@ -66,6 +66,7 @@ local Recipes = ns.Recipes
 
 print("\nbefore any read of the professions")
 check("nothing is hidden", not Recipes:IsDropped(robe) and not Recipes:IsDropped(bar))
+check("the robe is offered as a sub-craft", ns.Cost:FindRecipeForItem(100) == 10)
 
 print("\na read at login, before skill levels arrive")
 Recipes:RefreshProfessions()
@@ -79,7 +80,6 @@ check("the kept profession's craft is not", not Recipes:IsDropped(bar))
 check("a craft with no skill line is kept", not Recipes:IsDropped(mystery))
 check("a craft whose skill line was not listed is kept", not Recipes:IsDropped(odd))
 check("nothing was deleted", ns.db.characters[SELF].recipes[10] == robe)
-ns.Cost:InvalidateIndex()
 check("it is not offered as a sub-craft", ns.Cost:FindRecipeForItem(100) == nil)
 check("the kept one still is", ns.Cost:FindRecipeForItem(200) == 20)
 
@@ -102,5 +102,21 @@ Recipes:RefreshProfessions()
 check("its crafts come back", not Recipes:IsDropped(robe))
 _, owner = Recipes:GetAny(10)
 check("and this character makes it again", owner == SELF)
+
+print("\nlearning or dropping a profession is read at once")
+local handlers = {}
+ns.RegisterEvent = function(_, event, fn) handlers[event] = fn; return true end
+local savedTimer = C_Timer
+C_Timer = { NewTicker = function() return { Cancel = function() end } end }
+Recipes:OnEnable()
+check("the skill lines changing is listened for", handlers.SKILL_LINES_CHANGED ~= nil)
+levels[197], levels[2942] = 0, 0
+handlers.SKILL_LINES_CHANGED()
+check("and a drop hides the crafts", Recipes:IsDropped(robe))
+check("and takes them out of the sub-crafts", ns.Cost:FindRecipeForItem(100) == nil)
+-- A client without the event: RegisterEvent says no, and nothing breaks.
+ns.RegisterEvent = function() return false end
+check("a client without the event is fine", pcall(Recipes.OnEnable, Recipes))
+C_Timer = savedTimer
 
 print(("\n%d check(s) passed\n"):format(checks))
