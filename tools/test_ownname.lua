@@ -51,7 +51,10 @@ fresh()
 check("your whole name is you", Scanner:IsOwnAuction("Voldar Ash", nil))
 check("your whole name with the realm is you", Scanner:IsOwnAuction(nil, "Voldar Ash-TestRealm"))
 check("a rival sharing your first name is not you", not Scanner:IsOwnAuction("Voldar Stone", "Voldar Stone-TestRealm"))
-check("a bare first name is not taken as you", not Scanner:IsOwnAuction("Voldar", "Voldar-TestRealm"))
+-- A row with only a first name cannot be told apart. It is read as you, so
+-- your own listings are never undercut if Forever writes sellers that way.
+check("a bare first name is still taken as you", Scanner:IsOwnAuction("Voldar", "Voldar-TestRealm"))
+check("a bare other name is not you", not Scanner:IsOwnAuction("Grimble", "Grimble-TestRealm"))
 check("the same name on another realm is not you", not Scanner:IsOwnAuction(nil, "Voldar Ash-OtherRealm"))
 
 print("\na character with no last name")

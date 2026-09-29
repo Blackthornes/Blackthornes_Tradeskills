@@ -118,6 +118,7 @@ ns.Recipes = {
     Count = function() return 1 end,
     GetAll = function() return mine end,
     GetAccountWide = function() return everyone end,
+    IsDropped = function() return false end,
 }
 ns.Prices = { Count = function() return 1 end }
 ns.Auctions = { SetLimit = function() end }

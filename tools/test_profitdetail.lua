@@ -173,7 +173,8 @@ local analyses = {
 }
 
 ns.Profit = { GetRanked = function() return analyses end, Analyse = function() return analyses[1] end }
-ns.Recipes = { Count = function() return 1 end, GetAll = function() return {} end }
+ns.Recipes = { Count = function() return 1 end, GetAll = function() return {} end,
+               GetAccountWide = function() return {} end, IsDropped = function() return false end }
 ns.Prices = { Count = function() return 1 end }
 ns.Auctions = { SetLimit = function() end }
 ns.Config = { Get = function() return 0 end }

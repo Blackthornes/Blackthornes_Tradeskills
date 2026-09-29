@@ -213,6 +213,8 @@ check("it is not stamped as a full scan", Prices:GetLastFullScan() == nil)
 local said = printed[#printed] or ""
 check("chat says it stopped at the page limit", said:find("page limit", 1, true) ~= nil)
 check("and not that the scan is complete", said:find("scan complete", 1, true) == nil)
+check("but it is remembered, so the automatic scan does not repeat it at once",
+    ns.db.lastCappedScanByRealm and ns.db.lastCappedScanByRealm.TestRealm ~= nil)
 
 -- One the game says is whole on its last page is still a full scan.
 browseResults, full, queue, printed = {}, false, {}, {}

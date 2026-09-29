@@ -96,7 +96,15 @@ function Scanner:IsOwnAuction(owner, ownerFullName)
 
         local function Matches(text)
             local rowName, rowRealm = SplitOwner(text)
-            return rowName == wanted and (not rowRealm or not realm or rowRealm == realm)
+            if rowRealm and realm and rowRealm ~= realm then return false end
+
+            -- A row that carries only a first name cannot be told apart, and
+            -- whether Forever writes the seller that way is not yet known.
+            -- Reading your own listing as a rival's would have you undercut
+            -- yourself, which costs more than the rare same-name rival.
+            if rowName and not rowName:find(" ", 1, true) then return rowName == name end
+
+            return rowName == wanted
         end
 
         return Matches(ownerFullName) or Matches(owner)
@@ -768,6 +776,12 @@ function Scanner:CommitBrowseResults(results, opts)
         ns.Prices:SetLastFullScan(now)
         ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
     elseif opts.capped then
+        -- Remembered apart from the full scan stamp, so the automatic scan
+        -- does not start the same capped sweep again on every visit.
+        if ns.db and ns.Config.GetRealmKey then
+            ns.db.lastCappedScanByRealm = ns.db.lastCappedScanByRealm or {}
+            ns.db.lastCappedScanByRealm[ns.Config:GetRealmKey()] = now
+        end
         ns.Print(("scan stopped at the %d page limit: %s items updated in %.1fs. Items on later pages were not reached, so this does not count as a full scan.")
             :format(MAX_BROWSE_PAGES, Util.Comma(recorded), elapsed))
     else
@@ -1697,6 +1711,12 @@ function Scanner:ConsiderAutoScan(attempt)
 
     local count = ns.Prices:Count()
     local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
+    -- A sweep that stopped at the page limit is not a full scan, but it is
+    -- as far as a sweep can get here, so repeating it at once gains nothing.
+    local capped = ns.db and ns.db.lastCappedScanByRealm
+        and ns.Config.GetRealmKey and ns.db.lastCappedScanByRealm[ns.Config:GetRealmKey()]
+    if capped and (not lastScan or capped > lastScan) then lastScan = capped end
+
     local stale = not lastScan
         or (time() - lastScan) > (ns.Config:Get("staleAfterSeconds") or 172800)
 
