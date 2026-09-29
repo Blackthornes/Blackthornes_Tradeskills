@@ -200,6 +200,7 @@ function Vendor:GetNeeded()
                     unitPrice = stock.price,
                     cost = cost,
                     stack = stock.stack,
+                    bundlePrice = stock.bundlePrice,
                     short = affordable < line.shortfall,
                 }
 
@@ -321,7 +322,13 @@ function Vendor:BuyStep()
         self.buyIndex = self.buyIndex + 1
     else
         self.buyPurchased[line.itemID] = purchased + amount
-        self.buySpent = self.buySpent + (amount * line.unitPrice)
+        -- By the bundle where the vendor sells in bundles: the unit price is
+        -- floored, and "about 60c spent" for 3 of a 5-for-1s bundle was 1s.
+        if line.stack and line.stack > 1 and line.bundlePrice then
+            self.buySpent = self.buySpent + math.ceil(amount / line.stack) * line.bundlePrice
+        else
+            self.buySpent = self.buySpent + (amount * line.unitPrice)
+        end
     end
 
     -- Long enough for BAG_UPDATE to land, so the live check above is meaningful

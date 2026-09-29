@@ -388,25 +388,39 @@ check("and keeps what it is worth", Prices:Get(2589).market == 400)
 check("the item it saw is updated, not cleared", Prices:Get(2592).rivalMin == 950)
 check("a price read during the scan is left alone", Prices:Get(2593).rivalMin == 700)
 
--- A sweep far smaller than the last whole one is a search, not the auction
--- house. Seen in review: a search typed while page 1 was out came back as
--- "the whole sweep" and would have cleared every other item.
+-- A sweep that saw far fewer items than the last whole one on this realm is
+-- a search, not the auction house. Seen in review: a search typed while page
+-- 1 was out came back as "the whole sweep" and would have cleared the rest.
 reset()
-ns.db.lastSweepRows = 100
-Prices:Record(2589, 400, 400, 5, before, 400)
-Scanner:CommitBrowseResults({
-    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
-}, true)
-check("a sweep much smaller than the last clears nothing", Prices:Get(2589).rivalMin == 400)
-
--- And however it got there, most of the book vanishing at once is refused.
-reset()
-ns.db.lastSweepRows = nil
+ns.db.sweepSeenByRealm = { TestRealm = 40 }
 for id = 5000, 5039 do Prices:Record(id, 400, 400, 5, before, 400) end
 Scanner:CommitBrowseResults({
     { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
 }, true)
-check("39 of 40 items gone at once clears none", Prices:Get(5001).rivalMin == 400
+check("a sweep much smaller than the last clears nothing", Prices:Get(5001).rivalMin == 400
     and Prices:Get(5039).quantity == 5)
+
+-- But the check heals: a market that really shrank is refused once, not for
+-- ever. The first guard used a share of the book, and as listings aged the
+-- share only grew, so nothing was ever marked sold out again.
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 5000 }, minPrice = 400, totalQuantity = 5 },
+}, true)
+check("the next sweep of that size is trusted", Prices:Get(5001).rivalMin == nil
+    and Prices:Get(5039).quantity == 0)
+
+-- A sweep cut short is not a full scan: no stamp, so deals it never reached
+-- are not hidden as older than it.
+reset()
+ns.db.lastFullScan, ns.db.lastFullScanByRealm = nil, nil
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+})
+check("a cut-short sweep is not stamped as a full scan", Prices:GetLastFullScan() == nil)
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = 2592 }, minPrice = 950, totalQuantity = 2 },
+}, { ended = true })
+check("one that ran to its end is", Prices:GetLastFullScan() ~= nil
+    and ns.db.lastFullScanByRealm.TestRealm ~= nil)
 
 print(("\n%d check(s) passed\n"):format(checks))

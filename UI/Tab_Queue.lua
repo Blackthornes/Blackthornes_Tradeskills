@@ -512,6 +512,11 @@ local function Build(container)
     heading.rule:SetPoint("RIGHT", clear, "LEFT", -8, 0)
 
     local craftList = Widgets.CreateScrollList(container, {
+        -- The craft being made stays lit, as in the craft pane's list.
+        isSelected = function(entry)
+            local active = ns.Crafting.active
+            return active ~= nil and active.recipeID == entry.recipeID
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateCraftRow,
         updateRow = UpdateCraftRow,
@@ -654,7 +659,10 @@ function UI:OnQueueUpdated()
     -- is usually the thing that just changed it.
     if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
 
-    if self.activeTab == "queue" then
+    -- Only while the window is showing: redrawing a hidden Queue tab also
+    -- ran its alt-craft announcement, chat line and coin sound included,
+    -- every time something was queued from the craft pane.
+    if self.activeTab == "queue" and self.window and self.window:IsShown() then
         Refresh()
     else
         -- The Gather tab is derived from the queue, so it goes stale too.

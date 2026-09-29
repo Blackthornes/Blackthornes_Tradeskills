@@ -178,7 +178,10 @@ local function UpdateRow(row, entry)
 
     cells.min:SetText(Util.FormatMoney(entry.record.min, { short = true }))
 
-    cells.quantity:SetText(Util.Comma(entry.quantity))
+    -- Sold out reads as sold out, apart from a thin shelf at a glance.
+    local listed = (entry.quantity or 0) > 0
+    cells.quantity:SetText(listed and Util.Comma(entry.quantity) or "none")
+    cells.quantity:SetTextColor(Theme.Unpack(listed and "muted" or "dim"))
 
     if entry.liquidity then
         cells.liquidity:SetText(("%d%%"):format(math.floor(entry.liquidity * 100)))
@@ -405,7 +408,14 @@ local function UpdateDetail(entry)
     detail.titleBlock:SetHeight(math.max(30, tonumber(titleHeight) or 0))
 
     detail.values.market:SetText(Util.FormatMoney(record.market))
-    detail.values.min:SetText(Util.FormatMoney(record.min))
+    -- Worded like the Cheapest rival line when there is nothing listed.
+    if record.min then
+        detail.values.min:SetText(Util.FormatMoney(record.min))
+        detail.values.min:SetTextColor(Theme.Unpack("text"))
+    else
+        detail.values.min:SetText("none listed")
+        detail.values.min:SetTextColor(Theme.Unpack("dim"))
+    end
 
     if record.rivalMin then
         detail.values.rival:SetText(Util.FormatMoney(record.rivalMin))

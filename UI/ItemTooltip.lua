@@ -271,7 +271,10 @@ function ItemTooltip:LinesFor(itemID, count)
     -- values at nothing.
     if not value or value <= 0 then
         if self.IsAuctionable(itemID) then
-            lines[#lines + 1] = { "Auction value", "not scanned yet", true }
+            -- Searched and found empty is not the same as never looked at.
+            local record = ns.Prices.Get and ns.Prices:Get(itemID)
+            lines[#lines + 1] = { "Auction value",
+                (record and record.quantity == 0) and "none listed" or "not scanned yet", true }
         end
 
         local disenchant = self:DisenchantLine(itemID)

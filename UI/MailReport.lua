@@ -645,10 +645,14 @@ function MailReport:Show(haul, opts)
 
     -- The footer.
     local stats = {}
-    if (haul.today or 0) > 0 then
+    -- Today and the last week are about now, so an old haul reopened from the
+    -- Sales tab leaves them out rather than showing that day's figures.
+    if opts.replay then
+        -- nothing: only the best haul below still means something
+    elseif (haul.today or 0) > 0 then
         stats[#stats + 1] = ("Today %s"):format(Util.FormatMoney(haul.today, { short = true }))
     end
-    if (haul.week or 0) > 0 then
+    if not opts.replay and (haul.week or 0) > 0 then
         stats[#stats + 1] = ("Last 7 days %s"):format(Util.FormatMoney(haul.week, { short = true }))
     end
     local bestHaul = ns.MailHaul and ns.MailHaul:Records() or 0

@@ -224,7 +224,7 @@ local function Build(outer)
     widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local lossRow = CreateRow(container, altCraftRow, "Recommend selling at a loss",
-        "Off: the Post tab still lists them, marked red, but does not recommend them.")
+        "Off: the Post tab shows them in red but will not list them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
         Config:Set("allowPostingAtALoss", checked)
@@ -373,6 +373,8 @@ local function Build(outer)
         if button.armed then
             ns.db.prices[ns.Config:GetRealmKey()] = {}
             ns.db.lastFullScan = nil
+            ns.db.lastFullScanByRealm = nil
+            ns.db.sweepSeenByRealm = nil
 
             button.armed = false
             button:SetText("Clear price data")
@@ -465,8 +467,10 @@ local function Build(outer)
     widgets.debug:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local resetButton = Widgets.CreateButton(container, "Reset to defaults", function()
+        -- Through Config:Set, as every other setting change is, so a session
+        -- keeping its settings in the backup store saves these too.
         for key, value in pairs(ns.Config.DEFAULTS.settings) do
-            ns.db.settings[key] = value
+            ns.Config:Set(key, value)
         end
 
         ns.Print("settings reset to defaults")
@@ -541,7 +545,7 @@ local function Refresh()
     widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
-    local lastScan = ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
 
     widgets.dataSummary:SetText(("%s items priced on %s"):format(
         Util.Comma(ns.Prices:Count()), Config:GetRealmKey()))

@@ -391,7 +391,8 @@ local function Refresh()
 
     local total, losses, unpriced = 0, 0, 0
     for _, line in ipairs(lines) do
-        total = total + (line.total or 0)
+        -- What the LIST column will put up, as each row's TOTAL shows.
+        total = total + (line.postTotal or line.total or 0)
         if line.atALoss then losses = losses + 1 end
         if not line.unitPrice then unpriced = unpriced + 1 end
     end
@@ -433,7 +434,7 @@ local function Build(container)
 
     local durationHint = Theme.CreateLabel(toolbar, "tiny", "dim")
     durationHint:SetPoint("LEFT", widgets.duration, "RIGHT", 8, 0)
-    durationHint:SetText("affects the deposit estimate only")
+    durationHint:SetText("how long listings stay up")
 
     widgets.statusLabel = Theme.CreateLabel(toolbar, "small", "warn", "RIGHT")
     widgets.statusLabel:SetPoint("RIGHT", 0, 0)

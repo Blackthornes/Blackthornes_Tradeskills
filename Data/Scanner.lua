@@ -457,8 +457,7 @@ function Scanner:ArmBrowseTimeout()
         -- Finish it properly rather than just stopping: save what was read,
         -- hide the progress bar and give the Scan button back. Only setting
         -- the flags left the bar sitting at its last value for good.
-        local ok, partial = pcall(C_AuctionHouse.GetBrowseResults)
-        Scanner:CommitBrowseResults((ok and type(partial) == "table") and partial or {})
+        Scanner:CommitBrowseResults(Scanner:SweepSoFar())
 
         -- Blizzard's own list is waiting on the same results we are, so a
         -- query that never answered leaves its spinner turning.
@@ -510,13 +509,19 @@ function Scanner:OnBrowseResults()
     -- search, most likely -- has taken the shared results over. Paced paging made
     -- a sweep long enough for that to be likely, so take the smaller set as the
     -- end of ours rather than paging through somebody else's search.
-    if self.browseRowsSeen and #results < self.browseRowsSeen then
+    --
+    -- "What was read so far" is the last page of ours, kept below: by now the
+    -- shared results hold the other search, and committing those kept its
+    -- twenty rows and threw the sweep away. Likewise once anybody else's
+    -- search has gone out, the next page cannot be trusted to be ours.
+    if (self.browseRowsSeen and #results < self.browseRowsSeen) or self.browseForeign then
         self:Report("another search replaced the results; keeping what was read so far")
-        self:CommitBrowseResults(results)
+        self:CommitBrowseResults(self:SweepSoFar())
         return
     end
 
     self.browseRowsSeen = #results
+    self.browseLast = results
     self.browsePages = self.browsePages + 1
 
     local full = true
@@ -559,8 +564,13 @@ function Scanner:OnBrowseResults()
                 -- price update beats none, and it releases the shared results.
                 if not Scanner.isBrowsing then return end
 
-                local okResults, partial = pcall(C_AuctionHouse.GetBrowseResults)
-                Scanner:CommitBrowseResults((okResults and type(partial) == "table") and partial or {})
+                -- Not when the auction house has just closed, though: the
+                -- queue lets its waiting requests go before the scanner hears
+                -- of the close, and this read a walk-away as a finished scan.
+                -- The scanner's own close handler cancels the scan.
+                if ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing() then return end
+
+                Scanner:CommitBrowseResults(Scanner:SweepSoFar())
             end,
         })
         return
@@ -570,7 +580,17 @@ function Scanner:OnBrowseResults()
     -- One stopped at the page cap has not looked everywhere, and results
     -- after anybody else's search went out may be that search's, not ours:
     -- the results slot is shared, and a first page cannot tell them apart.
-    self:CommitBrowseResults(results, full and saidWhole and not self.browseForeign)
+    self:CommitBrowseResults(results, {
+        ended = true,
+        whole = full and saidWhole and not self.browseForeign,
+    })
+end
+
+--- The rows of the last page this sweep accepted as its own.
+function Scanner:SweepSoFar()
+    if self.browseLast then return self.browseLast end
+    local ok, partial = pcall(C_AuctionHouse.GetBrowseResults)
+    return (ok and type(partial) == "table") and partial or {}
 end
 
 --- Read one browse row into a rival price and an own price.
@@ -616,10 +636,18 @@ end
 
 Scanner.SplitBrowseRow = SplitBrowseRow
 
---- @param complete true when the sweep read the whole auction house, so an
---- item it did not see has sold out. Partial sweeps leave the rest alone.
-function Scanner:CommitBrowseResults(results, complete)
+--- @param opts.ended true when paging reached its natural end, so this was
+---   a full scan rather than one cut short.
+--- @param opts.whole true when the sweep read the whole auction house, so an
+---   item it did not see has sold out. Partial sweeps leave the rest alone.
+---   Passing true is the same as both.
+function Scanner:CommitBrowseResults(results, opts)
+    if opts == true then opts = { ended = true, whole = true } end
+    opts = opts or {}
+    local complete = opts.whole == true
+
     self:StopBrowseTimeout()
+    self.browseLast = nil
 
     self.isBrowsing = false
     self.isScanning = false
@@ -679,28 +707,29 @@ function Scanner:CommitBrowseResults(results, complete)
 
     local soldOut = 0
     if complete then
-        -- A sweep far smaller than the last whole one is somebody's search
-        -- that slipped past the checks above, not the auction house.
-        local lastRows = ns.db.lastSweepRows
-        if lastRows and #results < lastRows / 2 then
-            self:Report(("%d row(s) against %d last time, so no item is marked sold out"):format(#results, lastRows))
-        else
-            ns.db.lastSweepRows = #results
-            soldOut = ns.Prices:ClearMissing(seen, self.scanStartedWall, now)
-        end
+        local why
+        soldOut, why = ns.Prices:ClearMissingIfWhole(seen, self.scanStartedWall, now)
+        if why then self:Report(why .. ", so no item is marked sold out") end
     end
 
     self.verbose = false
-    ns.db.lastFullScan = now
 
+    -- Only a scan that ran to its end counts as a full scan. A cut-short one
+    -- stamped as full hid every deal it had not reached (they looked older
+    -- than the scan) and put off the next automatic scan for two days.
     local elapsed = GetTime() - (self.scanStartedAt or GetTime())
-    ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+    if opts.ended then
+        ns.Prices:SetLastFullScan(now)
+        ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+    else
+        ns.Print(("scan stopped early: %s items updated in %.1fs"):format(Util.Comma(recorded), elapsed))
+    end
     if soldOut > 0 then
         ns.Print(("%s item(s) sold out since they were last seen"):format(Util.Comma(soldOut)))
     end
 
     if ns.UI and ns.UI.OnScanComplete then
-        ns.UI:OnScanComplete({ items = recorded })
+        ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
     end
 
     -- Written out rather than held until logout, because this client loses
@@ -848,7 +877,9 @@ function Scanner:ReadReplicateResults(numItems)
             -- to clear a large share of the book in one go.)
             local soldOut = 0
             if unreadable <= 5 then
-                soldOut = ns.Prices:ClearMissing(seen, startedWall, now)
+                local why
+                soldOut, why = ns.Prices:ClearMissingIfWhole(seen, startedWall, now)
+                if why then self:Report(why .. ", so no item is marked sold out") end
             else
                 self:Report(("%d row(s) could not be read, so no item is marked sold out this time"):format(unreadable))
             end
@@ -873,7 +904,7 @@ function Scanner:ReadReplicateResults(numItems)
             end
 
             if ns.UI and ns.UI.OnScanComplete then
-                ns.UI:OnScanComplete({ items = recorded })
+                ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
             end
         end,
 
@@ -960,11 +991,18 @@ function Scanner:GetScanStatus()
         }
     end
 
+    -- Before the quick-scan line: after the quick scan goes unanswered the
+    -- scan is still "running" while the page-by-page one waits its turn,
+    -- and the bar said it was asking for a quick scan all that time.
+    if self.browseQueued then
+        return { text = "Waiting to start the page-by-page scan" }
+    end
+
     if self.isScanning then
         return { text = "Asking for a quick scan" }
     end
 
-    if self.scanQueued or self.browseQueued then
+    if self.scanQueued then
         return { text = "Waiting to start the scan" }
     end
 
@@ -1584,7 +1622,7 @@ function Scanner:ConsiderAutoScan(attempt)
     if not allowed then return end
 
     local count = ns.Prices:Count()
-    local lastScan = ns.db and ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     local stale = not lastScan
         or (time() - lastScan) > (ns.Config:Get("staleAfterSeconds") or 172800)
 

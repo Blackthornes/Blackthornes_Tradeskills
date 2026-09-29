@@ -650,7 +650,18 @@ local function UpdateDetail(analysis)
         detail.limitBox:Show()
         detail.limitHint:Show()
 
-        detail.limitBox:SetValue(analysis.postLimit or 0, true)
+        -- Not over a number being typed: a bag update mid-typing put the
+        -- old limit back and the next key landed after it (1, then 5 from
+        -- the redraw, then 2, saved as 52). A different craft does replace
+        -- it, and drops the half-typed number with it.
+        local box = detail.limitBox
+        local typing = box.editBox.HasFocus and box.editBox:HasFocus()
+        if not typing then
+            box:SetValue(analysis.postLimit or 0, true)
+        elseif newCraft then
+            box:SetValue(analysis.postLimit or 0, true)
+            box.editBox:ClearFocus()
+        end
 
         -- Spell out where the stock is, so a hidden craft is explicable.
         local parts = {}

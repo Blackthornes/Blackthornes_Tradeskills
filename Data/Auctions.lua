@@ -229,6 +229,11 @@ end
 function Auctions:ReadOwned(opts)
     opts = opts or {}
 
+    -- A read-back timed for a listing can land after the auction house has
+    -- closed, when the game's list of your auctions reads empty. Storing that
+    -- said nothing was listed, and Keep in stock suggested crafting more.
+    if ns.Scanner and ns.Scanner.isAuctionHouseOpen == false then return end
+
     if not Util.HasFunction("C_AuctionHouse.GetNumOwnedAuctions") then return end
 
     local ok, count = pcall(C_AuctionHouse.GetNumOwnedAuctions)
