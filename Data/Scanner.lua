@@ -49,7 +49,7 @@ Scanner.isScanning = false
 
 local function GetPlayerIdentity()
     if Scanner.playerName then
-        return Scanner.playerName, Scanner.playerFullName
+        return Scanner.playerName, Scanner.playerFullName, Scanner.playerSurname, Scanner.playerRealm
     end
 
     local ok, name = pcall(UnitName, "player")
@@ -58,15 +58,52 @@ local function GetPlayerIdentity()
     local realmOk, realm = pcall(GetRealmName)
     if realmOk and realm then
         -- ownerFullName arrives as Name-Realm with spaces stripped.
-        Scanner.playerFullName = Scanner.playerName .. "-" .. realm:gsub("%s", "")
+        Scanner.playerRealm = realm:gsub("%s", "")
+        Scanner.playerFullName = Scanner.playerName .. "-" .. Scanner.playerRealm
     end
 
-    return Scanner.playerName, Scanner.playerFullName
+    -- Forever lets any number of characters share a first name, so a first
+    -- name alone is not you. Asked once a session: finding it looks through
+    -- the game's functions, which is far too slow to do for every row.
+    if ns.Config and ns.Config.ReadSurname then
+        local surnameOk, surname = pcall(ns.Config.ReadSurname, ns.Config)
+        if surnameOk and type(surname) == "string" and surname ~= "" then
+            Scanner.playerSurname = surname
+        end
+    end
+
+    return Scanner.playerName, Scanner.playerFullName, Scanner.playerSurname, Scanner.playerRealm
+end
+
+-- A seller's name and realm, from "Name" or "Name-Realm".
+local function SplitOwner(text)
+    if type(text) ~= "string" or text == "" then return nil end
+
+    local name, realm = text:match("^(.-)%-([^%-]+)$")
+    if not name or name == "" then return text, nil end
+
+    return name, (realm:gsub("%s", ""))
 end
 
 function Scanner:IsOwnAuction(owner, ownerFullName)
-    local name, fullName = GetPlayerIdentity()
+    local name, fullName, surname, realm = GetPlayerIdentity()
 
+    -- With a last name known, only the whole name is you. A rival who shares
+    -- your first name used to be read as you, and your own listings were then
+    -- never undercut against theirs.
+    if surname then
+        local wanted = name .. " " .. surname
+
+        local function Matches(text)
+            local rowName, rowRealm = SplitOwner(text)
+            return rowName == wanted and (not rowRealm or not realm or rowRealm == realm)
+        end
+
+        return Matches(ownerFullName) or Matches(owner)
+    end
+
+    -- No last name to go on (a character without one, or a client that will
+    -- not say), so the first name is all there is.
     if ownerFullName and fullName and ownerFullName == fullName then return true end
     if owner and owner == name then return true end
 
