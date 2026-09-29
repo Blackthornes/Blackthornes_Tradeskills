@@ -107,9 +107,17 @@ local function CreateRow(row)
         -- are simply things the scan has never had a reason to look at.
         if not line.unitPrice then
             ns.Posting:CheckPrice(line.itemID, function(itemID, price, status)
-                if not price then
+                -- "recent" while that same search is still out means a
+                -- second click before the answer: it will redraw the row
+                -- itself, and saying nobody sells one would be a guess.
+                local pending = ns.Scanner.pendingItem
+                local stillAsking = status == "recent" and pending and pending.itemID == itemID
+
+                if not price and not stillAsking then
                     ns.Print(("%s: %s"):format(Util.GetItemLabel(itemID),
-                        status == "empty"
+                        -- "recent": searched moments ago, and that search
+                        -- found nobody selling it.
+                        (status == "empty" or status == "recent")
                             and "nobody is selling one right now, so there is no price to go on."
                             or "the auction house did not answer. Try again in a moment."))
                 end
@@ -167,7 +175,9 @@ function UpdateRow(row, line)
             cells[key]:SetTextColor(Theme.Unpack(priceColour))
         end
 
-        cells.total:SetText(Util.FormatMoney(line.total, { short = true }))
+        -- What this listing comes to at the LIST amount, the same figure the
+        -- tooltip gives, not the whole stack's.
+        cells.total:SetText(Util.FormatMoney(line.postTotal or line.total, { short = true }))
         cells.total:SetTextColor(Theme.Unpack(line.atALoss and "loss" or "profit"))
     else
         for _, key in ipairs({ "gold", "silver", "copper" }) do
@@ -204,7 +214,7 @@ function UpdateRow(row, line)
             row.post.tooltipText = reason
         elseif line.atALoss then
             row.post.tooltipText = (line.lossReason == "vendor"
-                and "This would sell for less than a vendor pays. Blocked unless you allow it in Settings."
+                and "This would sell for less than a vendor pays, so it will not be listed. Sell it to a vendor instead."
                 or "This would sell below its material cost. Blocked unless you allow it in Settings.")
         else
             row.post.tooltipText = ("List %d of %d at %s each"):format(
@@ -329,7 +339,11 @@ local function VisibleLines()
 
     local kept = {}
     for _, line in ipairs(lines) do
-        if (line.label or ""):lower():find(needle, 1, true) then
+        -- The name only: the label is an item link, and its colour code and
+        -- item number matched "ff" or "20" on nearly every row.
+        local label = line.label or ""
+        local name = label:match("%[(.-)%]") or label
+        if name:lower():find(needle, 1, true) then
             kept[#kept + 1] = line
         end
     end
@@ -377,7 +391,8 @@ local function Refresh()
 
     local total, losses, unpriced = 0, 0, 0
     for _, line in ipairs(lines) do
-        total = total + (line.total or 0)
+        -- What the LIST column will put up, as each row's TOTAL shows.
+        total = total + (line.postTotal or line.total or 0)
         if line.atALoss then losses = losses + 1 end
         if not line.unitPrice then unpriced = unpriced + 1 end
     end
@@ -387,7 +402,7 @@ local function Refresh()
         unpriced > 0 and ("  ·  %d with no price yet"):format(unpriced) or ""))
 
     widgets.warning:SetText(losses > 0
-        and ("%d item%s would sell below material cost"):format(
+        and ("%d item%s would sell at a loss"):format(
             losses, losses == 1 and "" or "s")
         or "")
 
@@ -419,7 +434,7 @@ local function Build(container)
 
     local durationHint = Theme.CreateLabel(toolbar, "tiny", "dim")
     durationHint:SetPoint("LEFT", widgets.duration, "RIGHT", 8, 0)
-    durationHint:SetText("affects the deposit estimate only")
+    durationHint:SetText("how long listings stay up")
 
     widgets.statusLabel = Theme.CreateLabel(toolbar, "small", "warn", "RIGHT")
     widgets.statusLabel:SetPoint("RIGHT", 0, 0)
@@ -485,6 +500,10 @@ local function Build(container)
         updateRow = UpdateRow,
         onEnter = ShowRowTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", note, "BOTTOMRIGHT", shown and -10 or 0, -8)
+        end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     list:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 54)

@@ -135,7 +135,11 @@ function Opener:CreateOverlay()
     overlay.background = Theme.Fill(overlay, "rowActive")
     Theme.Border(overlay, "border")
     overlay.label = Theme.CreateLabel(overlay, "small", "accent", "CENTER")
-    overlay.label:SetPoint("CENTER")
+    -- Held inside the button like every other label: "Open Leatherworking"
+    -- ran over its edges.
+    overlay.label:SetPoint("LEFT", 4, 0)
+    overlay.label:SetPoint("RIGHT", -4, 0)
+    overlay.label:SetWordWrap(false)
 
     overlay:SetScript("OnEnter", function(self)
         self.background:SetColorTexture(Theme.Unpack("rowHover"))
@@ -379,7 +383,7 @@ local function DescribePlacement()
     local overlay, anchor = Opener.overlay, Opener.anchor
     if not overlay or not anchor then return end
 
-    ns.Print(("Open button layer: %s %d over the craft button's %s %d, size %dx%d, %s.")
+    ns.Print(("Open button layer: %s %d over the craft button's %s %d, size %.0fx%.0f, %s.")
         :format(overlay:GetFrameStrata(), overlay:GetFrameLevel(),
             anchor:GetFrameStrata(), anchor:GetFrameLevel(),
             overlay:GetWidth() or 0, overlay:GetHeight() or 0,
@@ -393,7 +397,7 @@ local function DescribePlacement()
     end
     local ox, oy = Screen(overlay)
     local ax, ay = Screen(anchor)
-    ns.Print(("Open button at %d,%d; craft button at %d,%d. Mouse over Open: %s, over craft: %s, Open takes mouse: %s.")
+    ns.Print(("Open button at %.0f,%.0f; craft button at %.0f,%.0f. Mouse over Open: %s, over craft: %s, Open takes mouse: %s.")
         :format(ox, oy, ax, ay,
             tostring(overlay:IsMouseOver()), tostring(anchor:IsMouseOver()),
             tostring(overlay:IsMouseEnabled())))

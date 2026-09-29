@@ -83,11 +83,17 @@ local function Matches(itemID, name, query)
 
     local haystack = (name or ""):lower()
 
-    if itemID then
+    -- The item is only looked up when the entry carries no name: reading
+    -- every ledger entry through the client on each keystroke pulled items
+    -- into its small cache and pushed bag items out.
+    if itemID and (name or "") == "" then
         -- GetItemLabel hands back a link once the client has the item, and a
         -- link carries the name inside it, so searching the label works for
         -- both shapes without having to take the link apart.
-        haystack = haystack .. " " .. tostring(Util.GetItemLabel(itemID)):lower()
+        -- Only the name inside the link: its colour code and item number
+        -- matched "ff" or a digit on every row.
+        local label = tostring(Util.GetItemLabel(itemID))
+        haystack = haystack .. " " .. (label:match("%[(.-)%]") or label):lower()
     end
 
     return haystack:find(query, 1, true) ~= nil
@@ -236,8 +242,8 @@ local function UpdateVisitRow(row, haul)
         parts[#parts + 1] = ("%d item%s"):format(haul.itemCount, haul.itemCount == 1 and "" or "s")
     end
 
-    local who = tostring(haul.who or ""):match("^([^%-]+)")
-    if who then parts[#parts + 1] = who end
+    local who = Util.CharacterName(haul.who)
+    if who ~= "" then parts[#parts + 1] = who end
 
     row.detail:SetText(table.concat(parts, "  ·  "))
     row.detail:SetTextColor(Theme.Unpack("muted"))
@@ -268,6 +274,8 @@ local LINE_COUNT = 11
 
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
+    -- The gold edge every other detail pane has.
+    Theme.AccentStripe(detail, 2, 0.6)
     detail:SetWidth(DETAIL_WIDTH)
 
     local title = Theme.CreateLabel(detail, "large", "accent")
@@ -383,7 +391,7 @@ local function UpdateDetail(item, totals)
 
         if item.sold > 0 then
             Add("Taken in", Util.FormatMoney(item.net), "profit")
-            Add("Average sale", Util.FormatMoney(item.net / item.sold))
+            Add("Average per sale", Util.FormatMoney(item.net / item.sold))
 
             if item.cut > 0 then
                 Add("Auction cut", Util.FormatMoney(item.cut), "muted")
@@ -428,7 +436,7 @@ local function UpdateDetail(item, totals)
 
         if totals.sold > 0 then
             Add("Taken in", Util.FormatMoney(totals.net), "profit")
-            Add("Average sale", Util.FormatMoney(totals.net / totals.sold))
+            Add("Average per sale", Util.FormatMoney(totals.net / totals.sold))
 
             if totals.cut > 0 then
                 Add("Auction cut", Util.FormatMoney(totals.cut), "muted")
@@ -686,6 +694,12 @@ local function Build(container)
             Widgets.ShowItemOnly(row, data.itemID, data.name)
         end,
         onLeave = function() GameTooltip:Hide() end,
+        -- The item the detail pane is showing is lit, as on every other tab.
+        isSelected = function(data)
+            if data.haul or not state.selected then return false end
+            local key = data.key or data.itemID or ("?" .. tostring(data.name or "unknown"))
+            return key == state.selected
+        end,
         onClick = function(data)
             if data.haul then
                 if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end

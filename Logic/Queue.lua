@@ -126,7 +126,12 @@ function Queue:RebuildDependencies()
     end
 
     -- Deepest first: a sub-craft's own sub-crafts have to come before it.
-    table.sort(derived, function(a, b) return a.depth > b.depth end)
+    -- Ties go by recipe, so a rebuild never swaps sub-crafts of the same
+    -- depth around (table.sort is not stable, and rows must not jump).
+    table.sort(derived, function(a, b)
+        if a.depth ~= b.depth then return a.depth > b.depth end
+        return a.recipeID < b.recipeID
+    end)
 
     for index = #queue, 1, -1 do
         queue[index] = nil
@@ -380,6 +385,36 @@ end
 -- only queued when making the reagent is cheaper than buying it, and their
 -- own materials are already on this list, so listing the reagent too asked
 -- you to pay for it twice.
+--- Every material a queued craft still needs: { [itemID] = how many }.
+--
+-- The same items the shopping list covers, without its pricing, stock counts
+-- or alt offers. Posting asks this every second at the auction house to keep
+-- queued reagents off the sale list, and the full list is too heavy for that.
+function Queue:GetReservedItems()
+    local required, queuedToMake = {}, {}
+
+    for _, entry in ipairs(self:GetAll()) do
+        local recipe = ns.Recipes:GetAny(entry.recipeID)
+        if recipe then
+            for _, reagent in ipairs(recipe.reagents or {}) do
+                required[reagent.itemID] = (required[reagent.itemID] or 0)
+                    + (reagent.quantity * entry.quantity)
+            end
+            if entry.isDependency and recipe.outputItemID then
+                queuedToMake[recipe.outputItemID] = (queuedToMake[recipe.outputItemID] or 0)
+                    + entry.quantity * math.max(1, recipe.quantityMin or 1)
+            end
+        end
+    end
+
+    local reserved = {}
+    for itemID, needed in pairs(required) do
+        local short = needed - (queuedToMake[itemID] or 0)
+        if short > 0 then reserved[itemID] = short end
+    end
+    return reserved
+end
+
 function Queue:GetShoppingList()
     local required = {}
     local queuedToMake = {}
@@ -482,7 +517,12 @@ function Queue:GetShoppingList()
         if (a.shortfall > 0) ~= (b.shortfall > 0) then
             return a.shortfall > 0
         end
-        return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        -- A last tie-break, so equal rows (every "no data" one at 0) keep
+        -- their places between refreshes instead of swapping.
+        if (a.estimatedCost or 0) ~= (b.estimatedCost or 0) then
+            return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        end
+        return (a.itemID or 0) < (b.itemID or 0)
     end)
 
     return list

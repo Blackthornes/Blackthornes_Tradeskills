@@ -180,6 +180,9 @@ local function Reset()
     characterRecord.mailAt = nil
     ns.db.mailLedger = {}
     Mail.nameCache = nil
+    -- These reads stand for ones made after the server has answered, as the
+    -- addon's own are. An empty box before that is not trusted (Mail:Read).
+    Mail.inboxUpdatedThisVisit = true
     Tick()
 end
 
@@ -669,6 +672,17 @@ for _, entry in ipairs(Mail:GetRecent(10)) do amounts[entry.net] = true end
 check("the paid one kept its amount",           amounts[800], true)
 check("and the held one kept its own",          amounts[325], true)
 
+-- Looking again. The paid mail is re-read every time, and it once settled the
+-- held sale with its own 800c because the two share an item name.
+Mail:Read()
+check("a second look leaves the held one alone", Mail:GetSummary().net, 1125)
+check("and it is still being paid",             Mail:GetSummary().estimated, 1)
+
+inbox[2].money = 325
+Mail:Read()
+check("its own gold settles it",                Mail:GetSummary().estimated, 0)
+check("at its own amount",                      Mail:GetSummary().net, 1125)
+
 --------------------------------------------------------------------------------
 print("")
 print("a sale nothing can price yet waits rather than reading as free")
@@ -800,6 +814,56 @@ Mail:Read()
 local withExpiry = Mail:GetSummary()
 check("the expiry is told apart from them",     withExpiry.expired, 1)
 check("they still are not in the ratio",        withExpiry.sellThrough, 0)
+
+--------------------------------------------------------------------------------
+print("")
+print("a mailbox shut before the server answered")
+--------------------------------------------------------------------------------
+
+-- Bump a mailbox and press Escape: the delayed read finds nothing listed.
+-- It used to take that as an empty box and forget every mail on record, so
+-- the next real visit wrote each one down again.
+Reset()
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 285, invoice = { invoiceType = "seller", itemName = "Linen Bag", bid = 300 } },
+}
+Mail:Read()
+check("the sale is recorded once",              Mail:GetSummary().sold, 1)
+
+local held = inbox
+inbox = {}
+Mail.inboxUpdatedThisVisit = false
+Mail:Read()
+
+inbox = held
+Mail.inboxUpdatedThisVisit = true
+Mail:Read()
+check("and not again on the next visit",        Mail:GetSummary().sold, 1)
+
+--------------------------------------------------------------------------------
+print("")
+print("sales and expiries of an uncrafted item share one row")
+--------------------------------------------------------------------------------
+
+-- Cloth sold from the whole-bag Post tab: the sale mail names it but has no
+-- item, and no recipe makes it, so the sale had no id. Its expiry has one.
+-- The Sales tab showed them as two items, each with the wrong sell-through.
+Reset()
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Cloth",
+      money = 90, invoice = { invoiceType = "seller", itemName = "Linen Cloth", bid = 100 } },
+    { sender = "Auction House", subject = "Auction expired: Linen Cloth",
+      items = { { itemID = CLOTH, count = 20 } } },
+}
+Mail:Read()
+
+local clothRows = 0
+for _, bucket in ipairs(Mail:GetItems()) do
+    if bucket.name == "Linen Cloth" or bucket.itemID == CLOTH then clothRows = clothRows + 1 end
+end
+check("one row for the cloth",                  clothRows, 1)
+check("its summary counts the sale too",        Mail:GetSummary(CLOTH).sold, 1)
 
 --------------------------------------------------------------------------------
 

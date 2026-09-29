@@ -74,6 +74,19 @@ end
 -- Cache access
 --------------------------------------------------------------------------------
 
+-- A plain, non-empty string from a client call, or nil. Tested and copied
+-- inside the pcall: in a dungeon the client can hand back a name that raises
+-- when compared or joined, and a stored one would raise forever.
+local function PlainString(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(function(...)
+        local v = fn(...)
+        if type(v) == "string" and v ~= "" then return v .. "" end
+    end, ...)
+    if ok then return value end
+    return nil
+end
+
 local function GetCharacterRecord(create)
     if not ns.db then return nil end
 
@@ -81,10 +94,24 @@ local function GetCharacterRecord(create)
     local characters = ns.db.characters
 
     local record = characters[key]
+
+    -- No record is made under the old name-and-realm key. That key is only
+    -- handed out when the game would not give the character's GUID (a
+    -- /reload inside a dungeon), and a record made then stayed for good as a
+    -- second copy of this character: its bags counted again as an alt's, its
+    -- recipes listed twice. The next read, with the GUID, makes the real one.
+    local config = ns.Config
+    if not record and create and config.characterKey == nil
+        and config.GetLegacyCharacterKey and key == config:GetLegacyCharacterKey() then
+        create = false
+    end
+
     if not record and create then
+        -- Plain copies: inside a dungeon the client can hand back names
+        -- that raise when compared, and a stored one would raise forever.
         record = {
-            name = UnitName("player"),
-            realm = GetRealmName and GetRealmName() or "?",
+            name = PlainString(UnitName, "player") or "Unknown",
+            realm = PlainString(GetRealmName) or "?",
             recipes = {},
             inventory = {},
         }
@@ -92,7 +119,9 @@ local function GetCharacterRecord(create)
     end
 
     if record and not Recipes.identityStamped and key == ns.Config.characterKey then
-        Recipes:StampIdentity(record)
+        -- Protected: a name the client will not let us compare must not stop
+        -- the recipe cache from loading.
+        pcall(Recipes.StampIdentity, Recipes, record)
     end
 
     return record
@@ -139,8 +168,8 @@ function Recipes:StampIdentity(record)
     local guid = ns.Config.characterKey
     if guid then record.guid = guid end
 
-    local ok, name = pcall(UnitName, "player")
-    if ok and type(name) == "string" and name ~= "" then record.name = name end
+    local name = PlainString(UnitName, "player")
+    if name then record.name = name end
 
     local surname = ns.Config:ReadSurname()
     if surname then record.surname = surname end
@@ -369,10 +398,30 @@ end
 --------------------------------------------------------------------------------
 
 --- Read every recipe the open profession window exposes into the cache.
+--- Is the open profession window someone else's?
+--
+-- A [Tailoring] link in chat, a guild member's list or an NPC crafter all
+-- open the same window, and their recipes read as learned. Saved as this
+-- character's, they put crafts in Profit and Level Up that nobody here can
+-- make, with no way to remove them.
+local function ShowingSomeoneElses()
+    for _, name in ipairs({ "IsTradeSkillLinked", "IsTradeSkillGuild", "IsNPCCrafting" }) do
+        local fn = C_TradeSkillUI and C_TradeSkillUI[name]
+        if type(fn) == "function" then
+            local ok, yes = pcall(function() return fn() == true end)
+            if ok and yes then return true end
+        end
+    end
+    return false
+end
+
+Recipes.ShowingSomeoneElses = ShowingSomeoneElses
+
 function Recipes:Harvest()
     local trade = ns.Compat:Get().tradeskill
     if trade.mode ~= "modern" then return false end
     if self.harvesting then return false end
+    if ShowingSomeoneElses() then return false end
 
     local ok, recipeIDs = pcall(C_TradeSkillUI.GetAllRecipeIDs)
     if not ok or type(recipeIDs) ~= "table" or #recipeIDs == 0 then
@@ -502,6 +551,7 @@ end
 -- So a read with nothing learned is only accepted when there is nothing
 -- better already stored.
 -- @return true if the cache now holds a learned profession
+-- @return true if this read itself found one (the login retry waits for that)
 function Recipes:RefreshProfessions()
     local record = GetCharacterRecord(true)
     if not record then return false end
@@ -519,7 +569,7 @@ function Recipes:RefreshProfessions()
         record.professions = fresh
     end
 
-    return AnyLearned(record.professions)
+    return AnyLearned(record.professions), AnyLearned(fresh)
 end
 
 function Recipes:OnEnable()
@@ -535,7 +585,11 @@ function Recipes:OnEnable()
     self.professionTimer = C_Timer.NewTicker(3, function()
         attempts = attempts + 1
 
-        if Recipes:RefreshProfessions() or attempts >= 5 then
+        -- Stopped on a fresh read that found something: the saved list
+        -- already holds last session's professions, so it proves nothing
+        -- about whether this session's skill levels have arrived yet.
+        local _, freshLearned = Recipes:RefreshProfessions()
+        if freshLearned or attempts >= 5 then
             if Recipes.professionTimer then
                 Recipes.professionTimer:Cancel()
                 Recipes.professionTimer = nil

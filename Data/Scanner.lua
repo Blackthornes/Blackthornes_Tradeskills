@@ -250,6 +250,9 @@ function Scanner:StartFullScan()
     end
 
     self.scanStartedAt = GetTime()
+    -- Wall-clock start, so a finished scan can tell its own records from
+    -- ones a search wrote while it ran (Prices:ClearMissing).
+    self.scanStartedWall = time()
 
     -- Snapshot when it is available, browse when it is not. Both end up in
     -- the same price database.
@@ -314,7 +317,9 @@ function Scanner:StartFullScan()
             Scanner.scanQueued = false
 
             if not Scanner.isScanning then
-                ns.Print("the auction house stayed busy; the scan was not sent.")
+                if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                    ns.Print("the auction house stayed busy; the scan was not sent.")
+                end
                 if ns.UI then ns.UI:OnScanComplete() end
             end
         end,
@@ -343,6 +348,7 @@ function Scanner:StartBrowseScan()
 
     self.browsePages = 0
     self.browseRowsSeen = nil
+    self.browseLast = nil
     self.scanStartedAt = self.scanStartedAt or GetTime()
 
     -- isBrowsing is deliberately not set yet. It means "our browse query is out
@@ -371,6 +377,7 @@ function Scanner:StartBrowseScan()
             Scanner.browseQueued = false
             Scanner.isScanning = true
             Scanner.isBrowsing = true
+            Scanner.browseForeign = false
         end,
 
         onGiveUp = function()
@@ -378,7 +385,9 @@ function Scanner:StartBrowseScan()
             Scanner.isScanning = false
             Scanner.isBrowsing = false
 
-            ns.Warn("the auction house stayed busy; the scan was not sent.")
+            if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                ns.Warn("the auction house stayed busy; the scan was not sent.")
+            end
             if ns.UI then ns.UI:OnScanComplete() end
         end,
     })
@@ -404,6 +413,9 @@ function Scanner:QueueBrowseQuery(searchString, opts)
         send = function()
             if opts.onSend then opts.onSend() end
 
+            -- Marked so the watch on every browse send (OnEnable) can tell
+            -- this one from a search somebody else started.
+            Scanner.sendingOwnBrowse = true
             local ok = pcall(C_AuctionHouse.SendBrowseQuery, {
                 searchString = searchString or "",
                 sorts = {},
@@ -412,6 +424,7 @@ function Scanner:QueueBrowseQuery(searchString, opts)
                 minLevel = 0,
                 maxLevel = 0,
             })
+            Scanner.sendingOwnBrowse = false
 
             if not ok then
                 ns.Warn("the game refused the page-by-page scan")
@@ -445,8 +458,7 @@ function Scanner:ArmBrowseTimeout()
         -- Finish it properly rather than just stopping: save what was read,
         -- hide the progress bar and give the Scan button back. Only setting
         -- the flags left the bar sitting at its last value for good.
-        local ok, partial = pcall(C_AuctionHouse.GetBrowseResults)
-        Scanner:CommitBrowseResults((ok and type(partial) == "table") and partial or {})
+        Scanner:CommitBrowseResults(Scanner:SweepSoFar())
 
         -- Blizzard's own list is waiting on the same results we are, so a
         -- query that never answered leaves its spinner turning.
@@ -498,19 +510,30 @@ function Scanner:OnBrowseResults()
     -- search, most likely -- has taken the shared results over. Paced paging made
     -- a sweep long enough for that to be likely, so take the smaller set as the
     -- end of ours rather than paging through somebody else's search.
-    if self.browseRowsSeen and #results < self.browseRowsSeen then
+    --
+    -- "What was read so far" is the last page of ours, kept below: by now the
+    -- shared results hold the other search, and committing those kept its
+    -- twenty rows and threw the sweep away. Likewise once anybody else's
+    -- search has gone out, the next page cannot be trusted to be ours.
+    if (self.browseRowsSeen and #results < self.browseRowsSeen) or self.browseForeign then
         self:Report("another search replaced the results; keeping what was read so far")
-        self:CommitBrowseResults(results)
+        self:CommitBrowseResults(self:SweepSoFar())
         return
     end
 
     self.browseRowsSeen = #results
+    self.browseLast = results
     self.browsePages = self.browsePages + 1
 
     local full = true
+    -- Whether the game said, in so many words, that this set is whole. Only
+    -- that may mark unseen items sold out; assuming it (no function, or a
+    -- call that failed) is fine for "stop paging" but not for clearing.
+    local saidWhole = false
     if Util.HasFunction("C_AuctionHouse.HasFullBrowseResults") then
         local fullOk, hasFull = pcall(C_AuctionHouse.HasFullBrowseResults)
         full = (not fullOk) or hasFull
+        saidWhole = fullOk and hasFull == true
     end
 
     if not full and self.browsePages < MAX_BROWSE_PAGES then
@@ -542,14 +565,33 @@ function Scanner:OnBrowseResults()
                 -- price update beats none, and it releases the shared results.
                 if not Scanner.isBrowsing then return end
 
-                local okResults, partial = pcall(C_AuctionHouse.GetBrowseResults)
-                Scanner:CommitBrowseResults((okResults and type(partial) == "table") and partial or {})
+                -- Not when the auction house has just closed, though: the
+                -- queue lets its waiting requests go before the scanner hears
+                -- of the close, and this read a walk-away as a finished scan.
+                -- The scanner's own close handler cancels the scan.
+                if ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing() then return end
+
+                Scanner:CommitBrowseResults(Scanner:SweepSoFar())
             end,
         })
         return
     end
 
-    self:CommitBrowseResults(results)
+    -- Only a sweep the game says is whole may mark missing items sold out.
+    -- One stopped at the page cap has not looked everywhere, and results
+    -- after anybody else's search went out may be that search's, not ours:
+    -- the results slot is shared, and a first page cannot tell them apart.
+    self:CommitBrowseResults(results, {
+        ended = true,
+        whole = full and saidWhole and not self.browseForeign,
+    })
+end
+
+--- The rows of the last page this sweep accepted as its own.
+function Scanner:SweepSoFar()
+    if self.browseLast then return self.browseLast end
+    local ok, partial = pcall(C_AuctionHouse.GetBrowseResults)
+    return (ok and type(partial) == "table") and partial or {}
 end
 
 --- Read one browse row into a rival price and an own price.
@@ -595,8 +637,18 @@ end
 
 Scanner.SplitBrowseRow = SplitBrowseRow
 
-function Scanner:CommitBrowseResults(results)
+--- @param opts.ended true when paging reached its natural end, so this was
+---   a full scan rather than one cut short.
+--- @param opts.whole true when the sweep read the whole auction house, so an
+---   item it did not see has sold out. Partial sweeps leave the rest alone.
+---   Passing true is the same as both.
+function Scanner:CommitBrowseResults(results, opts)
+    if opts == true then opts = { ended = true, whole = true } end
+    opts = opts or {}
+    local complete = opts.whole == true
+
     self:StopBrowseTimeout()
+    self.browseLast = nil
 
     self.isBrowsing = false
     self.isScanning = false
@@ -604,10 +656,13 @@ function Scanner:CommitBrowseResults(results)
     local recorded, skipped, implausible = 0, 0, 0
     local now = time()
     local unsettled = {}
+    local seen = {}
 
     for _, result in ipairs(results) do
         local itemID = result.itemKey and result.itemKey.itemID
         local price = result.minPrice
+
+        if itemID then seen[itemID] = true end
 
         if itemID and price and price > 0 then
             -- A browse row carries one price and nothing to fall back on, so a
@@ -651,14 +706,31 @@ function Scanner:CommitBrowseResults(results)
 
     self:FollowUpOwned(unsettled)
 
-    self.verbose = false
-    ns.db.lastFullScan = now
+    local soldOut = 0
+    if complete then
+        local why
+        soldOut, why = ns.Prices:ClearMissingIfWhole(seen, self.scanStartedWall, now)
+        if why then self:Report(why .. ", so no item is marked sold out") end
+    end
 
+    self.verbose = false
+
+    -- Only a scan that ran to its end counts as a full scan. A cut-short one
+    -- stamped as full hid every deal it had not reached (they looked older
+    -- than the scan) and put off the next automatic scan for two days.
     local elapsed = GetTime() - (self.scanStartedAt or GetTime())
-    ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+    if opts.ended then
+        ns.Prices:SetLastFullScan(now)
+        ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+    else
+        ns.Print(("scan stopped early: %s items updated in %.1fs"):format(Util.Comma(recorded), elapsed))
+    end
+    if soldOut > 0 then
+        ns.Print(("%s item(s) sold out since they were last seen"):format(Util.Comma(soldOut)))
+    end
 
     if ns.UI and ns.UI.OnScanComplete then
-        ns.UI:OnScanComplete({ items = recorded })
+        ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
     end
 
     -- Written out rather than held until logout, because this client loses
@@ -670,6 +742,11 @@ end
 
 function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     if not self.isScanning or self.isReading then return end
+
+    -- A late answer after the six-second fallback already started the page
+    -- by page scan: reading it too would run two scans at once, and the
+    -- quick scan finishing would end the other one halfway.
+    if self.isBrowsing or self.browseQueued then return end
 
     if self.timeoutHandle then
         self.timeoutHandle:Cancel()
@@ -697,6 +774,10 @@ function Scanner:ReadReplicateResults(numItems)
     local observations = {}
     local skipped = 0
     local implausible = 0
+    -- Every item with a live listing, priced or not, and the rows that could
+    -- not be read at all. See the sold-out pass in onDone.
+    local seen = {}
+    local unreadable = 0
 
     -- GetReplicateItemInfo is 0-based.
     local indices = {}
@@ -716,13 +797,22 @@ function Scanner:ReadReplicateResults(numItems)
                   _, _, _, owner, ownerFullName, saleStatus, itemID =
                       pcall(C_AuctionHouse.GetReplicateItemInfo, index)
 
-            if not ok or not itemID or not buyoutPrice or buyoutPrice <= 0 then
+            if not ok or not itemID then
+                unreadable = unreadable + 1
                 skipped = skipped + 1
                 return
             end
 
             -- saleStatus 1 means the auction already sold; it is not on offer.
             if saleStatus == 1 then
+                skipped = skipped + 1
+                return
+            end
+
+            -- On offer, so not sold out, even when it has no buyout to read.
+            seen[itemID] = true
+
+            if not buyoutPrice or buyoutPrice <= 0 then
                 skipped = skipped + 1
                 return
             end
@@ -776,8 +866,24 @@ function Scanner:ReadReplicateResults(numItems)
         end,
 
         onDone = function()
-            local recorded = ns.Prices:CommitScan(observations)
+            local startedWall = self.scanStartedWall
+            local now = time()
+            local recorded = ns.Prices:CommitScan(observations, now)
             local elapsed = GetTime() - (self.scanStartedAt or GetTime())
+
+            -- The snapshot is the whole auction house, so an item it did not
+            -- list has sold out. A row that could not be read at all might be
+            -- any item, though, so a snapshot with more than a handful of
+            -- those does not get to decide. (Prices:ClearMissing also refuses
+            -- to clear a large share of the book in one go.)
+            local soldOut = 0
+            if unreadable <= 5 then
+                local why
+                soldOut, why = ns.Prices:ClearMissingIfWhole(seen, startedWall, now)
+                if why then self:Report(why .. ", so no item is marked sold out") end
+            else
+                self:Report(("%d row(s) could not be read, so no item is marked sold out this time"):format(unreadable))
+            end
 
             self.isScanning = false
             self.isReading = false
@@ -785,6 +891,10 @@ function Scanner:ReadReplicateResults(numItems)
             ns.Print(("scan complete: %s listings across %s items in %.1fs%s"):format(
                 Util.Comma(numItems - skipped), Util.Comma(recorded), elapsed,
                 skipped > 0 and (" (%s skipped)"):format(Util.Comma(skipped)) or ""))
+
+            if soldOut > 0 then
+                ns.Print(("%s item(s) sold out since they were last seen"):format(Util.Comma(soldOut)))
+            end
 
             implausible = implausible + ns.Prices:TakeImplausibleCount()
 
@@ -795,7 +905,7 @@ function Scanner:ReadReplicateResults(numItems)
             end
 
             if ns.UI and ns.UI.OnScanComplete then
-                ns.UI:OnScanComplete({ items = recorded })
+                ns.UI:OnScanComplete({ items = recorded, soldOut = soldOut })
             end
         end,
 
@@ -830,6 +940,10 @@ function Scanner:CancelScan()
     self.isBrowsing = false
     self.scanQueued = false
     self.browseQueued = false
+
+    -- A cancelled sweep's last page must not stand in for the next sweep's
+    -- rows, where it would be recorded as prices read just now.
+    self.browseLast = nil
 
     self:ClearSearchState()
 
@@ -882,11 +996,18 @@ function Scanner:GetScanStatus()
         }
     end
 
+    -- Before the quick-scan line: after the quick scan goes unanswered the
+    -- scan is still "running" while the page-by-page one waits its turn,
+    -- and the bar said it was asking for a quick scan all that time.
+    if self.browseQueued then
+        return { text = "Waiting to start the page-by-page scan" }
+    end
+
     if self.isScanning then
         return { text = "Asking for a quick scan" }
     end
 
-    if self.scanQueued or self.browseQueued then
+    if self.scanQueued then
         return { text = "Waiting to start the scan" }
     end
 
@@ -938,7 +1059,7 @@ function Scanner:NextFollowUp()
         else
             Scanner:NextFollowUp()
         end
-    end, { priority = ns.AHQueue and ns.AHQueue.PRIORITY.scan })
+    end, { priority = ns.AHQueue and ns.AHQueue.PRIORITY.scan, quiet = true })
 end
 
 --- Search for one item's real order book.
@@ -978,8 +1099,15 @@ function Scanner:ScanItem(itemID, callback, opts)
     local superseded = self.pendingItem
     self:ClearSearchState()
 
-    if superseded and superseded.callback then
-        superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
+    if superseded then
+        -- Its answer will never be read, so it is not a recent check: asked
+        -- about again within twenty seconds, it has to be searched again
+        -- rather than served as "recent" at the old price.
+        self.recentItemScans[superseded.itemID] = nil
+
+        if superseded.callback then
+            superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
+        end
     end
 
     -- Kept by identity as well as in the shared slot. The queue tells a request
@@ -988,7 +1116,9 @@ function Scanner:ScanItem(itemID, callback, opts)
     -- it cleared the new request, told the new caller its check had failed,
     -- and the new search then never went out. Two List clicks a second apart
     -- during a scan were enough to list at an unchecked price.
-    local mine = { itemID = itemID, itemKey = itemKey, callback = callback }
+    -- quiet: a background follow-up nobody clicked for says nothing when it
+    -- goes unanswered, since there is no price the player is waiting on.
+    local mine = { itemID = itemID, itemKey = itemKey, callback = callback, quiet = opts.quiet }
     self.pendingItem = mine
 
     -- Urgent priority: this is only reached because the player clicked something
@@ -1000,7 +1130,13 @@ function Scanner:ScanItem(itemID, callback, opts)
 
         Scanner.recentItemScans[itemID] = GetTime()
 
-        if not pcall(C_AuctionHouse.SendSearchQuery, itemKey, {}, true) then
+        -- Cheapest first, as Blizzard's own search asks: with no order a
+        -- deep listing could come back without its cheapest rows.
+        local sorts = {}
+        local order = Enum and Enum.AuctionHouseSortOrder and Enum.AuctionHouseSortOrder.Price
+        if order ~= nil then sorts[1] = { sortOrder = order, reverseSort = false } end
+
+        if not pcall(C_AuctionHouse.SendSearchQuery, itemKey, sorts, true) then
             local refused = Scanner.pendingItem
             Scanner.pendingItem = nil
 
@@ -1031,7 +1167,9 @@ function Scanner:ScanItem(itemID, callback, opts)
             -- price for the next twenty seconds.
             Scanner.recentItemScans[itemID] = nil
 
-            ns.Warn("the auction house did not answer that search; using the last known price.")
+            if not pending.quiet then
+                ns.Warn("the auction house did not answer that search; using the last known price.")
+            end
             Scanner:SettleSearchDisplay("a search did not answer")
 
             if pending.callback then
@@ -1046,7 +1184,9 @@ function Scanner:ScanItem(itemID, callback, opts)
         if Scanner.pendingItem ~= mine then return end
         Scanner.pendingItem = nil
 
-        ns.Warn("the auction house stayed busy; using the last known price.")
+        if not mine.quiet and not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+            ns.Warn("the auction house stayed busy; using the last known price.")
+        end
         if mine.callback then
             mine.callback(itemID, nil, nil, nil, nil, nil, "unavailable")
         end
@@ -1242,6 +1382,11 @@ function Scanner:SettleSearchDisplay(reason)
     if not self.isAuctionHouseOpen then return false end
     if self.settledSearchDisplay then return false end
 
+    -- A page-by-page scan waiting its turn shares the "browse" slot in the
+    -- queue: this query would replace it, and the scan would never run. Its
+    -- own queries settle the display anyway.
+    if self.browseQueued or self.isBrowsing then return false end
+
     if not Util.HasFunction("C_AuctionHouse.HasFullBrowseResults") then return false end
 
     local ok, hasFull = pcall(C_AuctionHouse.HasFullBrowseResults)
@@ -1282,17 +1427,36 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
                 -- market observation, so it never reaches Summarise. It still
                 -- goes into raw: `/bts listings` reports what the client said.
                 if ns.Prices.IsCredible(info.unitPrice) then
-                    listings[#listings + 1] = {
-                        unitPrice = info.unitPrice,
-                        quantity = info.quantity or 1,
-                        isOwn = info.containsOwnerItem == true,
-                    }
+                    local quantity = info.quantity or 1
+                    local ownUnits = tonumber(info.numOwnerItems)
+
+                    -- A price level holds everyone's units at that price. When
+                    -- the client says how many of them are yours, only those
+                    -- are yours: a level you share with a rival is still a
+                    -- rival price, and calling it all yours had the next
+                    -- listing undercut the level above instead.
+                    if info.containsOwnerItem == true and ownUnits and ownUnits > 0
+                        and ownUnits < quantity then
+                        listings[#listings + 1] = {
+                            unitPrice = info.unitPrice, quantity = ownUnits, isOwn = true,
+                        }
+                        listings[#listings + 1] = {
+                            unitPrice = info.unitPrice, quantity = quantity - ownUnits, isOwn = false,
+                        }
+                    else
+                        listings[#listings + 1] = {
+                            unitPrice = info.unitPrice,
+                            quantity = quantity,
+                            isOwn = info.containsOwnerItem == true,
+                        }
+                    end
                 end
 
                 raw[#raw + 1] = {
                     quantity = info.quantity or 1,
                     unitPrice = info.unitPrice,
                     ownerFlag = info.containsOwnerItem,
+                    ownUnits = info.numOwnerItems,
                 }
             end
         end
@@ -1463,7 +1627,7 @@ function Scanner:ConsiderAutoScan(attempt)
     if not allowed then return end
 
     local count = ns.Prices:Count()
-    local lastScan = ns.db and ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     local stale = not lastScan
         or (time() - lastScan) > (ns.Config:Get("staleAfterSeconds") or 172800)
 
@@ -1483,6 +1647,25 @@ function Scanner:AUCTION_HOUSE_CLOSED()
 end
 
 function Scanner:OnEnable()
+    -- Every browse search, whoever sends it. A search sent while a sweep is
+    -- out means the next results may be that search's, so the sweep can no
+    -- longer claim to have seen the whole auction house. hooksecurefunc
+    -- watches without replacing, so Blizzard's own call is untouched.
+    -- Favourites and item-key searches fill the same results slot (the Buy
+    -- tab runs a favourites search by itself), so they count too.
+    if type(hooksecurefunc) == "function" and type(C_AuctionHouse) == "table" then
+        local function Foreign()
+            if Scanner.isBrowsing and not Scanner.sendingOwnBrowse then
+                Scanner.browseForeign = true
+            end
+        end
+        for _, name in ipairs({ "SendBrowseQuery", "SearchForFavorites", "SearchForItemKeys" }) do
+            if type(C_AuctionHouse[name]) == "function" then
+                pcall(hooksecurefunc, C_AuctionHouse, name, Foreign)
+            end
+        end
+    end
+
     ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", self.AUCTION_HOUSE_SHOW)
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", self.AUCTION_HOUSE_CLOSED)
     ns.RegisterEvent(self, "REPLICATE_ITEM_LIST_UPDATE", self.REPLICATE_ITEM_LIST_UPDATE)
@@ -1555,6 +1738,7 @@ ns.RegisterCommand("browse", "scan page by page, skipping the quick full scan", 
 
     ns.Scanner:CancelScan()
     ns.Scanner.scanStartedAt = GetTime()
+    ns.Scanner.scanStartedWall = time()
     ns.Scanner.verbose = true
     ns.Scanner:StartBrowseScan()
 end)
@@ -1629,7 +1813,16 @@ ns.RegisterCommand("verify", "<itemID>: compare the scanned price with a fresh s
 
     ns.Print(("checking item %d against a fresh search..."):format(itemID))
 
-    ns.Scanner:ScanItem(itemID, function(_, marketValue, minBuyout, quantity, isCommodity)
+    ns.Scanner:ScanItem(itemID, function(_, marketValue, minBuyout, quantity, isCommodity, _, status)
+        -- Only an answered search can say nobody is selling it.
+        if status == "recent" then
+            ns.Print("that item was searched under 20 seconds ago; run this again shortly.")
+            return
+        elseif status == "superseded" or status == "unavailable" then
+            ns.Warn("the search did not get an answer; try again in a moment.")
+            return
+        end
+
         if not marketValue then
             ns.Warn("nobody has that item listed right now")
             return

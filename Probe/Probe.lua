@@ -158,7 +158,7 @@ function Probe:SampleAuction()
             -- Deposit maths feeds directly into the profit calculation, so find
             -- out what it really costs rather than hardcoding retail's numbers.
             if Util.HasFunction("C_AuctionHouse.CalculateCommodityDeposit") then
-                local depositOk, deposit = pcall(C_AuctionHouse.CalculateCommodityDeposit, itemID, 720, 1)
+                local depositOk, deposit = pcall(C_AuctionHouse.CalculateCommodityDeposit, itemID, 2, 1)
                 if depositOk then
                     entry.commodityDeposit = deposit
                 end
@@ -260,7 +260,7 @@ function Probe:PrintReport()
     local report = self:BuildReport()
     local caps = ns.Compat:Get()
 
-    ns.Print(("game check -- addon v%s"):format(ns.VERSION))
+    ns.Print(("game check, addon v%s"):format(ns.VERSION))
 
     Heading("Game")
     Line("version", ("%s (build %s, interface %s)"):format(
@@ -269,15 +269,15 @@ function Probe:PrintReport()
     Heading("Saved data (SavedVariables)")
     local persistence = report.persistence
     if persistence.loadCountBefore == 0 then
-        Line("status", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r -- this is the first load")
-        Line("next", "log out to character select, log back in, then run this again")
-        Line("note", "a /reload does not test this; it needs a real logout")
+        Line("status", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r: this is the first load")
+        Line("next", "quit the game fully, start it again, then run this again")
+        Line("note", "a /reload or character select does not test this; it needs a full quit")
     elseif persistence.sawPrevious then
-        Line("status", "|c" .. ns.COLORS.profit .. "WORKING|r -- last session's data loaded")
+        Line("status", "|c" .. ns.COLORS.profit .. "WORKING|r: last session's data loaded")
         Line("sessions", persistence.loadCountBefore)
         Line("last saved", date("%Y-%m-%d %H:%M", persistence.previousStamp or 0))
     else
-        Line("status", "|c" .. ns.COLORS.loss .. "BROKEN|r -- data was saved but did not load")
+        Line("status", "|c" .. ns.COLORS.loss .. "BROKEN|r: data was saved but did not load")
         Line("result", "price history cannot be kept; use export and import instead")
     end
 
@@ -294,9 +294,9 @@ function Probe:PrintReport()
     Line("save and read back", Yes(cvars.roundTrip))
 
     if not cvars.roundTrip then
-        Line("result", "|c" .. ns.COLORS.loss .. "UNAVAILABLE|r -- settings cannot be kept on this version of the game")
+        Line("result", "|c" .. ns.COLORS.loss .. "UNAVAILABLE|r: settings cannot be kept on this version of the game")
     elseif cvarResult.persisted then
-        Line("result", "|c" .. ns.COLORS.profit .. "KEPT|r -- settings are copied here")
+        Line("result", "|c" .. ns.COLORS.profit .. "KEPT|r: settings are copied here")
         Line("sessions seen", cvarResult.previousCount)
 
         local mirroring, restored = ns.Persist:GetStatus()
@@ -307,8 +307,8 @@ function Probe:PrintReport()
                 or "|c" .. ns.COLORS.loss .. "off|r")
         end
     else
-        Line("result", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r -- no earlier value to compare")
-        Line("next", "log out to character select, log back in, then run this again")
+        Line("result", "|c" .. ns.COLORS.warn .. "NOT YET TESTED|r: no earlier value to compare")
+        Line("next", "quit the game fully, start it again, then run this again")
     end
 
     Heading("Auction house")
@@ -328,7 +328,8 @@ function Probe:PrintReport()
         "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED",
         "AUCTION_HOUSE_BROWSE_RESULTS_ADDED",
     }) do
-        Line(event:lower():gsub("_", " "), Yes(not unknown[event]))
+        -- Bracketed: gsub also returns a count, which took the value's place.
+        Line((event:lower():gsub("_", " ")), Yes(not unknown[event]))
     end
     Line("post commodity", Yes(caps.auction.hasPostCommodity))
     Line("post item", Yes(caps.auction.hasPostItem))

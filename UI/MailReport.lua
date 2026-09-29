@@ -188,8 +188,12 @@ end
 local function ItemText(itemID, fallback)
     if not itemID then return fallback or "an item" end
 
+    -- GetItemLabel says "item 1234" for an item the client has not cached,
+    -- which a sold item usually is. The name the mail carried reads better.
     local label = Util.GetItemLabel(itemID)
-    if type(label) == "string" and label ~= "" then return label end
+    if type(label) == "string" and label ~= "" and not (fallback and label == ("item %d"):format(itemID)) then
+        return label
+    end
 
     return fallback or ("item " .. itemID)
 end
@@ -361,6 +365,9 @@ function MailReport:Build()
 
     local who = Theme.CreateLabel(header, "tiny", "muted", "RIGHT")
     who:SetPoint("RIGHT", close, "LEFT", -8, 0)
+    -- A full two-part name with its time ran back under the title.
+    who:SetPoint("LEFT", title, "RIGHT", 8, 0)
+    who:SetWordWrap(false)
     frame.who = who
 
     local shine = header:CreateTexture(nil, "OVERLAY")
@@ -541,9 +548,17 @@ local function DrawLine(row, line)
     end
 end
 
+--- The character's name for a haul's key. Keys are now the character's GUID
+--- ("Player-..."), where the text before the first dash is just "Player", so
+--- the name comes from the character's record; old "Name-Realm" keys still
+--- work. Empty when the character is unknown.
+function MailReport.WhoName(key)
+    return Util.CharacterName(key)
+end
+
 --- "Blackthornes, just now" or "Blackthornes, 2h ago"
 local function WhoWhen(haul)
-    local name = tostring(haul.who or ""):match("^([^%-]+)") or ""
+    local name = MailReport.WhoName(haul.who)
     local age = haul.t and (time() - haul.t) or 0
     local when = age < 60 and "just now" or Util.FormatAgeAgo(age)
     if name == "" then return when end
@@ -563,11 +578,13 @@ function MailReport:Show(haul, opts)
 
     -- The record ribbon.
     local ribbonText
+    -- Reopened from the Sales tab, a record is told as one it was then,
+    -- not as news.
     if haul.recordHaul then
-        ribbonText = ("NEW BEST HAUL!  Old best %s"):format(
+        ribbonText = (opts.replay and "BEST HAUL AT THE TIME!  Old best %s" or "NEW BEST HAUL!  Old best %s"):format(
             Util.FormatMoney(haul.previousBest or 0, { short = true }))
     elseif haul.recordSale then
-        ribbonText = "YOUR BEST SALE EVER!"
+        ribbonText = opts.replay and "BEST SALE AT THE TIME!" or "YOUR BEST SALE EVER!"
     elseif haul.first then
         ribbonText = "YOUR FIRST HAUL ON RECORD"
     end
@@ -628,10 +645,14 @@ function MailReport:Show(haul, opts)
 
     -- The footer.
     local stats = {}
-    if (haul.today or 0) > 0 then
+    -- Today and the last week are about now, so an old haul reopened from the
+    -- Sales tab leaves them out rather than showing that day's figures.
+    if opts.replay then
+        -- nothing: only the best haul below still means something
+    elseif (haul.today or 0) > 0 then
         stats[#stats + 1] = ("Today %s"):format(Util.FormatMoney(haul.today, { short = true }))
     end
-    if (haul.week or 0) > 0 then
+    if not opts.replay and (haul.week or 0) > 0 then
         stats[#stats + 1] = ("Last 7 days %s"):format(Util.FormatMoney(haul.week, { short = true }))
     end
     local bestHaul = ns.MailHaul and ns.MailHaul:Records() or 0

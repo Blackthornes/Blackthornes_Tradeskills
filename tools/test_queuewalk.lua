@@ -69,4 +69,33 @@ local _, third = Queue:Find(300)
 check("the partly made craft counted down", third and third.quantity == 1)
 check("nothing else is on the queue", Queue:Count() == 1)
 
+print("\nenchants, which make no item")
+
+-- An enchant never turns up in the bags, so the bag walk cannot count it.
+-- Ten queued stayed at ten however many were cast.
+recipes[400] = { recipeID = 400 }
+ns.db.queue = { { recipeID = 400, quantity = 3 } }
+Crafting.isTradeSkillOpen = true
+
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
+local _, enchant = Queue:Find(400)
+check("a finished enchant counts down", enchant and enchant.quantity == 2)
+
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "party1", "cast", 400)
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 999)
+_, enchant = Queue:Find(400)
+check("someone else's cast, or another spell, does not", enchant and enchant.quantity == 2)
+
+-- A craft that makes an item is left to the bag walk, or it would count twice.
+ns.db.queue = { { recipeID = 100, quantity = 2 } }
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 100)
+local _, made = Queue:Find(100)
+check("an item craft is not counted by its cast", made and made.quantity == 2)
+
+Crafting.isTradeSkillOpen = false
+ns.db.queue = { { recipeID = 400, quantity = 3 } }
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
+_, enchant = Queue:Find(400)
+check("with no profession window and nothing crafting, nothing counts", enchant.quantity == 3)
+
 print(("\n%d check(s) passed\n"):format(checks))

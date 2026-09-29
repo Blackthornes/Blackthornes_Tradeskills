@@ -310,8 +310,11 @@ function AHQueue:Request(opts)
 
                 -- The same key is asked for at different priorities (the owned
                 -- auctions refresh is routine; the /bts auctions check is
-                -- urgent), so the replacement takes its own place in line
-                -- rather than inheriting the old one's.
+                -- urgent), so the replacement takes the more urgent of the
+                -- two. Taking its own let a routine refresh push a listing's
+                -- urgent read-back to the back of the line, where it waited
+                -- out the check and reported it could not tell.
+                request.priority = math.min(request.priority, replaced.priority or request.priority)
                 table.sort(self.queue, Compare)
 
                 -- The replaced request will never be sent, so whatever was
@@ -364,9 +367,20 @@ function AHQueue:Flush(reason)
     local queued = self.queue
     self.queue = {}
 
+    -- Waiters still tidy up, but say nothing: a request dropped because the
+    -- auction house closed was not refused for being busy, and a string of
+    -- "stayed busy" warnings on walking away read as something going wrong.
+    self.flushing = reason or true
     for i = 1, #queued do
         if queued[i].onGiveUp then pcall(queued[i].onGiveUp) end
     end
+    self.flushing = nil
+end
+
+--- True while Flush is telling waiters their request is not coming, so a
+--- give-up can keep quiet about a window the player closed.
+function AHQueue:IsFlushing()
+    return self.flushing ~= nil
 end
 
 function AHQueue:GetPendingCount()

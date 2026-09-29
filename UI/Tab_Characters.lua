@@ -63,8 +63,9 @@ local function UpdateRow(row, entry)
         row.freshness:SetTextColor(Theme.Unpack("profit"))
     else
         local age = entry.inventoryAt and (time() - entry.inventoryAt)
-        row.freshness:SetText(("%d recipes  ·  seen %s"):format(
-            entry.recipeCount, Util.FormatAgeAgo(age)))
+        row.freshness:SetText(age
+            and ("%d recipes  ·  seen %s"):format(entry.recipeCount, Util.FormatAgeAgo(age))
+            or ("%d recipes  ·  bags never read"):format(entry.recipeCount))
         row.freshness:SetTextColor(Theme.Unpack("dim"))
     end
 end
@@ -75,6 +76,8 @@ end
 
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
+    -- The gold edge every other detail pane has.
+    Theme.AccentStripe(detail, 2, 0.6)
     detail:SetWidth(DETAIL_WIDTH)
 
     local title = Theme.CreateLabel(detail, "large", "accent")
@@ -124,23 +127,30 @@ local function BuildDetail(parent)
         local button = detail.forget
         if not state.selected then return end
 
-        if button.armed then
+        -- Armed for one character only: arming on one alt and clicking again
+        -- after selecting another must ask again, not delete the second.
+        if button.armed and button.armed == state.selected.key then
             ns.Recipes:ForgetCharacter(state.selected.key)
             button.armed = false
             button:SetText("Forget character")
+            button.label:SetTextColor(Theme.Unpack("text"))
 
             state.selected = nil
             UI:RefreshActiveTab()
             return
         end
 
-        button.armed = true
+        local armedFor = state.selected.key
+        button.armed = armedFor
         button:SetText("Really forget?")
+        -- Red while armed, like the craft pane's Clear queue.
+        button.label:SetTextColor(Theme.Unpack("loss"))
 
         C_Timer.After(4, function()
-            if button.armed then
+            if button.armed == armedFor then
                 button.armed = false
                 button:SetText("Forget character")
+                button.label:SetTextColor(Theme.Unpack("text"))
             end
         end)
     end, { width = 140, height = 22,
@@ -170,6 +180,13 @@ local function UpdateDetail(entry)
     -- Only an alt can be forgotten; you cannot discard the character you are on.
     detail.forget:SetShown(shown and not entry.isCurrent)
 
+    -- Showing another character disarms the button.
+    if detail.forget.armed and (not entry or detail.forget.armed ~= entry.key) then
+        detail.forget.armed = false
+        detail.forget:SetText("Forget character")
+        detail.forget.label:SetTextColor(Theme.Unpack("text"))
+    end
+
     for _, line in ipairs(detail.lines) do
         line:Hide()
     end
@@ -197,7 +214,11 @@ local function UpdateDetail(entry)
 
     if #ranked == 0 then
         detail.lines[1]:Show()
-        detail.lines[1].name:SetText("Nothing with a price yet")
+        -- A character with no recipes read needs a profession window
+        -- opened, not a scan.
+        detail.lines[1].name:SetText((entry.recipeCount or 0) == 0
+            and "No recipes read. Open a profession."
+            or "Nothing with a price yet")
         detail.lines[1].name:SetTextColor(Theme.Unpack("dim"))
         detail.lines[1].profit:SetText("")
     else
@@ -279,6 +300,12 @@ local function Build(container)
     local divider = Theme.CreateDivider(container)
     divider:SetPoint("TOPLEFT", 8, -26)
     divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -DETAIL_WIDTH - 16, -26)
+    -- Kept as the list's anchor, but the heading carries the house rule now.
+    divider:Hide()
+    Theme.StyleHeading(heading, container)
+    heading.rule:ClearAllPoints()
+    heading.rule:SetPoint("LEFT", heading, "RIGHT", 6, 0)
+    heading.rule:SetPoint("RIGHT", container, "RIGHT", -DETAIL_WIDTH - 16, 0)
 
     local list = Widgets.CreateScrollList(container, {
         rowHeight = ROW_HEIGHT,

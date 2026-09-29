@@ -71,10 +71,19 @@ local function BuildList()
             if aCost ~= bCost then return aCost > bCost end
 
         elseif state.sortBy == "name" then
-            return a.label < b.label
+            -- By the name inside the link: the link itself opens with a
+            -- colour code, which sorted by rarity instead.
+            local aName = (a.label or ""):match("%[(.-)%]") or a.label or ""
+            local bName = (b.label or ""):match("%[(.-)%]") or b.label or ""
+            if aName ~= bName then return aName < bName end
         end
 
-        return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        -- A last tie-break, so equal rows (every "no data" one at 0) keep
+        -- their places between refreshes instead of swapping.
+        if (a.estimatedCost or 0) ~= (b.estimatedCost or 0) then
+            return (a.estimatedCost or 0) > (b.estimatedCost or 0)
+        end
+        return (a.itemID or 0) < (b.itemID or 0)
     end)
 
     return lines
@@ -208,7 +217,8 @@ local function ShowRowTooltip(row, line)
 
     if line.savingTotal and line.savingTotal > 0 then
         GameTooltip:AddDoubleLine(
-            ("Saved by buying from the %s"):format(line.source),
+            ("Saved by buying from the %s"):format(
+                line.source == "auction" and "auction house" or line.source),
             Util.FormatMoney(line.savingTotal, { noColor = true }),
             0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
     end
@@ -353,6 +363,10 @@ local function Build(container)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
     local list = Widgets.CreateScrollList(container, {
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -(shown and 10 or 0), -8)
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
@@ -383,7 +397,8 @@ local function Build(container)
     widgets.auctionTotal = Theme.CreateLabel(container, "small", "text")
     widgets.auctionTotal:SetPoint("BOTTOMLEFT", 220, 38)
 
-    widgets.grandTotal = Theme.CreateLabel(container, "small", "text")
+    -- In gold, like the other headline figures: it is the answer here.
+    widgets.grandTotal = Theme.CreateLabel(container, "small", "accent")
     widgets.grandTotal:SetPoint("BOTTOMLEFT", 430, 38)
 
     widgets.savingLabel = Theme.CreateLabel(container, "tiny", "profit")

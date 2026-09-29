@@ -39,7 +39,8 @@ local function CreateCraftRow(row)
 
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 28, 0)
-    row.name:SetPoint("RIGHT", row, "RIGHT", -150, 0)
+    -- Ends short of the profit column, so a long amount never draws over it.
+    row.name:SetPoint("RIGHT", row, "RIGHT", -180, 0)
 
     row.profit = Theme.CreateLabel(row, "small", "text", "RIGHT")
     row.profit:SetPoint("RIGHT", -96, 0)
@@ -98,7 +99,14 @@ local function UpdateCraftRow(row, entry)
     row.remove:SetShown(not entry.isDependency)
     row.count:SetText(tostring(entry.quantity))
 
-    if analysis and analysis.priceable then
+    if entry.isDependency then
+        -- Made to go into another craft, not sold, so it earns nothing of
+        -- its own. The footer already counts it that way; a sale profit here
+        -- made the column add up to more than the total under it.
+        row.profit:SetText("used")
+        row.profit:SetTextColor(Theme.Unpack("dim"))
+        row.name:SetTextColor(Theme.Unpack("text"))
+    elseif analysis and analysis.priceable then
         local total = analysis.profit * entry.quantity
         row.profit:SetText(Util.FormatMoney(total, { short = true }))
         row.profit:SetTextColor(Theme.ProfitColor(total))
@@ -274,8 +282,8 @@ local function UpdateBankNote()
     local age = ns.Inventory:GetBankAge()
 
     if age then
-        note:SetText(("Bank not checked this session, so using what it held %s ago.")
-            :format(Util.FormatAge(age)))
+        note:SetText(("Bank not checked this session, so using what it held %s.")
+            :format(Util.FormatAgeAgo(age)))
     else
         note:SetText("Bank never checked, so HAVE counts bags only.")
     end
@@ -335,7 +343,7 @@ local function SetCraftButton(button, label)
             button.tooltipText = ("Opens your %s window. Click again to craft %dx %s.")
                 :format(profession.name, canMake, (recipe and recipe.name) or "item")
 
-            label:SetText(("%d of %d ready -- click to open %s"):format(ready, total, profession.name))
+            label:SetText(("%d of %d ready. Click to open %s"):format(ready, total, profession.name))
             label:SetTextColor(Theme.Unpack("accent"))
 
             button.opensProfession = true
@@ -495,8 +503,20 @@ local function Build(container)
     local divider = Theme.CreateDivider(container)
     divider:SetPoint("TOPLEFT", 8, -26)
     divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -26)
+    -- Kept as the list's anchor, but the heading carries the house rule now,
+    -- running from the words to the Clear all button, like MATERIALS NEEDED.
+    divider:Hide()
+    Theme.StyleHeading(heading, container)
+    heading.rule:ClearAllPoints()
+    heading.rule:SetPoint("LEFT", heading, "RIGHT", 6, 0)
+    heading.rule:SetPoint("RIGHT", clear, "LEFT", -8, 0)
 
     local craftList = Widgets.CreateScrollList(container, {
+        -- The craft being made stays lit, as in the craft pane's list.
+        isSelected = function(entry)
+            local active = ns.Crafting.active
+            return active ~= nil and active.recipeID == entry.recipeID
+        end,
         rowHeight = ROW_HEIGHT,
         createRow = CreateCraftRow,
         updateRow = UpdateCraftRow,
@@ -563,6 +583,8 @@ local function Build(container)
     local materialsHeading = Theme.CreateLabel(materials, "tiny", "accent")
     materialsHeading:SetPoint("TOPLEFT", 10, -10)
     materialsHeading:SetText("MATERIALS NEEDED")
+    -- The house heading: gold, with the rule running off to the right.
+    Theme.StyleHeading(materialsHeading, materials)
 
     -- Column headings, so NEED and HAVE are labelled rather than inferred.
     local columnHeader = CreateFrame("Frame", nil, materials)
@@ -591,6 +613,10 @@ local function Build(container)
         updateRow = UpdateMaterialRow,
         onEnter = ShowMaterialTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- The headings move in with the rows when the scrollbar takes its room.
+        onScrollbarShown = function(shown)
+            columnHeader:SetPoint("TOPRIGHT", shown and -20 or -10, -28)
+        end,
     })
     materialList:SetPoint("TOPLEFT", materialsDivider, "BOTTOMLEFT", 0, -4)
     materialList:SetPoint("BOTTOMRIGHT", materials, "BOTTOMRIGHT", -10, 48)
@@ -633,7 +659,10 @@ function UI:OnQueueUpdated()
     -- is usually the thing that just changed it.
     if ns.CraftPanel then ns.CraftPanel:RequestRefresh() end
 
-    if self.activeTab == "queue" then
+    -- Only while the window is showing: redrawing a hidden Queue tab also
+    -- ran its alt-craft announcement, chat line and coin sound included,
+    -- every time something was queued from the craft pane.
+    if self.activeTab == "queue" and self.window and self.window:IsShown() then
         Refresh()
     else
         -- The Gather tab is derived from the queue, so it goes stale too.

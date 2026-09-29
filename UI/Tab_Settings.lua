@@ -74,7 +74,15 @@ local function CreateRow(parent, anchor, labelText, description)
         local hint = Theme.CreateLabel(row, "tiny", "dim")
         hint:SetPoint("TOPLEFT", 0, -24)
         hint:SetWidth(COLUMN_WIDTH)
+        -- Wrapped, with the row grown to fit: on one line the longer ones
+        -- (Undercut by, Minimum profit) were cut off halfway with "...".
+        hint:SetWordWrap(true)
         hint:SetText(description)
+
+        local height = hint.GetStringHeight and hint:GetStringHeight() or 0
+        if type(height) == "number" and height > 0 then
+            row:SetHeight(math.max(40, 24 + math.ceil(height) + 2))
+        end
     end
 
     return row
@@ -216,7 +224,7 @@ local function Build(outer)
     widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local lossRow = CreateRow(container, altCraftRow, "Recommend selling at a loss",
-        "Off: the Post tab still lists them, marked red, but does not recommend them.")
+        "Off: the Post tab shows them in red but will not list them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
         Config:Set("allowPostingAtALoss", checked)
@@ -363,11 +371,18 @@ local function Build(outer)
         local button = widgets.clearButton
 
         if button.armed then
-            ns.db.prices[ns.Config:GetRealmKey()] = {}
+            -- This realm only: the other realms keep their prices, so they
+            -- keep their scan times and sizes too.
+            local realmKey = ns.Config:GetRealmKey()
+            ns.db.prices[realmKey] = {}
             ns.db.lastFullScan = nil
+            for _, field in ipairs({ "lastFullScanByRealm", "sweepSeenByRealm", "sweepRefusedByRealm" }) do
+                if ns.db[field] then ns.db[field][realmKey] = nil end
+            end
 
             button.armed = false
             button:SetText("Clear price data")
+            button.label:SetTextColor(Theme.Unpack("text"))
 
             ns.Print("price data cleared for this realm")
             UI:RefreshActiveTab()
@@ -377,11 +392,14 @@ local function Build(outer)
 
         button.armed = true
         button:SetText("Really clear?")
+        -- Red while armed, like the craft pane's Clear queue.
+        button.label:SetTextColor(Theme.Unpack("loss"))
 
         C_Timer.After(4, function()
             if button.armed then
                 button.armed = false
                 button:SetText("Clear price data")
+                button.label:SetTextColor(Theme.Unpack("text"))
             end
         end)
     end, { width = 140, height = 22, tooltip = "Delete every stored price for this realm" })
@@ -453,8 +471,10 @@ local function Build(outer)
     widgets.debug:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local resetButton = Widgets.CreateButton(container, "Reset to defaults", function()
+        -- Through Config:Set, as every other setting change is, so a session
+        -- keeping its settings in the backup store saves these too.
         for key, value in pairs(ns.Config.DEFAULTS.settings) do
-            ns.db.settings[key] = value
+            ns.Config:Set(key, value)
         end
 
         ns.Print("settings reset to defaults")
@@ -507,7 +527,9 @@ local function Refresh()
     local overrides = 0
     for _ in pairs(ns.db.postLimits or {}) do overrides = overrides + 1 end
     widgets.maxPostedHint:SetText(overrides > 0
-        and ("%d item%s with their own limit"):format(overrides, overrides == 1 and "" or "s")
+        -- Short enough for the 120 pixels beside the box; the longer wording
+        -- was cut off with "...".
+        and ("%d set per item"):format(overrides)
         or "")
 
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
@@ -527,7 +549,7 @@ local function Refresh()
     widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
-    local lastScan = ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
 
     widgets.dataSummary:SetText(("%s items priced on %s"):format(
         Util.Comma(ns.Prices:Count()), Config:GetRealmKey()))
@@ -542,22 +564,22 @@ local function Refresh()
     local diagnostics = ns.Config:GetLoadDiagnostics()
     if diagnostics.restoredFromCVars then
         widgets.loadWarning:SetText(
-            "The game did not load your saved data at login, so it was recovered from the backup in CVars. This is a known WoW: Forever beta problem.")
+            "The game did not load your saved data at login, so it was recovered from the backup in CVars.")
     elseif diagnostics.globalType ~= "table" and not diagnostics.restored then
         widgets.loadWarning:SetText(
-            "The game did not load your saved data at login, so this session started fresh. This is a known WoW: Forever beta problem.")
+            "The game did not load your saved data at login, so this session started fresh.")
     else
         widgets.loadWarning:SetText("")
     end
 
     local auctionAge = ns.Auctions:GetAge()
     widgets.auctionSummary:SetText(auctionAge
-        and ("Your auctions last read " .. Util.FormatAge(auctionAge) .. " ago.")
+        and ("Your auctions last read " .. Util.FormatAgeAgo(auctionAge) .. ".")
         or "Your auctions have never been read. Open the auction house once.")
 
     local bankAge = ns.Inventory:GetBankAge()
     widgets.bankSummary:SetText(bankAge
-        and ("Bank contents last read " .. Util.FormatAge(bankAge) .. " ago.")
+        and ("Bank contents last read " .. Util.FormatAgeAgo(bankAge) .. ".")
         or "Bank never read. Visit a bank so material counts include it.")
 
     -- Last: the warnings above wrap to different heights depending on what

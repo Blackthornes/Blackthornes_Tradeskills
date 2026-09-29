@@ -189,7 +189,9 @@ end
 
 --- Start or cancel a scan, explaining itself when it cannot.
 function UI:TriggerScan()
-    if ns.Scanner.isScanning then
+    -- A scan still waiting its turn can be called off too.
+    local scanner = ns.Scanner
+    if scanner.isScanning or scanner.scanQueued or scanner.browseQueued then
         ns.Scanner:CancelScan()
         self:UpdateHeader()
         return
@@ -275,7 +277,7 @@ function UI:UpdateHeader()
     local priceCount = ns.Prices:Count()
     local recipeCount = ns.Recipes:Count()
 
-    local lastScan = ns.db and ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     local scanText = lastScan and ("scanned " .. Util.FormatAgeAgo(time() - lastScan))
         or "never scanned"
 
@@ -284,10 +286,19 @@ function UI:UpdateHeader()
 
     -- The scan button stays live and explains itself rather than greying out
     -- into something that looks broken.
-    if ns.Scanner.isScanning then
+    local scanner = ns.Scanner
+    if scanner.isScanning or scanner.scanQueued or scanner.browseQueued then
+        -- A scan waiting its turn is cancelled by this button too, so it
+        -- says so rather than offering to start one.
         self.scanButton:SetText("Cancel scan")
         self.scanButton.tooltipText = "Stop the running scan"
-        self.scanHint:SetText("")
+        -- The progress ("scanning... 42%") lives here while a scan runs, and
+        -- clearing it on this five-second tick made it blink out.
+        if not scanner.isScanning then
+            self.scanHint:SetText("|c" .. ns.COLORS.warn .. "waiting to start...|r")
+        elseif not (self.scanHint:GetText() or ""):find("^scanning") then
+            self.scanHint:SetText("scanning...")
+        end
     else
         self.scanButton:SetText("Scan auctions")
 
@@ -613,7 +624,7 @@ function UI:RefreshAuctionStatus()
     bar.progress:Hide()
     bar.status:SetTextColor(Theme.Unpack("muted"))
 
-    local lastScan = ns.db and ns.db.lastFullScan
+    local lastScan = (ns.Prices.GetLastFullScan and ns.Prices:GetLastFullScan() or (ns.db and ns.db.lastFullScan))
     bar.status:SetText(lastScan
         and ("Last scan " .. Util.FormatAgeAgo(time() - lastScan))
         or "No scan yet. Click Scan to price everything.")
@@ -629,7 +640,8 @@ function UI:CelebrateScan(result)
     bar.glint:Hide()
     bar.progress:Show()
     bar.progress:SetProgress(1)
-    bar.status:SetText(("Scan complete: %s prices updated"):format(Util.Comma(result.items or 0)))
+    bar.status:SetText(("Scan complete: %s prices updated%s"):format(Util.Comma(result.items or 0),
+        (result.soldOut or 0) > 0 and (", %s sold out"):format(Util.Comma(result.soldOut)) or ""))
     bar.status:SetTextColor(Theme.Unpack("profit"))
     bar.flashLeft = 1
 
@@ -737,7 +749,7 @@ function UI:UpdateAuctionButton()
     local button = self.auctionButton
     if not button then return end
 
-    if ns.Scanner.isScanning then
+    if ns.Scanner.isScanning or ns.Scanner.scanQueued or ns.Scanner.browseQueued then
         button:SetText("Cancel")
         button.tooltipText = "Stop the running scan"
         -- Cancelling is always allowed, even when the button was disabled a
@@ -995,6 +1007,7 @@ function UI:ShowTransferDialog(mode)
             dialog:Hide()
         end, { width = 90, height = 26 })
         close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
+        dialog.close = close
 
         self.transferDialog = dialog
     end
@@ -1010,12 +1023,18 @@ function UI:ShowTransferDialog(mode)
         dialog.editBox:SetText(code)
         dialog.editBox:HighlightText()
         dialog.action:Hide()
+        -- Import is hidden here, so Close takes its corner rather than
+        -- floating where Import would have been beside it.
+        dialog.close:ClearAllPoints()
+        dialog.close:SetPoint("BOTTOMRIGHT", -20, 18)
     else
         dialog.title:SetText("Import")
-        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits are replaced.")
+        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits in the code replace yours.")
 
         dialog.editBox:SetText("")
         dialog.action:Show()
+        dialog.close:ClearAllPoints()
+        dialog.close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
     end
 
     dialog:Show()
@@ -1103,7 +1122,7 @@ function UI:UpdateMerchantButton()
         parts[#parts + 1] = ("  %dx %s  (%s)%s"):format(
             line.amount, Util.GetItemLabel(line.itemID),
             Util.FormatMoney(line.cost, { noColor = true, short = true }),
-            line.short and "  - vendor stock limited" or "")
+            line.short and "  (vendor stock limited)" or "")
     end
 
     if #lines > 10 then
@@ -1214,10 +1233,24 @@ function UI:SearchAuctionHouse(itemID)
         return false
     end
 
+    -- A search sent mid-scan takes over the scan's shared results, which
+    -- ends the scan early. Wait for it instead.
+    if ns.Scanner.isScanning then
+        ns.Print("a scan is running; search again once it finishes")
+        return false
+    end
+
     local name
     if Util.HasFunction("C_Item.GetItemInfo") then
         local ok, itemName = pcall(C_Item.GetItemInfo, itemID)
         if ok then name = itemName end
+    end
+
+    -- Deal rows are mostly items the player has never hovered, so the name
+    -- the addon saved when it last saw the item will do.
+    if not name and ns.Disenchant and ns.Disenchant.KnownName then
+        local ok, known = pcall(ns.Disenchant.KnownName, ns.Disenchant, itemID)
+        if ok and type(known) == "string" and known ~= "" then name = known end
     end
 
     if not name then
@@ -1255,7 +1288,9 @@ function UI:SearchAuctionHouse(itemID)
         end,
 
         onGiveUp = function()
-            ns.Warn("the auction house stayed busy; that search was not sent.")
+            if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                ns.Warn("the auction house stayed busy; that search was not sent.")
+            end
         end,
     })
 
