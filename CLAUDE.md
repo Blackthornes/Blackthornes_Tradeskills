@@ -67,6 +67,23 @@ _G.BlackthornesFarmer.GoalsUI:Show()              -- opens Farmer's Goals panel
 `CLAUDE.md` asks its side to keep these stable; if one changes, change
 `Logic/FarmerGoals.lua` in the same breath.
 
+## How Tradeskills uses Equipment
+
+Gear that **Blackthornes_Equipment** (`Blackthornes/Blackthornes_Equipment`)
+calls an upgrade for the character playing gets the green arrow on its icon,
+everywhere Tradeskills draws item icons (`Theme.SetItemIcon` asks
+`Logic/Upgrades.lua`). Equipment is optional (`## OptionalDeps` in the TOC);
+without it nothing is drawn. It calls, inside a pcall and read only:
+
+```lua
+_G.BlackthornesEquipment.Compare:IsUpgrade(itemID)   -- true or false
+```
+
+Answers are kept per item ID and forgotten on gear, level, talent and
+item-info events. Setting: `showUpgradeArrows`. Equipment's `CLAUDE.md` asks
+its side to keep the call stable; if it changes, change `Logic/Upgrades.lua`
+in the same breath.
+
 ## Trent's standing rules (both addons)
 
 - **"Always check that it's clear to post."** Anything that goes public (a
