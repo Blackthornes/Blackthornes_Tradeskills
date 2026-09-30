@@ -4,6 +4,32 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.17.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating. This release also carries everything in 0.17.0.
+
+- Fixed: at the auction house, opening your character window (C) put it
+  under the Ready to sell list, which covered it completely. The list now
+  moves over beside the character window while it's open and slides back
+  when it closes. On a screen too narrow for all three, the list steps
+  aside until the character window closes. The spellbook and other game
+  windows that open in the same place work the same way.
+
+## 0.17.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- The Disenchanting tab can now show the items in your bags. Pick
+  "Show: Items in your bags" at the top left. Each item lists how much more
+  disenchanting pays than selling, what it disenchants into, what it
+  sells for and how many you have.
+- The best item is picked for you. The Disenchant button breaks one per
+  click, and the next item takes over when that one is gone. A running
+  total shows what you've disenchanted this session, and "All done!" shows
+  when your bags are clear.
+
 ## 0.16.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
