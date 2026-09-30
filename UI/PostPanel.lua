@@ -325,11 +325,16 @@ end
 --
 -- Returns nil while the frames have no screen coordinates yet, which is what
 -- a frame that has never been laid out reports.
-function PostPanel:DesiredHeight(auctionFrame)
+--
+-- @param left  where the panel's left edge is, when it is not right beside the
+--   auction window (it moves over for the character window)
+function PostPanel:DesiredHeight(auctionFrame, left)
     local top, bottom, right =
         auctionFrame:GetTop(), auctionFrame:GetBottom(), auctionFrame:GetRight()
 
     if not top or not bottom or not right then return nil end
+
+    left = left or right + PANEL_GAP
 
     local window = ns.UI and ns.UI.window
 
@@ -340,8 +345,6 @@ function PostPanel:DesiredHeight(auctionFrame)
         -- Only when the two really do share screen space. The main window is
         -- movable, so most of the time it is somewhere else entirely.
         if windowTop and windowLeft and windowRight then
-            local left = right + PANEL_GAP
-
             if windowRight > left and windowLeft < left + PANEL_WIDTH
                 and windowTop > bottom then
                 bottom = windowTop + PANEL_GAP
@@ -352,12 +355,181 @@ function PostPanel:DesiredHeight(auctionFrame)
     return math.max(top - bottom, PANEL_MIN_HEIGHT)
 end
 
+--------------------------------------------------------------------------------
+-- Making room for the character window
+--------------------------------------------------------------------------------
+
+-- With the auction house open, the game puts the character window (and any
+-- other window that opens beside it) in the slot to the auction window's
+-- right. That is exactly where this panel docks, and the panel sits in a
+-- higher strata, so it covered the paper doll completely. Now it moves over
+-- to the right of whatever window has opened there, and steps aside if the
+-- screen has no room for both.
+
+-- Windows worth checking even if the game's panel slots cannot be read.
+local SIDE_FRAME_NAMES = { "CharacterFrame" }
+
+--- A frame edge in the panel's own coordinates (UIParent's), or nil.
+--
+-- Blizzard shrinks some windows to fit the screen, and an edge read off a
+-- scaled frame is in that frame's units, not ours.
+local function Edge(frame, method)
+    local ok, value = pcall(frame[method], frame)
+    if not ok or type(value) ~= "number" then return nil end
+
+    local parent = _G.UIParent
+    if frame == parent or type(frame.GetEffectiveScale) ~= "function"
+        or type(parent) ~= "table" or type(parent.GetEffectiveScale) ~= "function" then
+        return value
+    end
+
+    local okFrame, frameScale = pcall(frame.GetEffectiveScale, frame)
+    local okParent, parentScale = pcall(parent.GetEffectiveScale, parent)
+
+    if okFrame and okParent and type(frameScale) == "number"
+        and type(parentScale) == "number" and parentScale > 0 then
+        value = value * frameScale / parentScale
+    end
+
+    return value
+end
+
+local function IsShownFrame(frame)
+    if type(frame) ~= "table" or type(frame.IsShown) ~= "function" then return false end
+
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and shown == true
+end
+
+--- The game window open beside the auction house, if one is in the way.
+--
+-- Anything in the game's right-hand panel slot counts, not just the character
+-- window: the spellbook and the rest land in the same place.
+function PostPanel:SideFrame(auctionFrame)
+    local candidates = {}
+
+    if type(_G.GetUIPanel) == "function" then
+        local ok, frame = pcall(_G.GetUIPanel, "right")
+        if ok and frame then candidates[#candidates + 1] = frame end
+    end
+
+    for _, name in ipairs(SIDE_FRAME_NAMES) do
+        candidates[#candidates + 1] = _G[name]
+    end
+
+    local ahRight, ahTop, ahBottom =
+        Edge(auctionFrame, "GetRight"), Edge(auctionFrame, "GetTop"), Edge(auctionFrame, "GetBottom")
+    if not (ahRight and ahTop and ahBottom) then return nil end
+
+    -- Where the panel would sit, docked beside the auction window.
+    local dockLeft, dockRight = ahRight + PANEL_GAP, ahRight + PANEL_GAP + PANEL_WIDTH
+
+    for _, frame in ipairs(candidates) do
+        if frame ~= auctionFrame and frame ~= self.frame and IsShownFrame(frame) then
+            local left, right = Edge(frame, "GetLeft"), Edge(frame, "GetRight")
+            local top, bottom = Edge(frame, "GetTop"), Edge(frame, "GetBottom")
+
+            -- Only a window actually in the panel's spot. One the player has
+            -- dragged somewhere else is left to itself.
+            if left and right and top and bottom
+                and left < dockRight and right > dockLeft
+                and bottom < ahTop and top > ahBottom then
+                return frame, right
+            end
+        end
+    end
+end
+
+--- Where the panel should be right now.
+--
+-- @return the frame to dock to, the panel's left edge (nil for "beside the
+--   auction window"), and false when there is no room for it at all
+function PostPanel:Placement(auctionFrame)
+    local side, sideRight = self:SideFrame(auctionFrame)
+    if not side then return auctionFrame, nil, true end
+
+    local left = sideRight + PANEL_GAP
+    local screenRight = _G.UIParent and Edge(_G.UIParent, "GetRight")
+    local fits = not screenRight or left + PANEL_WIDTH <= screenRight
+
+    return side, left, fits
+end
+
+--- Put the panel where Placement says, showing or hiding it to match.
+--
+-- Cheap enough for the one-second auction house ticker, which is what brings
+-- the panel back after the character window closes if no event does.
+function PostPanel:Redock()
+    local frame = self.frame
+    if not (frame and self.attached) then return end
+
+    local auctionFrame = ns.UI:FindAuctionFrame()
+    if not auctionFrame then return end
+
+    local host, left, fits = self:Placement(auctionFrame)
+
+    if not fits then
+        -- No room beside the character window. Out of the way until it
+        -- closes: the paper doll is what the player just asked to see.
+        self.dockedTo = nil
+        if frame:IsShown() then frame:Hide() end
+        return
+    end
+
+    self.dockedLeft = left
+
+    if self.dockedTo ~= host then
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", host, "TOPRIGHT", PANEL_GAP, 0)
+        self.dockedTo = host
+
+        -- Beside a different window, the main window may be in the way now,
+        -- or no longer.
+        self:ApplyHeight(true)
+    end
+
+    if not frame:IsShown() then
+        frame:Show()
+        self:ApplyHeight(true)
+        self:Refresh()
+    end
+end
+
+--- Redock as soon as the game has placed a window, rather than on the next
+-- tick of the ticker. Hooked once; hooksecurefunc and HookScript leave the
+-- game's own code untouched.
+function PostPanel:WatchSideFrames()
+    if self.watching then return end
+    self.watching = true
+
+    local function Soon()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() PostPanel:Redock() end)
+        end
+    end
+
+    if type(_G.hooksecurefunc) == "function" then
+        for _, name in ipairs({ "ShowUIPanel", "HideUIPanel" }) do
+            if type(_G[name]) == "function" then pcall(_G.hooksecurefunc, name, Soon) end
+        end
+    end
+
+    for _, name in ipairs(SIDE_FRAME_NAMES) do
+        local frame = _G[name]
+        if type(frame) == "table" and type(frame.HookScript) == "function" then
+            pcall(frame.HookScript, frame, "OnShow", Soon)
+            pcall(frame.HookScript, frame, "OnHide", Soon)
+        end
+    end
+end
+
 --- Dock to the right of the auction house, as tall as there is room for.
 function PostPanel:Attach()
     local frame = self:Build()
     local auctionFrame = ns.UI:FindAuctionFrame()
 
     frame:ClearAllPoints()
+    self.dockedTo, self.dockedLeft = nil, nil
 
     if auctionFrame then
         -- One anchor and a measured height, rather than a point on the auction
@@ -372,14 +544,19 @@ function PostPanel:Attach()
         -- keeps whatever height it had. That is how it ended up half as tall as
         -- the window it was docked to.)
         frame:SetPoint("TOPLEFT", auctionFrame, "TOPRIGHT", PANEL_GAP, 0)
+        self.dockedTo = auctionFrame
     else
         -- The auction house window is load-on-demand and may not exist yet.
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -120)
     end
 
+    self.attached = true
+    self:WatchSideFrames()
+
     self:ApplyHeight(true)
 
     frame:Show()
+    self:Redock()
     self:Refresh()
 end
 
@@ -391,7 +568,7 @@ end
 -- @return nil when there is nothing to go on
 function PostPanel:TargetHeight(fallback)
     local auctionFrame = ns.UI:FindAuctionFrame()
-    local full = auctionFrame and self:DesiredHeight(auctionFrame)
+    local full = auctionFrame and self:DesiredHeight(auctionFrame, self.dockedLeft)
 
     if not full and fallback then full = PANEL_FALLBACK_HEIGHT end
     if not full then return nil end
@@ -425,6 +602,10 @@ function PostPanel:Reflow()
 end
 
 function PostPanel:Refresh()
+    -- Before the shown check: this is how a panel that stepped aside for the
+    -- character window comes back.
+    self:Redock()
+
     if not self.frame or not self.frame:IsShown() then return end
 
     -- Cheap, and it catches the main window being dragged, which has no event.
@@ -498,6 +679,10 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
 end
 
 function PostPanel:Hide()
+    -- The auction house closed: nothing should bring the panel back now.
+    self.attached = false
+    self.dockedTo, self.dockedLeft = nil, nil
+
     if self.frame then self.frame:Hide() end
 end
 
