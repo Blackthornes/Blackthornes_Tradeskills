@@ -4,6 +4,20 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.18.0
+
+For WoW: Forever (interface 16001). This version adds files, so fully
+restart the game after updating; `/reload` is not enough.
+
+- The Characters tab has a new Bank view (switch at the top, or
+  `/bts bank`). It lists every item in all your characters' banks, with a
+  search box, a character filter, and sorting by worth, count or name.
+  Tick "Bags too" to add bags. Point at an item to see who holds it.
+- The side pane shows each bank's worth and when it was last read, or,
+  once you pick an item, who has it and how many.
+- A character's bank shows up once they've opened it with the addon
+  installed. Characters who haven't show "Bank not opened yet".
+
 ## 0.17.1
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
