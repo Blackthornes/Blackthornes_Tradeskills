@@ -17,8 +17,15 @@ local UI = ns.UI
 local ROW_HEIGHT = 40
 local DETAIL_WIDTH = 320
 
-local state = { selected = nil }
+local state = { selected = nil, view = "characters" }
 local widgets = {}
+
+-- The tab has two views: the characters themselves, and every character's
+-- bank in one list (UI/BankView.lua).
+local VIEWS = {
+    { key = "characters", text = "CHARACTERS" },
+    { key = "bank",       text = "BANK" },
+}
 
 --------------------------------------------------------------------------------
 -- Rows
@@ -252,7 +259,7 @@ end
 -- Refresh
 --------------------------------------------------------------------------------
 
-local function Refresh()
+local function RefreshCharacters()
     if not widgets.list then return end
 
     local characters = ns.Recipes:GetCharacters()
@@ -292,20 +299,100 @@ end
 -- Build
 --------------------------------------------------------------------------------
 
-local function Build(container)
-    local heading = Theme.CreateLabel(container, "tiny", "accent")
-    heading:SetPoint("TOPLEFT", 8, -10)
-    heading:SetText("CHARACTERS")
+local function Refresh()
+    if state.view == "bank" then
+        if ns.BankView then ns.BankView.Refresh() end
+    else
+        RefreshCharacters()
+    end
+end
 
+--- Show one of the two views and paint the switch to match.
+local function ShowView(key)
+    if not widgets.views then
+        state.view = key
+        return
+    end
+
+    state.view = widgets.views[key] and key or "characters"
+
+    for viewKey, view in pairs(widgets.views) do
+        view:SetShown(viewKey == state.view)
+    end
+
+    for _, button in ipairs(widgets.switch) do
+        local active = button.key == state.view
+        button.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
+        button.underline:SetShown(active)
+    end
+
+    Refresh()
+end
+
+ns.CharactersTab = { ShowView = ShowView }
+
+--- CHARACTERS | BANK, drawn as the tab's heading: the view showing is lit
+--- gold and underlined, the other waits in grey.
+local function BuildSwitch(container)
+    local buttons = {}
+    local previous
+
+    for _, definition in ipairs(VIEWS) do
+        local button = CreateFrame("Button", nil, container)
+        button:SetHeight(18)
+        button:SetFrameLevel(container:GetFrameLevel() + 5)
+
+        button.label = Theme.CreateLabel(button, "tiny", "muted")
+        button.label:SetPoint("LEFT", 0, 0)
+        button.label:SetText(definition.text)
+        button:SetWidth(button.label:GetStringWidth() + 4)
+
+        button.underline = button:CreateTexture(nil, "OVERLAY")
+        button.underline:SetPoint("BOTTOMLEFT", 0, 1)
+        button.underline:SetPoint("BOTTOMRIGHT", -4, 1)
+        button.underline:SetHeight(1)
+        button.underline:SetColorTexture(Theme.Unpack("accent"))
+        button.underline:Hide()
+
+        button.key = definition.key
+
+        if previous then
+            button:SetPoint("LEFT", previous, "RIGHT", 14, 0)
+        else
+            button:SetPoint("TOPLEFT", 8, -5)
+        end
+
+        button:SetScript("OnClick", function(self) ShowView(self.key) end)
+        button:SetScript("OnEnter", function(self)
+            if self.key ~= state.view then
+                self.label:SetTextColor(Theme.Unpack("text"))
+            end
+        end)
+        button:SetScript("OnLeave", function(self)
+            if self.key ~= state.view then
+                self.label:SetTextColor(Theme.Unpack("muted"))
+            end
+        end)
+
+        buttons[#buttons + 1] = button
+        previous = button
+    end
+
+    local rule = container:CreateTexture(nil, "ARTWORK")
+    rule:SetColorTexture(Theme.Unpack("border"))
+    rule:SetHeight(1)
+    rule:SetPoint("LEFT", previous, "RIGHT", 6, 0)
+    rule:SetPoint("RIGHT", container, "RIGHT", -DETAIL_WIDTH - 16, 0)
+
+    return buttons
+end
+
+local function BuildCharacters(container)
     local divider = Theme.CreateDivider(container)
     divider:SetPoint("TOPLEFT", 8, -26)
     divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -DETAIL_WIDTH - 16, -26)
-    -- Kept as the list's anchor, but the heading carries the house rule now.
+    -- Kept as the list's anchor; the view switch carries the house rule.
     divider:Hide()
-    Theme.StyleHeading(heading, container)
-    heading.rule:ClearAllPoints()
-    heading.rule:SetPoint("LEFT", heading, "RIGHT", 6, 0)
-    heading.rule:SetPoint("RIGHT", container, "RIGHT", -DETAIL_WIDTH - 16, 0)
 
     local list = Widgets.CreateScrollList(container, {
         rowHeight = ROW_HEIGHT,
@@ -341,6 +428,25 @@ local function Build(container)
     widgets.detail = detail
 
     UpdateDetail(nil)
+end
+
+local function Build(container)
+    local views = {}
+
+    for _, definition in ipairs(VIEWS) do
+        local view = CreateFrame("Frame", nil, container)
+        view:SetAllPoints(container)
+        view:Hide()
+        views[definition.key] = view
+    end
+
+    BuildCharacters(views.characters)
+    if ns.BankView then ns.BankView.Build(views.bank) end
+
+    widgets.views = views
+    widgets.switch = BuildSwitch(container)
+
+    ShowView(state.view)
 end
 
 UI:RegisterTab({
