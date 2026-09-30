@@ -162,6 +162,11 @@ local DEFAULTS = {
         -- tooltip exactly as the client writes it.
         showValueOnItemTooltips = true,
 
+        -- A green arrow on the icon of any gear that is an upgrade for the
+        -- character playing, as Blackthornes Equipment judges it. Does
+        -- nothing without Equipment. See Logic/Upgrades.lua.
+        showUpgradeArrows = true,
+
         -- Play a sound the moment the game says one of your auctions has
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
         saleAlarm = true,

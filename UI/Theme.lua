@@ -287,25 +287,90 @@ end
 
 local FALLBACK_ICON = [[Interface\Icons\INV_Misc_QuestionMark]]
 
+-- The upgrade arrow: the game's own bag arrow, the one Blackthornes Equipment
+-- puts on bag items, so both mean the same. The fallback is a green arrow
+-- every client has, turned to point up.
+local UPGRADE_ATLAS = "bags-greenarrow"
+local UPGRADE_FALLBACK = [[Interface\Buttons\UI-MicroStream-Green]]
+
+local function HasAtlas(name)
+    if type(C_Texture) ~= "table" or type(C_Texture.GetAtlasInfo) ~= "function" then
+        return false
+    end
+    local ok, found = pcall(C_Texture.GetAtlasInfo, name)
+    return ok and found ~= nil
+end
+
+-- Kept beside the icons, weakly, so none of it can clash with a texture's own
+-- fields: icon -> { size, upgrade, arrow }.
+local iconState = setmetatable({}, { __mode = "k" })
+
+--- The arrow for an icon, made the first time an upgrade is shown on it.
+local function UpgradeArrow(icon, state)
+    if state.arrow then return state.arrow end
+
+    local parent = icon:GetParent()
+    local ok, arrow = pcall(parent.CreateTexture, parent, nil, "OVERLAY", nil, 7)
+    if not ok or not arrow then return nil end
+
+    local size = math.max(8, math.floor(state.size * 0.6 + 0.5))
+    arrow:SetSize(size, size)
+    arrow:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
+
+    local usedAtlas = HasAtlas(UPGRADE_ATLAS) and pcall(arrow.SetAtlas, arrow, UPGRADE_ATLAS)
+    if not usedAtlas then
+        arrow:SetTexture(UPGRADE_FALLBACK)
+        -- The stream arrow points down; flipped, it points up.
+        arrow:SetTexCoord(0, 1, 1, 0)
+    end
+    arrow:Hide()
+
+    state.arrow = arrow
+    return arrow
+end
+
+--- Show the arrow when the icon is shown and its item is an upgrade.
+local function ShowArrow(icon)
+    local state = iconState[icon]
+    if not state then return end
+    local on = state.upgrade and icon:IsShown()
+    local arrow = on and UpgradeArrow(icon, state) or state.arrow
+    if arrow then arrow:SetShown(on and true or false) end
+end
+
 --- An item icon, trimmed of its built-in border the way the bags draw it.
+--- The arrow follows the icon, so a row that hides its icon hides the arrow.
 function Theme.CreateItemIcon(parent, size)
     local icon = parent:CreateTexture(nil, "ARTWORK")
     icon:SetSize(size or 16, size or 16)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    iconState[icon] = { size = size or 16, upgrade = false }
+
+    local show, hide, setShown = icon.Show, icon.Hide, icon.SetShown
+    function icon:Show() show(self); ShowArrow(self) end
+    function icon:Hide() hide(self); ShowArrow(self) end
+    function icon:SetShown(on) setShown(self, on); ShowArrow(self) end
+
     icon:Hide()
     return icon
 end
 
 --- Show an item's icon, or the question mark while the game has not sent it.
---- Hidden when there is no item at all.
+--- Hidden when there is no item at all. Gear that is an upgrade for the
+--- character playing gets the green arrow (only with Blackthornes Equipment
+--- loaded; see Logic/Upgrades.lua).
 function Theme.SetItemIcon(icon, itemID)
     if not icon then return end
 
     if not itemID then
+        if iconState[icon] then iconState[icon].upgrade = false end
         icon:Hide()
         return
     end
 
+    if iconState[icon] then
+        iconState[icon].upgrade = ns.Upgrades ~= nil and ns.Upgrades:IsUpgrade(itemID)
+    end
     icon:SetTexture((ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(itemID))
         or FALLBACK_ICON)
     icon:Show()

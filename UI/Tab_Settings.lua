@@ -462,7 +462,17 @@ local function Build(outer)
     end, true)
     widgets.tooltipValue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local debugRow = CreateRow(container, tooltipValueRow, "Debug output",
+    local upgradeRow = CreateRow(container, tooltipValueRow, "Upgrade arrows on gear",
+        "A green arrow on the icon of gear that is an upgrade for you. Needs Blackthornes Equipment.")
+
+    widgets.upgradeArrows = Widgets.CreateCheckbox(upgradeRow, "Enabled", function(checked)
+        Config:Set("showUpgradeArrows", checked)
+        if ns.Upgrades then ns.Upgrades:Forget() end
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.upgradeArrows:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local debugRow = CreateRow(container, upgradeRow, "Debug output",
         "Extra messages in chat, to help track down problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
@@ -565,6 +575,7 @@ local function Refresh()
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
+    widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
     widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)

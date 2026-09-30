@@ -5,7 +5,7 @@
 ## Version: 0.1.0
 ## SavedVariables: BlackthornesTSDB
 ## SavedVariablesPerCharacter: BlackthornesTSCharDB
-## OptionalDeps: Blackthornes_Farmer
+## OptionalDeps: Blackthornes_Farmer, Blackthornes_Equipment
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
 
 Core\Init.lua
@@ -40,6 +40,7 @@ Logic\MailHaul.lua
 Logic\FarmerGoals.lua
 Logic\VendorFlips.lua
 Logic\Banks.lua
+Logic\Upgrades.lua
 
 UI\Theme.lua
 UI\Widgets.lua
