@@ -1,0 +1,506 @@
+-- Blackthornes Tradeskills -- UI/BankView.lua
+-- The Characters tab's Bank view: every character's bank in one list.
+--
+-- The list is by item, so one search answers "who has my Silk Cloth". The pane
+-- on the right shows each bank at a glance until an item is picked, then who
+-- holds that item and how many. Counts are snapshots from each character's
+-- last bank visit, and the pane says how old each one is.
+
+local _, ns = ...
+
+local Theme = ns.Theme
+local Widgets = ns.Widgets
+local Util = ns.Util
+
+local BankView = {}
+ns.BankView = BankView
+
+local ROW_HEIGHT = 24
+local DETAIL_WIDTH = 320
+local DETAIL_LINES = 8
+local ALL = "all"
+
+local COLUMNS = {
+    { key = "worth", label = "WORTH", width = 96 },
+    { key = "have",  label = "HAVE",  width = 52 },
+    { key = "who",   label = "WHO",   width = 150 },
+}
+
+local SORTS = {
+    { value = "worth", text = "Sort: worth" },
+    { value = "count", text = "Sort: how many" },
+    { value = "name",  text = "Sort: name" },
+}
+
+local state = {
+    search = "",
+    character = ALL,
+    sortBy = "worth",
+    bags = false,
+    selected = nil,
+}
+
+local widgets = {}
+local names = {}
+local current = {}
+
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
+
+local function Money(copper)
+    if not copper then return Util.FormatMoney(nil) end
+    return Util.FormatMoney(copper, { short = true })
+end
+
+--- "bank 40  ·  bags 4", leaving out a side that holds none.
+local function WhereText(bank, bags)
+    local parts = {}
+    if bank > 0 then parts[#parts + 1] = ("bank %s"):format(Util.Comma(bank)) end
+    if bags > 0 then parts[#parts + 1] = ("bags %s"):format(Util.Comma(bags)) end
+    return table.concat(parts, "  ·  ")
+end
+
+local function NameColor(key)
+    return key == current.key and "accent" or "text"
+end
+
+-- The running count's frame and the value it last settled on.
+local counter = { driver = nil, shown = 0 }
+
+--- The gold total runs up to its new value rather than jumping to it.
+local function CountTo(label, prefix, to)
+    local driver = counter.driver
+    if not driver then
+        driver = CreateFrame("Frame", nil, label:GetParent())
+        counter.driver = driver
+    end
+
+    local from = counter.shown
+    if from == to then
+        label:SetText(prefix .. Money(to))
+        return
+    end
+
+    local elapsed, duration = 0, 0.6
+    driver:SetScript("OnUpdate", function(self, delta)
+        elapsed = elapsed + (delta or 0)
+        local p = math.min(1, elapsed / duration)
+        local eased = 1 - (1 - p) * (1 - p)
+        label:SetText(prefix .. Money(math.floor(from + (to - from) * eased)))
+        if p >= 1 then
+            counter.shown = to
+            self:SetScript("OnUpdate", nil)
+        end
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- Rows
+--------------------------------------------------------------------------------
+
+local function CreateRow(row)
+    row.icon = Theme.CreateItemIcon(row, 18)
+    row.icon:SetPoint("LEFT", 8, 0)
+
+    row.name = Theme.CreateLabel(row, "small", "text")
+    row.name:SetPoint("LEFT", 32, 0)
+    row.name:SetWordWrap(false)
+
+    row.cells = {}
+
+    local offset, reserved = -8, 16
+    for _, column in ipairs(COLUMNS) do
+        local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+        cell:SetPoint("RIGHT", offset, 0)
+        cell:SetWidth(column.width)
+        cell:SetWordWrap(false)
+        row.cells[column.key] = cell
+
+        offset = offset - column.width - 8
+        reserved = reserved + column.width + 8
+    end
+
+    row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+end
+
+local function UpdateRow(row, entry)
+    Theme.SetItemIcon(row.icon, entry.itemID)
+    row.name:SetText(Util.GetItemLabel(entry.itemID))
+
+    row.cells.worth:SetText(Money(entry.worth))
+    row.cells.have:SetText(Util.Comma(entry.total))
+    row.cells.have:SetTextColor(Theme.Unpack("text"))
+
+    local who
+    if #entry.holders == 1 then
+        who = names[entry.holders[1].key] or "?"
+    else
+        who = ("%d characters"):format(#entry.holders)
+    end
+    row.cells.who:SetText(who)
+end
+
+local function ShowRowTooltip(row, entry)
+    Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", entry.itemID, entry.name)
+
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("Held by", Theme.Unpack("accent"))
+
+    for _, holder in ipairs(entry.holders) do
+        local r, g, b = Theme.Unpack(NameColor(holder.key))
+        GameTooltip:AddDoubleLine(names[holder.key] or "?", WhereText(holder.bank, holder.bags),
+            r, g, b, 1, 1, 1)
+    end
+
+    GameTooltip:Show()
+end
+
+--------------------------------------------------------------------------------
+-- Detail pane
+--------------------------------------------------------------------------------
+
+local function BuildDetail(parent)
+    local detail = Theme.CreatePanel(parent, "window")
+    Theme.AccentStripe(detail, 2, 0.6)
+    detail:SetWidth(DETAIL_WIDTH)
+
+    detail.icon = Theme.CreateItemIcon(detail, 32)
+    detail.icon:SetPoint("TOPLEFT", 12, -12)
+
+    detail.title = Theme.CreateLabel(detail, "large", "accent")
+    detail.title:SetPoint("TOPLEFT", 12, -12)
+    detail.title:SetPoint("TOPRIGHT", -12, -12)
+    detail.title:SetWordWrap(false)
+
+    detail.subtitle = Theme.CreateLabel(detail, "small", "muted")
+    detail.subtitle:SetPoint("TOPLEFT", detail.title, "BOTTOMLEFT", 0, -4)
+    detail.subtitle:SetPoint("TOPRIGHT", detail.title, "BOTTOMRIGHT", 0, -4)
+
+    detail.heading = Theme.CreateHeading(detail, "")
+    detail.heading:SetPoint("TOPLEFT", 12, -64)
+
+    detail.lines = {}
+    for index = 1, DETAIL_LINES do
+        local line = CreateFrame("Frame", nil, detail)
+        line:SetHeight(34)
+        line:SetPoint("TOPLEFT", 12, -78 - (index - 1) * 36)
+        line:SetPoint("TOPRIGHT", -12, -78 - (index - 1) * 36)
+
+        line.name = Theme.CreateLabel(line, "normal", "text")
+        line.name:SetPoint("TOPLEFT", 0, -2)
+        line.name:SetPoint("TOPRIGHT", -110, -2)
+        line.name:SetWordWrap(false)
+
+        line.value = Theme.CreateLabel(line, "normal", "text", "RIGHT")
+        line.value:SetPoint("TOPRIGHT", 0, -2)
+        line.value:SetWidth(106)
+
+        line.sub = Theme.CreateLabel(line, "tiny", "dim")
+        line.sub:SetPoint("TOPLEFT", 0, -18)
+        line.sub:SetPoint("TOPRIGHT", 0, -18)
+        line.sub:SetWordWrap(false)
+
+        line.bar = Theme.CreateBar(line, DETAIL_WIDTH - 24, 2)
+        line.bar:SetPoint("BOTTOMLEFT", line, "BOTTOMLEFT", 0, 0)
+
+        line:Hide()
+        detail.lines[index] = line
+    end
+
+    detail.more = Theme.CreateLabel(detail, "tiny", "dim")
+    detail.more:SetPoint("TOPLEFT", 12, -78 - DETAIL_LINES * 36)
+
+    detail.note = Theme.CreateLabel(detail, "tiny", "dim")
+    detail.note:SetPoint("BOTTOMLEFT", 12, 12)
+    detail.note:SetPoint("BOTTOMRIGHT", -12, 12)
+    detail.note:SetWordWrap(true)
+
+    return detail
+end
+
+local function HideLines(detail)
+    for _, line in ipairs(detail.lines) do line:Hide() end
+    detail.more:SetText("")
+end
+
+--- No item picked: each bank, what is in it and what it is worth.
+local function ShowOverview(detail, overview)
+    HideLines(detail)
+
+    detail.icon:Hide()
+    detail.title:ClearAllPoints()
+    detail.title:SetPoint("TOPLEFT", 12, -12)
+    detail.title:SetPoint("TOPRIGHT", -12, -12)
+
+    local total, read = 0, 0
+    local best = 0
+    for _, row in ipairs(overview) do
+        total = total + row.worth
+        if row.bankAt then read = read + 1 end
+        if row.worth > best then best = row.worth end
+    end
+
+    detail.title:SetText("Every bank")
+    detail.subtitle:SetText(("%d of %d banks read  ·  %s"):format(read, #overview, Money(total)))
+    detail.heading:SetText("BY CHARACTER")
+
+    for index, row in ipairs(overview) do
+        local line = detail.lines[index]
+        if not line then
+            detail.more:SetText(("and %d more"):format(#overview - DETAIL_LINES))
+            break
+        end
+
+        line.name:SetText(row.name)
+        line.name:SetTextColor(Theme.Unpack(row.isCurrent and "accent" or "text"))
+
+        if row.bankAt then
+            line.value:SetText(Money(row.worth))
+
+            local age = row.isCurrent and ns.Inventory and ns.Inventory.bankOpen
+                and "open now" or ("read " .. Util.FormatAgeAgo(time() - row.bankAt))
+            line.sub:SetText(("%s items  ·  %s"):format(Util.Comma(row.count), age))
+            line.sub:SetTextColor(Theme.Unpack("dim"))
+            line.bar:Set(best > 0 and row.worth / best or 0, row.isCurrent and "accent" or "profit")
+        else
+            line.value:SetText("")
+            line.sub:SetText("Bank not opened yet")
+            line.sub:SetTextColor(Theme.Unpack("warn"))
+            line.bar:Set(nil)
+        end
+
+        line:Show()
+    end
+
+    detail.note:SetText("Open the bank once on each character to add it here. Click an item to see who has it.")
+end
+
+--- An item picked: who holds it and how many.
+local function ShowItem(detail, entry)
+    HideLines(detail)
+
+    Theme.SetItemIcon(detail.icon, entry.itemID)
+    detail.title:ClearAllPoints()
+    detail.title:SetPoint("TOPLEFT", detail.icon, "TOPRIGHT", 8, 0)
+    detail.title:SetPoint("TOPRIGHT", -12, -12)
+    detail.title:SetText(Util.GetItemLabel(entry.itemID))
+
+    detail.subtitle:SetText(("%s held  ·  %s%s"):format(
+        Util.Comma(entry.total), Money(entry.worth),
+        entry.unit and ("  ·  " .. Money(entry.unit) .. " each") or ""))
+    detail.heading:SetText("WHO HAS IT")
+
+    for index, holder in ipairs(entry.holders) do
+        local line = detail.lines[index]
+        if not line then
+            detail.more:SetText(("and %d more"):format(#entry.holders - DETAIL_LINES))
+            break
+        end
+
+        local held = holder.bank + holder.bags
+
+        line.name:SetText(names[holder.key] or "?")
+        line.name:SetTextColor(Theme.Unpack(NameColor(holder.key)))
+        line.value:SetText(Util.Comma(held))
+        line.sub:SetText(WhereText(holder.bank, holder.bags))
+        line.sub:SetTextColor(Theme.Unpack("dim"))
+        line.bar:Set(entry.total > 0 and held / entry.total or 0,
+            holder.key == current.key and "accent" or "profit")
+        line:Show()
+    end
+
+    detail.note:SetText("Counts are from each character's last bank visit. Bags are from their last time online.")
+end
+
+--------------------------------------------------------------------------------
+-- Refresh
+--------------------------------------------------------------------------------
+
+local function CharacterOptions(characters)
+    local options = { { value = ALL, text = "All characters" } }
+    for _, character in ipairs(characters) do
+        options[#options + 1] = { value = character.key, text = character.name }
+    end
+    return options
+end
+
+function BankView.Refresh()
+    if not widgets.list or not ns.db then return end
+
+    local characters = ns.Recipes:GetCharacters()
+
+    names = {}
+    current = {}
+    for _, character in ipairs(characters) do
+        names[character.key] = character.name
+        if character.isCurrent then current.key = character.key end
+    end
+
+    widgets.character:SetOptions(CharacterOptions(characters))
+    if state.character ~= ALL and not names[state.character] then state.character = ALL end
+    widgets.character:SetValue(state.character)
+
+    local list = ns.Banks:Collect({
+        character = state.character ~= ALL and state.character or nil,
+        bags = state.bags,
+        search = state.search,
+    })
+    ns.Banks:Sort(list, state.sortBy)
+
+    widgets.list:SetData(list)
+
+    local total, count = 0, 0
+    for _, entry in ipairs(list) do
+        total = total + (entry.worth or 0)
+        count = count + entry.total
+    end
+
+    local overview = ns.Banks:Overview()
+    local anyRead = false
+    for _, row in ipairs(overview) do
+        if row.bankAt then anyRead = true break end
+    end
+
+    widgets.empty:SetShown(#list == 0)
+    if #list == 0 then
+        if not anyRead and not state.bags then
+            widgets.empty:SetText("No bank read yet. Open your bank on each character and it shows up here.")
+        elseif state.search ~= "" then
+            widgets.empty:SetText(("Nothing matches \"%s\"."):format(state.search))
+        else
+            widgets.empty:SetText("Nothing here yet.")
+        end
+    end
+
+    widgets.summary:SetText(("%s different items  ·  %s in all  ·  "):format(
+        Util.Comma(#list), Util.Comma(count)))
+    CountTo(widgets.total, "", total)
+
+    -- Keep the pane on the same item across refreshes.
+    local selected
+    if state.selected then
+        for _, entry in ipairs(list) do
+            if entry.itemID == state.selected then selected = entry break end
+        end
+        if not selected then state.selected = nil end
+    end
+
+    if selected then
+        ShowItem(widgets.detail, selected)
+    else
+        ShowOverview(widgets.detail, overview)
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Build
+--------------------------------------------------------------------------------
+
+--- Fill `view`, a frame covering the whole Characters tab. The top 28 pixels
+--- on the left are the tab's view switch.
+function BankView.Build(view)
+    local right = -DETAIL_WIDTH - 16
+
+    local search = Widgets.CreateSearchBox(view, "Search every bank", function(text)
+        state.search = text or ""
+        BankView.Refresh()
+    end)
+    search:SetPoint("TOPLEFT", 8, -32)
+    search:SetWidth(210)
+    widgets.search = search
+
+    local character = Widgets.CreateDropdown(view, {}, function(value)
+        state.character = value
+        state.selected = nil
+        BankView.Refresh()
+    end, { width = 160 })
+    character:SetPoint("LEFT", search, "RIGHT", 8, 0)
+    widgets.character = character
+
+    local sort = Widgets.CreateDropdown(view, SORTS, function(value)
+        state.sortBy = value
+        BankView.Refresh()
+    end, { width = 128 })
+    sort:SetPoint("LEFT", character, "RIGHT", 8, 0)
+    sort:SetValue(state.sortBy)
+    widgets.sort = sort
+
+    local bags = Widgets.CreateCheckbox(view, "Bags too", function(checked)
+        state.bags = checked and true or false
+        BankView.Refresh()
+    end, state.bags)
+    bags:SetPoint("LEFT", sort, "RIGHT", 12, 0)
+    widgets.bags = bags
+
+    -- Column headings over the list, lined up with the row cells.
+    local headings = CreateFrame("Frame", nil, view)
+    headings:SetHeight(14)
+    headings:SetPoint("TOPLEFT", 8, -62)
+    headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", right, -62)
+
+    local itemHeading = Theme.CreateLabel(headings, "tiny", "dim")
+    itemHeading:SetPoint("LEFT", 32, 0)
+    itemHeading:SetText("ITEM")
+
+    headings.cells = {}
+    local offset = -8
+    for _, column in ipairs(COLUMNS) do
+        local cell = Theme.CreateLabel(headings, "tiny", "dim", "RIGHT")
+        cell:SetPoint("RIGHT", offset, 0)
+        cell:SetWidth(column.width)
+        cell:SetText(column.label)
+        headings.cells[column.key] = cell
+        offset = offset - column.width - 8
+    end
+    widgets.headings = headings
+
+    local list = Widgets.CreateScrollList(view, {
+        rowHeight = ROW_HEIGHT,
+        createRow = CreateRow,
+        updateRow = UpdateRow,
+
+        isSelected = function(entry)
+            return state.selected ~= nil and entry.itemID == state.selected
+        end,
+
+        onClick = function(entry)
+            -- A second click on the same item goes back to the overview.
+            state.selected = state.selected ~= entry.itemID and entry.itemID or nil
+            BankView.Refresh()
+        end,
+
+        onEnter = ShowRowTooltip,
+        onLeave = function() GameTooltip:Hide() end,
+
+        -- Headings step left with the rows while the scrollbar shows.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", right - (shown and 10 or 0), -62)
+        end,
+    })
+    list:SetPoint("TOPLEFT", 8, -78)
+    list:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", right, 28)
+    widgets.list = list
+
+    local empty = Theme.CreateLabel(view, "small", "dim", "CENTER")
+    empty:SetPoint("CENTER", list, "CENTER")
+    empty:SetWidth(360)
+    empty:SetWordWrap(true)
+    widgets.empty = empty
+
+    local summary = Theme.CreateLabel(view, "small", "text")
+    summary:SetPoint("BOTTOMLEFT", 8, 10)
+    widgets.summary = summary
+
+    local total = Theme.CreateLabel(view, "small", "text")
+    total:SetPoint("LEFT", summary, "RIGHT", 0, 0)
+    widgets.total = total
+
+    local detail = BuildDetail(view)
+    detail:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8, -8)
+    detail:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -8, 8)
+    widgets.detail = detail
+end
+
+--- For the tests: the view's state, so a test can set a filter.
+BankView._state = state
