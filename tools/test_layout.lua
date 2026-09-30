@@ -91,9 +91,61 @@ check("auction window not laid out yet: no answer rather than a wrong one",
     GetRight = function() return nil end,
   }), nil)
 
+-- Moved over for the character window: the main window is measured against
+-- where the panel really is, not the spot beside the auction window.
+ns.UI = { window = Window(1400, 4, 600, 580) }
+check("panel moved right onto the main window: gives way",
+  PostPanel:DesiredHeight(AH, 1250), 1091 - (584 + PANEL_GAP))
+
+ns.UI = { window = Window(1077, 4, 1060, 580) }
+check("panel moved right past a narrow main window: still clears it",
+  PostPanel:DesiredHeight(AH, 2140), AH_HEIGHT)
+
+-- The character window, where the game puts it with the auction house open:
+-- in the slot to the auction window's right, which is the panel's spot.
+print("")
+
+UIParent = { GetRight = function() return 2141 end }
+local character = Window(857, 579, 384, 512)
+CharacterFrame = character
+
+local host, left, fits = PostPanel:Placement(AH)
+check("character window open beside the auction house: dock to it",
+  host == character, true)
+check("and sit just past its right edge", left, 857 + 384 + PANEL_GAP)
+check("which fits on a wide screen", fits, true)
+
+character.shown = false
+host, left, fits = PostPanel:Placement(AH)
+check("character window closed: back beside the auction house",
+  host == AH, true)
+check("with no moved edge", left, nil)
+
+-- Dragged off somewhere else, it is not in the way.
+character.shown = true
+CharacterFrame = Window(1500, 100, 384, 400)
+host = PostPanel:Placement(AH)
+check("character window dragged clear: panel stays put", host == AH, true)
+
+-- Found through the game's panel slot too, whatever the window is.
+CharacterFrame = nil
+local spellbook = Window(857, 600, 540, 480)
+GetUIPanel = function(key) if key == "right" then return spellbook end end
+host = PostPanel:Placement(AH)
+check("any window in the right-hand slot counts", host == spellbook, true)
+
+-- A narrow screen: the panel steps aside rather than covering the paper doll.
+GetUIPanel = nil
+CharacterFrame = character
+UIParent = { GetRight = function() return 1366 end }
+host, left, fits = PostPanel:Placement(AH)
+check("no room past the character window: step aside", fits, false)
+
+UIParent, CharacterFrame = nil, nil
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d layout checks wrong", failed, passed + failed))
 end
-print(string.format("PASS -- the sell list clears the main window (%d checks)", passed))
+print(string.format("PASS -- the sell list clears the main window and the character window (%d checks)", passed))
 print("")
