@@ -143,6 +143,7 @@ local function Load(path) assert(loadfile(lfs_cwd .. path))("Blackthornes_TS", n
 Load("/Core/Util.lua")
 Load("/UI/Theme.lua")
 Load("/UI/Widgets.lua")
+Load("/Logic/Banks.lua")
 Load("/Data/Mail.lua")
 Load("/Logic/MailHaul.lua")
 Load("/UI/MailReport.lua")

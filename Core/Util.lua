@@ -29,8 +29,11 @@ function Util.FormatMoney(copper, opts)
 
     opts = opts or {}
 
-    local negative = copper < 0
     local amount = math.floor(math.abs(copper) + 0.5)
+
+    -- Signed after rounding: a loss of a fraction of a copper rounds to
+    -- nothing, and "-0c" in red read as a loss that was not there.
+    local negative = copper < 0 and amount > 0
 
     local gold   = math.floor(amount / COPPER_PER_GOLD)
     local silver = math.floor((amount % COPPER_PER_GOLD) / COPPER_PER_SILVER)

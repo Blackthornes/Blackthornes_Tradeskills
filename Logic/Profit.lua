@@ -636,7 +636,12 @@ function Profit:GetRanked(opts)
         local right = opts.ignoreStock and (b[sortBy] or -math.huge) or RankValue(b, sortBy)
 
         if left == right then
-            return (a.name or "") < (b.name or "")
+            -- Two recipes can share a name, so the recipe ID settles the
+            -- rest; otherwise those rows swapped places on every redraw.
+            if (a.name or "") ~= (b.name or "") then
+                return (a.name or "") < (b.name or "")
+            end
+            return (a.recipeID or 0) < (b.recipeID or 0)
         end
         return left > right
     end)
@@ -693,7 +698,8 @@ function Profit:Resolve(query)
 end
 
 ns.RegisterCommand("top", "[count]: most profitable crafts right now", function(args)
-    local limit = tonumber(args:match("(%d+)")) or 10
+    -- At least one: "/bts top 0" printed a heading over an empty list.
+    local limit = math.max(1, tonumber(args:match("(%d+)")) or 10)
 
     if ns.Recipes:Count() == 0 then
         ns.Print("no recipes read yet. Open a profession window once")

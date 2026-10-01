@@ -20,7 +20,7 @@ local function Frame()
     local frame = {}
     function frame.RegisterEvent() end
     function frame.UnregisterEvent() end
-    function frame.SetScript() end
+    function frame.SetScript(self, name, fn) self[name] = fn end
     return frame
 end
 
@@ -81,6 +81,26 @@ check("short help ends by pointing to /bts help all",
 lines = {}
 ns.commands.help.fn("all")
 check("help all lists developer tools too", Shown("taint") and Shown("scan"), table.concat(lines, "\n"))
+
+-- Events: a handler that unregisters itself mid-dispatch must not make the
+-- next handler for that event miss it (the old macros' one-off combat-end
+-- handler used to skip the Disenchant button's).
+ns = LoadWith("v0.2.0")
+local ran = {}
+local first, second, third = {}, {}, {}
+ns.RegisterEvent(first, "PLAYER_REGEN_ENABLED", function()
+    ran[#ran + 1] = "first"
+    ns.UnregisterEvent(first, "PLAYER_REGEN_ENABLED")
+end)
+ns.RegisterEvent(second, "PLAYER_REGEN_ENABLED", function() ran[#ran + 1] = "second" end)
+ns.RegisterEvent(third, "PLAYER_REGEN_ENABLED", function() ran[#ran + 1] = "third" end)
+ns.eventFrame.OnEvent(ns.eventFrame, "PLAYER_REGEN_ENABLED")
+check("every handler runs when one unregisters itself",
+    table.concat(ran, ",") == "first,second,third", table.concat(ran, ","))
+ran = {}
+ns.eventFrame.OnEvent(ns.eventFrame, "PLAYER_REGEN_ENABLED")
+check("and the one that left is gone next time",
+    table.concat(ran, ",") == "second,third", table.concat(ran, ","))
 
 if failures > 0 then error(("version: %d failure(s)"):format(failures), 0) end
 print("  version and help: all checks passed")
