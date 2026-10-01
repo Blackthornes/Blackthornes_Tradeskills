@@ -92,6 +92,16 @@ do
 end
 
 print("")
+print("Room for the queued crafts")
+
+do
+  check("room past the pane: shown", CraftPanel.QueuedFits(1500, 2000), true)
+  check("no room: out of the way rather than over the pane", CraftPanel.QueuedFits(1830, 2000), false)
+  check("exactly enough room", CraftPanel.QueuedFits(2000 - 254, 2000), true)
+  check("not laid out yet: shown", CraftPanel.QueuedFits(nil, 2000), true)
+end
+
+print("")
 print("Showing and hiding")
 
 do

@@ -1611,10 +1611,24 @@ function CraftPanel:BuildQueued()
     return frame
 end
 
+--- Is there room for the queued crafts to the right of the pane?
+--
+-- Kept on screen, they used to be pushed back over the pane itself when there
+-- was not, covering its sort button and recipes (Trent's screenshot with the
+-- auction house open, 2026-10-01). Out of the way instead, as the sell list
+-- steps aside for the character window.
+-- @param paneRight the pane's right edge, nil when not laid out yet
+-- @param screenRight the screen's right edge, nil when unknown
+function CraftPanel.QueuedFits(paneRight, screenRight)
+    if type(paneRight) ~= "number" or type(screenRight) ~= "number" then return true end
+    return paneRight + QUEUED_GAP + QUEUED_WIDTH <= screenRight
+end
+
 --- Show the queued crafts beside the pane while anything is queued.
 function CraftPanel:RefreshQueued()
     local wanted = self.frame and self.frame:IsShown()
         and not self:IsCollapsed() and ns.Queue:Count() > 0
+        and CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
 
     if not wanted then
         if self.queuedFrame then self.queuedFrame:Hide() end
