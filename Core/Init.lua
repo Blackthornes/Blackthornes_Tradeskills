@@ -165,14 +165,21 @@ function ns.RegisterEvent(owner, event, fn)
 end
 
 function ns.UnregisterEvent(owner, event)
-    local list = handlers[event]
-    if not list then return false end
+    local old = handlers[event]
+    if not old then return false end
 
-    for i = #list, 1, -1 do
-        if list[i].owner == owner then
-            table.remove(list, i)
+    -- A new list rather than removing from the old one. A handler that
+    -- unregisters itself does it while the old list is being walked, and
+    -- removing from under the walk skipped the handler after it: the
+    -- Disenchant button was not set up again after a fight that began at
+    -- login, because the old macros' one-off handler came first.
+    local list = {}
+    for i = 1, #old do
+        if old[i].owner ~= owner then
+            list[#list + 1] = old[i]
         end
     end
+    handlers[event] = list
 
     if #list == 0 then
         handlers[event] = nil

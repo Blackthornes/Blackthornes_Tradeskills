@@ -268,6 +268,17 @@ prices[CLOTH] = { market = 2, rival = 1 }
 check("and never goes below a copper", Profit:ChoosePostPrice(CLOTH), 1)
 
 --------------------------------------------------------------------------------
+-- Money text: a fraction of a copper either way is no money at all, and
+-- "-0c" in red read as a loss that was not there.
+
+check("a loss under half a copper reads as nothing",
+    Util.FormatMoney(-0.4, { noColor = true }), "0c")
+check("a real loss keeps its sign",
+    Util.FormatMoney(-150, { noColor = true }), "-1s 50c")
+check("and rounds like a gain",
+    Util.FormatMoney(-0.6, { noColor = true }), "-1c")
+
+--------------------------------------------------------------------------------
 print("")
 if failures > 0 then
     error(("%d silver-step check(s) failed"):format(failures), 0)

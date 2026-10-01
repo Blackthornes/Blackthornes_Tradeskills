@@ -211,6 +211,11 @@ local function Build(outer)
 
     widgets.subCrafts = Widgets.CreateCheckbox(subCraftRow, "Queue them", function(checked)
         Config:Set("autoQueueSubCrafts", checked)
+
+        -- Sub-crafts are only worked out when the queue changes, so unticking
+        -- this left them queued (and ticking it queued none) until then.
+        ns.Queue:RebuildDependencies()
+        ns.Queue:Notify()
     end, true)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 

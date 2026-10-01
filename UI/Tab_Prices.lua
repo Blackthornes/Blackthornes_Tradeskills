@@ -141,7 +141,10 @@ local function BuildList()
     table.sort(rows, function(a, b)
         -- Age sorts ascending: freshest first is the useful direction.
         if sortBy == "age" then
-            return a.age < b.age
+            -- One scan prices many items at once; ties go by item so those
+            -- rows do not swap places on every redraw.
+            if a.age ~= b.age then return a.age < b.age end
+            return a.itemID < b.itemID
         end
 
         if sortBy == "name" then

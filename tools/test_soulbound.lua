@@ -173,6 +173,18 @@ local starred = ids(ns.SkillUp:GetRecommended())
 check("the star list leaves soulbound out", not starred[100] and not starred[400])
 check("and keeps bind on equip", starred[200] == true)
 
+-- Equal profit and the same name: the recipe ID decides, so the rows keep
+-- their places from one redraw to the next rather than swapping.
+local names = {}
+for itemID, recipe in pairs(recipes) do names[itemID] = recipe.name; recipe.name = "Same Name" end
+local tied = Profit:GetRanked({})
+local inOrder = #tied > 1
+for index = 2, #tied do
+    if tied[index - 1].recipeID >= tied[index].recipeID then inOrder = false end
+end
+check("rows tied on profit and name go by recipe", inOrder)
+for itemID, name in pairs(names) do recipes[itemID].name = name end
+
 C_Item, GetTime = saved.C_Item, saved.GetTime
 
 print(("\n%d check(s) passed\n"):format(checks))
