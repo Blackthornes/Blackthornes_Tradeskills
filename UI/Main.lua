@@ -1210,7 +1210,10 @@ function UI:BuildMinimapButton()
         self:SetScript("OnUpdate", function()
             local mx, my = Minimap:GetCenter()
             local cx, cy = GetCursorPosition()
-            local scale = UIParent:GetEffectiveScale()
+            -- The minimap's own scale, since its centre is in its own
+            -- coordinates: a minimap sized up or down (Edit Mode does it
+            -- through scale) put the button at the wrong angle to the cursor.
+            local scale = Minimap:GetEffectiveScale()
 
             local newAngle = math.atan2((cy / scale) - my, (cx / scale) - mx)
             UpdatePosition(newAngle)

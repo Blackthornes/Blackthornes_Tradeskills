@@ -217,7 +217,13 @@ local function UpdateDetail(entry)
         end
     end
 
-    table.sort(ranked, function(a, b) return a.profit > b.profit end)
+    -- Ties settled by name, then recipe: crafts with equal profit swapped
+    -- places on every redraw.
+    table.sort(ranked, function(a, b)
+        if a.profit ~= b.profit then return a.profit > b.profit end
+        if (a.name or "") ~= (b.name or "") then return (a.name or "") < (b.name or "") end
+        return (a.recipeID or 0) < (b.recipeID or 0)
+    end)
 
     if #ranked == 0 then
         detail.lines[1]:Show()
