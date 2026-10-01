@@ -560,11 +560,13 @@ end
 
 --- What the items that came back are worth at today's prices, where known.
 local function ItemsValue(list)
-    if not (ns.Prices and ns.Prices.GetValue) then return 0 end
+    if not (ns.Banks and ns.Banks.UnitWorth) then return 0 end
 
+    -- Banks' worth keeps the house rule: grey items at what a vendor pays,
+    -- the rest at the better of auction and vendor.
     local value = 0
     for _, entry in ipairs(list) do
-        local ok, each = pcall(ns.Prices.GetValue, ns.Prices, entry.itemID)
+        local ok, each = pcall(ns.Banks.UnitWorth, ns.Banks, entry.itemID)
         if ok and type(each) == "number" then value = value + each * entry.count end
     end
     return value
