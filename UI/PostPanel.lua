@@ -502,10 +502,11 @@ function PostPanel:PastOwnPanes(frame, right, ahTop, ahBottom)
                 local left, paneRight = Edge(pane, "GetLeft"), Edge(pane, "GetRight")
                 local top, bottom = Edge(pane, "GetTop"), Edge(pane, "GetBottom")
 
-                -- Docked just past the edge so far, or pushed back over it
-                -- by the screen edge; either way in the panel's spot.
+                -- Anywhere in the panel's spot past the edge so far. The
+                -- craft pane sits clear of the profession tabs, which stick
+                -- out past that window's edge, so it is not right beside it.
                 if left and paneRight and top and bottom
-                    and left <= right + PANEL_GAP * 3 and paneRight > right
+                    and left < right + PANEL_GAP + PANEL_WIDTH and paneRight > right
                     and bottom < ahTop and top > ahBottom then
                     frame, right, moved = pane, paneRight, true
                 end

@@ -161,6 +161,16 @@ UIParent = { GetRight = function() return 3000 end }
 host = PostPanel:Placement(AH)
 check("panes closed: dock to the profession window", host == profession, true)
 
+-- The pane really sits clear of the profession tabs, well past the
+-- window's edge (Trent's second screenshot): still in the panel's spot.
+pane.shown, queued.shown = true, false
+ns.CraftPanel.frame = Window(857 + 630 + 48, 560, 350, 520)
+host, left = PostPanel:Placement(AH)
+check("a pane clear of the profession tabs still counts", host == ns.CraftPanel.frame, true)
+check("so the panel goes past it", left, 857 + 630 + 48 + 350 + PANEL_GAP)
+ns.CraftPanel.frame = pane
+pane.shown = false
+
 -- A pane dragged clear of the profession window is not in the way.
 pane.shown = true
 ns.CraftPanel.frame = Window(100, 100, 350, 520)
