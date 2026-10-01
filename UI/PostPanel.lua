@@ -330,8 +330,8 @@ function PostPanel:Build()
 
     local shopping = Widgets.CreateScrollList(body, {
         rowHeight = SHOPPING_ROW_HEIGHT,
-        createRow = function(row) ns.CraftPanel.CreateShoppingRow(row) end,
-        updateRow = function(row, line) ns.CraftPanel.UpdateShoppingRow(row, line) end,
+        createRow = PostPanel.CreateShoppingRow,
+        updateRow = PostPanel.UpdateShoppingRow,
         onEnter = PostPanel.ShowShoppingTooltip,
         onLeave = function() GameTooltip:Hide() end,
         onClick = function(line)
@@ -695,6 +695,30 @@ end
 --- vendor material, which is a mistake to buy there.
 function PostPanel:CanSearch(line)
     return type(line) == "table" and (line.shortfall or 0) > 0 and not line.fromVendor
+end
+
+-- Clicking the row searched already, but nothing said so. Trent: "a button
+-- would be clearer to a new user". The same size as the sell list's List.
+local SEARCH_WIDTH = BUTTON_WIDTH
+
+--- The craft pane's shopping row, with a Search button at its right end and
+--- the counts moved over to make room for it.
+function PostPanel.CreateShoppingRow(row)
+    ns.CraftPanel.CreateShoppingRow(row)
+
+    row.search = Widgets.CreateButton(row, "Search", function()
+        if PostPanel:CanSearch(row.data) then ns.UI:SearchAuctionHouse(row.data.itemID) end
+    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = "Search the auction house for this" })
+    row.search:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+
+    local inset = -(8 + SEARCH_WIDTH + 6)
+    row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", inset, -4)
+    row.tag:SetPoint("TOPRIGHT", row, "TOPRIGHT", inset, -15)
+end
+
+function PostPanel.UpdateShoppingRow(row, line)
+    ns.CraftPanel.UpdateShoppingRow(row, line)
+    row.search:SetShown(PostPanel:CanSearch(line))
 end
 
 --- The Queue tab's tooltip, and what a click does.
