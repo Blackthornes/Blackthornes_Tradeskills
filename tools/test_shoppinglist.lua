@@ -105,6 +105,54 @@ do
 end
 
 print("")
+print("The Buy view at the auction house")
+
+do
+  local PostPanel
+  local realNew = ns.NewModule
+  ns.NewModule = function(name) local m = realNew(name); PostPanel = m; return m end
+  assert(loadfile(lfs_cwd .. "/UI/PostPanel.lua"))("Blackthornes_TS", ns)
+  ns.NewModule = realNew
+
+  check("opens on the sell list", PostPanel.view, "sell")
+
+  check("a short auction material can be searched for",
+    PostPanel:CanSearch({ shortfall = 2 }), true)
+  check("a vendor material is never searched for",
+    PostPanel:CanSearch({ shortfall = 2, fromVendor = true }), false)
+  check("nor one you already have",
+    PostPanel:CanSearch({ shortfall = 0 }), false)
+
+  ns.Queue = { GetShoppingTotal = function() return 4560, 0 end }
+  local text, short = PostPanel:ShoppingSummary({
+    { shortfall = 6 }, { shortfall = 0 }, { shortfall = 2 } })
+  check("counts only what is still short", short, 2)
+  check("and says what it costs", text, "2 materials to buy, about 4560c")
+
+  text, short = PostPanel:ShoppingSummary({ { shortfall = 0 } })
+  check("nothing short says so", text, "You have everything the queue needs.")
+
+  local refreshed = 0
+  PostPanel.Refresh = function() refreshed = refreshed + 1 end
+  PostPanel:SetView("buy")
+  check("Buy switches to the shopping list", PostPanel.view, "buy")
+  check("and redraws", refreshed, 1)
+  PostPanel:SetView("anything else")
+  check("anything else is the sell list", PostPanel.view, "sell")
+
+  local now, built = 100, 0
+  _G.GetTime = function() return now end
+  ns.Queue.GetShoppingList = function() built = built + 1; return {} end
+  PostPanel.shoppingAt = nil
+  PostPanel:ShoppingLines(); PostPanel:ShoppingLines()
+  check("the one-second ticker does not rebuild it every tick", built, 1)
+  now = now + 2
+  PostPanel:ShoppingLines()
+  check("but it is fresh again two seconds on", built, 2)
+  _G.GetTime = nil
+end
+
+print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d shopping list checks wrong", failed, passed + failed))
 end

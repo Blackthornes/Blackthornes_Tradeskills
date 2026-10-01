@@ -44,6 +44,18 @@ local PANEL_MIN_HEIGHT = 200
 -- Remembers whether the panel is folded down to its title (UI/Collapse.lua).
 local COLLAPSE_KEY = "postPanelCollapsed"
 
+-- The Sell and Buy switch under the title. Buy is the craft queue's shopping
+-- list, the one beside the profession window (Trent, 2026-10-01: "could we
+-- have a shopping list also appear on the actual AH UI somewhere that's not
+-- in the way?"). Sharing this panel puts it at the auction house without
+-- taking any more of the screen.
+local SWITCH_HEIGHT = 28
+local SHOPPING_ROW_HEIGHT = 28
+
+-- The shopping list walks the queue, the bags and every character's saved
+-- counts, too much for the one-second ticker; at most this often instead.
+local SHOPPING_REFRESH_SECONDS = 2
+
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
@@ -285,8 +297,19 @@ function PostPanel:Build()
         end,
     })
 
+    local half = math.floor((PANEL_WIDTH - 28) / 2)
+    local switch = Widgets.CreateTabStrip(body, {
+        { key = "sell", text = "Sell", width = half },
+        { key = "buy", text = "Buy", width = half },
+    }, function(key)
+        PostPanel:SetView(key)
+    end)
+    switch:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
+    switch:Select(self.view)
+    self.switch = switch
+
     local summary = Theme.CreateLabel(body, "tiny", "muted")
-    summary:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
+    summary:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -6)
     summary:SetWidth(PANEL_WIDTH - 28)
     self.summary = summary
 
@@ -304,6 +327,21 @@ function PostPanel:Build()
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
     self.list = list
+
+    local shopping = Widgets.CreateScrollList(body, {
+        rowHeight = SHOPPING_ROW_HEIGHT,
+        createRow = function(row) ns.CraftPanel.CreateShoppingRow(row) end,
+        updateRow = function(row, line) ns.CraftPanel.UpdateShoppingRow(row, line) end,
+        onEnter = PostPanel.ShowShoppingTooltip,
+        onLeave = function() GameTooltip:Hide() end,
+        onClick = function(line)
+            if PostPanel:CanSearch(line) then ns.UI:SearchAuctionHouse(line.itemID) end
+        end,
+    })
+    shopping:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
+    shopping:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    shopping:Hide()
+    self.shoppingList = shopping
 
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
     empty:SetPoint("CENTER", list, "CENTER")
@@ -638,6 +676,89 @@ function PostPanel:Reflow()
     end
 end
 
+--------------------------------------------------------------------------------
+-- Buy: the craft queue's shopping list
+--------------------------------------------------------------------------------
+
+PostPanel.view = "sell"
+
+--- Switch between the sell list and the shopping list.
+function PostPanel:SetView(view)
+    self.view = view == "buy" and "buy" or "sell"
+    if self.switch then self.switch:Select(self.view) end
+    self.shoppingAt = nil
+    self:Refresh()
+end
+
+--- A row worth searching the auction house for: still short, and not a
+--- vendor material, which is a mistake to buy there.
+function PostPanel:CanSearch(line)
+    return type(line) == "table" and (line.shortfall or 0) > 0 and not line.fromVendor
+end
+
+--- The Queue tab's tooltip, and what a click does.
+function PostPanel.ShowShoppingTooltip(row, line)
+    if ns.UI and ns.UI.ShowMaterialTooltip then ns.UI.ShowMaterialTooltip(row, line) end
+    if PostPanel:CanSearch(line) then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Click to search the auction house", 0.78, 0.64, 0.30)
+        GameTooltip:Show()
+    end
+end
+
+--- The shopping list, at most once every couple of seconds.
+function PostPanel:ShoppingLines()
+    local now = GetTime()
+    if not self.shoppingLines or not self.shoppingAt
+        or now - self.shoppingAt >= SHOPPING_REFRESH_SECONDS then
+        self.shoppingLines = ns.Queue:GetShoppingList()
+        self.shoppingAt = now
+    end
+    return self.shoppingLines
+end
+
+--- What the Buy view's summary line says.
+-- @return text, and how many lines are still short
+function PostPanel:ShoppingSummary(lines)
+    local short = 0
+    for _, line in ipairs(lines) do
+        if (line.shortfall or 0) > 0 then short = short + 1 end
+    end
+
+    if short == 0 then
+        return "You have everything the queue needs.", 0
+    end
+
+    local cost = ns.Queue:GetShoppingTotal()
+    return ("%d material%s to buy, about %s"):format(
+        short, short == 1 and "" or "s",
+        Util.FormatMoney(cost or 0, { short = true })), short
+end
+
+function PostPanel:RefreshShopping()
+    self.list:Hide()
+    self.shoppingList:Show()
+
+    local lines = self:ShoppingLines()
+    local text, short = self:ShoppingSummary(lines)
+
+    self.title:SetText(self:IsCollapsed() and short > 0
+        and ("Shopping list (%d)"):format(short) or "Shopping list")
+
+    self.shoppingList:SetData(lines)
+    self.empty:SetShown(#lines == 0)
+
+    if #lines == 0 then
+        self.empty:SetText(ns.Queue:Count() == 0
+            and "Nothing queued.\n\nQueue crafts and the materials they need show up here."
+            or "You already have everything the queue needs.")
+        self.summary:SetText("")
+        return
+    end
+
+    self.summary:SetText(text)
+end
+
 function PostPanel:Refresh()
     -- Before the shown check: this is how a panel that stepped aside for the
     -- character window comes back.
@@ -647,6 +768,15 @@ function PostPanel:Refresh()
 
     -- Cheap, and it catches the main window being dragged, which has no event.
     self:Reflow()
+
+    if self.view == "buy" then
+        self.worth:SetText("")
+        self:RefreshShopping()
+        return
+    end
+
+    self.shoppingList:Hide()
+    self.list:Show()
 
     if TypingInList(self.list) then return end
 
