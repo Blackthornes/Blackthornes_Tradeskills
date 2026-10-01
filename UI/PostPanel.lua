@@ -434,10 +434,47 @@ function PostPanel:SideFrame(auctionFrame)
             if left and right and top and bottom
                 and left < dockRight and right > dockLeft
                 and bottom < ahTop and top > ahBottom then
-                return frame, right
+                return self:PastOwnPanes(frame, right, ahTop, ahBottom)
             end
         end
     end
+end
+
+-- Panes of this addon that dock to the right of a game window: the craft
+-- queue beside the profession window, and its queued crafts beside that.
+local function OwnPanes()
+    local panel = ns.CraftPanel
+    if type(panel) ~= "table" then return {} end
+    return { panel.frame, panel.queuedFrame }
+end
+
+--- Past the craft queue panes, when they are docked beside the window found.
+--
+-- With the auction house and a profession both open, the profession window
+-- takes the slot beside the auction window and the craft queue panes dock to
+-- its right, which is where this panel went next. Trent's screenshot,
+-- 2026-10-01: Ready to sell drawn over the queued crafts and shopping list.
+-- @return the frame to dock to, its right edge
+function PostPanel:PastOwnPanes(frame, right, ahTop, ahBottom)
+    local moved = true
+    while moved do
+        moved = false
+        for _, pane in ipairs(OwnPanes()) do
+            if pane ~= frame and IsShownFrame(pane) then
+                local left, paneRight = Edge(pane, "GetLeft"), Edge(pane, "GetRight")
+                local top, bottom = Edge(pane, "GetTop"), Edge(pane, "GetBottom")
+
+                -- Docked just past the edge so far, or pushed back over it
+                -- by the screen edge; either way in the panel's spot.
+                if left and paneRight and top and bottom
+                    and left <= right + PANEL_GAP * 3 and paneRight > right
+                    and bottom < ahTop and top > ahBottom then
+                    frame, right, moved = pane, paneRight, true
+                end
+            end
+        end
+    end
+    return frame, right
 end
 
 --- Where the panel should be right now.
