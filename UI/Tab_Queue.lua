@@ -199,6 +199,7 @@ local function UpdateMaterialRow(row, line)
 end
 
 --- Full numbers on hover, including surplus and anything held by alts.
+-- On UI as well, for the shopping list beside the profession window.
 local function ShowMaterialTooltip(row, line)
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", line.itemID, Util.GetItemLabel(line.itemID))
     GameTooltip:AddLine(" ")
@@ -263,6 +264,8 @@ local function ShowMaterialTooltip(row, line)
 
     GameTooltip:Show()
 end
+
+UI.ShowMaterialTooltip = ShowMaterialTooltip
 
 --------------------------------------------------------------------------------
 -- Refresh
