@@ -191,6 +191,10 @@ local DEFAULTS = {
         -- the old default wrote into saved settings does not keep it off.
         suggestOtherCharacters = true,
 
+        -- The shopping list under the queued crafts beside the profession
+        -- window. Hidden and shown with the button at its foot.
+        craftPaneShoppingList = true,
+
         -- How the mark on a craft that both skills you up and pays is drawn:
         -- "star" is the addon's own art, "raid" the game's raid-target star,
         -- "pip" a plain gold square for a client that draws neither. Switched
