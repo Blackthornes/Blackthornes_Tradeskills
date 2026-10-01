@@ -134,6 +134,50 @@ GetUIPanel = function(key) if key == "right" then return spellbook end end
 host = PostPanel:Placement(AH)
 check("any window in the right-hand slot counts", host == spellbook, true)
 
+-- A profession window in that slot, with the craft queue panes docked to its
+-- right: the panel goes past them, not over them (Trent, 2026-10-01).
+local profession = Window(857, 560, 630, 520)
+GetUIPanel = function(key) if key == "right" then return profession end end
+local pane = Window(857 + 630 + 6, 560, 350, 520)
+local queued = Window(857 + 630 + 6 + 350 + 4, 560, 250, 520)
+ns.CraftPanel = { frame = pane, queuedFrame = queued }
+UIParent = { GetRight = function() return 3000 end }
+host, left, fits = PostPanel:Placement(AH)
+check("craft panes beside the profession: dock past them", host == queued, true)
+check("just past the queued crafts' right edge", left, 857 + 630 + 6 + 350 + 4 + 250 + PANEL_GAP)
+
+queued.shown = false
+host, left = PostPanel:Placement(AH)
+check("queued crafts hidden: dock past the craft pane", host == pane, true)
+check("at the pane's right edge", left, 857 + 630 + 6 + 350 + PANEL_GAP)
+
+UIParent = { GetRight = function() return 2000 end }
+queued.shown = true
+host, left, fits = PostPanel:Placement(AH)
+check("no room past the panes: step aside", fits, false)
+
+pane.shown, queued.shown = false, false
+UIParent = { GetRight = function() return 3000 end }
+host = PostPanel:Placement(AH)
+check("panes closed: dock to the profession window", host == profession, true)
+
+-- The pane really sits clear of the profession tabs, well past the
+-- window's edge (Trent's second screenshot): still in the panel's spot.
+pane.shown, queued.shown = true, false
+ns.CraftPanel.frame = Window(857 + 630 + 48, 560, 350, 520)
+host, left = PostPanel:Placement(AH)
+check("a pane clear of the profession tabs still counts", host == ns.CraftPanel.frame, true)
+check("so the panel goes past it", left, 857 + 630 + 48 + 350 + PANEL_GAP)
+ns.CraftPanel.frame = pane
+pane.shown = false
+
+-- A pane dragged clear of the profession window is not in the way.
+pane.shown = true
+ns.CraftPanel.frame = Window(100, 100, 350, 520)
+host = PostPanel:Placement(AH)
+check("a pane somewhere else is ignored", host == profession, true)
+ns.CraftPanel = nil
+
 -- A narrow screen: the panel steps aside rather than covering the paper doll.
 GetUIPanel = nil
 CharacterFrame = character

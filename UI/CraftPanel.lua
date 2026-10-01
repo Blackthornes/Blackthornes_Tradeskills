@@ -1376,6 +1376,161 @@ local function UpdateQueuedRow(row, entry)
         or status
 end
 
+--------------------------------------------------------------------------------
+-- The shopping list, under the queued crafts
+--------------------------------------------------------------------------------
+
+-- Ranatsu32 on CurseForge: "Is it possible to have the 'Crafting Queue' show a
+-- total materials needed to complete the queue? Like a shopping list?" The
+-- Queue tab had one, but this is the window people craft from. Same list as
+-- that tab (Queue:GetShoppingList), so the two never disagree.
+
+local SHOPPING_ROW_HEIGHT = 28
+local SHOPPING_BAR_WIDTH = 96
+local SHOPPING_COUNT_WIDTH = 54
+local SHOPPING_FOOTER_HEIGHT = 26
+
+-- The queued crafts keep at least this many rows when the shopping list
+-- shares the column with them, and never take more than this share of it.
+local QUEUED_MIN_ROWS = 2
+local QUEUED_MAX_SHARE = 0.45
+
+--- Who else holds the most of an item, bags and bank together.
+--
+-- From the counts Inventory already saved for each character; nothing new is
+-- read. Only a hint: stock on another character is not in reach of the craft.
+-- @return name, count  (nil when no other character has any)
+function CraftPanel:AltHolder(itemID)
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" then return nil end
+
+    local selfKey = ns.Config:GetCharacterKey()
+    local bestKey, bestCount = nil, 0
+
+    for key, record in pairs(characters) do
+        if key ~= selfKey and type(record) == "table" then
+            local count = 0
+            if type(record.inventory) == "table" then count = count + (record.inventory[itemID] or 0) end
+            if type(record.bank) == "table" then count = count + (record.bank[itemID] or 0) end
+            if count > bestCount or (count == bestCount and count > 0 and key < bestKey) then
+                bestKey, bestCount = key, count
+            end
+        end
+    end
+
+    if not bestKey then return nil end
+    local name = Util.CharacterName(bestKey)
+    if name == "" then name = "another character" end
+    return name, bestCount
+end
+
+--- How one shopping list line reads.
+--
+-- Green when you have enough on you, amber when you own enough but some of it
+-- is in the bank or on another character, red when you still have to buy.
+-- @return look { count, colour, fraction, tag, tagColour }
+function CraftPanel:ShoppingLook(line)
+    local needed = math.max(1, line.needed or 0)
+    local look = {
+        count = ("%d/%d"):format(line.have or 0, line.needed or 0),
+        fraction = math.min(1, (line.have or 0) / needed),
+    }
+
+    if (line.shortfall or 0) <= 0 then
+        if line.needsBankTrip then
+            look.colour, look.tag, look.tagColour = "warn", "in bank", "warn"
+        else
+            look.colour, look.tag, look.tagColour = "profit", "have all", "profit"
+        end
+        return look
+    end
+
+    look.colour = "loss"
+
+    local altName, altCount = self:AltHolder(line.itemID)
+    if altName and altCount >= line.shortfall then
+        look.colour, look.tag, look.tagColour = "warn", "on " .. altName, "warn"
+        return look
+    end
+
+    if line.estimatedCost then
+        local cost = Util.FormatMoney(line.estimatedCost, { short = true })
+        look.tag = line.fromVendor and ("|c%svendor|r %s"):format(ns.COLORS.accent, cost) or cost
+        look.tagColour = "text"
+    else
+        look.tag, look.tagColour = "no price", "muted"
+    end
+    return look
+end
+
+--- The total along the bottom: what is left to buy. Kept to the money, as it
+--- shares the line with the button; a line with no price says so itself.
+function CraftPanel:ShoppingTotalText()
+    local cost = ns.Queue:GetShoppingTotal()
+    return "To buy " .. Util.FormatMoney(cost or 0, { short = true })
+end
+
+local function CreateShoppingRow(row)
+    row.icon = Theme.CreateItemIcon(row, 13)
+    row.icon:SetPoint("TOPLEFT", 8, -3)
+
+    row.count = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+    row.count:SetPoint("TOPRIGHT", -8, -4)
+    row.count:SetWidth(SHOPPING_COUNT_WIDTH)
+
+    row.name = Theme.CreateLabel(row, "small", "text")
+    row.name:SetPoint("TOPLEFT", 25, -4)
+    row.name:SetPoint("TOPRIGHT", row.count, "TOPLEFT", -4, 0)
+
+    row.bar = Theme.CreateBar(row, SHOPPING_BAR_WIDTH, 3)
+    row.bar:SetPoint("TOPLEFT", row, "TOPLEFT", 25, -19)
+
+    row.tag = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
+    row.tag:SetPoint("TOPLEFT", row, "TOPLEFT", 25 + SHOPPING_BAR_WIDTH + 6, -15)
+    row.tag:SetPoint("TOPRIGHT", -8, -15)
+end
+
+local function UpdateShoppingRow(row, line)
+    local look = CraftPanel:ShoppingLook(line)
+
+    row.name:SetText(Util.GetItemLabel(line.itemID))
+    row.name:SetTextColor(Theme.Unpack(look.colour == "profit" and "muted" or "text"))
+    Theme.SetItemIcon(row.icon, line.itemID)
+
+    row.count:SetText(look.count)
+    row.count:SetTextColor(Theme.Unpack(look.colour))
+
+    row.bar:Set(look.fraction, look.colour)
+
+    row.tag:SetText(look.tag or "")
+    row.tag:SetTextColor(Theme.Unpack(look.tagColour or "muted"))
+end
+
+-- The sell list's Buy view at the auction house draws the same rows.
+CraftPanel.CreateShoppingRow = CreateShoppingRow
+CraftPanel.UpdateShoppingRow = UpdateShoppingRow
+
+--- Show the shopping list or not; remembered across sessions.
+function CraftPanel:SetShoppingShown(on)
+    ns.Config:Set("craftPaneShoppingList", on and true or false)
+    self:RefreshQueued()
+end
+
+function CraftPanel:IsShoppingShown()
+    return ns.Config:Get("craftPaneShoppingList") ~= false
+end
+
+--- How tall the queued crafts list is when the shopping list shares the column.
+--
+-- Its rows, as long as they fit in its share; at least a couple, so a long
+-- shopping list never squeezes the crafts out.
+-- @param available the height both lists share
+-- @param queued how many crafts are queued
+function CraftPanel.QueuedListHeight(available, queued)
+    local most = math.max(QUEUED_MIN_ROWS, math.floor(available * QUEUED_MAX_SHARE / QUEUED_ROW_HEIGHT))
+    return math.max(1, math.min(queued, most)) * QUEUED_ROW_HEIGHT
+end
+
 function CraftPanel:BuildQueued()
     if self.queuedFrame then return self.queuedFrame end
 
@@ -1410,17 +1565,70 @@ function CraftPanel:BuildQueued()
         end,
     })
     list:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
-    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    list:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, ns.Collapse.CONTENT_TOP)
     self.queuedList = list
+
+    -- The total and the show/hide switch, along the bottom.
+    ns.Collapse.CreateFooter(frame, SHOPPING_FOOTER_HEIGHT)
+
+    local total = Theme.CreateLabel(frame, "small", "text")
+    total:SetPoint("LEFT", frame, "BOTTOMLEFT", 14, 24)
+    self.shoppingTotal = total
+
+    local toggle = Widgets.CreateButton(frame, "Hide list", function()
+        CraftPanel:SetShoppingShown(not CraftPanel:IsShoppingShown())
+    end, { width = 56, height = 16 })
+    toggle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 16)
+    total:SetPoint("RIGHT", toggle, "LEFT", -6, 0)
+    self.shoppingToggle = toggle
+
+    local heading = Theme.CreateHeading(frame, "SHOPPING LIST")
+    heading:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 0, -8)
+    self.shoppingHeading = heading
+
+    local columns = Theme.CreateLabel(frame, "tiny", "muted", "RIGHT")
+    columns:SetText("have / need")
+    columns:SetPoint("TOPRIGHT", list, "BOTTOMRIGHT", 0, -8)
+    heading.rule:SetPoint("RIGHT", columns, "LEFT", -6, 0)
+    self.shoppingColumns = columns
+
+    local shopping = Widgets.CreateScrollList(frame, {
+        rowHeight = SHOPPING_ROW_HEIGHT,
+        createRow = CreateShoppingRow,
+        updateRow = UpdateShoppingRow,
+        -- The Queue tab's tooltip: need, bags, bank, other characters, cost.
+        onEnter = function(row, line)
+            if ns.UI and ns.UI.ShowMaterialTooltip then ns.UI.ShowMaterialTooltip(row, line) end
+        end,
+        onLeave = function() GameTooltip:Hide() end,
+    })
+    shopping:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -6)
+    shopping:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
+    shopping:SetPoint("BOTTOM", frame, "BOTTOM", 0, 14 + SHOPPING_FOOTER_HEIGHT)
+    self.shoppingList = shopping
 
     self.queuedFrame = frame
     return frame
+end
+
+--- Is there room for the queued crafts to the right of the pane?
+--
+-- Kept on screen, they used to be pushed back over the pane itself when there
+-- was not, covering its sort button and recipes (Trent's screenshot with the
+-- auction house open, 2026-10-01). Out of the way instead, as the sell list
+-- steps aside for the character window.
+-- @param paneRight the pane's right edge, nil when not laid out yet
+-- @param screenRight the screen's right edge, nil when unknown
+function CraftPanel.QueuedFits(paneRight, screenRight)
+    if type(paneRight) ~= "number" or type(screenRight) ~= "number" then return true end
+    return paneRight + QUEUED_GAP + QUEUED_WIDTH <= screenRight
 end
 
 --- Show the queued crafts beside the pane while anything is queued.
 function CraftPanel:RefreshQueued()
     local wanted = self.frame and self.frame:IsShown()
         and not self:IsCollapsed() and ns.Queue:Count() > 0
+        and CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
 
     if not wanted then
         if self.queuedFrame then self.queuedFrame:Hide() end
@@ -1435,6 +1643,27 @@ function CraftPanel:RefreshQueued()
 
     self.queuedTitle:SetText(("Queued crafts (%d)"):format(#entries))
     self.queuedOpen = self:GetOpenRecipeIDs()
+
+    -- Between the title and the footer, shared with the shopping list when
+    -- it is showing.
+    local available = frame:GetHeight() + ns.Collapse.CONTENT_TOP - 14 - SHOPPING_FOOTER_HEIGHT
+    local shown = self:IsShoppingShown()
+
+    if shown then
+        self.queuedList:SetHeight(CraftPanel.QueuedListHeight(available, #entries))
+        self.shoppingList:SetData(ns.Queue:GetShoppingList())
+    else
+        self.queuedList:SetHeight(math.max(QUEUED_ROW_HEIGHT, available - 4))
+    end
+
+    self.shoppingHeading:SetShown(shown)
+    self.shoppingColumns:SetShown(shown)
+    self.shoppingList:SetShown(shown)
+    self.shoppingToggle:SetText(shown and "Hide list" or "Shopping")
+    self.shoppingToggle.tooltipText = shown and "Hide the materials list"
+        or "Show what the queue still needs, minus what you have"
+    self.shoppingTotal:SetText(self:ShoppingTotalText())
+
     self.queuedList:SetData(entries)
 end
 
