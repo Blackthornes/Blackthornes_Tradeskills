@@ -150,6 +150,17 @@ do
   PostPanel:SetView("anything else")
   check("anything else is the sell list", PostPanel.view, "sell")
 
+  -- The Search button: shown only on a row worth searching for.
+  ns.CraftPanel = { UpdateShoppingRow = function() end }
+  local row = { search = { SetShown = function(self, on) self.shown = on end } }
+  PostPanel.UpdateShoppingRow(row, { shortfall = 3 })
+  check("a material still to buy gets a Search button", row.search.shown, true)
+  PostPanel.UpdateShoppingRow(row, { shortfall = 3, fromVendor = true })
+  check("a vendor material does not", row.search.shown, false)
+  PostPanel.UpdateShoppingRow(row, { shortfall = 0 })
+  check("nor one you already have", row.search.shown, false)
+  ns.CraftPanel = nil
+
   local now, built = 100, 0
   _G.GetTime = function() return now end
   ns.Queue.GetShoppingList = function() built = built + 1; return {} end
