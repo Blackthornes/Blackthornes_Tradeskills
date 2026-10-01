@@ -4,6 +4,24 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.20.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Shopping list beside the profession window: under Queued crafts you now
+  see every material the whole queue needs, with have and need, a progress
+  bar, its price or where to get it, and a To buy total. The Hide list /
+  Shopping button at its foot hides and shows it.
+- Shopping list at the auction house: Ready to sell has a Sell / Buy switch.
+  Buy shows the same list in the panel already beside the auction house.
+  Each material you're still short of that no vendor sells gets a Search
+  button that looks it up on the auction house.
+- Ready to sell no longer covers the craft queue when a profession and the
+  auction house are open together. It docks past the queue, or steps aside
+  when the screen has no room, and the queued crafts move out of its way
+  too.
+
 ## 0.19.0
 
 For WoW: Forever (interface 16001). This version adds a file, so fully
