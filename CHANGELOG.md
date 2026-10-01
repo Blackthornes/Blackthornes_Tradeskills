@@ -4,6 +4,26 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.19.0
+
+For WoW: Forever (interface 16001). This version adds a file, so fully
+restart the game after updating; `/reload` is not enough.
+
+- With Blackthornes Equipment installed, gear that's an upgrade for the
+  character you're playing gets the green upgrade arrow on its icon in every
+  Tradeskills window, the same arrow Equipment puts in your bags. Without
+  Equipment nothing changes. "Upgrade arrows on gear" in the settings turns
+  it off.
+- Returned mail is valued the same way as everything else: grey items at
+  vendor price, the rest at the higher of auction and vendor.
+- Ticking "Queue sub-crafts" updates the queue straight away.
+- The minimap button follows the cursor on a scaled minimap.
+- Fixed: the Disenchant button could stop working after a fight that began
+  right at login.
+- Fixed: a tiny loss showed as a red "-0c" instead of 0c.
+- Fixed: `/bts top 0` showed an empty heading instead of one craft.
+- Profit, Characters and Prices lists keep the same order for ties.
+
 ## 0.18.0
 
 For WoW: Forever (interface 16001). This version adds files, so fully
