@@ -1506,6 +1506,10 @@ local function UpdateShoppingRow(row, line)
     row.tag:SetTextColor(Theme.Unpack(look.tagColour or "muted"))
 end
 
+-- The sell list's Buy view at the auction house draws the same rows.
+CraftPanel.CreateShoppingRow = CreateShoppingRow
+CraftPanel.UpdateShoppingRow = UpdateShoppingRow
+
 --- Show the shopping list or not; remembered across sessions.
 function CraftPanel:SetShoppingShown(on)
     ns.Config:Set("craftPaneShoppingList", on and true or false)
