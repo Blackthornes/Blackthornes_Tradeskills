@@ -84,6 +84,16 @@ item-info events. Setting: `showUpgradeArrows`. Equipment's `CLAUDE.md` asks
 its side to keep the call stable; if it changes, change `Logic/Upgrades.lua`
 in the same breath.
 
+Equipment calls back one way: when a player changes their own stat weights
+in Equipment's weights window, it calls, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Upgrades:RedrawSoon()   -- forget kept answers, redraw the open tab
+```
+
+So keep `ns.Upgrades` on the global and `Upgrades:RedrawSoon()` stable too;
+if it changes, change Equipment's `Weights:Changed` (`Logic/Weights.lua`).
+
 ## Trent's standing rules (both addons)
 
 - **"Always check that it's clear to post."** Anything that goes public (a
