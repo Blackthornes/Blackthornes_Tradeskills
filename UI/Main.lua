@@ -901,15 +901,18 @@ local function ApplyWaitLabel(button, name, seconds, reason)
         -- than sitting on "0s" while the wait is genuinely still running.
         button:SetText(("%ds"):format(math.max(1, math.ceil(seconds))))
         button.waitingLabel = true
+        button.waitTip = reason
     elseif reason then
         -- No number to give: the client's throttle and the player's own sell
         -- window both end when they end. Saying "wait" beats counting down to
         -- zero and then carrying on refusing.
         button:SetText("wait")
         button.waitingLabel = true
+        button.waitTip = reason
     else
         button:SetText(name)
         button.waitingLabel = false
+        button.waitTip = nil
     end
 end
 
@@ -961,10 +964,6 @@ function UI:UpdatePostButton()
             Util.FormatMoney(line.unitPrice, { noColor = true }),
             count, Util.FormatMoney(total, { noColor = true, short = true }))
         or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
-
-    if waitReason then
-        button.tooltipText = button.tooltipText .. ("\n\nWaiting: %s."):format(waitReason)
-    end
 end
 
 --------------------------------------------------------------------------------

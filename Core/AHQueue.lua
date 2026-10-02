@@ -503,6 +503,12 @@ function AHQueue:OnEnable()
     end)
 
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
+        -- Said closed before the flush, not after: the flush runs each
+        -- request's give-up, and a price check giving up with the auction
+        -- house still marked open went on to show a listing confirmation out
+        -- in the world. The scanner's own handler only runs after this one.
+        if ns.Scanner then ns.Scanner.isAuctionHouseOpen = false end
+
         AHQueue:Flush("the auction house closed")
         AHQueue:StopDraining()
     end)

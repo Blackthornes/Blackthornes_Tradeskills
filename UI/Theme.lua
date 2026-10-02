@@ -142,6 +142,31 @@ function Theme.CreateLabel(parent, size, colorKey, justify)
     return label
 end
 
+--- Put a money amount on a label in as much detail as fits its width: every
+--- coin, then the two largest, then the largest alone, rounded. Measured, so
+--- a narrow cell never ends in "..." halfway through an amount. A label that
+--- cannot be measured gets every coin.
+function Theme.SetMoneyText(label, copper, opts)
+    local function Format(parts)
+        local options = {}
+        for key, value in pairs(opts or {}) do options[key] = value end
+        options.parts = parts
+        return ns.Util.FormatMoney(copper, options)
+    end
+
+    label:SetText(Format(nil))
+    if copper == nil then return end
+
+    local room = label:GetWidth()
+    if type(room) ~= "number" or room <= 0 then return end
+
+    for _, parts in ipairs({ 2, 1 }) do
+        local ok, width = pcall(label.GetStringWidth, label)
+        if not ok or type(width) ~= "number" or width <= room then return end
+        label:SetText(Format(parts))
+    end
+end
+
 --- Wrap a frame in Blizzard's classic bevelled tooltip border.
 --
 -- Used for controls that sit out in the game world rather than inside our own

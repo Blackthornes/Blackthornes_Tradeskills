@@ -521,10 +521,24 @@ end
 -- Refresh
 --------------------------------------------------------------------------------
 
+--- The key of the item a row is about, the same key By item files it under.
+--
+-- A sale recorded by name only (the mail gave no item id) is filed under the
+-- id another entry gave that name. Keyed by "?name" here instead, clicking
+-- one selected nothing, and the item's sales were never lit.
+local function SelectionKey(data)
+    return data.key or data.itemID
+        or (data.name and state.names and state.names[data.name])
+        or ("?" .. tostring(data.name or "unknown"))
+end
+
 local function Refresh()
     if not widgets.list then return end
 
     awaitingItemData = false
+
+    -- Once per redraw: it walks the whole ledger.
+    state.names = ns.Mail.NameIndex and ns.Mail:NameIndex() or nil
 
     local query = (state.search or ""):lower()
     local items = ns.Mail:GetItems()
@@ -697,8 +711,7 @@ local function Build(container)
         -- The item the detail pane is showing is lit, as on every other tab.
         isSelected = function(data)
             if data.haul or not state.selected then return false end
-            local key = data.key or data.itemID or ("?" .. tostring(data.name or "unknown"))
-            return key == state.selected
+            return SelectionKey(data) == state.selected
         end,
         onClick = function(data)
             if data.haul then
@@ -708,10 +721,15 @@ local function Build(container)
 
             -- Both views select the same thing: an item. Clicking one sale
             -- asks about that item, not about that one listing.
-            local key = data.key or data.itemID
-                or ("?" .. tostring(data.name or "unknown"))
+            local key = SelectionKey(data)
 
-            state.selected = (state.selected == key) and nil or key
+            -- A second click lets it go. Written "== key and nil or key",
+            -- the nil fell through to key and the item could not be let go.
+            if state.selected == key then
+                state.selected = nil
+            else
+                state.selected = key
+            end
             Refresh()
         end,
     })
