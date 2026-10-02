@@ -323,14 +323,18 @@ function Auctions:ReadOwned(opts)
             -- status as sold rather than discarding everything.
             local active = info.status == nil or info.status == STATUS_ACTIVE
 
+            -- Every auction's id, sold ones too. They only tell a new listing
+            -- apart, and one bought within seconds is already marked sold
+            -- when it is read back: counted as active only, it was reported
+            -- as refused by the auction house.
+            if itemID and info.auctionID then
+                ids[itemID] = ids[itemID] or {}
+                ids[itemID][info.auctionID] = true
+            end
+
             if itemID and active then
                 local quantity = info.quantity or 1
                 items[itemID] = (items[itemID] or 0) + quantity
-
-                if info.auctionID then
-                    ids[itemID] = ids[itemID] or {}
-                    ids[itemID][info.auctionID] = true
-                end
 
                 -- The cheapest unit price you have it listed at. A commodity
                 -- listing carries a unit price; an item auction carries the

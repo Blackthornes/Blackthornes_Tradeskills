@@ -72,6 +72,20 @@ local function TypingInList(list)
     end
     return false
 end
+
+--- Enter whatever is half-typed in a LIST box of this list, as Enter would.
+--
+-- Clicking a button does not take the keyboard from a box, so a number typed
+-- and not yet entered was still waiting when List was clicked: the old
+-- amount was listed, often the whole stack, with the new one on screen.
+local function CommitTyping(list)
+    for _, row in ipairs((list and list.rows) or {}) do
+        if row.quantity and BeingTyped(row.quantity) then
+            row.quantity.editBox:ClearFocus()
+        end
+    end
+end
+
 local function CreateRow(row)
     -- The item's icon beside its name, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 16)
@@ -114,6 +128,7 @@ local function CreateRow(row)
     row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
 
     row.post = Widgets.CreateButton(row, "List", function()
+        CommitTyping(widgets.list)
         local line = row.data
         if not line then return end
 
@@ -164,16 +179,27 @@ function UpdateRow(row, line)
 
     -- Not while it is being typed into: overwriting someone mid-number is how
     -- a field ends up refusing to accept what they meant.
-    if not BeingTyped(row.quantity) then
+    -- A reused row now showing another item drops the half-typed number,
+    -- though: it was for the item that scrolled away, and pressing Enter
+    -- would have set that many of this one. The Queue tab does the same.
+    local typing = BeingTyped(row.quantity)
+    if not typing or row.boundItemID ~= line.itemID then
         row.quantity:SetLimits(1, math.max(1, line.maxQuantity or line.count or 1))
         row.quantity:SetValue(line.postQuantity or line.count or 1, true)
+        if typing then row.quantity.editBox:ClearFocus() end
     end
+    row.boundItemID = line.itemID
 
     cells.count:SetText(tostring(line.count))
     cells.count:SetTextColor(Theme.Unpack("text"))
 
-    cells.cost:SetText(line.unitCost
-        and Util.FormatMoney(line.unitCost, { short = true }) or "?")
+    -- Money cells are measured: "12g 34s 56c" was wider than COST and
+    -- DEPOSIT, and ended in "...". It now drops to "12g 35s" instead.
+    if line.unitCost then
+        Theme.SetMoneyText(cells.cost, line.unitCost, { short = true })
+    else
+        cells.cost:SetText("?")
+    end
 
     if line.unitPrice then
         -- Split into the three boxes Blizzard's Sell tab asks for, so the price
@@ -192,7 +218,7 @@ function UpdateRow(row, line)
 
         -- What this listing comes to at the LIST amount, the same figure the
         -- tooltip gives, not the whole stack's.
-        cells.total:SetText(Util.FormatMoney(line.postTotal or line.total, { short = true }))
+        Theme.SetMoneyText(cells.total, line.postTotal or line.total, { short = true })
         cells.total:SetTextColor(Theme.Unpack(line.atALoss and "loss" or "profit"))
     else
         for _, key in ipairs({ "gold", "silver", "copper" }) do
@@ -204,8 +230,11 @@ function UpdateRow(row, line)
         cells.total:SetTextColor(Theme.Unpack("dim"))
     end
 
-    cells.deposit:SetText(line.deposit
-        and Util.FormatMoney(line.deposit, { short = true }) or "--")
+    if line.deposit then
+        Theme.SetMoneyText(cells.deposit, line.deposit, { short = true })
+    else
+        cells.deposit:SetText("--")
+    end
 
     -- The bag holds all sorts now, so a row is worth recognising at a glance.
     -- Rarity is how the game itself says what a thing is.

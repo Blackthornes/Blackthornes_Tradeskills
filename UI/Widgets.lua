@@ -414,6 +414,14 @@ function Widgets.CreateButton(parent, text, onClick, opts)
         -- tooltipText is set at runtime, so a button can explain why it is
         -- currently unavailable rather than just looking dead.
         local text = self.tooltipText or opts.tooltip
+
+        -- A button showing a countdown or "wait" says what it is waiting
+        -- for first, since the label alone cannot.
+        if self.waitingLabel == true and type(self.waitTip) == "string" then
+            local wait = ("|c%sWaiting: %s.|r"):format(ns.COLORS.warn, self.waitTip)
+            text = text and (wait .. "\n\n" .. text) or wait
+        end
+
         if text then
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(text, 1, 1, 1, 1, true)
