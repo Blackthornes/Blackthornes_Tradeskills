@@ -270,6 +270,8 @@ function PostPanel:Build()
 
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house glow round its edge, flaring as it opens.
+    Theme.Halo(frame, 8, 0.08)
 
     local header, title = ns.Collapse.CreateHeader(frame, "Ready to sell")
     self.title = title
@@ -568,6 +570,9 @@ function PostPanel:Redock()
         frame:Show()
         self:ApplyHeight(true)
         self:Refresh()
+        -- Fades in where it docked; it never rises, since it sits beside
+        -- another window.
+        if ns.Motion then ns.Motion:Open(frame, 0) end
     end
 end
 
@@ -631,9 +636,12 @@ function PostPanel:Attach()
 
     self:ApplyHeight(true)
 
+    local opening = not frame:IsShown()
     frame:Show()
     self:Redock()
     self:Refresh()
+
+    if opening and ns.Motion then ns.Motion:Open(frame, 0) end
 end
 
 --- The height to be right now: the title strip when collapsed, otherwise as

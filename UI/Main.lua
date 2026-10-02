@@ -87,7 +87,16 @@ function UI:Build()
     -- again muddies it.
     Theme.AddGameOutline(window, { style = "dialog", color = "natural" })
 
-    window:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    -- A soft gold glow round the outside, Farmer's neon edge: it flares as
+    -- the window opens and settles to a faint light.
+    Theme.Halo(window, 10, 0.10)
+
+    window:SetScript("OnDragStart", function(self)
+        -- Still rising into place: land it first, or the opening would keep
+        -- pulling the window back under the cursor.
+        if ns.Motion then ns.Motion:Stop(self, "open", true) end
+        self:StartMoving()
+    end)
     window:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         UI:SavePosition()
@@ -119,9 +128,10 @@ function UI:BuildHeader()
     header:SetHeight(52)
     Theme.Fill(header, "header")
 
-    -- The house header, shared with Farmer: a gold stripe down the left edge
-    -- and a lit rule underneath.
+    -- The house header, shared with Farmer: a gold stripe down the left edge,
+    -- a soft gold light from the top and a lit rule underneath.
     Theme.AccentStripe(header, 3)
+    Theme.HeaderGlow(header, 24, 0.10)
 
     local rule = Theme.CreateDivider(header, "borderLit")
     rule:SetPoint("BOTTOMLEFT")
@@ -433,6 +443,10 @@ function UI:RestorePosition(key)
 
     local position = ns.db and ns.db[key]
 
+    -- Still rising into place from opening: land that first, or its last
+    -- steps would put the window back where it was before this move.
+    if ns.Motion then ns.Motion:Stop(self.window, "open", true) end
+
     self.window:ClearAllPoints()
 
     if position then
@@ -455,15 +469,23 @@ end
 
 function UI:Show()
     self:Build()
+
+    local opening = not self.window:IsShown()
     self.window:Show()
 
     self:SelectTab(self.activeTab or (ns.db and ns.db.lastTab) or self.tabOrder[1].key)
     self:UpdateHeader()
 
     if ns.PostPanel then ns.PostPanel:Reflow() end
+
+    -- Fades up into place with its glow flaring, as Farmer's windows open.
+    -- After the reflow, so it rises from wherever it is going to sit.
+    if opening and ns.Motion then ns.Motion:Open(self.window) end
 end
 
 function UI:Hide()
+    -- Closed mid-opening: drawn in full and back in its place for next time.
+    if self.window and ns.Motion then ns.Motion:Settle(self.window) end
     if self.window then self.window:Hide() end
 
     -- Hidden, so the sell list can have its full height back.
@@ -969,6 +991,7 @@ function UI:ShowTransferDialog(mode)
 
         Theme.Fill(dialog, "window")
         Theme.AddGameOutline(dialog, { style = "dialog", color = "natural" })
+        Theme.Halo(dialog, 10, 0.10)
 
         tinsert(UISpecialFrames, "BlackthornesTSTransferDialog")
 
@@ -1041,8 +1064,10 @@ function UI:ShowTransferDialog(mode)
         dialog.close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
     end
 
+    local opening = not dialog:IsShown()
     dialog:Show()
     dialog.editBox:SetFocus()
+    if opening and ns.Motion then ns.Motion:Open(dialog) end
 end
 
 --------------------------------------------------------------------------------

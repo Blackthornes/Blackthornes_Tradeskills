@@ -338,6 +338,8 @@ function MailReport:Build()
 
     Theme.Fill(frame, "window", 0.97)
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house glow round its edge, flaring as the report opens.
+    Theme.Halo(frame, 10, 0.12)
 
     -- Escape closes it, like the main window.
     tinsert(UISpecialFrames, "BlackthornesTSMailReport")
@@ -679,6 +681,17 @@ function MailReport:Animate(haul, hasRibbon, opts)
             frame:SetAlpha(EaseOut(p))
         end,
         stop = function() frame:SetAlpha(1) end })
+
+    -- The glow round the edge flares and settles; brighter for a record.
+    local rest = frame.haloRest
+    if rest then
+        local peak = rest * (record and 5 or 3.2)
+        MailReport.Start({ slot = "report:halo", duration = record and 1.4 or 0.9,
+            apply = function(p)
+                Theme.SetHalo(frame, peak + (rest - peak) * EaseOut(p))
+            end,
+            stop = function() Theme.SetHalo(frame, rest) end })
+    end
 
     local okWidth, width = pcall(frame.header.GetWidth, frame.header)
     width = okWidth and tonumber(width) or WIDTH

@@ -824,6 +824,8 @@ function CraftPanel:Build()
 
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house glow round its edge, flaring as it opens.
+    Theme.Halo(frame, 8, 0.08)
 
     local header, title = ns.Collapse.CreateHeader(frame, "Craft queue")
     self.title = title
@@ -1033,6 +1035,7 @@ end
 function CraftPanel:Attach()
     local frame = self:Build()
     local tradeSkillFrame, frameName = self:FindTradeSkillFrame()
+    local opening = not frame:IsShown()
 
     frame:ClearAllPoints()
 
@@ -1066,6 +1069,10 @@ function CraftPanel:Attach()
 
     frame:Show()
     self:Refresh()
+
+    -- Fades in where it docked, its glow flaring; it never rises, since it
+    -- sits beside the profession window.
+    if opening and ns.Motion then ns.Motion:Open(frame, 0) end
 end
 
 function CraftPanel:IsCollapsed()
@@ -1545,6 +1552,7 @@ function CraftPanel:BuildQueued()
 
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    Theme.Halo(frame, 8, 0.08)
 
     local _, title = ns.Collapse.CreateHeader(frame, "Queued crafts")
     self.queuedTitle = title
@@ -1639,7 +1647,9 @@ function CraftPanel:RefreshQueued()
 
     local frame = self:BuildQueued()
     frame:SetHeight(self.frame:GetHeight())
+    local opening = not frame:IsShown()
     frame:Show()
+    if opening and ns.Motion then ns.Motion:Open(frame, 0) end
 
     self.queuedTitle:SetText(("Queued crafts (%d)"):format(#entries))
     self.queuedOpen = self:GetOpenRecipeIDs()
