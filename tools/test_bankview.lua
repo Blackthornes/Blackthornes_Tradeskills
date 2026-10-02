@@ -12,6 +12,7 @@ ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 local commands = {}
 ns.RegisterCommand = function(name, _, fn) commands[name] = fn end
 ns.Print = function() end
+ns.RegisterEvent = function() return true end
 
 local function Stub(fields)
     local frame = fields or {}
@@ -58,6 +59,7 @@ end }
 
 ns.Theme = {
     FONT = "font",
+    sizes = { tiny = 10, small = 11, normal = 12, large = 14 },
     Unpack = function(key) return key end,
     CreateLabel = function() return Label() end,
     CreatePanel = function() return Frame() end,

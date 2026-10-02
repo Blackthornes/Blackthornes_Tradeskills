@@ -73,7 +73,8 @@ AUCTION_OUTBID_MAIL_SUBJECT = "Outbid on %s"
 local LINEN_BAG, CLOTH, VIAL, WOOL = 4238, 2589, 3371, 2592
 local names = { [LINEN_BAG] = "Linen Bag", [CLOTH] = "Linen Cloth", [VIAL] = "Crystal Vial", [WOOL] = "Wool Cloth" }
 
-C_Item = { GetItemInfo = function(itemID) return names[itemID] end }
+-- Name, link and quality, as the game hands them back for a loaded item.
+C_Item = { GetItemInfo = function(itemID) return names[itemID], nil, names[itemID] and 1 or nil end }
 C_Timer = { After = function() end }
 
 --------------------------------------------------------------------------------
