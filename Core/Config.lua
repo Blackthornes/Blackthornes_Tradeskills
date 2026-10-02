@@ -600,8 +600,12 @@ function Config:CheckAccountDataLost(db)
     -- The player has started fresh (/bts db fresh) since this character last
     -- looked, so what it remembers is the data he already let go. Without
     -- this, every other character raised the warning again on its next login.
-    local freshAt = db.probe and db.probe.freshAt
-    if freshAt and charDb.accountFreshAt ~= freshAt then
+    -- Only a fresh start newer than the one this character took: an older
+    -- copy of the file brought back still carries an older one, and it is
+    -- as much a loss as any.
+    local freshAt = tonumber(db.probe and db.probe.freshAt)
+    local isNewer = freshAt ~= nil and freshAt > (tonumber(charDb.accountFreshAt) or 0)
+    if isNewer then
         remembered = nil
     end
 
@@ -611,7 +615,7 @@ function Config:CheckAccountDataLost(db)
     end
 
     charDb.accountLoads = loadsNow
-    charDb.accountFreshAt = freshAt
+    if isNewer then charDb.accountFreshAt = freshAt end
 end
 
 --- Loud on purpose: every logout or /reload saves the file, and the game
