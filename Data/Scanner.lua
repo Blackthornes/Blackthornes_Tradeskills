@@ -889,8 +889,15 @@ function Scanner:ReadReplicateResults(numItems)
             -- quick scan had stored 83c, and the market was 16 times too high.
             -- A commodity row can hold more than a stack, so the stack-size
             -- guard item auctions use does not apply to it.
+            --
+            -- That includes a commodity nobody has told us is one yet, which
+            -- is most reagents. No item auction holds more than a stack, so a
+            -- row that does is a commodity's. Read as an item auction, the
+            -- stack-size guard kept its whole price as the price of one, and
+            -- Wool Cloth at 1s each was stored at 40s.
             local unitPrice
-            if self:IsCommodity(itemID) then
+            if self:IsCommodity(itemID)
+                or (quantity > 1 and quantity > (Util.GetMaxStackSize(itemID) or quantity)) then
                 commodities[itemID] = true
                 if quantity > 1 and buyoutPrice >= quantity then
                     unitPrice = math.floor(buyoutPrice / quantity + 0.5)
@@ -942,19 +949,30 @@ function Scanner:ReadReplicateResults(numItems)
 
             -- Market value is an average carried from scan to scan, so the
             -- ones built from whole-row prices would take many scans to come
-            -- down. Once, the first time this reading runs, a commodity it
-            -- priced starts its market afresh from this scan. Its history
-            -- is kept.
-            if ns.db and not ns.db.commodityRowPriceFixed then
-                local table_ = ns.Prices:GetTable()
-                for itemID in pairs(commodities) do
-                    local record = table_ and table_[itemID]
-                    if record and observations[itemID] then record.market = nil end
+            -- down. Once, the first time this reading prices it, a commodity
+            -- starts its market afresh from this scan. Its history is kept.
+            --
+            -- Marked on each price rather than once for the account: prices
+            -- are kept per realm and faction, and one account-wide mark let
+            -- only the first realm scanned start afresh. That old mark,
+            -- commodityRowPriceFixed, is left in the saved data unread.
+            local table_ = ns.Prices:GetTable()
+            for itemID in pairs(commodities) do
+                local record = table_ and table_[itemID]
+                if record and observations[itemID] and not record.rowPriceFixed then
+                    record.market = nil
                 end
-                ns.db.commodityRowPriceFixed = true
             end
 
             local recorded = ns.Prices:CommitScan(observations, now)
+
+            -- After the commit, so a commodity priced for the first time in
+            -- this scan is marked too and never starts afresh later.
+            for itemID in pairs(commodities) do
+                local record = table_ and table_[itemID]
+                if record and observations[itemID] then record.rowPriceFixed = true end
+            end
+
             local elapsed = GetTime() - (self.scanStartedAt or GetTime())
 
             -- The snapshot is the whole auction house, so an item it did not

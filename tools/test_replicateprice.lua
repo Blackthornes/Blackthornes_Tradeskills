@@ -161,7 +161,8 @@ check("its market is near 40c, not in silver", linen and linen.market and linen.
 check("the old history is kept", linen and linen.history ~= nil)
 
 -- Only once: after that, market value averages across scans as usual.
-check("the reset is remembered", ns.db.commodityRowPriceFixed == true)
+check("the reset is remembered on the price", linen and linen.rowPriceFixed == true)
+check("the old account-wide mark is not written", ns.db.commodityRowPriceFixed == nil)
 linen.market = 60
 Scanner:ReadReplicateResults(#rows)
 check("a later scan averages instead of starting afresh", Prices:Get(LINEN).market > 45)
