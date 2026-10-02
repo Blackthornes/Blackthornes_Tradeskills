@@ -650,7 +650,11 @@ function Disenchant:GetCraftRows(opts)
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         local itemID = recipe.outputItemID
 
-        if itemID and self:IsDisenchantable(itemID) then
+        -- Crafts of a profession the character has dropped are left out, as
+        -- the Profit tab leaves them out.
+        local dropped = ns.Recipes.IsDropped ~= nil and ns.Recipes:IsDropped(recipe)
+
+        if itemID and not dropped and self:IsDisenchantable(itemID) then
             local value, partial, breakdown = self:GetValue(itemID)
             local analysis = ns.Profit:Analyse(recipeID) or {}
 
@@ -660,9 +664,29 @@ function Disenchant:GetCraftRows(opts)
             local sells, sellsAt
             if analysis.soulbound then
                 sells, sellsAt = Util.GetVendorSellPrice(itemID), "vendor"
-            elseif analysis.unitRevenue then
-                sells = analysis.unitRevenue
-                sellsAt = analysis.priceDerived and "estimate" or "auction"
+            else
+                if analysis.unitRevenue then
+                    sells = analysis.unitRevenue
+                    -- Analyse takes a vendor's price when it pays more than
+                    -- the listing, and says so in its basis.
+                    sellsAt = analysis.priceBasis == "vendor" and "vendor"
+                        or analysis.priceDerived and "estimate" or "auction"
+                elseif ns.Profit.ChoosePostPrice then
+                    -- Analyse stops before the sale price when a reagent has
+                    -- no price, but what the craft sells for does not depend
+                    -- on its reagents. Without this the craft showed "no
+                    -- price" and counted as worth more disenchanted.
+                    local listAt, basis = ns.Profit:ChoosePostPrice(itemID)
+                    if listAt then
+                        sells, sellsAt = listAt, basis == "derived" and "estimate" or "auction"
+                    end
+                end
+
+                -- Never under what a vendor pays, as the bags list prices it.
+                local vendor = Util.GetVendorSellPrice(itemID)
+                if vendor and (not sells or vendor > sells) then
+                    sells, sellsAt = vendor, "vendor"
+                end
             end
 
             local net = value and math.floor(value * (1 - cut) + 0.5) or nil
@@ -705,6 +729,41 @@ function Disenchant:GetCraftRows(opts)
     end)
 
     return rows
+end
+
+--- The bag link of the first copy found of each item in `wanted`.
+--
+-- Random-suffix gear ("of the Monkey") shares its item ID with every other
+-- suffix of the same item, and only the link says which one this is. The
+-- upgrade arrow on a row asks with it.
+local function BagLinks(wanted)
+    local links = {}
+    if not next(wanted) or not (ns.Inventory and ns.Inventory.GetCarriedBags)
+        or not Util.HasFunction("C_Container.GetContainerItemID")
+        or not Util.HasFunction("C_Container.GetContainerItemLink") then
+        return links
+    end
+
+    -- Read inside a pcall: in an instance the client can hand out values
+    -- that raise when they are compared or used as a key. The link is
+    -- copied in there too (the `.. ""`), so one the client will not let
+    -- addons read raises here rather than wherever the row is drawn.
+    local function Read(bag, slot)
+        local itemID = C_Container.GetContainerItemID(bag, slot)
+        if not itemID or not wanted[itemID] or links[itemID] then return end
+
+        local link = C_Container.GetContainerItemLink(bag, slot)
+        if type(link) == "string" then links[itemID] = link .. "" end
+    end
+
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
+        local gotSlots, slots = pcall(C_Container.GetContainerNumSlots, bag)
+        if gotSlots and type(slots) == "number" then
+            for slot = 1, slots do pcall(Read, bag, slot) end
+        end
+    end
+
+    return links
 end
 
 --- Every disenchantable item in the bags.
@@ -754,6 +813,12 @@ function Disenchant:GetBagRows(opts)
             end
         end
     end
+
+    -- One link per row, so the row's icon is judged as the copy carried.
+    local wanted = {}
+    for _, row in ipairs(rows) do wanted[row.itemID] = true end
+    local links = BagLinks(wanted)
+    for _, row in ipairs(rows) do row.link = links[row.itemID] end
 
     table.sort(rows, function(a, b)
         local left, right = a.gain or -math.huge, b.gain or -math.huge

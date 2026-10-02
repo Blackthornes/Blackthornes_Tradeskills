@@ -127,10 +127,16 @@ function Disenchanter:CreateOverlay()
     overlay:Hide()
     overlay:EnableMouse(true)
 
-    -- Drawn like the button under it, so a misplaced one can be seen.
+    -- Drawn like the button under it, a primary one with a gold edge, so a
+    -- misplaced one can be seen. It used a grey edge, so Disenchant lost its
+    -- gold look exactly while it could be used.
     local Theme = ns.Theme
     overlay.background = Theme.Fill(overlay, "rowActive")
-    Theme.Border(overlay, "border")
+    Theme.Border(overlay, "accent", 0.55)
+    if Theme.TopSheen then Theme.TopSheen(overlay) end
+    -- The mouse finds this button rather than the one under it, so it is the
+    -- one that glows gold under the mouse, as primary buttons do.
+    if Theme.Halo then Theme.Halo(overlay, 5, 0) end
     overlay.label = Theme.CreateLabel(overlay, "small", "accent", "CENTER")
     overlay.label:SetPoint("LEFT", 4, 0)
     overlay.label:SetPoint("RIGHT", -4, 0)
@@ -139,6 +145,8 @@ function Disenchanter:CreateOverlay()
 
     overlay:SetScript("OnEnter", function(self)
         self.background:SetColorTexture(Theme.Unpack("rowHover"))
+        Theme.SetBorderColor(self, "accent")
+        if Theme.SetHalo then Theme.SetHalo(self, 0.32) end
         local anchor = Disenchanter.anchor
         if anchor and anchor.tooltipText then
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -149,6 +157,8 @@ function Disenchanter:CreateOverlay()
 
     overlay:SetScript("OnLeave", function(self)
         self.background:SetColorTexture(Theme.Unpack("rowActive"))
+        Theme.SetBorderColor(self, "accent", 0.55)
+        if Theme.SetHalo then Theme.SetHalo(self, 0) end
         GameTooltip:Hide()
     end)
 
@@ -211,7 +221,11 @@ end
 --- Lay the secure button over `anchor`, set to disenchant this item.
 -- @return true when armed
 function Disenchanter:Arm(anchor, itemID, bag, slot)
-    if InCombat() then return false end
+    -- Only over a button the player can see. A tab redrawn while hidden took
+    -- the one secure button from the tab on screen and aimed it at its own
+    -- item, so the Disenchant button the player saw broke something else, and
+    -- the button then stayed up after the window closed.
+    if InCombat() or not anchor or not anchor:IsVisible() then return false end
 
     local overlay = self:CreateOverlay()
 
