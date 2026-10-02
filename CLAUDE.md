@@ -76,10 +76,14 @@ everywhere Tradeskills draws item icons (`Theme.SetItemIcon` asks
 without it nothing is drawn. It calls, inside a pcall and read only:
 
 ```lua
-_G.BlackthornesEquipment.Compare:IsUpgrade(itemID)   -- true or false
+_G.BlackthornesEquipment.Compare:IsUpgrade(item)   -- item ID or link; true or false
 ```
 
-Answers are kept per item ID and forgotten on gear, level, talent and
+Most windows ask by item ID. Bag rows on the Disenchanting and Enchanting
+tabs pass the carried copy's link (`Theme.SetItemIcon(icon, itemID, link)`),
+so random-suffix gear ("of the Monkey") is judged as that copy; Equipment's
+`CLAUDE.md` already promises links. Answers are kept per item ID, or per
+item string for a link, and forgotten on gear, level, talent and
 item-info events. Setting: `showUpgradeArrows`. Equipment's `CLAUDE.md` asks
 its side to keep the call stable; if it changes, change `Logic/Upgrades.lua`
 in the same breath.
@@ -88,7 +92,7 @@ Equipment calls back one way: when a player changes their own stat weights
 in Equipment's weights window, it calls, inside a pcall:
 
 ```lua
-_G.BlackthornesTS.Upgrades:RedrawSoon()   -- forget kept answers, redraw the open tab
+_G.BlackthornesTS.Upgrades:RedrawSoon()   -- forget kept answers, redraw what shows arrows
 ```
 
 So keep `ns.Upgrades` on the global and `Upgrades:RedrawSoon()` stable too;
