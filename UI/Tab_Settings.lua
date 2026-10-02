@@ -262,15 +262,11 @@ local function Build(outer)
     end, false)
     widgets.allowLoss:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local confirmRow = CreateRow(container, lossRow, "Confirm before each listing",
-        "Off: clicking List or Post Crafted lists immediately, with no prompt.")
-
-    widgets.confirmPost = Widgets.CreateCheckbox(confirmRow, "Ask first", function(checked)
-        Config:Set("confirmBeforePosting", checked)
-    end, true)
-    widgets.confirmPost:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local verifyRow = CreateRow(container, confirmRow, "Check price before listing",
+    -- No "Confirm before each listing" switch: the confirmation's Yes is the
+    -- click that lists. Posting needs a real click, and after the price
+    -- check (an auction house search, answered later) there is no other.
+    -- The switch never did anything; its saved value is left where it is.
+    local verifyRow = CreateRow(container, lossRow, "Check price before listing",
         "Searches the auction house for that one item first, so you undercut the price as it is now.")
 
     widgets.verifyPrice = Widgets.CreateCheckbox(verifyRow, "Check first", function(checked)
@@ -653,7 +649,6 @@ local function Refresh()
 
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
-    widgets.confirmPost:SetChecked(Config:Get("confirmBeforePosting") ~= false)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)

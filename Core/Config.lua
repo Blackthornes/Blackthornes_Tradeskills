@@ -84,9 +84,9 @@ local DEFAULTS = {
         -- that moved ten minutes ago is how you end up listed above a rival.
         verifyPriceBeforePosting = true,
 
-        -- Ask before each listing. Posting is irreversible without paying a
-        -- second deposit, and listing can work through a whole bag, so the
-        -- default is to confirm.
+        -- Nothing reads this any more, and Settings no longer offers it: every
+        -- listing is confirmed, as the confirmation's Yes is the click that
+        -- posts (Logic/Posting.lua). Kept so a saved value is never dropped.
         confirmBeforePosting = true,
 
         -- Whether to recommend selling below material cost. Such items are
