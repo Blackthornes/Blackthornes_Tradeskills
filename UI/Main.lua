@@ -1073,11 +1073,40 @@ end
 -- Merchant attachment
 --------------------------------------------------------------------------------
 
+-- The button's width at rest, and the room kept each side of its label when
+-- a long cost makes it wider.
+local MERCHANT_BUTTON_WIDTH = 170
+local MERCHANT_BUTTON_PAD = 12
+
+--- Size the button to its label, never narrower than at rest. At 170 wide,
+--- "Buy materials  1g 50s 50c" lost its last coins to "...", and the cost
+--- is the one thing the button is there to say. It hangs from the vendor
+--- window's top right corner, so it grows to the left.
+local function FitMerchantButton(button)
+    -- The unbounded width where the client has it, else the plain one.
+    local width
+    for _, method in ipairs({ "GetUnboundedStringWidth", "GetStringWidth" }) do
+        if not width and type(button.label[method]) == "function" then
+            local ok, value = pcall(button.label[method], button.label)
+            width = ok and tonumber(value) or nil
+        end
+    end
+
+    button:SetWidth(math.max(MERCHANT_BUTTON_WIDTH, math.ceil((width or 0) + MERCHANT_BUTTON_PAD * 2)))
+end
+
 --- A button on Blizzard's vendor window that buys the queue's shortfalls.
 --
 -- Spending your gold is never automatic: this is one deliberate click, and the
 -- button states the exact cost before you press it.
 function UI:AttachToMerchant()
+    -- Only while a vendor is open. A call that lands after it closed showed
+    -- the button over the game world, with no vendor to buy from.
+    if not (ns.Vendor and ns.Vendor.isMerchantOpen) then
+        if self.merchantButton then self.merchantButton:Hide() end
+        return
+    end
+
     local button = self.merchantButton
 
     if not button then
@@ -1085,7 +1114,7 @@ function UI:AttachToMerchant()
             ns.Vendor:BuyNeeded()
             UI:UpdateMerchantButton()
         end, {
-            width = 170,
+            width = MERCHANT_BUTTON_WIDTH,
             height = 30,
             primary = true,
             baseColor = { 0.06, 0.07, 0.09, 1 },
@@ -1121,6 +1150,7 @@ function UI:UpdateMerchantButton()
 
     if ns.Vendor:IsBuying() then
         button:SetText("Buying...")
+        FitMerchantButton(button)
         button:SetEnabledState(false)
         button.tooltipText = "Purchases in progress"
         return
@@ -1142,6 +1172,7 @@ function UI:UpdateMerchantButton()
     if #lines == 0 then
         -- Present but inert, so it never looks like it failed to appear.
         button:SetText("Nothing needed here")
+        FitMerchantButton(button)
         button:SetEnabledState(false)
         button.tooltipText = ns.Queue:Count() == 0
             and "Your craft queue is empty"
@@ -1151,11 +1182,13 @@ function UI:UpdateMerchantButton()
     end
 
     button:SetText(("Buy materials  %s"):format(Util.FormatMoney(total, { short = true })))
+    FitMerchantButton(button)
     button:SetEnabledState(true)
 
     -- Spell out exactly what will be bought before any gold moves.
-    local parts = { ("Buys %d material%s for your queue:"):format(
-        #lines, #lines == 1 and "" or "s") }
+    local parts = { ("Buys %d material%s for your queue, %s in all:"):format(
+        #lines, #lines == 1 and "" or "s",
+        Util.FormatMoney(total, { noColor = true, short = true })) }
 
     for index = 1, math.min(#lines, 10) do
         local line = lines[index]

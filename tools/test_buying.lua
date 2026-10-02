@@ -106,7 +106,7 @@ end
 
 -- The real reading of the book, borrowed from Data/Prices.lua, so the lone
 -- low rule is the one the rest of the addon uses.
-local LowestListed
+local LowestListed, Summarise
 do
     local module
     local priceNs = {
@@ -115,6 +115,7 @@ do
     }
     assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", priceNs)
     LowestListed = module.LowestListed
+    Summarise = function(book) return module:Summarise(book, nil) end
 end
 
 local THREAD, VIAL, FLUX = 2320, 3371, 2880
@@ -187,5 +188,47 @@ byItem = {}
 for _, line in ipairs(lines) do byItem[line.itemID] = line end
 expect("his own units do not cover the shortfall", byItem[THREAD] and byItem[THREAD].amount, 10)
 ns.Auctions = nil
+
+-- A few cheap units in front of a shelf of dearer ones (2026-10-02). The
+-- cheapest posting was under the vendor's 10c and the whole book covered
+-- what was short, so all 20 thread went to the auction house: 3 at 8c and
+-- 17 at 15c, 279c against 200c here. The market value has to be under the
+-- vendor price too.
+local function ThreadFromBook(book)
+    local market, min, quantity, rivalMin, ownMin, ignoredLow = Summarise(book)
+    records[THREAD] = { market = market, min = min, quantity = quantity,
+        rivalMin = rivalMin, ownMin = ownMin, ignoredLow = ignoredLow }
+    lines, _, cheaper = Vendor:GetNeeded()
+    byItem = {}
+    for _, line in ipairs(lines) do byItem[line.itemID] = line end
+end
+
+shopping[1].shortfall = 20
+
+ThreadFromBook({
+    { unitPrice = 8, quantity = 3, isOwn = false },
+    { unitPrice = 15, quantity = 100, isOwn = false },
+    { unitPrice = 15, quantity = 100, isOwn = false },
+})
+expect("3 at 8c before 200 at 15c: the vendor buys all 20", byItem[THREAD] and byItem[THREAD].amount, 20)
+expect("and the tooltip does not call it cheaper there", cheaper, 0)
+
+ThreadFromBook({
+    { unitPrice = 8, quantity = 2, isOwn = false },
+    { unitPrice = 8, quantity = 2, isOwn = false },
+    { unitPrice = 60, quantity = 100, isOwn = false },
+    { unitPrice = 62, quantity = 100, isOwn = false },
+})
+expect("4 at 8c before 200 at 60c: the vendor buys all 20", byItem[THREAD] and byItem[THREAD].amount, 20)
+
+-- Plenty under the vendor price: still left for the auction house.
+ThreadFromBook({
+    { unitPrice = 6, quantity = 40, isOwn = false },
+    { unitPrice = 15, quantity = 100, isOwn = false },
+})
+expect("40 at 6c: left for the auction house", byItem[THREAD], nil)
+expect("and counted as cheaper there", cheaper, 1)
+
+shopping[1].shortfall = 10
 
 ns.Prices = nil
