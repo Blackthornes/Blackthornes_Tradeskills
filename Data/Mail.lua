@@ -541,6 +541,10 @@ function Mail:FillItemID(itemID)
     ns.Debug(("mail: %d sale(s) of %s now know their item"):format(filled, name))
 end
 
+-- How many days the auction house's mail stays in the box. daysLeft counts
+-- down from here, so it also says when the mail was sent.
+local AUCTION_MAIL_DAYS = 30
+
 --- Record what a new mail tells us, if anything.
 local function Describe(mail, kind, itemName, invoice)
     local entry = {
@@ -581,6 +585,16 @@ local function Describe(mail, kind, itemName, invoice)
                     entry.quantity = entry.quantity + (stack.quantity or 0)
                 end
             end
+        end
+
+        -- When it was sent back, which is when the auction ended. The inbox
+        -- can be read long after, and Data/Auctions.lua needs to know whether
+        -- the stack was still listed when your auctions were last read.
+        -- Taken off a reading that had already left it out, 5 still listed
+        -- read as none.
+        if mail.daysLeft then
+            local sent = entry.t - math.floor((AUCTION_MAIL_DAYS - mail.daysLeft) * 86400 + 0.5)
+            entry.sent = math.min(entry.t, sent)
         end
     end
 
