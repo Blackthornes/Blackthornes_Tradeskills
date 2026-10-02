@@ -487,8 +487,9 @@ end
 --- Show an item's icon, or the question mark while the game has not sent it.
 --- Hidden when there is no item at all. Gear that is an upgrade for the
 --- character playing gets the green arrow (only with Blackthornes Equipment
---- loaded; see Logic/Upgrades.lua).
-function Theme.SetItemIcon(icon, itemID)
+--- loaded; see Logic/Upgrades.lua). `link`, when the caller has a bag item's
+--- link, has a random-suffix item judged as the copy it is.
+function Theme.SetItemIcon(icon, itemID, link)
     if not icon then return end
 
     if not itemID then
@@ -498,7 +499,7 @@ function Theme.SetItemIcon(icon, itemID)
     end
 
     if iconState[icon] then
-        iconState[icon].upgrade = ns.Upgrades ~= nil and ns.Upgrades:IsUpgrade(itemID)
+        iconState[icon].upgrade = ns.Upgrades ~= nil and ns.Upgrades:IsUpgrade(itemID, link)
     end
     icon:SetTexture((ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(itemID))
         or FALLBACK_ICON)
