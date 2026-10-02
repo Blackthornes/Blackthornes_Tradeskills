@@ -216,7 +216,8 @@ local function UpdateRow(row, entry)
     if row.view ~= state.view then ApplyRowLayout(row) end
 
     row.name:SetText(entry.name or ("item " .. tostring(entry.itemID)))
-    Theme.SetItemIcon(row.icon, entry.itemID)
+    -- A bag row carries its link, so the upgrade arrow judges that very copy.
+    Theme.SetItemIcon(row.icon, entry.itemID, entry.link)
 
     local r, g, b = Util.GetItemQualityColor(entry.itemID)
     if r then
@@ -413,6 +414,23 @@ local function UpdateDisenchantButton(entry)
     end
 end
 
+-- A "breaks into" line runs the width of the detail panel, less its margins.
+local OUTCOME_WIDTH = DETAIL_WIDTH - 24
+
+--- Give a "breaks into" line's name the room its price leaves, and the line
+--- the height the name wraps to. With a fixed room, a long name ran under a
+--- wide price ("12g 34s 56c each") or ended in "...".
+local function FitOutcomeLine(line)
+    local ok, priceWidth = pcall(line.value.GetStringWidth, line.value)
+    if not ok or type(priceWidth) ~= "number" then priceWidth = 74 end
+
+    line.name:SetWidth(math.max(40, OUTCOME_WIDTH - 18 - 6 - math.ceil(priceWidth)))
+
+    local gotHeight, height = pcall(line.name.GetStringHeight, line.name)
+    if not gotHeight or type(height) ~= "number" then height = 0 end
+    line.frame:SetHeight(math.max(16, math.ceil(height) + 2))
+end
+
 --- Draw what the chances and prices are for one outcome list, under the heading.
 local function DrawOutcomes(detail, breakdown)
     local anchor = detail.heading
@@ -426,9 +444,10 @@ local function DrawOutcomes(detail, breakdown)
             local icon = Theme.CreateItemIcon(frame, 14)
             icon:SetPoint("LEFT", 0, 0)
 
+            -- Its width is set to what the price leaves, see FitOutcomeLine.
             local name = Theme.CreateLabel(frame, "small", "text")
             name:SetPoint("LEFT", 18, 0)
-            name:SetPoint("RIGHT", -74, 0)
+            name:SetWordWrap(true)
 
             local value = Theme.CreateLabel(frame, "small", "muted", "RIGHT")
             value:SetPoint("RIGHT", 0, 0)
@@ -456,6 +475,7 @@ local function DrawOutcomes(detail, breakdown)
             line.value:SetTextColor(Theme.Unpack("dim"))
         end
 
+        FitOutcomeLine(line)
         line.frame:Show()
         anchor = line.frame
     end
@@ -558,7 +578,7 @@ local function UpdateDetail(entry)
     if not shown then return end
 
     detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
-    Theme.SetItemIcon(detail.icon, entry.itemID)
+    Theme.SetItemIcon(detail.icon, entry.itemID, entry.link)
 
     if isBag then return UpdateBagDetail(entry) end
 
@@ -710,6 +730,15 @@ local function EmptyText()
         return "Scan the auction house to find items worth buying to disenchant."
     end
 
+    -- Items were found, and "Only ones I can disenchant" hid all of them.
+    -- Said first: the text below names the other tick box, and unticking
+    -- that one showed nothing new.
+    local found = built.rows and #built.rows or 0
+    if state.hideTooHigh and found > 0 then
+        return ("None of your characters can disenchant the %d item%s found yet. Untick \"Only ones I can disenchant\" to see %s."):format(
+            found, found == 1 and "" or "s", found == 1 and "it" or "them")
+    end
+
     if state.dealsOnly then
         local text = "Nothing on the auction house is worth buying to disenchant right now."
 
@@ -730,6 +759,25 @@ local function EmptyText()
     return "No weapons or armor from other sellers in your last scan."
 end
 
+-- Beside the Disenchant button when the bags list has items but none is worth
+-- more disenchanted than sold, so none was picked.
+local NOTHING_PICKED = "Nothing here is worth more disenchanted than sold. Click one to disenchant it anyway."
+
+--- No item picked in a bags list that has some: the Disenchant button shows
+--- unset, and the line beside it says why.
+local function ShowNothingPicked()
+    local detail = widgets.detail
+    local button = detail.disenchantButton
+
+    button:SetShown(true)
+    button:SetEnabledState(false)
+    button.tooltipText = NOTHING_PICKED
+    detail.disenchantStatus:SetText(NOTHING_PICKED)
+    detail.disenchantStatus:SetShown(true)
+
+    if ns.Disenchanter.anchor == button then ns.Disenchanter:Disarm() end
+end
+
 --- The count line and the picked row, for the bags list.
 local function RefreshBags(rows)
     local beats = 0
@@ -745,6 +793,7 @@ local function RefreshBags(rows)
     end
     widgets.countLabel:SetText(text)
 
+    local before = state.selected
     local fresh
     for _, row in ipairs(rows) do
         if SameRow(row, state.selected) then
@@ -753,13 +802,28 @@ local function RefreshBags(rows)
         end
     end
 
-    -- The top row is picked when nothing else is, so the Disenchant button is
-    -- always ready on the best one to break. After a disenchant the item
-    -- leaves the list and the next one takes its place under the same button.
-    if not fresh then fresh = rows[1] end
+    -- When nothing is picked, the best item worth more disenchanted than sold
+    -- is picked for you, so the Disenchant button is ready on it. After a
+    -- disenchant the item leaves the list and the next one takes its place
+    -- under the same button. One that sells for more is never picked for you,
+    -- or clicking on down the list broke things worth more sold; a click on
+    -- it still picks it.
+    if not fresh then
+        for _, row in ipairs(rows) do
+            if row.beatsSale then
+                fresh = row
+                break
+            end
+        end
+    end
 
     state.selected = fresh
     UpdateDetail(fresh)
+
+    if not fresh and #rows > 0 then ShowNothingPicked() end
+
+    -- The rows were drawn before this pick, so light the picked one now.
+    if fresh and not SameRow(fresh, before) then widgets.list:Refresh() end
 end
 
 local function Refresh()
@@ -983,14 +1047,19 @@ local function Build(container)
         redrawQueued = true
         C_Timer.After(1, function()
             redrawQueued = false
-            Refresh()
+            -- Not once the player has moved to another tab. Redrawn hidden,
+            -- this tab took the Disenchant button from the Enchanting tab on
+            -- screen and aimed it at its own item. It redraws when shown.
+            if widgets.list:IsVisible() then Refresh() end
         end)
     end)
     -- Items new to the tab wait while the auction house is open. Read them
     -- as soon as it closes rather than whenever something next redraws.
     ns.RegisterEvent(UI, "AUCTION_HOUSE_CLOSED", function()
         if not widgets.list:IsVisible() then return end
-        C_Timer.After(0.5, Refresh)
+        C_Timer.After(0.5, function()
+            if widgets.list:IsVisible() then Refresh() end
+        end)
     end)
 end
 

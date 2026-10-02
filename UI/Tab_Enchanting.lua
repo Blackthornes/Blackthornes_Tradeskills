@@ -177,7 +177,8 @@ local function UpdateRow(row, entry)
     if row.view ~= state.view then ApplyRowLayout(row) end
 
     row.name:SetText(entry.name or ("item " .. tostring(entry.itemID)))
-    Theme.SetItemIcon(row.icon, entry.itemID)
+    -- A bag row carries its link, so the upgrade arrow judges that very copy.
+    Theme.SetItemIcon(row.icon, entry.itemID, entry.link)
 
     local r, g, b = Util.GetItemQualityColor(entry.itemID)
     if r then
@@ -353,7 +354,25 @@ local function SetLine(line, label, value, color)
     line.value:SetTextColor(Theme.Unpack(color or "text"))
 end
 
+-- A "breaks into" line runs the width of the detail panel, less its margins.
+local OUTCOME_WIDTH = DETAIL_WIDTH - 24
+
+--- Give a "breaks into" line's name the room its price leaves, and the line
+--- the height the name wraps to. With a fixed room, a long name ran under a
+--- wide price ("12g 34s 56c each") or ended in "...".
+local function FitOutcomeLine(line)
+    local ok, priceWidth = pcall(line.value.GetStringWidth, line.value)
+    if not ok or type(priceWidth) ~= "number" then priceWidth = 74 end
+
+    line.name:SetWidth(math.max(40, OUTCOME_WIDTH - 18 - 6 - math.ceil(priceWidth)))
+
+    local gotHeight, height = pcall(line.name.GetStringHeight, line.name)
+    if not gotHeight or type(height) ~= "number" then height = 0 end
+    line.frame:SetHeight(math.max(16, math.ceil(height) + 2))
+end
+
 --- Arm the Disenchant button for a bag item, or say why it cannot be.
+-- @return true when the item can be disenchanted now
 local function UpdateDisenchantButton(entry)
     local detail = widgets.detail
     local button = detail.disenchantButton
@@ -371,6 +390,27 @@ local function UpdateDisenchantButton(entry)
     elseif disenchanter.anchor == button then
         disenchanter:Disarm()
     end
+    return check.ok
+end
+
+--- Where the Disenchant button and the line saying why it cannot be used
+--- sit: bottom left for a bag item, with the line beside it, and beside the
+--- queue button for a craft. There is no room for the line there, so for a
+--- craft it takes the button's place, and only when the button cannot be used.
+local function PlaceDisenchantButton(inBags)
+    local detail = widgets.detail
+    local button, status = detail.disenchantButton, detail.disenchantStatus
+
+    button:ClearAllPoints()
+    status:ClearAllPoints()
+    if inBags then
+        button:SetPoint("BOTTOMLEFT", detail, "BOTTOMLEFT", 12, 14)
+        status:SetPoint("LEFT", button, "RIGHT", 8, 0)
+    else
+        button:SetPoint("BOTTOMLEFT", detail.addButton, "BOTTOMRIGHT", 8, 0)
+        status:SetPoint("LEFT", button, "LEFT", 0, 0)
+    end
+    status:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 end
 
 local function UpdateDetail(entry)
@@ -399,21 +439,20 @@ local function UpdateDetail(entry)
     local carried = isCraft and ns.Disenchanter:FindSlot(entry.itemID) ~= nil
     local button = detail.disenchantButton
 
-    button:ClearAllPoints()
-    if isBag then
-        button:SetPoint("BOTTOMLEFT", detail, "BOTTOMLEFT", 12, 14)
-    else
-        button:SetPoint("BOTTOMLEFT", detail.addButton, "BOTTOMRIGHT", 8, 0)
-    end
-
+    PlaceDisenchantButton(isBag)
     button:SetShown(isBag or carried)
-    detail.disenchantStatus:SetShown(isBag)
-    if isBag or carried then UpdateDisenchantButton(entry) end
+    detail.disenchantStatus:SetShown(isBag or carried)
+
+    -- A craft's Disenchant button that cannot be used gives way to the
+    -- reason. There is no room beside it for both, and greyed out with
+    -- nothing said, it looked broken.
+    local usable = (isBag or carried) and UpdateDisenchantButton(entry)
+    if carried and not usable then button:Hide() end
 
     if not shown then return end
 
     detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
-    Theme.SetItemIcon(detail.icon, entry.itemID)
+    Theme.SetItemIcon(detail.icon, entry.itemID, entry.link)
 
     local lines = detail.lines
 
@@ -455,9 +494,10 @@ local function UpdateDetail(entry)
             local icon = Theme.CreateItemIcon(frame, 14)
             icon:SetPoint("LEFT", 0, 0)
 
+            -- Its width is set to what the price leaves, see FitOutcomeLine.
             local name = Theme.CreateLabel(frame, "small", "text")
             name:SetPoint("LEFT", 18, 0)
-            name:SetPoint("RIGHT", -74, 0)
+            name:SetWordWrap(true)
 
             local value = Theme.CreateLabel(frame, "small", "muted", "RIGHT")
             value:SetPoint("RIGHT", 0, 0)
@@ -486,6 +526,7 @@ local function UpdateDetail(entry)
             line.value:SetTextColor(Theme.Unpack("dim"))
         end
 
+        FitOutcomeLine(line)
         line.frame:Show()
         anchor = line.frame
     end
@@ -632,6 +673,26 @@ local function ApplyHeadings()
         or "Pick an item, then click Disenchant")
 end
 
+-- Beside the Disenchant button when the bags list has items but none is worth
+-- more disenchanted than sold, so none was picked.
+local NOTHING_PICKED = "Nothing here is worth more disenchanted than sold. Click one to disenchant it anyway."
+
+--- No item picked in a bags list that has some: the Disenchant button shows
+--- unset, and the line beside it says why.
+local function ShowNothingPicked()
+    local detail = widgets.detail
+    local button = detail.disenchantButton
+
+    PlaceDisenchantButton(true)
+    button:SetShown(true)
+    button:SetEnabledState(false)
+    button.tooltipText = NOTHING_PICKED
+    detail.disenchantStatus:SetText(NOTHING_PICKED)
+    detail.disenchantStatus:SetShown(true)
+
+    if ns.Disenchanter.anchor == button then ns.Disenchanter:Disarm() end
+end
+
 local function Refresh()
     if not widgets.list then return end
 
@@ -664,6 +725,7 @@ local function Refresh()
 
     -- Keep the detail panel on the same row with fresh numbers, or clear it
     -- when that row has left the list.
+    local before = state.selected
     local fresh
     if state.selected then
         for _, row in ipairs(rows) do
@@ -674,15 +736,27 @@ local function Refresh()
         end
     end
 
-    -- In the bags list, the top row is picked when nothing else is, so the
-    -- Disenchant button is always ready on the best one to break. After a
-    -- disenchant the item leaves the list and the next one takes its place.
-    if not fresh and state.view == "bag" and rows[1] then
-        fresh = rows[1]
+    -- In the bags list, the best item worth more disenchanted than sold is
+    -- picked when nothing else is, so the Disenchant button is ready on it.
+    -- After a disenchant the item leaves the list and the next one takes its
+    -- place. One that sells for more is never picked for you; a click on it
+    -- still picks it.
+    if not fresh and state.view == "bag" then
+        for _, row in ipairs(rows) do
+            if row.beatsSale then
+                fresh = row
+                break
+            end
+        end
     end
 
     state.selected = fresh
     UpdateDetail(fresh)
+
+    if not fresh and state.view == "bag" and #rows > 0 then ShowNothingPicked() end
+
+    -- The rows were drawn before this pick, so light the picked one now.
+    if fresh and not SameRow(fresh, before) then widgets.list:Refresh() end
 end
 
 --------------------------------------------------------------------------------
@@ -813,7 +887,10 @@ local function Build(container)
         redrawQueued = true
         C_Timer.After(0.3, function()
             redrawQueued = false
-            Refresh()
+            -- Not once the player has moved to another tab. Redrawn hidden,
+            -- this tab took the Disenchant button from the Disenchanting tab
+            -- on screen and aimed it at its own item. It redraws when shown.
+            if widgets.list:IsVisible() then Refresh() end
         end)
     end)
 end
