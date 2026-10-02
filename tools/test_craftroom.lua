@@ -34,6 +34,7 @@ ns.Util = { Clamp = function(v, l, h) return math.max(l, math.min(h, v)) end,
 ns.Config = { Get = function() return nil end, GetPriceTable = function() return {} end }
 ns.Scanner = { IsCommodity = function() return true end }
 ns.Cost = { FindRecipeForItem = function() return nil end }
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 
 time = time or os.time
 

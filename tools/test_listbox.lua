@@ -110,6 +110,7 @@ local function NewNamespace()
     ns.Recipes = { GetAccountWide = function() return {} end }
     ns.Queue = { GetShoppingList = function() return {} end }
     ns.Cost = { FindRecipeForItem = function() return nil end }
+    ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
     ns.Theme = Theme()
     return ns
 end

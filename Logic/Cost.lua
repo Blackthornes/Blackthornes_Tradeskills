@@ -70,6 +70,20 @@ function Cost:FindRecipeForItem(itemID)
     return self.recipeByOutput[itemID]
 end
 
+--- Which recipe, known by any character on the account, produces this item.
+--- The logged-in character's own comes first.
+--
+-- For pricing, where what an item sells for does not depend on who is logged
+-- in. FindRecipeForItem stays with this character's crafts, because it is
+-- what offers sub-crafts, and only those can be made here. Priced through it,
+-- a bank alt posting what the crafter mailed it never undercut ("the cost to
+-- make this is unknown") and got no markup over materials.
+function Cost:FindAnyRecipeForItem(itemID)
+    local own = self:FindRecipeForItem(itemID)
+    if own then return own end
+    return self.anyRecipeByOutput and self.anyRecipeByOutput[itemID]
+end
+
 function Cost:RebuildOutputIndex()
     local index = {}
 
@@ -81,7 +95,20 @@ function Cost:RebuildOutputIndex()
         end
     end
 
+    -- Every character's crafts, for FindAnyRecipeForItem, leaving out each
+    -- one's dropped professions as above.
+    local anywhere = {}
+
+    if ns.Recipes.GetAccountWide then
+        for recipeID, recipe in pairs(ns.Recipes:GetAccountWide(true)) do
+            if recipe.outputItemID then
+                anywhere[recipe.outputItemID] = recipeID
+            end
+        end
+    end
+
     self.recipeByOutput = index
+    self.anyRecipeByOutput = anywhere
     self.recipeIndexStale = false
 end
 

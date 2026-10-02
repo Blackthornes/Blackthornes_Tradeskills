@@ -130,6 +130,7 @@ ns.Queue = {
 }
 
 ns.Cost = { FindRecipeForItem = function() return nil end }
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
