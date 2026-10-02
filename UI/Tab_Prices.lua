@@ -203,11 +203,17 @@ local function UpdateRow(row, entry)
 
     local cells = row.cells
 
-    cells.market:SetText(Util.FormatMoney(entry.record.market, { short = true }))
+    -- Measured into the cell: "12g 34s 56c" is wider than it, and was cut
+    -- off. It drops to the two largest coins, then one, rounded.
+    Theme.SetMoneyText(cells.market, entry.record.market, { short = true })
     cells.market:SetTextColor(Theme.Unpack("text"))
 
     local listedMin = entry.record.min ~= nil
-    cells.min:SetText(listedMin and Util.FormatMoney(entry.record.min, { short = true }) or "none")
+    if listedMin then
+        Theme.SetMoneyText(cells.min, entry.record.min, { short = true })
+    else
+        cells.min:SetText("none")
+    end
     cells.min:SetTextColor(Theme.Unpack(listedMin and "text" or "dim"))
 
     -- Sold out reads as sold out, apart from a thin shelf at a glance.
@@ -224,7 +230,9 @@ local function UpdateRow(row, entry)
         cells.liquidity:SetTextColor(Theme.Unpack("dim"))
     end
 
-    cells.age:SetText(Util.FormatAge(entry.record.seen and (time() - entry.record.seen)))
+    -- "now" rather than "just now", which is wider than the column.
+    local age = Util.FormatAge(entry.record.seen and (time() - entry.record.seen))
+    cells.age:SetText(age == "just now" and "now" or age)
     cells.age:SetTextColor(Theme.Unpack(stale and "warn" or "dim"))
 end
 
@@ -531,19 +539,29 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
+    -- A new search, filter or sort is a different list, so it starts at the
+    -- top. The list keeps its place on the redraws that bag and auction
+    -- events cause, which left a new search showing its results part way
+    -- down, with the best of them above the view.
+    local function ShowFromTop()
+        Refresh()
+        if widgets.list then widgets.list:ScrollToTop() end
+    end
+
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
-        Refresh()
+        ShowFromTop()
     end)
     search:SetPoint("LEFT", 0, 0)
     search:SetWidth(190)
 
     local reagentsOnly = Widgets.CreateCheckbox(toolbar, "Only what I craft with", function(checked)
         state.reagentsOnly = checked
-        Refresh()
+        ShowFromTop()
     end, false)
     reagentsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
+    -- Wide enough for "Sort: Cheapest" and "Sort: Freshest".
     local sort = Widgets.CreateDropdown(toolbar, {
         { text = "Sort: Market", value = "market" },
         { text = "Sort: Cheapest", value = "min" },
@@ -552,8 +570,8 @@ local function Build(container)
         { text = "Sort: Name", value = "name" },
     }, function(value)
         state.sortBy = value
-        Refresh()
-    end, { width = 120 })
+        ShowFromTop()
+    end, { width = 140 })
     sort:SetPoint("RIGHT", 0, 0)
     sort:SetValue("market")
 

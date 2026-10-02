@@ -73,8 +73,39 @@ function Collapse.CreateHeader(frame, text)
     return header, title
 end
 
+--- A plus drawn on the button from two bars of plain colour, the way the
+--- theme draws everything, so it reads as a control rather than a letter.
+--- Hung from the label, so it dips with it when pressed. Nil on a button
+--- that cannot draw, which keeps its text "+" and "-".
+local function CreateGlyph(button)
+    if type(button.CreateTexture) ~= "function" or not button.label then return nil end
+
+    local ok, glyph = pcall(function()
+        local r, g, b = ns.Theme.Unpack("text")
+        local bar = button:CreateTexture(nil, "OVERLAY")
+        bar:SetSize(8, 2)
+        bar:SetPoint("CENTER", button.label, "CENTER", 0, 0)
+        bar:SetColorTexture(r, g, b, 1)
+
+        local stem = button:CreateTexture(nil, "OVERLAY")
+        stem:SetSize(2, 8)
+        stem:SetPoint("CENTER", button.label, "CENTER", 0, 0)
+        stem:SetColorTexture(r, g, b, 1)
+
+        return { bar = bar, stem = stem }
+    end)
+
+    return ok and glyph or nil
+end
+
 local function UpdateButton(button, collapsed)
-    button:SetText(collapsed and "+" or "-")
+    local glyph = rawget(button, "glyph")
+    if glyph then
+        button:SetText("")
+        glyph.stem:SetShown(collapsed)
+    else
+        button:SetText(collapsed and "+" or "-")
+    end
     button.tooltipText = collapsed and "Expand this window" or "Collapse this window"
 end
 
@@ -96,6 +127,7 @@ function Collapse.Attach(frame, opts)
         if opts.onToggle then opts.onToggle(collapsed) end
     end, { width = BUTTON_SIZE, height = BUTTON_SIZE })
 
+    button.glyph = CreateGlyph(button)
     button:SetPoint("LEFT", opts.header, "LEFT", 8, 0)
 
     opts.title:ClearAllPoints()

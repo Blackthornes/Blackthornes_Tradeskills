@@ -142,6 +142,44 @@ function Theme.CreateLabel(parent, size, colorKey, justify)
     return label
 end
 
+--- How wide a label's text is when drawn in full, or nil when it cannot be
+--- measured. A retail client can report only the part a fixed-width label
+--- draws, which never looks too wide; GetUnboundedStringWidth, where the
+--- client has it, measures all of it.
+function Theme.TextWidth(label)
+    for _, method in ipairs({ "GetUnboundedStringWidth", "GetStringWidth" }) do
+        local measure = label[method]
+        if type(measure) == "function" then
+            local ok, width = pcall(measure, label)
+            if ok and type(width) == "number" and width > 0 then return width end
+        end
+    end
+    return nil
+end
+
+--- Put the first of `texts` that fits on a label: the full wording first,
+--- then shorter ones, so a label says less rather than ending in "...".
+--- When none fits it keeps the last, the shortest. A label that cannot be
+--- measured gets the first. `room` is the width to fit, the label's own
+--- width when not given (so the label needs a width or two anchors).
+--- Returns the text it put there.
+function Theme.FitText(label, texts, room)
+    room = room or label:GetWidth()
+    local measurable = type(room) == "number" and room > 0
+
+    local chosen
+    for _, text in ipairs(texts) do
+        chosen = text
+        label:SetText(text)
+        if not measurable then break end
+
+        local width = Theme.TextWidth(label)
+        if width == nil or width <= room then break end
+    end
+
+    return chosen
+end
+
 --- Put a money amount on a label in as much detail as fits its width: every
 --- coin, then the two largest, then the largest alone, rounded. Measured, so
 --- a narrow cell never ends in "..." halfway through an amount. A label that
@@ -161,8 +199,8 @@ function Theme.SetMoneyText(label, copper, opts)
     if type(room) ~= "number" or room <= 0 then return end
 
     for _, parts in ipairs({ 2, 1 }) do
-        local ok, width = pcall(label.GetStringWidth, label)
-        if not ok or type(width) ~= "number" or width <= room then return end
+        local width = Theme.TextWidth(label)
+        if width == nil or width <= room then return end
         label:SetText(Format(parts))
     end
 end
