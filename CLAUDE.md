@@ -90,7 +90,8 @@ its side to keep the call stable; if it changes, change `Logic/Upgrades.lua`
 in the same breath.
 
 Equipment calls back one way: when a player changes their own stat weights
-in Equipment's weights window, it calls, inside a pcall:
+in Equipment's weights window, or picks a spec there, it calls, inside a
+pcall:
 
 ```lua
 _G.BlackthornesTS.Upgrades:RedrawSoon()   -- forget kept answers, redraw what shows arrows
