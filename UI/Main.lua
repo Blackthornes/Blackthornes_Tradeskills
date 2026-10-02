@@ -223,19 +223,19 @@ end
 function UI:BuildTabs()
     local window = self.window
 
-    -- Every tab the same width, as wide as fits across the window: eleven
-    -- at the old 96 would run off the right edge.
+    -- Each tab as wide as its own name, within the width of the window.
+    -- Twelve tabs of one width were too narrow for "Disenchanting" and
+    -- "Vendor Flips", whose names ran into their neighbours.
     local stripWidth = WINDOW_WIDTH - 2 * EDGE_PAD - 16
-    local tabWidth = math.min(96, math.floor(stripWidth / math.max(1, #self.tabOrder)))
 
     local definitions = {}
     for _, tab in ipairs(self.tabOrder) do
-        definitions[#definitions + 1] = { key = tab.key, text = tab.text, width = tabWidth }
+        definitions[#definitions + 1] = { key = tab.key, text = tab.text }
     end
 
     local strip = Widgets.CreateTabStrip(window, definitions, function(key)
         UI:SelectTab(key)
-    end)
+    end, { width = stripWidth })
     strip:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 8, -4)
     self.tabStrip = strip
 
@@ -563,11 +563,28 @@ function UI:GetAuctionBar()
     title:SetText("Blackthornes Tradeskills")
 
     -- One line under the name: when the last scan was, or what the running
-    -- scan is doing.
+    -- scan is doing. As wide as the bar until the buttons arrive and take
+    -- their share (AttachPostButton), so it can be measured from the start.
     local status = Theme.CreateLabel(bar, "tiny", "muted")
     status:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+    status:SetWidth(AUCTION_BAR_WIDTH - left - AUCTION_BAR_PAD)
     status:SetWordWrap(false)
     bar.status = status
+
+    -- When the line had to be shortened to fit, the whole of it is a hover
+    -- away.
+    bar:SetScript("OnEnter", function(frame)
+        if not frame.statusFull then return end
+        GameTooltip:SetOwner(frame, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(frame.statusFull, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+        frame.statusTip = true
+    end)
+    bar:SetScript("OnLeave", function(frame)
+        if not frame.statusTip then return end
+        frame.statusTip = nil
+        GameTooltip:Hide()
+    end)
 
     -- The scan's progress, along the bottom of the text column. Shown only
     -- while a scan runs, and for a moment after one finishes.
@@ -623,6 +640,14 @@ function UI:GetAuctionBar()
     return bar
 end
 
+--- Put the first of `texts` that fits on the bar's status line, from the
+--- full wording to the shortest, rather than running it into the buttons.
+--- The full wording is kept for the bar's tooltip when a shorter one shows.
+local function SetAuctionStatus(bar, texts)
+    local shown = Theme.FitText(bar.status, texts)
+    bar.statusFull = shown ~= texts[1] and texts[1] or nil
+end
+
 --- Bring the bar's status line and progress bar up to date with the scanner.
 function UI:RefreshAuctionStatus()
     local bar = self.auctionBar
@@ -632,7 +657,7 @@ function UI:RefreshAuctionStatus()
 
     if scan then
         bar.doneUntil = nil
-        bar.status:SetText(scan.text)
+        SetAuctionStatus(bar, { scan.text, scan.fraction and "Scanning" or "Waiting to scan" })
         bar.status:SetTextColor(Theme.Unpack("text"))
         bar.progress:Show()
         bar.progress:SetProgress(scan.fraction or 0)
@@ -650,10 +675,18 @@ function UI:RefreshAuctionStatus()
     bar.status:SetTextColor(Theme.Unpack("muted"))
 
     local lastScan, capped = ns.Prices:GetLastScan()
-    bar.status:SetText(lastScan
-        and ("Last scan " .. Util.FormatAgeAgo(time() - lastScan)
-            .. (capped and ", stopped at the page limit" or ""))
-        or "No scan yet. Click Scan to price everything.")
+    if not lastScan then
+        SetAuctionStatus(bar, { "No scan yet. Click Scan to price everything.", "No scan yet" })
+        return
+    end
+
+    local ago = Util.FormatAgeAgo(time() - lastScan)
+    if capped then
+        SetAuctionStatus(bar, { "Last scan " .. ago .. ", stopped at the page limit",
+            "Last scan " .. ago .. " (page limit)", "Scanned " .. ago })
+    else
+        SetAuctionStatus(bar, { "Last scan " .. ago, "Scanned " .. ago })
+    end
 end
 
 --- The finish of a scan: the bar fills, flashes gold, says what it found and
@@ -666,8 +699,15 @@ function UI:CelebrateScan(result)
     bar.glint:Hide()
     bar.progress:Show()
     bar.progress:SetProgress(1)
-    bar.status:SetText(("Scan complete: %s prices updated%s"):format(Util.Comma(result.items or 0),
-        (result.soldOut or 0) > 0 and (", %s sold out"):format(Util.Comma(result.soldOut)) or ""))
+
+    local prices = Util.Comma(result.items or 0)
+    local soldOut = (result.soldOut or 0) > 0 and (", %s sold out"):format(Util.Comma(result.soldOut)) or ""
+    SetAuctionStatus(bar, {
+        ("Scan complete: %s prices updated%s"):format(prices, soldOut),
+        ("Scan complete: %s prices%s"):format(prices, soldOut),
+        ("Scan complete: %s prices"):format(prices),
+        "Scan complete",
+    })
     bar.status:SetTextColor(Theme.Unpack("profit"))
     bar.flashLeft = 1
 
@@ -1021,6 +1061,51 @@ function UI:ShowTransferDialog(mode)
         scroll:SetScrollChild(editBox)
         dialog.editBox = editBox
 
+        -- A long code runs past the bottom of the box. A slim bar down its
+        -- right edge and the mouse wheel move through it; before, only the
+        -- first lines could be seen.
+        local bar = CreateFrame("Slider", nil, box)
+        bar:SetOrientation("VERTICAL")
+        bar:SetWidth(6)
+        bar:SetPoint("TOPRIGHT", -3, -6)
+        bar:SetPoint("BOTTOMRIGHT", -3, 6)
+        bar:SetValueStep(1)
+        bar:SetMinMaxValues(0, 0)
+        bar:SetValue(0)
+        bar:Hide()
+
+        local track = bar:CreateTexture(nil, "BACKGROUND")
+        track:SetAllPoints(bar)
+        track:SetColorTexture(Theme.Unpack("panel"))
+
+        local thumb = bar:CreateTexture(nil, "ARTWORK")
+        thumb:SetColorTexture(Theme.Unpack("borderLit"))
+        thumb:SetSize(6, 30)
+        bar:SetThumbTexture(thumb)
+        Widgets.LightThumb(bar, thumb)
+
+        local function ScrollTo(offset)
+            local range = scroll:GetVerticalScrollRange() or 0
+            offset = math.max(0, math.min(range, offset or 0))
+            scroll:SetVerticalScroll(offset)
+            if bar:GetValue() ~= offset then bar:SetValue(offset) end
+        end
+
+        bar:SetScript("OnValueChanged", function(_, value) scroll:SetVerticalScroll(value) end)
+
+        scroll:SetScript("OnScrollRangeChanged", function(_, _, range)
+            range = tonumber(range) or 0
+            bar:SetMinMaxValues(0, range)
+            bar:SetShown(range > 0)
+            if (scroll:GetVerticalScroll() or 0) > range then ScrollTo(range) end
+        end)
+
+        scroll:EnableMouseWheel(true)
+        scroll:SetScript("OnMouseWheel", function(_, delta)
+            ScrollTo((scroll:GetVerticalScroll() or 0) - (tonumber(delta) or 0) * 30)
+        end)
+        dialog.scrollTo = ScrollTo
+
         dialog.action = Widgets.CreateButton(dialog, "Import", function()
             local ok, message = ns.Transfer:Import(dialog.editBox:GetText())
 
@@ -1062,6 +1147,9 @@ function UI:ShowTransferDialog(mode)
         dialog.close:ClearAllPoints()
         dialog.close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
     end
+
+    -- A new code starts at its top, not wherever the last one was left.
+    dialog.scrollTo(0)
 
     local opening = not dialog:IsShown()
     dialog:Show()
@@ -1211,6 +1299,12 @@ end
 -- Minimap button
 --------------------------------------------------------------------------------
 
+-- Where the button sits until it is dragged. Farmer's sits at 200 degrees on
+-- the same ring, and this one sat there too, hidden under it (or Farmer's
+-- under this) for anyone running both. Equipment's is at 230 and Pets' at
+-- 260. A saved angle is kept as it is.
+local DEFAULT_ANGLE = math.rad(170)
+
 function UI:BuildMinimapButton()
     if self.minimapButton or not Minimap then return end
 
@@ -1236,6 +1330,26 @@ function UI:BuildMinimapButton()
     border:SetPoint("TOPLEFT")
     border:SetTexture([[Interface\Minimap\MiniMap-TrackingBorder]])
 
+    -- The game's own round glow under the mouse, as every minimap button
+    -- has, Farmer's included.
+    if button.SetHighlightTexture then
+        pcall(button.SetHighlightTexture, button,
+            [[Interface\Minimap\UI-Minimap-ZoomButton-Highlight]], "ADD")
+    end
+
+    -- The icon swells a little under the mouse and dips when pressed, as
+    -- Farmer's does.
+    local function IconSize(size)
+        icon:SetSize(size, size)
+    end
+    button:SetScript("OnMouseDown", function() IconSize(16) end)
+    button:SetScript("OnMouseUp", function()
+        -- Back to its hover size if the mouse is still on it, else its own.
+        local target = 18 + 2 * ns.Motion:Value(button, "hover")
+        ns.Motion:Run(button, "press", 0.2, function(p) IconSize(16 + (target - 16) * p) end,
+            { ease = ns.Motion.EaseOutBack })
+    end)
+
     -- Derived from the minimap's real size rather than assumed. A fixed radius
     -- only clears the ring on a default 140px minimap; anyone running a larger
     -- one gets the button sitting on top of the map.
@@ -1256,7 +1370,7 @@ function UI:BuildMinimapButton()
 
     button.UpdatePosition = UpdatePosition
 
-    local angle = (ns.db and ns.db.minimapAngle) or math.rad(200)
+    local angle = (ns.db and ns.db.minimapAngle) or DEFAULT_ANGLE
     UpdatePosition(angle)
 
     -- Dragging around the minimap edge is the expected behaviour for these.
@@ -1289,13 +1403,18 @@ function UI:BuildMinimapButton()
     end)
 
     button:SetScript("OnEnter", function(self)
+        ns.Motion:Blend(self, "hover", 1, 0.12, function(v) IconSize(18 + 2 * v) end)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Blackthornes Tradeskills")
         GameTooltip:AddLine("Click to open", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Drag to move it round the minimap", 0.5, 0.5, 0.5)
         GameTooltip:Show()
     end)
 
-    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    button:SetScript("OnLeave", function(self)
+        ns.Motion:Blend(self, "hover", 0, 0.18, function(v) IconSize(18 + 2 * v) end)
+        GameTooltip:Hide()
+    end)
 
     self.minimapButton = button
     self.lastMinimapWidth = Minimap:GetWidth()
@@ -1380,7 +1499,7 @@ function UI:RepositionMinimapButton()
     local button = self.minimapButton
     if not button or not button.UpdatePosition then return end
 
-    button.UpdatePosition((ns.db and ns.db.minimapAngle) or math.rad(200))
+    button.UpdatePosition((ns.db and ns.db.minimapAngle) or DEFAULT_ANGLE)
     self.lastMinimapWidth = Minimap and Minimap:GetWidth()
 end
 

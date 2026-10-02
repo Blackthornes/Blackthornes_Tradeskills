@@ -77,6 +77,9 @@ local function Theme()
     return {
         FONT = "font",
         sizes = { tiny = 10, small = 11, normal = 12, large = 14, title = 16 },
+        -- The dropdowns fit their words with these; the full wording here.
+        FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
+        TextWidth = function() return nil end,
         Fill = function() return NewFrame() end,
         Unpack = function() return 1, 1, 1, 1 end,
         Border = noop, SetBorderColor = noop, TopSheen = noop, AddGameOutline = noop,
