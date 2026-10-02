@@ -63,9 +63,10 @@ _G.BlackthornesFarmer.Goals:Set(name, amount)     -- goal table, or nil and why
 _G.BlackthornesFarmer.GoalsUI:Show()              -- opens Farmer's Goals panel
 ```
 
-`name` is the item's plain name and `amount` the row's NEED. Farmer's
-`CLAUDE.md` asks its side to keep these stable; if one changes, change
-`Logic/FarmerGoals.lua` in the same breath.
+`name` is the item's plain name and `amount` the row's NEED. Farmer's goals
+belong to the character that set them, so `Find` and `Set` act on the
+character playing. Farmer's `CLAUDE.md` asks its side to keep these stable;
+if one changes, change `Logic/FarmerGoals.lua` in the same breath.
 
 ## How Tradeskills uses Equipment
 
