@@ -19,23 +19,16 @@ local MAX_SUBCRAFT_DEPTH = 3
 -- Reagent pricing
 --------------------------------------------------------------------------------
 
---- What one unit of a reagent costs to acquire.
+--- What one unit of a reagent costs to buy, whatever is already owned.
 --
--- @param opts.valueOwned  force the market-price view even when the player
---   has chosen cash-out-of-pocket. Pricing something off its materials needs
---   what they are worth, not what is left to pay for them.
--- @return copper, source  -- source is "buy", "owned" or nil when unknown
-function Cost:GetReagentUnitCost(itemID, opts)
-    local valueOwned = (opts and opts.valueOwned) or ns.Config:Get("valueOwnedMaterials")
-
-    if not valueOwned then
-        -- Cash-out-of-pocket view: anything already in the bags is sunk.
-        local owned = ns.Inventory:GetBagCount(itemID)
-        if owned > 0 then
-            return 0, "owned"
-        end
-    end
-
+-- The cash-out-of-pocket view is applied in GetCraftCost, where the quantity
+-- is known. Applied here, one unit in the bags made the whole line free: one
+-- bolt held, and all three a bag needs cost nothing. A bolt could then never
+-- be cheaper to make than to buy, so once the first queued bolt was made,
+-- the rest of them dropped off the queue.
+--
+-- @return copper, source  -- source is "vendor", "buy" or nil when unknown
+function Cost:GetReagentUnitCost(itemID)
     -- Buying means paying the asking price, not the smoothed market average.
     -- A lone listing far below the rest is left out, as the undercut rule
     -- leaves it out (Trent, 2026-09-26): one seller's single cheap unit is
@@ -118,8 +111,10 @@ end
 
 --- Total reagent cost for one craft of a recipe.
 --
--- @param opts.valueOwned  as GetReagentUnitCost above, carried down through
---   sub-crafts so the whole tree is valued the same way.
+-- @param opts.valueOwned  force the market-price view even when the player
+--   has chosen cash-out-of-pocket. Pricing something off its materials needs
+--   what they are worth, not what is left to pay for them. Carried down
+--   through sub-crafts so the whole tree is valued the same way.
 --
 -- @return result table:
 --   total        copper cost of a single craft, or nil when unpriceable
@@ -150,10 +145,12 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
         total = 0,
     }
 
+    local valueOwned = (opts and opts.valueOwned) or ns.Config:Get("valueOwnedMaterials")
+
     for _, reagent in ipairs(recipe.reagents or {}) do
         local itemID, quantity = reagent.itemID, reagent.quantity
 
-        local unitCost, source = self:GetReagentUnitCost(itemID, opts)
+        local unitCost, source = self:GetReagentUnitCost(itemID)
         local crafted = false
 
         -- If we know how to make this reagent and making it is cheaper than
@@ -181,11 +178,19 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
         local inBags = ns.Inventory:GetBagCount(itemID)
         local have = inBags + ns.Inventory:GetBankCount(itemID)
 
+        -- Cash-out-of-pocket view: what is in the bags is already paid for,
+        -- but only that many. The rest of the line is still bought or made.
+        local free = (not valueOwned) and math.min(quantity, inBags) or 0
+        local lineCost = unitCost and (unitCost * (quantity - free)) or nil
+        if free > 0 and free >= quantity then
+            unitCost, source, lineCost = 0, "owned", 0
+        end
+
         local entry = {
             itemID = itemID,
             quantity = quantity,
             unitCost = unitCost,
-            lineCost = unitCost and (unitCost * quantity) or nil,
+            lineCost = lineCost,
             source = source,
             crafted = crafted,
             have = have,
