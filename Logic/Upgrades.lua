@@ -39,18 +39,36 @@ end
 
 --- True when the item is an upgrade the character can wear now. False for
 --- everything else, including when Equipment is not there. Never raises.
-function Upgrades:IsUpgrade(itemID)
+--
+-- `link` is optional: a bag item's link, when the caller has one. Random-suffix
+-- gear ("of the Monkey") shares its item ID with every other suffix, so asked
+-- by ID it got the plain item's answer. With a link Equipment is asked about
+-- that exact copy, and the answer is kept under the link's item string.
+function Upgrades:IsUpgrade(itemID, link)
     itemID = tonumber(itemID)
     if not itemID or not self:IsEnabled() then return false end
 
     local compare = self:Equipment()
     if not compare then return false end
 
-    local answer = known[itemID]
+    -- The item string ("item:12345:0:...") names the copy, suffix and all,
+    -- without the colour and name around it. Read and copied (the `.. ""`)
+    -- inside a pcall: a link can be a value the client does not let addons
+    -- read, and as a key below it would raise. Without one, by ID.
+    local item, key = itemID, itemID
+    if type(link) == "string" then
+        local ok, itemString = pcall(function()
+            local found = string.match(link, "item[%-?%d:]+")
+            return found and found .. ""
+        end)
+        if ok and type(itemString) == "string" then item, key = link, itemString end
+    end
+
+    local answer = known[key]
     if answer == nil then
-        local ok, result = pcall(compare.IsUpgrade, compare, itemID)
+        local ok, result = pcall(compare.IsUpgrade, compare, item)
         answer = ok and result == true
-        known[itemID] = answer
+        known[key] = answer
     end
     return answer
 end
