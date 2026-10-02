@@ -597,12 +597,21 @@ function Config:CheckAccountDataLost(db)
     local loadsNow = (db.probe and db.probe.loadCount) or 0
     local remembered = tonumber(charDb.accountLoads)
 
+    -- The player has started fresh (/bts db fresh) since this character last
+    -- looked, so what it remembers is the data he already let go. Without
+    -- this, every other character raised the warning again on its next login.
+    local freshAt = db.probe and db.probe.freshAt
+    if freshAt and charDb.accountFreshAt ~= freshAt then
+        remembered = nil
+    end
+
     if remembered and loadsNow <= remembered then
         self.accountDataLost = { remembered = remembered, now = loadsNow - 1 }
         return
     end
 
     charDb.accountLoads = loadsNow
+    charDb.accountFreshAt = freshAt
 end
 
 --- Loud on purpose: every logout or /reload saves the file, and the game
@@ -793,6 +802,13 @@ ns.RegisterCommand("db", "show what saved data loaded (/bts db fresh: stop the m
         local charDb = _G.BlackthornesTSCharDB
         if type(charDb) == "table" and ns.db and ns.db.probe then
             charDb.accountLoads = ns.db.probe.loadCount or 0
+
+            -- Marked in the account-wide file as well, so the player's other
+            -- characters take the fresh start too. A time rather than a
+            -- flag: after another loss and another fresh start, characters
+            -- that took the first one have to take this one as well.
+            ns.db.probe.freshAt = time()
+            charDb.accountFreshAt = ns.db.probe.freshAt
         end
         ns.Config.accountDataLost = nil
         ns.Print("starting fresh: the missing saved data warning will not show again.")
