@@ -44,10 +44,12 @@ local widgets = {}
 
 local SOURCE_ORDER = { vendor = 1, auction = 2, unknown = 3 }
 
+--- The rows to show, sorted, and the whole shopping list they came from.
 local function BuildList()
     local lines = {}
+    local all = ns.Queue:GetShoppingList()
 
-    for _, line in ipairs(ns.Queue:GetShoppingList()) do
+    for _, line in ipairs(all) do
         if line.shortfall > 0 or not state.hideSatisfied then
             line.label = Util.GetItemLabel(line.itemID)
             lines[#lines + 1] = line
@@ -86,7 +88,7 @@ local function BuildList()
         return (a.itemID or 0) < (b.itemID or 0)
     end)
 
-    return lines
+    return lines, all
 end
 
 --------------------------------------------------------------------------------
@@ -137,11 +139,14 @@ local function CreateRow(row)
 end
 
 local function UpdateRow(row, line)
-    row.name:SetText(line.label)
+    local done = line.shortfall <= 0
+
+    -- Greyed once you have it all. The link's own colour shows over the
+    -- label's, so the greyed name goes without it.
+    row.name:SetText(done and Util.Uncolored(line.label) or line.label)
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells
-    local done = line.shortfall <= 0
 
     cells.need:SetText(tostring(line.needed))
     cells.have:SetText(tostring(line.have))
@@ -242,7 +247,7 @@ end
 local function Refresh()
     if not widgets.list then return end
 
-    local lines = BuildList()
+    local lines, all = BuildList()
     widgets.list:SetData(lines)
 
     widgets.emptyLabel:SetShown(#lines == 0)
@@ -252,7 +257,9 @@ local function Refresh()
             or "You already have everything the queue needs.")
     end
 
-    local summary = ns.Queue:GetGatherSummary()
+    -- From the list already built, satisfied lines and all, rather than
+    -- building it a second time.
+    local summary = ns.Queue:GetGatherSummary(all)
 
     widgets.progress:SetText(("%d of %d materials still needed"):format(
         summary.outstanding, summary.outstanding + summary.satisfied))

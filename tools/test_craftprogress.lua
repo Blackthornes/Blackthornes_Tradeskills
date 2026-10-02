@@ -72,8 +72,32 @@ recasts = 3
 driverScript()
 check(bar:IsShown(), "bar shows during a craft")
 check(not status:IsShown(), "status line hidden under the bar")
-check(bar.label.text == "Light Leather, 3 more after this", "label: " .. bar.label.text)
-check(bar.timer.text == "3.0s", "timer: " .. bar.timer.text)
+-- The count sits beside the time, where the narrow bar has room for it.
+check(bar.label.text == "Light Leather", "label: " .. bar.label.text)
+check(bar.timer.text == "3 more · 3.0s", "timer: " .. bar.timer.text)
+
+-- Nothing is cut off in a narrower bar: the time goes first, then the name,
+-- and the count stays. The name has what the right-hand text leaves it.
+local function Measure(region) return #region.text * 6 end
+local barWidth = 200
+bar.label.GetStringWidth = Measure
+bar.label.GetWidth = function() return barWidth - 18 - Measure(bar.timer) end
+
+barWidth = 150
+driverScript()
+check(bar.label.text == "Light Leather", "a narrower bar keeps the name: " .. bar.label.text)
+check(bar.timer.text == "3 more", "and the count, without the time: " .. bar.timer.text)
+
+barWidth = 120
+driverScript()
+check(bar.label.text == "", "a name with no room at all is left off: " .. bar.label.text)
+check(bar.timer.text == "3 more · 3.0s", "and the count and time stay: " .. bar.timer.text)
+
+barWidth = 200
+driverScript()
+check(bar.label.text == "Light Leather", "with room the name is back: " .. bar.label.text)
+check(bar.timer.text == "3 more · 3.0s", "and the time: " .. bar.timer.text)
+bar.label.GetStringWidth, bar.label.GetWidth = nil, nil
 check(bar.fill.width == 50, "fill a quarter of 200, got " .. tostring(bar.fill.width))
 
 -- An ordinary spell is not a craft.
@@ -87,6 +111,7 @@ recasts = 0
 now = 12
 driverScript()
 check(bar.label.text == "Light Leather", "last craft label: " .. bar.label.text)
+check(bar.timer.text == "1.0s", "last craft shows the time alone: " .. bar.timer.text)
 check(bar.fill.width == 150, "fill three quarters, got " .. tostring(bar.fill.width))
 
 -- Run over.
