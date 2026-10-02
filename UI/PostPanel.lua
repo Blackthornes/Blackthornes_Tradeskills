@@ -164,8 +164,10 @@ PostPanel._TypingInList = TypingInList
 --- cannot be measured, so nothing is shortened on a guess.
 local function DetailTooWide(row)
     local label = row.detail
-    local ok, width = pcall(label.GetStringWidth, label)
-    if not ok or type(width) ~= "number" then return false end
+    -- Theme.TextWidth, because a label's own GetStringWidth can stop at the
+    -- label's width, and then nothing is ever too wide.
+    local width = Theme.TextWidth(label)
+    if not width then return false end
 
     local room = label:GetWidth()
     if type(room) ~= "number" or room <= 0 then

@@ -100,6 +100,9 @@ ns.Theme = setmetatable({
     Unpack = function(key) return key end,
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
     CreateHeading = function() local h = NewFrame(); h.rule = NewFrame(); return h end,
+    -- Dropdown faces set their words through FitText; nothing is measured.
+    FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
+    TextWidth = function() return nil end,
 }, { __index = function(_, k)
     if type(k) == "string" and k:match("^%u") then return function() return NewFrame() end end
 end })

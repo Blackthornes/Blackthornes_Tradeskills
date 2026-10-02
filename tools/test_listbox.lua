@@ -79,7 +79,13 @@ local function Theme()
         sizes = { tiny = 10, small = 11, normal = 12, large = 14, title = 16 },
         -- The dropdowns fit their words with these; the full wording here.
         FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
-        TextWidth = function() return nil end,
+        -- Measured as the real one measures: unbounded first.
+        TextWidth = function(label)
+            for _, method in ipairs({ "GetUnboundedStringWidth", "GetStringWidth" }) do
+                local ok, width = pcall(label[method], label)
+                if ok and type(width) == "number" and width > 0 then return width end
+            end
+        end,
         Fill = function() return NewFrame() end,
         Unpack = function() return 1, 1, 1, 1 end,
         Border = noop, SetBorderColor = noop, TopSheen = noop, AddGameOutline = noop,
@@ -201,6 +207,16 @@ do
     row.detail.width = 60
     ns.PostPanel.list:Refresh()
     check("short of room, it keeps the amount and price", row.detail.text, "20 @ 3s")
+
+    -- A label's own GetStringWidth can stop at the label's width. Measured
+    -- unbounded, the line is still shortened.
+    row.detail.GetUnboundedStringWidth = function(self) return #tostring(self.text or "") * 6 end
+    row.detail.GetStringWidth = function(self) return math.min(#tostring(self.text or "") * 6, self.width) end
+    row.detail.width = 400
+    ns.PostPanel.list:Refresh()
+    row.detail.width = 60
+    ns.PostPanel.list:Refresh()
+    check("measured past a capped width, it is still shortened", row.detail.text, "20 @ 3s")
 
     -- A List button showing a countdown says what it is waiting for.
     local button = ns.PostPanel.list.rows[1].post
