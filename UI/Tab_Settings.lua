@@ -530,7 +530,10 @@ local function Build(outer)
         ns.Print("settings reset to defaults")
         UI:RefreshActiveTab()
     end, { width = 140, height = 22, tooltip = "Put every setting back to how it started. Asks you to click again first." })
-    resetButton:SetPoint("BOTTOMLEFT", COLUMN_TWO_X, 12)
+    -- Under the last setting rather than pinned to the page's bottom edge:
+    -- measured from there, the page grew 4 pixels taller every time it was
+    -- drawn, and left more empty space to scroll into each time.
+    resetButton:SetPoint("TOPLEFT", debugRow, "BOTTOMLEFT", 0, -18)
 end
 
 --------------------------------------------------------------------------------
