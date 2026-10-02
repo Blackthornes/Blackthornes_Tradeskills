@@ -75,6 +75,18 @@ check("near the known market value it is kept", rival == 1000 and ignored == nil
 _, _, _, rival, _, ignored = Prices:Summarise({ L(100), L(5000, 5) }, 4800)
 check("far under the known market value it is skipped", rival == 5000 and ignored == 100)
 
+-- One listing holding most of the book is where the item sells now, not one
+-- purchase to step past: 1000 at 10c under 60 at 50c is the price to beat.
+_, min, qty, rival, _, ignored = Prices:Summarise({ L(50, 20), L(10, 1000), L(52, 40) }, 50)
+check("a listing holding most of the book is the price", rival == 10 and ignored == nil)
+check("and is what it costs", min == 10 and qty == 1060)
+_, _, _, rival, _, ignored = Prices:Summarise({ L(10, 30), L(1000, 30) })
+check("half the book is enough", rival == 10 and ignored == nil)
+
+-- One stack among several is still a lone listing.
+_, _, _, rival, _, ignored = Prices:Summarise({ L(5, 20), L(50, 20), L(50, 20), L(50, 20) }, 50)
+check("a stack among several is still skipped", rival == 50 and ignored == 5)
+
 -- Only the lone listing and your own above it: nobody left to undercut.
 _, _, _, rival, own, ignored = Prices:Summarise({ L(100), L(5000, 1, true) })
 check("with only yours above, there is no rival", rival == nil and own == 5000 and ignored == 100)
