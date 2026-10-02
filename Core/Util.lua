@@ -452,6 +452,23 @@ function Util.GetItemLabel(itemID)
     return ("item %d"):format(itemID)
 end
 
+--- Text without its colour codes, so a label's own colour shows. An item
+--- link carries its quality colour inside it, which wins over SetTextColor:
+--- a row greyed out as done, or green for a cheaper craft on another
+--- character, still showed in the item's colour. Both colour codes go: the
+--- "|cff1eff00" kind and the named "|cnIQ2:" kind newer clients put in item
+--- links. Text that cannot be read (a value the game keeps from addons) comes
+--- back as it was.
+function Util.Uncolored(text)
+    if type(text) ~= "string" then return text end
+
+    local ok, plain = pcall(function()
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|cn[%w_]+:", ""):gsub("|r", ""))
+    end)
+    if ok and type(plain) == "string" then return plain end
+    return text
+end
+
 --- A character's name for display from a saved key, or "" when unknown.
 --- Keys are now the character's GUID ("Player-..."), where the text before
 --- the first dash is just "Player"; the name then comes from the character's

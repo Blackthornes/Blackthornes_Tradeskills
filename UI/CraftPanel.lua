@@ -413,6 +413,24 @@ local function BeingTyped(box)
     return box.editBox.HasFocus and box.editBox:HasFocus()
 end
 
+--- Whether a label's text runs past its width. False when it cannot be
+--- measured, so nothing is shortened on a guess.
+local function TooWide(label)
+    local ok, width = pcall(label.GetStringWidth, label)
+    if not ok or type(width) ~= "number" then return false end
+
+    local room = label.GetWidth and label:GetWidth()
+    return type(room) == "number" and room > 0 and width > room
+end
+
+--- Put the first of `texts` that fits on a label, or the last when none does.
+local function SetFirstThatFits(label, texts)
+    for index, text in ipairs(texts) do
+        label:SetText(text)
+        if index == #texts or not TooWide(label) then return end
+    end
+end
+
 --- Is the "Ignore max on hand" box ticked?
 function CraftPanel:IgnoringLimit()
     return ns.Config:Get("craftPaneIgnoreLimit") == true
@@ -591,6 +609,7 @@ end
 -- Listed is called out separately from the rest because the two mean different
 -- things when deciding what to make: stock in your bags is ready to list, and
 -- stock on the auction house is already competing with anything else you post.
+-- @return phrase, and true when it already says how many are queued
 local function StockText(line)
     local stock = line.stock or 0
 
@@ -601,7 +620,7 @@ local function StockText(line)
         -- Queued crafts count toward the limit too; without saying so,
         -- "have 0 of 5, at your limit" contradicted itself.
         if line.atPostLimit and (line.queuedElsewhere or 0) > 0 then
-            return ("have %d, %d queued, limit %d"):format(stock, line.queuedElsewhere, line.postLimit)
+            return ("have %d, %d queued, limit %d"):format(stock, line.queuedElsewhere, line.postLimit), true
         end
         if line.atPostLimit then return text .. ", at your limit" end
         return text
@@ -677,35 +696,44 @@ local function UpdateRow(row, line)
     local tier = line.skillUpTier
     Theme.SetMark(row.mark, tier ~= "trivial" and tier or nil)
 
-    -- What it is worth, and whether you can make one right now: the two things
-    -- that decide whether this recipe is the one you want.
-    local parts = {}
-
-    if line.priceable then
-        parts[#parts + 1] = ("%s each"):format(
-            Util.FormatMoney(line.profit, { noColor = true, short = true }))
-    elseif line.soulbound then
-        -- The whole reason is in the tooltip; the row has room for one word.
-        parts[#parts + 1] = "soulbound"
-    else
-        parts[#parts + 1] = line.reason or "no price data"
-    end
-
-    parts[#parts + 1] = line.craftable > 0
-        and ("can make %d"):format(line.craftable)
-        or "no materials"
-
     -- What you already hold, listed or otherwise. This is the number the pane
     -- was missing: "9 listed" changes the answer to "what should I make next"
     -- more than anything else on the row does.
-    local stockText = StockText(line)
-    if stockText then parts[#parts + 1] = stockText end
+    local stockText, saysQueued = StockText(line)
 
-    if line.queued > 0 then
-        parts[#parts + 1] = ("queued %d"):format(line.queued)
+    -- What it is worth, and whether you can make one right now: the two things
+    -- that decide whether this recipe is the one you want.
+    local function Detail(coins, withQueued)
+        local parts = {}
+
+        if line.priceable then
+            parts[#parts + 1] = ("%s each"):format(
+                Util.FormatMoney(line.profit, { noColor = true, short = true, parts = coins }))
+        elseif line.soulbound then
+            -- The whole reason is in the tooltip; the row has room for one word.
+            parts[#parts + 1] = "soulbound"
+        else
+            parts[#parts + 1] = line.reason or "no price data"
+        end
+
+        parts[#parts + 1] = line.craftable > 0
+            and ("can make %d"):format(line.craftable)
+            or "no materials"
+
+        if stockText then parts[#parts + 1] = stockText end
+
+        -- Once: at the limit the stock already says how many are queued, and
+        -- the line said "queued" twice.
+        if withQueued and line.queued > 0 and not saysQueued then
+            parts[#parts + 1] = ("queued %d"):format(line.queued)
+        end
+
+        return table.concat(parts, " · ")
     end
 
-    row.detail:SetText(table.concat(parts, " · "))
+    -- When the whole line runs past the row, the queued count goes first
+    -- (the box beside the name shows it), then coins off the amount.
+    SetFirstThatFits(row.detail, { Detail(nil, true), Detail(nil, false), Detail(2, false), Detail(1, false) })
 
     local limitApplies = line.atPostLimit and not CraftPanel:IgnoringLimit()
 
@@ -736,6 +764,8 @@ local function UpdateRow(row, line)
         and ("Queue one fewer %s. Right-click the row to take all of it off."):format(line.name)
         or "Nothing of this queued yet"
 end
+
+CraftPanel._UpdateRow = UpdateRow
 
 local function ShowRowTooltip(row, line)
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.outputItemID, line.name)
@@ -950,6 +980,19 @@ function CraftPanel:Build()
     summary:SetPoint("BOTTOMLEFT", 14, 22)
     summary:SetWidth(summaryWidth)
     self.summary = summary
+
+    -- What the * after a profit that leaves crafts out means. The line has
+    -- no room to say it, and "(some unpriced)" ran off its end.
+    local summaryHover = CreateFrame("Frame", nil, body)
+    summaryHover:SetAllPoints(summary)
+    summaryHover:EnableMouse(true)
+    summaryHover:SetScript("OnEnter", function(hover)
+        if not CraftPanel.summaryNote or not summary:IsShown() then return end
+        GameTooltip:SetOwner(hover, "ANCHOR_TOP")
+        GameTooltip:SetText(CraftPanel.summaryNote, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    summaryHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- While a craft casts, a progress bar takes the summary line's place.
     local progress = ns.CraftProgress:Create(body, {
@@ -1268,6 +1311,7 @@ function CraftPanel:UpdateSummary()
     if not self.summary then return end
 
     local queued = ns.Queue:Count()
+    self.summaryNote = nil
 
     if queued == 0 then
         self.summary:SetText("Nothing queued")
@@ -1276,14 +1320,26 @@ function CraftPanel:UpdateSummary()
     end
 
     local totals = ns.Queue:GetTotals()
+    local colour = (totals.profit or 0) < 0 and ns.COLORS.loss or ns.COLORS.profit
+
+    -- A craft with no price is left out of the profit. A * says so, and the
+    -- hover says what it means.
+    local marker = ""
+    if not totals.priceable then
+        marker = ("|c%s*|r"):format(ns.COLORS.warn)
+        self.summaryNote = "Some queued crafts have no price, so this profit leaves them out."
+    end
 
     -- The profit in its own colour: green when the queue pays, red when not.
-    -- Kept short: it shares the bottom line with Clear queue and Queue tab.
-    self.summary:SetText(("%d queued · profit |c%s%s|r%s"):format(
-        totals.crafts,
-        (totals.profit or 0) < 0 and ns.COLORS.loss or ns.COLORS.profit,
-        Util.FormatMoney(totals.profit, { noColor = true, short = true }),
-        totals.priceable and "" or " (some unpriced)"))
+    -- Kept short: it shares the bottom line with Clear queue and Queue tab,
+    -- and an amount too long for it loses coins rather than its end.
+    local texts = {}
+    for _, coins in ipairs({ 3, 2, 1 }) do
+        texts[#texts + 1] = ("%d queued · profit |c%s%s|r%s"):format(totals.crafts, colour,
+            Util.FormatMoney(totals.profit, { noColor = true, short = true, parts = coins }),
+            marker)
+    end
+    SetFirstThatFits(self.summary, texts)
     self.summary:SetTextColor(Theme.Unpack("muted"))
 end
 
@@ -1427,6 +1483,14 @@ function CraftPanel:AltHolder(itemID)
 
     if not bestKey then return nil end
     local name = Util.CharacterName(bestKey)
+
+    -- The short name, as the narrow columns elsewhere show it: Forever names
+    -- are first and last, and "on Firstname Lastname" ran off the tag.
+    if name ~= "" and ns.Recipes and ns.Recipes.GetShortCharacterName then
+        local short = ns.Recipes:GetShortCharacterName(bestKey)
+        if type(short) == "string" and short ~= "" then name = short end
+    end
+
     if name == "" then name = "another character" end
     return name, bestCount
 end
@@ -1434,8 +1498,10 @@ end
 --- How one shopping list line reads.
 --
 -- Green when you have enough on you, amber when you own enough but some of it
--- is in the bank or on another character, red when you still have to buy.
--- @return look { count, colour, fraction, tag, tagColour }
+-- is in the bank, the mailbox or on another character, red when you still
+-- have to buy.
+-- @return look { count, colour, fraction, tag, tagColour, shorter }
+--   shorter: the tag in fewer words, for a row with too little room for it
 function CraftPanel:ShoppingLook(line)
     local needed = math.max(1, line.needed or 0)
     local look = {
@@ -1446,6 +1512,8 @@ function CraftPanel:ShoppingLook(line)
     if (line.shortfall or 0) <= 0 then
         if line.needsBankTrip then
             look.colour, look.tag, look.tagColour = "warn", "in bank", "warn"
+        elseif line.needsMailTrip then
+            look.colour, look.tag, look.tagColour = "warn", "in mail", "warn"
         else
             look.colour, look.tag, look.tagColour = "profit", "have all", "profit"
         end
@@ -1457,12 +1525,17 @@ function CraftPanel:ShoppingLook(line)
     local altName, altCount = self:AltHolder(line.itemID)
     if altName and altCount >= line.shortfall then
         look.colour, look.tag, look.tagColour = "warn", "on " .. altName, "warn"
+        look.shorter = { "on an alt" }
         return look
     end
 
     if line.estimatedCost then
-        local cost = Util.FormatMoney(line.estimatedCost, { short = true })
-        look.tag = line.fromVendor and ("|c%svendor|r %s"):format(ns.COLORS.accent, cost) or cost
+        local function Cost(coins)
+            local cost = Util.FormatMoney(line.estimatedCost, { short = true, parts = coins })
+            return line.fromVendor and ("|c%svendor|r %s"):format(ns.COLORS.accent, cost) or cost
+        end
+        look.tag = Cost(nil)
+        look.shorter = { Cost(2), Cost(1) }
         look.tagColour = "text"
     else
         look.tag, look.tagColour = "no price", "muted"
@@ -1472,8 +1545,10 @@ end
 
 --- The total along the bottom: what is left to buy. Kept to the money, as it
 --- shares the line with the button; a line with no price says so itself.
-function CraftPanel:ShoppingTotalText()
-    local cost = ns.Queue:GetShoppingTotal()
+-- @param lines  the shopping list already built for the rows, so it is not
+--   built a second time for the total
+function CraftPanel:ShoppingTotalText(lines)
+    local cost = ns.Queue:GetShoppingTotal(lines)
     return "To buy " .. Util.FormatMoney(cost or 0, { short = true })
 end
 
@@ -1500,8 +1575,16 @@ end
 local function UpdateShoppingRow(row, line)
     local look = CraftPanel:ShoppingLook(line)
 
-    row.name:SetText(Util.GetItemLabel(line.itemID))
-    row.name:SetTextColor(Theme.Unpack(look.colour == "profit" and "muted" or "text"))
+    -- Greyed once you have it all. An item link carries its own colour, which
+    -- shows over the label's, so the greyed name goes without it.
+    local label = Util.GetItemLabel(line.itemID)
+    if look.colour == "profit" then
+        row.name:SetText(Util.Uncolored(label))
+        row.name:SetTextColor(Theme.Unpack("muted"))
+    else
+        row.name:SetText(label)
+        row.name:SetTextColor(Theme.Unpack("text"))
+    end
     Theme.SetItemIcon(row.icon, line.itemID)
 
     row.count:SetText(look.count)
@@ -1509,7 +1592,10 @@ local function UpdateShoppingRow(row, line)
 
     row.bar:Set(look.fraction, look.colour)
 
-    row.tag:SetText(look.tag or "")
+    -- The first wording that fits beside the bar, rather than one cut off.
+    local tags = { look.tag or "" }
+    for _, shorter in ipairs(look.shorter or {}) do tags[#tags + 1] = shorter end
+    SetFirstThatFits(row.tag, tags)
     row.tag:SetTextColor(Theme.Unpack(look.tagColour or "muted"))
 end
 
@@ -1659,9 +1745,13 @@ function CraftPanel:RefreshQueued()
     local available = frame:GetHeight() + ns.Collapse.CONTENT_TOP - 14 - SHOPPING_FOOTER_HEIGHT
     local shown = self:IsShoppingShown()
 
+    -- Built once for the rows and the total: it walks the queue, the bags
+    -- and every character's recipes, and this runs on every queue click.
+    local lines = ns.Queue:GetShoppingList()
+
     if shown then
         self.queuedList:SetHeight(CraftPanel.QueuedListHeight(available, #entries))
-        self.shoppingList:SetData(ns.Queue:GetShoppingList())
+        self.shoppingList:SetData(lines)
     else
         self.queuedList:SetHeight(math.max(QUEUED_ROW_HEIGHT, available - 4))
     end
@@ -1672,7 +1762,7 @@ function CraftPanel:RefreshQueued()
     self.shoppingToggle:SetText(shown and "Hide list" or "Shopping")
     self.shoppingToggle.tooltipText = shown and "Hide the materials list"
         or "Show what the queue still needs, minus what you have"
-    self.shoppingTotal:SetText(self:ShoppingTotalText())
+    self.shoppingTotal:SetText(self:ShoppingTotalText(lines))
 
     self.queuedList:SetData(entries)
 end

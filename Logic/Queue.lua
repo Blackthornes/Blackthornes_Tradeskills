@@ -457,8 +457,10 @@ function Queue:GetShoppingList()
             -- A sub-craft was sized against everything owned, mail included, so
             -- whatever of this it leaves over is already owned. Counting it the
             -- same way keeps the two from disagreeing about what is left to buy.
+            local inMail = 0
             if queuedToMake[itemID] then
-                have = have + ns.Inventory:GetMailCount(itemID)
+                inMail = ns.Inventory:GetMailCount(itemID)
+                have = have + inMail
             end
 
             local shortfall = math.max(0, needed - have)
@@ -493,9 +495,13 @@ function Queue:GetShoppingList()
                 have = have,
                 inBags = inBags,
                 inBank = inBank,
+                inMail = inMail,
                 -- True when you own enough only by counting the bank, so the row
                 -- can say "go to the bank" rather than implying you can craft now.
-                needsBankTrip = inBags < needed and have >= needed,
+                needsBankTrip = inBags < needed and inBags + inBank >= needed,
+                -- The same for the mailbox. A sub-craft's leftovers can be
+                -- waiting there, and the row said "in bank" for them.
+                needsMailTrip = inBags + inBank < needed and have >= needed,
                 shortfall = shortfall,
                 unitCost = unitCost,
                 estimatedCost = unitCost and (unitCost * shortfall) or nil,
@@ -627,10 +633,14 @@ function Queue:GetAltCraftOffer(itemID, units, buyUnitCost, context)
     return best
 end
 
-function Queue:GetShoppingTotal()
+--- What is still to buy, and how many of those lines have no price.
+-- @param lines  the shopping list when the caller already has it. Building
+--   it walks the queue, the bags and every character's recipes, and the Buy
+--   view built it again every second just for this total.
+function Queue:GetShoppingTotal(lines)
     local total, unknown = 0, 0
 
-    for _, line in ipairs(self:GetShoppingList()) do
+    for _, line in ipairs(lines or self:GetShoppingList()) do
         if line.shortfall > 0 then
             if line.estimatedCost then
                 total = total + line.estimatedCost
@@ -644,8 +654,9 @@ function Queue:GetShoppingTotal()
 end
 
 --- Shopping totals split by where you have to go to get them.
+-- @param lines  the shopping list when the caller already has it
 -- @return summary table keyed by source, plus grand totals
-function Queue:GetGatherSummary()
+function Queue:GetGatherSummary(lines)
     local summary = {
         vendor = { count = 0, cost = 0 },
         auction = { count = 0, cost = 0 },
@@ -656,7 +667,7 @@ function Queue:GetGatherSummary()
         saving = 0,
     }
 
-    for _, line in ipairs(self:GetShoppingList()) do
+    for _, line in ipairs(lines or self:GetShoppingList()) do
         if line.shortfall > 0 then
             summary.outstanding = summary.outstanding + 1
 

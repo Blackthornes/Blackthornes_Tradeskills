@@ -811,7 +811,10 @@ function PostPanel:ShoppingSummary(lines)
         return "You have everything the queue needs.", 0
     end
 
-    local cost = ns.Queue:GetShoppingTotal()
+    -- From the lines in hand. Asked for on its own, the total built the whole
+    -- list again on every one-second tick, which the cache above is there
+    -- to stop.
+    local cost = ns.Queue:GetShoppingTotal(lines)
     return ("%d material%s to buy, about %s"):format(
         short, short == 1 and "" or "s",
         Util.FormatMoney(cost or 0, { short = true })), short

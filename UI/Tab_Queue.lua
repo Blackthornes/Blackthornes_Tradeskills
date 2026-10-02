@@ -17,14 +17,15 @@ local ROW_HEIGHT = 24
 local MATERIALS_WIDTH = 360
 
 -- Right-aligned columns for the materials panel, laid out from the right edge
--- inward. The AH button occupies the rightmost slot.
+-- inward. The AH button occupies the rightmost slot. COST is wide enough for
+-- all three coins ("12g 34s 56c"): at 48 the copper was cut off.
 local MATERIAL_COLUMNS = {
-    { key = "cost", label = "COST", width = 48, offset = -34 },
-    { key = "have", label = "HAVE", width = 34, offset = -86 },
-    { key = "need", label = "NEED", width = 34, offset = -124 },
+    { key = "cost", label = "COST", width = 64, offset = -34 },
+    { key = "have", label = "HAVE", width = 34, offset = -102 },
+    { key = "need", label = "NEED", width = 34, offset = -140 },
 }
 
-local MATERIAL_NAME_INSET = -162
+local MATERIAL_NAME_INSET = -178
 
 local widgets = {}
 
@@ -155,7 +156,11 @@ local function CreateMaterialRow(row)
 end
 
 local function UpdateMaterialRow(row, line)
-    row.name:SetText(Util.GetItemLabel(line.itemID))
+    -- The name in its item colour, unless it is recoloured below: a link's
+    -- own colour shows over the label's, so a recoloured name goes without.
+    local label = Util.GetItemLabel(line.itemID)
+    local nameColour = line.shortfall <= 0 and "muted" or line.altCraft and "profit" or nil
+    row.name:SetText(nameColour and Util.Uncolored(label) or label)
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells
@@ -170,30 +175,36 @@ local function UpdateMaterialRow(row, line)
 
     if line.shortfall > 0 then
         cells.have:SetTextColor(Theme.Unpack("loss"))
-    elseif line.needsBankTrip then
+    elseif line.needsBankTrip or line.needsMailTrip then
         -- Owned, but not on you. Amber rather than green: nothing to buy, but
-        -- you cannot craft it until you visit the bank.
+        -- you cannot craft it until you visit the bank or the mailbox.
         cells.have:SetTextColor(Theme.Unpack("warn"))
     else
         cells.have:SetTextColor(Theme.Unpack("profit"))
     end
 
     if line.shortfall > 0 then
-        cells.cost:SetText(line.estimatedCost
-            and Util.FormatMoney(line.estimatedCost, { short = true }) or "?")
+        -- Measured: an amount too wide for the column loses coins, rounded,
+        -- rather than ending in "...".
+        if line.estimatedCost then
+            Theme.SetMoneyText(cells.cost, line.estimatedCost, { short = true })
+        else
+            cells.cost:SetText("?")
+        end
         cells.cost:SetTextColor(Theme.Unpack(line.fromVendor and "accent" or "muted"))
 
         -- Green: another of your characters can make it for less.
-        row.name:SetTextColor(Theme.Unpack(line.altCraft and "profit" or "text"))
+        row.name:SetTextColor(Theme.Unpack(nameColour or "text"))
 
         -- Buying a vendor reagent off the auction house is a mistake, so do
         -- not offer the search for it.
         row.search:SetShown(not line.fromVendor)
     else
-        cells.cost:SetText(line.needsBankTrip and "in bank" or "")
+        cells.cost:SetText(line.needsBankTrip and "in bank"
+            or line.needsMailTrip and "in mail" or "")
         cells.cost:SetTextColor(Theme.Unpack("warn"))
 
-        row.name:SetTextColor(Theme.Unpack("muted"))
+        row.name:SetTextColor(Theme.Unpack(nameColour))
         row.search:Hide()
     end
 end
@@ -217,8 +228,15 @@ local function ShowMaterialTooltip(row, line)
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
     end
 
+    if (line.inMail or 0) > 0 then
+        GameTooltip:AddDoubleLine("In mail", tostring(line.inMail),
+            0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
+    end
+
     if line.needsBankTrip then
         GameTooltip:AddLine("You own enough, but some is in the bank.", 0.91, 0.76, 0.35)
+    elseif line.needsMailTrip then
+        GameTooltip:AddLine("You own enough, but some is in the mailbox.", 0.91, 0.76, 0.35)
     end
 
     if line.have > line.needed then
@@ -375,8 +393,11 @@ local function UpdateCraftStatus()
     if not button then return end
 
     -- Every other state wants the click to reach the craft button itself.
-    if not SetCraftButton(button, label) and ns.ProfessionOpener then
-        ns.ProfessionOpener:Disarm()
+    -- Only our own button, as the Level Up tab does: that tab may be holding
+    -- the secure button over its Craft button.
+    local opener = ns.ProfessionOpener
+    if not SetCraftButton(button, label) and opener and opener.anchor == button then
+        opener:Disarm()
     end
 end
 
@@ -467,7 +488,8 @@ local function Refresh()
     widgets.emptyLabel:SetShown(#entries == 0)
 
     local totals = ns.Queue:GetTotals()
-    local shoppingCost, unknown = ns.Queue:GetShoppingTotal()
+    -- From the list already built above, not a second walk of everything.
+    local shoppingCost, unknown = ns.Queue:GetShoppingTotal(shopping)
 
     UpdateCraftStatus()
     UpdateBankNote()
