@@ -74,6 +74,7 @@ ns.Theme = {
     AccentStripe = function() return Stub() end,
     CreateItemIcon = function() return Stub() end,
     SetItemIcon = function() end,
+    SetMoneyText = function(label, copper, opts) label:SetText(ns.Util.FormatMoney(copper, opts)) end,
     CreateBar = function() return Stub() end,
     CreateHeading = function() return Stub({ rule = Stub() }) end,
     StyleHeading = function(label) label.rule = Stub(); return label end,

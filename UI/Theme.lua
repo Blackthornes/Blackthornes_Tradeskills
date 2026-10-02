@@ -142,6 +142,69 @@ function Theme.CreateLabel(parent, size, colorKey, justify)
     return label
 end
 
+--- How wide a label's text is when drawn in full, or nil when it cannot be
+--- measured. A retail client can report only the part a fixed-width label
+--- draws, which never looks too wide; GetUnboundedStringWidth, where the
+--- client has it, measures all of it.
+function Theme.TextWidth(label)
+    for _, method in ipairs({ "GetUnboundedStringWidth", "GetStringWidth" }) do
+        local measure = label[method]
+        if type(measure) == "function" then
+            local ok, width = pcall(measure, label)
+            if ok and type(width) == "number" and width > 0 then return width end
+        end
+    end
+    return nil
+end
+
+--- Put the first of `texts` that fits on a label: the full wording first,
+--- then shorter ones, so a label says less rather than ending in "...".
+--- When none fits it keeps the last, the shortest. A label that cannot be
+--- measured gets the first. `room` is the width to fit, the label's own
+--- width when not given (so the label needs a width or two anchors).
+--- Returns the text it put there.
+function Theme.FitText(label, texts, room)
+    room = room or label:GetWidth()
+    local measurable = type(room) == "number" and room > 0
+
+    local chosen
+    for _, text in ipairs(texts) do
+        chosen = text
+        label:SetText(text)
+        if not measurable then break end
+
+        local width = Theme.TextWidth(label)
+        if width == nil or width <= room then break end
+    end
+
+    return chosen
+end
+
+--- Put a money amount on a label in as much detail as fits its width: every
+--- coin, then the two largest, then the largest alone, rounded. Measured, so
+--- a narrow cell never ends in "..." halfway through an amount. A label that
+--- cannot be measured gets every coin.
+function Theme.SetMoneyText(label, copper, opts)
+    local function Format(parts)
+        local options = {}
+        for key, value in pairs(opts or {}) do options[key] = value end
+        options.parts = parts
+        return ns.Util.FormatMoney(copper, options)
+    end
+
+    label:SetText(Format(nil))
+    if copper == nil then return end
+
+    local room = label:GetWidth()
+    if type(room) ~= "number" or room <= 0 then return end
+
+    for _, parts in ipairs({ 2, 1 }) do
+        local width = Theme.TextWidth(label)
+        if width == nil or width <= room then return end
+        label:SetText(Format(parts))
+    end
+end
+
 --- Wrap a frame in Blizzard's classic bevelled tooltip border.
 --
 -- Used for controls that sit out in the game world rather than inside our own
@@ -252,6 +315,110 @@ function Theme.TopSheen(frame, alpha)
     return sheen
 end
 
+--- Shade `texture` from one alpha of a palette colour to another, along
+--- "VERTICAL" (bottom to top) or "HORIZONTAL" (left to right). Where the
+--- client cannot draw a gradient it gets one flat, fainter wash instead.
+function Theme.SetGradientAlpha(texture, orientation, key, fromAlpha, toAlpha)
+    local r, g, b = Theme.Unpack(key or "accent")
+    texture:SetColorTexture(1, 1, 1, 1)
+
+    local ok = false
+    if type(CreateColor) == "function" and type(texture.SetGradient) == "function" then
+        ok = pcall(texture.SetGradient, texture, orientation,
+            CreateColor(r, g, b, fromAlpha), CreateColor(r, g, b, toAlpha))
+    end
+
+    if not ok then
+        texture:SetColorTexture(r, g, b, math.max(fromAlpha, toAlpha) * 0.4)
+    end
+    return ok
+end
+
+--- A soft gold glow fading down from the top of a header: the same light
+--- Farmer's headers carry. Left out where the client draws no gradient.
+function Theme.HeaderGlow(frame, height, alpha)
+    local glow = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
+    glow:SetPoint("TOPLEFT")
+    glow:SetPoint("TOPRIGHT")
+    glow:SetHeight(height or 18)
+
+    if not Theme.SetGradientAlpha(glow, "VERTICAL", "accent", 0, alpha or 0.10) then
+        glow:Hide()
+    end
+    return glow
+end
+
+--- A gold wash across a band, brightest at its left edge and gone by its
+--- right: the light a selected row or tab sits in. Hidden until shown.
+function Theme.GlowBand(frame, alpha, key)
+    local band = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+    band:SetAllPoints(frame)
+    Theme.SetGradientAlpha(band, "HORIZONTAL", key or "accent", alpha or 0.16, 0)
+    band:Hide()
+    return band
+end
+
+--- A soft glow round the outside of a frame, fading out from its edge: the
+--- neon edge Farmer's windows wear. Returns the four sides, so a caller can
+--- brighten or dim them together with Theme.SetHalo. Where the client cannot
+--- draw a gradient the glow is a flat, fainter band instead.
+function Theme.Halo(frame, spread, alpha, key)
+    spread = spread or 6
+    local sides = {}
+
+    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+        local halo = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+        pcall(halo.SetBlendMode, halo, "ADD")
+
+        if side == "TOP" or side == "BOTTOM" then
+            local out = side == "TOP" and 1 or -1
+            halo:SetPoint(side .. "LEFT", frame, side .. "LEFT", 0, out * spread)
+            halo:SetPoint(side .. "RIGHT", frame, side .. "RIGHT", 0, out * spread)
+            halo:SetHeight(spread)
+        else
+            local out = side == "LEFT" and -1 or 1
+            halo:SetPoint("TOP" .. side, frame, "TOP" .. side, out * spread, 0)
+            halo:SetPoint("BOTTOM" .. side, frame, "BOTTOM" .. side, out * spread, 0)
+            halo:SetWidth(spread)
+        end
+
+        halo.side = side
+        sides[#sides + 1] = halo
+    end
+
+    frame.haloTextures = sides
+    -- Where it settles; Motion:Open flares it from brighter as a window opens.
+    frame.haloRest = alpha or 0.12
+    frame.haloKey = key
+    Theme.SetHalo(frame, frame.haloRest, key)
+    return sides
+end
+
+--- Relight a halo drawn by Theme.Halo: `alpha` at the frame's edge, in the
+--- palette colour `key` (the halo's own colour unless given).
+function Theme.SetHalo(frame, alpha, key)
+    local sides = frame and frame.haloTextures
+    if not sides then return end
+
+    key = key or frame.haloKey or "accent"
+    alpha = math.max(0, tonumber(alpha) or 0)
+
+    for _, halo in ipairs(sides) do
+        -- The bright end sits against the frame: the bottom of the band
+        -- above it, the top of the band below, and so on.
+        if halo.side == "TOP" then
+            Theme.SetGradientAlpha(halo, "VERTICAL", key, alpha, 0)
+        elseif halo.side == "BOTTOM" then
+            Theme.SetGradientAlpha(halo, "VERTICAL", key, 0, alpha)
+        elseif halo.side == "LEFT" then
+            Theme.SetGradientAlpha(halo, "HORIZONTAL", key, 0, alpha)
+        else
+            Theme.SetGradientAlpha(halo, "HORIZONTAL", key, alpha, 0)
+        end
+        halo:SetShown(alpha > 0)
+    end
+end
+
 --- A section heading: small accent capitals with a rule running off to the
 --- right, the way Farmer's settings sections read.
 --
@@ -358,8 +525,9 @@ end
 --- Show an item's icon, or the question mark while the game has not sent it.
 --- Hidden when there is no item at all. Gear that is an upgrade for the
 --- character playing gets the green arrow (only with Blackthornes Equipment
---- loaded; see Logic/Upgrades.lua).
-function Theme.SetItemIcon(icon, itemID)
+--- loaded; see Logic/Upgrades.lua). `link`, when the caller has a bag item's
+--- link, has a random-suffix item judged as the copy it is.
+function Theme.SetItemIcon(icon, itemID, link)
     if not icon then return end
 
     if not itemID then
@@ -369,7 +537,7 @@ function Theme.SetItemIcon(icon, itemID)
     end
 
     if iconState[icon] then
-        iconState[icon].upgrade = ns.Upgrades ~= nil and ns.Upgrades:IsUpgrade(itemID)
+        iconState[icon].upgrade = ns.Upgrades ~= nil and ns.Upgrades:IsUpgrade(itemID, link)
     end
     icon:SetTexture((ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(itemID))
         or FALLBACK_ICON)

@@ -110,6 +110,12 @@ end
 -- no longer caps what the bag walk counts, in seconds.
 local CAST_KEPT_FOR = 10
 
+-- How long the bags are still read after a batch started here has ended, in
+-- seconds. The last craft's items land a moment after its cast ends, and with
+-- the profession window closed nothing was left reading them, so the last
+-- craft of the batch stayed on the queue.
+local AFTER_BATCH_SECONDS = 3
+
 --- The end of a "made N of X" line: how many are still queued.
 local function LeftText(left)
     if left and left > 0 then return (", %d left"):format(left) end
@@ -288,7 +294,7 @@ end
 -- count. The spell is compared inside a pcall: inside an instance it can be
 -- a value the game will not let an addon compare.
 function Crafting:OnCastSucceeded(_, unit, _, spellID)
-    if not (self.isTradeSkillOpen or self.active) then return end
+    if not self:IsFollowing() then return end
 
     local okUnit, isPlayer = pcall(function() return unit == "player" end)
     if not (okUnit and isPlayer) then return end
@@ -334,12 +340,20 @@ function Crafting:OnEnable()
     -- started is still casting: closing the window does not stop it, and the
     -- crafts made after that were never taken off the queue.
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", function()
-        if Crafting.isTradeSkillOpen or Crafting.active then
+        if Crafting:IsFollowing() then
             Crafting:OnBagUpdate()
         end
     end)
 
     self:RememberOutputs()
+end
+
+--- Whether casts and bag changes are being read as crafts: while a
+--- profession window is open, while a batch started here runs, and for a
+--- moment after it ends, when its last items are still on their way.
+function Crafting:IsFollowing()
+    if self.isTradeSkillOpen or self.active then return true end
+    return self.followUntil ~= nil and GetTime() < self.followUntil
 end
 
 --------------------------------------------------------------------------------
@@ -406,6 +420,8 @@ function Crafting:Stop()
     end
 
     self.active = nil
+    -- The craft under way still finishes, and its items still count.
+    self.followUntil = GetTime() + CAST_KEPT_FOR
     self:StopWatching()
 
     if ns.UI then ns.UI:RefreshActiveTab() end
@@ -433,6 +449,7 @@ function Crafting:StartWatching()
         if Crafting:IsStillCrafting() then return end
 
         Crafting.active = nil
+        Crafting.followUntil = GetTime() + AFTER_BATCH_SECONDS
         Crafting:StopWatching()
 
         if ns.UI then ns.UI:RefreshActiveTab() end

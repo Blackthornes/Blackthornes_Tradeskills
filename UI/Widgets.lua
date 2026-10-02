@@ -14,6 +14,268 @@ ns.Widgets = Widgets
 local Theme = ns.Theme
 
 --------------------------------------------------------------------------------
+-- Motion
+--
+-- Farmer's small tweens, so the two addons move alike: a button easing into
+-- its hover colour, a window fading up as it opens with its glow flaring, the
+-- gold line under the tabs gliding to the one picked. The "Window effects"
+-- setting picks Full, Subtle (no rise, shorter fades) or Off (every tween
+-- lands at its end at once).
+--
+-- One OnUpdate on one small frame, shown only while something is moving, so
+-- an idle window costs nothing per frame. A tween that errors is dropped
+-- rather than raised: a hover colour must never break a click.
+--------------------------------------------------------------------------------
+
+local Motion = {}
+ns.Motion = Motion
+
+Motion.tweens = {}
+
+--- "full", "subtle" or "off", from the Window effects setting.
+function Motion.Level()
+    local level = ns.Config and ns.Config.Get and ns.Config:Get("windowEffects")
+    if level == "off" or level == "subtle" then return level end
+    return "full"
+end
+
+function Motion.EaseOut(p)
+    return 1 - (1 - p) ^ 3
+end
+
+--- Overshoots a touch and settles, for things that should feel like they
+--- landed.
+function Motion.EaseOutBack(p)
+    local c = 1.4
+    return 1 + (c + 1) * (p - 1) ^ 3 + c * (p - 1) ^ 2
+end
+
+--- Two colours mixed, `p` of the way from `a` to `b`. Each is a palette key
+--- or an { r, g, b, a } list.
+function Motion.Mix(a, b, p, alphaA, alphaB)
+    local r1, g1, b1, a1
+    if type(a) == "table" then r1, g1, b1, a1 = a[1], a[2], a[3], alphaA or a[4] or 1
+    else r1, g1, b1, a1 = Theme.Unpack(a, alphaA) end
+
+    local r2, g2, b2, a2
+    if type(b) == "table" then r2, g2, b2, a2 = b[1], b[2], b[3], alphaB or b[4] or 1
+    else r2, g2, b2, a2 = Theme.Unpack(b, alphaB) end
+
+    return r1 + (r2 - r1) * p, g1 + (g2 - g1) * p, b1 + (b2 - b1) * p, a1 + (a2 - a1) * p
+end
+
+function Motion:Driver()
+    if self.driver then return self.driver end
+
+    local driver = CreateFrame("Frame", nil, UIParent)
+    driver:SetScript("OnUpdate", function(_, elapsed) Motion:Step(elapsed) end)
+    driver:Hide()
+
+    self.driver = driver
+    return driver
+end
+
+local function Finish(tween)
+    pcall(tween.apply, 1)
+    if tween.done then pcall(tween.done) end
+end
+
+--- Run `apply(p)` with p going 0 to 1 over `duration` seconds.
+--
+-- `owner` and `slot` name the tween: a new one for the same owner and slot
+-- replaces the old, so hovering on and off quickly never leaves two fighting.
+-- opts: delay (seconds before it starts), done (called at the end), ease
+-- (a function of p; EaseOut unless given, false for linear).
+function Motion:Run(owner, slot, duration, apply, opts)
+    opts = opts or {}
+
+    self:Stop(owner, slot)
+
+    local tween = { owner = owner, slot = slot, duration = duration or 0.2,
+        apply = apply, done = opts.done, age = -(opts.delay or 0) }
+
+    local ease = opts.ease
+    if ease == nil then ease = Motion.EaseOut end
+    tween.ease = ease or nil
+
+    if self.Level() == "off" or tween.duration <= 0 then
+        Finish(tween)
+        return
+    end
+
+    -- Drawn at its start now, so nothing flashes at its end for a frame
+    -- before the first step.
+    pcall(apply, 0)
+
+    self.tweens[#self.tweens + 1] = tween
+    self:Driver():Show()
+end
+
+--- Stop a running tween where it is. `finish` lands it at its end first.
+function Motion:Stop(owner, slot, finish)
+    for index = #self.tweens, 1, -1 do
+        local tween = self.tweens[index]
+        if tween.owner == owner and (slot == nil or tween.slot == slot) then
+            table.remove(self.tweens, index)
+            if finish then Finish(tween) end
+        end
+    end
+end
+
+--- Whether a tween is running for this owner (and slot, when given).
+function Motion:Running(owner, slot)
+    for _, tween in ipairs(self.tweens) do
+        if tween.owner == owner and (slot == nil or tween.slot == slot) then return true end
+    end
+    return false
+end
+
+--- Land every running tween at its end. For the tests, and for effects
+--- being turned off mid-animation.
+function Motion:FinishAll()
+    local tweens = self.tweens
+    self.tweens = {}
+    for _, tween in ipairs(tweens) do Finish(tween) end
+    if self.driver then self.driver:Hide() end
+end
+
+function Motion:Step(elapsed)
+    elapsed = tonumber(elapsed) or 0
+
+    local live = {}
+    local tweens = self.tweens
+    self.tweens = live
+
+    for _, tween in ipairs(tweens) do
+        tween.age = tween.age + elapsed
+
+        if tween.age >= 0 then
+            local p = math.min(1, tween.age / tween.duration)
+            local eased = tween.ease and tween.ease(p) or p
+            local ok = pcall(tween.apply, eased)
+
+            if not ok or p >= 1 then
+                if ok and tween.done then pcall(tween.done) end
+            else
+                live[#live + 1] = tween
+            end
+        else
+            live[#live + 1] = tween
+        end
+    end
+
+    -- Tweens started from inside an apply or done landed in `live` already.
+    if #self.tweens == 0 and self.driver then self.driver:Hide() end
+end
+
+-- Blended values, kept here rather than as fields on the frames so they never
+-- collide with a frame's own keys.
+Motion.values = setmetatable({}, { __mode = "k" })
+
+--- Where Blend last left `owner`'s `slot`: 0 until it has moved.
+function Motion:Value(owner, slot)
+    local values = self.values[owner]
+    return values and values[slot] or 0
+end
+
+function Motion:SetValue(owner, slot, value)
+    local values = self.values[owner]
+    if not values then
+        values = {}
+        self.values[owner] = values
+    end
+    values[slot] = value
+end
+
+--- Ease a number kept on `owner` toward `target`, calling `apply(value)` as
+--- it goes. Starts from wherever the last one left it, so a hover that is
+--- undone halfway turns round smoothly instead of jumping.
+function Motion:Blend(owner, slot, target, duration, apply)
+    local from = self:Value(owner, slot)
+    if from == target and not self:Running(owner, slot) then
+        apply(target)
+        return
+    end
+
+    self:Run(owner, slot, duration, function(p)
+        local value = from + (target - from) * p
+        self:SetValue(owner, slot, value)
+        apply(value)
+    end, { ease = false })
+end
+
+--- Fade a window up as it opens: from clear, and a few pixels low, with its
+--- glow (Theme.Halo) flaring and settling.
+--
+-- Only the alpha and one point's offset move, so the window's saved spot is
+-- never touched: the last step puts back exactly the point it started with.
+-- `rise` 0 keeps it still, for a panel docked beside another window.
+function Motion:Open(frame, rise)
+    if not frame then return end
+
+    -- Opened again before the last opening finished: land that one first,
+    -- which puts its point back, or the window would start from the
+    -- lowered spot and settle a few pixels further down every time.
+    self:Stop(frame, "open", true)
+
+    local rest = frame.haloTextures and frame.haloRest
+    if rest then
+        self:Run(frame, "halo", 0.7, function(p)
+            Theme.SetHalo(frame, rest * 3.2 + (rest - rest * 3.2) * p)
+        end)
+    end
+
+    local level = self.Level()
+    if level == "off" then
+        frame:SetAlpha(1)
+        return
+    end
+
+    rise = level == "full" and (rise or 8) or 0
+
+    local point, relativeTo, relativePoint, x, y = frame:GetPoint(1)
+    local canMove = rise ~= 0 and point ~= nil and type(x) == "number" and type(y) == "number"
+        and (frame.GetNumPoints == nil or frame:GetNumPoints() == 1)
+
+    self:Run(frame, "open", level == "full" and 0.2 or 0.12, function(p)
+        frame:SetAlpha(p)
+        if canMove then
+            frame:SetPoint(point, relativeTo, relativePoint, x, y - rise * (1 - p))
+        end
+    end)
+end
+
+--- A window's glow at rest again, and the window drawn in full, at once: for
+--- a window hidden mid-opening, so it never comes back half faded.
+function Motion:Settle(frame)
+    if not frame then return end
+    self:Stop(frame, "open", true)
+    self:Stop(frame, "halo", true)
+end
+
+if ns.RegisterCommand then
+    ns.RegisterCommand("effects", "how much the windows move: /bts effects [full|subtle|off]", function(args)
+        local choice = (args or ""):lower():gsub("%s", "")
+        local said = {
+            full = "window effects: full. Windows fade up and glow as they open, and buttons ease.",
+            subtle = "window effects: subtle. Shorter fades, and nothing rises.",
+            off = "window effects off. /bts effects full turns them back on.",
+        }
+
+        if not said[choice] then
+            ns.Print(("window effects are %s. /bts effects full, subtle or off changes them."):format(
+                Motion.Level()))
+            return
+        end
+
+        ns.Config:Set("windowEffects", choice)
+        if choice == "off" then Motion:FinishAll() end
+        ns.Print(said[choice])
+        if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- Button
 --------------------------------------------------------------------------------
 
@@ -90,11 +352,61 @@ function Widgets.CreateButton(parent, text, onClick, opts)
             or (opts.primary and "accent" or "text")))
     end
 
+    -- The one button on a screen that does the main thing glows gold round
+    -- its edge under the mouse, as Farmer's do.
+    if opts.primary and Theme.Halo then Theme.Halo(button, 5, 0) end
+
+    --- How lit the button is: 0 at rest, 1 under the mouse. Everything the
+    --- mouse changes is drawn from this one number, so easing it eases the
+    --- lot, and a state change mid-hover redraws from where the hover is.
+    local hotEdge = opts.primary and "accent" or "borderLit"
+
+    local function Light(self, p)
+        if self.disabled then p = 0 end
+
+        local r, g, b, a
+        if self.disabled then
+            r, g, b, a = Theme.Unpack("panel")
+        elseif self.baseColor then
+            r, g, b, a = self.baseColor[1], self.baseColor[2], self.baseColor[3], self.baseColor[4] or 1
+        else
+            r, g, b, a = Theme.Unpack(baseKey)
+        end
+        local hr, hg, hb = Theme.Unpack("rowHover")
+        r, g, b = r + (hr - r) * p, g + (hg - g) * p, b + (hb - b) * p
+
+        -- Held down, the fill sinks a shade toward the window behind it, so
+        -- the press shows in the button as well as in its label.
+        if rawget(self, "held") and not self.disabled then
+            local wr, wg, wb = Theme.Unpack("window")
+            r, g, b = r + (wr - r) * 0.35, g + (wg - g) * 0.35, b + (wb - b) * 0.35
+        end
+
+        self.background:SetColorTexture(r, g, b, a)
+
+        -- An outlined button keeps its own edge colour; drawing over it here
+        -- would undo the outline on the first mouseover.
+        if not self.outline then
+            local edges = rawget(self, "borderTextures")
+            if self.disabled or self.confirming or p <= 0 or type(edges) ~= "table" then
+                ApplyBorder(self)
+            else
+                local er, eg, eb, ea = Motion.Mix(borderKey, hotEdge, p, borderAlpha or 1, 1)
+                for _, edge in ipairs(edges) do
+                    edge:SetColorTexture(er, eg, eb, ea)
+                end
+            end
+        end
+
+        if rawget(self, "haloTextures") then Theme.SetHalo(self, 0.32 * p) end
+    end
+
+    local HOVER_TIME = 0.12
+
     function button:SetEnabledState(enabled)
         self.disabled = not enabled
         ApplyLabelColor(self)
-        ApplyBaseColor(self)
-        ApplyBorder(self)
+        Light(self, Motion:Value(self, "hover"))
     end
 
     --- Waiting for a second click to confirm ("Really clear?"): red label
@@ -102,21 +414,23 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     function button:SetConfirming(on)
         self.confirming = on and true or false
         ApplyLabelColor(self)
-        ApplyBorder(self)
+        Light(self, Motion:Value(self, "hover"))
     end
 
     button:SetScript("OnEnter", function(self)
-        if not self.disabled then
-            self.background:SetColorTexture(Theme.Unpack("rowHover"))
-
-            if not self.outline and not self.confirming then
-                Theme.SetBorderColor(self, opts.primary and "accent" or "borderLit")
-            end
-        end
+        Motion:Blend(self, "hover", 1, HOVER_TIME, function(value) Light(self, value) end)
 
         -- tooltipText is set at runtime, so a button can explain why it is
         -- currently unavailable rather than just looking dead.
         local text = self.tooltipText or opts.tooltip
+
+        -- A button showing a countdown or "wait" says what it is waiting
+        -- for first, since the label alone cannot.
+        if self.waitingLabel == true and type(self.waitTip) == "string" then
+            local wait = ("|c%sWaiting: %s.|r"):format(ns.COLORS.warn, self.waitTip)
+            text = text and (wait .. "\n\n" .. text) or wait
+        end
+
         if text then
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(text, 1, 1, 1, 1, true)
@@ -125,14 +439,50 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     end)
 
     button:SetScript("OnLeave", function(self)
-        ApplyBaseColor(self)
-
-        -- An outlined button keeps its own edge colour; resetting it here would
-        -- undo the outline on the first mouseover.
-        ApplyBorder(self)
-
+        Motion:Blend(self, "hover", 0, HOVER_TIME * 1.5, function(value) Light(self, value) end)
         GameTooltip:Hide()
     end)
+
+    -- The label dips a pixel while the button is held, so a click feels
+    -- pressed. Every point the label has moves together, and goes back to
+    -- exactly where it was.
+    button:SetScript("OnMouseDown", function(self)
+        if self.disabled or rawget(self, "pressedPoints") then return end
+
+        self.held = true
+        Light(self, Motion:Value(self, "hover"))
+
+        local count = self.label.GetNumPoints and self.label:GetNumPoints()
+        if type(count) ~= "number" or count < 1 then return end
+
+        local points = {}
+        for index = 1, count do
+            local point, relativeTo, relativePoint, x, y = self.label:GetPoint(index)
+            if not (point and type(x) == "number" and type(y) == "number") then return end
+            points[index] = { point, relativeTo, relativePoint, x, y }
+        end
+
+        self.pressedPoints = points
+        self.label:ClearAllPoints()
+        for _, p in ipairs(points) do self.label:SetPoint(p[1], p[2], p[3], p[4], p[5] - 1) end
+    end)
+
+    local function Release(self)
+        if rawget(self, "held") then
+            self.held = nil
+            Light(self, Motion:Value(self, "hover"))
+        end
+
+        local points = rawget(self, "pressedPoints")
+        if not points then return end
+
+        self.pressedPoints = nil
+        self.label:ClearAllPoints()
+        for _, p in ipairs(points) do self.label:SetPoint(p[1], p[2], p[3], p[4], p[5]) end
+    end
+
+    button:SetScript("OnMouseUp", Release)
+    if button.HookScript then button:HookScript("OnHide", Release) end
 
     button:SetScript("OnClick", function(self, mouseButton)
         if self.disabled then return end
@@ -196,6 +546,7 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
     tick:SetPoint("CENTER")
     tick:SetSize(8, 8)
     tick:SetColorTexture(Theme.Unpack("accent"))
+    checkbox.tick = tick
 
     local label = Theme.CreateLabel(checkbox, "small", "text")
     label:SetPoint("LEFT", box, "RIGHT", 6, 0)
@@ -223,15 +574,29 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
 
     checkbox:SetScript("OnClick", function(self)
         self:SetChecked(not self.checked)
+
+        -- Ticked by hand, the tick pops in: a little past full size, then
+        -- settles. Set from code (a page refreshing) it is simply there.
+        if self.checked then
+            Motion:Run(tick, "pop", 0.22, function(p)
+                local size = math.max(1, 8 * p)
+                tick:SetSize(size, size)
+            end, { ease = Motion.EaseOutBack })
+        end
+
         if onToggle then onToggle(self.checked) end
     end)
 
     checkbox:SetScript("OnEnter", function()
-        label:SetTextColor(Theme.Unpack("accent"))
+        Motion:Blend(checkbox, "hover", 1, 0.12, function(p)
+            label:SetTextColor(Motion.Mix("text", "accent", p))
+        end)
         PaintBox(true)
     end)
     checkbox:SetScript("OnLeave", function()
-        label:SetTextColor(Theme.Unpack("text"))
+        Motion:Blend(checkbox, "hover", 0, 0.18, function(p)
+            label:SetTextColor(Motion.Mix("text", "accent", p))
+        end)
         PaintBox(false)
     end)
 
@@ -246,25 +611,48 @@ function Widgets.CreateSearchBox(parent, placeholder, onChange)
     local container = Theme.CreatePanel(parent, "row")
     container:SetHeight(22)
 
+    -- The game's own magnifier, so the box reads as search at a glance, as
+    -- Farmer's does. It turns gold while the box has the keyboard.
+    local icon = container:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(12, 12)
+    icon:SetPoint("LEFT", 6, 0)
+    icon:SetTexture([[Interface\Common\UI-Searchbox-Icon]])
+    icon:SetVertexColor(Theme.Unpack("muted"))
+    container.icon = icon
+
     local editBox = CreateFrame("EditBox", nil, container)
-    editBox:SetPoint("TOPLEFT", 6, 0)
+    editBox:SetPoint("TOPLEFT", 22, 0)
     editBox:SetPoint("BOTTOMRIGHT", -20, 0)
     editBox:SetAutoFocus(false)
     editBox:SetFont(Theme.FONT, Theme.sizes.small, "")
     editBox:SetTextColor(Theme.Unpack("text"))
 
     local hint = Theme.CreateLabel(container, "small", "dim")
-    hint:SetPoint("LEFT", 6, 0)
+    hint:SetPoint("LEFT", 22, 0)
     hint:SetText(placeholder or "Search")
 
+    -- A target bigger than the letter on it, filling the gap the edit box
+    -- leaves at the right, and lit gold under the mouse so it reads as a
+    -- button.
     local clear = CreateFrame("Button", nil, container)
-    clear:SetSize(14, 14)
-    clear:SetPoint("RIGHT", -4, 0)
+    clear:SetSize(18, 18)
+    clear:SetPoint("RIGHT", -2, 0)
 
     local clearLabel = Theme.CreateLabel(clear, "small", "muted", "CENTER")
     clearLabel:SetPoint("CENTER")
     clearLabel:SetText("x")
     clear:Hide()
+
+    local function LightClear(p) clearLabel:SetTextColor(Motion.Mix("muted", "accent", p)) end
+    clear:SetScript("OnEnter", function(self) Motion:Blend(self, "hover", 1, 0.1, LightClear) end)
+    clear:SetScript("OnLeave", function(self) Motion:Blend(self, "hover", 0, 0.15, LightClear) end)
+
+    -- It hides under the mouse when clicked; it comes back unlit.
+    clear:SetScript("OnHide", function(self)
+        Motion:Stop(self, "hover")
+        Motion:SetValue(self, "hover", 0)
+        LightClear(0)
+    end)
 
     local function Update()
         local text = editBox:GetText()
@@ -274,9 +662,22 @@ function Widgets.CreateSearchBox(parent, placeholder, onChange)
     end
 
     -- Gold edge while typing, lit on hover, so it is clear where the keys go.
+    -- Both ease in and out; the keyboard's gold wins over the mouse's light.
+    local function Paint()
+        local hover = Motion:Value(container, "hover")
+        local focus = Motion:Value(container, "focus")
+
+        local r1, g1, b1 = Motion.Mix("border", "borderLit", hover)
+        local r2, g2, b2 = Theme.Unpack("accent")
+        local r, g, b = r1 + (r2 - r1) * focus, g1 + (g2 - g1) * focus, b1 + (b2 - b1) * focus
+        for _, edge in ipairs(container.borderTextures or {}) do edge:SetColorTexture(r, g, b, 1) end
+
+        icon:SetVertexColor(Motion.Mix("muted", "accent", math.max(focus, hover * 0.4)))
+    end
+
     local function PaintEdge()
-        Theme.SetBorderColor(container, editBox:HasFocus() and "accent"
-            or container:IsMouseOver() and "borderLit" or "border")
+        Motion:Blend(container, "focus", editBox:HasFocus() and 1 or 0, 0.15, Paint)
+        Motion:Blend(container, "hover", container:IsMouseOver() and 1 or 0, 0.12, Paint)
     end
 
     editBox:SetScript("OnEditFocusGained", PaintEdge)
@@ -410,6 +811,18 @@ end
 -- Dropdown
 --------------------------------------------------------------------------------
 
+-- Rows a menu shows at once. A longer list (every character, in the bank
+-- view's filter) scrolls with the mouse wheel instead of running off the
+-- screen.
+local MENU_ROWS = 12
+local MENU_ROW_HEIGHT = 20
+
+--- An option's words without a "Sort: " or "Show: " lead-in, for a box too
+--- narrow for all of them: what is left still names the choice.
+local function ShortOptionText(text)
+    return type(text) == "string" and text:match("^[^:]+:%s+(.+)$") or text
+end
+
 --- Minimal dropdown. options is an array of { text, value }.
 function Widgets.CreateDropdown(parent, options, onSelect, opts)
     opts = opts or {}
@@ -423,15 +836,31 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     label:SetPoint("LEFT", 6, 0)
     label:SetPoint("RIGHT", -18, 0)
 
-    local arrow = Theme.CreateLabel(dropdown, "tiny", "muted", "CENTER")
-    arrow:SetPoint("RIGHT", -6, 0)
-    arrow:SetText("v")
+    -- A small solid arrow pointing down where a letter "v" stood, drawn from
+    -- four rows of plain colour (7, 5, 3 and 1 pixels wide) the way the rest
+    -- of the theme is drawn, so it needs no texture file.
+    local arrow = {}
+    for row = 0, 3 do
+        local bar = dropdown:CreateTexture(nil, "ARTWORK")
+        bar:SetSize(7 - row * 2, 1)
+        bar:SetPoint("TOPLEFT", dropdown, "RIGHT", -13 + row, 2 - row)
+        bar:SetColorTexture(Theme.Unpack("muted"))
+        arrow[#arrow + 1] = bar
+    end
 
     local menu = Theme.CreatePanel(parent, "panel", "borderLit")
     menu:SetFrameStrata("DIALOG")
     menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
     menu:SetPoint("TOPRIGHT", dropdown, "BOTTOMRIGHT", 0, -2)
     menu:Hide()
+
+    -- The first option a long menu is showing, and a slim bar down its right
+    -- edge saying how far through the list that is.
+    menu.first = 1
+    local thumb = menu:CreateTexture(nil, "OVERLAY")
+    thumb:SetWidth(3)
+    thumb:SetColorTexture(Theme.Unpack("borderLit"))
+    thumb:Hide()
 
     dropdown.options = options or {}
     dropdown.selected = nil
@@ -443,46 +872,79 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
             entry:Hide()
         end
 
-        local y = -4
+        local count = #dropdown.options
+        local shown = math.min(count, MENU_ROWS)
+        local scrolls = count > shown
+        menu.first = math.max(1, math.min(menu.first or 1, count - shown + 1))
+
+        -- The room an entry's words have: the menu's width less the entry's
+        -- insets, and less the bar when there is one.
+        local width = dropdown:GetWidth()
+        local room = type(width) == "number" and (width - 18 - (scrolls and 6 or 0)) or nil
+
         for index, option in ipairs(dropdown.options) do
             local entry = entries[index]
 
             if not entry then
                 entry = CreateFrame("Button", nil, menu)
-                entry:SetHeight(20)
-                entry.highlight = Theme.Fill(entry, "rowHover", 0, "ARTWORK")
+                entry:SetHeight(MENU_ROW_HEIGHT)
+                -- Drawn in full and faded with SetAlpha: made with a colour
+                -- alpha of 0, as it was, no hover ever showed.
+                entry.highlight = Theme.Fill(entry, "rowHover", nil, "ARTWORK")
+                entry.highlight:SetAlpha(0)
                 entry.label = Theme.CreateLabel(entry, "small", "text")
                 entry.label:SetPoint("LEFT", 8, 0)
                 entry.label:SetPoint("RIGHT", -8, 0)
 
-                entry:SetScript("OnEnter", function(self) self.highlight:SetAlpha(1) end)
-                entry:SetScript("OnLeave", function(self) self.highlight:SetAlpha(0) end)
+                -- The option picked now wears the gold edge.
+                entry.mark = Theme.AccentStripe(entry, 2)
+                entry.mark:Hide()
+
+                local function Light(value) entry.highlight:SetAlpha(value) end
+                entry:SetScript("OnEnter", function(self) Motion:Blend(self, "hover", 1, 0.08, Light) end)
+                entry:SetScript("OnLeave", function(self) Motion:Blend(self, "hover", 0, 0.15, Light) end)
 
                 entries[index] = entry
             end
 
-            entry:SetPoint("TOPLEFT", 1, y)
-            entry:SetPoint("TOPRIGHT", -1, y)
-            entry.label:SetText(option.text)
-            entry.label:SetTextColor(Theme.Unpack(
-                option.value == dropdown.selected and "accent" or "text"))
-            entry:Show()
+            -- Only the window of options the menu is showing is placed; an
+            -- entry made just now for one outside it starts hidden too.
+            local slot = index - menu.first
+            if slot >= 0 and slot < shown then
+                local y = -4 - slot * MENU_ROW_HEIGHT
+                entry:SetPoint("TOPLEFT", 1, y)
+                entry:SetPoint("TOPRIGHT", scrolls and -7 or -1, y)
+                Theme.FitText(entry.label, { option.text, ShortOptionText(option.text) }, room)
+                entry.label:SetTextColor(Theme.Unpack(
+                    option.value == dropdown.selected and "accent" or "text"))
+                entry.mark:SetShown(option.value == dropdown.selected)
+                entry:Show()
+            else
+                entry:Hide()
+            end
 
             entry:SetScript("OnClick", function()
                 dropdown:SetValue(option.value)
                 menu:Hide()
                 if onSelect then onSelect(option.value, option) end
             end)
-
-            y = y - 20
         end
 
-        menu:SetHeight(math.max(8, (#dropdown.options * 20) + 8))
+        menu:SetHeight(math.max(8, shown * MENU_ROW_HEIGHT + 8))
+
+        thumb:SetShown(scrolls)
+        if scrolls then
+            local track = shown * MENU_ROW_HEIGHT
+            local size = math.max(12, math.floor(track * shown / count))
+            local offset = math.floor((track - size) * (menu.first - 1) / (count - shown) + 0.5)
+            thumb:SetHeight(size)
+            thumb:ClearAllPoints()
+            thumb:SetPoint("TOPRIGHT", -2, -4 - offset)
+        end
     end
 
     function dropdown:SetOptions(newOptions)
         self.options = newOptions or {}
-        Rebuild()
 
         -- Keep the current selection if it still exists, else fall back.
         local stillValid = false
@@ -490,9 +952,15 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
             if option.value == self.selected then stillValid = true break end
         end
 
-        if not stillValid then
-            self:SetValue(self.options[1] and self.options[1].value)
-        end
+        local value = self.selected
+        if not stillValid then value = self.options[1] and self.options[1].value end
+
+        -- The box is drawn every time, not only on a fall back. A first
+        -- option with no value ("All professions") matched the nil a new
+        -- box starts with, so its name was never drawn and the box stayed
+        -- blank until something was picked.
+        self:SetValue(value)
+        Rebuild()
     end
 
     function dropdown:SetValue(value)
@@ -500,7 +968,11 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
 
         for _, option in ipairs(self.options) do
             if option.value == value then
-                label:SetText(option.text)
+                -- The whole wording when it fits, else without its "Sort: "
+                -- lead-in, rather than cut off with "...".
+                local width = self:GetWidth()
+                Theme.FitText(label, { option.text, ShortOptionText(option.text) },
+                    type(width) == "number" and (width - 24) or nil)
                 return
             end
         end
@@ -512,24 +984,91 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
         return self.selected
     end
 
+    --- Down from the box, or up from it when the screen has no room below
+    --- and has room above.
+    local function Place()
+        local up = false
+        pcall(function()
+            local scale = dropdown:GetEffectiveScale()
+            local need = (menu:GetHeight() + 2) * scale
+            local below = dropdown:GetBottom() * scale
+            local above = UIParent:GetTop() * UIParent:GetEffectiveScale() - dropdown:GetTop() * scale
+            up = below < need and above >= need
+        end)
+
+        menu:ClearAllPoints()
+        if up then
+            menu:SetPoint("BOTTOMLEFT", dropdown, "TOPLEFT", 0, 2)
+            menu:SetPoint("BOTTOMRIGHT", dropdown, "TOPRIGHT", 0, 2)
+        else
+            menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+            menu:SetPoint("TOPRIGHT", dropdown, "BOTTOMRIGHT", 0, -2)
+        end
+    end
+
     dropdown:SetScript("OnMouseDown", function()
         if menu:IsShown() then
             menu:Hide()
         else
+            -- A long menu opens with the choice made in view, near its middle.
+            for index, option in ipairs(dropdown.options) do
+                if option.value == dropdown.selected then
+                    menu.first = index - math.floor(MENU_ROWS / 2)
+                    break
+                end
+            end
+
             Rebuild()
+            Place()
             menu:Show()
             menu:Raise()
+            Motion:Run(menu, "open", 0.12, function(p) menu:SetAlpha(p) end)
         end
     end)
 
-    dropdown:SetScript("OnEnter", function(self)
-        Theme.SetBorderColor(self, "borderLit")
-        arrow:SetTextColor(Theme.Unpack("accent"))
+    -- The wheel moves a long menu a row at a time.
+    menu:EnableMouseWheel(true)
+    menu:SetScript("OnMouseWheel", function(_, delta)
+        local count = #dropdown.options
+        if count <= MENU_ROWS then return end
+
+        local step = (tonumber(delta) or 0) > 0 and -1 or 1
+        local first = math.max(1, math.min(count - MENU_ROWS + 1, menu.first + step))
+        if first ~= menu.first then
+            menu.first = first
+            Rebuild()
+        end
     end)
-    dropdown:SetScript("OnLeave", function(self)
-        Theme.SetBorderColor(self, "border")
-        arrow:SetTextColor(Theme.Unpack("muted"))
+
+    -- A click anywhere else closes the menu, as the game's own menus do. The
+    -- event is asked for only while the menu is open, and inside a pcall: a
+    -- client that does not know it raises, and then the menu simply stays
+    -- open until picked from or clicked shut, as before.
+    menu:SetScript("OnShow", function(self)
+        pcall(self.RegisterEvent, self, "GLOBAL_MOUSE_DOWN")
     end)
+    menu:SetScript("OnHide", function(self)
+        pcall(self.UnregisterEvent, self, "GLOBAL_MOUSE_DOWN")
+    end)
+    menu:SetScript("OnEvent", function(self)
+        if self:IsMouseOver() or dropdown:IsMouseOver() then return end
+        self:Hide()
+    end)
+
+    -- Its tab closing takes the menu with it, or it would be found still
+    -- open the next time the tab is shown.
+    dropdown:SetScript("OnHide", function() menu:Hide() end)
+
+    --- How lit the box is under the mouse: its edge and its arrow.
+    local function Light(p)
+        local r, g, b = Motion.Mix("border", "borderLit", p)
+        for _, edge in ipairs(dropdown.borderTextures or {}) do edge:SetColorTexture(r, g, b, 1) end
+        local ar, ag, ab = Motion.Mix("muted", "accent", p)
+        for _, bar in ipairs(arrow) do bar:SetColorTexture(ar, ag, ab, 1) end
+    end
+
+    dropdown:SetScript("OnEnter", function(self) Motion:Blend(self, "hover", 1, 0.12, Light) end)
+    dropdown:SetScript("OnLeave", function(self) Motion:Blend(self, "hover", 0, 0.18, Light) end)
 
     dropdown.menu = menu
     dropdown:SetOptions(options)
@@ -558,11 +1097,39 @@ function Widgets.CreateProgressBar(parent)
     tip:SetWidth(2)
     tip:SetColorTexture(1, 0.92, 0.65, 0.9)
 
-    function bar:SetProgress(fraction)
-        fraction = math.max(0, math.min(1, fraction or 0))
-        local width = math.max(1, (self:GetWidth() - 2) * fraction)
-        fill:SetWidth(width)
-        tip:SetShown(fraction > 0 and fraction < 1)
+    -- And a soft gold spark round it, spilling past the bar's edges.
+    local spark = bar:CreateTexture(nil, "OVERLAY", nil, 1)
+    spark:SetPoint("RIGHT", fill, "RIGHT", 4, 0)
+    spark:SetSize(14, 10)
+    Theme.SetGradientAlpha(spark, "HORIZONTAL", "accent", 0, 0.55)
+    pcall(spark.SetBlendMode, spark, "ADD")
+    spark:Hide()
+
+    bar.fill, bar.spark = fill, spark
+
+    local shown = 0
+
+    local function Draw(fraction)
+        shown = fraction
+        fill:SetWidth(math.max(1, (bar:GetWidth() - 2) * fraction))
+        local moving = fraction > 0 and fraction < 1
+        tip:SetShown(moving)
+        spark:SetShown(moving)
+    end
+
+    --- Glide to `fraction` (0 to 1) rather than jump, so a scan's progress
+    --- flows. Going back down (a new scan starting) jumps, as does `instant`.
+    function bar:SetProgress(fraction, instant)
+        fraction = math.max(0, math.min(1, tonumber(fraction) or 0))
+
+        if instant or fraction <= shown or not self:IsVisible() then
+            Motion:Stop(self, "fill")
+            Draw(fraction)
+            return
+        end
+
+        local from = shown
+        Motion:Run(self, "fill", 0.25, function(p) Draw(from + (fraction - from) * p) end)
     end
 
     bar:SetProgress(0)
@@ -573,38 +1140,87 @@ end
 -- Tab strip
 --------------------------------------------------------------------------------
 
-function Widgets.CreateTabStrip(parent, tabs, onSelect)
+-- Room either side of a tab's name, and the narrowest a tab gets, when the
+-- tabs are sized to their names.
+local TAB_PAD = 20
+local TAB_MIN = 56
+
+--- Widths for tabs sized to their names: each name measured with room either
+--- side, and what is left of `room` shared out, a little each, so a strip of
+--- a few tabs does not stretch them wide. Nil when a name cannot be measured,
+--- or when they do not all fit `room`.
+local function NameWidths(buttons, room)
+    local widths, total = {}, 0
+    for index, button in ipairs(buttons) do
+        local width = Theme.TextWidth(button.label)
+        if not width then return nil end
+        widths[index] = math.max(TAB_MIN, math.ceil(width) + TAB_PAD)
+        total = total + widths[index]
+    end
+
+    if room and total > room then return nil end
+
+    local extra = room and math.min(24, math.floor((room - total) / #buttons)) or 0
+    for index in ipairs(widths) do widths[index] = widths[index] + extra end
+    return widths
+end
+
+--- A row of tabs. Each tab is { key, text, width }; a tab given no width is
+--- as wide as its name needs, and opts.width is the room all of them have.
+function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
+    opts = opts or {}
+
     local strip = CreateFrame("Frame", nil, parent)
     strip:SetHeight(28)
 
     strip.tabs = {}
     strip.selected = nil
 
-    local x = 0
+    --- How lit a tab is under the mouse, 0 to 1: its wash, its underline
+    --- and its label.
+    local function Hover(button, p)
+        button.hover:SetAlpha(p)
+        button.underline:SetAlpha(p)
+        if strip.selected ~= button.key then
+            button.label:SetTextColor(Motion.Mix("muted", "text", p))
+        end
+    end
+
     for index, tab in ipairs(tabs) do
         local button = CreateFrame("Button", nil, strip)
-        button:SetPoint("BOTTOMLEFT", x, 0)
-        button:SetSize(tab.width or 96, 28)
+        button:SetHeight(28)
 
         button.background = Theme.Fill(button, "panel")
         button.hover = Theme.Fill(button, "rowHover", 0.45, "BORDER")
-        button.hover:Hide()
+        button.hover:SetAlpha(0)
 
-        -- A step smaller once the tabs get narrow, so "Disenchanting" stays
-        -- inside its own tab.
-        local labelSize = (tab.width or 96) < 90 and "small" or "normal"
+        -- The tab showing sits in a soft gold light rising from its line.
+        button.lit = button:CreateTexture(nil, "BORDER", nil, 1)
+        button.lit:SetAllPoints(button)
+        Theme.SetGradientAlpha(button.lit, "VERTICAL", "accent", 0.14, 0)
+        button.lit:Hide()
+
+        -- Under the mouse, a faint line along the tab's foot echoes the gold
+        -- one under the tab showing. It is inset from the tab's edges and
+        -- drawn on the tab, below the layer the gold line rides on, so the
+        -- gold line passes over it as it slides, and the tab showing never
+        -- lights its own.
+        button.underline = button:CreateTexture(nil, "ARTWORK")
+        button.underline:SetPoint("BOTTOMLEFT", 10, 0)
+        button.underline:SetPoint("BOTTOMRIGHT", -10, 0)
+        button.underline:SetHeight(1)
+        button.underline:SetColorTexture(Theme.Unpack("muted"))
+        button.underline:SetAlpha(0)
+
+        -- A step smaller on a narrow tab given its width, so its name stays
+        -- inside it. Tabs sized to their names are sized below.
+        local labelSize = tab.width and tab.width < 90 and "small" or "normal"
         button.label = Theme.CreateLabel(button, labelSize, "muted", "CENTER")
         button.label:SetPoint("CENTER", 0, 0)
         button.label:SetText(tab.text)
 
-        button.underline = button:CreateTexture(nil, "OVERLAY")
-        button.underline:SetPoint("BOTTOMLEFT", 0, 0)
-        button.underline:SetPoint("BOTTOMRIGHT", 0, 0)
-        button.underline:SetHeight(2)
-        button.underline:SetColorTexture(Theme.Unpack("accent"))
-        button.underline:Hide()
-
         button.key = tab.key
+        button.fixedWidth = tab.width
 
         button:SetScript("OnClick", function(self)
             strip:Select(self.key)
@@ -612,34 +1228,119 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect)
         end)
 
         button:SetScript("OnEnter", function(self)
-            if strip.selected ~= self.key then
-                self.label:SetTextColor(Theme.Unpack("text"))
-                self.hover:Show()
-            end
+            if strip.selected == self.key then return end
+            Motion:Blend(self, "hover", 1, 0.12, function(p) Hover(self, p) end)
         end)
 
         button:SetScript("OnLeave", function(self)
-            self.hover:Hide()
-            if strip.selected ~= self.key then
-                self.label:SetTextColor(Theme.Unpack("muted"))
-            end
+            Motion:Blend(self, "hover", 0, 0.18, function(p) Hover(self, p) end)
         end)
 
         strip.tabs[index] = button
-        x = x + (tab.width or 96)
+    end
+
+    -- Tabs given no width are as wide as their names, at the full size when
+    -- all of them fit opts.width and a step smaller when not. Twelve equal
+    -- tabs left "Disenchanting" and "Vendor Flips" running into their
+    -- neighbours. When a name cannot be measured they share the room
+    -- equally, as all tabs used to.
+    local sized, room = {}, opts.width
+    for _, button in ipairs(strip.tabs) do
+        if button.fixedWidth then
+            if room then room = room - button.fixedWidth end
+        else
+            sized[#sized + 1] = button
+        end
+    end
+
+    local widths = {}
+    if #sized > 0 then
+        local named = NameWidths(sized, room)
+        if not named then
+            for _, button in ipairs(sized) do
+                button.label:SetFont(Theme.FONT, Theme.sizes.small, "")
+            end
+            named = NameWidths(sized, room)
+        end
+
+        for index, button in ipairs(sized) do
+            widths[button] = named and named[index]
+                or (room and math.min(96, math.floor(room / #sized)) or 96)
+        end
+    end
+
+    local x = 0
+    for _, button in ipairs(strip.tabs) do
+        local width = button.fixedWidth or widths[button]
+        button:SetPoint("BOTTOMLEFT", x, 0)
+        button:SetWidth(width)
+        button.left, button.span = x, width
+        x = x + width
     end
 
     strip:SetWidth(math.max(x, 1))
+
+    -- One gold line for the whole strip, gliding to the tab picked, with a
+    -- soft glow over it: Farmer's tabs do the same. Both ride on a layer of
+    -- their own above the tabs. Drawn on the strip itself they sat under
+    -- every tab's fill (a frame's children draw over it) and never showed.
+    local layer = CreateFrame("Frame", nil, strip)
+    layer:SetAllPoints(strip)
+    local ok, level = pcall(strip.GetFrameLevel, strip)
+    if ok and type(level) == "number" then layer:SetFrameLevel(level + 3) end
+    strip.lineLayer = layer
+
+    local line = layer:CreateTexture(nil, "OVERLAY")
+    line:SetHeight(2)
+    line:SetColorTexture(Theme.Unpack("accent"))
+    line:Hide()
+    strip.line = line
+
+    local glow = layer:CreateTexture(nil, "ARTWORK")
+    glow:SetHeight(7)
+    glow:SetPoint("BOTTOMLEFT", line, "BOTTOMLEFT", -2, 0)
+    glow:SetPoint("BOTTOMRIGHT", line, "BOTTOMRIGHT", 2, 0)
+    Theme.SetGradientAlpha(glow, "VERTICAL", "accent", 0.32, 0)
+    pcall(glow.SetBlendMode, glow, "ADD")
+    glow:Hide()
+    strip.lineGlow = glow
+
+    --- Put the line under `button`, sliding there from wherever it is now,
+    --- so a tab picked mid-slide turns the line round rather than making it
+    --- jump back first.
+    local function MarkTab(button)
+        local fromX, fromWidth = strip.lineX or button.left, strip.lineWidth or button.span
+        local still = fromX == button.left and fromWidth == button.span
+
+        line:Show()
+        glow:Show()
+
+        -- Hung from the tab it is heading for, so it lands exactly under it;
+        -- only the distance still to go is worked out.
+        Motion:Run(line, "slide", still and 0 or 0.22, function(p)
+            local x = fromX + (button.left - fromX) * p
+            local width = fromWidth + (button.span - fromWidth) * p
+            strip.lineX, strip.lineWidth = x, width
+
+            line:ClearAllPoints()
+            line:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", x - button.left, 0)
+            line:SetWidth(math.max(1, width))
+        end)
+    end
 
     function strip:Select(key)
         self.selected = key
 
         for _, button in ipairs(self.tabs) do
             local active = button.key == key
-            button.underline:SetShown(active)
-            button.hover:Hide()
+            Motion:Stop(button, "hover")
+            Motion:SetValue(button, "hover", 0)
+            button.hover:SetAlpha(0)
+            button.underline:SetAlpha(0)
+            button.lit:SetShown(active)
             button.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
             button.background:SetColorTexture(Theme.Unpack(active and "header" or "panel"))
+            if active then MarkTab(button) end
         end
     end
 
@@ -776,6 +1477,21 @@ function Widgets.CreateScrollFrame(parent, opts)
     return scroll
 end
 
+--- What a row's tooltip describes, kept steady across redraws: the lists
+--- build their entries afresh each time, so the entry itself would count
+--- as new on every redraw.
+local function TipIdentity(entry)
+    if type(entry) ~= "table" then return entry end
+    return entry.itemID or entry.recipeID or entry.key or entry
+end
+
+--- Whether the game's tooltip is showing for `frame` now.
+local function OwnsTooltip(frame)
+    if type(GameTooltip) ~= "table" or type(GameTooltip.IsOwned) ~= "function" then return false end
+    local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, frame)
+    return ok and owned == true
+end
+
 function Widgets.CreateScrollList(parent, opts)
     local list = CreateFrame("Frame", nil, parent)
 
@@ -825,7 +1541,15 @@ function Widgets.CreateScrollList(parent, opts)
         row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
         row.background = Theme.Fill(row, "row")
-        row.highlight = Theme.Fill(row, "rowHover", 0, "BORDER")
+        -- Drawn in full and faded with SetAlpha. It used to be made with a
+        -- colour alpha of 0, which no SetAlpha can lift, so the wash under
+        -- the mouse never showed at all (Farmer had the same bug).
+        row.highlight = Theme.Fill(row, "rowHover", nil, "BORDER")
+        row.highlight:SetAlpha(0)
+
+        -- The row the detail pane is showing sits in a gold light from its
+        -- left edge, as Farmer's lit rows do.
+        if Theme.GlowBand then row.glowBand = Theme.GlowBand(row, 0.16) end
 
         -- A gold edge on the row under the mouse, as Farmer's lists do, so the
         -- eye can follow a row across a wide table.
@@ -837,15 +1561,21 @@ function Widgets.CreateScrollList(parent, opts)
             opts.createRow(row)
         end
 
+        local function Light(value) row.highlight:SetAlpha(value) end
+
         row:SetScript("OnEnter", function(self)
-            self.highlight:SetAlpha(1)
+            Motion:Blend(self, "hover", 1, 0.1, Light)
             self.hoverEdge:Show()
-            if opts.onEnter and self.data then opts.onEnter(self, self.data) end
+            if opts.onEnter and self.data then
+                self.tipFor = TipIdentity(self.data)
+                opts.onEnter(self, self.data)
+            end
         end)
 
         row:SetScript("OnLeave", function(self)
-            self.highlight:SetAlpha(0)
+            Motion:Blend(self, "hover", 0, 0.18, Light)
             self.hoverEdge:SetShown(self.selected and true or false)
+            self.tipFor = nil
             if opts.onLeave then opts.onLeave(self, self.data) end
         end)
 
@@ -871,6 +1601,13 @@ function Widgets.CreateScrollList(parent, opts)
 
         scrollbar:SetMinMaxValues(0, maxOffset)
         scrollbar:SetShown(maxOffset > 0)
+
+        -- The thumb is as long as the share of the list on screen, as the
+        -- scroll frame's is, so it says how much more there is rather than
+        -- only that there is more.
+        if maxOffset > 0 and visible > 0 then
+            thumb:SetHeight(math.max(20, math.floor(self:GetHeight() * visible / total)))
+        end
 
         -- Rows give up 10px to the scrollbar while it shows. A table whose
         -- column headings sit outside the list is told, so its headings can
@@ -912,6 +1649,8 @@ function Widgets.CreateScrollList(parent, opts)
                     end
 
                     row.hoverEdge:SetShown(row.selected or row:IsMouseOver())
+                    local band = rawget(row, "glowBand")
+                    if band then band:SetShown(row.selected) end
 
                     if opts.updateRow then
                         opts.updateRow(row, entry, dataIndex)
@@ -924,6 +1663,21 @@ function Widgets.CreateScrollList(parent, opts)
             elseif row then
                 row.data = nil
                 row:Hide()
+            end
+        end
+
+        -- The row under the mouse may be showing a different entry now (the
+        -- list scrolled, or was rebuilt under the cursor). Its tooltip is
+        -- drawn again for that entry rather than left describing the last.
+        if opts.onEnter then
+            for index = 1, visible do
+                local row = self.rows[index]
+                local tipFor = row and rawget(row, "tipFor")
+                if tipFor ~= nil and row.data and TipIdentity(row.data) ~= tipFor
+                    and row:IsMouseOver() and OwnsTooltip(row) then
+                    row.tipFor = TipIdentity(row.data)
+                    opts.onEnter(row, row.data)
+                end
             end
         end
     end

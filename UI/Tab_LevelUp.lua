@@ -248,10 +248,14 @@ local function BuildDetail(parent)
     detail.makeValue = SummaryRow(2, "You can make now")
 
     -- What the Craft button will do, or why it cannot. A craft's progress bar
-    -- takes this line's place while it casts.
+    -- takes this line's place while it casts. Wrapped, growing upwards into
+    -- the space under the summary: "Opens your Leatherworking window. Click
+    -- again to craft." is about as wide as the pane on one line, and longer
+    -- profession names ran past it.
     local craftStatus = Theme.CreateLabel(detail, "tiny", "accent")
     craftStatus:SetPoint("BOTTOMLEFT", 12, 46)
     craftStatus:SetPoint("BOTTOMRIGHT", -12, 46)
+    craftStatus:SetWordWrap(true)
     detail.craftStatus = craftStatus
 
     detail.craftProgress = ns.CraftProgress:Create(detail, {

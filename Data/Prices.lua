@@ -76,11 +76,21 @@ local PRUNE_AFTER_SECONDS = 21 * 24 * 3600
 -- are a real price drop and are left alone, as is a listing with nothing
 -- above it to compare against.
 --
+-- So is one that holds half or more of everything listed. Nobody clears
+-- that in one purchase: 1000 Linen at 10c, with 60 more at 50c, is where
+-- Linen sells now. Skipped, it left the price to beat at 50c while the 1000
+-- sat at 10c. A stack among several, the usual lone listing, is still
+-- skipped.
+--
 -- @param listings sorted cheapest first
 -- @param reference the item's stored market value, or nil
-local function IsLoneLow(listings, reference)
+-- @param totalQuantity units across the whole book
+local function IsLoneLow(listings, reference, totalQuantity)
     local first, second = listings[1], listings[2]
     if not first or not second or first.isOwn then return false end
+
+    local quantity = first.quantity or 1
+    if quantity > 1 and quantity * 2 >= (totalQuantity or quantity) then return false end
 
     if first.unitPrice >= second.unitPrice * LONE_LOW then return false end
     if reference and reference > 0 and first.unitPrice >= reference * LONE_LOW then return false end
@@ -114,7 +124,7 @@ function Prices:Summarise(listings, reference)
     -- is neither undercut nor allowed to drag market value down. The caller's
     -- table is left as it was.
     local ignoredLow
-    if IsLoneLow(listings, reference) then
+    if IsLoneLow(listings, reference, totalQuantity) then
         ignoredLow = listings[1].unitPrice
 
         local rest = {}

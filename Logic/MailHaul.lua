@@ -22,8 +22,10 @@
 --            reading: an attachment that has not loaded yet is not one you
 --            took (the same rule the ledger follows).
 --
--- Mail cannot be deleted while it holds gold or items, so nothing leaves the
--- mailbox without being collected.
+-- Mail cannot be deleted while it holds gold or items, so the one way it
+-- leaves the mailbox without being collected is Return. A returned mail is
+-- taken out of the last reading before the next one (NoteReturned), and the
+-- gold total follows the purse, so neither counts it as collected.
 
 local _, ns = ...
 
@@ -274,6 +276,11 @@ end
 -- Your purse is the truth for how much gold came in: it cannot count a mail
 -- twice. The mail says where it came from. When the mail adds up to more than
 -- the purse went up by, the split is scaled down to fit.
+--
+-- The purse is the truth even while it has not moved. A letter sent back
+-- with Return leaves the box with its gold still on it, and counting what
+-- the mail said instead reported gold that never reached you. The mail's own
+-- sum is used only when the purse cannot be read at all.
 function MailHaul:Settle()
     local visit = self.visit
     if not visit then return end
@@ -281,7 +288,7 @@ function MailHaul:Settle()
     local mailGold = visit.gold.sold + visit.gold.outbid + visit.gold.other
     visit.mailTotal = mailGold
 
-    if visit.moneyIn > 0 then
+    if visit.lastMoney ~= nil then
         visit.total = visit.moneyIn
     else
         visit.total = mailGold
@@ -457,6 +464,8 @@ function MailHaul:Observe(mails, complete)
 
     local now = self:Snapshot(mails)
     self.readings = (self.readings or 0) + 1
+    -- How many mails the last reading listed, for NoteReturned.
+    self.listed = #mails
 
     if not self.baseline then
         self.baseline = now
@@ -495,6 +504,52 @@ function MailHaul:Observe(mails, complete)
     if #events > 0 or #appeared > 0 or self.visit.total ~= before then
         self:Tally()
     end
+end
+
+--- A mail sent back with Return. Its gold and items leave the box without
+--- reaching you, so they come out of the last reading now, before the next
+--- reading could count them as collected.
+--
+-- Only while the box still lists what the last reading did: then the mail at
+-- `index` is the one going back. A mail that cannot be read whole, or one the
+-- game will not send back (auction house mail), is left alone, and the purse
+-- still keeps its gold out of the total.
+function MailHaul:NoteReturned(index)
+    local baseline = self.baseline
+    if not (self.visit and baseline) or type(index) ~= "number" then return end
+    if not (ns.Mail and ns.Mail.ReadInbox) then return end
+
+    if type(InboxItemCanDelete) == "function" then
+        local ok, canDelete = pcall(InboxItemCanDelete, index)
+        if ok and canDelete then return end
+    end
+
+    local mails = ns.Mail:ReadInbox()
+    if #mails ~= self.listed then return end
+
+    local mail = mails[index]
+    if not mail or mail.pending or (mail.sender == nil and mail.subject == nil) then return end
+
+    for key, bucket in pairs(self:Snapshot({ mail })) do
+        local held = baseline[key]
+        if held then
+            for _, amount in ipairs(bucket.monies) do
+                for position, was in ipairs(held.monies) do
+                    if was == amount then
+                        table.remove(held.monies, position)
+                        break
+                    end
+                end
+            end
+
+            for itemID, count in pairs(bucket.items) do
+                local left = (held.items[itemID] or 0) - count
+                held.items[itemID] = left > 0 and left or nil
+            end
+        end
+    end
+
+    self:Log(("mail %d sent back, not counted"):format(index))
 end
 
 --- Tell the tally over the mailbox how the visit stands.
@@ -618,7 +673,11 @@ function MailHaul:Finish(visit, history)
     local sales = {}
     for _, list in ipairs({ visit.sales, visit.cameBack or {} }) do
         for _, sale in ipairs(list) do
-            sales[#sales + 1] = { name = sale.name, amount = sale.amount, itemID = names[sale.name or ""] }
+            -- A stack's sale is named with its size ("Linen Cloth (20)"), and
+            -- the ledger by the item alone, so that is looked up too.
+            local name = type(sale.name) == "string" and sale.name or ""
+            local itemID = names[name] or names[(name:gsub(" %(%d+%)$", ""))]
+            sales[#sales + 1] = { name = sale.name, amount = sale.amount, itemID = itemID }
         end
     end
     table.sort(sales, function(a, b) return a.amount > b.amount end)
@@ -763,6 +822,15 @@ function MailHaul:OnEnable()
     -- Not the mailbox window hiding: other mail addons hide or replace it
     -- while you are still at the mailbox, which ended the visit early and
     -- showed the report halfway through collecting.
+
+    -- Return sends a letter back with its gold and items still on it.
+    -- Watched without replacing it, so the game's own call is unaffected.
+    if not self.watchingReturns and type(hooksecurefunc) == "function"
+        and type(ReturnInboxItem) == "function" then
+        self.watchingReturns = pcall(hooksecurefunc, "ReturnInboxItem", function(index)
+            pcall(MailHaul.NoteReturned, MailHaul, index)
+        end)
+    end
 end
 
 --- The mailbox closed, by whichever signal came first. The rest find no visit.

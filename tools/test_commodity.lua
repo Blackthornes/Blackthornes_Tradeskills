@@ -39,6 +39,7 @@ ns.Config = {
 ns.db = {}
 ns.AHQueue = { PRIORITY = { urgent = 10, normal = 50, scan = 90 } }
 ns.Cost = { FindRecipeForItem = function() return nil end }
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 ns.Inventory = { GetCarriedBags = function() return { 0 } end }
 
 time = time or os.time

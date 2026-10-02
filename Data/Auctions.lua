@@ -42,6 +42,12 @@ end
 -- A reading only changes at the auction house. Between visits, a listing
 -- that expired was still counted as listed while the same stack also sat in
 -- the mailbox, so Keep in stock counted it twice until the next visit.
+--
+-- What matters is when the auction ended, not when its mail was read. A
+-- stack cancelled or expired before the reading is already missing from it,
+-- and taking it off a second time when the mail was opened later read 5
+-- still listed as none. An entry's `sent` is when its mail went out; one
+-- written before that was kept has only `t`, when the inbox was read.
 local function ReturnedSince(itemID, who, since)
     if not since or not (ns.Mail and ns.Mail.GetLedger) then return 0 end
 
@@ -51,18 +57,29 @@ local function ReturnedSince(itemID, who, since)
     local returned = 0
     local entries = ledger.entries
 
-    -- Oldest first, so walk back only as far as the reading.
+    -- Oldest first, so walk back only as far as the reading. A mail is
+    -- always sent before it is read, so nothing further back can count.
     for index = #entries, 1, -1 do
         local entry = entries[index]
         if (entry.t or 0) <= since then break end
 
         if entry.itemID == itemID and (entry.kind == "expired" or entry.kind == "removed")
-            and (who == nil or entry.who == who) then
+            and (who == nil or entry.who == who) and (entry.sent or entry.t) > since then
             returned = returned + (entry.quantity or 0)
         end
     end
 
     return returned
+end
+
+-- The longest an auction stays up: Blizzard's own Sell tab on Forever offers
+-- 2, 8 and 24 hours (DURATIONS in Logic/Posting.lua). Everything in a reading
+-- older than that has sold or come back since.
+local LONGEST_AUCTION = 24 * 3600
+
+--- Is a reading too old to have anything in it still listed?
+local function Outlived(updatedAt)
+    return updatedAt ~= nil and updatedAt < time() - LONGEST_AUCTION
 end
 
 --- How many units of an item you currently have listed, on every character
@@ -72,6 +89,10 @@ end
 -- used to be whichever character last opened the auction house, so Keep in
 -- stock forgot an alt's listings the moment another character looked.
 -- Each character's last reading is now kept and added up.
+--
+-- Except a reading older than the longest auction. An alt whose listings sold
+-- and who never went back to the auction house kept them counted for good: a
+-- sale sends gold rather than the item, so nothing ever took them off.
 function Auctions:GetPostedCount(itemID)
     if not itemID then return 0 end
 
@@ -81,6 +102,7 @@ function Auctions:GetPostedCount(itemID)
     -- Saved before readings were kept per character: nobody knows whose it
     -- is, so it stands until a character reads its own.
     if not byCharacter or next(byCharacter) == nil then
+        if Outlived(record.updatedAt) then return 0 end
         local listed = record.items[itemID] or 0
         return math.max(0, listed - ReturnedSince(itemID, nil, record.updatedAt))
     end
@@ -88,7 +110,7 @@ function Auctions:GetPostedCount(itemID)
     local total = 0
     for who, reading in pairs(byCharacter) do
         local listed = (reading.items and reading.items[itemID]) or 0
-        if listed > 0 then
+        if listed > 0 and not Outlived(reading.updatedAt) then
             total = total + math.max(0, listed - ReturnedSince(itemID, who, reading.updatedAt))
         end
     end
@@ -323,14 +345,18 @@ function Auctions:ReadOwned(opts)
             -- status as sold rather than discarding everything.
             local active = info.status == nil or info.status == STATUS_ACTIVE
 
+            -- Every auction's id, sold ones too. They only tell a new listing
+            -- apart, and one bought within seconds is already marked sold
+            -- when it is read back: counted as active only, it was reported
+            -- as refused by the auction house.
+            if itemID and info.auctionID then
+                ids[itemID] = ids[itemID] or {}
+                ids[itemID][info.auctionID] = true
+            end
+
             if itemID and active then
                 local quantity = info.quantity or 1
                 items[itemID] = (items[itemID] or 0) + quantity
-
-                if info.auctionID then
-                    ids[itemID] = ids[itemID] or {}
-                    ids[itemID][info.auctionID] = true
-                end
 
                 -- The cheapest unit price you have it listed at. A commodity
                 -- listing carries a unit price; an item auction carries the

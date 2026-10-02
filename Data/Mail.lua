@@ -541,6 +541,10 @@ function Mail:FillItemID(itemID)
     ns.Debug(("mail: %d sale(s) of %s now know their item"):format(filled, name))
 end
 
+-- How many days the auction house's mail stays in the box. daysLeft counts
+-- down from here, so it also says when the mail was sent.
+local AUCTION_MAIL_DAYS = 30
+
 --- Record what a new mail tells us, if anything.
 local function Describe(mail, kind, itemName, invoice)
     local entry = {
@@ -581,6 +585,16 @@ local function Describe(mail, kind, itemName, invoice)
                     entry.quantity = entry.quantity + (stack.quantity or 0)
                 end
             end
+        end
+
+        -- When it was sent back, which is when the auction ended. The inbox
+        -- can be read long after, and Data/Auctions.lua needs to know whether
+        -- the stack was still listed when your auctions were last read.
+        -- Taken off a reading that had already left it out, 5 still listed
+        -- read as none.
+        if mail.daysLeft then
+            local sent = entry.t - math.floor((AUCTION_MAIL_DAYS - mail.daysLeft) * 86400 + 0.5)
+            entry.sent = math.min(entry.t, sent)
         end
     end
 
@@ -647,9 +661,16 @@ local function SeenFor(ledger, who)
     if seen then return seen, false end
 
     -- First reading since lists were kept per character. The old shared list
-    -- is the best start there is: it is right for whoever read last.
+    -- is the best start there is for the first character to read: it is right
+    -- for whoever read last. It is used once. Copied to every character, it
+    -- made a new character's first sale of an item on it read as already
+    -- seen, and that sale was never written down. Everyone after the first
+    -- starts empty, and AlreadyWritten finds the mails they wrote down before.
     seen = {}
-    for key, count in pairs(ledger.seen or {}) do seen[key] = count end
+    if not ledger.seenSeeded and next(ledger.seenBy) == nil then
+        for key, count in pairs(ledger.seen or {}) do seen[key] = count end
+    end
+    ledger.seenSeeded = true
     ledger.seenBy[who] = seen
     return seen, true
 end
@@ -658,10 +679,46 @@ end
 --- old shared list may still have been written down before the shared list
 --- lost it. An entry this character already has for the same thing counts
 --- as that mail, once each, so the switch never writes a sale down twice.
-local function AlreadyWritten(entries, upTo, used, who, kind, name)
+--
+-- The same thing means the same figure too. On the name alone, a sale
+-- collected weeks ago passed a new sale of the same item off as written down,
+-- and the new one never was. A sale's entry holds what the mail pays, or its
+-- invoice's estimate while the gold was held. A return's entry holds what
+-- came back, and the mail can only have lost stacks since. Before 0.16.0 it
+-- held the first stack alone, so that counts as the same too.
+--
+-- Entries written before characters were keyed by GUID (2026-09-27) still
+-- carry the old name-realm key, so that counts as this character too.
+local function AlreadyWritten(entries, upTo, used, who, kind, name, mail, invoice)
+    local legacy
+    if ns.Config.GetLegacyCharacterKey then
+        local ok, key = pcall(ns.Config.GetLegacyCharacterKey, ns.Config)
+        if ok and type(key) == "string" then legacy = key end
+    end
+
+    local paid, estimate = tonumber(mail.money) or 0, nil
+    if invoice and invoice.bid then
+        estimate = invoice.bid - (invoice.cut or 0) + (invoice.deposit or 0)
+    end
+
+    local first = mail.attachments[1]
+    local quantity = 0
+    for _, stack in ipairs(mail.attachments) do
+        if first and stack.itemID == first.itemID then quantity = quantity + (stack.quantity or 0) end
+    end
+
     for index = upTo, 1, -1 do
         local entry = entries[index]
-        if not used[index] and entry.who == who and entry.kind == kind and entry.name == name then
+        local same
+        if kind == "sold" then
+            same = entry.net ~= nil and ((paid > 0 and entry.net == paid) or entry.net == estimate)
+        else
+            same = first ~= nil and entry.itemID == first.itemID
+                and ((entry.quantity or 0) >= quantity or entry.quantity == first.quantity)
+        end
+
+        if same and not used[index] and (entry.who == who or (legacy and entry.who == legacy))
+            and entry.kind == kind and entry.name == name then
             used[index] = true
             return true
         end
@@ -753,7 +810,27 @@ function Mail:Reconcile(mails, complete)
     -- different amounts of gold -- one paid out, one still being held -- so
     -- describing both from the first mail would have put the wrong figure on
     -- one of them.
-    for _, mail in ipairs(mails) do
+    --
+    -- Walked oldest first, so the mails already written down are the ones
+    -- counted against `seen` and a newer look-alike is the one recorded. The
+    -- inbox lists the newest first: walked in that order, a sale arriving
+    -- while an older one of the same item still sat in the box (its gold
+    -- held, say) passed as the one written down, and the older one was
+    -- written down a second time with its own figure.
+    local walk = {}
+    for position, mail in ipairs(mails) do walk[position] = mail end
+    table.sort(walk, function(a, b)
+        local left, right = a.daysLeft or 0, b.daysLeft or 0
+        if left ~= right then return left < right end
+        return a.index > b.index
+    end)
+
+    -- A fingerprint with a sale that cannot be priced yet waits as a whole.
+    -- A newer look-alike counted in its place would leave the next reading
+    -- numbering them differently, and one sale written down twice.
+    local deferred = {}
+
+    for _, mail in ipairs(walk) do
         -- A mail whose attachments have not arrived yet would fingerprint as a
         -- different mail than the same one fully loaded, so it waits.
         if not mail.pending then
@@ -761,7 +838,10 @@ function Mail:Reconcile(mails, complete)
             local occurrence = (present[key] or 0) + 1
             present[key] = occurrence
 
-            if occurrence > (seen[key] or 0) then
+            if deferred[key] then
+                present[key] = occurrence - 1
+
+            elseif occurrence > (seen[key] or 0) then
                 local kind, itemName = self:Classify(mail)
                 local invoice = self:ReadInvoice(mail.index)
 
@@ -781,6 +861,7 @@ function Mail:Reconcile(mails, complete)
                     -- attachment does.
                     mail.pending = true
                     present[key] = occurrence - 1
+                    deferred[key] = true
                     self.awaitingAmount = (self.awaitingAmount or 0) + 1
 
                 elseif kind ~= "sold" and #mail.attachments == 0 and (mail.money or 0) == 0 then
@@ -799,7 +880,7 @@ function Mail:Reconcile(mails, complete)
                     ns.Debug("mail with stacks taken:", tostring(mail.subject))
 
                 elseif kind and firstReading and AlreadyWritten(ledger.entries, earlier, used, who, kind,
-                    (kind == "sold" and invoice and invoice.itemName) or itemName) then
+                    (kind == "sold" and invoice and invoice.itemName) or itemName, mail, invoice) then
                     ns.Debug("mail written down before:", tostring(mail.subject))
 
                 elseif kind then

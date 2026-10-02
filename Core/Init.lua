@@ -91,7 +91,10 @@ function ns.Debug(...)
 end
 
 function ns.Warn(...)
-    ns.Print("|c" .. ns.COLORS.warn .. Join(...) .. "|r")
+    -- An item link or a coloured amount inside the message ends with |r,
+    -- which would turn the rest of the line white; pick the colour up again.
+    local text = Join(...):gsub("|r", "|r|c" .. ns.COLORS.warn)
+    ns.Print("|c" .. ns.COLORS.warn .. text .. "|r")
 end
 
 --------------------------------------------------------------------------------

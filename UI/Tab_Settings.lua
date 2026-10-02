@@ -22,8 +22,10 @@ local COLUMN_WIDTH = 400
 local COLUMN_ONE_X = 16
 local COLUMN_TWO_X = 452
 
-local LABEL_WIDTH = 200
-local CONTROL_X = 212
+-- Wide enough for the longest label ("Recommend selling at a loss"), with the
+-- widest control ("Charge market price") still inside the column.
+local LABEL_WIDTH = 228
+local CONTROL_X = 240
 
 local ROW_GAP = -8
 local SECTION_GAP = -22
@@ -65,14 +67,26 @@ local function CreateRow(parent, anchor, labelText, description)
     row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, ROW_GAP)
     row:SetSize(COLUMN_WIDTH, description and 40 or 24)
 
+    -- Wrapped rather than cut off should a label still outgrow its room at
+    -- the player's font; the description then starts under its last line.
     local label = Theme.CreateLabel(row, "small", "text")
     label:SetPoint("TOPLEFT", 0, -4)
     label:SetWidth(LABEL_WIDTH)
+    label:SetWordWrap(true)
     label:SetText(labelText)
 
+    local top = 24
+    local labelHeight = label.GetStringHeight and label:GetStringHeight() or 0
+    if type(labelHeight) == "number" and labelHeight > 16 then
+        top = math.ceil(4 + labelHeight + 6)
+        row:SetHeight(math.max(row:GetHeight() or 0, top))
+    end
+
     if description then
-        local hint = Theme.CreateLabel(row, "tiny", "dim")
-        hint:SetPoint("TOPLEFT", 0, -24)
+        -- "muted" rather than "dim": the small print says what each setting
+        -- does, and "dim" was hard to read on the panel.
+        local hint = Theme.CreateLabel(row, "tiny", "muted")
+        hint:SetPoint("TOPLEFT", 0, -top)
         hint:SetWidth(COLUMN_WIDTH)
         -- Wrapped, with the row grown to fit: on one line the longer ones
         -- (Undercut by, Minimum profit) were cut off halfway with "...".
@@ -81,7 +95,7 @@ local function CreateRow(parent, anchor, labelText, description)
 
         local height = hint.GetStringHeight and hint:GetStringHeight() or 0
         if type(height) == "number" and height > 0 then
-            row:SetHeight(math.max(40, 24 + math.ceil(height) + 2))
+            row:SetHeight(math.max(40, top + math.ceil(height) + 2))
         end
     end
 
@@ -94,6 +108,17 @@ local function AddUnit(row, control, text)
     unit:SetPoint("LEFT", control, "RIGHT", 6, 0)
     unit:SetText(text)
     return unit
+end
+
+--- Widen a button to its label when the label, measured at the player's
+--- font, needs more room than the button was given: "Remove old prices"
+--- and "Reset to defaults" ended in "..." on 140-pixel buttons.
+local function FitButton(button)
+    local width = Theme.TextWidth(button.label)
+    local have = button:GetWidth()
+    if width and type(have) == "number" and width + 16 > have then
+        button:SetWidth(math.ceil(width) + 16)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -237,15 +262,11 @@ local function Build(outer)
     end, false)
     widgets.allowLoss:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local confirmRow = CreateRow(container, lossRow, "Confirm before each listing",
-        "Off: clicking List or Post Crafted lists immediately, with no prompt.")
-
-    widgets.confirmPost = Widgets.CreateCheckbox(confirmRow, "Ask first", function(checked)
-        Config:Set("confirmBeforePosting", checked)
-    end, true)
-    widgets.confirmPost:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local verifyRow = CreateRow(container, confirmRow, "Check price before listing",
+    -- No "Confirm before each listing" switch: the confirmation's Yes is the
+    -- click that lists. Posting needs a real click, and after the price
+    -- check (an auction house search, answered later) there is no other.
+    -- The switch never did anything; its saved value is left where it is.
+    local verifyRow = CreateRow(container, lossRow, "Check price before listing",
         "Searches the auction house for that one item first, so you undercut the price as it is now.")
 
     widgets.verifyPrice = Widgets.CreateCheckbox(verifyRow, "Check first", function(checked)
@@ -342,21 +363,28 @@ local function Build(outer)
 
     local data = CreateSection(container, "DATA", { x = COLUMN_TWO_X, y = -16 })
 
+    -- All four wrap: "last scan 3h ago (stopped at the page limit)" and the
+    -- bank and auction warnings are longer than the column, and were cut
+    -- off. Refresh measures the page after setting them.
     widgets.dataSummary = Theme.CreateLabel(container, "small", "text")
     widgets.dataSummary:SetPoint("TOPLEFT", data, "BOTTOMLEFT", 0, -6)
     widgets.dataSummary:SetWidth(COLUMN_WIDTH)
+    widgets.dataSummary:SetWordWrap(true)
 
     widgets.recipeSummary = Theme.CreateLabel(container, "small", "text")
     widgets.recipeSummary:SetPoint("TOPLEFT", widgets.dataSummary, "BOTTOMLEFT", 0, -4)
     widgets.recipeSummary:SetWidth(COLUMN_WIDTH)
+    widgets.recipeSummary:SetWordWrap(true)
 
     widgets.bankSummary = Theme.CreateLabel(container, "tiny", "dim")
     widgets.bankSummary:SetPoint("TOPLEFT", widgets.recipeSummary, "BOTTOMLEFT", 0, -6)
     widgets.bankSummary:SetWidth(COLUMN_WIDTH)
+    widgets.bankSummary:SetWordWrap(true)
 
     widgets.auctionSummary = Theme.CreateLabel(container, "tiny", "dim")
     widgets.auctionSummary:SetPoint("TOPLEFT", widgets.bankSummary, "BOTTOMLEFT", 0, -4)
     widgets.auctionSummary:SetWidth(COLUMN_WIDTH)
+    widgets.auctionSummary:SetWordWrap(true)
 
     widgets.loadWarning = Theme.CreateLabel(container, "tiny", "warn")
     widgets.loadWarning:SetPoint("TOPLEFT", widgets.auctionSummary, "BOTTOMLEFT", 0, -6)
@@ -367,8 +395,9 @@ local function Build(outer)
         local removed = ns.Prices:Prune()
         ns.Print(("removed %d old price(s)"):format(removed))
         UI:RefreshActiveTab()
-    end, { width = 140, height = 22, tooltip = "Drop items not seen on the auction house for 21 days" })
+    end, { width = 150, height = 22, tooltip = "Drop items not seen on the auction house for 21 days" })
     pruneButton:SetPoint("TOPLEFT", widgets.loadWarning, "BOTTOMLEFT", 0, -18)
+    FitButton(pruneButton)
 
     -- Destructive, so it arms first rather than wiping a long price history on
     -- a misclick.
@@ -381,7 +410,11 @@ local function Build(outer)
             local realmKey = ns.Config:GetRealmKey()
             ns.db.prices[realmKey] = {}
             ns.db.lastFullScan = nil
-            for _, field in ipairs({ "lastFullScanByRealm", "sweepSeenByRealm", "sweepRefusedByRealm" }) do
+            -- The page-limit stamp too: a big auction house only ever has
+            -- that one, and left behind it went on saying "scanned 3h ago"
+            -- over no prices at all.
+            for _, field in ipairs({ "lastFullScanByRealm", "lastCappedScanByRealm",
+                                     "sweepSeenByRealm", "sweepRefusedByRealm" }) do
                 if ns.db[field] then ns.db[field][realmKey] = nil end
             end
 
@@ -407,18 +440,20 @@ local function Build(outer)
                 button:SetConfirming(false)
             end
         end)
-    end, { width = 140, height = 22, tooltip = "Delete every stored price for this realm" })
+    end, { width = 150, height = 22, tooltip = "Delete every stored price for this realm" })
     widgets.clearButton:SetPoint("LEFT", pruneButton, "RIGHT", 8, 0)
+    FitButton(widgets.clearButton)
 
     local exportButton = Widgets.CreateButton(container, "Export queue", function()
         UI:ShowTransferDialog("export")
-    end, { width = 140, height = 22,
+    end, { width = 150, height = 22,
            tooltip = "Copy your queue, settings and stock limits to a code" })
     exportButton:SetPoint("TOPLEFT", pruneButton, "BOTTOMLEFT", 0, -8)
+    FitButton(exportButton)
 
     local importButton = Widgets.CreateButton(container, "Import", function()
         UI:ShowTransferDialog("import")
-    end, { width = 140, height = 22,
+    end, { width = 150, height = 22,
            tooltip = "Restore from a code" })
     importButton:SetPoint("LEFT", exportButton, "RIGHT", 8, 0)
 
@@ -477,7 +512,21 @@ local function Build(outer)
     end, true)
     widgets.upgradeArrows:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local debugRow = CreateRow(container, upgradeRow, "Debug output",
+    local effectsRow = CreateRow(container, upgradeRow, "Window effects",
+        "Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all.")
+
+    widgets.effects = Widgets.CreateDropdown(effectsRow, {
+        { text = "Full", value = "full" },
+        { text = "Subtle", value = "subtle" },
+        { text = "Off", value = "off" },
+    }, function(value)
+        Config:Set("windowEffects", value)
+        -- Anything moving now lands at once rather than finishing slowly.
+        if value == "off" and ns.Motion then ns.Motion:FinishAll() end
+    end, { width = 110 })
+    widgets.effects:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local debugRow = CreateRow(container, effectsRow, "Debug output",
         "Extra messages in chat, to help track down problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
@@ -513,10 +562,29 @@ local function Build(outer)
             ns.Config:Set(key, value)
         end
 
+        -- What each control does on a change, done for the reset too. Only
+        -- the values moved before: queued sub-crafts stayed as they were,
+        -- the profession window kept its old values, and a folded side
+        -- panel grew to full height with nothing in it.
+        ns.Queue:RebuildDependencies()
+        ns.Queue:Notify()
+        if ns.RecipeValue then ns.RecipeValue:Refresh() end
+        for _, panel in ipairs({ ns.PostPanel, ns.CraftPanel }) do
+            if panel and panel.frame then
+                ns.Collapse.Apply(panel.frame)
+                panel:ApplyHeight()
+                panel:Refresh()
+            end
+        end
+
         ns.Print("settings reset to defaults")
         UI:RefreshActiveTab()
-    end, { width = 140, height = 22, tooltip = "Put every setting back to how it started. Asks you to click again first." })
-    resetButton:SetPoint("BOTTOMLEFT", COLUMN_TWO_X, 12)
+    end, { width = 150, height = 22, tooltip = "Put every setting back to how it started. Asks you to click again first." })
+    -- Under the last setting rather than pinned to the page's bottom edge:
+    -- measured from there, the page grew 4 pixels taller every time it was
+    -- drawn, and left more empty space to scroll into each time.
+    resetButton:SetPoint("TOPLEFT", debugRow, "BOTTOMLEFT", 0, -18)
+    FitButton(resetButton)
 end
 
 --------------------------------------------------------------------------------
@@ -538,27 +606,38 @@ local function FitScroll()
     end
 end
 
+--- Write a stored value back into its box, unless the player is typing in
+--- it. Bag, mail and auction events redraw this page every few seconds at
+--- the auction house, and each redraw put the stored number back over the
+--- one being typed, so Enter then saved the old number (or a mix of both).
+local function Put(box, value)
+    local editBox = box.editBox
+    if editBox and editBox.HasFocus and editBox:HasFocus() then return end
+    box:SetValue(value, true)
+end
+
 local function Refresh()
     if not widgets.undercut then return end
 
     local Config = ns.Config
 
-    -- silent = true: writing a stored value back into its own box must not fire
-    -- the change handler and write it straight back to the database.
-    widgets.undercut:SetValue(Config:Get("undercutCopper") or 1, true)
-    widgets.cut:SetValue((Config:Get("auctionCut") or 0.05) * 100, true)
-    widgets.minProfit:SetValue((Config:Get("minProfit") or 0) / 100, true)
-    widgets.minMargin:SetValue(Config:Get("minMarginPercent") or 0, true)
-    widgets.budget:SetValue(Config:Get("scanBudgetMs") or 8, true)
+    -- silent = true (inside Put): writing a stored value back into its own
+    -- box must not fire the change handler and write it straight back to
+    -- the database.
+    Put(widgets.undercut, Config:Get("undercutCopper") or 1)
+    Put(widgets.cut, (Config:Get("auctionCut") or 0.05) * 100)
+    Put(widgets.minProfit, (Config:Get("minProfit") or 0) / 100)
+    Put(widgets.minMargin, Config:Get("minMarginPercent") or 0)
+    Put(widgets.budget, Config:Get("scanBudgetMs") or 8)
 
     local markup = Config:Get("unscannedMarkupPercent")
-    widgets.unscannedMarkup:SetValue(type(markup) == "number" and markup or 50, true)
+    Put(widgets.unscannedMarkup, type(markup) == "number" and markup or 50)
     widgets.priceUnscanned:SetChecked(Config:Get("priceUnscannedCrafts") ~= false)
 
     widgets.minProfitPreview:SetText(
         Util.FormatMoney(Config:Get("minProfit") or 0, { short = true }))
 
-    widgets.maxPosted:SetValue(Config:Get("maxPostedPerItem") or 0, true)
+    Put(widgets.maxPosted, Config:Get("maxPostedPerItem") or 0)
 
     local overrides = 0
     for _ in pairs(ns.db.postLimits or {}) do overrides = overrides + 1 end
@@ -570,7 +649,6 @@ local function Refresh()
 
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
-    widgets.confirmPost:SetChecked(Config:Get("confirmBeforePosting") ~= false)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
@@ -581,6 +659,7 @@ local function Refresh()
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
+    widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
     widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)

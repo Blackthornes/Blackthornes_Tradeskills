@@ -21,7 +21,10 @@ local COPPER_SUFFIX = "|cffeda55fc|r"
 --- Format a copper amount as gold/silver/copper.
 -- @param copper  amount in copper; nil renders as a muted dash
 -- @param opts    { short = true } drops trailing silver/copper once gold is large,
---                { noColor = true } strips the colour escapes
+--                { noColor = true } strips the colour escapes,
+--                { parts = 1 or 2 } at most that many coins, counted from the
+--                largest, rounded to the last one shown ("12g 35s" for
+--                12g 34s 56c): for a narrow cell, see Theme.SetMoneyText
 function Util.FormatMoney(copper, opts)
     if copper == nil then
         return "|c" .. ns.COLORS.muted .. "--|r"
@@ -30,6 +33,14 @@ function Util.FormatMoney(copper, opts)
     opts = opts or {}
 
     local amount = math.floor(math.abs(copper) + 0.5)
+
+    if opts.parts then
+        -- The smallest coin shown, from the largest the amount has.
+        local largest = amount >= COPPER_PER_GOLD and 3 or amount >= COPPER_PER_SILVER and 2 or 1
+        local smallest = largest - opts.parts + 1
+        local unit = smallest >= 3 and COPPER_PER_GOLD or smallest == 2 and COPPER_PER_SILVER or 1
+        amount = math.floor(amount / unit + 0.5) * unit
+    end
 
     -- Signed after rounding: a loss of a fraction of a copper rounds to
     -- nothing, and "-0c" in red read as a loss that was not there.
@@ -52,13 +63,17 @@ function Util.FormatMoney(copper, opts)
     -- Past a few hundred gold the copper column is noise, not precision.
     local suppressMinor = opts.short and gold >= 100
 
-    if not suppressMinor then
-        if silver > 0 or gold > 0 then
-            parts[#parts + 1] = silver .. s
-        end
-        if copperPart > 0 or #parts == 0 then
-            parts[#parts + 1] = copperPart .. c
-        end
+    -- Coins left out by `parts` are rounded away above, and stay out even
+    -- when they come to zero ("12g", not "12g 0s").
+    local showSilver = not suppressMinor and not (opts.parts and gold > 0 and opts.parts < 2)
+    local showCopper = not suppressMinor and not (opts.parts and
+        ((gold > 0 and opts.parts < 3) or (silver > 0 and opts.parts < 2)))
+
+    if showSilver and (silver > 0 or gold > 0) then
+        parts[#parts + 1] = silver .. s
+    end
+    if showCopper and (copperPart > 0 or #parts == 0) then
+        parts[#parts + 1] = copperPart .. c
     end
 
     local text = table.concat(parts, " ")
@@ -435,6 +450,23 @@ function Util.GetItemLabel(itemID)
     end
 
     return ("item %d"):format(itemID)
+end
+
+--- Text without its colour codes, so a label's own colour shows. An item
+--- link carries its quality colour inside it, which wins over SetTextColor:
+--- a row greyed out as done, or green for a cheaper craft on another
+--- character, still showed in the item's colour. Both colour codes go: the
+--- "|cff1eff00" kind and the named "|cnIQ2:" kind newer clients put in item
+--- links. Text that cannot be read (a value the game keeps from addons) comes
+--- back as it was.
+function Util.Uncolored(text)
+    if type(text) ~= "string" then return text end
+
+    local ok, plain = pcall(function()
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|cn[%w_]+:", ""):gsub("|r", ""))
+    end)
+    if ok and type(plain) == "string" then return plain end
+    return text
 end
 
 --- A character's name for display from a saved key, or "" when unknown.

@@ -93,6 +93,7 @@ ns.Recipes = {
 ns.Cost = {
     GetCraftCost = function() return { priceable = true, total = 100, perUnit = 100, yield = 1 } end,
     FindRecipeForItem = function(_, itemID) return itemID end,
+    FindAnyRecipeForItem = function(_, itemID) return itemID end,
     GetMaterialValue = function() return nil end,
 }
 ns.Prices = {

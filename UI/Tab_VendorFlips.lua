@@ -46,8 +46,11 @@ local widgets = {}
 -- Helpers
 --------------------------------------------------------------------------------
 
-local function Money(value)
-    return Util.FormatMoney(value, { short = true })
+--- A price in a money column, measured into the cell: "1g 23s 45c" is wider
+--- than the column and was cut off. It drops to the two largest coins, then
+--- one, rounded.
+local function SetMoney(cell, value)
+    Theme.SetMoneyText(cell, value, { short = true })
 end
 
 local function MarginText(margin)
@@ -108,7 +111,7 @@ local function FillCell(cell, key, entry)
     local text
 
     if key == "gain" then
-        cell:SetText(Money(entry.gain))
+        SetMoney(cell, entry.gain)
         cell:SetTextColor(Theme.ProfitColor(entry.gain))
         return
     elseif key == "margin" then
@@ -116,17 +119,22 @@ local function FillCell(cell, key, entry)
         cell:SetTextColor(Theme.ProfitColor(entry.gain))
         return
     elseif key == "vendor" then
-        text = Money(entry.vendor)
-        color = "text"
+        SetMoney(cell, entry.vendor)
+        cell:SetTextColor(Theme.Unpack("text"))
+        return
     elseif key == "buy" then
-        text = Money(entry.buy)
+        SetMoney(cell, entry.buy)
+        cell:SetTextColor(Theme.Unpack("muted"))
+        return
     elseif key == "listed" then
         text = entry.listed and tostring(entry.listed) or ""
         color = "dim"
     elseif key == "age" then
-        -- Read now, as the list itself can be kept for a while.
+        -- Read now, as the list itself can be kept for a while. "now"
+        -- rather than "just now", which is wider than the column.
         local age = ns.Prices:GetAge(entry.itemID) or entry.age
         text = age and Util.FormatAge(age) or ""
+        if text == "just now" then text = "now" end
         color = ns.Prices:IsStale(entry.itemID) and "warn" or "dim"
     end
 
@@ -159,7 +167,9 @@ local function ShowRowTooltip(row, entry)
         Util.FormatMoney(entry.vendor, { noColor = true }),
         Util.FormatMoney(entry.gain, { noColor = true })), 0.35, 0.85, 0.45, true)
 
-    if entry.stale then
+    -- Read now, as the AGE column is: the list can be kept for hours, and
+    -- the warning it was built with never came on as the scan aged.
+    if ns.Prices:IsStale(entry.itemID) then
         GameTooltip:AddLine("Scanned a while ago, so it may have sold.", 0.91, 0.76, 0.35, true)
     end
 
@@ -226,17 +236,19 @@ local function BuildDetail(parent)
     verdict:SetWordWrap(true)
     detail.verdict = verdict
 
+    -- Under the verdict, as tall as its words. A box of fixed height pinned
+    -- to the bottom had room for five lines, and the warning that the scan
+    -- is old made six, so the warning itself was the line cut off.
     local note = Theme.CreateLabel(detail, "tiny", "dim")
-    note:SetPoint("BOTTOMLEFT", 12, 44)
-    note:SetPoint("BOTTOMRIGHT", -12, 44)
+    note:SetPoint("TOPLEFT", verdict, "BOTTOMLEFT", 0, -10)
+    note:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
     note:SetWordWrap(true)
-    note:SetJustifyV("BOTTOM")
-    note:SetHeight(60)
+    note:SetJustifyV("TOP")
     detail.note = note
 
     local searchButton = Widgets.CreateButton(detail, "Search the auction house", function()
         SearchAuctionHouse(state.selected)
-    end, { width = 180, primary = true, height = 24 })
+    end, { width = 200, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
     searchButton.tooltipText = "Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."
     detail.searchButton = searchButton
@@ -282,8 +294,10 @@ local function UpdateDetail(entry)
         detail.subtitle:SetText("One listed.")
     end
 
+    -- Short enough to stay clear of the price on its right; the longer
+    -- "(a lone low listing)" ran over it.
     local lines = detail.lines
-    SetLine(lines[1], entry.loneLow and "Buy for (a lone low listing)" or "Buy for",
+    SetLine(lines[1], entry.loneLow and "Buy for (lone low)" or "Buy for",
         Util.FormatMoney(entry.buy), "text")
     SetLine(lines[2], "A vendor pays", Util.FormatMoney(entry.vendor), "text")
     SetLine(lines[3], "Profit each", ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
@@ -294,9 +308,12 @@ local function UpdateDetail(entry)
     detail.verdict:SetText(("Buy it, sell it to any vendor, and keep about %s each. No auction house cut."):format(
         Util.FormatMoney(entry.gain, { noColor = true })))
 
+    -- The scan's age read now, as the AGE column reads it: the list can be
+    -- kept for hours, and the age it was built with went on saying "2m ago".
+    local age = ns.Prices:GetAge(entry.itemID) or entry.age
     local note = ("The buy price is the cheapest listing from another seller when last scanned (%s). Prices are per item, so a stack pays the same on every one in it."):format(
-        entry.age and Util.FormatAgeAgo(entry.age) or "never")
-    if entry.stale then note = note .. " That was a while ago, so it may have sold." end
+        age and Util.FormatAgeAgo(age) or "never")
+    if ns.Prices:IsStale(entry.itemID) then note = note .. " That was a while ago, so it may have sold." end
     detail.note:SetText(note)
 end
 
@@ -379,24 +396,43 @@ local function Refresh()
     local total = 0
     for _, row in ipairs(rows) do total = total + row.gain end
 
+    -- Each part of the count line from its full wording to its shortest.
+    -- The line takes the first whole wording that fits beside the hint,
+    -- rather than running on and ending in "...".
+    local flips
     if #rows > 0 then
-        widgets.countLabel:SetText(("%d flip%s, about %s if you buy one of each"):format(
-            #rows, #rows == 1 and "" or "s", Util.FormatMoney(total, { noColor = true, short = true })))
-    else
-        widgets.countLabel:SetText("")
+        local plural = #rows == 1 and "" or "s"
+        local money = Util.FormatMoney(total, { noColor = true, short = true })
+        flips = {
+            ("%d flip%s, about %s if you buy one of each"):format(#rows, plural, money),
+            ("%d flip%s, about %s for one of each"):format(#rows, plural, money),
+            ("%d flip%s"):format(#rows, plural),
+        }
     end
 
     -- Items whose vendor price is not read yet wait for the auction house to
     -- close, so reading them cannot upset Ready to sell. Say so, or the list
     -- looks short.
+    local pending
     if (state.pending or 0) > 0 then
         local waiting = ns.Scanner and ns.Scanner.isAuctionHouseOpen
             and "read once the auction house is closed"
             or "reading them now"
-        local text = widgets.countLabel:GetText() or ""
-        widgets.countLabel:SetText(("%s%s%d listed items with no vendor price yet, %s"):format(
-            text, text ~= "" and "  ·  " or "", state.pending, waiting))
+        pending = {
+            ("%d listed items with no vendor price yet, %s"):format(state.pending, waiting),
+            ("%d waiting for a vendor price"):format(state.pending),
+        }
     end
+
+    local texts = { "" }
+    if flips and pending then
+        local sep = "  ·  "
+        texts = { flips[1] .. sep .. pending[1], flips[1] .. sep .. pending[2],
+            flips[2] .. sep .. pending[2], flips[3] .. sep .. pending[2] }
+    elseif flips or pending then
+        texts = flips or pending
+    end
+    Theme.FitText(widgets.countLabel, texts)
 
     local fresh
     if state.selected then
@@ -422,16 +458,24 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
+    -- A new search or filter is a different list, so it starts at the top.
+    -- The list keeps its place on the redraws that bag and auction events
+    -- cause, which left a new search showing its results part way down.
+    local function ShowFromTop()
+        Refresh()
+        if widgets.list then widgets.list:ScrollToTop() end
+    end
+
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
-        Refresh()
+        ShowFromTop()
     end)
     search:SetPoint("LEFT", 0, 0)
     search:SetWidth(180)
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
         state.dealsOnly = checked
-        Refresh()
+        ShowFromTop()
     end, state.dealsOnly)
     dealsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
@@ -497,13 +541,16 @@ local function Build(container)
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)
     widgets.countLabel = countLabel
 
+    -- Short, to leave the count line room; each row's tooltip says the same
+    -- at length.
     local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText("Right-click an item to search the auction house for it")
+    hint:SetText("Right-click a row to search for it")
     widgets.hint = hint
 
     -- The count line grows a long "not checked yet" note while items load,
-    -- and ran under this hint. It stops short of it now and ends in "...".
+    -- and ran under this hint. It stops short of it now, and Refresh picks
+    -- a wording that fits.
     countLabel:SetPoint("RIGHT", hint, "LEFT", -12, 0)
     countLabel:SetJustifyH("LEFT")
     countLabel:SetWordWrap(false)

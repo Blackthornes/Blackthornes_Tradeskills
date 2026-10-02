@@ -283,9 +283,13 @@ CreateFrame = function() return Stub() end
 C_Timer = { After = function() end }
 GameTooltip = Stub()
 
-local bars = {}
+local bars, labels = {}, {}
 ns.Theme = {
-    CreateLabel = function() return Label() end,
+    CreateLabel = function()
+        local label = Label()
+        labels[#labels + 1] = label
+        return label
+    end,
     CreatePanel = function() return Stub() end,
     CreateDivider = function() return Stub() end,
     Unpack = function(key) return key end,
@@ -299,16 +303,22 @@ ns.Theme = {
         bars[#bars + 1] = bar
         return bar
     end,
+    -- Nothing here can be measured, so every coin and the full wording.
+    SetMoneyText = function(label, copper, opts) label:SetText(ns.Util.FormatMoney(copper, opts)) end,
+    FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
 }
 
 local checkboxes, lists = {}, {}
+local searched
 ns.Widgets = {
-    CreateSearchBox = function() return Stub() end,
+    CreateSearchBox = function(_, _, onChange) searched = onChange; return Stub() end,
     CreateCheckbox = function(_, text, onToggle) local box = Stub({ onToggle = onToggle }); checkboxes[text] = box; return box end,
     CreateButton = function() return Stub() end,
     ShowItemTooltip = function() return true end,
     CreateScrollList = function(_, opts)
-        local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end })
+        local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end,
+            -- Read raw: a stub answers any other key with a function.
+            ScrollToTop = function(self) self.toTop = (rawget(self, "toTop") or 0) + 1 end })
         lists[#lists + 1] = list
         return list
     end,
@@ -350,6 +360,40 @@ check("picking a row fills the profit bar", bars[1] and math.abs(bars[1].value -
 
 list.opts.onClick(Find(list.data, 3003), 1, "RightButton")
 check("right-click searches the auction house for it", sent[#sent] == "item3003")
+
+--- The detail pane's note on where the buy price came from.
+local function Note()
+    for _, label in ipairs(labels) do
+        if label.text:find("^The buy price is") then return label.text end
+    end
+    return ""
+end
+
+local function Showing(text)
+    for _, label in ipairs(labels) do
+        if label.text == text then return true end
+    end
+    return false
+end
+
+check("a lone low listing says so, in words short enough to fit", Showing("Buy for (lone low)"))
+check("the note gives the scan's age", Note():find("(10m ago)", 1, true) ~= nil)
+check("and that it may have sold", Note():find("may have sold", 1, true) ~= nil)
+
+-- The list is kept for hours; the age is read when the row is picked.
+ns.Prices.GetAge = function() return 7200 end
+list.opts.onClick(Find(list.data, 3003), 1, "LeftButton")
+check("picked again later, the note's age is read again", Note():find("(2h ago)", 1, true) ~= nil)
+ns.Prices.GetAge = function() return 600 end
+
+-- A new search or filter is a different list, so it starts at the top.
+local tops = rawget(list, "toTop") or 0
+searched("item")
+check("a new search starts the list at the top", rawget(list, "toTop") == tops + 1)
+checkboxes["Only deals over my minimums"].onToggle(false)
+check("so does a filter", rawget(list, "toTop") == tops + 2)
+checkboxes["Only deals over my minimums"].onToggle(true)
+searched("")
 
 config.minProfit = 50
 tab.refresh()

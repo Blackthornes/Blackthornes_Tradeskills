@@ -175,6 +175,12 @@ end
 -- vendor is the only place to get it. A tie goes to the vendor, which is a
 -- sure purchase.
 --
+-- The cheapest posting can be a few units in front of a shelf of dearer
+-- ones, so the market value, the going price across the cheaper part of
+-- what is listed, has to be under the vendor price as well. Going by the
+-- cheapest alone, 3 thread at 8c and the rest at 15c sent all 20 that were
+-- short to the auction house, against 10c each here.
+--
 -- The player's own listings are left out of both the price and the count.
 -- Counted, his own auction was "the cheaper one" and the vendor buy was
 -- skipped when nobody else had any cheaper.
@@ -204,6 +210,8 @@ local function CheaperAtAuction(itemID, stock, shortfall)
     if stock.stack and stock.stack > 1 and stock.bundlePrice then
         vendorUnit = stock.bundlePrice / stock.stack
     end
+
+    if record.market and record.market >= vendorUnit then return false end
 
     return auction < vendorUnit
 end
@@ -416,7 +424,10 @@ function Vendor:OnEnable()
         Vendor.isMerchantOpen = true
 
         -- The merchant list is not always populated on the event itself.
+        -- A vendor closed inside the wait has nothing left to read, and
+        -- attaching then left the button floating where the window had been.
         C_Timer.After(0.2, function()
+            if not Vendor.isMerchantOpen then return end
             Vendor:Scan()
             if ns.UI then ns.UI:AttachToMerchant() end
         end)
@@ -424,6 +435,7 @@ function Vendor:OnEnable()
 
     ns.RegisterEvent(self, "MERCHANT_UPDATE", function()
         C_Timer.After(0.2, function()
+            if not Vendor.isMerchantOpen then return end
             Vendor:Scan()
             if ns.UI then ns.UI:UpdateMerchantButton() end
         end)

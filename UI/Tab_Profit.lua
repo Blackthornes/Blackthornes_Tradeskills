@@ -12,6 +12,9 @@ local UI = ns.UI
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 
+-- The detail pane's summary lines: materials, prices, cut, profit.
+local SUMMARY_ROW_HEIGHT = 17
+
 -- Room at the left of every row for the skill-up star. Always reserved, shown
 -- or not, so the craft names stay in one straight line down the list -- names
 -- that shuffle sideways as the marks come and go are worse than the gap.
@@ -159,7 +162,7 @@ local function UpdateDisenchantCell(cells, analysis)
     local cell = cells.disenchant
 
     if analysis.disenchantValue then
-        cell:SetText(Util.FormatMoney(analysis.disenchantValue, { short = true }))
+        Theme.SetMoneyText(cell, analysis.disenchantValue, { short = true })
         cell:SetTextColor(Theme.Unpack(analysis.disenchantBeatsSale and "profit" or "muted"))
     elseif analysis.disenchantable then
         cell:SetText("no price")
@@ -185,6 +188,19 @@ local function AddOwnerLine(analysis)
 
     GameTooltip:AddLine(("Crafted by %s"):format(analysis.ownerName), 0.7, 0.7, 0.7)
     GameTooltip:Show()
+end
+
+--- A cell's text, or its short form when the full one runs past the cell.
+--- Measured, so a narrow column never ends in "..." on a wide font.
+local function SetFitted(cell, text, short)
+    cell:SetText(text)
+    if not short then return end
+
+    local ok, width = pcall(cell.GetStringWidth, cell)
+    local room = cell:GetWidth()
+    if ok and type(width) == "number" and type(room) == "number" and room > 0 and width > room then
+        cell:SetText(short)
+    end
 end
 
 local function UpdateRow(row, analysis)
@@ -239,7 +255,8 @@ local function UpdateRow(row, analysis)
         cells.margin:SetText("")
         cells.age:SetText("")
 
-        cells.posted:SetText("")
+        -- STOCK stays: what you hold needs no price, and it was blanked
+        -- here on exactly the rows the Keep in stock limit still applies to.
         cells.profit:SetText(analysis.soulbound and "soulbound"
             or analysis.reason == "output has no price data" and "no price"
             or "no data")
@@ -247,13 +264,15 @@ local function UpdateRow(row, analysis)
         return
     end
 
-    cells.cost:SetText(Util.FormatMoney(analysis.totalCost, { short = true }))
+    -- Measured: "12g 34s 56c" is wider than these columns and ended in
+    -- "...". It drops to "12g 35s" instead.
+    Theme.SetMoneyText(cells.cost, analysis.totalCost, { short = true })
     cells.cost:SetTextColor(Theme.Unpack("muted"))
 
-    cells.sells:SetText(Util.FormatMoney(analysis.revenue, { short = true }))
+    Theme.SetMoneyText(cells.sells, analysis.revenue, { short = true })
     cells.sells:SetTextColor(Theme.Unpack("text"))
 
-    cells.profit:SetText(Util.FormatMoney(analysis.profit, { short = true }))
+    Theme.SetMoneyText(cells.profit, analysis.profit, { short = true })
     cells.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
 
     cells.margin:SetText(("%d%%"):format(math.floor((analysis.margin or 0) * 100)))
@@ -269,10 +288,15 @@ local function UpdateRow(row, analysis)
         -- lie. The column says what the price actually is instead: the
         -- materials-plus-markup estimate, which is a different kind of
         -- number from everything else in the list.
-        cells.age:SetText("estimate")
+        SetFitted(cells.age, "estimate", "est.")
         cells.age:SetTextColor(Theme.Unpack("warn"))
+    elseif analysis.priceBasis == "vendor" then
+        -- Valued at what a vendor pays, which no scan's age bears on.
+        cells.age:SetText("vendor")
+        cells.age:SetTextColor(Theme.Unpack("muted"))
     else
-        cells.age:SetText(Util.FormatAge(analysis.age))
+        local age = Util.FormatAge(analysis.age)
+        SetFitted(cells.age, age, age == "just now" and "now" or nil)
         cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
     end
 end
@@ -328,8 +352,11 @@ local function BuildDetail(parent)
 
     local subtitle = Theme.CreateLabel(detail, "small", "muted")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    -- Held inside the pane, so a long line ends in "..." at its edge.
+    -- Held inside the pane and wrapped there. On one line, "You have 12 and
+    -- 4 more queued, your limit" ended in "..."; the materials below move
+    -- down to make room.
     subtitle:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
     local reagentHeading = Theme.CreateHeading(detail, "MATERIALS")
@@ -369,15 +396,17 @@ local function BuildDetail(parent)
     summary:SetPoint("BOTTOMRIGHT", -12, 84)
     summary:SetHeight(141)
     detail.summary = summary
+    detail.summaryRows = {}
 
     local function SummaryRow(index, labelText)
         local label = Theme.CreateLabel(summary, "small", "muted")
-        label:SetPoint("TOPLEFT", 0, -(index - 1) * 17)
+        label:SetPoint("TOPLEFT", 0, -(index - 1) * SUMMARY_ROW_HEIGHT)
         label:SetText(labelText)
 
         local value = Theme.CreateLabel(summary, "small", "text", "RIGHT")
-        value:SetPoint("TOPRIGHT", 0, -(index - 1) * 17)
+        value:SetPoint("TOPRIGHT", 0, -(index - 1) * SUMMARY_ROW_HEIGHT)
 
+        detail.summaryRows[index] = { label = label, value = value }
         return value, label
     end
 
@@ -411,9 +440,13 @@ local function BuildDetail(parent)
 
     detail.limitHint = Theme.CreateLabel(detail, "tiny", "dim")
     detail.limitHint:SetPoint("LEFT", detail.limitBox, "RIGHT", 6, 0)
-    -- Out to the pane's edge: "3 listed, 1 in mail, room for 2" did not fit
-    -- in a fixed 150.
+    -- Out to the pane's edge and onto a second line: "3 listed, 1 in mail,
+    -- room for 2" is wider than the 144 there, and ended in "..." just
+    -- where the room left was. Two lines, centred on the box, clear both
+    -- the buttons below and the summary above; a third would not.
     detail.limitHint:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    detail.limitHint:SetWordWrap(true)
+    if detail.limitHint.SetMaxLines then detail.limitHint:SetMaxLines(2) end
 
     -- Queue controls
     local quantityBox = Theme.CreatePanel(detail, "row")
@@ -447,12 +480,18 @@ local function BuildDetail(parent)
             return
         end
 
-        ns.Queue:Add(state.selected.recipeID, count)
-        ns.Print(("queued %dx %s"):format(count, state.selected.name or "craft"))
+        local recipeID, name = state.selected.recipeID, state.selected.name
+        ns.Queue:Add(recipeID, count)
+        ns.Print(("queued %dx %s"):format(count, name or "craft"))
 
-        -- The next redraw suggests again from what is now queued. Kept as
-        -- it was, a second click queued the full amount over the limit.
-        detail.shownRecipeID = nil
+        -- Suggest again from what is now queued, as Max would. Left as it
+        -- was, a second click queued the full amount again over the limit.
+        -- Set here rather than by the redraw Queue:Add makes, which has
+        -- already run by now and keeps the box as it was for the same craft.
+        local fresh = ns.Profit:Analyse(recipeID)
+        if fresh then
+            quantity:SetText(tostring(ns.Profit.MaxCrafts(fresh.craftableNow, fresh.roomInCrafts)))
+        end
     end, { width = 130, primary = true, height = 24 })
     addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
     detail.addButton = addButton
@@ -501,6 +540,26 @@ local function ReagentRoom(detail)
     -- 6 above the first line (its anchor offset) and a little air above the
     -- summary.
     return math.max(2, math.floor((top - bottom - 6 - 4) / REAGENT_LINE_HEIGHT))
+end
+
+--- Close the summary up around the rows that are hidden. "Your listing" with
+--- nothing listed left a blank line between the prices; now a hidden row's
+--- space goes to the top of the block, and the rows shown stay together just
+--- above the queue controls, in their order.
+local function LayoutSummary(detail)
+    local rows = detail.summaryRows
+    local shown = {}
+
+    for _, row in ipairs(rows) do
+        if row.label:IsShown() then shown[#shown + 1] = row end
+    end
+
+    local skipped = #rows - #shown
+    for position, row in ipairs(shown) do
+        local y = -(skipped + position - 1) * SUMMARY_ROW_HEIGHT
+        row.label:SetPoint("TOPLEFT", 0, y)
+        row.value:SetPoint("TOPRIGHT", 0, y)
+    end
 end
 
 local function UpdateDetail(analysis)
@@ -660,6 +719,12 @@ local function UpdateDetail(analysis)
             detail.rivalLabel:SetText("Never scanned")
             detail.rivalValue:SetText("from materials")
             detail.rivalValue:SetTextColor(Theme.Unpack("warn"))
+        elseif analysis.priceBasis == "vendor" then
+            -- Nothing listed, and the price below is what a vendor pays:
+            -- not an estimate, as "None listed" below would call it.
+            detail.rivalLabel:SetText("None listed")
+            detail.rivalValue:SetText("no rival")
+            detail.rivalValue:SetTextColor(Theme.Unpack("muted"))
         else
             -- Nothing listed means no competition to undercut, so the number
             -- shown is an estimate rather than an observed price.
@@ -685,13 +750,28 @@ local function UpdateDetail(analysis)
             detail.ownValue:Hide()
         end
 
+        -- Valued at what a vendor pays when that beats the listing, which
+        -- then takes no cut and no deposit.
+        local toVendor = analysis.priceBasis == "vendor"
+
+        detail.postLabel:SetText(toVendor and "Vendor pays" or "You post at")
         detail.postValue:SetText(Util.FormatMoney(analysis.unitRevenue))
         detail.postValue:SetTextColor(Theme.Unpack("accent"))
 
-        detail.cutValue:SetText("-" .. Util.FormatMoney(analysis.cut))
+        if toVendor then
+            detail.cutValue:SetText("none")
+            detail.cutValue:SetTextColor(Theme.Unpack("dim"))
+        else
+            detail.cutValue:SetText("-" .. Util.FormatMoney(analysis.cut))
+            detail.cutValue:SetTextColor(Theme.Unpack("text"))
+        end
 
         -- Only known once the item has been priced at an auction house.
-        if analysis.depositKnown then
+        if toVendor then
+            detail.depositLabel:SetText("Deposit")
+            detail.depositValue:SetText("none")
+            detail.depositValue:SetTextColor(Theme.Unpack("dim"))
+        elseif analysis.depositKnown then
             detail.depositLabel:SetText("Deposit")
             detail.depositValue:SetText("-" .. Util.FormatMoney(analysis.deposit))
             detail.depositValue:SetTextColor(Theme.Unpack("muted"))
@@ -724,6 +804,8 @@ local function UpdateDetail(analysis)
             detail.disenchantValue:SetText("materials not scanned")
             detail.disenchantValue:SetTextColor(Theme.Unpack("dim"))
         end
+
+        LayoutSummary(detail)
     end
 
     -- Limit control reflects the override if there is one, else the default.
@@ -791,12 +873,10 @@ local function UpdateDetail(analysis)
         detail.limitHint:Hide()
     end
 
-    -- Crafts, not items: see the Max button above.
-    local suggested = math.max(1, analysis.craftableNow or 1)
-    local suggestedRoom = analysis.roomInCrafts
-    if suggestedRoom then
-        suggested = math.max(1, math.min(suggested, suggestedRoom))
-    end
+    -- Crafts, not items, and what Max would write: 0 once the limit is
+    -- reached. Floored at 1, the box said 1 at "room for 0" and Add queued
+    -- one past the limit.
+    local suggested = ns.Profit.MaxCrafts(analysis.craftableNow, analysis.roomInCrafts)
     if newCraft then detail.quantity:SetText(tostring(suggested)) end
 
     if analysis.atPostLimit then
@@ -1042,6 +1122,11 @@ local function RefreshProfessionOptions()
     -- falls back to "All professions" on its own, and the filter has to
     -- follow it or the list would stay filtered to a choice no longer shown.
     state.profession = dropdown:GetValue()
+
+    -- And named on its face. The dropdown writes that only when the choice
+    -- changes, and "All professions" is already the choice when the tab
+    -- first opens, so the face stayed blank until something was picked.
+    dropdown:SetValue(state.profession)
 end
 
 local function Build(container)

@@ -25,6 +25,12 @@ local PAD = 16
 local ROW = 20
 local MAX_SALE_ROWS = 5
 
+-- A row's width inside the padding; the room an items row's list gets when
+-- its label cannot be measured; and the width of a sale's amount.
+local ROW_WIDTH = WIDTH - 2 * PAD
+local ITEMS_ROOM = ROW_WIDTH - 150
+local SALE_VALUE = 110
+
 local BRIGHT_GOLD = { 1, 0.84, 0.32 }
 
 -- The addon's own sounds, made by tools/make_sounds.py. A file added since
@@ -198,14 +204,25 @@ local function ItemText(itemID, fallback)
     return fallback or ("item " .. itemID)
 end
 
---- "Linen Cloth x20, Wool Cloth x4 and 2 more"
-local function ItemsLine(list)
+--- A sale's name: the item's own where the game knows it, with the stack
+--- size the mail's subject carried ("Linen Cloth (20)" reads "Linen Cloth x20").
+local function SaleText(itemID, name)
+    local text = ItemText(itemID, name)
+    local count = type(name) == "string" and name:match(" %((%d+)%)$")
+    if count and text ~= name then text = ("%s x%s"):format(text, count) end
+    return text
+end
+
+--- "Linen Cloth x20, Wool Cloth x4, 2 more": the first `shown` (2 unless
+--- said) by name, then how many more there are.
+local function ItemsLine(list, shown)
+    shown = math.min(shown or 2, #list)
     local parts = {}
-    for index = 1, math.min(2, #list) do
+    for index = 1, shown do
         local entry = list[index]
         parts[#parts + 1] = ("%s x%d"):format(ItemText(entry.itemID), entry.count)
     end
-    if #list > 2 then parts[#parts + 1] = ("%d more"):format(#list - 2) end
+    if #list > shown then parts[#parts + 1] = ("%d more"):format(#list - shown) end
     return table.concat(parts, ", ")
 end
 
@@ -248,7 +265,9 @@ function MailReport.Lines(haul)
 
     local sales = haul.sales or {}
     if #sales > 0 then
-        Add({ type = "heading", text = "BEST SALE" })
+        -- The record tag sits on the heading, so the best sale's name keeps
+        -- the whole row.
+        Add({ type = "heading", text = "BEST SALE", tag = haul.recordSale and "BEST EVER" or nil })
         Add({ type = "sale", itemID = sales[1].itemID, name = sales[1].name,
             amount = sales[1].amount, best = true, record = haul.recordSale })
 
@@ -285,7 +304,7 @@ function MailReport.Lines(haul)
             local list = items[kind[1]]
             if list and #list > 0 then
                 Add({ type = "items", label = ("%s (%d)"):format(kind[2], Total(list)),
-                    text = ItemsLine(list), color = kind[3] })
+                    text = ItemsLine(list), list = list, color = kind[3] })
             end
         end
 
@@ -338,6 +357,8 @@ function MailReport:Build()
 
     Theme.Fill(frame, "window", 0.97)
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house glow round its edge, flaring as the report opens.
+    Theme.Halo(frame, 10, 0.12)
 
     -- Escape closes it, like the main window.
     tinsert(UISpecialFrames, "BlackthornesTSMailReport")
@@ -481,13 +502,48 @@ local function ResetRow(row)
     row.label:SetPoint("RIGHT", row.value, "LEFT", -8, 0)
     row.label:SetFont(Theme.FONT, Theme.sizes.small, "")
     row.label:SetTextColor(Theme.Unpack("text"))
+    row.label:SetWidth(0)
+    row.label:SetWordWrap(false)
     row.value:SetWidth(0)
+    row.value:SetWordWrap(false)
     row.value:SetText("")
     row.value:SetTextColor(Theme.Unpack("text"))
     row:SetAlpha(1)
 end
 
+--- Whether a label's text fits `room` pixels across. One that cannot be
+--- measured is taken to fit.
+local function Fits(label, room)
+    local ok, width = pcall(label.GetStringWidth, label)
+    return not ok or type(width) ~= "number" or width <= room
+end
+
+--- A label `room` wide that runs onto more lines rather than end in "...".
+-- @return the height the row needs to hold it
+local function WrapToFit(label, room, height, size)
+    if Fits(label, room) then return height end
+
+    label:SetWordWrap(true)
+    local ok, needed = pcall(label.GetStringHeight, label)
+    if ok and type(needed) == "number" and needed > 0 then
+        return math.max(height, math.ceil(needed) + 8)
+    end
+    return height + size + 3
+end
+
+--- As many items by name as fit `room` beside how many more there are, so the
+--- count is never the part cut off.
+-- @return false when even one name and the count need a second line
+local function FitItems(label, list, room)
+    for shown = math.min(2, #list), 1, -1 do
+        label:SetText(ItemsLine(list, shown))
+        if Fits(label, room) then return true end
+    end
+    return false
+end
+
 --- Fill one row from a line of MailReport.Lines.
+-- @return the row's height: taller than usual when its text needs two lines
 local function DrawLine(row, line)
     ResetRow(row)
 
@@ -499,7 +555,15 @@ local function DrawLine(row, line)
         row.label:SetText(line.text)
         row.rule:ClearAllPoints()
         row.rule:SetPoint("LEFT", row.label, "RIGHT", 6, 0)
-        row.rule:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        if line.tag then
+            row.tag:ClearAllPoints()
+            row.tag:SetPoint("BOTTOMRIGHT", 0, 3)
+            row.tag:SetText(line.tag)
+            row.tag:Show()
+            row.rule:SetPoint("RIGHT", row.tag, "LEFT", -6, 0)
+        else
+            row.rule:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        end
         row.rule:Show()
 
     elseif line.type == "money" then
@@ -516,36 +580,47 @@ local function DrawLine(row, line)
     elseif line.type == "sale" then
         Theme.SetItemIcon(row.icon, line.itemID)
         if not line.itemID then row.icon:Hide() end
-        row.label:ClearAllPoints()
-        row.label:SetPoint("LEFT", line.itemID and 22 or 0, 0)
-        row.label:SetPoint("RIGHT", row.value, "LEFT", -8, 0)
-        row.label:SetText(ItemText(line.itemID, line.name))
-        local r, g, b = Util.GetItemQualityColor(line.itemID)
-        if r then row.label:SetTextColor(r, g, b) end
         row.value:SetText(Util.FormatMoney(line.amount))
         row.value:SetTextColor(Theme.Unpack("profit"))
-        row.value:SetWidth(110)
+        row.value:SetWidth(SALE_VALUE)
 
-        if line.best then
-            row.label:SetFont(Theme.FONT, Theme.sizes.normal, "")
-            if line.record then
-                row.tag:ClearAllPoints()
-                row.tag:SetPoint("RIGHT", row.value, "LEFT", -6, 0)
-                row.tag:SetText("BEST EVER")
-                row.tag:Show()
-                row.label:SetPoint("RIGHT", row.tag, "LEFT", -6, 0)
-            end
-        end
+        -- The name has the row up to the amount. Sized before it is
+        -- measured, and given a second line rather than cut off.
+        local left = line.itemID and 22 or 0
+        local room = ROW_WIDTH - left - SALE_VALUE - 8
+        local size = line.best and Theme.sizes.normal or Theme.sizes.small
+        row.label:SetFont(Theme.FONT, size, "")
+        row.label:ClearAllPoints()
+        row.label:SetPoint("LEFT", left, 0)
+        row.label:SetWidth(room)
+        row.label:SetText(SaleText(line.itemID, line.name))
+        local r, g, b = Util.GetItemQualityColor(line.itemID)
+        if r then row.label:SetTextColor(r, g, b) end
+
+        return WrapToFit(row.label, room, line.best and 24 or ROW, size)
 
     else
         row.label:SetText(line.label)
         row.label:SetTextColor(Theme.Unpack(line.color or "text"))
         row.label:ClearAllPoints()
         row.label:SetPoint("LEFT", 0, 0)
-        row.value:SetText(line.text or "")
         row.value:SetTextColor(Theme.Unpack("muted"))
-        row.value:SetWidth(WIDTH - 2 * PAD - 150)
+
+        -- The value has what the label leaves, so a short label gives the
+        -- items more names.
+        local room = ITEMS_ROOM
+        local ok, used = pcall(row.label.GetStringWidth, row.label)
+        if ok and type(used) == "number" and used > 0 then
+            room = ROW_WIDTH - math.ceil(used) - 12
+        end
+        row.value:SetWidth(room)
+
+        if line.list and FitItems(row.value, line.list, room) then return ROW end
+        if not line.list then row.value:SetText(line.text or "") end
+        return WrapToFit(row.value, room, ROW, Theme.sizes.small)
     end
+
+    return line.best and 24 or ROW
 end
 
 --- The character's name for a haul's key. Keys are now the character's GUID
@@ -613,8 +688,8 @@ function MailReport:Show(haul, opts)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", PAD, y)
         row:SetPoint("TOPRIGHT", -PAD, y)
-        row:SetHeight(line.best and 24 or ROW)
-        DrawLine(row, line)
+        local height = DrawLine(row, line)
+        row:SetHeight(height)
         row:Show()
 
         -- Each row fades in after the one above, and a share bar slides out.
@@ -638,7 +713,7 @@ function MailReport:Show(haul, opts)
                 stop = function() row.glow:SetAlpha(0) end })
         end
 
-        y = y - (line.best and 24 or ROW)
+        y = y - height
     end
 
     for index = #lines + 1, #frame.rows do frame.rows[index]:Hide() end
@@ -679,6 +754,17 @@ function MailReport:Animate(haul, hasRibbon, opts)
             frame:SetAlpha(EaseOut(p))
         end,
         stop = function() frame:SetAlpha(1) end })
+
+    -- The glow round the edge flares and settles; brighter for a record.
+    local rest = frame.haloRest
+    if rest then
+        local peak = rest * (record and 5 or 3.2)
+        MailReport.Start({ slot = "report:halo", duration = record and 1.4 or 0.9,
+            apply = function(p)
+                Theme.SetHalo(frame, peak + (rest - peak) * EaseOut(p))
+            end,
+            stop = function() Theme.SetHalo(frame, rest) end })
+    end
 
     local okWidth, width = pcall(frame.header.GetWidth, frame.header)
     width = okWidth and tonumber(width) or WIDTH

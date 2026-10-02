@@ -569,8 +569,9 @@ end
 --- Items in your bags worth listing.
 --
 -- @param opts.includeAll  everything sellable in the bags, not only what one
---   of this account's recipes makes. Reagents a queued craft is waiting on
---   are still held back, because listing those costs real work to undo.
+--   of this account's recipes makes. The number of each reagent a queued
+--   craft is waiting on is still held back, because listing those costs
+--   real work to undo.
 -- @param opts.includeUnpriced  keep items no scan has ever priced, which only
 --   the Post tab wants; every caller that picks something to list on the
 --   player's behalf must not see them.
@@ -608,11 +609,13 @@ function Posting:GetPostable(opts)
     local skipped = {}
 
     for _, itemID in ipairs(order) do
-        local wanted = outputs[itemID] ~= nil
-            or (opts.includeAll and not reserved[itemID])
+        -- Reagents the queue needs are offered too, less the number it needs
+        -- (held back below), as crafted stock is: one queued craft needing
+        -- six Linen Cloth kept all two hundred off the whole-bag lists.
+        local wanted = outputs[itemID] ~= nil or opts.includeAll
 
         if not wanted then
-            skipped[itemID] = reserved[itemID] and "kept for a queued craft" or "not asked for"
+            skipped[itemID] = "not asked for"
         end
 
         if wanted then
@@ -837,6 +840,23 @@ function Posting:OnEnable()
             ns.UI:UpdatePostButton()
         end
     end)
+
+    -- Walking away with a confirmation still up takes it down too. Left up,
+    -- its Yes could list later, back at the auction house, at a price
+    -- checked minutes before.
+    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
+        local data = Posting.confirming
+        Posting.confirming = nil
+
+        local okVisible, visible = pcall(StaticPopup_Visible, "BLACKTHORNES_TS_CONFIRM_POST")
+        if not (okVisible and visible) then return end
+
+        pcall(StaticPopup_Hide, "BLACKTHORNES_TS_CONFIRM_POST")
+        if data then
+            ns.Print(("the auction house closed, so %s was not listed."):format(
+                Util.GetItemLabel(data.itemID)))
+        end
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -956,18 +976,13 @@ function Posting:Post(itemID, quantity, unitPrice)
     -- Refuse to list below what the materials cost. An undercut war can drive
     -- the rival price under your own cost, and following it down loses gold on
     -- every sale.
-    if ns.Config:Get("allowPostingAtALoss") ~= true then
-        local recipeID = ns.Cost:FindRecipeForItem(itemID)
-        local analysis = recipeID and ns.Profit:Analyse(recipeID)
-        local unitCost = analysis and analysis.costPerUnit
-
-        if unitCost and unitPrice < unitCost then
-            ns.Warn(("not listing %s at %s, the materials cost %s"):format(
-                Util.GetItemLabel(itemID),
-                Util.FormatMoney(unitPrice), Util.FormatMoney(unitCost)))
-            ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
-            return false
-        end
+    local unitCost = self:BelowCost(itemID, unitPrice)
+    if unitCost then
+        ns.Warn(("not listing %s at %s, the materials cost %s"):format(
+            Util.GetItemLabel(itemID),
+            Util.FormatMoney(unitPrice), Util.FormatMoney(unitCost)))
+        ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
+        return false
     end
 
     local duration = ns.Config:Get("postDuration") or 2
@@ -1181,8 +1196,10 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     local text = ("Average Market Value: %s\nLowest Market Posting: %s\nPosting at: %s"):format(
         marketText, lowestText, postingText)
 
-    -- The one case worth a fifth line: this listing loses gold.
-    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    -- The one case worth a fifth line: this listing loses gold. Any
+    -- character's recipe, so a bank alt listing the crafter's work is told
+    -- as well.
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
     local analysis = recipeID and ns.Profit:Analyse(recipeID)
     local unitCost = analysis and analysis.costPerUnit
 
@@ -1337,6 +1354,47 @@ function Posting:CheckPrice(itemID, onDone)
     return started and true or false
 end
 
+--- What one of these cost to make, when `price` is under it and listing at a
+--- loss is not allowed; nil when the listing may go ahead on cost.
+function Posting:BelowCost(itemID, price)
+    if not price or ns.Config:Get("allowPostingAtALoss") == true then return nil end
+
+    -- Any character's recipe, so a bank alt holds back a craft the crafter
+    -- mailed it just as the crafter would.
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
+    local analysis = recipeID and ns.Profit:Analyse(recipeID)
+    local unitCost = analysis and analysis.costPerUnit
+
+    if unitCost and price < unitCost then return unitCost end
+    return nil
+end
+
+--- Say why a listing at `price` would be refused, before any dialog asks
+--- about it. Asking "Do you wish to continue?" and refusing after Yes is the
+--- same answer, one click later and after a question it had no use for.
+-- @return true when it would be refused (and was said)
+function Posting:RefusesEarly(itemID, price)
+    -- Under what a vendor pays, or a fraction of market after a dump.
+    local floor, why = self:GetPriceFloor(itemID)
+    if floor and price and price < floor then
+        ns.Warn(("not listing %s at %s: %s. Expected at least %s."):format(
+            Util.GetItemLabel(itemID), Util.FormatMoney(price), why or "the price looks wrong",
+            Util.FormatMoney(floor)))
+        return true
+    end
+
+    -- Under what the materials cost, with selling at a loss turned off.
+    local unitCost = self:BelowCost(itemID, price)
+    if unitCost then
+        ns.Warn(("not listing %s at %s, the materials cost %s"):format(
+            Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(unitCost)))
+        ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
+        return true
+    end
+
+    return false
+end
+
 --- Check the current price, then ask, then post. This is what the buttons call.
 --
 -- The price check is a real auction house search for this one item, not a
@@ -1360,6 +1418,7 @@ function Posting:Request(itemID, quantity, unitPrice)
     local verify = ns.Config:Get("verifyPriceBeforePosting") ~= false
 
     if not verify or not ns.Scanner.isAuctionHouseOpen then
+        if self:RefusesEarly(itemID, unitPrice) then return false end
         self:Confirm(itemID, quantity, unitPrice)
         return true
     end
@@ -1386,6 +1445,11 @@ function Posting:Request(itemID, quantity, unitPrice)
         -- price was never checked. Verifying is on, so nothing is listed on
         -- an unchecked number; the click is cheap to repeat.
         if state == "superseded" then
+            -- Taken over by a newer click on this same item, whose check is
+            -- still out and will bring up the dialog itself. Saying "click
+            -- it again" then was wrong, with the dialog about to appear.
+            if (Posting.requesting[itemID] or 0) > 0 then return end
+
             ns.Print(("the price check for %s was interrupted by another search; nothing was listed. Click it again."):format(
                 Util.GetItemLabel(itemID)))
             return
@@ -1415,17 +1479,10 @@ function Posting:Request(itemID, quantity, unitPrice)
         -- a seller who is not there.
         local price = self:GetPostPrice(itemID) or unitPrice
 
-        -- A price the listing step will refuse (under what a vendor pays, or
-        -- a fraction of market after a rival's dump) is said now. Asking
-        -- "Do you wish to continue?" and refusing after Yes was the same
-        -- answer, one click later and after a question it had no use for.
-        local floor, why = self:GetPriceFloor(itemID)
-        if floor and price and price < floor then
-            ns.Warn(("not listing %s at %s: %s. Expected at least %s."):format(
-                Util.GetItemLabel(itemID), Util.FormatMoney(price), why or "the price looks wrong",
-                Util.FormatMoney(floor)))
-            return
-        end
+        -- A price the listing step will refuse (under what a vendor pays, a
+        -- fraction of market after a rival's dump, or under what it cost to
+        -- make) is said now rather than after Yes.
+        if self:RefusesEarly(itemID, price) then return end
 
         self:Confirm(itemID, quantity, price, { state = state })
     end
