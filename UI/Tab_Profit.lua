@@ -162,7 +162,7 @@ local function UpdateDisenchantCell(cells, analysis)
     local cell = cells.disenchant
 
     if analysis.disenchantValue then
-        cell:SetText(Util.FormatMoney(analysis.disenchantValue, { short = true }))
+        Theme.SetMoneyText(cell, analysis.disenchantValue, { short = true })
         cell:SetTextColor(Theme.Unpack(analysis.disenchantBeatsSale and "profit" or "muted"))
     elseif analysis.disenchantable then
         cell:SetText("no price")
@@ -188,6 +188,19 @@ local function AddOwnerLine(analysis)
 
     GameTooltip:AddLine(("Crafted by %s"):format(analysis.ownerName), 0.7, 0.7, 0.7)
     GameTooltip:Show()
+end
+
+--- A cell's text, or its short form when the full one runs past the cell.
+--- Measured, so a narrow column never ends in "..." on a wide font.
+local function SetFitted(cell, text, short)
+    cell:SetText(text)
+    if not short then return end
+
+    local ok, width = pcall(cell.GetStringWidth, cell)
+    local room = cell:GetWidth()
+    if ok and type(width) == "number" and type(room) == "number" and room > 0 and width > room then
+        cell:SetText(short)
+    end
 end
 
 local function UpdateRow(row, analysis)
@@ -251,13 +264,15 @@ local function UpdateRow(row, analysis)
         return
     end
 
-    cells.cost:SetText(Util.FormatMoney(analysis.totalCost, { short = true }))
+    -- Measured: "12g 34s 56c" is wider than these columns and ended in
+    -- "...". It drops to "12g 35s" instead.
+    Theme.SetMoneyText(cells.cost, analysis.totalCost, { short = true })
     cells.cost:SetTextColor(Theme.Unpack("muted"))
 
-    cells.sells:SetText(Util.FormatMoney(analysis.revenue, { short = true }))
+    Theme.SetMoneyText(cells.sells, analysis.revenue, { short = true })
     cells.sells:SetTextColor(Theme.Unpack("text"))
 
-    cells.profit:SetText(Util.FormatMoney(analysis.profit, { short = true }))
+    Theme.SetMoneyText(cells.profit, analysis.profit, { short = true })
     cells.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
 
     cells.margin:SetText(("%d%%"):format(math.floor((analysis.margin or 0) * 100)))
@@ -273,14 +288,15 @@ local function UpdateRow(row, analysis)
         -- lie. The column says what the price actually is instead: the
         -- materials-plus-markup estimate, which is a different kind of
         -- number from everything else in the list.
-        cells.age:SetText("estimate")
+        SetFitted(cells.age, "estimate", "est.")
         cells.age:SetTextColor(Theme.Unpack("warn"))
     elseif analysis.priceBasis == "vendor" then
         -- Valued at what a vendor pays, which no scan's age bears on.
         cells.age:SetText("vendor")
         cells.age:SetTextColor(Theme.Unpack("muted"))
     else
-        cells.age:SetText(Util.FormatAge(analysis.age))
+        local age = Util.FormatAge(analysis.age)
+        SetFitted(cells.age, age, age == "just now" and "now" or nil)
         cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
     end
 end

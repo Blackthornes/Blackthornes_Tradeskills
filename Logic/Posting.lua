@@ -1196,8 +1196,10 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     local text = ("Average Market Value: %s\nLowest Market Posting: %s\nPosting at: %s"):format(
         marketText, lowestText, postingText)
 
-    -- The one case worth a fifth line: this listing loses gold.
-    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    -- The one case worth a fifth line: this listing loses gold. Any
+    -- character's recipe, so a bank alt listing the crafter's work is told
+    -- as well.
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
     local analysis = recipeID and ns.Profit:Analyse(recipeID)
     local unitCost = analysis and analysis.costPerUnit
 
