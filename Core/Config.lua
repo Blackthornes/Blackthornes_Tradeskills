@@ -167,6 +167,12 @@ local DEFAULTS = {
         -- nothing without Equipment. See Logic/Upgrades.lua.
         showUpgradeArrows = true,
 
+        -- How much the windows move, as Farmer's /farm effects: "full"
+        -- (windows fade up and glow as they open, hovers ease, the tab line
+        -- glides), "subtle" (shorter fades, nothing rises) or "off"
+        -- (everything lands at once). See Motion in UI/Widgets.lua.
+        windowEffects = "full",
+
         -- Play a sound the moment the game says one of your auctions has
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
         saleAlarm = true,

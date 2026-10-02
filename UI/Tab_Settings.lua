@@ -477,7 +477,21 @@ local function Build(outer)
     end, true)
     widgets.upgradeArrows:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local debugRow = CreateRow(container, upgradeRow, "Debug output",
+    local effectsRow = CreateRow(container, upgradeRow, "Window effects",
+        "Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all.")
+
+    widgets.effects = Widgets.CreateDropdown(effectsRow, {
+        { text = "Full", value = "full" },
+        { text = "Subtle", value = "subtle" },
+        { text = "Off", value = "off" },
+    }, function(value)
+        Config:Set("windowEffects", value)
+        -- Anything moving now lands at once rather than finishing slowly.
+        if value == "off" and ns.Motion then ns.Motion:FinishAll() end
+    end, { width = 110 })
+    widgets.effects:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local debugRow = CreateRow(container, effectsRow, "Debug output",
         "Extra messages in chat, to help track down problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
@@ -581,6 +595,7 @@ local function Refresh()
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
+    widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
     widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)
