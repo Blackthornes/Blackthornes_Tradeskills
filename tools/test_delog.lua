@@ -188,6 +188,20 @@ local secret = setmetatable({}, { __eq = function() error("secret") end,
 local ok = pcall(Log.OnCastSent, Log, "UNIT_SPELLCAST_SENT", secret, secret, "cast", SPELL)
 check("a secret unit is ignored, not an error", ok)
 
+-- A loot link the game will not let us read: matching it raises.
+local SECRET_LINK = "|Hitem:10940::|h[secret]|h"
+local realMatch, realLink = string.match, GetLootSlotLink
+string.match = function(text, ...)
+    if text == SECRET_LINK then error("secret value") end
+    return realMatch(text, ...)
+end
+GetLootSlotLink = function() return SECRET_LINK end
+local missedBefore = Log:GetTable().missed
+ok = pcall(Disenchantment, { click = 1, loot = { { STRANGE_DUST, 5 } } })
+string.match, GetLootSlotLink = realMatch, realLink
+check("a secret loot link is missed, not an error", ok and Log:GetTable().missed == missedBefore + 1
+    and Casts(CHEST_KEY) == 4)
+
 print("\nusing your results")
 
 local outcomes, facts = Disenchant:GetOutcomes(1001)
