@@ -95,6 +95,14 @@ commands.db("fresh")
 check("B takes the second fresh start too", Login("B"), false)
 check("and C", Login("C"), false)
 
+-- A copy from before the second fresh start, with fewer sessions than B
+-- now remembers: its older fresh start excuses nothing.
+local second = account
+for _ = 1, 3 do Login("B") end
+account = { probe = { loadCount = 1, freshAt = before.probe.freshAt } }
+check("a copy carrying the first fresh start warns on B", Login("B"), true)
+account = second
+
 print("")
 print("the old file coming back")
 
