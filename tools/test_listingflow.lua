@@ -135,6 +135,7 @@ ns.Inventory = {
 ns.Recipes = { GetAccountWide = function() return { [77] = { recipeID = 77, outputItemID = ITEM } } end }
 ns.Queue = { GetReservedItems = function() return { [LINEN] = 6 } end }
 ns.Cost = { FindRecipeForItem = function(_, itemID) return itemID == ITEM and 77 or nil end }
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 ns.Profit = {
     ChoosePostPrice = function() return 300, "undercut" end,      -- 3s each
     Analyse = function() return { costPerUnit = 500 } end,         -- 5s to make

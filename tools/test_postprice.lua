@@ -37,6 +37,7 @@ time = time or os.time
 -- tools/test_silverstep.lua is where that rule is checked.
 ns.Scanner = { IsCommodity = function() return true end }
 ns.Cost = { FindRecipeForItem = function() return nil end }
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 
 assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)

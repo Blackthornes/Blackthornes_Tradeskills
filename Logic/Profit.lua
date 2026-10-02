@@ -74,7 +74,8 @@ function Profit:DeriveFromMaterials(itemID, knownCost)
     if not itemID then return nil end
     if ns.Config:Get("priceUnscannedCrafts") == false then return nil end
 
-    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    -- Any character's recipe: an alt's craft is worth as much to sell.
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
     if not recipeID then return nil end
 
     -- Full material value, not the cash-out-of-pocket view: a craft is not
@@ -233,7 +234,7 @@ function Profit:ChoosePostPrice(itemID, knownCost)
         return matchPrice, "match", "the game allows no lower price than the rival's"
     end
 
-    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
     local recipe = recipeID and ns.Recipes:GetAny(recipeID)
     local cost = recipeID and ns.Cost:GetCraftCost(recipeID)
     local profit = ProfitAtPrice(recipe, cost, underPrice)

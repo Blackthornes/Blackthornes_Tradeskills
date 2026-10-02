@@ -45,6 +45,7 @@ ns.Config = {
 }
 ns.db = {}
 ns.Cost = { FindRecipeForItem = function() return nil end }
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 ns.Auctions = { GetPostedCount = function() return 0 end }
 ns.AHQueue = { PRIORITY = { urgent = 10, normal = 50, scan = 90 } }
 

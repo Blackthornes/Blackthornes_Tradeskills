@@ -1357,7 +1357,9 @@ end
 function Posting:BelowCost(itemID, price)
     if not price or ns.Config:Get("allowPostingAtALoss") == true then return nil end
 
-    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    -- Any character's recipe, so a bank alt holds back a craft the crafter
+    -- mailed it just as the crafter would.
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
     local analysis = recipeID and ns.Profit:Analyse(recipeID)
     local unitCost = analysis and analysis.costPerUnit
 
