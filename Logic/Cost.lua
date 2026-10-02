@@ -37,10 +37,13 @@ function Cost:GetReagentUnitCost(itemID)
     local auction = ns.Prices:GetValue(itemID, "lowest")
     local vendor = ns.Vendor:GetUnitPrice(itemID)
 
-    -- A vendor caps what any reagent can cost you. People routinely list
-    -- vendor-sold thread and vials on the auction house for many times the
-    -- shop price, and paying that is a choice, not a cost.
-    if vendor and (not auction or vendor <= auction) then
+    -- Anything a vendor sells costs the vendor price (Trent, 2026-10-02).
+    -- People list vendor-sold thread and vials on the auction house for many
+    -- times the shop price, and paying that is a choice, not a cost. The one
+    -- exception is a shop seen with limited stock: it cannot supply a run of
+    -- crafts, so a cheaper auction price still wins there.
+    local limited = ns.Vendor.IsLimited and ns.Vendor:IsLimited(itemID)
+    if vendor and not (limited and auction and auction < vendor) then
         return vendor, "vendor"
     end
 
@@ -262,8 +265,10 @@ function Cost:GetShortfall(recipeID, craftCount)
         local short = math.max(0, needed - have)
 
         if short > 0 then
-            -- Priced as GetReagentUnitCost prices it, lone low listing aside.
-            local unitCost = ns.Prices:GetValue(reagent.itemID, "lowest")
+            -- Priced as GetReagentUnitCost prices it: the vendor price for
+            -- what a vendor sells, else the auction price, lone low listing
+            -- aside.
+            local unitCost = self:GetReagentUnitCost(reagent.itemID)
 
             missing[#missing + 1] = {
                 itemID = reagent.itemID,
