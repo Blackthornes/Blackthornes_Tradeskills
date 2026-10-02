@@ -788,6 +788,21 @@ check("and lets go of the keyboard", undercut.editBox:HasFocus(), false)
 UI.tabs.settings.refresh()
 check("the next redraw shows it", undercut.editBox.text, "25")
 
+--- The control on the row whose label says `text`, if Settings offers one.
+local function Offered(text)
+    for _, kind in ipairs({ "CreateCheckbox", "CreateNumberBox" }) do
+        for _, control in ipairs(made[kind]) do
+            local label = control:GetParent().strings[1]
+            if label and label.text == text then return control end
+        end
+    end
+end
+
+-- The confirmation's Yes is the click that lists, so there is no switch
+-- to turn it off: one was offered and never did anything.
+check("no switch that does nothing: every listing is confirmed", Offered("Confirm before each listing"), nil)
+check("the price check is still offered", Offered("Check price before listing") ~= nil, true)
+
 ns.db.prices = { Forever = { [1] = {} }, Elsewhere = { [2] = {} } }
 ns.db.lastCappedScanByRealm = { Forever = 900, Elsewhere = 800 }
 local clear = buttons["Clear price data"]
