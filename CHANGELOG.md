@@ -4,6 +4,62 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.21.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- A new look shared with Blackthornes Farmer. Windows wear a soft gold glow
+  that flares as they open, and buttons, tabs, rows, menus, search boxes and
+  checkboxes ease into their hover colours. One gold line glides under the
+  tab you pick, and progress bars glide up. A new "Window effects" setting
+  (Full, Subtle, Off) and `/bts effects` control it.
+- Text fits everywhere: tabs are as wide as their names, money drops to
+  fewer coins instead of ending in "...", long menus scroll, and dropdowns
+  show their choice from the start.
+- Upgrade arrows judge random-suffix gear ("of the Monkey" and so on) as the
+  copy in your bags. The craft pane and sell list redraw their arrows when
+  Blackthornes Equipment's weights or spec change.
+- Pricing: a cheap listing holding most of the auction house's stock is now
+  the price to beat. A quick full scan prices reagents per unit, so Wool
+  Cloth is no longer stored at a whole stack's price. A craft is valued at
+  what a vendor pays when that beats the auction house.
+- An alt's crafts are priced the same as the crafter's, on a bank alt
+  posting them and on the Profit tab with "All characters".
+- Owned materials count as free only for the units you hold, so queued
+  sub-crafts stay queued.
+- Add to queue stops at Keep in stock.
+- Buy materials uses the vendor when a few cheap auction units sit in front
+  of dearer ones, and its button no longer lingers after the vendor closes.
+- The shopping list says "in mail" for materials waiting in the mailbox.
+- The last craft of a run leaves the queue even with the profession window
+  closed.
+- The mailbox report no longer counts returned letters, and stack sales
+  find their item.
+- Sales history no longer records a sale twice or misses a look-alike one.
+- The listed count no longer takes a returned stack off twice, and an alt's
+  old auction readings expire after a day.
+- The bank view's gold total is right, and grey items are valued at vendor
+  price.
+- The Disenchant button only follows the tab on screen, and picks only items
+  worth more disenchanted than sold.
+- A typed LIST price counts when List is clicked, a price under cost is
+  refused before the confirmation, and closing the auction house takes the
+  confirmation down.
+- `/bts import` with a code too long for chat opens the paste window instead
+  of importing it cut short.
+- The missing saved data warning stops on every character after
+  `/bts db fresh`, not just the one it was typed on.
+- The minimap button starts at 170 degrees, clear of Farmer's; a button you
+  already moved stays put.
+- Settings: "Confirm before each listing" is gone, since it never did
+  anything. Every listing is still confirmed.
+- Fixed: Craft buttons ignored clicks after the Open profession button moved
+  between tabs.
+- Fixed: the Settings page grew taller each time it drew.
+- Fixed: a loot link the game hides inside instances could raise an error in
+  the disenchanting log.
+
 ## 0.20.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
