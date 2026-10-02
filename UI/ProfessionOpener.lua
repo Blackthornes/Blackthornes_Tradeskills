@@ -237,6 +237,10 @@ function Opener:Arm(anchor, profession, recipeID)
     local overlay = self:CreateOverlay()
 
     if self.anchor ~= anchor then
+        -- The button it covered until now takes clicks again. Only the
+        -- current one is given them back later, so the Queue tab's Craft
+        -- button stayed dead after the Level Up tab took the secure button.
+        SetAnchorMouse(self.anchor, true)
         self.anchor = anchor
         self.placed = nil
 
