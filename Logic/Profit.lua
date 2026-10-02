@@ -366,6 +366,16 @@ function Profit.MaxCrafts(craftableNow, roomInCrafts)
     return most
 end
 
+--- What one unit listed at a price pays once sold: the price, less the
+--- auction house's cut and the deposits lost to relisting. A deposit not yet
+--- known counts as none, so this never undersells the listing.
+function Profit:NetFromListing(itemID, unitPrice)
+    local cut = ns.Config:Get("auctionCut") or 0.05
+    local deposit = ns.Posting:GetCachedUnitDeposit(itemID) or 0
+    local relists = math.max(1, ns.Config:Get("expectedRelists") or 1)
+    return unitPrice * (1 - cut) - deposit * relists
+end
+
 --- Full profitability breakdown for one recipe.
 function Profit:Analyse(recipeID, characterKey)
     local recipe, owner = ns.Recipes:GetAny(recipeID)
@@ -449,8 +459,14 @@ function Profit:Analyse(recipeID, characterKey)
     -- max(auction, vendor)). Under what a vendor pays, Posting refuses the
     -- listing anyway, so the vendor is the sale that would be made. A craft
     -- shown as a loss and hidden could be making money at the vendor.
+    --
+    -- Compared on what each puts in your pocket, as Vendor Flips compares
+    -- (Izbode's report, 2026-10-02): a listing loses the house's cut and its
+    -- deposit, a vendor pays in full. A 1g listing against a 97s vendor price
+    -- is the vendor's sale, though 1g is the bigger number.
     local vendor = Util.GetVendorSellPrice(recipe.outputItemID)
-    if vendor and (not unitRevenue or vendor > unitRevenue) then
+    if vendor and (not unitRevenue
+            or vendor >= self:NetFromListing(recipe.outputItemID, unitRevenue)) then
         unitRevenue, basis, uncertain = vendor, "vendor", nil
     end
 

@@ -357,23 +357,81 @@ end
 -- they earn no profit.
 function Queue:GetTotals()
     local totals = { crafts = 0, cost = 0, profit = 0, priceable = true }
+    local entries = self:GetEntryCosts()
 
     for _, entry in ipairs(self:GetAll()) do
-        local analysis = ns.Profit:Analyse(entry.recipeID)
+        local priced = entries[entry]
 
         totals.crafts = totals.crafts + entry.quantity
 
         if entry.isDependency then
             -- Counted inside the craft it serves.
-        elseif analysis and analysis.priceable then
-            totals.cost = totals.cost + (analysis.totalCost * entry.quantity)
-            totals.profit = totals.profit + (analysis.profit * entry.quantity)
+        elseif priced then
+            totals.cost = totals.cost + priced.cost
+            totals.profit = totals.profit + priced.profit
         else
             totals.priceable = false
         end
     end
 
     return totals
+end
+
+--- What each queued craft costs and earns for all the times it is queued.
+--
+-- One craft's cost times the count is right unless "Charge market price" is
+-- unticked. Then the materials in the bags are free, but only as many as
+-- there are: 20 bolts in the bags pay for the first bags queued, not for
+-- every one of them, and not again for the next craft in the queue that
+-- uses bolts. So the bags are shared out down the queue, first come first
+-- served, and everything past them costs what it would to buy.
+--
+-- @return { [entry] = { cost = copper, profit = copper } } for every entry
+--   that is not a sub-craft and can be priced
+function Queue:GetEntryCosts()
+    local result = {}
+    local cashView = not ns.Config:Get("valueOwnedMaterials")
+    local bagsLeft = {}
+
+    for _, entry in ipairs(self:GetAll()) do
+        local analysis = not entry.isDependency and ns.Profit:Analyse(entry.recipeID)
+
+        if analysis and analysis.priceable then
+            local count = entry.quantity
+            local cost = analysis.totalCost * count
+
+            if cashView then
+                -- Every line at what it is worth, then the bags taken off.
+                local full = ns.Cost:GetCraftCost(entry.recipeID, nil, nil, { valueOwned = true })
+
+                if full and full.priceable then
+                    cost = full.total * count
+
+                    for _, reagent in ipairs(full.reagents) do
+                        local itemID = reagent.itemID
+                        if bagsLeft[itemID] == nil then
+                            bagsLeft[itemID] = ns.Inventory:GetBagCount(itemID)
+                        end
+
+                        local free = math.min(reagent.quantity * count, bagsLeft[itemID])
+                        if free > 0 then
+                            bagsLeft[itemID] = bagsLeft[itemID] - free
+                            cost = cost - (reagent.unitCost or 0) * free
+                        end
+                    end
+                end
+            end
+
+            -- Profit moves with cost one for one: the sale and its cut are
+            -- the same however the materials were paid for.
+            result[entry] = {
+                cost = cost,
+                profit = analysis.profit * count + analysis.totalCost * count - cost,
+            }
+        end
+    end
+
+    return result
 end
 
 --- Everything the queue needs, minus what is in the bags, aggregated.

@@ -23,6 +23,7 @@ Data\Recipes.lua
 Data\Inventory.lua
 Data\Mail.lua
 Data\Auctions.lua
+Data\VendorPrices.lua
 Data\Vendor.lua
 
 Logic\Cost.lua
