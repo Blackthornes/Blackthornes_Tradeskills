@@ -39,9 +39,13 @@ end
 
 --- A name to search and sort by: the client's, then one the addon saved
 --- itself, then the ID.
+--
+-- `Banks.waiting` is set whenever an item the client has not loaded is met,
+-- here or in UnitWorth, so the bank view knows to draw again once it loads.
 function Banks:GetName(itemID)
     local name = ItemFacts(itemID)
     if name then return name end
+    self.waiting = true
 
     if ns.Disenchant and ns.Disenchant.KnownName then
         local ok, known = pcall(ns.Disenchant.KnownName, ns.Disenchant, itemID)
@@ -54,11 +58,17 @@ end
 --- What one of an item is worth, in copper, or nil when nothing is known.
 --
 -- Grey items are worth what a vendor pays and nothing more; anything else is
--- the better of the auction price and the vendor price.
+-- the better of the auction price and the vendor price. An item the client
+-- has not loaded yet has no quality to go by, so it gets no auction price
+-- until it loads: a grey one was valued at whatever someone had listed it for.
 function Banks:UnitWorth(itemID)
     local vendor = Util.GetVendorSellPrice(itemID)
 
     local _, quality = ItemFacts(itemID)
+    if quality == nil then
+        self.waiting = true
+        return vendor
+    end
     if quality == POOR then return vendor end
 
     local auction
