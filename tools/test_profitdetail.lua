@@ -133,6 +133,7 @@ ns.Theme = {
     AccentStripe = function() return Stub() end,
     CreateItemIcon = function() return Stub() end,
     SetItemIcon = function() end,
+    SetMoneyText = function(label, copper, opts) label:SetText(ns.Util.FormatMoney(copper, opts)) end,
     CreateBar = function() return Stub() end,
     -- Where the MATERIALS heading ends, once the pane is laid out.
     CreateHeading = function() return Stub({ rule = Stub(), GetBottom = function() return headingBottom end }) end,
