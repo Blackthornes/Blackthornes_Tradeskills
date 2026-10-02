@@ -35,9 +35,11 @@ local function CreateRow(row)
     row.name = Theme.CreateLabel(row, "normal", "text")
     row.name:SetPoint("TOPLEFT", 10, -6)
 
+    -- The two lines under the name share the row: professions on the left,
+    -- how fresh the figures are on the right, each fitted to its own width.
     row.professions = Theme.CreateLabel(row, "tiny", "muted")
     row.professions:SetPoint("TOPLEFT", 10, -22)
-    row.professions:SetWidth(280)
+    row.professions:SetWidth(420)
 
     row.gold = Theme.CreateLabel(row, "small", "text", "RIGHT")
     row.gold:SetPoint("TOPRIGHT", -12, -6)
@@ -45,7 +47,7 @@ local function CreateRow(row)
 
     row.freshness = Theme.CreateLabel(row, "tiny", "dim", "RIGHT")
     row.freshness:SetPoint("TOPRIGHT", -12, -23)
-    row.freshness:SetWidth(160)
+    row.freshness:SetWidth(220)
 end
 
 local function UpdateRow(row, entry)
@@ -59,9 +61,17 @@ local function UpdateRow(row, entry)
         end
     end
 
-    row.professions:SetText(#learned > 0
-        and table.concat(learned, "  ·  ")
-        or "no professions recorded")
+    -- Every profession when they fit, else the first few and how many more
+    -- (the row's tooltip lists them all), rather than a line cut off.
+    local texts = {}
+    for count = #learned, 1, -1 do
+        local shown = table.concat(learned, "  ·  ", 1, count)
+        texts[#texts + 1] = count < #learned
+            and ("%s  ·  +%d more"):format(shown, #learned - count) or shown
+    end
+
+    local professions = Theme.FitText(row.professions, #texts > 0 and texts or { "no professions recorded" })
+    row.professionsCut = #learned > 0 and professions ~= texts[1] and learned or nil
 
     row.gold:SetText(entry.gold and Util.FormatMoney(entry.gold, { short = true }) or "--")
 
@@ -70,11 +80,23 @@ local function UpdateRow(row, entry)
         row.freshness:SetTextColor(Theme.Unpack("profit"))
     else
         local age = entry.inventoryAt and (time() - entry.inventoryAt)
-        row.freshness:SetText(age
-            and ("%d recipes  ·  seen %s"):format(entry.recipeCount, Util.FormatAgeAgo(age))
-            or ("%d recipes  ·  bags never read"):format(entry.recipeCount))
+        local seen = age and ("seen " .. Util.FormatAgeAgo(age)) or "bags never read"
+        Theme.FitText(row.freshness, { ("%d recipes  ·  %s"):format(entry.recipeCount, seen), seen })
         row.freshness:SetTextColor(Theme.Unpack("dim"))
     end
+end
+
+--- A row whose professions did not all fit lists every one of them.
+local function ShowRowTooltip(row, entry)
+    local learned = rawget(row, "professionsCut")
+    if not learned then return end
+
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:SetText(entry.name or "", 1, 1, 1)
+    for _, line in ipairs(learned) do
+        GameTooltip:AddLine(line, 0.7, 0.7, 0.7)
+    end
+    GameTooltip:Show()
 end
 
 --------------------------------------------------------------------------------
@@ -92,9 +114,12 @@ local function BuildDetail(parent)
     title:SetPoint("TOPRIGHT", -12, -12)
     detail.title = title
 
+    -- Realm, gold and recipes can be wider than the pane; it wraps to a
+    -- second line rather than being cut off, and the list below moves down.
     local subtitle = Theme.CreateLabel(detail, "small", "muted")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
     subtitle:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -4)
+    subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
     local heading = Theme.CreateLabel(detail, "tiny", "dim")
@@ -210,10 +235,14 @@ local function UpdateDetail(entry)
     local record = ns.db.characters[entry.key]
     local ranked = {}
 
-    for recipeID in pairs((record and record.recipes) or {}) do
-        local analysis = ns.Profit:Analyse(recipeID, entry.key)
-        if analysis and analysis.priceable then
-            ranked[#ranked + 1] = analysis
+    -- Crafts of a profession the character dropped are left out, as the
+    -- Profit tab leaves them out: kept in the saved data, but not makeable.
+    for recipeID, recipe in pairs((record and record.recipes) or {}) do
+        if not ns.Recipes:IsDropped(recipe, entry.key) then
+            local analysis = ns.Profit:Analyse(recipeID, entry.key)
+            if analysis and analysis.priceable then
+                ranked[#ranked + 1] = analysis
+            end
         end
     end
 
@@ -243,7 +272,8 @@ local function UpdateDetail(entry)
             line.name:SetTextColor(Theme.Unpack(
                 analysis.craftableNow > 0 and "text" or "muted"))
 
-            line.profit:SetText(Util.FormatMoney(analysis.profit, { short = true }))
+            -- Measured into its narrow column, which "4g 12s 38c" overran.
+            Theme.SetMoneyText(line.profit, analysis.profit, { short = true })
             line.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
             line:Show()
         end
@@ -413,6 +443,9 @@ local function BuildCharacters(container)
             state.selected = entry
             UpdateDetail(entry)
         end,
+
+        onEnter = ShowRowTooltip,
+        onLeave = function() GameTooltip:Hide() end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     list:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 28)

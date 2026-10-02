@@ -398,19 +398,28 @@ function DisenchantLog:OnLootReady()
     local any = false
 
     for slot = 1, slots do
-        local gotLink, link = pcall(GetLootSlotLink, slot)
-        local materialID = gotLink and type(link) == "string"
-            and tonumber(link:match("item:(%d+)")) or nil
+        -- Matched and counted inside the pcall too: in an instance the client
+        -- can hand out a link or a count that raises when it is read. The ID
+        -- is copied in there (the `+ 0`), so it is a plain number after.
+        local gotLink, materialID = pcall(function()
+            local link = GetLootSlotLink(slot)
+            local id = type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
+            return id and id + 0
+        end)
+        if not gotLink then materialID = nil end
 
         if not materialID or not ns.Disenchant:IsMaterial(materialID) then
             self:Miss("the loot was not enchanting materials")
             return
         end
 
-        local gotInfo, _, _, quantity = pcall(GetLootSlotInfo, slot)
-        quantity = gotInfo and tonumber(quantity) or 1
+        local gotInfo, quantity = pcall(function()
+            local _, _, count = GetLootSlotInfo(slot)
+            return math.max(1, tonumber(count) or 1)
+        end)
+        if not gotInfo then quantity = 1 end
 
-        results[materialID] = (results[materialID] or 0) + math.max(1, quantity)
+        results[materialID] = (results[materialID] or 0) + quantity
         any = true
 
         local source = LootSourceItem(slot)

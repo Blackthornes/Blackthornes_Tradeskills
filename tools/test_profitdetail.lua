@@ -133,6 +133,7 @@ ns.Theme = {
     AccentStripe = function() return Stub() end,
     CreateItemIcon = function() return Stub() end,
     SetItemIcon = function() end,
+    SetMoneyText = function(label, copper, opts) label:SetText(ns.Util.FormatMoney(copper, opts)) end,
     CreateBar = function() return Stub() end,
     -- Where the MATERIALS heading ends, once the pane is laid out.
     CreateHeading = function() return Stub({ rule = Stub(), GetBottom = function() return headingBottom end }) end,
@@ -176,7 +177,8 @@ local analyses = {
       ownerName = "Voldar Ashenmoor", ownerShortName = "Voldar A.", isMine = true },
 }
 
-ns.Profit = { GetRanked = function() return analyses end, Analyse = function() return analyses[1] end }
+ns.Profit = { GetRanked = function() return analyses end, Analyse = function() return analyses[1] end,
+              MaxCrafts = function(craftableNow) return math.max(1, craftableNow or 1) end }
 ns.Recipes = { Count = function() return 1 end, GetAll = function() return {} end,
                GetAccountWide = function() return {} end, IsDropped = function() return false end }
 ns.Prices = { Count = function() return 1 end }

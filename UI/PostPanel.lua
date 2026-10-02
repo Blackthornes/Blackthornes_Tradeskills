@@ -87,6 +87,20 @@ local function TypingInList(list)
     end
     return false
 end
+
+--- Enter whatever is half-typed in a LIST box of this list, as Enter would.
+--
+-- Clicking a button does not take the keyboard from a box, so a number typed
+-- and not yet entered was still waiting when List was clicked: the old
+-- amount was listed, often the whole stack, with the new one on screen.
+local function CommitTyping(list)
+    for _, row in ipairs((list and list.rows) or {}) do
+        if row.quantity and BeingTyped(row.quantity) then
+            row.quantity.editBox:ClearFocus()
+        end
+    end
+end
+
 local function CreateRow(row)
     -- The item's icon at the start of the name line, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 13)
@@ -104,6 +118,7 @@ local function CreateRow(row)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -17)
 
     row.post = Widgets.CreateButton(row, "List", function()
+        CommitTyping(PostPanel.list)
         if not row.data then return end
 
         ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
@@ -145,6 +160,27 @@ end
 PostPanel._DisenchantFor = DisenchantFor
 PostPanel._TypingInList = TypingInList
 
+--- Whether a row's detail line runs past the room it has. False when it
+--- cannot be measured, so nothing is shortened on a guess.
+local function DetailTooWide(row)
+    local label = row.detail
+    -- Theme.TextWidth, because a label's own GetStringWidth can stop at the
+    -- label's width, and then nothing is ever too wide.
+    local width = Theme.TextWidth(label)
+    if not width then return false end
+
+    local room = label:GetWidth()
+    if type(room) ~= "number" or room <= 0 then
+        -- Not laid out yet: the room its anchors will give it.
+        local rowWidth = row:GetWidth()
+        room = type(rowWidth) == "number" and (rowWidth - 8 - TEXT_INSET) or nil
+    end
+
+    return room ~= nil and room > 0 and width > room
+end
+
+PostPanel._DetailTooWide = DetailTooWide
+
 --- Why a line is a loss, in words the player can act on.
 local function LossText(line)
     if line.lossReason == "vendor" then
@@ -161,31 +197,46 @@ function UpdateRow(row, line)
 
     -- Not while it is being typed into: overwriting someone mid-number is how
     -- a field ends up refusing to accept what they meant.
-    if not BeingTyped(row.quantity) then
+    -- A reused row now showing another item drops the half-typed number,
+    -- though: it was for the item that scrolled away, and pressing Enter
+    -- would have set that many of this one. The Queue tab does the same.
+    local typing = BeingTyped(row.quantity)
+    if not typing or row.boundItemID ~= line.itemID then
         row.quantity:SetLimits(1, math.max(1, maxQuantity))
         row.quantity:SetValue(line.postQuantity or maxQuantity, true)
+        if typing then row.quantity.editBox:ClearFocus() end
     end
+    row.boundItemID = line.itemID
 
     -- Quantity and unit price on one line: together they are the decision,
     -- and a commodity posting 63 at once is worth noticing before clicking.
     -- Listing part of a stack says so, since "7 @ 6c" out of 20 in the bag
     -- reads the same as all of them otherwise.
-    local detail = ("%d%s @ %s  =  %s"):format(
+    local each = ("%d%s @ %s"):format(
         line.postQuantity,
         line.postQuantity < maxQuantity and (" of " .. maxQuantity) or "",
-        Util.FormatMoney(line.unitPrice, { noColor = true, short = true }),
-        Util.FormatMoney(line.postTotal or 0, { noColor = true, short = true }))
+        Util.FormatMoney(line.unitPrice, { noColor = true, short = true }))
+    local total = "  =  " .. Util.FormatMoney(line.postTotal or 0, { noColor = true, short = true })
 
     -- Beside the price, so selling and disenchanting read against each
     -- other: green when disenchanting one is worth more than listing it.
     local disenchant, beats = DisenchantFor(line)
+    local de = ""
     if disenchant then
-        local text = "DE " .. Util.FormatMoney(disenchant, { noColor = true, short = true })
-        if beats then text = ("|c%s%s|r"):format(ns.COLORS.profit, text) end
-        detail = detail .. "   " .. text
+        de = "   DE " .. Util.FormatMoney(disenchant, { noColor = true, short = true })
+        if beats then de = ("|c%s%s|r"):format(ns.COLORS.profit, de) end
     end
 
-    row.detail:SetText(detail)
+    -- Measured, and shortened rather than cut off: with gold-sized prices
+    -- the end of the line ran under the LIST box. The total goes first when
+    -- disenchanting wins (that green is the point), the disenchant value
+    -- first otherwise; the tooltip has both.
+    row.detail:SetText(each .. total .. de)
+
+    if DetailTooWide(row) then
+        row.detail:SetText(beats and (each .. de) or (each .. total))
+        if DetailTooWide(row) then row.detail:SetText(each) end
+    end
 
     if line.atALoss then
         row.name:SetTextColor(Theme.Unpack("loss"))
@@ -270,6 +321,8 @@ function PostPanel:Build()
 
     Theme.Fill(frame, "window")
     Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house glow round its edge, flaring as it opens.
+    Theme.Halo(frame, 8, 0.08)
 
     local header, title = ns.Collapse.CreateHeader(frame, "Ready to sell")
     self.title = title
@@ -568,6 +621,9 @@ function PostPanel:Redock()
         frame:Show()
         self:ApplyHeight(true)
         self:Refresh()
+        -- Fades in where it docked; it never rises, since it sits beside
+        -- another window.
+        if ns.Motion then ns.Motion:Open(frame, 0) end
     end
 end
 
@@ -631,9 +687,12 @@ function PostPanel:Attach()
 
     self:ApplyHeight(true)
 
+    local opening = not frame:IsShown()
     frame:Show()
     self:Redock()
     self:Refresh()
+
+    if opening and ns.Motion then ns.Motion:Open(frame, 0) end
 end
 
 --- The height to be right now: the title strip when collapsed, otherwise as
@@ -754,7 +813,10 @@ function PostPanel:ShoppingSummary(lines)
         return "You have everything the queue needs.", 0
     end
 
-    local cost = ns.Queue:GetShoppingTotal()
+    -- From the lines in hand. Asked for on its own, the total built the whole
+    -- list again on every one-second tick, which the cache above is there
+    -- to stop.
+    local cost = ns.Queue:GetShoppingTotal(lines)
     return ("%d material%s to buy, about %s"):format(
         short, short == 1 and "" or "s",
         Util.FormatMoney(cost or 0, { short = true })), short

@@ -45,6 +45,7 @@ ns.Config = {
 }
 ns.db = {}
 ns.Cost = { FindRecipeForItem = function() return nil end }
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 ns.Auctions = { GetPostedCount = function() return 0 end }
 ns.AHQueue = { PRIORITY = { urgent = 10, normal = 50, scan = 90 } }
 
@@ -147,6 +148,7 @@ check("no market value reads none", unknown[1] == "Average Market Value: none")
 
 -- Listing below what it cost to make: the one extra line allowed.
 ns.Cost.FindRecipeForItem = function() return 1 end
+ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 ns.Profit.Analyse = function() return { costPerUnit = 600 } end
 local loss = lines(Posting:BuildConfirmText(3530, 1, 240, { state = "fresh" }))
 check("a loss adds one line", #loss == 5 and loss[4]:find("Below the 600 it cost to make", 1, true) ~= nil)

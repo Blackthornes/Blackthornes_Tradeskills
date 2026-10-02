@@ -74,7 +74,8 @@ function Profit:DeriveFromMaterials(itemID, knownCost)
     if not itemID then return nil end
     if ns.Config:Get("priceUnscannedCrafts") == false then return nil end
 
-    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    -- Any character's recipe: an alt's craft is worth as much to sell.
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
     if not recipeID then return nil end
 
     -- Full material value, not the cash-out-of-pocket view: a craft is not
@@ -233,7 +234,7 @@ function Profit:ChoosePostPrice(itemID, knownCost)
         return matchPrice, "match", "the game allows no lower price than the rival's"
     end
 
-    local recipeID = ns.Cost:FindRecipeForItem(itemID)
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
     local recipe = recipeID and ns.Recipes:GetAny(recipeID)
     local cost = recipeID and ns.Cost:GetCraftCost(recipeID)
     local profit = ProfitAtPrice(recipe, cost, underPrice)
@@ -444,6 +445,15 @@ function Profit:Analyse(recipeID, characterKey)
     local unitRevenue, basis, _, uncertain =
         self:ChoosePostPrice(recipe.outputItemID, cost)
 
+    -- Worth whichever pays more, that listing or a vendor (Trent's rule:
+    -- max(auction, vendor)). Under what a vendor pays, Posting refuses the
+    -- listing anyway, so the vendor is the sale that would be made. A craft
+    -- shown as a loss and hidden could be making money at the vendor.
+    local vendor = Util.GetVendorSellPrice(recipe.outputItemID)
+    if vendor and (not unitRevenue or vendor > unitRevenue) then
+        unitRevenue, basis, uncertain = vendor, "vendor", nil
+    end
+
     analysis.priceBasis = basis
     -- Set when the price above is the materials-plus-markup estimate rather
     -- than anything the auction house said. Every display of the number
@@ -511,7 +521,10 @@ function Profit:Analyse(recipeID, characterKey)
     end
     analysis.revenue = unitRevenue * yield
 
-    local auctionCut = ns.Config:Get("auctionCut") or 0.05
+    -- A vendor takes no cut and asks no deposit.
+    local toVendor = basis == "vendor"
+
+    local auctionCut = toVendor and 0 or (ns.Config:Get("auctionCut") or 0.05)
     analysis.cut = analysis.revenue * auctionCut
     analysis.netRevenue = analysis.revenue - analysis.cut
 
@@ -521,10 +534,10 @@ function Profit:Analyse(recipeID, characterKey)
     -- The deposit is paid up front and lost on every listing that does not
     -- sell, so it is a real cost of selling. Ignoring it overstates profit on
     -- every single craft.
-    local unitDeposit = ns.Posting:GetCachedUnitDeposit(recipe.outputItemID)
+    local unitDeposit = not toVendor and ns.Posting:GetCachedUnitDeposit(recipe.outputItemID) or nil
     local relists = ns.Config:Get("expectedRelists") or 1
 
-    analysis.depositKnown = unitDeposit ~= nil
+    analysis.depositKnown = toVendor or unitDeposit ~= nil
     analysis.deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
 
     analysis.profit = analysis.netRevenue - cost.total - analysis.deposit
@@ -803,7 +816,16 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
 
     ns.PrintRaw(("  material cost   %s"):format(Util.FormatMoney(analysis.totalCost)))
 
-    if analysis.undercut then
+    if analysis.priceBasis == "vendor" then
+        -- Said before the number: this one is not going to the auction house.
+        if analysis.undercut then
+            ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))
+        end
+        ns.PrintRaw(("  |c%sa vendor pays more than a listing would, so it is valued at that|r"):format(
+            ns.COLORS.profit))
+        ns.PrintRaw(("  vendor pays     %s  (makes %.1f)"):format(
+            Util.FormatMoney(analysis.unitRevenue), analysis.yield))
+    elseif analysis.undercut then
         ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))
         ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
@@ -830,13 +852,17 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
         ns.PrintRaw(("  none listed     posting at market %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     end
-    ns.PrintRaw(("  auction cut     -%s"):format(Util.FormatMoney(analysis.cut)))
-
-    if analysis.depositKnown then
-        ns.PrintRaw(("  deposit         -%s"):format(Util.FormatMoney(analysis.deposit)))
+    if analysis.priceBasis == "vendor" then
+        ns.PrintRaw(("  |c%sno auction cut or deposit on a vendor sale|r"):format(ns.COLORS.muted))
     else
-        ns.PrintRaw(("  |c%sdeposit unknown until you visit an auction house|r")
-            :format(ns.COLORS.muted))
+        ns.PrintRaw(("  auction cut     -%s"):format(Util.FormatMoney(analysis.cut)))
+
+        if analysis.depositKnown then
+            ns.PrintRaw(("  deposit         -%s"):format(Util.FormatMoney(analysis.deposit)))
+        else
+            ns.PrintRaw(("  |c%sdeposit unknown until you visit an auction house|r")
+                :format(ns.COLORS.muted))
+        end
     end
     ns.PrintRaw(("  |c%sprofit          %s|r  (%.0f%% margin, %.0f%% return on cost)"):format(
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),

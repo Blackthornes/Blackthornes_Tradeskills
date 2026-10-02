@@ -84,9 +84,9 @@ local DEFAULTS = {
         -- that moved ten minutes ago is how you end up listed above a rival.
         verifyPriceBeforePosting = true,
 
-        -- Ask before each listing. Posting is irreversible without paying a
-        -- second deposit, and listing can work through a whole bag, so the
-        -- default is to confirm.
+        -- Nothing reads this any more, and Settings no longer offers it: every
+        -- listing is confirmed, as the confirmation's Yes is the click that
+        -- posts (Logic/Posting.lua). Kept so a saved value is never dropped.
         confirmBeforePosting = true,
 
         -- Whether to recommend selling below material cost. Such items are
@@ -166,6 +166,12 @@ local DEFAULTS = {
         -- character playing, as Blackthornes Equipment judges it. Does
         -- nothing without Equipment. See Logic/Upgrades.lua.
         showUpgradeArrows = true,
+
+        -- How much the windows move, as Farmer's /farm effects: "full"
+        -- (windows fade up and glow as they open, hovers ease, the tab line
+        -- glides), "subtle" (shorter fades, nothing rises) or "off"
+        -- (everything lands at once). See Motion in UI/Widgets.lua.
+        windowEffects = "full",
 
         -- Play a sound the moment the game says one of your auctions has
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
@@ -591,12 +597,25 @@ function Config:CheckAccountDataLost(db)
     local loadsNow = (db.probe and db.probe.loadCount) or 0
     local remembered = tonumber(charDb.accountLoads)
 
+    -- The player has started fresh (/bts db fresh) since this character last
+    -- looked, so what it remembers is the data he already let go. Without
+    -- this, every other character raised the warning again on its next login.
+    -- Only a fresh start newer than the one this character took: an older
+    -- copy of the file brought back still carries an older one, and it is
+    -- as much a loss as any.
+    local freshAt = tonumber(db.probe and db.probe.freshAt)
+    local isNewer = freshAt ~= nil and freshAt > (tonumber(charDb.accountFreshAt) or 0)
+    if isNewer then
+        remembered = nil
+    end
+
     if remembered and loadsNow <= remembered then
         self.accountDataLost = { remembered = remembered, now = loadsNow - 1 }
         return
     end
 
     charDb.accountLoads = loadsNow
+    if isNewer then charDb.accountFreshAt = freshAt end
 end
 
 --- Loud on purpose: every logout or /reload saves the file, and the game
@@ -787,6 +806,13 @@ ns.RegisterCommand("db", "show what saved data loaded (/bts db fresh: stop the m
         local charDb = _G.BlackthornesTSCharDB
         if type(charDb) == "table" and ns.db and ns.db.probe then
             charDb.accountLoads = ns.db.probe.loadCount or 0
+
+            -- Marked in the account-wide file as well, so the player's other
+            -- characters take the fresh start too. A time rather than a
+            -- flag: after another loss and another fresh start, characters
+            -- that took the first one have to take this one as well.
+            ns.db.probe.freshAt = time()
+            charDb.accountFreshAt = ns.db.probe.freshAt
         end
         ns.Config.accountDataLost = nil
         ns.Print("starting fresh: the missing saved data warning will not show again.")

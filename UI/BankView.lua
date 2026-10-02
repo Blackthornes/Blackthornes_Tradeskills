@@ -65,7 +65,7 @@ local function NameColor(key)
     return key == current.key and "accent" or "text"
 end
 
--- The running count's frame and the value it last settled on.
+-- The running count's frame and the value on the label right now.
 local counter = { driver = nil, shown = 0 }
 
 --- The gold total runs up to its new value rather than jumping to it.
@@ -75,6 +75,12 @@ local function CountTo(label, prefix, to)
         driver = CreateFrame("Frame", nil, label:GetParent())
         counter.driver = driver
     end
+
+    -- A count still running stops where it is, and the new one starts from
+    -- there. Left running, it finished on the old total after the new one
+    -- was drawn: type a letter in the search and take it out again, and the
+    -- footer kept the filtered total under the whole list.
+    driver:SetScript("OnUpdate", nil)
 
     local from = counter.shown
     if from == to then
@@ -87,11 +93,9 @@ local function CountTo(label, prefix, to)
         elapsed = elapsed + (delta or 0)
         local p = math.min(1, elapsed / duration)
         local eased = 1 - (1 - p) * (1 - p)
-        label:SetText(prefix .. Money(math.floor(from + (to - from) * eased)))
-        if p >= 1 then
-            counter.shown = to
-            self:SetScript("OnUpdate", nil)
-        end
+        counter.shown = p >= 1 and to or math.floor(from + (to - from) * eased)
+        label:SetText(prefix .. Money(counter.shown))
+        if p >= 1 then self:SetScript("OnUpdate", nil) end
     end)
 end
 
@@ -224,6 +228,48 @@ local function HideLines(detail)
     detail.more:SetText("")
 end
 
+-- Across the pane inside its padding, for the title and the line under it;
+-- less the icon beside them once an item is picked.
+local TITLE_ROOM = DETAIL_WIDTH - 24
+local ITEM_TITLE_ROOM = TITLE_ROOM - 32 - 8
+
+--- Whether a label's text fits `room` pixels across. One that cannot be
+--- measured is taken to fit.
+local function Fits(label, room)
+    local ok, width = pcall(label.GetStringWidth, label)
+    return not ok or type(width) ~= "number" or width <= room
+end
+
+--- The pane's title in the room it has: its own size, then a size smaller,
+--- then two lines, so a long item name is never cut off.
+local function SetTitle(label, text, room)
+    label:SetWordWrap(false)
+    pcall(label.SetFont, label, Theme.FONT, Theme.sizes.large, "")
+    label:SetText(text)
+    if Fits(label, room) then return end
+
+    pcall(label.SetFont, label, Theme.FONT, Theme.sizes.normal, "")
+    if Fits(label, room) then return end
+
+    label:SetWordWrap(true)
+end
+
+--- "40 held  ·  12g 34s 56c  ·  30s each", with the amounts in fewer coins,
+--- rounded, until the line fits. Measured, so it never ends in "...".
+local function SetItemSubtitle(label, entry, room)
+    for _, parts in ipairs({ false, 2, 1 }) do
+        local function Amount(copper)
+            if not copper then return Util.FormatMoney(nil) end
+            return Util.FormatMoney(copper, { short = true, parts = parts or nil })
+        end
+
+        label:SetText(("%s held  ·  %s%s"):format(
+            Util.Comma(entry.total), Amount(entry.worth),
+            entry.unit and ("  ·  " .. Amount(entry.unit) .. " each") or ""))
+        if Fits(label, room) then return end
+    end
+end
+
 --- No item picked: each bank, what is in it and what it is worth.
 local function ShowOverview(detail, overview)
     HideLines(detail)
@@ -241,7 +287,7 @@ local function ShowOverview(detail, overview)
         if row.worth > best then best = row.worth end
     end
 
-    detail.title:SetText("Every bank")
+    SetTitle(detail.title, "Every bank", TITLE_ROOM)
     detail.subtitle:SetText(("%d of %d banks read  ·  %s"):format(read, #overview, Money(total)))
     detail.heading:SetText("BY CHARACTER")
 
@@ -284,11 +330,9 @@ local function ShowItem(detail, entry)
     detail.title:ClearAllPoints()
     detail.title:SetPoint("TOPLEFT", detail.icon, "TOPRIGHT", 8, 0)
     detail.title:SetPoint("TOPRIGHT", -12, -12)
-    detail.title:SetText(Util.GetItemLabel(entry.itemID))
+    SetTitle(detail.title, Util.GetItemLabel(entry.itemID), ITEM_TITLE_ROOM)
 
-    detail.subtitle:SetText(("%s held  ·  %s%s"):format(
-        Util.Comma(entry.total), Money(entry.worth),
-        entry.unit and ("  ·  " .. Money(entry.unit) .. " each") or ""))
+    SetItemSubtitle(detail.subtitle, entry, ITEM_TITLE_ROOM)
     detail.heading:SetText("WHO HAS IT")
 
     for index, holder in ipairs(entry.holders) do
@@ -341,6 +385,9 @@ function BankView.Refresh()
     if state.character ~= ALL and not names[state.character] then state.character = ALL end
     widgets.character:SetValue(state.character)
 
+    -- Set again by Banks for any item the client has not loaded yet.
+    ns.Banks.waiting = false
+
     local list = ns.Banks:Collect({
         character = state.character ~= ALL and state.character or nil,
         bags = state.bags,
@@ -357,6 +404,7 @@ function BankView.Refresh()
     end
 
     local overview = ns.Banks:Overview()
+    state.waiting = ns.Banks.waiting and true or false
     local anyRead = false
     for _, row in ipairs(overview) do
         if row.bankAt then anyRead = true break end
@@ -500,7 +548,27 @@ function BankView.Build(view)
     detail:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8, -8)
     detail:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
+
+    -- An item the client had not loaded is drawn as "item 1234" with no
+    -- worth. Drawn again once items arrive: a burst of them is one redraw,
+    -- and nothing happens unless something on show was waiting. An item the
+    -- game says does not exist never arrives, and drawing again would only
+    -- ask for it again, so that answer is not a reason to.
+    local redrawQueued = false
+    ns.RegisterEvent(BankView, "GET_ITEM_INFO_RECEIVED", function(_, _, _, success)
+        if success == false then return end
+        if redrawQueued or not state.waiting then return end
+        if not list:IsVisible() then return end
+
+        redrawQueued = true
+        C_Timer.After(0.2, function()
+            redrawQueued = false
+            BankView.Refresh()
+        end)
+    end)
 end
 
---- For the tests: the view's state, so a test can set a filter.
+--- For the tests: the view's state, so a test can set a filter, and what it
+--- drew, so a test can read it back.
 BankView._state = state
+BankView._widgets = widgets

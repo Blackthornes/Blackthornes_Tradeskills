@@ -591,6 +591,14 @@ function Scanner:OnBrowseResults()
         -- landed, which is a request per server reply for as long as the sweep
         -- ran -- the single largest drain on an allowance the player's own
         -- posting needs a share of.
+        --
+        -- A page can land while the last ask for one is still waiting its
+        -- turn, when something else asked for more of the same results.
+        -- Queued again under the same key, the waiting one was replaced and
+        -- its give-up ran, which ended the sweep after that page. It is
+        -- taken out quietly first instead.
+        if ns.AHQueue.Cancel then ns.AHQueue:Cancel("browse-more", true) end
+
         ns.AHQueue:Request({
             name = "browse page",
             key = "browse-more",
@@ -688,6 +696,67 @@ end
 
 Scanner.SplitBrowseRow = SplitBrowseRow
 
+--- Browse rows put together into one reading per item.
+--
+-- An item can come back as several rows, one per item key: gear with a
+-- random suffix ("of the Bear", "of the Eagle") shares one itemID. Recorded a
+-- row at a time, each row overwrote the one before, so the item kept
+-- whichever row came last as its cheapest and its count, and was counted as
+-- scanned once per row. Taken together, the cheapest row is the price and
+-- the counts add up. Whose price each row is still goes through
+-- SplitBrowseRow, row by row.
+--
+-- @param seen optional set, filled with every itemID a row names, priced or not
+-- @return items in the order first seen, each { itemID, price, quantity,
+--   rivalMin, ownMin, ask }, then the rows with no item or price, then the
+--   rows priced past what anyone could pay
+local function CombineBrowseRows(results, seen)
+    local items, byItem = {}, {}
+    local skipped, implausible = 0, 0
+
+    for _, result in ipairs(results) do
+        local itemID = result.itemKey and result.itemKey.itemID
+        local price = result.minPrice
+
+        if itemID and seen then seen[itemID] = true end
+
+        if not (itemID and price and price > 0) then
+            skipped = skipped + 1
+
+        -- A browse row carries one price and nothing to fall back on, so a
+        -- row priced past what anyone could pay is passed over whole
+        -- rather than recorded as what the item is worth.
+        elseif not ns.Prices.IsCredible(price) then
+            implausible = implausible + 1
+
+        else
+            local rivalMin, ownMin, ask = SplitBrowseRow(itemID, price, result.containsOwnerItem)
+
+            local item = byItem[itemID]
+            if not item then
+                item = { itemID = itemID, price = price, quantity = 0 }
+                byItem[itemID] = item
+                items[#items + 1] = item
+            end
+
+            item.price = math.min(item.price, price)
+            item.quantity = item.quantity + (result.totalQuantity or 0)
+            if rivalMin and (not item.rivalMin or rivalMin < item.rivalMin) then item.rivalMin = rivalMin end
+            if ownMin and (not item.ownMin or ownMin < item.ownMin) then item.ownMin = ownMin end
+            item.ask = item.ask or ask
+        end
+    end
+
+    -- A row at your own price wants an exact search only while no rival is
+    -- known. Another row of the item naming one settles it, the same way a
+    -- rival already on record does in SplitBrowseRow.
+    for _, item in ipairs(items) do
+        item.ask = item.ask and item.rivalMin == nil
+    end
+
+    return items, skipped, implausible
+end
+
 --- @param opts.ended true when paging reached its natural end, so this was
 ---   a full scan rather than one cut short.
 --- @param opts.capped true when paging stopped at the page limit, so the
@@ -706,40 +775,22 @@ function Scanner:CommitBrowseResults(results, opts)
     self.isBrowsing = false
     self.isScanning = false
 
-    local recorded, skipped, implausible = 0, 0, 0
+    local recorded = 0
     local now = time()
     local unsettled = {}
     local seen = {}
 
-    for _, result in ipairs(results) do
-        local itemID = result.itemKey and result.itemKey.itemID
-        local price = result.minPrice
+    local items, skipped, implausible = CombineBrowseRows(results, seen)
 
-        if itemID then seen[itemID] = true end
+    for _, item in ipairs(items) do
+        -- A browse row is one price, not a book, so market and minimum are
+        -- the same figure here: the item's cheapest row.
+        ns.Prices:Record(item.itemID, item.price, item.price, item.quantity, now,
+            item.rivalMin, item.ownMin)
 
-        if itemID and price and price > 0 then
-            -- A browse row carries one price and nothing to fall back on, so a
-            -- row priced past what anyone could pay is passed over whole
-            -- rather than recorded as what the item is worth.
-            if not ns.Prices.IsCredible(price) then
-                implausible = implausible + 1
-            else
-                -- A browse row is one price, not a book, so market and minimum
-                -- are the same figure here. Whose price it is goes through
-                -- SplitBrowseRow, and the reasons are on that function.
-                local rivalMin, ownMin, ask =
-                    SplitBrowseRow(itemID, price, result.containsOwnerItem)
+        if item.ask then unsettled[#unsettled + 1] = item.itemID end
 
-                ns.Prices:Record(itemID, price, price, result.totalQuantity or 0, now,
-                    rivalMin, ownMin)
-
-                if ask then unsettled[#unsettled + 1] = itemID end
-
-                recorded = recorded + 1
-            end
-        else
-            skipped = skipped + 1
-        end
+        recorded = recorded + 1
     end
 
     if skipped > 0 then
@@ -889,8 +940,15 @@ function Scanner:ReadReplicateResults(numItems)
             -- quick scan had stored 83c, and the market was 16 times too high.
             -- A commodity row can hold more than a stack, so the stack-size
             -- guard item auctions use does not apply to it.
+            --
+            -- That includes a commodity nobody has told us is one yet, which
+            -- is most reagents. No item auction holds more than a stack, so a
+            -- row that does is a commodity's. Read as an item auction, the
+            -- stack-size guard kept its whole price as the price of one, and
+            -- Wool Cloth at 1s each was stored at 40s.
             local unitPrice
-            if self:IsCommodity(itemID) then
+            if self:IsCommodity(itemID)
+                or (quantity > 1 and quantity > (Util.GetMaxStackSize(itemID) or quantity)) then
                 commodities[itemID] = true
                 if quantity > 1 and buyoutPrice >= quantity then
                     unitPrice = math.floor(buyoutPrice / quantity + 0.5)
@@ -942,19 +1000,30 @@ function Scanner:ReadReplicateResults(numItems)
 
             -- Market value is an average carried from scan to scan, so the
             -- ones built from whole-row prices would take many scans to come
-            -- down. Once, the first time this reading runs, a commodity it
-            -- priced starts its market afresh from this scan. Its history
-            -- is kept.
-            if ns.db and not ns.db.commodityRowPriceFixed then
-                local table_ = ns.Prices:GetTable()
-                for itemID in pairs(commodities) do
-                    local record = table_ and table_[itemID]
-                    if record and observations[itemID] then record.market = nil end
+            -- down. Once, the first time this reading prices it, a commodity
+            -- starts its market afresh from this scan. Its history is kept.
+            --
+            -- Marked on each price rather than once for the account: prices
+            -- are kept per realm and faction, and one account-wide mark let
+            -- only the first realm scanned start afresh. That old mark,
+            -- commodityRowPriceFixed, is left in the saved data unread.
+            local table_ = ns.Prices:GetTable()
+            for itemID in pairs(commodities) do
+                local record = table_ and table_[itemID]
+                if record and observations[itemID] and not record.rowPriceFixed then
+                    record.market = nil
                 end
-                ns.db.commodityRowPriceFixed = true
             end
 
             local recorded = ns.Prices:CommitScan(observations, now)
+
+            -- After the commit, so a commodity priced for the first time in
+            -- this scan is marked too and never starts afresh later.
+            for itemID in pairs(commodities) do
+                local record = table_ and table_[itemID]
+                if record and observations[itemID] then record.rowPriceFixed = true end
+            end
+
             local elapsed = GetTime() - (self.scanStartedAt or GetTime())
 
             -- The snapshot is the whole auction house, so an item it did not
@@ -1386,21 +1455,14 @@ function Scanner:CapturePassiveBrowse()
 
     local learned = 0
 
-    for _, result in ipairs(results) do
-        local itemID = result.itemKey and result.itemKey.itemID
-        local price = result.minPrice
-
-        if itemID and price and price > 0 and ns.Prices.IsCredible(price) then
-            -- One price per row, not a book, so market and minimum are the
-            -- same figure -- the same reading CommitBrowseResults makes of the
-            -- same rows, ownership included. A row priced past what anyone can
-            -- pay is passed over for the same reason it is there.
-            local rivalMin, ownMin = SplitBrowseRow(itemID, price, result.containsOwnerItem)
-
-            if self:RecordPassive(itemID, price, price, result.totalQuantity or 0,
-                rivalMin, ownMin) then
-                learned = learned + 1
-            end
+    -- One price per item, not a book, so market and minimum are the same
+    -- figure -- the same reading CommitBrowseResults makes of the same rows,
+    -- ownership included and an item's rows taken together. A row priced
+    -- past what anyone can pay is passed over for the same reason it is there.
+    for _, item in ipairs((CombineBrowseRows(results))) do
+        if self:RecordPassive(item.itemID, item.price, item.price, item.quantity,
+            item.rivalMin, item.ownMin) then
+            learned = learned + 1
         end
     end
 

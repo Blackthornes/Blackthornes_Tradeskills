@@ -218,13 +218,24 @@ ns.RegisterCommand("export", "copy your queue and settings to a code", function(
     if ns.UI then ns.UI:ShowTransferDialog("export") end
 end)
 
+-- The chat box holds 255 letters, the command included, and quietly drops
+-- whatever is pasted past that. A cut code still reads as a code: its last
+-- number comes in short, and any section after the cut is missing. So a code
+-- long enough to have been cut is never imported from chat. The room is
+-- reckoned from the longer command, with a few letters spare for spaces.
+local CHAT_ROOM = 255 - #"/blackthorne import " - 5
+
 ns.RegisterCommand("import", "restore your queue and settings from a code", function(args)
     -- Pasting into the box is easier than typing after the command, but accept
     -- both rather than insisting.
     if args and args:gsub("%s", "") ~= "" then
-        local ok, message = ns.Transfer:Import(args)
-        ns.Print(message)
-        return ok
+        if #args < CHAT_ROOM then
+            local ok, message = ns.Transfer:Import(args)
+            ns.Print(message)
+            return ok
+        end
+
+        ns.Print("that code is too long for the chat box, which cuts it short. Paste it into this window instead.")
     end
 
     if ns.UI then ns.UI:ShowTransferDialog("import") end

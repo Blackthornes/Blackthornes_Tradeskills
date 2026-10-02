@@ -64,6 +64,7 @@ ns.Scanner = { IsCommodity = function(_, itemID) return commodities[itemID] == t
 
 ns.Cost = {
     FindRecipeForItem = function(_, itemID) return recipeByOutput[itemID] end,
+    FindAnyRecipeForItem = function(_, itemID) return recipeByOutput[itemID] end,
     GetCraftCost = function(_, recipeID) return craftCost[recipeID] end,
 }
 
