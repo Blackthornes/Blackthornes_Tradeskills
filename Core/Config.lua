@@ -248,22 +248,9 @@ Config.DEFAULTS = DEFAULTS
 -- Keys
 --------------------------------------------------------------------------------
 
-local function SafeUnitName()
-    local ok, name = pcall(UnitName, "player")
-    if ok and name then return name end
-    return "Unknown"
-end
-
-local function SafeRealmName()
-    if type(GetRealmName) == "function" then
-        local ok, realm = pcall(GetRealmName)
-        if ok and realm then return realm end
-    end
-    return "UnknownRealm"
-end
-
--- Called inside a pcall, and a string copied there: in a dungeon the game
--- can hand back a secret value that raises when joined or compared outside.
+-- A plain, non-empty string, or nil. The test and the copy happen inside the
+-- pcall: logging in or reloading inside a dungeon can hand back a name the
+-- addon may not compare or join, and the character key would raise forever.
 local function PlainString(fn, ...)
     local ok, value = pcall(function(...)
         local v = fn(...)
@@ -271,6 +258,17 @@ local function PlainString(fn, ...)
     end, ...)
     if ok then return value end
     return nil
+end
+
+local function SafeUnitName()
+    return PlainString(UnitName, "player") or "Unknown"
+end
+
+local function SafeRealmName()
+    if type(GetRealmName) == "function" then
+        return PlainString(GetRealmName) or "UnknownRealm"
+    end
+    return "UnknownRealm"
 end
 
 local function SafeFaction()

@@ -95,6 +95,18 @@ end
 -- Which item a tooltip is showing
 --------------------------------------------------------------------------------
 
+--- A positive item ID as a plain number, or nil.
+-- type() says "number" even for a value the game will not let the addon read,
+-- and the first comparison or table lookup with one raises. So the test and
+-- a copy happen inside a pcall.
+local function PlainID(value)
+    if type(value) ~= "number" then return nil end
+    local ok, id = pcall(function() if value > 0 then return value + 0 end end)
+    if ok then return id end
+    return nil
+end
+ItemTooltip.PlainID = PlainID
+
 --- The item ID inside an item link, or nil.
 --
 -- A link is `|cff...|Hitem:2589:0:0:...|h[Linen Cloth]|h|r`. Matching on the
@@ -104,8 +116,12 @@ end
 function ItemTooltip.ItemIDFromLink(link)
     if type(link) ~= "string" then return nil end
 
-    local id = link:match("|Hitem:(%d+)") or link:match("^item:(%d+)")
-    if not id then return nil end
+    -- Matched inside a pcall: a link the game will not let the addon read (a
+    -- tooltip in a dungeon) raises when matched, and is simply no item.
+    local ok, id = pcall(function()
+        return link:match("|Hitem:(%d+)") or link:match("^item:(%d+)")
+    end)
+    if not ok or not id then return nil end
 
     return tonumber(id)
 end
@@ -124,8 +140,8 @@ end
 -- as its link and find no item at all. That is what this looks like in game:
 -- an addon that loads, hooks everything, and decorates nothing.
 function ItemTooltip:ItemForTooltip(tooltip, data)
-    local fromData = Field(data, "id")
-    if type(fromData) == "number" then return fromData end
+    local fromData = PlainID(Field(data, "id"))
+    if fromData then return fromData end
 
     local displayed = Field(_G.TooltipUtil, "GetDisplayedItem")
 
@@ -133,7 +149,8 @@ function ItemTooltip:ItemForTooltip(tooltip, data)
         local ok, _, link, id = pcall(displayed, tooltip)
 
         if ok then
-            if type(id) == "number" then return id end
+            local plainID = PlainID(id)
+            if plainID then return plainID end
 
             local fromLink = self.ItemIDFromLink(link)
             if fromLink then return fromLink end
@@ -487,7 +504,15 @@ end
 
 --- The entry point every hook funnels into, so the counting is in one place.
 function ItemTooltip:OnTooltip(tooltip, data, source, count)
-    local outcome = self:Decorate(tooltip, data, count)
+    -- A backstop: whatever this tooltip holds, a value the game will not let
+    -- the addon read costs the price line, never a Lua error on hover. And
+    -- `writing` is cleared, or one error would silently stop every tooltip
+    -- for the rest of the session.
+    local ok, outcome = pcall(self.Decorate, self, tooltip, data, count)
+    if not ok then
+        self.writing = false
+        return "noitem"
+    end
 
     if outcome == "valued" or outcome == "unscanned" then
         self.fired[source] = (self.fired[source] or 0) + 1
