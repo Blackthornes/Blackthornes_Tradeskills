@@ -428,6 +428,34 @@ function Util.UnitPriceFromStack(itemID, totalPrice, quantity)
     return math.floor(totalPrice / quantity)
 end
 
+--- The random suffix in an item link ("of the Wolf"), or nil for none.
+--
+-- The eighth field of item:ID:enchant:gem1:gem2:gem3:gem4:suffix:... in the
+-- link. Negative numbers are suffixes too, so anything but 0 counts.
+local function ParseSuffix(link)
+    if type(link) ~= "string" then return nil end
+    local body = link:match("item:([%-%d:]+)")
+    if not body then return nil end
+
+    local fields, index = {}, 0
+    for field in (body .. ":"):gmatch("([^:]*):") do
+        index = index + 1
+        fields[index] = field
+        if index >= 7 then break end
+    end
+
+    local suffix = tonumber(fields[7] or "")
+    if not suffix or suffix == 0 then return nil end
+    return suffix
+end
+
+function Util.LinkSuffix(link)
+    -- Inside a pcall: a link read in an instance can be a secret value that
+    -- raises when it is matched.
+    local ok, suffix = pcall(ParseSuffix, link)
+    return ok and suffix or nil
+end
+
 --- A player-readable label for an item: its clickable link when the client has
 -- the item cached, its name otherwise, and only as a last resort the raw ID.
 --

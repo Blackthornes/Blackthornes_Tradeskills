@@ -1494,6 +1494,28 @@ function UI:SearchAuctionHouse(itemID)
     return true
 end
 
+--- Alt-click any item, in the bags, a chat link or a loot window, with the
+--- auction house open, and the house searches for it (kronosbest's request,
+--- 2026-10-02: "a global action to search the auction house for that item").
+--- The search is by name, so every suffix of "Lead Band" comes back.
+---
+--- Hooked after Blizzard's own handler, so its shift and ctrl clicks are
+--- untouched; an Alt-click there does nothing of Blizzard's own.
+function UI:HookAltClickSearch()
+    if self.altClickHooked or type(hooksecurefunc) ~= "function" then return end
+    if type(_G.HandleModifiedItemClick) ~= "function" then return end
+    self.altClickHooked = true
+
+    hooksecurefunc("HandleModifiedItemClick", function(link)
+        if not ns.Scanner.isAuctionHouseOpen then return end
+        if not (IsAltKeyDown and IsAltKeyDown()) then return end
+        if (IsShiftKeyDown and IsShiftKeyDown()) or (IsControlKeyDown and IsControlKeyDown()) then return end
+
+        local ok, itemID = pcall(function() return tonumber(link:match("item:(%d+)")) end)
+        if ok and itemID then UI:SearchAuctionHouse(itemID) end
+    end)
+end
+
 --- Re-seat the minimap button at its stored angle, using the current radius.
 function UI:RepositionMinimapButton()
     local button = self.minimapButton
@@ -1510,6 +1532,7 @@ end
 function UI:OnEnable()
     self:Build()
     self:BuildMinimapButton()
+    self:HookAltClickSearch()
 
     -- The minimap's final size is not always settled at login, and other addons
     -- resize it afterwards, so re-seat the button once things have calmed down.
