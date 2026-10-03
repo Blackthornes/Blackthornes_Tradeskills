@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.24.2
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- The quick full scan waits up to 30 seconds for the auction house to
+  answer instead of giving up after six and scanning page by page. If the
+  answer comes even later, it's still used. `/bts scanstatus` shows how long
+  the last quick scan took to answer.
+
 ## 0.24.1
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
