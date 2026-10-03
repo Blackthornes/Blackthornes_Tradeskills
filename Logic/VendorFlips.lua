@@ -159,3 +159,29 @@ ns.RegisterCommand("vendordeals", "say why each item on the Vendor Flips tab is 
                 record.ownMin and Util.FormatMoney(record.ownMin, { noColor = true }) or "none"))
     end
 end)
+
+--------------------------------------------------------------------------------
+-- /bts sellprice: what each source says a vendor pays for one item
+--------------------------------------------------------------------------------
+
+ns.RegisterCommand("sellprice", "say what the item info and the tooltip each say a vendor pays for an item", function(input)
+    input = type(input) == "string" and input or ""
+    local itemID = tonumber(input) or tonumber(input:match("item:(%d+)"))
+    if not itemID then
+        ns.Print("sellprice: give an item ID or shift-click an item, e.g. /bts sellprice 11288")
+        return
+    end
+
+    local info
+    if Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, name, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
+        if ok and name then info = sellPrice end
+    end
+    local tooltip, read = Util.GetTooltipSellPrice(itemID)
+    local saved = ns.Disenchant:GetSellPrice(itemID)
+
+    local function Money(copper) return copper and Util.FormatMoney(copper, { noColor = true }) or "none" end
+    ns.Print(("sellprice: %s (%d): item info %s, tooltip %s%s, used %s")
+        :format(Util.GetItemLabel(itemID), itemID, Money(info), Money(tooltip),
+            read and "" or " (no tooltip data)", Money(saved)))
+end)

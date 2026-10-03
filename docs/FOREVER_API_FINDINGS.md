@@ -15,6 +15,7 @@ Client `1.60.1` build `69913`, interface `16001`.
 | Profession API | **Modern.** 146 functions in `C_TradeSkillUI` | Schematic-based recipe model. |
 | Reagent quality tiers? | **No.** `qualityTiersObserved = false`; every reagent slot has `reagentChoices = 1` | Cost engine stays flat — no quality-tier permutation logic. Significant simplification. |
 | Does a recipe report how hard it is? | **Yes, on `GetRecipeInfo().relativeDifficulty` only.** 60 of 60 recipes read answered, out of 477 visible; `Enum.TradeskillRelativeDifficulty` is present and the values match it by name (`0` = Optimal, `3` = Trivial). `C_TradeSkillUI.GetRecipeDifficulty` is **absent**, and so is the classic `GetTradeSkillInfo` list | Skill-up marking works. Read it through `Logic/SkillUp.lua`, which tries the other three sources too and reports which answered — see `/bts skillup`. |
+| Is `GetItemInfo`'s sell price what a vendor pays? | **Not always.** Seen 2026-10-03: Greater Magic Wand (11288) shows `Sell Price: 1c` on its tooltip while the Vendor Flips tab, reading `GetItemInfo`'s 11th return, said 15s 35c (Classic's price). Forever's server changed some sell prices and only the tooltip has the new one | The tooltip's `SellPrice` line (`C_TooltipInfo.GetItemByID`, line type 11, `price`) wins over `GetItemInfo` everywhere (`Util.GetTooltipSellPrice`). `/bts sellprice <item>` prints both. |
 
 ## Keeping data between sessions
 

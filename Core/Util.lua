@@ -320,6 +320,55 @@ function Util._ForgetItemMemo()
     sellPriceMemo, bindTypeMemo, maxStackMemo = {}, {}, {}
 end
 
+-- The tooltip line type retail gives "Sell Price:". 11 on every retail build
+-- that has the enum; read from the client when it says.
+local function SellPriceLineType()
+    local enum = _G.Enum and _G.Enum.TooltipDataLineType
+    return (type(enum) == "table" and enum.SellPrice) or 11
+end
+
+--- What the item's own tooltip says a vendor pays for one, or nil when the
+--- client has no tooltip data for it or the tooltip shows no sell price.
+--
+-- Forever's server changed some sell prices from Classic's, and only the
+-- tooltip has the new one: Greater Magic Wand's tooltip says 1c while
+-- GetItemInfo still answers Classic's 15s 35c (Trent, 2026-10-03). So the
+-- tooltip wins. Read by item ID, so it is the price of one, never a stack.
+-- Only ask for an item the client already holds.
+--
+-- @return copper, then true when the tooltip was there to read at all
+function Util.GetTooltipSellPrice(itemID)
+    if not itemID or not Util.HasFunction("C_TooltipInfo.GetItemByID") then return nil, false end
+
+    local ok, data = pcall(C_TooltipInfo.GetItemByID, itemID)
+    if not ok or type(data) ~= "table" or type(data.lines) ~= "table" or #data.lines == 0 then
+        return nil, false
+    end
+
+    local sellType = SellPriceLineType()
+    for _, line in ipairs(data.lines) do
+        if type(line) == "table" then
+            local price, kind = line.price, line.type
+
+            -- Early 10.0 builds hand the fields over as an args list.
+            if type(line.args) == "table" then
+                for _, arg in ipairs(line.args) do
+                    if type(arg) == "table" then
+                        if arg.field == "type" and kind == nil then kind = arg.intVal end
+                        if arg.field == "price" and price == nil then price = arg.intVal end
+                    end
+                end
+            end
+
+            if kind == sellType and type(price) == "number" and price >= 0 then
+                return price, true
+            end
+        end
+    end
+
+    return nil, true
+end
+
 function Util.GetVendorSellPrice(itemID)
     if not itemID then return nil end
 
@@ -333,6 +382,12 @@ function Util.GetVendorSellPrice(itemID)
     -- GetItemLabel already asks the client to cache anything it renders, so a
     -- second look once the list refreshes has it.
     local ok, name, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
+
+    -- The tooltip's price wins where it shows one (see GetTooltipSellPrice).
+    if ok and name then
+        local fromTooltip = Util.GetTooltipSellPrice(itemID)
+        if fromTooltip then sellPrice = fromTooltip end
+    end
 
     -- Only a real answer is kept: an item not cached yet returns no name.
     if ok and name and type(sellPrice) == "number" then
