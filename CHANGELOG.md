@@ -4,6 +4,29 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.23.0
+
+For WoW: Forever (interface 16001). This version adds files, so fully
+restart the game after updating; `/reload` is not enough.
+
+- The Profit tab has an **Ignore** button beside Max in a craft's breakdown.
+  An ignored craft leaves the Profit list on every character and Queue All
+  skips it. The count under the list says how many are ignored, and a new
+  Ignored crafts section in Settings lists them with a Restore button.
+- Every queued craft remembers which character queued it.
+- A new setting, off by default, lets your alts make sub-crafts: a sub-craft
+  goes to whichever of your characters makes it for less and can mail it
+  (same realm and faction, never anything that binds on pickup). The Queue
+  tab and the craft pane say who makes it and who it's for, and logging in on
+  a helper lists what it makes for whom. With it off, the shopping list
+  recommends making it on the other character, as before.
+- At the mailbox, a panel beside the mail window lists what this character
+  should send the others for the queue. **Send to** fills in the mail for
+  you; you still press Send. Sent items aren't offered again while they're
+  on the way.
+- A craft you queued that only an alt can make is offered back to you once
+  the alt has made it.
+
 ## 0.22.0
 
 For WoW: Forever (interface 16001). This version adds files, so fully
