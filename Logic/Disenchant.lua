@@ -245,9 +245,16 @@ local function Remember(itemID)
     end
 
     -- v is what a vendor pays for one, 0 when it buys nothing. Kept for the
-    -- Vendor Flips tab; items read before it existed have none yet.
+    -- Vendor Flips tab; items read before it existed have none yet. The
+    -- tooltip's price wins over GetItemInfo's, which on Forever can still be
+    -- Classic's (Util.GetTooltipSellPrice). vt says the tooltip was read, so
+    -- prices saved before that are read once more.
+    local fromTooltip, tooltipRead = Util.GetTooltipSellPrice(itemID)
+    if fromTooltip then sellPrice = fromTooltip end
+
     local facts = { n = name, q = quality, l = itemLevel, c = classID, e = equipLoc,
-                    v = type(sellPrice) == "number" and sellPrice or 0 }
+                    v = type(sellPrice) == "number" and sellPrice or 0,
+                    vt = tooltipRead or nil }
     Store()[itemID] = facts
     waiting[itemID], attempts[itemID] = nil, nil
 
@@ -255,6 +262,9 @@ local function Remember(itemID)
     Disenchant.factsVersion = (Disenchant.factsVersion or 0) + 1
     return facts
 end
+
+-- Items whose saved price was read again this session for the tooltip's.
+local tooltipRetried = {}
 
 --- Did this addon ask the client for this item, and is it on its way or
 --- just arrived? The tabs redraw only for those. Not for items read long
@@ -347,19 +357,31 @@ end
 --
 -- @return copper (0 when a vendor will not buy it), or nil while the item
 --   has not been read yet. Items remembered before sell prices were kept
---   are read again, a few a second like any other.
+--   are read again, a few a second like any other, and so are items whose
+--   price was saved before the tooltip was read for it: until then the old
+--   price stands.
 function Disenchant:GetSellPrice(itemID)
     if not itemID then return nil end
 
     local known = Store()[itemID]
-    if not known or known.v == nil then known = Fetch(itemID) end
+    if not known or known.v == nil then
+        known = Fetch(itemID)
+    elseif not known.vt and not tooltipRetried[itemID] and Util.HasFunction("C_TooltipInfo.GetItemByID") then
+        -- Once a session: an item whose tooltip never has lines keeps the
+        -- price it has rather than being read on every redraw.
+        local fresh = Fetch(itemID)
+        if fresh then
+            tooltipRetried[itemID] = true
+            known = fresh
+        end
+    end
 
     return known and known.v
 end
 
 --- Forget what was read about items (for tests).
 function Disenchant:_ForgetItems()
-    sessionFacts, waiting, attempts, arrived = {}, {}, {}, {}
+    sessionFacts, waiting, attempts, arrived, tooltipRetried = {}, {}, {}, {}, {}
     gearMemo = {}
     if ns.db then ns.db.itemFacts = {} end
     budget.second, budget.used = nil, 0
