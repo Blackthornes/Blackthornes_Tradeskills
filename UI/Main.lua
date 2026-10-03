@@ -492,6 +492,14 @@ function UI:Hide()
     if ns.PostPanel then ns.PostPanel:Reflow() end
 end
 
+-- Names for Bindings.xml, shown under Options, Keybindings, AddOns (Izbode's
+-- request, 2026-10-02). The Disenchant key clicks the same secure button the
+-- Disenchanting and Enchanting tabs put over their Disenchant buttons, so it
+-- works while one of those tabs shows a picked item, as the button does.
+_G.BINDING_HEADER_BLACKTHORNESTS = "Blackthornes Tradeskills"
+_G.BINDING_NAME_BLACKTHORNESTS_TOGGLE = "Open or close the window"
+_G["BINDING_NAME_CLICK BlackthornesTSDisenchant:LeftButton"] = "Disenchant the picked item"
+
 function UI:Toggle()
     self:Build()
 
@@ -1494,6 +1502,24 @@ function UI:SearchAuctionHouse(itemID)
     return true
 end
 
+--- With "Open with the auction house and vendors" ticked, the window opens
+--- as either opens and closes again as it closes (Izbode's request,
+--- 2026-10-02). Only a window opened this way is closed: one the player
+--- already had open stays open.
+function UI:OpenWithShop(which)
+    if ns.Config:Get("openWithShops") ~= true then return end
+    self:Build()
+    if self.window:IsShown() then return end
+    self.openedFor = which
+    self:Show()
+end
+
+function UI:CloseWithShop(which)
+    if self.openedFor ~= which then return end
+    self.openedFor = nil
+    if self.window and self.window:IsShown() then self:Hide() end
+end
+
 --- Alt-click any item, in the bags, a chat link or a loot window, with the
 --- auction house open, and the house searches for it (kronosbest's request,
 --- 2026-10-02: "a global action to search the auction house for that item").
@@ -1593,7 +1619,13 @@ function UI:OnEnable()
         end)
     end)
 
+    -- Settings: Open with the auction house and vendors.
+    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function() UI:OpenWithShop("auction") end)
+    ns.RegisterEvent(self, "MERCHANT_SHOW", function() UI:OpenWithShop("merchant") end)
+    ns.RegisterEvent(self, "MERCHANT_CLOSED", function() UI:CloseWithShop("merchant") end)
+
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
+        UI:CloseWithShop("auction")
         UI:UpdateHeader()
         if UI.auctionBar then UI.auctionBar:Hide() end
         if ns.PostPanel then ns.PostPanel:Hide() end

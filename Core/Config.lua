@@ -198,6 +198,10 @@ local DEFAULTS = {
         goalSound = true,
         -- The coin when another character can make a material for less.
         altCraftSound = true,
+        -- Open the window when the auction house or a vendor opens, and close
+        -- it again when they close. Off: the window stays as you left it.
+        openWithShops = false,
+
         -- A chime when a run of crafts (two or more) finishes.
         craftDoneSound = true,
         -- A warning when your bags fill up. See Logic/BagsFull.lua.
