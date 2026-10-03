@@ -272,6 +272,15 @@ function Vendor:GetNeeded()
     return lines, total, cheaperElsewhere
 end
 
+--- How many are in the bags right now, read fresh.
+local function BagCount(itemID)
+    local Inventory = ns.Inventory
+    if not (Inventory and Inventory.GetBagCount) then return 0 end
+    if Inventory.InvalidateBagCounts then Inventory:InvalidateBagCounts() end
+    local ok, count = pcall(Inventory.GetBagCount, Inventory, itemID)
+    return ok and tonumber(count) or 0
+end
+
 --- Buy everything the queue needs from the open vendor.
 --
 -- Purchases are chunked and re-checked against your actual bags between each
@@ -312,12 +321,24 @@ function Vendor:BuyNeeded()
     self.buyLines = lines
     self.buySteps = 0
     self.buyPurchased = {}
+    self.settling = nil
+
+    -- What the bags held before, so the end of the run can tell when the
+    -- purchases have actually arrived (see FinishBuying).
+    self.buyStartBags = {}
+    for _, line in ipairs(lines) do
+        self.buyStartBags[line.itemID] = BagCount(line.itemID)
+    end
 
     ns.Print(("buying %d material(s) for %s..."):format(#lines, Util.FormatMoney(total)))
 
     self:BuyStep()
     return true
 end
+
+-- How long the button waits for bought items to show up in the bags before
+-- it is drawn from whatever the bags say.
+local SETTLE_SECONDS = 3
 
 -- A hard ceiling on purchase calls, so a miscount can never spend
 -- unbounded gold in a runaway loop.
@@ -403,20 +424,76 @@ end
 function Vendor:FinishBuying()
     if not self.buying then return end
 
+    -- The last purchase is often still on its way to the bags when the run
+    -- ends. Redrawn now, the button read the old counts and came back as
+    -- "Buy materials 1s 8c" for the 12 thread just bought, and nothing
+    -- redrew it once they landed (Trent, 2026-10-03). So it stays on
+    -- "Buying..." until the bags hold what was bought, checked again on
+    -- every bag update, or until SETTLE_SECONDS have passed.
+    local waiting
+    for itemID, amount in pairs(self.buyPurchased or {}) do
+        if amount > 0 then
+            waiting = waiting or {}
+            waiting[itemID] = ((self.buyStartBags or {})[itemID] or 0) + amount
+        end
+    end
+
     self.buying = false
     self.buyLines = nil
     self.buyPurchased = nil
+    self.buyStartBags = nil
+    self.settling = waiting
 
     ns.Print(("done buying (about %s spent)"):format(Util.FormatMoney(self.buySpent or 0)))
 
+    if waiting then
+        -- A purchase the game turned down (bags full) never arrives, so the
+        -- wait has an end. The token keeps an old run's timer off a new one.
+        local token = {}
+        self.settleToken = token
+        C_Timer.After(SETTLE_SECONDS, function()
+            if Vendor.settleToken == token and Vendor.settling then
+                Vendor.settling = nil
+                Vendor:Redraw()
+            end
+        end)
+        -- Already there when the bags were quick; otherwise "Buying..." holds.
+        self:CheckSettled()
+        if self.settling and ns.UI then ns.UI:UpdateMerchantButton() end
+        return
+    end
+
+    self:Redraw()
+end
+
+--- The button and the open tab, after the bags changed under them.
+function Vendor:Redraw()
     if ns.UI then
         ns.UI:UpdateMerchantButton()
         ns.UI:RefreshActiveTab()
     end
 end
 
+--- Have the purchases from the last run reached the bags? Once they all
+--- have, the button is drawn from the new counts.
+function Vendor:CheckSettled()
+    if not self.settling then return end
+
+    for itemID, target in pairs(self.settling) do
+        if BagCount(itemID) >= target then
+            self.settling[itemID] = nil
+        end
+    end
+
+    if next(self.settling) == nil then
+        self.settling = nil
+        self:Redraw()
+    end
+end
+
+--- Buying, or waiting for what was just bought to reach the bags.
 function Vendor:IsBuying()
-    return self.buying == true
+    return self.buying == true or self.settling ~= nil
 end
 
 --------------------------------------------------------------------------------
@@ -445,12 +522,28 @@ function Vendor:OnEnable()
         end)
     end)
 
+    -- Bags changed at the vendor: things just bought arriving, or bought
+    -- by hand, or moved. The button only redrew on vendor events, so it
+    -- kept offering what the bags already held.
+    ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", function()
+        if not Vendor.isMerchantOpen or Vendor.buying then return end
+        if Vendor.settling then
+            Vendor:CheckSettled()
+        elseif ns.UI then
+            if ns.Inventory and ns.Inventory.InvalidateBagCounts then
+                ns.Inventory:InvalidateBagCounts()
+            end
+            ns.UI:UpdateMerchantButton()
+        end
+    end)
+
     ns.RegisterEvent(self, "MERCHANT_CLOSED", function()
         Vendor.isMerchantOpen = false
         Vendor.merchantItems = nil
 
         -- Walking away mid-purchase must not leave a timer buying things.
         if Vendor.buying then Vendor:FinishBuying() end
+        Vendor.settling = nil
 
         if ns.UI and ns.UI.merchantButton then
             ns.UI.merchantButton:Hide()
