@@ -4,6 +4,32 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.22.0
+
+For WoW: Forever (interface 16001). This version adds files, so fully
+restart the game after updating; `/reload` is not enough.
+
+- Vendor-sold materials (vials, thread, flux, dyes, spices) cost the vendor
+  price everywhere, even before you've opened a vendor. A price you see at a
+  vendor still wins.
+- With "Charge market price" unticked, the materials in your bags count as
+  free once across the whole queue, not once per craft.
+- Key bindings under Options, Keybindings, AddOns: open or close the window,
+  and Disenchant the picked item.
+- A new setting, off by default, opens the window when the auction house or a
+  vendor opens and closes it with them.
+- A SOUNDS section in Settings has a switch for every sound the addon plays.
+  Two new sounds: a warning when your last free bag slot fills, and a chime
+  when a run of two or more crafts finishes.
+- Random-suffix gear is priced by its own suffix: Lead Band of the Wolf is
+  checked against Wolf listings, not every Lead Band.
+- Right-click a Post row, or Alt-click any item with the auction house open,
+  to search the auction house for it by name.
+- Disenchant value is the most likely result at its usual count. Rarer
+  results are shown as a bonus and no longer add to the value.
+- A craft only counts as worth disenchanting when it beats its materials.
+- Disenchanting has a tick box to switch between auction deals and your bags.
+
 ## 0.21.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
