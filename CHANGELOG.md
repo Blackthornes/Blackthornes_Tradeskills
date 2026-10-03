@@ -4,11 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
-## 0.23.1
+## 0.24.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
 enough after updating.
 
+- Click a column heading to sort the list by it. Numbers sort highest first
+  and names A to Z; a second click reverses the order and a third goes back
+  to the list's own order. The sorted heading is highlighted with a small
+  arrow. This works on the Profit, Prices, Post, Queue materials, Gather,
+  Disenchanting, Enchanting and Vendor flips tabs, and in the Bank view.
 - The Buy materials button above a vendor no longer offers to buy what you
   just bought. It reads "Buying..." until the items reach your bags, then
   shows what is still needed, and it updates whenever your bags change while
