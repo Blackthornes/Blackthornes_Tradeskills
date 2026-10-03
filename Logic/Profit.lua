@@ -586,12 +586,57 @@ function Profit:Analyse(recipeID, characterKey)
 end
 
 --------------------------------------------------------------------------------
+-- Ignored crafts
+--------------------------------------------------------------------------------
+
+-- Trent, 2026-10-03: a way to "permanently add a profit listed craft to
+-- ignore so it no longer appears in the recommended list". Kept for the whole
+-- account, and Settings lists them with a Restore button, so a misclick is
+-- never for good.
+
+function Profit:IsIgnored(recipeID)
+    return recipeID ~= nil and ns.db ~= nil and ns.db.ignoredCrafts ~= nil
+        and ns.db.ignoredCrafts[recipeID] ~= nil
+end
+
+--- Ignore a craft (ignored = true) or bring it back (false).
+function Profit:SetIgnored(recipeID, ignored, name)
+    if not ns.db or not recipeID then return end
+    ns.db.ignoredCrafts = ns.db.ignoredCrafts or {}
+
+    if ignored then
+        local known = ns.Recipes and ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)
+        ns.db.ignoredCrafts[recipeID] = name or (known and known.name)
+            or ("recipe " .. tostring(recipeID))
+    else
+        ns.db.ignoredCrafts[recipeID] = nil
+    end
+
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end
+
+--- The ignored crafts, A to Z: { { recipeID, name }, ... }.
+function Profit:GetIgnored()
+    local list = {}
+    for recipeID, name in pairs(ns.db and ns.db.ignoredCrafts or {}) do
+        list[#list + 1] = { recipeID = recipeID,
+                            name = type(name) == "string" and name or ("recipe " .. tostring(recipeID)) }
+    end
+    table.sort(list, function(a, b)
+        local left, right = a.name:lower(), b.name:lower()
+        if left ~= right then return left < right end
+        return a.recipeID < b.recipeID
+    end)
+    return list
+end
+
+--------------------------------------------------------------------------------
 -- Ranking
 --------------------------------------------------------------------------------
 
 --- Analyse every cached recipe.
 -- @param opts { craftableOnly, minProfit, minMargin, includeUnpriceable,
---               skillLineID, sortBy = "profit"|"margin"|"roi" }
+--               includeIgnored, skillLineID, sortBy = "profit"|"margin"|"roi" }
 function Profit:GetRanked(opts)
     opts = opts or {}
 
@@ -608,7 +653,10 @@ function Profit:GetRanked(opts)
     for recipeID, recipe in pairs(source) do
         local dropped = not opts.accountWide and ns.Recipes.IsDropped ~= nil
             and ns.Recipes:IsDropped(recipe)
-        local analysis = not dropped and self:Analyse(recipeID) or nil
+        -- An ignored craft is never analysed, so it is gone everywhere this
+        -- list is used: the rows, Queue All and the empty-list message.
+        local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
+        local analysis = not dropped and not ignored and self:Analyse(recipeID) or nil
 
         if analysis then
             local keep = true
