@@ -274,20 +274,9 @@ local function Build(outer)
     end, true)
     widgets.verifyPrice:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local saleAlarmRow = CreateRow(container, verifyRow, "Sound when an auction sells",
-        "Plays an alarm as soon as one of your auctions sells, wherever you are.")
-
-    widgets.saleAlarm = Widgets.CreateCheckbox(saleAlarmRow, "Enabled", function(checked)
-        Config:Set("saleAlarm", checked)
-    end, true)
-    widgets.saleAlarm:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local saleAlarmTest = Widgets.CreateButton(saleAlarmRow, "Test", function()
-        if ns.SaleAlarm then ns.SaleAlarm:Play() end
-    end, { width = 60, height = 20, tooltip = "Play the sale alarm now" })
-    saleAlarmTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
-
-    local mailReportRow = CreateRow(container, saleAlarmRow, "Report after collecting mail",
+    -- The sale alarm and the scan chime moved down to SOUNDS, with a switch
+    -- for every other sound (Trent, 2026-10-02).
+    local mailReportRow = CreateRow(container, verifyRow, "Report after collecting mail",
         "Counts up what you collected at the mailbox and shows it when you walk away, with your best sale.")
 
     widgets.mailReport = Widgets.CreateCheckbox(mailReportRow, "Enabled", function(checked)
@@ -300,15 +289,7 @@ local function Build(outer)
     end, { width = 70, height = 20, tooltip = "Show a sample report" })
     mailReportTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
 
-    local scanSoundsRow = CreateRow(container, mailReportRow, "Sound when a scan finishes",
-        "Plays a chime when an auction house scan finishes, and another when it finds disenchant or vendor deals.")
-
-    widgets.scanSounds = Widgets.CreateCheckbox(scanSoundsRow, "Enabled", function(checked)
-        Config:Set("scanSounds", checked)
-    end, true)
-    widgets.scanSounds:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local filters = CreateSection(container, "FILTERS", { anchor = scanSoundsRow })
+    local filters = CreateSection(container, "FILTERS", { anchor = mailReportRow })
 
     local profitRow = CreateRow(container, filters, "Minimum profit",
         "Crafts that make less than this are hidden from the Profit tab. " ..
@@ -534,6 +515,49 @@ local function Build(outer)
     end, false)
     widgets.debug:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Every sound the addon plays, each with its own switch, all on to start
+    -- with. The one sound not here is the warning that saved data failed to
+    -- load, which is about losing data rather than an effect.
+    local sounds = CreateSection(container, "SOUNDS", { anchor = debugRow })
+    widgets.sounds = {}
+
+    local lastSoundRow = sounds
+    local function SoundRow(key, label, description, test)
+        local row = CreateRow(container, lastSoundRow, label, description)
+        local box = Widgets.CreateCheckbox(row, "Enabled", function(checked)
+            Config:Set(key, checked)
+        end, true)
+        box:SetPoint("TOPLEFT", CONTROL_X, -2)
+        widgets.sounds[key] = box
+
+        if test then
+            local button = Widgets.CreateButton(row, "Test", test,
+                { width = 60, height = 20, tooltip = "Play it now" })
+            button:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+        end
+
+        lastSoundRow = row
+        return box
+    end
+
+    widgets.saleAlarm = SoundRow("saleAlarm", "An auction sells",
+        "An alarm as soon as one of your auctions sells, wherever you are.",
+        function() if ns.SaleAlarm then ns.SaleAlarm:Play() end end)
+    widgets.scanSounds = SoundRow("scanSounds", "A scan finishes",
+        "A chime when a scan finishes, and another when it finds disenchant or vendor deals.")
+    SoundRow("mailReportSound", "Mail report",
+        "The coins as the mail report counts up, and the fanfare on a new record.")
+    SoundRow("craftDoneSound", "Crafting finishes",
+        "A chime when a run of two or more crafts is done.")
+    SoundRow("bagsFullSound", "Bags are full",
+        "A warning the moment your last free bag slot fills.")
+    SoundRow("disenchantSound", "Disenchant finds",
+        "A chime when a disenchant turns up something new or lucky.")
+    SoundRow("altCraftSound", "Cheaper on an alt",
+        "A coin when another of your characters can make a material for less.")
+    SoundRow("goalSound", "Farmer goal set",
+        "A cheer when Set goal on the Gather tab makes a Farmer goal.")
+
     -- Every setting at once, so it arms first like Clear price data.
     local resetButton
     resetButton = Widgets.CreateButton(container, "Reset to defaults", function()
@@ -583,7 +607,7 @@ local function Build(outer)
     -- Under the last setting rather than pinned to the page's bottom edge:
     -- measured from there, the page grew 4 pixels taller every time it was
     -- drawn, and left more empty space to scroll into each time.
-    resetButton:SetPoint("TOPLEFT", debugRow, "BOTTOMLEFT", 0, -18)
+    resetButton:SetPoint("TOPLEFT", lastSoundRow, "BOTTOMLEFT", 0, -18)
     FitButton(resetButton)
 end
 
@@ -660,9 +684,10 @@ local function Refresh()
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
-    widgets.saleAlarm:SetChecked(Config:Get("saleAlarm") ~= false)
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
-    widgets.scanSounds:SetChecked(Config:Get("scanSounds") ~= false)
+    for key, box in pairs(widgets.sounds) do
+        box:SetChecked(Config:Get(key) ~= false)
+    end
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local lastScan, capped = ns.Prices:GetLastScan()
