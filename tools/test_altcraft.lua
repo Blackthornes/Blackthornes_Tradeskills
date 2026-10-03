@@ -22,10 +22,9 @@ local BAG, BOLT, WOOL, DYE, THREAD = 5000, 2997, 2592, 3825, 2321
 local bound = {}
 ns.Util = { IsBoundOnPickup = function(itemID) return bound[itemID] == true end }
 
--- Not shared: with the queue shared, the alt is given the bolts outright
--- (tools/test_sharedqueue.lua). Unshared, it is only a suggestion.
-local settings = { valueOwnedMaterials = true, suggestOtherCharacters = false,
-    shareQueueWithAlts = false }
+-- Alts making sub-crafts is off unless ticked, so this is only ever a
+-- suggestion. Ticked, the alt is given the bolts (tools/test_sharedqueue.lua).
+local settings = { valueOwnedMaterials = true, suggestOtherCharacters = false }
 local currentKey = "Player-ME"
 ns.Config = {
     Get = function(_, key) return settings[key] end,
