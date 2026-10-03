@@ -79,7 +79,8 @@ local function UpdateCraftRow(row, entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
     local analysis = ns.Profit:Analyse(entry.recipeID)
 
-    local label = (recipe and recipe.name) or ("recipe " .. entry.recipeID)
+    local plain = (recipe and recipe.name) or ("recipe " .. entry.recipeID)
+    local label = plain
     Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
 
     -- Marked so a craft the player did not add directly is explicable.
@@ -87,11 +88,23 @@ local function UpdateCraftRow(row, entry)
         local parents = ns.Queue:GetDependencyParents(entry)
 
         label = ("|cff7a8089>|r %s |cff7a8089(for %s)|r"):format(
-            label,
+            plain,
             #parents > 0 and table.concat(parents, ", ") or "another craft")
     end
 
-    row.name:SetText(label)
+    -- Who it is for and who makes it, when that is not all this character:
+    -- "you make this for Trent" on the tailor, "Loom makes this for you" on
+    -- Trent. The longest wording that fits the row, then shorter ones.
+    local who = ns.Queue.DescribeWho and ns.Queue:DescribeWho(entry) or {}
+    local texts = {}
+    local function Note(base, text)
+        return ("%s |cff7a8089·|r |cffc8a44d%s|r"):format(base, text)
+    end
+    for _, text in ipairs(who) do texts[#texts + 1] = Note(label, text) end
+    if #who > 0 then texts[#texts + 1] = Note(plain, who[#who]) end
+    texts[#texts + 1] = label
+    texts[#texts + 1] = plain
+    Theme.FitText(row.name, texts)
 
     -- Colour by whether it can be made, since nothing here can start one.
     local ready, reason = ns.Crafting:GetReadiness(entry.recipeID)
@@ -276,6 +289,22 @@ local function ShowMaterialTooltip(row, line)
         end
         GameTooltip:AddLine(("Log in on that character and %d x %s is queued there, with its materials to buy. Mail it across once made.")
             :format(offer.crafts, offer.recipeName or "it"), 0.7, 0.7, 0.7, true)
+    end
+
+    -- Shared with the alts: how much of this another character's crafts
+    -- use. What they already hold of it is not on your list.
+    if line.forOthers then
+        local keys = {}
+        for characterKey in pairs(line.forOthers) do keys[#keys + 1] = characterKey end
+        table.sort(keys)
+        for _, characterKey in ipairs(keys) do
+            GameTooltip:AddDoubleLine(("For %s's crafts"):format(ns.Recipes:GetCharacterName(characterKey)),
+                tostring(line.forOthers[characterKey]), 0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
+        end
+        if (line.othersHold or 0) > 0 then
+            GameTooltip:AddDoubleLine("They already hold", tostring(line.othersHold),
+                0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
+        end
     end
 
     -- Alt-held stock is never counted as yours automatically: it is not in

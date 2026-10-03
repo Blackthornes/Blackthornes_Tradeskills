@@ -217,6 +217,15 @@ local DEFAULTS = {
         -- the old default wrote into saved settings does not keep it off.
         suggestOtherCharacters = true,
 
+        -- Give a sub-craft to whichever of your characters makes it for
+        -- less, and keep track of who makes what for whom across them all
+        -- (Trent, 2026-10-03). Off: each character plans only its own.
+        shareQueueWithAlts = true,
+
+        -- At the mailbox, list what to send your other characters for the
+        -- queue, with a button that fills in the mail.
+        queueMailPanel = true,
+
         -- The shopping list under the queued crafts beside the profession
         -- window. Hidden and shown with the button at its foot.
         craftPaneShoppingList = true,
