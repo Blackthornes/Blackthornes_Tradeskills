@@ -261,6 +261,10 @@ local function IndexBags()
                     if not entry.bag and not info.isLocked then
                         entry.bag, entry.slot = bag, slot
                         entry.stackCount = info.stackCount or 1
+                        -- The copy that will be listed, so a random suffix
+                        -- item shows as "Lead Band of the Wolf", not "Lead
+                        -- Band". Read inside the pcall'd info above.
+                        entry.link = info.hyperlink
                     end
                 end
             end
@@ -285,6 +289,34 @@ local function MakeLocation(bag, slot)
     if not validOk or not valid then return nil end
 
     return location
+end
+
+--- The auction house's key for the copy of an item that would be listed,
+--- when it has a random suffix; nil otherwise.
+--
+-- A search by item ID alone names no suffix, and for "Lead Band of the Wolf"
+-- that search did not come back with the Wolf listings at 40s, so the price
+-- fell back to an average across every Lead Band: 80s (kronosbest's report,
+-- 2026-10-02). The key the client gives the bag copy names its suffix, so the
+-- check undercuts that suffix's own listings. Items with no suffix keep the
+-- search they had.
+function Posting:GetSearchKey(itemID)
+    if not (C_AuctionHouse and C_AuctionHouse.GetItemKeyFromItem) then return nil end
+
+    local bag, slot = FindInBags(itemID)
+    if not bag then return nil end
+
+    local linkOk, link = pcall(C_Container.GetContainerItemLink, bag, slot)
+    if not linkOk or not Util.LinkSuffix(link) then return nil end
+
+    local location = MakeLocation(bag, slot)
+    if not location then return nil end
+
+    local ok, key = pcall(C_AuctionHouse.GetItemKeyFromItem, location)
+    if not ok or type(key) ~= "table" or key.itemID ~= itemID then return nil end
+
+    ns.Debug(("searching %s by its suffix (%s)"):format(link, tostring(key.itemSuffix)))
+    return key
 end
 
 -- Enum.ItemBind values meaning a copy sitting in a bag is already soulbound:
@@ -692,7 +724,11 @@ function Posting:GetPostable(opts)
                     -- Whether one of this account's recipes makes it, so the
                     -- tab can tell crafted stock from the rest of the bag.
                     isCrafted = outputs[itemID] ~= nil,
-                    label = Util.GetItemLabel(itemID),
+                    -- The copy itself when it has a random suffix: the item
+                    -- ID alone names only "Lead Band".
+                    link = held and Util.LinkSuffix(held.link) and held.link or nil,
+                    label = held and Util.LinkSuffix(held.link) and held.link
+                        or Util.GetItemLabel(itemID),
                 }
             end
         end
@@ -1347,7 +1383,8 @@ function Posting:CheckPrice(itemID, onDone)
 
     -- quiet: this check says for itself when nothing came back, and the
     -- search's own "using the last known price" is wrong here, with no price.
-    local started = ns.Scanner:ScanItem(itemID, OnAnswer, { quiet = true })
+    local started = ns.Scanner:ScanItem(itemID, OnAnswer,
+        { quiet = true, itemKey = self:GetSearchKey(itemID) })
 
     if not started then Settle("unavailable") end
 
@@ -1509,7 +1546,7 @@ function Posting:Request(itemID, quantity, unitPrice)
         Proceed("unavailable")
     end)
 
-    local started = ns.Scanner:ScanItem(itemID, OnAnswer)
+    local started = ns.Scanner:ScanItem(itemID, OnAnswer, { itemKey = self:GetSearchKey(itemID) })
 
     if not started then
         Proceed("unavailable")

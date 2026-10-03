@@ -503,11 +503,15 @@ end
 --- cannot draw the item.
 --
 -- The caller adds its own lines after this and calls GameTooltip:Show().
-function Widgets.ShowItemTooltip(owner, anchor, itemID, fallback)
+function Widgets.ShowItemTooltip(owner, anchor, itemID, fallback, link)
     GameTooltip:SetOwner(owner, anchor or "ANCHOR_RIGHT")
 
     local shown = false
-    if itemID and GameTooltip.SetItemByID then
+    -- A link shows that very copy, random suffix and all.
+    if link and GameTooltip.SetHyperlink then
+        shown = pcall(GameTooltip.SetHyperlink, GameTooltip, link)
+    end
+    if not shown and itemID and GameTooltip.SetItemByID then
         shown = pcall(GameTooltip.SetItemByID, GameTooltip, itemID)
     end
 
