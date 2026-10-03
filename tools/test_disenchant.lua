@@ -63,9 +63,9 @@ C_Item = {
 }
 
 local prices = {
-    [STRANGE_DUST] = 100, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000,
+    [STRANGE_DUST] = 160, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000,
     [1001] = 700,    -- worth less sold than disenchanted (800)
-    [1002] = 5000,   -- worth more sold than disenchanted (1400)
+    [1002] = 5000,   -- worth more sold than disenchanted (1500)
 }
 
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
@@ -171,19 +171,25 @@ check("a level 58 epic gives a Nexus Crystal", epic[1].itemID == NEXUS)
 
 print("\nvalue")
 
--- 0.75 * 5 * 100 + 0.15 * 1.5 * 1000 + 0.10 * 1 * 2000
-local value, partial = Disenchant:GetValue(1001)
-check("armour is worth 800 copper disenchanted", value == 800)
-check("with every material priced", partial == nil)
+-- Only the most likely outcome counts (Trent, 2026-10-03); the essence and
+-- the shard are a bonus. 5 dust on average at 160 each.
+local value, partial, breakdown = Disenchant:GetValue(1001)
+check("armour is worth 800 copper disenchanted, its dust", value == 800)
+check("never partial", partial == nil)
+check("the dust is what is counted", breakdown.outcomes[1].counted == true)
+check("the shard is a bonus", breakdown.outcomes[3].counted == false)
 
--- 0.75 * 1.5 * 1000 + 0.15 * 5 * 100 + 0.10 * 1 * 2000
-check("the weapon is worth 1400", Disenchant:GetValue(1002) == 1400)
+-- 1.5 essence on average at 1000 each.
+check("the weapon is worth 1500, its essence", Disenchant:GetValue(1002) == 1500)
 
 prices[SMALL_GLIMMERING] = nil
 value, partial = Disenchant:GetValue(1001)
-check("an unpriced shard leaves the priced part", value == 600)
-check("and says the value is partial", partial == true)
+check("an unpriced shard changes nothing", value == 800 and partial == nil)
 prices[SMALL_GLIMMERING] = 2000
+
+prices[STRANGE_DUST], saved.dust = nil, prices[STRANGE_DUST]
+check("an unpriced dust leaves no value", Disenchant:GetValue(1001) == nil)
+prices[STRANGE_DUST] = saved.dust
 
 check("nothing priced is no value, not zero", Disenchant:GetValue(1003) == nil)
 check("an item that cannot be disenchanted has no value", Disenchant:GetValue(1005) == nil)
@@ -239,7 +245,7 @@ check("ticked, only the chest is left", #Disenchant:GetBagRows({ beatsOnly = tru
 local materials = Disenchant:GetMaterialRows()
 check("every enchanting material is listed", #materials == #Disenchant.MATERIALS)
 check("with its price and what you carry", materials[1].itemID == STRANGE_DUST
-    and materials[1].price == 100 and materials[1].have == 7)
+    and materials[1].price == 160 and materials[1].have == 7)
 
 C_Item, GetTime, CreateFrame = saved.C_Item, saved.GetTime, saved.CreateFrame
 

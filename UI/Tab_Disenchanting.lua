@@ -463,8 +463,10 @@ local function DrawOutcomes(detail, breakdown)
         local count = outcome.min == outcome.max and tostring(outcome.min)
             or ("%d-%d"):format(outcome.min, outcome.max)
 
-        line.name:SetText(("%s%%  %sx %s"):format(Util.Round(outcome.chance * 100, 1), count,
-            outcome.name or Util.GetItemLabel(outcome.itemID)))
+        -- Only the most likely outcome is the value; the rest are a bonus.
+        line.name:SetText(("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
+            outcome.name or Util.GetItemLabel(outcome.itemID),
+            outcome.counted == false and "  (bonus)" or ""))
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
         if outcome.price then

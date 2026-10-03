@@ -514,8 +514,10 @@ local function UpdateDetail(entry)
             or ("%d-%d"):format(outcome.min, outcome.max)
         local chance = Util.Round(outcome.chance * 100, 1)
 
-        line.name:SetText(("%s%%  %sx %s"):format(chance, count,
-            outcome.name or Util.GetItemLabel(outcome.itemID)))
+        -- Only the most likely outcome is the value; the rest are a bonus.
+        line.name:SetText(("%s%%  %sx %s%s"):format(chance, count,
+            outcome.name or Util.GetItemLabel(outcome.itemID),
+            outcome.counted == false and "  (bonus)" or ""))
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
         if outcome.price then
