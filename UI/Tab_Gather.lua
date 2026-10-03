@@ -248,6 +248,8 @@ local function Refresh()
     if not widgets.list then return end
 
     local lines, all = BuildList()
+    -- A clicked heading's order over the menu's.
+    if widgets.sorter then lines = widgets.sorter:Sort(lines) end
     widgets.list:SetData(lines)
 
     widgets.emptyLabel:SetShown(#lines == 0)
@@ -352,6 +354,7 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 30, 0)
     nameHeading:SetText("MATERIAL")
 
+    local sortLabels = { name = nameHeading }
     local offset = -8
     for _, column in ipairs(COLUMNS) do
         if column.label ~= "" then
@@ -359,9 +362,24 @@ local function Build(container)
             heading:SetPoint("RIGHT", offset, 0)
             heading:SetWidth(column.width)
             heading:SetText(column.label)
+            sortLabels[column.key] = heading
         end
         offset = offset - column.width - 6
     end
+
+    -- Click a heading to sort by it.
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
+        name = function(line)
+            local label = line.label or ""
+            return label:match("%[(.-)%]") or label
+        end,
+        cost = function(line) return line.estimatedCost end,
+        unit = function(line) return line.unitCost end,
+        source = function(line) return SOURCE_LABELS[line.source] or line.source end,
+        have = function(line) return line.have end,
+        need = function(line) return line.needed end,
+    }, function() Refresh() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name", "source" }) end
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

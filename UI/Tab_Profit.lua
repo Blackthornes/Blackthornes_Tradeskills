@@ -933,6 +933,8 @@ ApplyHeadingLayout = function()
             heading:Hide()
         end
     end
+
+    if widgets.sorter then widgets.sorter:Sync() end
 end
 
 --- What the list's order was worked out for. While it stays the same, rows
@@ -988,6 +990,9 @@ local function Refresh()
     if not widgets.list then return end
 
     local data = BuildList()
+
+    -- A clicked heading's order over the ranking's.
+    if widgets.sorter then data = widgets.sorter:Sort(data) end
 
     -- The DISENCHANT column earns its space only when something listed can
     -- be disenchanted: an alchemist's list would otherwise carry an empty one.
@@ -1232,6 +1237,23 @@ local function Build(container)
         heading:SetText(labels[column.key])
         widgets.headings[column.key] = heading
     end
+
+    -- Click a heading to sort by it.
+    local sortLabels = { name = nameHeading }
+    for key, heading in pairs(widgets.headings) do sortLabels[key] = heading end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
+        name = function(a) return a.name end,
+        cost = function(a) return a.costPerUnit end,
+        sells = function(a) return a.unitRevenue end,
+        profit = function(a) return a.profit end,
+        margin = function(a) return a.margin end,
+        age = function(a) return a.age end,
+        posted = function(a) return a.stock end,
+        make = function(a) return a.craftableNow end,
+        who = function(a) return a.ownerName end,
+        disenchant = function(a) return a.disenchantValue end,
+    }, function() Refresh() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name", "who" }) end
 
     ApplyHeadingLayout()
 
