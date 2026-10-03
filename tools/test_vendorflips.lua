@@ -30,7 +30,7 @@ ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, function() end
 -- Put back at the end: every suite shares one Lua runtime.
 local saved = { C_Item = C_Item, GetTime = GetTime, CreateFrame = CreateFrame,
                 PlaySound = PlaySound, SOUNDKIT = SOUNDKIT, GameTooltip = GameTooltip,
-                C_Timer = C_Timer }
+                C_Timer = C_Timer, C_TooltipInfo = C_TooltipInfo }
 
 CreateFrame = function()
     local frame = {}
@@ -197,6 +197,62 @@ check("and now has it", ns.db.itemFacts[3001].v == 500)
 C_Item.IsItemDataCachedByID = nil
 
 check("the disenchant facts still read the same", ns.Disenchant:GetItemFacts(3001).quality == 1)
+
+print("\nthe tooltip's sell price wins over the item info's")
+
+-- Forever changed some sell prices from Classic's and only the tooltip has
+-- the new one: Greater Magic Wand's item info says 15s 35c, its tooltip 1c
+-- (Trent, 2026-10-03). It sat on the tab as a 1435% flip.
+local tooltipPrices, tooltipReads = { [3001] = 1 }, {}
+C_TooltipInfo = {
+    GetItemByID = function(itemID)
+        tooltipReads[itemID] = (tooltipReads[itemID] or 0) + 1
+        if not items[itemID] then return nil end
+        local lines = { { type = 0, leftText = "item" .. itemID } }
+        if tooltipPrices[itemID] then
+            lines[#lines + 1] = { type = 11, price = tooltipPrices[itemID] }
+        end
+        return { id = itemID, lines = lines }
+    end,
+}
+C_Item.IsItemDataCachedByID = function() return true end
+
+-- Saved before the tooltip was read: the Classic price, no vt.
+ns.db.itemFacts[3001] = { n = "item3001", q = 1, l = 10, c = 7, e = "", v = 500 }
+check("an item priced before the tooltip was read is read again and drops off",
+    Find(VendorFlips:GetAuctionRows(), 3001) == nil)
+check("its saved price is now the tooltip's 1c", ns.db.itemFacts[3001].v == 1 and ns.db.itemFacts[3001].vt)
+check("its other facts are kept", ns.Disenchant:GetItemFacts(3001).quality == 1)
+check("an item whose tooltip agrees is still a flip", Find(VendorFlips:GetAuctionRows(), 3003) ~= nil)
+
+tooltipReads = {}
+for _ = 1, 3 do VendorFlips:GetAuctionRows() end
+check("the tooltip is read once, not on every redraw", tooltipReads[3001] == nil and tooltipReads[3003] == nil)
+
+-- An item whose tooltip shows no sell price keeps the item info's.
+ns.db.itemFacts[3004] = nil
+items[3004][2] = 50
+check("no sell price line keeps the item info's price", ns.Disenchant:GetSellPrice(3004) == 50)
+
+ns.Util._ForgetItemMemo()
+check("the shared vendor price reads the tooltip too", ns.Util.GetVendorSellPrice(3001) == 1)
+check("and keeps the item info's when the tooltip shows none", ns.Util.GetVendorSellPrice(3004) == 50)
+
+-- Early 10.0 builds hand line fields over as an args list.
+C_TooltipInfo.GetItemByID = function()
+    return { lines = { { args = { { field = "type", intVal = 11 }, { field = "price", intVal = 7 } } } } }
+end
+check("an args-list tooltip line is read", ns.Util.GetTooltipSellPrice(3001) == 7)
+
+printed = {}
+commands.sellprice("3001")
+check("/bts sellprice says both prices", printed[1] and printed[1]:find("item info", 1, true)
+    and printed[1]:find("tooltip", 1, true))
+
+ns.Util._ForgetItemMemo()
+C_TooltipInfo, C_Item.IsItemDataCachedByID = nil, nil
+ns.db.itemFacts[3001] = nil
+ns.Disenchant:_ForgetItems()
 
 print("\nnothing new is read while the auction house is open")
 
@@ -432,7 +488,7 @@ tab.refresh()
 check("with no scan it says to scan", list.data and #list.data == 0)
 
 for _, key in ipairs({ "C_Item", "GetTime", "CreateFrame", "PlaySound", "SOUNDKIT",
-                      "GameTooltip", "C_Timer" }) do
+                      "GameTooltip", "C_Timer", "C_TooltipInfo" }) do
     _G[key] = saved[key]
 end
 
