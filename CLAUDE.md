@@ -100,6 +100,21 @@ _G.BlackthornesTS.Upgrades:RedrawSoon()   -- forget kept answers, redraw what sh
 So keep `ns.Upgrades` on the global and `Upgrades:RedrawSoon()` stable too;
 if it changes, change Equipment's `Weights:Changed` (`Logic/Weights.lua`).
 
+Equipment's upgrade finder also lists crafted gear (who can make it, what
+the materials cost). Its `Logic/Crafting.lua` reads, inside a pcall and read
+only:
+
+```lua
+ns.Recipes:GetAccountWide(true)        -- recipes by ID (= spell ID), each with knownBy
+ns.Recipes:GetShortCharacterName(key)  -- an alt's short name
+ns.Config:GetCharacterKey()            -- the character playing
+ns.db.characters[key].faction          -- to leave out the other faction's alts
+ns.Prices:GetValue(itemID)             -- material and auction prices
+```
+
+Keep these stable as well; if one changes, change Equipment's
+`Logic/Crafting.lua` in the same breath.
+
 ## Trent's standing rules (both addons)
 
 - **"Always check that it's clear to post."** Anything that goes public (a
