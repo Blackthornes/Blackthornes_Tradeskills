@@ -492,7 +492,7 @@ local function BuildDetail(parent)
         if fresh then
             quantity:SetText(tostring(ns.Profit.MaxCrafts(fresh.craftableNow, fresh.roomInCrafts)))
         end
-    end, { width = 130, primary = true, height = 24 })
+    end, { width = 100, primary = true, height = 24 })
     addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
     detail.addButton = addButton
 
@@ -514,6 +514,23 @@ local function BuildDetail(parent)
            tooltip = "As many as your materials and stock limit allow" })
     maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 8, 0)
     detail.maxButton = maxButton
+
+    -- Takes the craft off this list for good, on every character. Settings
+    -- lists what is ignored, with a Restore button for each.
+    local ignoreButton = Widgets.CreateButton(detail, "Ignore", function()
+        local analysis = state.selected
+        if not analysis then return end
+
+        -- Cleared first: SetIgnored redraws the tab, and the pane should
+        -- not go on showing a craft the list no longer has.
+        state.selected = nil
+        ns.Profit:SetIgnored(analysis.recipeID, true, analysis.name)
+        ns.Print(("ignored %s: it no longer shows on the Profit tab. Restore it under Ignored crafts in Settings.")
+            :format(analysis.name or "that craft"))
+    end, { width = 60, height = 24,
+           tooltip = "Stop recommending this craft. Settings lists ignored crafts, each with a Restore button." })
+    ignoreButton:SetPoint("BOTTOMLEFT", maxButton, "BOTTOMRIGHT", 8, 0)
+    detail.ignoreButton = ignoreButton
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
@@ -582,6 +599,7 @@ local function UpdateDetail(analysis)
     detail.subtitle:SetShown(hasSelection)
     detail.reagentHeading:SetShown(hasSelection)
     detail.maxButton:SetShown(hasSelection)
+    detail.ignoreButton:SetShown(hasSelection)
     detail.icon:SetShown(hasSelection)
     detail.summary:SetShown(hasSelection)
     detail.addButton:SetShown(hasSelection)
@@ -1048,7 +1066,9 @@ local function Refresh()
         UpdateDetail(nil)
     end
 
-    widgets.countLabel:SetText(("%d craft%s"):format(#data, #data == 1 and "" or "s"))
+    local ignored = ns.Profit.GetIgnored and #ns.Profit:GetIgnored() or 0
+    widgets.countLabel:SetText(("%d craft%s"):format(#data, #data == 1 and "" or "s")
+        .. (ignored > 0 and (", %d ignored"):format(ignored) or ""))
 end
 
 --------------------------------------------------------------------------------
