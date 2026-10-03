@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.23.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- The Buy materials button above a vendor no longer offers to buy what you
+  just bought. It reads "Buying..." until the items reach your bags, then
+  shows what is still needed, and it updates whenever your bags change while
+  the vendor is open.
+
 ## 0.23.0
 
 For WoW: Forever (interface 16001). This version adds files, so fully
