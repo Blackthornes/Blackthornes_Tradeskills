@@ -198,7 +198,10 @@ local function ShowRowTooltip(row, entry)
 
     if entry.kind ~= "material" and entry.value then
         GameTooltip:AddLine(" ")
-        if entry.beatsSale and entry.sells then
+        if entry.losesToMaterials then
+            GameTooltip:AddLine(("Disenchanting beats selling, but loses %s against the materials."):format(
+                Util.FormatMoney(-entry.gain, { noColor = true })), 0.9, 0.35, 0.35, true)
+        elseif entry.beatsSale and entry.sells then
             GameTooltip:AddLine(("Disenchanting it is worth %s more than selling it."):format(
                 Util.FormatMoney(entry.value - entry.sells, { noColor = true })), 0.35, 0.85, 0.45, true)
         elseif entry.sells then
@@ -514,8 +517,10 @@ local function UpdateDetail(entry)
             or ("%d-%d"):format(outcome.min, outcome.max)
         local chance = Util.Round(outcome.chance * 100, 1)
 
-        line.name:SetText(("%s%%  %sx %s"):format(chance, count,
-            outcome.name or Util.GetItemLabel(outcome.itemID)))
+        -- Only the most likely outcome is the value; the rest are a bonus.
+        line.name:SetText(("%s%%  %sx %s%s"):format(chance, count,
+            outcome.name or Util.GetItemLabel(outcome.itemID),
+            outcome.counted == false and "  (bonus)" or ""))
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
         if outcome.price then
@@ -559,7 +564,11 @@ local function UpdateDetail(entry)
     end
 
     -- The answer, in words.
-    if entry.value and entry.sells then
+    if entry.losesToMaterials then
+        detail.verdict:SetText(("Disenchanting beats selling, but loses %s against the materials."):format(
+            Util.FormatMoney(-entry.gain, { noColor = true })))
+        detail.verdict:SetTextColor(Theme.Unpack("loss"))
+    elseif entry.value and entry.sells then
         if entry.beatsSale then
             detail.verdict:SetText(("Disenchanting pays %s more than selling."):format(
                 Util.FormatMoney(entry.value - entry.sells, { noColor = true })))

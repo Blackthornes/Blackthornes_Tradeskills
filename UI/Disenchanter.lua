@@ -171,6 +171,14 @@ function Disenchanter:CreateOverlay()
         Disenchanter.lastClick = GetTime()
 
         local wanted = Disenchanter.itemID
+
+        -- The key binding clicks this button even when no tab has set it.
+        if not wanted then
+            button:SetAttribute("type", nil)
+            ns.Print("pick an item on the Disenchanting or Enchanting tab first")
+            return
+        end
+
         local bag, slot = Disenchanter:FindSlot(wanted)
 
         if not bag or InCombat() then

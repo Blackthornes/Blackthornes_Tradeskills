@@ -187,6 +187,26 @@ local DEFAULTS = {
         -- keeps the scan silent; the chat lines and the bar still show.
         scanSounds = true,
 
+        -- Every other sound the addon makes has its own switch under SOUNDS
+        -- in Settings, all on to start with (Trent, 2026-10-02: "make sure
+        -- all sound effects can be disabled in settings, on by default").
+        -- The fanfare as the mail report counts up, and on a new record.
+        mailReportSound = true,
+        -- The chime when a disenchant turns up something new or lucky.
+        disenchantSound = true,
+        -- The cheer when Set goal makes a Farmer goal.
+        goalSound = true,
+        -- The coin when another character can make a material for less.
+        altCraftSound = true,
+        -- Open the window when the auction house or a vendor opens, and close
+        -- it again when they close. Off: the window stays as you left it.
+        openWithShops = false,
+
+        -- A chime when a run of crafts (two or more) finishes.
+        craftDoneSound = true,
+        -- A warning when your bags fill up. See Logic/BagsFull.lua.
+        bagsFullSound = true,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,

@@ -72,7 +72,7 @@ C_Item = {
 
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
 
-local materialPrices = { [STRANGE_DUST] = 100, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000 }
+local materialPrices = { [STRANGE_DUST] = 160, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000 }
 
 local records = {
     [2001] = { rivalMin = 500, quantity = 3 },
@@ -132,8 +132,9 @@ print("\nwhich auctions are listed")
 Enchanter(50)
 local rows = Disenchant:GetAuctionRows()
 
--- A level 22 green chest: 75% x 5 dust at 100, 15% x 1.5 essence at 1000,
--- 10% x 1 shard at 2000 = 375 + 225 + 200 = 800. Less 5% cut: 760.
+-- A level 22 green chest.
+-- (Before 2026-10-03 every outcome counted by its chance. Now only the most
+-- likely does: 5 dust on average at 160 = 800. Less 5% cut: 760.)
 local chest = Find(rows, 2001)
 check("the green chest is listed", chest ~= nil)
 check("its disenchant value is 800", chest.value == 800)

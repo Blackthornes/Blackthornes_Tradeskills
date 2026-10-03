@@ -540,33 +540,38 @@ function Disenchant:GetMaterialPrice(itemID)
     return value
 end
 
---- The expected value of disenchanting one of this item, in copper.
+--- What disenchanting one of this item gives, in copper: its most likely
+--- outcome. Anything rarer is a bonus and is not counted.
 --
 -- @return value, partial, breakdown
 --   value     nil when the item cannot be disenchanted, is not cached, or
---             none of what it gives has a price yet
---   partial   true when some of what it gives has no price, so the value
---             counts only the priced part and the real one is higher
+--             its most likely material has no price yet
+--   partial   always nil now; kept so callers need not change
 --   breakdown { outcomes = { { itemID, name, chance, min, max, average,
 --             price, worth }, ... }, facts }
 function Disenchant:GetValue(itemID)
     local outcomes, facts = self:GetOutcomes(itemID)
     if not outcomes then return nil end
 
-    local total, priced, missing = 0, 0, 0
+    -- Valued at the most likely outcome alone (Trent, 2026-10-03:
+    -- "disenchant value should be based on the highest chance outcome. Lucky
+    -- disenchants are a bonus."). A 20% essence or a 5% shard is not what
+    -- the next disenchant gives, so counting a share of it made breaking
+    -- an item down look better than it usually is.
+    local likely
+    for index, outcome in ipairs(outcomes) do
+        if not likely or outcome.chance > outcomes[likely].chance then likely = index end
+    end
+
     local lines = {}
+    local value
 
     for index, outcome in ipairs(outcomes) do
         local average = outcome.average or (outcome.min + outcome.max) / 2
         local price = self:GetMaterialPrice(outcome.itemID)
-        local worth = price and (price * outcome.chance * average) or nil
+        local worth = price and (price * average) or nil
 
-        if worth then
-            total = total + worth
-            priced = priced + 1
-        else
-            missing = missing + 1
-        end
+        if index == likely and worth then value = worth end
 
         lines[index] = {
             itemID = outcome.itemID,
@@ -576,15 +581,19 @@ function Disenchant:GetValue(itemID)
             max = outcome.max,
             average = average,
             price = price,
+            -- What this outcome is worth when it is the one you get.
             worth = worth,
+            -- The outcome the value is; every other one is a bonus.
+            counted = index == likely,
         }
     end
 
     local breakdown = { outcomes = lines, facts = facts }
 
-    if priced == 0 then return nil, nil, breakdown end
+    if not value then return nil, nil, breakdown end
 
-    return math.floor(total + 0.5), missing > 0 or nil, breakdown
+    -- Never partial: only the one outcome counts, and it is priced.
+    return math.floor(value + 0.5), nil, breakdown
 end
 
 --- Is this item an enchanting material a disenchant can give?
@@ -690,6 +699,14 @@ function Disenchant:GetCraftRows(opts)
             end
 
             local net = value and math.floor(value * (1 - cut) + 0.5) or nil
+            local gain = (net and costEach) and (net - costEach) or nil
+
+            -- A craft is only worth making to disenchant when what it breaks
+            -- into pays for its materials (Izbode's report, 2026-10-02). A
+            -- soulbound craft beat its vendor price and showed as a win while
+            -- every one made lost money against what went into it.
+            local beatsSale = Beats(value, sells)
+            local losesToMaterials = beatsSale and gain ~= nil and gain <= 0
 
             local row = {
                 kind = "craft",
@@ -706,8 +723,10 @@ function Disenchant:GetCraftRows(opts)
                 soulbound = analysis.soulbound,
                 craftableNow = analysis.craftableNow
                     or (ns.Profit.GetCraftableCount and ns.Profit:GetCraftableCount(recipeID)) or 0,
-                gain = (net and costEach) and (net - costEach) or nil,
-                beatsSale = Beats(value, sells),
+                gain = gain,
+                beatsSale = beatsSale and not losesToMaterials,
+                -- Beats selling, but not the cost of the materials.
+                losesToMaterials = losesToMaterials or nil,
             }
 
             if not opts.beatsOnly or row.beatsSale then
@@ -1082,16 +1101,17 @@ local function Report(input)
         local count = line.min == line.max and tostring(line.min)
             or ("%d-%d"):format(line.min, line.max)
 
-        ns.Print(("  %s%%  %sx %s  %s"):format(
+        ns.Print(("  %s%%  %sx %s  %s%s"):format(
             Util.Round(line.chance * 100, 1), count, line.name or Util.GetItemLabel(line.itemID),
-            line.price and (Util.FormatMoney(line.price, { noColor = true }) .. " each") or "no price"))
+            line.price and (Util.FormatMoney(line.price, { noColor = true }) .. " each") or "no price",
+            line.counted and "" or "  (bonus)"))
     end
 
     if value then
         ns.Print(("disenchant value %s%s"):format(Util.FormatMoney(value, { noColor = true }),
             partial and " (some materials have no price yet)" or ""))
     else
-        ns.Print("disenchant value unknown: none of these materials has been scanned")
+        ns.Print("disenchant value unknown: the most likely material has not been scanned")
     end
 end
 

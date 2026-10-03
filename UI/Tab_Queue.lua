@@ -29,6 +29,10 @@ local MATERIAL_NAME_INSET = -178
 
 local widgets = {}
 
+-- Each queued craft's cost and profit for its whole count, worked out once
+-- per redraw (Queue:GetEntryCosts) so a row and the footer agree.
+local entryCosts = {}
+
 --------------------------------------------------------------------------------
 -- Craft rows
 --------------------------------------------------------------------------------
@@ -108,7 +112,8 @@ local function UpdateCraftRow(row, entry)
         row.profit:SetTextColor(Theme.Unpack("dim"))
         row.name:SetTextColor(Theme.Unpack("text"))
     elseif analysis and analysis.priceable then
-        local total = analysis.profit * entry.quantity
+        local priced = entryCosts[entry]
+        local total = priced and priced.profit or (analysis.profit * entry.quantity)
         row.profit:SetText(Util.FormatMoney(total, { short = true }))
         row.profit:SetTextColor(Theme.ProfitColor(total))
 
@@ -424,7 +429,8 @@ local function AnnounceAltCrafts(lines)
         end
     end
 
-    if found and type(PlaySound) == "function" then
+    -- Settings: SOUNDS, Cheaper on another character.
+    if found and type(PlaySound) == "function" and ns.Config:Get("altCraftSound") ~= false then
         local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
         local kit = kits.LOOT_WINDOW_COIN_SOUND or 120
         pcall(PlaySound, kit)
@@ -479,6 +485,7 @@ local function Refresh()
         entries[index] = entry
     end
 
+    entryCosts = ns.Queue:GetEntryCosts()
     widgets.craftList:SetData(entries)
     local shopping = ns.Queue:GetShoppingList()
     widgets.materialList:SetData(shopping)

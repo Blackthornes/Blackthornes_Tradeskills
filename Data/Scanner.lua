@@ -1220,7 +1220,12 @@ end
 --- Search for one item's real order book.
 --
 -- @param opts  optional; `priority` overrides the urgent default, for a
---   follow-up nobody is waiting on.
+--   follow-up nobody is waiting on. `itemKey` searches that exact key: the
+--   one the auction house gives a copy in the bags, which for a random
+--   suffix item ("Lead Band of the Wolf") names its suffix. Searched by item
+--   ID alone, such an item's own listings never came back, and the post
+--   price fell back to a market average across every suffix (kronosbest's
+--   report, 2026-10-02: 80s asked with "of the Wolf" listed at 40s).
 function Scanner:ScanItem(itemID, callback, opts)
     opts = opts or {}
 
@@ -1229,17 +1234,26 @@ function Scanner:ScanItem(itemID, callback, opts)
         return false
     end
 
-    local keyOk, itemKey = pcall(C_AuctionHouse.MakeItemKey, itemID)
-    if not keyOk or not itemKey then
-        ns.Warn(("could not look up item %s"):format(tostring(itemID)))
-        return false
+    local itemKey = type(opts.itemKey) == "table" and opts.itemKey.itemID == itemID and opts.itemKey or nil
+    if not itemKey then
+        local keyOk, made = pcall(C_AuctionHouse.MakeItemKey, itemID)
+        if not keyOk or not made then
+            ns.Warn(("could not look up item %s"):format(tostring(itemID)))
+            return false
+        end
+        itemKey = made
     end
+
+    -- Remembered per suffix, so a search for one suffix is never served as
+    -- the checked price of another.
+    local suffix = tonumber(itemKey.itemSuffix) or 0
+    local recentKey = suffix ~= 0 and (itemID .. ":" .. suffix) or itemID
 
     -- Asking again about something we just looked at spends throttle budget
     -- for an answer that has not changed.
     self.recentItemScans = self.recentItemScans or {}
 
-    local last = self.recentItemScans[itemID]
+    local last = self.recentItemScans[recentKey]
     if last and (GetTime() - last) < 20 then
         -- Answered from a search made moments ago. That is still a checked
         -- price, not a check that failed to happen, and the caller is told
@@ -1258,7 +1272,7 @@ function Scanner:ScanItem(itemID, callback, opts)
         -- Its answer will never be read, so it is not a recent check: asked
         -- about again within twenty seconds, it has to be searched again
         -- rather than served as "recent" at the old price.
-        self.recentItemScans[superseded.itemID] = nil
+        self.recentItemScans[superseded.recentKey or superseded.itemID] = nil
 
         if superseded.callback then
             superseded.callback(superseded.itemID, nil, nil, nil, nil, nil, "superseded")
@@ -1273,7 +1287,8 @@ function Scanner:ScanItem(itemID, callback, opts)
     -- during a scan were enough to list at an unchecked price.
     -- quiet: a background follow-up nobody clicked for says nothing when it
     -- goes unanswered, since there is no price the player is waiting on.
-    local mine = { itemID = itemID, itemKey = itemKey, callback = callback, quiet = opts.quiet }
+    local mine = { itemID = itemID, itemKey = itemKey, recentKey = recentKey,
+        callback = callback, quiet = opts.quiet }
     self.pendingItem = mine
 
     -- Urgent priority: this is only reached because the player clicked something
@@ -1283,7 +1298,7 @@ function Scanner:ScanItem(itemID, callback, opts)
     Util.WhenAuctionReady(function()
         if Scanner.pendingItem ~= mine then return end
 
-        Scanner.recentItemScans[itemID] = GetTime()
+        Scanner.recentItemScans[recentKey] = GetTime()
 
         -- Cheapest first, as Blizzard's own search asks: with no order a
         -- deep listing could come back without its cheapest rows.
@@ -1329,7 +1344,7 @@ function Scanner:ScanItem(itemID, callback, opts)
 
             -- Ask again next time rather than serving this silence as a checked
             -- price for the next twenty seconds.
-            Scanner.recentItemScans[itemID] = nil
+            Scanner.recentItemScans[recentKey] = nil
 
             if not pending.quiet then
                 ns.Warn("the auction house did not answer that search; using the last known price.")
@@ -1521,7 +1536,7 @@ function Scanner:AbandonItemScan(callback)
     -- here, the panel could sit on "searching" for the rest of the visit.
     self.pendingItem = nil
     self.abandonedItem = pending
-    if self.recentItemScans then self.recentItemScans[pending.itemID] = nil end
+    if self.recentItemScans then self.recentItemScans[pending.recentKey or pending.itemID] = nil end
 
     return true
 end

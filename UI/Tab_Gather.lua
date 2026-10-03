@@ -293,11 +293,9 @@ local function Refresh()
             summary.unknown.count, summary.unknown.count == 1 and "" or "s")
         or "")
 
-    if ns.Vendor:Count() == 0 then
-        widgets.vendorNote:SetText("No vendor prices learned yet. Open a trade goods vendor once so vendor options can be compared.")
-    else
-        widgets.vendorNote:SetText("")
-    end
+    -- Vendor prices ship with the addon now (Data/VendorPrices.lua), so there
+    -- is no longer a "visit a vendor first" note to show.
+    widgets.vendorNote:SetText("")
 end
 
 --------------------------------------------------------------------------------

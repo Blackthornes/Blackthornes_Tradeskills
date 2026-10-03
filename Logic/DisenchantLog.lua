@@ -152,6 +152,8 @@ end
 --- anything else worth noticing.
 local function Chime(big)
     if type(PlaySound) ~= "function" then return end
+    -- Settings: SOUNDS, Disenchant finds.
+    if ns.Config and ns.Config:Get("disenchantSound") == false then return end
     local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
     local kit = big and (kits.LEVELUPSOUND or 888) or kits.UI_EPICLOOT_TOAST
     if kit then pcall(PlaySound, kit) end
