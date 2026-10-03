@@ -179,7 +179,12 @@ function Crafting:OnBagUpdate()
     for _, entry in ipairs(entries) do
         local recipe = ns.Recipes:GetAny(entry.recipeID)
 
-        if recipe and recipe.outputItemID then
+        -- A craft this character does not know is made on another one, and
+        -- what turns up here was mailed over, not made. Counted, the bolts
+        -- the tailor sent took the bolts off the tailor's queue a second time.
+        local elsewhere = ns.Recipes.Get and ns.Recipes:Get(entry.recipeID) == nil
+
+        if recipe and recipe.outputItemID and not elsewhere then
             local held = ns.Inventory:GetBagCount(recipe.outputItemID)
             local previous = self.seen and self.seen[recipe.outputItemID]
 
@@ -227,7 +232,15 @@ function Crafting:OnBagUpdate()
                     unclaimed[output] = unclaimed[output] - made * perCraft
                     -- Worked out first: SetQuantity changes the entry itself.
                     local left = entry.quantity - made
+                    local owner = entry.owner
                     ns.Queue:SetQuantity(entry.recipeID, left)
+
+                    -- Made for the character who queued it: the mailbox
+                    -- offers to send it to them.
+                    if owner and owner ~= ns.Config:GetCharacterKey()
+                        and ns.QueueMail and ns.QueueMail.NoteMadeFor then
+                        ns.QueueMail:NoteMadeFor(owner, output, made * perCraft)
+                    end
 
                     ns.Print(("made %d of %s%s"):format(made,
                         ns.Recipes:GetDisplayLink(entry.recipeID), LeftText(left)))

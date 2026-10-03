@@ -41,6 +41,372 @@ end
 -- depth the cost engine itself recurses to.
 local MAX_DEPENDENCY_DEPTH = 3
 
+--------------------------------------------------------------------------------
+-- Who makes what
+--------------------------------------------------------------------------------
+
+-- The queue is shared by every character on the account. Each craft
+-- remembers who queued it (`owner`), and each sub-craft who makes it
+-- (`crafter`) and for whom (`forCharacters`), so the plan reads the same
+-- whichever character is logged in: Trent queues a bag, his tailor alt is
+-- given the bolts, and logging into the tailor shows them as made for Trent.
+
+local function SelfKey()
+    return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or nil
+end
+
+local function CharacterRecord(characterKey)
+    local characters = ns.db and ns.db.characters
+    local record = characterKey and characters and characters[characterKey]
+    if type(record) == "table" then return record end
+end
+
+--- Are sub-crafts given to whichever character makes them for less?
+-- Off, or with no characters on record, the queue only ever plans for the
+-- character logged in, as it did before.
+function Queue:SharesWithAlts()
+    if ns.Config:Get("shareQueueWithAlts") == false then return false end
+    return CharacterRecord(SelfKey()) ~= nil
+end
+
+--- Can one character mail the other? The same realm, and the same faction
+--- where both are known.
+function Queue:CanMail(fromKey, toKey)
+    if fromKey == toKey then return true end
+
+    local from, to = CharacterRecord(fromKey), CharacterRecord(toKey)
+    if not (from and to) then return false end
+
+    if from.realm and to.realm and from.realm ~= to.realm then return false end
+    if from.faction and to.faction and from.faction ~= to.faction then return false end
+    return true
+end
+
+--- Does this character know the recipe, in a profession it still has?
+function Queue:Knows(characterKey, recipeID)
+    local record = CharacterRecord(characterKey)
+    local recipe = record and record.recipes and record.recipes[recipeID]
+    if not recipe then return false end
+
+    if ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe, characterKey) then
+        return false
+    end
+    return true
+end
+
+--- Every character on record, in a fixed order, so a choice between two
+--- equal ones is the same whoever is logged in.
+local function SortedCharacterKeys()
+    local keys = {}
+    for characterKey, record in pairs((ns.db and ns.db.characters) or {}) do
+        if type(record) == "table" then keys[#keys + 1] = characterKey end
+    end
+    table.sort(keys)
+    return keys
+end
+
+--- Which character makes this queued craft.
+--
+-- A sub-craft says. A craft you queued is made by whoever queued it when
+-- they know it, else by another character who does and can mail it back.
+-- A craft queued before owners were kept is made here when this character
+-- knows it.
+function Queue:GetCrafter(entry)
+    if entry.crafter then return entry.crafter end
+
+    local owner = entry.owner
+    if owner and self:Knows(owner, entry.recipeID) then return owner end
+
+    local selfKey = SelfKey()
+    if not owner and self:Knows(selfKey, entry.recipeID) then return selfKey end
+
+    for _, characterKey in ipairs(SortedCharacterKeys()) do
+        if self:Knows(characterKey, entry.recipeID)
+            and (not owner or self:CanMail(characterKey, owner)) then
+            return characterKey
+        end
+    end
+
+    local _, knownBy = ns.Recipes:GetAny(entry.recipeID)
+    return knownBy or owner or selfKey
+end
+
+--- Who a queued craft is for, other than the character making it.
+-- @return list of character keys in a fixed order, empty when it is the
+--   crafter's own
+function Queue:GetRecipients(entry)
+    local crafter = self:GetCrafter(entry)
+    local seen, list = {}, {}
+
+    local function add(characterKey)
+        if characterKey and characterKey ~= crafter and not seen[characterKey] then
+            seen[characterKey] = true
+            list[#list + 1] = characterKey
+        end
+    end
+
+    for characterKey in pairs(entry.forCharacters or {}) do add(characterKey) end
+    table.sort(list)
+
+    -- A craft you queued that another character makes goes back to you.
+    if not entry.isDependency then add(entry.owner) end
+
+    return list
+end
+
+--- How many of an item a character holds: bags, bank and, unless switched
+--- off, mailbox. Live for the character logged in; for anyone else as last
+--- seen, plus what has been mailed to them since.
+function Queue:HeldBy(characterKey, itemID)
+    if not characterKey or characterKey == SelfKey() then
+        return ns.Inventory:GetOwnedCount(itemID)
+    end
+
+    local record = CharacterRecord(characterKey)
+    if not record then return 0 end
+
+    local held = ((record.inventory and record.inventory[itemID]) or 0)
+        + ((record.bank and record.bank[itemID]) or 0)
+
+    if ns.Config:Get("countMailAsStock") ~= false then
+        held = held + ((record.mail and record.mail[itemID]) or 0)
+    end
+
+    if ns.QueueMail and ns.QueueMail.InFlight then
+        held = held + ns.QueueMail:InFlight(characterKey, itemID)
+    end
+
+    return held
+end
+
+--- Every recipe every character knows, by the item it makes.
+local function MakersByOutput()
+    local byOutput = {}
+
+    for _, characterKey in ipairs(SortedCharacterKeys()) do
+        local record = CharacterRecord(characterKey)
+        for recipeID, recipe in pairs(record.recipes or {}) do
+            local itemID = type(recipe) == "table" and recipe.outputItemID
+            local dropped = itemID and ns.Recipes.IsDropped
+                and ns.Recipes:IsDropped(recipe, characterKey)
+            if itemID and not dropped then
+                local list = byOutput[itemID] or {}
+                list[#list + 1] = { characterKey = characterKey, recipeID = recipeID, recipe = recipe }
+                byOutput[itemID] = list
+            end
+        end
+    end
+
+    -- pairs() gives a character's recipes in no fixed order.
+    for _, list in pairs(byOutput) do
+        table.sort(list, function(a, b)
+            if a.characterKey ~= b.characterKey then return a.characterKey < b.characterKey end
+            return a.recipeID < b.recipeID
+        end)
+    end
+
+    return byOutput
+end
+
+--- Who should make a material, when making it beats buying it.
+--
+-- Only characters who can mail it to everyone who needs it. Something that
+-- binds when picked up cannot be mailed, so only a character who needs it
+-- can make it. Among those who can, the character who needs it comes first
+-- (nothing to send), then the one who queued the craft, then the cheapest,
+-- then a fixed order.
+--
+-- @param need { crafters = { [key] = true }, owner }
+-- @return { characterKey, recipeID, recipe } or nil to buy it
+function Queue:PickMaker(itemID, need, makers)
+    local candidates = makers[itemID]
+    if not candidates then return nil end
+
+    local bound = ns.Util and ns.Util.IsBoundOnPickup
+        and ns.Util.IsBoundOnPickup(itemID) == true
+    local buyUnit = ns.Cost:GetReagentUnitCost(itemID)
+
+    local best
+    for _, candidate in ipairs(candidates) do
+        local reachable = true
+        for crafter in pairs(need.crafters) do
+            if bound then
+                reachable = reachable and candidate.characterKey == crafter
+            else
+                reachable = reachable and self:CanMail(candidate.characterKey, crafter)
+            end
+        end
+
+        if reachable then
+            local cost = ns.Cost:GetCraftCost(candidate.recipeID)
+            local unit = cost and cost.priceable and cost.perUnit
+
+            if unit and (not buyUnit or unit < buyUnit) then
+                local rank = need.crafters[candidate.characterKey] and 0
+                    or (candidate.characterKey == need.owner and 1) or 2
+
+                if not best or rank < best.rank
+                    or (rank == best.rank and unit < best.unit) then
+                    best = { characterKey = candidate.characterKey, recipeID = candidate.recipeID,
+                        recipe = candidate.recipe, rank = rank, unit = unit }
+                end
+            end
+        end
+    end
+
+    return best
+end
+
+--- The sub-crafts for every character at once (see SharesWithAlts).
+--
+-- The same walk as for one character: requirements summed per material over
+-- each level, the shortfall made into crafts. What differs is who makes them
+-- and what counts as already held: what everyone the material is for holds,
+-- and what the one making it holds, since what they made waits to be sent.
+function Queue:DeriveAcrossCharacters(manual, derived, maxDepth)
+    local makers = MakersByOutput()
+
+    local function process(entries, depth)
+        if depth >= maxDepth or #entries == 0 then return end
+
+        local needs, order = {}, {}
+
+        for _, entry in ipairs(entries) do
+            local recipe = ns.Recipes:GetAny(entry.recipeID)
+            local crafter = self:GetCrafter(entry)
+
+            for _, reagent in ipairs((recipe and recipe.reagents) or {}) do
+                local need = needs[reagent.itemID]
+                if not need then
+                    need = { units = 0, parents = {}, crafters = {} }
+                    needs[reagent.itemID] = need
+                    order[#order + 1] = reagent.itemID
+                end
+
+                need.units = need.units + reagent.quantity * entry.quantity
+                need.parents[entry.recipeID] = true
+                need.crafters[crafter] = true
+                need.owner = need.owner or entry.owner
+            end
+        end
+
+        -- A fixed order, so the same queue always derives the same plan.
+        table.sort(order)
+
+        local nextLevel = {}
+
+        for _, itemID in ipairs(order) do
+            local need = needs[itemID]
+            local maker = self:PickMaker(itemID, need, makers)
+
+            if maker then
+                local held = 0
+                for characterKey in pairs(need.crafters) do
+                    held = held + self:HeldBy(characterKey, itemID)
+                end
+                if not need.crafters[maker.characterKey] then
+                    held = held + self:HeldBy(maker.characterKey, itemID)
+                end
+
+                local short = math.max(0, need.units - held)
+
+                if short > 0 then
+                    local perCraft = math.max(1, maker.recipe.quantityMin or 1)
+
+                    local entry = {
+                        recipeID = maker.recipeID,
+                        quantity = math.ceil(short / perCraft),
+                        isDependency = true,
+                        forRecipes = need.parents,
+                        forCharacters = need.crafters,
+                        crafter = maker.characterKey,
+                        owner = need.owner,
+                        depth = depth,
+                        addedAt = time(),
+                    }
+
+                    derived[#derived + 1] = entry
+                    nextLevel[#nextLevel + 1] = entry
+                end
+            end
+        end
+
+        process(nextLevel, depth + 1)
+    end
+
+    process(manual, 0)
+end
+
+--- What a character makes for someone else.
+-- @return list of { entry, recipients = { keys } }
+function Queue:GetHelping(characterKey)
+    characterKey = characterKey or SelfKey()
+    local list = {}
+
+    for _, entry in ipairs(self:GetAll()) do
+        if self:GetCrafter(entry) == characterKey then
+            local recipients = self:GetRecipients(entry)
+            if #recipients > 0 then
+                list[#list + 1] = { entry = entry, recipients = recipients }
+            end
+        end
+    end
+
+    return list
+end
+
+local function ShortName(characterKey)
+    if ns.Recipes.GetShortCharacterName then
+        return ns.Recipes:GetShortCharacterName(characterKey)
+    end
+    return ns.Recipes:GetCharacterName(characterKey)
+end
+
+function Queue:JoinNames(keys)
+    local names = {}
+    for index, characterKey in ipairs(keys) do names[index] = ShortName(characterKey) end
+    return table.concat(names, ", ")
+end
+
+--- Who a queued craft is for and who makes it, as the character logged in
+--- sees it. Longest wording first, so a row can use the first that fits.
+-- @return list of texts, empty when it is all this character's own
+function Queue:DescribeWho(entry)
+    local viewer = SelfKey()
+    local crafter = self:GetCrafter(entry)
+    local recipients = self:GetRecipients(entry)
+
+    local others = {}
+    for _, characterKey in ipairs(recipients) do
+        if characterKey ~= viewer then others[#others + 1] = characterKey end
+    end
+
+    local texts = {}
+
+    if crafter == viewer then
+        if #others > 0 then
+            local names = self:JoinNames(others)
+            texts[#texts + 1] = ("you make this for %s"):format(names)
+            texts[#texts + 1] = ("for %s"):format(names)
+        end
+        return texts
+    end
+
+    local maker = ShortName(crafter)
+    if #others > 0 then
+        local names = self:JoinNames(others)
+        texts[#texts + 1] = ("%s makes this for %s"):format(maker, names)
+        texts[#texts + 1] = ("%s, for %s"):format(maker, names)
+    elseif #recipients > 0 then
+        texts[#texts + 1] = ("%s makes this for you"):format(maker)
+    else
+        texts[#texts + 1] = ("%s's craft"):format(maker)
+    end
+    texts[#texts + 1] = ("on %s"):format(maker)
+
+    return texts
+end
+
 --- Rebuild every sub-craft in the queue from the crafts you actually asked for.
 --
 -- Dependencies are derived, never stored independently. Storing them would mean
@@ -65,7 +431,11 @@ function Queue:RebuildDependencies()
 
     local derived = {}
 
-    if ns.Config:Get("autoQueueSubCrafts") ~= false then
+    if ns.Config:Get("autoQueueSubCrafts") ~= false and self:SharesWithAlts() then
+        self:DeriveAcrossCharacters(manual, derived, MAX_DEPENDENCY_DEPTH)
+    elseif ns.Config:Get("autoQueueSubCrafts") ~= false then
+        local selfKey = SelfKey()
+
         local function process(entries, depth)
             if depth >= MAX_DEPENDENCY_DEPTH or #entries == 0 then return end
 
@@ -109,6 +479,7 @@ function Queue:RebuildDependencies()
                             quantity = math.ceil(short / perCraft),
                             isDependency = true,
                             forRecipes = need.parents,
+                            crafter = selfKey,
                             depth = depth,
                             addedAt = time(),
                         }
@@ -155,7 +526,8 @@ end
 -- now finds the bolts queued and their wool on the shopping list, and the one
 -- that cannot make them goes back to buying them.
 function Queue:OnEnable()
-    if ns.Config:Get("suggestOtherCharacters") == false then return end
+    if ns.Config:Get("suggestOtherCharacters") == false
+        and ns.Config:Get("shareQueueWithAlts") == false then return end
     if not (C_Timer and C_Timer.After) then return end
 
     -- A moment's grace so the bags have been read: sub-crafts are sized
@@ -175,9 +547,16 @@ function Queue:RefreshForCharacter()
 
     self:RebuildDependencies()
 
+    -- Shared, the plan does not change with who logs in, so what this
+    -- character makes for the others is what it is told.
+    local shared = self:SharesWithAlts()
+    if shared then self:AnnounceHelping() end
+
     local added = {}
     for _, entry in ipairs(self:GetAll()) do
-        if entry.isDependency and not before[entry.recipeID] then
+        if entry.isDependency and not before[entry.recipeID] and shared then
+            added[#added + 1] = entry
+        elseif entry.isDependency and not before[entry.recipeID] then
             added[#added + 1] = entry
 
             local recipe = ns.Recipes:GetAny(entry.recipeID)
@@ -191,6 +570,36 @@ function Queue:RefreshForCharacter()
 
     self:Notify()
     return added
+end
+
+-- More than this many lines at login is a wall of chat; the rest are counted.
+local HELPING_LINES = 4
+
+--- Tell this character what it makes for the others, once at login.
+function Queue:AnnounceHelping()
+    local helping = self:GetHelping()
+    if #helping == 0 then return end
+
+    for index, help in ipairs(helping) do
+        if index > HELPING_LINES then
+            ns.Print(("and %d more for your other characters. The Queue tab has them all.")
+                :format(#helping - HELPING_LINES))
+            break
+        end
+
+        local entry = help.entry
+        local recipe = ns.Recipes:GetAny(entry.recipeID)
+        local name = (recipe and recipe.name) or "a craft"
+        local parents = entry.isDependency and self:GetDependencyParents(entry) or {}
+
+        if #parents > 0 then
+            ns.Print(("helping %s: make %d x %s for %s."):format(self:JoinNames(help.recipients),
+                entry.quantity, name, table.concat(parents, ", ")))
+        else
+            ns.Print(("helping %s: make %d x %s."):format(self:JoinNames(help.recipients),
+                entry.quantity, name))
+        end
+    end
 end
 
 --- The crafts this dependency exists to serve, for display.
@@ -233,6 +642,9 @@ function Queue:Add(recipeID, quantity, options)
             recipeID = recipeID,
             quantity = quantity,
             addedAt = time(),
+            -- Who queued it. More of the same craft queued on another
+            -- character adds to this entry and leaves the first owner.
+            owner = SelfKey(),
             snapshotCost = analysis and analysis.totalCost or nil,
             snapshotProfit = analysis and analysis.profit or nil,
         }
@@ -277,6 +689,7 @@ function Queue:AddUpToLimit(analyses)
                             recipeID = analysis.recipeID,
                             quantity = count,
                             addedAt = time(),
+                            owner = SelfKey(),
                             snapshotCost = current and current.totalCost or nil,
                             snapshotProfit = current and current.profit or nil,
                         }
@@ -477,15 +890,29 @@ function Queue:GetShoppingList()
     local required = {}
     local queuedToMake = {}
 
+    -- Shared with the alts, a material another character uses is first
+    -- taken from what that character already holds: the tailor's own wool
+    -- goes into the tailor's bolts, and only the rest is yours to get.
+    local shared = self:SharesWithAlts()
+    local selfKey = SelfKey()
+    local forOthers = {}
+
     for _, entry in ipairs(self:GetAll()) do
         -- GetAny, as everywhere else the queue is read: an alt's craft queued
         -- from the account-wide view still needs its materials gathered.
         local recipe = ns.Recipes:GetAny(entry.recipeID)
+        local crafter = shared and self:GetCrafter(entry) or selfKey
 
         if recipe then
             for _, reagent in ipairs(recipe.reagents or {}) do
-                required[reagent.itemID] = (required[reagent.itemID] or 0)
-                    + (reagent.quantity * entry.quantity)
+                local units = reagent.quantity * entry.quantity
+                required[reagent.itemID] = (required[reagent.itemID] or 0) + units
+
+                if crafter ~= selfKey then
+                    local byCharacter = forOthers[reagent.itemID] or {}
+                    byCharacter[crafter] = (byCharacter[crafter] or 0) + units
+                    forOthers[reagent.itemID] = byCharacter
+                end
             end
         end
 
@@ -505,6 +932,16 @@ function Queue:GetShoppingList()
 
     for itemID, needed in pairs(required) do
         needed = needed - (queuedToMake[itemID] or 0)
+
+        -- What the others need of it, and how much of that they hold.
+        local othersNeed, othersHold = nil, 0
+        for characterKey, units in pairs(forOthers[itemID] or {}) do
+            othersNeed = othersNeed or {}
+            othersNeed[characterKey] = units
+            othersHold = othersHold + math.min(units, self:HeldBy(characterKey, itemID))
+        end
+        needed = needed - othersHold
+
         if needed > 0 then
             -- A shopping list asks "must I buy this", so it counts the bank: you
             -- already own it, it just needs collecting.
@@ -572,6 +1009,10 @@ function Queue:GetShoppingList()
                 savingPerUnit = savingPerUnit,
                 savingTotal = savingPerUnit and (savingPerUnit * shortfall) or nil,
                 onAlts = ns.Inventory:GetAltTotal(itemID),
+                -- { [characterKey] = units } of this the others' crafts use,
+                -- and how many of those they already hold.
+                forOthers = othersNeed,
+                othersHold = othersHold,
                 -- Cheaper to make on another character, when asked to look.
                 altCraft = altContext and shortfall > 0
                     and self:GetAltCraftOffer(itemID, shortfall, unitCost, altContext) or nil,
@@ -606,10 +1047,12 @@ local function AltRecipesByOutput()
     local byOutput = {}
     if not (ns.db and ns.db.characters) then return byOutput end
 
-    local selfKey = ns.Config:GetCharacterKey()
+    local selfKey = SelfKey()
 
     for characterKey, record in pairs(ns.db.characters) do
-        if characterKey ~= selfKey and type(record) == "table" then
+        -- Only characters who could mail it here.
+        if characterKey ~= selfKey and type(record) == "table"
+            and Queue:CanMail(characterKey, selfKey) then
             for recipeID, recipe in pairs(record.recipes or {}) do
                 local itemID = recipe.outputItemID
                 -- Not from a profession that character has dropped.

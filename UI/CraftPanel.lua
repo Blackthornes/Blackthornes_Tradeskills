@@ -1420,13 +1420,19 @@ local function UpdateQueuedRow(row, entry)
 
     -- A material the queue added for another craft says which, as the Queue
     -- tab does, and has no x: it is sized from that craft.
+    local texts = {}
     if entry.isDependency then
         local parents = ns.Queue:GetDependencyParents(entry)
         status = ("for %s · %s"):format(
             #parents > 0 and table.concat(parents, ", ") or "another craft", status)
     end
 
-    row.detail:SetText(status)
+    -- Who it is for, when another of your characters is waiting on it, or
+    -- who makes it, when it is not this one: the longest that fits.
+    local who = ns.Queue.DescribeWho and ns.Queue:DescribeWho(entry) or {}
+    for _, text in ipairs(who) do texts[#texts + 1] = text .. " · " .. status end
+    texts[#texts + 1] = status
+    Theme.FitText(row.detail, texts)
     row.detail:SetTextColor(Theme.Unpack(colour))
 
     row.remove:SetShown(not entry.isDependency)

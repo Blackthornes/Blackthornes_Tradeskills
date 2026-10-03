@@ -33,6 +33,7 @@ Logic\SkillUp.lua
 Logic\Profit.lua
 Logic\LevelUp.lua
 Logic\Queue.lua
+Logic\QueueMail.lua
 Logic\Crafting.lua
 Logic\Posting.lua
 Logic\Transfer.lua
@@ -57,6 +58,7 @@ UI\CraftProgress.lua
 UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\MailReport.lua
+UI\QueueMailPanel.lua
 UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
 UI\Tab_Enchanting.lua
