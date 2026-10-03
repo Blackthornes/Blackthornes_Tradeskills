@@ -9,11 +9,16 @@
 --      is never cut to "...". It goes back to its own width for "Nothing
 --      needed here" and "Buying...".
 --   4. The tooltip's first line carries the total.
+--   5. After buying, the button waits for the bags to hold what was bought,
+--      then reads "Nothing needed here". It used to redraw from the old
+--      counts the moment the run ended and offer the same materials again
+--      (Trent, 2026-10-03: 12 Coarse Thread bought, "Buy materials 1s 8c"
+--      still showing). A bag update at the vendor redraws it too.
 
 -- Tests share one Lua state, so every global replaced here is put back,
 -- including the ones that were not set at all.
 local GLOBALS = { "CreateFrame", "UIParent", "MerchantFrame", "C_Timer", "C_MerchantFrame",
-    "GetMerchantNumItems", "GetMerchantItemLink", "time" }
+    "GetMerchantNumItems", "GetMerchantItemLink", "time", "BuyMerchantItem", "GetMoney" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -51,11 +56,25 @@ MerchantFrame = NewFrame()
 time = function() return 100000 end
 
 local timers = {}
-C_Timer = { After = function(_, fn) timers[#timers + 1] = fn end }
+C_Timer = { After = function(delay, fn) timers[#timers + 1] = { delay = delay, fn = fn } end }
 local function RunTimers()
     local due = timers
     timers = {}
-    for _, fn in ipairs(due) do fn() end
+    for _, timer in ipairs(due) do timer.fn() end
+end
+
+-- Every timer under a second, and the ones they start, leaving the longer
+-- waits for later: a whole purchase run, with nothing given time to arrive.
+local function RunShortTimers()
+    for _ = 1, 100 do
+        local due, kept = {}, {}
+        for _, timer in ipairs(timers) do
+            if timer.delay < 1 then due[#due + 1] = timer else kept[#kept + 1] = timer end
+        end
+        if #due == 0 then return end
+        timers = kept
+        for _, timer in ipairs(due) do timer.fn() end
+    end
 end
 
 -- One vendor selling thread at 1g 50s 50c, so the cost on the button is
@@ -195,6 +214,54 @@ UI:UpdateMerchantButton()
 check("buying: back to 170", button:GetWidth(), 170)
 check("reading Buying...", label:GetText(), "Buying...")
 Vendor.buying = nil
+
+print("")
+print("after buying, it waits for the bags")
+
+-- The shortfall follows the bags, as the real shopping list does, and the
+-- bags only fill when the test says the purchase has arrived.
+local inBags, needed, bought = 0, 12, 0
+ns.Inventory = {
+    GetBagCount = function() return inBags end,
+    InvalidateBagCounts = noop,
+}
+ns.Queue.GetShoppingList = function()
+    return { { itemID = THREAD, shortfall = math.max(0, needed - inBags) } }
+end
+BuyMerchantItem = function(_, amount) bought = bought + amount end
+GetMoney = function() return 10000000 end
+UI.RefreshActiveTab = noop
+
+UI:UpdateMerchantButton()
+check("12 short: offers to buy", label:GetText():match("^Buy materials") ~= nil, true)
+
+button.onClick()
+RunShortTimers()
+check("bought all 12", bought, 12)
+check("bags not caught up: still reads Buying...", label:GetText(), "Buying...")
+check("and cannot be clicked again", button.disabled, true)
+
+inBags = 12
+Fire("BAG_UPDATE_DELAYED")
+check("bags caught up: Nothing needed here", label:GetText(), "Nothing needed here")
+
+print("")
+print("a purchase that never arrives")
+
+inBags, bought = 0, 0
+UI:UpdateMerchantButton()
+button.onClick()
+RunShortTimers()
+check("still waiting", label:GetText(), "Buying...")
+RunTimers()
+check("the wait ends: drawn from the bags as they are", label:GetText():match("^Buy materials") ~= nil, true)
+
+print("")
+print("bags change at the vendor")
+
+inBags = 12
+Fire("BAG_UPDATE_DELAYED")
+check("the button redraws", label:GetText(), "Nothing needed here")
 
 Close()
 check("closing the vendor hides it", Shown(), false)
