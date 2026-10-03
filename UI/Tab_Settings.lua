@@ -338,6 +338,25 @@ local function Build(outer)
     end, { width = 110 })
     widgets.stale:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Crafts taken off the Profit tab with its Ignore button. The rows are
+    -- made in Refresh, one per craft, since the list grows and shrinks.
+    local ignored = CreateSection(container, "IGNORED CRAFTS", { anchor = staleRow })
+    widgets.ignoredSection = ignored
+
+    local ignoredHint = Theme.CreateLabel(container, "tiny", "muted")
+    ignoredHint:SetPoint("TOPLEFT", ignored, "BOTTOMLEFT", 0, ROW_GAP)
+    ignoredHint:SetWidth(COLUMN_WIDTH)
+    ignoredHint:SetWordWrap(true)
+    ignoredHint:SetText("Never shown on the Profit tab, on any character. Restore puts one back.")
+    widgets.ignoredHint = ignoredHint
+
+    widgets.ignoredEmpty = Theme.CreateLabel(container, "small", "dim")
+    widgets.ignoredEmpty:SetWidth(COLUMN_WIDTH)
+    widgets.ignoredEmpty:SetWordWrap(true)
+    widgets.ignoredEmpty:SetText("None. Pick a craft on the Profit tab and click Ignore.")
+    widgets.ignoredRows = {}
+    widgets.ignoredParent = container
+
     ----------------------------------------------------------------------------
     -- Column two: data and advanced
     ----------------------------------------------------------------------------
@@ -648,8 +667,60 @@ local function Put(box, value)
     box:SetValue(value, true)
 end
 
+local IGNORED_ROW_HEIGHT = 22
+local RESTORE_WIDTH = 70
+
+--- One line per ignored craft: its name, and Restore at the column's edge.
+local function IgnoredRow(index)
+    local row = widgets.ignoredRows[index]
+    if row then return row end
+
+    row = CreateFrame("Frame", nil, widgets.ignoredParent)
+    row:SetSize(COLUMN_WIDTH, IGNORED_ROW_HEIGHT)
+    row:SetPoint("TOPLEFT", widgets.ignoredHint, "BOTTOMLEFT", 0,
+        -6 - (index - 1) * (IGNORED_ROW_HEIGHT + 2))
+
+    row.label = Theme.CreateLabel(row, "small", "text")
+    row.label:SetPoint("LEFT", 0, 0)
+    row.label:SetPoint("RIGHT", row, "RIGHT", -RESTORE_WIDTH - 8, 0)
+    row.label:SetWordWrap(false)
+
+    row.restore = Widgets.CreateButton(row, "Restore", function()
+        if row.recipeID then ns.Profit:SetIgnored(row.recipeID, false) end
+    end, { width = RESTORE_WIDTH, height = 20,
+           tooltip = "Show this craft on the Profit tab again" })
+    row.restore:SetPoint("RIGHT", 0, 0)
+    FitButton(row.restore)
+
+    widgets.ignoredRows[index] = row
+    return row
+end
+
+local function RefreshIgnored()
+    if not widgets.ignoredHint or not ns.Profit.GetIgnored then return end
+
+    local list = ns.Profit:GetIgnored()
+
+    for index, entry in ipairs(list) do
+        local row = IgnoredRow(index)
+        row.recipeID = entry.recipeID
+        row.label:SetText(entry.name)
+        row:Show()
+    end
+    for index = #list + 1, #widgets.ignoredRows do
+        widgets.ignoredRows[index].recipeID = nil
+        widgets.ignoredRows[index]:Hide()
+    end
+
+    widgets.ignoredEmpty:ClearAllPoints()
+    widgets.ignoredEmpty:SetPoint("TOPLEFT", widgets.ignoredHint, "BOTTOMLEFT", 0, -6)
+    widgets.ignoredEmpty:SetShown(#list == 0)
+end
+
 local function Refresh()
     if not widgets.undercut then return end
+
+    RefreshIgnored()
 
     local Config = ns.Config
 
