@@ -493,7 +493,15 @@ local function Build(outer)
     end, true)
     widgets.upgradeArrows:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local effectsRow = CreateRow(container, upgradeRow, "Window effects",
+    local shopsRow = CreateRow(container, upgradeRow, "Open with the auction house",
+        "Opens this window when the auction house or a vendor opens, and closes it with them.")
+
+    widgets.openWithShops = Widgets.CreateCheckbox(shopsRow, "Enabled", function(checked)
+        Config:Set("openWithShops", checked)
+    end, false)
+    widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local effectsRow = CreateRow(container, shopsRow, "Window effects",
         "Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all.")
 
     widgets.effects = Widgets.CreateDropdown(effectsRow, {
@@ -683,6 +691,7 @@ local function Refresh()
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
+    widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
     for key, box in pairs(widgets.sounds) do
