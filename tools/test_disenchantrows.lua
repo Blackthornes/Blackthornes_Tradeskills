@@ -54,7 +54,7 @@ C_Item = {
 }
 
 local prices = {
-    [STRANGE_DUST] = 100, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000,
+    [STRANGE_DUST] = 160, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000,
     [1001] = 700, [1002] = 5000, [1011] = 300, [1012] = 700,
 }
 
@@ -162,7 +162,7 @@ local crafts = CraftRows(false)
 -- Undercut by a copper from the 5000 rival listing, as the Sell tab would.
 check("the craft list still shows what it sells for", crafts[1002].sells == 4999
     and crafts[1002].sellsAt == "auction")
-check("so it is not worth more disenchanted (1400)", crafts[1002].beatsSale == false)
+check("so it is not worth more disenchanted (1500)", crafts[1002].beatsSale == false)
 check("and stays out of the \"pays more\" list", CraftRows(true)[1002] == nil)
 check("a craft worth more disenchanted is still in it", CraftRows(true)[1001] ~= nil)
 
