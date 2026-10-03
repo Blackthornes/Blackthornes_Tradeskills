@@ -253,19 +253,19 @@ local function Build(outer)
     end, true)
     widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local shareRow = CreateRow(container, altCraftRow, "Share the queue with alts",
-        "A sub-craft goes to whichever of your characters makes it for less. Each craft remembers who queued it and who it is for.")
+    local shareRow = CreateRow(container, altCraftRow, "Let alts make sub-crafts",
+        "Off: the shopping list only recommends making it on the other character. On: it goes on that character's queue, marked who it is for, and the mailbox lists what to send.")
 
-    widgets.shareQueue = Widgets.CreateCheckbox(shareRow, "Share it", function(checked)
-        Config:Set("shareQueueWithAlts", checked)
+    widgets.shareQueue = Widgets.CreateCheckbox(shareRow, "Hand them over", function(checked)
+        Config:Set("queueAltCrafting", checked)
         -- Who makes each sub-craft is worked out when the queue is rebuilt.
         ns.Queue:RebuildDependencies()
         ns.Queue:Notify()
-    end, true)
+    end, false)
     widgets.shareQueue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local queueMailRow = CreateRow(container, shareRow, "Queue mail at the mailbox",
-        "Lists what to send your other characters for the queue, with a button that fills in the mail. You press Send.")
+        "With alts making sub-crafts, lists what to send them for the queue, with a button that fills in the mail. You press Send.")
 
     widgets.queueMail = Widgets.CreateCheckbox(queueMailRow, "Show it", function(checked)
         Config:Set("queueMailPanel", checked)
@@ -775,7 +775,7 @@ local function Refresh()
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
-    widgets.shareQueue:SetChecked(Config:Get("shareQueueWithAlts") ~= false)
+    widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
     widgets.queueMail:SetChecked(Config:Get("queueMailPanel") ~= false)
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
     widgets.debug:SetChecked(ns.db.global.debug == true)

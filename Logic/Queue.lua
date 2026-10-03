@@ -62,10 +62,11 @@ local function CharacterRecord(characterKey)
 end
 
 --- Are sub-crafts given to whichever character makes them for less?
--- Off, or with no characters on record, the queue only ever plans for the
--- character logged in, as it did before.
+-- Only when switched on in Settings. Off, or with no characters on record,
+-- the queue only ever plans for the character logged in, and the shopping
+-- list recommends the other character instead.
 function Queue:SharesWithAlts()
-    if ns.Config:Get("shareQueueWithAlts") == false then return false end
+    if ns.Config:Get("queueAltCrafting") ~= true then return false end
     return CharacterRecord(SelfKey()) ~= nil
 end
 
@@ -527,7 +528,7 @@ end
 -- that cannot make them goes back to buying them.
 function Queue:OnEnable()
     if ns.Config:Get("suggestOtherCharacters") == false
-        and ns.Config:Get("shareQueueWithAlts") == false then return end
+        and ns.Config:Get("queueAltCrafting") ~= true then return end
     if not (C_Timer and C_Timer.After) then return end
 
     -- A moment's grace so the bags have been read: sub-crafts are sized

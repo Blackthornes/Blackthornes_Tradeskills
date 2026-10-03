@@ -30,7 +30,8 @@ local TRENT, LOOM, FARAWAY = "Player-TRENT", "Player-LOOM", "Player-FAR"
 local bound = {}
 ns.Util = { IsBoundOnPickup = function(itemID) return bound[itemID] == true end }
 
-local settings = { valueOwnedMaterials = true }
+-- Ticked in Settings ("Let alts make sub-crafts"); off by default.
+local settings = { valueOwnedMaterials = true, queueAltCrafting = true }
 local currentKey = TRENT
 ns.Config = {
     Get = function(_, key) return settings[key] end,
@@ -251,13 +252,18 @@ queueOneBag(characters)
 check("Trent makes his own bolts when he can", Queue:GetCrafter(entryFor(20)) == TRENT)
 check("and nothing is mailed", delivery(LOOM) == nil)
 
-print("\nsharing switched off")
+print("\nnot ticked: the default")
 
-settings.shareQueueWithAlts = false
+settings.queueAltCrafting = nil
 queueOneBag()
 check("Trent cannot make bolts, so none are queued", entryFor(20) == nil)
+check("the bolts stay on his list", row(BOLT) and row(BOLT).shortfall == 3)
+check("with Loom recommended", row(BOLT).altCraft and row(BOLT).altCraft.characterKey == LOOM)
 check("and the mailbox has nothing", #QueueMail:GetDeliveries() == 0)
-settings.shareQueueWithAlts = nil
+settings.queueAltCrafting = false
+queueOneBag()
+check("unticked, the same", entryFor(20) == nil)
+settings.queueAltCrafting = true
 
 print("\nfinding a character by the name typed into a mail")
 
