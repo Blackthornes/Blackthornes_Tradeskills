@@ -230,6 +230,11 @@ function Recipes:StampIdentity(record)
     local surname = ns.Config:ReadSurname()
     if surname then record.surname = surname end
 
+    -- Mail only goes to characters of the same faction, so the shared
+    -- queue only gives one character's sub-crafts to another of its side.
+    local faction = PlainString(UnitFactionGroup, "player")
+    if faction then record.faction = faction end
+
     local classOk, className = pcall(UnitClass, "player")
     if classOk and type(className) == "string" then record.class = className end
 
