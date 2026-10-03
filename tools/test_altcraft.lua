@@ -22,6 +22,8 @@ local BAG, BOLT, WOOL, DYE, THREAD = 5000, 2997, 2592, 3825, 2321
 local bound = {}
 ns.Util = { IsBoundOnPickup = function(itemID) return bound[itemID] == true end }
 
+-- Alts making sub-crafts is off unless ticked, so this is only ever a
+-- suggestion. Ticked, the alt is given the bolts (tools/test_sharedqueue.lua).
 local settings = { valueOwnedMaterials = true, suggestOtherCharacters = false }
 local currentKey = "Player-ME"
 ns.Config = {

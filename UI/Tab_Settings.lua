@@ -253,7 +253,27 @@ local function Build(outer)
     end, true)
     widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local lossRow = CreateRow(container, altCraftRow, "Recommend selling at a loss",
+    local shareRow = CreateRow(container, altCraftRow, "Let alts make sub-crafts",
+        "Off: the shopping list only recommends making it on the other character. On: it goes on that character's queue, marked who it is for, and the mailbox lists what to send.")
+
+    widgets.shareQueue = Widgets.CreateCheckbox(shareRow, "Hand them over", function(checked)
+        Config:Set("queueAltCrafting", checked)
+        -- Who makes each sub-craft is worked out when the queue is rebuilt.
+        ns.Queue:RebuildDependencies()
+        ns.Queue:Notify()
+    end, false)
+    widgets.shareQueue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local queueMailRow = CreateRow(container, shareRow, "Queue mail at the mailbox",
+        "With alts making sub-crafts, lists what to send them for the queue, with a button that fills in the mail. You press Send.")
+
+    widgets.queueMail = Widgets.CreateCheckbox(queueMailRow, "Show it", function(checked)
+        Config:Set("queueMailPanel", checked)
+        if ns.QueueMailPanel then ns.QueueMailPanel:Refresh() end
+    end, true)
+    widgets.queueMail:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local lossRow = CreateRow(container, queueMailRow, "Recommend selling at a loss",
         "Off: the Post tab shows them in red but will not list them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
@@ -755,6 +775,8 @@ local function Refresh()
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
+    widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
+    widgets.queueMail:SetChecked(Config:Get("queueMailPanel") ~= false)
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
     widgets.debug:SetChecked(ns.db.global.debug == true)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
