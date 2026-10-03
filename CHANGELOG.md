@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.24.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Vendor prices now come from the item's tooltip, everywhere the addon asks
+  what a vendor pays: Vendor flips, Profit, posting floors, Disenchanting and
+  the Bank view. On Forever the game's item info can still hold Classic's
+  sell price, so Greater Magic Wand showed as a 15s 35c flip while a vendor
+  pays 1c.
+- `/bts sellprice <item>` shows both prices, so you can check any item in
+  game.
+
 ## 0.24.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
