@@ -42,6 +42,7 @@ Logic\FarmerGoals.lua
 Logic\VendorFlips.lua
 Logic\Banks.lua
 Logic\Upgrades.lua
+Logic\BagsFull.lua
 
 UI\Theme.lua
 UI\Widgets.lua
