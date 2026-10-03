@@ -16,6 +16,14 @@ local Util = ns.Util
 -- returns the same cached data and wastes the allowance.
 local REPLICATE_COOLDOWN = 15 * 60
 
+-- How long to wait for the quick full scan to answer before scanning page by
+-- page instead. It was six seconds, and as the auction house filled up the
+-- server took longer than that to build the snapshot: every quick scan gave
+-- way to the page-by-page one even hours after the last (Trent, 2026-10-03).
+-- An answer that comes later still is read anyway; see
+-- REPLICATE_ITEM_LIST_UPDATE.
+local QUICK_SCAN_WAIT = 30
+
 -- A browse sweep that never reports itself complete would otherwise page for
 -- ever, one throttled request at a time.
 local MAX_BROWSE_PAGES = 40
@@ -336,8 +344,10 @@ function Scanner:StartFullScan()
             -- for a scan the server never heard about.
             ns.db.lastReplicateRequest = time()
             ns.db.lastReplicateAnswered = nil
+            Scanner.awaitingReplicate = true
 
             if not pcall(C_AuctionHouse.ReplicateItems) then
+                Scanner.awaitingReplicate = false
                 ns.Print("the game refused the quick full scan, so scanning page by page instead")
                 Scanner:StartBrowseScan()
                 return true
@@ -348,9 +358,13 @@ function Scanner:StartFullScan()
             -- all -- no event, no error. Our own cooldown record can also be
             -- lost, so silence here is expected rather than exceptional. Fall
             -- back to browsing instead of leaving the player watching nothing.
-            Scanner.timeoutHandle = C_Timer.NewTimer(6, function()
+            -- A big auction house is also slow to answer, so the wait is
+            -- generous and a late answer still takes over from the browse.
+            Scanner.timeoutHandle = C_Timer.NewTimer(QUICK_SCAN_WAIT, function()
+                Scanner.timeoutHandle = nil
                 if Scanner.isScanning and not Scanner.isReading then
-                    ns.Print("the quick full scan did not answer (it was used too recently), so scanning page by page instead")
+                    ns.Print(("the quick full scan has not answered in %d seconds, so scanning page by page until it does")
+                        :format(QUICK_SCAN_WAIT))
                     Scanner:StartBrowseScan()
                 end
             end)
@@ -854,30 +868,60 @@ function Scanner:CommitBrowseResults(results, opts)
 end
 
 function Scanner:REPLICATE_ITEM_LIST_UPDATE()
-    if not self.isScanning or self.isReading then return end
+    -- Only an answer to our own request: another addon can ask too.
+    if not self.awaitingReplicate or self.isReading then return end
 
-    -- A late answer after the six-second fallback already started the page
-    -- by page scan: reading it too would run two scans at once, and the
-    -- quick scan finishing would end the other one halfway.
-    if self.isBrowsing or self.browseQueued then return end
+    local ok, numItems = pcall(C_AuctionHouse.GetNumReplicateItems)
+    local answered = ok and type(numItems) == "number" and numItems > 0
+
+    -- A late answer, after the wait ran out and the page-by-page scan took
+    -- over. It used to be thrown away, and the snapshot is the whole
+    -- auction house where the browse is forty pages at most, so the browse
+    -- is stopped and the snapshot read instead. Stopped first: running both
+    -- would have the quick scan finishing end the other one halfway.
+    local late = self.isBrowsing or self.browseQueued
+    if late then
+        if not answered then return end
+        self:StopBrowse()
+        ns.Print("the quick full scan answered after all, so reading it instead")
+    end
 
     if self.timeoutHandle then
         self.timeoutHandle:Cancel()
         self.timeoutHandle = nil
     end
 
-    local ok, numItems = pcall(C_AuctionHouse.GetNumReplicateItems)
-    if ok and numItems and numItems > 0 then
-        ns.db.lastReplicateAnswered = time()
-    end
+    self.awaitingReplicate = false
 
-    if not ok or not numItems or numItems == 0 then
+    if not answered then
         ns.Print("the quick full scan came back empty, so scanning page by page instead")
         self:StartBrowseScan()
         return
     end
 
+    ns.db.lastReplicateAnswered = time()
+
+    -- The page-by-page scan may already have finished, and the snapshot is
+    -- still the fuller picture.
+    self.isScanning = true
+
     self:ReadReplicateResults(numItems)
+end
+
+--- Stop a page-by-page sweep without saving it, for a quick scan that has
+--- answered and will price everything it would have.
+function Scanner:StopBrowse()
+    self:StopBrowseTimeout()
+
+    self.isBrowsing = false
+    self.browseQueued = false
+    self.browseLast = nil
+    self.browseRowsSeen = nil
+
+    if ns.AHQueue then
+        ns.AHQueue:Cancel("browse", true)
+        ns.AHQueue:Cancel("browse-more", true)
+    end
 end
 
 --- Walk the snapshot, accumulating per-item listings.
@@ -1095,6 +1139,7 @@ function Scanner:CancelScan()
     self.isBrowsing = false
     self.scanQueued = false
     self.browseQueued = false
+    self.awaitingReplicate = false
 
     -- A cancelled sweep's last page must not stand in for the next sweep's
     -- rows, where it would be recorded as prices read just now.
@@ -1908,7 +1953,8 @@ ns.RegisterCommand("scanstatus", "show when the quick full scan was last used an
     else
         ns.Print(("quick full scan: last sent %s, %s"):format(
             Util.FormatAgeAgo(time() - sent),
-            answered and answered >= sent and "and it answered" or "and it did not answer"))
+            answered and answered >= sent and ("and it answered after %ds"):format(answered - sent)
+                or "and it did not answer"))
     end
 
     local cooldown = S:GetSnapshotCooldown()
