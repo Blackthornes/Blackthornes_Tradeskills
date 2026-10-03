@@ -699,6 +699,14 @@ function Disenchant:GetCraftRows(opts)
             end
 
             local net = value and math.floor(value * (1 - cut) + 0.5) or nil
+            local gain = (net and costEach) and (net - costEach) or nil
+
+            -- A craft is only worth making to disenchant when what it breaks
+            -- into pays for its materials (Izbode's report, 2026-10-02). A
+            -- soulbound craft beat its vendor price and showed as a win while
+            -- every one made lost money against what went into it.
+            local beatsSale = Beats(value, sells)
+            local losesToMaterials = beatsSale and gain ~= nil and gain <= 0
 
             local row = {
                 kind = "craft",
@@ -715,8 +723,10 @@ function Disenchant:GetCraftRows(opts)
                 soulbound = analysis.soulbound,
                 craftableNow = analysis.craftableNow
                     or (ns.Profit.GetCraftableCount and ns.Profit:GetCraftableCount(recipeID)) or 0,
-                gain = (net and costEach) and (net - costEach) or nil,
-                beatsSale = Beats(value, sells),
+                gain = gain,
+                beatsSale = beatsSale and not losesToMaterials,
+                -- Beats selling, but not the cost of the materials.
+                losesToMaterials = losesToMaterials or nil,
             }
 
             if not opts.beatsOnly or row.beatsSale then
