@@ -55,6 +55,9 @@ local FALLBACK = {
 
 --- Play one of the report's sounds. True if the game said it would.
 function MailReport.Play(which)
+    -- Settings: SOUNDS, Mail report. The report itself still shows.
+    if ns.Config and ns.Config:Get("mailReportSound") == false then return false end
+
     if type(PlaySoundFile) == "function" then
         local ok, willPlay = pcall(PlaySoundFile, MailReport.SOUNDS[which], "Master")
         if ok and willPlay then return true end

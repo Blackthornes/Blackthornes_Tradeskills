@@ -448,7 +448,9 @@ function Crafting:StartWatching()
 
         if Crafting:IsStillCrafting() then return end
 
+        local finished = Crafting.active
         Crafting.active = nil
+        Crafting:AnnounceRunDone(finished)
         Crafting.followUntil = GetTime() + AFTER_BATCH_SECONDS
         Crafting:StopWatching()
 
@@ -458,6 +460,24 @@ function Crafting:StartWatching()
         -- left the pane saying "Stop crafting" (whose click started one).
         if ns.CraftPanel and ns.CraftPanel.RequestRefresh then ns.CraftPanel:RequestRefresh() end
     end)
+end
+
+--- A chime when a run of two or more crafts ends having made something, so a
+--- long run can be left to finish (Izbode's request, 2026-10-02). Stop
+--- clears the run before this is reached, so a stopped run stays quiet.
+function Crafting:AnnounceRunDone(run)
+    if not run or (run.requested or 0) < 2 then return end
+
+    -- Settings: SOUNDS, A run of crafts finishes.
+    if ns.Config:Get("craftDoneSound") == false or type(PlaySound) ~= "function" then return end
+
+    if run.outputItemID then
+        local made = ns.Inventory:GetBagCount(run.outputItemID) - (run.before or 0)
+        if made <= 0 then return end
+    end
+
+    local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
+    pcall(PlaySound, kits.READY_CHECK or 8960)
 end
 
 function Crafting:StopWatching()

@@ -7,9 +7,11 @@
 -- reagents from auction data alone either inflates the craft cost or, when
 -- nothing is listed at all, marks the recipe unpriceable and hides it.
 --
--- Prices are learned by watching merchants rather than shipped as a table: this
--- is a beta, and guessing at prices that may have changed would be worse than
--- having none.
+-- Prices are learned by watching merchants, and until a merchant has been seen
+-- selling something, Data/VendorPrices.lua says what Classic's vendors charge
+-- for it. A player who has never stood at a trade goods vendor still gets vials
+-- and thread costed at the shop price instead of the auction house's (Izbode's
+-- report, 2026-10-02). What a merchant is seen charging always wins.
 
 local _, ns = ...
 
@@ -30,10 +32,12 @@ function Vendor:GetTable()
     return ns.db.vendorPrices
 end
 
---- Copper for one unit, or nil if no vendor has been seen selling it.
+--- Copper for one unit, or nil if no vendor sells it.
 function Vendor:GetUnitPrice(itemID)
     local record = self:GetTable()[itemID]
-    if not record then return nil end
+    if not record then
+        return ns.VENDOR_PRICES and ns.VENDOR_PRICES[itemID] or nil
+    end
 
     -- Items bought with honour, tokens or similar are not purchasable with
     -- gold, so they have no meaningful cash price.

@@ -173,7 +173,7 @@ end
 
 function UpdateRow(row, line)
     row.name:SetText(line.label)
-    Theme.SetItemIcon(row.icon, line.itemID)
+    Theme.SetItemIcon(row.icon, line.itemID, line.link)
 
     local cells = row.cells
 
@@ -281,7 +281,7 @@ function UpdateRow(row, line)
 end
 
 local function ShowRowTooltip(row, line)
-    ns.Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", line.itemID, line.label)
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", line.itemID, line.label, line.link)
     GameTooltip:AddLine(" ")
 
     GameTooltip:AddDoubleLine("In bags", tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
@@ -351,6 +351,7 @@ local function ShowRowTooltip(row, line)
         or "Item auction: one listing at a time", 0.5, 0.5, 0.5)
 
     GameTooltip:AddLine("Type into the LIST box to sell fewer than that.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine("Right-click to search the auction house for it.", 0.5, 0.5, 0.5)
 
     GameTooltip:Show()
 end
@@ -545,6 +546,11 @@ local function Build(container)
         updateRow = UpdateRow,
         onEnter = ShowRowTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- Right-click: every listing of the item on the auction house, all
+        -- its suffixes included (kronosbest's request, 2026-10-02).
+        onClick = function(line, _, mouseButton)
+            if mouseButton == "RightButton" then UI:SearchAuctionHouse(line.itemID) end
+        end,
         -- The headings move in with the rows when the scrollbar takes its room.
         onScrollbarShown = function(shown)
             headings:SetPoint("TOPRIGHT", note, "BOTTOMRIGHT", shown and -10 or 0, -8)

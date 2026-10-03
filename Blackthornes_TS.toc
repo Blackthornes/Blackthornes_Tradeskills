@@ -26,6 +26,7 @@ Data\Recipes.lua
 Data\Inventory.lua
 Data\Mail.lua
 Data\Auctions.lua
+Data\VendorPrices.lua
 Data\Vendor.lua
 
 Logic\Cost.lua
@@ -44,6 +45,7 @@ Logic\FarmerGoals.lua
 Logic\VendorFlips.lua
 Logic\Banks.lua
 Logic\Upgrades.lua
+Logic\BagsFull.lua
 
 UI\Theme.lua
 UI\Widgets.lua

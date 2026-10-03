@@ -1,0 +1,9 @@
+<!-- Blackthornes Tradeskills: key bindings, under Options, Keybindings,
+     AddOns. Names are set in UI/Main.lua. The client loads this file by
+     itself; it is not listed in the TOC. -->
+<Bindings>
+    <Binding name="BLACKTHORNESTS_TOGGLE" header="BLACKTHORNESTS" category="ADDONS">
+        BlackthornesTS.UI:Toggle()
+    </Binding>
+    <Binding name="CLICK BlackthornesTSDisenchant:LeftButton" category="ADDONS"/>
+</Bindings>

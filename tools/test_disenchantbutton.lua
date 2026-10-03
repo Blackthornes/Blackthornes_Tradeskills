@@ -340,11 +340,14 @@ local en = {
 }
 local de = {
     button = Under("disenchanting", made.buttons, Labelled("Disenchant")),
-    view = Under("disenchanting", made.dropdowns),
+    -- A tick box since 2026-10-02; select() keeps the steps below readable.
+    view = Under("disenchanting", made.checkboxes, Labelled("Items in my bags")),
     list = Under("disenchanting", made.lists),
     hideTooHigh = Under("disenchanting", made.checkboxes, Labelled("Only ones I can disenchant")),
     detail = Under("disenchanting", panels),
 }
+
+de.view.select = function(value) de.view.onClick(value == "bag") end
 
 local checks = 0
 local function check(label, condition)

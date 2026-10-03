@@ -137,6 +137,18 @@ commands.why("Linen Belt")
 check("/bts why shows the cut", Printed("auction cut     -"), true)
 
 print("")
+print("a rival at 85c: a bigger number, but less in the pocket")
+
+-- Listed at 84c the belt pays 84 less the 5% cut less a 3c deposit, under
+-- 77c. The vendor's 80c is the better sale (Izbode, 2026-10-02: take the max
+-- of auction profit and vendor profit).
+ns.Prices:Record(BELT, 85, 85, 4, time(), 85, nil)
+a = Profit:Analyse(RECIPE)
+check("it is valued at what the vendor pays", a.unitRevenue, 80)
+check("as a vendor sale", a.priceBasis, "vendor")
+check("what a listing pays is worked out net", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), 768)
+
+print("")
 print("never scanned, with estimates from materials turned off")
 
 priceTable[BELT] = nil

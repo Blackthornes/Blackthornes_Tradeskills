@@ -54,6 +54,8 @@ FarmerGoals.ItemName = ItemName
 
 local function Cheer()
     if type(PlaySound) ~= "function" then return end
+    -- Settings: SOUNDS, Farmer goal set.
+    if ns.Config and ns.Config:Get("goalSound") == false then return end
     local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
     pcall(PlaySound, kits.IG_QUEST_LIST_COMPLETE or 878)
 end
