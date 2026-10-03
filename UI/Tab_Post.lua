@@ -405,6 +405,8 @@ local function Refresh()
     if widgets.showAll then widgets.showAll:SetChecked(showAll) end
 
     local lines, found = VisibleLines()
+    -- A clicked heading's order over the list's own.
+    if widgets.sorter then lines = widgets.sorter:Sort(lines) end
     widgets.list:SetData(lines)
 
     -- Ticking the box or typing in the search makes this a different list,
@@ -526,15 +528,33 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 30, 0)
     nameHeading:SetText("ITEM")
 
+    local sortLabels = { name = nameHeading }
     local offset = -8
     for _, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)
+        sortLabels[column.key] = heading
 
         offset = offset - column.width - 6
     end
+
+    -- Click a heading to sort by it. G, S and C are all the price.
+    local function Price(line) return line.unitPrice end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
+        name = function(line)
+            local label = line.label or ""
+            return label:match("%[(.-)%]") or label
+        end,
+        qty = function(line) return line.postQuantity end,
+        total = function(line) return line.postTotal end,
+        deposit = function(line) return line.deposit end,
+        gold = Price, silver = Price, copper = Price,
+        cost = function(line) return line.unitCost end,
+        count = function(line) return line.count end,
+    }, function() Refresh() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name" }) end
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

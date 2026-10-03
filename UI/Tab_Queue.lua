@@ -488,7 +488,8 @@ local function Refresh()
     entryCosts = ns.Queue:GetEntryCosts()
     widgets.craftList:SetData(entries)
     local shopping = ns.Queue:GetShoppingList()
-    widgets.materialList:SetData(shopping)
+    -- A clicked heading's order over the list's own.
+    widgets.materialList:SetData(widgets.materialSorter and widgets.materialSorter:Sort(shopping) or shopping)
     UpdateAltNote(shopping)
     AnnounceAltCrafts(shopping)
 
@@ -658,12 +659,26 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 24, 0)
     nameHeading:SetText("MATERIAL")
 
+    local sortLabels = { name = nameHeading }
     for _, column in ipairs(MATERIAL_COLUMNS) do
         local heading = Theme.CreateLabel(columnHeader, "tiny", "muted", "RIGHT")
         heading:SetPoint("RIGHT", column.offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)
+        sortLabels[column.key] = heading
     end
+
+    -- Click a heading to sort the materials by it.
+    widgets.materialSorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
+        name = function(line)
+            local label = Util.GetItemLabel(line.itemID) or ""
+            return label:match("%[(.-)%]") or label
+        end,
+        cost = function(line) return line.estimatedCost end,
+        have = function(line) return line.have end,
+        need = function(line) return line.needed end,
+    }, function() Refresh() end)
+    if widgets.materialSorter then widgets.materialSorter:SetText({ "name" }) end
 
     local materialsDivider = Theme.CreateDivider(materials)
     materialsDivider:SetPoint("TOPLEFT", 10, -45)
