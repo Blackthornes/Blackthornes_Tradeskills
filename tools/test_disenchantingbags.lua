@@ -3,7 +3,7 @@
 -- Trent, 2026-09-29: "Can we setup a way to Disenchant items in your bag
 -- under the Disenchant tab?" What this pins down:
 --   * the tab still opens on the auction house deals, as before;
---   * "Show: Items in your bags" lists the bag rows with their own columns;
+--   * "Items in my bags" ticked lists the bag rows with their own columns;
 --   * the top row is picked by itself and the Disenchant button is armed on
 --     it, and the next row takes over once that item has gone;
 --   * the button is not armed when the item cannot be disenchanted now, and
@@ -88,8 +88,8 @@ ns.Widgets = {
         dropdown = { options = options, select = onSelect }
         return Stub()
     end,
-    CreateCheckbox = function(_, text)
-        local box = Shown()
+    CreateCheckbox = function(_, text, onToggle)
+        local box = Shown({ onToggle = onToggle })
         checkboxes[text] = box
         return box
     end,
@@ -208,10 +208,10 @@ list.opts.onClick(auctionRows[1], 1, "LeftButton")
 check("picking a deal offers the search", search.shown and not disenchant.shown)
 
 print("\nthe bags view")
-check("there is a view picker for it", dropdown and dropdown.options[2].value == "bag"
-    and dropdown.options[2].text == "Show: Items in your bags")
+local bagsBox = checkboxes["Items in my bags"]
+check("there is a tick box for it", bagsBox ~= nil and dropdown == nil)
 
-dropdown.select("bag")
+bagsBox.onToggle(true)
 check("it lists what is in the bags", list.data == bagRows)
 check("with its own tick box", checkboxes["Only where disenchanting pays more"].shown
     and not checkboxes["Only deals over my minimums"].shown)
@@ -271,7 +271,7 @@ check("it cheers the finish", Showing("All done! You disenchanted 1 item this se
 check("no button without an item", not disenchant.shown)
 
 print("\nback to the auction house")
-dropdown.select("auction")
+bagsBox.onToggle(false)
 check("the deals come back", list.data == auctionRows)
 check("and the Disenchant button goes", not disenchant.shown)
 

@@ -917,18 +917,17 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
-    local view = Widgets.CreateDropdown(toolbar, {
-        { text = "Show: Deals on the auction house", value = "auction" },
-        { text = "Show: Items in your bags", value = "bag" },
-    }, function(value)
-        state.view = value == "bag" and "bag" or "auction"
+    -- A tick box rather than a menu (Izbode's request, 2026-10-02): one click
+    -- between the auction house deals and disenchanting from the bags.
+    local view = Widgets.CreateCheckbox(toolbar, "Items in my bags", function(checked)
+        state.view = checked and "bag" or "auction"
         state.selected = nil
         ApplyView()
         widgets.list:ScrollToTop()
         Refresh()
-    end, { width = 210 })
+    end, state.view == "bag")
     view:SetPoint("LEFT", 0, 0)
-    view:SetValue(state.view)
+    widgets.view = view
 
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
