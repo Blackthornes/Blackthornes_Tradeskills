@@ -832,6 +832,8 @@ local function Refresh()
     if not widgets.list then return end
 
     local rows = BuildRows()
+    -- A clicked heading's order over the list's own.
+    if widgets.sorter then rows = widgets.sorter:Sort(rows) end
     widgets.list:SetData(rows)
 
     widgets.emptyLabel:SetShown(#rows == 0)
@@ -904,6 +906,13 @@ local function ApplyView()
         end
     end
 
+    -- The columns now hold other things, so a clicked heading no longer
+    -- means what it did.
+    if widgets.sorter then
+        widgets.sorter:Reset()
+        widgets.sorter:Sync()
+    end
+
     local isBag = state.view == "bag"
     widgets.dealsOnly:SetShown(not isBag)
     widgets.hideTooHigh:SetShown(not isBag)
@@ -973,6 +982,29 @@ local function Build(container)
     for index = 1, MAX_COLUMNS do
         widgets.headings[index] = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
     end
+
+    -- Click a heading to sort by it. The headings change with the view, so
+    -- each one reads whatever column the view puts there.
+    local FIELDS = {
+        difference = function(row) return row.value and row.sells and (row.value - row.sells) or nil end,
+        skill = function(row) return row.needs end,
+    }
+    local sortLabels, values = { name = nameHeading }, {
+        name = function(row) return row.name end,
+    }
+    for index = 1, MAX_COLUMNS do
+        sortLabels[index] = widgets.headings[index]
+        values[index] = function(row)
+            local column = VIEWS[state.view].columns[index]
+            if not column then return nil end
+            local field = FIELDS[column.key]
+            if field then return field(row) end
+            return row[column.key]
+        end
+    end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, values,
+        function() Refresh() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name" }) end
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

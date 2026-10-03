@@ -676,6 +676,13 @@ local function ApplyHeadings()
         end
     end
 
+    -- The columns now hold other things, so a clicked heading no longer
+    -- means what it did.
+    if widgets.sorter then
+        widgets.sorter:Reset()
+        widgets.sorter:Sync()
+    end
+
     widgets.beatsOnly:SetShown(state.view ~= "material")
     widgets.hint:SetShown(state.view ~= "material")
     widgets.hint:SetText(state.view == "craft" and "Right-click a craft to queue one"
@@ -706,6 +713,8 @@ local function Refresh()
     if not widgets.list then return end
 
     local rows = BuildRows()
+    -- A clicked heading's order over the list's own.
+    if widgets.sorter then rows = widgets.sorter:Sort(rows) end
     widgets.list:SetData(rows)
 
     local isList = state.view ~= "material"
@@ -820,6 +829,29 @@ local function Build(container)
     for index = 1, MAX_COLUMNS do
         widgets.headings[index] = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
     end
+
+    -- Click a heading to sort by it. The headings change with the view, so
+    -- each one reads whatever column the view puts there.
+    local FIELDS = {
+        make = function(row) return row.craftableNow end,
+        age = function(row) return row.price and row.age or nil end,
+    }
+    local sortLabels, values = { name = nameHeading }, {
+        name = function(row) return row.name end,
+    }
+    for index = 1, MAX_COLUMNS do
+        sortLabels[index] = widgets.headings[index]
+        values[index] = function(row)
+            local column = VIEWS[state.view].columns[index]
+            if not column then return nil end
+            local field = FIELDS[column.key]
+            if field then return field(row) end
+            return row[column.key]
+        end
+    end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, values,
+        function() Refresh() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name" }) end
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
