@@ -106,6 +106,7 @@ local function BuildList()
     -- Names are only needed to search or sort by; the label itself is read
     -- for the rows on screen, in UpdateRow.
     local wantNames = state.search ~= "" or state.sortBy == "name"
+        or (widgets.sorter ~= nil and widgets.sorter.key == "name")
     local stored = wantNames and StoredNames() or {}
 
     for itemID, record in pairs(ns.Prices:GetTable()) do
@@ -158,6 +159,9 @@ local function BuildList()
         if left == right then return a.itemID < b.itemID end
         return left > right
     end)
+
+    -- A clicked heading's order over the menu's.
+    if widgets.sorter then rows = widgets.sorter:Sort(rows) end
 
     return rows
 end
@@ -585,14 +589,26 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 28, 0)
     nameHeading:SetText("ITEM")
 
+    local sortLabels = { name = nameHeading }
     local offset = -8
     for _, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)
+        sortLabels[column.key] = heading
         offset = offset - column.width - 6
     end
+
+    -- Click a heading to sort by it. Unknown ages sort as unknown, not as
+    -- the oldest.
+    local function Field(key) return function(row) return row[key] end end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
+        name = Field("name"), market = Field("market"), min = Field("min"),
+        quantity = Field("quantity"), liquidity = Field("liquidity"),
+        age = function(row) return row.age ~= math.huge and row.age or nil end,
+    }, function() ShowFromTop() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name" }) end
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

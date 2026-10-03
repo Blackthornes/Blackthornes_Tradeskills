@@ -394,6 +394,8 @@ function BankView.Refresh()
         search = state.search,
     })
     ns.Banks:Sort(list, state.sortBy)
+    -- A clicked heading's order over the menu's.
+    if widgets.sorter then list = widgets.sorter:Sort(list) end
 
     widgets.list:SetData(list)
 
@@ -502,6 +504,20 @@ function BankView.Build(view)
         offset = offset - column.width - 8
     end
     widgets.headings = headings
+
+    -- Click a heading to sort by it.
+    local sortLabels = { name = itemHeading }
+    for key, cell in pairs(headings.cells) do sortLabels[key] = cell end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
+        name = function(entry) return entry.name end,
+        worth = function(entry) return entry.worth end,
+        have = function(entry) return entry.total end,
+        who = function(entry)
+            if #entry.holders == 1 then return names[entry.holders[1].key] end
+            return ("%d characters"):format(#entry.holders)
+        end,
+    }, function() BankView.Refresh() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name", "who" }) end
 
     local list = Widgets.CreateScrollList(view, {
         rowHeight = ROW_HEIGHT,
