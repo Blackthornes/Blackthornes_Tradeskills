@@ -388,6 +388,8 @@ local function Refresh()
     if not widgets.list then return end
 
     local rows = BuildRows()
+    -- A clicked heading's order over the list's own.
+    if widgets.sorter then rows = widgets.sorter:Sort(rows) end
     widgets.list:SetData(rows)
 
     widgets.emptyLabel:SetShown(#rows == 0)
@@ -490,14 +492,25 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
     nameHeading:SetText("ITEM")
 
+    local sortLabels, values = { name = nameHeading }, {}
     local offset = -8
     for _, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetText(column.label)
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
+        sortLabels[column.key] = heading
         offset = offset - column.width - 6
     end
+
+    -- Click a heading to sort by it; each column shows the row field it is
+    -- named for.
+    for key in pairs(sortLabels) do
+        values[key] = function(row) return row[key] end
+    end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, values,
+        function() Refresh() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name" }) end
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

@@ -1375,6 +1375,167 @@ end
 --------------------------------------------------------------------------------
 -- Scroll frame
 --------------------------------------------------------------------------------
+-- Sortable column headings
+--------------------------------------------------------------------------------
+
+-- Blizzard's own list sort arrow, pointing down; flipped for smallest first.
+local SORT_ARROW = [[Interface\Buttons\UI-SortArrow]]
+
+--- Make a list's column headings sort it when clicked (Izbode's request,
+--- 2026-10-02).
+--
+-- The first click on a heading sorts by that column, biggest first (names A
+-- to Z); a second click turns it round; a third gives the list back its own
+-- order. The heading lit in the accent colour, with an arrow beside it, is the
+-- one sorting the list. Nothing is saved: the tab opens in its own order.
+--
+-- @param labels  { [key] = fontString } the headings, as the tab made them
+-- @param values  { [key] = function(row) return number or string end }; a
+--   heading with no entry here is not made clickable
+-- @param onChange  called after a click, to redraw the list
+-- @return sorter with :Sort(rows) (a sorted copy) and :Sync() (match
+--   each click area to its heading's visibility after a layout change)
+function Widgets.SortableHeadings(labels, values, onChange)
+    local sorter = { key = nil, ascending = false, buttons = {} }
+
+    local function Paint()
+        for key, button in pairs(sorter.buttons) do
+            local active = sorter.key == key
+            if active or not button.restColor then
+                button.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
+            else
+                button.label:SetTextColor(unpack(button.restColor))
+            end
+
+            local arrow = button.arrow
+            arrow:SetShown(active)
+            if active then
+                if sorter.ascending then
+                    arrow:SetTexCoord(0, 0.5625, 1, 0)
+                else
+                    arrow:SetTexCoord(0, 0.5625, 0, 1)
+                end
+
+                -- Beside the words, which may sit at either end of a
+                -- heading that is wider than they are.
+                local width = Theme.TextWidth and Theme.TextWidth(button.label) or nil
+                if type(width) ~= "number" then width = 0 end
+                arrow:ClearAllPoints()
+                local justify = button.label.GetJustifyH and button.label:GetJustifyH() or "LEFT"
+                if justify == "RIGHT" then
+                    arrow:SetPoint("RIGHT", button.label, "RIGHT", -math.ceil(width) - 2, 0)
+                else
+                    arrow:SetPoint("LEFT", button.label, "LEFT", math.ceil(width) + 2, 0)
+                end
+            end
+        end
+    end
+
+    for key, label in pairs(labels) do
+        if values[key] then
+            local button = CreateFrame("Button", nil, label:GetParent())
+            button:SetPoint("TOPLEFT", label, "TOPLEFT", 0, 2)
+            button:SetPoint("BOTTOMRIGHT", label, "BOTTOMRIGHT", 0, -2)
+            button.label = label
+
+            local arrow = button:CreateTexture(nil, "OVERLAY")
+            arrow:SetSize(9, 8)
+            pcall(arrow.SetTexture, arrow, SORT_ARROW)
+            arrow:Hide()
+            button.arrow = arrow
+
+            button:SetScript("OnClick", function()
+                if sorter.key ~= key then
+                    sorter.key = key
+                    -- Names read A to Z; numbers biggest first.
+                    sorter.ascending = sorter.isText and sorter.isText[key] or false
+                elseif sorter.ascending == ((sorter.isText and sorter.isText[key]) or false) then
+                    sorter.ascending = not sorter.ascending
+                else
+                    sorter.key = nil
+                end
+
+                Paint()
+                if onChange then onChange(sorter.key, sorter.ascending) end
+            end)
+            button:SetScript("OnEnter", function()
+                if sorter.key ~= key then
+                    label:SetTextColor(Theme.Unpack("text"))
+                end
+            end)
+            button:SetScript("OnLeave", Paint)
+
+            -- Its own colour when it is not the one sorting: some lists draw
+            -- their headings dimmer than others.
+            local ok, r, g, b = pcall(label.GetTextColor, label)
+            button.restColor = ok and type(r) == "number" and { r, g, b } or nil
+
+            sorter.buttons[key] = button
+        end
+    end
+
+    --- Which headings hold names, so they start A to Z.
+    function sorter:SetText(keys)
+        self.isText = {}
+        for _, key in ipairs(keys) do self.isText[key] = true end
+    end
+
+    --- Back to the list's own order, as when a tab changes what its
+    --- columns hold.
+    function sorter:Reset()
+        self.key = nil
+        Paint()
+    end
+
+    function sorter:Sync()
+        for _, button in pairs(self.buttons) do
+            button:SetShown(button.label:IsShown())
+        end
+        if self.key and self.buttons[self.key] and not self.buttons[self.key]:IsShown() then
+            self.key = nil
+        end
+        Paint()
+    end
+
+    --- The rows in the clicked heading's order, as a new list; the rows as
+    --- given when no heading is clicked. Rows with no value go last either
+    --- way round, and rows that tie keep the order they came in.
+    function sorter:Sort(given)
+        local get = self.key and values[self.key]
+        if not get or type(given) ~= "table" then return given end
+
+        local rows, position = {}, {}
+        for index, row in ipairs(given) do
+            rows[index] = row
+            position[row] = index
+        end
+
+        local ascending = self.ascending
+        table.sort(rows, function(a, b)
+            local left, right = get(a), get(b)
+            if type(left) == "string" then left = left:lower() end
+            if type(right) == "string" then right = right:lower() end
+
+            if left == nil or right == nil or type(left) ~= type(right) then
+                if (left == nil) ~= (right == nil) then return right == nil end
+                return position[a] < position[b]
+            end
+
+            if left ~= right then
+                if ascending then return left < right end
+                return left > right
+            end
+            return position[a] < position[b]
+        end)
+
+        return rows
+    end
+
+    Paint()
+    return sorter
+end
+
+--------------------------------------------------------------------------------
 
 --- A plain scrolling container for a laid-out panel.
 --
