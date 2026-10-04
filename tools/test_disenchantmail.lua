@@ -16,11 +16,11 @@ local GREEN_BAND, GREEN_BOOTS, BLUE_SWORD, PURPLE_STAFF, GREY_SHIRT, BOP_GLOVES,
 
 -- Other suites share this Lua state and may leave their own players behind.
 local oldUnitName, oldRealmName = UnitName, GetRealmName
-UnitName = function() return "Trent" end
+UnitName = function() return "Ana" end
 GetRealmName = function() return "Forever" end
 
 local settings = { disenchanterName = "Dusty", disenchanterQuality = 2 }
-local currentKey = "Player-TRENT"
+local currentKey = "Player-ANA"
 
 ns.Config = {
     Get = function(_, key) return settings[key] end,
@@ -29,7 +29,7 @@ ns.Config = {
 
 ns.db = {
     characters = {
-        ["Player-TRENT"] = { name = "Trent", realm = "Forever" },
+        ["Player-ANA"] = { name = "Ana", realm = "Forever" },
         ["Player-DUSTY"] = { name = "Dusty", realm = "Forever" },
     },
 }
@@ -68,7 +68,7 @@ C_Container = {
 
 local function Reset()
     settings.disenchanterName, settings.disenchanterQuality = "Dusty", 2
-    currentKey = "Player-TRENT"
+    currentKey = "Player-ANA"
     upgrades = {}
     bags = {
         Item(GREEN_BAND, 2), Item(GREEN_BAND, 2),
@@ -147,34 +147,34 @@ Reset()
 settings.disenchanterName = ""
 check("nobody set: nothing listed", QueueMail:GetDisenchantDelivery(), nil)
 
-settings.disenchanterName = "  trent "
+settings.disenchanterName = "  ana "
 check("the character playing: nothing listed", QueueMail:GetDisenchantDelivery(), nil)
 
--- Trent, 2026-10-04: logged in on the disenchanter, nothing is offered.
-settings.disenchanterName = "TRENT-Forever"
+-- 2026-10-04: logged in on the disenchanter, nothing is offered.
+settings.disenchanterName = "ANA-Forever"
 check("own name and realm, any case: nothing listed", QueueMail:GetDisenchanter(), nil)
 
-settings.disenchanterName = "trent blackthorne"
-ns.db.characters["Player-TRENT"].surname = "Blackthorne"
+settings.disenchanterName = "ana blackthorne"
+ns.db.characters["Player-ANA"].surname = "Blackthorne"
 check("first and last name: nothing listed", QueueMail:GetDisenchanter(), nil)
-settings.disenchanterName = "Trent  Blackthorne-Forever"
+settings.disenchanterName = "Ana  Blackthorne-Forever"
 check("with the realm and a doubled space too", QueueMail:GetDisenchanter(), nil)
-ns.db.characters["Player-TRENT"].surname = nil
+ns.db.characters["Player-ANA"].surname = nil
 
-settings.disenchanterName = "Trent-OtherRealm"
-check("the same name on another realm is somebody else", QueueMail:GetDisenchanter(), "Trent-OtherRealm")
+settings.disenchanterName = "Ana-OtherRealm"
+check("the same name on another realm is somebody else", QueueMail:GetDisenchanter(), "Ana-OtherRealm")
 
 -- A record the addon has not stamped yet: the game still says who is playing.
-local saved = ns.db.characters["Player-TRENT"]
-ns.db.characters["Player-TRENT"] = nil
-settings.disenchanterName = "trent"
+local saved = ns.db.characters["Player-ANA"]
+ns.db.characters["Player-ANA"] = nil
+settings.disenchanterName = "ana"
 check("no saved record yet: the game's name counts", QueueMail:GetDisenchanter(), nil)
-ns.db.characters["Player-TRENT"] = saved
+ns.db.characters["Player-ANA"] = saved
 
 -- And with nothing from the game, the saved record still says who it is.
 UnitName, GetRealmName = nil, nil
 check("no name from the game: the record's counts", QueueMail:GetDisenchanter(), nil)
-UnitName = function() return "Trent" end
+UnitName = function() return "Ana" end
 GetRealmName = function() return "Forever" end
 
 settings.disenchanterName = "Shardy-OtherRealm"
