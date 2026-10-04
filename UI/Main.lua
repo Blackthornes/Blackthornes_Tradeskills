@@ -871,13 +871,14 @@ function UI:AttachPostButton()
                 return
             end
 
-            local allowed, reason = ns.Posting:CanPost()
+            local line = ns.Posting:GetNextPostable()
+
+            local allowed, reason = ns.Posting:CanPost(line and line.itemID)
             if not allowed then
                 ns.Print(reason or "cannot post right now")
                 return
             end
 
-            local line = ns.Posting:GetNextPostable()
             if line then
                 ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
             else
@@ -980,9 +981,12 @@ UI.ApplyWaitLabel = ApplyWaitLabel
 function UI:UpdateWaitLabels()
     if not ns.Scanner.isAuctionHouseOpen then return end
 
-    local seconds, reason = ns.Posting:SecondsUntilPostable()
+    -- The button lists the item UpdatePostButton last found, and another copy
+    -- of an item being confirmed does not wait for it.
+    local buttonSeconds, buttonReason = ns.Posting:SecondsUntilPostable(self.postButtonItemID)
+    ApplyWaitLabel(self.postButton, "Post Crafted", buttonSeconds, buttonReason)
 
-    ApplyWaitLabel(self.postButton, "Post Crafted", seconds, reason)
+    local seconds, reason = ns.Posting:SecondsUntilPostable()
 
     if ns.PostPanel then
         ns.PostPanel:UpdateWaitLabels(seconds, reason)
@@ -994,6 +998,7 @@ function UI:UpdatePostButton()
     if not button then return end
 
     local line = ns.Posting:GetNextPostable()
+    self.postButtonItemID = line and line.itemID
 
     if not line then
         -- Inert rather than absent, so it never looks like it failed to load.
@@ -1005,8 +1010,8 @@ function UI:UpdatePostButton()
     end
 
     local count, total = ns.Posting:GetSummary()
-    local allowed, reason = ns.Posting:CanPost()
-    local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable()
+    local allowed, reason = ns.Posting:CanPost(line.itemID)
+    local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable(line.itemID)
 
     ApplyWaitLabel(button, "Post Crafted", waitSeconds, waitReason)
     button:SetEnabledState(true)
