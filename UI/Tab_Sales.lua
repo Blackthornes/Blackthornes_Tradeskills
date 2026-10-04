@@ -37,6 +37,7 @@ local DETAIL_WIDTH = 320
 local VIEWS = {
     { text = "Recent sales",   value = "sales" },
     { text = "Recent, all",    value = "all" },
+    { text = "Still listed",   value = "listed" },
     { text = "By item",        value = "item" },
     { text = "Mailbox visits", value = "visits" },
 }
@@ -135,7 +136,17 @@ local function UpdateEventRow(row, entry)
     row.name:SetText(ItemLabel(entry.itemID, entry.name))
     ApplyNameColor(row.name, entry.itemID)
 
-    if entry.kind == "sold" then
+    if entry.kind == "heard" then
+        -- Announced in chat while you were online. Its price arrives with
+        -- its mail, and the row gives way to the ledger's entry then.
+        row.amount:SetText("sold")
+        row.amount:SetTextColor(Theme.Unpack("profit"))
+
+        local who = Util.CharacterName(entry.who)
+        row.detail:SetText(("sold  ·  gold waiting in the mail%s"):format(
+            who ~= "" and ("  ·  " .. who) or ""))
+        row.detail:SetTextColor(Theme.Unpack("warn"))
+    elseif entry.kind == "sold" then
         row.amount:SetText(Util.FormatMoney(entry.net))
         row.amount:SetTextColor(Theme.Unpack("profit"))
 
@@ -216,6 +227,48 @@ local function UpdateItemRow(row, item)
     end
 end
 
+--- How long until a listing ends, or that it has.
+local function EndsText(listing)
+    if listing.ended then return "ended", "warn" end
+    if not listing.ends then return "", "dim" end
+
+    local left = listing.ends - time()
+    local text = Util.FormatAge(left)
+    if text == "just now" then text = "1m" end
+    return (listing.roughEnd and "ends within %s" or "ends in %s"):format(text), "dim"
+end
+
+--- One listing from a character's last auction house reading.
+local function UpdateListingRow(row, listing)
+    row.name:SetText(ItemLabel(listing.itemID, nil))
+    ApplyNameColor(row.name, listing.itemID)
+
+    if listing.unit then
+        row.amount:SetText(Util.FormatMoney(listing.unit * (listing.quantity or 1), { short = true }))
+        row.amount:SetTextColor(Theme.Unpack(listing.ended and "muted" or "text"))
+    else
+        row.amount:SetText("")
+    end
+
+    local parts = { ("%d listed"):format(listing.quantity or 1) }
+    if listing.unit and (listing.quantity or 1) > 1 then
+        parts[#parts + 1] = ("%s each"):format(
+            Util.FormatMoney(listing.unit, { short = true, noColor = true }))
+    end
+    if listing.ended then
+        parts[#parts + 1] = "sold or back in the mail"
+    end
+    local who = Util.CharacterName(listing.who)
+    if who ~= "" then parts[#parts + 1] = who end
+
+    row.detail:SetText(table.concat(parts, "  ·  "))
+    row.detail:SetTextColor(Theme.Unpack(listing.ended and "warn" or "muted"))
+
+    local text, color = EndsText(listing)
+    row.when:SetText(text)
+    row.when:SetTextColor(Theme.Unpack(color))
+end
+
 --- One mailbox visit: what was collected, and the best sale in it.
 local function UpdateVisitRow(row, haul)
     local best = haul.best
@@ -259,7 +312,9 @@ local function UpdateRow(row, data)
     end
 
     Theme.SetItemIcon(row.icon, data.itemID)
-    if data.kind then
+    if data.listing then
+        UpdateListingRow(row, data)
+    elseif data.kind then
         UpdateEventRow(row, data)
     else
         UpdateItemRow(row, data)
@@ -546,7 +601,34 @@ local function Refresh()
 
     local data = {}
 
-    if state.view == "visits" then
+    local heard = (state.view ~= "visits" and state.view ~= "item" and ns.Mail.GetHeard)
+        and ns.Mail:GetHeard() or {}
+    local listedCharacters, endedCount = 0, 0
+
+    if state.view == "listed" then
+        local listings, characters = {}, 0
+        if ns.Auctions and ns.Auctions.GetListings then
+            listings, characters = ns.Auctions:GetListings()
+        end
+        listedCharacters = characters
+
+        for _, listing in ipairs(listings) do
+            if Matches(listing.itemID, nil, query) then
+                if listing.ended then endedCount = endedCount + 1 end
+                -- Flagged on a copy, so nothing is written into saved data.
+                local row = {}
+                for k, v in pairs(listing) do row[k] = v end
+                row.listing = true
+                data[#data + 1] = row
+            end
+        end
+
+        -- Still up first, soonest to end at the top; ended ones after.
+        table.sort(data, function(a, b)
+            if a.ended ~= b.ended then return not a.ended end
+            return (a.ends or math.huge) < (b.ends or math.huge)
+        end)
+    elseif state.view == "visits" then
         local history = ns.MailHaul and ns.MailHaul:GetHistory() or {}
 
         for index = #history, 1, -1 do
@@ -586,6 +668,25 @@ local function Refresh()
                 data[#data + 1] = entry
             end
         end
+
+        -- Sales heard in chat whose mail has not been read yet, newest
+        -- first, among the rest by time.
+        if #heard > 0 then
+            for index = #heard, 1, -1 do
+                local entry = heard[index]
+                if Matches(entry.itemID, entry.name, query) then
+                    data[#data + 1] = setmetatable({ kind = "heard" }, { __index = entry })
+                end
+            end
+
+            -- Kept beside the rows, not on them: ledger rows are saved data.
+            local place = {}
+            for index, entry in ipairs(data) do place[entry] = index end
+            table.sort(data, function(a, b)
+                if (a.t or 0) ~= (b.t or 0) then return (a.t or 0) > (b.t or 0) end
+                return place[a] < place[b]
+            end)
+        end
     end
 
     widgets.list:SetData(data)
@@ -608,7 +709,15 @@ local function Refresh()
     if #data == 0 then
         widgets.emptyLabel:Show()
 
-        if state.view ~= "visits" and totals.sold == 0 and totals.expired == 0 and totals.cancelled == 0 then
+        if state.view == "listed" then
+            if query ~= "" then
+                widgets.emptyLabel:SetText(("Nothing here matches '%s'."):format(state.search))
+            elseif listedCharacters == 0 then
+                widgets.emptyLabel:SetText("Open the auction house once and what you have listed shows here, even after you log out.")
+            else
+                widgets.emptyLabel:SetText("Nothing was listed at your last auction house visit.")
+            end
+        elseif state.view ~= "visits" and totals.sold == 0 and totals.expired == 0 and totals.cancelled == 0 then
             widgets.emptyLabel:SetText(ns.Mail:HasReadThisSession()
                 and "Nothing recorded yet. Sales and expiries are written down when you open the mailbox they arrive in."
                 or "Nothing recorded yet. Visit a mailbox after a listing has ended and it will appear here.")
@@ -637,13 +746,23 @@ local function Refresh()
         return
     end
 
-    widgets.summary:SetText(("%d sold  ·  taken in %s%s"):format(
+    if state.view == "listed" then
+        local up = #data - endedCount
+        widgets.summary:SetText(("%d still listed%s  ·  as of your last auction house visit"):format(
+            math.max(0, up),
+            endedCount > 0 and ("  ·  %d ended since"):format(endedCount) or ""))
+        widgets.carried:Hide()
+        return
+    end
+
+    widgets.summary:SetText(("%d sold  ·  taken in %s%s%s"):format(
         totals.sold,
         Util.FormatMoney(totals.net, { short = true }),
         totals.sellThrough
             and ("  ·  %d%% sell-through"):format(
                 math.floor(totals.sellThrough * 100 + 0.5))
-            or ""))
+            or "",
+        #heard > 0 and ("  ·  %d waiting in the mail"):format(#heard) or ""))
 
     -- Only in the event views, and only when there is something the list
     -- genuinely cannot show. In the By item view the carried-over figures are

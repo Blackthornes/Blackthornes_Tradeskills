@@ -442,6 +442,78 @@ selectView("sales")
 --------------------------------------------------------------------------------
 
 print("")
+print("A sale heard in chat, before its mail is read")
+
+ns.db.heardSales = {}
+Given({})
+ns.Mail:NoteHeardSale("Bolt of Linen Cloth")
+
+row = Row(setmetatable({ kind = "heard" }, { __index = ns.Mail:GetHeard()[1] }))
+check("the amount column says it sold", row.amount.text, "sold")
+contains("and that the gold is in the mail", row.detail.text, "waiting in the mail")
+contains("naming the character", row.detail.text, "Trent")
+
+selectView("sales")
+check("Recent sales lists it straight away", #listData, 1)
+check("as a heard sale", listData[1].kind, "heard")
+check("nothing is written onto the saved heard sale",
+    rawget(ns.db.heardSales.Realm[1], "kind"), nil)
+contains("the footer counts it as waiting", LabelStartingWith("0 sold").text, "1 waiting in the mail")
+
+print("")
+print("Its mail arrives")
+
+local paid = { kind = "sold", t = NOW + 10, who = "Trent-Realm",
+    name = "Bolt of Linen Cloth", net = 3400 }
+Given({ paid })
+check("the heard sale gives way to the real one", #listData, 1)
+check("which is the ledger's entry", listData[1].kind, "sold")
+check("the heard list is empty again", #ns.db.heardSales.Realm, 0)
+check("the ledger entry is marked as heard", paid.heard, true)
+
+ns.Mail:NoteHeardSale("Bolt of Linen Cloth")
+tab.refresh()
+check("an earlier sale's mail does not settle a newer one", #ns.Mail:GetHeard(), 1)
+check("so both show", #listData, 2)
+
+ns.db.heardSales.Realm = {}
+Given({})
+
+print("")
+print("Still listed")
+
+local listings = {
+    { itemID = 2589, quantity = 20, unit = 30, ends = NOW + 7200, who = "Trent-Realm" },
+    { itemID = 2590, quantity = 1, unit = 500, ended = true, who = "Alt-Realm" },
+}
+ns.Auctions = { GetListings = function() return listings, 2 end }
+
+selectView("listed")
+check("one row per listing", #listData, 2)
+check("still up comes first", listData[1].itemID, 2589)
+check("nothing is written onto the reading", rawget(listings[1], "listing"), nil)
+
+row = Row(listData[1])
+check("the amount is the whole listing", row.amount.text, "600c")
+contains("says how many", row.detail.text, "20 listed")
+contains("and the price each", row.detail.text, "30c each")
+contains("and when it ends", row.when.text, "ends in")
+
+row = Row(listData[2])
+check("an ended listing says so", row.when.text, "ended")
+contains("and where it went", row.detail.text, "sold or back in the mail")
+contains("the footer counts both", LabelStartingWith("1 still listed").text, "1 ended since")
+
+ns.Auctions = { GetListings = function() return {}, 0 end }
+tab.refresh()
+check("never read says to open the auction house", LabelStartingWith("Open the auction house") ~= nil, true)
+
+ns.Auctions = nil
+selectView("sales")
+
+--------------------------------------------------------------------------------
+
+print("")
 print(string.format("%d passed, %d failed", passed, failed))
 
 if failed > 0 then

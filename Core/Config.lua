@@ -177,6 +177,11 @@ local DEFAULTS = {
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
         saleAlarm = true,
 
+        -- Keep the game's "A buyer has been found for your auction" lines out
+        -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
+        -- heard sales), so nothing is lost. Off unless the player turns it on.
+        hideSaleChat = false,
+
         -- After collecting mail, a report of what came in: the gold counting
         -- up, the best sale, what came back, and a fanfare on a new record.
         -- Also the running tally over the mailbox. See UI/MailReport.lua.
@@ -281,6 +286,11 @@ local DEFAULTS = {
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
     mailLedger = {},
+
+    -- realmKey -> list of { t, name, itemID, who }: sales the game announced
+    -- in chat while you were online, shown on the Sales tab until their mail
+    -- is read and the ledger has the real entry. See Mail:NoteHeardSale.
+    heardSales = {},
 
     -- realmKey -> when the history restored from macro storage was rolled up
     -- to. Ledger entries from before that moment are already inside it. See
