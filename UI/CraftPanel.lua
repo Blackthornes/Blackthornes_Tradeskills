@@ -1156,6 +1156,12 @@ function CraftPanel:Attach()
     frame:Show()
     self:Refresh()
 
+    -- Opening a profession puts the pane up after the main window, which
+    -- left the pane drawn across it. The window the player had open stays
+    -- in front; a click on the pane still brings the pane forward.
+    local window = ns.UI and ns.UI.window
+    if window and window:IsShown() and window.Raise then window:Raise() end
+
     -- The tabs can be laid out a moment after the window opens, and the game
     -- moves the window into its slot beside the auction house after that:
     -- measure again once they have.
