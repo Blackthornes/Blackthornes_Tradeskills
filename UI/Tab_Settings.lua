@@ -345,7 +345,17 @@ local function Build(outer)
     end, { width = 70, height = 20, tooltip = "Show a sample report" })
     mailReportTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
 
-    local filters = CreateSection(container, "FILTERS", { anchor = mailReportRow })
+    -- Requested by a player whose chat filled with sale lines: the Sales tab
+    -- keeps every sale, so the chat copy can go.
+    local saleChatRow = CreateRow(container, mailReportRow, "Hide sale messages in chat",
+        "Keeps \"A buyer has been found\" out of chat. Every sale is still on the Sales tab.")
+
+    widgets.hideSaleChat = Widgets.CreateCheckbox(saleChatRow, "Hide them", function(checked)
+        Config:Set("hideSaleChat", checked)
+    end, false)
+    widgets.hideSaleChat:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local filters = CreateSection(container, "FILTERS", { anchor = saleChatRow })
 
     local profitRow = CreateRow(container, filters, "Minimum profit",
         "Crafts that make less than this are hidden from the Profit tab. " ..
@@ -891,6 +901,7 @@ local function Refresh()
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
+    widgets.hideSaleChat:SetChecked(Config:Get("hideSaleChat") == true)
     for key, box in pairs(widgets.sounds) do
         box:SetChecked(Config:Get(key) ~= false)
     end

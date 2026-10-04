@@ -1240,6 +1240,101 @@ function Mail:ResetLedger()
 end
 
 --------------------------------------------------------------------------------
+-- Sales heard in chat
+--------------------------------------------------------------------------------
+
+-- A sale made while you are online is announced in chat at once, but its mail
+-- (and so its price) only reaches the ledger when you next open a mailbox.
+-- Heard sales fill that gap: the Sales tab lists them straight away, marked as
+-- waiting for their mail, and each one gives way to the ledger's real entry
+-- once that mail is read.
+
+-- Heard sales kept per realm, and how long one waits for its mail. Auction
+-- mail lasts 30 days, so a sale whose mail never turned up by then never will.
+local MAX_HEARD = 200
+local HEARD_KEEP_SECONDS = 31 * 86400
+
+--- This realm's heard sales, oldest first.
+function Mail:GetHeardList()
+    if not ns.db then return {} end
+
+    local realmKey = ns.Config:GetRealmKey()
+    ns.db.heardSales = ns.db.heardSales or {}
+    ns.db.heardSales[realmKey] = ns.db.heardSales[realmKey] or {}
+
+    return ns.db.heardSales[realmKey]
+end
+
+--- The game said one of your auctions sold. `name` is the item's plain name,
+--- from the chat line.
+function Mail:NoteHeardSale(name)
+    if type(name) ~= "string" or name == "" then return nil end
+
+    local list = self:GetHeardList()
+    local heard = {
+        t = time(),
+        name = name,
+        who = ns.Config:GetCharacterKey(),
+        itemID = self:ResolveItemName(name),
+    }
+
+    list[#list + 1] = heard
+    while #list > MAX_HEARD do table.remove(list, 1) end
+
+    return heard
+end
+
+--- Pair heard sales with the ledger's sold entries, and drop the ones that
+--- found their mail (or waited past the life of a mail).
+--
+-- A ledger entry pairs with at most one heard sale, the oldest one before it
+-- for the same character and item, and is marked `heard` so a later pass does
+-- not pair it again. The heard sale is then dropped: the ledger entry is the
+-- same sale with its price.
+function Mail:SettleHeard()
+    local list = self:GetHeardList()
+    if #list == 0 then return list end
+
+    local entries = self:GetLedger().entries
+    local now = time()
+    local kept = {}
+
+    for _, heard in ipairs(list) do
+        local settled = false
+
+        if (heard.t or 0) < now - HEARD_KEEP_SECONDS then
+            settled = true
+        else
+            for _, entry in ipairs(entries) do
+                if entry.kind == "sold" and not entry.heard
+                    and (entry.t or 0) >= (heard.t or 0) - 5
+                    and (heard.who == nil or entry.who == heard.who)
+                    and ((heard.name and entry.name == heard.name)
+                        or (heard.itemID and entry.itemID == heard.itemID)) then
+                    entry.heard = true
+                    settled = true
+                    break
+                end
+            end
+        end
+
+        if not settled then kept[#kept + 1] = heard end
+    end
+
+    if #kept ~= #list then
+        ns.db.heardSales[ns.Config:GetRealmKey()] = kept
+    end
+
+    return kept
+end
+
+--- Heard sales still waiting for their mail, oldest first.
+function Mail:GetHeard()
+    if not ns.db then return {} end
+    return self:SettleHeard()
+end
+
+--------------------------------------------------------------------------------
 -- Events
 --------------------------------------------------------------------------------
 

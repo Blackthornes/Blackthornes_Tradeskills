@@ -31,6 +31,9 @@ local ICON_GUTTER = ICON_SIZE + 4
 local COLUMNS = {
     { key = "age",    width = 40 },
     { key = "posted", width = 44 },
+    -- How well it sells (Logic/Demand.lua), beside what you already hold:
+    -- together they say whether to make more.
+    { key = "demand", width = 50 },
     { key = "make",   width = 40 },
     { key = "who",    width = 58, accountWideOnly = true },
     { key = "margin", width = 46 },
@@ -250,6 +253,16 @@ local function UpdateRow(row, analysis)
         cells.who:SetTextColor(Theme.Unpack(analysis.isMine and "accent" or "muted"))
     else
         cells.who:SetText("")
+    end
+
+    -- Shown on unpriced rows too: what sold needs no price.
+    local reading = ns.Demand and ns.Demand:Get(analysis.outputItemID)
+    if reading then
+        cells.demand:SetText(ns.Demand:Label(reading))
+        cells.demand:SetTextColor(Theme.Unpack(ns.Demand:Color(reading)))
+    else
+        cells.demand:SetText("--")
+        cells.demand:SetTextColor(Theme.Unpack("dim"))
     end
 
     -- Everything you already hold: listed, plus bags and bank.
@@ -499,6 +512,7 @@ local function BuildDetail(parent)
         local recipeID, name = state.selected.recipeID, state.selected.name
         ns.Queue:Add(recipeID, count)
         ns.Print(("queued %dx %s"):format(count, name or "craft"))
+        if ns.Demand then ns.Demand:WarnIfLow(state.selected.outputItemID, name) end
 
         -- Suggest again from what is now queued, as Max would. Left as it
         -- was, a second click queued the full amount again over the limit.
@@ -1246,7 +1260,7 @@ local function Build(container)
 
     local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
                      margin = "MARGIN", age = "AGE", who = "WHO", posted = "STOCK",
-                     make = "MAKE", disenchant = "DISENCHANT" }
+                     make = "MAKE", disenchant = "DISENCHANT", demand = "DEMAND" }
 
     widgets.headings = {}
     for _, column in ipairs(COLUMNS) do
@@ -1269,6 +1283,9 @@ local function Build(container)
         make = function(a) return a.craftableNow end,
         who = function(a) return a.ownerName end,
         disenchant = function(a) return a.disenchantValue end,
+        demand = function(a)
+            return ns.Demand and ns.Demand:Rank(ns.Demand:Get(a.outputItemID)) or 0
+        end,
     }, function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name", "who" }) end
 
@@ -1312,6 +1329,7 @@ local function Build(container)
                 -- Right-click is the fast path: queue one without leaving the list.
                 ns.Queue:Add(analysis.recipeID, 1)
                 ns.Print(("queued 1x %s"):format(analysis.name or "craft"))
+                if ns.Demand then ns.Demand:WarnIfLow(analysis.outputItemID, analysis.name) end
                 return
             end
 

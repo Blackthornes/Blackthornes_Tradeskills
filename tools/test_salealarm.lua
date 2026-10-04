@@ -181,6 +181,34 @@ check("a game that returns nothing is not a refusal", SaleAlarm:Play(), "unknown
 PlaySound = function() error("no such sound") end
 check("a game that throws is a refusal", SaleAlarm:Play(), false)
 
+print("\nthe Sales tab and the chat filter")
+
+ERR_AUCTION_SOLD_S = "A buyer has been found for your auction of %s."
+SaleAlarm:InvalidatePattern()
+local heard = {}
+ns.Mail = { NoteHeardSale = function(_, name) heard[#heard + 1] = name end }
+local filters = {}
+ChatFrame_AddMessageEventFilter = function(event, fn) filters[event] = fn end
+ns.accepts.CHAT_MSG_SYSTEM = true
+SaleAlarm:OnEnable()
+check("the filter is installed", type(filters.CHAT_MSG_SYSTEM), "function")
+check("and /bts salealarm can say so", SaleAlarm.filtering, true)
+
+SaleAlarm:CHAT_MSG_SYSTEM("CHAT_MSG_SYSTEM", "A buyer has been found for your auction of Heavy Silk Bandage.")
+check("a sale goes to the Sales tab", heard[#heard], "Heavy Silk Bandage")
+SaleAlarm:AUCTION_HOUSE_SHOW_NOTIFICATION("x", 4)
+check("the notice does not log it twice", #heard, 1)
+
+local filter = filters.CHAT_MSG_SYSTEM
+local soldLine = "A buyer has been found for your auction of Heavy Silk Bandage."
+settings.hideSaleChat = nil
+check("left in chat by default", filter(nil, "CHAT_MSG_SYSTEM", soldLine), false)
+settings.hideSaleChat = true
+check("hidden when the player asks", filter(nil, "CHAT_MSG_SYSTEM", soldLine), true)
+check("other system lines stay", filter(nil, "CHAT_MSG_SYSTEM", "You are now AFK."), false)
+settings.hideSaleChat = nil
+ChatFrame_AddMessageEventFilter, ns.Mail = nil, nil
+
 print("")
 if failures > 0 then
   error(string.format("%d sale alarm check(s) failed", failures))

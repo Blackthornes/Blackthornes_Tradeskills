@@ -117,6 +117,51 @@ function Auctions:GetPostedCount(itemID)
     return total
 end
 
+-- The most a time band can mean, for a listing whose seconds were not given:
+-- Enum.AuctionHouseTimeLeftBand Short, Medium, Long, VeryLong.
+local BAND_MOST = { [0] = 30 * 60, [1] = 2 * 3600, [2] = 12 * 3600, [3] = 48 * 3600 }
+
+--- Every listing from each character's last reading on this realm.
+--
+-- A reading only changes at the auction house, so each row says when it was
+-- read and when it ends. One that has ended since has sold or come back in the
+-- mail; the reading cannot say which.
+--
+-- @return array of { itemID, quantity, unit, ends, who, readAt, ended },
+--         and how many characters have been read since listings were kept
+function Auctions:GetListings()
+    local record = self:GetTable()
+    local out, characters = {}, 0
+    local now = time()
+
+    for who, reading in pairs(record.byCharacter or {}) do
+        if type(reading.listings) == "table" then
+            characters = characters + 1
+
+            for _, listing in ipairs(reading.listings) do
+                local ends = listing.ends
+                if not ends and listing.band and BAND_MOST[listing.band] then
+                    ends = (reading.updatedAt or now) + BAND_MOST[listing.band]
+                end
+
+                out[#out + 1] = {
+                    itemID = listing.itemID,
+                    quantity = listing.quantity or 1,
+                    unit = listing.unit,
+                    ends = ends,
+                    roughEnd = listing.ends == nil,
+                    who = who,
+                    readAt = reading.updatedAt,
+                    ended = ends ~= nil and ends <= now
+                        or Outlived(reading.updatedAt),
+                }
+            end
+        end
+    end
+
+    return out, characters
+end
+
 --- How many units of an item this character has listed. Verifying a new
 --- listing compares against this, since a reading only ever shows your own.
 function Auctions:GetOwnPostedCount(itemID)
@@ -334,6 +379,8 @@ function Auctions:ReadOwned(opts)
     local items = {}
     local prices = {}
     local ids = {}
+    local listings = {}
+    local readAt = time()
 
     for index = 1, count do
         local infoOk, info = pcall(C_AuctionHouse.GetOwnedAuctionInfo, index)
@@ -377,6 +424,20 @@ function Auctions:ReadOwned(opts)
                 if unit and unit > 0 and (not prices[itemID] or unit < prices[itemID]) then
                     prices[itemID] = unit
                 end
+
+                -- Each listing as it stands, for the Sales tab's Still listed
+                -- view. When it ends is read from the seconds left where the
+                -- client gives them, else from the rough time band.
+                local listing = { itemID = itemID, quantity = quantity }
+                if unit and unit > 0 then listing.unit = unit end
+                local secondsOk, seconds = pcall(function() return tonumber(info.timeLeftSeconds) end)
+                if secondsOk and seconds and seconds >= 0 then
+                    listing.ends = readAt + seconds
+                else
+                    local bandOk, band = pcall(function() return tonumber(info.timeLeft) end)
+                    if bandOk and band then listing.band = band end
+                end
+                listings[#listings + 1] = listing
             end
         end
     end
@@ -393,7 +454,7 @@ function Auctions:ReadOwned(opts)
     record.prices = prices
 
     record.byCharacter = record.byCharacter or {}
-    record.byCharacter[CharacterKey()] = { items = items, updatedAt = time() }
+    record.byCharacter[CharacterKey()] = { items = items, updatedAt = time(), listings = listings }
     -- This session only: auction IDs are for telling a new listing apart.
     self.ownedIDs = ids
     record.updatedAt = time()

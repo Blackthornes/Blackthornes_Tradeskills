@@ -155,7 +155,28 @@ end
 
 function SaleAlarm:CHAT_MSG_SYSTEM(_, text)
     local item = self:MatchSoldLine(text)
-    if item then self:OnSale("chat", item) end
+    if not item then return end
+
+    self:OnSale("chat", item)
+
+    -- Into the Sales tab now, rather than when its mail is read. Only from
+    -- the chat line: it is the one route that names the item, and logging
+    -- the notice too would write every sale down twice.
+    if ns.Mail and ns.Mail.NoteHeardSale then
+        pcall(ns.Mail.NoteHeardSale, ns.Mail, item)
+        if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end
+end
+
+--- Hide the sold line from chat, when the player asked for that.
+--
+-- A chat filter only changes what the chat windows print. The event still
+-- reaches CHAT_MSG_SYSTEM above, so the alarm and the Sales tab still hear
+-- every sale.
+function SaleAlarm.ChatFilter(_, _, text)
+    if ns.Config:Get("hideSaleChat") ~= true then return false end
+    local ok, item = pcall(SaleAlarm.MatchSoldLine, SaleAlarm, text)
+    return (ok and item) and true or false
 end
 
 --- Every notice the auction house sends, sold or not.
@@ -182,6 +203,15 @@ function SaleAlarm:OnEnable()
     -- The chat route is only worth listening to if there is a line to match.
     if GetSoldPattern() then
         self.listening.chat = ns.RegisterEvent(self, "CHAT_MSG_SYSTEM", self.CHAT_MSG_SYSTEM) and true or false
+
+        -- Under either name the client gives it; newer ones moved it.
+        local add = _G.ChatFrame_AddMessageEventFilter
+        if type(add) ~= "function" and type(_G.ChatFrameUtil) == "table" then
+            add = _G.ChatFrameUtil.AddMessageEventFilter
+        end
+        if type(add) == "function" then
+            self.filtering = pcall(add, "CHAT_MSG_SYSTEM", self.ChatFilter)
+        end
     end
 
     local plain = ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW_NOTIFICATION",
@@ -221,6 +251,8 @@ function SaleAlarm:Report()
         muted, Yes(self.listening.chat)))
     ns.PrintRaw(("  |c%slistening for the auction house notice:|r %s"):format(
         muted, Yes(self.listening.notice)))
+    ns.PrintRaw(("  |c%scan hide the sold chat line:|r %s  (hiding: %s)"):format(
+        muted, Yes(self.filtering), Yes(ns.Config:Get("hideSaleChat") == true)))
     ns.PrintRaw(("  |c%ssales heard this session:|r chat line %d, notice %d"):format(
         muted, self.heard.chat or 0, self.heard.notice or 0))
 
