@@ -26,8 +26,12 @@ local ROW_HEIGHT = 30
 local BUTTON_WIDTH = 46
 local QUANTITY_WIDTH = 42
 
--- Right margin, button, gap, quantity box, gap before the text.
-local TEXT_INSET = 8 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 10
+-- The small x that ignores an item, left of the quantity box. A symbol
+-- rather than the word: "Ignore" would have cost the item names their room.
+local IGNORE_WIDTH = 18
+
+-- Right margin, button, gap, quantity box, gap, ignore, gap before the text.
+local TEXT_INSET = 8 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 6 + IGNORE_WIDTH + 10
 
 -- Clear of the auction window's bevelled edge without opening a gap you could
 -- see the world through.
@@ -140,6 +144,23 @@ local function CreateRow(row)
         end,
     })
     row.quantity:SetPoint("RIGHT", row.post, "LEFT", -6, 0)
+
+    -- Takes the item off this list for good, on every character (Trent,
+    -- 2026-10-04). Settings lists what is ignored, with a Restore button for
+    -- each, so a misclick is never for good.
+    row.ignore = Widgets.CreateButton(row, "x", function()
+        if not row.data then return end
+        CommitTyping(PostPanel.list)
+
+        -- By item, so every copy goes: a "Lead Band of the Wolf" ignores
+        -- all Lead Bands, and Settings names it by the plain item name.
+        local line = row.data
+        ns.Posting:SetIgnored(line.itemID, true)
+        ns.Print(("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.")
+            :format(line.label or "that item"))
+    end, { width = IGNORE_WIDTH, height = 18,
+           tooltip = "Ignore: stop offering this item for sale. Settings lists ignored items, each with a Restore button." })
+    row.ignore:SetPoint("RIGHT", row.quantity, "LEFT", -6, 0)
 end
 
 --- What one of this item is worth disenchanted, for an enchanter.
