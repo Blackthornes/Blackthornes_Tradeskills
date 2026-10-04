@@ -335,7 +335,7 @@ local function ClientString(fn, ...)
     return copied and text or nil
 end
 
---- Is the typed name the character playing? Trent (2026-10-04): the
+--- Is the typed name the character playing? Asked for 2026-10-04: the
 --- disenchanter is never offered gear to mail to itself. Matched without
 --- regard to case, by first name or by first and last name (Forever's
 --- characters have both), with or without the realm. The name is read from
