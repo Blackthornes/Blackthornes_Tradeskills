@@ -26,12 +26,13 @@ local ROW_HEIGHT = 30
 local BUTTON_WIDTH = 46
 local QUANTITY_WIDTH = 42
 
--- The small x that ignores an item, left of the quantity box. A symbol
--- rather than the word: "Ignore" would have cost the item names their room.
-local IGNORE_WIDTH = 18
+-- The red x that ignores an item, at the row's right end past List. A
+-- symbol rather than the word: "Ignore" would have cost the item names their
+-- room. Beside the amount box it read as "x 8", so it sits apart from it.
+local IGNORE_WIDTH = 20
 
--- Right margin, button, gap, quantity box, gap, ignore, gap before the text.
-local TEXT_INSET = 8 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 6 + IGNORE_WIDTH + 10
+-- Right margin, ignore, gap, button, gap, quantity box, gap before the text.
+local TEXT_INSET = 6 + IGNORE_WIDTH + 6 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 10
 
 -- Clear of the auction window's bevelled edge without opening a gap you could
 -- see the world through.
@@ -127,7 +128,7 @@ local function CreateRow(row)
 
         ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
     end, { width = BUTTON_WIDTH, height = 18, primary = true })
-    row.post:SetPoint("RIGHT", -8, 0)
+    row.post:SetPoint("RIGHT", -(6 + IGNORE_WIDTH + 6), 0)
 
     -- How many to list, beside the button that lists them. Empty-handed this
     -- panel posted whole stacks with no way to say otherwise.
@@ -158,9 +159,9 @@ local function CreateRow(row)
         ns.Posting:SetIgnored(line.itemID, true)
         ns.Print(("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.")
             :format(line.label or "that item"))
-    end, { width = IGNORE_WIDTH, height = 18,
-           tooltip = "Ignore: stop offering this item for sale. Settings lists ignored items, each with a Restore button." })
-    row.ignore:SetPoint("RIGHT", row.quantity, "LEFT", -6, 0)
+    end, { width = IGNORE_WIDTH, height = 18, danger = true,
+           tooltip = "Ignore this item: it stops showing on Ready to sell. Settings lists ignored items, each with a Restore button." })
+    row.ignore:SetPoint("RIGHT", -6, 0)
 end
 
 --- What one of this item is worth disenchanted, for an enchanter.
