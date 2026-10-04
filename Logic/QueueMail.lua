@@ -317,6 +317,57 @@ end
 
 local GREEN, PURPLE = 2, 4
 
+--- A name for comparing: lower case, spaces between words kept single.
+local function Fold(text)
+    if type(text) ~= "string" then return nil end
+    text = text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
+    if text == "" then return nil end
+    return text:lower()
+end
+
+--- A plain string from the client, or nil: read in a pcall and copied, since
+--- the client can hand out values that raise when touched.
+local function ClientString(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, ...)
+    if not ok or type(value) ~= "string" then return nil end
+    local copied, text = pcall(function() return value .. "" end)
+    return copied and text or nil
+end
+
+--- Is the typed name the character playing? Trent (2026-10-04): the
+--- disenchanter is never offered gear to mail to itself. Matched without
+--- regard to case, by first name or by first and last name (Forever's
+--- characters have both), with or without the realm. The name is read from
+--- the game, falling back to the saved record, so a record not yet stamped
+--- this session still counts.
+local function IsCharacterPlaying(typed)
+    local name, realm = typed:match("^(.-)%-([^%-]+)$")
+    name = Fold(name or typed)
+    if not name then return false end
+
+    local record = CharacterRecord(SelfKey()) or {}
+    local first = Fold(ClientString(UnitName, "player")) or Fold(record.name)
+    if not first then return false end
+
+    local surname = Fold(record.surname)
+    if not surname and ns.Config.ReadSurname then
+        local ok, found = pcall(ns.Config.ReadSurname, ns.Config)
+        surname = ok and Fold(found) or nil
+    end
+
+    if name ~= first and not (surname and name == first .. " " .. surname) then
+        return false
+    end
+
+    -- A realm that is not this one is somebody else of the same name.
+    local here = ClientString(GetRealmName) or record.realm
+    if realm and type(here) == "string" then
+        return realm:gsub("%s", ""):lower() == here:gsub("%s", ""):lower()
+    end
+    return true
+end
+
 --- The disenchanter's name as typed, trimmed, or nil when there is none
 --- (or it is the character playing).
 function QueueMail:GetDisenchanter()
@@ -325,16 +376,7 @@ function QueueMail:GetDisenchanter()
     typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
     if typed == "" then return nil end
 
-    local selfRecord = CharacterRecord(SelfKey())
-    local first = typed:match("^([^-]+)") or typed
-    if selfRecord and type(selfRecord.name) == "string"
-        and selfRecord.name:lower() == first:lower() then
-        local realm = typed:match("^[^-]+%-(.+)$")
-        if not realm or not selfRecord.realm
-            or realm:gsub("%s", ""):lower() == tostring(selfRecord.realm):gsub("%s", ""):lower() then
-            return nil
-        end
-    end
+    if IsCharacterPlaying(typed) then return nil end
     return typed
 end
 
