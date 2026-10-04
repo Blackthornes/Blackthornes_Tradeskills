@@ -272,6 +272,9 @@ function ItemTooltip:LinesFor(itemID, count)
                 (record and record.quantity == 0) and "none listed" or "not scanned yet", true }
         end
 
+        local demand = self:DemandLine(itemID)
+        if demand then lines[#lines + 1] = demand end
+
         local disenchant = self:DisenchantLine(itemID)
         if disenchant then lines[#lines + 1] = disenchant end
 
@@ -302,10 +305,24 @@ function ItemTooltip:LinesFor(itemID, count)
         }
     end
 
+    local demand = self:DemandLine(itemID)
+    if demand then lines[#lines + 1] = demand end
+
     local disenchant = self:DisenchantLine(itemID)
     if disenchant then lines[#lines + 1] = disenchant end
 
     return lines
+end
+
+--- How well it sells (Logic/Demand.lua), coloured by level. Nothing when
+--- there is no reading yet.
+function ItemTooltip:DemandLine(itemID)
+    if not (ns.Demand and ns.Demand.Get) then return nil end
+
+    local ok, reading = pcall(ns.Demand.Get, ns.Demand, itemID)
+    if not ok or not reading then return nil end
+
+    return { "Demand", ns.Demand:TooltipText(reading), color = ns.Demand:Color(reading) }
 end
 
 --- What one of the item is worth disenchanted, for anything that can be.
@@ -399,7 +416,8 @@ local function WriteLine(tooltip, line)
     if type(add) ~= "function" then return end
 
     local labelColor = ns.COLORS.accent
-    local valueColor = line[3] and ns.COLORS[STALE_COLOR] or ns.COLORS.text
+    local valueColor = (line.color and ns.COLORS[line.color])
+        or (line[3] and ns.COLORS[STALE_COLOR]) or ns.COLORS.text
 
     Try(add, tooltip, line[1], line[2],
         Component(labelColor, 3), Component(labelColor, 5), Component(labelColor, 7),

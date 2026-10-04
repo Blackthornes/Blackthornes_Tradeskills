@@ -39,6 +39,7 @@ Logic\Posting.lua
 Logic\Transfer.lua
 Logic\SaleAlarm.lua
 Logic\MailHaul.lua
+Logic\Demand.lua
 Logic\FarmerGoals.lua
 Logic\VendorFlips.lua
 Logic\Banks.lua

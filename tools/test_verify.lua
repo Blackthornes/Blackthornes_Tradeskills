@@ -84,7 +84,8 @@ C_AuctionHouse = {
     GetOwnedAuctionInfo = function(index)
         local entry = listed[index]
         if not entry then return nil end
-        return { itemKey = { itemID = entry.itemID }, quantity = entry.quantity, status = 0 }
+        return { itemKey = { itemID = entry.itemID }, quantity = entry.quantity, status = entry.status or 0,
+            timeLeftSeconds = entry.seconds, timeLeft = entry.band, unitPrice = entry.unit }
     end,
     QueryOwnedAuctions = function() end,
 }
@@ -284,6 +285,36 @@ ns.Mail = { GetLedger = function() return { entries = {
 check("a stack back in the mail is no longer listed", Auctions:GetPostedCount(2447), 5)
 check("verifying a listing still reads the raw count", Auctions:GetOwnPostedCount(2447), 8)
 ns.Mail = nil
+
+-- The Sales tab's Still listed view reads each listing as it stood.
+print("")
+print("still listed")
+ns.db.postedAuctions = nil
+who = "Main"
+listed = {
+    { itemID = 2447, quantity = 8, unit = 25, seconds = 3600 },
+    { itemID = 2449, quantity = 1, band = 1 },
+    { itemID = 2450, quantity = 2, status = 1 },
+}
+Auctions:ReadOwned({ final = true })
+local rows, characters = Auctions:GetListings()
+check("one row per active listing", #rows, 2)
+check("one character read", characters, 1)
+local first = rows[1].itemID == 2447 and rows[1] or rows[2]
+local second = rows[1].itemID == 2447 and rows[2] or rows[1]
+check("its price each is kept", first.unit, 25)
+check("it ends when the client said", first.ends - first.readAt, 3600)
+check("and has not ended", first.ended, false)
+check("a band gives the latest it can end", second.ends - second.readAt, 7200)
+check("which is marked as rough", second.roughEnd, true)
+Auctions:GetTable().byCharacter.Main.updatedAt = time() - 25 * 3600
+rows = Auctions:GetListings()
+check("a reading older than any auction has ended", rows[1].ended, true)
+
+ns.db.postedAuctions = { TestRealm = { items = {}, byCharacter = { Old = { items = { [2447] = 3 }, updatedAt = time() } } } }
+rows, characters = Auctions:GetListings()
+check("a reading saved before listings were kept shows none", #rows, 0)
+check("and is not counted as read", characters, 0)
 ns.Config.GetCharacterKey = nil
 
 print("")
