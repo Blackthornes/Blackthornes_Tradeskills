@@ -22,10 +22,12 @@ enough after updating.
 - Send gear to your disenchanter: set a **Disenchanter** name and **Mail
   gear up to** (greens by default, or blues, or purples) in Settings. At the
   mailbox a panel lists that gear with a **Send to** button that fills in
-  the mail; you press Send. Soulbound and bind-on-pickup gear, and upgrades
-  for your character when Blackthornes Equipment is loaded, are never listed.
+  the mail; you press Send. A **Settings** button on the panel takes you to
+  the setting. Soulbound and bind-on-pickup gear, and upgrades for your
+  character when Blackthornes Equipment is loaded, are never listed.
 - The craft queue pane beside the profession window docks clear of the
-  profession tabs instead of covering them.
+  profession tabs instead of covering them, and the Tradeskills window stays
+  in front of the pane.
 
 ## 0.25.0
 
