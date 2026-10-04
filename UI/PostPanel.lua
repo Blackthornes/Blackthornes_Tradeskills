@@ -50,7 +50,7 @@ local PANEL_MIN_HEIGHT = 200
 local COLLAPSE_KEY = "postPanelCollapsed"
 
 -- The Sell and Buy switch under the title. Buy is the craft queue's shopping
--- list, the one beside the profession window (Trent, 2026-10-01: "could we
+-- list, the one beside the profession window (2026-10-01: "could we
 -- have a shopping list also appear on the actual AH UI somewhere that's not
 -- in the way?"). Sharing this panel puts it at the auction house without
 -- taking any more of the screen.
@@ -146,8 +146,8 @@ local function CreateRow(row)
     })
     row.quantity:SetPoint("RIGHT", row.post, "LEFT", -6, 0)
 
-    -- Takes the item off this list for good, on every character (Trent,
-    -- 2026-10-04). Settings lists what is ignored, with a Restore button for
+    -- Takes the item off this list for good, on every character
+    -- (2026-10-04). Settings lists what is ignored, with a Restore button for
     -- each, so a misclick is never for good.
     row.ignore = Widgets.CreateButton(row, "x", function()
         if not row.data then return end
@@ -570,7 +570,7 @@ end
 --
 -- With the auction house and a profession both open, the profession window
 -- takes the slot beside the auction window and the craft queue panes dock to
--- its right, which is where this panel went next. Trent's screenshot,
+-- its right, which is where this panel went next. A screenshot,
 -- 2026-10-01: Ready to sell drawn over the queued crafts and shopping list.
 -- @return the frame to dock to, its right edge
 function PostPanel:PastOwnPanes(frame, right, ahTop, ahBottom)
@@ -783,7 +783,7 @@ function PostPanel:CanSearch(line)
     return type(line) == "table" and (line.shortfall or 0) > 0 and not line.fromVendor
 end
 
--- Clicking the row searched already, but nothing said so. Trent: "a button
+-- Clicking the row searched already, but nothing said so. Asked for: "a button
 -- would be clearer to a new user". The same size as the sell list's List.
 local SEARCH_WIDTH = BUTTON_WIDTH
 

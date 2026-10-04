@@ -48,6 +48,9 @@ PRIVATE = [
      re.compile(r"^BlackthornesTS(Char)?DB\s*=\s*\{\s*\n\s*\[", re.M)),
     ("a GitHub token", re.compile(r"\b(ghp|gho|ghs|ghu|github_pat)_[A-Za-z0-9_]{20,}")),
     ("a private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    # The owner's own name never goes out to players, in a comment or
+    # anywhere else. Spelt in two halves so this line does not carry it.
+    ("the owner's name", re.compile(r"\b" + "Tr" + r"ent\b", re.I)),
     ("an API key or token", re.compile(
         r"(api[_-]?key|api[_-]?token|secret|password)\s*[=:]\s*[\"'][^\"']{8,}",
         re.I)),

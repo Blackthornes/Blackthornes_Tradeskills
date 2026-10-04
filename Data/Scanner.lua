@@ -19,7 +19,7 @@ local REPLICATE_COOLDOWN = 15 * 60
 -- How long to wait for the quick full scan to answer before scanning page by
 -- page instead. It was six seconds, and as the auction house filled up the
 -- server took longer than that to build the snapshot: every quick scan gave
--- way to the page-by-page one even hours after the last (Trent, 2026-10-03).
+-- way to the page-by-page one even hours after the last (2026-10-03).
 -- An answer that comes later still is read anyway; see
 -- REPLICATE_ITEM_LIST_UPDATE.
 local QUICK_SCAN_WAIT = 30
@@ -684,7 +684,7 @@ end
 -- anybody.
 --
 -- A row at your own price says nothing about rivals AT that price. Measured
--- 2026-09-20 on Heavy Woolen Gloves: Trent listed at 63s and 64s, and other
+-- 2026-09-20 on Heavy Woolen Gloves: we listed at 63s and 64s, and other
 -- sellers sat at 63s and 64s too. The row reads 63s, yours, and only an
 -- exact search can tell that tie from a lead. So a rival already on record
 -- at or above your price is kept -- the row does not contradict it -- and

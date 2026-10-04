@@ -331,7 +331,7 @@ local function Build(outer)
     widgets.verifyPrice:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- The sale alarm and the scan chime moved down to SOUNDS, with a switch
-    -- for every other sound (Trent, 2026-10-02).
+    -- for every other sound (2026-10-02).
     local mailReportRow = CreateRow(container, verifyRow, "Report after collecting mail",
         "Counts up what you collected at the mailbox and shows it when you walk away, with your best sale.")
 
@@ -432,7 +432,7 @@ local function Build(outer)
     widgets.ignoredEnd = ignoredEnd
 
     -- Items taken off Ready to sell at the auction house with the x on
-    -- their row (Trent, 2026-10-04). Laid out as Ignored crafts is.
+    -- their row (2026-10-04). Laid out as Ignored crafts is.
     local ignoredItems = CreateSection(container, "IGNORED ITEMS", { anchor = ignoredEnd })
     widgets.ignoredItemsSection = ignoredItems
 

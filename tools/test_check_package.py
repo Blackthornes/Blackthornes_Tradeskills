@@ -67,6 +67,10 @@ expect("a Windows path is refused",
 False)
 expect("an email address is refused",
        with_({"Core/Util.lua": "-- mail someone@example.com\n"}), False)
+expect("the owner's name is refused",
+       with_({"Core/Util.lua": "-- asked by " + "Tr" + "ent\n"}), False)
+expect("a word that only holds those letters is allowed",
+       with_({"Core/Util.lua": "-- a torrent of loot\n"}), True)
 expect("a WTF account path is refused",
        with_({"Core/Util.lua": "-- WTF/Account/NAME/SavedVariables\n"}), False)
 expect("a placeholder account path is allowed",

@@ -26,7 +26,7 @@ local OUTLIER_LOW = 0.30
 local OUTLIER_HIGH = 3.00
 
 -- A lone listing this far under everything else is not the price to beat.
--- Trent, 2026-09-26: "make undercut ignore a lone low posting".
+-- Asked 2026-09-26: "make undercut ignore a lone low posting".
 local LONE_LOW = 1 / 3
 
 -- The most copper a price is allowed to be before it is read as junk rather

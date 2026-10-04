@@ -332,7 +332,7 @@ end
 --
 -- Forever's server changed some sell prices from Classic's, and only the
 -- tooltip has the new one: Greater Magic Wand's tooltip says 1c while
--- GetItemInfo still answers Classic's 15s 35c (Trent, 2026-10-03). So the
+-- GetItemInfo still answers Classic's 15s 35c (2026-10-03). So the
 -- tooltip wins. Read by item ID, so it is the price of one, never a stack.
 -- Only ask for an item the client already holds.
 --

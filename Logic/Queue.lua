@@ -48,8 +48,8 @@ local MAX_DEPENDENCY_DEPTH = 3
 -- The queue is shared by every character on the account. Each craft
 -- remembers who queued it (`owner`), and each sub-craft who makes it
 -- (`crafter`) and for whom (`forCharacters`), so the plan reads the same
--- whichever character is logged in: Trent queues a bag, his tailor alt is
--- given the bolts, and logging into the tailor shows them as made for Trent.
+-- whichever character is logged in: Ana queues a bag, her tailor alt is
+-- given the bolts, and logging into the tailor shows them as made for Ana.
 
 local function SelfKey()
     return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or nil
