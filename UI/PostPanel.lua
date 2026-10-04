@@ -512,6 +512,37 @@ local function Edge(frame, method)
     return value
 end
 
+--- How far a window's own buttons stick out past its right edge, in the
+-- panel's coordinates.
+--
+-- Izbode's screenshot, 2026-10-04: with a custom interface, the Professions
+-- window carries a column of buttons hanging off its right side, and the
+-- list docked to the window's edge sat on top of them. The craft queue pane
+-- already measures the same thing beside the profession window
+-- (CraftPanel:RightOverhang), so the same measure is used here.
+local function Overhang(frame)
+    local panel = ns.CraftPanel
+    if type(panel) ~= "table" or type(panel.RightOverhang) ~= "function" then return 0 end
+
+    local ok, overhang = pcall(panel.RightOverhang, panel, frame)
+    if not ok or type(overhang) ~= "number" or overhang <= 0 then return 0 end
+
+    -- Measured in the window's own units, which a scaled window does not
+    -- share with the panel.
+    local parent = _G.UIParent
+    if type(frame.GetEffectiveScale) == "function" and type(parent) == "table"
+        and type(parent.GetEffectiveScale) == "function" then
+        local okFrame, frameScale = pcall(frame.GetEffectiveScale, frame)
+        local okParent, parentScale = pcall(parent.GetEffectiveScale, parent)
+        if okFrame and okParent and type(frameScale) == "number"
+            and type(parentScale) == "number" and parentScale > 0 then
+            overhang = overhang * frameScale / parentScale
+        end
+    end
+
+    return overhang
+end
+
 local function IsShownFrame(frame)
     if type(frame) ~= "table" or type(frame.IsShown) ~= "function" then return false end
 
@@ -552,7 +583,7 @@ function PostPanel:SideFrame(auctionFrame)
             if left and right and top and bottom
                 and left < dockRight and right > dockLeft
                 and bottom < ahTop and top > ahBottom then
-                return self:PastOwnPanes(frame, right, ahTop, ahBottom)
+                return self:PastOwnPanes(frame, right + Overhang(frame), ahTop, ahBottom)
             end
         end
     end
@@ -634,10 +665,16 @@ function PostPanel:Redock()
 
     self.dockedLeft = left
 
-    if self.dockedTo ~= host then
+    -- Past the window's edge by the gap, and by whatever of its own sticks
+    -- out there (Overhang).
+    local offset = PANEL_GAP
+    local hostRight = left and Edge(host, "GetRight")
+    if hostRight then offset = math.max(PANEL_GAP, left - hostRight) end
+
+    if self.dockedTo ~= host or math.abs((self.dockedOffset or PANEL_GAP) - offset) > 0.5 then
         frame:ClearAllPoints()
-        frame:SetPoint("TOPLEFT", host, "TOPRIGHT", PANEL_GAP, 0)
-        self.dockedTo = host
+        frame:SetPoint("TOPLEFT", host, "TOPRIGHT", offset, 0)
+        self.dockedTo, self.dockedOffset = host, offset
 
         -- Beside a different window, the main window may be in the way now,
         -- or no longer.
@@ -703,7 +740,7 @@ function PostPanel:Attach()
         -- keeps whatever height it had. That is how it ended up half as tall as
         -- the window it was docked to.)
         frame:SetPoint("TOPLEFT", auctionFrame, "TOPRIGHT", PANEL_GAP, 0)
-        self.dockedTo = auctionFrame
+        self.dockedTo, self.dockedOffset = auctionFrame, PANEL_GAP
     else
         -- The auction house window is load-on-demand and may not exist yet.
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -120)
