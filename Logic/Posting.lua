@@ -372,14 +372,35 @@ end
 -- "Lead Band" with different suffixes are different items to a buyer, and a
 -- stackable item auction still draws from the one slot it names.
 --
--- Unconfirmed on Forever. When a batch comes back with only one listed (or
--- none), this goes back to one at a time for the rest of the session.
-Posting.manyRefused = false
+-- When a batch of an item comes back with only one listed (or none), that
+-- item goes back to one at a time for the rest of the session.
+--
+-- Trent, 2026-10-04: "multiposting works sometimes for crafted items and
+-- other times it does not". One doubtful reading used to turn this off for
+-- every item until the next login, and the first listing of a visit is
+-- measured against a count from the last visit, so a sale in between made a
+-- full batch read as one. Now only a reading that can tell new auctions
+-- apart counts, and only against the item it was about.
+Posting.manyRefused = {}
+
+--- Can this item's copies not stack? Item info that has not loaded yet
+--- answers nothing, so the client's own stack size call is asked too.
+local function MaxStack(itemID)
+    local maxStack = Util.GetMaxStackSize(itemID)
+    if maxStack then return maxStack end
+
+    local api = _G.C_Item
+    if type(api) == "table" and type(api.GetItemMaxStackSizeByID) == "function" then
+        local ok, value = pcall(api.GetItemMaxStackSizeByID, itemID)
+        if ok and type(value) == "number" and value >= 1 then return value end
+    end
+end
 
 function Posting:CanPostMany(itemID, link)
-    if self.manyRefused then return false end
+    if type(self.manyRefused) ~= "table" then self.manyRefused = {} end
+    if self.manyRefused[itemID] then return false end
     if link and Util.LinkSuffix(link) then return false end
-    return Util.GetMaxStackSize(itemID) == 1
+    return MaxStack(itemID) == 1
 end
 
 --------------------------------------------------------------------------------
@@ -1737,17 +1758,26 @@ function Posting:ResolvePending(posted, appeared)
     -- click. A commodity's quantity is one auction, so it is not counted.
     local several = (pending.quantity or 1) > 1 and not pending.isCommodity
     local gained = posted and (posted - (pending.postedBefore or 0)) or 0
-    if pending.many and not pending.joined and posted and gained < pending.quantity
-        and (gained <= 1 or not pending.idsBefore) then
-        self.manyRefused = true
+    local refused = false
+    if pending.many and not pending.joined and posted and pending.idsBefore
+        and gained < pending.quantity and gained <= 1 then
+        if type(self.manyRefused) ~= "table" then self.manyRefused = {} end
+        self.manyRefused[pending.itemID] = true
+        refused = true
     end
 
     if several and posted and gained >= pending.quantity then
         ns.Print(("listed %d x %s"):format(pending.quantity, Util.GetItemLabel(pending.itemID)))
 
+    elseif several and posted and posted > 0 and not pending.idsBefore then
+        -- Measured against last visit's count (see below), so a shortfall
+        -- may only be listings that sold since. Nothing is concluded from it.
+        ns.Print(("%s: you have %d listed now. This was the first check since the auction house opened, so the new listings could not be told apart from older ones.")
+            :format(Util.GetItemLabel(pending.itemID), posted))
+
     elseif several and posted and gained > 0 then
         ns.Print(("listed %d of %d x %s."):format(gained, pending.quantity, Util.GetItemLabel(pending.itemID)))
-        if self.manyRefused then
+        if refused then
             ns.Print("the auction house took one at a time, so the rest go up one per click.")
         end
 

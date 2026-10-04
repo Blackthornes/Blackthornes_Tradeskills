@@ -200,7 +200,7 @@ local OIL, POTION = 20748, 929
 
 local function Reset()
     Posting.pending = nil
-    Posting.manyRefused = true
+    Posting.manyRefused = { [OIL] = true }
     maxStacks = { [OIL] = 1, [POTION] = 5 }
     prices = { [OIL] = { market = 30000 }, [POTION] = { market = 1000 } }
     bags = {
@@ -268,11 +268,11 @@ Posting:ResolvePending(5, true)
 check("one of two is said plainly", Said("^listed 1 of 2 x "), true)
 
 Reset()
-Posting.manyRefused = false
+Posting.manyRefused = {}
 Posting.pending = { itemID = OIL, quantity = 3, many = true, joined = true,
     postedBefore = 0, idsBefore = {}, startedAt = clock }
 Posting:ResolvePending(2, true)
-check("copies listed one by one never turn off listing together", Posting.manyRefused, false)
+check("copies listed one by one never turn off listing together", Posting.manyRefused[OIL] == true, false)
 
 print("")
 print("when the game refuses the second copy")
