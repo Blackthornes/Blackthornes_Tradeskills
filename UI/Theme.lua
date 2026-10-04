@@ -23,6 +23,14 @@ Theme.colors = {
     borderLit = { 0.302, 0.333, 0.388 },
 
     accent    = { 0.784, 0.643, 0.302 },   -- #C8A44D
+    -- Titanforged (2026-10-04): the lit gold of a hovered edge, the gold of
+    -- a button's label, the dark ink on a gold button, the dark well a list
+    -- sits recessed in, and the dim metal edge of a button at rest.
+    accentHi  = { 0.945, 0.831, 0.533 },   -- #F1D488
+    gilt      = { 0.941, 0.824, 0.494 },   -- #F0D27E
+    ink       = { 0.110, 0.078, 0.024 },   -- #1C1406
+    well      = { 0.039, 0.047, 0.063 },   -- #0A0C10
+    metal     = { 0.541, 0.427, 0.180 },   -- #8A6D2E
     profit    = { 0.310, 0.820, 0.545 },   -- #4FD18B
     loss      = { 0.898, 0.376, 0.310 },   -- #E5604F
     warn      = { 0.910, 0.757, 0.353 },
@@ -275,6 +283,57 @@ function Theme.AddGameOutline(frame, opts)
 
     frame.outline = outer
     return outer
+end
+
+--- Sink a panel into the window, as the game's inset panels sit: a darker
+--- well, a shadow falling from its top edge and a faint light along its foot.
+function Theme.Recess(frame)
+    if frame.background then frame.background:SetColorTexture(Theme.Unpack("well")) end
+
+    local shadow = frame:CreateTexture(nil, "BACKGROUND", nil, 3)
+    shadow:SetPoint("TOPLEFT", 1, -1)
+    shadow:SetPoint("TOPRIGHT", -1, -1)
+    shadow:SetHeight(14)
+    shadow:SetColorTexture(0, 0, 0, 1)
+    local ok = type(CreateColor) == "function" and type(shadow.SetGradient) == "function"
+        and pcall(shadow.SetGradient, shadow, "VERTICAL", CreateColor(0, 0, 0, 0), CreateColor(0, 0, 0, 0.6))
+    if not ok then shadow:Hide() end
+
+    local foot = frame:CreateTexture(nil, "BORDER", nil, 2)
+    foot:SetPoint("BOTTOMLEFT", 1, 0)
+    foot:SetPoint("BOTTOMRIGHT", -1, 0)
+    foot:SetHeight(1)
+    foot:SetColorTexture(1, 1, 1, 0.05)
+
+    if frame.borderTextures then
+        Theme.SetBorderColor(frame, "border", 0.8)
+        -- The top edge in shadow, so the panel reads as sunk rather than raised.
+        local top = frame.borderTextures[1]
+        if top then top:SetColorTexture(0.016, 0.020, 0.028, 1) end
+    end
+    return shadow
+end
+
+--- A button's metal: a light along its top half and a shade along its
+--- bottom, over whatever fill it has, so it reads as raised and pressable.
+function Theme.Bevel(frame)
+    local shine = frame:CreateTexture(nil, "BORDER", nil, -1)
+    shine:SetPoint("TOPLEFT", 1, -1)
+    shine:SetPoint("TOPRIGHT", -1, -1)
+    shine:SetPoint("BOTTOM", frame, "CENTER")
+    shine:SetColorTexture(1, 1, 1, 0.06)
+
+    local shade = frame:CreateTexture(nil, "BORDER", nil, -1)
+    shade:SetPoint("BOTTOMLEFT", 1, 1)
+    shade:SetPoint("BOTTOMRIGHT", -1, 1)
+    shade:SetPoint("TOP", frame, "CENTER")
+    shade:SetColorTexture(0, 0, 0, 0.22)
+
+    if type(CreateColor) == "function" and type(shine.SetGradient) == "function" then
+        pcall(shine.SetGradient, shine, "VERTICAL", CreateColor(1, 1, 1, 0.02), CreateColor(1, 1, 1, 0.12))
+        pcall(shade.SetGradient, shade, "VERTICAL", CreateColor(0, 0, 0, 0.35), CreateColor(0, 0, 0, 0.02))
+    end
+    return shine, shade
 end
 
 --- Thin horizontal rule.

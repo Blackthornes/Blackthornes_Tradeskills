@@ -13,12 +13,20 @@ local Widgets = ns.Widgets
 local Util = ns.Util
 
 local WINDOW_WIDTH = 1060
-local WINDOW_HEIGHT = 580
 
--- The bevelled dialog border sits on the window's edge and reaches this far
--- inward, so everything inside is padded by the same amount. This is why every
--- Blizzard panel has a wide margin.
+-- The tabs hang below the window now (Titanforged, 2026-10-04), so it is
+-- shorter by their row: its contents keep the height they had, and with the
+-- tabs the whole stands no taller than before.
+local WINDOW_HEIGHT = 548
+
+-- The metal rim sits on the window's edge and reaches this far inward, with
+-- room to spare, so everything inside is padded by the same amount.
 local EDGE_PAD = 11
+
+-- The tabs hanging below the window: how tall, and how far in from each
+-- corner gem.
+local TAB_HANG = 28
+local TAB_INSET = 34
 
 -- The bar of controls that rides on the auction window. Tall enough that the
 -- 28px buttons inside it keep their bevel clear of its own edge.
@@ -81,15 +89,27 @@ function UI:Build()
 
     Theme.Fill(window, "window")
 
-    -- The heavy bevelled gold dialog frame, so the window reads as part of the
-    -- game rather than a flat overlay pasted on top of it. Flush to the edge
-    -- and untinted: that texture already carries its own gold, and tinting it
-    -- again muddies it.
-    Theme.AddGameOutline(window, { style = "dialog", color = "natural" })
+    -- The house frame: the game's own window shape, a gold rim with corner
+    -- gems, the anvil in a round portrait, the name on a plate and a red
+    -- close gem (UI/Titanforged.lua).
+    if ns.Titanforged then
+        local trim = ns.Titanforged:Dress(window, {
+            title = "Blackthornes Tradeskills",
+            portrait = true,
+            close = function() UI:Hide() end,
+        })
+
+        -- Kept on the screen whole: the portrait and plate reach out past
+        -- the top left, and the tabs hang below.
+        local left, right, top = ns.Titanforged.Reach(trim)
+        if window.SetClampRectInsets then
+            window:SetClampRectInsets(-left, right, top, -TAB_HANG)
+        end
+    end
 
     -- A soft gold glow round the outside, Farmer's neon edge: it flares as
     -- the window opens and settles to a faint light.
-    Theme.Halo(window, 10, 0.10)
+    Theme.Halo(window, 12, 0.14)
 
     window:SetScript("OnDragStart", function(self)
         -- Still rising into place: land it first, or the opening would keep
@@ -122,52 +142,31 @@ end
 function UI:BuildHeader()
     local window = self.window
 
+    -- The window's name is on the plate across the top edge and the close
+    -- gem sits on the top right corner (UI/Titanforged.lua), so the header
+    -- holds what the scan has done and the scan button, clear of the
+    -- portrait on the left.
     local header = CreateFrame("Frame", nil, window)
     header:SetPoint("TOPLEFT", EDGE_PAD, -EDGE_PAD)
     header:SetPoint("TOPRIGHT", -EDGE_PAD, -EDGE_PAD)
     header:SetHeight(52)
-    Theme.Fill(header, "header")
 
-    -- The house header, shared with Farmer: a gold stripe down the left edge,
-    -- a soft gold light from the top and a lit rule underneath.
-    Theme.AccentStripe(header, 3)
-    Theme.HeaderGlow(header, 24, 0.10)
-
-    local rule = Theme.CreateDivider(header, "borderLit")
+    -- A gold rule under it, bright at the left and fading out to the right.
+    local rule = header:CreateTexture(nil, "ARTWORK")
     rule:SetPoint("BOTTOMLEFT")
     rule:SetPoint("BOTTOMRIGHT")
-
-    local title = Theme.CreateLabel(header, "title", "accent")
-    title:SetPoint("TOPLEFT", 16, -10)
-    title:SetText("Blackthornes Tradeskills")
+    rule:SetHeight(1)
+    Theme.SetGradientAlpha(rule, "HORIZONTAL", "accent", 0.6, 0.05)
 
     local status = Theme.CreateLabel(header, "small", "muted")
-    status:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    status:SetPoint("LEFT", header, "LEFT", 58, -6)
     self.statusLabel = status
 
-    -- Close
-    local close = CreateFrame("Button", nil, header)
-    close:SetSize(24, 24)
-    close:SetPoint("TOPRIGHT", -8, -8)
-
-    local closeFill = Theme.Fill(close, "row")
-    Theme.Border(close, "border")
-
-    local closeLabel = Theme.CreateLabel(close, "normal", "muted", "CENTER")
-    closeLabel:SetPoint("CENTER", 0, 0)
-    closeLabel:SetText("X")
-
-    close:SetScript("OnEnter", function()
-        closeLabel:SetTextColor(Theme.Unpack("loss"))
-        closeFill:SetColorTexture(Theme.Unpack("rowHover"))
-        Theme.SetBorderColor(close, "loss", 0.7)
-    end)
-    close:SetScript("OnLeave", function()
-        closeLabel:SetTextColor(Theme.Unpack("muted"))
-        closeFill:SetColorTexture(Theme.Unpack("row"))
-        Theme.SetBorderColor(close, "border")
-    end)
-    close:SetScript("OnClick", function() UI:Hide() end)
+    -- Something for the scan button to sit beside, where the close button
+    -- used to be: the gem is on the window's corner now.
+    local close = CreateFrame("Frame", nil, header)
+    close:SetSize(1, 24)
+    close:SetPoint("TOPRIGHT", -8, -12)
 
     -- Scan.
     --
@@ -226,22 +225,25 @@ function UI:BuildTabs()
     -- Each tab as wide as its own name, within the width of the window.
     -- Twelve tabs of one width were too narrow for "Disenchanting" and
     -- "Vendor Flips", whose names ran into their neighbours.
-    local stripWidth = WINDOW_WIDTH - 2 * EDGE_PAD - 16
+    local stripWidth = WINDOW_WIDTH - 2 * TAB_INSET
 
     local definitions = {}
     for _, tab in ipairs(self.tabOrder) do
         definitions[#definitions + 1] = { key = tab.key, text = tab.text }
     end
 
+    -- Hung below the window, as the game's own windows wear their tabs. The
+    -- one showing reaches up over the rim and joins the window.
     local strip = Widgets.CreateTabStrip(window, definitions, function(key)
         UI:SelectTab(key)
-    end, { width = stripWidth })
-    strip:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 8, -4)
+    end, { width = stripWidth, hanging = true })
+    strip:SetPoint("TOPLEFT", window, "BOTTOMLEFT", TAB_INSET, 0)
     self.tabStrip = strip
 
     local content = Theme.CreatePanel(window, "panel")
-    content:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", -8, -1)
+    content:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 0, -4)
     content:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -EDGE_PAD, EDGE_PAD)
+    Theme.Recess(content)
     self.content = content
 
     for _, tab in ipairs(self.tabOrder) do
@@ -456,8 +458,9 @@ function UI:RestorePosition(key)
         -- Never dragged at the auction house before: the bottom right corner.
         -- The auction window owns the left of the screen and the sell list the
         -- strip beside it, so this is the largest clear space there is.
+        -- Raised by the tabs hanging below it, so they stay on the screen.
         self.window:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT",
-            -AUCTION_LAYOUT_INSET, AUCTION_LAYOUT_INSET)
+            -AUCTION_LAYOUT_INSET, AUCTION_LAYOUT_INSET + TAB_HANG)
     else
         self.window:SetPoint("CENTER")
     end
@@ -483,9 +486,11 @@ function UI:Show()
 
     if ns.PostPanel then ns.PostPanel:Reflow() end
 
-    -- Fades up into place with its glow flaring, as Farmer's windows open.
-    -- After the reflow, so it rises from wherever it is going to sit.
+    -- Fades up into place with its glow flaring, as Farmer's windows open,
+    -- and a light runs round the portrait. After the reflow, so it rises
+    -- from wherever it is going to sit.
     if opening and ns.Motion then ns.Motion:Open(self.window) end
+    if opening and ns.Titanforged then ns.Titanforged:Opened(self.window) end
 end
 
 function UI:Hide()
@@ -1047,7 +1052,12 @@ function UI:ShowTransferDialog(mode)
         dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
 
         Theme.Fill(dialog, "window")
-        Theme.AddGameOutline(dialog, { style = "dialog", color = "natural" })
+        -- The house frame (UI/Titanforged.lua): the gold rim and corner gems.
+        if ns.Titanforged then
+            ns.Titanforged:Dress(dialog)
+        else
+            Theme.AddGameOutline(dialog, { style = "dialog", color = "natural" })
+        end
         Theme.Halo(dialog, 10, 0.10)
 
         tinsert(UISpecialFrames, "BlackthornesTSTransferDialog")

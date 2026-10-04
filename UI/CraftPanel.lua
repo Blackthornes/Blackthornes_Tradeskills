@@ -897,7 +897,12 @@ function CraftPanel:Build()
     end)
 
     Theme.Fill(frame, "window")
-    Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house frame (UI/Titanforged.lua): the gold rim and corner gems.
+    if ns.Titanforged then
+        ns.Titanforged:Dress(frame)
+    else
+        Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    end
     -- The house glow round its edge, flaring as it opens.
     Theme.Halo(frame, 8, 0.08)
 
@@ -1702,7 +1707,12 @@ function CraftPanel:BuildQueued()
     frame:Hide()
 
     Theme.Fill(frame, "window")
-    Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house frame (UI/Titanforged.lua): the gold rim and corner gems.
+    if ns.Titanforged then
+        ns.Titanforged:Dress(frame)
+    else
+        Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    end
     Theme.Halo(frame, 8, 0.08)
 
     local _, title = ns.Collapse.CreateHeader(frame, "Queued crafts")
