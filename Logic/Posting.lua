@@ -598,6 +598,61 @@ function Posting:GetLossFloor(itemID, unitCost)
     return floor, reason, vendorPrice
 end
 
+--------------------------------------------------------------------------------
+-- Ignored items
+--------------------------------------------------------------------------------
+
+-- Trent, 2026-10-04: "an ignore button ... for items in the sell list so they
+-- can be set to no longer appear in the list". The same shape as ignored
+-- crafts on the Profit tab: kept for the whole account, by item, with the
+-- item's name so Settings can list it with a Restore button.
+
+--- The item's plain name, for Settings to list. Read inside a pcall: the
+--- client can hand back a value that raises when touched.
+local function PlainName(itemID)
+    if Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, name = pcall(C_Item.GetItemInfo, itemID)
+        if ok and type(name) == "string" and name ~= "" then return name end
+    end
+    return "item " .. tostring(itemID)
+end
+
+function Posting:IsIgnored(itemID)
+    return itemID ~= nil and ns.db ~= nil and ns.db.ignoredSellItems ~= nil
+        and ns.db.ignoredSellItems[itemID] ~= nil
+end
+
+--- Ignore an item (ignored = true) or bring it back (false).
+function Posting:SetIgnored(itemID, ignored, name)
+    if not ns.db or not itemID then return end
+    ns.db.ignoredSellItems = ns.db.ignoredSellItems or {}
+
+    if ignored then
+        if type(name) ~= "string" or name == "" then name = PlainName(itemID) end
+        ns.db.ignoredSellItems[itemID] = name
+    else
+        ns.db.ignoredSellItems[itemID] = nil
+    end
+
+    if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end
+
+--- The ignored items, A to Z: { { itemID, name }, ... }.
+function Posting:GetIgnored()
+    local list = {}
+    for itemID, name in pairs(ns.db and ns.db.ignoredSellItems or {}) do
+        list[#list + 1] = { itemID = itemID,
+                            name = type(name) == "string" and name or ("item " .. tostring(itemID)) }
+    end
+    table.sort(list, function(a, b)
+        local left, right = a.name:lower(), b.name:lower()
+        if left ~= right then return left < right end
+        return a.itemID < b.itemID
+    end)
+    return list
+end
+
 --- Items in your bags worth listing.
 --
 -- @param opts.includeAll  everything sellable in the bags, not only what one
@@ -607,6 +662,9 @@ end
 -- @param opts.includeUnpriced  keep items no scan has ever priced, which only
 --   the Post tab wants; every caller that picks something to list on the
 --   player's behalf must not see them.
+--
+-- Items the player ignored are never offered, on any list: ignoring one
+-- means not selling it, so Post Crafted and Post ALL leave it alone too.
 function Posting:GetPostable(opts)
     opts = opts or {}
 
@@ -648,6 +706,9 @@ function Posting:GetPostable(opts)
 
         if not wanted then
             skipped[itemID] = "not asked for"
+        elseif self:IsIgnored(itemID) then
+            wanted = false
+            skipped[itemID] = "ignored (Settings, Ignored items)"
         end
 
         if wanted then

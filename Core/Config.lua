@@ -265,6 +265,11 @@ local DEFAULTS = {
     -- one the character playing does not know. See Profit:SetIgnored.
     ignoredCrafts = {},
 
+    -- itemID -> the item's name: items the player told Ready to sell to stop
+    -- offering. Account wide; the name is kept so Settings can list one the
+    -- client has not loaded. See Posting:SetIgnored.
+    ignoredSellItems = {},
+
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
     mailLedger = {},
