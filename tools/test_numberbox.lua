@@ -84,7 +84,7 @@ check("hovering keeps it red",                  edge[armedButton], "loss")
 armedButton.scripts.OnLeave(armedButton)
 check("and so does leaving",                    edge[armedButton], "loss")
 armedButton:SetConfirming(false)
-check("back to normal once disarmed",           edge[armedButton], "border")
+check("back to normal once disarmed",           edge[armedButton], "metal")
 
 print("")
 if failed > 0 then error(("%d check(s) failed"):format(failed), 0) end
