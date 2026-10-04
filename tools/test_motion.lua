@@ -319,6 +319,41 @@ button.scripts.OnLeave(button)
 Motion:Step(1)
 check("and goes back to rest", Same(button.background.color, "accent"), true)
 check("its glow settles to a faint light", button.haloTextures[1].shown, true)
+check("a primary button's label is dark on its gold", Same(button.label.textColor, "ink"), true)
+
+-- Every kind of button keeps its label readable on its own face, at rest and
+-- under the mouse: the auction house's Scan and Post Crafted once drew dark
+-- lettering on a dark face and read as empty boxes.
+local function Luminance(c)
+    local function lin(v) v = v or 0; return v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4 end
+    return 0.2126 * lin(c[1]) + 0.7152 * lin(c[2]) + 0.0722 * lin(c[3])
+end
+local function Contrast(a, b)
+    local la, lb = Luminance(a), Luminance(b)
+    if la < lb then la, lb = lb, la end
+    return (la + 0.05) / (lb + 0.05)
+end
+
+local kinds = {
+    { "a plain button", {}, 4.5 },
+    { "a primary button", { primary = true }, 4.5 },
+    -- Red on dark metal reads as a warning first; it only needs to stand out.
+    { "a danger button", { danger = true }, 3.5 },
+    { "a primary button with its own dark face", { primary = true, baseColor = { 0.06, 0.07, 0.09, 1 } }, 4.5 },
+}
+for _, kind in ipairs(kinds) do
+    local b = Widgets.CreateButton(Region(), "Scan", function() end, kind[2])
+    b:ApplyBaseColor()
+    b:SetEnabledState(true)
+    check(kind[1] .. " is readable at rest",
+        Contrast(b.label.textColor, b.background.color) >= kind[3], true)
+    b.scripts.OnEnter(b)
+    Motion:Step(1)
+    check(kind[1] .. " is readable under the mouse",
+        Contrast(b.label.textColor, b.background.color) >= kind[3], true)
+    b.scripts.OnLeave(b)
+    Motion:Step(1)
+end
 
 local plain = Widgets.CreateButton(Region(), "Clear", function() end)
 plain:SetConfirming(true)
