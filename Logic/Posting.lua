@@ -107,7 +107,7 @@ function Posting:CanPost(itemID)
     -- Refusing here means the buttons know, and SecondsUntilPostable can count
     -- it down instead of the player discovering it at the end.
     --
-    -- Another copy of the same item is the exception (Trent, 2026-10-04: "post
+    -- Another copy of the same item is the exception (2026-10-04: "post
     -- them one at a time, just like the Blizzard AH UI does", not five seconds
     -- apart). Its listing joins the one being confirmed and both are counted
     -- together, so nothing has to be told apart.
@@ -637,7 +637,7 @@ end
 -- Ignored items
 --------------------------------------------------------------------------------
 
--- Trent, 2026-10-04: "an ignore button ... for items in the sell list so they
+-- Asked 2026-10-04: "an ignore button ... for items in the sell list so they
 -- can be set to no longer appear in the list". The same shape as ignored
 -- crafts on the Profit tab: kept for the whole account, by item, with the
 -- item's name so Settings can list it with a Restore button.

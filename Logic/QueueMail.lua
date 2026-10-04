@@ -2,8 +2,8 @@
 -- What to mail to your other characters for the shared craft queue.
 --
 -- The queue gives each craft to a character (Logic/Queue.lua, "Who makes
--- what"). The tailor makes the bolts for Trent's bag, so the tailor needs
--- the wool, and Trent needs the bolts once they are made. At a mailbox this
+-- what"). The tailor makes the bolts for Ana's bag, so the tailor needs
+-- the wool, and Ana needs the bolts once they are made. At a mailbox this
 -- works out what the character logged in holds that another one needs, and
 -- UI/QueueMailPanel.lua offers to fill a mail with it.
 --

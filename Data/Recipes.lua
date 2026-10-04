@@ -260,7 +260,7 @@ end
 
 --- The character's name for a narrow column: the first name alone, unless
 --- another known character has the same first name, and then the first name
---- and the last name's initial ("Trent B."). The full name is for tooltips.
+--- and the last name's initial ("Bob B."). The full name is for tooltips.
 function Recipes:GetShortCharacterName(characterKey)
     local full = self:GetCharacterName(characterKey)
     local first, rest = full:match("^(%S+)%s+(.+)$")

@@ -1,6 +1,6 @@
 -- Blackthornes Tradeskills -- Logic/FarmerGoals.lua
 -- Hands a material from the Gather tab to Blackthornes Farmer as a gathering
--- goal (Trent, 2026-09-27).
+-- goal (2026-09-27).
 --
 -- Farmer is optional. Without it nothing here shows and nothing is called.
 -- With it, Farmer's own Goals:Set does the work, so the goal is exactly what
