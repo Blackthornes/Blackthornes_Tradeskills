@@ -14,6 +14,11 @@ ns.Print, ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, funct
 local GREEN_BAND, GREEN_BOOTS, BLUE_SWORD, PURPLE_STAFF, GREY_SHIRT, BOP_GLOVES, WAND, CLOTH =
     7955, 7956, 7957, 7958, 7959, 7960, 7961, 2589
 
+-- Other suites share this Lua state and may leave their own players behind.
+local oldUnitName, oldRealmName = UnitName, GetRealmName
+UnitName = function() return "Trent" end
+GetRealmName = function() return "Forever" end
+
 local settings = { disenchanterName = "Dusty", disenchanterQuality = 2 }
 local currentKey = "Player-TRENT"
 
@@ -145,6 +150,33 @@ check("nobody set: nothing listed", QueueMail:GetDisenchantDelivery(), nil)
 settings.disenchanterName = "  trent "
 check("the character playing: nothing listed", QueueMail:GetDisenchantDelivery(), nil)
 
+-- Trent, 2026-10-04: logged in on the disenchanter, nothing is offered.
+settings.disenchanterName = "TRENT-Forever"
+check("own name and realm, any case: nothing listed", QueueMail:GetDisenchanter(), nil)
+
+settings.disenchanterName = "trent blackthorne"
+ns.db.characters["Player-TRENT"].surname = "Blackthorne"
+check("first and last name: nothing listed", QueueMail:GetDisenchanter(), nil)
+settings.disenchanterName = "Trent  Blackthorne-Forever"
+check("with the realm and a doubled space too", QueueMail:GetDisenchanter(), nil)
+ns.db.characters["Player-TRENT"].surname = nil
+
+settings.disenchanterName = "Trent-OtherRealm"
+check("the same name on another realm is somebody else", QueueMail:GetDisenchanter(), "Trent-OtherRealm")
+
+-- A record the addon has not stamped yet: the game still says who is playing.
+local saved = ns.db.characters["Player-TRENT"]
+ns.db.characters["Player-TRENT"] = nil
+settings.disenchanterName = "trent"
+check("no saved record yet: the game's name counts", QueueMail:GetDisenchanter(), nil)
+ns.db.characters["Player-TRENT"] = saved
+
+-- And with nothing from the game, the saved record still says who it is.
+UnitName, GetRealmName = nil, nil
+check("no name from the game: the record's counts", QueueMail:GetDisenchanter(), nil)
+UnitName = function() return "Trent" end
+GetRealmName = function() return "Forever" end
+
 settings.disenchanterName = "Shardy-OtherRealm"
 delivery = QueueMail:GetDisenchantDelivery()
 check("a name from another account still gets a mail", delivery and delivery.recipient, "Shardy-OtherRealm")
@@ -163,6 +195,7 @@ settings.disenchanterQuality = nil
 check("unset reads as greens only", QueueMail:GetDisenchantQuality(), 2)
 
 C_Container = nil
+UnitName, GetRealmName = oldUnitName, oldRealmName
 
 print("")
 if failures > 0 then
