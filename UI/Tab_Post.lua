@@ -159,7 +159,7 @@ local function CreateRow(row)
 
         -- Left clickable even when it cannot list, so the click produces an
         -- explanation rather than nothing at all.
-        local allowed, reason = ns.Posting:CanPost()
+        local allowed, reason = ns.Posting:CanPost(line.itemID)
         if not allowed then
             ns.Print(reason or "cannot post right now")
             return
@@ -248,7 +248,7 @@ function UpdateRow(row, line)
 
     -- The G/S/C columns stay either way: when the auction house refuses a
     -- listing, typing it into Blizzard's Sell tab is the fallback.
-    local allowed, reason = ns.Posting:CanPost()
+    local allowed, reason = ns.Posting:CanPost(line.itemID)
 
     if line.unitPrice then
         row.post:SetText("List")
