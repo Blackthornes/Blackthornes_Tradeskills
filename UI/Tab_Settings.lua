@@ -273,7 +273,43 @@ local function Build(outer)
     end, true)
     widgets.queueMail:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local lossRow = CreateRow(container, queueMailRow, "Recommend selling at a loss",
+    -- Izbode, 2026-10-04: a character to mail gear to for disenchanting.
+    -- Typed rather than picked, so one on another account works too.
+    local disenchanterRow = CreateRow(container, queueMailRow, "Disenchanter",
+        "At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear or an upgrade for you. Leave empty for nobody.")
+
+    widgets.disenchanter = Widgets.CreateSearchBox(disenchanterRow, "Character name", function(text)
+        local trimmed = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        Config:Set("disenchanterName", trimmed)
+        if ns.QueueMailPanel then ns.QueueMailPanel:Refresh() end
+    end)
+    widgets.disenchanter:SetWidth(150)
+    widgets.disenchanter:SetPoint("TOPLEFT", CONTROL_X, 0)
+    -- A letter where the search box has its magnifier: this is a name.
+    if widgets.disenchanter.icon then
+        widgets.disenchanter.icon:SetTexture([[Interface\Minimap\Tracking\Mailbox]])
+        widgets.disenchanter.icon:SetSize(14, 14)
+    end
+    -- Escape puts the saved name back rather than clearing it.
+    widgets.disenchanter.editBox:SetScript("OnEscapePressed", function(self)
+        self:SetText(Config:Get("disenchanterName") or "")
+        self:ClearFocus()
+    end)
+
+    local disenchantQualityRow = CreateRow(container, disenchanterRow, "Mail gear up to",
+        "The best quality that goes to your disenchanter.")
+
+    widgets.disenchantQuality = Widgets.CreateDropdown(disenchantQualityRow, {
+        { text = "Greens only", value = 2 },
+        { text = "Greens and blues", value = 3 },
+        { text = "Up to purples", value = 4 },
+    }, function(value)
+        Config:Set("disenchanterQuality", value)
+        if ns.QueueMailPanel then ns.QueueMailPanel:Refresh() end
+    end, { width = 150 })
+    widgets.disenchantQuality:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local lossRow = CreateRow(container, disenchantQualityRow, "Recommend selling at a loss",
         "Off: the Post tab shows them in red but will not list them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
@@ -838,6 +874,13 @@ local function Refresh()
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
     widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
     widgets.queueMail:SetChecked(Config:Get("queueMailPanel") ~= false)
+    local disenchanterBox = widgets.disenchanter.editBox
+    if not (disenchanterBox.HasFocus and disenchanterBox:HasFocus()) then
+        local saved = Config:Get("disenchanterName") or ""
+        if widgets.disenchanter:GetText() ~= saved then widgets.disenchanter:SetText(saved) end
+    end
+    widgets.disenchantQuality:SetValue(ns.QueueMail and ns.QueueMail:GetDisenchantQuality()
+        or Config:Get("disenchanterQuality") or 2, true)
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
     widgets.debug:SetChecked(ns.db.global.debug == true)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)

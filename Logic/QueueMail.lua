@@ -302,6 +302,135 @@ function QueueMail:GetDeliveries()
 end
 
 --------------------------------------------------------------------------------
+-- Gear for the disenchanter
+--------------------------------------------------------------------------------
+
+-- Izbode, 2026-10-04: "Setting a disenchant character to mail all BoEs to
+-- (with threshold option, like only greens, or maybe only green and blues)".
+-- The name is typed in Settings, so it can be any character, one on another
+-- account included. What goes: green and better armour and weapons that can
+-- be disenchanted, up to the quality picked, never a soulbound copy, never
+-- gear that binds when picked up, and never an upgrade for the character
+-- carrying it (when Equipment is loaded to say so). Like the queue's mail,
+-- nothing is sent from here: the panel fills the mail and the player
+-- presses Send.
+
+local GREEN, PURPLE = 2, 4
+
+--- The disenchanter's name as typed, trimmed, or nil when there is none
+--- (or it is the character playing).
+function QueueMail:GetDisenchanter()
+    local typed = ns.Config:Get("disenchanterName")
+    if type(typed) ~= "string" then return nil end
+    typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
+    if typed == "" then return nil end
+
+    local selfRecord = CharacterRecord(SelfKey())
+    local first = typed:match("^([^-]+)") or typed
+    if selfRecord and type(selfRecord.name) == "string"
+        and selfRecord.name:lower() == first:lower() then
+        local realm = typed:match("^[^-]+%-(.+)$")
+        if not realm or not selfRecord.realm
+            or realm:gsub("%s", ""):lower() == tostring(selfRecord.realm):gsub("%s", ""):lower() then
+            return nil
+        end
+    end
+    return typed
+end
+
+--- The best quality mailed to the disenchanter: 2 to 4.
+function QueueMail:GetDisenchantQuality()
+    local quality = tonumber(ns.Config:Get("disenchanterQuality")) or GREEN
+    return math.max(GREEN, math.min(PURPLE, math.floor(quality)))
+end
+
+--- Is this copy an upgrade for the character carrying it? Asked of
+--- Equipment directly, whether or not the arrows are switched on: the
+--- answer here decides what leaves the bags.
+local function UpgradeForMe(itemID, link)
+    local compare = ns.Upgrades and ns.Upgrades.Equipment and ns.Upgrades:Equipment()
+    if not compare then return false end
+    local ok, result = pcall(compare.IsUpgrade, compare, link or itemID)
+    return ok and result == true
+end
+
+--- What the bags hold for the disenchanter, as a delivery the panel can
+--- draw and Fill can attach, or nil when there is nobody or nothing.
+-- @return { to, name, recipient, subject, disenchant = true,
+--   items = { { itemID, count, quality } } }
+function QueueMail:GetDisenchantDelivery()
+    local recipient = self:GetDisenchanter()
+    if not recipient then return nil end
+
+    local Disenchant = ns.Disenchant
+    if not (Disenchant and Disenchant.IsDisenchantable) then return nil end
+    if not (C_Container and ns.Inventory and ns.Inventory.GetCarriedBags) then return nil end
+
+    local best = self:GetDisenchantQuality()
+    local counts, order, qualities, refused = {}, {}, {}, {}
+
+    -- Read and copied inside a pcall: the client can hand out values that
+    -- raise when compared.
+    local function Read(bag, slot)
+        local info = C_Container.GetContainerItemInfo(bag, slot)
+        if type(info) ~= "table" or info.isBound then return nil end
+        local itemID, quality = tonumber(info.itemID), tonumber(info.quality)
+        local link = type(info.hyperlink) == "string" and (info.hyperlink .. "") or nil
+        return itemID, quality, tonumber(info.stackCount) or 1, link
+    end
+
+    for _, bag in ipairs(ns.Inventory:GetCarriedBags()) do
+        local okSlots, slots = pcall(C_Container.GetContainerNumSlots, bag)
+        for slot = 1, (okSlots and tonumber(slots)) or 0 do
+            local ok, itemID, quality, stack, link = pcall(Read, bag, slot)
+
+            if ok and itemID and quality and quality >= GREEN and quality <= best
+                and not refused[itemID] then
+                -- One copy an upgrade keeps them all: the mail is filled by
+                -- item, and could take that copy rather than another.
+                if Disenchant:IsDisenchantable(itemID) ~= true or Bound(itemID)
+                    or UpgradeForMe(itemID, link) then
+                    refused[itemID] = true
+                else
+                    if not counts[itemID] then
+                        order[#order + 1] = itemID
+                        qualities[itemID] = quality
+                    end
+                    counts[itemID] = (counts[itemID] or 0) + stack
+                end
+            end
+        end
+    end
+
+    local kept = {}
+    for _, itemID in ipairs(order) do
+        if not refused[itemID] then kept[#kept + 1] = itemID end
+    end
+    order = kept
+    if #order == 0 then return nil end
+
+    -- Best quality first.
+    table.sort(order, function(a, b)
+        if qualities[a] ~= qualities[b] then return qualities[a] > qualities[b] end
+        return a < b
+    end)
+
+    local items = {}
+    for _, itemID in ipairs(order) do
+        items[#items + 1] = { itemID = itemID, count = counts[itemID], quality = qualities[itemID] }
+    end
+
+    return {
+        to = self:FindCharacter(recipient),
+        name = recipient,
+        recipient = recipient,
+        subject = "Gear to disenchant",
+        disenchant = true,
+        items = items,
+    }
+end
+
+--------------------------------------------------------------------------------
 -- Filling a mail
 --------------------------------------------------------------------------------
 
@@ -404,11 +533,11 @@ function QueueMail:Fill(delivery, onDone)
         Call(_G.MailFrameTab2.Click, _G.MailFrameTab2)
     end
 
-    local record = CharacterRecord(delivery.to)
-    local name = (record and record.name) or delivery.name
+    local record = delivery.to and CharacterRecord(delivery.to)
+    local name = delivery.recipient or (record and record.name) or delivery.name
     Call(nameBox.SetText, nameBox, name)
     local subject = _G.SendMailSubjectEditBox
-    if subject then Call(subject.SetText, subject, "Materials for the craft queue") end
+    if subject then Call(subject.SetText, subject, delivery.subject or "Materials for the craft queue") end
 
     local _, alreadyIn = UsedSlots()
     local room = MaxAttachments() - alreadyIn
