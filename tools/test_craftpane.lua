@@ -481,6 +481,59 @@ do
       GetChildren = function() end,
     }), 0)
 
+  -- Izbode, 2026-10-04: the tabs held in a container of their own. The
+  -- container sits inside the window; the tabs in it hang out past it.
+  local function Tab(left, right, top, bottom)
+    return {
+      IsShown = function() return true end,
+      GetLeft = function() return left end,
+      GetRight = function() return right end,
+      GetTop = function() return top end,
+      GetBottom = function() return bottom end,
+    }
+  end
+  local container = {
+    IsShown = function() return true end,
+    GetRight = function() return 890 end,
+    GetChildren = function() return Tab(898, 940, 760, 720), Tab(898, 940, 715, 675) end,
+  }
+  check("tabs inside a container of their own are cleared",
+    CraftPanel:RightOverhang({
+      GetRight = function() return 900 end,
+      GetTop = function() return 800 end,
+      GetBottom = function() return 300 end,
+      GetChildren = function() return container end,
+    }), 40)
+
+  -- Something deep inside that is merely wide (a scroll area's content)
+  -- starts well inside the window: not a tab.
+  local scroller = {
+    IsShown = function() return true end,
+    GetRight = function() return 890 end,
+    GetChildren = function() return Tab(400, 1000, 700, 400) end,
+  }
+  check("a wide frame deep inside the window is not a tab",
+    CraftPanel:RightOverhang({
+      GetRight = function() return 900 end,
+      GetTop = function() return 800 end,
+      GetBottom = function() return 300 end,
+      GetChildren = function() return scroller end,
+    }), 0)
+
+  -- Nor is one at the edge but below the window.
+  local below = {
+    IsShown = function() return true end,
+    GetRight = function() return 890 end,
+    GetChildren = function() return Tab(898, 960, 290, 250) end,
+  }
+  check("a frame below the window is not beside it",
+    CraftPanel:RightOverhang({
+      GetRight = function() return 900 end,
+      GetTop = function() return 800 end,
+      GetBottom = function() return 300 end,
+      GetChildren = function() return below end,
+    }), 0)
+
   -- The client raising rather than answering must not take the pane down.
   check("a client that refuses GetChildren is survivable",
     CraftPanel:RightOverhang({

@@ -120,30 +120,73 @@ end
 -- anchored far away should not push the pane off the side of the screen.
 local MAX_OVERHANG = 120
 
+-- How deep to look for them. Izbode, 2026-10-04: the pane still covered the
+-- tabs to pick a profession. A window can hold its tabs in a container of
+-- their own, whose rectangle sits inside the window while the tabs in it
+-- hang out, so the window's own children said nothing stood out. Their
+-- children are looked at too, and theirs, but only frames that start at the
+-- window's right edge: something wider than a scroll area inside the window
+-- is not a tab.
+local OVERHANG_DEPTH = 3
+local EDGE_SLACK = 60
+local MAX_FRAMES_LOOKED_AT = 400
+
+-- Guarded: GetChildren is not worth assuming on a client with API gaps,
+-- and a pane that fails to dock is worse than one docked a little close.
+local function Children(frame)
+    if type(frame) ~= "table" or type(frame.GetChildren) ~= "function" then return {} end
+    local ok, children = pcall(function() return { frame:GetChildren() } end)
+    if ok and type(children) == "table" then return children end
+    return {}
+end
+
+local function Number(frame, method)
+    if type(frame[method]) ~= "function" then return nil end
+    local ok, value = pcall(frame[method], frame)
+    if ok and type(value) == "number" then return value end
+end
+
 function CraftPanel:RightOverhang(tradeSkillFrame)
     local right = tradeSkillFrame:GetRight()
     if not right then return 0 end
 
-    -- Guarded: GetChildren is not worth assuming on a client with API gaps,
-    -- and a pane that fails to dock is worse than one docked a little close.
-    local ok, children = pcall(function()
-        return { tradeSkillFrame:GetChildren() }
-    end)
+    local top, bottom = Number(tradeSkillFrame, "GetTop"), Number(tradeSkillFrame, "GetBottom")
 
-    if not ok or type(children) ~= "table" then return 0 end
+    local overhang, looked = 0, 0
 
-    local overhang = 0
+    local function Visit(frame, depth)
+        for _, child in ipairs(Children(frame)) do
+            looked = looked + 1
+            if looked > MAX_FRAMES_LOOKED_AT then return end
 
-    for _, child in ipairs(children) do
-        if type(child) == "table" and child.GetRight and child.IsShown then
-            local shownOk, shown = pcall(child.IsShown, child)
-            local rightOk, childRight = pcall(child.GetRight, child)
+            if type(child) == "table" and child.GetRight and child.IsShown then
+                local shownOk, shown = pcall(child.IsShown, child)
+                local childRight = Number(child, "GetRight")
 
-            if shownOk and shown and rightOk and childRight then
-                overhang = math.max(overhang, childRight - right)
+                if shownOk and shown then
+                    -- The window's own children count as they always have;
+                    -- deeper ones only when they start at its edge and sit
+                    -- beside it, not above or below.
+                    local counts = depth == 1
+                    if not counts and childRight then
+                        local left = Number(child, "GetLeft")
+                        local childTop, childBottom = Number(child, "GetTop"), Number(child, "GetBottom")
+                        counts = left ~= nil and left >= right - EDGE_SLACK
+                            and (not top or not childBottom or childBottom < top)
+                            and (not bottom or not childTop or childTop > bottom)
+                    end
+
+                    if counts and childRight then
+                        overhang = math.max(overhang, childRight - right)
+                    end
+
+                    if depth < OVERHANG_DEPTH then Visit(child, depth + 1) end
+                end
             end
         end
     end
+
+    Visit(tradeSkillFrame, 1)
 
     return math.min(math.max(overhang, 0), MAX_OVERHANG)
 end
@@ -1112,6 +1155,15 @@ function CraftPanel:Attach()
 
     frame:Show()
     self:Refresh()
+
+    -- The tabs can be laid out a moment after the window opens, and the game
+    -- moves the window into its slot beside the auction house after that:
+    -- measure again once they have.
+    if C_Timer and C_Timer.After then
+        for _, delay in ipairs({ 0.2, 1 }) do
+            C_Timer.After(delay, function() CraftPanel:Reflow() end)
+        end
+    end
 
     -- Fades in where it docked, its glow flaring; it never rises, since it
     -- sits beside the profession window.
