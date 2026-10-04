@@ -359,7 +359,12 @@ function MailReport:Build()
     frame:Hide()
 
     Theme.Fill(frame, "window", 0.97)
-    Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    -- The house frame (UI/Titanforged.lua): the gold rim and corner gems.
+    if ns.Titanforged then
+        ns.Titanforged:Dress(frame)
+    else
+        Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
+    end
     -- The house glow round its edge, flaring as the report opens.
     Theme.Halo(frame, 10, 0.12)
 

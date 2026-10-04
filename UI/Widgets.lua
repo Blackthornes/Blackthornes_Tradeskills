@@ -285,19 +285,28 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     local button = CreateFrame("Button", nil, parent)
     button:SetSize(opts.width or 90, opts.height or 22)
 
-    local baseKey = opts.primary and "rowActive" or "row"
+    -- Titanforged (2026-10-04): every button is raised metal, a dark face
+    -- in a gold edge with a gold label, lit and glowing under the mouse. The
+    -- primary action is solid gold with dark lettering, so the one button
+    -- that does the main thing on a screen stands out at a glance.
+    local baseKey = opts.primary and "accent" or "row"
+    local hotFill = opts.primary and "accentHi" or opts.danger and "rowHover" or "rowActive"
 
     button.background = Theme.Fill(button, baseKey)
 
-    -- The primary action wears a gold edge, so the one button that does the
-    -- main thing on a screen stands out from the rest without shouting.
     -- A danger button (opts.danger: takes something away, like Ignore)
-    -- wears red instead, label and edge, so it never reads as plain text.
-    local borderKey = opts.primary and "accent" or opts.danger and "loss" or "border"
-    local borderAlpha = opts.primary and 0.55 or opts.danger and 0.7 or nil
-    local labelKey = opts.primary and "accent" or opts.danger and "loss" or "text"
+    -- wears red, label and edge, so it never reads as plain text.
+    local borderKey = opts.primary and "accentHi" or opts.danger and "loss" or "metal"
+    local borderAlpha = opts.danger and 0.7 or nil
+    -- Dark lettering only on a gold face: a primary button given its own
+    -- dark resting colour (opts.baseColor) keeps the gold label, or its text
+    -- would be dark on dark.
+    local goldFace = opts.primary and not opts.baseColor
+    local labelKey = goldFace and "ink" or opts.danger and "loss" or "gilt"
+    local labelHot = goldFace and "ink" or opts.danger and "loss" or { 1, 0.953, 0.784 }
     Theme.Border(button, borderKey, borderAlpha)
-    button.sheen = Theme.TopSheen(button)
+    button.sheen = Theme.TopSheen(button, 0.10)
+    if Theme.Bevel then Theme.Bevel(button) end
 
     -- An explicit resting colour, for buttons that sit over the game world and
     -- need to stay fully opaque rather than picking up the panel palette.
@@ -349,21 +358,26 @@ function Widgets.CreateButton(parent, text, onClick, opts)
         end
     end
 
-    local function ApplyLabelColor(self)
-        self.label:SetTextColor(Theme.Unpack(
-            self.disabled and "dim" or self.confirming and "loss"
-            or labelKey))
+    local function ApplyLabelColor(self, p)
+        if self.disabled or self.confirming then
+            self.label:SetTextColor(Theme.Unpack(self.disabled and "dim" or "loss"))
+        else
+            self.label:SetTextColor(Motion.Mix(labelKey, labelHot, p or 0))
+        end
     end
 
-    -- The one button on a screen that does the main thing glows gold round
-    -- its edge under the mouse, as Farmer's do.
-    if opts.primary and Theme.Halo then Theme.Halo(button, 5, 0) end
-    if opts.danger and Theme.Halo then Theme.Halo(button, 5, 0, "loss") end
+    -- Every button glows round its edge under the mouse, as Farmer's do;
+    -- the primary one glows a little even at rest. A button sitting over
+    -- the game world (opts.baseColor) keeps to its own look.
+    local haloRest = opts.primary and 0.12 or 0
+    if Theme.Halo and not opts.baseColor then
+        Theme.Halo(button, 5, haloRest, opts.danger and "loss" or "accent")
+    end
 
     --- How lit the button is: 0 at rest, 1 under the mouse. Everything the
     --- mouse changes is drawn from this one number, so easing it eases the
     --- lot, and a state change mid-hover redraws from where the hover is.
-    local hotEdge = opts.primary and "accent" or opts.danger and "loss" or "borderLit"
+    local hotEdge = opts.danger and "loss" or "accentHi"
 
     local function Light(self, p)
         if self.disabled then p = 0 end
@@ -376,8 +390,13 @@ function Widgets.CreateButton(parent, text, onClick, opts)
         else
             r, g, b, a = Theme.Unpack(baseKey)
         end
-        local hr, hg, hb = Theme.Unpack("rowHover")
-        r, g, b = r + (hr - r) * p, g + (hg - g) * p, b + (hb - b) * p
+        if not self.baseColor and not self.disabled then
+            local hr, hg, hb = Theme.Unpack(hotFill)
+            r, g, b = r + (hr - r) * p, g + (hg - g) * p, b + (hb - b) * p
+        else
+            local hr, hg, hb = Theme.Unpack("rowHover")
+            r, g, b = r + (hr - r) * p, g + (hg - g) * p, b + (hb - b) * p
+        end
 
         -- Held down, the fill sinks a shade toward the window behind it, so
         -- the press shows in the button as well as in its label.
@@ -402,7 +421,10 @@ function Widgets.CreateButton(parent, text, onClick, opts)
             end
         end
 
-        if rawget(self, "haloTextures") then Theme.SetHalo(self, 0.32 * p) end
+        if rawget(self, "haloTextures") then
+            Theme.SetHalo(self, self.disabled and 0 or haloRest + (0.4 - haloRest) * p)
+        end
+        ApplyLabelColor(self, p)
     end
 
     local HOVER_TIME = 0.12
@@ -546,9 +568,10 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
     local box = CreateFrame("Frame", nil, checkbox)
     box:SetSize(14, 14)
     box:SetPoint("LEFT")
-    Theme.Fill(box, "row")
-    Theme.Border(box, "border")
-    Theme.TopSheen(box)
+    -- A small dark well in a gold edge, glowing when ticked (Titanforged).
+    Theme.Fill(box, "well")
+    Theme.Border(box, "metal")
+    if Theme.Halo then Theme.Halo(box, 4, 0) end
 
     local tick = box:CreateTexture(nil, "OVERLAY")
     tick:SetPoint("CENTER")
@@ -565,8 +588,12 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
 
     local function PaintBox(hovered)
         tick:SetShown(checkbox.checked)
-        Theme.SetBorderColor(box, checkbox.checked and "accent"
-            or hovered and "borderLit" or "border")
+        tick:SetColorTexture(Theme.Unpack(checkbox.checked and "accentHi" or "accent"))
+        Theme.SetBorderColor(box, checkbox.checked and "accentHi"
+            or hovered and "accent" or "metal")
+        if rawget(box, "haloTextures") then
+            Theme.SetHalo(box, checkbox.checked and 0.3 or hovered and 0.15 or 0)
+        end
     end
 
     PaintBox(false)
@@ -618,6 +645,11 @@ end
 function Widgets.CreateSearchBox(parent, placeholder, onChange)
     local container = Theme.CreatePanel(parent, "row")
     container:SetHeight(22)
+
+    -- Sunk into the window, and glowing gold while it has the keyboard
+    -- (Titanforged).
+    if Theme.Recess then Theme.Recess(container) end
+    if Theme.Halo then Theme.Halo(container, 6, 0) end
 
     -- The game's own magnifier, so the box reads as search at a glance, as
     -- Farmer's does. It turns gold while the box has the keyboard.
@@ -679,6 +711,7 @@ function Widgets.CreateSearchBox(parent, placeholder, onChange)
         local r2, g2, b2 = Theme.Unpack("accent")
         local r, g, b = r1 + (r2 - r1) * focus, g1 + (g2 - g1) * focus, b1 + (b2 - b1) * focus
         for _, edge in ipairs(container.borderTextures or {}) do edge:SetColorTexture(r, g, b, 1) end
+        if rawget(container, "haloTextures") then Theme.SetHalo(container, 0.3 * focus) end
 
         icon:SetVertexColor(Motion.Mix("muted", "accent", math.max(focus, hover * 0.4)))
     end
@@ -1173,10 +1206,45 @@ local function NameWidths(buttons, room)
     return widths
 end
 
+-- Hanging tabs (opts.hanging): how tall a tab is, and how far the one
+-- showing reaches up over the window's rim to join it.
+local HANG_HEIGHT = 26
+local HANG_JOIN = 5
+
+--- The metal edge round a hanging tab: down both sides and along the foot.
+local function HangingEdges(button)
+    local Gradient = ns.Titanforged and ns.Titanforged.Gradient
+    local metalLo, metal = { 0.357, 0.267, 0.086 }, { 0.690, 0.545, 0.235 }
+    local hi = { 0.941, 0.831, 0.541 }
+
+    local function Edge(a, b, width, height)
+        local edge = button:CreateTexture(nil, "BORDER", nil, 2)
+        edge:SetPoint(a)
+        edge:SetPoint(b)
+        if width then edge:SetWidth(width) else edge:SetHeight(height) end
+        return edge
+    end
+
+    local left = Edge("TOPLEFT", "BOTTOMLEFT", 2)
+    local right = Edge("TOPRIGHT", "BOTTOMRIGHT", 2)
+    local foot = Edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 2)
+
+    if Gradient then
+        Gradient(left, "VERTICAL", hi, metalLo)
+        Gradient(right, "VERTICAL", metal, metalLo)
+        Gradient(foot, "HORIZONTAL", metal, hi)
+    else
+        for _, edge in ipairs({ left, right, foot }) do edge:SetColorTexture(Theme.Unpack("metal")) end
+    end
+end
+
 --- A row of tabs. Each tab is { key, text, width }; a tab given no width is
 --- as wide as its name needs, and opts.width is the room all of them have.
+--- opts.hanging hangs them below the strip's top edge, as the game's own
+--- windows wear their tabs: anchor the strip's top to the window's bottom.
 function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
     opts = opts or {}
+    local hanging = opts.hanging and true or false
 
     local strip = CreateFrame("Frame", nil, parent)
     strip:SetHeight(28)
@@ -1196,16 +1264,22 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
 
     for index, tab in ipairs(tabs) do
         local button = CreateFrame("Button", nil, strip)
-        button:SetHeight(28)
+        button:SetHeight(hanging and HANG_HEIGHT or 28)
 
         button.background = Theme.Fill(button, "panel")
         button.hover = Theme.Fill(button, "rowHover", 0.45, "BORDER")
         button.hover:SetAlpha(0)
 
+        if hanging then
+            HangingEdges(button)
+            -- Each tab glows faintly gold when it is the one showing.
+            if Theme.Halo then Theme.Halo(button, 6, 0) end
+        end
+
         -- The tab showing sits in a soft gold light rising from its line.
         button.lit = button:CreateTexture(nil, "BORDER", nil, 1)
         button.lit:SetAllPoints(button)
-        Theme.SetGradientAlpha(button.lit, "VERTICAL", "accent", 0.14, 0)
+        Theme.SetGradientAlpha(button.lit, "VERTICAL", "accent", hanging and 0.28 or 0.14, 0)
         button.lit:Hide()
 
         -- Under the mouse, a faint line along the tab's foot echoes the gold
@@ -1277,13 +1351,20 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
         end
     end
 
+    -- Hanging tabs stand a little apart, so each reads as its own tab.
+    local gap = hanging and 3 or 0
     local x = 0
     for _, button in ipairs(strip.tabs) do
         local width = button.fixedWidth or widths[button]
-        button:SetPoint("BOTTOMLEFT", x, 0)
+        if hanging then
+            button:SetPoint("TOPLEFT", x, 0)
+            width = math.max(1, width - gap)
+        else
+            button:SetPoint("BOTTOMLEFT", x, 0)
+        end
         button:SetWidth(width)
         button.left, button.span = x, width
-        x = x + width
+        x = x + width + gap
     end
 
     strip:SetWidth(math.max(x, 1))
@@ -1346,8 +1427,16 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
             button.hover:SetAlpha(0)
             button.underline:SetAlpha(0)
             button.lit:SetShown(active)
-            button.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
-            button.background:SetColorTexture(Theme.Unpack(active and "header" or "panel"))
+            button.label:SetTextColor(Theme.Unpack(active and (hanging and "accentHi" or "accent") or "muted"))
+            button.background:SetColorTexture(Theme.Unpack(active and "header" or (hanging and "window" or "panel")))
+            if hanging then
+                -- The tab showing is taller, reaching up over the window's
+                -- rim so it joins the window, and glows.
+                button:ClearAllPoints()
+                button:SetPoint("TOPLEFT", strip, "TOPLEFT", button.left, active and HANG_JOIN or 0)
+                button:SetHeight(HANG_HEIGHT + (active and HANG_JOIN or 0))
+                if rawget(button, "haloTextures") then Theme.SetHalo(button, active and 0.22 or 0) end
+            end
             if active then MarkTab(button) end
         end
     end
@@ -1373,7 +1462,7 @@ end
 function Widgets.LightThumb(bar, thumb)
     bar:EnableMouse(true)
     bar:HookScript("OnEnter", function() thumb:SetColorTexture(Theme.Unpack("accent")) end)
-    bar:HookScript("OnLeave", function() thumb:SetColorTexture(Theme.Unpack("borderLit")) end)
+    bar:HookScript("OnLeave", function() thumb:SetColorTexture(Theme.Unpack("metal")) end)
 end
 
 --------------------------------------------------------------------------------
@@ -1576,7 +1665,7 @@ function Widgets.CreateScrollFrame(parent, opts)
     track:SetColorTexture(Theme.Unpack("panel"))
 
     local thumb = bar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("borderLit"))
+    thumb:SetColorTexture(Theme.Unpack("metal"))
     thumb:SetSize(8, 40)
     bar:SetThumbTexture(thumb)
     Widgets.LightThumb(bar, thumb)
@@ -1715,7 +1804,7 @@ function Widgets.CreateScrollList(parent, opts)
     track:SetColorTexture(Theme.Unpack("panel"))
 
     local thumb = scrollbar:CreateTexture(nil, "ARTWORK")
-    thumb:SetColorTexture(Theme.Unpack("borderLit"))
+    thumb:SetColorTexture(Theme.Unpack("metal"))
     thumb:SetSize(8, 40)
     scrollbar:SetThumbTexture(thumb)
     Widgets.LightThumb(scrollbar, thumb)
@@ -1756,13 +1845,35 @@ function Widgets.CreateScrollList(parent, opts)
         -- eye can follow a row across a wide table.
         row.hoverEdge = Theme.AccentStripe(row, 2)
         row.hoverEdge:SetDrawLayer("OVERLAY")
+        row.hoverEdge:SetColorTexture(Theme.Unpack("accentHi"))
         row.hoverEdge:Hide()
+
+        -- Titanforged: under the mouse the row lights from the left too, a
+        -- gold wash fading across it and a glow off the gold edge.
+        row.hoverWash = row:CreateTexture(nil, "BORDER", nil, 1)
+        row.hoverWash:SetAllPoints(row)
+        row.hoverWash:SetAlpha(0)
+
+        row.edgeGlow = row:CreateTexture(nil, "ARTWORK", nil, 7)
+        row.edgeGlow:SetPoint("TOPLEFT", 2, 0)
+        row.edgeGlow:SetPoint("BOTTOMLEFT", 2, 0)
+        row.edgeGlow:SetWidth(10)
+        if Theme.SetGradientAlpha then
+            Theme.SetGradientAlpha(row.hoverWash, "HORIZONTAL", "accent", 0.20, 0)
+            Theme.SetGradientAlpha(row.edgeGlow, "HORIZONTAL", "accentHi", 0.35, 0)
+        end
+        pcall(row.edgeGlow.SetBlendMode, row.edgeGlow, "ADD")
+        row.edgeGlow:SetAlpha(0)
 
         if opts.createRow then
             opts.createRow(row)
         end
 
-        local function Light(value) row.highlight:SetAlpha(value) end
+        local function Light(value)
+            row.highlight:SetAlpha(value)
+            row.hoverWash:SetAlpha(value)
+            row.edgeGlow:SetAlpha(value)
+        end
 
         row:SetScript("OnEnter", function(self)
             Motion:Blend(self, "hover", 1, 0.1, Light)

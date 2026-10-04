@@ -115,6 +115,22 @@ ns.Prices:GetValue(itemID)             -- material and auction prices
 Keep these stable as well; if one changes, change Equipment's
 `Logic/Crafting.lua` in the same breath.
 
+## The house frame (Titanforged)
+
+Trent picked this look for all four addons on 2026-10-04 from two mockups
+(the other was "Arcane Glass"). It's the game's own window shape with the
+light turned up: a gold metal rim with corner gems, a round portrait with
+the addon's emblem, the name on a plate across the top edge, a red close
+gem, and tabs hanging below the window. Buttons are raised metal with gold
+labels, and the main action is solid gold with dark lettering.
+
+It lives in `UI/Titanforged.lua` (`Titanforged:Dress(frame, opts)`,
+`:Opened(frame)`), with the art in `Media/Frame/*.tga`, drawn by
+`tools/make_frame_art.py`. Hanging tabs are `CreateTabStrip(..., { hanging =
+true })`. Tradeskills got it first. Farmer, Equipment and Pets copy the file,
+the art and the tool, changing only `EMBLEM` in the tool (pick, shield,
+paw). Glows and glints follow the Window effects setting.
+
 ## Trent's standing rules (both addons)
 
 - **"Always check that it's clear to post."** Anything that goes public (a
