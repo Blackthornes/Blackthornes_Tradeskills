@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.28.3
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Listing every copy of an unstackable crafted item in one click no longer
+  switches itself off. A sale between auction house visits could make a full
+  batch look short and turn it off for every item until the next login. Now
+  only a clear reading can turn it off, and only for that one item. Items
+  whose info has not loaded yet no longer go up one at a time.
+
 ## 0.28.2
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is

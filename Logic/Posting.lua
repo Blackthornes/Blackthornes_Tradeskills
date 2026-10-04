@@ -375,7 +375,7 @@ end
 -- When a batch of an item comes back with only one listed (or none), that
 -- item goes back to one at a time for the rest of the session.
 --
--- Trent, 2026-10-04: "multiposting works sometimes for crafted items and
+-- Asked for 2026-10-04: "multiposting works sometimes for crafted items and
 -- other times it does not". One doubtful reading used to turn this off for
 -- every item until the next login, and the first listing of a visit is
 -- measured against a count from the last visit, so a sale in between made a
