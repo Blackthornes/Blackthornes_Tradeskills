@@ -812,7 +812,7 @@ local function ShowRowTooltip(row, line)
             0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
     end
 
-    GameTooltip:AddLine("Left-click to queue, right-click to remove.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine("Left-click to queue, right-click to remove, Shift-click to search the auction house.", 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 

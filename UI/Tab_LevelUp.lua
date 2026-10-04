@@ -36,6 +36,22 @@ local state = {
 
 local widgets = {}
 
+-- The row hint, as much of it as fits beside the count on its left.
+local HINT_TEXTS = {
+    "Right-click a row to queue one, Shift-click to search the auction house",
+    "Right-click to queue, Shift-click to search",
+    "Right-click a row to queue one",
+}
+
+local function FitHint()
+    local hint, count, list = widgets.hint, widgets.countLabel, widgets.list
+    if not (hint and count and list and Theme.TextWidth and Theme.FitText) then return end
+    local listWidth = list:GetWidth()
+    local used = Theme.TextWidth(count) or 0
+    local room = type(listWidth) == "number" and listWidth > 0 and (listWidth - used - 24) or nil
+    Theme.FitText(hint, HINT_TEXTS, room)
+end
+
 -- Defined with the detail panel, used by the controls built inside it.
 local UpdateCraftButton
 
@@ -148,7 +164,7 @@ local function ShowRowTooltip(row, entry)
     local note = StaleNote(entry.skillUp)
     if note then GameTooltip:AddLine(note, 0.91, 0.76, 0.35, true) end
 
-    GameTooltip:AddLine("Right-click to queue one.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine("Right-click to queue one. Shift-click to search the auction house.", 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -529,6 +545,7 @@ local function Refresh()
     if #rows > 0 and unread == #rows then
         widgets.countLabel:SetText("Open this profession once so the skill up colours can be read.")
     end
+    FitHint()
 
     -- Keep the detail panel in step with the fresh numbers.
     if state.selected then
@@ -653,7 +670,8 @@ local function Build(container)
 
     local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText("Right-click a row to queue one")
+    hint:SetText(HINT_TEXTS[1])
+    widgets.hint = hint
 
     local detail = BuildDetail(container)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
