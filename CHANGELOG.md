@@ -4,6 +4,20 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.25.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Ready to sell, beside the auction house, can now leave items out. Each
+  row has a red x at its right end ("Ignore this item"); clicking it takes
+  that item off the list for good, on every character, and Post Crafted and
+  Post ALL leave it alone too. It works by item, so ignoring one "Lead Band
+  of the Wolf" ignores every Lead Band.
+- Settings has a new Ignored items section under Ignored crafts, listing
+  them A to Z in their rarity colour with a Restore button for each.
+- `/bts readysell` says when an item is left out because it's ignored.
+
 ## 0.24.2
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
