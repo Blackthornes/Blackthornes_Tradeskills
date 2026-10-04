@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.28.2
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Ready to sell, beside the auction house, no longer covers buttons that
+  stick out past the Professions window's right edge (some interface addons
+  add a column of them). The list docks past them, and sits where it did
+  before when there are none.
+
 ## 0.28.1
 
 For WoW: Forever (interface 16001). This version adds files, so fully
