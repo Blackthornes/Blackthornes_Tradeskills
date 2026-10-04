@@ -377,6 +377,31 @@ local function Build(outer)
     widgets.ignoredRows = {}
     widgets.ignoredParent = container
 
+    -- Where the ignored crafts end, moved under the last of them in Refresh,
+    -- so the section below follows the list as it grows and shrinks.
+    local ignoredEnd = CreateFrame("Frame", nil, container)
+    ignoredEnd:SetSize(COLUMN_WIDTH, 1)
+    ignoredEnd:SetPoint("TOPLEFT", widgets.ignoredEmpty, "BOTTOMLEFT", 0, 0)
+    widgets.ignoredEnd = ignoredEnd
+
+    -- Items taken off Ready to sell at the auction house with the x on
+    -- their row (Trent, 2026-10-04). Laid out as Ignored crafts is.
+    local ignoredItems = CreateSection(container, "IGNORED ITEMS", { anchor = ignoredEnd })
+    widgets.ignoredItemsSection = ignoredItems
+
+    local ignoredItemsHint = Theme.CreateLabel(container, "tiny", "muted")
+    ignoredItemsHint:SetPoint("TOPLEFT", ignoredItems, "BOTTOMLEFT", 0, ROW_GAP)
+    ignoredItemsHint:SetWidth(COLUMN_WIDTH)
+    ignoredItemsHint:SetWordWrap(true)
+    ignoredItemsHint:SetText("Never offered for sale on Ready to sell or the Post tab, on any character. Restore puts one back.")
+    widgets.ignoredItemsHint = ignoredItemsHint
+
+    widgets.ignoredItemsEmpty = Theme.CreateLabel(container, "small", "dim")
+    widgets.ignoredItemsEmpty:SetWidth(COLUMN_WIDTH)
+    widgets.ignoredItemsEmpty:SetWordWrap(true)
+    widgets.ignoredItemsEmpty:SetText("None. Click the x on an item in Ready to sell at the auction house.")
+    widgets.ignoredItemsRows = {}
+
     ----------------------------------------------------------------------------
     -- Column two: data and advanced
     ----------------------------------------------------------------------------
@@ -690,14 +715,16 @@ end
 local IGNORED_ROW_HEIGHT = 22
 local RESTORE_WIDTH = 70
 
---- One line per ignored craft: its name, and Restore at the column's edge.
-local function IgnoredRow(index)
-    local row = widgets.ignoredRows[index]
+--- One line per ignored craft or item: its name, and Restore at the
+--- column's edge. `rows` is the list's own row table, `hint` the label the
+--- rows hang under, `onRestore(key)` puts one back.
+local function IgnoredRow(rows, hint, index, onRestore, restoreTip)
+    local row = rows[index]
     if row then return row end
 
     row = CreateFrame("Frame", nil, widgets.ignoredParent)
     row:SetSize(COLUMN_WIDTH, IGNORED_ROW_HEIGHT)
-    row:SetPoint("TOPLEFT", widgets.ignoredHint, "BOTTOMLEFT", 0,
+    row:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0,
         -6 - (index - 1) * (IGNORED_ROW_HEIGHT + 2))
 
     row.label = Theme.CreateLabel(row, "small", "text")
@@ -706,35 +733,69 @@ local function IgnoredRow(index)
     row.label:SetWordWrap(false)
 
     row.restore = Widgets.CreateButton(row, "Restore", function()
-        if row.recipeID then ns.Profit:SetIgnored(row.recipeID, false) end
-    end, { width = RESTORE_WIDTH, height = 20,
-           tooltip = "Show this craft on the Profit tab again" })
+        if row.key then onRestore(row.key) end
+    end, { width = RESTORE_WIDTH, height = 20, tooltip = restoreTip })
     row.restore:SetPoint("RIGHT", 0, 0)
     FitButton(row.restore)
 
-    widgets.ignoredRows[index] = row
+    rows[index] = row
     return row
+end
+
+--- Fill one ignored list; returns the last line drawn, for what follows.
+local function FillIgnored(list, rows, hint, empty, onRestore, restoreTip, color)
+    for index, entry in ipairs(list) do
+        local row = IgnoredRow(rows, hint, index, onRestore, restoreTip)
+        row.key = entry.key
+        row.label:SetText(entry.name)
+        if color then
+            local r, g, b = color(entry.key)
+            if r then row.label:SetTextColor(r, g, b)
+            else row.label:SetTextColor(Theme.Unpack("text")) end
+        end
+        row:Show()
+    end
+    for index = #list + 1, #rows do
+        rows[index].key = nil
+        rows[index]:Hide()
+    end
+
+    empty:ClearAllPoints()
+    empty:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -6)
+    empty:SetShown(#list == 0)
+
+    return #list > 0 and rows[#list] or empty
 end
 
 local function RefreshIgnored()
     if not widgets.ignoredHint or not ns.Profit.GetIgnored then return end
 
-    local list = ns.Profit:GetIgnored()
-
-    for index, entry in ipairs(list) do
-        local row = IgnoredRow(index)
-        row.recipeID = entry.recipeID
-        row.label:SetText(entry.name)
-        row:Show()
-    end
-    for index = #list + 1, #widgets.ignoredRows do
-        widgets.ignoredRows[index].recipeID = nil
-        widgets.ignoredRows[index]:Hide()
+    local crafts = {}
+    for _, entry in ipairs(ns.Profit:GetIgnored()) do
+        crafts[#crafts + 1] = { key = entry.recipeID, name = entry.name }
     end
 
-    widgets.ignoredEmpty:ClearAllPoints()
-    widgets.ignoredEmpty:SetPoint("TOPLEFT", widgets.ignoredHint, "BOTTOMLEFT", 0, -6)
-    widgets.ignoredEmpty:SetShown(#list == 0)
+    local last = FillIgnored(crafts, widgets.ignoredRows, widgets.ignoredHint,
+        widgets.ignoredEmpty,
+        function(recipeID) ns.Profit:SetIgnored(recipeID, false) end,
+        "Show this craft on the Profit tab again")
+
+    widgets.ignoredEnd:ClearAllPoints()
+    widgets.ignoredEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+
+    if not widgets.ignoredItemsHint or not (ns.Posting and ns.Posting.GetIgnored) then return end
+
+    local items = {}
+    for _, entry in ipairs(ns.Posting:GetIgnored()) do
+        items[#items + 1] = { key = entry.itemID, name = entry.name }
+    end
+
+    -- In the item's rarity colour, as Ready to sell draws it.
+    FillIgnored(items, widgets.ignoredItemsRows, widgets.ignoredItemsHint,
+        widgets.ignoredItemsEmpty,
+        function(itemID) ns.Posting:SetIgnored(itemID, false) end,
+        "Offer this item on Ready to sell again",
+        function(itemID) return Util.GetItemQualityColor(itemID) end)
 end
 
 local function Refresh()

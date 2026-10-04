@@ -341,6 +341,51 @@ do
 end
 
 print("")
+print("an item the player ignored (the x on Ready to sell)")
+
+Reset()
+
+do
+    ns.db.postLimits = { [CRAFTED] = 3 }
+
+    Posting:SetIgnored(BOUGHT, true)
+    check("it reads as ignored",                  Posting:IsIgnored(BOUGHT), true)
+    check("kept with the item's own name",        ns.db.ignoredSellItems[BOUGHT], "item" .. BOUGHT)
+    check("gone from Ready to sell",              LineFor(Posting:GetPostable({ includeAll = true }), BOUGHT), nil)
+    check("and from the Post tab",                LineFor(Everything(), BOUGHT), nil)
+    check("nothing else went with it",            LineFor(Everything(), CRAFTED) ~= nil, true)
+
+    -- BOUGHT is the priciest stack, so Post ALL would reach for it first.
+    local nextLine = Posting:GetNextPostable({ includeAll = true })
+    check("Post ALL never picks it",              nextLine and nextLine.itemID ~= BOUGHT, true)
+
+    Posting:SetIgnored(CRAFTED, true, "Bolt of Linen Cloth")
+    check("a name given is the name kept",        ns.db.ignoredSellItems[CRAFTED], "Bolt of Linen Cloth")
+    check("crafted stock can be ignored too",     LineFor(Posting:GetPostable(), CRAFTED), nil)
+
+    local list = Posting:GetIgnored()
+    check("Settings lists both",                  #list, 2)
+    check("A to Z",                               list[1].name, "Bolt of Linen Cloth")
+
+    Posting:SetIgnored(BOUGHT, false)
+    check("Restore brings it back",               LineFor(Everything(), BOUGHT) ~= nil, true)
+    check("the other stays ignored",              Posting:IsIgnored(CRAFTED), true)
+    check("the rest of the saved data is untouched", ns.db.postLimits[CRAFTED], 3)
+
+    Posting:SetIgnored(CRAFTED, false)
+    check("and the list is empty again",          #Posting:GetIgnored(), 0)
+end
+
+do
+    local Config = {}
+    local configNs = { NewModule = function() return Config end, Util = ns.Util,
+        RegisterCommand = function() end, RegisterEvent = function() end }
+    assert(loadfile(lfs_cwd .. "/Core/Config.lua"))("Blackthornes_TS", configNs)
+    check("a fresh database starts with none",    next(Config.DEFAULTS.ignoredSellItems), nil)
+    check("not a setting, so Reset leaves it",    Config.DEFAULTS.settings.ignoredSellItems, nil)
+end
+
+print("")
 print("finding a slot once instead of once per item")
 
 Reset()
