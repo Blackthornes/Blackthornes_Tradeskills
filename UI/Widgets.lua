@@ -298,8 +298,12 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     -- wears red, label and edge, so it never reads as plain text.
     local borderKey = opts.primary and "accentHi" or opts.danger and "loss" or "metal"
     local borderAlpha = opts.danger and 0.7 or nil
-    local labelKey = opts.primary and "ink" or opts.danger and "loss" or "gilt"
-    local labelHot = opts.primary and "ink" or opts.danger and "loss" or { 1, 0.953, 0.784 }
+    -- Dark lettering only on a gold face: a primary button given its own
+    -- dark resting colour (opts.baseColor) keeps the gold label, or its text
+    -- would be dark on dark.
+    local goldFace = opts.primary and not opts.baseColor
+    local labelKey = goldFace and "ink" or opts.danger and "loss" or "gilt"
+    local labelHot = goldFace and "ink" or opts.danger and "loss" or { 1, 0.953, 0.784 }
     Theme.Border(button, borderKey, borderAlpha)
     button.sheen = Theme.TopSheen(button, 0.10)
     if Theme.Bevel then Theme.Bevel(button) end

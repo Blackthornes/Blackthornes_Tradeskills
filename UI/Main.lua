@@ -783,9 +783,9 @@ function UI:AttachToAuctionHouse()
             -- Tall enough that the bevel does not crowd the label.
             width = 84,
             height = 28,
+            -- Solid gold, the house main action, and fully opaque, so
+            -- nothing behind the button shows through.
             primary = true,
-            -- Fully opaque, so nothing behind the button shows through.
-            baseColor = { 0.06, 0.07, 0.09, 1 },
         })
 
         -- This button lives out in the game world, where a flat one-pixel
@@ -895,7 +895,6 @@ function UI:AttachPostButton()
             width = 116,
             height = 28,
             primary = true,
-            baseColor = { 0.06, 0.07, 0.09, 1 },
         })
 
         button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -1233,7 +1232,6 @@ function UI:AttachToMerchant()
             width = MERCHANT_BUTTON_WIDTH,
             height = 30,
             primary = true,
-            baseColor = { 0.06, 0.07, 0.09, 1 },
         })
 
         button:SetFrameStrata("FULLSCREEN_DIALOG")
