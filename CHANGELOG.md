@@ -4,6 +4,29 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.26.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Shift-click any item row (Profit, Level up, Queue, the craft pane, Ready
+  to sell and the rest) with the auction house open to search for that item.
+  Right-click still queues.
+- Items that don't stack, like Mana Oil, can be listed several at once: one
+  click, one auction each, after the usual Yes. If the auction house only
+  takes one, the addon goes back to one at a time for the rest of the
+  session and says so.
+- Another copy of the same item can be listed straight away, one per click,
+  with no wait between copies. One check a few seconds after the last click
+  counts them all and says "listed 3 x ...".
+- Send gear to your disenchanter: set a **Disenchanter** name and **Mail
+  gear up to** (greens by default, or blues, or purples) in Settings. At the
+  mailbox a panel lists that gear with a **Send to** button that fills in
+  the mail; you press Send. Soulbound and bind-on-pickup gear, and upgrades
+  for your character when Blackthornes Equipment is loaded, are never listed.
+- The craft queue pane beside the profession window docks clear of the
+  profession tabs instead of covering them.
+
 ## 0.25.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
