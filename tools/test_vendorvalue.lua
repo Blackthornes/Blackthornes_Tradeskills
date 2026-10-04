@@ -1,5 +1,5 @@
 -- A craft is worth whichever pays more: the listing it would make, or a
--- vendor (Trent's rule, max(auction, vendor)).
+-- vendor (the house rule, max(auction, vendor)).
 --
 -- With a rival listing under what a vendor pays, the Profit tab costed the
 -- undercut: 7 Linen Cloth at 10c made a belt it would list at 59c, a 13c

@@ -1,6 +1,6 @@
 -- A lone listing far below everything else is not the price to undercut.
 --
--- Trent, 2026-09-26: "make undercut ignore a lone low posting". One seller's
+-- Asked 2026-09-26: "make undercut ignore a lone low posting". One seller's
 -- single listing under a third of the next listing up (and under a third of
 -- the stored market value, when there is one) is skipped: the cheapest rival
 -- becomes the next real seller and market value leaves it out. Two listings

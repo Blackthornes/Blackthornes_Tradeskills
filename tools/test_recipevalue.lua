@@ -208,7 +208,7 @@ check("a recipe added after the first read is matched",
 -- Where the value lands on the row
 --------------------------------------------------------------------------------
 
--- Trent's screenshot of 2026-09-21 showed the price printed across the end of
+-- a screenshot of 2026-09-21 showed the price printed across the end of
 -- the name on two kinds of row:
 --
 --   "Bolt of Woolen Cloth [5]5s 56c"       -- the count is a second region

@@ -2,7 +2,7 @@
 -- of your other characters can make for less is pointed out, and nothing else
 -- changes.
 --
--- Trent's Woolen Reagent Bag again, but the tailor who knows Bolt of Woolen
+-- The owner's Woolen Reagent Bag again, but the tailor who knows Bolt of Woolen
 -- Cloth is an alt. The character at the auction house cannot make bolts, so
 -- the cost engine buys them at 10s 30c each. The alt can make one from 3 Wool
 -- Cloth at 2s 95c, 8s 85c a bolt, so swapping saves 1s 45c a bolt.

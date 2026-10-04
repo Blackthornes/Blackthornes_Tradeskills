@@ -1,7 +1,7 @@
 -- Learning prices from the player's own auction house searches.
 --
 -- The client announces search results the same way whoever asked for them, so
--- when Trent types into Blizzard's search box the addon's handlers fire with a
+-- when the owner types into Blizzard's search box the addon's handlers fire with a
 -- full set of real prices sitting in the shared state. They used to return
 -- early on "not ours" and throw all of it away.
 --
@@ -14,7 +14,7 @@
 --    that guess is how the addon would list far under value.
 --  * nothing may be sent. Paging through somebody else's search is exactly
 --    what the old early returns were guarding against, and it would spend the
---    throttle budget Trent's own posting needs.
+--    throttle budget the owner's own posting needs.
 
 local ns = {}
 ns.COLORS = setmetatable({}, {__index = function() return "ffffffff" end})
@@ -312,7 +312,7 @@ check("and you hold the lowest", Prices:HoldsLowest(2996))
 --------------------------------------------------------------------------------
 -- A rival tied with you
 --
--- Measured 2026-09-20: Trent at 63s and 64s, other sellers at 63s and 64s.
+-- Measured 2026-09-20: the owner at 63s and 64s, other sellers at 63s and 64s.
 -- The row reads 63s and yours; it cannot see the tie. A rival on record at
 -- your price is not contradicted by that row, so it stays.
 --------------------------------------------------------------------------------
@@ -360,7 +360,7 @@ check("a passive browse still sends nothing", #sent == 0)
 --------------------------------------------------------------------------------
 -- Sold out since the last scan
 --
--- Trent, 2026-09-29: "Full scans should clear items that sold out." A sweep
+-- Asked 2026-09-29: "Full scans should clear items that sold out." A sweep
 -- that read the whole auction house marks every item it did not see as having
 -- nothing listed. One cut short leaves the rest alone.
 --------------------------------------------------------------------------------

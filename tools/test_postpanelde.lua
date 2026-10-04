@@ -1,6 +1,6 @@
 -- The disenchant value on the Ready to sell list at the auction house.
 --
--- Trent, 2026-09-27: "disenchant value of items should also be displayed on
+-- Asked 2026-09-27: "disenchant value of items should also be displayed on
 -- the Ready to sell tab when AH is open so a player can decide whether to
 -- sell or DE if they are an enchanter." So: shown for an enchanter, left out
 -- for anyone else, and marked when it beats the listing price.

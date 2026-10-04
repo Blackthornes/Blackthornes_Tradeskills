@@ -1,5 +1,5 @@
 -- The Enchanting tab's Disenchant button, as far as it can be seen without a
--- game client (Trent, 2026-09-27: "we also need ... disenchanting items in
+-- game client (2026-09-27: "we also need ... disenchanting items in
 -- inventory").
 --
 -- The cast itself needs the game. What this pins down is everything around

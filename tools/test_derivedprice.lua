@@ -1,6 +1,6 @@
 -- What a craft is worth when the auction house has never priced it.
 --
--- Trent's rule: no auction price for a craft means its price is a markup over
+-- The house rule: no auction price for a craft means its price is a markup over
 -- what its materials are worth -- 50% by default, adjustable in Settings.
 --
 -- The whole point of the rule is that it produces a number where there was

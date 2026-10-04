@@ -1,6 +1,6 @@
 -- Queue All on the Profit tab: every listed craft up to its Max on hand.
 --
--- Trent, 2026-09-26: "a Queue All button ... that will queue the max on hand
+-- Asked 2026-09-26: "a Queue All button ... that will queue the max on hand
 -- amount of every item listed." Drives the real Queue.lua and the real
 -- Auctions:GetRoom, so what is already held, listed, in the mail or queued
 -- comes off each craft exactly as the MAKE and Max numbers count it.

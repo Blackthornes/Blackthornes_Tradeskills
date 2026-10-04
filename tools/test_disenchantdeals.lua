@@ -1,5 +1,5 @@
 -- The Disenchanting tab: items on the auction house worth buying to
--- disenchant (Trent, 2026-09-27).
+-- disenchant (2026-09-27).
 --
 -- What this pins down:
 --   * profit is the disenchant value, less the auction house cut on the
@@ -275,7 +275,7 @@ print("\nnothing new is read while the auction house is open")
 
 -- The auction house refuses to sell an item the client has let go of, so
 -- reading new items there pushed his bag items out and Ready to sell lost
--- rows (Trent, 2026-09-28). What is already known still lists.
+-- rows (2026-09-28). What is already known still lists.
 Disenchant:_ForgetItems()
 Disenchant:GetAuctionRows()               -- the known items, read while it is shut
 local knownCount = #Disenchant:GetAuctionRows()

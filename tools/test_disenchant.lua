@@ -1,7 +1,7 @@
 -- Disenchant values, on the Profit tab and the Enchanting tab.
 --
 -- A player asked for disenchant values on the Profit tab (2026-09-27), and
--- Trent thought a tab of its own would help. The game does not tell addons
+-- The owner thought a tab of its own would help. The game does not tell addons
 -- what an item breaks into, so Logic/Disenchant.lua carries the Classic
 -- table. What this pins down:
 --   * which items can be disenchanted at all;
@@ -171,7 +171,7 @@ check("a level 58 epic gives a Nexus Crystal", epic[1].itemID == NEXUS)
 
 print("\nvalue")
 
--- Only the most likely outcome counts (Trent, 2026-10-03); the essence and
+-- Only the most likely outcome counts (2026-10-03); the essence and
 -- the shard are a bonus. 5 dust on average at 160 each.
 local value, partial, breakdown = Disenchant:GetValue(1001)
 check("armour is worth 800 copper disenchanted, its dust", value == 800)

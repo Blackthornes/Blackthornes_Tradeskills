@@ -1,6 +1,6 @@
 -- The item's icon in the posting confirmation.
 --
--- The icon sits beside the four lines, not as a line of its own: Trent's rule
+-- The icon sits beside the four lines, not as a line of its own: the house rule
 -- is that the dialog says exactly "Average Market Value", "Lowest Market
 -- Posting", "Posting at" and "Do you wish to continue?". It goes with the
 -- dialog when it closes, since the game lends the same popup frame to other
