@@ -57,7 +57,7 @@ jobs:
         with:
           args: -d -z
 
-      # Trent: "always check that it's clear to post." A failure here stops
+      # House rule: "always check that it's clear to post." A failure here stops
       # the release before any upload, and the log says what it found.
       - name: Check the package is clear to post
         run: python tools/check_package.py .release/Blackthornes_TS

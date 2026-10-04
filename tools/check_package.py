@@ -1,6 +1,6 @@
 """Check a built package is clear to post before anything is uploaded.
 
-Trent (2026-09-25): "always check that it's clear to post." The release
+House rule (2026-09-25): "always check that it's clear to post." The release
 workflow builds the package without uploading, runs this over it, and only
 uploads if it passes:
 

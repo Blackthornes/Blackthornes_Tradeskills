@@ -5,7 +5,7 @@
 # client will not see the addon.
 package-as: Blackthornes_TS
 
-# Development-only files. The README names Trent's own folders; players read
+# Development-only files. The README names the owner's own folders; players read
 # the CurseForge description instead.
 ignore:
   - .github

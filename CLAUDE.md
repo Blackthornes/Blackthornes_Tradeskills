@@ -1,12 +1,12 @@
 # Notes for Claude
 
-Read this before working in this repo. Trent also runs a separate Claude
+Read this before working in this repo. The owner also runs a separate Claude
 project for his other addon, **Blackthornes_Farmer**
 (`Blackthornes/Blackthornes_Farmer`), and that project has made changes here.
 The two projects cannot read each other's memory, so what one of them needs to
 know about the other lives in the repos, in this file and in Farmer's
 `CLAUDE.md`. Keep it current: when work here changes something Farmer depends
-on, or a new standing rule from Trent applies to both addons, add it to both
+on, or a new standing rule from the owner applies to both addons, add it to both
 files.
 
 Nothing private goes in this file (no local paths, emails or account names).
@@ -22,14 +22,14 @@ It never ships: `.pkgmeta` leaves it out of the zip and
   upload of that same checked folder. The TOC version is `@project-version@`
   and is never typed by hand. Details are in the README under Releasing.
 - **CurseForge.** Project IDs: Tradeskills **1710638**, Farmer **1710618**.
-  The upload uses the `CF_API_KEY` repository secret, which Trent set himself;
+  The upload uses the `CF_API_KEY` repository secret, which the owner set himself;
   never ask him to paste a token anywhere. The hand-uploaded original counts
   as 0.1.0.
 - **v0.2.0 was tagged and uploaded to CurseForge on 2026-09-25.** Nothing has
   changed here since, so there is no newer release yet.
 - **The CurseForge page.** The Farmer project wrote the Tradeskills
   description and its animated GIF and screenshots. They are not in this repo;
-  Trent pasted and uploaded them on CurseForge himself. Description rules
+  The owner pasted and uploaded them on CurseForge himself. Description rules
   below.
 
 ## How Farmer uses Tradeskills
@@ -47,7 +47,7 @@ writes nothing, and has no TOC dependency; without Tradeskills it falls back to
 vendor prices. So keep all three stable: the `_G.BlackthornesTS` global
 (`Core/Init.lua`), `ns.Prices` on it, and `Prices:GetValue(itemID)` defaulting
 to the smoothed market value (`Data/Prices.lua`). If one has to change, change
-Farmer's `Logic/Value.lua` in the same breath and tell Trent both need
+Farmer's `Logic/Value.lua` in the same breath and tell the owner both need
 updating.
 
 ## How Tradeskills uses Farmer
@@ -117,7 +117,7 @@ Keep these stable as well; if one changes, change Equipment's
 
 ## The house frame (Titanforged)
 
-Trent picked this look for all four addons on 2026-10-04 from two mockups
+The owner picked this look for all four addons on 2026-10-04 from two mockups
 (the other was "Arcane Glass"). It's the game's own window shape with the
 light turned up: a gold metal rim with corner gems, a round portrait with
 the addon's emblem, the name on a plate across the top edge, a red close
@@ -131,16 +131,16 @@ true })`. Tradeskills got it first. Farmer, Equipment and Pets copy the file,
 the art and the tool, changing only `EMBLEM` in the tool (pick, shield,
 paw). Glows and glints follow the Window effects setting.
 
-## Trent's standing rules (both addons)
+## The owner's standing rules (both addons)
 
 - **"Always check that it's clear to post."** Anything that goes public (a
   release, a CurseForge page, a post) is checked for private or unexpected
-  content first, and nothing is published or uploaded without Trent's
+  content first, and nothing is published or uploaded without the owner's
   go-ahead. He tags releases himself.
 - **Changelogs come from git history.** Work out what changed since the last
   tag from the merged PRs and commits (`git log vX.Y.Z..origin/main --merges`);
-  never ask Trent what went in. Claude drafts the CHANGELOG section in a PR;
-  Trent merges, pulls `main`, tags and pushes.
+  never ask the owner what went in. Claude drafts the CHANGELOG section in a PR;
+  The owner merges, pulls `main`, tags and pushes.
 - **Every reply that ships code ends with the GitHub Desktop steps,** naming
   the branch: merge the PR on github.com (Ready for review, then Merge pull
   request); in GitHub Desktop switch **Current branch** to **main** and click

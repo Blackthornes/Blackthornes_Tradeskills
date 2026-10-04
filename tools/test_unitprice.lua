@@ -1,6 +1,6 @@
 -- Turning what a listing costs into what one of the thing costs.
 --
--- The bug, seen in game 2026-09-19: Trent went to post crafted Linen Bags and
+-- The bug, seen in game 2026-09-19: the owner went to post crafted Linen Bags and
 -- the sell list offered them at 1c each, while the auction house in front of
 -- him showed the cheapest at 3s. The arithmetic gives it away -- 241 Linen
 -- Bags were on offer across all listings, and 300 copper divided by 241 is 1.
@@ -11,7 +11,7 @@
 -- stacks to one, so 241 of them can never be one listing.
 --
 -- Which way to err matters. Dividing when we should not prices an item at a
--- copper and Trent loses the item; not dividing when we should prices it too
+-- copper and the owner loses the item; not dividing when we should prices it too
 -- high and he loses a sale. The second is recoverable, so doubt means no
 -- division.
 

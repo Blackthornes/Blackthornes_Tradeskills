@@ -1,4 +1,4 @@
--- The version the addon reports (Trent, 2026-09-25: "we need to be tracking
+-- The version the addon reports (2026-09-25: "we need to be tracking
 -- versioning somehow").
 --
 -- The TOC says `## Version: @project-version@` and the release packager

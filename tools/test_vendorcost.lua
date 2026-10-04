@@ -1,4 +1,4 @@
--- Materials a vendor sells cost the vendor price (Izbode's report, Trent's
+-- Materials a vendor sells cost the vendor price (Izbode's report, the owner's
 -- call, 2026-10-02), and the queue's total charges bag materials once.
 --
 -- What must hold:

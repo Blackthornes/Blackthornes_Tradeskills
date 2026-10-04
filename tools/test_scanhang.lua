@@ -1,7 +1,7 @@
 -- The page-by-page scan that "stopped answering" at page 8, and the quick
 -- full scan cooldown nobody had started.
 --
--- Trent, 2026-09-26: "the quick full scan can be used again in 13m" when he
+-- Asked 2026-09-26: "the quick full scan can be used again in 13m" when he
 -- had not scanned in hours, then "the page-by-page scan stopped answering
 -- after 15s (8 page(s) read)" with the progress bar stuck at 40%.
 --
