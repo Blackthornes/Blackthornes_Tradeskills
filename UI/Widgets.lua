@@ -291,8 +291,11 @@ function Widgets.CreateButton(parent, text, onClick, opts)
 
     -- The primary action wears a gold edge, so the one button that does the
     -- main thing on a screen stands out from the rest without shouting.
-    local borderKey = opts.primary and "accent" or "border"
-    local borderAlpha = opts.primary and 0.55 or nil
+    -- A danger button (opts.danger: takes something away, like Ignore)
+    -- wears red instead, label and edge, so it never reads as plain text.
+    local borderKey = opts.primary and "accent" or opts.danger and "loss" or "border"
+    local borderAlpha = opts.primary and 0.55 or opts.danger and 0.7 or nil
+    local labelKey = opts.primary and "accent" or opts.danger and "loss" or "text"
     Theme.Border(button, borderKey, borderAlpha)
     button.sheen = Theme.TopSheen(button)
 
@@ -313,7 +316,7 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     button.ApplyBaseColor = ApplyBaseColor
 
     button.label = Theme.CreateLabel(button, opts.fontSize or "small",
-        opts.primary and "accent" or "text", "CENTER")
+        labelKey, "CENTER")
     -- Held inside the button, so a label longer than the button ends in
     -- "..." instead of spilling over whatever sits beside it. The little
     -- symbol buttons (+, -, x) stay centred: their insets would leave no
@@ -349,17 +352,18 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     local function ApplyLabelColor(self)
         self.label:SetTextColor(Theme.Unpack(
             self.disabled and "dim" or self.confirming and "loss"
-            or (opts.primary and "accent" or "text")))
+            or labelKey))
     end
 
     -- The one button on a screen that does the main thing glows gold round
     -- its edge under the mouse, as Farmer's do.
     if opts.primary and Theme.Halo then Theme.Halo(button, 5, 0) end
+    if opts.danger and Theme.Halo then Theme.Halo(button, 5, 0, "loss") end
 
     --- How lit the button is: 0 at rest, 1 under the mouse. Everything the
     --- mouse changes is drawn from this one number, so easing it eases the
     --- lot, and a state change mid-hover redraws from where the hover is.
-    local hotEdge = opts.primary and "accent" or "borderLit"
+    local hotEdge = opts.primary and "accent" or opts.danger and "loss" or "borderLit"
 
     local function Light(self, p)
         if self.disabled then p = 0 end
