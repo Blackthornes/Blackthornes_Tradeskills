@@ -1411,7 +1411,7 @@ end
 -- Queued crafts, beside the pane
 --------------------------------------------------------------------------------
 
--- Trent, 2026-09-28: "show the crafting queue out to the right of this Craft
+-- Asked 2026-09-28: "show the crafting queue out to the right of this Craft
 -- queue window once things are queued." The queue itself, in the order it is
 -- worked through, each entry with its own Craft button, so nothing here needs
 -- the main window. A child of the pane, so it hides whenever the pane does.
@@ -1783,7 +1783,7 @@ end
 --- Is there room for the queued crafts to the right of the pane?
 --
 -- Kept on screen, they used to be pushed back over the pane itself when there
--- was not, covering its sort button and recipes (Trent's screenshot with the
+-- was not, covering its sort button and recipes (a screenshot with the
 -- auction house open, 2026-10-01). Out of the way instead, as the sell list
 -- steps aside for the character window.
 -- @param paneRight the pane's right edge, nil when not laid out yet

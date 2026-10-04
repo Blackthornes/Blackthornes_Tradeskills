@@ -1,6 +1,6 @@
 -- Blackthornes Tradeskills -- UI/Titanforged.lua
 -- The house window frame: the game's own window shape with the light turned
--- up (Trent picked it from the mockups, 2026-10-04, "Titanforged").
+-- up (picked from the mockups, 2026-10-04, "Titanforged").
 --
 -- A gold metal rim with corner gems, a round portrait holding the addon's
 -- emblem in the top left, the window's name on a plate across the top edge

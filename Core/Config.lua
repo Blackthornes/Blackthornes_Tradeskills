@@ -193,7 +193,7 @@ local DEFAULTS = {
         scanSounds = true,
 
         -- Every other sound the addon makes has its own switch under SOUNDS
-        -- in Settings, all on to start with (Trent, 2026-10-02: "make sure
+        -- in Settings, all on to start with (2026-10-02: "make sure
         -- all sound effects can be disabled in settings, on by default").
         -- The fanfare as the mail report counts up, and on a new record.
         mailReportSound = true,
@@ -224,7 +224,7 @@ local DEFAULTS = {
 
         -- Give a sub-craft to whichever of your characters makes it for
         -- less, and keep track of who makes what for whom across them all.
-        -- Off by default (Trent, 2026-10-03: "the cross character crafting
+        -- Off by default (2026-10-03: "the cross character crafting
         -- needs to be optional. the addon just recommends crafting on the
         -- other character"): off, each character plans only its own and
         -- the shopping list recommends the other character. Named anew

@@ -477,7 +477,7 @@ function UI:Show()
     self.window:Show()
 
     -- In front of the craft queue pane and the sell list, which share its
-    -- strata: the window just asked for is the one wanted on top (Trent's
+    -- strata: the window just asked for is the one wanted on top (a
     -- screenshot, 2026-10-04: the craft queue drawn across it).
     if self.window.Raise then self.window:Raise() end
 

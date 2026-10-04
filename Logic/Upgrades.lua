@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- Logic/Upgrades.lua
 -- Is this item an upgrade for the character playing? Asked of Blackthornes
 -- Equipment, so the green arrow on an icon here means exactly what the arrow
--- in the bags means (Trent, 2026-09-30).
+-- in the bags means (2026-09-30).
 --
 -- Equipment is optional. Without it every answer is "no" and nothing is
 -- drawn; Tradeskills works as before. With it, Equipment's own

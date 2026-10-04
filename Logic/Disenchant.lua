@@ -172,7 +172,7 @@ end
 -- and slot never change, so they are kept in the saved data once read and
 -- the client is never asked about that item again.
 --
--- Why it matters (Trent, 2026-09-27 and 28): the client's item cache is
+-- Why it matters (2026-09-27 and 28): the client's item cache is
 -- small. Reading a thousand scanned weapons and armour through it pushed the
 -- items in his bags out, and while an item is out the auction house calls it
 -- unsellable, so Ready to sell dropped half its rows every other second. An
@@ -554,7 +554,7 @@ end
 
 --- The auction value of one of a material, or nil when it has never been
 --- priced. Its lowest posting, leaving out a lone one far below the rest
---- (Trent, 2026-09-27: "based on DE mat's lowest posting value disregarding
+--- (2026-09-27: "based on DE mat's lowest posting value disregarding
 --- outliers"), since that is what the materials would sell for today.
 function Disenchant:GetMaterialPrice(itemID)
     local value = ns.Prices and ns.Prices:GetValue(itemID, "lowest")
@@ -575,7 +575,7 @@ function Disenchant:GetValue(itemID)
     local outcomes, facts = self:GetOutcomes(itemID)
     if not outcomes then return nil end
 
-    -- Valued at the most likely outcome alone (Trent, 2026-10-03:
+    -- Valued at the most likely outcome alone (2026-10-03:
     -- "disenchant value should be based on the highest chance outcome. Lucky
     -- disenchants are a bonus."). A 20% essence or a 5% shard is not what
     -- the next disenchant gives, so counting a share of it made breaking

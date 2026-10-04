@@ -93,8 +93,8 @@ local function UpdateCraftRow(row, entry)
     end
 
     -- Who it is for and who makes it, when that is not all this character:
-    -- "you make this for Trent" on the tailor, "Loom makes this for you" on
-    -- Trent. The longest wording that fits the row, then shorter ones.
+    -- "you make this for Ana" on the tailor, "Bob makes this for you" on
+    -- Ana. The longest wording that fits the row, then shorter ones.
     local who = ns.Queue.DescribeWho and ns.Queue:DescribeWho(entry) or {}
     local texts = {}
     local function Note(base, text)

@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- UI/MailReport.lua
 -- The report after a mailbox visit, and the running tally while you are there.
 --
--- Trent, 2026-09-28: "better mail tracking and reporting after mails are
+-- Asked 2026-09-28: "better mail tracking and reporting after mails are
 -- collected, needs to look nextgen and keep with the dopamine hits as we're
 -- doing with farmer". So collecting mail is a moment: a tally over the
 -- mailbox counts up with a "+3g" rising off it each time gold lands, and when
@@ -866,7 +866,7 @@ function MailReport:BuildTally()
     heading:SetPoint("TOPLEFT", 12, -6)
     heading:SetText("COLLECTED THIS VISIT")
 
-    -- Trent, 2026-09-28: "i see no way to get rid of the message". A close
+    -- Asked 2026-09-28: "i see no way to get rid of the message". A close
     -- button, and the tally also goes by itself once the mailbox is gone.
     local close = Widgets.CreateButton(tally, "X", function() MailReport:HideTally() end,
         { width = 18, height = 16, fontSize = "tiny", tooltip = "Hide this until the next mailbox visit" })
@@ -956,7 +956,7 @@ function MailReport:HideTally()
     self.tallyDismissed = true
 end
 
--- Trent, 2026-09-28: "it should fade on it's own 30sec after leaving mailbox".
+-- Asked 2026-09-28: "it should fade on it's own 30sec after leaving mailbox".
 local TALLY_LINGER = 30
 local TALLY_FADE = 1.5
 

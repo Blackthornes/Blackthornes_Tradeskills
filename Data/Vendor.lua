@@ -427,7 +427,7 @@ function Vendor:FinishBuying()
     -- The last purchase is often still on its way to the bags when the run
     -- ends. Redrawn now, the button read the old counts and came back as
     -- "Buy materials 1s 8c" for the 12 thread just bought, and nothing
-    -- redrew it once they landed (Trent, 2026-10-03). So it stays on
+    -- redrew it once they landed (2026-10-03). So it stays on
     -- "Buying..." until the bags hold what was bought, checked again on
     -- every bag update, or until SETTLE_SECONDS have passed.
     local waiting
