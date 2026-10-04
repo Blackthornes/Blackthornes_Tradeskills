@@ -63,6 +63,22 @@ local state = {
 
 local widgets = {}
 
+-- The row hint, as much of it as fits beside the count on its left.
+local HINT_TEXTS = {
+    "Right-click a row to queue one, Shift-click to search the auction house",
+    "Right-click to queue, Shift-click to search",
+    "Right-click a row to queue one",
+}
+
+local function FitHint()
+    local hint, count, list = widgets.hint, widgets.countLabel, widgets.list
+    if not (hint and count and list and Theme.TextWidth and Theme.FitText) then return end
+    local listWidth = list:GetWidth()
+    local used = Theme.TextWidth(count) or 0
+    local room = type(listWidth) == "number" and listWidth > 0 and (listWidth - used - 124) or nil
+    Theme.FitText(hint, HINT_TEXTS, room)
+end
+
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
@@ -1074,6 +1090,7 @@ local function Refresh()
     local ignored = ns.Profit.GetIgnored and #ns.Profit:GetIgnored() or 0
     widgets.countLabel:SetText(("%d craft%s"):format(#data, #data == 1 and "" or "s")
         .. (ignored > 0 and (", %d ignored"):format(ignored) or ""))
+    FitHint()
 end
 
 --------------------------------------------------------------------------------
@@ -1351,7 +1368,8 @@ local function Build(container)
 
     local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
     hint:SetPoint("RIGHT", queueAll, "LEFT", -10, 0)
-    hint:SetText("Right-click a row to queue one")
+    hint:SetText(HINT_TEXTS[1])
+    widgets.hint = hint
 
     -- Detail panel
     local detail = BuildDetail(container)
