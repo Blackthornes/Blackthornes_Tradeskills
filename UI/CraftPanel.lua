@@ -520,6 +520,7 @@ local function QueueMore(line, quantity)
     end
 
     ns.Queue:Add(line.recipeID, quantity)
+    if ns.Demand then ns.Demand:WarnIfLow(line.outputItemID, line.name) end
 
     -- Until the next full refresh re-reads it, so quick clicks cannot run
     -- past the limit on a number read before the first of them.

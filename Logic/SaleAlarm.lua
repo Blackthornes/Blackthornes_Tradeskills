@@ -153,9 +153,106 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+--- The item a sold line or notice names, as a plain name.
+--
+-- Seen in game (2026-10-04): this client prints "A buyer has been found for
+-- your auction of Woolen Bag." from the auction house notice, not as a
+-- CHAT_MSG_SYSTEM line, and the notice's text is the item's name. Colour
+-- codes and a link's brackets are taken off either way.
+function SaleAlarm:ItemFromText(text)
+    if type(text) ~= "string" then return nil end
+
+    local ok, plain = pcall(function()
+        local t = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        return t:match("|h%[(.-)%]|h") or t
+    end)
+    if not ok or type(plain) ~= "string" or plain == "" then return nil end
+
+    return self:MatchSoldLine(plain) or plain
+end
+
+--- Is this text the sold line, coloured or not?
+function SaleAlarm:IsSoldText(text)
+    if type(text) ~= "string" then return false end
+    local ok, plain = pcall(function()
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+    end)
+    return ok and self:MatchSoldLine(plain) ~= nil or false
+end
+
+-- One sale can be reported by both routes a moment apart. The second report
+-- of the same item from the OTHER route is that same sale; a second report
+-- from the same route is another sale (a buyer taking two of your auctions).
+local PAIR_SECONDS = 3
+
+--- Into the Sales tab now, rather than when its mail is read.
+function SaleAlarm:LogHeard(item, via)
+    if not item or not (ns.Mail and ns.Mail.NoteHeardSale) then return false end
+
+    local now = Now()
+    self.unpaired = self.unpaired or {}
+
+    for index = #self.unpaired, 1, -1 do
+        local earlier = self.unpaired[index]
+        if now - earlier.at > PAIR_SECONDS then
+            table.remove(self.unpaired, index)
+        elseif earlier.item == item and earlier.via ~= via then
+            table.remove(self.unpaired, index)
+            return false
+        end
+    end
+
+    self.unpaired[#self.unpaired + 1] = { item = item, via = via, at = now }
+    pcall(ns.Mail.NoteHeardSale, ns.Mail, item)
+    self.logged = (self.logged or 0) + 1
+    if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    return true
+end
+
 function SaleAlarm:CHAT_MSG_SYSTEM(_, text)
     local item = self:MatchSoldLine(text)
-    if item then self:OnSale("chat", item) end
+    if not item then return end
+
+    self:OnSale("chat", item)
+    self:LogHeard(item, "chat")
+end
+
+--- Hide the sold line from chat, when the player asked for that.
+--
+-- A chat filter only changes what the chat windows print. The event still
+-- reaches CHAT_MSG_SYSTEM above, so the alarm and the Sales tab still hear
+-- every sale.
+function SaleAlarm.ChatFilter(_, _, text)
+    if ns.Config:Get("hideSaleChat") ~= true then return false end
+    return SaleAlarm:IsSoldText(text)
+end
+
+--- The line this client prints from the notice never passes through a chat
+--- filter, so it is stopped where the chat windows add it. Installed only
+--- once the player turns hiding on, and it lets everything else through.
+function SaleAlarm:InstallChatHider()
+    if ns.Config:Get("hideSaleChat") ~= true then return false end
+
+    self.wrapped = self.wrapped or {}
+    local count = tonumber(_G.NUM_CHAT_WINDOWS) or 10
+
+    for index = 1, count do
+        local frame = _G["ChatFrame" .. index]
+        if type(frame) == "table" and not self.wrapped[frame]
+            and type(frame.AddMessage) == "function" then
+            local original = frame.AddMessage
+            frame.AddMessage = function(chat, text, ...)
+                if ns.Config:Get("hideSaleChat") == true and SaleAlarm:IsSoldText(text) then
+                    SaleAlarm.hidden = (SaleAlarm.hidden or 0) + 1
+                    return
+                end
+                return original(chat, text, ...)
+            end
+            self.wrapped[frame] = true
+        end
+    end
+
+    return next(self.wrapped) ~= nil
 end
 
 --- Every notice the auction house sends, sold or not.
@@ -174,7 +271,9 @@ end
 function SaleAlarm:AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION(_, notification, text)
     self:CountNotice(notification)
     if self:IsSoldNotice(notification) then
-        self:OnSale("notice", type(text) == "string" and text or nil)
+        local item = self:ItemFromText(text)
+        self:OnSale("notice", item)
+        self:LogHeard(item, "notice")
     end
 end
 
@@ -182,7 +281,18 @@ function SaleAlarm:OnEnable()
     -- The chat route is only worth listening to if there is a line to match.
     if GetSoldPattern() then
         self.listening.chat = ns.RegisterEvent(self, "CHAT_MSG_SYSTEM", self.CHAT_MSG_SYSTEM) and true or false
+
+        -- Under either name the client gives it; newer ones moved it.
+        local add = _G.ChatFrame_AddMessageEventFilter
+        if type(add) ~= "function" and type(_G.ChatFrameUtil) == "table" then
+            add = _G.ChatFrameUtil.AddMessageEventFilter
+        end
+        if type(add) == "function" then
+            self.filtering = pcall(add, "CHAT_MSG_SYSTEM", self.ChatFilter)
+        end
     end
+
+    self:InstallChatHider()
 
     local plain = ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW_NOTIFICATION",
         self.AUCTION_HOUSE_SHOW_NOTIFICATION)
@@ -221,6 +331,8 @@ function SaleAlarm:Report()
         muted, Yes(self.listening.chat)))
     ns.PrintRaw(("  |c%slistening for the auction house notice:|r %s"):format(
         muted, Yes(self.listening.notice)))
+    ns.PrintRaw(("  |c%shiding sale lines in chat:|r %s  (%d hidden, %d sales logged this session)"):format(
+        muted, Yes(ns.Config:Get("hideSaleChat") == true), self.hidden or 0, self.logged or 0))
     ns.PrintRaw(("  |c%ssales heard this session:|r chat line %d, notice %d"):format(
         muted, self.heard.chat or 0, self.heard.notice or 0))
 

@@ -181,6 +181,70 @@ check("a game that returns nothing is not a refusal", SaleAlarm:Play(), "unknown
 PlaySound = function() error("no such sound") end
 check("a game that throws is a refusal", SaleAlarm:Play(), false)
 
+print("\nthe Sales tab and the chat filter")
+
+ERR_AUCTION_SOLD_S = "A buyer has been found for your auction of %s."
+SaleAlarm:InvalidatePattern()
+local heard = {}
+ns.Mail = { NoteHeardSale = function(_, name) heard[#heard + 1] = name end }
+local filters = {}
+ChatFrame_AddMessageEventFilter = function(event, fn) filters[event] = fn end
+ns.accepts.CHAT_MSG_SYSTEM = true
+SaleAlarm:OnEnable()
+check("the filter is installed", type(filters.CHAT_MSG_SYSTEM), "function")
+check("and /bts salealarm can say so", SaleAlarm.filtering, true)
+
+SaleAlarm:CHAT_MSG_SYSTEM("CHAT_MSG_SYSTEM", "A buyer has been found for your auction of Heavy Silk Bandage.")
+check("a sale goes to the Sales tab", heard[#heard], "Heavy Silk Bandage")
+SaleAlarm:AUCTION_HOUSE_SHOW_NOTIFICATION("x", 4)
+check("the notice does not log it twice", #heard, 1)
+
+local filter = filters.CHAT_MSG_SYSTEM
+local soldLine = "A buyer has been found for your auction of Heavy Silk Bandage."
+settings.hideSaleChat = nil
+check("left in chat by default", filter(nil, "CHAT_MSG_SYSTEM", soldLine), false)
+settings.hideSaleChat = true
+check("hidden when the player asks", filter(nil, "CHAT_MSG_SYSTEM", soldLine), true)
+check("other system lines stay", filter(nil, "CHAT_MSG_SYSTEM", "You are now AFK."), false)
+settings.hideSaleChat = nil
+
+-- Seen in game: the line in chat came from the notice, with the item's name
+-- as its text, and no CHAT_MSG_SYSTEM at all.
+print("\nthe notice route, as Forever sends it")
+Enum = { AuctionHouseNotification = { AuctionSold = 4 } }
+heard = {}
+later()
+SaleAlarm:AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION("x", 4, "Woolen Bag")
+check("the notice's sale goes to the Sales tab", heard[1], "Woolen Bag")
+SaleAlarm:CHAT_MSG_SYSTEM("CHAT_MSG_SYSTEM", "A buyer has been found for your auction of Woolen Bag.")
+check("the same sale by chat a moment later is not logged twice", #heard, 1)
+SaleAlarm:AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION("x", 4, "Woolen Bag")
+check("a second notice for the same item is a second sale", #heard, 2)
+later()
+SaleAlarm:AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION("x", 4, "|cff1eff00|Hitem:4240::|h[Woolen Bag]|h|r")
+check("a link is read as its name", heard[3], "Woolen Bag")
+SaleAlarm:AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION("x", 3, "Woolen Bag")
+check("an outbid notice is not a sale", #heard, 3)
+
+print("\nhiding the line the notice prints")
+local printed = {}
+ChatFrame1 = { AddMessage = function(_, text) printed[#printed + 1] = text end }
+NUM_CHAT_WINDOWS = 1
+settings.hideSaleChat = nil
+check("nothing is wrapped while hiding is off", SaleAlarm:InstallChatHider(), false)
+settings.hideSaleChat = true
+check("wrapped once hiding is on", SaleAlarm:InstallChatHider(), true)
+ChatFrame1:AddMessage("A buyer has been found for your auction of Woolen Bag.", 1, 1, 0)
+ChatFrame1:AddMessage("|cffffff00A buyer has been found for your auction of Woolen Bag.|r")
+check("the sold line, coloured or not, is kept out", #printed, 0)
+ChatFrame1:AddMessage("[2. Trade] anyone selling bags?")
+check("everything else still prints", #printed, 1)
+settings.hideSaleChat = nil
+ChatFrame1:AddMessage("A buyer has been found for your auction of Woolen Bag.")
+check("turned off, the line prints again", #printed, 2)
+ChatFrame1, NUM_CHAT_WINDOWS = nil, nil
+ChatFrame_AddMessageEventFilter, ns.Mail = nil, nil
+
 print("")
 if failures > 0 then
   error(string.format("%d sale alarm check(s) failed", failures))

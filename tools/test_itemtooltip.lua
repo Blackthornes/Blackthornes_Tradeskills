@@ -388,6 +388,22 @@ check("value and lowest go on together", #tooltip.lines, 2)
 check("the late stack total still lands", ItemTooltip:AddStackLine(tooltip, 20), true)
 check("as the stack line, not the lowest again", tooltip.lines[3][2], ("<%d>"):format(2300 * 20))
 
+-- How well it sells, from Logic/Demand.lua, after the price lines.
+ns.Demand = {
+    Get = function(_, itemID)
+        if itemID == LINEN_CLOTH then return { level = "low" } end
+    end,
+    TooltipText = function() return "Low (you sold 1 of 8 listed)" end,
+    Color = function() return "loss" end,
+}
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+check("demand follows the price", lines[#lines][1], "Demand")
+check("saying why", lines[#lines][2], "Low (you sold 1 of 8 listed)")
+check("in its colour", lines[#lines].color, "loss")
+check("an item with no reading has no demand line", ItemTooltip:LinesFor(SILK_CLOTH, nil)[2] == nil
+    or ItemTooltip:LinesFor(SILK_CLOTH, nil)[#ItemTooltip:LinesFor(SILK_CLOTH, nil)][1] ~= "Demand", true)
+ns.Demand = nil
+
 ns.Prices.Get = nil
 
 print("test_itemtooltip: ok")
