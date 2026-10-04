@@ -949,7 +949,13 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
         -- alone keeps that reason visible rather than replacing it with a
         -- countdown it is not really serving.
         if row and row.data and row.post and not row.post.disabled then
-            Apply(row.post, "List", seconds, reason)
+            -- Another copy of the item being confirmed does not wait for it.
+            local pending = ns.Posting and ns.Posting.pending
+            if pending and pending.itemID == row.data.itemID then
+                Apply(row.post, "List", ns.Posting:SecondsUntilPostable(row.data.itemID))
+            else
+                Apply(row.post, "List", seconds, reason)
+            end
         end
     end
 end

@@ -420,7 +420,16 @@ function Auctions:ReadOwned(opts)
             end
         end
 
-        if appeared or posted > (pending.postedBefore or 0) or opts.final then
+        -- Several auctions (copies listed back to back, or many from one
+        -- click) are settled once all of them show, or on the last reading,
+        -- so the first to appear does not report the rest as missing.
+        local wanted = 1
+        if (pending.quantity or 1) > 1 and not pending.isCommodity then
+            wanted = pending.quantity
+        end
+        local gained = posted - (pending.postedBefore or 0)
+
+        if opts.final or gained >= wanted or (wanted == 1 and appeared) then
             ns.Posting:ResolvePending(posted, appeared)
         end
     end
