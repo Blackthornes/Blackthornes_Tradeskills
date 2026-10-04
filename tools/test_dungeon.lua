@@ -1,4 +1,4 @@
--- Lua errors inside a dungeon (Trent asked, 2026-09-26).
+-- Lua errors inside a dungeon (asked 2026-09-26).
 --
 -- Inside an instance the game can hand an addon a value it will not let the
 -- addon read: type() answers honestly, but comparing, joining, formatting or

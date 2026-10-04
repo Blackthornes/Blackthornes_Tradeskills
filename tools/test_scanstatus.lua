@@ -1,6 +1,6 @@
 -- The status line and progress bar on the auction house bar.
 --
--- Trent, 2026-09-27: "can we get a scan progress bar on that bar to show the
+-- Asked 2026-09-27: "can we get a scan progress bar on that bar to show the
 -- player that it's scanning?" The bar reads Scanner:GetScanStatus a few times
 -- a second, so what it shows has to come from the scanner's real state at
 -- every step: waiting its turn, asking for the quick scan, each page of a

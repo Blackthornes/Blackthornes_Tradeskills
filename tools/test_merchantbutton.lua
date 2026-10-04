@@ -12,7 +12,7 @@
 --   5. After buying, the button waits for the bags to hold what was bought,
 --      then reads "Nothing needed here". It used to redraw from the old
 --      counts the moment the run ended and offer the same materials again
---      (Trent, 2026-10-03: 12 Coarse Thread bought, "Buy materials 1s 8c"
+--      (2026-10-03: 12 Coarse Thread bought, "Buy materials 1s 8c"
 --      still showing). A bag update at the vendor redraws it too.
 
 -- Tests share one Lua state, so every global replaced here is put back,

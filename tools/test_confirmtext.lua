@@ -1,6 +1,6 @@
 -- The posting confirmation says four things and asks one question.
 --
--- Trent, 2026-09-26: the dialog read oddly. It should say
+-- Asked 2026-09-26: the dialog read oddly. It should say
 --   Average Market Value, Lowest Market Posting, Posting at,
 --   Do you wish to continue?
 -- and nothing else, however the post was started. Every List and Post button

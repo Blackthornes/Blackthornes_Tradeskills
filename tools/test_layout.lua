@@ -135,7 +135,7 @@ host = PostPanel:Placement(AH)
 check("any window in the right-hand slot counts", host == spellbook, true)
 
 -- A profession window in that slot, with the craft queue panes docked to its
--- right: the panel goes past them, not over them (Trent, 2026-10-01).
+-- right: the panel goes past them, not over them (2026-10-01).
 local profession = Window(857, 560, 630, 520)
 GetUIPanel = function(key) if key == "right" then return profession end end
 local pane = Window(857 + 630 + 6, 560, 350, 520)
@@ -162,7 +162,7 @@ host = PostPanel:Placement(AH)
 check("panes closed: dock to the profession window", host == profession, true)
 
 -- The pane really sits clear of the profession tabs, well past the
--- window's edge (Trent's second screenshot): still in the panel's spot.
+-- window's edge (the second screenshot): still in the panel's spot.
 pane.shown, queued.shown = true, false
 ns.CraftPanel.frame = Window(857 + 630 + 48, 560, 350, 520)
 host, left = PostPanel:Placement(AH)

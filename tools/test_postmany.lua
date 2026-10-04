@@ -202,7 +202,7 @@ Posting.pending = { itemID = OIL, quantity = 1, many = false, postedBefore = 0, 
 Posting:ResolvePending(0, false)
 check("a single listing failing changes nothing", Posting.manyRefused[OIL] == true, false)
 
--- Trent, 2026-10-04: "multiposting works sometimes for crafted items and
+-- Asked 2026-10-04: "multiposting works sometimes for crafted items and
 -- other times it does not". One doubtful reading turned it off for every
 -- item for the rest of the session.
 print("")

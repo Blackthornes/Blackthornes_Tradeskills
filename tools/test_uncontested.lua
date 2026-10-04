@@ -1,6 +1,6 @@
 -- What to charge when you are the only seller.
 --
--- Trent, 2026-09-24, about Woolen Reagent Bags: "if there are no items of
+-- Asked 2026-09-24, about Woolen Reagent Bags: "if there are no items of
 -- something i'm selling on the AH the selling price should get pushed up to
 -- 50% over material price ... i'm currently the only one selling but the
 -- addon just keeps recommending market value."
@@ -299,7 +299,7 @@ end
 print("")
 print("a lone low listing does not set the material cost")
 
--- Trent, 2026-09-26: a single listing under a third of the next one up, and
+-- Asked 2026-09-26: a single listing under a third of the next one up, and
 -- of market when known, is ignored; two or more low listings count. Material
 -- cost and the only-seller price follow the same rule the undercut does.
 local function ScanWool(prices)

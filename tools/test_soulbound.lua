@@ -1,6 +1,6 @@
 -- Crafts whose output binds on pickup are not recommended for sale.
 --
--- Trent, 2026-09-23: "soulbound items cannot be sold on the AH so they should
+-- Asked 2026-09-23: "soulbound items cannot be sold on the AH so they should
 -- not be recommended to craft to sell". A bind-on-pickup item is soulbound the
 -- moment it is made, so any profit the Profit tab showed for one was revenue
 -- that could never arrive, and a skill-up star on it said "this pays" about
