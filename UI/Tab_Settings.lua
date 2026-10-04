@@ -352,6 +352,7 @@ local function Build(outer)
 
     widgets.hideSaleChat = Widgets.CreateCheckbox(saleChatRow, "Hide them", function(checked)
         Config:Set("hideSaleChat", checked)
+        if checked and ns.SaleAlarm then ns.SaleAlarm:InstallChatHider() end
     end, false)
     widgets.hideSaleChat:SetPoint("TOPLEFT", CONTROL_X, -2)
 
