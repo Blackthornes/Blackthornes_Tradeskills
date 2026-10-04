@@ -178,6 +178,19 @@ host = PostPanel:Placement(AH)
 check("a pane somewhere else is ignored", host == profession, true)
 ns.CraftPanel = nil
 
+-- Buttons hanging off the window's right side (Izbode's custom interface,
+-- 2026-10-04): the panel docks past them, not on top of them. The measure is
+-- the craft pane's own, stubbed here to say how far they stick out.
+ns.CraftPanel = { RightOverhang = function(_, frame) return frame == profession and 32 or 0 end }
+host, left, fits = PostPanel:Placement(AH)
+check("buttons off the profession window: dock to it", host == profession, true)
+check("and sit past the buttons", left, 857 + 630 + 32 + PANEL_GAP)
+
+ns.CraftPanel.RightOverhang = function() error("no client") end
+host, left = PostPanel:Placement(AH)
+check("a measure that fails docks at the edge as before", left, 857 + 630 + PANEL_GAP)
+ns.CraftPanel = nil
+
 -- A narrow screen: the panel steps aside rather than covering the paper doll.
 GetUIPanel = nil
 CharacterFrame = character
