@@ -31,13 +31,13 @@ local MAX_SUBCRAFT_DEPTH = 3
 function Cost:GetReagentUnitCost(itemID)
     -- Buying means paying the asking price, not the smoothed market average.
     -- A lone listing far below the rest is left out, as the undercut rule
-    -- leaves it out (Trent, 2026-09-26): one seller's single cheap unit is
+    -- leaves it out (2026-09-26): one seller's single cheap unit is
     -- gone after one purchase and cannot supply a run of crafts, so pricing
     -- every craft off it overstated profit and the only-seller price.
     local auction = ns.Prices:GetValue(itemID, "lowest")
     local vendor = ns.Vendor:GetUnitPrice(itemID)
 
-    -- Anything a vendor sells costs the vendor price (Trent, 2026-10-02).
+    -- Anything a vendor sells costs the vendor price (2026-10-02).
     -- People list vendor-sold thread and vials on the auction house for many
     -- times the shop price, and paying that is a choice, not a cost. The one
     -- exception is a shop seen with limited stock: it cannot supply a run of

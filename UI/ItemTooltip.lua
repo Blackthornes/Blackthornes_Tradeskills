@@ -345,8 +345,8 @@ function ItemTooltip:DisenchantLine(itemID)
     return { "Disenchant value", text }
 end
 
---- The cheapest listing the last scan saw, beside the smoothed value (Trent,
---- 2026-09-26: "items should show the lowest seller value in addition to
+--- The cheapest listing the last scan saw, beside the smoothed value
+--- (2026-09-26: "items should show the lowest seller value in addition to
 --- auction value"). Marked when the cheapest one is your own. A lone
 --- listing far below the rest is left out, as the Enchanting pane and the
 --- undercut leave it out, so the tooltip does not quote a price that one

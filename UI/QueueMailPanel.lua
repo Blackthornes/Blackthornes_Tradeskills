@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- UI/QueueMailPanel.lua
 -- Beside the mailbox: what to send your other characters for the queue.
 --
--- Trent, 2026-10-03: "when you go to the mail it should allow you to auto
+-- Asked 2026-10-03: "when you go to the mail it should allow you to auto
 -- send materials this character has to the one that needs it". One row per
 -- character, with what to send and a Send to button that opens Send Mail,
 -- fills in the name and attaches the items. The player presses Send: mail
@@ -143,7 +143,7 @@ function QueueMailPanel:Build()
     end, { width = 18, height = 16, fontSize = "tiny", tooltip = "Hide this until the next mailbox visit" })
     close:SetPoint("TOPRIGHT", -4, -4)
 
-    -- Trent, 2026-10-04: the words under the heading were too many, and
+    -- Asked 2026-10-04: the words under the heading were too many, and
     -- there was no way from here to the setting that picks the disenchanter.
     -- The Send button's tooltip says what it does; this goes to Settings.
     local settings = Widgets.CreateButton(panel, "Settings", function()

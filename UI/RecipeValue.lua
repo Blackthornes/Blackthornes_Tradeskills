@@ -684,7 +684,7 @@ end
 -- The first version of this measured the recipe's name alone and anchored the
 -- value to it. That printed the value on top of the "[5]" beside a recipe
 -- that makes more than one, and on top of the last word of any name long
--- enough to reach the right-hand edge. Both are in Trent's screenshot of
+-- enough to reach the right-hand edge. Both are in a screenshot of
 -- 2026-09-21. So nothing is inferred from the name here: the row is measured,
 -- all of it, and when there is genuinely no room the name gives way rather
 -- than the two being drawn over each other.

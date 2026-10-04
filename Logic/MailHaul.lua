@@ -152,7 +152,7 @@ end
 -- showed up again. The game does this while a take is going through: the
 -- mail drops out of the list, the inbox is refreshed from the server with it
 -- still there, and then it goes for good. Counting each disappearance once
--- doubled the tally (Trent, 2026-09-28), so Observe undoes a collection
+-- doubled the tally (2026-09-28), so Observe undoes a collection
 -- whose gold or item comes back.
 -- @return taken, appeared: arrays of
 --   { key, kind, name, monies = { amount, ... }, items = { itemID = count } }

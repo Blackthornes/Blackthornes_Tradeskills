@@ -524,7 +524,7 @@ end
 
 --- Start a tooltip for an item row with the game's own tooltip for the item,
 --- the one the bags show, so hovering a name inside the addon shows the item
---- itself (Trent, 2026-09-26). The addon's value lines join it the same way
+--- itself (2026-09-26). The addon's value lines join it the same way
 --- they join any item tooltip. Falls back to the plain name when the game
 --- cannot draw the item.
 --

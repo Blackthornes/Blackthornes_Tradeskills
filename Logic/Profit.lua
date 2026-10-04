@@ -455,7 +455,7 @@ function Profit:Analyse(recipeID, characterKey)
     local unitRevenue, basis, _, uncertain =
         self:ChoosePostPrice(recipe.outputItemID, cost)
 
-    -- Worth whichever pays more, that listing or a vendor (Trent's rule:
+    -- Worth whichever pays more, that listing or a vendor (the house rule:
     -- max(auction, vendor)). Under what a vendor pays, Posting refuses the
     -- listing anyway, so the vendor is the sale that would be made. A craft
     -- shown as a loss and hidden could be making money at the vendor.
@@ -589,7 +589,7 @@ end
 -- Ignored crafts
 --------------------------------------------------------------------------------
 
--- Trent, 2026-10-03: a way to "permanently add a profit listed craft to
+-- Asked 2026-10-03: a way to "permanently add a profit listed craft to
 -- ignore so it no longer appears in the recommended list". Kept for the whole
 -- account, and Settings lists them with a Restore button, so a misclick is
 -- never for good.
