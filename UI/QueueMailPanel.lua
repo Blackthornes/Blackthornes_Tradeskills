@@ -143,14 +143,21 @@ function QueueMailPanel:Build()
     end, { width = 18, height = 16, fontSize = "tiny", tooltip = "Hide this until the next mailbox visit" })
     close:SetPoint("TOPRIGHT", -4, -4)
 
-    local hint = Theme.CreateLabel(panel, "tiny", "muted")
-    hint:SetPoint("TOPLEFT", PAD, -22)
-    hint:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -22)
-    hint:SetText("Your other characters need these. The button fills in the mail; you press Send.")
-    hint:SetWordWrap(true)
-    hint:SetJustifyV("TOP")
-    hint:SetHeight(26)
-    panel.hint = hint
+    -- Trent, 2026-10-04: the words under the heading were too many, and
+    -- there was no way from here to the setting that picks the disenchanter.
+    -- The Send button's tooltip says what it does; this goes to Settings.
+    local settings = Widgets.CreateButton(panel, "Settings", function()
+        if not ns.UI then return end
+        ns.UI:Show()
+        ns.UI:SelectTab("settings")
+    end, { width = 60, height = 16, fontSize = "tiny",
+        tooltip = "Pick your disenchanter and the best quality mailed to them" })
+    local labelWidth = Theme.TextWidth and Theme.TextWidth(settings.label)
+    if type(labelWidth) == "number" and labelWidth + 14 > 60 then
+        settings:SetWidth(math.ceil(labelWidth) + 14)
+    end
+    settings:SetPoint("RIGHT", close, "LEFT", -6, 0)
+    panel.settings = settings
 
     panel.rows = {}
 
@@ -257,14 +264,12 @@ function QueueMailPanel:Refresh()
 
     -- Headed for what is on it.
     local onlyGear = hasGear and #deliveries == 1
-    panel.heading:SetText(onlyGear and "SEND TO YOUR DISENCHANTER"
-        or hasGear and "SEND FROM YOUR BAGS" or "SEND FOR THE CRAFT QUEUE")
-    panel.hint:SetText(onlyGear
-        and "Gear to disenchant, picked in Settings. The button fills in the mail; you press Send."
-        or hasGear and "Gear for your disenchanter, and what your other characters need. You press Send."
-        or "Your other characters need these. The button fills in the mail; you press Send.")
+    local headingRoom = WIDTH - PAD - 4 - 18 - 6 - (panel.settings:GetWidth() or 60) - 8
+    Theme.FitText(panel.heading, onlyGear and { "SEND TO YOUR DISENCHANTER", "DISENCHANTER" }
+        or hasGear and { "SEND FROM YOUR BAGS", "SEND" }
+        or { "SEND FOR THE CRAFT QUEUE", "FOR THE QUEUE" }, headingRoom)
     local room = WIDTH - 2 * PAD
-    local top = -52
+    local top = -28
 
     for index, delivery in ipairs(deliveries) do
         if index > MAX_ROWS then break end
@@ -283,7 +288,8 @@ function QueueMailPanel:Refresh()
             Theme.FitText(row.name, { delivery.name, short }, room - BUTTON_WIDTH - 8)
             Theme.FitText(row.items, ItemTexts(delivery.items), room)
         end
-        Theme.FitText(row.send.label, { "Send to " .. short, "Fill mail" }, BUTTON_WIDTH - 8)
+        local first = short:match("^(%S+)") or short
+        Theme.FitText(row.send.label, { "Send to " .. short, "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
         row.send:SetEnabledState(not ns.QueueMail.filling)
         row:Show()
     end
@@ -294,7 +300,7 @@ function QueueMailPanel:Refresh()
     end
 
     local shownRows = math.min(#deliveries, MAX_ROWS)
-    local height = 52 + shownRows * ROW_HEIGHT + 30
+    local height = 28 + shownRows * ROW_HEIGHT + 30
 
     panel.more:ClearAllPoints()
     if #deliveries > MAX_ROWS then
