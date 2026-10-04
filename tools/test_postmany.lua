@@ -149,7 +149,7 @@ local LINEN, OIL, BAND, POTION = 2589, 20748, 7955, 929
 
 local function Reset()
     Posting.chosenQuantity = {}
-    Posting.manyRefused = false
+    Posting.manyRefused = {}
     commodities = { [LINEN] = true }
     maxStacks = { [LINEN] = 200, [OIL] = 1, [BAND] = 1, [POTION] = 5 }
     prices = { [LINEN] = { market = 40 }, [OIL] = { market = 30000 },
@@ -185,22 +185,61 @@ print("when the auction house takes only one")
 Reset()
 Posting.pending = { itemID = OIL, quantity = 3, many = true, postedBefore = 0, idsBefore = {} }
 Posting:ResolvePending(3, true)
-check("all three listed: keeps listing together", Posting.manyRefused, false)
+check("all three listed: keeps listing together", Posting.manyRefused[OIL] == true, false)
 
 Posting.pending = { itemID = OIL, quantity = 3, many = true, postedBefore = 0, idsBefore = {} }
 Posting:ResolvePending(1, true)
-check("one of three: back to one at a time", Posting.manyRefused, true)
+check("one of three: back to one at a time", Posting.manyRefused[OIL] == true, true)
 check("so the oils go up one per click", LineFor(OIL).maxQuantity, 1)
 
 Reset()
 Posting.pending = { itemID = OIL, quantity = 3, many = true, postedBefore = 0, idsBefore = {} }
 Posting:ResolvePending(0, false)
-check("none listed: back to one at a time", Posting.manyRefused, true)
+check("none listed: back to one at a time", Posting.manyRefused[OIL] == true, true)
 
 Reset()
 Posting.pending = { itemID = OIL, quantity = 1, many = false, postedBefore = 0, idsBefore = {} }
 Posting:ResolvePending(0, false)
-check("a single listing failing changes nothing", Posting.manyRefused, false)
+check("a single listing failing changes nothing", Posting.manyRefused[OIL] == true, false)
+
+-- Trent, 2026-10-04: "multiposting works sometimes for crafted items and
+-- other times it does not". One doubtful reading turned it off for every
+-- item for the rest of the session.
+print("")
+print("one doubtful reading does not turn it off")
+
+Reset()
+Posting.pending = { itemID = OIL, quantity = 3, many = true, postedBefore = 0, idsBefore = {} }
+Posting:ResolvePending(1, true)
+maxStacks[BAND] = 1
+bags[0][6].link, bags[0][7].link = nil, nil
+check("another item still lists together", LineFor(BAND).maxQuantity, 2)
+
+Reset()
+-- The first listing of a visit, measured against last visit's count: two
+-- sold since, so a full batch of three reads as one more than before.
+Posting.pending = { itemID = OIL, quantity = 3, many = true, postedBefore = 5, idsBefore = nil }
+Posting:ResolvePending(6, false)
+check("first check of a visit: nothing concluded", Posting.manyRefused[OIL] == true, false)
+check("so the oils still go up together", LineFor(OIL).maxQuantity, 3)
+
+print("")
+print("item info not loaded yet")
+
+Reset()
+-- An item never asked about before, so nothing is remembered for it.
+local WIZARD_OIL = 20749
+prices[WIZARD_OIL] = { market = 30000 }
+table.insert(bags[0], { itemID = WIZARD_OIL, stackCount = 1 })
+table.insert(bags[0], { itemID = WIZARD_OIL, stackCount = 1 })
+local realInfo = C_Item.GetItemInfo
+C_Item.GetItemInfo = function(itemID)
+    if itemID == WIZARD_OIL then return nil end
+    return realInfo(itemID)
+end
+C_Item.GetItemMaxStackSizeByID = function(itemID) return itemID == WIZARD_OIL and 1 or nil end
+check("the client's stack size call still says one", LineFor(WIZARD_OIL).maxQuantity, 2)
+C_Item.GetItemInfo, C_Item.GetItemMaxStackSizeByID = realInfo, nil
 
 -- Every suite shares one Lua state; leave no item lookup behind for the next.
 C_Item, maxStacks = nil, nil
