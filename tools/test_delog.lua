@@ -1,6 +1,6 @@
 -- Learning disenchant results from your own disenchants.
 --
--- Trent, 2026-09-27: "yes, build it", on recording what his own disenchants
+-- Asked 2026-09-27: "yes, build it", on recording what his own disenchants
 -- give and using that over the built-in table. What this pins down:
 --   * each of the three ways of telling which item went in: the loot
 --     window's source, the bag slot clicked, the name sent with the cast;

@@ -426,7 +426,7 @@ end
 -- Clearing the profession tabs on the window's right-hand edge
 --------------------------------------------------------------------------------
 
--- Trent, 2026-09-21: "the Craft queue is also overlapping the buttons to the
+-- Asked 2026-09-21: "the Craft queue is also overlapping the buttons to the
 -- right of the blizzard UI. There are Profession buttons on the right hand
 -- side of the blizzard UI". Blizzard anchors those tabs OUTSIDE the frame's
 -- own rectangle, so GetRight() reports the window and not the tabs, and
@@ -546,7 +546,7 @@ end
 -- Row text stops clear of the controls beside it
 --------------------------------------------------------------------------------
 
--- Trent, same report: "the words on teh Craft queue extend under the buttons".
+-- Same report: "the words on teh Craft queue extend under the buttons".
 -- The two lines used to take a width worked out from PANEL_WIDTH, but a row is
 -- narrower than the panel -- the list is inset 14 either side and the scroll
 -- bar takes 10 more -- so the text was laid out 214 wide in a 194 space, or

@@ -1,4 +1,4 @@
--- Ignoring a craft on the Profit tab (Trent, 2026-10-03: "permanently add a
+-- Ignoring a craft on the Profit tab (2026-10-03: "permanently add a
 -- profit listed craft to ignore so it no longer appears in the recommended
 -- list").
 --

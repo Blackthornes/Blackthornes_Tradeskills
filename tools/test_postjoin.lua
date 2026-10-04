@@ -1,6 +1,6 @@
 -- Copies of one item, listed back to back.
 --
--- Trent, 2026-10-04: "if i have multiples of the same crafted item, the addon
+-- Asked 2026-10-04: "if i have multiples of the same crafted item, the addon
 -- should allow me to post all of them rapidly, but have it post them one at a
 -- time, just like the Blizzard AH UI does ... right now i have to wait 5
 -- seconds between each". Each listing used to be confirmed against the server

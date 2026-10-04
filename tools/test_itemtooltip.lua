@@ -327,7 +327,7 @@ ns.settings.showValueOnItemTooltips = true
 check("on when switched on", ItemTooltip:IsEnabled(), true)
 
 --------------------------------------------------------------------------------
--- The lowest posting, beside the market value (Trent, 2026-09-26)
+-- The lowest posting, beside the market value (2026-09-26)
 --------------------------------------------------------------------------------
 
 local RECORDS = {

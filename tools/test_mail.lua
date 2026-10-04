@@ -526,7 +526,7 @@ print("")
 print("what you already hold pushes a craft down the list")
 --------------------------------------------------------------------------------
 
--- Trent does not want a cap to configure. So holding stock does not hide a
+-- The owner does not want a cap to configure. So holding stock does not hide a
 -- craft, it demotes it: the eleventh of something only sells once the other ten
 -- have, so the gold comes back that much slower.
 ns.Prices = { Count = function() return 0 end }
@@ -646,7 +646,7 @@ print("")
 print("two sales of one item, paid out at different times")
 --------------------------------------------------------------------------------
 
--- Exactly Trent's case: two of the same bag sold, one paid, one still held.
+-- Exactly the owner's case: two of the same bag sold, one paid, one still held.
 -- These share a fingerprint deliberately, so each has to be described from its
 -- own mail. Describing both from whichever was walked first is how one of them
 -- would end up wearing the other's figure.
@@ -716,7 +716,7 @@ print("")
 print("throwing the ledger away")
 --------------------------------------------------------------------------------
 
--- Trent's ledger carried rows written before the payout fix, reading "sold
+-- The owner's ledger carried rows written before the payout fix, reading "sold
 -- Linen Reagent Bag for 0c". Entries are never rewritten, so the only way to be
 -- rid of them is to clear the lot and start again.
 Reset()
@@ -760,7 +760,7 @@ print("")
 print("a cancelled listing is not a failure to sell")
 --------------------------------------------------------------------------------
 
--- Trent cancelled nine listings to test something, and the sell-through number
+-- The owner cancelled nine listings to test something, and the sell-through number
 -- counted them as nine the market had turned down. Pulling a listing yourself
 -- is not the market's verdict, so cancellations are counted and shown but kept
 -- out of the ratio.

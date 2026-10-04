@@ -1,6 +1,6 @@
 -- The queue counts each in-between material once, the cheaper way.
 --
--- Trent's Woolen Reagent Bag: 3 Bolts of Woolen Cloth, a Cerulean Dye and a
+-- The owner's Woolen Reagent Bag: 3 Bolts of Woolen Cloth, a Cerulean Dye and a
 -- Fine Thread. Making the bolts from 9 Wool Cloth was cheaper than buying
 -- them, so the queue added the bolt crafts. The footer then read 1g 2s 85c:
 -- the bag's own cost (which already paid for the wool) plus the bolt crafts

@@ -139,7 +139,7 @@ ns.Util = {
 ns.Config = {
     Get = function() return nil end,
     GetRealmKey = function() return "Realm" end,
-    GetCharacterKey = function() return "Trent-Realm" end,
+    GetCharacterKey = function() return "Bob-Realm" end,
 }
 
 ns.Recipes = {
@@ -451,7 +451,7 @@ ns.Mail:NoteHeardSale("Bolt of Linen Cloth")
 row = Row(setmetatable({ kind = "heard" }, { __index = ns.Mail:GetHeard()[1] }))
 check("the amount column says it sold", row.amount.text, "sold")
 contains("and that the gold is in the mail", row.detail.text, "waiting in the mail")
-contains("naming the character", row.detail.text, "Trent")
+contains("naming the character", row.detail.text, "Bob")
 
 selectView("sales")
 check("Recent sales lists it straight away", #listData, 1)
@@ -463,7 +463,7 @@ contains("the footer counts it as waiting", LabelStartingWith("0 sold").text, "1
 print("")
 print("Its mail arrives")
 
-local paid = { kind = "sold", t = NOW + 10, who = "Trent-Realm",
+local paid = { kind = "sold", t = NOW + 10, who = "Bob-Realm",
     name = "Bolt of Linen Cloth", net = 3400 }
 Given({ paid })
 check("the heard sale gives way to the real one", #listData, 1)
@@ -483,7 +483,7 @@ print("")
 print("Still listed")
 
 local listings = {
-    { itemID = 2589, quantity = 20, unit = 30, ends = NOW + 7200, who = "Trent-Realm" },
+    { itemID = 2589, quantity = 20, unit = 30, ends = NOW + 7200, who = "Bob-Realm" },
     { itemID = 2590, quantity = 1, unit = 500, ended = true, who = "Alt-Realm" },
 }
 ns.Auctions = { GetListings = function() return listings, 2 end }

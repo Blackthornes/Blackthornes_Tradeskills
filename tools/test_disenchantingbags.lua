@@ -1,6 +1,6 @@
 -- The Disenchanting tab's bags list, drawn without a game client.
 --
--- Trent, 2026-09-29: "Can we setup a way to Disenchant items in your bag
+-- Asked 2026-09-29: "Can we setup a way to Disenchant items in your bag
 -- under the Disenchant tab?" What this pins down:
 --   * the tab still opens on the auction house deals, as before;
 --   * "Items in my bags" ticked lists the bag rows with their own columns;

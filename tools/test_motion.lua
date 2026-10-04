@@ -1,5 +1,5 @@
 -- The windows' motion and glow, outside WoW: Farmer's tweens brought over, so
--- the two addons move alike (Trent: "next-gen, neon glow, dopamine hits").
+-- the two addons move alike (asked for: "next-gen, neon glow, dopamine hits").
 --
 -- What must hold:
 --   1. Tweens land where they were headed, a new one in the same slot

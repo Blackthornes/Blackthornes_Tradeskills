@@ -1,4 +1,4 @@
--- The report after a mailbox visit (Trent, 2026-09-28: "better mail tracking
+-- The report after a mailbox visit (2026-09-28: "better mail tracking
 -- and reporting after mails are collected ... keep with the dopamine hits").
 --
 -- Logic/MailHaul.lua works out what was collected from the difference between
@@ -410,7 +410,7 @@ print("")
 print("a mail that drops out and comes back is not counted twice")
 --------------------------------------------------------------------------------
 
--- Trent, 2026-09-28: the tally read 12g 24s 44c where the game said he had
+-- Asked 2026-09-28: the tally read 12g 24s 44c where the game said he had
 -- gained 6g 12s 22c. A take going through makes the mail vanish, reappear
 -- when the inbox is refreshed, then vanish for good.
 

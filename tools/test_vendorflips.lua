@@ -1,5 +1,5 @@
 -- The Vendor Flips tab: items on the auction house listed for less than a
--- vendor pays for them (Trent, 2026-09-28).
+-- vendor pays for them (2026-09-28).
 --
 -- What this pins down:
 --   * profit is the vendor price less the cheapest listing from someone
@@ -202,7 +202,7 @@ print("\nthe tooltip's sell price wins over the item info's")
 
 -- Forever changed some sell prices from Classic's and only the tooltip has
 -- the new one: Greater Magic Wand's item info says 15s 35c, its tooltip 1c
--- (Trent, 2026-10-03). It sat on the tab as a 1435% flip.
+-- (2026-10-03). It sat on the tab as a 1435% flip.
 local tooltipPrices, tooltipReads = { [3001] = 1 }, {}
 C_TooltipInfo = {
     GetItemByID = function(itemID)

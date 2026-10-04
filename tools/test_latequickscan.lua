@@ -1,6 +1,6 @@
 -- The quick full scan that always gave way to the page-by-page one.
 --
--- Trent, 2026-10-03: "it asks for a quick scan and then a few seconds later
+-- Asked 2026-10-03: "it asks for a quick scan and then a few seconds later
 -- it does a page by page even when it's been hours since the last scan."
 --
 --  * The wait for the snapshot was six seconds. As the auction house filled

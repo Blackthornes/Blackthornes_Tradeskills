@@ -1,6 +1,6 @@
 -- The scroll list must not draw a row past its own bottom edge.
 --
--- The bug Trent saw on the Prices tab: the "N items priced" line peeking out
+-- The bug the owner saw on the Prices tab: the "N items priced" line peeking out
 -- from under the last row. The list is a plain frame that clips nothing, and
 -- it rounded its visible row count UP, so a list 100 pixels tall with 22
 -- pixel rows drew five of them and the fifth hung ten pixels below the list,
