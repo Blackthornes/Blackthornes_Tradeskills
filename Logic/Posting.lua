@@ -73,7 +73,9 @@ function Posting:MarkBlocked()
 end
 
 --- Whether a listing can be attempted right now, and why not when it cannot.
-function Posting:CanPost()
+-- @param itemID optional: the item about to be listed. Another copy of the
+--   item still being confirmed can go straight away (see Post).
+function Posting:CanPost(itemID)
     if self:IsBlocked() then
         return false, "the game will not let addons list auctions"
     end
@@ -104,7 +106,12 @@ function Posting:CanPost()
     -- the player clicked that did anything mention the listing still settling.
     -- Refusing here means the buttons know, and SecondsUntilPostable can count
     -- it down instead of the player discovering it at the end.
-    if self.pending then
+    --
+    -- Another copy of the same item is the exception (Trent, 2026-10-04: "post
+    -- them one at a time, just like the Blizzard AH UI does", not five seconds
+    -- apart). Its listing joins the one being confirmed and both are counted
+    -- together, so nothing has to be told apart.
+    if self.pending and not (itemID and self.pending.itemID == itemID) then
         return false, "still confirming the last listing"
     end
 
@@ -123,8 +130,10 @@ end
 -- addon auctions) return nothing, because they have their own wording already
 -- and a countdown would imply they clear on their own.
 --
+-- @param itemID optional: the item about to be listed. Another copy of the
+--   item being confirmed does not wait for it (see CanPost).
 -- @return seconds, reason
-function Posting:SecondsUntilPostable()
+function Posting:SecondsUntilPostable(itemID)
     if self:IsBlocked() then return 0, nil end
     if not ns.Scanner.isAuctionHouseOpen then return 0, nil end
 
@@ -141,6 +150,7 @@ function Posting:SecondsUntilPostable()
     -- allowed while posting still felt slow, because posting never got as far
     -- as asking it for anything.
     local pending = self.pending
+    if pending and itemID and pending.itemID == itemID then pending = nil end
 
     if pending then
         -- The confirming read is itself a request to the auction house, and
@@ -1017,13 +1027,16 @@ end)
 
 --- List one item. Must be called from a hardware event.
 function Posting:Post(itemID, quantity, unitPrice)
-    local allowed, reason = self:CanPost()
+    local allowed, reason = self:CanPost(itemID)
     if not allowed then
         ns.Print(reason)
         return false
     end
 
-    if self.pending then
+    -- Another copy of an item still being confirmed: this listing joins it,
+    -- and the check counts both (see CanPost).
+    local previous = self.pending
+    if previous and previous.itemID ~= itemID then
         ns.Print("a listing is already going through")
         return false
     end
@@ -1093,8 +1106,6 @@ function Posting:Post(itemID, quantity, unitPrice)
     local floor, why = self:GetPriceFloor(itemID)
 
     if floor and unitPrice < floor then
-        self.pending = nil
-
         ns.Warn(("not listing %s at %s: %s."):format(
             Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or "the price looks wrong"))
         ns.Warn(("expected at least %s. Run a scan, or list it by hand."):format(
@@ -1129,6 +1140,23 @@ function Posting:Post(itemID, quantity, unitPrice)
         startedAt = GetTime(),
     }
 
+    -- Joining a listing still being confirmed: measured from before the
+    -- first of them, and checked once for all of them, a few seconds after
+    -- the last click. A check already out was asked before this listing
+    -- existed, so its answer is dropped and a fresh one asked for.
+    if previous then
+        local joined = self.pending
+        joined.quantity = (previous.quantity or 1) + quantity
+        joined.postedBefore = previous.postedBefore
+        joined.idsBefore = previous.idsBefore
+        joined.many = many or previous.many
+        joined.joined = true
+
+        if previous.verifying then
+            ns.Auctions.confirmToken = (ns.Auctions.confirmToken or 0) + 1
+        end
+    end
+
     local ok, err
     if isCommodity then
         ok, err = pcall(C_AuctionHouse.PostCommodity, location, duration, quantity, unitPrice)
@@ -1144,7 +1172,8 @@ function Posting:Post(itemID, quantity, unitPrice)
     end
 
     if not ok then
-        self.pending = nil
+        -- The earlier copies are still up and still to be confirmed.
+        self.pending = previous
 
         if tostring(err):lower():find("addon") then
             self:MarkBlocked()
@@ -1537,7 +1566,7 @@ end
 -- confirmation click is what actually creates the listing. That ordering is
 -- deliberate: search, show the fresh number, and let the click commit it.
 function Posting:Request(itemID, quantity, unitPrice)
-    local allowed, reason = self:CanPost()
+    local allowed, reason = self:CanPost(itemID)
     if not allowed then
         ns.Print(reason or "cannot post right now")
         return false
@@ -1657,6 +1686,10 @@ end
 function Posting:VerifyPending()
     if not self.pending or self.pending.verifying then return end
 
+    -- Another copy was listed since this timer was set, and that listing's
+    -- own timer checks them both.
+    if GetTime() - (self.pending.startedAt or 0) < POST_VERIFY_DELAY - 0.05 then return end
+
     -- An attempt older than this has already given up; leaving it in place lets
     -- an unrelated auction be mistaken for it.
     if (GetTime() - (self.pending.startedAt or 0)) > 60 then
@@ -1698,18 +1731,21 @@ function Posting:ResolvePending(posted, appeared)
 
     self.pending = nil
 
-    -- Several copies in one go: how many went up. One of several means the
-    -- auction house took only the first, so the rest go one per click.
+    -- Several auctions in one go, from one click (CanPostMany) or copies
+    -- listed back to back: how many went up. One of several from one click
+    -- means the auction house took only the first, so the rest go one per
+    -- click. A commodity's quantity is one auction, so it is not counted.
+    local several = (pending.quantity or 1) > 1 and not pending.isCommodity
     local gained = posted and (posted - (pending.postedBefore or 0)) or 0
-    if pending.many and posted and gained < pending.quantity
+    if pending.many and not pending.joined and posted and gained < pending.quantity
         and (gained <= 1 or not pending.idsBefore) then
         self.manyRefused = true
     end
 
-    if pending.many and posted and gained >= pending.quantity then
+    if several and posted and gained >= pending.quantity then
         ns.Print(("listed %d x %s"):format(pending.quantity, Util.GetItemLabel(pending.itemID)))
 
-    elseif pending.many and posted and gained > 0 then
+    elseif several and posted and gained > 0 then
         ns.Print(("listed %d of %d x %s."):format(gained, pending.quantity, Util.GetItemLabel(pending.itemID)))
         if self.manyRefused then
             ns.Print("the auction house took one at a time, so the rest go up one per click.")
@@ -1730,7 +1766,7 @@ function Posting:ResolvePending(posted, appeared)
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(("%s did not appear in your auctions."):format(
             Util.GetItemLabel(pending.itemID)))
-        if pending.many then
+        if pending.many and not pending.joined then
             ns.Warn("listing several at once may not work here, so the next click lists one.")
         else
             ns.Warn("the auction house may be refusing listings; try Blizzard's own Sell tab.")
