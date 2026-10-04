@@ -4,6 +4,24 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.27.0
+
+For WoW: Forever (interface 16001). This version adds a file, so fully
+restart the game after updating; `/reload` is not enough.
+
+- A sale made while you're online goes on the Sales tab straight away,
+  marked "gold waiting in the mail", and the real entry replaces it once
+  the mail is read. This includes the sales the auction house announces
+  with its own notice.
+- A new **Still listed** view shows each character's listings from its last
+  auction house visit, with when each one ends or that it has ended.
+- Settings has **Hide sale messages in chat** (off by default).
+- A **DEMAND** column on the Profit tab and a Demand line on item tooltips
+  show High, Some or Low. Demand comes from your own sales once three of
+  your listings of an item have sold or expired; before that it comes from
+  how fast the auction house stock shrinks between scans.
+- Queueing a craft with Low demand gives a one-time warning in chat.
+
 ## 0.26.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
