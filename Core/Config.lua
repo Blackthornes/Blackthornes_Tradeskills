@@ -231,6 +231,14 @@ local DEFAULTS = {
         -- queue, with a button that fills in the mail.
         queueMailPanel = true,
 
+        -- The character gear goes to for disenchanting (Izbode, 2026-10-04),
+        -- typed in Settings: any name, so a character on another account
+        -- works too. Empty: nobody, and the mailbox lists nothing for it.
+        disenchanterName = "",
+        -- The best quality mailed to them: 2 greens only, 3 greens and
+        -- blues, 4 up to purples.
+        disenchanterQuality = 2,
+
         -- The shopping list under the queued crafts beside the profession
         -- window. Hidden and shown with the button at its foot.
         craftPaneShoppingList = true,
