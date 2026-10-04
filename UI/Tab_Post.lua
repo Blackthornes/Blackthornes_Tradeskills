@@ -345,10 +345,15 @@ local function ShowRowTooltip(row, line)
             0.5, 0.5, 0.5)
     end
 
-    -- Commodities sell from across the bags at once; gear goes up one at a time.
-    GameTooltip:AddLine(line.isCommodity
+    -- Commodities sell from across the bags at once, and so do copies of an
+    -- item that does not stack (one auction each); other gear goes up one at
+    -- a time.
+    local together = line.isCommodity
         and ("Commodity: all %d can go up together"):format(line.count)
-        or "Item auction: one listing at a time", 0.5, 0.5, 0.5)
+        or ((line.maxQuantity or 1) > 1
+            and ("All %d go up in one click, one auction each"):format(line.maxQuantity)
+            or "Item auction: one listing at a time")
+    GameTooltip:AddLine(together, 0.5, 0.5, 0.5)
 
     GameTooltip:AddLine("Type into the LIST box to sell fewer than that.", 0.5, 0.5, 0.5)
     GameTooltip:AddLine("Right-click to search the auction house for it.", 0.5, 0.5, 0.5)

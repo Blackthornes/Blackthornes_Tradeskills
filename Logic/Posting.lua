@@ -348,6 +348,31 @@ end
 
 --- Can this item be auctioned at all, and how many of it?
 --
+-- Several copies of an item that does not stack, in one listing click
+--------------------------------------------------------------------------------
+
+-- Izbode, 2026-10-04: Mana Oils do not stack, so each went up on its own
+-- click, with the wait for the last one to be confirmed in between. The
+-- auction house's item listing takes a quantity: for an item that does not
+-- stack it puts up that many separate auctions, one per copy, which is what
+-- Blizzard's own Sell tab does with its quantity box. So one click lists
+-- them all, still one listing click and one Yes from the player.
+--
+-- Only for items that cannot stack and have no random suffix: copies of
+-- "Lead Band" with different suffixes are different items to a buyer, and a
+-- stackable item auction still draws from the one slot it names.
+--
+-- Unconfirmed on Forever. When a batch comes back with only one listed (or
+-- none), this goes back to one at a time for the rest of the session.
+Posting.manyRefused = false
+
+function Posting:CanPostMany(itemID, link)
+    if self.manyRefused then return false end
+    if link and Util.LinkSuffix(link) then return false end
+    return Util.GetMaxStackSize(itemID) == 1
+end
+
+--------------------------------------------------------------------------------
 -- These take an ItemLocation and read the auction house's sell state, which
 -- was investigated as a cause of Blizzard's own Sell tab failing with
 -- "Internal auction error". It was ruled out: the error occurs with this addon
@@ -747,7 +772,7 @@ function Posting:GetPostable(opts)
             -- auctions come from a single slot, so gear goes up one
             -- listing at a time. That is the ceiling, not the amount:
             -- the player may have asked for fewer.
-            local maxQuantity = isCommodity
+            local maxQuantity = (isCommodity or self:CanPostMany(itemID, held and held.link))
                 and count
                 or math.min(count, (held and held.stackCount) or 1)
 
@@ -1025,9 +1050,16 @@ function Posting:Post(itemID, quantity, unitPrice)
     local isCommodity = ns.Scanner:IsCommodity(itemID, location)
 
     -- An item auction draws from the one slot it references, so gear goes up
-    -- one listing at a time.
+    -- one listing at a time, unless it is copies of an item that does not
+    -- stack (CanPostMany), which the auction house lists one per copy.
+    local many = false
     if not isCommodity then
-        quantity = math.min(quantity, slotStack or 1)
+        local okLink, link = pcall(C_Container.GetContainerItemLink, bag, slot)
+        if quantity > 1 and self:CanPostMany(itemID, okLink and link or nil) then
+            many = true
+        else
+            quantity = math.min(quantity, slotStack or 1)
+        end
     end
 
     if available < 1 then
@@ -1089,6 +1121,7 @@ function Posting:Post(itemID, quantity, unitPrice)
         quantity = quantity,
         unitPrice = unitPrice,
         isCommodity = isCommodity,
+        many = many,
         -- Measured against afterwards, so success is verified rather than
         -- inferred from an event that fires for any auction at all.
         postedBefore = ns.Auctions:GetOwnPostedCount(itemID),
@@ -1665,7 +1698,24 @@ function Posting:ResolvePending(posted, appeared)
 
     self.pending = nil
 
-    if posted and (appeared or posted > (pending.postedBefore or 0)) then
+    -- Several copies in one go: how many went up. One of several means the
+    -- auction house took only the first, so the rest go one per click.
+    local gained = posted and (posted - (pending.postedBefore or 0)) or 0
+    if pending.many and posted and gained < pending.quantity
+        and (gained <= 1 or not pending.idsBefore) then
+        self.manyRefused = true
+    end
+
+    if pending.many and posted and gained >= pending.quantity then
+        ns.Print(("listed %d x %s"):format(pending.quantity, Util.GetItemLabel(pending.itemID)))
+
+    elseif pending.many and posted and gained > 0 then
+        ns.Print(("listed %d of %d x %s."):format(gained, pending.quantity, Util.GetItemLabel(pending.itemID)))
+        if self.manyRefused then
+            ns.Print("the auction house took one at a time, so the rest go up one per click.")
+        end
+
+    elseif posted and (appeared or posted > (pending.postedBefore or 0)) then
         ns.Print(("listed %s"):format(Util.GetItemLabel(pending.itemID)))
 
     elseif posted and posted > 0 and not pending.idsBefore then
@@ -1680,7 +1730,11 @@ function Posting:ResolvePending(posted, appeared)
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(("%s did not appear in your auctions."):format(
             Util.GetItemLabel(pending.itemID)))
-        ns.Warn("the auction house may be refusing listings; try Blizzard's own Sell tab.")
+        if pending.many then
+            ns.Warn("listing several at once may not work here, so the next click lists one.")
+        else
+            ns.Warn("the auction house may be refusing listings; try Blizzard's own Sell tab.")
+        end
     else
         ns.Warn("could not tell whether that listing went up. Check your Auctions tab")
     end

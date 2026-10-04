@@ -49,6 +49,49 @@ local function ItemTexts(items)
     return texts
 end
 
+-- Quality words in the game's own rarity colours.
+local QUALITY_WORDS = {
+    [2] = "|cff1eff00green|r",
+    [3] = "|cff0070ddblue|r",
+    [4] = "|cffa335eepurple|r",
+}
+
+--- The disenchanter's row: how many of each quality, then just how many.
+local function GearTexts(items)
+    local byQuality, total = {}, 0
+    for _, item in ipairs(items) do
+        local quality = item.quality or 2
+        byQuality[quality] = (byQuality[quality] or 0) + item.count
+        total = total + item.count
+    end
+
+    local parts = {}
+    for quality = 4, 2, -1 do
+        if byQuality[quality] then
+            parts[#parts + 1] = ("%d %s"):format(byQuality[quality], QUALITY_WORDS[quality])
+        end
+    end
+
+    local joined = #parts > 1
+        and (table.concat(parts, ", ", 1, #parts - 1) .. " and " .. parts[#parts])
+        or parts[1] or ""
+    return {
+        joined .. " to disenchant",
+        joined,
+        total == 1 and "1 piece of gear" or ("%d pieces of gear"):format(total),
+    }
+end
+
+--- The name a row's button and status use: the character's short name, or
+--- the disenchanter's name as typed, without its realm.
+local function ShortName(delivery)
+    if delivery.to and ns.Recipes.GetShortCharacterName then
+        return ns.Recipes:GetShortCharacterName(delivery.to)
+    end
+    local name = delivery.recipient or delivery.name or ""
+    return name:match("^([^-]+)") or name
+end
+
 local function CreateRow(panel, index)
     local row = CreateFrame("Frame", nil, panel)
     row:SetSize(WIDTH - 2 * PAD, ROW_HEIGHT)
@@ -92,6 +135,7 @@ function QueueMailPanel:Build()
     local heading = Theme.CreateLabel(panel, "tiny", "accent")
     heading:SetPoint("TOPLEFT", PAD, -8)
     heading:SetText("SEND FOR THE CRAFT QUEUE")
+    panel.heading = heading
 
     local close = Widgets.CreateButton(panel, "X", function()
         QueueMailPanel.dismissed = true
@@ -99,13 +143,21 @@ function QueueMailPanel:Build()
     end, { width = 18, height = 16, fontSize = "tiny", tooltip = "Hide this until the next mailbox visit" })
     close:SetPoint("TOPRIGHT", -4, -4)
 
-    local hint = Theme.CreateLabel(panel, "tiny", "muted")
-    hint:SetPoint("TOPLEFT", PAD, -22)
-    hint:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -22)
-    hint:SetText("Your other characters need these. The button fills in the mail; you press Send.")
-    hint:SetWordWrap(true)
-    hint:SetJustifyV("TOP")
-    hint:SetHeight(26)
+    -- Trent, 2026-10-04: the words under the heading were too many, and
+    -- there was no way from here to the setting that picks the disenchanter.
+    -- The Send button's tooltip says what it does; this goes to Settings.
+    local settings = Widgets.CreateButton(panel, "Settings", function()
+        if not ns.UI then return end
+        ns.UI:Show()
+        ns.UI:SelectTab("settings")
+    end, { width = 60, height = 16, fontSize = "tiny",
+        tooltip = "Pick your disenchanter and the best quality mailed to them" })
+    local labelWidth = Theme.TextWidth and Theme.TextWidth(settings.label)
+    if type(labelWidth) == "number" and labelWidth + 14 > 60 then
+        settings:SetWidth(math.ceil(labelWidth) + 14)
+    end
+    settings:SetPoint("RIGHT", close, "LEFT", -6, 0)
+    panel.settings = settings
 
     panel.rows = {}
 
@@ -174,18 +226,34 @@ end
 -- Drawing
 --------------------------------------------------------------------------------
 
-function QueueMailPanel:Refresh()
-    if ns.Config:Get("queueMailPanel") == false then
-        if self.frame then self.frame:Hide() end
-        return
+--- What to list: the disenchanter's gear first, when one is set, then the
+--- queue's deliveries, when the queue mail setting is on.
+function QueueMailPanel:GetDeliveries()
+    local deliveries = {}
+
+    local okGear, gear = pcall(ns.QueueMail.GetDisenchantDelivery, ns.QueueMail)
+    if okGear and gear then
+        deliveries[1] = gear
+    elseif not okGear then
+        ns.Debug("disenchanter mail:", gear)
     end
+
+    if ns.Config:Get("queueMailPanel") ~= false then
+        local ok, queued = pcall(ns.QueueMail.GetDeliveries, ns.QueueMail)
+        if ok then
+            for _, delivery in ipairs(queued) do deliveries[#deliveries + 1] = delivery end
+        else
+            ns.Debug("queue mail:", queued)
+        end
+    end
+
+    return deliveries, okGear and gear ~= nil
+end
+
+function QueueMailPanel:Refresh()
     if self.dismissed or not self.MailboxOpen() then return end
 
-    local ok, deliveries = pcall(ns.QueueMail.GetDeliveries, ns.QueueMail)
-    if not ok then
-        ns.Debug("queue mail:", deliveries)
-        deliveries = {}
-    end
+    local deliveries, hasGear = self:GetDeliveries()
 
     if #deliveries == 0 then
         if self.frame then self.frame:Hide() end
@@ -193,8 +261,15 @@ function QueueMailPanel:Refresh()
     end
 
     local panel = self:Build()
+
+    -- Headed for what is on it.
+    local onlyGear = hasGear and #deliveries == 1
+    local headingRoom = WIDTH - PAD - 4 - 18 - 6 - (panel.settings:GetWidth() or 60) - 8
+    Theme.FitText(panel.heading, onlyGear and { "SEND TO YOUR DISENCHANTER", "DISENCHANTER" }
+        or hasGear and { "SEND FROM YOUR BAGS", "SEND" }
+        or { "SEND FOR THE CRAFT QUEUE", "FOR THE QUEUE" }, headingRoom)
     local room = WIDTH - 2 * PAD
-    local top = -52
+    local top = -28
 
     for index, delivery in ipairs(deliveries) do
         if index > MAX_ROWS then break end
@@ -204,11 +279,17 @@ function QueueMailPanel:Refresh()
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", PAD, top - (index - 1) * ROW_HEIGHT)
 
-        local short = ns.Recipes.GetShortCharacterName
-            and ns.Recipes:GetShortCharacterName(delivery.to) or delivery.name
-        Theme.FitText(row.name, { delivery.name, short }, room - BUTTON_WIDTH - 8)
-        Theme.FitText(row.send.label, { "Send to " .. short, "Fill mail" }, BUTTON_WIDTH - 8)
-        Theme.FitText(row.items, ItemTexts(delivery.items), room)
+        local short = ShortName(delivery)
+        if delivery.disenchant then
+            Theme.FitText(row.name, { delivery.name .. ", disenchanter", short .. ", disenchanter", short },
+                room - BUTTON_WIDTH - 8)
+            Theme.FitText(row.items, GearTexts(delivery.items), room)
+        else
+            Theme.FitText(row.name, { delivery.name, short }, room - BUTTON_WIDTH - 8)
+            Theme.FitText(row.items, ItemTexts(delivery.items), room)
+        end
+        local first = short:match("^(%S+)") or short
+        Theme.FitText(row.send.label, { "Send to " .. short, "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
         row.send:SetEnabledState(not ns.QueueMail.filling)
         row:Show()
     end
@@ -219,7 +300,7 @@ function QueueMailPanel:Refresh()
     end
 
     local shownRows = math.min(#deliveries, MAX_ROWS)
-    local height = 52 + shownRows * ROW_HEIGHT + 30
+    local height = 28 + shownRows * ROW_HEIGHT + 30
 
     panel.more:ClearAllPoints()
     if #deliveries > MAX_ROWS then
@@ -246,8 +327,8 @@ end
 function QueueMailPanel:FillFor(row)
     local panel = self.frame
     local delivery = row.delivery
-    local short = ns.Recipes.GetShortCharacterName
-        and ns.Recipes:GetShortCharacterName(delivery.to) or delivery.name
+    local short = ShortName(delivery)
+    self.lastFilled = delivery
 
     local started, why = ns.QueueMail:Fill(delivery, function(attached, leftOver)
         if not panel then return end
@@ -304,6 +385,18 @@ ns.RegisterEvent(QueueMailPanel, "MAIL_SHOW", function()
     if QueueMailPanel.frame then QueueMailPanel.frame.status:SetText("") end
     -- A moment for the inbox to be read, so what is waiting there counts.
     Soon(function() QueueMailPanel:Refresh() end)
+end)
+
+-- A mail to someone who is not one of your characters (a disenchanter on
+-- another account) is not written down by Logic/QueueMail.lua, so the panel
+-- says it went itself.
+ns.RegisterEvent(QueueMailPanel, "MAIL_SEND_SUCCESS", function()
+    local panel, filled = QueueMailPanel.frame, QueueMailPanel.lastFilled
+    QueueMailPanel.lastFilled = nil
+    if panel and panel:IsShown() and filled and not filled.to then
+        Theme.FitText(panel.status, { ("Sent to %s."):format(ShortName(filled)), "Sent." }, WIDTH - 2 * PAD)
+        Soon(function() QueueMailPanel:Refresh() end)
+    end
 end)
 
 ns.RegisterEvent(QueueMailPanel, "MAIL_CLOSED", function()

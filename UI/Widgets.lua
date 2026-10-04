@@ -1661,6 +1661,38 @@ local function OwnsTooltip(frame)
     return ok and owned == true
 end
 
+--- The item a list row stands for: its own item, else what its recipe makes.
+--- A list can name it itself with opts.searchItem(data), or return false to
+--- keep shift-clicks to itself.
+function Widgets.RowItemID(data, searchItem)
+    if type(data) ~= "table" then return nil end
+    if searchItem then return searchItem(data) or nil end
+
+    local itemID = tonumber(data.itemID) or tonumber(data.outputItemID)
+    if itemID then return itemID end
+
+    local recipeID = tonumber(data.recipeID)
+    local recipes = ns.Recipes
+    if recipeID and recipes and recipes.GetAny then
+        local ok, recipe = pcall(recipes.GetAny, recipes, recipeID)
+        if ok and type(recipe) == "table" then return tonumber(recipe.outputItemID) end
+    end
+end
+
+--- Shift held at the auction house: search for the row's item.
+-- @return true when the click was taken for a search
+function Widgets.ShiftClickSearch(data, searchItem)
+    if not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
+    if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
+    if not (ns.UI and ns.UI.SearchAuctionHouse) then return false end
+
+    local itemID = Widgets.RowItemID(data, searchItem)
+    if not itemID then return false end
+
+    ns.UI:SearchAuctionHouse(itemID)
+    return true
+end
+
 function Widgets.CreateScrollList(parent, opts)
     local list = CreateFrame("Frame", nil, parent)
 
@@ -1749,6 +1781,11 @@ function Widgets.CreateScrollList(parent, opts)
         end)
 
         row:SetScript("OnClick", function(self, mouseButton)
+            -- Shift-click any item row with the auction house open and the
+            -- house searches for it (Izbode, 2026-10-04). Right-click stays
+            -- what each list already made it.
+            if self.data and Widgets.ShiftClickSearch(self.data, opts.searchItem) then return end
+
             if self.data and opts.onClick then
                 opts.onClick(self.data, self.dataIndex, mouseButton, self)
 

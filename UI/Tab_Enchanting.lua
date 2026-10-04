@@ -217,7 +217,7 @@ local function ShowRowTooltip(row, entry)
     end
 
     if entry.kind == "craft" then
-        GameTooltip:AddLine("Right-click to queue one.", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine("Right-click to queue one. Shift-click to search the auction house.", 0.5, 0.5, 0.5)
     end
 
     GameTooltip:Show()

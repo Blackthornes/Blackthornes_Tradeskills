@@ -473,6 +473,11 @@ function UI:Show()
     local opening = not self.window:IsShown()
     self.window:Show()
 
+    -- In front of the craft queue pane and the sell list, which share its
+    -- strata: the window just asked for is the one wanted on top (Trent's
+    -- screenshot, 2026-10-04: the craft queue drawn across it).
+    if self.window.Raise then self.window:Raise() end
+
     self:SelectTab(self.activeTab or (ns.db and ns.db.lastTab) or self.tabOrder[1].key)
     self:UpdateHeader()
 
