@@ -259,6 +259,8 @@ function UpdateRow(row, line)
         elseif line.atALoss then
             row.post.tooltipText = (line.lossReason == "vendor"
                 and "This would sell for less than a vendor pays, so it will not be listed. Sell it to a vendor instead."
+                or line.lossReason == "crafted"
+                and "After the auction house's cut, this brings in less than you paid to make it. Blocked while 'Never below what I paid' is on in Settings."
                 or "This would sell below its material cost. Blocked unless you allow it in Settings.")
         else
             row.post.tooltipText = ("List %d of %d at %s each"):format(
@@ -329,6 +331,16 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.unitCost, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
+    -- What it cost when it was made, what it last went up at, and what this
+    -- listing makes over that cost (2026-10-05).
+    if ns.CraftedCost then
+        for _, entry in ipairs(ns.CraftedCost:Lines(line.itemID, line.unitPrice)) do
+            local r, g, b = 1, 1, 1
+            if entry.color then r, g, b = Theme.Unpack(entry.color) end
+            GameTooltip:AddDoubleLine(entry[1], entry[2], 0.7, 0.7, 0.7, r, g, b)
+        end
+    end
+
     if line.vendorPrice then
         GameTooltip:AddDoubleLine("Vendor pays, each",
             Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
@@ -337,6 +349,8 @@ local function ShowRowTooltip(row, line)
     if line.atALoss then
         GameTooltip:AddLine(line.lossReason == "vendor"
             and "Would sell for less than a vendor pays"
+            or line.lossReason == "crafted"
+            and "Would bring in less than you paid to make it"
             or "Would sell below material cost", 0.9, 0.38, 0.31)
     end
 

@@ -278,6 +278,8 @@ function ItemTooltip:LinesFor(itemID, count)
         local disenchant = self:DisenchantLine(itemID)
         if disenchant then lines[#lines + 1] = disenchant end
 
+        self:AddCraftedLines(lines, itemID)
+
         return lines
     end
 
@@ -311,7 +313,21 @@ function ItemTooltip:LinesFor(itemID, count)
     local disenchant = self:DisenchantLine(itemID)
     if disenchant then lines[#lines + 1] = disenchant end
 
+    self:AddCraftedLines(lines, itemID)
+
     return lines
+end
+
+--- What it cost the last time you made one, what it last went up at, and
+--- what listing it now makes over that cost (Logic/CraftedCost.lua, asked
+--- 2026-10-05). Nothing for an item you have not crafted.
+function ItemTooltip:AddCraftedLines(lines, itemID)
+    if not (ns.CraftedCost and ns.CraftedCost.Lines) then return end
+
+    local ok, crafted = pcall(ns.CraftedCost.Lines, ns.CraftedCost, itemID)
+    if not ok or type(crafted) ~= "table" then return end
+
+    for _, line in ipairs(crafted) do lines[#lines + 1] = line end
 end
 
 --- How well it sells (Logic/Demand.lua), coloured by level. Nothing when
