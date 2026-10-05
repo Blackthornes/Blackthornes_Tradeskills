@@ -4,6 +4,25 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.31.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- Recipe items (Pattern, Plans, Formula, Recipe, Schematic, Manual) now
+  show what they're worth on their tooltip: what the recipe teaches and at
+  what skill, who on your account knows it, the cost to make, what one craft
+  sells for after the cut, what it disenchants for, the profit per craft,
+  and how many crafts pay the recipe back. A Settings switch turns these
+  lines off.
+- The Profit tab has a new **MY CRAFTS | RECIPES TO LEARN** switch.
+  Recipes to learn lists every recipe of a profession you don't know yet,
+  with skill, cost, sells, disenchant, profit, the recipe's cheapest price
+  (trainer, vendor or auction) and where it's learned. Sort by any heading;
+  the pane on the right shows the materials and where to learn it (vendors
+  on your side, drops, trainer). Open it with `/bts recipes [profession]`
+  or the button in Settings.
+
 ## 0.30.0
 
 For WoW: Forever (interface 16001). A file was added, so restart the game
