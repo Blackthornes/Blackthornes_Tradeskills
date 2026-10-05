@@ -14,18 +14,27 @@ local Util = ns.Util
 local UI = ns.UI
 
 local ROW_HEIGHT = 24
-local MATERIALS_WIDTH = 360
+-- Wider since 2026-10-05, with the window: the headings sat tight against
+-- each other and long material names were cut short. The craft list keeps
+-- the width it had, because the window grew by the same amount.
+local MATERIALS_WIDTH = 420
 
 -- Right-aligned columns for the materials panel, laid out from the right edge
 -- inward. The AH button occupies the rightmost slot. COST is wide enough for
--- all three coins ("12g 34s 56c"): at 48 the copper was cut off.
+-- all three coins ("12g 34s 56c"): at 48 the copper was cut off. NEED and
+-- HAVE are wide enough for four digits, with a gap between every column.
 local MATERIAL_COLUMNS = {
-    { key = "cost", label = "COST", width = 64, offset = -34 },
-    { key = "have", label = "HAVE", width = 34, offset = -102 },
-    { key = "need", label = "NEED", width = 34, offset = -140 },
+    { key = "cost", label = "COST", width = 70, offset = -36 },
+    { key = "have", label = "HAVE", width = 42, offset = -114 },
+    { key = "need", label = "NEED", width = 42, offset = -164 },
 }
 
-local MATERIAL_NAME_INSET = -178
+local MATERIAL_NAME_INSET = -214
+
+-- The queued amount is a box you can type in (asked 2026-10-05: taking 100
+-- off meant 100 clicks on -). Wide enough for four digits; the label it
+-- replaced was 22 wide and lost the last digit of 100.
+local QUANTITY_WIDTH = 42
 
 local widgets = {}
 
@@ -45,22 +54,38 @@ local function CreateCraftRow(row)
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 28, 0)
     -- Ends short of the profit column, so a long amount never draws over it.
-    row.name:SetPoint("RIGHT", row, "RIGHT", -180, 0)
+    row.name:SetPoint("RIGHT", row, "RIGHT", -200, 0)
 
     row.profit = Theme.CreateLabel(row, "small", "text", "RIGHT")
-    row.profit:SetPoint("RIGHT", -96, 0)
+    row.profit:SetPoint("RIGHT", -114, 0)
     row.profit:SetWidth(80)
 
-    -- Quantity stepper
+    -- Quantity stepper: - and + either side of a box you can type the
+    -- amount into. 0 takes the craft off the queue, as - does at 1.
     row.minus = Widgets.CreateButton(row, "-", function()
         if not row.data then return end
         ns.Queue:SetQuantity(row.data.recipeID, row.data.quantity - 1)
     end, { width = 18, height = 16 })
-    row.minus:SetPoint("RIGHT", -70, 0)
+    row.minus:SetPoint("RIGHT", -90, 0)
 
+    row.quantity = Widgets.CreateNumberBox(row, {
+        width = QUANTITY_WIDTH,
+        height = 18,
+        background = "panel",
+        justify = "CENTER",
+        min = 0,
+        max = 9999,
+        onChange = function(value)
+            if row.data then ns.Queue:SetQuantity(row.data.recipeID, value) end
+        end,
+    })
+    row.quantity:SetPoint("RIGHT", -45, 0)
+
+    -- Sub-crafts show their amount without the box: it comes from the
+    -- crafts they serve, so a typed one would be worked out away again.
     row.count = Theme.CreateLabel(row, "small", "accent", "CENTER")
-    row.count:SetPoint("RIGHT", -46, 0)
-    row.count:SetWidth(22)
+    row.count:SetPoint("RIGHT", -45, 0)
+    row.count:SetWidth(QUANTITY_WIDTH)
 
     row.plus = Widgets.CreateButton(row, "+", function()
         if not row.data then return end
@@ -79,7 +104,7 @@ local function CreateCraftRow(row)
     row.buyInstead = Widgets.CreateButton(row, "Buy instead", function()
         if row.data then ns.Queue:BuyInstead(row.data) end
     end, { width = 80, height = 18 })
-    row.buyInstead:SetPoint("RIGHT", -96, 0)
+    row.buyInstead:SetPoint("RIGHT", -114, 0)
     row.buyInstead:Hide()
 end
 
@@ -138,14 +163,29 @@ local function UpdateCraftRow(row, entry)
 
     -- Colour by whether it can be made, since nothing here can start one.
     local ready, reason = ns.Crafting:GetReadiness(entry.recipeID)
-    row.count:SetTextColor(Theme.Unpack(ready and "profit" or "muted"))
+    local countColor = ready and "profit" or "muted"
+    row.count:SetTextColor(Theme.Unpack(countColor))
+    row.quantity.editBox:SetTextColor(Theme.Unpack(countColor))
 
     -- Derived rows have no controls: their quantity comes from the parents,
     -- so anything set here would be recalculated away on the next change.
     row.minus:SetShown(not entry.isDependency)
     row.plus:SetShown(not entry.isDependency)
     row.remove:SetShown(not entry.isDependency)
+    row.quantity:SetShown(not entry.isDependency)
+    row.count:SetShown(entry.isDependency == true)
     row.count:SetText(tostring(entry.quantity))
+
+    -- A redraw leaves a number being typed alone, unless the row now shows
+    -- a different craft: then what was typed belonged to the old one.
+    local typing = row.quantity.editBox.HasFocus and row.quantity.editBox:HasFocus()
+    if typing and row.boundRecipeID ~= entry.recipeID then
+        row.quantity:SetValue(entry.quantity, true)
+        row.quantity.editBox:ClearFocus()
+    elseif not typing then
+        row.quantity:SetValue(entry.quantity, true)
+    end
+    row.boundRecipeID = entry.recipeID
 
     local kept = entry.isDependency and entry.buyCheaper == true
     row.buyInstead:SetShown(kept)
