@@ -532,6 +532,8 @@ end
 -- @param opts.profession  a profession's name, or nil for every one
 -- @param opts.includeKnown  keep recipes the character playing knows
 -- @param opts.search  part of the recipe's name
+-- @param opts.order  "skill" for the skill each needs, lowest first (the
+--   Level Up tab's order); otherwise the most profit first
 -- @return rows { recipeID, record, name, profession, skill, outputItemID,
 --   value fields..., learn, known, knownBy }
 function RecipeBook:List(opts)
@@ -572,6 +574,20 @@ function RecipeBook:List(opts)
                 }
             end
         end
+    end
+
+    if opts.order == "skill" then
+        -- A recipe whose skill is not known (one only a profession window
+        -- has shown) goes after the rest.
+        table.sort(rows, function(a, b)
+            local sa, sb = a.skill or math.huge, b.skill or math.huge
+            if sa ~= sb then return sa < sb end
+            if (a.profit or -math.huge) ~= (b.profit or -math.huge) then
+                return (a.profit or -math.huge) > (b.profit or -math.huge)
+            end
+            return a.name < b.name
+        end)
+        return rows
     end
 
     -- Most profit first; recipes that cannot be valued go last, by skill.
