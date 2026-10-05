@@ -20,8 +20,20 @@ local DETAIL_WIDTH = 300
 -- out right to left.
 local COLUMNS = {
     { key = "make",   width = 40 },
+    { key = "real",   width = 74 },
+    { key = "via",    width = 44 },
+    { key = "back",   width = 74 },
     { key = "cost",   width = 74 },
     { key = "chance", width = 80 },
+}
+
+-- How each way of getting gold back is named: short in the VIA column, in
+-- full in the tooltip and the detail panel.
+local WAY_SHORT = { vendor = "Vendor", auction = "AH", disenchant = "DE" }
+local WAY_LONG = {
+    vendor = "Vendor",
+    auction = "Auction house, after the cut",
+    disenchant = "Disenchant, most likely result",
 }
 
 local state = {
@@ -127,11 +139,39 @@ local function UpdateRow(row, entry)
     cells.chance:SetTextColor(TierColor(entry.tier))
 
     if entry.cost then
-        cells.cost:SetText(Util.FormatMoney(entry.cost, { short = true }))
+        Theme.SetMoneyText(cells.cost, entry.cost, { short = true })
         cells.cost:SetTextColor(Theme.Unpack("text"))
     else
         cells.cost:SetText("no price")
         cells.cost:SetTextColor(Theme.Unpack("dim"))
+    end
+
+    if entry.back then
+        Theme.SetMoneyText(cells.back, entry.back, { short = true })
+        cells.via:SetText(WAY_SHORT[entry.backWay] or "")
+        cells.via:SetTextColor(Theme.Unpack("muted"))
+    else
+        cells.back:SetText("--")
+        cells.back:SetTextColor(Theme.Unpack("dim"))
+        cells.via:SetText("")
+    end
+
+    -- What levelling on it really costs once it is sold back. Below nothing
+    -- the craft pays for itself, shown as a gain in green.
+    if entry.realCost and entry.realCost < 0 then
+        -- Fitted a little narrower, so the plus sign has room too.
+        local width = cells.real:GetWidth()
+        cells.real:SetWidth(width - 8)
+        Theme.SetMoneyText(cells.real, -entry.realCost, { short = true })
+        cells.real:SetWidth(width)
+        cells.real:SetText("+" .. (cells.real:GetText() or ""))
+        cells.real:SetTextColor(Theme.Unpack("profit"))
+    elseif entry.realCost or entry.cost then
+        Theme.SetMoneyText(cells.real, entry.realCost or entry.cost, { short = true })
+        cells.real:SetTextColor(Theme.Unpack("text"))
+    else
+        cells.real:SetText("no price")
+        cells.real:SetTextColor(Theme.Unpack("dim"))
     end
 
     local craftable = entry.craftableNow or 0
@@ -160,6 +200,29 @@ local function ShowRowTooltip(row, entry)
     GameTooltip:AddDoubleLine("Materials", entry.cost
         and Util.FormatMoney(entry.cost, { noColor = true }) or "no price",
         0.7, 0.7, 0.7, 1, 1, 1)
+
+    local returns = entry.returns
+    if returns and returns.best then
+        for _, way in ipairs({ "vendor", "auction", "disenchant" }) do
+            if returns[way] then
+                local r, g, b = 1, 1, 1
+                if way == entry.backWay then r, g, b = Theme.Unpack("profit") end
+                GameTooltip:AddDoubleLine(WAY_LONG[way], Util.FormatMoney(returns[way], { noColor = true }),
+                    0.7, 0.7, 0.7, r, g, b)
+            end
+        end
+
+        if entry.realCost then
+            local gain = entry.realCost < 0
+            local r, g, b = 1, 1, 1
+            if gain then r, g, b = Theme.Unpack("profit") end
+            GameTooltip:AddDoubleLine(gain and "Pays you back" or "Real cost",
+                Util.FormatMoney(math.abs(entry.realCost), { noColor = true }),
+                1, 0.82, 0, r, g, b)
+        end
+    elseif entry.outputItemID then
+        GameTooltip:AddLine("Nothing to sell it back for yet: no vendor, auction or disenchant price.", 0.7, 0.7, 0.7, true)
+    end
 
     local note = StaleNote(entry.skillUp)
     if note then GameTooltip:AddLine(note, 0.91, 0.76, 0.35, true) end
@@ -246,22 +309,29 @@ local function BuildDetail(parent)
     local summary = CreateFrame("Frame", nil, detail)
     summary:SetPoint("BOTTOMLEFT", 12, 72)
     summary:SetPoint("BOTTOMRIGHT", -12, 72)
-    summary:SetHeight(36)
+    summary:SetHeight(6 * 16)
     detail.summary = summary
 
     local function SummaryRow(index, labelText)
         local label = Theme.CreateLabel(summary, "small", "muted")
-        label:SetPoint("TOPLEFT", 0, -(index - 1) * 17)
+        label:SetPoint("TOPLEFT", 0, -(index - 1) * 16)
         label:SetText(labelText)
 
         local value = Theme.CreateLabel(summary, "small", "text", "RIGHT")
-        value:SetPoint("TOPRIGHT", 0, -(index - 1) * 17)
+        value:SetPoint("TOPRIGHT", 0, -(index - 1) * 16)
+        value:SetPoint("LEFT", label, "RIGHT", 8, 0)
 
-        return value
+        return value, label
     end
 
     detail.costValue = SummaryRow(1, "Materials for one")
-    detail.makeValue = SummaryRow(2, "You can make now")
+    detail.wayValues = {
+        vendor = SummaryRow(2, "Vendor pays"),
+        auction = SummaryRow(3, "Auction, after cut"),
+        disenchant = SummaryRow(4, "Disenchant, likely"),
+    }
+    detail.realValue, detail.realLabel = SummaryRow(5, "Real cost")
+    detail.makeValue = SummaryRow(6, "You can make now")
 
     -- What the Craft button will do, or why it cannot. A craft's progress bar
     -- takes this line's place while it casts. Wrapped, growing upwards into
@@ -449,6 +519,33 @@ local function UpdateDetail(entry)
         detail.costValue:SetText("a material has no price")
     end
 
+    -- Each way back, the one the list counts in green.
+    local returns = entry.returns or {}
+    for way, label in pairs(detail.wayValues) do
+        if returns[way] then
+            label:SetText(Util.FormatMoney(returns[way]))
+            if way == entry.backWay then
+                label:SetTextColor(Theme.Unpack("profit"))
+            else
+                label:SetTextColor(Theme.Unpack("text"))
+            end
+        else
+            label:SetText("--")
+            label:SetTextColor(Theme.Unpack("dim"))
+        end
+    end
+
+    if entry.realCost and entry.realCost < 0 then
+        detail.realLabel:SetText("Pays you back")
+        detail.realValue:SetText(Util.FormatMoney(-entry.realCost))
+        detail.realValue:SetTextColor(Theme.Unpack("profit"))
+    else
+        detail.realLabel:SetText("Real cost")
+        local real = entry.realCost or entry.cost
+        detail.realValue:SetText(real and Util.FormatMoney(real) or "--")
+        detail.realValue:SetTextColor(Theme.Unpack(real and "text" or "dim"))
+    end
+
     local craftable = entry.craftableNow or 0
     detail.makeValue:SetText(tostring(craftable))
     detail.makeValue:SetTextColor(Theme.Unpack(craftable > 0 and "profit" or "loss"))
@@ -610,7 +707,10 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 28, 0)
     nameHeading:SetText("RECIPE")
 
-    local labels = { chance = "SKILL UP", cost = "COST", make = "MAKE" }
+    local labels = {
+        chance = "SKILL UP", cost = "COST", back = "GETS BACK", via = "VIA",
+        real = "REAL COST", make = "MAKE",
+    }
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do
