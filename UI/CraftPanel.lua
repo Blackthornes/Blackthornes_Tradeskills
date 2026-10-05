@@ -1447,6 +1447,8 @@ function CraftPanel:QueuedStatus(entry, open)
     return reason or "missing materials", "muted", false
 end
 
+local BUY_WIDTH = 34
+
 local function CreateQueuedRow(row)
     row.icon = Theme.CreateItemIcon(row, 13)
     row.icon:SetPoint("TOPLEFT", 8, -3)
@@ -1468,6 +1470,14 @@ local function CreateQueuedRow(row)
         if row.data then CraftPanel:CraftEntry(row.data) end
     end, { width = CRAFT_WIDTH, height = 15, primary = true })
     row.craft:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
+
+    -- On a sub-craft kept after buying its item turned cheaper, at the end
+    -- of the line that says so.
+    row.buy = Widgets.CreateButton(row, "Buy", function()
+        if row.data then ns.Queue:BuyInstead(row.data) end
+    end, { width = BUY_WIDTH, height = 13 })
+    row.buy:SetPoint("TOPRIGHT", -8, -16)
+    row.buy:Hide()
 end
 
 local function UpdateQueuedRow(row, entry)
@@ -1490,6 +1500,24 @@ local function UpdateQueuedRow(row, entry)
         status = ("for %s · %s"):format(
             #parents > 0 and table.concat(parents, ", ") or "another craft", status)
     end
+
+    -- Kept after buying turned cheaper (Queue:RebuildDependencies): said
+    -- first, in amber, with a Buy button to take it off.
+    local kept = entry.isDependency and entry.buyCheaper == true
+    if kept then
+        status = "buying is cheaper now · " .. status
+        colour = "warn"
+        local name = (recipe and recipe.name) or "this"
+        local buy, make = ns.Queue:GetBuyOrMake(entry)
+        local tip = ("Buying %s is now cheaper than making it."):format(name)
+        if buy and make then
+            tip = ("%s\nBuy: %s each. Make: %s each."):format(tip,
+                Util.FormatMoney(buy), Util.FormatMoney(make))
+        end
+        row.buy.tooltipText = tip .. "\nBuy takes it off the queue and puts it on the shopping list."
+    end
+    row.buy:SetShown(kept)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", kept and -(8 + BUY_WIDTH + 4) or -8, -17)
 
     -- Who it is for, when another of your characters is waiting on it, or
     -- who makes it, when it is not this one: the longest that fits.

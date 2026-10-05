@@ -73,6 +73,28 @@ local function CreateCraftRow(row)
         ns.Queue:Remove(row.data.recipeID)
     end, { width = 16, height = 16, tooltip = "Remove from queue" })
     row.remove:SetPoint("RIGHT", -4, 0)
+
+    -- On a sub-craft kept after buying its item turned cheaper, in the
+    -- profit column, which such a row has no use for.
+    row.buyInstead = Widgets.CreateButton(row, "Buy instead", function()
+        if row.data then ns.Queue:BuyInstead(row.data) end
+    end, { width = 80, height = 18 })
+    row.buyInstead:SetPoint("RIGHT", -96, 0)
+    row.buyInstead:Hide()
+end
+
+--- The hover for Buy instead: both prices, when known, and what it does.
+local function BuyInsteadTooltip(entry)
+    local recipe = ns.Recipes:GetAny(entry.recipeID)
+    local name = (recipe and recipe.name) or "this"
+    local buy, make = ns.Queue:GetBuyOrMake(entry)
+
+    local text = ("Buying %s is now cheaper than making it."):format(name)
+    if buy and make then
+        text = ("%s\nBuy: %s each. Make: %s each."):format(text,
+            Util.FormatMoney(buy), Util.FormatMoney(make))
+    end
+    return text .. "\nBuy instead takes it off the queue and puts it on the shopping list."
 end
 
 local function UpdateCraftRow(row, entry)
@@ -100,6 +122,14 @@ local function UpdateCraftRow(row, entry)
     local function Note(base, text)
         return ("%s |cff7a8089·|r |cffc8a44d%s|r"):format(base, text)
     end
+
+    -- Kept after buying turned cheaper: said on the row ahead of who makes
+    -- it, so it is not mistaken for the cheaper way.
+    if entry.buyCheaper then
+        local cheaper = ("|c%sbuying is cheaper now|r"):format(ns.COLORS.warn)
+        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(label, cheaper)
+        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(plain, cheaper)
+    end
     for _, text in ipairs(who) do texts[#texts + 1] = Note(label, text) end
     if #who > 0 then texts[#texts + 1] = Note(plain, who[#who]) end
     texts[#texts + 1] = label
@@ -116,6 +146,11 @@ local function UpdateCraftRow(row, entry)
     row.plus:SetShown(not entry.isDependency)
     row.remove:SetShown(not entry.isDependency)
     row.count:SetText(tostring(entry.quantity))
+
+    local kept = entry.isDependency and entry.buyCheaper == true
+    row.buyInstead:SetShown(kept)
+    row.profit:SetShown(not kept)
+    if kept then row.buyInstead.tooltipText = BuyInsteadTooltip(entry) end
 
     if entry.isDependency then
         -- Made to go into another craft, not sold, so it earns nothing of
