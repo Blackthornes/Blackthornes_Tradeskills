@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.28.5
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- The craft queue no longer drops a planned sub-craft when buying it turns
+  cheaper partway through a chain (say scraps to light leather to medium
+  leather). The sub-craft stays, its row says "buying is cheaper now" in
+  amber, and chat tells you once. Hover it to see both prices.
+- A **Buy instead** button on the Queue tab, or **Buy** on the craft queue
+  beside the profession window, takes that sub-craft off and puts the item
+  on the shopping list.
+
 ## 0.28.4
 
 For WoW: Forever (interface 16001). Nothing in the addon itself changed, so
