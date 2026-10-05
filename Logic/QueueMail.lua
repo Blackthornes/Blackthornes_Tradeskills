@@ -562,7 +562,7 @@ end
 -- @param onDone function(attached, leftOver) when the last item is in
 -- @return true when it started, or false and why
 function QueueMail:Fill(delivery, onDone)
-    if self.filling then return false, "still filling the last mail" end
+    if self.filling or self.taking then return false, "still filling the last mail" end
     if InCombatLockdown and InCombatLockdown() then return false, "not in combat" end
 
     local nameBox = _G.SendMailNameEditBox
@@ -641,6 +641,149 @@ function QueueMail:Fill(delivery, onDone)
         end
 
         C_Timer.After(ATTACH_STEP, Next)
+    end
+
+    Next()
+    return true
+end
+
+--------------------------------------------------------------------------------
+-- Taking the next batch out of the mailbox
+--------------------------------------------------------------------------------
+--
+-- Ezmode (2026-10-05): a thousand essence waiting in the mail is a hundred
+-- slots, and the bags hold thirty. With the setting on (mailBatchTake, off by
+-- default) the panel offers Take next batch: the queue's materials from the
+-- mail, as much as fits with the spare slots kept (Logic/BagsFull.lua), in the
+-- same share as the vendor's Buy what fits, so the two make whole crafts.
+-- Mail hands out whole stacks, so a batch can run over by part of one stack.
+-- Mail asking for payment on delivery (COD) is never touched.
+
+-- The client takes one attachment at a time and needs a moment between.
+local TAKE_STEP = 0.6
+
+-- A hard ceiling on take calls, so a miscount can never loop for ever.
+local MAX_TAKE_STEPS = 150
+
+local function MaxReceive()
+    local max = tonumber(_G.ATTACHMENTS_MAX_RECEIVE)
+    if max and max > 0 then return max end
+    return 16
+end
+
+--- Every attachment of the queue's materials in the mailbox, with where it is.
+-- @return list of { index, slot, itemID, count }
+local function MailAttachments(wanted)
+    local found = {}
+    local okCount, count = Call(_G.GetInboxNumItems)
+    if not okCount then return found end
+
+    for index = 1, tonumber(count) or 0 do
+        local okHeader, _, _, _, _, _, cod, _, itemCount = Call(_G.GetInboxHeaderInfo, index)
+        if okHeader and (tonumber(cod) or 0) == 0 and (tonumber(itemCount) or 0) > 0 then
+            for slot = 1, MaxReceive() do
+                local itemID, units = ns.Mail:ReadAttachment(index, slot)
+                if itemID and wanted[itemID] then
+                    found[#found + 1] = { index = index, slot = slot, itemID = itemID, count = units or 1 }
+                end
+            end
+        end
+    end
+    return found
+end
+
+--- What Take next batch would take, or nil when the setting is off or the
+--- mail holds nothing the queue still needs.
+-- @return { items = { {itemID, count}, ... }, units, batches, spare, room,
+--           noRoom (true when it would take something but the bags are full) }
+function QueueMail:GetMailBatch()
+    if ns.Config:Get("mailBatchTake") ~= true then return nil end
+    if not (ns.Mail and ns.Mail.ReadAttachment and ns.BagsFull and ns.BagsFull.PlanBatch) then return nil end
+
+    local shopping = ns.Queue:GetShoppingList()
+    local stillNeeded = {}
+    for _, line in ipairs(shopping) do
+        if (line.needed or 0) > (line.inBags or 0) then stillNeeded[line.itemID] = true end
+    end
+
+    local inMail = {}
+    for _, attachment in ipairs(MailAttachments(stillNeeded)) do
+        inMail[attachment.itemID] = (inMail[attachment.itemID] or 0) + attachment.count
+    end
+    if next(inMail) == nil then return nil end
+
+    local room = ns.BagsFull:Room()
+    if not room then return nil end
+    local plan = ns.BagsFull:PlanBatch(shopping, room)
+
+    local batch = { items = {}, units = 0, batches = plan.batches, spare = ns.BagsFull:GetSpare(), room = room }
+    for _, line in ipairs(shopping) do
+        local count = math.min(inMail[line.itemID] or 0, plan.bring[line.itemID] or 0)
+        if count > 0 then
+            batch.items[#batch.items + 1] = { itemID = line.itemID, count = count }
+            batch.units = batch.units + count
+        end
+    end
+
+    if #batch.items == 0 then batch.noRoom = true end
+    return batch
+end
+
+--- Take the next batch out of the mailbox, one attachment at a time.
+-- @param onDone function(units taken, stacks taken) when it stops
+-- @return true when it started, or false and why
+function QueueMail:TakeBatch(onDone)
+    if self.taking or self.filling then return false, "still busy with the last one" end
+    if not ns.Mail or not ns.Mail.isOpen then return false, "the mailbox is not open" end
+    if type(_G.TakeInboxItem) ~= "function" then
+        return false, "this version of the game does not let addons take mail"
+    end
+
+    local batch = self:GetMailBatch()
+    if not batch or #batch.items == 0 then return false, "nothing to take that fits" end
+
+    local left, wanted = {}, {}
+    for _, item in ipairs(batch.items) do
+        left[item.itemID] = item.count
+        wanted[item.itemID] = true
+    end
+
+    self.taking = true
+    local units, stacks, steps, slotsLeft = 0, 0, 0, batch.room
+
+    local function Finish()
+        QueueMail.taking = false
+        if onDone then onDone(units, stacks) end
+    end
+
+    local function Next()
+        steps = steps + 1
+        if steps > MAX_TAKE_STEPS or slotsLeft <= 0 or not ns.Mail.isOpen then return Finish() end
+
+        -- Bags read again each time: the last stack may have filled a slot
+        -- this did not count on.
+        local free = ns.BagsFull:CountFree()
+        if free and free <= ns.BagsFull:GetSpare() then return Finish() end
+
+        -- The inbox read afresh too: taking an attachment can move the mail
+        -- it came from, or empty it and close the gap.
+        local pick
+        for _, attachment in ipairs(MailAttachments(wanted)) do
+            if (left[attachment.itemID] or 0) > 0 then
+                pick = attachment
+                break
+            end
+        end
+        if not pick then return Finish() end
+
+        if not Call(_G.TakeInboxItem, pick.index, pick.slot) then return Finish() end
+
+        left[pick.itemID] = left[pick.itemID] - pick.count
+        units = units + pick.count
+        stacks = stacks + 1
+        slotsLeft = slotsLeft - 1
+
+        C_Timer.After(TAKE_STEP, Next)
     end
 
     Next()
