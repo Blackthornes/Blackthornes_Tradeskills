@@ -797,6 +797,11 @@ function Posting:GetPostable(opts)
             local lossFloor, lossReason, vendorPrice =
                 self:GetLossFloor(itemID, unitCost)
 
+            -- Under what the last craft of it cost, with that guard on.
+            local belowCrafted = price ~= nil
+                and self:BelowCraftedCost(itemID, price) ~= nil
+            local madeFor = ns.CraftedCost and ns.CraftedCost:Get(itemID)
+
             local isCommodity = ns.Scanner:IsCommodity(itemID)
 
             -- Commodities sell from across the bags at once; item
@@ -828,9 +833,12 @@ function Posting:GetPostable(opts)
                     unitCost = unitCost,
                     vendorPrice = vendorPrice,
                     lossFloor = lossFloor,
-                    lossReason = lossReason,
-                    atALoss = price ~= nil and lossFloor ~= nil
-                        and price < lossFloor,
+                    lossReason = (belowCrafted and not (price and lossFloor and price < lossFloor))
+                        and "crafted" or lossReason,
+                    atALoss = belowCrafted or (price ~= nil and lossFloor ~= nil
+                        and price < lossFloor),
+                    belowCrafted = belowCrafted or nil,
+                    craftedCost = madeFor and madeFor.cost or nil,
                     postQuantity = postQuantity,
                     maxQuantity = maxQuantity,
                     quantityChosen = postQuantity ~= maxQuantity,
@@ -953,7 +961,8 @@ function Posting:GetNextPostable(opts)
     local allowLoss = ns.Config:Get("allowPostingAtALoss") == true
 
     for _, line in ipairs(self:GetPostable(opts)) do
-        if line.unitPrice and (allowLoss or not line.atALoss) and not self:IsUnderFloor(line) then
+        if line.unitPrice and (allowLoss or not line.atALoss) and not line.belowCrafted
+            and not self:IsUnderFloor(line) then
             return line
         end
     end
@@ -965,7 +974,8 @@ function Posting:GetSummary(opts)
 
     local count, total = 0, 0
     for _, line in ipairs(self:GetPostable(opts)) do
-        if line.unitPrice and (allowLoss or not line.atALoss) and not self:IsUnderFloor(line) then
+        if line.unitPrice and (allowLoss or not line.atALoss) and not line.belowCrafted
+            and not self:IsUnderFloor(line) then
             count = count + 1
             total = total + (line.total or 0)
         end
@@ -1146,6 +1156,14 @@ function Posting:Post(itemID, quantity, unitPrice)
         return false
     end
 
+    -- Under what the last craft of it cost, with that guard turned on.
+    local paid, net = self:BelowCraftedCost(itemID, unitPrice)
+    if paid then
+        ns.Warn(ns.CraftedCost:RefusalText(itemID, unitPrice, paid, net))
+        ns.Warn("turn off 'Never below what I paid' in Settings to allow it.")
+        return false
+    end
+
     local duration = ns.Config:Get("postDuration") or 2
 
     self.pending = {
@@ -1211,6 +1229,8 @@ function Posting:Post(itemID, quantity, unitPrice)
     -- settles this, which is what VerifyPending goes and asks for.
     ns.Print(("listing %dx %s at %s each"):format(
         quantity, Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice)))
+
+    if ns.CraftedCost then ns.CraftedCost:NotePosted(itemID, unitPrice) end
 
     -- Nothing of ours competes with a listing that is settling. Verification is
     -- urgent and still gets through; scans and bookkeeping wait.
@@ -1550,6 +1570,14 @@ function Posting:BelowCost(itemID, price)
     return nil
 end
 
+--- What the last craft of one cost, when "Never below what I paid" is on and
+--- `price` brings in less than that after the cut; nil otherwise.
+-- @return cost, net
+function Posting:BelowCraftedCost(itemID, price)
+    if not ns.CraftedCost then return nil end
+    return ns.CraftedCost:Refuses(itemID, price)
+end
+
 --- Say why a listing at `price` would be refused, before any dialog asks
 --- about it. Asking "Do you wish to continue?" and refusing after Yes is the
 --- same answer, one click later and after a question it had no use for.
@@ -1570,6 +1598,14 @@ function Posting:RefusesEarly(itemID, price)
         ns.Warn(("not listing %s at %s, the materials cost %s"):format(
             Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(unitCost)))
         ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
+        return true
+    end
+
+    -- Under what the last craft of it cost, with that guard turned on.
+    local paid, net = self:BelowCraftedCost(itemID, price)
+    if paid then
+        ns.Warn(ns.CraftedCost:RefusalText(itemID, price, paid, net) .. ".")
+        ns.Warn("turn off 'Never below what I paid' in Settings to allow it.")
         return true
     end
 
