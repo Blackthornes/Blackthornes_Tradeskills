@@ -638,7 +638,24 @@ local function Build(outer)
     end, true)
     widgets.tooltipValue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local upgradeRow = CreateRow(container, tooltipValueRow, "Upgrade arrows on gear",
+    -- Asked 2026-10-05: is a recipe worth buying, at a glance. The button
+    -- is /bts recipes.
+    local recipeTipRow = CreateRow(container, tooltipValueRow, "Recipe value on tooltips",
+        "On a Pattern, Plans, Formula or Recipe: what it teaches, the cost to make, what it sells and disenchants for, and how many crafts pay it back.")
+
+    widgets.recipeTooltips = Widgets.CreateCheckbox(recipeTipRow, "Enabled", function(checked)
+        Config:Set("showRecipeValueOnTooltips", checked)
+    end, true)
+    widgets.recipeTooltips:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local recipeList = Widgets.CreateButton(recipeTipRow, "Recipes to learn", function()
+        if ns.ProfitTab and ns.ProfitTab.ShowRecipesToLearn then ns.ProfitTab.ShowRecipesToLearn() end
+    end, { width = 120, height = 20,
+           tooltip = "Every recipe of your professions you have not learned, with what each is worth" })
+    recipeList:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+    FitButton(recipeList)
+
+    local upgradeRow = CreateRow(container, recipeTipRow, "Upgrade arrows on gear",
         "A green arrow on the icon of gear that is an upgrade for you. Needs Blackthornes Equipment.")
 
     widgets.upgradeArrows = Widgets.CreateCheckbox(upgradeRow, "Enabled", function(checked)
@@ -948,6 +965,7 @@ local function Refresh()
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
+    widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)

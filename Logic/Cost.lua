@@ -119,6 +119,11 @@ end
 --   what they are worth, not what is left to pay for them. Carried down
 --   through sub-crafts so the whole tree is valued the same way.
 --
+-- @param opts.recipe  cost this recipe record instead of looking the ID up
+--   among the recipes characters know: a recipe nobody has learned yet
+--   (Logic/RecipeBook.lua). Not carried down to sub-crafts, which are
+--   always ones this character can make.
+--
 -- @return result table:
 --   total        copper cost of a single craft, or nil when unpriceable
 --   perUnit      cost per output item
@@ -132,7 +137,13 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
 
     -- GetAny, so a craft that lives on an alt can still be costed. Material
     -- cost is realm-wide regardless of who does the crafting.
-    local recipe = ns.Recipes:GetAny(recipeID)
+    local recipe
+    if opts and opts.recipe then
+        recipe = opts.recipe
+        opts = { valueOwned = opts.valueOwned }
+    else
+        recipe = ns.Recipes:GetAny(recipeID)
+    end
     if not recipe then return nil end
 
     -- A recipe whose reagent is made by a recipe that needs the first item
