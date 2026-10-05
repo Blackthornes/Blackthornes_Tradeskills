@@ -12,7 +12,9 @@ local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
 
-local WINDOW_WIDTH = 1060
+-- 1120 since 2026-10-05 (was 1060): the room went to the Queue tab's
+-- materials list, whose headings sat tight against each other.
+local WINDOW_WIDTH = 1120
 
 -- The tabs hang below the window now (Titanforged, 2026-10-04), so it is
 -- shorter by their row: its contents keep the height they had, and with the
