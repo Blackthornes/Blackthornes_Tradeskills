@@ -341,6 +341,8 @@ function Probe:PrintReport()
     Line("merchant count", Yes(Util.HasFunction("GetMerchantNumItems")))
     Line("merchant links", Yes(Util.HasFunction("GetMerchantItemLink")))
     Line("buy from vendor", Yes(Util.HasFunction("BuyMerchantItem")))
+    Line("take from mail", Yes(Util.HasFunction("TakeInboxItem")))
+    Line("item stack size", Yes(Util.HasFunction("C_Item.GetItemMaxStackByID")))
     Line("prices learned", ns.Vendor and ns.Vendor:Count() or 0)
 
     if self.auctionSample and #self.auctionSample.items > 0 then

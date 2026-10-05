@@ -212,6 +212,14 @@ local DEFAULTS = {
         -- A warning when your bags fill up. See Logic/BagsFull.lua.
         bagsFullSound = true,
 
+        -- A queue too big for the bags is bought a bagful at a time, keeping
+        -- this many slots free (Ezmode, 2026-10-05). See Logic/BagsFull.lua.
+        fitBuysToBags = true,
+        bagSpareSlots = 5,
+        -- A Take next batch button at the mailbox, taking the queue's
+        -- materials a bagful at a time. Off by default (2026-10-05).
+        mailBatchTake = false,
+
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,

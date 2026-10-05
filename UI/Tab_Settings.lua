@@ -309,7 +309,39 @@ local function Build(outer)
     end, { width = 150 })
     widgets.disenchantQuality:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    local lossRow = CreateRow(container, disenchantQualityRow, "Recommend selling at a loss",
+    -- Ezmode, 2026-10-05: big shuffles bought or taken a bagful at a time.
+    local fitBuysRow = CreateRow(container, disenchantQualityRow, "Fit vendor buys to your bags",
+        "When the queue needs more than your bags hold, Buy materials buys what fits, in step, so it makes whole crafts. Craft, then buy again.")
+
+    widgets.fitBuys = Widgets.CreateCheckbox(fitBuysRow, "Buy in batches", function(checked)
+        Config:Set("fitBuysToBags", checked)
+        if ns.UI then ns.UI:UpdateMerchantButton() end
+    end, true)
+    widgets.fitBuys:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local spareRow = CreateRow(container, fitBuysRow, "Bag slots kept free",
+        "Left empty by each batch, for what you craft and anything you pick up.")
+
+    widgets.bagSpare = Widgets.CreateNumberBox(spareRow, {
+        width = 70, min = 0, max = 50,
+        onChange = function(value)
+            Config:Set("bagSpareSlots", value)
+            if ns.UI then ns.UI:UpdateMerchantButton() end
+            if ns.QueueMailPanel then ns.QueueMailPanel:Refresh() end
+        end,
+    })
+    widgets.bagSpare:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local mailBatchRow = CreateRow(container, spareRow, "Take queue mail in batches",
+        "At the mailbox, a Take next batch button takes the queue's materials from your mail, as much as fits in your bags. Never mail asking for payment (COD).")
+
+    widgets.mailBatch = Widgets.CreateCheckbox(mailBatchRow, "Show it", function(checked)
+        Config:Set("mailBatchTake", checked)
+        if ns.QueueMailPanel then ns.QueueMailPanel:Refresh() end
+    end, false)
+    widgets.mailBatch:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local lossRow = CreateRow(container, mailBatchRow, "Recommend selling at a loss",
         "Off: the Post tab shows them in red but will not list them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
@@ -885,6 +917,10 @@ local function Refresh()
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
     widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
     widgets.queueMail:SetChecked(Config:Get("queueMailPanel") ~= false)
+    widgets.fitBuys:SetChecked(Config:Get("fitBuysToBags") ~= false)
+    local spare = Config:Get("bagSpareSlots")
+    Put(widgets.bagSpare, type(spare) == "number" and spare or 5)
+    widgets.mailBatch:SetChecked(Config:Get("mailBatchTake") == true)
     local disenchanterBox = widgets.disenchanter.editBox
     if not (disenchanterBox.HasFocus and disenchanterBox:HasFocus()) then
         local saved = Config:Get("disenchanterName") or ""
