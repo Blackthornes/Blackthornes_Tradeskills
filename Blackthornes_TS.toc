@@ -24,6 +24,7 @@ Data\Inventory.lua
 Data\Mail.lua
 Data\Auctions.lua
 Data\VendorPrices.lua
+Data\RecipeBook.lua
 Data\Vendor.lua
 
 Logic\Cost.lua
@@ -32,6 +33,7 @@ Logic\DisenchantLog.lua
 Logic\SkillUp.lua
 Logic\Profit.lua
 Logic\LevelUp.lua
+Logic\RecipeBook.lua
 Logic\Queue.lua
 Logic\QueueMail.lua
 Logic\Crafting.lua
@@ -62,6 +64,7 @@ UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\MailReport.lua
 UI\QueueMailPanel.lua
+UI\RecipeBookView.lua
 UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
 UI\Tab_Enchanting.lua

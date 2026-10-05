@@ -544,10 +544,6 @@ function Recipes:Harvest()
             local infoOk, info = pcall(C_TradeSkillUI.GetRecipeInfo, recipeID)
             if not infoOk or not info then return end
 
-            -- Recipes the character has not learned cannot be crafted, so they
-            -- have no place in a "what should I make" table.
-            if info.learned == false then return end
-
             local schematicOk, schematic = pcall(C_TradeSkillUI.GetRecipeSchematic, recipeID, false)
             if not schematicOk or not schematic then return end
 
@@ -568,10 +564,29 @@ function Recipes:Harvest()
 
             if #reagents == 0 then return end
 
+            local skillLineID = GetRecipeSkillLine(recipeID, info)
+
+            -- Every recipe the window shows, learned or not, goes in the
+            -- account's recipe book (Logic/RecipeBook.lua), so a recipe can
+            -- be valued before anyone buys it. No character's name in it.
+            if ns.RecipeBook and ns.RecipeBook.NoteSeen then
+                pcall(ns.RecipeBook.NoteSeen, ns.RecipeBook, recipeID, {
+                    name = info.name or schematic.name,
+                    outputItemID = schematic.outputItemID,
+                    quantityMin = schematic.quantityMin or 1,
+                    quantityMax = schematic.quantityMax or schematic.quantityMin or 1,
+                    skillLineID = skillLineID,
+                    reagents = reagents,
+                    learned = info.learned ~= false,
+                })
+            end
+
+            -- Recipes the character has not learned cannot be crafted, so they
+            -- have no place in a "what should I make" table.
+            if info.learned == false then return end
+
             local existing = record.recipes[recipeID]
             if existing then updated = updated + 1 else added = added + 1 end
-
-            local skillLineID = GetRecipeSkillLine(recipeID, info)
 
             -- Whether this still skills you up, kept with the recipe so the
             -- Profit tab can say so at the auction house, where no profession
