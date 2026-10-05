@@ -4,6 +4,28 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.29.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Buy materials now buys only what fits in your bags, keeping 5 slots
+  free, and keeps the materials in step so what you buy makes whole crafts.
+  The button reads "Buy what fits", and its tooltip says roughly how many
+  batches the queue will take. Craft, then click again for the next batch.
+- New setting, **Take queue mail in batches** (off by default): the
+  mailbox panel gets a **Take next batch** button that takes the queue's
+  materials out of the mail the same way, one stack at a time. It never
+  touches COD mail.
+- The Level Up tab has three new columns: GETS BACK (the most one craft
+  returns), VIA (Vendor, AH or DE) and REAL COST (the materials less what
+  you get back, in green with a plus when the craft pays for itself). Each
+  skill-up colour now ranks on the real cost.
+- On the Queue tab you can type the queued amount (Enter to set it, 0 takes
+  the craft off), with room for four digits. The window is a little wider,
+  so Materials Needed has more space and long names are no longer cut
+  short.
+
 ## 0.28.5
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
