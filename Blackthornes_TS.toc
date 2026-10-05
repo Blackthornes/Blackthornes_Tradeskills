@@ -36,6 +36,7 @@ Logic\Queue.lua
 Logic\QueueMail.lua
 Logic\Crafting.lua
 Logic\Posting.lua
+Logic\CraftedCost.lua
 Logic\Transfer.lua
 Logic\SaleAlarm.lua
 Logic\MailHaul.lua

@@ -350,11 +350,23 @@ local function Build(outer)
     end, false)
     widgets.allowLoss:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Asked by a player on 2026-10-05: the guard above compares with what the
+    -- materials cost today; this one with what the last craft actually cost.
+    local paidRow = CreateRow(container, lossRow, "Never below what I paid",
+        "Won't list a crafted item for less than its last craft cost, after the auction house's cut.")
+
+    widgets.neverBelowPaid = Widgets.CreateCheckbox(paidRow, "Enabled", function(checked)
+        Config:Set("neverBelowCraftedCost", checked)
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.neverBelowPaid:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- No "Confirm before each listing" switch: the confirmation's Yes is the
     -- click that lists. Posting needs a real click, and after the price
     -- check (an auction house search, answered later) there is no other.
     -- The switch never did anything; its saved value is left where it is.
-    local verifyRow = CreateRow(container, lossRow, "Check price before listing",
+    local verifyRow = CreateRow(container, paidRow, "Check price before listing",
         "Searches the auction house for that one item first, so you undercut the price as it is now.")
 
     widgets.verifyPrice = Widgets.CreateCheckbox(verifyRow, "Check first", function(checked)
@@ -912,6 +924,7 @@ local function Refresh()
 
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
+    widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)

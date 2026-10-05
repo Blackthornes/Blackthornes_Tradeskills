@@ -208,6 +208,9 @@ local function LossText(line)
     if line.lossReason == "vendor" then
         return "Below what a vendor would pay for it."
     end
+    if line.lossReason == "crafted" then
+        return "Below what you paid to make it, after the auction house's cut."
+    end
     return "Below what the materials cost."
 end
 
@@ -285,6 +288,16 @@ function UpdateRow(row, line)
             Util.FormatMoney(line.unitPrice or 0, { noColor = true }))
 end
 
+--- The crafted cost lines (Logic/CraftedCost.lua) on the row's tooltip.
+local function AddCraftedLines(line)
+    if not ns.CraftedCost then return end
+    for _, entry in ipairs(ns.CraftedCost:Lines(line.itemID, line.unitPrice)) do
+        local r, g, b = 1, 1, 1
+        if entry.color then r, g, b = Theme.Unpack(entry.color) end
+        GameTooltip:AddDoubleLine(entry[1], entry[2], 0.7, 0.7, 0.7, r, g, b)
+    end
+end
+
 local function ShowRowTooltip(row, line)
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label)
     GameTooltip:AddLine(" ")
@@ -297,6 +310,10 @@ local function ShowRowTooltip(row, line)
         GameTooltip:AddDoubleLine("Cost each",
             Util.FormatMoney(line.unitCost, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
+
+    -- What it cost when it was made, what it last went up at, and what this
+    -- listing makes over that cost (2026-10-05).
+    AddCraftedLines(line)
 
     if line.vendorPrice then
         GameTooltip:AddDoubleLine("Vendor pays",

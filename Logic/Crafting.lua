@@ -328,6 +328,11 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
         self.casts[copied] = cast
     end
 
+    -- What one cost to make, kept for when it is listed later (2026-10-05).
+    if okSpell and copied and ns.CraftedCost then
+        ns.CraftedCost:NoteCraft(copied)
+    end
+
     for _, entry in ipairs(ns.Queue:GetAll()) do
         local ok, same = pcall(function() return entry.recipeID == spellID end)
         if ok and same and not entry.isDependency then
