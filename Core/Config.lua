@@ -94,6 +94,11 @@ local DEFAULTS = {
         -- worth listing.
         allowPostingAtALoss = false,
 
+        -- Refuse a listing that, after the auction house's cut, brings in
+        -- less than what the last craft of it cost (asked 2026-10-05). Off
+        -- by default. See Logic/CraftedCost.lua.
+        neverBelowCraftedCost = false,
+
         -- Hide crafts that have hit their posted limit rather than showing
         -- them greyed out.
         hideAtPostLimit = true,
@@ -299,6 +304,13 @@ local DEFAULTS = {
     -- in chat while you were online, shown on the Sales tab until their mail
     -- is read and the ledger has the real entry. See Mail:NoteHeardSale.
     heardSales = {},
+
+    -- realmKey -> itemID -> { cost, at }: what one cost to make the last time
+    -- it was crafted, and when. See Logic/CraftedCost.lua.
+    craftedCosts = {},
+
+    -- realmKey -> itemID -> { price, at }: the price one last went up at.
+    lastPosted = {},
 
     -- realmKey -> when the history restored from macro storage was rolled up
     -- to. Ledger entries from before that moment are already inside it. See
