@@ -406,11 +406,11 @@ check("a label with no width to fit gets the first",
 print("")
 print("the tabs")
 
--- Every tab the window has, in its order. The room is the window's: 1060 wide,
+-- Every tab the window has, in its order. The room is the window's: 1120 wide,
 -- less its 11-pixel edges and 16 more.
 local NAMES = { "Profit", "Level Up", "Enchanting", "Disenchanting", "Vendor Flips", "Queue",
     "Gather", "Post", "Prices", "Sales", "Characters", "Settings" }
-local ROOM = 1060 - 2 * 11 - 16
+local ROOM = 1120 - 2 * 11 - 16
 
 local function Definitions()
     local definitions = {}
@@ -447,7 +447,7 @@ local realTextWidth = Theme.TextWidth
 Theme.TextWidth = function() return nil end
 local blind = Widgets.CreateTabStrip(Region(), Definitions(), nil, { width = ROOM })
 Theme.TextWidth = realTextWidth
-check("names that cannot be measured share the room equally", blind.tabs[4].span, 85)
+check("names that cannot be measured share the room equally", blind.tabs[4].span, math.floor(ROOM / #NAMES))
 
 local fixed = Widgets.CreateTabStrip(Region(), {
     { key = "sell", text = "Sell", width = 120 }, { key = "buy", text = "Buy", width = 120 } })
@@ -756,7 +756,7 @@ check("and so does the bar", slider.value, 0)
 for name in pairs(made) do made[name] = {} end
 
 UI.window = Region(UIParent)
-UI.window.width = 1060
+UI.window.width = 1120
 UI.header = Region(UI.window)
 UI:BuildTabs()
 
@@ -931,6 +931,57 @@ second.scripts.OnLeave(second)
 
 first.scripts.OnClick(first, "LeftButton")
 check("a dropped profession's crafts are left out of the best crafts", table.concat(analysed, ","), "102")
+
+--------------------------------------------------------------------------------
+print("")
+print("Queue")
+
+-- The queued amount is typed (asked 2026-10-05: taking 100 off a craft meant
+-- clicking - a hundred times, and 100 lost its last digit). The real rows,
+-- built and drawn by the Queue tab's own list.
+local quantities = {}
+ns.Queue.SetQuantity = function(_, recipeID, quantity) quantities[recipeID] = quantity end
+ns.Recipes.GetAny = function(_, recipeID) return { name = "Craft " .. recipeID, outputItemID = recipeID } end
+ns.Crafting = { GetReadiness = function() return true end }
+ns.Queue.GetDependencyParents = function() return { "Craft 701" } end
+ns.CraftProgress = { Create = function(_, parent) return Region(parent) end }
+
+Load("/UI/Tab_Queue.lua")
+local listsBefore = #made.CreateScrollList
+UI.tabs.queue.build(Region(UI.window))
+local craftList = made.CreateScrollList[listsBefore + 1]
+craftList.height = 200
+
+local own = { recipeID = 701, quantity = 120 }
+local sub = { recipeID = 702, quantity = 36, isDependency = true }
+craftList:SetData({ own, sub })
+local ownRow, subRow = craftList.rows[1], craftList.rows[2]
+
+check("the queued amount is in a box you can type in", ownRow.quantity.editBox.text, "120")
+local digits = Theme.CreateLabel(Region(), "small", "text")
+digits:SetText("9999")
+check("wide enough for four digits and the box's edges",
+    ownRow.quantity:GetWidth() >= Theme.TextWidth(digits) + 10, true)
+ownRow.quantity.editBox:SetFocus()
+ownRow.quantity.editBox:SetText("20")
+craftList:Refresh()
+check("a redraw leaves an amount being typed alone", ownRow.quantity.editBox.text, "20")
+ownRow.quantity.editBox.scripts.OnEnterPressed(ownRow.quantity.editBox)
+check("Enter sets the queued amount", quantities[701], 20)
+check("and lets go of the keyboard", ownRow.quantity.editBox:HasFocus(), false)
+ownRow.quantity.editBox:SetFocus()
+ownRow.quantity.editBox:SetText("0")
+ownRow.quantity.editBox.scripts.OnEnterPressed(ownRow.quantity.editBox)
+check("0 takes the craft off the queue", quantities[701], 0)
+check("a sub-craft has no box", subRow.quantity:IsShown(), false)
+check("but shows its amount", subRow.count.text, "36")
+
+quantities[701] = nil
+ownRow.quantity.editBox:SetFocus()
+ownRow.quantity.editBox:SetText("55")
+craftList:SetData({ { recipeID = 703, quantity = 4 } })
+check("a row now showing another craft drops what was typed", ownRow.quantity.editBox.text, "4")
+check("without queuing it for either craft", quantities[701] == nil and quantities[703] == nil, true)
 
 --------------------------------------------------------------------------------
 

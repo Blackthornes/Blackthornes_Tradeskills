@@ -33,7 +33,8 @@ local Util = ns.Util
 local PANEL_WIDTH = 350
 local ROW_HEIGHT = 30
 
-local QUANTITY_WIDTH = 34
+-- Four digits fit (2026-10-05): at 34 an amount of 100 or more lost a digit.
+local QUANTITY_WIDTH = 42
 
 -- The - and + buttons either side of the quantity box, and the gap between
 -- each button and the box.
