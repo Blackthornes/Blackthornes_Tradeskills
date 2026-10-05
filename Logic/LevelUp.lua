@@ -43,7 +43,12 @@ function LevelUp.BandOf(row)
     return BAND[row and row.tier or "unknown"] or BAND.unknown
 end
 
---- The order of the list: band, then cost, then name.
+--- The order of the list: band, then real cost, then name.
+--
+-- Real cost is the materials less the most the craft gets back (a vendor,
+-- the auction house or a disenchant), so a craft that pays some of itself
+-- back ranks as the cheaper way up (asked 2026-10-05). It is the plain
+-- material cost where nothing comes back.
 --
 -- A craft whose materials have no price goes after every priced one in its
 -- band. Treating a missing price as free would put it on top, and that is
@@ -56,7 +61,7 @@ function LevelUp.Compare(a, b)
     local bandA, bandB = LevelUp.BandOf(a), LevelUp.BandOf(b)
     if bandA ~= bandB then return bandA < bandB end
 
-    local costA, costB = a.cost, b.cost
+    local costA, costB = a.realCost or a.cost, b.realCost or b.cost
     if costA and not costB then return true end
     if costB and not costA then return false end
     if costA and costB and costA ~= costB then return costA < costB end
@@ -67,13 +72,111 @@ function LevelUp.Compare(a, b)
     return (a.recipeID or 0) < (b.recipeID or 0)
 end
 
+--------------------------------------------------------------------------------
+-- What a craft gets back
+--------------------------------------------------------------------------------
+
+local POOR = (Enum and Enum.ItemQuality and Enum.ItemQuality.Poor) or 0
+
+-- The item's quality, from the saved facts when Disenchant has them, else the
+-- client. nil while the item is not loaded.
+local function QualityOf(itemID)
+    local Disenchant = ns.Disenchant
+    if Disenchant and Disenchant.GetItemFacts then
+        local facts = Disenchant:GetItemFacts(itemID)
+        if facts and facts.quality then return facts.quality end
+    end
+
+    if ns.Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, _, _, quality = pcall(C_Item.GetItemInfo, itemID)
+        if ok and type(quality) == "number" then return quality end
+    end
+
+    return nil
+end
+
+-- What one listing of the item pays once sold, or nil when the auction house
+-- has never priced it. The Sell tab's own price chooser, less the cut and
+-- deposits. A price the addon worked out from the materials is not a market,
+-- so it never counts here: when every listing is yours the market value
+-- stands instead.
+local function AuctionReturn(itemID, costDetail)
+    local Profit, Prices = ns.Profit, ns.Prices
+    if not (Profit and Profit.ChoosePostPrice and Profit.NetFromListing) then return nil end
+
+    local price, basis = Profit:ChoosePostPrice(itemID, costDetail)
+    if basis == "derived" then return nil end
+    if basis == "uncontested" then
+        price = Prices and Prices.GetValue and Prices:GetValue(itemID, "market") or nil
+    end
+    if not price or price <= 0 then return nil end
+
+    local net = Profit:NetFromListing(itemID, price)
+    return net > 0 and math.floor(net + 0.5) or nil
+end
+
+--- What one craft gets back, each way it can be turned into gold.
+--
+-- The house rules: a grey item is worth what a vendor pays and nothing more,
+-- and a disenchant counts at its most likely result alone (rarer ones are a
+-- bonus). Disenchanted materials still have to be sold, so they lose the
+-- auction house cut like any listing. A soulbound craft never reaches the
+-- auction house, but a vendor and a disenchant still take it.
+--
+-- @return { vendor, auction, disenchant, best, bestWay } in copper for one
+--   craft (its whole yield), any of them nil; bestWay is "vendor", "auction"
+--   or "disenchant". nil when the craft makes no item.
+function LevelUp:GetReturns(recipe, costDetail)
+    local itemID = recipe and recipe.outputItemID
+    if not itemID then return nil end
+
+    local yield = (costDetail and costDetail.yield) or 1
+    local result = {}
+
+    local vendor = ns.Util.GetVendorSellPrice and ns.Util.GetVendorSellPrice(itemID) or nil
+    if vendor and vendor > 0 then result.vendor = math.floor(vendor * yield + 0.5) end
+
+    local quality = QualityOf(itemID)
+
+    if quality ~= nil and quality ~= POOR then
+        -- Not loaded yet counts as sellable, as on the Profit tab.
+        local soulbound = ns.Util.IsBoundOnPickup and ns.Util.IsBoundOnPickup(itemID)
+
+        if not soulbound then
+            local auction = AuctionReturn(itemID, costDetail)
+            if auction then result.auction = math.floor(auction * yield + 0.5) end
+        end
+
+        local Disenchant = ns.Disenchant
+        if Disenchant and Disenchant.IsDisenchantable and Disenchant:IsDisenchantable(itemID) then
+            local value = Disenchant:GetValue(itemID)
+            if value and value > 0 then
+                local cut = ns.Config:Get("auctionCut") or 0.05
+                result.disenchant = math.floor(value * (1 - cut) * yield + 0.5)
+            end
+        end
+    end
+
+    -- Ties go to the vendor, then the auction house: the surer sale.
+    for _, way in ipairs({ "vendor", "auction", "disenchant" }) do
+        if result[way] and (not result.best or result[way] > result.best) then
+            result.best, result.bestWay = result[way], way
+        end
+    end
+
+    return result
+end
+
 --- One row of the list.
 --
 -- @return { recipeID, name, outputItemID, skillLineID, tier, skillUp,
---           cost, costDetail, craftableNow, missing }
+--           cost, costDetail, returns, back, backWay, realCost,
+--           craftableNow, missing }
 --   cost is the material cost of one craft in copper, or nil when a
---   material has no price. missing is how many materials are short for one
---   craft, counting the bank, the same way the Profit tab's breakdown does.
+--   material has no price. back is the most one craft gets back (backWay
+--   says how), and realCost the cost less that, below zero when the craft
+--   pays. missing is how many materials are short for one craft, counting
+--   the bank, the same way the Profit tab's breakdown does.
 function LevelUp:BuildRow(recipeID, recipe)
     recipe = recipe or ns.Recipes:GetAny(recipeID)
     if not recipe then return nil end
@@ -86,6 +189,10 @@ function LevelUp:BuildRow(recipeID, recipe)
         if (reagent.shortfall or 0) > 0 then missing = missing + 1 end
     end
 
+    local cost = costDetail and costDetail.priceable and costDetail.total or nil
+    local returns = self:GetReturns(recipe, costDetail)
+    local back = returns and returns.best or nil
+
     return {
         recipeID = recipeID,
         name = recipe.name,
@@ -93,8 +200,12 @@ function LevelUp:BuildRow(recipeID, recipe)
         skillLineID = recipe.skillLineID,
         tier = skillUp and skillUp.tier or "unknown",
         skillUp = skillUp,
-        cost = costDetail and costDetail.priceable and costDetail.total or nil,
+        cost = cost,
         costDetail = costDetail,
+        returns = returns,
+        back = back,
+        backWay = returns and returns.bestWay or nil,
+        realCost = cost and back and (cost - back) or nil,
         craftableNow = ns.Profit:GetCraftableCount(recipeID),
         missing = missing,
     }
