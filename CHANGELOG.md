@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.30.0
+
+For WoW: Forever (interface 16001). A file was added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- Tradeskills now remembers what each craft cost you to make. The item
+  tooltip, Ready to sell and the Post tab show **Made for** (what one cost
+  the last time you crafted it, and when), **Last posted** (the price it
+  last went up at) and **Profit now** (what listing at today's price makes
+  over that cost after the auction house's cut, in green or red).
+- New setting under Posting, **Never below what I paid** (off by default):
+  a listing that would bring in less than the last craft cost after the cut
+  is refused and shown in red on Ready to sell. It works alongside the
+  existing material cost guard.
+
 ## 0.29.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
