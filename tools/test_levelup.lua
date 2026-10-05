@@ -184,4 +184,60 @@ busy = true
 check("while crafting, the button stops it", LevelUp:CraftAction(1, "1").kind == "stop")
 busy = false
 
+print("\nwhat a craft gets back")
+
+-- Belt and Aaa Belt both cost 3s. The belt sells to a vendor for 1s, lists
+-- for 2s, and disenchants for 2s 50c of materials; the kilt (green, 5s) is
+-- grey quality, so only the vendor counts for it.
+local KILT_ITEM, BELT_ITEM, AAA_ITEM, CAPE_ITEM = 5006, 5001, 5009, 5002
+local quality = { [KILT_ITEM] = 0, [BELT_ITEM] = 2, [AAA_ITEM] = 2, [CAPE_ITEM] = 2 }
+local vendorPays = { [KILT_ITEM] = 40, [BELT_ITEM] = 100, [AAA_ITEM] = 100 }
+local listsFor = { [KILT_ITEM] = 5000, [BELT_ITEM] = 200, [CAPE_ITEM] = 1200 }
+local bound = {}
+local priceBasis = {}
+
+ns.Util.GetVendorSellPrice = function(id) return vendorPays[id] end
+ns.Util.IsBoundOnPickup = function(id) return bound[id] == true end
+ns.Profit.ChoosePostPrice = function(_, id) return listsFor[id], priceBasis[id] or "undercut" end
+-- A 5% cut and no deposit.
+ns.Profit.NetFromListing = function(_, _, price) return price * 0.95 end
+ns.Disenchant = {
+    GetItemFacts = function(_, id) return quality[id] and { quality = quality[id] } or nil end,
+    IsDisenchantable = function(_, id) return quality[id] == 2 end,
+    GetValue = function(_, id) return id == BELT_ITEM and 250 or nil end,
+}
+
+local belt = LevelUp:BuildRow(1)
+check("the vendor pays in full", belt.returns.vendor == 100)
+check("the auction house after its cut", belt.returns.auction == 190)
+check("a disenchant's materials lose the cut too", belt.returns.disenchant == 238)
+check("the best way back is counted", belt.back == 238 and belt.backWay == "disenchant")
+check("real cost is the materials less that", belt.realCost == 300 - 238)
+
+local kilt = LevelUp:BuildRow(6)
+check("grey: the vendor only, never the auction house",
+    kilt.returns.vendor == 40 and kilt.returns.auction == nil and kilt.back == 40)
+
+bound[BELT_ITEM] = true
+belt = LevelUp:BuildRow(1)
+check("soulbound: no auction, a disenchant still counts",
+    belt.returns.auction == nil and belt.returns.disenchant == 238)
+bound[BELT_ITEM] = nil
+
+priceBasis[CAPE_ITEM] = "derived"
+local cape2 = LevelUp:BuildRow(2)
+check("a price worked out from the materials is not a sale", cape2.back == nil and cape2.realCost == nil)
+priceBasis[CAPE_ITEM] = nil
+cape2 = LevelUp:BuildRow(2)
+check("a craft that sells for more than it costs pays you back", cape2.realCost == 900 - 1140)
+
+rows = LevelUp:GetRanked({ skillLines = tailoring })
+print("  " .. names(rows))
+check("in a colour, the lowest real cost goes first",
+    names(rows) == "Woolen Cape, Linen Belt, Aaa Belt, Odd Gloves, "
+        .. "Linen Bandana, Bolt of Woolen Cloth, Simple Kilt, Unread Shirt")
+
+ns.Util.GetVendorSellPrice, ns.Util.IsBoundOnPickup = nil, nil
+ns.Profit.ChoosePostPrice, ns.Profit.NetFromListing, ns.Disenchant = nil, nil, nil
+
 print("\n  all level up checks passed\n")
