@@ -217,9 +217,14 @@ end
 -- (nothing to send), then the one who queued the craft, then the cheapest,
 -- then a fixed order.
 --
+-- A material the queue was already making (`keep`, from the last plan) stays
+-- with whoever was making it when buying it has since become cheaper, and the
+-- answer says so with `buyCheaper`. See RebuildDependencies.
+--
 -- @param need { crafters = { [key] = true }, owner }
--- @return { characterKey, recipeID, recipe } or nil to buy it
-function Queue:PickMaker(itemID, need, makers)
+-- @param keep { recipeID, crafter } or nil
+-- @return { characterKey, recipeID, recipe, buyCheaper } or nil to buy it
+function Queue:PickMaker(itemID, need, makers, keep)
     local candidates = makers[itemID]
     if not candidates then return nil end
 
@@ -227,7 +232,7 @@ function Queue:PickMaker(itemID, need, makers)
         and ns.Util.IsBoundOnPickup(itemID) == true
     local buyUnit = ns.Cost:GetReagentUnitCost(itemID)
 
-    local best
+    local best, kept
     for _, candidate in ipairs(candidates) do
         local reachable = true
         for crafter in pairs(need.crafters) do
@@ -251,11 +256,15 @@ function Queue:PickMaker(itemID, need, makers)
                     best = { characterKey = candidate.characterKey, recipeID = candidate.recipeID,
                         recipe = candidate.recipe, rank = rank, unit = unit }
                 end
+            elseif keep and candidate.characterKey == keep.crafter
+                and candidate.recipeID == keep.recipeID then
+                kept = { characterKey = candidate.characterKey, recipeID = candidate.recipeID,
+                    recipe = candidate.recipe, buyCheaper = true }
             end
         end
     end
 
-    return best
+    return best or kept
 end
 
 --- The sub-crafts for every character at once (see SharesWithAlts).
@@ -264,8 +273,9 @@ end
 -- each level, the shortfall made into crafts. What differs is who makes them
 -- and what counts as already held: what everyone the material is for holds,
 -- and what the one making it holds, since what they made waits to be sent.
-function Queue:DeriveAcrossCharacters(manual, derived, maxDepth)
+function Queue:DeriveAcrossCharacters(manual, derived, maxDepth, planned)
     local makers = MakersByOutput()
+    planned = planned or {}
 
     local function process(entries, depth)
         if depth >= maxDepth or #entries == 0 then return end
@@ -298,7 +308,7 @@ function Queue:DeriveAcrossCharacters(manual, derived, maxDepth)
 
         for _, itemID in ipairs(order) do
             local need = needs[itemID]
-            local maker = self:PickMaker(itemID, need, makers)
+            local maker = self:PickMaker(itemID, need, makers, planned[itemID])
 
             if maker then
                 local held = 0
@@ -322,6 +332,7 @@ function Queue:DeriveAcrossCharacters(manual, derived, maxDepth)
                         forCharacters = need.crafters,
                         crafter = maker.characterKey,
                         owner = need.owner,
+                        buyCheaper = maker.buyCheaper or nil,
                         depth = depth,
                         addedAt = time(),
                     }
@@ -430,10 +441,31 @@ function Queue:RebuildDependencies()
         end
     end
 
+    -- What the last plan was making, by the item it makes. Voldar on
+    -- Discord (2026-10-05): halfway through turning scraps into light
+    -- leather, buying medium leather became cheaper than making it, so the
+    -- medium leather dropped off the queue, the light leather with it, and
+    -- the leather already made had nothing left to go into. A sub-craft
+    -- already planned now stays when buying turns cheaper, marked
+    -- `buyCheaper` so the queue can say so; Buy instead (BuyInstead) takes it
+    -- off. Only what was planned: a material the queue was not making is
+    -- still only made when that is cheaper.
+    local planned = {}
+    for _, entry in ipairs(queue) do
+        local recipe = entry.isDependency and ns.Recipes:GetAny(entry.recipeID)
+        if recipe and recipe.outputItemID then
+            planned[recipe.outputItemID] = {
+                recipeID = entry.recipeID,
+                crafter = entry.crafter,
+                buyCheaper = entry.buyCheaper,
+            }
+        end
+    end
+
     local derived = {}
 
     if ns.Config:Get("autoQueueSubCrafts") ~= false and self:SharesWithAlts() then
-        self:DeriveAcrossCharacters(manual, derived, MAX_DEPENDENCY_DEPTH)
+        self:DeriveAcrossCharacters(manual, derived, MAX_DEPENDENCY_DEPTH, planned)
     elseif ns.Config:Get("autoQueueSubCrafts") ~= false then
         local selfKey = SelfKey()
 
@@ -448,13 +480,15 @@ function Queue:RebuildDependencies()
                 local cost = ns.Cost:GetCraftCost(entry.recipeID)
 
                 for _, reagent in ipairs((cost and cost.reagents) or {}) do
-                    -- `crafted` means the cost engine found making it cheaper.
-                    if reagent.crafted then
+                    -- `crafted` means the cost engine found making it
+                    -- cheaper. One already being made stays (see above).
+                    if reagent.crafted or planned[reagent.itemID] then
                         local need = needs[reagent.itemID]
                             or { units = 0, parents = {} }
 
                         need.units = need.units + (reagent.quantity * entry.quantity)
                         need.parents[entry.recipeID] = true
+                        need.cheaper = need.cheaper or reagent.crafted
 
                         needs[reagent.itemID] = need
                     end
@@ -481,6 +515,7 @@ function Queue:RebuildDependencies()
                             isDependency = true,
                             forRecipes = need.parents,
                             crafter = selfKey,
+                            buyCheaper = (not need.cheaper) or nil,
                             depth = depth,
                             addedAt = time(),
                         }
@@ -516,6 +551,52 @@ function Queue:RebuildDependencies()
     for _, entry in ipairs(manual) do
         queue[#queue + 1] = entry
     end
+
+    -- Said once, when buying first turns cheaper, not on every rebuild.
+    for _, entry in ipairs(derived) do
+        local recipe = entry.buyCheaper and ns.Recipes:GetAny(entry.recipeID)
+        local before = recipe and planned[recipe.outputItemID]
+        if before and not before.buyCheaper then
+            local name = ns.Recipes.GetDisplayLink and ns.Recipes:GetDisplayLink(entry.recipeID)
+                or recipe.name or "a sub-craft"
+            ns.Print(("buying %s is now cheaper than making it. It stays on the queue; Buy instead on the Queue tab takes it off.")
+                :format(name))
+        end
+    end
+end
+
+--- Take a sub-craft off the queue and buy its item instead.
+--
+-- For a sub-craft kept after buying turned cheaper (`buyCheaper`). Its item
+-- goes back on the shopping list, and whatever only went into it leaves the
+-- queue too. If making it turns cheaper again, it comes back like any other.
+function Queue:BuyInstead(entry)
+    local queue = self:GetAll()
+    local removed = false
+
+    for index = #queue, 1, -1 do
+        if queue[index] == entry then
+            table.remove(queue, index)
+            removed = true
+        end
+    end
+    if not removed then return false end
+
+    self:RebuildDependencies()
+    self:Notify()
+    return true
+end
+
+--- What one of a sub-craft's items costs to buy and to make, for the note
+--- on a kept sub-craft.
+-- @return buy, make  (copper each, either nil when unknown)
+function Queue:GetBuyOrMake(entry)
+    local recipe = entry and ns.Recipes:GetAny(entry.recipeID)
+    if not (recipe and recipe.outputItemID) then return nil, nil end
+
+    local buy = ns.Cost:GetReagentUnitCost(recipe.outputItemID)
+    local cost = ns.Cost:GetCraftCost(entry.recipeID)
+    return buy, cost and cost.priceable and cost.perUnit or nil
 end
 
 --- Re-derive the sub-crafts for the character just logged in.
