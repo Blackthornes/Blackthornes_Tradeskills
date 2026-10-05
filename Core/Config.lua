@@ -167,6 +167,11 @@ local DEFAULTS = {
         -- tooltip exactly as the client writes it.
         showValueOnItemTooltips = true,
 
+        -- On a recipe item's tooltip (a Pattern, Plans, Formula...): what it
+        -- teaches, what one craft costs, sells and disenchants for, and how
+        -- many crafts pay the recipe back. See Logic/RecipeBook.lua.
+        showRecipeValueOnTooltips = true,
+
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does
         -- nothing without Equipment. See Logic/Upgrades.lua.
@@ -311,6 +316,13 @@ local DEFAULTS = {
 
     -- realmKey -> itemID -> { price, at }: the price one last went up at.
     lastPosted = {},
+
+    -- recipeID -> { name, outputItemID, quantityMin, quantityMax,
+    -- skillLineID, profession, reagents, seenAt }: every recipe a profession
+    -- window has shown on this account, learned or not. Overrides the
+    -- shipped Classic recipe book where Forever differs. No character names.
+    -- See Logic/RecipeBook.lua.
+    seenRecipes = {},
 
     -- realmKey -> when the history restored from macro storage was rolled up
     -- to. Ledger entries from before that moment are already inside it. See

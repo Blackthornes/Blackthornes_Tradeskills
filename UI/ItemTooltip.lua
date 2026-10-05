@@ -284,6 +284,7 @@ function ItemTooltip:LinesFor(itemID, count)
         if disenchant then lines[#lines + 1] = disenchant end
 
         self:AddCraftedLines(lines, itemID)
+        self:AddRecipeLines(lines, itemID)
 
         return lines
     end
@@ -319,8 +320,21 @@ function ItemTooltip:LinesFor(itemID, count)
     if disenchant then lines[#lines + 1] = disenchant end
 
     self:AddCraftedLines(lines, itemID)
+    self:AddRecipeLines(lines, itemID)
 
     return lines
+end
+
+--- On a recipe item: what it teaches, who knows it, what one craft costs,
+--- sells and disenchants for, and how many crafts pay the recipe back
+--- (Logic/RecipeBook.lua, asked 2026-10-05). Nothing for any other item.
+function ItemTooltip:AddRecipeLines(lines, itemID)
+    if not (ns.RecipeBook and ns.RecipeBook.TooltipLines) then return end
+
+    local ok, recipe = pcall(ns.RecipeBook.TooltipLines, ns.RecipeBook, itemID)
+    if not ok or type(recipe) ~= "table" then return end
+
+    for _, line in ipairs(recipe) do lines[#lines + 1] = line end
 end
 
 --- What it cost the last time you made one, what it last went up at, and
