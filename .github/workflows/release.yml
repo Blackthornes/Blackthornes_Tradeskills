@@ -49,6 +49,7 @@ jobs:
         run: |
           python tools/test_check_release.py
           python tools/test_check_package.py
+          python tools/test_announce_discord.py
 
       # Build first with nothing uploaded, so the package can be checked
       # before anything leaves the repository.
@@ -73,3 +74,13 @@ jobs:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
+
+      # Tells the Discord server: posts this version's changelog in
+      # #announcements. Needs the DISCORD_WEBHOOK_URL repository secret, which
+      # the owner sets himself; without it this step does nothing. A failure
+      # here shows as a warning and never undoes the upload above.
+      - name: Announce on Discord
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python tools/announce_discord.py "${{ github.ref_name }}"
