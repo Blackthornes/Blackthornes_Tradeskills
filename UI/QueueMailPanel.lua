@@ -105,7 +105,11 @@ local function CreateRow(panel, index)
     row.items:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -24)
 
     row.send = Widgets.CreateButton(row, "Send", function()
-        if row.delivery then QueueMailPanel:FillFor(row) end
+        if row.delivery and row.delivery.take then
+            QueueMailPanel:TakeFor(row)
+        elseif row.delivery then
+            QueueMailPanel:FillFor(row)
+        end
     end, { width = BUTTON_WIDTH, height = 20, primary = true,
         tooltip = "Opens Send Mail with the name filled in and these attached. You press Send." })
     row.send:SetPoint("TOPRIGHT", 0, -3)
@@ -226,14 +230,22 @@ end
 -- Drawing
 --------------------------------------------------------------------------------
 
---- What to list: the disenchanter's gear first, when one is set, then the
---- queue's deliveries, when the queue mail setting is on.
+--- What to list: the next batch to take from the mail, when that setting is
+--- on, then the disenchanter's gear, when one is set, then the queue's
+--- deliveries, when the queue mail setting is on.
 function QueueMailPanel:GetDeliveries()
     local deliveries = {}
 
+    local okTake, batch = pcall(ns.QueueMail.GetMailBatch, ns.QueueMail)
+    if okTake and batch then
+        deliveries[1] = { take = true, batch = batch, items = batch.items, name = "Next batch from your mail" }
+    elseif not okTake then
+        ns.Debug("mail batch:", batch)
+    end
+
     local okGear, gear = pcall(ns.QueueMail.GetDisenchantDelivery, ns.QueueMail)
     if okGear and gear then
-        deliveries[1] = gear
+        deliveries[#deliveries + 1] = gear
     elseif not okGear then
         ns.Debug("disenchanter mail:", gear)
     end
@@ -264,8 +276,11 @@ function QueueMailPanel:Refresh()
 
     -- Headed for what is on it.
     local onlyGear = hasGear and #deliveries == 1
+    local onlyTake = deliveries[1].take and #deliveries == 1
     local headingRoom = WIDTH - PAD - 4 - 18 - 6 - (panel.settings:GetWidth() or 60) - 8
-    Theme.FitText(panel.heading, onlyGear and { "SEND TO YOUR DISENCHANTER", "DISENCHANTER" }
+    Theme.FitText(panel.heading, onlyTake and { "TAKE FOR THE CRAFT QUEUE", "TAKE" }
+        or deliveries[1].take and not hasGear and { "FOR THE CRAFT QUEUE", "QUEUE" }
+        or onlyGear and { "SEND TO YOUR DISENCHANTER", "DISENCHANTER" }
         or hasGear and { "SEND FROM YOUR BAGS", "SEND" }
         or { "SEND FOR THE CRAFT QUEUE", "FOR THE QUEUE" }, headingRoom)
     local room = WIDTH - 2 * PAD
@@ -280,7 +295,22 @@ function QueueMailPanel:Refresh()
         row:SetPoint("TOPLEFT", PAD, top - (index - 1) * ROW_HEIGHT)
 
         local short = ShortName(delivery)
-        if delivery.disenchant then
+        if delivery.take then
+            local batch = delivery.batch
+            Theme.FitText(row.name, { delivery.name, "Next batch" }, room - BUTTON_WIDTH - 8)
+            if batch.noRoom then
+                Theme.FitText(row.items, { ("No room in your bags (keeping %d slots free)"):format(batch.spare),
+                    "No room in your bags" }, room)
+            else
+                Theme.FitText(row.items, ItemTexts(delivery.items), room)
+            end
+            Theme.FitText(row.send.label, { "Take next batch", "Take" }, BUTTON_WIDTH - 8)
+            row.send.tooltipText = batch.batches > 1
+                and ("Takes the queue's materials that fit in your bags, keeping %d slots free: about 1 of %d batches. Craft, then take the next."):format(
+                    batch.spare, math.min(batch.batches, 999))
+                or "Takes the queue's materials from your mail. Mail asking for payment (COD) is left alone."
+            row.send:SetEnabledState(not batch.noRoom and not ns.QueueMail.filling and not ns.QueueMail.taking)
+        elseif delivery.disenchant then
             Theme.FitText(row.name, { delivery.name .. ", disenchanter", short .. ", disenchanter", short },
                 room - BUTTON_WIDTH - 8)
             Theme.FitText(row.items, GearTexts(delivery.items), room)
@@ -288,9 +318,12 @@ function QueueMailPanel:Refresh()
             Theme.FitText(row.name, { delivery.name, short }, room - BUTTON_WIDTH - 8)
             Theme.FitText(row.items, ItemTexts(delivery.items), room)
         end
-        local first = short:match("^(%S+)") or short
-        Theme.FitText(row.send.label, { "Send to " .. short, "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
-        row.send:SetEnabledState(not ns.QueueMail.filling)
+        if not delivery.take then
+            local first = short:match("^(%S+)") or short
+            Theme.FitText(row.send.label, { "Send to " .. short, "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
+            row.send.tooltipText = "Opens Send Mail with the name filled in and these attached. You press Send."
+            row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
+        end
         row:Show()
     end
 
@@ -360,6 +393,30 @@ function QueueMailPanel:FillFor(row)
     for _, other in ipairs(panel.rows) do other.send:SetEnabledState(false) end
 end
 
+--- Take the next batch out of the mail for the queue.
+function QueueMailPanel:TakeFor(row)
+    local panel = self.frame
+
+    local started, why = ns.QueueMail:TakeBatch(function(units, stacks)
+        if not panel then return end
+        local texts = stacks > 0
+            and { ("Took %d (%d stack%s). Craft, then take the next batch."):format(units, stacks, stacks == 1 and "" or "s"),
+                ("Took %d."):format(units) }
+            or { "Took nothing: the bags are full or the mail would not give it.", "Took nothing." }
+        Theme.FitText(panel.status, texts, WIDTH - 2 * PAD)
+        QueueMailPanel:Refresh()
+    end)
+
+    if not started then
+        Theme.FitText(panel.status, { "Can't take it: " .. (why or "the mailbox is busy"), why or "" },
+            WIDTH - 2 * PAD)
+        return
+    end
+
+    Theme.FitText(panel.status, { "Taking the next batch...", "Taking..." }, WIDTH - 2 * PAD)
+    for _, other in ipairs(panel.rows) do other.send:SetEnabledState(false) end
+end
+
 --- A mail to one of your characters went. Logic/QueueMail.lua calls this.
 function QueueMailPanel:OnSent(toKey)
     local panel = self.frame
@@ -399,13 +456,25 @@ ns.RegisterEvent(QueueMailPanel, "MAIL_SEND_SUCCESS", function()
     end
 end)
 
+-- The inbox fills in after the mailbox opens, and changes as mail is taken:
+-- what Take next batch offers comes from it. Only with that setting on.
+ns.RegisterEvent(QueueMailPanel, "MAIL_INBOX_UPDATE", function()
+    if ns.Config:Get("mailBatchTake") ~= true or ns.QueueMail.taking or QueueMailPanel.inboxSoon then return end
+    QueueMailPanel.inboxSoon = true
+    Soon(function()
+        QueueMailPanel.inboxSoon = false
+        QueueMailPanel:Refresh()
+    end)
+end)
+
 ns.RegisterEvent(QueueMailPanel, "MAIL_CLOSED", function()
     if QueueMailPanel.frame then QueueMailPanel.frame:Hide() end
 end)
 
 -- Items going into a mail and coming out of the bags change what is left.
 ns.RegisterEvent(QueueMailPanel, "BAG_UPDATE_DELAYED", function()
-    if QueueMailPanel.frame and QueueMailPanel.frame:IsShown() and not ns.QueueMail.filling then
+    if QueueMailPanel.frame and QueueMailPanel.frame:IsShown()
+        and not ns.QueueMail.filling and not ns.QueueMail.taking then
         QueueMailPanel:Refresh()
     end
 end)

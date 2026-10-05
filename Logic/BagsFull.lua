@@ -61,3 +61,114 @@ function BagsFull:OnEnable()
         self:Check()
     end)
 end
+
+--------------------------------------------------------------------------------
+-- Batches that fit the bags
+--------------------------------------------------------------------------------
+--
+-- Asked for by a player (Ezmode, 2026-10-05) for big vendor and disenchant
+-- shuffles: a thousand wands is a thousand wood and a thousand essence, about
+-- 150 slots, and the bags hold 30. Buying it all at once filled the bags and
+-- the game quietly refused the rest. So the Buy materials button, and the
+-- mailbox's Take next batch, bring only what fits, in step: the same share of
+-- every material the queue needs, so what arrives makes whole crafts.
+
+-- Slots left free by default: room for the crafts, the odd drop, a new quest
+-- item.
+local DEFAULT_SPARE = 5
+
+--- Bag slots kept free by a batch.
+function BagsFull:GetSpare()
+    local spare = ns.Config and tonumber(ns.Config:Get("bagSpareSlots"))
+    if not spare then return DEFAULT_SPARE end
+    return math.max(0, math.floor(spare))
+end
+
+--- Slots a batch may fill, and the free slots it counted from, or nil when
+--- the game will not say.
+function BagsFull:Room()
+    local free = self:CountFree()
+    if free == nil then return nil end
+    return math.max(0, free - self:GetSpare()), free
+end
+
+--- How many of an item one bag slot holds. 1 when the game does not say, so
+--- a batch is too small rather than too big.
+function BagsFull.MaxStack(itemID)
+    if C_Item and type(C_Item.GetItemMaxStackByID) == "function" then
+        local ok, stack = pcall(C_Item.GetItemMaxStackByID, itemID)
+        if ok and type(stack) == "number" and stack >= 1 then return stack end
+    end
+    if type(GetItemInfo) == "function" then
+        local ok, _, _, _, _, _, _, _, stack = pcall(GetItemInfo, itemID)
+        if ok and type(stack) == "number" and stack >= 1 then return stack end
+    end
+    return 1
+end
+
+--- The new slots `amount` more of an item takes, once the part stack already
+--- in the bags is topped up.
+function BagsFull.SlotsFor(itemID, amount, inBags)
+    if not amount or amount <= 0 then return 0 end
+    local stack = BagsFull.MaxStack(itemID)
+    local have = tonumber(inBags) or 0
+    local topUp = 0
+    if have > 0 and have % stack ~= 0 then topUp = stack - have % stack end
+    return math.ceil(math.max(0, amount - topUp) / stack)
+end
+
+--- How much of the share `share` (0 to 1) of what the queue needs is still to
+--- come into the bags.
+local function Bring(line, share)
+    local needed = tonumber(line.needed) or 0
+    local inBags = tonumber(line.inBags) or 0
+    -- The small amount taken off keeps 0.14 * 1000 at 140, not 141.
+    local target = math.min(needed, math.ceil(needed * share - 1e-9))
+    return math.max(0, target - inBags)
+end
+
+local function SlotsAt(list, share)
+    local slots = 0
+    for _, line in ipairs(list) do
+        slots = slots + BagsFull.SlotsFor(line.itemID, Bring(line, share), line.inBags)
+    end
+    return slots
+end
+
+--- The next batch for a shopping list (Queue:GetShoppingList's lines).
+--
+-- Every material in the list counts toward the room, wherever it comes from:
+-- at a vendor, room is kept for what is still to come from the mailbox or the
+-- auction house, so the wood bought matches the essence that will join it.
+--
+-- @param room slots the batch may fill (see Room)
+-- @return { share = 0..1 (1: all of it fits), bring = { [itemID] = units },
+--           batches = about how many batches the rest of the queue takes }
+function BagsFull:PlanBatch(list, room)
+    room = math.max(0, tonumber(room) or 0)
+    local all = SlotsAt(list, 1)
+
+    local share = 1
+    if all > room then
+        -- The most the room takes. Bring only grows with the share, so a
+        -- halving search finds it.
+        local low, high = 0, 1
+        for _ = 1, 40 do
+            local middle = (low + high) / 2
+            if SlotsAt(list, middle) <= room then low = middle else high = middle end
+        end
+        share = low
+    end
+
+    local bring = {}
+    for _, line in ipairs(list) do
+        bring[line.itemID] = Bring(line, share)
+    end
+
+    local batches = 1
+    if all > room then
+        batches = room > 0 and math.ceil(all / room) or math.huge
+    end
+
+    return { share = share, bring = bring, batches = batches, slots = all }
+end
