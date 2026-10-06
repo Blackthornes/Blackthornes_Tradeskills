@@ -6,6 +6,9 @@
 --   3. Picking a row fills the pane: one craft's worth, materials, where to
 --      learn it; picking it again goes back to the overview.
 --   4. A profession can be picked by part of its name (/bts recipes leath).
+--   5. SKILL is green within the character's skill, amber above it.
+--   6. The Level Up tab's copy keeps its own filters and asks for skill
+--      order; the switch shows one view at a time and redraws only that one.
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -161,6 +164,61 @@ check("to the overview", View._widgets.detail.title.text, "Recipes to learn")
 print("\npicking a profession by name")
 View.SetProfession("ench")
 check("part of a name is enough", View._state.profession, "Enchanting")
+
+print("\nthe skill column")
+ns.Recipes.GetLearnedProfessions = function() return { { name = "Leatherworking", skillLevel = 95 } } end
+local colors = {}
+ns.Theme.Unpack = function(key) colors[#colors + 1] = key return 1, 1, 1, 1 end
+View.Refresh()
+local function SkillColor(entry)
+  colors = {}
+  local row = Frame()
+  list.opts.createRow(row)
+  row.cells = row.cells
+  local cell
+  list.opts.updateRow(row, entry)
+  return row.cells.skill, colors
+end
+local learnable = { recipeID = 9, record = record, name = "x", skill = 90, profession = "Leatherworking",
+  outputItemID = 1, learn = "Trainer" }
+local _, c1 = SkillColor(learnable)
+local found = false
+for _, key in ipairs(c1) do if key == "profit" then found = true end end
+check("a recipe within your skill is green", found, true)
+learnable.skill = 120
+local _, c2 = SkillColor(learnable)
+found = false
+for _, key in ipairs(c2) do if key == "warn" then found = true end end
+check("one above your skill is amber", found, true)
+ns.Theme.Unpack = function() return 1, 1, 1, 1 end
+
+print("\na second copy for Level Up")
+local mainList = list
+local second = View.New({ order = "skill" })
+second.Build(Frame())
+second.Refresh()
+check("the Level Up copy asks for skill order", asked.order, "skill")
+check("it keeps its own list", list ~= mainList, true)
+second.SetProfession("ench")
+View.SetProfession("leath")
+check("its own profession", second._state.profession, "Enchanting")
+check("does not move the other's", View._state.profession, "Leatherworking")
+
+print("\nthe switch at the top of a tab")
+local built, refreshed = nil, 0
+local tab = View.WithSwitch({ mainKey = "recipes", mainText = "MY RECIPES", mainTip = "tip",
+  buildMain = function(frame) built = frame end, refreshMain = function() refreshed = refreshed + 1 end,
+  learn = second })
+tab.Build(Frame())
+check("the tab's own view is built", built ~= nil, true)
+check("and shown first", tab.view, "recipes")
+check("and drawn", refreshed, 1)
+tab.ShowView("learn")
+check("the switch moves to Recipes to learn", tab.view, "learn")
+tab.Refresh()
+check("which redraws the list, not the tab's view", refreshed, 1)
+tab.ShowView("nonsense")
+check("an unknown view falls back to the tab's own", tab.view, "recipes")
 
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")
