@@ -266,6 +266,11 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
         table.remove(history, 1)
     end
 
+    -- The hour by hour graph keeps the cheapest posting, as buying sees it.
+    if ns.PriceHistory then
+        ns.PriceHistory:Note(itemID, Prices.LowestListed(record), scannedAt)
+    end
+
     return record
 end
 
@@ -655,6 +660,9 @@ function Prices:SetFavourite(itemID, on, name)
     else
         ns.db.favouritePrices[itemID] = nil
     end
+
+    -- A starred item keeps an hour by hour price history from the next scan.
+    if ns.PriceHistory then ns.PriceHistory:Retrack() end
 end
 
 --- itemID -> saved name (or true when none was known).
