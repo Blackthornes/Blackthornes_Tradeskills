@@ -364,9 +364,14 @@ ns.Theme = {
     FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
 }
 
-local checkboxes, lists = {}, {}
+local checkboxes, lists, dropdowns = {}, {}, {}
 local searched
 ns.Widgets = {
+    CreateDropdown = function(_, options, onSelect)
+        local dropdown = Stub({ options = options, onSelect = onSelect })
+        dropdowns[#dropdowns + 1] = dropdown
+        return dropdown
+    end,
     CreateSearchBox = function(_, _, onChange) searched = onChange; return Stub() end,
     CreateCheckbox = function(_, text, onToggle) local box = Stub({ onToggle = onToggle }); checkboxes[text] = box; return box end,
     CreateButton = function() return Stub() end,
@@ -486,6 +491,139 @@ ns.Prices.Count = function() return 0 end
 ns.Prices.changes = 2
 tab.refresh()
 check("with no scan it says to scan", list.data and #list.data == 0)
+
+--------------------------------------------------------------------------------
+-- Sell to: Auction house (Voldar's idea, 2026-10-06)
+--------------------------------------------------------------------------------
+
+print("\nbuy under the usual price and list it again")
+
+local deposits = {}
+ns.Posting = { GetCachedUnitDeposit = function(_, itemID) return deposits[itemID] end }
+ns.Profit = {
+    NetFromListing = function(_, itemID, unitPrice)
+        return unitPrice * (1 - (config.auctionCut or 0.05)) - (deposits[itemID] or 0)
+    end,
+}
+local demandLevels = {}
+ns.Demand = {
+    Get = function(_, itemID)
+        local level = demandLevels[itemID]
+        return level and { level = level, source = "market", rate = 0.2 } or nil
+    end,
+    Label = function(_, reading) return reading and (reading.level == "high" and "High" or reading.level == "some" and "Some" or "Low") end,
+    Color = function(_, reading) return reading and "profit" or "muted" end,
+    Rank = function(_, reading) return reading and 3 or 0 end,
+    TooltipText = function(_, reading) return reading and "High (20% of its stock sells between scans)" end,
+}
+
+--- A record seen in `count` scans: every earlier one at `usual`, the latest
+--- (which found the cheap listing) at `latest`.
+local function Seen(count, usual, latest, fields)
+    local record = fields
+    record.seen = 5000
+    record.history = {}
+    for index = 1, count do
+        local last = index == count
+        record.history[index] = { t = last and 5000 or 1000 + index, m = last and latest or usual, q = 10 }
+    end
+    record.market = latest
+    return record
+end
+
+items[4005] = { 0, 10 }
+for itemID = 4001, 4007 do
+    if not items[itemID] then items[itemID] = { 1, 10 } end
+    demandLevels[itemID] = "high"
+end
+demandLevels[4004] = "low"
+
+records = {
+    [4001] = Seen(6, 1000, 700, { rivalMin = 500, quantity = 10 }),
+    [4002] = Seen(6, 1000, 900, { rivalMin = 800, ignoredLow = 200, quantity = 4 }),
+    [4003] = Seen(3, 1000, 700, { rivalMin = 500, quantity = 10 }),
+    [4004] = Seen(6, 1000, 700, { rivalMin = 500, quantity = 10 }),
+    [4005] = Seen(6, 1000, 700, { rivalMin = 500, quantity = 10 }),
+    [4006] = Seen(6, 1000, 990, { rivalMin = 970, quantity = 10 }),
+    [4007] = Seen(6, 1000, 700, { rivalMin = 500, quantity = 10 }),
+}
+deposits[4007] = 100
+ns.Prices.Count = function() return 7 end
+
+check("the usual price leaves out the scan that found the deal", VendorFlips.UsualPrice(records[4001]) == 1000)
+check("and is the middle value, so one odd scan does not move it",
+    VendorFlips.UsualPrice(Seen(6, 1000, 1, { history = nil })) == 1000)
+local odd = Seen(6, 1000, 700, {})
+odd.history[2].m = 90000
+check("a single high scan does not either", VendorFlips.UsualPrice(odd) == 1000)
+check("fewer than five scans has no usual price", VendorFlips.UsualPrice(records[4003]) == nil)
+
+local resale, held, thin = VendorFlips:GetResaleRows()
+local plain = Find(resale, 4001)
+check("bought at 5s, usually 10s: listed", plain ~= nil)
+check("it lists again at the usual price", plain.resell == 1000 and plain.usual == 1000 and not plain.capped)
+check("profit is 10s less the 5% cut less 5s", plain.gain == 450)
+check("its demand is carried", plain.demand and plain.demand.level == "high")
+check("the deposit is not known yet", plain.depositKnown == false)
+
+local loneResale = Find(resale, 4002)
+check("a lone low listing lists again beside the next one up", loneResale and loneResale.buy == 200
+    and loneResale.resell == 800 and loneResale.capped and loneResale.gain == 560)
+
+check("a known deposit comes off the profit", Find(resale, 4007).gain == 350 and Find(resale, 4007).depositKnown)
+
+check("too few scans is held back", Find(resale, 4003) == nil)
+check("Low demand is held back", Find(resale, 4004) == nil)
+check("a grey item is held back", Find(resale, 4005) == nil)
+check("and those three are counted as thin", thin == 3)
+check("a listing the cut eats is no flip", Find(resale, 4006) == nil)
+check("best profit first", resale[1].itemID == 4002 and resale[2].itemID == 4001)
+check("nothing held by minimums with none set", held == 0)
+
+config.minProfit = 400
+local kept, heldBack = VendorFlips:GetResaleRows({ profitableOnly = true })
+check("Minimum profit holds the 3s 50c one back", Find(kept, 4007) == nil and heldBack == 1)
+config.minProfit = 0
+
+demandLevels[4001] = nil
+check("no demand reading is held back too", Find(VendorFlips:GetResaleRows(), 4001) == nil)
+demandLevels[4001] = "high"
+
+ns.db.lastFullScan = 6000
+check("a listing the last scan did not see is no flip", #VendorFlips:GetResaleRows() == 0)
+ns.db.lastFullScan = nil
+
+print("\nthe Sell to menu")
+
+local sellTo = dropdowns[1]
+check("the menu offers Vendor and Auction house", sellTo and #sellTo.options == 2
+    and sellTo.options[2].value == "auction")
+
+ns.Prices.changes = 3
+sellTo.onSelect("auction")
+check("picking Auction house lists the resale flips", list.data and #list.data == 3 and Find(list.data, 4001) ~= nil)
+check("the headings read RESELL and DEMAND", Showing("RESELL") and Showing("DEMAND"))
+
+row = Stub()
+list.opts.createRow(row)
+list.opts.updateRow(row, Find(list.data, 4001))
+check("RESELL shows the price it lists again at", row.cells[3].text ~= "")
+check("DEMAND shows High", row.cells[5].text == "High")
+
+list.opts.onClick(Find(list.data, 4002), 1, "LeftButton")
+check("the detail says what it usually sells for", Showing("Usually sells for"))
+check("and that it lists beside the next listing", Showing("List again at (next listing)"))
+
+ns.Scanner.isAuctionHouseOpen = true
+printed = {}
+list.opts.onClick(Find(list.data, 4001), 1, "RightButton")
+check("right-click still searches for it", sent[#sent] == "item4001")
+check("and says what is worth buying to list again", printed[1] and printed[1]:find("pays to list again", 1, true))
+ns.Scanner.isAuctionHouseOpen = false
+
+sellTo.onSelect("vendor")
+check("back on Vendor the headings read VENDOR and LISTED", Showing("VENDOR") and Showing("LISTED"))
+check("and the resale rows are gone", Find(list.data, 4001) == nil)
 
 for _, key in ipairs({ "C_Item", "GetTime", "CreateFrame", "PlaySound", "SOUNDKIT",
                       "GameTooltip", "C_Timer", "C_TooltipInfo" }) do

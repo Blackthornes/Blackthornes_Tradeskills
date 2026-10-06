@@ -1,5 +1,7 @@
 -- Blackthornes Tradeskills -- UI/Tab_VendorFlips.lua
--- Items on the auction house listed for less than a vendor pays.
+-- Items on the auction house listed for less than a vendor pays, or, with
+-- Sell to: Auction house, for well under what they usually sell for, to
+-- buy and list again (Voldar's idea, 2026-10-06).
 --
 -- Every item someone else has listed, priced at their cheapest listing from
 -- your last scan, against what any vendor gives for it. Profit is the vendor
@@ -22,23 +24,36 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
--- Right-aligned columns, laid out right to left.
+-- Right-aligned columns, laid out right to left. "sell" is what a vendor
+-- pays or what it lists again for, and "extra" how many are listed or how
+-- well it sells, by the Sell to menu.
 local COLUMNS = {
     { key = "gain",   label = "PROFIT", width = 66 },
     { key = "margin", label = "MARGIN", width = 50 },
-    { key = "vendor", label = "VENDOR", width = 66 },
+    { key = "sell",   label = "VENDOR", auction = "RESELL", width = 66 },
     { key = "buy",    label = "BUY",    width = 66 },
-    { key = "listed", label = "LISTED", width = 44 },
+    { key = "extra",  label = "LISTED", auction = "DEMAND", width = 44 },
     { key = "age",    label = "AGE",    width = 44 },
 }
 
+local SELL_TO = {
+    { text = "Sell to: Vendor",       value = "vendor" },
+    { text = "Sell to: Auction house", value = "auction" },
+}
+
 local state = {
+    sellTo = "vendor",
     search = "",
     dealsOnly = true,
     selected = nil,
     hidden = 0,
     pending = 0,
+    thin = 0,
 }
+
+local function Resale()
+    return state.sellTo == "auction"
+end
 
 local widgets = {}
 
@@ -77,6 +92,13 @@ local function SearchAuctionHouse(entry)
     -- in the queue, at click priority. The scan's slot was shared, so this
     -- could replace a waiting scan (or a scan could drop this search).
     if not ns.UI:SearchAuctionHouse(entry.itemID) then return end
+
+    if entry.kind == "auction" then
+        ns.Print(("Searching the auction house for %s. Anything under %s each pays to list again at %s. If the list there does not change, type the name into its search box."):format(
+            Util.GetItemLabel(entry.itemID), Util.FormatMoney(math.floor(entry.net), { noColor = true }),
+            Util.FormatMoney(entry.resell, { noColor = true })))
+        return
+    end
 
     ns.Print(("Searching the auction house for %s. Anything at %s each or less is a vendor flip. If the list there does not change, type the name into its search box."):format(
         Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.vendor - 1, { noColor = true })))
@@ -118,15 +140,18 @@ local function FillCell(cell, key, entry)
         cell:SetText(MarginText(entry.margin))
         cell:SetTextColor(Theme.ProfitColor(entry.gain))
         return
-    elseif key == "vendor" then
-        SetMoney(cell, entry.vendor)
+    elseif key == "sell" then
+        SetMoney(cell, entry.sell)
         cell:SetTextColor(Theme.Unpack("text"))
         return
     elseif key == "buy" then
         SetMoney(cell, entry.buy)
         cell:SetTextColor(Theme.Unpack("muted"))
         return
-    elseif key == "listed" then
+    elseif key == "extra" and entry.kind == "auction" then
+        text = ns.Demand:Label(entry.demand) or ""
+        color = ns.Demand:Color(entry.demand)
+    elseif key == "extra" then
         text = entry.listed and tostring(entry.listed) or ""
         color = "dim"
     elseif key == "age" then
@@ -162,10 +187,21 @@ local function ShowRowTooltip(row, entry)
     Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID, entry.name)
 
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine(("Buy at %s, sell to any vendor for %s: %s profit each."):format(
-        Util.FormatMoney(entry.buy, { noColor = true }),
-        Util.FormatMoney(entry.vendor, { noColor = true }),
-        Util.FormatMoney(entry.gain, { noColor = true })), 0.35, 0.85, 0.45, true)
+    if entry.kind == "auction" then
+        GameTooltip:AddLine(("Buy at %s, list it again at %s: %s profit each after the cut."):format(
+            Util.FormatMoney(entry.buy, { noColor = true }),
+            Util.FormatMoney(entry.resell, { noColor = true }),
+            Util.FormatMoney(entry.gain, { noColor = true })), 0.35, 0.85, 0.45, true)
+        GameTooltip:AddLine(("Usually sells for %s (middle of %d scans)."):format(
+            Util.FormatMoney(entry.usual, { noColor = true }), entry.scans - 1), 0.85, 0.85, 0.85, true)
+        local demand = ns.Demand:TooltipText(entry.demand)
+        if demand then GameTooltip:AddLine("Demand: " .. demand, 0.85, 0.85, 0.85, true) end
+    else
+        GameTooltip:AddLine(("Buy at %s, sell to any vendor for %s: %s profit each."):format(
+            Util.FormatMoney(entry.buy, { noColor = true }),
+            Util.FormatMoney(entry.vendor, { noColor = true }),
+            Util.FormatMoney(entry.gain, { noColor = true })), 0.35, 0.85, 0.45, true)
+    end
 
     -- Read now, as the AGE column is: the list can be kept for hours, and
     -- the warning it was built with never came on as the scan aged.
@@ -210,7 +246,7 @@ local function BuildDetail(parent)
     local summary = CreateFrame("Frame", nil, detail)
     summary:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -8)
     summary:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
-    summary:SetHeight(52)
+    summary:SetHeight(69)
     detail.summary = summary
 
     local function SummaryRow(index)
@@ -223,9 +259,10 @@ local function BuildDetail(parent)
         return { label = label, value = value }
     end
 
-    detail.lines = { SummaryRow(1), SummaryRow(2), SummaryRow(3) }
+    detail.lines = { SummaryRow(1), SummaryRow(2), SummaryRow(3), SummaryRow(4) }
 
-    -- How much of what a vendor pays is profit: full when the item is free.
+    -- How much of what a vendor pays (or a resale pays) is profit: full
+    -- when the item is free. Under the last summary line in use.
     local bar = Theme.CreateBar(detail, DETAIL_WIDTH - 24, 3)
     bar:SetPoint("TOPLEFT", summary, "TOPLEFT", 0, -54)
     detail.bar = bar
@@ -269,6 +306,51 @@ local function SetLine(line, label, value, color)
     line.value:SetTextColor(Theme.Unpack(color or "text"))
 end
 
+--- The detail panel for a row bought to list again.
+local function UpdateResaleDetail(detail, entry)
+    local fourth = detail.lines[4]
+    fourth.label:Show()
+    fourth.value:Show()
+
+    if entry.listed and entry.listed > 1 then
+        detail.subtitle:SetText(("%d listed. Only the cheapest is sure to be at this price."):format(entry.listed))
+    else
+        detail.subtitle:SetText("One listed.")
+    end
+
+    local lines = detail.lines
+    SetLine(lines[1], entry.loneLow and "Buy for (lone low)" or "Buy for",
+        Util.FormatMoney(entry.buy), "text")
+    SetLine(lines[2], "Usually sells for", Util.FormatMoney(entry.usual), "text")
+    SetLine(lines[3], entry.capped and "List again at (next listing)" or "List again at",
+        Util.FormatMoney(entry.resell), "text")
+    SetLine(lines[4], "Profit each", ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
+        "profit")
+
+    detail.bar:SetPoint("TOPLEFT", detail.summary, "TOPLEFT", 0, -71)
+    detail.bar:Set(entry.resell > 0 and entry.gain / entry.resell or 0, "profit")
+
+    local cut = math.floor((ns.Config:Get("auctionCut") or 0.05) * 100 + 0.5)
+    local paid = entry.depositKnown and ("the %d%% cut and the deposit"):format(cut)
+        or ("the %d%% cut"):format(cut)
+    detail.verdict:SetText(("Buy it, list it again at %s, and keep about %s each after %s."):format(
+        Util.FormatMoney(entry.resell, { noColor = true }), Util.FormatMoney(entry.gain, { noColor = true }), paid))
+
+    local parts = {
+        ("The usual price is the middle of the %d scans before the last one, so the cheap listing does not drag it down."):format(entry.scans - 1),
+    }
+    local demand = ns.Demand:TooltipText(entry.demand)
+    if demand then parts[#parts + 1] = ("Demand: %s."):format(demand) end
+    if not entry.depositKnown then
+        parts[#parts + 1] = "The deposit is not known until you have listed one, so it is not counted yet."
+    end
+    parts[#parts + 1] = "Your gold is tied up until it sells."
+    local age = ns.Prices:GetAge(entry.itemID) or entry.age
+    parts[#parts + 1] = ("Scanned %s."):format(age and Util.FormatAgeAgo(age) or "never")
+    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = "That was a while ago, so it may have sold." end
+    detail.note:SetText(table.concat(parts, " "))
+end
+
 local function UpdateDetail(entry)
     local detail = widgets.detail
     local shown = entry ~= nil
@@ -287,6 +369,15 @@ local function UpdateDetail(entry)
 
     detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
     Theme.SetItemIcon(detail.icon, entry.itemID)
+
+    if entry.kind == "auction" then
+        UpdateResaleDetail(detail, entry)
+        return
+    end
+
+    detail.lines[4].label:Hide()
+    detail.lines[4].value:Hide()
+    detail.bar:SetPoint("TOPLEFT", detail.summary, "TOPLEFT", 0, -54)
 
     if entry.listed and entry.listed > 1 then
         detail.subtitle:SetText(("%d listed. Only the cheapest is sure to be at this price."):format(entry.listed))
@@ -333,6 +424,7 @@ local function BuildKey()
         tostring(ns.Prices and ns.Prices:Count() or 0),
         tostring(ns.Disenchant.factsVersion or 0),
         tostring(state.dealsOnly),
+        state.sellTo,
         tostring(ns.Config:Get("minProfit")),
         tostring(ns.Config:Get("minMarginPercent")),
         tostring(ns.Scanner and ns.Scanner.isAuctionHouseOpen and true or false),
@@ -343,8 +435,14 @@ local function BuildRows()
     local key = BuildKey()
 
     if key ~= built.key then
-        local rows, hidden, pending = ns.VendorFlips:GetAuctionRows({ profitableOnly = state.dealsOnly })
-        built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
+        local rows, hidden, pending, thin
+        if Resale() then
+            rows, hidden, thin = ns.VendorFlips:GetResaleRows({ profitableOnly = state.dealsOnly })
+        else
+            rows, hidden, pending = ns.VendorFlips:GetAuctionRows({ profitableOnly = state.dealsOnly })
+        end
+        built.key, built.rows, built.hidden, built.pending, built.thin =
+            key, rows, hidden or 0, pending or 0, thin or 0
 
         -- For /bts vendordeals: what the tab is showing and when it was built.
         ns.VendorFlips.shownRows, ns.VendorFlips.shownBuiltAt = rows, time()
@@ -353,6 +451,7 @@ local function BuildRows()
     local rows = built.rows
     state.hidden = built.hidden
     state.pending = built.pending
+    state.thin = built.thin
 
     if state.search == "" then return rows end
 
@@ -372,7 +471,8 @@ local function EmptyText()
     end
 
     if (ns.Prices and ns.Prices:Count() or 0) == 0 then
-        return "Scan the auction house to find items listed for less than a vendor pays."
+        return Resale() and "Scan the auction house to find items listed well under their usual price."
+            or "Scan the auction house to find items listed for less than a vendor pays."
     end
 
     if state.dealsOnly and state.hidden > 0 then
@@ -381,11 +481,26 @@ local function EmptyText()
             ns.Config:Get("minMarginPercent") or 0, state.hidden)
     end
 
+    if Resale() then
+        local text = "Nothing on the auction house is under its usual price by more than the cut right now."
+        if (state.thin or 0) > 0 then
+            text = text .. (" %d more are cheap, but have fewer than %d scans, little demand, or are grey. Scan again over the next days to build up their history.")
+                :format(state.thin, ns.VendorFlips.MIN_RESALE_SCANS)
+        end
+        return text
+    end
+
     return "Nothing on the auction house is listed for less than a vendor pays right now."
 end
 
 local function Refresh()
     if not widgets.list then return end
+
+    if widgets.headingLabels then
+        for _, column in ipairs(COLUMNS) do
+            widgets.headingLabels[column.key]:SetText(Resale() and column.auction or column.label)
+        end
+    end
 
     local rows = BuildRows()
     -- A clicked heading's order over the list's own.
@@ -416,7 +531,12 @@ local function Refresh()
     -- close, so reading them cannot upset Ready to sell. Say so, or the list
     -- looks short.
     local pending
-    if (state.pending or 0) > 0 then
+    if Resale() and (state.thin or 0) > 0 then
+        pending = {
+            ("%d more held back: few scans or little demand"):format(state.thin),
+            ("%d held back"):format(state.thin),
+        }
+    elseif (state.pending or 0) > 0 then
         local waiting = ns.Scanner and ns.Scanner.isAuctionHouseOpen
             and "read once the auction house is closed"
             or "reading them now"
@@ -468,11 +588,22 @@ local function Build(container)
         if widgets.list then widgets.list:ScrollToTop() end
     end
 
+    -- Option bar: the menu, then search, then the tick box (Ezmode,
+    -- 2026-10-06).
+    local sellTo = Widgets.CreateDropdown(toolbar, SELL_TO, function(value)
+        state.sellTo = value
+        state.selected = nil
+        ShowFromTop()
+    end, { width = 180 })
+    sellTo:SetPoint("LEFT", 0, 0)
+    sellTo:SetValue(state.sellTo, true)
+    widgets.sellTo = sellTo
+
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
         ShowFromTop()
     end)
-    search:SetPoint("LEFT", 0, 0)
+    search:SetPoint("LEFT", sellTo, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
@@ -502,6 +633,8 @@ local function Build(container)
         sortLabels[column.key] = heading
         offset = offset - column.width - 6
     end
+    widgets.headingLabels = {}
+    for _, column in ipairs(COLUMNS) do widgets.headingLabels[column.key] = sortLabels[column.key] end
 
     -- Click a heading to sort by it; each column shows the row field it is
     -- named for.
