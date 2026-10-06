@@ -1474,7 +1474,11 @@ end
 --
 -- Searching is unrestricted; buying is never automated. The addon puts the item
 -- in front of you and gets out of the way.
-function UI:SearchAuctionHouse(itemID)
+--
+-- quantity is how many the queue still needs, from the shopping lists: picking
+-- the item in Blizzard's results then fills its quantity box with that
+-- (UI/BuyQuantity.lua). Other searches leave it out and fill nothing.
+function UI:SearchAuctionHouse(itemID, quantity)
     if not ns.Scanner.isAuctionHouseOpen then
         ns.Print("open the auction house first")
         return false
@@ -1504,6 +1508,8 @@ function UI:SearchAuctionHouse(itemID)
         ns.Print("the game has not loaded that item yet; hover over it once and try again")
         return false
     end
+
+    if ns.BuyQuantity then ns.BuyQuantity:Want(itemID, quantity) end
 
     -- Queued rather than sent directly. This shares one throttled channel with
     -- the player's own posting, and a search fired the instant a row is clicked

@@ -243,7 +243,7 @@ local function CreateMaterialRow(row)
     end
 
     row.search = Widgets.CreateButton(row, "AH", function()
-        if row.data then UI:SearchAuctionHouse(row.data.itemID) end
+        if row.data then UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall) end
     end, { width = 26, height = 16, tooltip = "Search the auction house for this" })
     row.search:SetPoint("RIGHT", -4, 0)
 end

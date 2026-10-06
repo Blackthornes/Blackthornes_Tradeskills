@@ -335,6 +335,7 @@ function Probe:PrintReport()
     Line("post item", Yes(caps.auction.hasPostItem))
     Line("post item PROTECTED", Yes(caps.auction.postItemSecure))
     Line("item locations", Yes(caps.auction.hasItemLocation))
+    if ns.BuyQuantity then Line("fill buy quantity", ns.BuyQuantity:ProbeText()) end
 
     Heading("Vendors")
     Line("merchant item info", Yes(Util.HasFunction("C_MerchantFrame.GetItemInfo")))
