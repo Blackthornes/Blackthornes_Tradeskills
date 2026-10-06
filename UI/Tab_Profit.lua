@@ -1423,133 +1423,18 @@ end
 -- recipe of a profession you have not learned, and whether it is worth
 -- getting. It is the same question as this tab's, asked before the recipe
 -- is bought, so it lives here behind a switch like the Characters tab's.
-local VIEWS = {
-    { key = "crafts", text = "MY CRAFTS" },
-    { key = "learn",  text = "RECIPES TO LEARN" },
-}
+-- Without that file (the tests load this one alone) the tab is the crafts.
+local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
+    mainKey = "crafts",
+    mainText = "MY CRAFTS",
+    mainTip = "The crafts you know, by profit",
+    buildMain = BuildCrafts,
+    refreshMain = Refresh,
+})
 
--- The switch's height; both views start below it.
-local SWITCH_HEIGHT = 22
-
-local function RefreshView()
-    if state.view == "learn" then
-        if ns.RecipeBookView then ns.RecipeBookView.Refresh() end
-    else
-        Refresh()
-    end
-end
-
---- Show one view and paint the switch to match.
-local function ShowView(key)
-    if not widgets.views then
-        state.view = key
-        return
-    end
-
-    state.view = widgets.views[key] and key or "crafts"
-
-    for viewKey, view in pairs(widgets.views) do
-        view:SetShown(viewKey == state.view)
-    end
-
-    for _, part in ipairs(widgets.switch) do
-        local active = part.key == state.view
-        part.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
-        if part.underline then part.underline:SetShown(active) end
-    end
-
-    RefreshView()
-end
-
---- MY CRAFTS | RECIPES TO LEARN: the view showing is lit gold and
---- underlined, the other waits in grey and lights under the mouse.
-local function BuildSwitch(container)
-    local buttons = {}
-    local previous
-
-    for _, definition in ipairs(VIEWS) do
-        local button = CreateFrame("Button", nil, container)
-        button:SetHeight(18)
-        local level = container:GetFrameLevel()
-        button:SetFrameLevel((type(level) == "number" and level or 1) + 5)
-
-        -- Kept beside the button rather than on it.
-        local part = { key = definition.key }
-
-        part.label = Theme.CreateLabel(button, "tiny", "muted")
-        part.label:SetPoint("LEFT", 0, 0)
-        part.label:SetText(definition.text)
-        local width = Theme.TextWidth and Theme.TextWidth(part.label)
-        button:SetWidth((type(width) == "number" and width or 100) + 4)
-
-        local underline = button:CreateTexture(nil, "OVERLAY")
-        if underline then
-            underline:SetPoint("BOTTOMLEFT", 0, 1)
-            underline:SetPoint("BOTTOMRIGHT", -4, 1)
-            underline:SetHeight(1)
-            underline:SetColorTexture(Theme.Unpack("accent"))
-            underline:Hide()
-            part.underline = underline
-        end
-
-        if previous then
-            button:SetPoint("LEFT", previous, "RIGHT", 14, 0)
-        else
-            button:SetPoint("TOPLEFT", 8, -4)
-        end
-
-        button:SetScript("OnClick", function() ShowView(part.key) end)
-        button:SetScript("OnEnter", function(self)
-            if part.key ~= state.view then
-                part.label:SetTextColor(Theme.Unpack("text"))
-            end
-            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(part.key == "learn"
-                and "Recipes you have not learned, and what each is worth"
-                or "The crafts you know, by profit", 1, 1, 1)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function()
-            if part.key ~= state.view then
-                part.label:SetTextColor(Theme.Unpack("muted"))
-            end
-            GameTooltip:Hide()
-        end)
-
-        buttons[#buttons + 1] = part
-        previous = button
-    end
-
-    local rule = container:CreateTexture(nil, "ARTWORK")
-    if rule then
-        rule:SetColorTexture(Theme.Unpack("border"))
-        rule:SetHeight(1)
-        rule:SetPoint("LEFT", previous, "RIGHT", 6, 0)
-        rule:SetPoint("RIGHT", container, "RIGHT", -8, 0)
-    end
-
-    return buttons
-end
-
-local function Build(container)
-    local views = {}
-
-    for _, definition in ipairs(VIEWS) do
-        local view = CreateFrame("Frame", nil, container)
-        view:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -SWITCH_HEIGHT)
-        view:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
-        view:Hide()
-        views[definition.key] = view
-    end
-
-    BuildCrafts(views.crafts)
-    if ns.RecipeBookView then ns.RecipeBookView.Build(views.learn) end
-
-    widgets.views = views
-    widgets.switch = BuildSwitch(container)
-
-    ShowView(state.view or "crafts")
-end
+local Build = switch and switch.Build or BuildCrafts
+local RefreshView = switch and switch.Refresh or Refresh
+local ShowView = switch and switch.ShowView or function() end
 
 local function OnShow()
     -- Opening the tab again sorts afresh.

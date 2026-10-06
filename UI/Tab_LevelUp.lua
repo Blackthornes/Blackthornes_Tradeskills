@@ -838,11 +838,24 @@ local function OnShow()
     dropdown:SetValue(state.profession)
 end
 
+-- Recipes to learn here too (2026-10-05: "recipes to learn should be under
+-- level up as well"), its own copy listed by the skill each recipe needs, so
+-- the next recipe to get on the way up is near the top. Without
+-- UI/RecipeBookView.lua (the tests load this file alone) the tab is the list.
+local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
+    mainKey = "recipes",
+    mainText = "MY RECIPES",
+    mainTip = "The recipes you know, cheapest way up first",
+    buildMain = Build,
+    refreshMain = Refresh,
+    learn = ns.RecipeBookView.New({ order = "skill" }),
+})
+
 UI:RegisterTab({
     key = "levelup",
     text = "Level Up",
     order = 1.5,
-    build = Build,
-    refresh = Refresh,
+    build = switch and switch.Build or Build,
+    refresh = switch and switch.Refresh or Refresh,
     onShow = OnShow,
 })
