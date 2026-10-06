@@ -405,6 +405,9 @@ end
 -- Detail panel
 --------------------------------------------------------------------------------
 
+-- Defined below; the Price graph button redraws the pane with it.
+local UpdateDetail
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
@@ -434,6 +437,30 @@ local function BuildDetail(parent)
     -- Back out under the icon, so the list of materials starts at the edge.
     reagentHeading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.reagentHeading = reagentHeading
+
+    -- The price graph (Sullivan, 2026-10-06) goes where the materials list
+    -- does, for the craft and each material, hour by hour. This swaps the
+    -- two; which one shows is remembered.
+    if ns.PriceGraph then
+        local graphButton = Widgets.CreateButton(detail, "Price graph", function()
+            ns.Config:Set("profitShowsGraph", not ns.Config:Get("profitShowsGraph"))
+            UpdateDetail(state.selected)
+        end, { width = 76, height = 16, fontSize = "tiny" })
+        graphButton:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
+        graphButton:SetPoint("TOP", reagentHeading, "TOP", 0, 4)
+        detail.graphButton = graphButton
+        if reagentHeading.rule then
+            reagentHeading.rule:ClearAllPoints()
+            reagentHeading.rule:SetPoint("LEFT", reagentHeading, "RIGHT", 6, 0)
+            reagentHeading.rule:SetPoint("RIGHT", graphButton, "LEFT", -6, 0)
+        end
+
+        local graph = ns.PriceGraph.Create(detail, { picker = true, ticks = true })
+        graph:SetPoint("TOPLEFT", reagentHeading, "BOTTOMLEFT", 0, -6)
+        graph:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -12, 84 + 170 + 6)
+        graph:Hide()
+        detail.graph = graph
+    end
 
     detail.reagentLines = {}
 
@@ -658,7 +685,45 @@ local function LayoutSummary(detail)
     end
 end
 
-local function UpdateDetail(analysis)
+--- Show the price graph or the materials list, and fit the graph above the
+--- summary rows that are shown.
+local function UpdateGraph(detail, analysis)
+    -- rawget: a test's stand-in frame answers any field with a function.
+    if type(rawget(detail, "graph")) ~= "table" then return false end
+    local showGraph = analysis ~= nil and ns.Config:Get("profitShowsGraph") == true
+
+    detail.graphButton:SetShown(analysis ~= nil)
+    detail.graphButton:SetText(showGraph and "Materials" or "Price graph")
+    detail.graphButton.tooltipText = showGraph
+        and "Show the materials list again"
+        or "The cheapest price hour by hour, for this craft and its materials, and when in the day each is cheapest and dearest"
+    detail.reagentHeading:SetText(showGraph and "PRICE HISTORY" or "MATERIALS")
+    detail.graph:SetShown(showGraph)
+    if not showGraph then return false end
+
+    -- Hidden summary rows leave their room at the top of the block.
+    local skipped = 0
+    for _, row in ipairs(detail.summaryRows) do
+        if not row.label:IsShown() then skipped = skipped + 1 end
+    end
+    if not detail.summary:IsShown() then skipped = #detail.summaryRows end
+
+    detail.graph:ClearAllPoints()
+    detail.graph:SetPoint("TOPLEFT", detail.reagentHeading, "BOTTOMLEFT", 0, -8)
+    detail.graph:SetPoint("BOTTOMRIGHT", detail.summary, "TOPRIGHT", 0,
+        6 - skipped * SUMMARY_ROW_HEIGHT)
+
+    -- The craft first, then its materials, dearest line first.
+    local items = {}
+    if analysis.outputItemID then items[1] = analysis.outputItemID end
+    for _, reagent in ipairs((analysis.cost and analysis.cost.reagents) or {}) do
+        if reagent.itemID then items[#items + 1] = reagent.itemID end
+    end
+    detail.graph:SetItems(items, analysis.outputItemID)
+    return true
+end
+
+function UpdateDetail(analysis)
     local detail = widgets.detail
 
     local hasSelection = analysis ~= nil
@@ -687,7 +752,10 @@ local function UpdateDetail(analysis)
     detail.limitHint:SetShown(hasSelection)
     detail.quantity:GetParent():SetShown(hasSelection)
 
-    if not hasSelection then return end
+    if not hasSelection then
+        UpdateGraph(detail, nil)
+        return
+    end
 
     detail.title:SetText(analysis.name or ("recipe " .. analysis.recipeID))
     Theme.SetItemIcon(detail.icon, analysis.outputItemID)
@@ -919,6 +987,12 @@ local function UpdateDetail(analysis)
         end
 
         LayoutSummary(detail)
+    end
+
+    -- After the summary, which decides how much room the graph has.
+    if UpdateGraph(detail, analysis) then
+        for _, line in ipairs(detail.reagentLines) do line.frame:Hide() end
+        detail.moreLine:Hide()
     end
 
     -- Limit control reflects the override if there is one, else the default.
