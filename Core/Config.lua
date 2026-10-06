@@ -272,6 +272,12 @@ local DEFAULTS = {
         -- in game with /bts star, because whether a texture resolves is the
         -- one thing that cannot be checked outside it.
         skillUpMarker = "star",
+
+        -- What the Profit tab's profit is for (Sullivan, 2026-10-06): "best"
+        -- for whichever of the auction house, a vendor and disenchanting
+        -- pays most, or "auction", "vendor" or "disenchant" alone. Picked on
+        -- the tab's option bar; /bts top and /bts why follow it.
+        profitBy = "best",
     },
 
     -- realmKey -> itemID -> price record
