@@ -361,6 +361,10 @@ local function UpdateRow(row, analysis)
         -- Valued at what it disenchants to, read off its materials' prices.
         cells.age:SetText("DE")
         cells.age:SetTextColor(Theme.Unpack("muted"))
+    elseif analysis.priceBasis == "mine" or analysis.priceBasis == "floor" then
+        -- Priced at what the player set on the Prices tab, not a scan.
+        SetFitted(cells.age, "my price", "mine")
+        cells.age:SetTextColor(Theme.Unpack("warn"))
     else
         local age = Util.FormatAge(analysis.age)
         SetFitted(cells.age, age, age == "just now" and "now" or nil)
@@ -757,6 +761,11 @@ local function UpdateDetail(analysis)
             line.name:SetText(("%dx %s"):format(reagent.quantity, label))
             line.value:SetText(("need %d"):format(reagent.shortfall))
             line.value:SetTextColor(Theme.Unpack("loss"))
+        elseif reagent.source == "mine" then
+            -- Costed at the player's own price from the Prices tab.
+            line.name:SetText(("%dx %s |c%s(my price)|r"):format(reagent.quantity, label, ns.COLORS.warn))
+            line.value:SetText(Util.FormatMoney(reagent.lineCost, { short = true }))
+            line.value:SetTextColor(Theme.Unpack("warn"))
         else
             line.name:SetText(("%dx %s"):format(reagent.quantity, label))
             line.value:SetText(Util.FormatMoney(reagent.lineCost, { short = true }))

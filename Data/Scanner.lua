@@ -1539,7 +1539,7 @@ function Scanner:CapturePassiveListings(itemID, listings)
     if not listings or #listings == 0 then return false end
 
     local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow =
-        ns.Prices:Summarise(listings, ns.Prices:GetValue(itemID, "market"))
+        ns.Prices:Summarise(listings, ns.Prices:GetScanValue(itemID, "market"))
     if not marketValue then return false end
 
     local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow)
@@ -1805,7 +1805,7 @@ function Scanner:FinishItemScan(itemID, listings, isCommodity)
     self.pendingItem = nil
 
     local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow =
-        ns.Prices:Summarise(listings, ns.Prices:GetValue(itemID, "market"))
+        ns.Prices:Summarise(listings, ns.Prices:GetScanValue(itemID, "market"))
 
     -- "fresh" and "empty" both mean the auction house answered. They are told
     -- apart because an empty answer is information -- there is nothing listed

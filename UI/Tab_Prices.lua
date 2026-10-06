@@ -29,6 +29,7 @@ local state = {
     search = "",
     reagentsOnly = false,
     favouritesOnly = false,
+    mineOnly = false,
     sortBy = "market",
     selected = nil,
 }
@@ -102,11 +103,24 @@ local function StoredNames()
         if not names[itemID] and type(name) == "string" then names[itemID] = name end
     end
 
+    -- And an item given its own price, the name it had then.
+    for itemID, entry in pairs(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) do
+        if not names[itemID] and type(entry) == "table" and type(entry.name) == "string" then
+            names[itemID] = entry.name
+        end
+    end
+
     return names
 end
 
 local function IsFavourite(itemID)
     return ns.Prices.IsFavourite ~= nil and ns.Prices:IsFavourite(itemID)
+end
+
+--- The price the player set on an item, and its kind, or nil.
+local function Mine(itemID)
+    if not ns.Prices.GetMine then return nil end
+    return ns.Prices:GetMine(itemID)
 end
 
 local function BuildList()
@@ -125,6 +139,7 @@ local function BuildList()
     local function Add(itemID, record)
         if reagents and not reagents[itemID] then return end
         if state.favouritesOnly and favourites[itemID] == nil then return end
+        if state.mineOnly and not Mine(itemID) then return end
 
         rows[#rows + 1] = {
             itemID = itemID,
@@ -145,8 +160,19 @@ local function BuildList()
 
     -- A starred item with no price yet (never scanned, or pruned for age)
     -- still shows, with dashes, so it never quietly drops off the list.
+    local added = {}
     for itemID in pairs(favourites) do
-        if type(itemID) == "number" and not prices[itemID] then Add(itemID, {}) end
+        if type(itemID) == "number" and not prices[itemID] then
+            Add(itemID, {})
+            added[itemID] = true
+        end
+    end
+
+    -- So does an item given its own price.
+    for itemID in pairs(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) do
+        if type(itemID) == "number" and not prices[itemID] and not added[itemID] and Mine(itemID) then
+            Add(itemID, {})
+        end
     end
 
     if state.search ~= "" then
@@ -195,6 +221,7 @@ end
 --------------------------------------------------------------------------------
 
 local Refresh
+local BuildMyPrice
 
 --- The favourite star: a gold star when the item is starred, a grey one when
 --- not, lit under the mouse with a tooltip saying what a click does, so it
@@ -316,7 +343,12 @@ end
 
 local function UpdateRow(row, entry)
     entry.label = Util.GetItemLabel(entry.itemID)
-    row.name:SetText(entry.label)
+    -- An item with its own price says so, in gold, beside its name.
+    if Mine(entry.itemID) then
+        row.name:SetText(("%s  |c%smy price|r"):format(entry.label, ns.COLORS.warn))
+    else
+        row.name:SetText(entry.label)
+    end
     Theme.SetItemIcon(row.icon, entry.itemID)
     row.star:SetItem(entry.itemID)
 
@@ -423,6 +455,152 @@ end
 -- Detail panel
 --------------------------------------------------------------------------------
 
+-- My price (Ponyboy, 2026-10-06): the player's own price for the item, in
+-- gold, silver and copper boxes, and whether it is used instead of the
+-- auction price or only as the least it can be. Saved as it is typed;
+-- a price of nothing clears it, and so does Clear.
+
+local MY_MODES = {
+    { text = "Use this price", value = "use" },
+    { text = "Never below", value = "floor" },
+}
+
+local MY_STATUS = {
+    use = "Used instead of the AH price",
+    floor = "AH price, but never below",
+}
+
+local function MyPriceTyped(my)
+    local gold = my.gold:GetValue() or 0
+    local silver = my.silver:GetValue() or 0
+    local copper = my.copper:GetValue() or 0
+    return gold * 10000 + silver * 100 + copper
+end
+
+local function SaveMyPrice()
+    -- The item the boxes were filled for: a box left mid-edit by a click on
+    -- another row saves to the item it was typed for.
+    local my = widgets.detail and widgets.detail.myPrice
+    local itemID = my and my.itemID
+    if not itemID then return end
+
+    ns.Prices:SetMine(itemID, MyPriceTyped(my), my.mode:GetValue() or "use", PlainName(itemID))
+    if Refresh then Refresh() end
+end
+
+BuildMyPrice = function(detail, anchor)
+    local my = {}
+    detail.myPrice = my
+
+    local heading = Theme.CreateLabel(detail, "tiny", "dim")
+    heading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
+    heading:SetText("MY PRICE")
+    Theme.StyleHeading(heading, detail)
+    my.heading = heading
+
+    local parts = {}
+    local last
+    local function Coin(key, width, max, suffix)
+        local box = Widgets.CreateNumberBox(detail, {
+            width = width, min = 0, max = max,
+            onChange = function() SaveMyPrice() end,
+        })
+        if last then
+            box:SetPoint("LEFT", last, "RIGHT", 4, 0)
+        else
+            box:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -6)
+        end
+
+        local mark = Theme.CreateLabel(detail, "small", "text")
+        mark:SetPoint("LEFT", box, "RIGHT", 2, 0)
+        mark:SetText(suffix)
+
+        my[key] = box
+        parts[#parts + 1] = box
+        parts[#parts + 1] = mark
+        last = mark
+    end
+
+    Coin("gold", 44, 214748, "|cffffd700g|r")
+    Coin("silver", 28, 99, "|cffc7c7cfs|r")
+    Coin("copper", 28, 99, "|cffeda55fc|r")
+
+    my.mode = Widgets.CreateDropdown(detail, MY_MODES, function() SaveMyPrice() end, { width = 118 })
+    my.mode:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
+    my.mode:SetPoint("TOP", my.gold, "TOP", 0, 0)
+    my.mode:SetValue("use")
+    parts[#parts + 1] = my.mode
+
+    my.clear = Widgets.CreateButton(detail, "Clear", function()
+        if not my.itemID then return end
+        ns.Prices:SetMine(my.itemID, nil)
+        if Refresh then Refresh() end
+    end, { width = 64, height = 22, tooltip = "Take your price off and go back to the AH price" })
+    my.clear:SetPoint("TOPRIGHT", my.mode, "BOTTOMRIGHT", 0, -6)
+    parts[#parts + 1] = my.clear
+
+    -- Beside Clear, as wide as the pane leaves it.
+    local status = Theme.CreateLabel(detail, "small", "muted")
+    status:SetPoint("TOPLEFT", my.gold, "BOTTOMLEFT", 0, -11)
+    status:SetWidth(DETAIL_WIDTH - 24 - 64 - 8)
+    status:SetWordWrap(false)
+    my.status = status
+    parts[#parts + 1] = status
+
+    -- Tooltips on the boxes, so what they are for is never a guess.
+    for _, box in ipairs({ my.gold, my.silver, my.copper }) do
+        box.editBox:SetScript("OnEnter", function(self)
+            Theme.SetBorderColor(box, "borderLit")
+            GameTooltip:SetOwner(box, "ANCHOR_TOP")
+            GameTooltip:SetText("My price", 1, 1, 1)
+            GameTooltip:AddLine("Your own price for this item. Pick whether it is used instead of the AH price, or only as the least it can be.", 0.9, 0.9, 0.9, true)
+            GameTooltip:Show()
+        end)
+        box.editBox:SetScript("OnLeave", function()
+            Theme.SetBorderColor(box, "border")
+            GameTooltip:Hide()
+        end)
+    end
+
+    function my:SetShown(shown)
+        heading:SetShown(shown)
+        for _, part in ipairs(parts) do part:SetShown(shown) end
+    end
+
+    local function Focused(box)
+        local edit = box.editBox
+        return type(edit.HasFocus) == "function" and edit:HasFocus() == true
+    end
+
+    function my:Show(itemID)
+        -- Another item: a box still being typed in saves first, to its own.
+        if self.itemID ~= itemID then
+            for _, box in ipairs({ self.gold, self.silver, self.copper }) do
+                if Focused(box) then box.editBox:ClearFocus() end
+            end
+        end
+        self.itemID = itemID
+
+        -- A redraw while typing (the auction house redraws often) leaves
+        -- the box being typed in alone.
+        local price, mode = Mine(itemID)
+        local gold, silver, copper = Util.SplitMoney(price or 0)
+        if not Focused(self.gold) then self.gold:SetValue(gold, true) end
+        if not Focused(self.silver) then self.silver:SetValue(silver, true) end
+        if not Focused(self.copper) then self.copper:SetValue(copper, true) end
+        self.mode:SetValue(mode or self.mode:GetValue() or "use")
+        self.clear:SetEnabledState(price ~= nil)
+
+        if price then
+            status:SetText(MY_STATUS[mode])
+            status:SetTextColor(Theme.Unpack("warn"))
+        else
+            status:SetText("Not set, the AH price is used")
+            status:SetTextColor(Theme.Unpack("dim"))
+        end
+    end
+end
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
@@ -482,9 +660,11 @@ local function BuildDetail(parent)
     AddRow("confidence", "Confidence")
     AddRow("liquidity", "Stock movement")
 
+    BuildMyPrice(detail, rowsAnchor)
+
     -- Chart
     local chartHeading = Theme.CreateLabel(detail, "tiny", "dim")
-    chartHeading:SetPoint("TOPLEFT", rowsAnchor, "BOTTOMLEFT", 0, -16)
+    chartHeading:SetPoint("TOPLEFT", detail.myPrice.status, "BOTTOMLEFT", 0, -14)
     chartHeading:SetText("MARKET VALUE HISTORY")
     Theme.StyleHeading(chartHeading, detail)
     detail.historyHeading = chartHeading
@@ -492,7 +672,7 @@ local function BuildDetail(parent)
     local chart = CreateFrame("Frame", nil, detail)
     chart:SetPoint("TOPLEFT", chartHeading, "BOTTOMLEFT", 0, -6)
     chart:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
-    chart:SetHeight(54)
+    chart:SetHeight(44)
     detail.chart = chart
     detail.bars = {}
 
@@ -558,6 +738,7 @@ local function UpdateDetail(entry)
         label:SetShown(shown)
     end
     if detail.historyHeading then detail.historyHeading:SetShown(shown) end
+    detail.myPrice:SetShown(shown)
 
     if not shown then
         for _, bar in ipairs(detail.bars) do bar:Hide() end
@@ -570,6 +751,7 @@ local function UpdateDetail(entry)
     detail.title:SetText(Util.GetItemLabel(entry.itemID))
     Theme.SetItemIcon(detail.icon, entry.itemID)
     detail.star:SetItem(entry.itemID)
+    detail.myPrice:Show(entry.itemID)
 
     -- A name that wraps to two lines pushes the rows down with it.
     local titleHeight = detail.title.GetStringHeight and detail.title:GetStringHeight() or 0
@@ -629,9 +811,10 @@ local function UpdateDetail(entry)
 end
 
 --- The list a search would show, for the tests.
-function UI._PricesList(search, favouritesOnly)
+function UI._PricesList(search, favouritesOnly, mineOnly)
     state.search = search or ""
     state.favouritesOnly = favouritesOnly and true or false
+    state.mineOnly = mineOnly and true or false
     return BuildList()
 end
 
@@ -651,6 +834,8 @@ function Refresh()
     if #data == 0 then
         if state.favouritesOnly and starred == 0 then
             widgets.emptyLabel:SetText("No favourites yet. Click the star beside an item to keep it here.")
+        elseif state.mineOnly and not next(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) then
+            widgets.emptyLabel:SetText("No prices of your own yet. Pick an item and type one under My price.")
         else
             widgets.emptyLabel:SetText(ns.Prices:Count() == 0
                 and "No auction data yet. Open the auction house and press Scan."
@@ -706,6 +891,13 @@ local function Build(container)
         ShowFromTop()
     end, state.favouritesOnly)
     favouritesOnly:SetPoint("LEFT", reagentsOnly, "RIGHT", 12, 0)
+
+    -- Only the items given their own price (Ponyboy, 2026-10-06).
+    local mineOnly = Widgets.CreateCheckbox(toolbar, "My prices only", function(checked)
+        state.mineOnly = checked
+        ShowFromTop()
+    end, false)
+    mineOnly:SetPoint("LEFT", favouritesOnly, "RIGHT", 12, 0)
 
     -- No sort menu: the headings sort (Ezmode, 2026-10-06). The list opens
     -- by market value.

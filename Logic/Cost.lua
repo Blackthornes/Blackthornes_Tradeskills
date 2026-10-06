@@ -27,8 +27,15 @@ local MAX_SUBCRAFT_DEPTH = 3
 -- be cheaper to make than to buy, so once the first queued bolt was made,
 -- the rest of them dropped off the queue.
 --
--- @return copper, source  -- source is "vendor", "buy" or nil when unknown
+-- @return copper, source  -- source is "vendor", "buy", "mine" (the player's
+--   own price, from the Prices tab) or nil when unknown
 function Cost:GetReagentUnitCost(itemID)
+    -- A price the player set wins (Ponyboy, 2026-10-06). "use" is the cost,
+    -- whoever sells it; "floor" is the least it costs, vendor or auction.
+    local mine, mode
+    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
+    if mine and mode == "use" then return mine, "mine" end
+
     -- Buying means paying the asking price, not the smoothed market average.
     -- A lone listing far below the rest is left out, as the undercut rule
     -- leaves it out (2026-09-26): one seller's single cheap unit is
@@ -44,8 +51,12 @@ function Cost:GetReagentUnitCost(itemID)
     -- crafts, so a cheaper auction price still wins there.
     local limited = ns.Vendor.IsLimited and ns.Vendor:IsLimited(itemID)
     if vendor and not (limited and auction and auction < vendor) then
+        if mine and vendor < mine then return mine, "mine" end
         return vendor, "vendor"
     end
+
+    -- GetValue has already lifted the auction price to a floor.
+    if mine and auction == mine then return auction, "mine" end
 
     if auction then
         return auction, "buy"
@@ -173,7 +184,8 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
         if depth < MAX_SUBCRAFT_DEPTH then
             local subRecipeID = self:FindRecipeForItem(itemID)
 
-            if subRecipeID and not visited[subRecipeID] then
+            -- Not over a price the player chose to use for it.
+            if subRecipeID and not visited[subRecipeID] and source ~= "mine" then
                 local subResult = self:GetCraftCost(subRecipeID, depth + 1, visited, opts)
 
                 if subResult and subResult.priceable and subResult.perUnit then

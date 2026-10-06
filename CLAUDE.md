@@ -42,7 +42,11 @@ at runtime, inside a pcall and read only:
 _G.BlackthornesTS.Prices:GetValue(itemID)   -- no second argument: "market"
 ```
 
-It expects a copper number, or nil when there is no price. It copies no data,
+It expects a copper number, or nil when there is no price. Since
+2026-10-06 `GetValue` also follows a price the player set on the Prices tab
+(`Prices:GetMine`, saved in `myPrices`): "use" replaces the scanned price,
+"floor" lifts it, and "rival" stays the auction house's. `GetScanValue` is
+the scans alone. It copies no data,
 writes nothing, and has no TOC dependency; without Tradeskills it falls back to
 vendor prices. So keep all three stable: the `_G.BlackthornesTS` global
 (`Core/Init.lua`), `ns.Prices` on it, and `Prices:GetValue(itemID)` defaulting
