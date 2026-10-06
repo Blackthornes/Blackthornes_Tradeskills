@@ -229,6 +229,10 @@ local DEFAULTS = {
         -- A Take next batch button at the mailbox, taking the queue's
         -- materials a bagful at a time. Off by default (2026-10-05).
         mailBatchTake = false,
+        -- Picking a material the Buy list searched for fills the auction
+        -- house's quantity box with what the queue still needs (2026-10-06).
+        -- See UI/BuyQuantity.lua.
+        fillBuyQuantity = true,
 
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.

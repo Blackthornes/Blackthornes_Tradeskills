@@ -56,6 +56,7 @@ UI\Titanforged.lua
 UI\Collapse.lua
 UI\Main.lua
 UI\PostPanel.lua
+UI\BuyQuantity.lua
 UI\CraftPanel.lua
 UI\ProfessionOpener.lua
 UI\Disenchanter.lua
