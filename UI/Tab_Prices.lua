@@ -28,6 +28,7 @@ local COLUMNS = {
 local state = {
     search = "",
     reagentsOnly = false,
+    favouritesOnly = false,
     sortBy = "market",
     selected = nil,
 }
@@ -96,12 +97,22 @@ local function StoredNames()
         end
     end
 
+    -- A starred item keeps the name it had when it was starred.
+    for itemID, name in pairs(ns.Prices.GetFavourites and ns.Prices:GetFavourites() or {}) do
+        if not names[itemID] and type(name) == "string" then names[itemID] = name end
+    end
+
     return names
+end
+
+local function IsFavourite(itemID)
+    return ns.Prices.IsFavourite ~= nil and ns.Prices:IsFavourite(itemID)
 end
 
 local function BuildList()
     local rows = {}
     local reagents = state.reagentsOnly and GetReagentSet() or nil
+    local favourites = ns.Prices.GetFavourites and ns.Prices:GetFavourites() or {}
 
     -- Names are only needed to search or sort by; the label itself is read
     -- for the rows on screen, in UpdateRow.
@@ -109,20 +120,33 @@ local function BuildList()
         or (widgets.sorter ~= nil and widgets.sorter.key == "name")
     local stored = wantNames and StoredNames() or {}
 
-    for itemID, record in pairs(ns.Prices:GetTable()) do
-        if not reagents or reagents[itemID] then
-            rows[#rows + 1] = {
-                itemID = itemID,
-                record = record,
-                market = record.market or 0,
-                min = record.min or 0,
-                quantity = record.quantity or 0,
-                age = ns.Prices:GetAge(itemID) or math.huge,
-                liquidity = ns.Prices:GetLiquidity(itemID),
-                name = wantNames and (PlainName(itemID) or stored[itemID]
-                    or ("~item %d"):format(itemID)) or "",
-            }
-        end
+    local prices = ns.Prices:GetTable()
+
+    local function Add(itemID, record)
+        if reagents and not reagents[itemID] then return end
+        if state.favouritesOnly and favourites[itemID] == nil then return end
+
+        rows[#rows + 1] = {
+            itemID = itemID,
+            record = record,
+            market = record.market or 0,
+            min = record.min or 0,
+            quantity = record.quantity or 0,
+            age = ns.Prices:GetAge(itemID) or math.huge,
+            liquidity = ns.Prices:GetLiquidity(itemID),
+            name = wantNames and (PlainName(itemID) or stored[itemID]
+                or ("~item %d"):format(itemID)) or "",
+        }
+    end
+
+    for itemID, record in pairs(prices) do
+        Add(itemID, record)
+    end
+
+    -- A starred item with no price yet (never scanned, or pruned for age)
+    -- still shows, with dashes, so it never quietly drops off the list.
+    for itemID in pairs(favourites) do
+        if type(itemID) == "number" and not prices[itemID] then Add(itemID, {}) end
     end
 
     if state.search ~= "" then
@@ -170,13 +194,106 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+local Refresh
+
+--- The favourite star: a gold star when the item is starred, a grey one when
+--- not, lit under the mouse with a tooltip saying what a click does, so it
+--- reads as a button rather than decoration. `getItemID` names the item the
+--- star belongs to when it is clicked.
+local function CreateStar(parent, size, getItemID)
+    local star = CreateFrame("Button", nil, parent)
+    star:SetSize(size + 4, size + 4)
+
+    local file = (Theme.MEDIA or "") .. "SkillUpStar"
+
+    -- A soft gold light behind the star, under the mouse and when starred.
+    local glow = star:CreateTexture(nil, "BACKGROUND")
+    glow:SetPoint("CENTER")
+    glow:SetSize(size + 10, size + 10)
+    glow:SetTexture(file)
+    pcall(glow.SetBlendMode, glow, "ADD")
+    glow:SetAlpha(0)
+    star.glow = glow
+
+    local art = star:CreateTexture(nil, "ARTWORK")
+    art:SetPoint("CENTER")
+    art:SetSize(size, size)
+    art:SetTexture(file)
+    star.art = art
+
+    local function Paint(hovered)
+        local on = star.itemID ~= nil and IsFavourite(star.itemID)
+        star.on = on
+        pcall(art.SetDesaturated, art, not on)
+        if on then
+            art:SetVertexColor(1, 1, 1)
+            art:SetAlpha(1)
+        else
+            -- Grey but plain to see, brighter under the mouse.
+            art:SetVertexColor(0.85, 0.85, 0.85)
+            art:SetAlpha(hovered and 0.95 or 0.5)
+        end
+        glow:SetAlpha(hovered and 0.55 or on and 0.2 or 0)
+    end
+    star.Paint = Paint
+
+    function star:SetItem(itemID)
+        self.itemID = itemID
+        Paint(self.IsMouseOver ~= nil and self:IsMouseOver() == true)
+    end
+
+    local function ShowTip()
+        GameTooltip:SetOwner(star, "ANCHOR_TOP")
+        GameTooltip:SetText(star.on and "Remove from favourites" or "Add to favourites", 1, 1, 1, 1, true)
+        GameTooltip:AddLine("Tick Favourites only to see just your starred items.", 0.9, 0.9, 0.9, true)
+        GameTooltip:Show()
+    end
+
+    star:SetScript("OnClick", function(self)
+        local itemID = getItemID and getItemID() or self.itemID
+        if not itemID then return end
+
+        local on = not IsFavourite(itemID)
+        local name = PlainName(itemID)
+        ns.Prices:SetFavourite(itemID, on, name)
+
+        -- Starred by hand, the star pops: a little past full size, then settles.
+        if on and ns.Motion and ns.Motion.Run then
+            ns.Motion:Run(art, "pop", 0.25, function(p)
+                local grown = math.max(1, size * p)
+                art:SetSize(grown, grown)
+            end, { ease = ns.Motion.EaseOutBack })
+        end
+
+        if Refresh then Refresh() end
+        Paint(true)
+        ShowTip()
+    end)
+
+    star:SetScript("OnEnter", function()
+        Paint(true)
+        ShowTip()
+    end)
+    star:SetScript("OnLeave", function()
+        Paint(false)
+        GameTooltip:Hide()
+    end)
+
+    Paint(false)
+    return star
+end
+
 local function CreateRow(row)
+    -- The favourite star at the row's left end, before the icon.
+    row.star = CreateStar(row, 14, function() return row.data and row.data.itemID end)
+    row.star:SetPoint("LEFT", 4, 0)
+
     -- The item's icon beside its name, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 16)
-    row.icon:SetPoint("LEFT", 8, 0)
+    row.icon:SetPoint("LEFT", 26, 0)
 
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("LEFT", 28, 0)
+    row.name:SetPoint("LEFT", 46, 0)
 
     row.cells = {}
 
@@ -201,6 +318,7 @@ local function UpdateRow(row, entry)
     entry.label = Util.GetItemLabel(entry.itemID)
     row.name:SetText(entry.label)
     Theme.SetItemIcon(row.icon, entry.itemID)
+    row.star:SetItem(entry.itemID)
 
     local stale = ns.Prices:IsStale(entry.itemID)
     row.name:SetTextColor(Theme.Unpack(stale and "muted" or "text"))
@@ -316,9 +434,13 @@ local function BuildDetail(parent)
     icon:SetPoint("TOPLEFT", 12, -12)
     detail.icon = icon
 
+    -- The same star as the rows', at the pane's top right.
+    detail.star = CreateStar(detail, 18, function() return state.selected and state.selected.itemID end)
+    detail.star:SetPoint("TOPRIGHT", -8, -10)
+
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 50, -12)
-    title:SetPoint("TOPRIGHT", -12, -12)
+    title:SetPoint("TOPRIGHT", -36, -12)
     title:SetWordWrap(true)
     detail.title = title
 
@@ -424,6 +546,7 @@ local function UpdateDetail(entry)
     detail.chartRange:SetShown(shown)
     detail.deepScan:SetShown(shown)
     detail.searchAH:SetShown(shown)
+    detail.star:SetShown(shown)
 
     for _, value in pairs(detail.values) do
         value:SetShown(shown)
@@ -446,6 +569,7 @@ local function UpdateDetail(entry)
 
     detail.title:SetText(Util.GetItemLabel(entry.itemID))
     Theme.SetItemIcon(detail.icon, entry.itemID)
+    detail.star:SetItem(entry.itemID)
 
     -- A name that wraps to two lines pushes the rows down with it.
     local titleHeight = detail.title.GetStringHeight and detail.title:GetStringHeight() or 0
@@ -505,8 +629,9 @@ local function UpdateDetail(entry)
 end
 
 --- The list a search would show, for the tests.
-function UI._PricesList(search)
+function UI._PricesList(search, favouritesOnly)
     state.search = search or ""
+    state.favouritesOnly = favouritesOnly and true or false
     return BuildList()
 end
 
@@ -514,21 +639,28 @@ end
 -- Refresh
 --------------------------------------------------------------------------------
 
-local function Refresh()
+function Refresh()
     if not widgets.list then return end
 
     local data = BuildList()
     widgets.list:SetData(data)
 
     widgets.emptyLabel:SetShown(#data == 0)
+    local starred = ns.Prices.GetFavourites and Util.Count(ns.Prices:GetFavourites()) or 0
+
     if #data == 0 then
-        widgets.emptyLabel:SetText(ns.Prices:Count() == 0
-            and "No auction data yet. Open the auction house and press Scan."
-            or "Nothing matches these filters.")
+        if state.favouritesOnly and starred == 0 then
+            widgets.emptyLabel:SetText("No favourites yet. Click the star beside an item to keep it here.")
+        else
+            widgets.emptyLabel:SetText(ns.Prices:Count() == 0
+                and "No auction data yet. Open the auction house and press Scan."
+                or "Nothing matches these filters.")
+        end
     end
 
-    widgets.countLabel:SetText(("%s item%s priced"):format(
-        Util.Comma(#data), #data == 1 and "" or "s"))
+    widgets.countLabel:SetText(("%s item%s priced%s"):format(
+        Util.Comma(#data), #data == 1 and "" or "s",
+        starred > 0 and (", %d starred"):format(starred) or ""))
 
     UpdateDetail(state.selected)
 end
@@ -565,6 +697,16 @@ local function Build(container)
     end, false)
     reagentsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
+    -- Only the starred items (Voldar, 2026-10-06). Remembered, so the tab
+    -- opens on the watch list for whoever keeps one.
+    state.favouritesOnly = ns.Config:Get("pricesFavouritesOnly") == true
+    local favouritesOnly = Widgets.CreateCheckbox(toolbar, "Favourites only", function(checked)
+        state.favouritesOnly = checked
+        ns.Config:Set("pricesFavouritesOnly", checked)
+        ShowFromTop()
+    end, state.favouritesOnly)
+    favouritesOnly:SetPoint("LEFT", reagentsOnly, "RIGHT", 12, 0)
+
     -- No sort menu: the headings sort (Ezmode, 2026-10-06). The list opens
     -- by market value.
 
@@ -575,7 +717,7 @@ local function Build(container)
     headings:SetHeight(16)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
-    nameHeading:SetPoint("LEFT", 28, 0)
+    nameHeading:SetPoint("LEFT", 46, 0)
     nameHeading:SetText("ITEM")
 
     local sortLabels = { name = nameHeading }
