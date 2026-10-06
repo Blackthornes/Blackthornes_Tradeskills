@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.32.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- The Level Up tab now has the **MY RECIPES | RECIPES TO LEARN** switch
+  too. There the list is ordered by the skill each recipe needs, lowest
+  first, so the next recipe to pick up on the way up sits near the top.
+- On both tabs, the SKILL column in Recipes to learn is green when your
+  skill is already high enough to learn the recipe and amber when it isn't
+  yet.
+
 ## 0.31.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
