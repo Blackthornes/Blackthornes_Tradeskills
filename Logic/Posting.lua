@@ -1356,7 +1356,9 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
         return Util.FormatMoney(copper, { noColor = true })
     end
 
-    local market = ns.Prices:GetValue(itemID, "market")
+    -- The auction house's own figure, beside the price the player set.
+    local market = ns.Prices.GetScanValue and ns.Prices:GetScanValue(itemID, "market")
+        or ns.Prices:GetValue(itemID, "market")
     local marketText = (market and market > 0) and Money(market) or "none"
 
     -- Someone else's cheapest, never the player's own: the price being

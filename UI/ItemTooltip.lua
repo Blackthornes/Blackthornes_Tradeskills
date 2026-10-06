@@ -265,7 +265,16 @@ function ItemTooltip:LinesFor(itemID, count)
     end)
     if poorOk and poor then return lines end
 
-    local value = ns.Prices:GetValue(itemID, "market")
+    local mine = self:MyPriceLine(itemID)
+    if mine then lines[#lines + 1] = mine end
+
+    -- The auction house's own figure: the player's price has its own line.
+    local value
+    if ns.Prices.GetScanValue then
+        value = ns.Prices:GetScanValue(itemID, "market")
+    else
+        value = ns.Prices:GetValue(itemID, "market")
+    end
 
     -- A stored zero is a scan that saw no listings, not an item the market
     -- values at nothing.
@@ -323,6 +332,18 @@ function ItemTooltip:LinesFor(itemID, count)
     self:AddRecipeLines(lines, itemID)
 
     return lines
+end
+
+--- The price the player set on the Prices tab, in gold so it stands out
+--- from the auction figures, saying how it is used. nil when none is set.
+function ItemTooltip:MyPriceLine(itemID)
+    if type(ns.Prices.GetMine) ~= "function" then return nil end
+
+    local mine, mode = ns.Prices:GetMine(itemID)
+    if not mine then return nil end
+
+    return { "My price", ("%s  (%s)"):format(Util.FormatMoney(mine, { short = true }),
+        mode == "use" and "used instead of AH" or "never below"), color = "warn" }
 end
 
 --- On a recipe item: what it teaches, who knows it, what one craft costs,
