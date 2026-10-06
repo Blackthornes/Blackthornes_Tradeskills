@@ -34,7 +34,7 @@ local WOOD, ESSENCE = 4470, 10938
 local STACKS = { [WOOD] = 20, [ESSENCE] = 10 }
 C_Item = { GetItemMaxStackByID = function(itemID) return STACKS[itemID] end }
 
-local settings = { bagSpareSlots = 5, mailBatchTake = true }
+local settings = { bagSpareSlots = 5, mailBatchTake = true, fitBuysToBags = true }
 ns.Config = { Get = function(_, key) return settings[key] end }
 
 local free = 30
@@ -108,6 +108,10 @@ lines, _, _, batch = Vendor:GetNeeded()
 expect("setting off: the whole shortfall", lines[1].amount, 1000)
 expect("setting off: no batch", batch, nil)
 settings.fitBuysToBags = nil
+lines, _, _, batch = Vendor:GetNeeded()
+expect("never set (off by default): the whole shortfall", lines[1].amount, 1000)
+expect("never set: no batch", batch, nil)
+settings.fitBuysToBags = true
 
 free = 5
 lines, _, _, batch = Vendor:GetNeeded()
