@@ -220,26 +220,10 @@ local function CheaperAtAuction(itemID, stock, shortfall)
     return auction < vendorUnit
 end
 
---- The batch that fits the bags, or nil when buying is not held to them
---- (the setting is off, or the game will not say how full the bags are).
-function Vendor:GetBatch(shopping)
-    local BagsFull = ns.BagsFull
-    if not (BagsFull and BagsFull.PlanBatch) then return nil end
-    if ns.Config and ns.Config:Get("fitBuysToBags") == false then return nil end
-
-    local room, free = BagsFull:Room()
-    if not room then return nil end
-
-    local plan = BagsFull:PlanBatch(shopping, room)
-    plan.room, plan.free, plan.spare = room, free, BagsFull:GetSpare()
-    return plan
-end
-
 --- Queue shortfalls that this vendor can actually supply, where it is the
---- cheaper place to buy them, as much of them as fits in the bags.
+--- cheaper place to buy them.
 -- @return lines, totalCost, how many were left for the auction house because
---   they are cheaper there, and the batch (nil when it all fits, or buying
---   is not held to the bags; see GetBatch)
+--   they are cheaper there
 function Vendor:GetNeeded()
     local lines, total, cheaperElsewhere = {}, 0, 0
 
@@ -247,11 +231,7 @@ function Vendor:GetNeeded()
         return lines, 0, 0
     end
 
-    local shopping = ns.Queue:GetShoppingList()
-    local batch = self:GetBatch(shopping)
-    if batch and batch.share >= 1 then batch = nil end
-
-    for _, line in ipairs(shopping) do
+    for _, line in ipairs(ns.Queue:GetShoppingList()) do
         local stock = self.merchantItems[line.itemID]
 
         -- Items bought with tokens or honour cannot be paid for in gold.
@@ -267,13 +247,6 @@ function Vendor:GetNeeded()
                 affordable = math.min(affordable, stock.numAvailable * stock.stack)
             end
             local limited = affordable < line.shortfall
-
-            -- Only this batch's share, when the rest would not fit.
-            if batch then
-                local fits = math.min(affordable, batch.bring[line.itemID] or 0)
-                if fits <= 0 and affordable > 0 then batch.leftOut = (batch.leftOut or 0) + 1 end
-                affordable = fits
-            end
 
             if affordable > 0 then
                 local cost = affordable * stock.price
@@ -297,7 +270,7 @@ function Vendor:GetNeeded()
         end
     end
 
-    return lines, total, cheaperElsewhere, batch
+    return lines, total, cheaperElsewhere
 end
 
 --- How many are in the bags right now, read fresh.
@@ -326,11 +299,9 @@ function Vendor:BuyNeeded()
         return false
     end
 
-    local lines, total, cheaperElsewhere, batch = self:GetNeeded()
+    local lines, total, cheaperElsewhere = self:GetNeeded()
     if #lines == 0 then
-        if batch and batch.leftOut then
-            ns.Print(("no room in your bags (keeping %d slots free); craft or make room, then buy again"):format(batch.spare or 0))
-        elseif cheaperElsewhere > 0 then
+        if cheaperElsewhere > 0 then
             ns.Print("the auction house is cheaper for everything this vendor has that the queue needs")
         else
             ns.Print("this vendor has nothing the queue needs")
@@ -360,12 +331,7 @@ function Vendor:BuyNeeded()
         self.buyStartBags[line.itemID] = BagCount(line.itemID)
     end
 
-    if batch then
-        ns.Print(("buying what fits in your bags, %d material(s) for %s (about %d batches in all)..."):format(
-            #lines, Util.FormatMoney(total), batch.batches))
-    else
-        ns.Print(("buying %d material(s) for %s..."):format(#lines, Util.FormatMoney(total)))
-    end
+    ns.Print(("buying %d material(s) for %s..."):format(#lines, Util.FormatMoney(total)))
 
     self:BuyStep()
     return true

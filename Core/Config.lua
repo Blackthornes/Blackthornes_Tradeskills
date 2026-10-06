@@ -222,9 +222,10 @@ local DEFAULTS = {
         -- A warning when your bags fill up. See Logic/BagsFull.lua.
         bagsFullSound = true,
 
-        -- A queue too big for the bags is bought a bagful at a time, keeping
-        -- this many slots free (Ezmode, 2026-10-05). See Logic/BagsFull.lua.
-        fitBuysToBags = true,
+        -- Slots Take next batch leaves free (Ezmode, 2026-10-05). See
+        -- Logic/BagsFull.lua. Vendor buys were batched the same way until
+        -- 2026-10-06, when that was taken out; its saved fitBuysToBags is
+        -- left in players' data, unread.
         bagSpareSlots = 5,
         -- A Take next batch button at the mailbox, taking the queue's
         -- materials a bagful at a time. Off by default (2026-10-05).
