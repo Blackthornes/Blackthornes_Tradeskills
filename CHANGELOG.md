@@ -4,6 +4,39 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.34.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- New price graph. Tradeskills keeps the cheapest listing once an hour for
+  7 days for what your characters craft, their materials and starred items,
+  and draws it as a line with **24 Hours** and **7 Day** toggles on the
+  Prices tab and the Profit tab's craft pane (a **Price graph** button there
+  swaps it in for the materials). Under the graph a line says when an item
+  is usually cheapest and dearest, once there are enough scans to tell.
+- Picking an item that the Buy list, the Queue tab or the Gather tab
+  searched for now fills the auction house's quantity box with how many the
+  queue still needs. A number you typed is never written over, and Buy Now
+  is still your click. A Settings row, **Fill in how many to buy**, turns it
+  off.
+- At the mailbox, finished crafts another character's queue needs get their
+  own green row with a **Send crafts to** button, ahead of any materials.
+  Both rows show whether or not "Let alts make sub-crafts" is ticked, and
+  the To box gets the full name, since Forever characters share first names.
+- The Prices tab's detail pane has a **My price** section. Type a price in
+  gold, silver and copper, then pick **Use this price** (it replaces the
+  auction price everywhere) or **Never below** (it only lifts a lower
+  auction price). Material costs, Profit, Level Up, the queue, tooltips and
+  posting all follow it, and items with a price of your own say "my price"
+  in gold. A new **My prices only** tick box lists just those. Clear removes
+  the price.
+- Buy materials at a vendor buys the whole amount again; buying a bagful at
+  a time is taken out for now, along with its "Fit vendor buys to your bags"
+  setting. Take next batch at the mailbox stays.
+- The minimap button now sits on the minimap's ring beside other addons'
+  buttons, instead of floating just outside it.
+
 ## 0.33.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
