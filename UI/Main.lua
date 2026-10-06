@@ -1272,7 +1272,7 @@ function UI:UpdateMerchantButton()
         return
     end
 
-    local lines, total, cheaperElsewhere, batch = ns.Vendor:GetNeeded()
+    local lines, total, cheaperElsewhere = ns.Vendor:GetNeeded()
     cheaperElsewhere = cheaperElsewhere or 0
 
     -- Materials this vendor has but the auction house sells for less are
@@ -1284,15 +1284,6 @@ function UI:UpdateMerchantButton()
             cheaperElsewhere == 1 and "is" or "are",
             cheaperElsewhere == 1 and "it is" or "they are")
         or nil
-
-    -- The queue needs more than the bags hold and they hold no more now.
-    if #lines == 0 and batch and batch.leftOut then
-        button:SetText("No room in your bags")
-        FitMerchantButton(button)
-        button:SetEnabledState(false)
-        button.tooltipText = ("Buys in batches that fit your bags, keeping %d slots free. Craft what you have, or make room, and it offers the next batch. Settings, Fit vendor buys to your bags."):format(batch.spare or 0)
-        return
-    end
 
     if #lines == 0 then
         -- Present but inert, so it never looks like it failed to appear.
@@ -1306,9 +1297,7 @@ function UI:UpdateMerchantButton()
         return
     end
 
-    -- Asked for by Ezmode (2026-10-05): a queue too big for the bags is
-    -- bought a bagful at a time. The label says so.
-    button:SetText(("%s  %s"):format(batch and "Buy what fits" or "Buy materials",
+    button:SetText(("%s  %s"):format("Buy materials",
         Util.FormatMoney(total, { short = true })))
     FitMerchantButton(button)
     button:SetEnabledState(true)
@@ -1317,13 +1306,6 @@ function UI:UpdateMerchantButton()
     local parts = { ("Buys %d material%s for your queue, %s in all:"):format(
         #lines, #lines == 1 and "" or "s",
         Util.FormatMoney(total, { noColor = true, short = true })) }
-
-    if batch then
-        parts[1] = ("Your queue needs more than your bags hold, so this buys what fits, keeping %d slots free: about 1 of %d batches. Craft, then click again for the next."):format(
-            batch.spare or 0, math.min(batch.batches or 1, 999))
-        parts[2] = ("%d material%s, %s:"):format(#lines, #lines == 1 and "" or "s",
-            Util.FormatMoney(total, { noColor = true, short = true }))
-    end
 
     for index = 1, math.min(#lines, 10) do
         local line = lines[index]

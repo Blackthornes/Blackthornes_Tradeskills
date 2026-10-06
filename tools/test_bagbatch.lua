@@ -91,33 +91,19 @@ Vendor.merchantItems = {
     [WOOD] = { index = 1, price = 38, stack = 1, numAvailable = -1, extendedCost = false },
 }
 
--- The essence is still to come from the mail, so room is kept for it.
+-- Vendor buys are not held to the bags (taken out 2026-10-06), even when
+-- the bags could not hold it all.
 local lines, _, _, batch = Vendor:GetNeeded()
 expect("only the wood is bought here", #lines, 1)
-expect("the batch is held to the bags", batch ~= nil, true)
-expect("wood to match the essence still to come", lines[1].amount, 160)
+expect("the whole shortfall", lines[1].amount, 1000)
+expect("no batch", batch, nil)
 
--- The essence came out of the mail first: the wood matches it.
-bags[ESSENCE] = 160
-free = 14
-lines = Vendor:GetNeeded()
-expect("after 160 essence, the wood matches it", lines[1].amount, 160)
-
-settings.fitBuysToBags = false
-lines, _, _, batch = Vendor:GetNeeded()
-expect("setting off: the whole shortfall", lines[1].amount, 1000)
-expect("setting off: no batch", batch, nil)
-settings.fitBuysToBags = nil
-
+-- A save that still says fitBuysToBags = true changes nothing.
+settings.fitBuysToBags = true
 free = 5
-lines, _, _, batch = Vendor:GetNeeded()
-expect("only the spare slots left: nothing bought", #lines, 0)
-expect("and the button can say the bags are full", batch and batch.leftOut, 1)
-
-free = 200
-lines, _, _, batch = Vendor:GetNeeded()
-expect("room for it all: the whole shortfall", lines[1].amount, 1000)
-expect("room for it all: no batch", batch, nil)
+lines = Vendor:GetNeeded()
+expect("an old saved setting is ignored", lines[1].amount, 1000)
+settings.fitBuysToBags = nil
 
 --------------------------------------------------------------------------------
 print("")
