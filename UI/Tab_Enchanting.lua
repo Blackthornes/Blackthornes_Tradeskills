@@ -1,10 +1,11 @@
 -- Blackthornes Tradeskills -- UI/Tab_Enchanting.lua
 -- What is worth more disenchanted than sold, and what the materials fetch.
 --
--- Three views of one question. Crafts: which of your recipes make something
--- worth more broken down than listed, ranked on what disenchanting makes over
--- the materials. Your bags: which of the things you carry are worth more
--- disenchanted than sold. Materials: what each enchanting material is worth.
+-- Two views. Crafts: which of your recipes make something worth more broken
+-- down than listed, ranked on what disenchanting makes over the materials.
+-- Materials: what each enchanting material is worth. What you carry that is
+-- worth more disenchanted is the Disenchanting tab's "Items in my bags"; this
+-- tab had the same list as a view until 2026-10-06 (Ezmode's feedback).
 --
 -- The numbers come from Logic/Disenchant.lua, which holds the built-in table
 -- the game does not give addons.
@@ -21,8 +22,6 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
--- Short enough to leave room for the bound-item warning in the bag view:
--- the longer wording filled the note's four lines and pushed that off.
 local SOURCE_NOTE = "Chances come from the built-in Classic table until you have done %d disenchants like this (%d so far). Materials are priced at their lowest posting, leaving out a lone low one."
 
 -- Right-aligned columns per view, laid out right to left.
@@ -36,15 +35,6 @@ local VIEWS = {
             { key = "make",  label = "MAKE",       width = 40 },
         },
         heading = "CRAFT",
-    },
-    bag = {
-        columns = {
-            { key = "gain",  label = "DIFFERENCE", width = 74 },
-            { key = "value", label = "DISENCHANT", width = 70 },
-            { key = "sells", label = "SELLS",      width = 70 },
-            { key = "count", label = "HAVE",       width = 40 },
-        },
-        heading = "ITEM",
     },
     material = {
         columns = {
@@ -316,7 +306,7 @@ local function BuildDetail(parent)
     addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
     detail.addButton = addButton
 
-    -- Disenchant, for an item in the bags. The click itself is taken by the
+    -- Disenchant, for a craft you carry. The click itself is taken by the
     -- secure button UI/Disenchanter.lua lays over this one; this handler
     -- only runs when that button is not there, so it says why.
     local disenchantButton = Widgets.CreateButton(detail, "Disenchant", function()
@@ -374,7 +364,7 @@ local function FitOutcomeLine(line)
     line.frame:SetHeight(math.max(16, math.ceil(height) + 2))
 end
 
---- Arm the Disenchant button for a bag item, or say why it cannot be.
+--- Arm the Disenchant button for a carried craft, or say why it cannot be.
 -- @return true when the item can be disenchanted now
 local function UpdateDisenchantButton(entry)
     local detail = widgets.detail
@@ -397,22 +387,16 @@ local function UpdateDisenchantButton(entry)
 end
 
 --- Where the Disenchant button and the line saying why it cannot be used
---- sit: bottom left for a bag item, with the line beside it, and beside the
---- queue button for a craft. There is no room for the line there, so for a
---- craft it takes the button's place, and only when the button cannot be used.
-local function PlaceDisenchantButton(inBags)
+--- sit: beside the queue button. There is no room for the line there, so it
+--- takes the button's place, and only when the button cannot be used.
+local function PlaceDisenchantButton()
     local detail = widgets.detail
     local button, status = detail.disenchantButton, detail.disenchantStatus
 
     button:ClearAllPoints()
     status:ClearAllPoints()
-    if inBags then
-        button:SetPoint("BOTTOMLEFT", detail, "BOTTOMLEFT", 12, 14)
-        status:SetPoint("LEFT", button, "RIGHT", 8, 0)
-    else
-        button:SetPoint("BOTTOMLEFT", detail.addButton, "BOTTOMRIGHT", 8, 0)
-        status:SetPoint("LEFT", button, "LEFT", 0, 0)
-    end
+    button:SetPoint("BOTTOMLEFT", detail.addButton, "BOTTOMRIGHT", 8, 0)
+    status:SetPoint("LEFT", button, "LEFT", 0, 0)
     status:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 end
 
@@ -435,21 +419,19 @@ local function UpdateDetail(entry)
     detail.quantityBox:SetShown(isCraft)
     detail.addButton:SetShown(isCraft)
 
-    -- Disenchant: always for a bag item, and for a craft while one is in
-    -- the bags, beside its queue button. Hiding the button takes the secure
-    -- button away with it.
-    local isBag = shown and entry.kind == "bag"
+    -- Disenchant: for a craft while one is in the bags, beside its queue
+    -- button. Hiding the button takes the secure button away with it.
     local carried = isCraft and ns.Disenchanter:FindSlot(entry.itemID) ~= nil
     local button = detail.disenchantButton
 
-    PlaceDisenchantButton(isBag)
-    button:SetShown(isBag or carried)
-    detail.disenchantStatus:SetShown(isBag or carried)
+    PlaceDisenchantButton()
+    button:SetShown(carried)
+    detail.disenchantStatus:SetShown(carried)
 
     -- A craft's Disenchant button that cannot be used gives way to the
     -- reason. There is no room beside it for both, and greyed out with
     -- nothing said, it looked broken.
-    local usable = (isBag or carried) and UpdateDisenchantButton(entry)
+    local usable = carried and UpdateDisenchantButton(entry)
     if carried and not usable then button:Hide() end
 
     if not shown then return end
@@ -552,16 +534,11 @@ local function UpdateDetail(entry)
         SetLine(lines[2], "Sells for", entry.soulbound and "soulbound, no vendor price" or "no price", "dim")
     end
 
-    if entry.kind == "craft" then
-        SetLine(lines[3], "Materials", entry.cost and Util.FormatMoney(entry.cost) or "no price",
-            entry.cost and "muted" or "dim")
-        SetLine(lines[4], entry.gain and "Profit after the auction cut" or nil,
-            entry.gain and Util.FormatMoney(entry.gain) or nil,
-            entry.gain and (entry.gain > 0 and "profit" or "loss") or nil)
-    else
-        SetLine(lines[3], "In your bags", tostring(entry.count or 0), "muted")
-        SetLine(lines[4], nil)
-    end
+    SetLine(lines[3], "Materials", entry.cost and Util.FormatMoney(entry.cost) or "no price",
+        entry.cost and "muted" or "dim")
+    SetLine(lines[4], entry.gain and "Profit after the auction cut" or nil,
+        entry.gain and Util.FormatMoney(entry.gain) or nil,
+        entry.gain and (entry.gain > 0 and "profit" or "loss") or nil)
 
     -- The answer, in words.
     if entry.losesToMaterials then
@@ -593,9 +570,6 @@ local function UpdateDetail(entry)
     else
         note = SOURCE_NOTE:format(ns.Disenchant.LEARN_AFTER or 10, facts.casts or 0)
     end
-    if entry.kind == "bag" and not entry.soulbound then
-        note = note .. " If it is already bound to you, only a vendor will buy it."
-    end
     detail.note:SetText(note)
 
     if entry.kind == "craft" and detail.shownRecipeID ~= entry.recipeID then
@@ -613,8 +587,6 @@ local function BuildRows()
 
     if state.view == "craft" then
         rows = ns.Disenchant:GetCraftRows({ beatsOnly = state.beatsOnly })
-    elseif state.view == "bag" then
-        rows = ns.Disenchant:GetBagRows({ beatsOnly = state.beatsOnly })
     else
         rows = ns.Disenchant:GetMaterialRows()
     end
@@ -639,19 +611,12 @@ local function EmptyText()
         return ("Nothing matching \"%s\"."):format(state.search)
     end
 
-    if state.view == "craft" then
-        if ns.Recipes:Count() == 0 then
-            return "Open a profession window once so your recipes can be read."
-        elseif state.beatsOnly then
-            return "None of your crafts are worth more disenchanted than sold. Untick \"Only where disenchanting pays more\" to see them all."
-        end
-        return "None of your crafts make something that can be disenchanted."
+    if ns.Recipes:Count() == 0 then
+        return "Open a profession window once so your recipes can be read."
+    elseif state.beatsOnly then
+        return "None of your crafts are worth more disenchanted than sold. Untick \"Only where disenchanting pays more\" to see them all."
     end
-
-    if state.beatsOnly then
-        return "Nothing in your bags is worth more disenchanted than sold. Untick \"Only where disenchanting pays more\" to see them all."
-    end
-    return "Nothing in your bags can be disenchanted."
+    return "None of your crafts make something that can be disenchanted."
 end
 
 local function ApplyHeadings()
@@ -685,28 +650,7 @@ local function ApplyHeadings()
 
     widgets.beatsOnly:SetShown(state.view ~= "material")
     widgets.hint:SetShown(state.view ~= "material")
-    widgets.hint:SetText(state.view == "craft" and "Right-click a craft to queue one"
-        or "Pick an item, then click Disenchant")
-end
-
--- Beside the Disenchant button when the bags list has items but none is worth
--- more disenchanted than sold, so none was picked.
-local NOTHING_PICKED = "Nothing here is worth more disenchanted than sold. Click one to disenchant it anyway."
-
---- No item picked in a bags list that has some: the Disenchant button shows
---- unset, and the line beside it says why.
-local function ShowNothingPicked()
-    local detail = widgets.detail
-    local button = detail.disenchantButton
-
-    PlaceDisenchantButton(true)
-    button:SetShown(true)
-    button:SetEnabledState(false)
-    button.tooltipText = NOTHING_PICKED
-    detail.disenchantStatus:SetText(NOTHING_PICKED)
-    detail.disenchantStatus:SetShown(true)
-
-    if ns.Disenchanter.anchor == button then ns.Disenchanter:Disarm() end
+    widgets.hint:SetText("Right-click a craft to queue one")
 end
 
 local function Refresh()
@@ -736,9 +680,8 @@ local function Refresh()
             if row.beatsSale then beats = beats + 1 end
         end
 
-        local noun = state.view == "craft" and "craft" or "item"
-        widgets.countLabel:SetText(("%d %s%s, %d worth more disenchanted"):format(
-            #rows, noun, #rows == 1 and "" or "s", beats))
+        widgets.countLabel:SetText(("%d craft%s, %d worth more disenchanted"):format(
+            #rows, #rows == 1 and "" or "s", beats))
     end
 
     -- Keep the detail panel on the same row with fresh numbers, or clear it
@@ -754,24 +697,8 @@ local function Refresh()
         end
     end
 
-    -- In the bags list, the best item worth more disenchanted than sold is
-    -- picked when nothing else is, so the Disenchant button is ready on it.
-    -- After a disenchant the item leaves the list and the next one takes its
-    -- place. One that sells for more is never picked for you; a click on it
-    -- still picks it.
-    if not fresh and state.view == "bag" then
-        for _, row in ipairs(rows) do
-            if row.beatsSale then
-                fresh = row
-                break
-            end
-        end
-    end
-
     state.selected = fresh
     UpdateDetail(fresh)
-
-    if not fresh and state.view == "bag" and #rows > 0 then ShowNothingPicked() end
 
     -- The rows were drawn before this pick, so light the picked one now.
     if fresh and not SameRow(fresh, before) then widgets.list:Refresh() end
@@ -789,7 +716,6 @@ local function Build(container)
 
     local view = Widgets.CreateDropdown(toolbar, {
         { text = "Show: Your crafts", value = "craft" },
-        { text = "Show: Items in your bags", value = "bag" },
         { text = "Show: Enchanting materials", value = "material" },
     }, function(value)
         state.view = value or "craft"
