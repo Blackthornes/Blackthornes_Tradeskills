@@ -78,11 +78,15 @@ ns.Theme = {
 }
 
 local checkboxes = {}
-local lastDropdown
+local lastDropdown, lastOptions
 
 ns.Widgets = {
     CreateSearchBox = function() return Stub() end,
-    CreateDropdown = function(_, _, onSelect) lastDropdown = onSelect; return Stub() end,
+    CreateDropdown = function(_, options, onSelect)
+        lastDropdown = onSelect
+        lastOptions = options
+        return Stub()
+    end,
     CreateCheckbox = function(_, text) local box = Stub({ shown = true, SetShown = function(self, v) self.shown = v end }); checkboxes[text] = box; return box end,
     ShowItemTooltip = function() return true end,
     CreateNumberBox = function() return Stub() end,
@@ -217,17 +221,13 @@ local before = #armed
 list.opts.onClick(craftRows[2], 2, "LeftButton")
 check("a craft you do not carry does not", #armed == before)
 
--- The bags list picks its top row by itself, ready to disenchant.
-local viewPicker = lastDropdown
-before = #armed
-viewPicker("bag")
-check("the bags list arms Disenchant on its top row unasked", armed[#armed] == 21 and #armed > before)
-
-carrying[21] = nil
-before = #armed
-enchanting.refresh()
-check("an item that has left the bags is not armed", #armed == before)
-viewPicker("craft")
+-- Bag items are the Disenchanting tab's; this menu no longer offers them
+-- (2026-10-06).
+local offersBags = false
+for _, option in ipairs(lastOptions or {}) do
+    if option.value == "bag" then offersBags = true end
+end
+check("the Show menu offers crafts and materials only", #lastOptions == 2 and not offersBags)
 
 --------------------------------------------------------------------------------
 -- The Profit tab's column
