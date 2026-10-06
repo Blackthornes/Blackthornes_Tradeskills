@@ -1404,7 +1404,10 @@ function UI:BuildMinimapButton()
         local size = Minimap:GetWidth()
         if not size or size <= 0 then size = 140 end
 
-        return (size / 2) + (ns.db and ns.db.minimapGap or 16)
+        -- Centre the button on the ring, where other minimap buttons sit:
+        -- 5 pixels past the map's edge. A saved minimapGap is kept but no
+        -- longer read; its 16 pixels left the button floating off the ring.
+        return (size / 2) + 5
     end
 
     local function UpdatePosition(angle)
