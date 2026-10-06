@@ -18,6 +18,7 @@ Core\Persist.lua
 Core\OldMacros.lua
 
 Data\Prices.lua
+Data\PriceHistory.lua
 Data\Scanner.lua
 Data\Recipes.lua
 Data\Inventory.lua
@@ -54,6 +55,7 @@ UI\Theme.lua
 UI\Widgets.lua
 UI\Titanforged.lua
 UI\Collapse.lua
+UI\PriceGraph.lua
 UI\Main.lua
 UI\PostPanel.lua
 UI\BuyQuantity.lua

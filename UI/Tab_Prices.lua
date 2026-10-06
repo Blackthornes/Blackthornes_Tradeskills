@@ -391,67 +391,6 @@ local function UpdateRow(row, entry)
 end
 
 --------------------------------------------------------------------------------
--- History chart
---------------------------------------------------------------------------------
-
---- Bar chart of recorded market values.
---
--- Deliberately unscaled from zero: these are relative moves, and anchoring to
--- zero would flatten every real change on a realm where things cost coppers.
-local function UpdateChart(detail, record)
-    local history = record and record.history or {}
-
-    for _, bar in ipairs(detail.bars) do
-        bar:Hide()
-    end
-
-    if #history < 2 then
-        detail.chartEmpty:Show()
-        -- Or the last item's price range stays under "needs two scans".
-        detail.chartRange:SetText("")
-        return
-    end
-
-    detail.chartEmpty:Hide()
-
-    local low, high = math.huge, 0
-    for _, point in ipairs(history) do
-        local value = point.m or 0
-        if value < low then low = value end
-        if value > high then high = value end
-    end
-
-    local span = math.max(1, high - low)
-
-    local width = detail.chart:GetWidth()
-    local height = detail.chart:GetHeight()
-    local barWidth = math.max(2, (width / #history) - 2)
-
-    for index, point in ipairs(history) do
-        local bar = detail.bars[index]
-
-        if not bar then
-            bar = detail.chart:CreateTexture(nil, "ARTWORK")
-            detail.bars[index] = bar
-        end
-
-        -- Floor at 2px so a flat series still reads as data rather than a gap.
-        local fraction = ((point.m or 0) - low) / span
-        local barHeight = math.max(2, fraction * (height - 2))
-
-        bar:SetColorTexture(Theme.Unpack(index == #history and "accent" or "border"))
-        bar:ClearAllPoints()
-        bar:SetPoint("BOTTOMLEFT", detail.chart, "BOTTOMLEFT",
-            (index - 1) * (barWidth + 2), 0)
-        bar:SetSize(barWidth, barHeight)
-        bar:Show()
-    end
-
-    detail.chartRange:SetText(("%s  to  %s"):format(
-        Util.FormatMoney(low, { short = true }), Util.FormatMoney(high, { short = true })))
-end
-
---------------------------------------------------------------------------------
 -- Detail panel
 --------------------------------------------------------------------------------
 
@@ -662,28 +601,15 @@ local function BuildDetail(parent)
 
     BuildMyPrice(detail, rowsAnchor)
 
-    -- Chart
-    local chartHeading = Theme.CreateLabel(detail, "tiny", "dim")
-    chartHeading:SetPoint("TOPLEFT", detail.myPrice.status, "BOTTOMLEFT", 0, -14)
-    chartHeading:SetText("MARKET VALUE HISTORY")
-    Theme.StyleHeading(chartHeading, detail)
-    detail.historyHeading = chartHeading
-
-    local chart = CreateFrame("Frame", nil, detail)
-    chart:SetPoint("TOPLEFT", chartHeading, "BOTTOMLEFT", 0, -6)
-    chart:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
-    chart:SetHeight(44)
-    detail.chart = chart
-    detail.bars = {}
-
-    local chartEmpty = Theme.CreateLabel(chart, "tiny", "dim")
-    chartEmpty:SetPoint("LEFT", 0, 0)
-    chartEmpty:SetText("Needs at least two scans")
-    detail.chartEmpty = chartEmpty
-
-    local chartRange = Theme.CreateLabel(detail, "tiny", "dim")
-    chartRange:SetPoint("TOPLEFT", chart, "BOTTOMLEFT", 0, -4)
-    detail.chartRange = chartRange
+    -- The price graph: the cheapest price hour by hour, 24 hours or 7 days,
+    -- and when in the day it is cheapest and dearest. It runs down to the
+    -- buttons, so it gets whatever room the rows above leave.
+    if ns.PriceGraph then
+        local graph = ns.PriceGraph.Create(detail, { heading = "PRICE HISTORY" })
+        graph:SetPoint("TOPLEFT", detail.myPrice.status, "BOTTOMLEFT", 0, -12)
+        graph:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -12, 14 + 24 + 8)
+        detail.graph = graph
+    end
 
     -- Actions
     detail.deepScan = Widgets.CreateButton(detail, "Deep scan", function()
@@ -722,8 +648,8 @@ local function UpdateDetail(entry)
     detail.empty:SetShown(not shown)
     detail.title:SetShown(shown)
     detail.icon:SetShown(shown)
-    detail.chart:SetShown(shown)
-    detail.chartRange:SetShown(shown)
+    local graph = rawget(detail, "graph")
+    if type(graph) == "table" then graph:SetShown(shown) end
     detail.deepScan:SetShown(shown)
     detail.searchAH:SetShown(shown)
     detail.star:SetShown(shown)
@@ -737,12 +663,9 @@ local function UpdateDetail(entry)
     for _, label in pairs(detail.labels or {}) do
         label:SetShown(shown)
     end
-    if detail.historyHeading then detail.historyHeading:SetShown(shown) end
     detail.myPrice:SetShown(shown)
 
     if not shown then
-        for _, bar in ipairs(detail.bars) do bar:Hide() end
-        detail.chartEmpty:Hide()
         return
     end
 
@@ -807,7 +730,7 @@ local function UpdateDetail(entry)
         and "Read every listing of this item from the auction house"
         or "The auction house must be open"
 
-    UpdateChart(detail, record)
+    if type(graph) == "table" then graph:SetItem(entry.itemID) end
 end
 
 --- The list a search would show, for the tests.

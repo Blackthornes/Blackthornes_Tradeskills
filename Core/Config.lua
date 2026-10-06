@@ -285,6 +285,12 @@ local DEFAULTS = {
 
         -- The Prices tab shows only starred items (Voldar, 2026-10-06).
         pricesFavouritesOnly = false,
+
+        -- The price graph (Sullivan, 2026-10-06): "day" for the last 24
+        -- hours, "week" for 7 days. And whether the Profit tab's craft pane
+        -- shows the graph where the materials list goes.
+        priceGraphWindow = "day",
+        profitShowsGraph = false,
     },
 
     -- realmKey -> itemID -> price record
@@ -322,6 +328,12 @@ local DEFAULTS = {
     -- on the Prices tab, used instead of the auction price ("use") or as
     -- the least it can be ("floor"). See Prices:SetMine.
     myPrices = {},
+
+    -- realmKey -> itemID -> { hour, copper, hour, copper, ... }: the cheapest
+    -- price each hour a scan saw it, for seven days, for what the account
+    -- crafts, its materials and starred items. Drawn as the price graph.
+    -- See Data/PriceHistory.lua.
+    priceHistory = {},
 
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
