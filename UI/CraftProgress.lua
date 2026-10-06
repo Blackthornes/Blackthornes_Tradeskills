@@ -22,10 +22,11 @@ local function ReadUnsafe()
     if castBar and not castBar:IsCrafting() then return nil end
 
     local now = GetTime() * 1000
-    local fraction, secondsLeft = 0, 0
+    local fraction, secondsLeft, castSeconds = 0, 0, 0
     if type(startMS) == "number" and type(endMS) == "number" and endMS > startMS then
         fraction = math.max(0, math.min(1, (now - startMS) / (endMS - startMS)))
         secondsLeft = math.max(0, (endMS - now) / 1000)
+        castSeconds = (endMS - startMS) / 1000
     end
 
     local remaining
@@ -39,12 +40,16 @@ local function ReadUnsafe()
     -- A plain string, or this raises here, inside Read's pcall, rather than
     -- later on the bar every frame.
     label = label .. ""
-    return { name = label, fraction = fraction, secondsLeft = secondsLeft, remaining = remaining }
+    return {
+        name = label, fraction = fraction, secondsLeft = secondsLeft,
+        castSeconds = castSeconds, remaining = remaining,
+    }
 end
 
 --- What is being crafted right now.
 -- @return nil when no craft is casting, else
---   { name, fraction (0..1), secondsLeft, remaining (crafts after this one, or nil) }
+--   { name, fraction (0..1), secondsLeft, castSeconds (one whole craft),
+--     remaining (crafts after this one, or nil) }
 --
 -- Runs every frame while a bar shows. Anything the game will not let the addon
 -- read (a cast inside a dungeon) means no bar, never an error per frame.
@@ -55,28 +60,65 @@ function Progress:Read()
     return nil
 end
 
---- The text on the bar: the craft on the left, and on the right how many
---- more after this one beside the time left. The count used to follow the
---- name, and in the narrow bar beside the profession window it was cut off.
--- @return name, right, shorter  -- shorter: the count without the time, for
---   a bar with no room for the name beside both; nil on the last craft
-function Progress.Describe(cast)
-    local time = ("%.1fs"):format(cast.secondsLeft)
-    if cast.remaining then
-        return cast.name, ("%d more · %s"):format(cast.remaining, time),
-            ("%d more"):format(cast.remaining)
+--- A whole run's time left, rounded up so it never reads 0s while crafting:
+--- "45s", "1m 20s", "1h 05m".
+function Progress.FormatTotal(seconds)
+    seconds = math.ceil(math.max(0, seconds))
+    if seconds < 60 then return ("%ds"):format(seconds) end
+    if seconds < 3600 then
+        return ("%dm %02ds"):format(math.floor(seconds / 60), seconds % 60)
     end
-    return cast.name, time
+    return ("%dh %02dm"):format(math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
 end
 
---- Whether a label's text runs past its width. False when it cannot be
---- measured, so nothing is left out on a guess.
-local function TooWide(label)
-    local ok, width = pcall(label.GetStringWidth, label)
-    if not ok or type(width) ~= "number" then return false end
+--- The text on the bar: the craft on the left, and on the right how many
+--- more after this one, the time left on this craft and the time left on
+--- the whole run (a player asked for the last, 2026-10-06). The count used
+--- to follow the name, and in the narrow bar beside the profession window it
+--- was cut off.
+-- @return name, choices  -- the right-hand text, longest first; the bar uses
+--   the first that leaves the name room. One choice on the last craft.
+function Progress.Describe(cast)
+    local time = ("%.1fs"):format(cast.secondsLeft)
+    if not cast.remaining then return cast.name, { time } end
 
-    local room = label.GetWidth and label:GetWidth()
-    return type(room) == "number" and room > 0 and width > room
+    local count = ("%d more"):format(cast.remaining)
+    local total = Progress.FormatTotal(cast.secondsLeft + cast.remaining * (cast.castSeconds or 0))
+    return cast.name, {
+        ("%s · %s · %s left"):format(count, time, total),
+        ("%s · %s left"):format(count, total),
+        count,
+    }
+end
+
+--- A region's text width, or nil when it cannot be measured.
+local function TextWidth(region)
+    local ok, width = pcall(region.GetStringWidth, region)
+    if ok and type(width) == "number" then return width end
+    return nil
+end
+
+--- The bar's inside width, or nil when it is not laid out yet.
+local function Inside(bar)
+    local ok, width = pcall(bar.GetWidth, bar)
+    if ok and type(width) == "number" and width > 0 then return width - 12 end
+    return nil
+end
+
+--- Whether the name runs into the right-hand text. Worked out from the bar's
+--- width rather than the name's own, which reads 0 rather than less than
+--- nothing once the right-hand text takes the whole bar. False when it
+--- cannot be measured, so nothing is left out on a guess.
+local function TooWide(bar)
+    local name, right, inside = TextWidth(bar.label), TextWidth(bar.timer), Inside(bar)
+    if not (name and right and inside) or name == 0 then return false end
+    return name + 6 + right > inside
+end
+
+--- Whether the right-hand text alone is wider than the bar's inside.
+local function RunsPastBar(bar)
+    local right, inside = TextWidth(bar.timer), Inside(bar)
+    return right ~= nil and inside ~= nil and right > inside
 end
 
 --- Create a bar. It shows itself while a craft casts and hides otherwise.
@@ -125,16 +167,22 @@ local function Update(bar, cast)
         if bar.covers then bar.covers:Hide() end
     end
 
-    local name, right, shorter = Progress.Describe(cast)
-    bar.timer:SetText(right)
+    local name, choices = Progress.Describe(cast)
     bar.label:SetText(name)
 
-    -- Nothing is cut off. With too little room the time goes first, as the
-    -- fill shows how far the craft has got, then the name; the count stays.
-    if shorter and TooWide(bar.label) then bar.timer:SetText(shorter) end
-    if TooWide(bar.label) then
+    -- Nothing is cut off. With too little room this craft's time goes first,
+    -- as the fill shows how far it has got, then the run's time, then the
+    -- name; the count stays.
+    for _, right in ipairs(choices) do
         bar.timer:SetText(right)
+        if not TooWide(bar) then break end
+    end
+    if TooWide(bar) then
         bar.label:SetText("")
+        for _, right in ipairs(choices) do
+            bar.timer:SetText(right)
+            if not RunsPastBar(bar) then break end
+        end
     end
     bar.fill:SetWidth(math.max(1, (bar:GetWidth() - 2) * cast.fraction))
 end
