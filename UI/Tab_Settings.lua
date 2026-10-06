@@ -309,24 +309,14 @@ local function Build(outer)
     end, { width = 150 })
     widgets.disenchantQuality:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    -- Ezmode, 2026-10-05: big shuffles bought or taken a bagful at a time.
-    local fitBuysRow = CreateRow(container, disenchantQualityRow, "Fit vendor buys to your bags",
-        "When the queue needs more than your bags hold, Buy materials buys what fits, in step, so it makes whole crafts. Craft, then buy again.")
-
-    widgets.fitBuys = Widgets.CreateCheckbox(fitBuysRow, "Buy in batches", function(checked)
-        Config:Set("fitBuysToBags", checked)
-        if ns.UI then ns.UI:UpdateMerchantButton() end
-    end, true)
-    widgets.fitBuys:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local spareRow = CreateRow(container, fitBuysRow, "Bag slots kept free",
-        "Left empty by each batch, for what you craft and anything you pick up.")
+    -- Ezmode, 2026-10-05: big shuffles taken from the mail a bagful at a time.
+    local spareRow = CreateRow(container, disenchantQualityRow, "Bag slots kept free",
+        "Left empty by each Take next batch at the mailbox, for what you craft and anything you pick up.")
 
     widgets.bagSpare = Widgets.CreateNumberBox(spareRow, {
         width = 70, min = 0, max = 50,
         onChange = function(value)
             Config:Set("bagSpareSlots", value)
-            if ns.UI then ns.UI:UpdateMerchantButton() end
             if ns.QueueMailPanel then ns.QueueMailPanel:Refresh() end
         end,
     })
@@ -956,7 +946,6 @@ local function Refresh()
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
     widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
     widgets.queueMail:SetChecked(Config:Get("queueMailPanel") ~= false)
-    widgets.fitBuys:SetChecked(Config:Get("fitBuysToBags") ~= false)
     local spare = Config:Get("bagSpareSlots")
     Put(widgets.bagSpare, type(spare) == "number" and spare or 5)
     widgets.mailBatch:SetChecked(Config:Get("mailBatchTake") == true)
