@@ -239,20 +239,30 @@ print("")
 print("the summary rows")
 
 -- Rows by place: materials, rival, your listing, price, cut, deposit,
--- profit, disenchant value.
+-- profit, then what it makes at the AH, at a vendor and disenchanted.
 local RIVAL, OWN, PRICE, PROFIT = 2, 3, 4, 7
 local function Top(index) return detail.summaryRows[index].label.points.TOPLEFT[2] end
 
--- Nothing of yours listed and nothing to disenchant: two rows hidden.
+-- Nothing of yours listed and only one way to sell: four rows hidden.
 check("Your listing is hidden", detail.summaryRows[OWN].label.shown, false)
 check("the rows shown sit together: rival, then price", Top(RIVAL) - Top(PRICE), 17)
-check("and they sit at the bottom, where the hidden ones were", Top(PROFIT), -119)
+check("and they sit at the bottom, where the hidden ones were", Top(PROFIT), -153)
 
-extra = { ownListing = 650, disenchantable = true }
+extra = { ownListing = 650, disenchantable = true, disenchantValue = 900, via = "disenchant",
+    ways = { auction = { profit = 575 }, vendor = { profit = -40 },
+             disenchant = { profit = 765, canDisenchant = true } } }
 list.opts.onClick(Analysis(6), 1, "LeftButton")
 check("with a listing of yours, its row shows", detail.summaryRows[OWN].label.shown, true)
 check("between the rival and the price", Top(OWN) - Top(PRICE), 17)
 check("and every row is in its place", Top(1), 0)
+check("each way has its row", Row("If vendored") ~= nil and Row("If vendored").label.shown, true)
+check("with what it makes that way", Row("If disenchanted").value.text, "765")
+check("a loss that way too", Row("If vendored").value.text, "-40")
+
+extra = { disenchantable = true, ways = { auction = { profit = 575 }, vendor = { profit = 10 },
+    disenchant = { profit = 900 } } }
+list.opts.onClick(Analysis(7), 1, "LeftButton")
+check("with no enchanter, the disenchant row says so", Row("If disenchanted").value.text, "900  no enchanter")
 
 print("")
 print("an unpriced row")

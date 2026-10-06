@@ -37,6 +37,9 @@ local COLUMNS = {
     { key = "make",   width = 40 },
     { key = "who",    width = 58, accountWideOnly = true },
     { key = "margin", width = 46 },
+    -- Which way the profit is for (AH, Vendor, DE), when the list is
+    -- ranked by whichever pays most. Ranked by one way, it says nothing.
+    { key = "via",    width = 44, bestOnly = true },
     { key = "profit", width = 74 },
     -- Beside SELLS so the two read against each other. Only shown when
     -- something in the list can be disenchanted.
@@ -86,8 +89,14 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+--- What the profit is for: Settings' "profitBy", "best" unless picked.
+local function Method()
+    return ns.Profit.GetMethod and ns.Profit:GetMethod() or nil
+end
+
 local function IsColumnVisible(column)
     if column.accountWideOnly then return state.accountWide end
+    if column.bestOnly then return Method() == "best" end
     if column.disenchantOnly then return state.showDisenchant end
     return true
 end
@@ -201,6 +210,27 @@ local function AddDisenchantLine(analysis)
     GameTooltip:Show()
 end
 
+--- What the craft makes each way it can be turned into gold, the one the
+--- profit is for in gold. Returns whether it added anything.
+local function AddWaysLines(analysis)
+    if not ns.Profit.DescribeWays or not GameTooltip:IsShown() then return false end
+
+    local lines = ns.Profit:DescribeWays(analysis)
+    if #lines == 0 then return false end
+
+    GameTooltip:AddLine(" ")
+    for _, line in ipairs(lines) do
+        local label = line.label .. (line.note and (" (" .. line.note .. ")") or "")
+        local r, g, b = 0.7, 0.7, 0.7
+        if line.chosen then r, g, b = Theme.Unpack("accent") end
+        local vr, vg, vb = Theme.Unpack(line.profit >= 0 and "profit" or "loss")
+        GameTooltip:AddDoubleLine(label, Util.FormatMoney(line.profit, { noColor = true }),
+            r, g, b, vr, vg, vb)
+    end
+    GameTooltip:Show()
+    return true
+end
+
 --- The full name of who can make it, since the WHO column shows it shortened.
 local function AddOwnerLine(analysis)
     if not state.accountWide or not analysis.ownerName or not GameTooltip:IsShown() then return end
@@ -281,6 +311,7 @@ local function UpdateRow(row, analysis)
     if not analysis.priceable then
         cells.cost:SetText("--")
         cells.sells:SetText("--")
+        cells.via:SetText("")
         cells.margin:SetText("")
         cells.age:SetText("")
 
@@ -304,6 +335,9 @@ local function UpdateRow(row, analysis)
     Theme.SetMoneyText(cells.profit, analysis.profit, { short = true })
     cells.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
 
+    cells.via:SetText(ns.Profit.WAY_LABELS and ns.Profit.WAY_LABELS[analysis.via] or "")
+    cells.via:SetTextColor(Theme.Unpack(analysis.via == "disenchant" and "accent" or "muted"))
+
     cells.margin:SetText(("%d%%"):format(math.floor((analysis.margin or 0) * 100)))
     cells.margin:SetTextColor(Theme.ProfitColor(analysis.profit))
 
@@ -322,6 +356,10 @@ local function UpdateRow(row, analysis)
     elseif analysis.priceBasis == "vendor" then
         -- Valued at what a vendor pays, which no scan's age bears on.
         cells.age:SetText("vendor")
+        cells.age:SetTextColor(Theme.Unpack("muted"))
+    elseif analysis.priceBasis == "disenchant" then
+        -- Valued at what it disenchants to, read off its materials' prices.
+        cells.age:SetText("DE")
         cells.age:SetTextColor(Theme.Unpack("muted"))
     else
         local age = Util.FormatAge(analysis.age)
@@ -423,7 +461,8 @@ local function BuildDetail(parent)
     local summary = CreateFrame("Frame", nil, detail)
     summary:SetPoint("BOTTOMLEFT", 12, 84)
     summary:SetPoint("BOTTOMRIGHT", -12, 84)
-    summary:SetHeight(141)
+    -- Ten rows of 17: the sale, then what each way makes.
+    summary:SetHeight(170)
     detail.summary = summary
     detail.summaryRows = {}
 
@@ -446,7 +485,13 @@ local function BuildDetail(parent)
     detail.cutValue = SummaryRow(5, "Auction cut")
     detail.depositValue, detail.depositLabel = SummaryRow(6, "Deposit")
     detail.profitValue = SummaryRow(7, "Profit")
-    detail.disenchantValue, detail.disenchantLabel = SummaryRow(8, "Disenchant value")
+    -- What each way makes, when there is more than one. The one the
+    -- profit above is for is lit.
+    detail.wayRows = {
+        auction = { SummaryRow(8, "If sold at AH") },
+        vendor = { SummaryRow(9, "If vendored") },
+        disenchant = { SummaryRow(10, "If disenchanted") },
+    }
 
     -- Per-item posted limit. Sits with the queue controls because it is the
     -- thing that decides how many you should be adding.
@@ -518,7 +563,7 @@ local function BuildDetail(parent)
         -- was, a second click queued the full amount again over the limit.
         -- Set here rather than by the redraw Queue:Add makes, which has
         -- already run by now and keeps the box as it was for the same craft.
-        local fresh = ns.Profit:Analyse(recipeID)
+        local fresh = ns.Profit:Analyse(recipeID, nil, Method())
         if fresh then
             quantity:SetText(tostring(ns.Profit.MaxCrafts(fresh.craftableNow, fresh.roomInCrafts)))
         end
@@ -799,10 +844,13 @@ local function UpdateDetail(analysis)
         end
 
         -- Valued at what a vendor pays when that beats the listing, which
-        -- then takes no cut and no deposit.
+        -- then takes no cut and no deposit. Disenchanted, the cut is the
+        -- one on selling the materials, and there is no deposit.
         local toVendor = analysis.priceBasis == "vendor"
+        local toEnchanter = analysis.priceBasis == "disenchant"
 
-        detail.postLabel:SetText(toVendor and "Vendor pays" or "You post at")
+        detail.postLabel:SetText(toVendor and "Vendor pays"
+            or toEnchanter and "Disenchants to" or "You post at")
         detail.postValue:SetText(Util.FormatMoney(analysis.unitRevenue))
         detail.postValue:SetTextColor(Theme.Unpack("accent"))
 
@@ -815,7 +863,7 @@ local function UpdateDetail(analysis)
         end
 
         -- Only known once the item has been priced at an auction house.
-        if toVendor then
+        if toVendor or toEnchanter then
             detail.depositLabel:SetText("Deposit")
             detail.depositValue:SetText("none")
             detail.depositValue:SetTextColor(Theme.Unpack("dim"))
@@ -832,25 +880,33 @@ local function UpdateDetail(analysis)
         detail.profitValue:SetText(Util.FormatMoney(analysis.profit))
         detail.profitValue:SetTextColor(Theme.ProfitColor(analysis.profit))
 
-        -- What one is worth disenchanted, against the listing price above.
-        -- Only for things that can be disenchanted at all.
-        local showDisenchant = analysis.disenchantable == true
-        detail.disenchantLabel:SetShown(showDisenchant)
-        detail.disenchantValue:SetShown(showDisenchant)
+        -- What each way makes, when there is more than one to compare.
+        -- Something that can be disenchanted but whose materials have no
+        -- price yet says so on its row.
+        local lines = ns.Profit.DescribeWays and ns.Profit:DescribeWays(analysis) or {}
+        local byWay = {}
+        for _, line in ipairs(lines) do byWay[line.way] = line end
 
-        if analysis.disenchantValue then
-            local text = Util.FormatMoney(analysis.disenchantValue)
-            if analysis.disenchantBeatsSale then
-                text = text .. "  beats selling"
-            elseif analysis.disenchantPartial then
-                text = text .. "  or more"
+        for way, pair in pairs(detail.wayRows) do
+            local value, label = pair[1], pair[2]
+            local line = byWay[way]
+            local unscanned = way == "disenchant" and analysis.disenchantable == true
+                and not analysis.disenchantValue
+
+            label:SetShown(line ~= nil or unscanned)
+            value:SetShown(line ~= nil or unscanned)
+
+            if line then
+                local text = Util.FormatMoney(line.profit, { short = true })
+                if line.note then text = text .. "  " .. line.note end
+                value:SetText(text)
+                value:SetTextColor(Theme.ProfitColor(line.profit))
+                label:SetTextColor(Theme.Unpack(line.chosen and "accent" or "muted"))
+            elseif unscanned then
+                value:SetText("materials not scanned")
+                value:SetTextColor(Theme.Unpack("dim"))
+                label:SetTextColor(Theme.Unpack("muted"))
             end
-            detail.disenchantValue:SetText(text)
-            detail.disenchantValue:SetTextColor(Theme.Unpack(
-                analysis.disenchantBeatsSale and "profit" or "muted"))
-        elseif showDisenchant then
-            detail.disenchantValue:SetText("materials not scanned")
-            detail.disenchantValue:SetTextColor(Theme.Unpack("dim"))
         end
 
         LayoutSummary(detail)
@@ -977,7 +1033,7 @@ local function OrderKey()
     return table.concat({ tostring(state.accountWide), tostring(state.ignorePostLimit),
         tostring(state.sortBy), tostring(state.craftableOnly),
         tostring(state.includeUnpriceable), tostring(state.profession),
-        state.search or "" }, "|")
+        tostring(Method()), state.search or "" }, "|")
 end
 
 local function BuildList()
@@ -993,6 +1049,7 @@ local function BuildList()
         craftableOnly = state.craftableOnly,
         includeUnpriceable = state.includeUnpriceable,
         skillLineID = state.profession,
+        method = Method(),
         keepOrder = state.heldOrder,
     })
 
@@ -1063,6 +1120,7 @@ local function Refresh()
                 craftableOnly = state.craftableOnly,
                 includeUnpriceable = state.includeUnpriceable,
                 skillLineID = state.profession,
+                method = Method(),
                 minProfit = 0,
                 minMargin = 0,
             })
@@ -1094,7 +1152,7 @@ local function Refresh()
     if state.selected then
         -- Written back, so Max reads what can be made now and not what could
         -- be made when the row was clicked.
-        local fresh = ns.Profit:Analyse(state.selected.recipeID)
+        local fresh = ns.Profit:Analyse(state.selected.recipeID, nil, Method())
         if fresh then state.selected = fresh end
         UpdateDetail(fresh)
     else
@@ -1202,11 +1260,35 @@ local function BuildCrafts(container)
     profession:SetPoint("LEFT", 0, 0)
     widgets.professionDropdown = profession
 
+    -- What the profit is for (Sullivan, 2026-10-06): whichever way pays
+    -- most, or one way alone. Kept in Settings, so /bts top and /bts why
+    -- rank the same way.
+    local labels = ns.Profit.WAY_LABELS or {}
+    local methodOptions = { { text = "Profit: Best", value = "best" } }
+    for _, method in ipairs(ns.Profit.METHODS or {}) do
+        if labels[method] then
+            methodOptions[#methodOptions + 1] = { text = "Profit: " .. labels[method], value = method }
+        end
+    end
+
+    local method = Widgets.CreateDropdown(toolbar, methodOptions, function(value)
+        ns.Config:Set("profitBy", value)
+
+        -- VIA shows only when ranked by whichever pays most.
+        layoutVersion = layoutVersion + 1
+        ApplyHeadingLayout()
+
+        Refresh()
+    end, { width = 140 })
+    method:SetPoint("LEFT", profession, "RIGHT", 8, 0)
+    method:SetValue(Method() or "best")
+    widgets.methodDropdown = method
+
     local search = Widgets.CreateSearchBox(toolbar, "Search crafts", function(text)
         state.search = text or ""
         Refresh()
     end)
-    search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
+    search:SetPoint("LEFT", method, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local craftable = Widgets.CreateCheckbox(toolbar, "Craftable now", function(checked)
@@ -1251,7 +1333,7 @@ local function BuildCrafts(container)
 
     local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
                      margin = "MARGIN", age = "AGE", who = "WHO", posted = "STOCK",
-                     make = "MAKE", disenchant = "DISENCHANT", demand = "DEMAND" }
+                     make = "MAKE", disenchant = "DISENCHANT", demand = "DEMAND", via = "VIA" }
 
     widgets.headings = {}
     for _, column in ipairs(COLUMNS) do
@@ -1274,11 +1356,12 @@ local function BuildCrafts(container)
         make = function(a) return a.craftableNow end,
         who = function(a) return a.ownerName end,
         disenchant = function(a) return a.disenchantValue end,
+        via = function(a) return a.via end,
         demand = function(a)
             return ns.Demand and ns.Demand:Rank(ns.Demand:Get(a.outputItemID)) or 0
         end,
     }, function() Refresh() end)
-    if widgets.sorter then widgets.sorter:SetText({ "name", "who" }) end
+    if widgets.sorter then widgets.sorter:SetText({ "name", "who", "via" }) end
 
     ApplyHeadingLayout()
 
@@ -1304,7 +1387,7 @@ local function BuildCrafts(container)
             else
                 Widgets.ShowItemOnly(row, analysis.outputItemID, analysis.name)
             end
-            AddDisenchantLine(analysis)
+            if not AddWaysLines(analysis) then AddDisenchantLine(analysis) end
             AddOwnerLine(analysis)
         end,
 
@@ -1325,7 +1408,7 @@ local function BuildCrafts(container)
             end
 
             state.selected = analysis
-            UpdateDetail(ns.Profit:Analyse(analysis.recipeID))
+            UpdateDetail(ns.Profit:Analyse(analysis.recipeID, nil, Method()))
         end,
     })
 
