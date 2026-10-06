@@ -6,9 +6,18 @@ the top; a release is refused if its version has no section here.
 
 ## 0.34.0
 
-For WoW: Forever (interface 16001). No files were added, so `/reload` is
-enough after updating.
+For WoW: Forever (interface 16001). A file was added, so restart the game
+fully after updating (`/reload` is not enough).
 
+- Picking an item that the Buy list, the Queue tab or the Gather tab
+  searched for now fills the auction house's quantity box with how many the
+  queue still needs. A number you typed is never written over, and Buy Now
+  is still your click. A Settings row, **Fill in how many to buy**, turns it
+  off.
+- At the mailbox, finished crafts another character's queue needs get their
+  own green row with a **Send crafts to** button, ahead of any materials.
+  Both rows show whether or not "Let alts make sub-crafts" is ticked, and
+  the To box gets the full name, since Forever characters share first names.
 - The Prices tab's detail pane has a **My price** section. Type a price in
   gold, silver and copper, then pick **Use this price** (it replaces the
   auction price everywhere) or **Never below** (it only lifts a lower
