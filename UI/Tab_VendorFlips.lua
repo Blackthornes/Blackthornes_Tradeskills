@@ -473,7 +473,7 @@ local function Build(container)
         ShowFromTop()
     end)
     search:SetPoint("LEFT", 0, 0)
-    search:SetWidth(180)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
         state.dealsOnly = checked

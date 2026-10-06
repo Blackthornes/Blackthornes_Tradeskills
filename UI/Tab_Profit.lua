@@ -1192,26 +1192,28 @@ local function BuildCrafts(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
-    local search = Widgets.CreateSearchBox(toolbar, "Search crafts", function(text)
-        state.search = text or ""
-        Refresh()
-    end)
-    search:SetPoint("LEFT", 0, 0)
-    search:SetWidth(190)
-
+    -- Every tab's option bar runs dropdowns, then search, then tick boxes
+    -- (Ezmode's request, 2026-10-06). The headings do the sorting.
     local profession = Widgets.CreateDropdown(toolbar, { { text = "All professions", value = nil } },
         function(value)
             state.profession = value
             Refresh()
         end, { width = 150 })
-    profession:SetPoint("LEFT", search, "RIGHT", 8, 0)
+    profession:SetPoint("LEFT", 0, 0)
     widgets.professionDropdown = profession
+
+    local search = Widgets.CreateSearchBox(toolbar, "Search crafts", function(text)
+        state.search = text or ""
+        Refresh()
+    end)
+    search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local craftable = Widgets.CreateCheckbox(toolbar, "Craftable now", function(checked)
         state.craftableOnly = checked
         Refresh()
     end, false)
-    craftable:SetPoint("LEFT", profession, "RIGHT", 12, 0)
+    craftable:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
     local unpriceable = Widgets.CreateCheckbox(toolbar, "Show unpriced", function(checked)
         state.includeUnpriceable = checked
@@ -1236,17 +1238,6 @@ local function BuildCrafts(container)
         Refresh()
     end, false)
     showMaxed:SetPoint("LEFT", accountWide, "RIGHT", 12, 0)
-
-    local sort = Widgets.CreateDropdown(toolbar, {
-        { text = "Sort: Profit", value = "profit" },
-        { text = "Sort: Margin", value = "margin" },
-        { text = "Sort: ROI", value = "roi" },
-    }, function(value)
-        state.sortBy = value
-        Refresh()
-    end, { width = 110 })
-    sort:SetPoint("RIGHT", 0, 0)
-    sort:SetValue("profit")
 
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)

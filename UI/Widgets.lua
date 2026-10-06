@@ -642,6 +642,10 @@ end
 -- Search box
 --------------------------------------------------------------------------------
 
+-- One width for the search box on every tab's option bar, so it sits in the
+-- same place whichever tab is open.
+Widgets.SEARCH_WIDTH = 170
+
 function Widgets.CreateSearchBox(parent, placeholder, onChange)
     local container = Theme.CreatePanel(parent, "row")
     container:SetHeight(22)

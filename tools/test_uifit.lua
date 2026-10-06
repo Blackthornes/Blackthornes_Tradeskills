@@ -333,7 +333,7 @@ local Theme, Widgets, Motion, UI = ns.Theme, ns.Widgets, ns.Motion, ns.UI
 -- made, in the order made, and the buttons by their words.
 local made, buttons = {}, {}
 for _, name in ipairs({ "CreateScrollList", "CreateSearchBox", "CreateCheckbox", "CreateDropdown",
-                         "CreateNumberBox" }) do
+                         "CreateNumberBox", "SortableHeadings" }) do
     local real = Widgets[name]
     made[name] = {}
     Widgets[name] = function(...)
@@ -850,7 +850,7 @@ records[1001].market = 123456
 local pricesList = made.CreateScrollList[1]
 local pricesSearch = made.CreateSearchBox[1]
 local craftWith = made.CreateCheckbox[1]
-local sort = made.CreateDropdown[1]
+local sorter = made.SortableHeadings[1]
 pricesList.height = 220
 
 UI:SelectTab("prices")
@@ -862,7 +862,6 @@ top.cells.market:SetWidth(50)
 UI.tabs.prices.refresh()
 check("a narrower one, fewer coins", Plain(top.cells.market.text), "12g 35s")
 top.cells.market:SetWidth(80)
-check("the sort box is wide enough for its words", sort.width, 140)
 
 local function ScrollDown()
     for _ = 1, 5 do pricesList.scripts.OnMouseWheel(pricesList, -1) end
@@ -886,11 +885,11 @@ craftWith.scripts.OnClick(craftWith)
 check("so does a filter", pricesList.offset, 0)
 craftWith.scripts.OnClick(craftWith)
 
+-- No sort menu any more (Ezmode, 2026-10-06): the headings sort.
 ScrollDown()
-sort.scripts.OnMouseDown(sort)
-sort.menu.children[5].scripts.OnClick(sort.menu.children[5])
+sorter.buttons.name.scripts.OnClick(sorter.buttons.name)
 check("and a new sort", pricesList.offset, 0)
-check("by the order picked", sort:GetValue(), "name")
+check("by the heading clicked", sorter.key, "name")
 
 --------------------------------------------------------------------------------
 print("")
