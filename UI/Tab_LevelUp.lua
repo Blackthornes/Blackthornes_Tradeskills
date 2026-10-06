@@ -679,7 +679,7 @@ local function Build(container)
         Refresh()
     end)
     search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
-    search:SetWidth(170)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local craftable = Widgets.CreateCheckbox(toolbar, "Craftable now", function(checked)
         state.craftableOnly = checked

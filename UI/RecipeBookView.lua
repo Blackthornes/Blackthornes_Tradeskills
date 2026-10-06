@@ -461,27 +461,28 @@ local function NewView(opts)
     function instance.Build(view)
         local right = -DETAIL_WIDTH - 16
 
-        local search = Widgets.CreateSearchBox(view, "Search recipes", function(text)
-            state.search = text or ""
-            instance.Refresh()
-        end)
-        search:SetPoint("TOPLEFT", 8, -8)
-        search:SetWidth(190)
-
+        -- Dropdown, search, tick box: the order every tab uses.
         local profession = Widgets.CreateDropdown(view, { { value = ALL, text = "All professions" } },
             function(value)
                 state.profession = value
                 state.selected = nil
                 instance.Refresh()
             end, { width = 150 })
-        profession:SetPoint("LEFT", search, "RIGHT", 8, 0)
+        profession:SetPoint("TOPLEFT", 8, -8)
         widgets.profession = profession
+
+        local search = Widgets.CreateSearchBox(view, "Search recipes", function(text)
+            state.search = text or ""
+            instance.Refresh()
+        end)
+        search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
+        search:SetWidth(Widgets.SEARCH_WIDTH)
 
         local known = Widgets.CreateCheckbox(view, "Show learned too", function(checked)
             state.includeKnown = checked and true or false
             instance.Refresh()
         end, false)
-        known:SetPoint("LEFT", profession, "RIGHT", 12, 0)
+        known:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
         local headings = CreateFrame("Frame", nil, view)
         headings:SetHeight(16)

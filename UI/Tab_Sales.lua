@@ -32,7 +32,7 @@ local Util = ns.Util
 local UI = ns.UI
 
 local ROW_HEIGHT = 34
-local DETAIL_WIDTH = 320
+local DETAIL_WIDTH = 300
 
 local VIEWS = {
     { text = "Recent sales",   value = "sales" },
@@ -781,30 +781,32 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Across the top, over the list and the panel, like every other tab's
+    -- option bar: the menu first, then search (Ezmode, 2026-10-06).
     local toolbar = CreateFrame("Frame", nil, container)
-    toolbar:SetHeight(22)
-    toolbar:SetPoint("TOPLEFT", 8, -10)
-    toolbar:SetPoint("TOPRIGHT", container, "TOPRIGHT", -DETAIL_WIDTH - 16, -10)
-
-    local search = Widgets.CreateSearchBox(toolbar, "Search sales", function(text)
-        state.search = text or ""
-        Refresh()
-    end)
-    search:SetPoint("LEFT", 0, 0)
-    search:SetWidth(200)
-    widgets.search = search
+    toolbar:SetPoint("TOPLEFT", 8, -8)
+    toolbar:SetPoint("TOPRIGHT", -8, -8)
+    toolbar:SetHeight(24)
 
     local view = Widgets.CreateDropdown(toolbar, VIEWS, function(value)
         state.view = value
         Refresh()
     end, { width = 130 })
-    view:SetPoint("RIGHT", 0, 0)
+    view:SetPoint("LEFT", 0, 0)
     view:SetValue(state.view)
     widgets.view = view
 
+    local search = Widgets.CreateSearchBox(toolbar, "Search sales", function(text)
+        state.search = text or ""
+        Refresh()
+    end)
+    search:SetPoint("LEFT", view, "RIGHT", 8, 0)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
+    widgets.search = search
+
     local divider = Theme.CreateDivider(container)
     divider:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
-    divider:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
+    divider:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
 
     local carried = Theme.CreateLabel(container, "tiny", "dim")
     carried:SetPoint("BOTTOMLEFT", 8, 26)
@@ -867,7 +869,7 @@ local function Build(container)
     widgets.summary = summary
 
     local detail = BuildDetail(container)
-    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -8)
+    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 

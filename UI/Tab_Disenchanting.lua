@@ -926,8 +926,17 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
-    -- A tick box rather than a menu (Izbode's request, 2026-10-02): one click
-    -- between the auction house deals and disenchanting from the bags.
+    -- Search first, then the tick boxes, as on every tab (Ezmode,
+    -- 2026-10-06). The view stays a tick box rather than a menu (Izbode's
+    -- request, 2026-10-02): one click between the auction house deals and
+    -- disenchanting from the bags.
+    local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
+        state.search = text or ""
+        Refresh()
+    end)
+    search:SetPoint("LEFT", 0, 0)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
+
     local view = Widgets.CreateCheckbox(toolbar, "Items in my bags", function(checked)
         state.view = checked and "bag" or "auction"
         state.selected = nil
@@ -935,21 +944,14 @@ local function Build(container)
         widgets.list:ScrollToTop()
         Refresh()
     end, state.view == "bag")
-    view:SetPoint("LEFT", 0, 0)
+    view:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.view = view
-
-    local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
-        state.search = text or ""
-        Refresh()
-    end)
-    search:SetPoint("LEFT", view, "RIGHT", 8, 0)
-    search:SetWidth(150)
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
         state.dealsOnly = checked
         Refresh()
     end, state.dealsOnly)
-    dealsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
+    dealsOnly:SetPoint("LEFT", view, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
 
     local hideTooHigh = Widgets.CreateCheckbox(toolbar, "Only ones I can disenchant", function(checked)
@@ -965,7 +967,7 @@ local function Build(container)
         state.beatsOnly = checked
         Refresh()
     end, state.beatsOnly)
-    beatsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
+    beatsOnly:SetPoint("LEFT", view, "RIGHT", 12, 0)
     widgets.beatsOnly = beatsOnly
 
     -- Column headings

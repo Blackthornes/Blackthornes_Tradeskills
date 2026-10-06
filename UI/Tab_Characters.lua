@@ -15,7 +15,7 @@ local Util = ns.Util
 local UI = ns.UI
 
 local ROW_HEIGHT = 40
-local DETAIL_WIDTH = 320
+local DETAIL_WIDTH = 300
 
 local state = { selected = nil, view = "characters" }
 local widgets = {}
@@ -418,7 +418,8 @@ local function BuildSwitch(container)
     rule:SetColorTexture(Theme.Unpack("border"))
     rule:SetHeight(1)
     rule:SetPoint("LEFT", previous, "RIGHT", 6, 0)
-    rule:SetPoint("RIGHT", container, "RIGHT", -DETAIL_WIDTH - 16, 0)
+    -- Across the top like every tab's option bar, over the detail panel.
+    rule:SetPoint("RIGHT", container, "RIGHT", -8, 0)
 
     return buttons
 end
@@ -462,7 +463,7 @@ local function BuildCharacters(container)
     widgets.summary = summary
 
     local detail = BuildDetail(container)
-    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -8)
+    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
