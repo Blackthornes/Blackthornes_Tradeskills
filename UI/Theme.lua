@@ -650,6 +650,7 @@ end
 -- Built from the folder name the client hands us rather than written out, so
 -- the texture still resolves if the addon is installed under another name.
 local MEDIA = ([[Interface\AddOns\%s\Media\]]):format(ADDON)
+Theme.MEDIA = MEDIA
 
 -- How the mark on a recommended craft is drawn. Three of them because this is
 -- the one part of the addon that cannot be checked outside the game: a texture

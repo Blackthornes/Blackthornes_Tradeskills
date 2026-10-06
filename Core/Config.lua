@@ -278,6 +278,9 @@ local DEFAULTS = {
         -- pays most, or "auction", "vendor" or "disenchant" alone. Picked on
         -- the tab's option bar; /bts top and /bts why follow it.
         profitBy = "best",
+
+        -- The Prices tab shows only starred items (Voldar, 2026-10-06).
+        pricesFavouritesOnly = false,
     },
 
     -- realmKey -> itemID -> price record
@@ -306,6 +309,10 @@ local DEFAULTS = {
     -- offering. Account wide; the name is kept so Settings can list one the
     -- client has not loaded. See Posting:SetIgnored.
     ignoredSellItems = {},
+
+    -- itemID -> the item's name: items starred on the Prices tab to keep an
+    -- eye on. Account wide. See Prices:SetFavourite.
+    favouritePrices = {},
 
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
