@@ -320,4 +320,17 @@ check("with the realm", QueueMail:FindCharacter("Loom-Forever") == LOOM)
 check("not someone else's Loom elsewhere", QueueMail:FindCharacter("Loom-Elsewhere") == nil)
 check("a stranger is nobody", QueueMail:FindCharacter("Stranger") == nil)
 
+print("\nmailing by first and last name")
+
+-- Forever lets characters share a first name, so a mail goes by both.
+ns.db.characters[LOOM].surname = "Weaver"
+check("the mail is addressed to Loom Weaver", QueueMail.MailName(ns.db.characters[LOOM]) == "Loom Weaver")
+check("by the first name alone when the last is not known",
+    QueueMail.MailName(ns.db.characters[BOB]) == "Bob")
+check("Loom Weaver is Loom", QueueMail:FindCharacter("Loom Weaver") == LOOM)
+check("any case and spacing", QueueMail:FindCharacter("  loom   weaver ") == LOOM)
+check("with the realm", QueueMail:FindCharacter("Loom Weaver-Forever") == LOOM)
+check("another Loom is not", QueueMail:FindCharacter("Loom Tanner") == nil)
+check("the first name alone still finds the only Loom", QueueMail:FindCharacter("Loom") == LOOM)
+
 print(("\n%d passed, 0 failed"):format(checks))

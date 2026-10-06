@@ -398,6 +398,14 @@ function QueueMailPanel:FillFor(row)
         else
             texts = { ("All attached.%s Press Send."):format(cost), "Press Send." }
         end
+        -- Forever's characters share first names, so the mail needs the
+        -- last name too. One not yet on record (that character has not
+        -- logged in since last names were read) has to be typed.
+        local record = delivery.to and ns.db and ns.db.characters and ns.db.characters[delivery.to]
+        if type(record) == "table" and not record.surname then
+            texts = { ("Type %s's last name after the first, then press Send."):format(short),
+                "Add the last name, then Send." }
+        end
         Theme.FitText(panel.status, texts, WIDTH - 2 * PAD)
         QueueMailPanel:Refresh()
     end)
