@@ -294,6 +294,21 @@ local backToBob = delivery(BOB)
 check("unticked, a craft made for Bob is still offered", backToBob and sends(backToBob, BAG) == 1)
 check("as a finished craft", backToBob.crafts == true)
 check("and nothing else is", #QueueMail:GetDeliveries() == 1)
+
+-- Bob queues a Spider Bag only Loom knows, and holds its silk. Unticked,
+-- Loom still makes it, so Bob's mailbox offers Loom the silk.
+local SPIDER_BAG, SILK = 5010, 4306
+characters = freshCharacters()
+characters[LOOM].recipes[40] = { recipeID = 40, name = "Spider Bag", outputItemID = SPIDER_BAG,
+    quantityMin = 1, quantityMax = 1, reagents = { { itemID = SILK, quantity = 4 } } }
+loginAs(BOB, { [SILK] = 6 })
+ns.db = { queue = {}, characters = characters }
+Queue:Add(40, 1)
+local silkToLoom = delivery(LOOM)
+check("unticked, Bob is offered to send Loom the silk", silkToLoom and sends(silkToLoom, SILK) == 4)
+check("as materials", not silkToLoom.crafts)
+characters[LOOM].inventory = { [SILK] = 4 }
+check("not when Loom already holds it", delivery(LOOM) == nil)
 settings.queueAltCrafting = true
 
 print("\nfinding a character by the name typed into a mail")

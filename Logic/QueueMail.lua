@@ -222,9 +222,14 @@ end
 -- should be a button to send their alt craft to the character that needs
 -- it". A craft is what this character can make and the other one's queued
 -- crafts use (bolts for Ana's bag), or what it made from a craft another
--- character queued (`owed`). Those owed are offered whether or not alts are
--- given sub-crafts: the queue is shared either way, so an alt can make
--- something another character queued with the setting off.
+-- character queued (`owed`).
+--
+-- All of it is offered whether or not alts are given sub-crafts (asked the
+-- same day: "also if they hold a material that other character needs to
+-- complete something in the queue"). The queue is shared either way, so a
+-- craft only an alt knows is the alt's to make with the setting off too,
+-- and the materials for it can be in another character's bags. The setting
+-- only decides whether sub-crafts are handed to alts.
 --
 -- @return list of { to = key, name, crafts, subject, items = { { itemID, count, made } } },
 --   by name, a character's crafts before its materials, items by item
@@ -233,10 +238,9 @@ function QueueMail:GetDeliveries()
     local Queue = ns.Queue
     if not (ns.db and Queue and Queue.CanMail) then return deliveries end
 
-    local shared = Queue.SharesWithAlts and Queue:SharesWithAlts()
     local selfKey = SelfKey()
-    local uses, makes = {}, {}
-    if shared then uses, makes = self:GetPlan() end
+    if not CharacterRecord(selfKey) then return deliveries end
+    local uses, makes = self:GetPlan()
     local myUse, myMake = uses[selfKey] or {}, makes[selfKey] or {}
     local canMake = OwnOutputs()
 
