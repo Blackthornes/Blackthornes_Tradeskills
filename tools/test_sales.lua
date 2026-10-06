@@ -31,8 +31,10 @@ ns.RegisterEvent = function(_, event, fn)
     return true
 end
 
-time = time or os.time
-local NOW = time()
+-- Whatever an earlier test left as the clock, fixed, but able to turn a
+-- date into a time the way the game's can.
+local NOW = (time or os.time)()
+time = function(t) if t then return os.time(t) end return NOW end
 
 --------------------------------------------------------------------------------
 -- A widget layer that only remembers what was written to it
@@ -64,7 +66,9 @@ local function Label()
     })
 end
 
-CreateFrame = function() return Stub() end
+CreateFrame = function()
+    return Stub({ CreateTexture = function() return Stub() end })
+end
 C_Timer = { After = function() end, NewTicker = function() return Stub() end }
 
 -- Every label the tab builds, in creation order, so an assertion can reach the
@@ -86,18 +90,21 @@ ns.Theme = {
 
     -- The house trim: drawn, never asserted on.
     AccentStripe = function() return Stub() end,
+    Recess = function() end,
     CreateItemIcon = function() return Stub() end,
     SetItemIcon = function() end,
 }
 
 -- The tab's only way to change view is the dropdown's callback, so the stub
 -- keeps hold of it.
-local selectView
+local selectView, selectPeriod
 
 ns.Widgets = {
     CreateSearchBox = function() return Stub() end,
-    CreateDropdown = function(_, _, onSelect)
-        selectView = onSelect
+    CreateDropdown = function(_, options, onSelect)
+        local first = options and options[1] and options[1].value
+        if first == "sales" then selectView = onSelect end
+        if first == "session" then selectPeriod = onSelect end
         return Stub()
     end,
     CreateCheckbox = function() return Stub() end,
@@ -162,6 +169,14 @@ ns.db = { mailLedger = {} }
 do
     local chunk = assert(loadfile(lfs_cwd .. "/Data/Mail.lua"))
     chunk("Blackthornes_TS", ns)
+end
+
+date = os.date
+GameTooltip = GameTooltip or Stub()
+
+do
+    assert(loadfile(lfs_cwd .. "/Logic/GoldLog.lua"))("Blackthornes_TS", ns)
+    assert(loadfile(lfs_cwd .. "/UI/GoldChart.lua"))("Blackthornes_TS", ns)
 end
 
 -- The carried-over history is read from the saved database; stand in for it.
@@ -565,6 +580,36 @@ row = Row({ kind = "sold", t = NOW, itemID = 2589, net = 1000, cost = 800 })
 contains("the cost it sold at wins over the last craft", row.detail.text, "profit +200c")
 
 ns.db.craftedCosts = nil
+
+--------------------------------------------------------------------------------
+
+print("")
+print("Gold in and out (asked by a player, 2026-10-06)")
+
+ns.GoldLog.session = {}
+ns.GoldLog.sessionStart = time() - 600
+ns.GoldLog:Record("auctionSales", 9000)
+ns.GoldLog:Record("repairs", -1500)
+ns.GoldLog:Record("transfer", 40000)
+
+selectView("gold")
+check("the list makes way for the chart", listData ~= nil, true)
+contains("the footer says what came in", LabelStartingWith("In ").text, "In 9000c")
+contains("and what went out", LabelStartingWith("In ").text, "out 1500c")
+contains("and the net", LabelStartingWith("In ").text, "net +7500c")
+contains("over the last 7 days by default", LabelStartingWith("In ").text, "the last 7 days")
+check("the legend lists the sale", LabelStartingWith("Auction sales") ~= nil, true)
+check("and the repair", LabelStartingWith("Repairs") ~= nil, true)
+check("and the move between characters apart", LabelStartingWith("Moved between alts") ~= nil, true)
+
+selectPeriod("session")
+contains("this session", LabelStartingWith("In ").text, "this session")
+selectPeriod("pick")
+contains("picked days name their dates", LabelStartingWith("In ").text, " to ")
+selectPeriod("week")
+
+selectView("sales")
+ns.db.goldLog = nil
 
 print("")
 print(string.format("%d passed, %d failed", passed, failed))
