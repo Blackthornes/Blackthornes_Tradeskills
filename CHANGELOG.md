@@ -4,6 +4,35 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.33.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- New **Gold in and out** view on the Sales tab: a chart of where your gold
+  came from and went, by source (auction sales and buys, deposits, vendor,
+  repairs, loot, quests, training, flights, mail, trades), for this session,
+  today, the last 7 or 30 days, or dates you pick. Hover a bar for what made
+  it up. Gold mailed between your own characters is kept apart.
+- The Sales tab shows the profit on each sale over what the item cost to
+  make, in green or red, with totals per item and for the whole list.
+- Vendor Flips has a new **Sell to: Auction house** choice: items other
+  sellers have listed well under their usual price, with what to list them
+  again at and the profit after the cut.
+- The Profit tab's PROFIT is now the best of the auction house, a vendor
+  and disenchanting, with a VIA column saying which. A **Profit:** switch
+  ranks by Best, AH, Vendor or DE alone. Disenchanting only counts when one
+  of your characters has the Enchanting skill for the item.
+- The Prices tab has a star on every row. Star the items you watch and tick
+  **Favourites only** to see just those.
+- While batch crafting, the progress bar also shows the time left on the
+  whole batch, e.g. "3 more · 3.0s · 15s left".
+- Every tab's option bar is laid out the same way: menus, then search, then
+  tick boxes. The "Sort:" menus are gone, since clicking a heading sorts,
+  and the right-hand panel no longer moves when you switch tabs.
+- The Enchanting tab no longer has its own "Items in your bags" view; the
+  Disenchanting tab's **Items in my bags** tick box shows the same list.
+
 ## 0.32.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
