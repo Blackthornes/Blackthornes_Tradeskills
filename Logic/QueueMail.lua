@@ -607,8 +607,9 @@ function QueueMail:Fill(delivery, onDone)
         Call(_G.MailFrameTab2.Click, _G.MailFrameTab2)
     end
 
-    local record = delivery.to and CharacterRecord(delivery.to)
-    local name = delivery.recipient or (record and record.name) or delivery.name
+    local name = delivery.recipient
+        or (delivery.to and QueueMail.MailName(CharacterRecord(delivery.to)))
+        or delivery.name
     Call(nameBox.SetText, nameBox, name)
     local subject = _G.SendMailSubjectEditBox
     if subject then Call(subject.SetText, subject, delivery.subject or "Materials for the craft queue") end
@@ -826,21 +827,43 @@ end
 -- Writing down what was sent
 --------------------------------------------------------------------------------
 
+--- The name to mail a character by: first and last name when the last one is
+--- known. Forever lets any number of characters share a first name, so the
+--- first name alone (all the To box got, 2026-10-06) can reach a stranger or
+--- nobody.
+function QueueMail.MailName(record)
+    if type(record) ~= "table" or type(record.name) ~= "string" then return nil end
+    if type(record.surname) == "string" and record.surname ~= "" then
+        return record.name .. " " .. record.surname
+    end
+    return record.name
+end
+
 --- Which of your characters a typed name means: one on this realm with that
---- first name, and only when exactly one is.
+--- first and last name, or with that first name when only one has it.
 function QueueMail:FindCharacter(typed)
     if type(typed) ~= "string" or typed == "" then return nil end
 
     local selfRecord = CharacterRecord(SelfKey())
     local realm = selfRecord and selfRecord.realm
     local wanted, wantedRealm = typed:match("^([^-]+)-?(.*)$")
-    wanted = (wanted or typed):lower()
+    wanted = Fold(wanted or typed)
+    if not wanted then return nil end
     if wantedRealm ~= nil and wantedRealm ~= "" then realm = wantedRealm end
+    local first, last = wanted:match("^(%S+) (.+)$")
+
+    local function Named(record)
+        if first then
+            return record.name:lower() == first
+                and type(record.surname) == "string" and Fold(record.surname) == last
+        end
+        return record.name:lower() == wanted
+    end
 
     local found
     for characterKey, record in pairs((ns.db and ns.db.characters) or {}) do
         if type(record) == "table" and type(record.name) == "string"
-            and record.name:lower() == wanted
+            and Named(record)
             and (not realm or not record.realm or record.realm:gsub("%s", "") == realm:gsub("%s", "")) then
             if found then return nil end
             found = characterKey
