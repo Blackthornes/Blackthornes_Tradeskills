@@ -806,7 +806,7 @@ local function Build(container)
         Refresh()
     end)
     search:SetPoint("LEFT", view, "RIGHT", 8, 0)
-    search:SetWidth(170)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local beatsOnly = Widgets.CreateCheckbox(toolbar, "Only where disenchanting pays more", function(checked)
         state.beatsOnly = checked
