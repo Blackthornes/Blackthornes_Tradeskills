@@ -101,6 +101,33 @@ local function Matches(itemID, name, query)
 end
 
 --------------------------------------------------------------------------------
+-- Profit
+--------------------------------------------------------------------------------
+
+-- What each sale made over what the item cost (Logic/CraftedCost.lua). Asked
+-- by two players on 2026-10-06. Worked out on each draw, never written into
+-- the ledger, so a cost learned later still reaches older sales.
+
+-- One lookup per draw: which recipe makes an item and today's cost of it.
+local saleCosts
+
+--- "+1g 20s" in green, "-40s" in red, coins left plain so the sign reads.
+local function SignedMoney(copper)
+    local sign = copper > 0 and "+" or ""
+    return ("|c%s%s%s|r"):format(ns.COLORS[copper < 0 and "loss" or "profit"], sign,
+        Util.FormatMoney(copper, { short = true, noColor = true }))
+end
+
+--- What one ledger sale made, or nil.
+-- @return profit, cost, source ("made" | "est")
+local function EntryProfit(entry)
+    if not ns.CraftedCost or not ns.CraftedCost.SaleProfit then return nil end
+    saleCosts = saleCosts or ns.CraftedCost:NewSaleCache()
+    local itemID = entry.itemID or (state.names and entry.name and state.names[entry.name])
+    return ns.CraftedCost:SaleProfit(entry, itemID, saleCosts)
+end
+
+--------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
 
@@ -162,13 +189,24 @@ local function UpdateEventRow(row, entry)
             parts[#parts + 1] = "sold"
         end
 
-        if entry.cut and entry.cut > 0 then
+        local profit, cost, source = EntryProfit(entry)
+
+        -- The cut gives way to the profit, which already takes it off: the
+        -- line has room for one or the other, not both.
+        if not profit and entry.cut and entry.cut > 0 then
             parts[#parts + 1] = ("cut %s"):format(
                 Util.FormatMoney(entry.cut, { short = true, noColor = true }))
         end
 
         if entry.estimated then
             parts[#parts + 1] = "gold still held"
+        end
+
+        if profit then
+            parts[#parts + 1] = ("cost %s%s"):format(
+                Util.FormatMoney(cost, { short = true, noColor = true }),
+                source == "est" and " est." or "")
+            parts[#parts + 1] = "profit " .. SignedMoney(profit)
         end
 
         row.detail:SetText(table.concat(parts, "  ·  "))
@@ -212,6 +250,11 @@ local function UpdateItemRow(row, item)
 
     if item.cancelled > 0 then
         parts[#parts + 1] = ("%d cancelled"):format(item.cancelled)
+    end
+
+    if item.costed + item.guessed > 0 then
+        parts[#parts + 1] = "profit " .. SignedMoney(item.profit)
+            .. (item.guessed > 0 and " est." or "")
     end
 
     row.detail:SetText(table.concat(parts, "  ·  "))
@@ -325,7 +368,7 @@ end
 -- Detail
 --------------------------------------------------------------------------------
 
-local LINE_COUNT = 11
+local LINE_COUNT = 13
 
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
@@ -411,6 +454,26 @@ local function EstimatedUnitRevenue(itemID)
     return nil
 end
 
+--- The profit lines for one item or for everything: the total, and how many
+--- of the sales it covers when some could not be costed.
+local function AddProfitLines(Add, subject)
+    local counted = subject.costed + subject.guessed
+    if counted == 0 then
+        if subject.sold > 0 then Add("Profit", "cost not known", "muted") end
+        return
+    end
+
+    Add(subject.guessed > 0 and "Profit (some est.)" or "Profit",
+        SignedMoney(subject.profit), subject.profit < 0 and "loss" or "profit")
+
+    if counted < subject.sold then
+        Add("Costed sales", ("%d of %d"):format(counted, subject.sold), "muted")
+    elseif counted > 1 then
+        Add("Profit per sale", SignedMoney(subject.profit / counted),
+            subject.profit < 0 and "loss" or "profit")
+    end
+end
+
 local function UpdateDetail(item, totals)
     local detail = widgets.detail
     local lines = {}
@@ -452,6 +515,8 @@ local function UpdateDetail(item, totals)
                 Add("Auction cut", Util.FormatMoney(item.cut), "muted")
             end
 
+            AddProfitLines(Add, item)
+
             local estimate = EstimatedUnitRevenue(item.itemID)
             if estimate then
                 Add("Profit tab says", ("%s a unit"):format(
@@ -466,6 +531,8 @@ local function UpdateDetail(item, totals)
 
         if item.restored then
             detail.note:SetText("Some of these figures are from before you last quit the game. Only sales, amounts, expiries and gold are kept when you quit, so the auction cut and cancellations here are for this session only.")
+        elseif item.guessed > 0 then
+            detail.note:SetText("A cost marked est. is what the materials cost today: that sale came before Tradeskills kept what each craft cost.")
         elseif item.soldUnits == item.sold and item.sold > 0 then
             detail.note:SetText("The sale mail does not say how many were in the stack, so a stack of twenty looks the same as a single item. For now, every sale counts as one.")
         else
@@ -496,6 +563,8 @@ local function UpdateDetail(item, totals)
             if totals.cut > 0 then
                 Add("Auction cut", Util.FormatMoney(totals.cut), "muted")
             end
+
+            AddProfitLines(Add, totals)
         end
 
         Add("Different items", tostring(totals.items), "muted")
@@ -522,6 +591,7 @@ local function Totals(items)
     local totals = {
         sold = 0, soldUnits = 0, expired = 0, cancelled = 0,
         net = 0, cut = 0, estimated = 0, items = 0, restored = false,
+        profit = 0, costed = 0, guessed = 0, uncosted = 0,
     }
 
     for _, item in ipairs(items) do
@@ -532,6 +602,10 @@ local function Totals(items)
         totals.net = totals.net + item.net
         totals.cut = totals.cut + item.cut
         totals.estimated = totals.estimated + item.estimated
+        totals.profit = totals.profit + item.profit
+        totals.costed = totals.costed + item.costed
+        totals.guessed = totals.guessed + item.guessed
+        totals.uncosted = totals.uncosted + item.uncosted
         totals.items = totals.items + 1
 
         if item.restored then totals.restored = true end
@@ -591,6 +665,7 @@ local function Refresh()
     if not widgets.list then return end
 
     awaitingItemData = false
+    saleCosts = nil
 
     -- Once per redraw: it walks the whole ledger.
     state.names = ns.Mail.NameIndex and ns.Mail:NameIndex() or nil
@@ -755,9 +830,15 @@ local function Refresh()
         return
     end
 
-    widgets.summary:SetText(("%d sold  ·  taken in %s%s%s"):format(
+    local counted = totals.costed + totals.guessed
+
+    widgets.summary:SetText(("%d sold  ·  taken in %s%s%s%s"):format(
         totals.sold,
         Util.FormatMoney(totals.net, { short = true }),
+        counted > 0
+            and ("  ·  profit %s%s"):format(SignedMoney(totals.profit),
+                counted < totals.sold and (" on %d"):format(counted) or "")
+            or "",
         totals.sellThrough
             and ("  ·  %d%% sell-through"):format(
                 math.floor(totals.sellThrough * 100 + 0.5))
