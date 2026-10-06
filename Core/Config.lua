@@ -314,6 +314,11 @@ local DEFAULTS = {
     -- eye on. Account wide. See Prices:SetFavourite.
     favouritePrices = {},
 
+    -- realmKey -> itemID -> { price, mode, name }: prices the player set
+    -- on the Prices tab, used instead of the auction price ("use") or as
+    -- the least it can be ("floor"). See Prices:SetMine.
+    myPrices = {},
+
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
     mailLedger = {},

@@ -311,6 +311,10 @@ local function ShowRowTooltip(row, line)
             why = "No scan has priced this, so it is estimated from what its materials are worth"
         elseif line.priceBasis == "uncontested" then
             why = "Nobody else is listing one, so it is priced at your materials plus the markup"
+        elseif line.priceBasis == "mine" then
+            why = "Your own price, set on the Prices tab"
+        elseif line.priceBasis == "floor" then
+            why = "Raised to the least you set on the Prices tab"
         elseif line.priceBasis == "match" then
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.

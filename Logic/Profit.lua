@@ -141,7 +141,7 @@ end
 -- the unknown case is the one where giving gold away is least defensible.
 --
 -- @return price, basis, why, uncertain  -- basis is "undercut", "match",
---   "market", "derived" or "uncontested", and nil price when there is
+--   "market", "derived", "uncontested", "mine" or "floor", and nil price when there is
 --   nothing to go on. "derived" (never scanned) and "uncontested" (scanned,
 --   but every listing is yours) are both the material-value figure from
 --   DeriveFromMaterials above, and are the two bases that are not evidence
@@ -152,6 +152,35 @@ end
 -- @param knownCost  optional, passed straight to DeriveFromMaterials; see
 --   there for when it is used and when it is ignored.
 function Profit:ChoosePostPrice(itemID, knownCost)
+    if not itemID then return nil, nil end
+
+    -- A price the player set on the Prices tab (Ponyboy, 2026-10-06): "use"
+    -- lists at it, "floor" undercuts as usual but never goes below it.
+    local mine, mode
+    if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
+    if not mine then return self:ChooseMarketPostPrice(itemID, knownCost) end
+
+    local status
+    if ns.Scanner.GetCommodityStatus then
+        status = ns.Scanner:GetCommodityStatus(itemID)
+    else
+        status = ns.Scanner:IsCommodity(itemID)
+    end
+    local floor = RoundForSale(mine, status ~= false)
+
+    if mode == "use" then
+        return floor, "mine", "your own price, set on the Prices tab", status == nil
+    end
+
+    local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost)
+    if price and price >= floor then return price, basis, why, uncertain end
+
+    return floor, "floor", "the least you set on the Prices tab", status == nil
+end
+
+--- ChoosePostPrice from the auction house alone, before the player's own
+--- price is applied. Same returns.
+function Profit:ChooseMarketPostPrice(itemID, knownCost)
     if not itemID then return nil, nil end
 
     -- "rival" excludes your own auctions, so listing a second one does not
@@ -1023,7 +1052,8 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
     end
 
     for _, reagent in ipairs(analysis.cost.reagents) do
-        local note = reagent.crafted and "cheaper to craft" or reagent.source
+        local note = reagent.crafted and "cheaper to craft"
+            or reagent.source == "mine" and "my price" or reagent.source
         local shortfall = reagent.shortfall > 0
             and (" |c%sneed %d more|r"):format(ns.COLORS.warn, reagent.shortfall)
             or ""
@@ -1049,6 +1079,12 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
         ns.PrintRaw(("  |c%sa vendor pays more than a listing would, so it is valued at that|r"):format(
             ns.COLORS.profit))
         ns.PrintRaw(("  vendor pays     %s  (makes %.1f)"):format(
+            Util.FormatMoney(analysis.unitRevenue), analysis.yield))
+    elseif analysis.priceBasis == "mine" or analysis.priceBasis == "floor" then
+        ns.PrintRaw(("  |c%s%s|r"):format(ns.COLORS.warn, analysis.priceBasis == "mine"
+            and "priced at your own price, set on the Prices tab"
+            or "raised to the least you set on the Prices tab"))
+        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.undercut then
         ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))

@@ -498,7 +498,26 @@ end
 -- "rival" deliberately does not fall back to `min`: if the only listing is
 -- yours, there is nobody to undercut, and pretending otherwise would have you
 -- undercut yourself.
+--
+-- A price the player set on the Prices tab (see My prices below) wins over
+-- all but "rival": "use" replaces the scanned price, "floor" lifts it.
+-- Rival stays the auction house's own, since it is the price to undercut.
+-- GetScanValue answers from the scans alone.
 function Prices:GetValue(itemID, which)
+    local scanned = self:GetScanValue(itemID, which)
+    if which == "rival" then return scanned end
+
+    local mine, mode = self:GetMine(itemID)
+    if not mine then return scanned end
+
+    if mode == "use" then return mine end
+    if not scanned or scanned < mine then return mine end
+    return scanned
+end
+
+--- What the scans alone say an item is worth, leaving out any price the
+--- player set. Same `which` as GetValue.
+function Prices:GetScanValue(itemID, which)
     local record = self:GetTable()[itemID]
     if not record then return nil end
 
@@ -641,6 +660,87 @@ end
 --- itemID -> saved name (or true when none was known).
 function Prices:GetFavourites()
     return ns.db and type(ns.db.favouritePrices) == "table" and ns.db.favouritePrices or {}
+end
+
+--------------------------------------------------------------------------------
+-- My prices
+--------------------------------------------------------------------------------
+
+-- Asked 2026-10-06 (Ponyboy): set your own price on an item. Two kinds:
+--   "use"    this price instead of the auction price, everywhere: a reagent
+--            you make for less than the auction house asks.
+--   "floor"  the auction price, but never below this: a craft worth more
+--            to you than the auction house is paying right now.
+-- Kept per realm, like the price table, in `myPrices[realm][itemID] =
+-- { price, mode, name }`. Never rename it. Apart from the price table, so
+-- pruning old prices never takes a player's own price with it.
+
+local MY_MODES = { use = true, floor = true }
+
+local function MyPrices(create)
+    if not ns.db then return nil end
+
+    if type(ns.db.myPrices) ~= "table" then
+        if not create then return nil end
+        ns.db.myPrices = {}
+    end
+
+    local realmKey = ns.Config:GetRealmKey()
+    local realm = ns.db.myPrices[realmKey]
+    if type(realm) ~= "table" then
+        if not create then return nil end
+        realm = {}
+        ns.db.myPrices[realmKey] = realm
+    end
+    return realm
+end
+
+--- The price the player set on an item, and its kind ("use" or "floor").
+--- nil when none is set. A saved entry this cannot read is left alone.
+function Prices:GetMine(itemID)
+    local realm = itemID and MyPrices(false)
+    local entry = realm and realm[itemID]
+    if type(entry) ~= "table" then return nil end
+
+    local price = tonumber(entry.price)
+    if not price or price < 1 or not MY_MODES[entry.mode] then return nil end
+    return math.floor(price), entry.mode
+end
+
+--- Set the player's price on an item. A price of nil or 0 clears it.
+-- @return true when saved or cleared, false when the price was refused
+function Prices:SetMine(itemID, price, mode, name)
+    if not itemID then return false end
+    price = tonumber(price)
+
+    if not price or price < 1 then
+        local realm = MyPrices(false)
+        if realm and realm[itemID] ~= nil then
+            realm[itemID] = nil
+            Prices.changes = (Prices.changes or 0) + 1
+        end
+        return true
+    end
+
+    if not Prices.IsCredible(price) then return false end
+    if not MY_MODES[mode] then mode = "use" end
+
+    local realm = MyPrices(true)
+    if not realm then return false end
+
+    local old = realm[itemID]
+    if type(name) ~= "string" or name == "" then
+        name = type(old) == "table" and type(old.name) == "string" and old.name or nil
+    end
+
+    realm[itemID] = { price = math.floor(price), mode = mode, name = name }
+    Prices.changes = (Prices.changes or 0) + 1
+    return true
+end
+
+--- itemID -> { price, mode, name } for this realm.
+function Prices:GetAllMine()
+    return MyPrices(false) or {}
 end
 
 --------------------------------------------------------------------------------
