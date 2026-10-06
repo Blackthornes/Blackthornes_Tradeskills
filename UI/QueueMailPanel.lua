@@ -7,6 +7,10 @@
 -- fills in the name and attaches the items. The player presses Send: mail
 -- costs postage and cannot be taken back. Logic/QueueMail.lua works out
 -- what goes where; this only draws it.
+--
+-- Asked 2026-10-06: an alt that has finished a craft another character
+-- needs gets its own row for it at the mailbox, "Crafts for Bob", in the
+-- profit green, with a Send crafts to Bob button, ahead of any materials.
 
 local _, ns = ...
 
@@ -277,11 +281,16 @@ function QueueMailPanel:Refresh()
     -- Headed for what is on it.
     local onlyGear = hasGear and #deliveries == 1
     local onlyTake = deliveries[1].take and #deliveries == 1
+    local onlyCrafts = true
+    for _, delivery in ipairs(deliveries) do
+        if not delivery.crafts then onlyCrafts = false end
+    end
     local headingRoom = WIDTH - PAD - 4 - 18 - 6 - (panel.settings:GetWidth() or 60) - 8
     Theme.FitText(panel.heading, onlyTake and { "TAKE FOR THE CRAFT QUEUE", "TAKE" }
         or deliveries[1].take and not hasGear and { "FOR THE CRAFT QUEUE", "QUEUE" }
         or onlyGear and { "SEND TO YOUR DISENCHANTER", "DISENCHANTER" }
         or hasGear and { "SEND FROM YOUR BAGS", "SEND" }
+        or onlyCrafts and { "SEND YOUR FINISHED CRAFTS", "FINISHED CRAFTS", "CRAFTS" }
         or { "SEND FOR THE CRAFT QUEUE", "FOR THE QUEUE" }, headingRoom)
     local room = WIDTH - 2 * PAD
     local top = -28
@@ -295,6 +304,8 @@ function QueueMailPanel:Refresh()
         row:SetPoint("TOPLEFT", PAD, top - (index - 1) * ROW_HEIGHT)
 
         local short = ShortName(delivery)
+        local first = short:match("^(%S+)") or short
+        row.name:SetTextColor(Theme.Unpack(delivery.crafts and "profit" or "text"))
         if delivery.take then
             local batch = delivery.batch
             Theme.FitText(row.name, { delivery.name, "Next batch" }, room - BUTTON_WIDTH - 8)
@@ -314,12 +325,20 @@ function QueueMailPanel:Refresh()
             Theme.FitText(row.name, { delivery.name .. ", disenchanter", short .. ", disenchanter", short },
                 room - BUTTON_WIDTH - 8)
             Theme.FitText(row.items, GearTexts(delivery.items), room)
+        elseif delivery.crafts then
+            Theme.FitText(row.name, { "Crafts for " .. delivery.name, "Crafts for " .. short, short },
+                room - BUTTON_WIDTH - 8)
+            Theme.FitText(row.items, ItemTexts(delivery.items), room)
         else
             Theme.FitText(row.name, { delivery.name, short }, room - BUTTON_WIDTH - 8)
             Theme.FitText(row.items, ItemTexts(delivery.items), room)
         end
-        if not delivery.take then
-            local first = short:match("^(%S+)") or short
+        if delivery.crafts then
+            Theme.FitText(row.send.label, { "Send crafts to " .. short, "Send crafts to " .. first,
+                "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
+            row.send.tooltipText = ("Opens Send Mail to %s with the crafts their queue needs attached. You press Send."):format(short)
+            row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
+        elseif not delivery.take then
             Theme.FitText(row.send.label, { "Send to " .. short, "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
             row.send.tooltipText = "Opens Send Mail with the name filled in and these attached. You press Send."
             row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)

@@ -196,6 +196,18 @@ local function Bound(itemID)
     return ns.Util and ns.Util.IsBoundOnPickup and ns.Util.IsBoundOnPickup(itemID) == true
 end
 
+--- The items this character can make: the outputs of its own recipes.
+local function OwnOutputs()
+    local outputs = {}
+    local ok, recipes = pcall(ns.Recipes.GetAll, ns.Recipes)
+    for _, recipe in pairs((ok and type(recipes) == "table" and recipes) or {}) do
+        if type(recipe) == "table" and recipe.outputItemID then
+            outputs[recipe.outputItemID] = true
+        end
+    end
+    return outputs
+end
+
 --- What the character logged in can send to whom, right now.
 --
 -- For each other character the queue gives crafts to: what those crafts
@@ -204,18 +216,33 @@ end
 -- to what is in these bags (only the bags can go in a mail) beyond what
 -- this character's own crafts use.
 --
--- @return list of { to = key, name, items = { { itemID, count, made } } },
---   by name, items by item
+-- Finished crafts go in a delivery of their own (`crafts = true`), ahead of
+-- the materials for the same character. Asked 2026-10-06: "if your alt is
+-- doing a craft and completes it, when they go back to the mail there
+-- should be a button to send their alt craft to the character that needs
+-- it". A craft is what this character can make and the other one's queued
+-- crafts use (bolts for Ana's bag), or what it made from a craft another
+-- character queued (`owed`).
+--
+-- All of it is offered whether or not alts are given sub-crafts (asked the
+-- same day: "also if they hold a material that other character needs to
+-- complete something in the queue"). The queue is shared either way, so a
+-- craft only an alt knows is the alt's to make with the setting off too,
+-- and the materials for it can be in another character's bags. The setting
+-- only decides whether sub-crafts are handed to alts.
+--
+-- @return list of { to = key, name, crafts, subject, items = { { itemID, count, made } } },
+--   by name, a character's crafts before its materials, items by item
 function QueueMail:GetDeliveries()
     local deliveries = {}
     local Queue = ns.Queue
-    if not (ns.db and Queue and Queue.SharesWithAlts and Queue:SharesWithAlts()) then
-        return deliveries
-    end
+    if not (ns.db and Queue and Queue.CanMail) then return deliveries end
 
     local selfKey = SelfKey()
+    if not CharacterRecord(selfKey) then return deliveries end
     local uses, makes = self:GetPlan()
     local myUse, myMake = uses[selfKey] or {}, makes[selfKey] or {}
+    local canMake = OwnOutputs()
 
     -- What these bags can spare, item by item, worked out as it is asked for.
     local spare = {}
@@ -237,17 +264,21 @@ function QueueMail:GetDeliveries()
         if give <= 0 then return end
         spare[itemID] = spare[itemID] - give
 
-        local delivery = byKey[toKey]
+        local key = made and (toKey .. "#crafts") or toKey
+        local delivery = byKey[key]
         if not delivery then
             delivery = { to = toKey, name = ns.Recipes:GetCharacterName(toKey), items = {} }
-            byKey[toKey] = delivery
+            if made then
+                delivery.crafts = true
+                delivery.subject = "Crafts for your queue"
+            end
+            byKey[key] = delivery
             deliveries[#deliveries + 1] = delivery
         end
 
         for _, item in ipairs(delivery.items) do
             if item.itemID == itemID then
                 item.count = item.count + give
-                item.made = item.made or made
                 return
             end
         end
@@ -271,7 +302,7 @@ function QueueMail:GetDeliveries()
         for _, itemID in ipairs(items) do
             local left = uses[toKey][itemID] - (theirMake[itemID] or 0)
                 - Queue:HeldBy(toKey, itemID)
-            Give(toKey, itemID, left, (myMake[itemID] or 0) > 0)
+            Give(toKey, itemID, left, (myMake[itemID] or 0) > 0 or canMake[itemID] == true)
         end
     end
 
@@ -295,7 +326,8 @@ function QueueMail:GetDeliveries()
 
     table.sort(deliveries, function(a, b)
         if a.name ~= b.name then return a.name < b.name end
-        return a.to < b.to
+        if a.to ~= b.to then return a.to < b.to end
+        return a.crafts == true and b.crafts ~= true
     end)
 
     return deliveries
