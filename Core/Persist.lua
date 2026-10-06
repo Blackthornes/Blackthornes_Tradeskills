@@ -318,6 +318,10 @@ local function Snapshot(db)
     -- does not spend this budget.
     snapshot.itemFacts = nil
 
+    -- The price graph's hourly prices: worth having, not worth the budget.
+    -- The next scans start it again.
+    snapshot.priceHistory = nil
+
     return snapshot
 end
 
