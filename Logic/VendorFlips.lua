@@ -69,6 +69,8 @@ function VendorFlips:GetAuctionRows(opts)
                 loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
                 listed = record.quantity,
                 vendor = vendor,
+                sell = vendor,
+                extra = record.quantity,
                 gain = gain,
                 margin = gain / buy,
                 age = ns.Prices:GetAge(itemID),
@@ -91,6 +93,144 @@ function VendorFlips:GetAuctionRows(opts)
     end)
 
     return rows, hidden, pending
+end
+
+--------------------------------------------------------------------------------
+-- Auction house flips: buy under the usual price, list it again
+--------------------------------------------------------------------------------
+
+-- Scans of an item, the one that found the deal included, before its usual
+-- price is trusted. Fewer, and one seller's cheap stack may simply be where
+-- it sells now (Voldar's idea, 2026-10-06).
+local MIN_RESALE_SCANS = 5
+
+VendorFlips.MIN_RESALE_SCANS = MIN_RESALE_SCANS
+
+--- What an item usually sells for: the middle of its market values from the
+--- scans before the latest one. The latest is left out on purpose, since a
+--- cheap listing found by it pulls that scan's value down too.
+--
+-- @return copper and how many scans it was taken from, or nil when there
+--   are fewer than MIN_RESALE_SCANS
+function VendorFlips.UsualPrice(record)
+    if type(record) ~= "table" or type(record.history) ~= "table" then return nil end
+
+    local values = {}
+    local history = record.history
+    for index, entry in ipairs(history) do
+        local latest = index == #history and (record.seen == nil or entry.t == record.seen)
+        if not latest and type(entry.m) == "number" and entry.m > 0 then
+            values[#values + 1] = entry.m
+        end
+    end
+
+    if #values + 1 < MIN_RESALE_SCANS then return nil end
+
+    table.sort(values)
+    local middle = (#values + 1) / 2
+    local usual = (values[math.floor(middle)] + values[math.ceil(middle)]) / 2
+    return math.floor(usual + 0.5), #values
+end
+
+--- Every item someone else has on the auction house well under what it
+--- usually sells for, with what buying one and listing it again makes.
+--
+-- The resale price is the usual price, or the next listing up when that is
+-- lower, since that listing is what yours will sit beside. Profit is what
+-- that pays after the auction house cut and the deposit (Profit:NetFromListing),
+-- less the buy price.
+--
+-- Held back always, and counted as thin: items with fewer than
+-- MIN_RESALE_SCANS scans, items with Low or no Demand (gold tied up in
+-- something that does not sell is not a deal), and grey items, which are
+-- priced at vendor only.
+--
+-- @param opts { profitableOnly, minProfit, minMargin } as GetAuctionRows
+-- @return rows best profit first, how many were held back by the minimums,
+--   and how many cheap listings were held back as thin
+function VendorFlips:GetResaleRows(opts)
+    opts = opts or {}
+
+    local rows, hidden, thin = {}, 0, 0
+    local prices = ns.Prices and ns.Prices:GetTable() or {}
+    local minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0
+    local minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100
+    local BuyPrice = ns.Disenchant._BuyPrice
+
+    local since = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
+
+    for itemID, record in pairs(prices) do
+        local buy = type(record) == "table" and BuyPrice(record)
+        if buy and since and (record.seen or 0) < since then buy = nil end
+
+        local usual, scans
+        if buy then usual, scans = VendorFlips.UsualPrice(record) end
+
+        -- Too few scans for a usual price: weighed against the market value
+        -- only to say how many were held back.
+        local reference = usual or (buy and record.market)
+
+        if buy and reference and buy < reference then
+            local resell = reference
+            -- The next listing up, when the cheap one is a lone low listing
+            -- that pricing left out: yours sits beside it.
+            if record.rivalMin and record.rivalMin > buy and record.rivalMin < resell then
+                resell = record.rivalMin
+            end
+
+            local net = ns.Profit:NetFromListing(itemID, resell)
+            local gain = math.floor(net - buy)
+            local clears = gain >= minProfit and gain / buy >= minMargin
+
+            local demand, grey
+            if usual and gain > 0 then
+                demand = ns.Demand and ns.Demand:Get(itemID)
+                local facts = ns.Disenchant:GetItemFacts(itemID)
+                grey = facts and facts.quality == 0
+            end
+
+            if gain <= 0 then
+                -- Not a flip once the cut and deposit are paid.
+            elseif not usual or grey or not demand or demand.level == "low" then
+                if clears or not opts.profitableOnly then thin = thin + 1 end
+            else
+                local row = {
+                    kind = "auction",
+                    itemID = itemID,
+                    name = ns.Disenchant:ItemName(itemID),
+                    buy = buy,
+                    loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
+                    listed = record.quantity,
+                    usual = usual,
+                    scans = scans + 1,
+                    resell = resell,
+                    capped = resell < usual or nil,
+                    sell = resell,
+                    net = net,
+                    depositKnown = ns.Posting:GetCachedUnitDeposit(itemID) ~= nil,
+                    gain = gain,
+                    margin = gain / buy,
+                    demand = demand,
+                    extra = ns.Demand:Rank(demand),
+                    age = ns.Prices:GetAge(itemID),
+                    stale = ns.Prices:IsStale(itemID),
+                }
+
+                if not opts.profitableOnly or clears then
+                    rows[#rows + 1] = row
+                else
+                    hidden = hidden + 1
+                end
+            end
+        end
+    end
+
+    table.sort(rows, function(a, b)
+        if a.gain ~= b.gain then return a.gain > b.gain end
+        return a.itemID < b.itemID
+    end)
+
+    return rows, hidden, thin
 end
 
 --- After a scan: say how many flips it found and the best one, with the
