@@ -100,6 +100,107 @@ function CraftedCost:NotePosted(itemID, unitPrice)
 end
 
 --------------------------------------------------------------------------------
+-- What a sale made
+--------------------------------------------------------------------------------
+
+-- Asked by two players on 2026-10-06: the Sales tab said what each sale took
+-- in, but not whether it made anything over what the item cost. A sale is
+-- costed, best first, from:
+--
+--   "made"  the cost written on the sale when it was recorded, or failing
+--           that the last craft cost if that craft came before the sale;
+--   "est"   what the materials cost today, for something sold before its
+--           craft cost was being kept (or made on a character that never
+--           cast it since);
+--   nil     neither: bought rather than made, or nothing to price it with.
+--
+-- A sale mail does not say how many were in the stack, so a sale counts as
+-- one unless the ledger recorded a quantity.
+
+--- A lookup kept for one pass over the ledger: which recipe makes an item,
+--- and today's estimate for it, worked out once however many sales it has.
+function CraftedCost:NewSaleCache()
+    return { estimates = {} }
+end
+
+--- The recipe that makes `itemID`, from every character's recipes.
+local function RecipeFor(cache, itemID)
+    if not cache.recipeByItem then
+        cache.recipeByItem = {}
+        for _, record in pairs((ns.db and ns.db.characters) or {}) do
+            for recipeID, recipe in pairs(type(record) == "table" and record.recipes or {}) do
+                if type(recipe) == "table" and recipe.outputItemID
+                    and not cache.recipeByItem[recipe.outputItemID] then
+                    cache.recipeByItem[recipe.outputItemID] = recipe.recipeID or recipeID
+                end
+            end
+        end
+    end
+    return cache.recipeByItem[itemID]
+end
+
+--- Today's material cost of one `itemID`, or false when it cannot be priced.
+local function Estimate(cache, itemID)
+    local known = cache.estimates[itemID]
+    if known ~= nil then return known end
+
+    local each = false
+    local recipeID = RecipeFor(cache, itemID)
+
+    if recipeID and ns.Cost then
+        local ok, cost = pcall(ns.Cost.GetCraftCost, ns.Cost, recipeID, nil, nil, { valueOwned = true })
+        if ok and type(cost) == "table" and cost.priceable
+            and type(cost.perUnit) == "number" and cost.perUnit > 0 then
+            each = math.floor(cost.perUnit + 0.5)
+        end
+    end
+
+    cache.estimates[itemID] = each
+    return each
+end
+
+--- What one of a sold item cost, and where that figure came from.
+-- @param itemID  the sale's item, resolved by the caller when the entry has none
+-- @return each, source ("made" | "est"), or nil when it cannot be costed
+function CraftedCost:SaleCost(entry, itemID, cache)
+    if type(entry) ~= "table" then return nil end
+
+    if type(entry.cost) == "number" then return entry.cost, "made" end
+
+    itemID = itemID or entry.itemID
+    if not itemID then return nil end
+
+    local record = self:Get(itemID)
+    if record and (not record.at or not entry.t or record.at <= entry.t) then
+        return record.cost, "made"
+    end
+
+    local each = Estimate(cache or self:NewSaleCache(), itemID)
+    if each then return each, "est" end
+
+    return nil
+end
+
+--- What a sale made over what the item cost.
+--
+-- What came in is the sale less the auction house's cut. The deposit handed
+-- back with it is left out: it was paid when listing, so getting it back
+-- earns nothing.
+--
+-- @return profit, cost, source -- all nil when the sale cannot be costed
+function CraftedCost:SaleProfit(entry, itemID, cache)
+    if type(entry) ~= "table" or entry.kind ~= "sold" then return nil end
+
+    local each, source = self:SaleCost(entry, itemID, cache)
+    if not each then return nil end
+
+    local cost = each * math.max(1, tonumber(entry.quantity) or 1)
+    local income = (entry.net or 0) - (entry.deposit or 0)
+
+    return income - cost, cost, source
+end
+
+--------------------------------------------------------------------------------
 -- Reading it
 --------------------------------------------------------------------------------
 
