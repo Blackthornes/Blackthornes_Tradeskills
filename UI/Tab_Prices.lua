@@ -557,7 +557,7 @@ local function Build(container)
         ShowFromTop()
     end)
     search:SetPoint("LEFT", 0, 0)
-    search:SetWidth(190)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local reagentsOnly = Widgets.CreateCheckbox(toolbar, "Only what I craft with", function(checked)
         state.reagentsOnly = checked
@@ -565,19 +565,8 @@ local function Build(container)
     end, false)
     reagentsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
-    -- Wide enough for "Sort: Cheapest" and "Sort: Freshest".
-    local sort = Widgets.CreateDropdown(toolbar, {
-        { text = "Sort: Market", value = "market" },
-        { text = "Sort: Cheapest", value = "min" },
-        { text = "Sort: Listed", value = "quantity" },
-        { text = "Sort: Freshest", value = "age" },
-        { text = "Sort: Name", value = "name" },
-    }, function(value)
-        state.sortBy = value
-        ShowFromTop()
-    end, { width = 140 })
-    sort:SetPoint("RIGHT", 0, 0)
-    sort:SetValue("market")
+    -- No sort menu: the headings sort (Ezmode, 2026-10-06). The list opens
+    -- by market value.
 
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)

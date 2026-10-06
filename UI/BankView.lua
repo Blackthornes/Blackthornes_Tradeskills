@@ -16,20 +16,16 @@ local BankView = {}
 ns.BankView = BankView
 
 local ROW_HEIGHT = 24
-local DETAIL_WIDTH = 320
-local DETAIL_LINES = 8
+local DETAIL_WIDTH = 300
+-- Seven fit the panel now that it starts below the option bar, as on
+-- every tab; "and N more" covers the rest.
+local DETAIL_LINES = 7
 local ALL = "all"
 
 local COLUMNS = {
     { key = "worth", label = "WORTH", width = 96 },
     { key = "have",  label = "HAVE",  width = 52 },
     { key = "who",   label = "WHO",   width = 150 },
-}
-
-local SORTS = {
-    { value = "worth", text = "Sort: worth" },
-    { value = "count", text = "Sort: how many" },
-    { value = "name",  text = "Sort: name" },
 }
 
 local state = {
@@ -452,35 +448,29 @@ end
 function BankView.Build(view)
     local right = -DETAIL_WIDTH - 16
 
-    local search = Widgets.CreateSearchBox(view, "Search every bank", function(text)
-        state.search = text or ""
-        BankView.Refresh()
-    end)
-    search:SetPoint("TOPLEFT", 8, -32)
-    search:SetWidth(210)
-    widgets.search = search
-
+    -- Dropdown, search, tick box, as on every tab (Ezmode, 2026-10-06). No
+    -- sort menu: the headings sort, and the list opens by worth.
     local character = Widgets.CreateDropdown(view, {}, function(value)
         state.character = value
         state.selected = nil
         BankView.Refresh()
     end, { width = 160 })
-    character:SetPoint("LEFT", search, "RIGHT", 8, 0)
+    character:SetPoint("TOPLEFT", 8, -32)
     widgets.character = character
 
-    local sort = Widgets.CreateDropdown(view, SORTS, function(value)
-        state.sortBy = value
+    local search = Widgets.CreateSearchBox(view, "Search every bank", function(text)
+        state.search = text or ""
         BankView.Refresh()
-    end, { width = 128 })
-    sort:SetPoint("LEFT", character, "RIGHT", 8, 0)
-    sort:SetValue(state.sortBy)
-    widgets.sort = sort
+    end)
+    search:SetPoint("LEFT", character, "RIGHT", 8, 0)
+    search:SetWidth(Widgets.SEARCH_WIDTH)
+    widgets.search = search
 
     local bags = Widgets.CreateCheckbox(view, "Bags too", function(checked)
         state.bags = checked and true or false
         BankView.Refresh()
     end, state.bags)
-    bags:SetPoint("LEFT", sort, "RIGHT", 12, 0)
+    bags:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.bags = bags
 
     -- Column headings over the list, lined up with the row cells.
@@ -561,7 +551,7 @@ function BankView.Build(view)
     widgets.total = total
 
     local detail = BuildDetail(view)
-    detail:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8, -8)
+    detail:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 

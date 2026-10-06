@@ -313,12 +313,8 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
-    local hideSatisfied = Widgets.CreateCheckbox(toolbar, "Hide what I have", function(checked)
-        state.hideSatisfied = checked
-        Refresh()
-    end, true)
-    hideSatisfied:SetPoint("LEFT", 0, 0)
-
+    -- The menu first, then the tick box, as on every tab. It stays: it
+    -- groups the list by where to buy, which a heading cannot.
     local sort = Widgets.CreateDropdown(toolbar, {
         { text = "Group: Where to buy", value = "source" },
         { text = "Sort: Cost", value = "cost" },
@@ -327,8 +323,14 @@ local function Build(container)
         state.sortBy = value
         Refresh()
     end, { width = 150 })
-    sort:SetPoint("RIGHT", 0, 0)
+    sort:SetPoint("LEFT", 0, 0)
     sort:SetValue("source")
+
+    local hideSatisfied = Widgets.CreateCheckbox(toolbar, "Hide what I have", function(checked)
+        state.hideSatisfied = checked
+        Refresh()
+    end, true)
+    hideSatisfied:SetPoint("LEFT", sort, "RIGHT", 12, 0)
 
     -- With Blackthornes Farmer loaded: every material still needed becomes a
     -- Farmer goal in one click, in the order the list shows them.
@@ -341,7 +343,7 @@ local function Build(container)
             ns.FarmerGoals:SetGoals(needed)
         end, { width = 100, height = 22,
             tooltip = "Make a Blackthornes Farmer goal for every material you still need" })
-        setAll:SetPoint("RIGHT", sort, "LEFT", -8, 0)
+        setAll:SetPoint("RIGHT", 0, 0)
     end
 
     -- Column headings
