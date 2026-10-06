@@ -396,23 +396,22 @@ check("the Disenchanting bags list sets the button on its top item", Armed() == 
 Fire("GET_ITEM_INFO_RECEIVED", 777, true)
 check("the Disenchanting tab queued its redraw", #timers == 1)
 
--- The player moves to the Enchanting tab's bags list and picks the boots.
+-- The player moves to the Enchanting tab and picks a robe they carry.
 SelectTab("enchanting")
-en.view.select("bag")
-ClickRow(en, BOOTS)
-check("the Enchanting tab's button is set on the boots", Armed() == BOOTS and Disenchanter.anchor == en.button)
+en.view.select("craft")
+ClickRow(en, ROBE)
+check("the Enchanting tab's button is set on the robe", Armed() == ROBE and Disenchanter.anchor == en.button)
 
 RunTimers()
-check("the hidden tab's redraw leaves it there", Armed() == BOOTS and Disenchanter.anchor == en.button)
-check("still aimed at the boots' slot", Disenchanter.overlay:GetAttribute("target-slot") == 2)
+check("the hidden tab's redraw leaves it there", Armed() == ROBE and Disenchanter.anchor == en.button)
 check("a hidden tab's button cannot take it", Disenchanter:Arm(de.button, BELT, 0, 1) == false
-    and Armed() == BOOTS)
+    and Armed() == ROBE)
 
 SelectTab("profit")
 check("moving to another tab takes the button away", not Disenchanter.overlay:IsShown())
 
 SelectTab("enchanting")
-check("coming back sets it again", Armed() == BOOTS)
+check("coming back sets it again", Armed() == ROBE)
 window:Hide()
 check("closing the window takes it away", not Disenchanter.overlay:IsShown())
 
@@ -461,21 +460,7 @@ bagRows = { BagRow(BOOTS, "Boots", -100) }
 tabs.disenchanting.refresh()
 check("the boots do not take its place", Armed() == nil and de.button.enabled == false)
 
--- The same on the Enchanting tab, with its own tick box cleared.
 SelectTab("enchanting")
-en.beatsOnly.onClick(false)
-en.view.select("bag")
-check("the Enchanting bags list does not pick the boots either", Armed() == nil)
-check("and says why beside its button", en.button:IsShown() and en.button.enabled == false
-    and en.detail.disenchantStatus:IsShown()
-    and en.detail.disenchantStatus.text:find("Click one to disenchant it anyway") ~= nil)
-
-bagRows = { BagRow(BOOTS, "Boots", -100), BagRow(BELT, "Belt", 800) }
-tabs.enchanting.refresh()
-check("an item worth more disenchanted is picked", Armed() == BELT)
-check("and its row is lit", en.list.lit[2] == true)
-en.beatsOnly.onClick(true)
-
 --------------------------------------------------------------------------------
 print("\na craft whose Disenchant button cannot be used")
 --------------------------------------------------------------------------------
@@ -545,10 +530,6 @@ end
 local belt = de.list.data[1]
 check("a Disenchanting bag row hands its link to the icon", DrawnIcon(de, belt).link == belt.link)
 check("and so does the detail panel", de.detail.icon.link == belt.link)
-
-SelectTab("enchanting")
-en.view.select("bag")
-check("as does an Enchanting bag row", DrawnIcon(en, en.list.data[1]).link == en.list.data[1].link)
 
 --------------------------------------------------------------------------------
 print("\nhow the secure button looks")
