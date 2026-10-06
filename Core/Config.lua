@@ -330,6 +330,11 @@ local DEFAULTS = {
     -- realmKey -> itemID -> { price, at }: the price one last went up at.
     lastPosted = {},
 
+    -- realmKey -> { hours = { [hourStart] = bucket }, days = { [YYYYMMDD] =
+    -- bucket } }, a bucket being { [source] = { i, o } }: gold in and out by
+    -- where it came from or went. No character names. See Logic/GoldLog.lua.
+    goldLog = {},
+
     -- recipeID -> { name, outputItemID, quantityMin, quantityMax,
     -- skillLineID, profession, reagents, seenAt }: every recipe a profession
     -- window has shown on this account, learned or not. Overrides the

@@ -74,6 +74,8 @@ ns.Widgets = {
 local tab
 ns.UI = { RegisterTab = function(_, def) tab = def end }
 ns.MailHaul = { GetHistory = function() return {} end, Records = function() return 0 end }
+-- Gold in and out draws in its own frames, never asserted on here.
+ns.GoldChart = { CreateChart = function() return Frame() end, CreateLegend = function() return Frame() end }
 
 assert(loadfile(lfs_cwd .. "/UI/Tab_Sales.lua"))("Blackthornes_TS", ns)
 tab.build(Frame())
