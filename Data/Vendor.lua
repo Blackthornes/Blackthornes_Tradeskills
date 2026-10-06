@@ -225,7 +225,7 @@ end
 function Vendor:GetBatch(shopping)
     local BagsFull = ns.BagsFull
     if not (BagsFull and BagsFull.PlanBatch) then return nil end
-    if ns.Config and ns.Config:Get("fitBuysToBags") == false then return nil end
+    if not (ns.Config and ns.Config:Get("fitBuysToBags") == true) then return nil end
 
     local room, free = BagsFull:Room()
     if not room then return nil end

@@ -224,7 +224,8 @@ local DEFAULTS = {
 
         -- A queue too big for the bags is bought a bagful at a time, keeping
         -- this many slots free (Ezmode, 2026-10-05). See Logic/BagsFull.lua.
-        fitBuysToBags = true,
+        -- Off by default since 2026-10-06; a choice already saved is kept.
+        fitBuysToBags = false,
         bagSpareSlots = 5,
         -- A Take next batch button at the mailbox, taking the queue's
         -- materials a bagful at a time. Off by default (2026-10-05).

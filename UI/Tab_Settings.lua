@@ -316,7 +316,7 @@ local function Build(outer)
     widgets.fitBuys = Widgets.CreateCheckbox(fitBuysRow, "Buy in batches", function(checked)
         Config:Set("fitBuysToBags", checked)
         if ns.UI then ns.UI:UpdateMerchantButton() end
-    end, true)
+    end, false)
     widgets.fitBuys:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local spareRow = CreateRow(container, fitBuysRow, "Bag slots kept free",
@@ -956,7 +956,7 @@ local function Refresh()
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
     widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
     widgets.queueMail:SetChecked(Config:Get("queueMailPanel") ~= false)
-    widgets.fitBuys:SetChecked(Config:Get("fitBuysToBags") ~= false)
+    widgets.fitBuys:SetChecked(Config:Get("fitBuysToBags") == true)
     local spare = Config:Get("bagSpareSlots")
     Put(widgets.bagSpare, type(spare) == "number" and spare or 5)
     widgets.mailBatch:SetChecked(Config:Get("mailBatchTake") == true)
