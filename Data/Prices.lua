@@ -608,6 +608,42 @@ function Prices:GetConfidence(itemID)
 end
 
 --------------------------------------------------------------------------------
+-- Favourites
+--------------------------------------------------------------------------------
+
+-- Asked 2026-10-06 (Voldar): star the items you keep an eye on, like Spider
+-- Silk, and show only those on the Prices tab. Kept for the whole account in
+-- `favouritePrices`, by item, with the item's name so a search still finds
+-- one the game has not loaded. Separate from the price table, so a price
+-- pruned for age never takes a favourite with it.
+
+function Prices:IsFavourite(itemID)
+    return itemID ~= nil and ns.db ~= nil and type(ns.db.favouritePrices) == "table"
+        and ns.db.favouritePrices[itemID] ~= nil
+end
+
+--- Star an item (on = true) or take its star off (false).
+function Prices:SetFavourite(itemID, on, name)
+    if not ns.db or not itemID then return end
+    if type(ns.db.favouritePrices) ~= "table" then ns.db.favouritePrices = {} end
+
+    if on then
+        if type(name) ~= "string" or name == "" then
+            name = ns.db.favouritePrices[itemID]
+            if type(name) ~= "string" then name = true end
+        end
+        ns.db.favouritePrices[itemID] = name
+    else
+        ns.db.favouritePrices[itemID] = nil
+    end
+end
+
+--- itemID -> saved name (or true when none was known).
+function Prices:GetFavourites()
+    return ns.db and type(ns.db.favouritePrices) == "table" and ns.db.favouritePrices or {}
+end
+
+--------------------------------------------------------------------------------
 -- Maintenance
 --------------------------------------------------------------------------------
 
