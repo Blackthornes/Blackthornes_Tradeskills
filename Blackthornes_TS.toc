@@ -39,6 +39,7 @@ Logic\QueueMail.lua
 Logic\Crafting.lua
 Logic\Posting.lua
 Logic\CraftedCost.lua
+Logic\GoldLog.lua
 Logic\Transfer.lua
 Logic\SaleAlarm.lua
 Logic\MailHaul.lua
@@ -74,6 +75,7 @@ UI\Tab_Queue.lua
 UI\Tab_Gather.lua
 UI\Tab_Post.lua
 UI\Tab_Prices.lua
+UI\GoldChart.lua
 UI\Tab_Sales.lua
 UI\BankView.lua
 UI\Tab_Characters.lua

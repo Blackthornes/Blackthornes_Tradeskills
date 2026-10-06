@@ -40,9 +40,10 @@ local VIEWS = {
     { text = "Still listed",   value = "listed" },
     { text = "By item",        value = "item" },
     { text = "Mailbox visits", value = "visits" },
+    { text = "Gold in and out", value = "gold" },
 }
 
-local state = { view = "sales", search = "", selected = nil }
+local state = { view = "sales", search = "", selected = nil, period = "week" }
 local widgets = {}
 
 --------------------------------------------------------------------------------
@@ -661,8 +662,120 @@ local function SelectionKey(data)
         or ("?" .. tostring(data.name or "unknown"))
 end
 
+--------------------------------------------------------------------------------
+-- Gold in and out
+--------------------------------------------------------------------------------
+
+-- Asked by a player on 2026-10-06: income and spending with their sources,
+-- over a session, a day, a week or chosen days. Logic/GoldLog.lua keeps it;
+-- UI/GoldChart.lua draws it in the list's place, with its legend in the
+-- detail pane's.
+
+local PERIOD_TEXT = {
+    session = "this session", today = "today",
+    week = "the last 7 days", month = "the last 30 days",
+}
+
+--- A day as the date pickers show it: "Oct 06".
+local function DayText(dayKey)
+    return date("%b %d", ns.GoldLog.KeyStart(dayKey))
+end
+
+--- Every day from the first one logged (or 30 days back) to today, newest first.
+local function DayOptions()
+    local days = ns.GoldLog:Days()
+    local today = ns.GoldLog.DayKey(time())
+    local oldest = ns.GoldLog.DayKey(ns.GoldLog.DayStart(time(), -29))
+    if days[#days] and days[#days] < oldest then oldest = days[#days] end
+
+    local options = {}
+    local day = ns.GoldLog.DayStart(time())
+    local key = today
+    while key >= oldest and #options < 400 do
+        options[#options + 1] = { text = DayText(key), value = key }
+        day = ns.GoldLog.DayStart(day, -1)
+        key = ns.GoldLog.DayKey(day)
+    end
+    return options
+end
+
+--- The period's name for the legend and footer.
+local function PeriodText()
+    if state.period == "pick" and state.fromDay and state.toDay then
+        local from, to = math.min(state.fromDay, state.toDay), math.max(state.fromDay, state.toDay)
+        if from == to then return DayText(from) end
+        return ("%s to %s"):format(DayText(from), DayText(to))
+    end
+    return PERIOD_TEXT[state.period] or ""
+end
+
+--- Show the controls and panes the view needs, hide the rest.
+local function ApplyLayout()
+    local gold = state.view == "gold"
+
+    widgets.list:SetShown(not gold)
+    widgets.detail:SetShown(not gold)
+    widgets.chart:SetShown(gold)
+    widgets.legend:SetShown(gold)
+    widgets.search:SetShown(not gold)
+    widgets.period:SetShown(gold)
+
+    local picking = gold and state.period == "pick"
+    widgets.fromDay:SetShown(picking)
+    widgets.toLabel:SetShown(picking)
+    widgets.toDay:SetShown(picking)
+
+    if gold then
+        widgets.emptyLabel:Hide()
+        widgets.carried:Hide()
+    end
+end
+
+local function RefreshGold()
+    if not ns.GoldLog then return end
+
+    if state.period == "pick" then
+        local options = DayOptions()
+        widgets.fromDay:SetOptions(options)
+        widgets.toDay:SetOptions(options)
+        state.toDay = state.toDay or options[1].value
+        state.fromDay = state.fromDay or (options[7] or options[#options]).value
+        widgets.fromDay:SetValue(state.fromDay)
+        widgets.toDay:SetValue(state.toDay)
+    end
+
+    local bins = ns.GoldLog:Bins(state.period, state.fromDay, state.toDay)
+    for _, bin in ipairs(bins) do
+        if state.period == "session" or state.period == "today" then
+            bin.title = date("%H:%M", bin.from) .. " to " .. date("%H:%M", bin.to)
+        elseif bin.to - bin.from > 86400 * 1.5 then
+            bin.title = ("%s to %s"):format(date("%b %d", bin.from), date("%b %d", bin.to - 1))
+        else
+            bin.title = date("%A %b %d", bin.from)
+        end
+    end
+
+    ns.GoldChart.SetBins(widgets.chart, bins,
+        "Nothing yet. Gold you make and spend from now on is written down here, with where it came from.")
+
+    local totals = ns.GoldLog:Totals(bins)
+    ns.GoldChart.SetTotals(widgets.legend, totals, PeriodText())
+
+    widgets.summary:SetText(("In %s  ·  out %s  ·  net |c%s%s|r  ·  %s"):format(
+        Util.FormatMoney(totals.income, { short = true }),
+        Util.FormatMoney(totals.spending, { short = true }),
+        ns.COLORS[totals.net < 0 and "loss" or "profit"], ns.GoldChart.Signed(totals.net),
+        PeriodText()))
+end
+
 local function Refresh()
     if not widgets.list then return end
+
+    ApplyLayout()
+    if state.view == "gold" then
+        RefreshGold()
+        return
+    end
 
     awaitingItemData = false
     saleCosts = nil
@@ -872,10 +985,39 @@ local function Build(container)
     local view = Widgets.CreateDropdown(toolbar, VIEWS, function(value)
         state.view = value
         Refresh()
-    end, { width = 130 })
+    end, { width = 150 })
     view:SetPoint("LEFT", 0, 0)
     view:SetValue(state.view)
     widgets.view = view
+
+    -- Gold in and out's own menus, shown only in that view, in the search
+    -- box's place.
+    local period = Widgets.CreateDropdown(toolbar, ns.GoldLog and ns.GoldLog.PERIODS or {}, function(value)
+        state.period = value
+        Refresh()
+    end, { width = 120 })
+    period:SetPoint("LEFT", view, "RIGHT", 8, 0)
+    period:SetValue(state.period)
+    widgets.period = period
+
+    local fromDay = Widgets.CreateDropdown(toolbar, {}, function(value)
+        state.fromDay = value
+        Refresh()
+    end, { width = 90 })
+    fromDay:SetPoint("LEFT", period, "RIGHT", 8, 0)
+    widgets.fromDay = fromDay
+
+    local toLabel = Theme.CreateLabel(toolbar, "small", "muted")
+    toLabel:SetPoint("LEFT", fromDay, "RIGHT", 6, 0)
+    toLabel:SetText("to")
+    widgets.toLabel = toLabel
+
+    local toDay = Widgets.CreateDropdown(toolbar, {}, function(value)
+        state.toDay = value
+        Refresh()
+    end, { width = 90 })
+    toDay:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
+    widgets.toDay = toDay
 
     local search = Widgets.CreateSearchBox(toolbar, "Search sales", function(text)
         state.search = text or ""
@@ -953,6 +1095,30 @@ local function Build(container)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
+
+    local chart = ns.GoldChart.CreateChart(container)
+    chart:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
+    chart:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 42)
+    chart:Hide()
+    widgets.chart = chart
+
+    local legend = ns.GoldChart.CreateLegend(container, DETAIL_WIDTH)
+    legend:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
+    legend:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
+    legend:Hide()
+    widgets.legend = legend
+
+    -- Gold changing while the view is up redraws it, a moment later so the
+    -- log has written the change down first.
+    local goldQueued = false
+    ns.RegisterEvent(UI, "PLAYER_MONEY", function()
+        if goldQueued or state.view ~= "gold" or not chart:IsVisible() then return end
+        goldQueued = true
+        C_Timer.After(0.3, function()
+            goldQueued = false
+            Refresh()
+        end)
+    end)
 
     -- An item the client has not cached yet draws with no rarity colour and a
     -- placeholder name, and stays that way until something redraws the tab.
