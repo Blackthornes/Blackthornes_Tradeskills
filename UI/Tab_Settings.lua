@@ -341,7 +341,16 @@ local function Build(outer)
     end, false)
     widgets.mailBatch:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local lossRow = CreateRow(container, mailBatchRow, "Recommend selling at a loss",
+    -- Asked 2026-10-06: the buy window opened at 1 after a Buy list search.
+    local fillBuyRow = CreateRow(container, mailBatchRow, "Fill in how many to buy",
+        "Search from the Buy list, the Queue tab or the Gather tab, pick the item in the auction house's results, and its quantity box shows how many the queue still needs. You still click Buy Now.")
+
+    widgets.fillBuy = Widgets.CreateCheckbox(fillBuyRow, "Enabled", function(checked)
+        Config:Set("fillBuyQuantity", checked)
+    end, true)
+    widgets.fillBuy:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local lossRow = CreateRow(container, fillBuyRow, "Recommend selling at a loss",
         "Off: the Post tab shows them in red but will not list them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
@@ -951,6 +960,7 @@ local function Refresh()
     local spare = Config:Get("bagSpareSlots")
     Put(widgets.bagSpare, type(spare) == "number" and spare or 5)
     widgets.mailBatch:SetChecked(Config:Get("mailBatchTake") == true)
+    widgets.fillBuy:SetChecked(Config:Get("fillBuyQuantity") ~= false)
     local disenchanterBox = widgets.disenchanter.editBox
     if not (disenchanterBox.HasFocus and disenchanterBox:HasFocus()) then
         local saved = Config:Get("disenchanterName") or ""
