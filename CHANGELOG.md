@@ -31,6 +31,9 @@ fully after updating (`/reload` is not enough).
   posting all follow it, and items with a price of your own say "my price"
   in gold. A new **My prices only** tick box lists just those. Clear removes
   the price.
+- Buy materials at a vendor buys the whole amount again; buying a bagful at
+  a time is taken out for now, along with its "Fit vendor buys to your bags"
+  setting. Take next batch at the mailbox stays.
 - The minimap button now sits on the minimap's ring beside other addons'
   buttons, instead of floating just outside it.
 
