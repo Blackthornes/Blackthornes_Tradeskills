@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.34.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- The Prices tab's detail pane has a **My price** section. Type a price in
+  gold, silver and copper, then pick **Use this price** (it replaces the
+  auction price everywhere) or **Never below** (it only lifts a lower
+  auction price). Material costs, Profit, Level Up, the queue, tooltips and
+  posting all follow it, and items with a price of your own say "my price"
+  in gold. A new **My prices only** tick box lists just those. Clear removes
+  the price.
+- The minimap button now sits on the minimap's ring beside other addons'
+  buttons, instead of floating just outside it.
+
 ## 0.33.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
