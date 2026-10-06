@@ -376,8 +376,93 @@ function Profit:NetFromListing(itemID, unitPrice)
     return unitPrice * (1 - cut) - deposit * relists
 end
 
+--------------------------------------------------------------------------------
+-- Ways to turn a craft into gold
+--------------------------------------------------------------------------------
+
+-- Sullivan's request (Discord, 2026-10-06): see what a craft makes sold at
+-- the auction house, sold to a vendor and disenchanted, and rank the list by
+-- whichever is picked. "best" takes whichever pays most, as the Level Up
+-- tab's GETS BACK does. Ties go to the vendor, then the auction house: the
+-- surer sale.
+Profit.WAYS = { "vendor", "auction", "disenchant" }
+
+-- What the Profit tab's switch offers, in its order.
+Profit.METHODS = { "best", "auction", "vendor", "disenchant" }
+
+-- Short names, for the VIA column and the switch.
+Profit.WAY_LABELS = { auction = "AH", vendor = "Vendor", disenchant = "DE" }
+
+-- Why a craft has no profit when the list is ranked by one way only.
+local NO_WAY_REASON = {
+    auction = "no auction price",
+    vendor = "no vendor price",
+    disenchant = "cannot be disenchanted",
+}
+
+--- Can one of your characters disenchant this? Read from what each last
+--- recorded, so an alt counts without logging in. nil when nobody knows
+--- Enchanting, false when nobody has the skill for this item yet.
+local function CanDisenchant(itemID)
+    local Disenchant = ns.Disenchant
+    if not (Disenchant and Disenchant.GetBestEnchanter) then return nil end
+
+    local skill = Disenchant:GetBestEnchanter()
+    if skill == nil then return nil end
+
+    local facts = Disenchant.GetItemFacts and Disenchant:GetItemFacts(itemID)
+    local needs = type(facts) == "table" and facts.skill or nil
+    return needs == nil or skill >= needs
+end
+
+--- The method the Profit tab and its commands rank by: Settings' choice,
+--- or "best".
+function Profit:GetMethod()
+    local method = ns.Config:Get("profitBy")
+    for _, known in ipairs(self.METHODS) do
+        if known == method then return method end
+    end
+    return "best"
+end
+
+--- The ways a craft can be turned into gold, for the row tooltip, the
+--- detail pane and /bts why. Empty when there is only one: the profit
+--- already says it.
+-- @return { { way, label, profit, chosen, note }, ... } in Profit.WAYS order
+function Profit:DescribeWays(analysis)
+    local lines = {}
+    local ways = analysis and analysis.ways
+    if not ways then return lines end
+
+    local labels = { auction = "If sold at AH", vendor = "If vendored", disenchant = "If disenchanted" }
+
+    for _, way in ipairs(self.WAYS) do
+        local option = ways[way]
+        if option then
+            local note
+            if way == "disenchant" then
+                if option.canDisenchant == nil then
+                    note = "no enchanter"
+                elseif option.canDisenchant == false then
+                    note = "skill too low"
+                end
+            end
+            lines[#lines + 1] = { way = way, label = labels[way], profit = option.profit,
+                chosen = analysis.via == way, note = note }
+        end
+    end
+
+    if #lines < 2 then return {} end
+    return lines
+end
+
 --- Full profitability breakdown for one recipe.
-function Profit:Analyse(recipeID, characterKey)
+--
+-- @param method nil for the sale the Sell tab would make (max(auction,
+--   vendor), the house rule), "best" for whichever of auction, vendor and
+--   disenchanting pays most, or one of those alone. analysis.ways holds
+--   all three either way, and analysis.via names the one the profit is for.
+function Profit:Analyse(recipeID, characterKey, method)
     local recipe, owner = ns.Recipes:GetAny(recipeID)
     if not recipe then return nil end
 
@@ -455,6 +540,10 @@ function Profit:Analyse(recipeID, characterKey)
     local unitRevenue, basis, _, uncertain =
         self:ChoosePostPrice(recipe.outputItemID, cost)
 
+    -- The listing on its own, kept for analysis.ways before a vendor that
+    -- pays more takes its place below.
+    local listPrice, listBasis, listUncertain = unitRevenue, basis, uncertain
+
     -- Worth whichever pays more, that listing or a vendor (the house rule:
     -- max(auction, vendor)). Under what a vendor pays, Posting refuses the
     -- listing anyway, so the vendor is the sale that would be made. A craft
@@ -512,7 +601,12 @@ function Profit:Analyse(recipeID, characterKey)
     analysis.roomInCrafts = RoomInCrafts(room, recipe)
     analysis.atPostLimit = room ~= nil and room <= 0
 
-    if not unitRevenue then
+    -- Ranked by disenchanting, a craft no auction or vendor prices may
+    -- still be worth breaking down.
+    local countsDisenchant = (method == "best" or method == "disenchant")
+        and analysis.disenchantValue ~= nil
+
+    if not unitRevenue and not countsDisenchant then
         -- A craft can land here with priced materials when the estimate is
         -- switched off, and with unpriced ones either way; the reason below
         -- covers both, since the output is what has no price in each.
@@ -529,34 +623,95 @@ function Profit:Analyse(recipeID, characterKey)
     local yield = cost.yield or 1
 
     analysis.yield = yield
-    analysis.unitRevenue = unitRevenue
 
     -- One item disenchanted against one item sold at the price above.
-    if analysis.disenchantValue and analysis.disenchantValue > unitRevenue then
+    if analysis.disenchantValue and unitRevenue and analysis.disenchantValue > unitRevenue then
         analysis.disenchantBeatsSale = true
     end
-    analysis.revenue = unitRevenue * yield
-
-    -- A vendor takes no cut and asks no deposit.
-    local toVendor = basis == "vendor"
-
-    local auctionCut = toVendor and 0 or (ns.Config:Get("auctionCut") or 0.05)
-    analysis.cut = analysis.revenue * auctionCut
-    analysis.netRevenue = analysis.revenue - analysis.cut
 
     analysis.totalCost = cost.total
     analysis.costPerUnit = cost.perUnit
 
-    -- The deposit is paid up front and lost on every listing that does not
-    -- sell, so it is a real cost of selling. Ignoring it overstates profit on
-    -- every single craft.
-    local unitDeposit = not toVendor and ns.Posting:GetCachedUnitDeposit(recipe.outputItemID) or nil
-    local relists = ns.Config:Get("expectedRelists") or 1
+    local auctionCut = ns.Config:Get("auctionCut") or 0.05
 
-    analysis.depositKnown = toVendor or unitDeposit ~= nil
-    analysis.deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
+    -- Every way to turn the craft into gold, each costed in full.
+    local ways = {}
 
-    analysis.profit = analysis.netRevenue - cost.total - analysis.deposit
+    if listPrice then
+        local revenue = listPrice * yield
+        local cut = revenue * auctionCut
+
+        -- The deposit is paid up front and lost on every listing that does
+        -- not sell, so it is a real cost of selling. Ignoring it overstates
+        -- profit on every single craft.
+        local unitDeposit = ns.Posting:GetCachedUnitDeposit(recipe.outputItemID)
+        local relists = ns.Config:Get("expectedRelists") or 1
+        local deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
+
+        ways.auction = { unit = listPrice, revenue = revenue, cut = cut, deposit = deposit,
+            depositKnown = unitDeposit ~= nil, basis = listBasis, uncertain = listUncertain,
+            profit = revenue - cut - cost.total - deposit }
+    end
+
+    -- A vendor takes no cut and asks no deposit.
+    if vendor and vendor > 0 then
+        local revenue = vendor * yield
+        ways.vendor = { unit = vendor, revenue = revenue, cut = 0, deposit = 0,
+            depositKnown = true, basis = "vendor", profit = revenue - cost.total }
+    end
+
+    -- The most likely result, less the cut on selling the materials. No
+    -- deposit: the materials' is small, and nobody can say which listing
+    -- they would join.
+    if analysis.disenchantValue and analysis.disenchantValue > 0 then
+        local revenue = analysis.disenchantValue * yield
+        local cut = revenue * auctionCut
+        ways.disenchant = { unit = analysis.disenchantValue, revenue = revenue, cut = cut,
+            deposit = 0, depositKnown = true, basis = "disenchant",
+            partial = analysis.disenchantPartial,
+            canDisenchant = CanDisenchant(recipe.outputItemID),
+            profit = revenue - cut - cost.total }
+    end
+
+    analysis.ways = ways
+
+    -- Which way the profit shown is for.
+    local via
+    if method == nil then
+        -- The sale the Sell tab would make, decided above.
+        via = basis == "vendor" and "vendor" or "auction"
+    elseif method == "best" then
+        for _, way in ipairs(self.WAYS) do
+            local option = ways[way]
+            -- Disenchanting counts only when one of your characters can.
+            local usable = option and (way ~= "disenchant" or option.canDisenchant == true)
+            if usable and (not via or option.profit > ways[via].profit) then via = way end
+        end
+    else
+        via = method
+    end
+
+    local chosen = via and ways[via]
+    if not chosen then
+        analysis.reason = method and NO_WAY_REASON[method] or "output has no price data"
+        return analysis
+    end
+
+    analysis.via = via
+    analysis.priceBasis = chosen.basis
+    analysis.priceDerived = chosen.basis == "derived" or nil
+    analysis.priceUncontested = chosen.basis == "uncontested" or nil
+    analysis.priceUncertain = chosen.uncertain or nil
+    if analysis.undercut then analysis.matchedRival = chosen.basis == "match" end
+
+    analysis.unitRevenue = chosen.unit
+    analysis.revenue = chosen.revenue
+    analysis.cut = chosen.cut
+    analysis.netRevenue = chosen.revenue - chosen.cut
+    analysis.depositKnown = chosen.depositKnown
+    analysis.deposit = chosen.deposit
+
+    analysis.profit = chosen.profit
     analysis.profitPerUnit = analysis.profit / yield
 
     -- Margin is profit against revenue; ROI is profit against the gold you must
@@ -636,7 +791,8 @@ end
 
 --- Analyse every cached recipe.
 -- @param opts { craftableOnly, minProfit, minMargin, includeUnpriceable,
---               includeIgnored, skillLineID, sortBy = "profit"|"margin"|"roi" }
+--               includeIgnored, skillLineID, sortBy = "profit"|"margin"|"roi",
+--               method = see Analyse }
 function Profit:GetRanked(opts)
     opts = opts or {}
 
@@ -656,7 +812,7 @@ function Profit:GetRanked(opts)
         -- An ignored craft is never analysed, so it is gone everywhere this
         -- list is used: the rows, Queue All and the empty-list message.
         local ignored = not opts.includeIgnored and self:IsIgnored(recipeID)
-        local analysis = not dropped and not ignored and self:Analyse(recipeID) or nil
+        local analysis = not dropped and not ignored and self:Analyse(recipeID, nil, opts.method) or nil
 
         if analysis then
             local keep = true
@@ -788,7 +944,7 @@ ns.RegisterCommand("top", "[count]: most profitable crafts right now", function(
         return
     end
 
-    local ranked = ns.Profit:GetRanked({ sortBy = "profit" })
+    local ranked = ns.Profit:GetRanked({ sortBy = "profit", method = ns.Profit:GetMethod() })
 
     if #ranked == 0 then
         ns.Print("nothing is profitable with the current price data")
@@ -846,7 +1002,7 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
         return
     end
 
-    local analysis = ns.Profit:Analyse(recipe.recipeID)
+    local analysis = ns.Profit:Analyse(recipe.recipeID, nil, ns.Profit:GetMethod())
     if not analysis then
         ns.Print("that recipe is no longer saved")
         return
@@ -880,7 +1036,12 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
 
     ns.PrintRaw(("  material cost   %s"):format(Util.FormatMoney(analysis.totalCost)))
 
-    if analysis.priceBasis == "vendor" then
+    if analysis.priceBasis == "disenchant" then
+        ns.PrintRaw(("  |c%sdisenchanting pays most, so it is valued at its most likely result|r"):format(
+            ns.COLORS.profit))
+        ns.PrintRaw(("  disenchants to  %s  (makes %.1f)"):format(
+            Util.FormatMoney(analysis.unitRevenue), analysis.yield))
+    elseif analysis.priceBasis == "vendor" then
         -- Said before the number: this one is not going to the auction house.
         if analysis.undercut then
             ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))
@@ -918,6 +1079,8 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
     end
     if analysis.priceBasis == "vendor" then
         ns.PrintRaw(("  |c%sno auction cut or deposit on a vendor sale|r"):format(ns.COLORS.muted))
+    elseif analysis.priceBasis == "disenchant" then
+        ns.PrintRaw(("  cut on the materials -%s"):format(Util.FormatMoney(analysis.cut)))
     else
         ns.PrintRaw(("  auction cut     -%s"):format(Util.FormatMoney(analysis.cut)))
 
@@ -931,6 +1094,10 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
     ns.PrintRaw(("  |c%sprofit          %s|r  (%.0f%% margin, %.0f%% return on cost)"):format(
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),
         math.floor(analysis.margin * 100), math.floor(analysis.roi * 100)))
+    for _, line in ipairs(ns.Profit:DescribeWays(analysis)) do
+        ns.PrintRaw(("  |c%s%s|r  %s%s"):format(line.chosen and ns.COLORS.accent or ns.COLORS.muted,
+            line.label, Util.FormatMoney(line.profit), line.note and ("  |c%s%s|r"):format(ns.COLORS.muted, line.note) or ""))
+    end
     ns.PrintRaw(("  |c%sconfidence %d%%%s, data read %s|r"):format(
         ns.COLORS.muted, math.floor((analysis.confidence or 0) * 100),
         analysis.confidenceReason and (" (" .. analysis.confidenceReason .. ")") or "",
