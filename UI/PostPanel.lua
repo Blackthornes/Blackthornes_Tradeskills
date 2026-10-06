@@ -432,7 +432,7 @@ function PostPanel:Build()
         onEnter = PostPanel.ShowShoppingTooltip,
         onLeave = function() GameTooltip:Hide() end,
         onClick = function(line)
-            if PostPanel:CanSearch(line) then ns.UI:SearchAuctionHouse(line.itemID) end
+            if PostPanel:CanSearch(line) then ns.UI:SearchAuctionHouse(line.itemID, line.shortfall) end
         end,
     })
     shopping:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
@@ -847,8 +847,10 @@ function PostPanel.CreateShoppingRow(row)
     ns.CraftPanel.CreateShoppingRow(row)
 
     row.search = Widgets.CreateButton(row, "Search", function()
-        if PostPanel:CanSearch(row.data) then ns.UI:SearchAuctionHouse(row.data.itemID) end
-    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = "Search the auction house for this" })
+        if PostPanel:CanSearch(row.data) then
+            ns.UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall)
+        end
+    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = "Search the auction house for this. Pick it in the results and the quantity is filled in with how many you still need." })
     row.search:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 
     local inset = -(8 + SEARCH_WIDTH + 6)
