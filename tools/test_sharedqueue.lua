@@ -197,6 +197,7 @@ local toLoom = delivery(LOOM)
 check("Loom is sent the wool", toLoom and sends(toLoom, WOOL) == 9)
 check("only what the bolts use", #toLoom.items == 1)
 check("named for the mail", toLoom.name == "Loom")
+check("wool is a material, not a craft", not toLoom.crafts)
 
 QueueMail:NoteSent(LOOM, { { itemID = WOOL, count = 9 } })
 bags = { [WOOL] = 3 }
@@ -215,6 +216,27 @@ Queue:RebuildDependencies()
 check("the bolts are made, so none are left to make", entryFor(20) == nil)
 local toBob = delivery(BOB)
 check("Bob is sent the bolts", toBob and sends(toBob, BOLT) == 3)
+check("on a row of their own, as finished crafts", toBob.crafts == true)
+check("with a subject that says so", toBob.subject == "Crafts for your queue")
+
+print("\nfinished crafts come before materials for the same character")
+
+local characters = freshCharacters()
+characters[BOB].recipes[30] = { recipeID = 30, name = "Spare Bolt", outputItemID = 9999,
+    quantityMin = 1, quantityMax = 1, reagents = { { itemID = BOLT, quantity = 1 } } }
+characters[LOOM].recipes[30] = nil
+loginAs(BOB, {})
+ns.db = { queue = {}, characters = characters }
+Queue:Add(10, 1)
+loginAs(LOOM, { [BOLT] = 3, [DYE] = 1 })
+Queue:RebuildDependencies()
+local rows = {}
+for _, d in ipairs(QueueMail:GetDeliveries()) do
+    if d.to == BOB then rows[#rows + 1] = d end
+end
+check("Bob gets two rows", #rows == 2)
+check("the bolts first, as crafts", rows[1].crafts == true and sends(rows[1], BOLT) == 3)
+check("then the dye, a material", not rows[2].crafts and sends(rows[2], DYE) == 1)
 
 print("\na craft only an alt knows goes back to whoever queued it")
 
@@ -230,7 +252,7 @@ check("sent, it is no longer owed", QueueMail:GetOwed(BOB)[BAG] == nil)
 
 print("\nwho cannot be given a sub-craft")
 
-local characters = freshCharacters()
+characters = freshCharacters()
 characters[LOOM].realm = "Elsewhere"
 queueOneBag(characters)
 check("a tailor on another realm is not", entryFor(20) == nil)
@@ -263,6 +285,15 @@ check("and the mailbox has nothing", #QueueMail:GetDeliveries() == 0)
 settings.queueAltCrafting = false
 queueOneBag()
 check("unticked, the same", entryFor(20) == nil)
+
+-- The queue is shared either way, so an alt can make a craft Bob queued
+-- that only it knows. What it made still goes back to him.
+loginAs(LOOM, { [BAG] = 1 })
+QueueMail:NoteMadeFor(BOB, BAG, 1)
+local backToBob = delivery(BOB)
+check("unticked, a craft made for Bob is still offered", backToBob and sends(backToBob, BAG) == 1)
+check("as a finished craft", backToBob.crafts == true)
+check("and nothing else is", #QueueMail:GetDeliveries() == 1)
 settings.queueAltCrafting = true
 
 print("\nfinding a character by the name typed into a mail")
