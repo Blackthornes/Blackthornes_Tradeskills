@@ -116,6 +116,38 @@ check("in loss red", lines[3].color, "loss")
 postPrice[BOLT] = { 2000, "derived" }
 check("no profit on an estimate", #CC:Lines(BOLT), 2)
 
+print("\nwhat a sale made")
+-- BOLT was last made for 1200 at `now`.
+local HAT = 300
+costs[5] = { priceable = true, perUnit = 333.4 }
+ns.db.characters = {
+  ["Ana-Realm-A"] = { recipes = { [5] = { recipeID = 5, outputItemID = HAT },
+                                   [2] = { recipeID = 2, outputItemID = SHIRT } } },
+}
+local cache = CC:NewSaleCache()
+local sale = { kind = "sold", t = now + 10, itemID = BOLT, net = 2100, deposit = 100 }
+local profit, cost, source = CC:SaleProfit(sale, nil, cache)
+check("sold after the craft: its cost", cost, 1200)
+check("from the craft", source, "made")
+check("profit leaves the deposit out", profit, 800)
+sale.cost = 900
+profit, cost = CC:SaleProfit(sale, nil, cache)
+check("a cost written on the sale wins", cost, 900)
+check("and the profit follows it", profit, 1100)
+sale = { kind = "sold", t = now - 10, itemID = BOLT, net = 1000 }
+profit, cost, source = CC:SaleProfit(sale, nil, cache)
+check("sold before the craft: no craft cost", source, nil)
+check("and no recipe makes it on record, so none", profit, nil)
+sale = { kind = "sold", t = now, itemID = HAT, net = 500, quantity = 2 }
+profit, cost, source = CC:SaleProfit(sale, nil, cache)
+check("never crafted: today's estimate", source, "est")
+check("rounded, times the quantity", cost, 666)
+check("loss", profit, -166)
+check("an unpriced recipe has no cost", CC:SaleProfit({ kind = "sold", itemID = SHIRT, net = 5 }, nil, cache), nil)
+check("an id passed in wins over none", (select(2, CC:SaleProfit({ kind = "sold", net = 900 }, HAT, cache))), 333)
+check("an expiry made nothing", CC:SaleProfit({ kind = "expired", itemID = BOLT }, nil, cache), nil)
+ns.db.characters = nil
+
 print("\nper realm")
 realm = "Realm-B"
 check("another realm knows nothing", CC:Get(BOLT), nil)

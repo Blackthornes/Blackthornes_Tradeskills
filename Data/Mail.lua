@@ -569,6 +569,11 @@ local function Describe(mail, kind, itemName, invoice)
         end
 
         entry.itemID = ns.Mail:ResolveItemName(entry.name)
+
+        -- What one cost to make, as it stood when this sold, so a later craft
+        -- at a different price does not rewrite what this sale made.
+        local made = entry.itemID and ns.CraftedCost and ns.CraftedCost:Get(entry.itemID)
+        if made then entry.cost = made.cost end
     else
         -- An expired or cancelled auction comes back as the item itself, so
         -- the attachment is the authority and the subject is only a label.
@@ -1127,6 +1132,10 @@ function Mail:GetItems()
                 key = key, itemID = itemID, name = name,
                 sold = 0, soldUnits = 0, expired = 0, cancelled = 0,
                 net = 0, gross = 0, cut = 0, deposit = 0, estimated = 0,
+                -- What the costed sales made over what the item cost, and how
+                -- many sales went into it: `costed` from a real craft cost,
+                -- `guessed` from today's materials, `uncosted` neither.
+                profit = 0, costed = 0, guessed = 0, uncosted = 0,
             }
 
             byKey[key] = bucket
@@ -1140,6 +1149,7 @@ function Mail:GetItems()
     end
 
     local names = self:NameIndex()
+    local costs = ns.CraftedCost and ns.CraftedCost:NewSaleCache()
 
     for _, entry in ipairs(self:GetLedger().entries) do
         local bucket = Bucket(entry.itemID or names[entry.name], entry.name)
@@ -1158,6 +1168,22 @@ function Mail:GetItems()
             bucket.deposit = bucket.deposit + (entry.deposit or 0)
 
             if entry.estimated then bucket.estimated = bucket.estimated + 1 end
+
+            local profit, _, source
+            if costs then
+                profit, _, source = ns.CraftedCost:SaleProfit(entry, bucket.itemID, costs)
+            end
+
+            if profit then
+                bucket.profit = bucket.profit + profit
+                if source == "made" then
+                    bucket.costed = bucket.costed + 1
+                else
+                    bucket.guessed = bucket.guessed + 1
+                end
+            else
+                bucket.uncosted = bucket.uncosted + 1
+            end
 
         elseif entry.kind == "removed" then
             -- Kept apart from an expiry all the way through: you pulling a
@@ -1188,6 +1214,8 @@ function Mail:GetItems()
             bucket.soldUnits = bucket.soldUnits + (record.soldUnits or 0)
             bucket.expired = bucket.expired + (record.expired or 0)
             bucket.net = bucket.net + (record.net or 0)
+            -- Carried over without the sales themselves, so nothing to cost.
+            bucket.uncosted = bucket.uncosted + (record.sold or 0)
             bucket.restored = true
 
             local at = record.lastAt

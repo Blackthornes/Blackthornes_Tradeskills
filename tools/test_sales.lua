@@ -229,7 +229,9 @@ local function check(label, got, want)
 end
 
 local function contains(label, haystack, needle)
-    check(label, (tostring(haystack):find(needle, 1, true) ~= nil), true)
+    -- Colour codes left out, so a coloured figure reads as its text.
+    local plain = tostring(haystack):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    check(label, (plain:find(needle, 1, true) ~= nil), true)
 end
 
 --------------------------------------------------------------------------------
@@ -512,6 +514,57 @@ ns.Auctions = nil
 selectView("sales")
 
 --------------------------------------------------------------------------------
+
+print("")
+print("Profit on each sale (asked by two players, 2026-10-06)")
+
+do
+    local chunk = assert(loadfile(lfs_cwd .. "/Logic/CraftedCost.lua"))
+    chunk("Blackthornes_TS", ns)
+end
+
+-- Linen was made for 800 an hour before these sold; the potion never was.
+ns.db.craftedCosts = { Realm = { [2589] = { cost = 800, at = NOW - 3600 } } }
+
+Given({
+    { kind = "sold", t = NOW - 300, itemID = 2589, net = 1000, cut = 100 },
+    { kind = "sold", t = NOW - 200, itemID = 2589, net = 2100, cut = 200, deposit = 100 },
+    { kind = "sold", t = NOW,       itemID = 6889, net = 500 },
+})
+
+row = Row(listData[3])
+contains("a sale says what one cost", row.detail.text, "cost 800c")
+contains("and what it made", row.detail.text, "profit +200c")
+check("the cut gives way to the profit", row.detail.text:find("cut ", 1, true), nil)
+
+row = Row(listData[2])
+contains("the deposit handed back is not profit", row.detail.text, "profit +1200c")
+
+row = Row(listData[1])
+check("a sale with no cost shows no profit", row.detail.text:find("profit", 1, true), nil)
+contains("and keeps its cut line when it has one", Row({ kind = "sold", t = NOW, itemID = 6889, net = 9, cut = 1 }).detail.text, "cut 1c")
+
+items = ns.Mail:GetItems()
+for _, item in ipairs(items) do
+    if item.itemID == 2589 then linen = item end
+end
+check("the item adds its sales' profit", linen.profit, 1400)
+check("both from a real craft cost", linen.costed, 2)
+
+contains("the footer gives the total", LabelStartingWith("3 sold").text, "profit +1400c on 2")
+
+row = Row(linen)
+contains("the item row says it too", row.detail.text, "profit +1400c")
+
+local loss = Row({ kind = "sold", t = NOW, itemID = 2589, net = 500 })
+contains("a loss is shown signed", loss.detail.text, "profit -300c")
+
+-- A sale written down with its own cost keeps it after a dearer craft.
+ns.db.craftedCosts.Realm[2589] = { cost = 5000, at = NOW - 3600 }
+row = Row({ kind = "sold", t = NOW, itemID = 2589, net = 1000, cost = 800 })
+contains("the cost it sold at wins over the last craft", row.detail.text, "profit +200c")
+
+ns.db.craftedCosts = nil
 
 print("")
 print(string.format("%d passed, %d failed", passed, failed))
