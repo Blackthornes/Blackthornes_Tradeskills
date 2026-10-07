@@ -17,6 +17,7 @@ Core\AHQueue.lua
 Core\Config.lua
 Core\Compat.lua
 Core\Serialize.lua
+Core\Comm.lua
 Core\Persist.lua
 Core\OldMacros.lua
 
@@ -53,6 +54,8 @@ Logic\VendorFlips.lua
 Logic\Banks.lua
 Logic\Upgrades.lua
 Logic\BagsFull.lua
+Logic\AccountLink.lua
+Logic\GuildPrices.lua
 
 UI\Theme.lua
 UI\Widgets.lua

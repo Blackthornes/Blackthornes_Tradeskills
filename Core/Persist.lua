@@ -322,6 +322,9 @@ local function Snapshot(db)
     -- The next scans start it again.
     snapshot.priceHistory = nil
 
+    -- Guildmates' prices: theirs to send again, not worth the budget.
+    snapshot.guildPrices = nil
+
     return snapshot
 end
 

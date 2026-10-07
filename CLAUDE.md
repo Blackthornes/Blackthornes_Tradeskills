@@ -119,6 +119,23 @@ ns.Prices:GetValue(itemID)             -- material and auction prices
 Keep these stable as well; if one changes, change Equipment's
 `Logic/Crafting.lua` in the same breath.
 
+## Sharing between accounts and with a guild
+
+Asked 2026-10-07 (Ezmode on Discord, the owner agreeing). Over addon
+messages (`Core/Comm.lua`, prefix `BTSshare`):
+
+- `Logic/AccountLink.lua`: the player names characters on another account
+  of theirs (`linkNames`); both sides must name each other. Their
+  characters arrive as ordinary `characters[guid]` records marked
+  `linkedFrom` (never rename it), so everything that reads alts (Farmer
+  aside, Equipment's crafting included) sees them. A copy never replaces
+  one of the account's own characters and is never sent on.
+- `Logic/GuildPrices.lua`: off by default (`guildPrices`). Guildmates'
+  prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
+  in `Prices:GetValue`: an item never scanned, or one gone stale while
+  theirs is newer. So Farmer's `GetValue` can now answer from a guild
+  price when the player turned it on; still copper or nil.
+
 ## The house frame (Titanforged)
 
 The owner picked this look for all four addons on 2026-10-04 from two mockups
