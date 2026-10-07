@@ -21,10 +21,8 @@ time = time or os.time
 
 local BAG, BOLT, WOOL, DYE, THREAD = 5000, 2997, 2592, 3825, 2321
 
-ns.Config = { Get = function(_, key)
-    if key == "valueOwnedMaterials" then return true end
-    return nil
-end }
+local config = { valueOwnedMaterials = true }
+ns.Config = { Get = function(_, key) return config[key] end }
 
 local recipes = {
     [10] = { recipeID = 10, outputItemID = BAG, quantityMin = 1, quantityMax = 1,
@@ -134,5 +132,37 @@ bags[BOLT], mail[BOLT] = nil, 1
 queueOneBag()
 check("a bolt in the mailbox is used too, not bought", row(BOLT) and row(BOLT).shortfall == 0)
 mail[BOLT] = nil
+
+print("\nsub-crafts switched off")
+
+-- Voldar on Discord (2026-10-07): with "Queue sub-crafts" off, To buy went
+-- up to the bought materials but the rows and the footer still priced
+-- them as made.
+config.autoQueueSubCrafts = false
+queueOneBag()
+check("no bolt crafts are queued", Queue:Find(20) == nil)
+totals = Queue:GetTotals()
+check("materials cost the bought bolts (got " .. totals.cost .. ")", totals.cost == 3090 + 4885 + 90)
+check("profit follows (got " .. totals.profit .. ")", totals.profit == 7550 - (3090 + 4885 + 90))
+local _, bag = Queue:Find(10)
+check("the bag's row costs the same", Queue:GetEntryCosts()[bag].cost == totals.cost)
+check("to buy matches the footer", Queue:GetShoppingTotal() == totals.cost)
+
+config.autoQueueSubCrafts = nil
+queueOneBag()
+check("switched back on, the bolts are made again", Queue:GetTotals().cost == 7630)
+
+print("\na kept sub-craft that buying now beats")
+
+-- The bolts stay queued when buying turns cheaper (see RebuildDependencies),
+-- so the bag is costed with them made, as To buy has it.
+auction[WOOL] = 400
+Queue:RebuildDependencies()
+_, bolts = Queue:Find(20)
+check("the bolt crafts stay", bolts and bolts.buyCheaper)
+totals = Queue:GetTotals()
+check("materials cost the wool for them (got " .. totals.cost .. ")", totals.cost == 3600 + 4885 + 90)
+check("to buy matches the footer", Queue:GetShoppingTotal() == totals.cost)
+auction[WOOL] = 295
 
 print(("\n%d check(s) passed\n"):format(checks))
