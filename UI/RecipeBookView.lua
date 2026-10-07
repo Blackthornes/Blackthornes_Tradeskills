@@ -377,9 +377,16 @@ local function NewView(opts)
                 first = first or name
             end
         end
+        -- The rest under a line of their own, so yours first then the
+        -- others reads as two groups rather than a list out of order.
+        local others = {}
         for _, name in ipairs(ns.RecipeBook:GetProfessions()) do
-            if not mine[name] then options[#options + 1] = { value = name, text = name } end
+            if not mine[name] then others[#others + 1] = { value = name, text = name } end
         end
+        if first and #others > 0 then
+            options[#options + 1] = { text = "Other professions", header = true }
+        end
+        for _, option in ipairs(others) do options[#options + 1] = option end
 
         return options, first
     end

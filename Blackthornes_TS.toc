@@ -79,9 +79,7 @@ UI\QueueMailPanel.lua
 UI\RecipeBookView.lua
 UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
-UI\Tab_Enchanting.lua
-UI\Tab_Disenchanting.lua
-UI\Tab_VendorFlips.lua
+UI\Tab_Deals.lua
 UI\Tab_Queue.lua
 UI\Tab_Gather.lua
 UI\Tab_Post.lua

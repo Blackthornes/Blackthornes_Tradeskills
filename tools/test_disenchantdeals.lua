@@ -385,7 +385,7 @@ records = backup
 -- The tab
 --------------------------------------------------------------------------------
 
-print("\nthe Disenchanting tab")
+print("\nthe Deals tab, for disenchanting")
 
 local function Stub(fields)
     local frame = fields or {}
@@ -420,6 +420,7 @@ ns.Theme = {
     CreateItemIcon = function() return Stub() end,
     SetItemIcon = function() end,
     CreateHeading = function() return Stub() end,
+    CreateBar = function() return Stub({ track = Stub() }) end,
 }
 
 local checkboxes, lists = {}, {}
@@ -445,11 +446,19 @@ ns.UI = Stub({
     SearchAuctionHouse = function(_, itemID) sent[#sent + 1] = "item" .. itemID; return true end,
 })
 
-assert(loadfile(lfs_cwd .. "/UI/Tab_Disenchanting.lua"))("Blackthornes_TS", ns)
+-- Nothing to flip to a vendor or list again here: those are
+-- tools/test_vendorflips.lua's.
+ns.VendorFlips = {
+    GetAuctionRows = function() return {}, 0, 0 end,
+    GetResaleRows = function() return {}, 0, 0 end,
+    MIN_RESALE_SCANS = 5,
+}
 
-local tab = tabs.disenchanting
-check("the tab registers as Disenchanting", tab and tab.text == "Disenchanting")
-check("it sits after Enchanting", tab.order > 1.7 and tab.order < 2)
+assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
+
+local tab = tabs.deals
+check("the tab registers as Deals", tab and tab.text == "Deals")
+check("it sits after Level Up", tab.order > 1.5 and tab.order < 2)
 
 tab.build(Stub())
 tab.refresh()
@@ -462,19 +471,20 @@ local row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 2001))
 
--- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, SKILL, AGE.
+-- Right to left: PROFIT, MARGIN, GETS, BUY, AGE, VIA.
 check("PROFIT shows 260 in green", row.cells[1].text:find("60", 1, true) and row.cells[1].color == "profit")
 check("MARGIN shows 52%", row.cells[2].text == "52%")
+check("GETS shows what disenchanting it fetches", row.cells[3].text ~= "")
 check("BUY shows the price", row.cells[4].text ~= "")
-check("SKILL shows what it needs", row.cells[5].text == "25" and row.cells[5].color == "dim")
+check("VIA says DE, lit", row.cells[6].text == "DE" and row.cells[6].color == "accent")
 
 checkboxes["Only deals over my minimums"].onToggle(false)
 check("unticking shows the loss too", Find(list.data, 2006) ~= nil)
 
 Enchanter(10)
 tab.refresh()
-list.opts.updateRow(row, Find(list.data, 2001))
-check("too high for his enchanters: SKILL in red", row.cells[5].color == "loss")
+check("too high for his enchanters: still listed", Find(list.data, 2001) ~= nil
+    and Find(list.data, 2001).canDisenchant == false)
 
 checkboxes["Only ones I can disenchant"].onToggle(true)
 check("and hidden when asked", Find(list.data, 2001) == nil and Find(list.data, 2007) ~= nil)

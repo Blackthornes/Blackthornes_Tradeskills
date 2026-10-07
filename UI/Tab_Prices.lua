@@ -33,6 +33,7 @@ local state = {
     reagentsOnly = false,
     favouritesOnly = false,
     mineOnly = false,
+    enchantingOnly = false,
     sortBy = "market",
     selected = nil,
 }
@@ -139,8 +140,22 @@ local function BuildList()
 
     local prices = ns.Prices:GetTable()
 
+    -- The Enchanting tab's materials list lives here now (Ezmode,
+    -- 2026-10-07): every enchanting material, priced or not.
+    local materials
+    if state.enchantingOnly and ns.Disenchant and ns.Disenchant.MATERIALS then
+        materials = {}
+        for _, material in ipairs(ns.Disenchant.MATERIALS) do
+            materials[material.itemID] = material.name or true
+            if wantNames and type(material.name) == "string" and not stored[material.itemID] then
+                stored[material.itemID] = material.name
+            end
+        end
+    end
+
     local function Add(itemID, record)
         if reagents and not reagents[itemID] then return end
+        if materials and not materials[itemID] then return end
         if state.favouritesOnly and favourites[itemID] == nil then return end
         if state.mineOnly and not Mine(itemID) then return end
 
@@ -175,7 +190,13 @@ local function BuildList()
     for itemID in pairs(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) do
         if type(itemID) == "number" and not prices[itemID] and not added[itemID] and Mine(itemID) then
             Add(itemID, {})
+            added[itemID] = true
         end
+    end
+
+    -- And, with Enchanting materials ticked, a material never scanned.
+    for itemID in pairs(materials or {}) do
+        if not prices[itemID] and not added[itemID] then Add(itemID, {}) end
     end
 
     if state.search ~= "" then
@@ -601,6 +622,7 @@ local function BuildDetail(parent)
     AddRow("scans", "Times scanned")
     AddRow("confidence", "Confidence")
     AddRow("liquidity", "Stock movement")
+    AddRow("bags", "In your bags")
 
     BuildMyPrice(detail, rowsAnchor)
 
@@ -728,6 +750,21 @@ local function UpdateDetail(entry)
         detail.values.liquidity:SetTextColor(Theme.Unpack("dim"))
     end
 
+    -- How many you carry and what they are worth, as the Enchanting tab's
+    -- materials list said.
+    local have = ns.Inventory and ns.Inventory.GetBagCount and ns.Inventory:GetBagCount(entry.itemID) or 0
+    if have > 0 and record.market then
+        detail.values.bags:SetText(("%d, worth %s"):format(have,
+            Util.FormatMoney(record.market * have, { short = true })))
+        detail.values.bags:SetTextColor(Theme.Unpack("text"))
+    elseif have > 0 then
+        detail.values.bags:SetText(tostring(have))
+        detail.values.bags:SetTextColor(Theme.Unpack("text"))
+    else
+        detail.values.bags:SetText("none")
+        detail.values.bags:SetTextColor(Theme.Unpack("dim"))
+    end
+
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
     detail.deepScan.tooltipText = ns.Scanner.isAuctionHouseOpen
         and "Read every listing of this item from the auction house"
@@ -827,6 +864,14 @@ local function Build(container)
         ShowFromTop()
     end, false)
     mineOnly:SetPoint("LEFT", favouritesOnly, "RIGHT", 12, 0)
+
+    -- Every enchanting material, scanned or not: the Enchanting tab's
+    -- materials list, which moved here (Ezmode, 2026-10-07).
+    local enchantingOnly = Widgets.CreateCheckbox(toolbar, "Enchanting materials", function(checked)
+        state.enchantingOnly = checked
+        ShowFromTop()
+    end, false)
+    enchantingOnly:SetPoint("LEFT", mineOnly, "RIGHT", 12, 0)
 
     -- No sort menu: the headings sort (Ezmode, 2026-10-06). The list opens
     -- by market value.
