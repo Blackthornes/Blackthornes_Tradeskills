@@ -983,6 +983,40 @@ craftList:SetData({ { recipeID = 703, quantity = 4 } })
 check("a row now showing another craft drops what was typed", ownRow.quantity.editBox.text, "4")
 check("without queuing it for either craft", quantities[701] == nil and quantities[703] == nil, true)
 
+-- Names in the colour of what they make (asked 2026-10-07). An item the
+-- client has not sent yet starts in the text colour and takes its colour
+-- when GET_ITEM_INFO_RECEIVED says it is here.
+local rarity = { [701] = { 0.12, 1.00, 0.00 }, [702] = { 0.00, 0.44, 0.87 } }
+local savedQuality, savedRegister, savedAfter = ns.Util.GetItemQualityColor, ns.RegisterEvent, C_Timer.After
+ns.Util.GetItemQualityColor = function(itemID)
+    local c = rarity[itemID]
+    if c then return c[1], c[2], c[3] end
+end
+local itemArrived
+ns.RegisterEvent = function(_, event, fn)
+    if event == "GET_ITEM_INFO_RECEIVED" then itemArrived = fn end
+    return true
+end
+C_Timer.After = function(_, fn) fn() end
+local textColor = { Theme.Unpack("text") }
+
+listsBefore = #made.CreateScrollList
+UI.tabs.queue.build(Region(UI.window))
+craftList = made.CreateScrollList[listsBefore + 1]
+craftList.height = 200
+craftList:SetData({ { recipeID = 701, quantity = 2 }, { recipeID = 702, quantity = 1, isDependency = true },
+    { recipeID = 704, quantity = 1 } })
+local green, blue, late = craftList.rows[1], craftList.rows[2], craftList.rows[3]
+check("a queued craft's name is its rarity colour", green.name.textColor[2], 1.00)
+check("a sub-craft's too", blue.name.textColor[3], 0.87)
+check("an item not sent yet starts in the text colour", late.name.textColor[1], textColor[1])
+rarity[704] = { 0.64, 0.21, 0.93 }
+check("the tab listens for the item arriving", type(itemArrived), "function")
+itemArrived()
+check("and colours it when it does", late.name.textColor[1], 0.64)
+
+ns.Util.GetItemQualityColor, ns.RegisterEvent, C_Timer.After = savedQuality, savedRegister, savedAfter
+
 --------------------------------------------------------------------------------
 
 Motion:FinishAll()
