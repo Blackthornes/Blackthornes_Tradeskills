@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.35.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Crafts on the Queue tab, sub-crafts included, are now drawn in the colour
+  of the item they make (green, blue, purple and so on), as on the Profit
+  tab. An item the game hasn't loaded yet picks up its colour as soon as it
+  arrives. A craft whose profit has fallen since it was queued now says
+  "worth less than when queued" in amber beside its name.
+
 ## 0.34.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
