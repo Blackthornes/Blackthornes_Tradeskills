@@ -230,6 +230,13 @@ function Crafting:OnBagUpdate()
 
                 elseif made > 0 then
                     unclaimed[output] = unclaimed[output] - made * perCraft
+
+                    -- Marked for the row's action (DE or Vendor), before
+                    -- SetQuantity can take the entry off the queue.
+                    if ns.QueueActions then
+                        ns.QueueActions:NoteMade(entry, output, made * perCraft)
+                    end
+
                     -- Worked out first: SetQuantity changes the entry itself.
                     local left = entry.quantity - made
                     local owner = entry.owner

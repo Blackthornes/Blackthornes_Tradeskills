@@ -50,6 +50,17 @@ PlaceMaterialColumns()
 -- replaced was 22 wide and lost the last digit of 100.
 local QUANTITY_WIDTH = 42
 
+-- The row's AH / DE / Vendor button (Ezmode, 2026-10-07). Wide enough for
+-- "Vendor" at the client's font, with the button's own insets.
+local ACTION_WIDTH = 54
+
+-- Disenchant next, left of Clear all, when Settings turns it on.
+local DE_NEXT_WIDTH = 230
+
+local function InCombat()
+    return type(InCombatLockdown) == "function" and InCombatLockdown() and true or false
+end
+
 local widgets = {}
 
 -- Each queued craft's cost and profit for its whole count, worked out once
@@ -67,8 +78,21 @@ local function CreateCraftRow(row)
 
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 28, 0)
-    -- Ends short of the profit column, so a long amount never draws over it.
-    row.name:SetPoint("RIGHT", row, "RIGHT", -200, 0)
+    -- Ends short of the action button, so a long name never draws under it.
+    row.name:SetPoint("RIGHT", row, "RIGHT", -(198 + ACTION_WIDTH + 6), 0)
+
+    -- What the craft is for once made: AH, DE or Vendor. A click steps to
+    -- the next, a right-click goes back to whichever pays most.
+    row.action = Widgets.CreateButton(row, "AH", function(_, mouseButton)
+        if not row.data or not ns.QueueActions then return end
+        if mouseButton == "RightButton" then
+            ns.QueueActions:Set(row.data, nil)
+        else
+            ns.QueueActions:Cycle(row.data)
+        end
+    end, { width = ACTION_WIDTH, height = 16 })
+    row.action:SetPoint("RIGHT", -198, 0)
+    if row.action.RegisterForClicks then row.action:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
 
     row.profit = Theme.CreateLabel(row, "small", "text", "RIGHT")
     row.profit:SetPoint("RIGHT", -114, 0)
@@ -120,6 +144,41 @@ local function CreateCraftRow(row)
     end, { width = 80, height = 18 })
     row.buyInstead:SetPoint("RIGHT", -114, 0)
     row.buyInstead:Hide()
+end
+
+--- The row's action button: its word, and a hover with what each way pays.
+local function UpdateActionButton(row, entry)
+    local actions = ns.QueueActions
+    local action, chosen, choices, analysis
+    if actions then action, chosen, choices, analysis = actions:Get(entry) end
+
+    if not action then
+        row.action:Hide()
+        return
+    end
+
+    row.action:Show()
+    row.action:SetText(actions.SHORT[action])
+
+    local ways = analysis and analysis.ways or {}
+    local lines = { chosen and ("%s, picked by you."):format(actions.LONG[action])
+        or ("%s, because it pays most."):format(actions.LONG[action]) }
+
+    for _, way in ipairs(choices) do
+        local option = ways[way]
+        local pays = option and Util.FormatMoney(option.profit * entry.quantity, { noColor = true, short = true })
+            or "no price yet"
+        lines[#lines + 1] = ("%s %s: %s"):format(way == action and ">" or "  ", actions.LONG[way], pays)
+    end
+
+    if action == "disenchant" then
+        lines[#lines + 1] = "Made items are marked for Disenchant next on this tab."
+    elseif action == "vendor" then
+        lines[#lines + 1] = "Made items are marked for Sell marked at a vendor."
+    end
+    lines[#lines + 1] = #choices > 1 and "Click to change. Right-click for whichever pays most."
+        or "Nothing else is open to this item."
+    row.action.tooltipText = table.concat(lines, "\n")
 end
 
 --- The hover for Buy instead: both prices, when known, and what it does.
@@ -229,6 +288,8 @@ local function UpdateCraftRow(row, entry)
         row.quantity:SetValue(entry.quantity, true)
     end
     row.boundRecipeID = entry.recipeID
+
+    UpdateActionButton(row, entry)
 
     local kept = entry.isDependency and entry.buyCheaper == true
     row.buyInstead:SetShown(kept)
@@ -608,6 +669,51 @@ local function UpdateAltNote(lines)
     widgets.materialList:SetPoint("BOTTOMRIGHT", widgets.materials, "BOTTOMRIGHT", -10, reserve)
 end
 
+--- Disenchant next: the secure Disenchant button aimed at the next item the
+--- queue made on DE. Off unless Settings turns it on, and only for items
+--- the queue marked (Logic/QueueActions.lua). One click, one disenchant.
+local function UpdateDisenchantNext()
+    local button = widgets.deNext
+    if not button then return end
+
+    local itemID, bag, slot, total
+    local show = ns.Config:Get("queueDisenchantNext") == true and ns.QueueActions ~= nil
+        and ns.Disenchanter ~= nil and not InCombat()
+        and widgets.craftList:IsVisible()
+
+    if show and ns.Disenchanter:Knows() == false then show = false end
+    if show then
+        itemID, bag, slot, total = ns.QueueActions:Next("disenchant")
+        show = itemID ~= nil
+    end
+
+    local rule = widgets.queueHeading and widgets.queueHeading.rule
+
+    if not show then
+        if not InCombat() then button:Hide() end
+        if rule then rule:SetPoint("RIGHT", widgets.clearButton, "LEFT", -8, 0) end
+        return
+    end
+
+    button:Show()
+    if rule then rule:SetPoint("RIGHT", button, "LEFT", -8, 0) end
+
+    local label = Util.GetItemLabel(itemID)
+    local name = Util.Uncolored(label)
+    name = name:match("^%[(.*)%]$") or name
+
+    button.overlayText = Theme.FitText(button.label, {
+        ("Disenchant next: %s (%d)"):format(name, total),
+        ("Disenchant: %s"):format(name),
+        ("Disenchant next (%d)"):format(total),
+    })
+    button.tooltipText = ("Disenchants %s from your bags. Your queue marked %d to disenchant.\n"
+        .. "One click, one disenchant. Never blue or better, anything worn, or anything the queue did not make.")
+        :format(name, total)
+
+    ns.Disenchanter:Arm(button, itemID, bag, slot)
+end
+
 local function Refresh()
     if not widgets.craftList then return end
 
@@ -635,6 +741,7 @@ local function Refresh()
 
     UpdateCraftStatus()
     UpdateBankNote()
+    UpdateDisenchantNext()
 
     if #entries == 0 then
         widgets.summaryLabel:SetText("")
@@ -699,6 +806,21 @@ local function Build(container)
     end, { width = 84, height = 18 })
     clear.tooltipText = "Empty the whole craft queue. Asks you to click again first."
     clear:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -8)
+    widgets.clearButton = clear
+    widgets.queueHeading = heading
+
+    -- The secure Disenchant button lies over this one while it is armed; a
+    -- click that reaches this one found it not set, so it is set now.
+    local deNext = Widgets.CreateButton(container, "Disenchant next", function()
+        UpdateDisenchantNext()
+        ns.Print("Disenchant next was not ready. Click it again.")
+    end, { width = DE_NEXT_WIDTH, height = 18, primary = true })
+    deNext:SetPoint("RIGHT", clear, "LEFT", -6, 0)
+    deNext.onSecureClick = function(itemID)
+        if ns.QueueActions then ns.QueueActions:NoteDisenchantClick(itemID) end
+    end
+    deNext:Hide()
+    widgets.deNext = deNext
 
     local divider = Theme.CreateDivider(container)
     divider:SetPoint("TOPLEFT", 8, -26)
@@ -884,6 +1006,14 @@ UI:RegisterTab({
     build = Build,
     refresh = Refresh,
 })
+
+--- Marks changed, or the bags did: re-aim Disenchant next and Sell marked.
+function UI:OnQueueMarksChanged()
+    if self.activeTab == "queue" and self.window and self.window:IsShown() then
+        UpdateDisenchantNext()
+    end
+    if ns.SellMarked then ns.SellMarked:Update() end
+end
 
 function UI:OnQueueUpdated()
     -- The craft pane beside the profession window shows the same queue, and

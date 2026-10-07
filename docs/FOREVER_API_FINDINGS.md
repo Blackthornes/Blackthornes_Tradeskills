@@ -411,6 +411,16 @@ seen in game 2026-09-25, 2945 opened nothing, and the game then reported
 mouse release fell through to the frame underneath; it now registers
 `AnyUp` with `useOnKeyDown` false.
 
+**Selling at a vendor from addon code (added 2026-10-07).** The Warcraft
+Wiki marks `C_Container.UseContainerItem` as protected on current retail, so
+the vendor's Sell marked button (`UI/SellMarked.lua`) is a secure button: each
+click sells one stack through a `/use bag slot` macro line, set only while the
+vendor is open and checked again in `PreClick`. Not the template's `item`
+type, which equips gear instead of using it. `/bts selltest` (Settings, Test
+selling) sells the cheapest grey item from addon code and keeps whether the
+item left and gold came in (`sellTest`); `/bts probe` shows it as "sell from
+addon". If it works, one click sells every marked stack, up to 12 a visit.
+
 **Addon messages (sharing, added 2026-10-07).** `Core/Comm.lua` assumes
 retail's rules: `C_ChatInfo.RegisterAddonMessagePrefix`, 255 bytes per
 message, a per-prefix throttle (a short burst, then about one a second,

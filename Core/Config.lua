@@ -236,6 +236,14 @@ local DEFAULTS = {
         -- A Take next batch button at the mailbox, taking the queue's
         -- materials a bagful at a time. Off by default (2026-10-05).
         mailBatchTake = false,
+
+        -- Queue tab: a Disenchant next button aimed at the next item the
+        -- queue made on DE (2026-10-07). Off until the player turns it on.
+        queueDisenchantNext = false,
+
+        -- The vendor window's Sell marked button, for items the queue made
+        -- on Vendor (2026-10-07). It only shows when something is marked.
+        sellMarkedButton = true,
         -- Picking a material the Buy list searched for fills the auction
         -- house's quantity box with what the queue still needs (2026-10-06).
         -- See UI/BuyQuantity.lua.
@@ -392,6 +400,15 @@ local DEFAULTS = {
     -- the client when one is held and from searches otherwise; it never
     -- changes for an item, so it is kept. See Scanner:GetCommodityStatus.
     commodity = {},
+
+    -- characterKey -> itemID -> { action = "disenchant" | "vendor", count }:
+    -- items the queue made for those actions, never more than are carried.
+    -- See Logic/QueueActions.lua.
+    queueMarks = {},
+
+    -- What the selling test at a vendor found: { at, result }. See
+    -- UI/SellMarked.lua.
+    sellTest = {},
 
     -- Written by Core/Compat.lua and Probe/Probe.lua.
     probe = {
