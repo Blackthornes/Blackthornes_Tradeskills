@@ -293,18 +293,30 @@ end
 -- Your own characters
 --------------------------------------------------------------------------------
 
---- Is `name` ("Name" or "Name-Realm") one of this account's characters?
+--- Is `name` ("Name", "Name-Realm" or "Name Surname") one of this
+--- account's characters?
+--
+-- Forever names can repeat, so mail to an alt is addressed "Name Surname"
+-- (QueueMail.MailName). Read as one name it matched nobody, and gold sent
+-- to an alt was counted as spent.
 function GoldLog:IsOwnCharacter(name)
     if type(name) ~= "string" or name == "" or not ns.db then return false end
 
     local short = name:match("^([^%-]+)") or name
     local realm = name:match("%-(.+)$")
 
-    for key in pairs(ns.db.characters or {}) do
+    local first, last = short:match("^(%S+)%s+(.-)%s*$")
+    if first then short = first end
+
+    for key, record in pairs(ns.db.characters or {}) do
         if type(key) == "string" then
             local keyName = key:match("^([^%-]+)")
             local keyRealm = key:match("%-(.+)$")
-            if keyName == short and (not realm or not keyRealm
+            local surname = type(record) == "table" and type(record.surname) == "string"
+                and record.surname ~= "" and record.surname or nil
+            if keyName == short
+                and (not last or not surname or surname:lower() == last:lower())
+                and (not realm or not keyRealm
                 or keyRealm:gsub("%s", "") == realm:gsub("%s", "")) then
                 return true
             end

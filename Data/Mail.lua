@@ -169,13 +169,18 @@ end
 --                       attachments = { {itemID, count}, ... }, pending }
 --   complete false when an attachment has not loaded yet, so the caller knows
 --            this reading is not the final word on what is there
+--   more     true when the server holds more mail than the box is showing
+--            (it shows 50 at most; the rest come in as mail is taken)
 function Mail:ReadInbox()
     local mails, complete = {}, true
 
-    if not Util.HasFunction("GetInboxNumItems") then return mails, false end
+    if not Util.HasFunction("GetInboxNumItems") then return mails, false, false end
 
-    local ok, count = pcall(GetInboxNumItems)
-    if not ok or not count then return mails, false end
+    local ok, count, total = pcall(GetInboxNumItems)
+    if not ok or not count then return mails, false, false end
+
+    local more = false
+    pcall(function() more = tonumber(total) ~= nil and tonumber(total) > tonumber(count) end)
 
     for index = 1, count do
         local mail = { index = index, attachments = {} }
@@ -221,7 +226,7 @@ function Mail:ReadInbox()
         mails[#mails + 1] = mail
     end
 
-    return mails, complete
+    return mails, complete, more
 end
 
 --- Read the mailbox and store what it holds.
@@ -230,7 +235,7 @@ end
 function Mail:Read()
     if not Util.HasFunction("GetInboxNumItems") then return end
 
-    local mails, complete = self:ReadInbox()
+    local mails, complete, more = self:ReadInbox()
 
     -- An empty list before the server has answered the mailbox's first inbox
     -- request is not an empty mailbox. Trusting it emptied the stock counts
@@ -263,8 +268,10 @@ function Mail:Read()
 
     -- Only a full reading can say a sale's mail is gone, and only one with
     -- every sale priced: one waiting on its amount is not in the ledger yet.
-    -- An empty box the server has not answered for yet never gets here.
-    if complete and (self.awaitingAmount or 0) == 0 then
+    -- An empty box the server has not answered for yet never gets here. Nor
+    -- does a box holding back mail past the 50 it shows: a heavy seller's
+    -- sale mail is often in the part not shown yet.
+    if complete and not more and (self.awaitingAmount or 0) == 0 then
         self:SweepHeard(mails)
     end
 

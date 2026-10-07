@@ -947,6 +947,33 @@ Mail:Read()
 check("a new return after that is new",         Mail:GetSummary().expired, 2)
 
 print("")
+print("a heard sale is not swept while the box holds mail back")
+--------------------------------------------------------------------------------
+
+-- The box shows 50 at most. With more on the server, a sale's mail can be in
+-- the part not shown yet, so not seeing it says nothing about it.
+Reset()
+Mail.awaitingAmount = 0
+ns.db.heardSales = { ["Testrealm-Alliance"] = {
+    { t = time() - 3 * 3600, name = "Runecloth", who = "Tester-Testrealm" },
+} }
+
+local shown = GetInboxNumItems
+GetInboxNumItems = function() return #inbox, #inbox + 12 end
+inbox = { ExpiredCloth(1) }
+Mail:Read()
+check("more mail on the server: still waiting",  ns.db.heardSales["Testrealm-Alliance"][1].collected, nil)
+
+GetInboxNumItems = function() return #inbox, #inbox end
+Tick()
+Mail:Read()
+check("every mail shown: it stops waiting",      ns.db.heardSales["Testrealm-Alliance"][1].collected ~= nil, true)
+check("and is kept",                             #ns.db.heardSales["Testrealm-Alliance"], 1)
+
+GetInboxNumItems = shown
+ns.db.heardSales = nil
+
+print("")
 if failures > 0 then
     error(("%d check(s) failed"):format(failures), 0)
 end
