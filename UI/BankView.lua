@@ -129,7 +129,7 @@ end
 
 local function UpdateRow(row, entry)
     Theme.SetItemIcon(row.icon, entry.itemID)
-    row.name:SetText(Util.GetItemLabel(entry.itemID))
+    Theme.SetRowName(row.name, Util.GetItemLabel(entry.itemID))
 
     row.cells.worth:SetText(Money(entry.worth))
     row.cells.have:SetText(Util.Comma(entry.total))

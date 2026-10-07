@@ -103,7 +103,7 @@ local function NewView(opts)
             if not ok or not name then state.waiting = true end
         end
 
-        row.name:SetText(entry.name)
+        Theme.SetRowName(row.name, entry.name)
         row.name:SetTextColor(Theme.Unpack(entry.known and "dim" or "text"))
 
         local cells = row.cells
