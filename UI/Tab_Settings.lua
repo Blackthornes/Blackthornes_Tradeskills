@@ -331,8 +331,34 @@ local function Build(outer)
     end, false)
     widgets.mailBatch:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Ezmode, 2026-10-07: each queue row says AH, DE or Vendor, and what the
+    -- queue made on DE or Vendor can be disenchanted or sold from here.
+    local deNextRow = CreateRow(container, mailBatchRow, "Disenchant next on the Queue tab",
+        "A button that disenchants the next item your queue made on DE, one click each. Never blue or better, anything worn, or anything the queue did not make.")
+
+    widgets.deNext = Widgets.CreateCheckbox(deNextRow, "Show it", function(checked)
+        Config:Set("queueDisenchantNext", checked)
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.deNext:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local sellMarkedRow = CreateRow(container, deNextRow, "Sell marked at vendors",
+        "A button on the vendor window that sells what your queue made on Vendor, up to 12 a visit so buyback can undo any sale. Test selling checks whether one click can sell them all.")
+
+    widgets.sellMarked = Widgets.CreateCheckbox(sellMarkedRow, "Show it", function(checked)
+        Config:Set("sellMarkedButton", checked)
+        if ns.SellMarked then ns.SellMarked:Update() end
+    end, true)
+    widgets.sellMarked:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local sellTest = Widgets.CreateButton(sellMarkedRow, "Test selling", function()
+        if ns.SellMarked then ns.SellMarked:Test() end
+    end, { width = 96, height = 20,
+        tooltip = "At a vendor: sells your cheapest grey item from the addon, to see whether the game allows it (/bts selltest)" })
+    sellTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+
     -- Asked 2026-10-06: the buy window opened at 1 after a Buy list search.
-    local fillBuyRow = CreateRow(container, mailBatchRow, "Fill in how many to buy",
+    local fillBuyRow = CreateRow(container, sellMarkedRow, "Fill in how many to buy",
         "Search from the Buy list, the Queue tab or the Gather tab, pick the item in the auction house's results, and its quantity box shows how many the queue still needs. You still click Buy Now.")
 
     widgets.fillBuy = Widgets.CreateCheckbox(fillBuyRow, "Enabled", function(checked)
@@ -1067,6 +1093,8 @@ local function Refresh()
     local spare = Config:Get("bagSpareSlots")
     Put(widgets.bagSpare, type(spare) == "number" and spare or 5)
     widgets.mailBatch:SetChecked(Config:Get("mailBatchTake") == true)
+    widgets.deNext:SetChecked(Config:Get("queueDisenchantNext") == true)
+    widgets.sellMarked:SetChecked(Config:Get("sellMarkedButton") ~= false)
     widgets.fillBuy:SetChecked(Config:Get("fillBuyQuantity") ~= false)
     local disenchanterBox = widgets.disenchanter.editBox
     if not (disenchanterBox.HasFocus and disenchanterBox:HasFocus()) then
