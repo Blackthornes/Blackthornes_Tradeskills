@@ -71,7 +71,7 @@ end
 --- The partner a sender is, or nil for anyone else.
 function AccountLink:PartnerFor(sender)
     local key = Comm.NameKey(sender)
-    if not key or key == Comm.NameKey(Comm.PlayerName()) then return nil end
+    if not key or Comm.IsMe(sender) then return nil end
     for _, partner in ipairs(self:GetPartners()) do
         if partner.key == key then
             local state = self.partners[key]
