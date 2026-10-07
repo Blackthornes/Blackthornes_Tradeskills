@@ -211,6 +211,26 @@ function Theme.FitText(label, texts, room)
     return chosen
 end
 
+--- An item's name on a list row, whole, never cut to "...": on one line in
+--- the label's own size when it fits, else in the smaller size, wrapped onto
+--- as many lines as it takes (a player's screenshot, 2026-10-07: "Deviate
+--- S..."). The label is laid out by both its ends, so its width is the room.
+function Theme.SetRowName(label, text, size)
+    size = Theme.sizes[size or "small"] or Theme.sizes.small
+    pcall(label.SetFont, label, FONT, size, "")
+    pcall(label.SetWordWrap, label, false)
+    label:SetText(text)
+
+    local ok, room = pcall(label.GetWidth, label)
+    if not ok or type(room) ~= "number" or room <= 0 then return end
+    local width = Theme.TextWidth(label)
+    if type(width) ~= "number" or width <= room then return end
+
+    pcall(label.SetFont, label, FONT, math.min(size, Theme.sizes.tiny), "")
+    pcall(label.SetWordWrap, label, true)
+    label:SetText(text)
+end
+
 --- Put a money amount on a label in as much detail as fits its width: every
 --- coin, then the two largest, then the largest alone, rounded. Measured, so
 --- a narrow cell never ends in "..." halfway through an amount. A label that

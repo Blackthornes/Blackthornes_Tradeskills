@@ -175,7 +175,7 @@ local function CreateRow(row)
 end
 
 function UpdateRow(row, line)
-    row.name:SetText(line.label)
+    Theme.SetRowName(row.name, line.label)
     Theme.SetItemIcon(row.icon, line.itemID, line.link)
 
     local cells = row.cells
