@@ -113,11 +113,45 @@ function Comm.NameKey(name)
     return short:lower()
 end
 
-local function PlayerName()
+local function FirstName()
     local ok, name = pcall(function() return UnitName("player") .. "" end)
     return ok and name or nil
 end
+
+local surname, surnameAsked
+--- This character's last name, when the game will say it (Config:ReadSurname).
+local function Surname()
+    if surnameAsked then return surname end
+    surnameAsked = true
+    local config = ns.Config
+    if config and config.ReadSurname then
+        local ok, found = pcall(config.ReadSurname, config)
+        if ok and type(found) == "string" and found ~= "" then surname = found end
+    end
+    return surname
+end
+
+--- The name whispers reach this character by. Forever lets characters share
+--- a first name, so a whisper needs the first and last name together, and
+--- an addon message's sender reads that way too: "Ana Smith", no realm
+--- (seen 2026-10-07: a whisper to the first name alone found nobody).
+local function PlayerName()
+    local first = FirstName()
+    local last = first and Surname()
+    if last then return first .. " " .. last end
+    return first
+end
 Comm.PlayerName = PlayerName
+
+--- Did this character send it? By the whole name when the last name is
+--- known; by the first word when the game would not say the last name.
+function Comm.IsMe(sender)
+    local key = Comm.NameKey(sender)
+    if not key then return false end
+    if key == Comm.NameKey(PlayerName()) then return true end
+    if Surname() then return false end
+    return key:match("^(%S+)") == Comm.NameKey(FirstName())
+end
 
 --------------------------------------------------------------------------------
 -- Sending
@@ -375,7 +409,10 @@ function Comm:Test()
     if not me then ns.Print("share test: the game would not say this character's name") return end
 
     local registered = self.registered
-    ns.Print(("share test: prefix %s registered: %s"):format(Comm.PREFIX, tostring(registered)))
+    ns.Print(("share test: prefix %s registered: %s, whispering \"%s\""):format(
+        Comm.PREFIX, tostring(registered), me))
+    -- Keeps "No player named" out of chat if the name is still wrong.
+    self:NoteWhisper(me)
 
     self.testing = { at = Now(), echoes = 0, sender = nil }
 

@@ -68,7 +68,7 @@ C_ChatInfo = {
 }
 UnitName = function() return current.name end
 
-local function NewClient(name, realmKey)
+local function NewClient(name, realmKey, surname)
     local ns = {}
     ns.VERSION = "1.0"
     ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -90,6 +90,7 @@ local function NewClient(name, realmKey)
         GetRealmKey = function() return realmKey end,
         GetCharacterKey = function() return "Player-1-" .. name end,
         GetPriceTable = function() return priceTable end,
+        ReadSurname = function() return surname end,
     }
     ns.Recipes = {
         ForgetCharacter = function(_, key)
@@ -196,6 +197,15 @@ check("but not for anyone else",
 uptime = uptime + 30
 check("nor once it is old",
     Comm.FilterNotFound(nil, "CHAT_MSG_SYSTEM", "No player named 'Carl' is currently playing."), false)
+
+-- Forever: a whisper needs the first and last name, and the sender reads so.
+local eve = NewClient("Eve", "Forever-Alliance", "Stone")
+check("the name whispers use has the last name", eve.ns.Comm.PlayerName(), "Eve Stone")
+check("a sender with my full name is me", eve.ns.Comm.IsMe("Eve Stone"), true)
+check("another Eve is not", eve.ns.Comm.IsMe("Eve Rivers"), false)
+current = ana
+check("without a last name, the first word decides", ana.ns.Comm.IsMe("Ana Whoever"), true)
+check("and someone else is not me", ana.ns.Comm.IsMe("Bob Smith"), false)
 
 --------------------------------------------------------------------------------
 print("\naccounts")
