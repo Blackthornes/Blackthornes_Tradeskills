@@ -6,7 +6,8 @@
 -- the whole server: a guild is a smaller, known group, so there is far less
 -- traffic and far less room for someone to feed in made-up prices.
 --
--- Off by default (Settings, Sharing: `guildPrices`). When on:
+-- On by default (the owner, 2026-10-07); Settings, Sharing: `guildPrices`.
+-- When on:
 --   * After a scan, its prices go to the guild, at most once an hour, and not
 --     at all when a guildmate shared a scan from about the same time.
 --   * Guildmates' prices are kept apart from yours, in

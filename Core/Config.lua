@@ -308,9 +308,9 @@ local DEFAULTS = {
         linkShareBags = true,
         linkShareGold = true,
         linkShareAuctions = true,
-        -- Share scans with guildmates and fill gaps with theirs. Off by
-        -- default. See Logic/GuildPrices.lua.
-        guildPrices = false,
+        -- Share scans with guildmates and fill gaps with theirs. On by
+        -- default (the owner, 2026-10-07). See Logic/GuildPrices.lua.
+        guildPrices = true,
     },
 
     -- realmKey -> itemID -> price record
