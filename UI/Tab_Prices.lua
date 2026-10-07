@@ -17,12 +17,15 @@ local UI = ns.UI
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 
+-- Right to left. Money sits to the right, so its coins line up; the rest is
+-- centred under its heading. `width` is the least each gets:
+-- Widgets.FitColumns widens it to fit the heading and a full amount.
 local COLUMNS = {
-    { key = "age",       label = "AGE",    width = 44 },
-    { key = "liquidity", label = "MOVES",  width = 52 },
-    { key = "quantity",  label = "LISTED", width = 52 },
-    { key = "min",       label = "CHEAPEST", width = 80 },
-    { key = "market",    label = "MARKET", width = 80 },
+    { key = "age",       label = "AGE",      width = 44, justify = "CENTER" },
+    { key = "liquidity", label = "MOVES",    width = 52, justify = "CENTER" },
+    { key = "quantity",  label = "LISTED",   width = 52, justify = "CENTER" },
+    { key = "min",       label = "CHEAPEST", width = 80, money = true },
+    { key = "market",    label = "MARKET",   width = 80, money = true },
 }
 
 local state = {
@@ -328,7 +331,7 @@ local function CreateRow(row)
     local reserved = 16
 
     for _, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+        local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
         cell:SetPoint("RIGHT", offset, 0)
         cell:SetWidth(column.width)
 
@@ -778,6 +781,9 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
+
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
@@ -838,7 +844,7 @@ local function Build(container)
     local sortLabels = { name = nameHeading }
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)

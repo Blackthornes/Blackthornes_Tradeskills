@@ -24,28 +24,30 @@ local MARK_GUTTER = 16
 local ICON_SIZE = 16
 local ICON_GUTTER = ICON_SIZE + 4
 
--- Right-aligned numeric columns, measured from the right edge of the list.
--- Laid out right to left. WHO only earns its space when more than one
--- character is in play, so it is hidden otherwise and the craft name takes
--- the room back.
+-- The columns, measured from the right edge of the list and laid out right
+-- to left. Money sits to the right, so its coins line up down the column;
+-- everything else is centred under its heading. `width` is the least each
+-- gets: Widgets.FitColumns widens it to fit the heading and a full amount.
+-- WHO only earns its space when more than one character is in play, so it
+-- is hidden otherwise and the craft name takes the room back.
 local COLUMNS = {
-    { key = "age",    width = 40 },
-    { key = "posted", width = 44 },
+    { key = "age",    label = "AGE",    width = 40, justify = "CENTER" },
+    { key = "posted", label = "STOCK",  width = 44, justify = "CENTER" },
     -- How well it sells (Logic/Demand.lua), beside what you already hold:
     -- together they say whether to make more.
-    { key = "demand", width = 50 },
-    { key = "make",   width = 40 },
-    { key = "who",    width = 58, accountWideOnly = true },
-    { key = "margin", width = 46 },
+    { key = "demand", label = "DEMAND", width = 50, justify = "CENTER" },
+    { key = "make",   label = "MAKE",   width = 40, justify = "CENTER" },
+    { key = "who",    label = "WHO",    width = 58, justify = "CENTER", accountWideOnly = true },
+    { key = "margin", label = "MARGIN", width = 46, justify = "CENTER" },
     -- Which way the profit is for (AH, Vendor, DE), when the list is
     -- ranked by whichever pays most. Ranked by one way, it says nothing.
-    { key = "via",    width = 44, bestOnly = true },
-    { key = "profit", width = 74 },
+    { key = "via",    label = "VIA",    width = 44, justify = "CENTER", bestOnly = true },
+    { key = "profit", label = "PROFIT", width = 74, money = true },
     -- Beside SELLS so the two read against each other. Only shown when
     -- something in the list can be disenchanted.
-    { key = "disenchant", width = 62, disenchantOnly = true },
-    { key = "sells",  width = 70 },
-    { key = "cost",   width = 70 },
+    { key = "disenchant", label = "DISENCHANT", width = 62, money = true, disenchantOnly = true },
+    { key = "sells",  label = "SELLS",  width = 70, money = true },
+    { key = "cost",   label = "COST",   width = 70, money = true },
 }
 
 -- Bumped whenever the visible column set changes, so recycled rows know to
@@ -120,8 +122,8 @@ local function ApplyRowLayout(row)
 
     row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
 
-    -- The margin's bar sits under its number, as long as the margin is wide.
-    row.marginBar:SetPoint("TOPRIGHT", row.cells.margin, "BOTTOMRIGHT", 0, -1)
+    -- The margin's bar sits centred under its number.
+    row.marginBar:SetPoint("TOP", row.cells.margin, "BOTTOM", 0, -1)
 
     row.layoutVersion = layoutVersion
 end
@@ -138,7 +140,7 @@ local function CreateRow(row)
 
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
-        row.cells[column.key] = Theme.CreateLabel(row, "small", "text", "RIGHT")
+        row.cells[column.key] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
     end
 
     row.marginBar = Theme.CreateBar(row, 40, 2)
@@ -1327,6 +1329,9 @@ local function RefreshProfessionOptions()
 end
 
 local function BuildCrafts(container)
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
+
     -- Toolbar
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
@@ -1414,14 +1419,10 @@ local function BuildCrafts(container)
     nameHeading:SetPoint("LEFT", 8 + MARK_GUTTER + ICON_GUTTER, 0)
     nameHeading:SetText("CRAFT")
 
-    local labels = { cost = "COST", sells = "SELLS", profit = "PROFIT",
-                     margin = "MARGIN", age = "AGE", who = "WHO", posted = "STOCK",
-                     make = "MAKE", disenchant = "DISENCHANT", demand = "DEMAND", via = "VIA" }
-
     widgets.headings = {}
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
-        heading:SetText(labels[column.key])
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
+        heading:SetText(column.label)
         widgets.headings[column.key] = heading
     end
 

@@ -24,23 +24,25 @@ local ICON_GUTTER = 20
 
 local SOURCE_NOTE = "Chances come from the built-in Classic table until you have done %d disenchants like this (%d so far). Materials are priced at their lowest posting, leaving out a lone low one."
 
--- Right-aligned columns per view, laid out right to left.
+-- Columns per view, laid out right to left. Money sits to the right, so its
+-- coins line up; the rest is centred under its heading. `width` is the least
+-- each gets: Widgets.FitColumns widens it to fit the heading and an amount.
 local VIEWS = {
     craft = {
         columns = {
-            { key = "gain",  label = "PROFIT",     width = 70 },
-            { key = "value", label = "DISENCHANT", width = 70 },
-            { key = "sells", label = "SELLS",      width = 70 },
-            { key = "cost",  label = "COST",       width = 66 },
-            { key = "make",  label = "MAKE",       width = 40 },
+            { key = "gain",  label = "PROFIT",     width = 70, money = true },
+            { key = "value", label = "DISENCHANT", width = 70, money = true },
+            { key = "sells", label = "SELLS",      width = 70, money = true },
+            { key = "cost",  label = "COST",       width = 66, money = true },
+            { key = "make",  label = "MAKE",       width = 40, justify = "CENTER" },
         },
         heading = "CRAFT",
     },
     material = {
         columns = {
-            { key = "age",   label = "AGE",   width = 50 },
-            { key = "price", label = "PRICE", width = 80 },
-            { key = "have",  label = "HAVE",  width = 40 },
+            { key = "age",   label = "AGE",   width = 50, justify = "CENTER" },
+            { key = "price", label = "PRICE", width = 80, money = true },
+            { key = "have",  label = "HAVE",  width = 40, justify = "CENTER" },
         },
         heading = "MATERIAL",
     },
@@ -86,6 +88,7 @@ local function ApplyRowLayout(row)
         if column then
             cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
             cell:SetWidth(column.width)
+            cell:SetJustifyH(column.justify or "RIGHT")
             cell:Show()
             offset = offset - column.width - 6
         else
@@ -634,6 +637,7 @@ local function ApplyHeadings()
             heading:SetText(column.label)
             heading:SetPoint("RIGHT", offset, 0)
             heading:SetWidth(column.width)
+            heading:SetJustifyH(column.justify or "RIGHT")
             heading:Show()
             offset = offset - column.width - 6
         else
@@ -709,6 +713,11 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then
+        for _, view in pairs(VIEWS) do Widgets.FitColumns(view.columns) end
+    end
+
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)

@@ -27,16 +27,19 @@ local UI = ns.UI
 
 local ROW_HEIGHT = 26
 
+-- Right to left. Money and the price boxes sit to the right, so their
+-- digits line up; HAVE is centred under its heading. `width` is the least
+-- each gets: Widgets.FitColumns widens it to fit the heading and an amount.
 local COLUMNS = {
     { key = "action",  label = "",        width = 56 },
     { key = "qty",     label = "LIST",    width = 44 },
-    { key = "total",   label = "TOTAL",   width = 78 },
-    { key = "deposit", label = "DEPOSIT", width = 62 },
+    { key = "total",   label = "TOTAL",   width = 78, money = true },
+    { key = "deposit", label = "DEPOSIT", width = 62, money = true },
     { key = "copper",  label = "C",       width = 34 },
     { key = "silver",  label = "S",       width = 34 },
     { key = "gold",    label = "G",       width = 40 },
-    { key = "cost",    label = "COST",    width = 66 },
-    { key = "count",   label = "HAVE",    width = 42 },
+    { key = "cost",    label = "COST",    width = 66, money = true },
+    { key = "count",   label = "HAVE",    width = 42, justify = "CENTER" },
 }
 
 local widgets = {}
@@ -115,7 +118,7 @@ local function CreateRow(row)
             })
             row.quantity:SetPoint("RIGHT", offset, 0)
         elseif column.key ~= "action" then
-            local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+            local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
             cell:SetPoint("RIGHT", offset, 0)
             cell:SetWidth(column.width)
             row.cells[column.key] = cell
@@ -488,6 +491,9 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
+
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
@@ -554,7 +560,7 @@ local function Build(container)
     local sortLabels = { name = nameHeading }
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)
