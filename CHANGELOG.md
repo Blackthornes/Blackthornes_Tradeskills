@@ -4,6 +4,20 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.36.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- Tradeskills now learns how each item disenchants for you, not just each
+  row of the disenchant table. Once you've disenchanted an item three times
+  and it mostly gives something other than the table says, its own results
+  are used everywhere: the tooltip value, the Disenchanting and Enchanting
+  tabs and Profit. Chat says "Learned!" when that happens, and `/bts delog`
+  lists those items. Items that break the way the table says keep using
+  the table's bigger pool. Disenchants you recorded before this update are
+  filled in once from your recent list.
+
 ## 0.35.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
