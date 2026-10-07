@@ -409,8 +409,8 @@ print("the tabs")
 
 -- Every tab the window has, in its order. The room is the window's: 1120 wide,
 -- less its 11-pixel edges and 16 more.
-local NAMES = { "Profit", "Level Up", "Enchanting", "Disenchanting", "Vendor Flips", "Queue",
-    "Gather", "Post", "Prices", "Sales", "Characters", "Settings" }
+local NAMES = { "Profit", "Level Up", "Deals", "Queue", "Gather", "Post", "Prices", "Sales",
+    "Characters", "Settings" }
 local ROOM = 1120 - 2 * 11 - 16
 
 local function Definitions()
@@ -433,22 +433,25 @@ local function Roomy(strip)
 end
 
 local strip = Widgets.CreateTabStrip(Region(), Definitions(), nil, { width = ROOM })
-check("all twelve fit across the window", Total(strip) <= ROOM, true)
+check("all ten fit across the window", Total(strip) <= ROOM, true)
 check("at the full size", strip.tabs[4].label.fontSize, 12)
 check("each with room either side of its name", Roomy(strip), true)
-check("a long name gets a wider tab than a short one", strip.tabs[4].span > strip.tabs[8].span, true)
+check("a long name gets a wider tab than a short one", strip.tabs[9].span > strip.tabs[6].span, true)
 check("each starts where the last ended", strip.tabs[5].left, strip.tabs[4].left + strip.tabs[4].span)
 
-local tight = Widgets.CreateTabStrip(Region(), Definitions(), nil, { width = 800 })
+-- Less room than the ten names take at the full size.
+local TIGHT = 600
+local tight = Widgets.CreateTabStrip(Region(), Definitions(), nil, { width = TIGHT })
 check("short of room, a step smaller", tight.tabs[4].label.fontSize, 11)
-check("and still all inside it", Total(tight) <= 800, true)
+check("and still all inside it", Total(tight) <= TIGHT, true)
 check("names still inside their tabs", Roomy(tight), true)
 
 local realTextWidth = Theme.TextWidth
 Theme.TextWidth = function() return nil end
 local blind = Widgets.CreateTabStrip(Region(), Definitions(), nil, { width = ROOM })
 Theme.TextWidth = realTextWidth
-check("names that cannot be measured share the room equally", blind.tabs[4].span, math.floor(ROOM / #NAMES))
+check("names that cannot be measured share the room equally, up to 96 each", blind.tabs[4].span,
+    math.min(96, math.floor(ROOM / #NAMES)))
 
 local fixed = Widgets.CreateTabStrip(Region(), {
     { key = "sell", text = "Sell", width = 120 }, { key = "buy", text = "Buy", width = 120 } })
@@ -457,13 +460,13 @@ check("tabs given a width keep it", fixed.tabs[2].left + fixed.tabs[2].span, 240
 check("the gold line rides on a layer of its own", strip.line:GetParent() == strip.lineLayer, true)
 check("above the tabs, whose fill hid it", strip.lineLayer.frameLevel > strip.tabs[1].frameLevel, true)
 
-strip:Select("Disenchanting")
+strip:Select("Characters")
 Motion:Step(1)
 local _, under = strip.line:GetPoint(1)
-check("it lands under a wide tab", under == strip.tabs[4], true)
-check("as wide as that tab", near(strip.line.width, strip.tabs[4].span), true)
+check("it lands under a wide tab", under == strip.tabs[9], true)
+check("as wide as that tab", near(strip.line.width, strip.tabs[9].span), true)
 
-local other = strip.tabs[9]
+local other = strip.tabs[7]
 other.scripts.OnEnter(other)
 Motion:Step(1)
 check("another tab under the mouse shows a faint line", other.underline.alpha, 1)
@@ -471,7 +474,7 @@ other.scripts.OnLeave(other)
 Motion:Step(1)
 check("which goes when the mouse does", other.underline.alpha, 0)
 
-local showing = strip.tabs[4]
+local showing = strip.tabs[9]
 showing.scripts.OnEnter(showing)
 Motion:Step(1)
 check("the tab showing never lights a line of its own", showing.underline.alpha, 0)
@@ -544,6 +547,42 @@ long.bottom, long.top = 600, 622
 long.scripts.OnMouseDown(long)
 check("with room below, down as before", long.menu.points[1][1], "TOPLEFT")
 long.scripts.OnMouseDown(long)
+
+-- A group heading in a menu (Recipes to learn, 2026-10-07).
+local grouped = Widgets.CreateDropdown(Region(), {
+    { text = "Other professions", header = true },
+    { text = "Tailoring", value = 197 },
+}, nil, { width = 150 })
+check("a heading is never the fall back", grouped:GetValue(), 197)
+grouped.scripts.OnMouseDown(grouped)
+local headingEntry = grouped.menu.children[1]
+headingEntry.scripts.OnClick(headingEntry)
+check("clicking a heading picks nothing", grouped:GetValue(), 197)
+check("and leaves the menu open", grouped.menu.shown, true)
+grouped.scripts.OnMouseDown(grouped)
+
+-- More than one ticked at once (the Deals tab's Sell to, 2026-10-07).
+local picked
+local multi = Widgets.CreateDropdown(Region(), {
+    { text = "Auction house", value = "auction" },
+    { text = "Disenchant", value = "disenchant" },
+    { text = "Vendor", value = "vendor" },
+}, function(set) picked = set end, { width = 160, multi = true,
+    summary = function(set) return set.vendor and "Sell to: has Vendor" or "Sell to: no Vendor" end })
+multi:SetValue({ auction = true, vendor = true })
+check("a multiple choice box shows its summary", multi.strings[1].text, "Sell to: has Vendor")
+multi.scripts.OnMouseDown(multi)
+local vendorEntry = multi.menu.children[3]
+vendorEntry.scripts.OnClick(vendorEntry)
+check("a click unticks one", picked and picked.vendor == nil and picked.auction == true, true)
+check("and the menu stays open for the next", multi.menu.shown, true)
+check("the box says so", multi.strings[1].text, "Sell to: no Vendor")
+check("a ticked one wears the gold edge", multi.menu.children[1].mark.shown, true)
+check("an unticked one does not", vendorEntry.mark.shown, false)
+local given = multi:GetValue()
+given.disenchant = true
+check("the set handed out is a copy", multi:GetValue().disenchant, nil)
+multi.scripts.OnMouseDown(multi)
 
 local short = Widgets.CreateDropdown(Region(), many, nil, { width = 160 })
 short:SetOptions({ many[1], many[2], many[3] })

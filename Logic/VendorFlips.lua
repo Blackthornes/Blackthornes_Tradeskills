@@ -8,7 +8,7 @@
 -- Prices are per item. A stack listed at 40c each is 40c a flip, however
 -- many are in it.
 --
--- What a vendor pays comes from the item facts the Disenchanting tab keeps
+-- What a vendor pays comes from the item facts the Deals tab uses
 -- (Disenchant:GetSellPrice), read once per item and saved, never from the
 -- client's item cache on a redraw: reading thousands of scanned items that
 -- way pushed his bag items out and broke Ready to sell (2026-09-28).
@@ -243,7 +243,7 @@ function VendorFlips:AnnounceDeals()
     local total = 0
     for _, row in ipairs(rows) do total = total + row.gain end
 
-    ns.Print(("Vendor flips: %d item%s on the auction house under what a vendor pays, %s together if you buy one of each. Best: %s for %s, a vendor pays %s. See the Vendor Flips tab."):format(
+    ns.Print(("Vendor flips: %d item%s on the auction house under what a vendor pays, %s together if you buy one of each. Best: %s for %s, a vendor pays %s. See the Deals tab."):format(
         #rows, #rows == 1 and "" or "s", Util.FormatMoney(total, { noColor = true }),
         Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
         Util.FormatMoney(best.vendor, { noColor = true })))
@@ -259,7 +259,7 @@ function VendorFlips:AnnounceDeals()
 end
 
 --------------------------------------------------------------------------------
--- /bts vendordeals: why each flip is on the Vendor Flips tab
+-- /bts vendordeals: why each vendor flip is on the Deals tab
 --------------------------------------------------------------------------------
 
 local function Ago(stamp)
@@ -267,7 +267,7 @@ local function Ago(stamp)
     return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
-ns.RegisterCommand("vendordeals", "say why each item on the Vendor Flips tab is there", function()
+ns.RegisterCommand("vendordeals", "say why each vendor flip on the Deals tab is there", function()
     local lastScan = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
     ns.Print(("vendordeals: last scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
@@ -277,7 +277,7 @@ ns.RegisterCommand("vendordeals", "say why each item on the Vendor Flips tab is 
         ns.Print(("vendordeals: the tab's list was built %s, %d row(s)")
             :format(Ago(VendorFlips.shownBuiltAt), #shown))
     else
-        ns.Print("vendordeals: the tab has not built its list since /reload (open the Vendor Flips tab)")
+        ns.Print("vendordeals: the tab has not built its list since /reload (open the Deals tab)")
     end
 
     local fresh, hidden, pending = VendorFlips:GetAuctionRows({ profitableOnly = true })

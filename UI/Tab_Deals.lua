@@ -1,19 +1,27 @@
--- Blackthornes Tradeskills -- UI/Tab_Disenchanting.lua
--- Items on the auction house worth buying to disenchant.
+-- Blackthornes Tradeskills -- UI/Tab_Deals.lua
+-- Items on the auction house worth buying, and what to do with them.
 --
--- Every weapon or piece of armour someone else has listed, priced at their
--- cheapest listing from your last scan, against what it breaks into. Profit
--- is the disenchant value less the auction house cut on selling the
--- materials, less the buy price. The numbers come from Logic/Disenchant.lua,
--- the same ones the Enchanting tab shows.
+-- The Disenchanting and Vendor Flips tabs made into one (Ezmode's idea,
+-- 2026-10-07). Every item someone else has listed, priced at their cheapest
+-- listing from your last scan, against the ways it can be turned into gold:
+--
+--   AH      list it again under its usual price (Logic/VendorFlips.lua,
+--           Voldar's idea, 2026-10-06)
+--   DE      disenchant it and sell the materials (Logic/Disenchant.lua)
+--   Vendor  sell it to any vendor for more than it cost (Logic/VendorFlips.lua)
+--
+-- The Sell to menu ticks which ways count. An item shows once, on the way
+-- that pays most, and the VIA column says which. A disenchant none of your
+-- characters can do yet gives way to any other way that pays. The detail
+-- pane says what the other ways would make.
 --
 -- The addon cannot buy for you: the game wants a real click on its own Buy
 -- button for every purchase. What it can do is send the search, so the item
 -- is in the auction house list ready to click.
 --
--- The second view lists what you carry that can be disenchanted, against what
--- it would sell for, with a Disenchant button. That button is the same secure
--- one the Enchanting tab uses (UI/Disenchanter.lua): one disenchant per click.
+-- "Items in my bags" lists what you carry that can be disenchanted, against
+-- what it would sell for, with a Disenchant button. That button is the
+-- secure one in UI/Disenchanter.lua: one disenchant per click.
 
 local _, ns = ...
 
@@ -27,20 +35,32 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
--- Columns per view, laid out right to left. Money sits to the right, so its
--- coins line up; the rest is centred under its heading. `width` is the least
--- each gets: Widgets.FitColumns widens it to fit the heading and an amount.
+-- The ways to sell, in the Sell to menu's order, with the VIA column's word
+-- for each. The same words as the Profit tab's VIA and the queue's marks.
+local ROUTES = {
+    { key = "auction",    via = "AH",     text = "Auction house" },
+    { key = "disenchant", via = "DE",     text = "Disenchant" },
+    { key = "vendor",     via = "Vendor", text = "Vendor" },
+}
+
+local VIA = {}
+for _, route in ipairs(ROUTES) do VIA[route.key] = route.via end
+
+-- Columns per view, laid out right to left, so VIA sits next to the item's
+-- name. Money sits to the right, so its coins line up; the rest is centred
+-- under its heading. `width` is the least each gets: Widgets.FitColumns
+-- widens it to fit the heading and an amount.
 local VIEWS = {
     auction = {
         columns = {
-            { key = "gain",   label = "PROFIT",     width = 66, money = true },
-            { key = "margin", label = "MARGIN",     width = 50, justify = "CENTER" },
-            { key = "value",  label = "DISENCHANT", width = 70, money = true },
-            { key = "buy",    label = "BUY",        width = 66, money = true },
-            { key = "skill",  label = "SKILL",      width = 40, justify = "CENTER" },
-            { key = "age",    label = "AGE",        width = 44, justify = "CENTER" },
+            { key = "gain",   label = "PROFIT", width = 66, money = true },
+            { key = "margin", label = "MARGIN", width = 50, justify = "CENTER" },
+            { key = "gets",   label = "GETS",   width = 70, money = true },
+            { key = "buy",    label = "BUY",    width = 66, money = true },
+            { key = "age",    label = "AGE",    width = 44, justify = "CENTER" },
+            { key = "via",    label = "VIA",    width = 44, justify = "CENTER" },
         },
-        hint = "Right-click an item to search the auction house for it",
+        hint = "Right-click a row to search for it",
     },
     bag = {
         columns = {
@@ -48,6 +68,7 @@ local VIEWS = {
             { key = "value",      label = "DISENCHANT", width = 70, money = true },
             { key = "sells",      label = "SELLS",      width = 70, money = true },
             { key = "count",      label = "HAVE",       width = 40, justify = "CENTER" },
+            { key = "via",        label = "VIA",        width = 44, justify = "CENTER" },
         },
         hint = "Pick an item, then click Disenchant",
     },
@@ -57,12 +78,15 @@ local MAX_COLUMNS = 6
 
 local state = {
     view = "auction",
+    routes = { auction = true, disenchant = true, vendor = true },
     search = "",
     dealsOnly = true,
     hideTooHigh = false,
     beatsOnly = false,
     selected = nil,
     hidden = 0,
+    pending = 0,
+    thin = 0,
 }
 
 local widgets = {}
@@ -73,6 +97,10 @@ local widgets = {}
 
 local function Money(value)
     return Util.FormatMoney(value, { short = true })
+end
+
+local function Plain(value)
+    return Util.FormatMoney(value, { noColor = true })
 end
 
 local function MarginText(margin)
@@ -90,6 +118,40 @@ local function Session()
 
     local count, worth = log:GetSession()
     return count or 0, worth or 0
+end
+
+--- The time now, or nil without a clock (a test's).
+local function Now()
+    return type(time) == "function" and time() or nil
+end
+
+--- Any way ticked in the Sell to menu?
+local function AnyRoute()
+    return next(state.routes) ~= nil
+end
+
+--- What the VIA column says for an item in the bags: DE when disenchanting
+--- pays more than selling it, else where it sells.
+local function BagVia(entry)
+    if entry.beatsSale or (entry.value and not entry.sells) then return VIA.disenchant end
+    if entry.sells then return entry.sellsAt == "vendor" and VIA.vendor or VIA.auction end
+    return ""
+end
+
+--- One way's profit in words, for a line on what the other ways make.
+local function OtherWay(row)
+    local how = row.route == "disenchant" and "disenchanted"
+        or row.route == "vendor" and "sold to a vendor" or "listed again"
+    return ("%s, %s"):format(how, Util.FormatMoney(row.gain, { noColor = true, short = true }))
+end
+
+--- "Other ways: ..." for a row that more than one way pays on, or nil.
+local function OthersText(entry)
+    if not entry.others or #entry.others == 0 then return nil end
+
+    local parts = {}
+    for _, other in ipairs(entry.others) do parts[#parts + 1] = OtherWay(other) end
+    return ("Other ways: %s."):format(table.concat(parts, "; "))
 end
 
 --- Send a search for this item, so it shows in the auction house list ready
@@ -113,8 +175,18 @@ local function SearchAuctionHouse(entry)
     -- could replace a waiting scan (or a scan could drop this search).
     if not ns.UI:SearchAuctionHouse(entry.itemID) then return end
 
-    ns.Print(("Searching the auction house for %s. Buy it in the auction house window at %s or less. If the list there does not change, type the name into its search box."):format(
-        Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.buy, { noColor = true })))
+    local label = Util.GetItemLabel(entry.itemID)
+
+    if entry.route == "auction" then
+        ns.Print(("Searching the auction house for %s. Anything under %s each pays to list again at %s. If the list there does not change, type the name into its search box."):format(
+            label, Plain(math.floor(entry.net)), Plain(entry.resell)))
+    elseif entry.route == "vendor" then
+        ns.Print(("Searching the auction house for %s. Anything at %s each or less is a vendor flip. If the list there does not change, type the name into its search box."):format(
+            label, Plain(entry.vendor - 1)))
+    else
+        ns.Print(("Searching the auction house for %s. Buy it in the auction house window at %s or less. If the list there does not change, type the name into its search box."):format(
+            label, Plain(entry.buy)))
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -173,10 +245,16 @@ local function FillCell(cell, key, entry)
         cell:SetText(MarginText(entry.margin))
         cell:SetTextColor(Theme.ProfitColor(entry.gain))
         return
+    elseif key == "via" then
+        text = entry.kind == "bag" and BagVia(entry) or entry.via or ""
+        color = text == VIA.disenchant and "accent" or "muted"
+    elseif key == "gets" then
+        text = Money(entry.gets) .. (entry.route == "disenchant" and entry.partial and "+" or "")
+        color = "text"
     elseif key == "value" then
         if entry.value then
             text = Money(entry.value) .. (entry.partial and "+" or "")
-            color = entry.kind == "bag" and entry.beatsSale and "profit" or "text"
+            color = entry.beatsSale and "profit" or "text"
         else
             text, color = "no price", "dim"
         end
@@ -200,14 +278,12 @@ local function FillCell(cell, key, entry)
         text = tostring(entry.count or 0)
     elseif key == "buy" then
         text = Money(entry.buy)
-    elseif key == "skill" then
-        text = entry.needs and tostring(entry.needs) or ""
-        -- Red when none of your characters can break it yet.
-        color = entry.canDisenchant == false and "loss" or "dim"
     elseif key == "age" then
-        -- Read now, as the list itself can be kept for a while.
+        -- Read now, as the list itself can be kept for a while. "now"
+        -- rather than "just now", which is wider than the column.
         local age = ns.Prices:GetAge(entry.itemID) or entry.age
         text = age and Util.FormatAge(age) or ""
+        if text == "just now" then text = "now" end
         color = ns.Prices:IsStale(entry.itemID) and "warn" or "dim"
     end
 
@@ -239,10 +315,10 @@ local function ShowBagTooltip(entry)
         GameTooltip:AddLine(" ")
         if entry.beatsSale then
             GameTooltip:AddLine(("Disenchanting it is worth %s more than selling it."):format(
-                Util.FormatMoney(entry.value - entry.sells, { noColor = true })), 0.35, 0.85, 0.45, true)
+                Plain(entry.value - entry.sells)), 0.35, 0.85, 0.45, true)
         else
             GameTooltip:AddLine(("Selling it is worth %s more than disenchanting it."):format(
-                Util.FormatMoney(entry.sells - entry.value, { noColor = true })), 0.7, 0.7, 0.7, true)
+                Plain(entry.sells - entry.value)), 0.7, 0.7, 0.7, true)
         end
     end
 
@@ -260,23 +336,46 @@ local function ShowRowTooltip(row, entry)
     if entry.kind == "bag" then return ShowBagTooltip(entry) end
 
     GameTooltip:AddLine(" ")
-    if entry.gain > 0 then
+
+    if entry.route == "auction" then
+        GameTooltip:AddLine(("Buy at %s, list it again at %s: %s profit each after the cut."):format(
+            Plain(entry.buy), Plain(entry.resell), Plain(entry.gain)), 0.35, 0.85, 0.45, true)
+        GameTooltip:AddLine(("Usually sells for %s (middle of %d scans)."):format(
+            Plain(entry.usual), entry.scans - 1), 0.85, 0.85, 0.85, true)
+        local demand = ns.Demand:TooltipText(entry.demand)
+        if demand then GameTooltip:AddLine("Demand: " .. demand, 0.85, 0.85, 0.85, true) end
+    elseif entry.route == "vendor" then
+        GameTooltip:AddLine(("Buy at %s, sell to any vendor for %s: %s profit each."):format(
+            Plain(entry.buy), Plain(entry.vendor), Plain(entry.gain)), 0.35, 0.85, 0.45, true)
+    elseif entry.gain > 0 then
         GameTooltip:AddLine(("Buy at %s, disenchant, and sell the materials: about %s profit."):format(
-            Util.FormatMoney(entry.buy, { noColor = true }),
-            Util.FormatMoney(entry.gain, { noColor = true })), 0.35, 0.85, 0.45, true)
+            Plain(entry.buy), Plain(entry.gain)), 0.35, 0.85, 0.45, true)
     else
         GameTooltip:AddLine(("Buying it to disenchant loses about %s."):format(
-            Util.FormatMoney(-entry.gain, { noColor = true })), 0.85, 0.35, 0.35, true)
+            Plain(-entry.gain)), 0.85, 0.35, 0.35, true)
     end
 
-    if entry.canDisenchant == false then
-        GameTooltip:AddLine(("Needs Enchanting %d. Your best is %d (%s)."):format(
-            entry.needs or 0, entry.enchanterSkill or 0, entry.enchanter or "?"), 0.85, 0.35, 0.35, true)
-    elseif entry.canDisenchant == nil then
-        GameTooltip:AddLine("None of your characters has Enchanting.", 0.85, 0.35, 0.35, true)
+    if entry.listed then
+        GameTooltip:AddLine(("%d listed."):format(entry.listed), 0.85, 0.85, 0.85, true)
     end
 
-    if entry.stale then
+    if entry.route == "disenchant" then
+        if entry.canDisenchant == false then
+            GameTooltip:AddLine(("Needs Enchanting %d. Your best is %d (%s)."):format(
+                entry.needs or 0, entry.enchanterSkill or 0, entry.enchanter or "?"), 0.85, 0.35, 0.35, true)
+        elseif entry.canDisenchant == nil then
+            GameTooltip:AddLine("None of your characters has Enchanting.", 0.85, 0.35, 0.35, true)
+        elseif entry.needs then
+            GameTooltip:AddLine(("Needs Enchanting %d."):format(entry.needs), 0.7, 0.7, 0.7, true)
+        end
+    end
+
+    local others = OthersText(entry)
+    if others then GameTooltip:AddLine(others, 0.7, 0.7, 0.7, true) end
+
+    -- Read now, as the AGE column is: the list can be kept for hours, and
+    -- the warning it was built with never came on as the scan aged.
+    if ns.Prices:IsStale(entry.itemID) then
         GameTooltip:AddLine("Scanned a while ago, so it may have sold.", 0.91, 0.76, 0.35, true)
     end
 
@@ -287,6 +386,24 @@ end
 --------------------------------------------------------------------------------
 -- Detail panel
 --------------------------------------------------------------------------------
+
+--- Four label and value lines in a frame.
+local function SummaryBlock(detail)
+    local summary = CreateFrame("Frame", nil, detail)
+
+    local function SummaryRow(index)
+        local label = Theme.CreateLabel(summary, "small", "muted")
+        label:SetPoint("TOPLEFT", 0, -(index - 1) * 17)
+
+        local value = Theme.CreateLabel(summary, "small", "text", "RIGHT")
+        value:SetPoint("TOPRIGHT", 0, -(index - 1) * 17)
+
+        return { label = label, value = value }
+    end
+
+    summary.lines = { SummaryRow(1), SummaryRow(2), SummaryRow(3), SummaryRow(4) }
+    return summary
+end
 
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
@@ -310,47 +427,61 @@ local function BuildDetail(parent)
     subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
+    -- "BREAKS INTO" for a disenchant, "THE FLIP" for the other ways.
     local heading = Theme.CreateHeading(detail, "BREAKS INTO")
     heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.heading = heading
 
     detail.outcomeLines = {}
 
-    local summary = CreateFrame("Frame", nil, detail)
-    summary:SetPoint("BOTTOMLEFT", 12, 110)
-    summary:SetPoint("BOTTOMRIGHT", -12, 110)
-    summary:SetHeight(70)
-    detail.summary = summary
+    -- A disenchant: what it breaks into runs down from the heading, and the
+    -- sums sit at the bottom, clear of a long list.
+    local breaks = SummaryBlock(detail)
+    breaks:SetPoint("BOTTOMLEFT", 12, 110)
+    breaks:SetPoint("BOTTOMRIGHT", -12, 110)
+    breaks:SetHeight(70)
 
-    local function SummaryRow(index)
-        local label = Theme.CreateLabel(summary, "small", "muted")
-        label:SetPoint("TOPLEFT", 0, -(index - 1) * 17)
+    breaks.verdict = Theme.CreateLabel(detail, "small", "profit")
+    breaks.verdict:SetPoint("BOTTOMLEFT", breaks, "TOPLEFT", 0, 6)
+    breaks.verdict:SetPoint("BOTTOMRIGHT", breaks, "TOPRIGHT", 0, 6)
+    breaks.verdict:SetWordWrap(true)
 
-        local value = Theme.CreateLabel(summary, "small", "text", "RIGHT")
-        value:SetPoint("TOPRIGHT", 0, -(index - 1) * 17)
+    breaks.note = Theme.CreateLabel(detail, "tiny", "dim")
+    breaks.note:SetPoint("BOTTOMLEFT", 12, 44)
+    breaks.note:SetPoint("BOTTOMRIGHT", -12, 44)
+    breaks.note:SetWordWrap(true)
+    breaks.note:SetJustifyV("BOTTOM")
+    breaks.note:SetHeight(60)
+    detail.breaks = breaks
 
-        return { label = label, value = value }
-    end
+    -- A flip to a vendor or back onto the auction house: the sums under the
+    -- heading, a bar for how much of the sale is profit, then the words.
+    local flip = SummaryBlock(detail)
+    flip:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -8)
+    flip:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    flip:SetHeight(69)
 
-    detail.lines = { SummaryRow(1), SummaryRow(2), SummaryRow(3), SummaryRow(4) }
+    flip.bar = Theme.CreateBar(detail, DETAIL_WIDTH - 24, 3)
+    flip.bar:SetPoint("TOPLEFT", flip, "TOPLEFT", 0, -54)
 
-    local verdict = Theme.CreateLabel(detail, "small", "profit")
-    verdict:SetPoint("BOTTOMLEFT", summary, "TOPLEFT", 0, 6)
-    verdict:SetPoint("BOTTOMRIGHT", summary, "TOPRIGHT", 0, 6)
-    verdict:SetWordWrap(true)
-    detail.verdict = verdict
+    flip.verdict = Theme.CreateLabel(detail, "small", "profit")
+    flip.verdict:SetPoint("TOPLEFT", flip.bar.track, "BOTTOMLEFT", 0, -10)
+    flip.verdict:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    flip.verdict:SetWordWrap(true)
 
-    local note = Theme.CreateLabel(detail, "tiny", "dim")
-    note:SetPoint("BOTTOMLEFT", 12, 44)
-    note:SetPoint("BOTTOMRIGHT", -12, 44)
-    note:SetWordWrap(true)
-    note:SetJustifyV("BOTTOM")
-    note:SetHeight(60)
-    detail.note = note
+    -- Under the verdict, as tall as its words. A box of fixed height pinned
+    -- to the bottom had room for five lines, and the warning that the scan
+    -- is old made six, so the warning itself was the line cut off.
+    flip.note = Theme.CreateLabel(detail, "tiny", "dim")
+    flip.note:SetPoint("TOPLEFT", flip.verdict, "BOTTOMLEFT", 0, -10)
+    flip.note:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    flip.note:SetWordWrap(true)
+    flip.note:SetJustifyV("TOP")
+    detail.flip = flip
 
     local searchButton = Widgets.CreateButton(detail, "Search the auction house", function()
         SearchAuctionHouse(state.selected)
-    end, { width = 180, primary = true, height = 24 })
+    end, { width = 200, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
     searchButton.tooltipText = "Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."
     detail.searchButton = searchButton
@@ -381,7 +512,7 @@ local function BuildDetail(parent)
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
     empty:SetWordWrap(true)
-    empty:SetText("Pick a row to see what it breaks into")
+    empty:SetText("Pick a row to see the deal")
     detail.empty = empty
 
     return detail
@@ -395,6 +526,24 @@ local function SetLine(line, label, value, color)
     line.label:SetText(label)
     line.value:SetText(value or "")
     line.value:SetTextColor(Theme.Unpack(color or "text"))
+end
+
+--- Show one of the two blocks, or neither.
+local function ShowBlock(detail, which)
+    for _, name in ipairs({ "breaks", "flip" }) do
+        local block = detail[name]
+        local shown = which == name
+        block:SetShown(shown)
+        block.verdict:SetShown(shown)
+        block.note:SetShown(shown)
+        -- rawget: only the flip block has a bar, and a test's stand-in
+        -- frame answers any missing field with a function.
+        local bar = rawget(block, "bar")
+        if type(bar) == "table" then
+            bar:SetShown(shown)
+            if not shown then bar:Set(nil) end
+        end
+    end
 end
 
 --- Arm the Disenchant button for a bag item, or say why it cannot be.
@@ -489,8 +638,12 @@ end
 --- The detail panel for an item in the bags.
 local function UpdateBagDetail(entry)
     local detail = widgets.detail
+    local block = detail.breaks
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
+
+    ShowBlock(detail, "breaks")
+    detail.heading:SetText("BREAKS INTO")
 
     detail.subtitle:SetText(("Item level %d %s %s. Needs Enchanting about %d."):format(
         facts.itemLevel or 0, facts.qualityName or "", facts.isWeapon and "weapon" or "armor",
@@ -499,7 +652,7 @@ local function UpdateBagDetail(entry)
 
     DrawOutcomes(detail, breakdown)
 
-    local lines = detail.lines
+    local lines = block.lines
     if entry.value then
         SetLine(lines[1], "Disenchant value",
             Util.FormatMoney(entry.value) .. (entry.partial and "  or more" or ""),
@@ -528,20 +681,20 @@ local function UpdateBagDetail(entry)
 
     if entry.value and entry.sells then
         if entry.beatsSale then
-            detail.verdict:SetText(("Disenchanting pays %s more than selling."):format(
-                Util.FormatMoney(entry.value - entry.sells, { noColor = true })))
-            detail.verdict:SetTextColor(Theme.Unpack("profit"))
+            block.verdict:SetText(("Disenchanting pays %s more than selling."):format(
+                Plain(entry.value - entry.sells)))
+            block.verdict:SetTextColor(Theme.Unpack("profit"))
         else
-            detail.verdict:SetText(("Selling pays %s more than disenchanting."):format(
-                Util.FormatMoney(entry.sells - entry.value, { noColor = true })))
-            detail.verdict:SetTextColor(Theme.Unpack("muted"))
+            block.verdict:SetText(("Selling pays %s more than disenchanting."):format(
+                Plain(entry.sells - entry.value)))
+            block.verdict:SetTextColor(Theme.Unpack("muted"))
         end
     elseif entry.value then
-        detail.verdict:SetText("Nothing to compare it with: it has no sale price.")
-        detail.verdict:SetTextColor(Theme.Unpack("muted"))
+        block.verdict:SetText("Nothing to compare it with: it has no sale price.")
+        block.verdict:SetTextColor(Theme.Unpack("muted"))
     else
-        detail.verdict:SetText("Scan the auction house to price its materials.")
-        detail.verdict:SetTextColor(Theme.Unpack("warn"))
+        block.verdict:SetText("Scan the auction house to price its materials.")
+        block.verdict:SetTextColor(Theme.Unpack("warn"))
     end
 
     local note
@@ -553,42 +706,19 @@ local function UpdateBagDetail(entry)
     if not entry.soulbound then
         note = note .. " If it is already bound to you, only a vendor will buy it."
     end
-    detail.note:SetText(note)
+    block.note:SetText(note)
 
     UpdateDisenchantButton(entry)
 end
 
-local function UpdateDetail(entry)
-    local detail = widgets.detail
-    local shown = entry ~= nil
-    local isBag = shown and entry.kind == "bag"
-
-    detail.empty:SetShown(not shown)
-
-    for _, line in ipairs(detail.outcomeLines) do
-        line.frame:Hide()
-    end
-
-    for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.heading,
-                            detail.summary, detail.verdict, detail.note }) do
-        part:SetShown(shown)
-    end
-
-    detail.searchButton:SetShown(shown and not isBag)
-
-    -- Hiding the button takes the secure button away with it.
-    detail.disenchantButton:SetShown(isBag)
-    detail.disenchantStatus:SetShown(isBag)
-
-    if not shown then return end
-
-    detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
-    Theme.SetItemIcon(detail.icon, entry.itemID, entry.link)
-
-    if isBag then return UpdateBagDetail(entry) end
-
+--- The detail panel for an auction house item bought to disenchant.
+local function UpdateDisenchantDetail(detail, entry)
+    local block = detail.breaks
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
+
+    ShowBlock(detail, "breaks")
+    detail.heading:SetText("BREAKS INTO")
 
     local who
     if entry.canDisenchant == nil then
@@ -604,7 +734,7 @@ local function UpdateDetail(entry)
 
     DrawOutcomes(detail, breakdown)
 
-    local lines = detail.lines
+    local lines = block.lines
     SetLine(lines[1], entry.loneLow and "Buy for (a lone low listing)" or "Buy for",
         Util.FormatMoney(entry.buy), "text")
     SetLine(lines[2], "Disenchant value",
@@ -614,25 +744,144 @@ local function UpdateDetail(entry)
         entry.gain > 0 and "profit" or "loss")
 
     if entry.gain > 0 then
-        detail.verdict:SetText(("Buying one to disenchant makes about %s."):format(
-            Util.FormatMoney(entry.gain, { noColor = true })))
-        detail.verdict:SetTextColor(Theme.Unpack("profit"))
+        block.verdict:SetText(("Buying one to disenchant makes about %s."):format(Plain(entry.gain)))
+        block.verdict:SetTextColor(Theme.Unpack("profit"))
     else
-        detail.verdict:SetText(("Buying one to disenchant loses about %s."):format(
-            Util.FormatMoney(-entry.gain, { noColor = true })))
-        detail.verdict:SetTextColor(Theme.Unpack("loss"))
+        block.verdict:SetText(("Buying one to disenchant loses about %s."):format(Plain(-entry.gain)))
+        block.verdict:SetTextColor(Theme.Unpack("loss"))
     end
 
-    local note
+    local parts = {}
+    parts[#parts + 1] = OthersText(entry)
     if facts.source == "yours" then
-        note = ("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts))
+        parts[#parts + 1] = ("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts))
     else
-        note = "Chances come from the Classic table built into the addon. It is an average: any one disenchant can give more or less."
+        parts[#parts + 1] = "Chances come from the Classic table built into the addon. It is an average: any one disenchant can give more or less."
     end
-    note = note .. (" The buy price is the cheapest listing when last scanned (%s)."):format(
-        entry.age and Util.FormatAgeAgo(entry.age) or "never")
-    if entry.stale then note = note .. " That was a while ago, so it may have sold." end
-    detail.note:SetText(note)
+    local age = ns.Prices:GetAge(entry.itemID) or entry.age
+    parts[#parts + 1] = ("The buy price is the cheapest listing when last scanned (%s)."):format(
+        age and Util.FormatAgeAgo(age) or "never")
+    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = "That was a while ago, so it may have sold." end
+    block.note:SetText(table.concat(parts, " "))
+end
+
+--- How many are listed, for the top of a flip's detail.
+local function ListedText(entry)
+    if entry.listed and entry.listed > 1 then
+        return ("%d listed. Only the cheapest is sure to be at this price."):format(entry.listed)
+    end
+    return "One listed."
+end
+
+--- The detail panel for a row bought to list again.
+local function UpdateResaleDetail(detail, entry)
+    local block = detail.flip
+
+    ShowBlock(detail, "flip")
+    detail.heading:SetText("THE FLIP")
+    detail.subtitle:SetText(ListedText(entry))
+    detail.subtitle:SetTextColor(Theme.Unpack("muted"))
+
+    local lines = block.lines
+    SetLine(lines[1], entry.loneLow and "Buy for (lone low)" or "Buy for", Util.FormatMoney(entry.buy), "text")
+    SetLine(lines[2], "Usually sells for", Util.FormatMoney(entry.usual), "text")
+    SetLine(lines[3], entry.capped and "List again at (next listing)" or "List again at",
+        Util.FormatMoney(entry.resell), "text")
+    SetLine(lines[4], "Profit each", ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
+        "profit")
+
+    block.bar:SetPoint("TOPLEFT", block, "TOPLEFT", 0, -71)
+    block.bar:Set(entry.resell > 0 and entry.gain / entry.resell or 0, "profit")
+
+    local cut = math.floor((ns.Config:Get("auctionCut") or 0.05) * 100 + 0.5)
+    local paid = entry.depositKnown and ("the %d%% cut and the deposit"):format(cut)
+        or ("the %d%% cut"):format(cut)
+    block.verdict:SetText(("Buy it, list it again at %s, and keep about %s each after %s."):format(
+        Plain(entry.resell), Plain(entry.gain), paid))
+    block.verdict:SetTextColor(Theme.Unpack("profit"))
+
+    local parts = { OthersText(entry) }
+    parts[#parts + 1] = ("The usual price is the middle of the %d scans before the last one, so the cheap listing does not drag it down."):format(entry.scans - 1)
+    local demand = ns.Demand:TooltipText(entry.demand)
+    if demand then parts[#parts + 1] = ("Demand: %s."):format(demand) end
+    if not entry.depositKnown then
+        parts[#parts + 1] = "The deposit is not known until you have listed one, so it is not counted yet."
+    end
+    parts[#parts + 1] = "Your gold is tied up until it sells."
+    local age = ns.Prices:GetAge(entry.itemID) or entry.age
+    parts[#parts + 1] = ("Scanned %s."):format(age and Util.FormatAgeAgo(age) or "never")
+    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = "That was a while ago, so it may have sold." end
+    block.note:SetText(table.concat(parts, " "))
+end
+
+--- The detail panel for a row bought to sell to a vendor.
+local function UpdateVendorDetail(detail, entry)
+    local block = detail.flip
+
+    ShowBlock(detail, "flip")
+    detail.heading:SetText("THE FLIP")
+    detail.subtitle:SetText(ListedText(entry))
+    detail.subtitle:SetTextColor(Theme.Unpack("muted"))
+
+    -- Short enough to stay clear of the price on its right; the longer
+    -- "(a lone low listing)" ran over it.
+    local lines = block.lines
+    SetLine(lines[1], entry.loneLow and "Buy for (lone low)" or "Buy for", Util.FormatMoney(entry.buy), "text")
+    SetLine(lines[2], "A vendor pays", Util.FormatMoney(entry.vendor), "text")
+    SetLine(lines[3], "Profit each", ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
+        "profit")
+    SetLine(lines[4], nil)
+
+    block.bar:SetPoint("TOPLEFT", block, "TOPLEFT", 0, -54)
+    block.bar:Set(entry.vendor > 0 and entry.gain / entry.vendor or 0, "profit")
+
+    block.verdict:SetText(("Buy it, sell it to any vendor, and keep about %s each. No auction house cut."):format(
+        Plain(entry.gain)))
+    block.verdict:SetTextColor(Theme.Unpack("profit"))
+
+    -- The scan's age read now, as the AGE column reads it: the list can be
+    -- kept for hours, and the age it was built with went on saying "2m ago".
+    local age = ns.Prices:GetAge(entry.itemID) or entry.age
+    local parts = { OthersText(entry) }
+    parts[#parts + 1] = ("The buy price is the cheapest listing from another seller when last scanned (%s). Prices are per item, so a stack pays the same on every one in it."):format(
+        age and Util.FormatAgeAgo(age) or "never")
+    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = "That was a while ago, so it may have sold." end
+    block.note:SetText(table.concat(parts, " "))
+end
+
+local function UpdateDetail(entry)
+    local detail = widgets.detail
+    local shown = entry ~= nil
+    local isBag = shown and entry.kind == "bag"
+
+    detail.empty:SetShown(not shown)
+
+    for _, line in ipairs(detail.outcomeLines) do
+        line.frame:Hide()
+    end
+
+    for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.heading }) do
+        part:SetShown(shown)
+    end
+
+    detail.searchButton:SetShown(shown and not isBag)
+
+    -- Hiding the button takes the secure button away with it.
+    detail.disenchantButton:SetShown(isBag)
+    detail.disenchantStatus:SetShown(isBag)
+
+    if not shown then
+        ShowBlock(detail, nil)
+        return
+    end
+
+    detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
+    Theme.SetItemIcon(detail.icon, entry.itemID, entry.link)
+
+    if isBag then return UpdateBagDetail(entry) end
+    if entry.route == "auction" then return UpdateResaleDetail(detail, entry) end
+    if entry.route == "vendor" then return UpdateVendorDetail(detail, entry) end
+    return UpdateDisenchantDetail(detail, entry)
 end
 
 --------------------------------------------------------------------------------
@@ -644,7 +893,7 @@ end
 -- a bag change or an auction event reuses it. At the auction house those
 -- redraws come often, and walking thousands of items each time pushed bag
 -- items out of the client's memory, so Ready to sell kept losing them.
-local built = { key = nil, rows = nil, hidden = 0, pending = 0 }
+local built = { key = nil, rows = nil, hidden = 0, pending = 0, thin = 0, disenchant = 0 }
 
 local function BuildKey()
     local skill = ns.Disenchant:GetBestEnchanter()
@@ -656,12 +905,82 @@ local function BuildKey()
         -- Your own disenchants taking over from the built-in table.
         tostring(ns.DisenchantLog and ns.DisenchantLog.version or 0),
         tostring(state.dealsOnly),
+        tostring(state.routes.auction), tostring(state.routes.disenchant), tostring(state.routes.vendor),
         tostring(ns.Config:Get("minProfit")),
         tostring(ns.Config:Get("minMarginPercent")),
         tostring(ns.Config:Get("auctionCut")),
         tostring(skill),
         tostring(ns.Scanner and ns.Scanner.isAuctionHouseOpen and true or false),
     }, "|")
+end
+
+--- Which of two ways on the same item wins: a disenchant none of your
+--- characters can do yet loses to any other way, else the bigger profit.
+local function Beats(a, b)
+    local aBlocked = a.route == "disenchant" and a.canDisenchant ~= true
+    local bBlocked = b.route == "disenchant" and b.canDisenchant ~= true
+    if aBlocked ~= bBlocked then return bBlocked end
+    return a.gain > b.gain
+end
+
+--- Every ticked way's rows, one per item on its best way.
+local function MergeRoutes()
+    local byItem, order = {}, {}
+    local hidden, pending, thin = 0, 0, 0
+    local deFound = 0
+
+    local function Take(rows, route, gets)
+        for _, row in ipairs(rows or {}) do
+            row.route, row.via, row.gets = route, VIA[route], gets(row)
+            row.others = nil
+
+            local best = byItem[row.itemID]
+            if not best then
+                byItem[row.itemID] = row
+                order[#order + 1] = row.itemID
+            elseif Beats(row, best) then
+                row.others = best.others or {}
+                best.others = nil
+                table.insert(row.others, best)
+                byItem[row.itemID] = row
+            else
+                best.others = best.others or {}
+                best.others[#best.others + 1] = row
+            end
+        end
+    end
+
+    if state.routes.disenchant then
+        local rows, held, waiting = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
+        hidden, pending, deFound = hidden + (held or 0), math.max(pending, waiting or 0), #(rows or {})
+        -- For /bts dedeals: what the tab is showing and when it was built.
+        ns.Disenchant.shownRows, ns.Disenchant.shownBuiltAt = rows, Now()
+        Take(rows, "disenchant", function(row) return row.value end)
+    end
+
+    if state.routes.vendor then
+        local rows, held, waiting = ns.VendorFlips:GetAuctionRows({ profitableOnly = state.dealsOnly })
+        hidden, pending = hidden + (held or 0), math.max(pending, waiting or 0)
+        -- For /bts vendordeals.
+        ns.VendorFlips.shownRows, ns.VendorFlips.shownBuiltAt = rows, Now()
+        Take(rows, "vendor", function(row) return row.vendor end)
+    end
+
+    if state.routes.auction then
+        local rows, held, few = ns.VendorFlips:GetResaleRows({ profitableOnly = state.dealsOnly })
+        hidden, thin = hidden + (held or 0), few or 0
+        Take(rows, "auction", function(row) return row.resell end)
+    end
+
+    local rows = {}
+    for _, itemID in ipairs(order) do rows[#rows + 1] = byItem[itemID] end
+
+    table.sort(rows, function(a, b)
+        if a.gain ~= b.gain then return a.gain > b.gain end
+        return a.itemID < b.itemID
+    end)
+
+    return rows, hidden, pending, thin, deFound
 end
 
 --- Everything in the bags that can be disenchanted. Only a bagful, and
@@ -686,16 +1005,15 @@ local function BuildRows()
     local key = BuildKey()
 
     if key ~= built.key then
-        local rows, hidden, pending = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
-        built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
-
-        -- For /bts dedeals: what the tab is showing and when it was built.
-        ns.Disenchant.shownRows, ns.Disenchant.shownBuiltAt = rows, time()
+        local rows, hidden, pending, thin, deFound = MergeRoutes()
+        built.key, built.rows = key, rows
+        built.hidden, built.pending, built.thin, built.disenchant = hidden, pending, thin, deFound
     end
 
     local rows = built.rows
     state.hidden = built.hidden
     state.pending = built.pending
+    state.thin = built.thin
 
     if state.search == "" and not state.hideTooHigh then return rows end
 
@@ -704,7 +1022,7 @@ local function BuildRows()
 
     for _, row in ipairs(rows) do
         local matches = needle == "" or (row.name or ""):lower():find(needle, 1, true)
-        local canDo = not state.hideTooHigh or row.canDisenchant == true
+        local canDo = not state.hideTooHigh or row.route ~= "disenchant" or row.canDisenchant == true
 
         if matches and canDo then filtered[#filtered + 1] = row end
     end
@@ -731,8 +1049,12 @@ local function EmptyText()
         return "Nothing in your bags can be disenchanted."
     end
 
+    if not AnyRoute() then
+        return "Tick at least one way to sell in the Sell to menu."
+    end
+
     if (ns.Prices and ns.Prices:Count() or 0) == 0 then
-        return "Scan the auction house to find items worth buying to disenchant."
+        return "Scan the auction house to find items worth buying."
     end
 
     -- Items were found, and "Only ones I can disenchant" hid all of them.
@@ -744,24 +1066,21 @@ local function EmptyText()
             found, found == 1 and "" or "s", found == 1 and "it" or "them")
     end
 
-    if state.dealsOnly then
-        local text = "Nothing on the auction house is worth buying to disenchant right now."
+    local text = "Nothing on the auction house is worth buying right now."
 
-        if state.hidden > 0 then
-            text = text .. (" %d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin)."):format(
-                state.hidden,
-                Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
-                ns.Config:Get("minMarginPercent") or 0)
-        end
-
-        return text .. " Untick \"Only deals over my minimums\" to see them all."
+    if state.dealsOnly and state.hidden > 0 then
+        return text .. (" %d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin). Untick \"Only deals over my minimums\" to see them."):format(
+            state.hidden,
+            Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
+            ns.Config:Get("minMarginPercent") or 0)
     end
 
-    if state.hideTooHigh then
-        return "Nothing listed that your enchanters can disenchant yet."
+    if state.routes.auction and (state.thin or 0) > 0 then
+        text = text .. (" %d more are cheap, but have fewer than %d scans, little demand, or are grey. Scan again over the next days to build up their history.")
+            :format(state.thin, ns.VendorFlips.MIN_RESALE_SCANS)
     end
 
-    return "No weapons or armor from other sellers in your last scan."
+    return text
 end
 
 -- Beside the Disenchant button when the bags list has items but none is worth
@@ -831,6 +1150,66 @@ local function RefreshBags(rows)
     if fresh and not SameRow(fresh, before) then widgets.list:Refresh() end
 end
 
+--- The count line for the auction house list, in the first whole wording
+--- that fits beside the hint rather than one ending in "...".
+local function SetDealsCount(rows)
+    local deals, total = 0, 0
+    for _, row in ipairs(rows) do
+        if row.gain > 0 then
+            deals = deals + 1
+            total = total + row.gain
+        end
+    end
+
+    local found
+    if deals > 0 then
+        local plural = deals == 1 and "" or "s"
+        local money = Util.FormatMoney(total, { noColor = true, short = true })
+        found = {
+            ("%d deal%s, about %s if you buy one of each"):format(deals, plural, money),
+            ("%d deal%s, about %s for one of each"):format(deals, plural, money),
+            ("%d deal%s"):format(deals, plural),
+        }
+    elseif #rows > 0 then
+        found = { ("%d item%s"):format(#rows, #rows == 1 and "" or "s") }
+    end
+
+    -- Items not read yet wait for the auction house to close, so reading
+    -- them cannot upset Ready to sell. Say so, or the list looks short.
+    local waiting
+    if (state.pending or 0) > 0 then
+        local when = ns.Scanner and ns.Scanner.isAuctionHouseOpen
+            and "read once the auction house is closed" or "reading them now"
+        waiting = {
+            ("%d more listed items not checked yet, %s"):format(state.pending, when),
+            ("%d not checked yet"):format(state.pending),
+        }
+    elseif state.routes.auction and (state.thin or 0) > 0 then
+        waiting = {
+            ("%d more held back: few scans or little demand"):format(state.thin),
+            ("%d held back"):format(state.thin),
+        }
+    end
+
+    local texts = { "" }
+    if found and waiting then
+        local sep = "  ·  "
+        texts = {}
+        for _, first in ipairs(found) do
+            texts[#texts + 1] = first .. sep .. waiting[1]
+            texts[#texts + 1] = first .. sep .. waiting[2]
+        end
+    elseif found or waiting then
+        texts = found or waiting
+    end
+
+    if Theme.FitText then
+        Theme.FitText(widgets.countLabel, texts)
+    else
+        widgets.countLabel:SetText(texts[1])
+    end
+end
+
 local function Refresh()
     if not widgets.list then return end
 
@@ -844,30 +1223,7 @@ local function Refresh()
 
     if state.view == "bag" then return RefreshBags(rows) end
 
-    local deals, total = 0, 0
-    for _, row in ipairs(rows) do
-        if row.gain > 0 then
-            deals = deals + 1
-            total = total + row.gain
-        end
-    end
-
-    if deals > 0 then
-        widgets.countLabel:SetText(("%d deal%s, about %s if you buy them all"):format(
-            deals, deals == 1 and "" or "s", Util.FormatMoney(total, { noColor = true, short = true })))
-    else
-        widgets.countLabel:SetText(("%d item%s"):format(#rows, #rows == 1 and "" or "s"))
-    end
-
-    -- Items not read yet wait for the auction house to close, so reading
-    -- them cannot upset Ready to sell. Say so, or the list looks short.
-    if (state.pending or 0) > 0 then
-        local waiting = ns.Scanner and ns.Scanner.isAuctionHouseOpen
-            and "they are read once the auction house is closed"
-            or "reading them now"
-        widgets.countLabel:SetText(("%s  ·  %d more listed items not checked yet, %s"):format(
-            widgets.countLabel:GetText() or "", state.pending, waiting))
-    end
+    SetDealsCount(rows)
 
     local fresh
     if state.selected then
@@ -919,9 +1275,20 @@ local function ApplyView()
 
     local isBag = state.view == "bag"
     widgets.dealsOnly:SetShown(not isBag)
-    widgets.hideTooHigh:SetShown(not isBag)
+    widgets.hideTooHigh:SetShown(not isBag and state.routes.disenchant == true)
     widgets.beatsOnly:SetShown(isBag)
     widgets.hint:SetText(view.hint)
+end
+
+--- The Sell to box's words: "All" with every way ticked, else their short names.
+local function SellToSummary(set)
+    local names, all = {}, true
+    for _, route in ipairs(ROUTES) do
+        if set[route.key] then names[#names + 1] = route.via else all = false end
+    end
+    if all then return "Sell to: All" end
+    if #names == 0 then return "Sell to: none" end
+    return "Sell to: " .. table.concat(names, ", ")
 end
 
 local function Build(container)
@@ -935,37 +1302,61 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
-    -- Search first, then the tick boxes, as on every tab (Ezmode,
-    -- 2026-10-06). The view stays a tick box rather than a menu (Izbode's
-    -- request, 2026-10-02): one click between the auction house deals and
-    -- disenchanting from the bags.
+    -- A new search or filter is a different list, so it starts at the top.
+    -- The list keeps its place on the redraws that bag and auction events
+    -- cause, which left a new search showing its results part way down.
+    local function ShowFromTop()
+        Refresh()
+        if widgets.list then widgets.list:ScrollToTop() end
+    end
+
+    -- Option bar: the menu, then search, then the tick boxes, as on every
+    -- tab (Ezmode, 2026-10-06). The bags list stays a tick box rather than a
+    -- menu (Izbode's request, 2026-10-02): one click between the auction
+    -- house deals and disenchanting from the bags.
+    local options = {}
+    for _, route in ipairs(ROUTES) do
+        options[#options + 1] = { text = route.text, value = route.key }
+    end
+
+    local sellTo = Widgets.CreateDropdown(toolbar, options, function(set)
+        state.routes = set or {}
+        state.selected = nil
+        ApplyView()
+        ShowFromTop()
+    end, { width = 140, multi = true, summary = SellToSummary })
+    sellTo:SetPoint("LEFT", 0, 0)
+    sellTo:SetValue(state.routes)
+    sellTo.tooltipText = "Tick the ways you will sell what you buy. Each item shows on the one that pays most."
+    widgets.sellTo = sellTo
+
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
-        Refresh()
+        ShowFromTop()
     end)
-    search:SetPoint("LEFT", 0, 0)
+    search:SetPoint("LEFT", sellTo, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local view = Widgets.CreateCheckbox(toolbar, "Items in my bags", function(checked)
         state.view = checked and "bag" or "auction"
         state.selected = nil
+        sellTo:SetShown(not checked)
         ApplyView()
-        widgets.list:ScrollToTop()
-        Refresh()
+        ShowFromTop()
     end, state.view == "bag")
     view:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.view = view
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
         state.dealsOnly = checked
-        Refresh()
+        ShowFromTop()
     end, state.dealsOnly)
     dealsOnly:SetPoint("LEFT", view, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
 
     local hideTooHigh = Widgets.CreateCheckbox(toolbar, "Only ones I can disenchant", function(checked)
         state.hideTooHigh = checked
-        Refresh()
+        ShowFromTop()
     end, state.hideTooHigh)
     hideTooHigh:SetPoint("LEFT", dealsOnly, "RIGHT", 12, 0)
     widgets.hideTooHigh = hideTooHigh
@@ -998,7 +1389,7 @@ local function Build(container)
     -- each one reads whatever column the view puts there.
     local FIELDS = {
         difference = function(row) return row.value and row.sells and (row.value - row.sells) or nil end,
-        skill = function(row) return row.needs end,
+        via = function(row) return row.kind == "bag" and BagVia(row) or row.via end,
     }
     local sortLabels, values = { name = nameHeading }, {
         name = function(row) return row.name end,
@@ -1064,7 +1455,8 @@ local function Build(container)
     widgets.hint = hint
 
     -- The count line grows a long "not checked yet" note while items load,
-    -- and ran under this hint. It stops short of it now and ends in "...".
+    -- and ran under this hint. It stops short of it now, and SetDealsCount
+    -- picks a wording that fits.
     countLabel:SetPoint("RIGHT", hint, "LEFT", -12, 0)
     countLabel:SetJustifyH("LEFT")
     countLabel:SetWordWrap(false)
@@ -1092,7 +1484,7 @@ local function Build(container)
         C_Timer.After(1, function()
             redrawQueued = false
             -- Not once the player has moved to another tab. Redrawn hidden,
-            -- this tab took the Disenchant button from the Enchanting tab on
+            -- this tab took the Disenchant button from the Profit tab on
             -- screen and aimed it at its own item. It redraws when shown.
             if widgets.list:IsVisible() then Refresh() end
         end)
@@ -1108,8 +1500,8 @@ local function Build(container)
 end
 
 UI:RegisterTab({
-    key = "disenchanting",
-    text = "Disenchanting",
+    key = "deals",
+    text = "Deals",
     order = 1.8,
     build = Build,
     refresh = Refresh,

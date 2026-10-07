@@ -123,7 +123,9 @@ check("opens on the character's profession", View._state.profession, "Leatherwor
 check("which the list was asked for", asked.profession, "Leatherworking")
 check("learned ones left out", asked.includeKnown, false)
 check("its own profession is offered first", dropdown.options[2].text, "Leatherworking")
-check("then the rest", dropdown.options[3].text, "Enchanting")
+check("then a line saying the rest are others", dropdown.options[3].text, "Other professions")
+check("which cannot be picked", dropdown.options[3].header, true)
+check("then the rest", dropdown.options[4].text, "Enchanting")
 check("every row listed", #list.data, 3)
 
 print("\nrows")

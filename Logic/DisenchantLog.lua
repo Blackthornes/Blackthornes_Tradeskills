@@ -283,7 +283,7 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
     end
 end
 
---- This session's running total, for the Disenchanting tab's bags list.
+--- This session's running total, for the Deals tab's bags list.
 -- Kept in memory only: it starts again at zero after a /reload.
 function DisenchantLog:AddToSession(results)
     local session = self.session or { count = 0, worth = 0 }
