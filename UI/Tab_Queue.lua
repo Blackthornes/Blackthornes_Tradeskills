@@ -122,6 +122,23 @@ local function BuyInsteadTooltip(entry)
     return text .. "\nBuy instead takes it off the queue and puts it on the shopping list."
 end
 
+-- A queued craft's name is the colour of what it makes (asked 2026-10-07),
+-- as on the Profit tab and in the craft pane. The client may not have the
+-- item yet when the list is drawn: such a row is drawn in the plain text
+-- colour, and GET_ITEM_INFO_RECEIVED redraws the list once it arrives.
+local awaitingItemData = false
+
+local function ApplyNameColor(row, itemID)
+    local r, g, b = Util.GetItemQualityColor(itemID)
+    if r then
+        row.name:SetTextColor(r, g, b)
+        return
+    end
+
+    row.name:SetTextColor(Theme.Unpack("text"))
+    if itemID then awaitingItemData = true end
+end
+
 local function UpdateCraftRow(row, entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
     local analysis = ns.Profit:Analyse(entry.recipeID)
@@ -155,11 +172,23 @@ local function UpdateCraftRow(row, entry)
         texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(label, cheaper)
         texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(plain, cheaper)
     end
+
+    -- A craft queued when it was worth 4g and now worth 40s should say so,
+    -- rather than silently re-pricing. This was an amber name until the
+    -- name took the item's rarity colour, so it is said in words now.
+    if not entry.isDependency and analysis and analysis.priceable
+        and entry.snapshotProfit and entry.snapshotProfit > 0
+        and analysis.profit / entry.snapshotProfit < 0.6 then
+        local dropped = ("|c%sworth less than when queued|r"):format(ns.COLORS.warn)
+        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(label, dropped)
+        texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(plain, dropped)
+    end
     for _, text in ipairs(who) do texts[#texts + 1] = Note(label, text) end
     if #who > 0 then texts[#texts + 1] = Note(plain, who[#who]) end
     texts[#texts + 1] = label
     texts[#texts + 1] = plain
     Theme.FitText(row.name, texts)
+    ApplyNameColor(row, recipe and recipe.outputItemID)
 
     -- Colour by whether it can be made, since nothing here can start one.
     local ready, reason = ns.Crafting:GetReadiness(entry.recipeID)
@@ -198,27 +227,14 @@ local function UpdateCraftRow(row, entry)
         -- made the column add up to more than the total under it.
         row.profit:SetText("used")
         row.profit:SetTextColor(Theme.Unpack("dim"))
-        row.name:SetTextColor(Theme.Unpack("text"))
     elseif analysis and analysis.priceable then
         local priced = entryCosts[entry]
         local total = priced and priced.profit or (analysis.profit * entry.quantity)
         row.profit:SetText(Util.FormatMoney(total, { short = true }))
         row.profit:SetTextColor(Theme.ProfitColor(total))
-
-        -- A craft queued when it was worth 4g and now worth 40s should say so,
-        -- rather than silently re-pricing.
-        if entry.snapshotProfit and entry.snapshotProfit > 0 then
-            local drift = analysis.profit / entry.snapshotProfit
-            if drift < 0.6 then
-                row.name:SetTextColor(Theme.Unpack("warn"))
-                return
-            end
-        end
-        row.name:SetTextColor(Theme.Unpack("text"))
     else
         row.profit:SetText("--")
         row.profit:SetTextColor(Theme.Unpack("dim"))
-        row.name:SetTextColor(Theme.Unpack("muted"))
     end
 end
 
@@ -825,6 +841,23 @@ local function Build(container)
     local shoppingLabel = Theme.CreateLabel(materials, "small", "text")
     shoppingLabel:SetPoint("BOTTOMLEFT", 10, 10)
     widgets.shoppingLabel = shoppingLabel
+
+    -- A craft drawn before the client had its item gets its rarity colour
+    -- when the item arrives. Only the craft list is redrawn, not the whole
+    -- tab, so the alt-craft chat line and sound do not play again; a burst
+    -- of arrivals is one redraw, and nothing happens unless a row waits.
+    local redrawQueued = false
+    ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", function()
+        if redrawQueued or not awaitingItemData then return end
+        if not craftList:IsVisible() then return end
+
+        redrawQueued = true
+        C_Timer.After(0.2, function()
+            redrawQueued = false
+            awaitingItemData = false
+            craftList:Refresh()
+        end)
+    end)
 end
 
 UI:RegisterTab({
