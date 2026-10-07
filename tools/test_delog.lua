@@ -8,7 +8,10 @@
 --   * loot that is not enchanting materials, or an item nobody can name,
 --     is counted as a miss rather than recorded wrong;
 --   * after LEARN_AFTER disenchants of a kind of item, its chances and
---     counts are yours, and the value follows them.
+--     counts are yours, and the value follows them;
+--   * an item that breaks into something other than its row says (a
+--     player's Dire Wands, 2026-10-07) uses its own results after
+--     ITEM_LEARN_AFTER of it, while the rest of its row does not.
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -53,6 +56,7 @@ GetTime = function() return clock end
 time = time or os.time
 
 local STRANGE_DUST, LESSER_ASTRAL, SMALL_GLIMMERING = 10940, 10998, 10978
+local GREATER_MAGIC = 10939
 local LINEN = 2589
 
 -- itemID -> quality, itemLevel, equipLoc, classID
@@ -60,6 +64,8 @@ local items = {
     [1001] = { 2, 22, "INVTYPE_CHEST", 4 },
     [1002] = { 2, 23, "INVTYPE_LEGS", 4 },
     [1003] = { 2, 24, "INVTYPE_WEAPON", 2 },
+    [1004] = { 2, 23, "INVTYPE_RANGEDRIGHT", 2 },
+    [1005] = { 2, 25, "INVTYPE_RANGEDRIGHT", 2 },
 }
 
 C_Item = {
@@ -72,8 +78,9 @@ C_Item = {
     GetItemIDByGUID = function(guid) return tonumber(guid:match("Item%-(%d+)")) end,
 }
 
--- Bag 0: slot 1 the chest, slot 2 the legs, slot 3 the sword.
-local slots = { 1001, 1002, 1003 }
+-- Bag 0: slot 1 the chest, slot 2 the legs, slot 3 the sword, slots 4 and
+-- 5 two wands.
+local slots = { 1001, 1002, 1003, 1004, 1005 }
 C_Container = {
     GetContainerItemID = function(_, slot) return slots[slot] end,
 }
@@ -87,13 +94,16 @@ GetLootSlotLink = function(slot) return ("|Hitem:%d::|h[x]|h"):format(loot[slot]
 GetLootSlotInfo = function(slot) return "icon", "name", loot[slot][2] end
 GetLootSourceInfo = function() return lootSource end
 
-local prices = { [STRANGE_DUST] = 100, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000 }
+local prices = { [STRANGE_DUST] = 100, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000,
+                 [GREATER_MAGIC] = 400 }
 
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
 
 ns.db = {}
 ns.Prices = { GetValue = function(_, itemID) return prices[itemID] end }
-ns.Inventory = { GetBagCounts = function() return { [1001] = 1, [1002] = 1, [1003] = 1 } end }
+ns.Inventory = { GetBagCounts = function()
+    return { [1001] = 1, [1002] = 1, [1003] = 1, [1004] = 1, [1005] = 1 }
+end }
 
 assert(loadfile(lfs_cwd .. "/Logic/Disenchant.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/DisenchantLog.lua"))("Blackthornes_TS", ns)
@@ -245,6 +255,54 @@ check("the value follows your results", Disenchant:GetValue(1002) == 510)
 
 check("a weapon of the same level is still on the table",
     select(2, Disenchant:GetOutcomes(1003)).source == "table")
+
+print("\nan item that breaks differently from its row")
+
+-- The table says a green weapon of item level 21 to 25 mostly gives Lesser
+-- Astral Essence; this wand gives Greater Magic Essence every time.
+local wand = select(1, Disenchant:GetOutcomes(1004))
+check("before any, the wand is on the table", wand[1].itemID == LESSER_ASTRAL)
+
+before = #printed
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 } } })
+outcomes, facts = Disenchant:GetOutcomes(1004)
+check("two of it are not yet enough", facts.source == "table" and not facts.byItem)
+
+Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
+outcomes, facts = Disenchant:GetOutcomes(1004)
+check("at three, the wand uses what it gave", facts.source == "yours" and facts.byItem
+    and facts.casts == 3)
+check("Greater Magic Essence every time", outcomes[1].itemID == GREATER_MAGIC
+    and outcomes[1].chance == 1 and #outcomes == 1)
+check("with the counts it gave", outcomes[1].min == 1 and outcomes[1].max == 2)
+check("the value follows it", Disenchant:GetValue(1004) == math.floor(400 * 4 / 3 + 0.5)
+    or math.abs(Disenchant:GetValue(1004) - 400 * 4 / 3) < 1)
+check("chat says it was learnt and why", Said("Learned!.-item1004 does not break the way the table says", before) ~= nil)
+local learnedLines = 0
+for index = before, #printed do
+    if printed[index]:find("Learned!.-item1004") then learnedLines = learnedLines + 1 end
+end
+check("and says it once", learnedLines == 1)
+check("the notes name this item", Disenchant:YoursPhrase(facts) == "your own 3 disenchants of this item")
+
+local _, other = Disenchant:GetOutcomes(1005)
+check("another wand of its row keeps the table", other.source == "table" and not other.byItem)
+
+-- An item whose own results agree with its row keeps the bigger pool.
+outcomes, facts = Disenchant:GetOutcomes(1002)
+check("an item that agrees with its row keeps the row's results", facts.casts == 10 and not facts.byItem)
+
+print("\nper item results from before they were kept")
+
+ns.db = { disenchantLog = { bands = {}, missed = 0, recent = {
+    { itemID = 1005, results = { [GREATER_MAGIC] = 1 } },
+    { itemID = 1005, results = { [GREATER_MAGIC] = 2 } },
+    { itemID = 1005, results = { [GREATER_MAGIC] = 1 } },
+} } }
+check("the recent list fills them in", Log:GetItem(1005) and Log:GetItem(1005).casts == 3)
+check("so that item learns from them at once", select(2, Disenchant:GetOutcomes(1005)).byItem == true)
+check("the bands are left as they were", next(Log:GetTable().bands) == nil)
 
 C_Item, C_Container, GetTime, CreateFrame = saved.C_Item, saved.C_Container, saved.GetTime, saved.CreateFrame
 SpellIsTargeting, GetNumLootItems = saved.SpellIsTargeting, saved.GetNumLootItems

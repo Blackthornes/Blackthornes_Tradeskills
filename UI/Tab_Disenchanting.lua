@@ -543,7 +543,7 @@ local function UpdateBagDetail(entry)
 
     local note
     if facts.source == "yours" then
-        note = ("Chances come from your own %d disenchants of items like this."):format(facts.casts or 0)
+        note = ("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts))
     else
         note = "Chances come from the Classic table built into the addon until you have done enough disenchants of your own."
     end
@@ -622,7 +622,7 @@ local function UpdateDetail(entry)
 
     local note
     if facts.source == "yours" then
-        note = ("Chances come from your own %d disenchants of items like this."):format(facts.casts or 0)
+        note = ("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts))
     else
         note = "Chances come from the Classic table built into the addon. It is an average: any one disenchant can give more or less."
     end
