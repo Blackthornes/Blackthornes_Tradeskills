@@ -258,7 +258,7 @@ end
 --------------------------------------------------------------------------------
 
 local function IsMe(sender)
-    return Comm.NameKey(sender) == Comm.NameKey(Comm.PlayerName())
+    return Comm.IsMe(sender)
 end
 
 function GuildPrices:OnAnnounce(sender, body, channel)

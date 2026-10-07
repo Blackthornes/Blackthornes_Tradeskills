@@ -754,7 +754,7 @@ local function Build(outer)
     local sharing = CreateSection(container, "SHARING", { anchor = lastSoundRow })
 
     local linkRow = CreateRow(container, sharing, "Your other account",
-        "Character names on another account of yours, separated by commas. Add this character's name on that side too. While both are logged in on the same realm, each sends the other its characters.")
+        "Full names (first and last) of characters on another account of yours, separated by commas. Add this character's full name on that side too. While both are logged in on the same realm, each sends the other its characters.")
 
     widgets.linkNames = Widgets.CreateSearchBox(linkRow, "Character names", function(text)
         if ns.AccountLink then ns.AccountLink:SetNames(text) end
@@ -774,6 +774,7 @@ local function Build(outer)
     widgets.linkNames.editBox:SetScript("OnEnterPressed", function(self)
         self:ClearFocus()
         if ns.AccountLink then ns.AccountLink:Check() end
+        UI:RefreshActiveTab()
     end)
 
     widgets.linkShares = {}

@@ -417,8 +417,14 @@ retail's rules: `C_ChatInfo.RegisterAddonMessagePrefix`, 255 bytes per
 message, a per-prefix throttle (a short burst, then about one a second,
 refused with result 3 when exceeded), WHISPER to one character on the same
 realm, GUILD to the guild, and "No player named '%s' is currently playing"
-in chat for a whisper to someone offline. None of it is measured on Forever
-yet. `/bts share test` (Settings, Sharing, Test messages) whispers this
+in chat for a whisper to someone offline. Measured 2026-10-07 with `/bts share test`: the prefix registers; a
+whisper to the first name alone finds nobody ("No player named
+'First' is currently playing"), because Forever lets characters share a
+first name, so whispers need the first and last name; a guild message came
+back with the sender read as "First Last" (a space, no realm). The client
+said "sent" to a 256-byte message and to twelve in a row, so neither the
+size limit nor the throttle shows on the sending side; the addon keeps to
+255 bytes and paces anyway. Still to measure: a whisper to the full name. `/bts share test` (Settings, Sharing, Test messages) whispers this
 character a full-size and an oversize message and twelve in a row, sends one
 to the guild, and says what came back and how the sender's name reads. Also
 open: whether a whisper's sender name tells apart two characters with the
