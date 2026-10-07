@@ -565,8 +565,8 @@ local function UpdateDetail(entry)
 
     local note
     if facts.source == "yours" then
-        note = ("Chances come from your own %d disenchants of items like this. Materials are priced at their lowest auction posting, leaving out a lone one far below the rest.")
-            :format(facts.casts or 0)
+        note = ("Chances come from %s. Materials are priced at their lowest auction posting, leaving out a lone one far below the rest.")
+            :format(ns.Disenchant:YoursPhrase(facts))
     else
         note = SOURCE_NOTE:format(ns.Disenchant.LEARN_AFTER or 10, facts.casts or 0)
     end
