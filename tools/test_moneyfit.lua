@@ -114,5 +114,22 @@ check("short still drops the small coins past 100g", Plain(Util.FormatMoney(1234
 check("short pads under 100g", Plain(Util.FormatMoney(120005, { short = true })), "12g 00s 05c")
 
 print("")
+print("an item name on a row is never cut off")
+
+local name = Label(120)
+function name:SetFont(_, size) self.size = size end
+function name:SetWordWrap(wrap) self.wrap = wrap end
+Theme.SetRowName(name, "Camp Chair")
+check("one that fits keeps its line", name.wrap, false)
+check("in the row's size", name.size, Theme.sizes.small)
+Theme.SetRowName(name, "Deviate Scale Cloak of the Monkey")
+check("a long one wraps rather than ending in ...", name.wrap, true)
+check("in the smaller size", name.size, Theme.sizes.tiny)
+check("and keeps every word", name.text, "Deviate Scale Cloak of the Monkey")
+Theme.SetRowName(name, "Camp Chair")
+check("the next short one is back on one line", name.wrap, false)
+check("in the row's size again", name.size, Theme.sizes.small)
+
+print("")
 print(("%d passed, %d failed"):format(passed, failed))
 assert(failed == 0, "money fitting checks failed")

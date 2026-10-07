@@ -24,8 +24,9 @@ local COLUMNS = {
     { key = "age",       label = "AGE",      width = 44, justify = "CENTER" },
     { key = "liquidity", label = "MOVES",    width = 52, justify = "CENTER" },
     { key = "quantity",  label = "LISTED",   width = 52, justify = "CENTER" },
-    { key = "min",       label = "CHEAPEST", width = 80, money = true },
-    { key = "market",    label = "MARKET",   width = 80, money = true },
+    -- Few columns, so room for two digits of gold.
+    { key = "min",       label = "CHEAPEST", width = 80, money = true, sample = "88g 88s 88c" },
+    { key = "market",    label = "MARKET",   width = 80, money = true, sample = "88g 88s 88c" },
 }
 
 local state = {
@@ -369,9 +370,9 @@ local function UpdateRow(row, entry)
     entry.label = Util.GetItemLabel(entry.itemID)
     -- An item with its own price says so, in gold, beside its name.
     if Mine(entry.itemID) then
-        row.name:SetText(("%s  |c%smy price|r"):format(entry.label, ns.COLORS.warn))
+        Theme.SetRowName(row.name, ("%s  |c%smy price|r"):format(entry.label, ns.COLORS.warn))
     else
-        row.name:SetText(entry.label)
+        Theme.SetRowName(row.name, entry.label)
     end
     Theme.SetItemIcon(row.icon, entry.itemID)
     row.star:SetItem(entry.itemID)
