@@ -313,6 +313,9 @@ function Recipes:GetCharacters()
             inventoryAt = record.inventoryAt,
             bankAt = record.bankAt,
             isCurrent = characterKey == selfKey,
+            -- A character from another account of yours (Logic/AccountLink.lua):
+            -- the name of the character it came through.
+            linkedFrom = type(record.linkedFrom) == "string" and record.linkedFrom or nil,
         }
     end
 

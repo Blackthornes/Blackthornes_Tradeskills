@@ -298,6 +298,19 @@ local DEFAULTS = {
         -- shows the graph where the materials list goes.
         priceGraphWindow = "day",
         profitShowsGraph = false,
+
+        -- Sharing (asked 2026-10-07, Ezmode on Discord). Characters on
+        -- another account of yours, by name and separated by commas; empty
+        -- shares nothing. Both sides add each other. See Logic/AccountLink.lua.
+        linkNames = "",
+        -- What this account sends them. Each side chooses its own.
+        linkShareRecipes = true,
+        linkShareBags = true,
+        linkShareGold = true,
+        linkShareAuctions = true,
+        -- Share scans with guildmates and fill gaps with theirs. Off by
+        -- default. See Logic/GuildPrices.lua.
+        guildPrices = false,
     },
 
     -- realmKey -> itemID -> price record
