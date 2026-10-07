@@ -569,10 +569,16 @@ function Disenchant:GetOutcomes(itemID)
     -- (2026-10-07, a player's Dire Wands gave magic essences where the table
     -- says astral), and pooled with its row that would stay hidden for a
     -- long while. When they agree, the bigger pool gives the better odds.
+    --
+    -- Three casts are enough when the table's likeliest result never came
+    -- out of it. When it did, three casts are only luck (three dust, one an
+    -- essence, ties to the essence), so the item waits for LEARN_AFTER.
     local own = log and log.GetItem and log:GetItem(itemID)
     if own and (own.casts or 0) >= self.ITEM_LEARN_AFTER then
         local mine = Learned(own)
-        if mine[1] and (not shaped[1] or mine[1].itemID ~= shaped[1].itemID) then
+        local tableTopSeen = shaped[1] and own.got and own.got[shaped[1].itemID] ~= nil
+        if mine[1] and (not shaped[1] or mine[1].itemID ~= shaped[1].itemID)
+            and (not tableTopSeen or own.casts >= self.LEARN_AFTER) then
             shaped = mine
             facts.source = "yours"
             facts.casts = own.casts
