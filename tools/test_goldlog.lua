@@ -103,6 +103,13 @@ check("anyone else", GL:MailSource(3), "mail")
 check("a lost bid's gold back", GL:MailSource(6), "auctionBuys")
 check("own character by name and realm", GL:IsOwnCharacter("Ana-RealmA"), true)
 check("another realm's Ana is not", GL:IsOwnCharacter("Ana-Elsewhere"), false)
+-- Mail to an alt is addressed "Name Surname", since Forever names repeat.
+ns.db.characters["Ana-Realm A"].surname = "Brightwood"
+check("own character by name and surname", GL:IsOwnCharacter("Ana Brightwood"), true)
+check("so is a surname in other letters", GL:IsOwnCharacter("Ana brightwood"), true)
+check("another Ana with another surname is not", GL:IsOwnCharacter("Ana Smith"), false)
+check("a surname not known yet still counts", GL:IsOwnCharacter("Bob Stone"), true)
+ns.db.characters["Ana-Realm A"].surname = nil
 GL:NoteTakeMail(4)
 GL:NoteTakeMail(1)
 check("an item-only mail leaves no tag", GL:Classify(900, NOW), "auctionSales")
