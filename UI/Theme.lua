@@ -150,6 +150,29 @@ function Theme.CreateLabel(parent, size, colorKey, justify)
     return label
 end
 
+-- One unanchored label per size, for measuring text no label holds yet.
+local measures = {}
+
+--- How wide `text` is at a label size, as the game draws it, or nil when it
+--- cannot be measured. For widths worked out before any label holds the
+--- text, such as a column fitted to its heading.
+function Theme.MeasureText(size, text)
+    if type(text) ~= "string" or text == "" then return nil end
+
+    local label = measures[size]
+    if not label then
+        if not UIParent then return nil end
+        label = Theme.CreateLabel(UIParent, size, "muted")
+        label:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", 0, -200)
+        label:SetAlpha(0)
+        measures[size] = label
+    end
+
+    label:SetText(text)
+    local width = Theme.TextWidth(label)
+    return width and math.ceil(width) or nil
+end
+
 --- How wide a label's text is when drawn in full, or nil when it cannot be
 --- measured. A retail client can report only the part a fixed-width label
 --- draws, which never looks too wide; GetUnboundedStringWidth, where the

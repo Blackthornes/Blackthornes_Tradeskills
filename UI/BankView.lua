@@ -22,10 +22,13 @@ local DETAIL_WIDTH = 300
 local DETAIL_LINES = 7
 local ALL = "all"
 
+-- Right to left. WORTH sits to the right, so its coins line up; the rest is
+-- centred under its heading. `width` is the least each gets:
+-- Widgets.FitColumns widens it to fit the heading and a full amount.
 local COLUMNS = {
-    { key = "worth", label = "WORTH", width = 96 },
-    { key = "have",  label = "HAVE",  width = 52 },
-    { key = "who",   label = "WHO",   width = 150 },
+    { key = "worth", label = "WORTH", width = 96, money = true },
+    { key = "have",  label = "HAVE",  width = 52, justify = "CENTER" },
+    { key = "who",   label = "WHO",   width = 150, justify = "CENTER" },
 }
 
 local state = {
@@ -111,7 +114,7 @@ local function CreateRow(row)
 
     local offset, reserved = -8, 16
     for _, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+        local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
         cell:SetPoint("RIGHT", offset, 0)
         cell:SetWidth(column.width)
         cell:SetWordWrap(false)
@@ -446,6 +449,9 @@ end
 --- Fill `view`, a frame covering the whole Characters tab. The top 28 pixels
 --- on the left are the tab's view switch.
 function BankView.Build(view)
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
+
     local right = -DETAIL_WIDTH - 16
 
     -- Dropdown, search, tick box, as on every tab (Ezmode, 2026-10-06). No
@@ -486,7 +492,7 @@ function BankView.Build(view)
     headings.cells = {}
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(headings, "tiny", "dim", "RIGHT")
+        local cell = Theme.CreateLabel(headings, "tiny", "dim", column.justify or "RIGHT")
         cell:SetPoint("RIGHT", offset, 0)
         cell:SetWidth(column.width)
         cell:SetText(column.label)

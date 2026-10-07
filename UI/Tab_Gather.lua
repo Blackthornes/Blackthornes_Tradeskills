@@ -20,13 +20,16 @@ local UI = ns.UI
 
 local ROW_HEIGHT = 24
 
+-- Right to left. Money sits to the right, so its coins line up; the rest is
+-- centred under its heading. `width` is the least each gets:
+-- Widgets.FitColumns widens it to fit the heading and a full amount.
 local COLUMNS = {
     { key = "action", label = "",       width = 30 },
-    { key = "cost",   label = "COST",   width = 74 },
-    { key = "unit",   label = "EACH",   width = 64 },
-    { key = "source", label = "BUY AT", width = 76 },
-    { key = "have",   label = "HAVE",   width = 42 },
-    { key = "need",   label = "NEED",   width = 42 },
+    { key = "cost",   label = "COST",   width = 74, money = true },
+    { key = "unit",   label = "EACH",   width = 64, money = true },
+    { key = "source", label = "BUY AT", width = 76, justify = "CENTER" },
+    { key = "have",   label = "HAVE",   width = 42, justify = "CENTER" },
+    { key = "need",   label = "NEED",   width = 42, justify = "CENTER" },
 }
 
 local SOURCE_LABELS = {
@@ -110,7 +113,7 @@ local function CreateRow(row)
 
     for _, column in ipairs(COLUMNS) do
         if column.key ~= "action" then
-            local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+            local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
             cell:SetPoint("RIGHT", offset, 0)
             cell:SetWidth(column.width)
             row.cells[column.key] = cell
@@ -307,6 +310,9 @@ end
 local function Build(container)
     -- Room for the Set goal button beside AH, only when Farmer is there to take it.
     COLUMNS[1].width = ns.FarmerGoals:Available() and 88 or 30
+    COLUMNS[1].baseWidth = COLUMNS[1].width
+    -- Then before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
@@ -360,7 +366,7 @@ local function Build(container)
     local offset = -8
     for _, column in ipairs(COLUMNS) do
         if column.label ~= "" then
-            local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
+            local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
             heading:SetPoint("RIGHT", offset, 0)
             heading:SetWidth(column.width)
             heading:SetText(column.label)
