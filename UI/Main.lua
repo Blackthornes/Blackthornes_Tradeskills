@@ -41,6 +41,23 @@ local AUCTION_BAR_WIDTH = 460
 -- it never sits on top of it.
 local AUCTION_BAR_CLEAR_LEFT = 80
 
+-- How big the window can be drawn, as a share of its normal size: dragged
+-- by the grip below its bottom right corner, picked on the Settings tab or
+-- typed with /bts size (a player's request, 2026-10-07: too big on a 4K
+-- screen, and in the way of other windows on a 1080p one). Drawn smaller or
+-- larger as a whole, so every tab keeps its layout and nothing is cut off.
+local SCALE_MIN = 0.5
+local SCALE_MAX = 1.5
+UI.SIZES = {
+    { key = "small", text = "Small", scale = 0.8 },
+    { key = "normal", text = "Normal", scale = 1 },
+    { key = "large", text = "Large", scale = 1.2 },
+}
+
+-- The grip hangs below the window's bottom right corner, right of the tabs
+-- (which stop TAB_INSET short of the corner), so it covers nothing inside.
+local GRIP_SIZE = 20
+
 -- How long "Scan complete" stays on the bar before it goes back to idle.
 local SCAN_DONE_HOLD = 5
 
@@ -75,6 +92,7 @@ function UI:Build()
 
     local window = CreateFrame("Frame", "BlackthornesTSWindow", UIParent)
     window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    window:SetScale(self:GetWindowScale())
     window:SetPoint("CENTER")
     window:SetFrameStrata("HIGH")
     window:SetClampedToScreen(true)
@@ -135,6 +153,7 @@ function UI:Build()
 
     self:BuildHeader()
     self:BuildTabs()
+    self:BuildSizeGrip()
 
     self:RestorePosition()
 
@@ -432,8 +451,10 @@ function UI:SavePosition()
 
     local point, _, relativePoint, x, y = self.window:GetPoint()
 
-    ns.db[self:PositionKey()] =
-        { point = point, relativePoint = relativePoint, x = x, y = y }
+    -- The offsets are in the window's own units, which change with its
+    -- size, so the size they were taken at goes with them.
+    ns.db[self:PositionKey()] = { point = point, relativePoint = relativePoint,
+        x = x, y = y, scale = self.window:GetScale() }
 end
 
 --- @param key string|nil which slot to restore; defaults to the current state.
@@ -454,8 +475,11 @@ function UI:RestorePosition(key)
     self.window:ClearAllPoints()
 
     if position then
+        -- Saved at another size (or before there were sizes, at 1): the same
+        -- spot on the screen, in the units of the size it is now.
+        local factor = UI.PositionFactor(position.scale, self.window:GetScale())
         self.window:SetPoint(position.point or "CENTER", UIParent,
-            position.relativePoint or "CENTER", position.x or 0, position.y or 0)
+            position.relativePoint or "CENTER", (position.x or 0) * factor, (position.y or 0) * factor)
     elseif key == "auctionWindowPosition" then
         -- Never dragged at the auction house before: the bottom right corner.
         -- The auction window owns the left of the screen and the sell list the
@@ -466,6 +490,254 @@ function UI:RestorePosition(key)
     else
         self.window:SetPoint("CENTER")
     end
+end
+
+--- How much to multiply a saved offset by, taken at `saved` size and put
+--- back at `now`.
+function UI.PositionFactor(saved, now)
+    saved = tonumber(saved) or 1
+    now = tonumber(now) or 1
+    if saved <= 0 or now <= 0 then return 1 end
+    return saved / now
+end
+
+--------------------------------------------------------------------------------
+-- Window size
+--------------------------------------------------------------------------------
+
+--- A size kept within bounds and to a whole percent.
+function UI.ClampScale(value)
+    value = tonumber(value)
+    if not value or value ~= value then return 1 end
+
+    value = math.max(SCALE_MIN, math.min(SCALE_MAX, value))
+    return math.floor(value * 100 + 0.5) / 100
+end
+
+--- The largest size at which the whole window, its portrait, plate and
+--- hanging tabs, still fits on the screen. The smallest size if it cannot
+--- be measured, never anything larger than SCALE_MAX.
+function UI.FitScale()
+    local ok, width, height = pcall(function()
+        return UIParent:GetWidth(), UIParent:GetHeight()
+    end)
+    if not ok or type(width) ~= "number" or type(height) ~= "number"
+        or width <= 0 or height <= 0 then
+        return SCALE_MAX
+    end
+
+    -- The portrait reaches 20 past the top left, the tabs TAB_HANG below.
+    local fit = math.min(width / (WINDOW_WIDTH + 30), height / (WINDOW_HEIGHT + 20 + TAB_HANG + 10))
+    return math.max(SCALE_MIN, math.min(SCALE_MAX, math.floor(fit * 100) / 100))
+end
+
+--- The size the window is drawn at: the saved one, kept on the screen.
+function UI:GetWindowScale()
+    local saved = ns.Config and ns.Config:Get("windowScale")
+    return math.min(UI.ClampScale(saved or 1), UI.FitScale())
+end
+
+--- The name of a size, "Small (80%)", or "87%" for one dragged to.
+function UI.ScaleText(scale)
+    local percent = math.floor((tonumber(scale) or 1) * 100 + 0.5)
+    for _, size in ipairs(UI.SIZES) do
+        if math.floor(size.scale * 100 + 0.5) == percent then
+            return ("%s (%d%%)"):format(size.text, percent)
+        end
+    end
+    return ("%d%%"):format(percent)
+end
+
+--- Draw the window at `scale` (from a stored or typed value) with its top
+--- left corner where it was, so it grows and shrinks toward the bottom
+--- right, as it does from the grip.
+function UI:ApplyScale(scale)
+    local window = self.window
+    if not window then return end
+
+    scale = math.min(UI.ClampScale(scale or self:GetWindowScale()), UI.FitScale())
+
+    local old = window:GetScale()
+    if type(old) ~= "number" or old <= 0 then old = 1 end
+    if math.abs(old - scale) < 0.001 then return end
+
+    -- Still rising into place from opening: land it, or the last steps of
+    -- the opening would put back the point it had at the old size.
+    if ns.Motion then ns.Motion:Stop(window, "open", true) end
+
+    local left, top = window:GetLeft(), window:GetTop()
+    window:SetScale(scale)
+
+    if type(left) == "number" and type(top) == "number" then
+        window:ClearAllPoints()
+        window:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left * old / scale, top * old / scale)
+        self:SavePosition()
+    end
+
+    if ns.PostPanel then ns.PostPanel:Reflow() end
+end
+
+--- Save a size and draw the window at it. Returns the size it ended up at.
+function UI:SetWindowScale(value)
+    local scale = UI.ClampScale(value)
+    if ns.Config then ns.Config:Set("windowScale", scale) end
+    self:ApplyScale(scale)
+
+    -- The Settings tab shows the size; keep it in step when it is open.
+    if self.activeTab == "settings" then self:RefreshActiveTab() end
+
+    return math.min(scale, UI.FitScale())
+end
+
+--- The grip below the bottom right corner: drag it to make the window
+--- bigger or smaller, right-click it for the normal size.
+function UI:BuildSizeGrip()
+    local window = self.window
+
+    local grip = Theme.CreatePanel(window, "panel", "borderLit")
+    grip:SetSize(GRIP_SIZE, GRIP_SIZE)
+    grip:SetPoint("TOPRIGHT", window, "BOTTOMRIGHT", -6, -3)
+    grip:SetFrameLevel((window:GetFrameLevel() or 0) + 20)
+    grip:EnableMouse(true)
+    Theme.TopSheen(grip)
+    self.sizeGrip = grip
+
+    -- Six gold dots in a stair down to the bottom right corner, the shape
+    -- every resizable window in the game wears, drawn from plain colour so
+    -- it needs no texture file.
+    local dots = {}
+    for row = 0, 2 do
+        for column = 2 - row, 2 do
+            local dot = grip:CreateTexture(nil, "ARTWORK")
+            dot:SetSize(3, 3)
+            dot:SetPoint("BOTTOMRIGHT", grip, "BOTTOMRIGHT", -3 - (2 - column) * 5, 3 + (2 - row) * 5)
+            dot:SetColorTexture(Theme.Unpack("accent"))
+            dots[#dots + 1] = dot
+        end
+    end
+
+    local function Light(on)
+        Theme.SetBorderColor(grip, on and "accent" or "borderLit")
+        for _, dot in ipairs(dots) do
+            dot:SetColorTexture(Theme.Unpack(on and "accentHi" or "accent"))
+        end
+    end
+
+    local function Track(self)
+        local cx, cy = GetCursorPosition()
+        local uiScale = UIParent:GetEffectiveScale()
+        if not cx or not uiScale or uiScale <= 0 then return end
+        cx, cy = cx / uiScale, cy / uiScale
+
+        -- Where the corner would be for the cursor to sit on the grip as it
+        -- did when the drag began, then the size that puts it there: the
+        -- width's and the height's answers averaged, so a drag in any
+        -- direction off the diagonal still feels right.
+        local width = cx - self.grabX - self.anchorLeft
+        local height = self.anchorTop - (cy + self.grabY)
+        local scale = UI.ClampScale((width / WINDOW_WIDTH + height / WINDOW_HEIGHT) / 2)
+        scale = math.min(scale, self.fit)
+
+        if math.abs(scale - (window:GetScale() or 1)) < 0.005 then return end
+
+        window:SetScale(scale)
+        window:ClearAllPoints()
+        window:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", self.anchorLeft / scale, self.anchorTop / scale)
+
+        if GameTooltip:IsOwned(self) then
+            GameTooltip:SetText(UI.ScaleText(scale), Theme.Unpack("accentHi"))
+            GameTooltip:Show()
+        end
+    end
+
+    local function StopSizing(self)
+        if not self.sizing then return end
+        self.sizing = false
+        self:SetScript("OnUpdate", nil)
+
+        if ns.Config then ns.Config:Set("windowScale", UI.ClampScale(window:GetScale())) end
+        UI:SavePosition()
+        if ns.PostPanel then ns.PostPanel:Reflow() end
+        if UI.activeTab == "settings" then UI:RefreshActiveTab() end
+    end
+
+    grip:SetScript("OnMouseDown", function(self, button)
+        if button == "RightButton" then
+            UI:SetWindowScale(1)
+            return
+        end
+        if button ~= "LeftButton" then return end
+
+        if ns.Motion then ns.Motion:Stop(window, "open", true) end
+
+        local scale = window:GetScale() or 1
+        local left, top = window:GetLeft(), window:GetTop()
+        local cx, cy = GetCursorPosition()
+        local uiScale = UIParent:GetEffectiveScale()
+        if not (left and top and cx and uiScale and uiScale > 0) then return end
+
+        -- All in the screen's units (UIParent's), which do not change as
+        -- the window's own scale does.
+        self.anchorLeft, self.anchorTop = left * scale, top * scale
+        self.grabX = cx / uiScale - (self.anchorLeft + WINDOW_WIDTH * scale)
+        self.grabY = (self.anchorTop - WINDOW_HEIGHT * scale) - cy / uiScale
+        self.fit = UI.FitScale()
+
+        window:ClearAllPoints()
+        window:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+
+        self.sizing = true
+        self:SetScript("OnUpdate", Track)
+    end)
+    grip:SetScript("OnMouseUp", StopSizing)
+    grip:SetScript("OnHide", StopSizing)
+
+    grip:SetScript("OnEnter", function(self)
+        Light(true)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(UI.ScaleText(window:GetScale()), Theme.Unpack("accentHi"))
+        GameTooltip:AddLine("Drag to make the window bigger or smaller.", 1, 1, 1, true)
+        GameTooltip:AddLine("Right-click: back to the normal size.", 1, 1, 1, true)
+        GameTooltip:AddLine("Also on the Settings tab, and /bts size.", Theme.Unpack("accent"))
+        GameTooltip:Show()
+    end)
+    grip:SetScript("OnLeave", function(self)
+        Light(false)
+        GameTooltip:Hide()
+    end)
+
+    return grip
+end
+
+--- "small", "normal", "large", "80", "80%" or "0.8" as a size, or nil.
+function UI.ParseSize(text)
+    text = (text or ""):lower():gsub("%s", ""):gsub("%%$", "")
+    if text == "" then return nil end
+
+    for _, size in ipairs(UI.SIZES) do
+        if size.key == text then return size.scale end
+    end
+
+    local number = tonumber(text)
+    if not number or number <= 0 then return nil end
+
+    -- 80 means 80%; 0.8 means the same.
+    if number > 5 then number = number / 100 end
+    return number
+end
+
+if ns.RegisterCommand then
+    ns.RegisterCommand("size", "how big the window is: /bts size [small|normal|large|50-150%]", function(args)
+        local scale = UI.ParseSize(args)
+        if not scale then
+            ns.Print(("the window is at %s. /bts size small, normal, large or a percent from %d%% to %d%% changes it, or drag the corner below its bottom right."):format(
+                UI.ScaleText(UI:GetWindowScale()), math.floor(SCALE_MIN * 100 + 0.5), math.floor(SCALE_MAX * 100 + 0.5)))
+            return
+        end
+
+        local now = UI:SetWindowScale(scale)
+        ns.Print(("window size: %s."):format(UI.ScaleText(now)))
+    end)
 end
 
 --------------------------------------------------------------------------------

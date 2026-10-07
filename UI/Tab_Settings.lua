@@ -672,7 +672,18 @@ local function Build(outer)
     end, false)
     widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local effectsRow = CreateRow(container, shopsRow, "Window effects",
+    -- A player's request (2026-10-07): the window was too big on a 4K
+    -- screen. The grip below its bottom right corner does the same, to any
+    -- size; one dragged to shows in the box as its percent.
+    local sizeRow = CreateRow(container, shopsRow, "Window size",
+        "How big this window is drawn. Drag the gold corner below its bottom right for any size, or right-click it for Normal. Also /bts size.")
+
+    widgets.windowSize = Widgets.CreateDropdown(sizeRow, {}, function(value)
+        UI:SetWindowScale(value)
+    end, { width = 150 })
+    widgets.windowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local effectsRow = CreateRow(container, sizeRow, "Window effects",
         "Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all.")
 
     widgets.effects = Widgets.CreateDropdown(effectsRow, {
@@ -772,6 +783,7 @@ local function Build(outer)
         ns.Queue:RebuildDependencies()
         ns.Queue:Notify()
         if ns.RecipeValue then ns.RecipeValue:Refresh() end
+        if UI.ApplyScale then UI:ApplyScale() end
         for _, panel in ipairs({ ns.PostPanel, ns.CraftPanel }) do
             if panel and panel.frame then
                 ns.Collapse.Apply(panel.frame)
@@ -967,6 +979,20 @@ local function Refresh()
     widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
+
+    -- The three sizes, and the one dragged to when it is none of them.
+    local scale = UI.GetWindowScale and UI:GetWindowScale() or 1
+    local sizes, shown = {}, nil
+    for _, size in ipairs(UI.SIZES or {}) do
+        sizes[#sizes + 1] = { text = UI.ScaleText(size.scale), value = size.scale }
+        if math.abs(size.scale - scale) < 0.005 then shown = size.scale end
+    end
+    if not shown then
+        sizes[#sizes + 1] = { text = UI.ScaleText(scale), value = scale }
+        shown = scale
+    end
+    widgets.windowSize:SetOptions(sizes)
+    widgets.windowSize:SetValue(shown)
     widgets.mailReport:SetChecked(Config:Get("mailReport") ~= false)
     widgets.hideSaleChat:SetChecked(Config:Get("hideSaleChat") == true)
     for key, box in pairs(widgets.sounds) do
