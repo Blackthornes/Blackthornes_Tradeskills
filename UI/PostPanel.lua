@@ -477,6 +477,15 @@ function PostPanel:DesiredHeight(auctionFrame, left)
         local windowTop, windowLeft, windowRight =
             window:GetTop(), window:GetLeft(), window:GetRight()
 
+        -- Read in the window's own units, which a player-sized window does
+        -- not share with this panel (/bts size): put into the panel's.
+        local scale = type(window.GetScale) == "function" and window:GetScale()
+        if type(scale) == "number" and scale > 0 and scale ~= 1
+            and windowTop and windowLeft and windowRight then
+            windowTop, windowLeft, windowRight =
+                windowTop * scale, windowLeft * scale, windowRight * scale
+        end
+
         -- Only when the two really do share screen space. The main window is
         -- movable, so most of the time it is somewhere else entirely.
         if windowTop and windowLeft and windowRight then
