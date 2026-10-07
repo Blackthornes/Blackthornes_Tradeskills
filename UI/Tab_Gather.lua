@@ -146,7 +146,7 @@ local function UpdateRow(row, line)
 
     -- Greyed once you have it all. The link's own colour shows over the
     -- label's, so the greyed name goes without it.
-    row.name:SetText(done and Util.Uncolored(line.label) or line.label)
+    Theme.SetRowName(row.name, done and Util.Uncolored(line.label) or line.label)
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells
