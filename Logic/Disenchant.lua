@@ -414,6 +414,37 @@ end
 -- many of them have been disenchanted and recorded.
 Disenchant.LEARN_AFTER = 10
 
+-- And for one item, once it has been disenchanted this many times.
+Disenchant.ITEM_LEARN_AFTER = 3
+
+--- Chances from recorded results ({ casts, got }), most likely first.
+local function Learned(record)
+    local shaped = {}
+
+    for materialID, got in pairs(record.got or {}) do
+        shaped[#shaped + 1] = {
+            itemID = materialID,
+            chance = got.times / record.casts,
+            min = got.min, max = got.max,
+            average = got.total / got.times,
+        }
+    end
+
+    table.sort(shaped, function(a, b)
+        if a.chance ~= b.chance then return a.chance > b.chance end
+        return a.itemID < b.itemID
+    end)
+
+    return shaped
+end
+
+--- Where the chances came from, for notes: "your own 4 disenchants of this
+--- item" or "your own 12 disenchants of items like this".
+function Disenchant:YoursPhrase(facts)
+    return ("your own %d disenchants of %s"):format(facts.casts or 0,
+        facts.byItem and "this item" or "items like this")
+end
+
 --- Which row of the table an item falls in, as a key for recording results.
 --
 -- Items in the same row break into the same things, so results are pooled
@@ -462,8 +493,9 @@ end
 --- What one disenchant of this item can give.
 --
 -- From your own recorded disenchants when there are enough of them for this
--- kind of item (facts.source == "yours"), otherwise from the built-in table
--- (facts.source == "table"). facts.casts is how many of yours are recorded.
+-- item (facts.byItem) or this kind of item (facts.source == "yours"),
+-- otherwise from the built-in table (facts.source == "table"). facts.casts
+-- is how many of yours are recorded.
 --
 -- @return outcomes { { itemID, chance, min, max, average }, ... }, facts
 --   nil when the item cannot be disenchanted or is not cached yet.
@@ -517,30 +549,34 @@ function Disenchant:GetOutcomes(itemID)
     facts.key = BandKey(facts, band)
     facts.source = "table"
     facts.casts = 0
+    facts.byItem = nil
+
+    local log = ns.DisenchantLog
 
     -- Your own results, once there are enough to trust over the table.
-    local learned = ns.DisenchantLog and ns.DisenchantLog:GetBand(facts.key)
+    local learned = log and log:GetBand(facts.key)
     if learned then
         facts.casts = learned.casts or 0
 
         if facts.casts >= self.LEARN_AFTER then
-            shaped = {}
-
-            for materialID, got in pairs(learned.got or {}) do
-                shaped[#shaped + 1] = {
-                    itemID = materialID,
-                    chance = got.times / learned.casts,
-                    min = got.min, max = got.max,
-                    average = got.total / got.times,
-                }
-            end
-
-            table.sort(shaped, function(a, b)
-                if a.chance ~= b.chance then return a.chance > b.chance end
-                return a.itemID < b.itemID
-            end)
-
+            shaped = Learned(learned)
             facts.source = "yours"
+        end
+    end
+
+    -- This item's own results, when they say it breaks into something else:
+    -- Forever can break one item differently from its row of the table
+    -- (2026-10-07, a player's Dire Wands gave magic essences where the table
+    -- says astral), and pooled with its row that would stay hidden for a
+    -- long while. When they agree, the bigger pool gives the better odds.
+    local own = log and log.GetItem and log:GetItem(itemID)
+    if own and (own.casts or 0) >= self.ITEM_LEARN_AFTER then
+        local mine = Learned(own)
+        if mine[1] and (not shaped[1] or mine[1].itemID ~= shaped[1].itemID) then
+            shaped = mine
+            facts.source = "yours"
+            facts.casts = own.casts
+            facts.byItem = true
         end
     end
     facts.qualityName = QUALITY_NAME[facts.quality]
@@ -1113,7 +1149,7 @@ local function Report(input)
         facts.isWeapon and "weapon" or "armor", facts.skill or 0))
 
     if facts.source == "yours" then
-        ns.Print(("  from your own %d disenchants of items like this"):format(facts.casts or 0))
+        ns.Print("  from " .. Disenchant:YoursPhrase(facts))
     else
         ns.Print(("  from the built-in table (%d of yours recorded, yours are used from %d)")
             :format(facts.casts or 0, Disenchant.LEARN_AFTER))
