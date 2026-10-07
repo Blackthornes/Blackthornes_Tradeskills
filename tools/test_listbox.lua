@@ -203,10 +203,10 @@ do
     local row = ns.PostPanel.list.rows[2]
     row.detail.width = 400
     ns.PostPanel.list:Refresh()
-    check("with room, the line has the total", row.detail.text, "20 @ 3s  =  60s")
+    check("with room, the line has the total", row.detail.text, "20 @ 3s 00c  =  60s 00c")
     row.detail.width = 60
     ns.PostPanel.list:Refresh()
-    check("short of room, it keeps the amount and price", row.detail.text, "20 @ 3s")
+    check("short of room, it keeps the amount and price", row.detail.text, "20 @ 3s 00c")
 
     -- A label's own GetStringWidth can stop at the label's width. Measured
     -- unbounded, the line is still shortened.
@@ -216,7 +216,7 @@ do
     ns.PostPanel.list:Refresh()
     row.detail.width = 60
     ns.PostPanel.list:Refresh()
-    check("measured past a capped width, it is still shortened", row.detail.text, "20 @ 3s")
+    check("measured past a capped width, it is still shortened", row.detail.text, "20 @ 3s 00c")
 
     -- A List button showing a countdown says what it is waiting for.
     local button = ns.PostPanel.list.rows[1].post

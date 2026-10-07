@@ -130,6 +130,74 @@ Click("profit")
 sorter:Reset()
 check("Reset gives the list its own order", Names(sorter:Sort(rows)), "Bolt,apron,Cloak,Belt")
 
+print("")
+print("columns fit their headings (Ezmode's request, 2026-10-07)")
+
+-- 6 pixels a letter, as the stub frames measure.
+ns.Theme.MeasureText = function(_, text) return #text * 6 end
+local room = Widgets.SORT_ARROW_ROOM
+
+local columns = {
+    { key = "value", label = "DISENCHANT", width = 62 },
+    { key = "age",   label = "AGE", width = 44, justify = "CENTER" },
+    { key = "make",  label = "MAKE", width = 20, justify = "CENTER" },
+    { key = "cost",  label = "COST", width = 40, money = true },
+    { key = "extra", label = "LISTED", auction = "DEMAND", width = 30 },
+}
+Widgets.FitColumns({ columns[1], columns[2], columns[3], columns[4] })
+check("a long heading widens its column, arrow and all", columns[1].width, 60 + room)
+check("a column already wide enough keeps its width", columns[2].width, 44)
+check("a centred heading needs the same room", columns[3].width, 24 + room)
+check("a money column holds every coin", columns[4].width, #Widgets.MONEY_SAMPLE * 6 + 2)
+
+Widgets.FitColumns({ columns[5] }, function(column) return { column.label, column.auction } end)
+check("a column fits the widest heading it can show", columns[5].width, 36 + room)
+
+columns[1].label = "DE"
+Widgets.FitColumns({ columns[1] })
+check("fitting again starts from the column's own width", columns[1].width, 62)
+
+print("")
+print("the arrow stays beside its heading's words")
+
+local function Arrow(justify)
+    local parent = NewFrame()
+    local label = NewFrame(parent)
+    label:SetText("AGE")
+    label.GetJustifyH = function() return justify end
+    local points
+    local fitted = Widgets.SortableHeadings({ age = label }, { age = function(row) return row.age end })
+    local arrow = fitted.buttons.age.arrow
+    arrow.SetPoint = function(_, point, _, relative, x) points = { point, relative, x } end
+    fitted.buttons.age.scripts.OnClick(fitted.buttons.age)
+    return table.concat({ points[1], points[2], tostring(points[3]) }, " ")
+end
+
+check("words to the right: the arrow before them", Arrow("RIGHT"), "RIGHT RIGHT -20")
+check("centred words: the arrow before them", Arrow("CENTER"), "RIGHT CENTER -11")
+check("words to the left: the arrow after them", Arrow("LEFT"), "LEFT LEFT 20")
+
+-- A centred heading gives up the arrow's room while it sorts, and takes it
+-- back after; one laid out again meanwhile keeps its new width.
+local parent = NewFrame()
+local centred = NewFrame(parent)
+centred:SetText("AGE")
+centred.GetJustifyH = function() return "CENTER" end
+centred.width = 50
+centred.GetWidth = function(self) return self.width end
+centred.SetWidth = function(self, width) self.width = width end
+local narrowing = Widgets.SortableHeadings({ age = centred }, { age = function(row) return row.age end })
+local button = narrowing.buttons.age
+button.scripts.OnClick(button)
+check("sorting by a centred heading narrows it", centred.width, 50 - room)
+button.scripts.OnLeave(button)
+check("and it stays narrowed while it sorts", centred.width, 50 - room)
+centred.width = 60
+narrowing:Sync()
+check("laid out again, it narrows from its new width", centred.width, 60 - room)
+narrowing:Reset()
+check("no longer sorting, it has its width back", centred.width, 60)
+
 for key, value in pairs(saved) do _G[key] = value end
 
 print("")

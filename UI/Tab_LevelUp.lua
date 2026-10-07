@@ -16,15 +16,17 @@ local UI = ns.UI
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 
--- Right-aligned columns, measured from the right edge of the list and laid
--- out right to left.
+-- Columns, measured from the right edge of the list and laid out right to
+-- left. Money sits to the right, so its coins line up; the rest is centred
+-- under its heading. `width` is the least each gets: Widgets.FitColumns
+-- widens it to fit the heading and a full amount.
 local COLUMNS = {
-    { key = "make",   width = 40 },
-    { key = "real",   width = 74 },
-    { key = "via",    width = 44 },
-    { key = "back",   width = 74 },
-    { key = "cost",   width = 74 },
-    { key = "chance", width = 80 },
+    { key = "make",   label = "MAKE",      width = 40, justify = "CENTER" },
+    { key = "real",   label = "REAL COST", width = 74, money = true },
+    { key = "via",    label = "VIA",       width = 44, justify = "CENTER" },
+    { key = "back",   label = "GETS BACK", width = 74, money = true },
+    { key = "cost",   label = "COST",      width = 74, money = true },
+    { key = "chance", label = "SKILL UP",  width = 80, justify = "CENTER" },
 }
 
 -- How each way of getting gold back is named: short in the VIA column, in
@@ -116,7 +118,7 @@ local function CreateRow(row)
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "text", "RIGHT")
+        local cell = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
         cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
         cell:SetWidth(column.width)
         row.cells[column.key] = cell
@@ -659,6 +661,9 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
+
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
@@ -707,15 +712,10 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 28, 0)
     nameHeading:SetText("RECIPE")
 
-    local labels = {
-        chance = "SKILL UP", cost = "COST", back = "GETS BACK", via = "VIA",
-        real = "REAL COST", make = "MAKE",
-    }
-
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
-        heading:SetText(labels[column.key])
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
+        heading:SetText(column.label)
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
         offset = offset - column.width - 6

@@ -19,17 +19,31 @@ local ROW_HEIGHT = 24
 -- the width it had, because the window grew by the same amount.
 local MATERIALS_WIDTH = 420
 
--- Right-aligned columns for the materials panel, laid out from the right edge
--- inward. The AH button occupies the rightmost slot. COST is wide enough for
--- all three coins ("12g 34s 56c"): at 48 the copper was cut off. NEED and
--- HAVE are wide enough for four digits, with a gap between every column.
+-- Columns for the materials panel, laid out from the right edge inward. The
+-- AH button occupies the rightmost slot. COST sits to the right, so its
+-- coins line up; NEED and HAVE are centred under their headings. `width` is
+-- the least each gets: Widgets.FitColumns widens it to fit the heading and
+-- all three coins ("12g 34s 56c"), and PlaceMaterialColumns works out the
+-- offsets from there, with a gap between every column.
 local MATERIAL_COLUMNS = {
-    { key = "cost", label = "COST", width = 70, offset = -36 },
-    { key = "have", label = "HAVE", width = 42, offset = -114 },
-    { key = "need", label = "NEED", width = 42, offset = -164 },
+    { key = "cost", label = "COST", width = 70, money = true },
+    { key = "have", label = "HAVE", width = 42, justify = "CENTER" },
+    { key = "need", label = "NEED", width = 42, justify = "CENTER" },
 }
 
 local MATERIAL_NAME_INSET = -214
+
+local function PlaceMaterialColumns()
+    if Widgets.FitColumns then Widgets.FitColumns(MATERIAL_COLUMNS) end
+
+    local offset = -36
+    for _, column in ipairs(MATERIAL_COLUMNS) do
+        column.offset = offset
+        offset = offset - column.width - 8
+    end
+    MATERIAL_NAME_INSET = offset
+end
+PlaceMaterialColumns()
 
 -- The queued amount is a box you can type in (asked 2026-10-05: taking 100
 -- off meant 100 clicks on -). Wide enough for four digits; the label it
@@ -252,7 +266,7 @@ local function CreateMaterialRow(row)
 
     row.cells = {}
     for _, column in ipairs(MATERIAL_COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+        local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
         cell:SetPoint("RIGHT", column.offset, 0)
         cell:SetWidth(column.width)
         row.cells[column.key] = cell
@@ -644,6 +658,9 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Before any row or heading is laid out: they read these places.
+    PlaceMaterialColumns()
+
     local heading = Theme.CreateLabel(container, "tiny", "accent")
     heading:SetPoint("TOPLEFT", 8, -10)
     heading:SetText("QUEUED CRAFTS")
@@ -781,7 +798,7 @@ local function Build(container)
 
     local sortLabels = { name = nameHeading }
     for _, column in ipairs(MATERIAL_COLUMNS) do
-        local heading = Theme.CreateLabel(columnHeader, "tiny", "muted", "RIGHT")
+        local heading = Theme.CreateLabel(columnHeader, "tiny", "muted", column.justify or "RIGHT")
         heading:SetPoint("RIGHT", column.offset, 0)
         heading:SetWidth(column.width)
         heading:SetText(column.label)

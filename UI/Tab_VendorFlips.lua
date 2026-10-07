@@ -24,16 +24,18 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 
--- Right-aligned columns, laid out right to left. "sell" is what a vendor
--- pays or what it lists again for, and "extra" how many are listed or how
--- well it sells, by the Sell to menu.
+-- Columns, laid out right to left. "sell" is what a vendor pays or what it
+-- lists again for, and "extra" how many are listed or how well it sells, by
+-- the Sell to menu. Money sits to the right, so its coins line up; the rest
+-- is centred under its heading. `width` is the least each gets:
+-- Widgets.FitColumns widens it to fit either heading and a full amount.
 local COLUMNS = {
-    { key = "gain",   label = "PROFIT", width = 66 },
-    { key = "margin", label = "MARGIN", width = 50 },
-    { key = "sell",   label = "VENDOR", auction = "RESELL", width = 66 },
-    { key = "buy",    label = "BUY",    width = 66 },
-    { key = "extra",  label = "LISTED", auction = "DEMAND", width = 44 },
-    { key = "age",    label = "AGE",    width = 44 },
+    { key = "gain",   label = "PROFIT", width = 66, money = true },
+    { key = "margin", label = "MARGIN", width = 50, justify = "CENTER" },
+    { key = "sell",   label = "VENDOR", auction = "RESELL", width = 66, money = true },
+    { key = "buy",    label = "BUY",    width = 66, money = true },
+    { key = "extra",  label = "LISTED", auction = "DEMAND", width = 44, justify = "CENTER" },
+    { key = "age",    label = "AGE",    width = 44, justify = "CENTER" },
 }
 
 local SELL_TO = {
@@ -118,7 +120,7 @@ local function CreateRow(row)
     row.cells = {}
     local offset = -8
     for index, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "text", "RIGHT")
+        local cell = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
         cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
         cell:SetWidth(column.width)
         row.cells[index] = cell
@@ -500,6 +502,8 @@ local function Refresh()
         for _, column in ipairs(COLUMNS) do
             widgets.headingLabels[column.key]:SetText(Resale() and column.auction or column.label)
         end
+        -- The arrow sits beside the words, which may just have changed.
+        if widgets.sorter then widgets.sorter:Sync() end
     end
 
     local rows = BuildRows()
@@ -575,6 +579,12 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
+    -- Before any row or heading is laid out: they read these widths. Each
+    -- column fits whichever heading the Sell to menu gives it.
+    if Widgets.FitColumns then
+        Widgets.FitColumns(COLUMNS, function(column) return { column.label, column.auction } end)
+    end
+
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
@@ -626,7 +636,7 @@ local function Build(container)
     local sortLabels, values = { name = nameHeading }, {}
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
+        local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
         heading:SetText(column.label)
         heading:SetPoint("RIGHT", offset, 0)
         heading:SetWidth(column.width)
