@@ -497,6 +497,57 @@ ns.db.heardSales.Realm = {}
 Given({})
 
 print("")
+print("A stack's mail names the stack")
+
+check("a stack's name is the item's", ns.Mail.PlainName("Linen Cloth (20)"), "Linen Cloth")
+check("so is a count after an x", ns.Mail.PlainName("Linen Cloth x20"), "Linen Cloth")
+check("and a link's", ns.Mail.PlainName("|cffffffff|Hitem:2589|h[Linen Cloth]|h|r"), "Linen Cloth")
+check("a plain name is left alone", ns.Mail.PlainName("Bolt of Linen Cloth"), "Bolt of Linen Cloth")
+
+ns.Mail:NoteHeardSale("Linen Cloth")
+local stack = { kind = "sold", t = NOW + 10, who = "Bob-Realm",
+    name = "Linen Cloth (20)", net = 900 }
+Given({ stack })
+check("the stack's mail settles its heard sale", #ns.Mail:GetHeard(), 0)
+check("so only the sale shows", #listData, 1)
+check("and it is marked as heard", stack.heard, true)
+check("the name it was written down with is kept", stack.name, "Linen Cloth (20)")
+
+print("")
+print("A sale whose mail was collected without being read")
+
+_G.AUCTION_SOLD_MAIL_SUBJECT = "Auction successful: %s"
+ns.Mail:InvalidateMatchers()
+
+ns.db.heardSales.Realm = {
+    { t = NOW - 16 * 3600, name = "Heavy Silk Bandage", who = "Bob-Realm" },
+    { t = NOW - 10 * 60, name = "Woolen Bag", who = "Bob-Realm" },
+    { t = NOW - 16 * 3600, name = "Mageweave Bag", who = "Ana-Realm" },
+    { t = NOW - 16 * 3600, name = "Runecloth", who = "Bob-Realm" },
+}
+Given({})
+check("all four wait before a mailbox visit", #ns.Mail:GetHeard(), 4)
+
+local marked = ns.Mail:SweepHeard({
+    { index = 1, subject = "Auction successful: Runecloth (20)", money = 0, attachments = {} },
+})
+check("an old sale with no mail stops waiting", marked, 1)
+check("the saved sale is kept", #ns.db.heardSales.Realm, 4)
+check("marked as collected", ns.db.heardSales.Realm[1].collected, NOW)
+check("a sale too new for its mail still waits", ns.db.heardSales.Realm[2].collected, nil)
+check("another character's sale still waits", ns.db.heardSales.Realm[3].collected, nil)
+check("a sale whose mail is in the box still waits", ns.db.heardSales.Realm[4].collected, nil)
+
+tab.refresh()
+check("the Sales tab no longer says it is waiting", #ns.Mail:GetHeard(), 3)
+check("and a later settle keeps it", #ns.db.heardSales.Realm, 4)
+
+_G.AUCTION_SOLD_MAIL_SUBJECT = nil
+ns.Mail:InvalidateMatchers()
+ns.db.heardSales.Realm = {}
+Given({})
+
+print("")
 print("Still listed")
 
 local listings = {
