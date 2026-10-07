@@ -285,7 +285,16 @@ end
 -- State
 --------------------------------------------------------------------------------
 
+-- Tabs that were folded into others (Ezmode's idea, 2026-10-07). A saved
+-- last tab, or a call, naming one of them opens where it went.
+UI.MOVED_TABS = {
+    enchanting = "profit",
+    disenchanting = "deals",
+    vendorflips = "deals",
+}
+
 function UI:SelectTab(key)
+    key = UI.MOVED_TABS[key] or key
     local tab = self.tabs[key]
     if not tab then return end
 
@@ -755,7 +764,10 @@ function UI:Show()
     -- screenshot, 2026-10-04: the craft queue drawn across it).
     if self.window.Raise then self.window:Raise() end
 
-    self:SelectTab(self.activeTab or (ns.db and ns.db.lastTab) or self.tabOrder[1].key)
+    local last = ns.db and ns.db.lastTab
+    last = last and (UI.MOVED_TABS[last] or last)
+    if last and not self.tabs[last] then last = nil end
+    self:SelectTab(self.activeTab or last or self.tabOrder[1].key)
     self:UpdateHeader()
 
     if ns.PostPanel then ns.PostPanel:Reflow() end
@@ -778,7 +790,7 @@ end
 
 -- Names for Bindings.xml, shown under Options, Keybindings, AddOns (Izbode's
 -- request, 2026-10-02). The Disenchant key clicks the same secure button the
--- Disenchanting and Enchanting tabs put over their Disenchant buttons, so it
+-- Deals and Profit tabs put over their Disenchant buttons, so it
 -- works while one of those tabs shows a picked item, as the button does.
 _G.BINDING_HEADER_BLACKTHORNESTS = "Blackthornes Tradeskills"
 _G.BINDING_NAME_BLACKTHORNESTS_TOGGLE = "Open or close the window"

@@ -869,8 +869,17 @@ local function ShortOptionText(text)
 end
 
 --- Minimal dropdown. options is an array of { text, value }.
+--
+-- An option with `header = true` is a line of dim words that cannot be
+-- picked, to split a long menu into groups.
+--
+-- With `opts.multi`, any number of options can be ticked at once (Ezmode's
+-- Sell to menu, 2026-10-07): the value is a set, { [value] = true }, a click
+-- ticks or unticks one and leaves the menu open, onSelect gets the new set,
+-- and the box shows `opts.summary(set)`, or the ticked options' words.
 function Widgets.CreateDropdown(parent, options, onSelect, opts)
     opts = opts or {}
+    local multi = opts.multi and true or false
 
     local dropdown = Theme.CreatePanel(parent, "row")
     dropdown:SetSize(opts.width or 140, 22)
@@ -908,7 +917,14 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     thumb:Hide()
 
     dropdown.options = options or {}
-    dropdown.selected = nil
+    dropdown.selected = multi and {} or nil
+
+    --- Is this option the one picked, or one of those ticked?
+    local function IsOn(option)
+        if option.header then return false end
+        if multi then return dropdown.selected[option.value] == true end
+        return option.value == dropdown.selected
+    end
 
     local entries = {}
 
@@ -960,15 +976,30 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 entry:SetPoint("TOPLEFT", 1, y)
                 entry:SetPoint("TOPRIGHT", scrolls and -7 or -1, y)
                 Theme.FitText(entry.label, { option.text, ShortOptionText(option.text) }, room)
-                entry.label:SetTextColor(Theme.Unpack(
-                    option.value == dropdown.selected and "accent" or "text"))
-                entry.mark:SetShown(option.value == dropdown.selected)
+                -- A ticked option in a multiple choice menu is lit and an
+                -- unticked one dimmed, so it reads as on and off.
+                local color = IsOn(option) and "accent" or (option.header or multi) and "dim" or "text"
+                entry.label:SetTextColor(Theme.Unpack(color))
+                entry.mark:SetShown(IsOn(option))
+                entry:EnableMouse(not option.header)
                 entry:Show()
             else
                 entry:Hide()
             end
 
             entry:SetScript("OnClick", function()
+                if option.header then return end
+
+                if multi then
+                    local set = {}
+                    for value, on in pairs(dropdown.selected) do set[value] = on end
+                    set[option.value] = not set[option.value] or nil
+                    dropdown:SetValue(set)
+                    Rebuild()
+                    if onSelect then onSelect(dropdown:GetValue(), option) end
+                    return
+                end
+
                 dropdown:SetValue(option.value)
                 menu:Hide()
                 if onSelect then onSelect(option.value, option) end
@@ -991,14 +1022,24 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     function dropdown:SetOptions(newOptions)
         self.options = newOptions or {}
 
-        -- Keep the current selection if it still exists, else fall back.
-        local stillValid = false
+        if multi then
+            self:SetValue(self.selected)
+            Rebuild()
+            return
+        end
+
+        -- Keep the current selection if it still exists, else fall back to
+        -- the first option that can be picked.
+        local stillValid, first = false, nil
         for _, option in ipairs(self.options) do
-            if option.value == self.selected then stillValid = true break end
+            if not option.header then
+                if first == nil then first = option end
+                if option.value == self.selected then stillValid = true break end
+            end
         end
 
         local value = self.selected
-        if not stillValid then value = self.options[1] and self.options[1].value end
+        if not stillValid then value = first and first.value end
 
         -- The box is drawn every time, not only on a fall back. A first
         -- option with no value ("All professions") matched the nil a new
@@ -1009,10 +1050,32 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     end
 
     function dropdown:SetValue(value)
+        if multi then
+            local set = {}
+            for key, on in pairs(type(value) == "table" and value or {}) do
+                if on then set[key] = true end
+            end
+            self.selected = set
+
+            -- The box says what is ticked, in the tab's words when it has some.
+            local text = opts.summary and opts.summary(set)
+            if not text then
+                local names = {}
+                for _, option in ipairs(self.options) do
+                    if not option.header and set[option.value] then names[#names + 1] = option.text end
+                end
+                text = #names > 0 and table.concat(names, ", ") or (opts.placeholder or "")
+            end
+            local width = self:GetWidth()
+            Theme.FitText(label, { text, ShortOptionText(text) },
+                type(width) == "number" and (width - 24) or nil)
+            return
+        end
+
         self.selected = value
 
         for _, option in ipairs(self.options) do
-            if option.value == value then
+            if not option.header and option.value == value then
                 -- The whole wording when it fits, else without its "Sort: "
                 -- lead-in, rather than cut off with "...".
                 local width = self:GetWidth()
@@ -1026,6 +1089,11 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     end
 
     function dropdown:GetValue()
+        if multi then
+            local set = {}
+            for key in pairs(self.selected) do set[key] = true end
+            return set
+        end
         return self.selected
     end
 
@@ -1057,7 +1125,7 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
         else
             -- A long menu opens with the choice made in view, near its middle.
             for index, option in ipairs(dropdown.options) do
-                if option.value == dropdown.selected then
+                if not multi and not option.header and option.value == dropdown.selected then
                     menu.first = index - math.floor(MENU_ROWS / 2)
                     break
                 end

@@ -245,7 +245,7 @@ local function Remember(itemID)
     end
 
     -- v is what a vendor pays for one, 0 when it buys nothing. Kept for the
-    -- Vendor Flips tab; items read before it existed have none yet. The
+    -- Deals tab; items read before it existed have none yet. The
     -- tooltip's price wins over GetItemInfo's, which on Forever can still be
     -- Classic's (Util.GetTooltipSellPrice). vt says the tooltip was read, so
     -- prices saved before that are read once more.
@@ -691,7 +691,7 @@ function Disenchant:ItemName(itemID)
 end
 
 --------------------------------------------------------------------------------
--- Lists for the Enchanting tab
+-- Lists for the Profit tab and the Prices tab's enchanting materials
 --------------------------------------------------------------------------------
 
 --- Does disenchanting beat the alternative? No known alternative counts as
@@ -717,7 +717,7 @@ function Disenchant:GetCraftRows(opts)
 
     local rows = {}
     -- The materials a disenchant gives still have to be sold, so the profit
-    -- here is net of the auction house cut, as it is on the Disenchanting tab.
+    -- here is net of the auction house cut, as it is on the Deals tab.
     local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
@@ -935,7 +935,7 @@ function Disenchant:GetMaterialRows()
 end
 
 --------------------------------------------------------------------------------
--- Auction house deals, for the Disenchanting tab
+-- Auction house deals, for the Deals tab
 --------------------------------------------------------------------------------
 
 --- The best Enchanting skill among your characters, and whose it is.
@@ -1110,7 +1110,7 @@ function Disenchant:AnnounceDeals()
     local total = 0
     for _, row in ipairs(rows) do total = total + row.gain end
 
-    ns.Print(("Disenchant deals: %d on the auction house worth %s together. Best: %s for %s, makes %s. See the Disenchanting tab."):format(
+    ns.Print(("Disenchant deals: %d on the auction house worth %s together. Best: %s for %s, makes %s. See the Deals tab."):format(
         #rows, Util.FormatMoney(total, { noColor = true }),
         Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
         Util.FormatMoney(best.gain, { noColor = true })))
@@ -1184,7 +1184,7 @@ Disenchant._Report = Report
 ns.RegisterCommand("de", "<item link or ID>: what an item disenchants into and its value", Report)
 
 --------------------------------------------------------------------------------
--- /bts dedeals: why each deal is on the Disenchanting tab
+-- /bts dedeals: why each disenchant deal is on the Deals tab
 --------------------------------------------------------------------------------
 
 local function Ago(stamp)
@@ -1192,7 +1192,7 @@ local function Ago(stamp)
     return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
-ns.RegisterCommand("dedeals", "say why each deal on the Disenchanting tab is there", function()
+ns.RegisterCommand("dedeals", "say why each disenchant deal on the Deals tab is there", function()
     local lastScan = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
     ns.Print(("dedeals: last scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
@@ -1202,7 +1202,7 @@ ns.RegisterCommand("dedeals", "say why each deal on the Disenchanting tab is the
         ns.Print(("dedeals: the tab's list was built %s, %d row(s)")
             :format(Ago(Disenchant.shownBuiltAt), #shown))
     else
-        ns.Print("dedeals: the tab has not built its list since /reload (open the Disenchanting tab)")
+        ns.Print("dedeals: the tab has not built its list since /reload (open the Deals tab)")
     end
 
     local fresh = Disenchant:GetAuctionRows({ profitableOnly = true })

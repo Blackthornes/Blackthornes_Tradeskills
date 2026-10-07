@@ -1,4 +1,4 @@
--- The Disenchant button the Enchanting and Disenchanting tabs share, drawn
+-- The Disenchant button the Profit and Deals tabs share, drawn
 -- without a game client on frames whose visibility follows their parents and
 -- whose OnHide runs when a parent hides, as in the game.
 --
@@ -9,9 +9,9 @@
 --   2. The bags lists pick only an item worth more disenchanted than sold,
 --      and light the row they pick. With none, the button shows unset and
 --      the line beside it says why; a click on an item still sets it.
---   3. On the Enchanting tab's crafts, a Disenchant button that cannot be
---      used gives way to the reason.
---   4. The Disenchanting tab names the tick box that hid every deal.
+--   3. On the Profit tab, a craft's Disenchant button that cannot be used
+--      says why on its tooltip.
+--   4. The Deals tab names the tick box that hid every deal.
 --   5. A "breaks into" line's name gets the room its price leaves, and wraps.
 --   6. Bag rows hand their link to the item icon, for the upgrade arrow.
 --   7. The secure button wears the primary button's gold edge.
@@ -213,6 +213,15 @@ ns.Theme = {
     AccentStripe = function(parent) return Frame("Texture", parent) end,
     Unpack = function(key) return key end,
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
+    CreateMark = function(parent) return Frame("Texture", parent) end,
+    SetMark = noop,
+    CreateBar = function(parent)
+        local bar = Frame("Frame", parent)
+        bar.track = Frame("Texture", bar)
+        function bar:Set(value) self.value = value end
+        return bar
+    end,
+    SetMoneyText = function(label, copper) label:SetText(tostring(copper or 0)) end,
 }
 
 local made = { buttons = {}, dropdowns = {}, checkboxes = {}, lists = {} }
@@ -225,6 +234,11 @@ ns.Widgets = {
         return button
     end,
     CreateSearchBox = function(parent) return Frame("EditBox", parent) end,
+    CreateNumberBox = function(parent)
+        local box = Frame("Frame", parent)
+        box.editBox = Frame("EditBox", box)
+        return box
+    end,
     CreateCheckbox = function(parent, text, onClick)
         local box = Frame("CheckButton", parent)
         box.label, box.onClick = text, onClick
@@ -291,12 +305,32 @@ ns.Prices = { Count = function() return 1 end, changes = 0,
 ns.Config = { Get = function() return 0 end }
 ns.Scanner = { isAuctionHouseOpen = false }
 ns.Inventory = { GetCarriedBags = function() return { 0 } end }
-ns.Recipes = { Count = function() return 1 end }
+ns.Recipes = { Count = function() return 1 end, GetAll = function() return {} end,
+    GetAccountWide = function() return {} end, IsDropped = function() return false end }
 ns.Queue = { Add = noop }
+ns.VendorFlips = {
+    GetAuctionRows = function() return {}, 0, 0 end,
+    GetResaleRows = function() return {}, 0, 0 end,
+    MIN_RESALE_SCANS = 5,
+}
+ns.Auctions = { SetLimit = noop }
+
+-- The Profit tab's crafts: a robe that can be disenchanted.
+local craftRows = {}
+ns.Profit = {
+    GetRanked = function() return craftRows end,
+    Analyse = function(_, recipeID)
+        for _, analysis in ipairs(craftRows) do
+            if analysis.recipeID == recipeID then return analysis end
+        end
+    end,
+    GetMethod = function() return "best" end,
+    MaxCrafts = function() return 1 end,
+}
 
 assert(loadfile(lfs_cwd .. "/UI/Disenchanter.lua"))("Blackthornes_TS", ns)
-assert(loadfile(lfs_cwd .. "/UI/Tab_Enchanting.lua"))("Blackthornes_TS", ns)
-assert(loadfile(lfs_cwd .. "/UI/Tab_Disenchanting.lua"))("Blackthornes_TS", ns)
+assert(loadfile(lfs_cwd .. "/UI/Tab_Profit.lua"))("Blackthornes_TS", ns)
+assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 
 local Disenchanter = ns.Disenchanter
 Disenchanter:OnEnable()
@@ -306,7 +340,7 @@ Disenchanter:OnEnable()
 local window = Frame("Frame", UIParent, "BlackthornesTSWindow")
 local content = Frame("Frame", window)
 local containers = {}
-for _, key in ipairs({ "enchanting", "disenchanting", "profit" }) do
+for _, key in ipairs({ "profit", "deals", "queue" }) do
     local container = Frame("Frame", content)
     container:Hide()
     containers[key] = container
@@ -332,19 +366,17 @@ local function Labelled(text)
 end
 
 local en = {
-    button = Under("enchanting", made.buttons, Labelled("Disenchant")),
-    view = Under("enchanting", made.dropdowns),
-    list = Under("enchanting", made.lists),
-    beatsOnly = Under("enchanting", made.checkboxes, Labelled("Only where disenchanting pays more")),
-    detail = Under("enchanting", panels),
+    button = Under("profit", made.buttons, Labelled("Disenchant")),
+    list = Under("profit", made.lists),
+    detail = Under("profit", panels),
 }
 local de = {
-    button = Under("disenchanting", made.buttons, Labelled("Disenchant")),
+    button = Under("deals", made.buttons, Labelled("Disenchant")),
     -- A tick box since 2026-10-02; select() keeps the steps below readable.
-    view = Under("disenchanting", made.checkboxes, Labelled("Items in my bags")),
-    list = Under("disenchanting", made.lists),
-    hideTooHigh = Under("disenchanting", made.checkboxes, Labelled("Only ones I can disenchant")),
-    detail = Under("disenchanting", panels),
+    view = Under("deals", made.checkboxes, Labelled("Items in my bags")),
+    list = Under("deals", made.lists),
+    hideTooHigh = Under("deals", made.checkboxes, Labelled("Only ones I can disenchant")),
+    detail = Under("deals", panels),
 }
 
 de.view.select = function(value) de.view.onClick(value == "bag") end
@@ -366,7 +398,7 @@ end
 --- Click a row of a tab's list, the way the list does.
 local function ClickRow(tab, itemID)
     for _, entry in ipairs(tab.list.data or {}) do
-        if entry.itemID == itemID then
+        if entry.itemID == itemID or entry.outputItemID == itemID then
             tab.list.opts.onClick(entry, 1, "LeftButton")
             tab.list:Refresh()
             return entry
@@ -382,52 +414,50 @@ print("\na redraw queued by a tab the player has left")
 --------------------------------------------------------------------------------
 
 bagRows = { BagRow(BELT, "Belt", 800), BagRow(BOOTS, "Boots", 200) }
-craftRows = { { kind = "craft", recipeID = 77, itemID = ROBE, name = "Robe", value = 900, sells = 100,
-    sellsAt = "auction", cost = 50, gain = 800, beatsSale = true, craftableNow = 1,
-    breakdown = { facts = {}, outcomes = {} } } }
+craftRows[1] = { recipeID = 77, outputItemID = ROBE, name = "Robe", priceable = true, totalCost = 50,
+    revenue = 100, unitRevenue = 100, profit = 50, margin = 1, disenchantable = true,
+    disenchantValue = 900, disenchantBeatsSale = true, craftableNow = 1 }
 
 window:Show()
-SelectTab("disenchanting")
+SelectTab("deals")
 de.view.select("bag")
-check("the Disenchanting bags list sets the button on its top item", Armed() == BELT
+check("the Deals bags list sets the button on its top item", Armed() == BELT
     and Disenchanter.anchor == de.button)
 
 -- An item the addon asked for arrives, and the tab queues a redraw.
 Fire("GET_ITEM_INFO_RECEIVED", 777, true)
-check("the Disenchanting tab queued its redraw", #timers == 1)
+check("the Deals tab queued its redraw", #timers == 1)
 
--- The player moves to the Enchanting tab and picks a robe they carry.
-SelectTab("enchanting")
-en.view.select("craft")
+-- The player moves to the Profit tab and picks a robe they carry.
+SelectTab("profit")
 ClickRow(en, ROBE)
-check("the Enchanting tab's button is set on the robe", Armed() == ROBE and Disenchanter.anchor == en.button)
+check("the Profit tab's button is set on the robe", Armed() == ROBE and Disenchanter.anchor == en.button)
 
 RunTimers()
 check("the hidden tab's redraw leaves it there", Armed() == ROBE and Disenchanter.anchor == en.button)
 check("a hidden tab's button cannot take it", Disenchanter:Arm(de.button, BELT, 0, 1) == false
     and Armed() == ROBE)
 
-SelectTab("profit")
+SelectTab("queue")
 check("moving to another tab takes the button away", not Disenchanter.overlay:IsShown())
 
-SelectTab("enchanting")
+SelectTab("profit")
 check("coming back sets it again", Armed() == ROBE)
 window:Hide()
 check("closing the window takes it away", not Disenchanter.overlay:IsShown())
 
--- The other way round: a craft on the Enchanting tab, then the bags on the
--- Disenchanting tab.
+-- The other way round: a craft on the Profit tab, then the bags on the
+-- Deals tab.
 window:Show()
-SelectTab("enchanting")
-en.view.select("craft")
+SelectTab("profit")
 ClickRow(en, ROBE)
 check("a carried craft sets the button on the robe", Armed() == ROBE)
 
 Fire("GET_ITEM_INFO_RECEIVED", 778, true)
-SelectTab("disenchanting")
-check("the Disenchanting tab sets it on its own pick", Armed() == BELT and Disenchanter.anchor == de.button)
+SelectTab("deals")
+check("the Deals tab sets it on its own pick", Armed() == BELT and Disenchanter.anchor == de.button)
 RunTimers()
-check("the Enchanting tab's late redraw does not aim it at the robe", Armed() == BELT
+check("the Profit tab's late redraw does not aim it at the robe", Armed() == BELT
     and Disenchanter.overlay:GetAttribute("target-slot") == 1)
 
 --------------------------------------------------------------------------------
@@ -442,7 +472,7 @@ check("and its row is lit as soon as it is picked", de.list.lit[1] == true and d
 
 -- Everything left sells for more than it disenchants for.
 bagRows = { BagRow(BOOTS, "Boots", -100), BagRow(CLOAK, "Cloak", -300) }
-tabs.disenchanting.refresh()
+tabs.deals.refresh()
 check("nothing that sells for more is picked for you", Armed() == nil)
 check("the button shows, unset", de.button:IsShown() and de.button.enabled == false)
 check("and the line beside it says why", de.detail.disenchantStatus:IsShown()
@@ -452,36 +482,38 @@ check("so does its tooltip", de.button.tooltipText == de.detail.disenchantStatus
 
 ClickRow(de, CLOAK)
 check("a click on one still sets the button on it", Armed() == CLOAK and de.button.enabled == true)
-tabs.disenchanting.refresh()
+tabs.deals.refresh()
 check("and it stays there through a redraw", Armed() == CLOAK)
 
 -- The cloak is disenchanted and leaves the bags; only the boots are left.
 bagRows = { BagRow(BOOTS, "Boots", -100) }
-tabs.disenchanting.refresh()
+tabs.deals.refresh()
 check("the boots do not take its place", Armed() == nil and de.button.enabled == false)
 
-SelectTab("enchanting")
+SelectTab("profit")
 --------------------------------------------------------------------------------
 print("\na craft whose Disenchant button cannot be used")
 --------------------------------------------------------------------------------
 
-en.view.select("craft")
 knows = false
 ClickRow(en, ROBE)
-check("the button gives way", not en.button:IsShown())
-check("to the reason, in its place", en.detail.disenchantStatus:IsShown()
-    and en.detail.disenchantStatus.text == "This character does not know Disenchant.")
+check("the button shows, unset", en.button:IsShown() and en.button.enabled == false and Armed() == nil)
+check("and its tooltip says why", en.button.tooltipText == "This character does not know Disenchant.")
 knows = true
 ClickRow(en, ROBE)
-check("once it can be used, the button is back", en.button:IsShown() and en.button.enabled == true
+check("once it can be used, it is set", en.button:IsShown() and en.button.enabled == true
     and Armed() == ROBE)
-check("with nothing beside it", en.detail.disenchantStatus.text == "")
+
+bag0[3] = nil
+ClickRow(en, ROBE)
+check("a craft not in the bags has no button", not en.button:IsShown() and Armed() == nil)
+bag0[3] = ROBE
 
 --------------------------------------------------------------------------------
-print("\nthe Disenchanting tab with every deal hidden")
+print("\nthe Deals tab with every deal hidden")
 --------------------------------------------------------------------------------
 
-SelectTab("disenchanting")
+SelectTab("deals")
 de.view.select("auction")
 auctionRows = { { kind = "auction", itemID = DEAL, name = "Listed Chest", value = 800, buy = 500,
     net = 760, gain = 260, margin = 0.52, needs = 250, canDisenchant = false,
@@ -490,7 +522,7 @@ ns.Prices.changes = 1
 de.hideTooHigh.onClick(true)
 
 local emptyLabel
-for _, frame in ipairs(containers.disenchanting.children) do
+for _, frame in ipairs(containers.deals.children) do
     if frame.kind == "FontString" and frame.shown and type(frame.text) == "string"
         and frame.text:find("Untick") then emptyLabel = frame end
 end
@@ -508,7 +540,7 @@ bagRows = { BagRow(BELT, "Belt", 800, { breakdown = { facts = {}, outcomes = {
     { itemID = 16203, name = "Greater Eternal Essence", chance = 0.225, min = 1, max = 2, price = 123456 },
     { itemID = 10940, name = "Dust", chance = 0.75, min = 1, max = 1, price = 5 },
 } } }) }
-tabs.disenchanting.refresh()
+tabs.deals.refresh()
 
 local wide, short = de.detail.outcomeLines[1], de.detail.outcomeLines[2]
 -- "123456 each" is 66 pixels here, so the name has 276 - 18 - 6 - 66.
@@ -528,7 +560,7 @@ local function DrawnIcon(tab, entry)
 end
 
 local belt = de.list.data[1]
-check("a Disenchanting bag row hands its link to the icon", DrawnIcon(de, belt).link == belt.link)
+check("a Deals bag row hands its link to the icon", DrawnIcon(de, belt).link == belt.link)
 check("and so does the detail panel", de.detail.icon.link == belt.link)
 
 --------------------------------------------------------------------------------
