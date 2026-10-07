@@ -261,6 +261,13 @@ function Mail:Read()
 
     self:Reconcile(mails, complete)
 
+    -- Only a full reading can say a sale's mail is gone, and only one with
+    -- every sale priced: one waiting on its amount is not in the ledger yet.
+    -- An empty box the server has not answered for yet never gets here.
+    if complete and (self.awaitingAmount or 0) == 0 then
+        self:SweepHeard(mails)
+    end
+
     -- What left the mailbox since the last reading is what was collected,
     -- which is what the report after a mailbox visit is made of.
     if ns.MailHaul then ns.MailHaul:Observe(mails, complete) end
@@ -1312,6 +1319,39 @@ function Mail:NoteHeardSale(name)
     return heard
 end
 
+--- An item name as the two sides of a sale both mean it.
+--
+-- The notice names the item ("Linen Cloth"), but a stack's mail names the
+-- stack ("Linen Cloth (20)"), and a notice can carry a link or a count of its
+-- own. Compared as written, a stack's sale never found its mail and said "gold
+-- waiting in the mail" for a month. Only for comparing: what is saved keeps
+-- the name it was written down with.
+function Mail.PlainName(name)
+    if type(name) ~= "string" then return nil end
+
+    local ok, plain = pcall(function()
+        local t = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        t = t:match("|h%[(.-)%]|h") or t
+        t = t:gsub("%s*%(%d+%)%s*$", ""):gsub("%s+x%s?%d+%s*$", "")
+        t = t:gsub("^%s+", ""):gsub("%s+$", "")
+        return t
+    end)
+
+    if not ok or type(plain) ~= "string" or plain == "" then return nil end
+    return plain
+end
+
+local function SameItem(heard, entry)
+    if heard.itemID and entry.itemID then return heard.itemID == entry.itemID end
+
+    local a, b = Mail.PlainName(heard.name), Mail.PlainName(entry.name)
+    return a ~= nil and a == b
+end
+
+-- How long after a sale its mail can take to turn up. Classic holds it for an
+-- hour; the margin covers a slow server.
+local MAIL_DELAY_SECONDS = 90 * 60
+
 --- Pair heard sales with the ledger's sold entries, and drop the ones that
 --- found their mail (or waited past the life of a mail).
 --
@@ -1319,26 +1359,31 @@ end
 -- for the same character and item, and is marked `heard` so a later pass does
 -- not pair it again. The heard sale is then dropped: the ledger entry is the
 -- same sale with its price.
+--
+-- A heard sale marked `collected` is one whose mail left the box without
+-- being read (see Mail:SweepHeard). It is kept, as the only record of that
+-- sale, but no longer waits.
 function Mail:SettleHeard()
     local list = self:GetHeardList()
-    if #list == 0 then return list end
+    if #list == 0 then return {}, list end
 
     local entries = self:GetLedger().entries
     local now = time()
-    local kept = {}
+    local kept, waiting = {}, {}
 
     for _, heard in ipairs(list) do
         local settled = false
 
-        if (heard.t or 0) < now - HEARD_KEEP_SECONDS then
+        if heard.collected then
+            settled = false
+        elseif (heard.t or 0) < now - HEARD_KEEP_SECONDS then
             settled = true
         else
             for _, entry in ipairs(entries) do
                 if entry.kind == "sold" and not entry.heard
                     and (entry.t or 0) >= (heard.t or 0) - 5
                     and (heard.who == nil or entry.who == heard.who)
-                    and ((heard.name and entry.name == heard.name)
-                        or (heard.itemID and entry.itemID == heard.itemID)) then
+                    and SameItem(heard, entry) then
                     entry.heard = true
                     settled = true
                     break
@@ -1346,20 +1391,66 @@ function Mail:SettleHeard()
             end
         end
 
-        if not settled then kept[#kept + 1] = heard end
+        if not settled then
+            kept[#kept + 1] = heard
+            if not heard.collected then waiting[#waiting + 1] = heard end
+        end
     end
 
     if #kept ~= #list then
         ns.db.heardSales[ns.Config:GetRealmKey()] = kept
     end
 
-    return kept
+    return waiting, kept
+end
+
+--- After a full look at the inbox: a heard sale of this character's, old
+--- enough that its mail has arrived, that found no mail in the ledger and
+--- has none in the box, was collected without its mail being read (another
+--- mail addon, or a mailbox read before this one could see it). It stops
+--- waiting. Nothing is removed: it is marked, and stays a sale.
+--
+-- @param mails the inbox as Mail:ReadInbox read it
+-- @return how many were marked
+function Mail:SweepHeard(mails)
+    if not ns.db then return 0 end
+
+    local waiting = self:SettleHeard()
+    if #waiting == 0 then return 0 end
+
+    -- A sale still in the box, priced or not, is not collected yet.
+    local inBox = {}
+    for _, mail in ipairs(mails or {}) do
+        local kind, itemName = self:Classify(mail)
+        if kind == "sold" or not kind then
+            local plain = self.PlainName(itemName or mail.subject)
+            if plain then inBox[plain] = true end
+        end
+    end
+
+    local who = ns.Config:GetCharacterKey()
+    local now = time()
+    local marked = 0
+
+    for _, heard in ipairs(waiting) do
+        if (heard.who == nil or heard.who == who)
+            and (heard.t or now) < now - MAIL_DELAY_SECONDS
+            and not inBox[self.PlainName(heard.name) or ""] then
+            heard.collected = now
+            marked = marked + 1
+        end
+    end
+
+    if marked > 0 then
+        ns.Debug(("mail: %d heard sale(s) collected without their mail being read"):format(marked))
+    end
+    return marked
 end
 
 --- Heard sales still waiting for their mail, oldest first.
 function Mail:GetHeard()
     if not ns.db then return {} end
-    return self:SettleHeard()
+    return (self:SettleHeard())
 end
 
 --------------------------------------------------------------------------------
