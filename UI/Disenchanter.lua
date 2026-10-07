@@ -190,6 +190,10 @@ function Disenchanter:CreateOverlay()
         button:SetAttribute("type", "spell")
         button:SetAttribute("target-bag", bag)
         button:SetAttribute("target-slot", slot)
+
+        -- The Queue tab's Disenchant next counts its marks off this.
+        local anchor = Disenchanter.anchor
+        if anchor and type(anchor.onSecureClick) == "function" then anchor.onSecureClick(wanted) end
     end)
 
     self.overlay = overlay
@@ -269,6 +273,9 @@ function Disenchanter:Arm(anchor, itemID, bag, slot)
     end
 
     self.itemID = itemID
+    -- The button underneath says what it does (Disenchant next names the
+    -- item), and the secure one over it must say the same.
+    overlay.label:SetText(type(anchor.overlayText) == "string" and anchor.overlayText or "Disenchant")
     self:Place()
 
     if anchor:IsVisible() then overlay:Show() end

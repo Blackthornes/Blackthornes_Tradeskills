@@ -40,6 +40,7 @@ Logic\Profit.lua
 Logic\LevelUp.lua
 Logic\RecipeBook.lua
 Logic\Queue.lua
+Logic\QueueActions.lua
 Logic\QueueMail.lua
 Logic\Crafting.lua
 Logic\Posting.lua
@@ -68,6 +69,7 @@ UI\BuyQuantity.lua
 UI\CraftPanel.lua
 UI\ProfessionOpener.lua
 UI\Disenchanter.lua
+UI\SellMarked.lua
 UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
