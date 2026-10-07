@@ -169,7 +169,7 @@ end
 local function UpdateRow(row, entry)
     if row.view ~= state.view then ApplyRowLayout(row) end
 
-    row.name:SetText(entry.name or ("item " .. tostring(entry.itemID)))
+    Theme.SetRowName(row.name, entry.name or ("item " .. tostring(entry.itemID)))
     -- A bag row carries its link, so the upgrade arrow judges that very copy.
     Theme.SetItemIcon(row.icon, entry.itemID, entry.link)
 

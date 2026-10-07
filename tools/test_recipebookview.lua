@@ -40,6 +40,7 @@ C_Timer = { After = function() end }
 C_Item = { GetItemInfo = function() return "item" end }
 
 ns.Theme = {
+  SetRowName = function(label, text) label:SetText(text) end,
   CreateLabel = function() return Label() end,
   CreateItemIcon = function() return Stub() end,
   SetItemIcon = function() end,

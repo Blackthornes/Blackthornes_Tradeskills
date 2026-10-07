@@ -1478,12 +1478,15 @@ end
 -- Blizzard's own list sort arrow, pointing down; flipped for smallest first.
 local SORT_ARROW = [[Interface\Buttons\UI-SortArrow]]
 
--- Room a heading keeps beside its words for the sort arrow: 9 wide, 2 off
--- the words, 1 spare.
-Widgets.SORT_ARROW_ROOM = 12
+-- Room a heading keeps beside its words for the sort arrow: 8 wide, 2 off
+-- the words.
+Widgets.SORT_ARROW_ROOM = 10
 
 -- The widest amount a money column is made to hold whole, every coin shown.
-Widgets.MONEY_SAMPLE = "88g 88s 88c"
+-- One digit of gold: at level 30 most amounts are under 10g, and every
+-- pixel more goes from the item names. A larger amount is measured down to
+-- "12g 35s" (Theme.SetMoneyText).
+Widgets.MONEY_SAMPLE = "9g 99s 99c"
 
 --- Widen a list's columns so every heading shows whole beside its sort arrow
 --- and every money column holds a full amount, never ending in "..."
@@ -1492,7 +1495,10 @@ Widgets.MONEY_SAMPLE = "88g 88s 88c"
 --
 -- Each column is a table with `width` (the least it is given; kept as
 -- `baseWidth`, so calling this again starts over), and optionally `label`
--- (its heading) and `money = true`. Call it before the rows and headings are
+-- (its heading), `money = true` and `sample` (a wider amount to hold, for a
+-- list with room to spare). A money column's width is measured
+-- whole, from its heading and MONEY_SAMPLE, once they can be measured: its
+-- own width was picked by eye, and the room it saves goes to the names. Call it before the rows and headings are
 -- laid out, which then read `width` as before. A centred heading needs no
 -- more room than another: SortableHeadings narrows it while it sorts.
 -- @param texts  optional function(column) returning the heading's text, or
@@ -1514,8 +1520,14 @@ function Widgets.FitColumns(columns, texts)
         end
 
         if column.money then
-            local width = measure("small", Widgets.MONEY_SAMPLE)
-            if type(width) == "number" then need = math.max(need, width + 2) end
+            local width = measure("small", column.sample or Widgets.MONEY_SAMPLE)
+            if type(width) == "number" then
+                need = width + 2
+                for _, text in ipairs(headings) do
+                    local heading = measure("tiny", text)
+                    if type(heading) == "number" then need = math.max(need, heading + room) end
+                end
+            end
         end
 
         column.width = need
@@ -1606,7 +1618,7 @@ function Widgets.SortableHeadings(labels, values, onChange)
             button.label = label
 
             local arrow = button:CreateTexture(nil, "OVERLAY")
-            arrow:SetSize(9, 8)
+            arrow:SetSize(8, 7)
             pcall(arrow.SetTexture, arrow, SORT_ARROW)
             arrow:Hide()
             button.arrow = arrow

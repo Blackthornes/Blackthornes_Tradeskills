@@ -170,7 +170,7 @@ local function FillCell(cell, key, entry)
 end
 
 local function UpdateRow(row, entry)
-    row.name:SetText(entry.name or ("item " .. tostring(entry.itemID)))
+    Theme.SetRowName(row.name, entry.name or ("item " .. tostring(entry.itemID)))
     Theme.SetItemIcon(row.icon, entry.itemID)
 
     local r, g, b = Util.GetItemQualityColor(entry.itemID)
