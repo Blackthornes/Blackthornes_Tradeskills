@@ -261,7 +261,7 @@ local function UpdateRow(row, analysis)
         ApplyRowLayout(row)
     end
 
-    row.name:SetText(analysis.name or ("recipe " .. analysis.recipeID))
+    Theme.SetRowName(row.name, analysis.name or ("recipe " .. analysis.recipeID))
     Theme.SetItemIcon(row.icon, analysis.outputItemID)
     row.marginBar:Set(nil)
 

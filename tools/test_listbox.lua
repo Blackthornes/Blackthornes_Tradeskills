@@ -98,6 +98,7 @@ local function Theme()
         CreateItemIcon = function() return NewFrame() end,
         SetItemIcon = noop,
         SetMoneyText = function(label, copper) label:SetText(tostring(copper)) end,
+        SetRowName = function(label, text) label:SetText(text) end,
         CreateHeading = function() local h = NewFrame(); h.rule = NewFrame(); return h end,
         ProfitColor = function() return 1, 1, 1, 1 end,
     }

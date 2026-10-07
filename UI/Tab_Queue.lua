@@ -344,7 +344,7 @@ local function UpdateMaterialRow(row, line)
     -- own colour shows over the label's, so a recoloured name goes without.
     local label = Util.GetItemLabel(line.itemID)
     local nameColour = line.shortfall <= 0 and "muted" or line.altCraft and "profit" or nil
-    row.name:SetText(nameColour and Util.Uncolored(label) or label)
+    Theme.SetRowName(row.name, nameColour and Util.Uncolored(label) or label)
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells

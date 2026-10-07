@@ -196,6 +196,7 @@ ns.Util = {
 local panels = {}
 local function Label(parent) return Frame("FontString", parent) end
 ns.Theme = {
+    SetRowName = function(label, text) label:SetText(text) end,
     FONT = "font", sizes = { tiny = 10, small = 11 },
     Fill = function(frame) return Frame("Texture", frame) end,
     Border = function(frame, key, alpha) frame.borderKey, frame.borderAlpha = key, alpha end,

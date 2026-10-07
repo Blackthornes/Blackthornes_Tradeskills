@@ -70,6 +70,7 @@ C_Timer = { After = function() end }
 GameTooltip = Stub()
 
 ns.Theme = {
+    SetRowName = function(label, text) label:SetText(text) end,
     CreateLabel = function() return Label() end,
     CreatePanel = function() return Stub() end,
     CreateDivider = function() return Stub() end,

@@ -133,7 +133,7 @@ local function UpdateRow(row, entry)
 
     -- Coloured the way the profession window colours it, so the list reads
     -- the same as the game without being told what orange means.
-    row.name:SetText(entry.name or ("recipe " .. entry.recipeID))
+    Theme.SetRowName(row.name, entry.name or ("recipe " .. entry.recipeID))
     row.name:SetTextColor(TierColor(entry.tier))
     Theme.SetItemIcon(row.icon, entry.outputItemID)
 
