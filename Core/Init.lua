@@ -279,7 +279,7 @@ end
 -- Everything else is a check or a developer tool, listed by /bts help all.
 local PLAYER_COMMANDS = {
     "scan", "cancel", "top", "why", "price", "stock", "sold", "de",
-    "haul", "mail", "salealarm", "pane", "professions", "export", "import",
+    "haul", "mail", "salealarm", "pane", "professions", "size", "export", "import",
 }
 
 local function HelpLine(name)

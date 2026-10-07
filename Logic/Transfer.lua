@@ -203,6 +203,8 @@ function Transfer:Import(code)
     end
 
     if ns.UI then
+        -- A code can carry the window's size: drawn at it now, not next time.
+        if ns.UI.ApplyScale then ns.UI:ApplyScale() end
         ns.UI:RefreshActiveTab()
         ns.UI:UpdateHeader()
     end

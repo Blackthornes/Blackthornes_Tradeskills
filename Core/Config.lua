@@ -183,6 +183,12 @@ local DEFAULTS = {
         -- (everything lands at once). See Motion in UI/Widgets.lua.
         windowEffects = "full",
 
+        -- How big the main window is drawn, 1 being its normal size: a
+        -- player on a 4K screen found it too big and wanted room for other
+        -- windows beside it (2026-10-07). Set by dragging the corner below
+        -- its bottom right, the Settings tab or /bts size. See UI/Main.lua.
+        windowScale = 1,
+
         -- Play a sound the moment the game says one of your auctions has
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
         saleAlarm = true,
