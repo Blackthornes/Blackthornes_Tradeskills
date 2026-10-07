@@ -809,8 +809,10 @@ local function OnShow()
         end
     end
 
+    -- "All professions" first, as in every profession menu (it sat last
+    -- here, first on the Profit tab).
     table.sort(options, function(a, b) return a.text < b.text end)
-    options[#options + 1] = { text = "All professions", value = nil }
+    table.insert(options, 1, { text = "All professions", value = nil })
 
     local dropdown = widgets.professionDropdown
     dropdown:SetOptions(options)
@@ -827,10 +829,10 @@ local function OnShow()
         state.selected = nil
     elseif state.profession and not skillLinesByName[state.profession] then
         state.profession = nil
-    elseif not state.started and options[1] then
+    elseif not state.started and options[2] then
         -- No profession opened since this was added: start on the first one
         -- rather than a mix of all of them.
-        state.profession = options[1].value
+        state.profession = options[2].value
     end
 
     state.started = true

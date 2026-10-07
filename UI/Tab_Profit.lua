@@ -410,6 +410,42 @@ end
 -- Defined below; the Price graph button redraws the pane with it.
 local UpdateDetail
 
+--- The tooltip on "If disenchanted": what the craft breaks into, the chance
+--- of each, and what each is worth, as the Enchanting tab's pane showed it.
+local function ShowBreaksInto(owner, analysis)
+    local itemID = analysis and analysis.outputItemID
+    if not itemID or not ns.Disenchant or not ns.Disenchant.GetValue then return end
+
+    local _, _, breakdown = ns.Disenchant:GetValue(itemID)
+    breakdown = breakdown or {}
+
+    GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
+    GameTooltip:SetText("Breaks into", 1, 1, 1)
+
+    for _, outcome in ipairs(breakdown.outcomes or {}) do
+        local count = outcome.min == outcome.max and tostring(outcome.min)
+            or ("%d-%d"):format(outcome.min, outcome.max)
+        GameTooltip:AddDoubleLine(
+            ("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
+                outcome.name or Util.GetItemLabel(outcome.itemID),
+                outcome.counted == false and "  (bonus)" or ""),
+            outcome.price and (Util.FormatMoney(outcome.price, { noColor = true, short = true }) .. " each")
+                or "no price",
+            1, 1, 1, 0.8, 0.8, 0.8)
+    end
+
+    local facts = breakdown.facts or {}
+    if facts.skill then
+        GameTooltip:AddLine(("Needs Enchanting about %d."):format(facts.skill), 0.7, 0.7, 0.7, true)
+    end
+    if facts.source == "yours" then
+        GameTooltip:AddLine(("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts)), 0.5, 0.5, 0.5, true)
+    else
+        GameTooltip:AddLine("Chances come from the Classic table built into the addon until you have done enough disenchants of your own.", 0.5, 0.5, 0.5, true)
+    end
+    GameTooltip:Show()
+end
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
@@ -463,6 +499,29 @@ local function BuildDetail(parent)
         graph:Hide()
         detail.graph = graph
     end
+
+    -- Disenchant, for a craft you carry (it came from the Enchanting tab,
+    -- 2026-10-07). The click itself is taken by the secure button
+    -- UI/Disenchanter.lua lays over this one; this handler only runs when
+    -- that button is not there, so it says why.
+    local disenchantButton = Widgets.CreateButton(detail, "Disenchant", function()
+        local analysis = state.selected
+        local check = ns.Disenchanter:Check(analysis and analysis.outputItemID)
+
+        if not check.ok then
+            ns.Print(check.why)
+        else
+            ns.Warn("that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints.")
+        end
+    end, { width = 76, height = 16, fontSize = "tiny", primary = true })
+    disenchantButton:SetPoint("TOP", reagentHeading, "TOP", 0, 4)
+    if detail.graphButton then
+        disenchantButton:SetPoint("RIGHT", detail.graphButton, "LEFT", -6, 0)
+    else
+        disenchantButton:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    end
+    disenchantButton:Hide()
+    detail.disenchantButton = disenchantButton
 
     detail.reagentLines = {}
 
@@ -525,6 +584,16 @@ local function BuildDetail(parent)
         vendor = { SummaryRow(9, "If vendored") },
         disenchant = { SummaryRow(10, "If disenchanted") },
     }
+
+    -- What the craft breaks into, with each chance, under the mouse on the
+    -- "If disenchanted" line (from the Enchanting tab, 2026-10-07).
+    local breaks = CreateFrame("Frame", nil, summary)
+    breaks:SetPoint("TOPLEFT", detail.wayRows.disenchant[2], "TOPLEFT", 0, 2)
+    breaks:SetPoint("BOTTOMRIGHT", detail.wayRows.disenchant[1], "BOTTOMRIGHT", 0, -2)
+    breaks:EnableMouse(true)
+    breaks:SetScript("OnEnter", function(self) ShowBreaksInto(self, state.selected) end)
+    breaks:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.breaksInto = breaks
 
     -- Per-item posted limit. Sits with the queue controls because it is the
     -- thing that decides how many you should be adding.
@@ -725,6 +794,49 @@ local function UpdateGraph(detail, analysis)
     return true
 end
 
+--- Show the Disenchant button for a craft that is in the bags and can be
+--- disenchanted, armed when it can be used now and saying why when not.
+-- The heading's rule stops short of it.
+local function UpdateDisenchantButton(detail, analysis)
+    local button = rawget(detail, "disenchantButton")
+    if type(button) ~= "table" or not ns.Disenchanter then return end
+
+    local itemID = analysis and analysis.outputItemID
+    local carried = itemID and analysis.disenchantable == true
+        and ns.Disenchanter:FindSlot(itemID) ~= nil or false
+
+    button:SetShown(carried)
+
+    local rule = rawget(detail.reagentHeading, "rule")
+    if type(rule) == "table" then
+        local stop = carried and button or rawget(detail, "graphButton")
+        rule:ClearAllPoints()
+        rule:SetPoint("LEFT", detail.reagentHeading, "RIGHT", 6, 0)
+        if type(stop) == "table" then
+            rule:SetPoint("RIGHT", stop, "LEFT", -6, 0)
+        else
+            rule:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+        end
+    end
+
+    local disenchanter = ns.Disenchanter
+    if not carried then
+        if disenchanter.anchor == button then disenchanter:Disarm() end
+        return
+    end
+
+    local check = disenchanter:Check(itemID)
+    button:SetEnabledState(check.ok)
+    button.tooltipText = check.ok
+        and ("Disenchant one %s from your bags."):format(analysis.name or "item") or check.why
+
+    if check.ok then
+        disenchanter:Arm(button, itemID, check.bag, check.slot)
+    elseif disenchanter.anchor == button then
+        disenchanter:Disarm()
+    end
+end
+
 function UpdateDetail(analysis)
     local detail = widgets.detail
 
@@ -753,6 +865,8 @@ function UpdateDetail(analysis)
     detail.limitBox:SetShown(hasSelection)
     detail.limitHint:SetShown(hasSelection)
     detail.quantity:GetParent():SetShown(hasSelection)
+
+    UpdateDisenchantButton(detail, analysis)
 
     if not hasSelection then
         UpdateGraph(detail, nil)
@@ -974,6 +1088,9 @@ function UpdateDetail(analysis)
 
             label:SetShown(line ~= nil or unscanned)
             value:SetShown(line ~= nil or unscanned)
+            if way == "disenchant" and type(rawget(detail, "breaksInto")) == "table" then
+                detail.breaksInto:SetShown(line ~= nil)
+            end
 
             if line then
                 local text = Util.FormatMoney(line.profit, { short = true })

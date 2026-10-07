@@ -1,5 +1,5 @@
--- The Enchanting tab and the Profit tab's DISENCHANT column, drawn without a
--- game client.
+-- The Profit tab's DISENCHANT column and Disenchant button, which took over
+-- the Enchanting tab's crafts list (2026-10-07), drawn without a game client.
 --
 -- The widget layer is the one tools/test_rarity.lua uses: it remembers what
 -- was written to each label, so a cell can be asked what it says and which
@@ -90,7 +90,7 @@ ns.Widgets = {
     end,
     CreateCheckbox = function(_, text) local box = Stub({ shown = true, SetShown = function(self, v) self.shown = v end }); checkboxes[text] = box; return box end,
     ShowItemTooltip = function() return true end,
-    CreateNumberBox = function() return Stub() end,
+    CreateNumberBox = function() return Stub({ editBox = Stub() }) end,
     CreateButton = function() return Stub() end,
 }
 
@@ -135,31 +135,10 @@ local function check(label, condition)
 end
 
 --------------------------------------------------------------------------------
--- The Enchanting tab
+-- What the Profit tab took over from the Enchanting tab (2026-10-07)
 --------------------------------------------------------------------------------
 
-local craftRows = {
-    { kind = "craft", recipeID = 1, itemID = 11, name = "Chest", value = 800, sells = 700,
-      sellsAt = "auction", cost = 100, gain = 700, beatsSale = true, craftableNow = 2,
-      breakdown = { facts = { itemLevel = 22, qualityName = "uncommon", skill = 25 },
-                    outcomes = { { itemID = 10940, name = "Strange Dust", chance = 0.75,
-                                   min = 4, max = 6, price = 100 } } } },
-    { kind = "craft", recipeID = 2, itemID = 12, name = "Sword", value = 1400, sells = 5000,
-      sellsAt = "auction", cost = 100, gain = 1300, beatsSale = false, craftableNow = 0,
-      breakdown = { facts = {}, outcomes = {} } },
-}
-
-ns.Disenchant = {
-    GetCraftRows = function() return craftRows end,
-    GetBagRows = function()
-        return { { kind = "bag", itemID = 21, name = "Belt", count = 1, value = 500, sells = 100,
-                   sellsAt = "auction", gain = 400, beatsSale = true,
-                   breakdown = { facts = { itemLevel = 20, qualityName = "uncommon", skill = 1 }, outcomes = {} } } }
-    end,
-    GetMaterialRows = function()
-        return { { kind = "material", itemID = 10940, name = "Strange Dust", price = 100, have = 7, age = 60 } }
-    end,
-}
+ns.Disenchant = {}
 ns.Queue = { Add = function() end }
 
 -- The Disenchant button's secure half, which needs a game client: this only
@@ -184,51 +163,25 @@ ns.Widgets.CreateScrollList = function(_, opts)
     return list
 end
 
+-- Buttons remember their words and whether they show.
+local buttons = {}
+ns.Widgets.CreateButton = function(_, text)
+    local button = Stub({ text = text, shown = true,
+        SetShown = function(self, value) self.shown = value and true or false end,
+        Hide = function(self) self.shown = false end,
+        Show = function(self) self.shown = true end })
+    buttons[#buttons + 1] = button
+    return button
+end
+
+local function Button(text)
+    for index = #buttons, 1, -1 do
+        if buttons[index].text == text then return buttons[index] end
+    end
+end
+
 local tabs = {}
 ns.UI = Stub({ RegisterTab = function(_, registered) tabs[registered.key] = registered end })
-
-assert(loadfile(lfs_cwd .. "/UI/Tab_Enchanting.lua"))("Blackthornes_TS", ns)
-
-local enchanting = tabs.enchanting
-check("the tab registers as Enchanting", enchanting and enchanting.text == "Enchanting")
-
-enchanting.build(Stub())
-enchanting.refresh()
-
-local list = lists[#lists]
-check("the craft view lists the crafts", list.data == craftRows)
-
-local row = Stub()
-list.opts.createRow(row)
-list.opts.updateRow(row, craftRows[1])
-
--- Columns run right to left: PROFIT, DISENCHANT, SELLS, COST, MAKE.
-check("the craft's name is shown", row.name.text == "Chest")
-check("its disenchant value is shown", row.cells[2].text == "800")
-check("and green, because it beats selling", row.cells[2].color[1] == "profit")
-check("the sale price sits beside it", row.cells[3].text == "700")
-check("profit over materials is shown", row.cells[1].text == "700")
-
-list.opts.updateRow(row, craftRows[2])
-check("a craft that sells for more is not green", row.cells[2].color[1] ~= "profit")
-check("and shows it cannot be made now", row.cells[5].text == "0" and row.cells[5].color[1] == "loss")
-
--- Picking a row fills the detail panel without an error.
-list.opts.onClick(craftRows[1], 1, "LeftButton")
-check("picking a row fills the detail panel", true)
-check("a craft you carry gets the Disenchant button", armed[#armed] == 11)
-
-local before = #armed
-list.opts.onClick(craftRows[2], 2, "LeftButton")
-check("a craft you do not carry does not", #armed == before)
-
--- Bag items are the Disenchanting tab's; this menu no longer offers them
--- (2026-10-06).
-local offersBags = false
-for _, option in ipairs(lastOptions or {}) do
-    if option.value == "bag" then offersBags = true end
-end
-check("the Show menu offers crafts and materials only", #lastOptions == 2 and not offersBags)
 
 --------------------------------------------------------------------------------
 -- The Profit tab's column
@@ -247,8 +200,33 @@ ns.Profit.GetRanked = function() return showing end
 
 assert(loadfile(lfs_cwd .. "/UI/Tab_Profit.lua"))("Blackthornes_TS", ns)
 
+ns.Profit.MaxCrafts = function() return 1 end
+ns.Profit.Analyse = function(_, recipeID)
+    for _, analysis in ipairs(analyses) do
+        if analysis.recipeID == recipeID then return analysis end
+    end
+end
+
 tabs.profit.build(Stub())
 tabs.profit.refresh()
+
+local disenchantButton = Button("Disenchant")
+check("the Profit tab's pane has a Disenchant button", disenchantButton ~= nil)
+check("hidden until a craft is picked", disenchantButton.shown == false)
+
+local picker = lists[#lists]
+picker.opts.onClick(analyses[1], 1, "LeftButton")
+check("a craft you carry that can be disenchanted shows it", disenchantButton.shown == true)
+check("and sets it on that item", armed[#armed] == 11)
+
+local before = #armed
+picker.opts.onClick(analyses[2], 2, "LeftButton")
+check("a craft that cannot be disenchanted hides it", disenchantButton.shown == false and #armed == before)
+
+carrying[11] = nil
+picker.opts.onClick(analyses[1], 1, "LeftButton")
+check("so does one you do not carry", disenchantButton.shown == false and #armed == before)
+carrying[11] = true
 
 local profitList = lists[#lists]
 local profitRow = Stub()

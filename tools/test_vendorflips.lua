@@ -313,7 +313,7 @@ records = backup
 -- The tab
 --------------------------------------------------------------------------------
 
-print("\nthe Vendor Flips tab")
+print("\nthe Deals tab, for vendor flips")
 
 local function Stub(fields)
     local frame = fields or {}
@@ -368,8 +368,8 @@ ns.Theme = {
 local checkboxes, lists, dropdowns = {}, {}, {}
 local searched
 ns.Widgets = {
-    CreateDropdown = function(_, options, onSelect)
-        local dropdown = Stub({ options = options, onSelect = onSelect })
+    CreateDropdown = function(_, options, onSelect, opts)
+        local dropdown = Stub({ options = options, onSelect = onSelect, opts = opts })
         dropdowns[#dropdowns + 1] = dropdown
         return dropdown
     end,
@@ -395,14 +395,24 @@ ns.UI = Stub({
     SearchAuctionHouse = function(_, itemID) sent[#sent + 1] = "item" .. itemID; return true end,
 })
 
-assert(loadfile(lfs_cwd .. "/UI/Tab_VendorFlips.lua"))("Blackthornes_TS", ns)
+assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 
-local tab = tabs.vendorflips
-check("the tab registers as Vendor Flips", tab and tab.text == "Vendor Flips")
-check("it sits after Disenchanting", tab.order > 1.8 and tab.order < 2)
+local tab = tabs.deals
+check("vendor flips are on the Deals tab", tab and tab.text == "Deals")
 
 tab.build(Stub())
-tab.refresh()
+
+-- Sell to: Vendor only, as the Vendor Flips tab was.
+local sellTo = dropdowns[1]
+check("the Sell to menu takes more than one way", sellTo and sellTo.opts and sellTo.opts.multi == true)
+check("it offers the auction house, disenchanting and a vendor", #sellTo.options == 3
+    and sellTo.options[1].value == "auction" and sellTo.options[2].value == "disenchant"
+    and sellTo.options[3].value == "vendor")
+check("the box says All with every way ticked", sellTo.opts.summary({ auction = true, disenchant = true, vendor = true })
+    == "Sell to: All")
+check("and names the ways otherwise", sellTo.opts.summary({ auction = true, vendor = true })
+    == "Sell to: AH, Vendor")
+sellTo.onSelect({ vendor = true })
 
 local list = lists[#lists]
 check("the flips are listed", list.data and #list.data == 3 and Find(list.data, 3001) ~= nil)
@@ -411,11 +421,11 @@ local row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 3001))
 
--- Right to left: PROFIT, MARGIN, VENDOR, BUY, LISTED, AGE.
+-- Right to left: PROFIT, MARGIN, GETS, BUY, AGE, VIA.
 check("PROFIT shows the gain in green", row.cells[1].text ~= "" and row.cells[1].color == "profit")
 check("MARGIN shows 150%", row.cells[2].text == "150%")
-check("VENDOR and BUY show prices", row.cells[3].text ~= "" and row.cells[4].text ~= "")
-check("LISTED shows how many", row.cells[5].text == "12")
+check("GETS and BUY show prices", row.cells[3].text ~= "" and row.cells[4].text ~= "")
+check("VIA says Vendor", row.cells[6].text == "Vendor")
 
 list.opts.onClick(Find(list.data, 3001), 1, "LeftButton")
 check("picking a row fills the profit bar", bars[1] and math.abs(bars[1].value - 0.6) < 1e-9)
@@ -596,20 +606,15 @@ ns.db.lastFullScan = nil
 
 print("\nthe Sell to menu")
 
-local sellTo = dropdowns[1]
-check("the menu offers Vendor and Auction house", sellTo and #sellTo.options == 2
-    and sellTo.options[2].value == "auction")
-
 ns.Prices.changes = 3
-sellTo.onSelect("auction")
-check("picking Auction house lists the resale flips", list.data and #list.data == 3 and Find(list.data, 4001) ~= nil)
-check("the headings read RESELL and DEMAND", Showing("RESELL") and Showing("DEMAND"))
+sellTo.onSelect({ auction = true })
+check("ticking only Auction house lists the resale flips", list.data and #list.data == 3 and Find(list.data, 4001) ~= nil)
 
 row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 4001))
-check("RESELL shows the price it lists again at", row.cells[3].text ~= "")
-check("DEMAND shows High", row.cells[5].text == "High")
+check("GETS shows the price it lists again at", row.cells[3].text ~= "")
+check("VIA says AH", row.cells[6].text == "AH")
 
 list.opts.onClick(Find(list.data, 4002), 1, "LeftButton")
 check("the detail says what it usually sells for", Showing("Usually sells for"))
@@ -622,9 +627,40 @@ check("right-click still searches for it", sent[#sent] == "item4001")
 check("and says what is worth buying to list again", printed[1] and printed[1]:find("pays to list again", 1, true))
 ns.Scanner.isAuctionHouseOpen = false
 
-sellTo.onSelect("vendor")
-check("back on Vendor the headings read VENDOR and LISTED", Showing("VENDOR") and Showing("LISTED"))
-check("and the resale rows are gone", Find(list.data, 4001) == nil)
+sellTo.onSelect({ vendor = true })
+check("back on Vendor the resale rows are gone", Find(list.data, 4001) == nil)
+
+sellTo.onSelect({})
+check("with no way ticked, nothing is listed", list.data and #list.data == 0)
+
+print("\nan item more than one way pays on")
+
+-- Bought at 5s: a vendor pays 9s, and it usually sells for 20s.
+items[4008] = { 1, 900 }
+demandLevels[4008] = "high"
+records[4008] = Seen(6, 2000, 700, { rivalMin = 500, quantity = 3 })
+ns.Prices.changes = 4
+sellTo.onSelect({ auction = true, vendor = true })
+
+local both = Find(list.data, 4008)
+local count = 0
+for _, entry in ipairs(list.data) do if entry.itemID == 4008 then count = count + 1 end end
+check("it is listed once", count == 1)
+check("on the way that pays most", both and both.via == "AH" and both.gain == 1400)
+check("with the other way kept for the detail", both.others and #both.others == 1
+    and both.others[1].via == "Vendor" and both.others[1].gain == 400)
+
+list.opts.onClick(both, 1, "LeftButton")
+local other
+for _, label in ipairs(labels) do
+    if label.text:find("^Other ways: sold to a vendor") then other = label.text end
+end
+check("and the detail says what the other way makes", other ~= nil)
+
+sellTo.onSelect({ vendor = true })
+both = Find(list.data, 4008)
+check("with the auction house unticked, it shows as a vendor flip", both and both.via == "Vendor"
+    and both.others == nil)
 
 for _, key in ipairs({ "C_Item", "GetTime", "CreateFrame", "PlaySound", "SOUNDKIT",
                       "GameTooltip", "C_Timer", "C_TooltipInfo" }) do

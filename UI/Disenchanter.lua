@@ -1,5 +1,5 @@
 -- Blackthornes Tradeskills -- UI/Disenchanter.lua
--- The Disenchant button on the Disenchanting and Enchanting tabs.
+-- The Disenchant button on the Deals and Profit tabs.
 --
 -- Addon code may not cast a spell, but the player's own click on a secure
 -- action button may. So the tab's Disenchant button has a secure button laid
@@ -175,7 +175,7 @@ function Disenchanter:CreateOverlay()
         -- The key binding clicks this button even when no tab has set it.
         if not wanted then
             button:SetAttribute("type", nil)
-            ns.Print("pick an item on the Disenchanting or Enchanting tab first")
+            ns.Print("pick an item in your bags on the Deals tab, or a craft you carry on the Profit tab, first")
             return
         end
 
@@ -336,7 +336,7 @@ local function Describe()
 
     local overlay, anchor = Disenchanter.overlay, Disenchanter.anchor
     if not overlay or not Disenchanter.itemID then
-        ns.Print("Disenchant button: not in use. Pick an item in your bags on the Disenchanting or Enchanting tab.")
+        ns.Print("Disenchant button: not in use. Pick an item in your bags on the Deals tab, or a craft you carry on the Profit tab.")
         return
     end
 
