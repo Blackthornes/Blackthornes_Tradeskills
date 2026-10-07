@@ -130,6 +130,11 @@ end
 --   what they are worth, not what is left to pay for them. Carried down
 --   through sub-crafts so the whole tree is valued the same way.
 --
+-- @param opts.made  { [itemID] = true } for the materials the queue is making.
+--   Given, a material is priced as made when it is in the set and as bought
+--   when it is not, whatever is cheaper today, so a queued craft costs
+--   what the queue will actually do. Carried down through sub-crafts.
+--
 -- @param opts.recipe  cost this recipe record instead of looking the ID up
 --   among the recipes characters know: a recipe nobody has learned yet
 --   (Logic/RecipeBook.lua). Not carried down to sub-crafts, which are
@@ -151,7 +156,7 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
     local recipe
     if opts and opts.recipe then
         recipe = opts.recipe
-        opts = { valueOwned = opts.valueOwned }
+        opts = { valueOwned = opts.valueOwned, made = opts.made }
     else
         recipe = ns.Recipes:GetAny(recipeID)
     end
@@ -184,12 +189,15 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
         if depth < MAX_SUBCRAFT_DEPTH then
             local subRecipeID = self:FindRecipeForItem(itemID)
 
+            local made = opts and opts.made
+            if made and not made[itemID] then subRecipeID = nil end
+
             -- Not over a price the player chose to use for it.
             if subRecipeID and not visited[subRecipeID] and source ~= "mine" then
                 local subResult = self:GetCraftCost(subRecipeID, depth + 1, visited, opts)
 
                 if subResult and subResult.priceable and subResult.perUnit then
-                    if not unitCost or subResult.perUnit < unitCost then
+                    if not unitCost or made or subResult.perUnit < unitCost then
                         unitCost = subResult.perUnit
                         source = "craft"
                         crafted = true
