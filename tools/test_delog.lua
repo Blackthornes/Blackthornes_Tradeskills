@@ -304,6 +304,33 @@ check("the recent list fills them in", Log:GetItem(1005) and Log:GetItem(1005).c
 check("so that item learns from them at once", select(2, Disenchant:GetOutcomes(1005)).byItem == true)
 check("the bands are left as they were", next(Log:GetTable().bands) == nil)
 
+print("\nthree casts that only by luck lead with something else")
+
+-- The sword's row mostly gives Lesser Astral Essence. Two dust and one
+-- essence in three is luck, not a different item: it stays on the table.
+local function Casts(itemID, list)
+    local recent = {}
+    for _, results in ipairs(list) do
+        recent[#recent + 1] = { itemID = itemID, results = results }
+    end
+    ns.db = { disenchantLog = { bands = {}, missed = 0, recent = recent } }
+end
+
+Casts(1003, { { [STRANGE_DUST] = 1 }, { [STRANGE_DUST] = 2 }, { [LESSER_ASTRAL] = 1 } })
+check("the table's likeliest came out once: still the table",
+    select(2, Disenchant:GetOutcomes(1003)).source == "table")
+
+local ten = {}
+for i = 1, 8 do ten[i] = { [STRANGE_DUST] = 1 } end
+ten[9], ten[10] = { [LESSER_ASTRAL] = 1 }, { [LESSER_ASTRAL] = 1 }
+Casts(1003, ten)
+check("ten that mostly give something else: its own results",
+    select(2, Disenchant:GetOutcomes(1003)).byItem == true)
+
+Casts(1003, { { [GREATER_MAGIC] = 1 }, { [GREATER_MAGIC] = 1 }, { [STRANGE_DUST] = 1 } })
+check("three where the table's likeliest never came: its own results",
+    select(2, Disenchant:GetOutcomes(1003)).byItem == true)
+
 C_Item, C_Container, GetTime, CreateFrame = saved.C_Item, saved.C_Container, saved.GetTime, saved.CreateFrame
 SpellIsTargeting, GetNumLootItems = saved.SpellIsTargeting, saved.GetNumLootItems
 GetLootSlotLink, GetLootSlotInfo, GetLootSourceInfo =
