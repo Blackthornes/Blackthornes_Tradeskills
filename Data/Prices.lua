@@ -512,6 +512,19 @@ function Prices:GetValue(itemID, which)
     local scanned = self:GetScanValue(itemID, which)
     if which == "rival" then return scanned end
 
+    -- Guildmates' prices (Logic/GuildPrices.lua, off unless the player turns
+    -- it on) fill a gap: an item never priced here, or one whose price has
+    -- gone stale while theirs is newer. A fresh scan of your own always wins.
+    local guild = ns.GuildPrices
+    if guild and guild.IsOn and guild:IsOn() then
+        local shared, sharedAt = guild:GetValue(itemID, which)
+        if shared then
+            local record = self:GetTable()[itemID]
+            local seen = type(record) == "table" and record.seen or 0
+            if not scanned or (self:IsStale(itemID) and sharedAt > seen) then scanned = shared end
+        end
+    end
+
     local mine, mode = self:GetMine(itemID)
     if not mine then return scanned end
 

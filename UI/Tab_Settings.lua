@@ -748,6 +748,111 @@ local function Build(outer)
     SoundRow("goalSound", "Farmer goal set",
         "A cheer when Set goal on the Gather tab makes a Farmer goal.")
 
+    -- Sharing (asked 2026-10-07): your characters on another account of
+    -- yours, and prices within your guild. Logic/AccountLink.lua and
+    -- Logic/GuildPrices.lua; every /bts share command has a control here.
+    local sharing = CreateSection(container, "SHARING", { anchor = lastSoundRow })
+
+    local linkRow = CreateRow(container, sharing, "Your other account",
+        "Character names on another account of yours, separated by commas. Add this character's name on that side too. While both are logged in on the same realm, each sends the other its characters.")
+
+    widgets.linkNames = Widgets.CreateSearchBox(linkRow, "Character names", function(text)
+        if ns.AccountLink then ns.AccountLink:SetNames(text) end
+    end)
+    widgets.linkNames:SetWidth(150)
+    widgets.linkNames:SetPoint("TOPLEFT", CONTROL_X, 0)
+    if widgets.linkNames.icon then
+        widgets.linkNames.icon:SetTexture([[Interface\FriendsFrame\UI-Toast-FriendOnlineIcon]])
+        widgets.linkNames.icon:SetSize(14, 14)
+    end
+    widgets.linkNames.editBox:SetScript("OnEscapePressed", function(self)
+        self:SetText(Config:Get("linkNames") or "")
+        self:ClearFocus()
+    end)
+    -- Saved as typed; the hello waits for Enter, so half a name is never
+    -- whispered.
+    widgets.linkNames.editBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        if ns.AccountLink then ns.AccountLink:Check() end
+    end)
+
+    widgets.linkShares = {}
+    local lastShareRow = linkRow
+    local function ShareRow(key, label, description)
+        local row = CreateRow(container, lastShareRow, label, description)
+        local box = Widgets.CreateCheckbox(row, "Send", function(checked)
+            Config:Set(key, checked)
+        end, true)
+        box:SetPoint("TOPLEFT", CONTROL_X, -2)
+        widgets.linkShares[key] = box
+        lastShareRow = row
+    end
+
+    ShareRow("linkShareRecipes", "Share recipes", "Your characters' professions and recipes.")
+    ShareRow("linkShareBags", "Share bags, bank and mail", "What your characters carry, bank and have in the mail.")
+    ShareRow("linkShareGold", "Share gold", "How much gold each of your characters has.")
+    ShareRow("linkShareAuctions", "Share auctions", "What your characters have listed, so Keep in stock counts it.")
+
+    local syncButton = Widgets.CreateButton(container, "Sync now", function()
+        if ns.AccountLink then ns.AccountLink:Check() end
+        ns.Print("asked your other account for anything new")
+        C_Timer.After(3, function() UI:RefreshActiveTab() end)
+    end, { width = 110, height = 22, tooltip = "Say hello to your other account now and swap anything that changed" })
+    syncButton:SetPoint("TOPLEFT", lastShareRow, "BOTTOMLEFT", 0, -10)
+    FitButton(syncButton)
+
+    local testButton = Widgets.CreateButton(container, "Test messages", function()
+        if ns.Comm then ns.Comm:Test() end
+    end, { width = 120, height = 22, tooltip = "Whisper yourself a few addon messages and say in chat what the game did with them" })
+    testButton:SetPoint("LEFT", syncButton, "RIGHT", 8, 0)
+    FitButton(testButton)
+
+    -- Removes only copies from the other account, never your own
+    -- characters; still arms first.
+    widgets.forgetLinked = Widgets.CreateButton(container, "Forget their characters", function()
+        local button = widgets.forgetLinked
+        if not button.armed then
+            button.armed = true
+            button:SetText("Really forget?")
+            button:SetConfirming(true)
+            C_Timer.After(4, function()
+                if button.armed then
+                    button.armed = false
+                    button:SetText("Forget their characters")
+                    button:SetConfirming(false)
+                end
+            end)
+            return
+        end
+        button.armed = false
+        button:SetText("Forget their characters")
+        button:SetConfirming(false)
+        local count = ns.AccountLink and ns.AccountLink:Forget() or 0
+        ns.Print(("forgot %d character%s from your other account"):format(count, count == 1 and "" or "s"))
+        UI:RefreshActiveTab()
+    end, { width = 170, height = 22,
+           tooltip = "Remove the copies of your other account's characters. Your own characters are never touched. Asks you to click again first." })
+    widgets.forgetLinked:SetPoint("TOPLEFT", syncButton, "BOTTOMLEFT", 0, -8)
+    FitButton(widgets.forgetLinked)
+
+    widgets.linkStatus = Theme.CreateLabel(container, "tiny", "muted")
+    widgets.linkStatus:SetPoint("TOPLEFT", widgets.forgetLinked, "BOTTOMLEFT", 0, -8)
+    widgets.linkStatus:SetWidth(COLUMN_WIDTH)
+    widgets.linkStatus:SetWordWrap(true)
+
+    local guildRow = CreateRow(container, widgets.linkStatus, "Guild prices",
+        "Shares your scans with guildmates who use this addon, at most once an hour, and fills gaps in your prices with theirs. Your own scans always win.")
+    widgets.guildPrices = Widgets.CreateCheckbox(guildRow, "Enabled", function(checked)
+        Config:Set("guildPrices", checked)
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.guildPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    widgets.guildStatus = Theme.CreateLabel(container, "tiny", "muted")
+    widgets.guildStatus:SetPoint("TOPLEFT", guildRow, "BOTTOMLEFT", 0, -4)
+    widgets.guildStatus:SetWidth(COLUMN_WIDTH)
+    widgets.guildStatus:SetWordWrap(true)
+
     -- Every setting at once, so it arms first like Clear price data.
     local resetButton
     resetButton = Widgets.CreateButton(container, "Reset to defaults", function()
@@ -798,7 +903,7 @@ local function Build(outer)
     -- Under the last setting rather than pinned to the page's bottom edge:
     -- measured from there, the page grew 4 pixels taller every time it was
     -- drawn, and left more empty space to scroll into each time.
-    resetButton:SetPoint("TOPLEFT", lastSoundRow, "BOTTOMLEFT", 0, -18)
+    resetButton:SetPoint("TOPLEFT", widgets.guildStatus, "BOTTOMLEFT", 0, -18)
     FitButton(resetButton)
 end
 
@@ -999,6 +1104,18 @@ local function Refresh()
         box:SetChecked(Config:Get(key) ~= false)
     end
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
+
+    local linkBox = widgets.linkNames.editBox
+    if not (linkBox.HasFocus and linkBox:HasFocus()) then
+        local saved = Config:Get("linkNames") or ""
+        if widgets.linkNames:GetText() ~= saved then widgets.linkNames:SetText(saved) end
+    end
+    for key, box in pairs(widgets.linkShares) do
+        box:SetChecked(Config:Get(key) ~= false)
+    end
+    widgets.linkStatus:SetText(ns.AccountLink and ns.AccountLink:Describe() or "")
+    widgets.guildPrices:SetChecked(Config:Get("guildPrices") == true)
+    widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Describe() or "")
 
     local lastScan, capped = ns.Prices:GetLastScan()
 

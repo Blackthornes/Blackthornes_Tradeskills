@@ -169,6 +169,37 @@ function PriceHistory:Note(itemID, price, at)
     PriceHistory.changes = (PriceHistory.changes or 0) + 1
 end
 
+--- A guildmate's price for an hour this account did not scan
+--- (Logic/GuildPrices.lua). Put in its place in time; an hour that already
+--- has a price, yours or a guildmate's, keeps it.
+function PriceHistory:Fill(itemID, price, at)
+    if not itemID or type(price) ~= "number" or price <= 0 or price ~= price then return end
+    if type(at) ~= "number" or not self:IsTracked(itemID) then return end
+
+    local now = time()
+    if at > now + 3600 or now - at > KEEP_SECONDS then return end
+
+    local realm = RealmTable(true)
+    if not realm then return end
+    local list = realm[itemID]
+    if type(list) ~= "table" then
+        list = {}
+        realm[itemID] = list
+    end
+
+    local hour = math.floor(at / 3600)
+    local position = #list + 1
+    for index = 1, #list - 1, 2 do
+        if list[index] == hour then return end
+        if list[index] > hour then position = index break end
+    end
+
+    table.insert(list, position, math.floor(price + 0.5))
+    table.insert(list, position, hour)
+    Trim(list, now)
+    PriceHistory.changes = (PriceHistory.changes or 0) + 1
+end
+
 --------------------------------------------------------------------------------
 -- Reading
 --------------------------------------------------------------------------------

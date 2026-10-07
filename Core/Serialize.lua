@@ -65,7 +65,14 @@ local function SafeFormatNumber(value)
     return "0"
 end
 
-local function EncodeValue(value, out, seen)
+-- Keys in a fixed order, for EncodeCanonical: numbers first, then strings.
+local function KeyOrder(a, b)
+    local ta, tb = type(a), type(b)
+    if ta ~= tb then return ta == "number" end
+    return a < b
+end
+
+local function EncodeValue(value, out, seen, sorted)
     local kind = type(value)
 
     if value == nil then
@@ -97,15 +104,32 @@ local function EncodeValue(value, out, seen)
         seen[value] = true
 
         out[#out + 1] = "t"
-        for k, v in pairs(value) do
+
+        local keys
+        if sorted then
+            keys = {}
+            for k in pairs(value) do
+                local vk = type(k)
+                if vk == "number" or vk == "string" then keys[#keys + 1] = k end
+            end
+            table.sort(keys, KeyOrder)
+        end
+
+        local function One(k, v)
             -- Functions and userdata have no meaning once stored, so they are
             -- skipped rather than failing the whole save.
             local vk, vv = type(k), type(v)
             if (vk == "number" or vk == "string")
                 and (vv ~= "function" and vv ~= "userdata" and vv ~= "thread") then
-                EncodeValue(k, out, seen)
-                EncodeValue(v, out, seen)
+                EncodeValue(k, out, seen, sorted)
+                EncodeValue(v, out, seen, sorted)
             end
+        end
+
+        if keys then
+            for i = 1, #keys do One(keys[i], value[keys[i]]) end
+        else
+            for k, v in pairs(value) do One(k, v) end
         end
         out[#out + 1] = "e"
 
@@ -118,6 +142,15 @@ end
 function Serialize.Encode(value)
     local out = {}
     EncodeValue(value, out, {})
+    return table.concat(out)
+end
+
+--- Encode with every table's keys in a fixed order, so the same data always
+--- gives the same text. Slower; for comparing data (Core/Comm.lua's Hash),
+--- where pairs' order changing between sessions would make it differ.
+function Serialize.EncodeCanonical(value)
+    local out = {}
+    EncodeValue(value, out, {}, true)
     return table.concat(out)
 end
 

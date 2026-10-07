@@ -410,3 +410,15 @@ seen in game 2026-09-25, 2945 opened nothing, and the game then reported
 (with `ActionButtonUseKeyDown` on), the secure button never cast and the
 mouse release fell through to the frame underneath; it now registers
 `AnyUp` with `useOnKeyDown` false.
+
+**Addon messages (sharing, added 2026-10-07).** `Core/Comm.lua` assumes
+retail's rules: `C_ChatInfo.RegisterAddonMessagePrefix`, 255 bytes per
+message, a per-prefix throttle (a short burst, then about one a second,
+refused with result 3 when exceeded), WHISPER to one character on the same
+realm, GUILD to the guild, and "No player named '%s' is currently playing"
+in chat for a whisper to someone offline. None of it is measured on Forever
+yet. `/bts share test` (Settings, Sharing, Test messages) whispers this
+character a full-size and an oversize message and twelve in a row, sends one
+to the guild, and says what came back and how the sender's name reads. Also
+open: whether a whisper's sender name tells apart two characters with the
+same first name, since Forever allows that.
