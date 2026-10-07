@@ -379,6 +379,26 @@ Linen Cloth 40c each, the quick scan had stored 83c as the cheapest and a
 market 16 times too high). Every row is divided by its count; a commodity row
 can be bigger than a stack, so it skips the stack-size guard.
 
+## Disenchant results follow the Classic table, mostly
+
+193 disenchants recorded in game (to 2026-10-01) all fit the built-in Classic
+table in `Logic/Disenchant.lua`: green armour of item level 13 to 30 and
+green weapons up to 20 gave the dust, essence and shard the table names, at
+about its chances (armour 21-25: Strange Dust 76%, Lesser Astral 16%, Small
+Glimmering 8%; armour 26-30: Soul Dust 70%, Greater Astral 25%, Large
+Glimmering 6%; weapons 16-20: Greater Magic 85%). Wands of item level 12 and
+17 broke as the table says too.
+
+A player's Dire Wands (item level 26, needs level 21; the table says Greater
+Astral) gave magic essences (2026-10-07). One guide says Forever goes by the
+level needed to wear an item rather than its item level, on bands five
+lower; on all the items above the two tables give the same answer, so this
+data cannot tell them apart, and neither explains magic essence from a Dire
+Wand. So an item's own results now win once it has been disenchanted three
+times and its most likely result differs from its row
+(`Disenchant.ITEM_LEARN_AFTER`, `DisenchantLog:GetItem`). Not yet seen: a
+green weapon above item level 20.
+
 ## Still unverified
 
 **How a profession window can be opened from the addon.** Casting is

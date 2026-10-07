@@ -5,7 +5,9 @@
 -- and nothing guarantees Forever matches it. So every disenchant you do is
 -- recorded here: which item went in, and what came out. Results are pooled
 -- by row of the table (quality, item level band, armor or weapon), and once
--- a row has enough of them, Disenchant:GetOutcomes uses yours instead.
+-- a row has enough of them, Disenchant:GetOutcomes uses yours instead. They
+-- are kept per item too, and an item's own results win once it has a few,
+-- since Forever does not break every item the way its row says.
 --
 -- Knowing what came out is easy: it is the loot window that opens after the
 -- cast. Knowing what went in is the hard part, because the game does not say
@@ -57,7 +59,50 @@ function DisenchantLog:GetTable()
     log.recent = log.recent or {}
     log.missed = log.missed or 0
 
+    -- Per item results came later (2026-10-07). The first time, the recent
+    -- list fills them in, so those disenchants are not lost.
+    if not log.items then
+        log.items = {}
+        for _, entry in ipairs(log.recent) do
+            if entry.itemID and type(entry.results) == "table" then
+                DisenchantLog.Add(log.items, entry.itemID, entry.results)
+            end
+        end
+    end
+
     return log
+end
+
+--- Count one disenchant into a { casts, got } record.
+local function AddTo(record, results)
+    record.casts = record.casts + 1
+
+    local newFinds = {}
+    for materialID, count in pairs(results) do
+        local got = record.got[materialID] or { times = 0, total = 0 }
+        record.got[materialID] = got
+        if got.times == 0 and record.casts > 1 then newFinds[#newFinds + 1] = materialID end
+
+        got.times = got.times + 1
+        got.total = got.total + count
+        got.min = got.min and math.min(got.min, count) or count
+        got.max = got.max and math.max(got.max, count) or count
+    end
+
+    return newFinds
+end
+
+--- Count one disenchant into a table of records by key.
+function DisenchantLog.Add(records, key, results)
+    local record = records[key] or { casts = 0, got = {} }
+    records[key] = record
+    return record, AddTo(record, results)
+end
+
+--- One item's own results, or nil when it has never been disenchanted.
+function DisenchantLog:GetItem(itemID)
+    if not itemID then return nil end
+    return self:GetTable().items[itemID]
 end
 
 --- The pooled results for one row of the table, or nil when there are none.
@@ -78,22 +123,12 @@ function DisenchantLog:Record(itemID, results, from)
     local usual = ns.Disenchant:GetValue(itemID)
 
     local log = self:GetTable()
-    local band = log.bands[facts.key] or { casts = 0, got = {} }
-    log.bands[facts.key] = band
+    local band, newFinds = DisenchantLog.Add(log.bands, facts.key, results)
+    local item = DisenchantLog.Add(log.items, itemID, results)
 
-    band.casts = band.casts + 1
-
-    local newFinds = {}
-    for materialID, count in pairs(results) do
-        local got = band.got[materialID] or { times = 0, total = 0 }
-        band.got[materialID] = got
-        if got.times == 0 and band.casts > 1 then newFinds[#newFinds + 1] = materialID end
-
-        got.times = got.times + 1
-        got.total = got.total + count
-        got.min = got.min and math.min(got.min, count) or count
-        got.max = got.max and math.max(got.max, count) or count
-    end
+    -- Did this one show the item breaks differently from its row?
+    local _, now = ns.Disenchant:GetOutcomes(itemID)
+    local itemLearned = now and now.byItem and not facts.byItem and item or nil
 
     table.insert(log.recent, 1, {
         itemID = itemID, results = results, from = from,
@@ -101,7 +136,7 @@ function DisenchantLog:Record(itemID, results, from)
     })
     while #log.recent > RECENT_KEPT do table.remove(log.recent) end
 
-    self:Announce(itemID, results, facts.key, band, usual, newFinds)
+    self:Announce(itemID, results, facts.key, band, usual, newFinds, itemLearned)
     self:AddToSession(results)
 
     -- Lists built from these results know to rebuild.
@@ -162,7 +197,7 @@ end
 DisenchantLog._Flash, DisenchantLog._Chime = Flash, Chime
 
 --- Say what that disenchant gave and what it taught.
-function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds)
+function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, item)
     local Disenchant = ns.Disenchant
     local learnAfter = Disenchant.LEARN_AFTER
     local kind = Disenchant:DescribeKey(key)
@@ -203,6 +238,26 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds)
         ns.Print(("%s %s now uses your own results: %s. Values for these follow what you get from now on.")
             :format(Colour("accent", "Learned!"), kind, table.concat(odds, ", ")))
         Flash(("Learned: %s"):format(kind))
+        big = true
+    end
+
+    -- An item that breaks differently from its row now uses its own results.
+    if item then
+        local odds = {}
+        for materialID, got in pairs(item.got) do
+            odds[#odds + 1] = { name = MaterialLabel(materialID), chance = got.times / item.casts }
+        end
+        table.sort(odds, function(a, b)
+            if a.chance ~= b.chance then return a.chance > b.chance end
+            return a.name < b.name
+        end)
+        for index, odd in ipairs(odds) do
+            odds[index] = ("%s %d%%"):format(odd.name, math.floor(odd.chance * 100 + 0.5))
+        end
+
+        ns.Print(("%s %s does not break the way the table says for %s, so it now uses your own results: %s.")
+            :format(Colour("accent", "Learned!"), Util.GetItemLabel(itemID), kind, table.concat(odds, ", ")))
+        Flash(("Learned: %s"):format(Util.GetItemLabel(itemID)))
         big = true
     end
 
@@ -481,6 +536,17 @@ local function Report(input)
         :format(total, total == 1 and "" or "s", groups, groups == 1 and "" or "s",
             trusted, trusted == 1 and "" or "s", trusted == 1 and "s" or "",
             ns.Disenchant.LEARN_AFTER))
+
+    local items = {}
+    for itemID in pairs(log.items) do
+        local _, facts = ns.Disenchant:GetOutcomes(itemID)
+        if facts and facts.byItem then items[#items + 1] = Util.GetItemLabel(itemID) end
+    end
+    if #items > 0 then
+        table.sort(items)
+        ns.Print(("breaking differently from the table, so using their own results: %s")
+            :format(table.concat(items, ", ")))
+    end
 
     if log.missed > 0 then
         ns.Print(("%d could not be recorded; the last because %s"):format(log.missed, log.lastMiss or "?"))
