@@ -63,6 +63,7 @@ KNOWN_GLOBALS = {
     "LE_ITEM_CLASS_TRADEGOODS",
     # Localised UI strings.
     "YES", "NO", "ACCEPT", "CANCEL", "OKAY", "CLOSE", "NONE", "UNKNOWN",
+    "ERR_CHAT_PLAYER_NOT_FOUND_S",
 }
 
 

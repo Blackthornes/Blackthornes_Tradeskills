@@ -81,6 +81,8 @@ local function UpdateRow(row, entry)
     else
         local age = entry.inventoryAt and (time() - entry.inventoryAt)
         local seen = age and ("seen " .. Util.FormatAgeAgo(age)) or "bags never read"
+        -- Shared from another account of yours (Settings, Sharing).
+        if entry.linkedFrom then seen = "other account  ·  " .. seen end
         Theme.FitText(row.freshness, { ("%d recipes  ·  %s"):format(entry.recipeCount, seen), seen })
         row.freshness:SetTextColor(Theme.Unpack("dim"))
     end
