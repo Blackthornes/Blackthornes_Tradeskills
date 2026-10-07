@@ -1478,6 +1478,50 @@ end
 -- Blizzard's own list sort arrow, pointing down; flipped for smallest first.
 local SORT_ARROW = [[Interface\Buttons\UI-SortArrow]]
 
+-- Room a heading keeps beside its words for the sort arrow: 9 wide, 2 off
+-- the words, 1 spare.
+Widgets.SORT_ARROW_ROOM = 12
+
+-- The widest amount a money column is made to hold whole, every coin shown.
+Widgets.MONEY_SAMPLE = "88g 88s 88c"
+
+--- Widen a list's columns so every heading shows whole beside its sort arrow
+--- and every money column holds a full amount, never ending in "..."
+--- (Ezmode's request, 2026-10-07). Measured, since the game's font runs
+--- wider than any width picked by eye.
+--
+-- Each column is a table with `width` (the least it is given; kept as
+-- `baseWidth`, so calling this again starts over), and optionally `label`
+-- (its heading) and `money = true`. Call it before the rows and headings are
+-- laid out, which then read `width` as before. A centred heading needs no
+-- more room than another: SortableHeadings narrows it while it sorts.
+-- @param texts  optional function(column) returning the heading's text, or
+--   a list of every text it can show, for a tab whose labels live elsewhere
+function Widgets.FitColumns(columns, texts)
+    local measure = Theme.MeasureText
+    if type(measure) ~= "function" then return end
+
+    for _, column in ipairs(columns) do
+        column.baseWidth = column.baseWidth or column.width
+        local need = column.baseWidth or 0
+
+        local headings = texts and texts(column) or column.label
+        if type(headings) ~= "table" then headings = { headings } end
+        local room = Widgets.SORT_ARROW_ROOM
+        for _, text in ipairs(headings) do
+            local width = measure("tiny", text)
+            if type(width) == "number" then need = math.max(need, width + room) end
+        end
+
+        if column.money then
+            local width = measure("small", Widgets.MONEY_SAMPLE)
+            if type(width) == "number" then need = math.max(need, width + 2) end
+        end
+
+        column.width = need
+    end
+end
+
 --- Make a list's column headings sort it when clicked (Izbode's request,
 --- 2026-10-02).
 --
@@ -1494,6 +1538,30 @@ local SORT_ARROW = [[Interface\Buttons\UI-SortArrow]]
 --   each click area to its heading's visibility after a layout change)
 function Widgets.SortableHeadings(labels, values, onChange)
     local sorter = { key = nil, ascending = false, buttons = {} }
+
+    -- A centred heading's words sit in the middle of their column, so the
+    -- arrow beside them would need room on both sides. Instead, while it
+    -- sorts the list, the heading gives up the arrow's room on its left
+    -- (it is laid out by its right edge), which moves its words over by
+    -- half of it and leaves the arrow that room before them.
+    local function Narrow(button, active)
+        local label = button.label
+        if not (label.GetJustifyH and label:GetJustifyH() == "CENTER") then return end
+
+        local ok, current = pcall(label.GetWidth, label)
+        if not ok or type(current) ~= "number" or current <= 0 then return end
+
+        -- The tab may have laid the heading out again since it was narrowed.
+        if button.narrowed ~= current then button.fullWidth = current end
+
+        if active then
+            button.narrowed = math.max(1, button.fullWidth - Widgets.SORT_ARROW_ROOM)
+            label:SetWidth(button.narrowed)
+        else
+            label:SetWidth(button.fullWidth)
+            button.narrowed = nil
+        end
+    end
 
     local function Paint()
         for key, button in pairs(sorter.buttons) do
@@ -1513,18 +1581,20 @@ function Widgets.SortableHeadings(labels, values, onChange)
                     arrow:SetTexCoord(0, 0.5625, 0, 1)
                 end
 
-                -- Beside the words, which may sit at either end of a
-                -- heading that is wider than they are.
+                -- Beside the words, in the room the heading keeps for it
+                -- (Widgets.FitColumns), so it never lies over the next one.
                 local width = Theme.TextWidth and Theme.TextWidth(button.label) or nil
                 if type(width) ~= "number" then width = 0 end
                 arrow:ClearAllPoints()
                 local justify = button.label.GetJustifyH and button.label:GetJustifyH() or "LEFT"
-                if justify == "RIGHT" then
-                    arrow:SetPoint("RIGHT", button.label, "RIGHT", -math.ceil(width) - 2, 0)
+                if justify == "RIGHT" or justify == "CENTER" then
+                    arrow:SetPoint("RIGHT", button.label, justify, -math.ceil(justify == "CENTER"
+                        and width / 2 or width) - 2, 0)
                 else
                     arrow:SetPoint("LEFT", button.label, "LEFT", math.ceil(width) + 2, 0)
                 end
             end
+            Narrow(button, active)
         end
     end
 

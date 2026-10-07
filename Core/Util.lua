@@ -20,6 +20,7 @@ local COPPER_SUFFIX = "|cffeda55fc|r"
 
 --- Format a copper amount as gold/silver/copper.
 -- @param copper  amount in copper; nil renders as a muted dash
+-- Every coin below the largest shows, zero-padded: "1g 05s 00c", "8s 00c".
 -- @param opts    { short = true } drops trailing silver/copper once gold is large,
 --                { noColor = true } strips the colour escapes,
 --                { parts = 1 or 2 } at most that many coins, counted from the
@@ -69,11 +70,18 @@ function Util.FormatMoney(copper, opts)
     local showCopper = not suppressMinor and not (opts.parts and
         ((gold > 0 and opts.parts < 3) or (silver > 0 and opts.parts < 2)))
 
+    -- Once a larger coin shows, every smaller one shows too, two digits wide
+    -- ("1g 05s 00c", "8s 00c", "45c"): one shape for every amount, so a
+    -- right-aligned column lines its coins up (Ezmode's request, 2026-10-07).
     if showSilver and (silver > 0 or gold > 0) then
-        parts[#parts + 1] = silver .. s
+        parts[#parts + 1] = (gold > 0 and ("%02d"):format(silver) or tostring(silver)) .. s
     end
-    if showCopper and (copperPart > 0 or #parts == 0) then
-        parts[#parts + 1] = copperPart .. c
+    if showCopper then
+        if #parts > 0 then
+            parts[#parts + 1] = ("%02d"):format(copperPart) .. c
+        else
+            parts[#parts + 1] = copperPart .. c
+        end
     end
 
     local text = table.concat(parts, " ")

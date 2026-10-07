@@ -21,15 +21,18 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ALL = "all"
 
--- Right to left, measured from the list's right edge.
+-- Right to left, measured from the list's right edge. Money sits to the
+-- right, so its coins line up; the rest is centred under its heading.
+-- `width` is the least each gets: Widgets.FitColumns widens it to fit the
+-- heading and a full amount.
 local COLUMNS = {
-    { key = "learn",      label = "LEARN FROM", width = 92 },
-    { key = "price",      label = "RECIPE",     width = 66 },
-    { key = "profit",     label = "PROFIT",     width = 70 },
-    { key = "disenchant", label = "DISENCHANT", width = 66 },
-    { key = "sells",      label = "SELLS",      width = 66 },
-    { key = "cost",       label = "COST",       width = 66 },
-    { key = "skill",      label = "SKILL",      width = 36 },
+    { key = "learn",      label = "LEARN FROM", width = 92, justify = "CENTER" },
+    { key = "price",      label = "RECIPE",     width = 66, money = true },
+    { key = "profit",     label = "PROFIT",     width = 70, money = true },
+    { key = "disenchant", label = "DISENCHANT", width = 66, money = true },
+    { key = "sells",      label = "SELLS",      width = 66, money = true },
+    { key = "cost",       label = "COST",       width = 66, money = true },
+    { key = "skill",      label = "SKILL",      width = 36, justify = "CENTER" },
 }
 
 --- One copy of the view, with its own filters and its own frames. The
@@ -68,7 +71,7 @@ local function NewView(opts)
 
         local offset, reserved = -8, 16
         for _, column in ipairs(COLUMNS) do
-            local cell = Theme.CreateLabel(row, "small", "muted", "RIGHT")
+            local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
             cell:SetPoint("RIGHT", offset, 0)
             cell:SetWidth(column.width)
             cell:SetWordWrap(false)
@@ -459,6 +462,9 @@ local function NewView(opts)
 
     --- Fill `view`, a frame covering a tab below its view switch.
     function instance.Build(view)
+        -- Before any row or heading is laid out: they read these widths.
+        if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
+
         local right = -DETAIL_WIDTH - 16
 
         -- Dropdown, search, tick box: the order every tab uses.
@@ -496,7 +502,7 @@ local function NewView(opts)
         headings.cells = {}
         local offset = -8
         for _, column in ipairs(COLUMNS) do
-            local cell = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
+            local cell = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
             cell:SetPoint("RIGHT", offset, 0)
             cell:SetWidth(column.width)
             cell:SetText(column.label)
