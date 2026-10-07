@@ -130,11 +130,11 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   `linkedFrom` (never rename it), so everything that reads alts (Farmer
   aside, Equipment's crafting included) sees them. A copy never replaces
   one of the account's own characters and is never sent on.
-- `Logic/GuildPrices.lua`: off by default (`guildPrices`). Guildmates'
+- `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
   in `Prices:GetValue`: an item never scanned, or one gone stale while
   theirs is newer. So Farmer's `GetValue` can now answer from a guild
-  price when the player turned it on; still copper or nil.
+  price unless the player turned it off; still copper or nil.
 
 ## The house frame (Titanforged)
 
