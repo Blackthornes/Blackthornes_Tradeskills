@@ -888,6 +888,17 @@ function Queue:GetEntryCosts()
     local cashView = not ns.Config:Get("valueOwnedMaterials")
     local bagsLeft = {}
 
+    -- What the queue is making, by item. Voldar on Discord (2026-10-07):
+    -- with "Queue sub-crafts" off the leather was bought, To buy went up,
+    -- and every row and the footer still priced it as made from scraps.
+    -- A material is costed as made only when a sub-craft on the queue makes
+    -- it, and as bought otherwise, so the rows match To buy.
+    local made = {}
+    for _, entry in ipairs(self:GetAll()) do
+        local recipe = entry.isDependency and ns.Recipes:GetAny(entry.recipeID)
+        if recipe and recipe.outputItemID then made[recipe.outputItemID] = true end
+    end
+
     for _, entry in ipairs(self:GetAll()) do
         local analysis = not entry.isDependency and ns.Profit:Analyse(entry.recipeID)
 
@@ -895,9 +906,15 @@ function Queue:GetEntryCosts()
             local count = entry.quantity
             local cost = analysis.totalCost * count
 
+            local planned = ns.Cost:GetCraftCost(entry.recipeID, nil, nil, { made = made })
+            if planned and planned.priceable then
+                cost = planned.total * count
+            end
+
             if cashView then
                 -- Every line at what it is worth, then the bags taken off.
-                local full = ns.Cost:GetCraftCost(entry.recipeID, nil, nil, { valueOwned = true })
+                local full = ns.Cost:GetCraftCost(entry.recipeID, nil, nil,
+                    { valueOwned = true, made = made })
 
                 if full and full.priceable then
                     cost = full.total * count
