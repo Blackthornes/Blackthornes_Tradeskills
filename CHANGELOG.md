@@ -4,6 +4,33 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.37.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- The main window can now be resized from 50% to 150% of its normal size.
+  Drag the gold grip below its bottom right corner (right-click it for
+  Normal), pick Small, Normal or Large under **Window size** in Settings,
+  or type `/bts size small|normal|large|<percent>`. Everything scales
+  together, so no tab loses its layout, and the size is kept between
+  sessions. The window never grows past the screen.
+- Queue tab costs now follow **Queue sub-crafts**. With it off, in-between
+  materials are priced at what they cost to buy; with it on, at what they
+  cost to make. Each queued craft and the footer's materials and profit
+  now match the Materials Needed list.
+- Fixed sales on the Sales tab that kept saying "gold waiting in the mail"
+  long after the gold was collected, stack sales especially. Sales already
+  stuck clear on your next mailbox visit. Only the display was wrong; the
+  totals, profit figures and gold chart were never affected.
+- With more than 50 mails waiting, a sale whose mail wasn't shown yet no
+  longer stops saying its gold is waiting.
+- A few lucky disenchants no longer make an item override the disenchant
+  table. An item now takes over after three casts only when the table's
+  likeliest result never came out of it; otherwise it waits for ten.
+- Gold mailed to an alt addressed by full name, as Queue Mail fills it in,
+  now counts as Your characters on the gold chart instead of Mail spending.
+
 ## 0.36.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
