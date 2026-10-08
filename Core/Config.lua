@@ -189,6 +189,16 @@ local DEFAULTS = {
         -- its bottom right, the Settings tab or /bts size. See UI/Main.lua.
         windowScale = 1,
 
+        -- Text size: "normal", "large" (+1 point) or "larger" (+2), inside
+        -- a window of the same size. Read at login, so a change waits for
+        -- /reload. See Theme.TextStep in UI/Theme.lua.
+        textSize = "normal",
+
+        -- Whether each setting's description sits under it on the Settings
+        -- tab rather than in its tooltip (2026-10-08). The page showing
+        -- there is kept too (settingsPage), but is not a setting to reset.
+        settingsDescriptions = false,
+
         -- Play a sound the moment the game says one of your auctions has
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
         saleAlarm = true,
