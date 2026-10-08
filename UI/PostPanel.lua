@@ -122,6 +122,43 @@ local function CreateRow(row)
     row.detail:SetPoint("TOPLEFT", 8, -17)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -17)
 
+    -- The price line is a field: click it to set your own price each, or a
+    -- total (UI/PriceEditor.lua, asked 2026-10-08 to sell a bad buy under
+    -- market). Drawn as a box with a gold edge that lights under the mouse,
+    -- so it reads as something to click rather than plain text.
+    local field = CreateFrame("Button", nil, row)
+    field:SetPoint("TOPLEFT", row.detail, "TOPLEFT", -4, 2)
+    field:SetHeight(14)
+    field:SetWidth(60)
+    Theme.Fill(field, "panel", 0.6)
+    Theme.Border(field, "metal", 0.45)
+    if Theme.Halo then Theme.Halo(field, 4, 0) end
+    -- The text stays on top of the box.
+    row.detail:SetParent(field)
+    row.detail:SetDrawLayer("OVERLAY")
+    field:SetScript("OnEnter", function(self)
+        Theme.SetBorderColor(self, "accentHi")
+        if rawget(self, "haloTextures") then Theme.SetHalo(self, 0.25) end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText("Set your own price", 1, 1, 1)
+        GameTooltip:AddLine("Click to change the price each, or type a total and have it split over the stack. Handy for selling under market value.", 0.9, 0.9, 0.9, true)
+        if row.data and row.data.priceBasis == "chosen" and row.data.suggestedPrice then
+            GameTooltip:AddDoubleLine("Suggested",
+                Util.FormatMoney(row.data.suggestedPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    field:SetScript("OnLeave", function(self)
+        Theme.SetBorderColor(self, "metal", 0.45)
+        if rawget(self, "haloTextures") then Theme.SetHalo(self, 0) end
+        GameTooltip:Hide()
+    end)
+    field:SetScript("OnClick", function()
+        CommitTyping(PostPanel.list)
+        if row.data and ns.PriceEditor then ns.PriceEditor:Open(row.data, PostPanel.frame) end
+    end)
+    row.priceField = field
+
     row.post = Widgets.CreateButton(row, "List", function()
         CommitTyping(PostPanel.list)
         if not row.data then return end
@@ -263,6 +300,14 @@ function UpdateRow(row, line)
         if DetailTooWide(row) then row.detail:SetText(each) end
     end
 
+    -- The field round the price line, as wide as its words.
+    if row.priceField then
+        local width = Theme.TextWidth(row.detail)
+        local room = row.detail:GetWidth()
+        if type(room) == "number" and room > 0 and width and width > room then width = room end
+        row.priceField:SetWidth(math.max(40, (width or 60) + 8))
+    end
+
     if line.atALoss then
         row.name:SetTextColor(Theme.Unpack("loss"))
         row.detail:SetTextColor(Theme.Unpack("loss"))
@@ -276,7 +321,9 @@ function UpdateRow(row, line)
             row.name:SetTextColor(Theme.Unpack("text"))
         end
 
-        row.detail:SetTextColor(Theme.Unpack("muted"))
+        -- A price of your own (the price editor) in gold, as the Prices
+        -- tab draws "my price".
+        row.detail:SetTextColor(Theme.Unpack(line.priceBasis == "chosen" and "accent" or "muted"))
     end
 
     row.post:SetEnabledState(line.unitPrice ~= nil)
@@ -334,7 +381,17 @@ local function ShowRowTooltip(row, line)
         and "Commodity: sells from every bag at once"
         or "Item auction: one stack at a time", 0.5, 0.5, 0.5)
 
+    if line.priceBasis == "chosen" then
+        GameTooltip:AddDoubleLine("Your price",
+            Util.FormatMoney(line.unitPrice, { noColor = true }), 0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
+        if line.suggestedPrice then
+            GameTooltip:AddDoubleLine("Suggested",
+                Util.FormatMoney(line.suggestedPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+        end
+    end
+
     GameTooltip:AddLine("Type in the box to list fewer than that.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine("Click the price to set your own.", 0.5, 0.5, 0.5)
 
     GameTooltip:Show()
 end
@@ -1036,6 +1093,10 @@ function PostPanel:Hide()
     self.dockedTo, self.dockedLeft = nil, nil
 
     if self.frame then self.frame:Hide() end
+
+    -- A price being set for a listing goes with it: nothing can be listed
+    -- away from the auction house.
+    if ns.PriceEditor and ns.PriceEditor.IsShown and ns.PriceEditor:IsShown() then ns.PriceEditor:Hide() end
 end
 
 function PostPanel:IsShown()
