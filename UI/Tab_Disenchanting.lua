@@ -89,6 +89,14 @@ local function Now()
     return type(time) == "function" and time() or nil
 end
 
+--- The row's rarity, from the item facts kept in the saved data, or nil.
+local function KnownQuality(entry)
+    local facts = entry.breakdown and entry.breakdown.facts
+    if facts and facts.quality then return facts.quality end
+    local known = ns.Disenchant and ns.Disenchant.GetItemFacts and ns.Disenchant:GetItemFacts(entry.itemID)
+    return known and known.quality
+end
+
 local function SameRow(a, b)
     return a and b and a.kind == b.kind and a.itemID == b.itemID
 end
@@ -232,7 +240,9 @@ local function UpdateRow(row, entry)
     -- A bag row carries its link, so the upgrade arrow judges that very copy.
     Theme.SetItemIcon(row.icon, entry.itemID, entry.link)
 
-    local r, g, b = Util.GetItemQualityColor(entry.itemID)
+    -- Coloured by rarity from the facts kept in the saved data: most rows
+    -- are items the client's cache no longer holds, which drew white.
+    local r, g, b = Util.GetItemQualityColor(entry.itemID, KnownQuality(entry))
     if r then
         row.name:SetTextColor(r, g, b)
     else

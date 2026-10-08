@@ -469,6 +469,21 @@ check("MARGIN shows 52%", row.cells[2].text == "52%")
 check("BUY shows the price", row.cells[4].text ~= "")
 check("SKILL shows what it needs", row.cells[5].text == "25" and row.cells[5].color == "dim")
 
+-- Trent, 2026-10-08: the names drew white. Most rows are items read in an
+-- earlier session that the client's cache no longer holds, so the name's
+-- rarity comes from the facts kept in the saved data, without asking the
+-- client for the item again.
+local cachedInfo, cachedLoad = C_Item.GetItemInfo, C_Item.RequestLoadItemDataByID
+local asked = 0
+ITEM_QUALITY_COLORS = { [2] = { r = 0.12, g = 1, b = 0 } }
+C_Item.GetItemInfo = function() return nil end
+C_Item.RequestLoadItemDataByID = function() asked = asked + 1 end
+list.opts.updateRow(row, Find(list.data, 2001))
+check("a green item's name is green with the client's cache empty", row.name.color == 0.12)
+check("and the client was not asked for it", asked == 0)
+C_Item.GetItemInfo, C_Item.RequestLoadItemDataByID = cachedInfo, cachedLoad
+ITEM_QUALITY_COLORS = nil
+
 checkboxes["Only deals over my minimums"].onToggle(false)
 check("unticking shows the loss too", Find(list.data, 2006) ~= nil)
 
