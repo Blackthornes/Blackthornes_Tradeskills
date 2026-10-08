@@ -356,13 +356,11 @@ local function UpdateRow(row, analysis)
         SetFitted(cells.age, "estimate", "est.")
         cells.age:SetTextColor(Theme.Unpack("warn"))
     elseif analysis.priceBasis == "vendor" then
-        -- Valued at what a vendor pays, which no scan's age bears on.
-        cells.age:SetText("vendor")
-        cells.age:SetTextColor(Theme.Unpack("muted"))
-    elseif analysis.priceBasis == "disenchant" then
-        -- Valued at what it disenchants to, read off its materials' prices.
-        cells.age:SetText("DE")
-        cells.age:SetTextColor(Theme.Unpack("muted"))
+        -- What a vendor pays never goes out of date, so there is no age to
+        -- show. VIA already says Vendor; repeating it here read as a bug
+        -- (Ezmode, Discord, 2026-10-08).
+        cells.age:SetText("--")
+        cells.age:SetTextColor(Theme.Unpack("dim"))
     elseif analysis.priceBasis == "mine" or analysis.priceBasis == "floor" then
         -- Priced at what the player set on the Prices tab, not a scan.
         SetFitted(cells.age, "my price", "mine")
