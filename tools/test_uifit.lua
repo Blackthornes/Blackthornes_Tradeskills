@@ -411,8 +411,8 @@ print("the tabs")
 
 -- Every tab the window has, in its order. The room is the window's: 1120 wide,
 -- less its 11-pixel edges and 16 more.
-local NAMES = { "Profit", "Level Up", "Deals", "Queue", "Gather", "Post", "Prices", "Sales",
-    "Characters", "Settings" }
+local NAMES = { "Profit", "Level Up", "Disenchanting", "Deals", "Queue", "Gather", "Post", "Prices",
+    "Sales", "Characters", "Settings" }
 local ROOM = 1120 - 2 * 11 - 16
 
 local function Definitions()
@@ -435,14 +435,14 @@ local function Roomy(strip)
 end
 
 local strip = Widgets.CreateTabStrip(Region(), Definitions(), nil, { width = ROOM })
-check("all ten fit across the window", Total(strip) <= ROOM, true)
+check("all eleven fit across the window", Total(strip) <= ROOM, true)
 check("at the full size", strip.tabs[4].label.fontSize, 12)
 check("each with room either side of its name", Roomy(strip), true)
-check("a long name gets a wider tab than a short one", strip.tabs[9].span > strip.tabs[6].span, true)
+check("a long name gets a wider tab than a short one", strip.tabs[10].span > strip.tabs[7].span, true)
 check("each starts where the last ended", strip.tabs[5].left, strip.tabs[4].left + strip.tabs[4].span)
 
--- Less room than the ten names take at the full size.
-local TIGHT = 600
+-- Less room than the eleven names take at the full size.
+local TIGHT = 700
 local tight = Widgets.CreateTabStrip(Region(), Definitions(), nil, { width = TIGHT })
 check("short of room, a step smaller", tight.tabs[4].label.fontSize, 11)
 check("and still all inside it", Total(tight) <= TIGHT, true)
@@ -465,8 +465,8 @@ check("above the tabs, whose fill hid it", strip.lineLayer.frameLevel > strip.ta
 strip:Select("Characters")
 Motion:Step(1)
 local _, under = strip.line:GetPoint(1)
-check("it lands under a wide tab", under == strip.tabs[9], true)
-check("as wide as that tab", near(strip.line.width, strip.tabs[9].span), true)
+check("it lands under a wide tab", under == strip.tabs[10], true)
+check("as wide as that tab", near(strip.line.width, strip.tabs[10].span), true)
 
 local other = strip.tabs[7]
 other.scripts.OnEnter(other)
@@ -476,7 +476,7 @@ other.scripts.OnLeave(other)
 Motion:Step(1)
 check("which goes when the mouse does", other.underline.alpha, 0)
 
-local showing = strip.tabs[9]
+local showing = strip.tabs[10]
 showing.scripts.OnEnter(showing)
 Motion:Step(1)
 check("the tab showing never lights a line of its own", showing.underline.alpha, 0)

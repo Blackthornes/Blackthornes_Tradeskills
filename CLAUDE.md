@@ -84,9 +84,7 @@ without it nothing is drawn. It calls, inside a pcall and read only:
 _G.BlackthornesEquipment.Compare:IsUpgrade(item)   -- item ID or link; true or false
 ```
 
-Most windows ask by item ID. Bag rows on the Deals tab (Disenchanting,
-Vendor Flips and Enchanting were merged into Deals, Profit and Prices on
-2026-10-07) pass the carried copy's link (`Theme.SetItemIcon(icon, itemID, link)`),
+Most windows ask by item ID. Bag rows on the Disenchanting tab pass the carried copy's link (`Theme.SetItemIcon(icon, itemID, link)`),
 so random-suffix gear ("of the Monkey") is judged as that copy; Equipment's
 `CLAUDE.md` already promises links. Answers are kept per item ID, or per
 item string for a link, and forgotten on gear, level, talent and
