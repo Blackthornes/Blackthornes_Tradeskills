@@ -38,7 +38,12 @@ local WIDTH = 400
 local HEIGHT = 540
 local PAD = 14
 local TOP = 46
-local ROW_HEIGHT = 38
+-- Taller with Text size Large or Larger (Theme.TextStep), so the two
+-- lines of a row keep apart.
+local function RowHeight()
+    local step = Theme.TextStep and Theme.TextStep() or 0
+    return 38 + 3 * (tonumber(step) or 0)
+end
 local ICON = 30
 local BUTTON_HEIGHT = 22
 local GAP = 6
@@ -227,7 +232,7 @@ end
 
 local function CreateMailRow(list, index)
     local row = CreateFrame("Button", nil, list)
-    row:SetHeight(ROW_HEIGHT)
+    row:SetHeight(RowHeight())
     row:RegisterForClicks("LeftButtonUp")
     row.background = Theme.Fill(row, "row")
     row.hover = Theme.Fill(row, "rowHover")
@@ -624,7 +629,8 @@ function MailWindow:RefreshInbox()
     self.mails = mails
 
     local height = list:GetHeight()
-    local visible = math.max(1, math.floor(((type(height) == "number" and height > 0) and height or 400) / ROW_HEIGHT))
+    local rowHeight = RowHeight()
+    local visible = math.max(1, math.floor(((type(height) == "number" and height > 0) and height or 400) / rowHeight))
     list.offset = math.max(0, math.min(list.offset, #mails - visible))
 
     local room = WIDTH - 2 * PAD - ICON - 8 - 4 - 110 - 12
@@ -634,7 +640,7 @@ function MailWindow:RefreshInbox()
         if row then
             if mail then
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", list, "TOPLEFT", 2, -2 - (index - 1) * ROW_HEIGHT)
+                row:SetPoint("TOPLEFT", list, "TOPLEFT", 2, -2 - (index - 1) * rowHeight)
                 row:SetPoint("RIGHT", list, "RIGHT", -2, 0)
                 DrawRow(row, mail, room)
                 row:Show()
