@@ -18,7 +18,7 @@ end
 GetTime = function() return 1000 end
 time = function() return 100000 end
 
-local BELT, LINEN, RECIPE = 5000, 2589, 300
+local BELT, LINEN, RECIPE, DUST, ESSENCE = 5000, 2589, 300, 10940, 10938
 
 -- What a vendor pays is the eleventh return: 80c for the belt.
 C_Item = { GetItemInfo = function(itemID)
@@ -83,7 +83,11 @@ local enchanterSkill
 local disenchantable = true
 ns.Disenchant = {
     IsDisenchantable = function() return disenchantable end,
-    GetValue = function() if disenchantable then return 200 end end,
+    GetValue = function()
+        if disenchantable then
+            return 200, nil, { outcomes = { { itemID = DUST, counted = true }, { itemID = ESSENCE } } }
+        end
+    end,
     GetBestEnchanter = function() return enchanterSkill, enchanterSkill and "Ana" or nil end,
     GetItemFacts = function() return { skill = 50 } end,
 }
@@ -107,6 +111,8 @@ end
 -- the vendor's 80c, and a 3c deposit is known.
 ns.Prices:Record(LINEN, 10, 10, 500, time(), 10, nil)
 ns.Prices:Record(BELT, 65, 60, 4, time(), 60, nil)
+-- The dust the belt breaks into was last scanned three days ago.
+ns.Prices:Record(DUST, 50, 50, 20, time() - 3 * 86400, 50, nil)
 
 print("")
 print("asked the old way, nothing changes")
@@ -129,6 +135,10 @@ check("less the cut on the materials", a.cut, 10)
 check("with no deposit", a.deposit, 0)
 check("and it says how", a.priceBasis, "disenchant")
 check("margin is on what it disenchants to", a.margin, 120 / 200)
+-- Ezmode (Discord, 2026-10-08): AGE said "DE" here instead of an age.
+check("its age is the dust's scan, not the belt's", a.age, 3 * 86400)
+check("which is past the stale limit", a.stale, true)
+check("read off the material it is valued at", a.ageItemID, DUST)
 
 local lines = Profit:DescribeWays(a)
 check("all three ways are described", #lines, 3)
@@ -161,6 +171,7 @@ check("with its deposit", a.deposit, 3)
 
 a = Profit:Analyse(RECIPE, nil, "vendor")
 check("ranked by the vendor, 10c", a.profit, 10)
+check("a vendor's row keeps the belt's own scan for /bts why", a.age, 0)
 
 a = Profit:Analyse(RECIPE, nil, "disenchant")
 check("ranked by disenchanting, its profit even with no enchanter", a.profit, 120)

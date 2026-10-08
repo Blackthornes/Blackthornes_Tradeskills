@@ -529,8 +529,15 @@ function Profit:Analyse(recipeID, characterKey, method)
     if ns.Disenchant then
         analysis.disenchantable = ns.Disenchant:IsDisenchantable(recipe.outputItemID) or nil
         if analysis.disenchantable then
-            analysis.disenchantValue, analysis.disenchantPartial =
+            local breakdown
+            analysis.disenchantValue, analysis.disenchantPartial, breakdown =
                 ns.Disenchant:GetValue(recipe.outputItemID)
+
+            -- The material the value is read off, whose price's age is the
+            -- age of a disenchant profit.
+            for _, outcome in ipairs((breakdown and breakdown.outcomes) or {}) do
+                if outcome.counted then analysis.disenchantMaterial = outcome.itemID end
+            end
         end
     end
 
@@ -750,8 +757,14 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     analysis.confidence, analysis.confidenceReason = ns.Prices:GetConfidence(recipe.outputItemID)
     analysis.liquidity = ns.Prices:GetLiquidity(recipe.outputItemID)
-    analysis.stale = ns.Prices:IsStale(recipe.outputItemID)
-    analysis.age = ns.Prices:GetAge(recipe.outputItemID)
+    -- The age of the price the profit is for (Ezmode, Discord, 2026-10-08):
+    -- a disenchant is valued at its material, so that scan's age is the one
+    -- that says how far to trust it. A vendor's price does not age; the
+    -- output's own scan stays here for /bts why and the row draws a dash.
+    local agedItem = via == "disenchant" and analysis.disenchantMaterial or recipe.outputItemID
+    analysis.ageItemID = agedItem
+    analysis.stale = ns.Prices:IsStale(agedItem)
+    analysis.age = ns.Prices:GetAge(agedItem)
 
     analysis.craftableNow = self:GetCraftableCount(recipeID, crafter)
     analysis.priceable = true
