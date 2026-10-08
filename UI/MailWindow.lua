@@ -17,11 +17,10 @@
 --          Reply, Return). The Take buttons (Logic/MailTake.lua) along the
 --          top. COD mail is never taken here: the reader sends you to the
 --          game's mailbox to pay, where the game asks first.
---   Send   the game's own Send Mail page, moved into this window. Its fields,
---          postage, attaching by right-click and the Send button are the
---          game's, so sending is always the player's own click, and the
---          craft queue's Send to buttons (Logic/QueueMail.lua) fill it the
---          same way.
+--   Send   hands the visit back to the game's mailbox on its own Send Mail
+--          page. Moving that page into this window drew it blank for players
+--          (2026-10-08), so sending stays wholly the game's; the strip under
+--          the game's inbox has a Tradeskills mailbox button to come back.
 --
 -- Nothing here deletes mail.
 
@@ -124,37 +123,6 @@ local function ShowStock()
     if saved.mouse ~= nil then Call(stock.EnableMouse, stock, saved.mouse) end
 end
 
---- The game's Send Mail page, into this window or back where it was.
-local function BorrowSendPage(body)
-    local page = _G.SendMailFrame
-    if not page or MailWindow.sendSaved then return end
-
-    local saved = { points = {} }
-    local okParent, parent = pcall(page.GetParent, page)
-    saved.parent = okParent and parent or _G.MailFrame
-    local okCount, count = pcall(page.GetNumPoints, page)
-    for index = 1, (okCount and count or 0) do
-        saved.points[index] = { page:GetPoint(index) }
-    end
-    MailWindow.sendSaved = saved
-
-    Call(page.SetParent, page, body)
-    Call(page.ClearAllPoints, page)
-    Call(page.SetPoint, page, "TOP", body, "TOP", 0, 0)
-end
-
-local function ReturnSendPage()
-    local page, saved = _G.SendMailFrame, MailWindow.sendSaved
-    if not page or not saved then return end
-    MailWindow.sendSaved = nil
-
-    Call(page.SetParent, page, saved.parent)
-    Call(page.ClearAllPoints, page)
-    for _, point in ipairs(saved.points) do
-        Call(page.SetPoint, page, unpack(point))
-    end
-end
-
 --- The game's own tab switch, so its pages show and hide as they should.
 local function StockTab(tab)
     local button = _G["MailFrameTab" .. tab]
@@ -186,15 +154,15 @@ function MailWindow:Begin()
 end
 
 --- Give the mailbox back to the game. `keepOpen` leaves the visit going
---- (the setting turned off, or "Use the game's mailbox").
+--- (the setting turned off, or "Use the game's mailbox"); "send" opens the
+--- game's Send Mail page.
 function MailWindow:End(keepOpen)
     if not self.replacing then return end
     self.replacing = false
     self.ending = true
 
-    ReturnSendPage()
     ShowStock()
-    if keepOpen then StockTab(1) end
+    if keepOpen then StockTab(keepOpen == "send" and 2 or 1) end
     if self.frame then self.frame:Hide() end
     self.ending = false
 
@@ -457,12 +425,13 @@ function MailWindow:Build()
     end)
     if UISpecialFrames then table.insert(UISpecialFrames, "BlackthornesTSMailWindow") end
 
-    -- Back to the game's own window, for this visit only.
+    -- Back to the game's own window. The same as unticking the setting, so
+    -- Settings agrees (Sullivan, 2026-10-08); the Tradeskills mailbox
+    -- button under the game's inbox turns it back on.
     local stock = Widgets.CreateButton(frame, "Use the game's mailbox", function()
-        MailWindow.declined = true
-        MailWindow:End(true)
+        MailWindow:UseGames()
     end, { height = 16, fontSize = "tiny",
-        tooltip = "Shows the game's mailbox until you next open one. Settings turns this window off for good." })
+        tooltip = "Goes back to the game's mailbox, the same as unticking Tradeskills mailbox in Settings. The Tradeskills mailbox button under the game's inbox brings this one back." })
     local labelWidth = Theme.TextWidth and Theme.TextWidth(stock.label)
     stock:SetWidth(type(labelWidth) == "number" and math.ceil(labelWidth) + 16 or 150)
     stock:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(TOP - 22))
@@ -478,12 +447,6 @@ function MailWindow:Build()
     frame.inbox = inbox
     self.frame = frame
     self:BuildInbox(inbox)
-
-    local send = CreateFrame("Frame", nil, frame)
-    send:SetPoint("TOPLEFT", 6, -(TOP - 4))
-    send:SetPoint("BOTTOMRIGHT", -6, 6)
-    send:Hide()
-    frame.send = send
 
     local strip = Widgets.CreateTabStrip(frame, {
         { key = "inbox", text = "Inbox" },
@@ -516,16 +479,10 @@ function MailWindow:SelectTab(key)
     if frame.tabs.Select then frame.tabs:Select(key) end
 
     if key == "send" then
-        frame.inbox:Hide()
-        frame.stockButton:Hide()
-        self.switching = true
-        StockTab(2)
-        self.switching = false
-        BorrowSendPage(frame.send)
-        frame.send:Show()
+        -- The game's own Send Mail, for the rest of this visit.
+        self.declined = true
+        self:End("send")
     else
-        frame.send:Hide()
-        ReturnSendPage()
         self.switching = true
         StockTab(1)
         self.switching = false
@@ -889,6 +846,25 @@ function MailWindow:RefreshSoon()
     if C_Timer and C_Timer.After then C_Timer.After(0.2, Go) else Go() end
 end
 
+local function RefreshSettings()
+    if ns.UI and ns.UI.RefreshActiveTab then Call(ns.UI.RefreshActiveTab, ns.UI) end
+end
+
+--- "Use the game's mailbox": the setting off, Settings told.
+function MailWindow:UseGames()
+    ns.Config:Set("mailReplace", false)
+    self:End(true)
+    RefreshSettings()
+end
+
+--- The Tradeskills mailbox button under the game's inbox: the setting on.
+function MailWindow:UseOurs()
+    ns.Config:Set("mailReplace", true)
+    self.declined = false
+    self:Begin()
+    RefreshSettings()
+end
+
 --- The setting changed in Settings.
 function MailWindow:SettingChanged()
     if ns.Config:Get("mailReplace") == true then
@@ -903,8 +879,17 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+-- Taken over the moment the game's mailbox shows, before it is drawn, so
+-- it doesn't flash up first (Ezmode, 2026-10-08). MAIL_SHOW below is the
+-- fallback.
+if _G.MailFrame and _G.MailFrame.HookScript then
+    pcall(_G.MailFrame.HookScript, _G.MailFrame, "OnShow", function()
+        if ns.Config:Get("mailReplace") == true then MailWindow:Begin() end
+    end)
+end
+
 ns.RegisterEvent(MailWindow, "MAIL_SHOW", function()
-    MailWindow.declined = false
+    if MailWindow.replacing then return end
     if ns.Config:Get("mailReplace") ~= true then return end
     -- The game shows its mailbox on this same event; take over just after.
     if C_Timer and C_Timer.After then
@@ -914,7 +899,9 @@ ns.RegisterEvent(MailWindow, "MAIL_SHOW", function()
     end
 end)
 
+-- "Send Mail" hands one visit to the game's window; the next is ours again.
 ns.RegisterEvent(MailWindow, "MAIL_CLOSED", function()
+    MailWindow.declined = false
     MailWindow:End(false)
 end)
 
@@ -923,7 +910,7 @@ ns.RegisterEvent(MailWindow, "MAIL_INBOX_UPDATE", function()
 end)
 
 -- Something else asked the game's mailbox for Send Mail (the craft queue's
--- Send to buttons): follow it here.
+-- Send to buttons): hand the visit to the game's Send Mail.
 if hooksecurefunc and _G.MailFrameTab_OnClick then
     pcall(hooksecurefunc, "MailFrameTab_OnClick", function(button, tab)
         if not MailWindow.replacing or MailWindow.switching then return end
