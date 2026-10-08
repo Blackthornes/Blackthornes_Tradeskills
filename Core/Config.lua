@@ -246,12 +246,10 @@ local DEFAULTS = {
         -- A Take next batch button at the mailbox, taking the queue's
         -- materials a bagful at a time. Off by default (2026-10-05).
         mailBatchTake = false,
-        -- Take sales, expired, cancelled or all at the mailbox (Ezmode,
-        -- 2026-10-07). On by default: it only adds buttons under the inbox.
-        mailTakeButtons = true,
-        -- The Tradeskills mailbox in place of the game's (Ezmode,
-        -- 2026-10-07). Off by default. See UI/MailWindow.lua.
-        mailReplace = false,
+        -- Take sales/expired/cancelled/all and the Tradeskills mailbox
+        -- shipped in 0.38.0 and were taken out on 2026-10-08 until they are
+        -- tested more (they covered the game's Send Mail tab). Their saved
+        -- mailTakeButtons and mailReplace are left in players' data, unread.
 
         -- Queue tab: a Disenchant next button aimed at the next item the
         -- queue made on DE (2026-10-07). Off until the player turns it on.
