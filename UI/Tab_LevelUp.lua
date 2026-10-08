@@ -27,6 +27,9 @@ local COLUMNS = {
     { key = "back",   label = "GETS BACK", width = 74, money = true },
     { key = "cost",   label = "COST",      width = 74, money = true },
     { key = "chance", label = "SKILL UP",  width = 80, justify = "CENTER" },
+    -- Make or Buy when another craft uses the item: a button that says
+    -- whether it is made as a sub-craft (Voldar, 2026-10-07).
+    { key = "sub",    label = "SUB-CRAFT", width = 50, justify = "CENTER", button = true },
 }
 
 -- How each way of getting gold back is named: short in the VIA column, in
@@ -45,6 +48,7 @@ local state = {
     started = false,        -- a default has been picked once already
     craftableOnly = false,
     includeTrivial = false,
+    subCraftsOnly = false,
     selected = nil,
 }
 
@@ -106,6 +110,27 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+--- Never make this craft as a sub-craft, or make it again (the row's
+--- SUB-CRAFT button). Cost:SetNeverSubCraft redraws everything.
+local function ToggleSubCraft(entry)
+    if not entry then return end
+    local never = not ns.Cost:IsNeverSubCraft(entry.recipeID)
+    ns.Cost:SetNeverSubCraft(entry.recipeID, never, entry.name)
+    if never then
+        ns.Print(("%s is no longer made as a sub-craft: crafts that use it buy it instead."):format(entry.name or "that craft"))
+    else
+        ns.Print(("%s is made as a sub-craft again when that is cheaper than buying it."):format(entry.name or "that craft"))
+    end
+end
+
+local function SubCraftTooltip(entry)
+    local name = entry.name or "this"
+    if entry.neverSubCraft then
+        return ("Buy: %s is never made to go into another craft. It is bought instead, in costs, the queue and the shopping list.\nClick to make it again when that is cheaper."):format(name)
+    end
+    return ("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those."):format(name)
+end
+
 local function CreateRow(row)
     -- The item's icon beside its name, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 16)
@@ -118,10 +143,18 @@ local function CreateRow(row)
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
-        cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
-        cell:SetWidth(column.width)
-        row.cells[column.key] = cell
+        if column.button then
+            local button = Widgets.CreateButton(row, "Make", function()
+                ToggleSubCraft(row.data)
+            end, { width = math.min(column.width, 48), height = 16 })
+            button:SetPoint("RIGHT", row, "RIGHT", offset - (column.width - math.min(column.width, 48)) / 2, 0)
+            row.subButton = button
+        else
+            local cell = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
+            cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
+            cell:SetWidth(column.width)
+            row.cells[column.key] = cell
+        end
         offset = offset - column.width - 6
     end
 
@@ -179,6 +212,19 @@ local function UpdateRow(row, entry)
     local craftable = entry.craftableNow or 0
     cells.make:SetText(tostring(craftable))
     cells.make:SetTextColor(Theme.Unpack(craftable > 0 and "text" or "loss"))
+
+    -- Only for an item another craft uses. A marked one keeps its button
+    -- wherever it shows, so it can always be made again from here.
+    local button = row.subButton
+    if button then
+        row.data = entry
+        local shown = entry.isMaterial or entry.neverSubCraft
+        button:SetShown(shown == true)
+        if shown then
+            button:SetText(entry.neverSubCraft and "Buy" or "Make")
+            button.tooltipText = SubCraftTooltip(entry)
+        end
+    end
 end
 
 --- A reading taken at a lower skill may have changed colour since. Said out
@@ -228,6 +274,10 @@ local function ShowRowTooltip(row, entry)
 
     local note = StaleNote(entry.skillUp)
     if note then GameTooltip:AddLine(note, 0.91, 0.76, 0.35, true) end
+
+    if entry.neverSubCraft then
+        GameTooltip:AddLine("Never made as a sub-craft: crafts that use it buy it instead.", 0.91, 0.76, 0.35, true)
+    end
 
     GameTooltip:AddLine("Right-click to queue one. Shift-click to search the auction house.", 0.5, 0.5, 0.5)
     GameTooltip:Show()
@@ -494,7 +544,12 @@ local function UpdateDetail(entry)
         line.frame:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
 
         local label = ("%dx %s"):format(reagent.quantity, Util.GetItemLabel(reagent.itemID))
-        if reagent.crafted then label = label .. " (make it)" end
+        if reagent.crafted then
+            label = label .. " (make it)"
+        elseif ns.Cost.NeverMadeRecipeFor and ns.Cost:NeverMadeRecipeFor(reagent.itemID) then
+            -- Marked never to make as a sub-craft, so it is bought.
+            label = label .. " (bought, never made)"
+        end
         line.name:SetText(label)
         Theme.SetItemIcon(line.icon, reagent.itemID)
 
@@ -594,6 +649,7 @@ local function Refresh()
         skillLines = state.profession and skillLinesByName[state.profession] or nil,
         includeTrivial = state.includeTrivial,
         craftableOnly = state.craftableOnly,
+        subCraftsOnly = state.subCraftsOnly,
         search = state.search,
     })
 
@@ -631,6 +687,8 @@ local function Refresh()
             widgets.emptyLabel:SetText("Open a profession window once so your recipes can be read.")
         elseif state.search ~= "" then
             widgets.emptyLabel:SetText(("Nothing matching \"%s\"."):format(state.search))
+        elseif state.subCraftsOnly then
+            widgets.emptyLabel:SetText("Nothing you know here makes a material for another craft.")
         elseif state.craftableOnly then
             widgets.emptyLabel:SetText("Nothing that gives skill can be made from your bags right now.")
         else
@@ -697,6 +755,23 @@ local function Build(container)
         Refresh()
     end, false)
     trivial:SetPoint("LEFT", craftable, "RIGHT", 12, 0)
+
+    -- Voldar, 2026-10-07: the crafts that make another's materials, grey
+    -- ones too, to choose which to make and which to buy.
+    local subCrafts = Widgets.CreateCheckbox(toolbar, "Sub-crafts only", function(checked)
+        state.subCraftsOnly = checked
+        state.selected = nil
+        widgets.list:ScrollToTop()
+        Refresh()
+    end, false)
+    subCrafts:SetPoint("LEFT", trivial, "RIGHT", 12, 0)
+    subCrafts:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
+        GameTooltip:SetText("Sub-crafts only", 1, 1, 1)
+        GameTooltip:AddLine("Only crafts whose item goes into another craft, grey ones too. Their SUB-CRAFT button picks Make or Buy.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    subCrafts:HookScript("OnLeave", function() GameTooltip:Hide() end)
 
     local skillLabel = Theme.CreateLabel(toolbar, "normal", "accent", "RIGHT")
     skillLabel:SetPoint("RIGHT", 0, 0)
