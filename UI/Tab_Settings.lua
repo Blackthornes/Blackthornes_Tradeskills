@@ -5,10 +5,10 @@
 -- these silently reshuffle the whole profit table, and a setting you cannot
 -- reason about is worse than no setting.
 --
--- Layout rule: a row is [label ......... control] on one line, with its
--- description on its own line underneath spanning the full column. Descriptions
--- are kept short enough to fit that single line, so row heights stay fixed and
--- nothing can overlap the control beside it.
+-- Layout rule: a row is [label ......... control] on one line. What it does
+-- is the row's tooltip, or, with Show descriptions ticked, wrapped on its own
+-- lines underneath spanning the full column, the row grown to fit. Rows sit
+-- in two columns on one of the category pages (PAGES), picked along the top.
 
 local _, ns = ...
 
@@ -30,24 +30,83 @@ local CONTROL_X = 240
 local ROW_GAP = -8
 local SECTION_GAP = -22
 
+-- The category switch along the top, and the room it takes.
+local BAR_HEIGHT = 34
+
+-- A player's request (2026-10-07): the one long page grew crowded, so the
+-- settings sit on category pages picked along the top, like Recipes /
+-- Recipes to learn. Every setting kept its saved name; only its place moved.
+local PAGES = {
+    { key = "pricing", text = "PRICING",
+      tip = "Undercut, the auction house cut, markups and what counts as profit" },
+    { key = "queue", text = "QUEUE",
+      tip = "What gets queued, sub-crafts, alts, ignored crafts and items, export and import" },
+    { key = "mail", text = "MAIL & VENDORS",
+      tip = "The mailbox, your disenchanter, selling to vendors and the mail report" },
+    { key = "auction", text = "AUCTION HOUSE",
+      tip = "Buying, posting and scanning" },
+    { key = "look", text = "LOOK & SOUND",
+      tip = "Window size and effects, values on tooltips, and every sound" },
+    { key = "sharing", text = "SHARING",
+      tip = "Your other account and guild prices" },
+    { key = "data", text = "DATA",
+      tip = "What is saved, clearing old prices, debug output and Reset to defaults" },
+}
+local DEFAULT_PAGE = "pricing"
+
 local widgets = {}
+
+-- [key] = { holder, scroll, content, last = { [1], [2] }, rows }; built in Build.
+local pages = {}
+
+-- Every row and button the search looks through, in the order built.
+local searchables = {}
 
 --------------------------------------------------------------------------------
 -- Layout helpers
 --------------------------------------------------------------------------------
 
---- Section heading with a rule underneath. Returns a frame to anchor rows to.
-local function CreateSection(parent, text, opts)
-    opts = opts or {}
-
-    local section = CreateFrame("Frame", nil, parent)
-    section:SetSize(COLUMN_WIDTH, 20)
-
-    if opts.anchor then
-        section:SetPoint("TOPLEFT", opts.anchor, "BOTTOMLEFT", 0, SECTION_GAP)
+--- Put `frame` under the last thing in a page's column, or at its top, and
+--- make it the new last thing there.
+local function Place(page, column, frame, gap)
+    local last = page.last[column]
+    if last then
+        frame:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, gap or ROW_GAP)
     else
-        section:SetPoint("TOPLEFT", opts.x or COLUMN_ONE_X, opts.y or -16)
+        frame:SetPoint("TOPLEFT", page.content, "TOPLEFT",
+            column == 1 and COLUMN_ONE_X or COLUMN_TWO_X, -12)
     end
+    page.last[column] = frame
+    return frame
+end
+
+--- A soft gold frame around something the search found. Drawn on the
+--- page itself, so it sits behind the row's own controls.
+local function AddFoundGlow(page, frame)
+    local glow = page.content:CreateTexture(nil, "BACKGROUND")
+    glow:SetPoint("TOPLEFT", frame, "TOPLEFT", -6, 3)
+    glow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 6, -3)
+    glow:SetColorTexture(Theme.Unpack("accent"))
+    glow:SetAlpha(0.16)
+    glow:Hide()
+    return glow
+end
+
+--- Let the search find `frame` by its words, on `page`.
+local function Searchable(page, frame, words)
+    searchables[#searchables + 1] = {
+        page = page.key,
+        frame = frame,
+        words = (words or ""):lower(),
+        glow = AddFoundGlow(page, frame),
+    }
+end
+
+--- Section heading with a rule underneath, next in a page's column.
+local function CreateSection(page, column, text)
+    local section = CreateFrame("Frame", nil, page.content)
+    section:SetSize(COLUMN_WIDTH, 20)
+    Place(page, column, section, page.last[column] and SECTION_GAP)
 
     local heading = Theme.CreateLabel(section, "tiny", "accent")
     heading:SetPoint("TOPLEFT", 0, 0)
@@ -60,12 +119,47 @@ local function CreateSection(parent, text, opts)
     return section
 end
 
---- One setting: label and control on a line, description beneath it.
+--- The tooltip a row shows under the mouse: its name, then what it does,
+--- in white so it reads easily.
+local function ShowRowTip(row)
+    if not (row.description and GameTooltip) then return end
+    if ns.Config:Get("settingsDescriptions") == true then return end
+
+    GameTooltip:SetOwner(row, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    GameTooltip:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -2)
+    GameTooltip:SetText(row.labelText, Theme.Unpack("accent"))
+    GameTooltip:AddLine(row.description, 1, 1, 1, true)
+    GameTooltip:Show()
+end
+
+--- Light a row while the mouse is over it or any control on it. Its
+--- controls take the mouse from it, so it checks each frame until the
+--- mouse has left the whole row rather than trusting OnLeave.
+local function LightRow(row)
+    row.hover:Show()
+    ShowRowTip(row)
+    row:SetScript("OnUpdate", function(self)
+        if self:IsMouseOver() then return end
+        self:SetScript("OnUpdate", nil)
+        self.hover:Hide()
+        if GameTooltip and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+end
+
+--- How tall a row is with its description shown, or without.
+local function FitRow(row, showDescription)
+    row.hint:SetShown(showDescription)
+    row:SetHeight(showDescription and row.fullHeight or row.compactHeight)
+end
+
+--- One setting: label and control on a line. What it does is a tooltip on
+--- the row, or the line beneath it with Show descriptions ticked.
 -- Returns the row frame; anchor the control at CONTROL_X inside it.
-local function CreateRow(parent, anchor, labelText, description)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, ROW_GAP)
-    row:SetSize(COLUMN_WIDTH, description and 40 or 24)
+local function CreateRow(page, column, labelText, description)
+    local row = CreateFrame("Frame", nil, page.content)
+    row:SetSize(COLUMN_WIDTH, 24)
+    Place(page, column, row)
 
     -- Wrapped rather than cut off should a label still outgrow its room at
     -- the player's font; the description then starts under its last line.
@@ -79,8 +173,22 @@ local function CreateRow(parent, anchor, labelText, description)
     local labelHeight = label.GetStringHeight and label:GetStringHeight() or 0
     if type(labelHeight) == "number" and labelHeight > 16 then
         top = math.ceil(4 + labelHeight + 6)
-        row:SetHeight(math.max(row:GetHeight() or 0, top))
     end
+    row.compactHeight = top
+    row.fullHeight = top
+
+    -- Lit under the mouse, so it is plain the row has more to say.
+    row.hover = row:CreateTexture(nil, "BACKGROUND")
+    row.hover:SetPoint("TOPLEFT", -6, 2)
+    row.hover:SetPoint("BOTTOMRIGHT", 6, -2)
+    row.hover:SetColorTexture(Theme.Unpack("accent"))
+    row.hover:SetAlpha(0.1)
+    row.hover:Hide()
+
+    row.labelText = labelText
+    row.description = description
+    row:EnableMouse(true)
+    row:SetScript("OnEnter", LightRow)
 
     if description then
         -- "muted" rather than "dim": the small print says what each setting
@@ -92,12 +200,18 @@ local function CreateRow(parent, anchor, labelText, description)
         -- (Undercut by, Minimum profit) were cut off halfway with "...".
         hint:SetWordWrap(true)
         hint:SetText(description)
+        row.hint = hint
 
         local height = hint.GetStringHeight and hint:GetStringHeight() or 0
-        if type(height) == "number" and height > 0 then
-            row:SetHeight(math.max(40, top + math.ceil(height) + 2))
-        end
+        row.fullHeight = math.max(40, top + (type(height) == "number" and math.ceil(height) or 14) + 2)
+        FitRow(row, ns.Config:Get("settingsDescriptions") == true)
+    else
+        row:SetHeight(top)
     end
+
+    page.rows = page.rows or {}
+    page.rows[#page.rows + 1] = row
+    Searchable(page, row, labelText .. " " .. (description or ""))
 
     return row
 end
@@ -122,29 +236,220 @@ local function FitButton(button)
 end
 
 --------------------------------------------------------------------------------
+-- Pages, the switch along the top, and the search
+--------------------------------------------------------------------------------
+
+--- The page showing now: the one saved, or Pricing.
+local function CurrentPage()
+    local saved = ns.Config:Get("settingsPage")
+    return pages[saved] and saved or DEFAULT_PAGE
+end
+
+--- Size a page's scrolling area to what is on it, once it has real
+--- coordinates.
+--
+-- On the first build the frames have not been laid out yet, so GetTop() is
+-- nil and there is nothing to measure. Retrying on the next frame costs one
+-- timer and avoids a page that cannot scroll until you click away and back.
+local function FitScroll(key)
+    local page = pages[key or CurrentPage()]
+    if not page then return end
+
+    if not page.scroll:FitContent() then
+        C_Timer.After(0, function() page.scroll:FitContent() end)
+    end
+end
+
+--- Light the switch: the page showing gold and underlined, a page the
+--- search found nothing on dimmed, the rest grey until hovered.
+local function PaintSwitch()
+    local current = CurrentPage()
+    for _, part in ipairs(widgets.switch or {}) do
+        local active = part.key == current
+        local color = active and "accent"
+            or (widgets.query and not part.found) and "dim"
+            or part.hovered and "text"
+            or "muted"
+        part.label:SetTextColor(Theme.Unpack(color))
+        part.underline:SetShown(active)
+    end
+end
+
+--- Lay the switch out left to right, each part as wide as its name.
+local function LayoutSwitch()
+    local previous
+    for _, part in ipairs(widgets.switch or {}) do
+        local width = Theme.TextWidth and Theme.TextWidth(part.label)
+        part.button:SetWidth((type(width) == "number" and width or 100) + 4)
+        part.button:ClearAllPoints()
+        if previous then
+            part.button:SetPoint("LEFT", previous, "RIGHT", 22, 0)
+        else
+            part.button:SetPoint("LEFT", widgets.bar, "LEFT", COLUMN_ONE_X, 0)
+        end
+        previous = part.button
+    end
+end
+
+--- Show one page and remember it.
+local function ShowPage(key)
+    if not pages[key] then key = DEFAULT_PAGE end
+    -- Only written when it changes: every setting write is mirrored out at
+    -- once (Persist), and a page being redrawn is not a change.
+    if ns.Config:Get("settingsPage") ~= key then ns.Config:Set("settingsPage", key) end
+    for pageKey, page in pairs(pages) do
+        page.holder:SetShown(pageKey == key)
+    end
+    widgets.shownPage = key
+    PaintSwitch()
+    FitScroll(key)
+end
+
+--- Scroll a page so `frame` is in view, near the top.
+local function ScrollTo(key, frame)
+    local page = pages[key]
+    local top, at = page.content:GetTop(), frame:GetTop()
+    if type(top) ~= "number" or type(at) ~= "number" then return end
+    page.scroll:UpdateRange()
+    local bar = page.scroll.scrollbar
+    local _, range = bar:GetMinMaxValues()
+    bar:SetValue(math.max(0, math.min(range or 0, top - at - 12)))
+end
+
+--- Find settings by their words. Each one found glows, each page with
+--- none dims on the switch, and when the page showing has none, the first
+--- page that does is shown.
+local function Search(text)
+    local query = (text or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    widgets.query = query ~= "" and query or nil
+
+    local counts, firstFound = {}, {}
+    for _, entry in ipairs(searchables) do
+        local found = widgets.query and entry.words:find(widgets.query, 1, true) ~= nil
+        entry.glow:SetShown(found and true or false)
+        if found then
+            counts[entry.page] = (counts[entry.page] or 0) + 1
+            firstFound[entry.page] = firstFound[entry.page] or entry.frame
+        end
+    end
+
+    -- No counts beside the names: the switch has to stay clear of the
+    -- search box at the player's font.
+    for _, part in ipairs(widgets.switch or {}) do
+        part.found = (counts[part.key] or 0) > 0
+    end
+
+    local show = CurrentPage()
+    if widgets.query and not counts[show] then
+        for _, definition in ipairs(PAGES) do
+            if counts[definition.key] then show = definition.key break end
+        end
+    end
+    if show ~= CurrentPage() then ShowPage(show) else PaintSwitch() end
+    if widgets.query and firstFound[show] then ScrollTo(show, firstFound[show]) end
+end
+
+--- Show or hide the line under every setting, and fit each page to it.
+local function ShowDescriptions(show)
+    for _, page in pairs(pages) do
+        for _, row in ipairs(page.rows or {}) do
+            if row.hint then FitRow(row, show) end
+        end
+    end
+    FitScroll()
+end
+
+local function BuildBar(outer)
+    local bar = CreateFrame("Frame", nil, outer)
+    bar:SetPoint("TOPLEFT", 0, 0)
+    bar:SetPoint("TOPRIGHT", 0, 0)
+    bar:SetHeight(BAR_HEIGHT)
+    widgets.bar = bar
+
+    local rule = Theme.CreateDivider(bar)
+    rule:SetPoint("BOTTOMLEFT", COLUMN_ONE_X, 0)
+    rule:SetPoint("BOTTOMRIGHT", -16, 0)
+
+    widgets.switch = {}
+    for _, definition in ipairs(PAGES) do
+        local button = CreateFrame("Button", nil, bar)
+        button:SetHeight(22)
+
+        local part = { key = definition.key, button = button }
+        part.label = Theme.CreateLabel(button, "small", "muted")
+        part.label:SetPoint("LEFT", 0, 0)
+        part.label:SetText(definition.text)
+
+        part.underline = button:CreateTexture(nil, "ARTWORK")
+        part.underline:SetColorTexture(Theme.Unpack("accent"))
+        part.underline:SetHeight(2)
+        part.underline:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, 1)
+        part.underline:SetPoint("TOPRIGHT", button, "BOTTOMRIGHT", 0, 1)
+        part.underline:Hide()
+
+        button:SetScript("OnClick", function() ShowPage(definition.key) end)
+        button:SetScript("OnEnter", function(self)
+            part.hovered = true
+            PaintSwitch()
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(definition.tip, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", function()
+            part.hovered = false
+            PaintSwitch()
+            GameTooltip:Hide()
+        end)
+
+        widgets.switch[#widgets.switch + 1] = part
+    end
+    LayoutSwitch()
+
+    -- The house order for an option bar: search, then tick boxes.
+    widgets.describe = Widgets.CreateCheckbox(bar, "Show descriptions", function(checked)
+        ns.Config:Set("settingsDescriptions", checked)
+        ShowDescriptions(checked)
+    end, false)
+    widgets.describe:SetPoint("RIGHT", bar, "RIGHT", -16, 0)
+
+    widgets.find = Widgets.CreateSearchBox(bar, "Find a setting", Search)
+    widgets.find:SetWidth(Widgets.SEARCH_WIDTH or 170)
+    widgets.find:SetPoint("RIGHT", widgets.describe, "LEFT", -16, 0)
+end
+
+--------------------------------------------------------------------------------
 -- Build
 --------------------------------------------------------------------------------
 
 local function Build(outer)
     local Config = ns.Config
 
-    -- This page is taller than the window at most resolutions, so everything
-    -- is built into a scrolling child rather than straight onto the tab.
-    -- Nothing below changes: the controls anchor to `container` either way.
-    local scroll = Widgets.CreateScrollFrame(outer, { step = 40 })
-    scroll:SetPoint("TOPLEFT", 0, 0)
-    scroll:SetPoint("BOTTOMRIGHT", -14, 0)
-    widgets.scroll = scroll
+    BuildBar(outer)
 
-    local container = scroll.content
+    -- Each page scrolls on its own, should one outgrow the window (a long
+    -- ignored list, or every description shown). The holder carries the
+    -- scrollbar, which sits beside the scrolling area rather than in it, so
+    -- hiding a page hides its bar too.
+    for _, definition in ipairs(PAGES) do
+        local holder = CreateFrame("Frame", nil, outer)
+        holder:SetPoint("TOPLEFT", 0, -BAR_HEIGHT - 2)
+        holder:SetPoint("BOTTOMRIGHT", 0, 0)
+        holder:Hide()
 
-    ----------------------------------------------------------------------------
-    -- Column one: pricing and filters
-    ----------------------------------------------------------------------------
+        local scroll = Widgets.CreateScrollFrame(holder, { step = 40 })
+        scroll:SetPoint("TOPLEFT", 0, 0)
+        scroll:SetPoint("BOTTOMRIGHT", -14, 0)
 
-    local pricing = CreateSection(container, "PRICING", { x = COLUMN_ONE_X, y = -16 })
+        pages[definition.key] = {
+            key = definition.key, holder = holder, scroll = scroll,
+            content = scroll.content, last = {},
+        }
+    end
 
-    local undercutRow = CreateRow(container, pricing, "Undercut by",
+
+    CreateSection(pages.pricing, 1, "AUCTION PRICES")
+
+    local undercutRow = CreateRow(pages.pricing, 1, "Undercut by",
         "Your posting price is the cheapest rival listing minus this. " ..
         "Stackable goods only: gear and bags can only be priced in whole " ..
         "silver, so those match the cheapest rival unless dropping a full " ..
@@ -160,7 +465,7 @@ local function Build(outer)
     widgets.undercut:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(undercutRow, widgets.undercut, "copper")
 
-    local cutRow = CreateRow(container, undercutRow, "Auction house cut",
+    local cutRow = CreateRow(pages.pricing, 1, "Auction house cut",
         "The share of each sale the auction house keeps.")
 
     widgets.cut = Widgets.CreateNumberBox(cutRow, {
@@ -173,7 +478,7 @@ local function Build(outer)
     widgets.cut:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(cutRow, widgets.cut, "%")
 
-    local unscannedRow = CreateRow(container, cutRow, "Markup with no competition",
+    local unscannedRow = CreateRow(pages.pricing, 1, "Markup with no competition",
         "When nobody else is listing one (never scanned, or every listing is " ..
         "yours), the price is your material cost plus this, never below market " ..
         "value. It is shown as an estimate and never saved as a real price.")
@@ -188,7 +493,7 @@ local function Build(outer)
     widgets.unscannedMarkup:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(unscannedRow, widgets.unscannedMarkup, "% markup")
 
-    local unscannedOnRow = CreateRow(container, unscannedRow, "Use that markup",
+    local unscannedOnRow = CreateRow(pages.pricing, 1, "Use that markup",
         "Off: crafts with no scanned price have no price at all, and your own listings hold at market value.")
 
     widgets.priceUnscanned = Widgets.CreateCheckbox(unscannedOnRow, "Enabled", function(checked)
@@ -197,7 +502,7 @@ local function Build(outer)
     end, true)
     widgets.priceUnscanned:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local ownedRow = CreateRow(container, unscannedOnRow, "Materials you already own",
+    local ownedRow = CreateRow(pages.pricing, 1, "Materials you already own",
         "On: they still cost market price. Off: they count as free.")
 
     widgets.valueOwned = Widgets.CreateCheckbox(ownedRow, "Charge market price", function(checked)
@@ -206,7 +511,8 @@ local function Build(outer)
     end, true)
     widgets.valueOwned:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local postedRow = CreateRow(container, ownedRow, "Keep in stock per item",
+    CreateSection(pages.queue, 1, "WHAT GETS QUEUED")
+    local postedRow = CreateRow(pages.queue, 1, "Keep in stock per item",
         "Counts listings, bags and bank together. 0 = no limit. Equipped gear is not counted.")
 
     widgets.maxPosted = Widgets.CreateNumberBox(postedRow, {
@@ -222,7 +528,7 @@ local function Build(outer)
     widgets.maxPostedHint:SetPoint("LEFT", widgets.maxPosted, "RIGHT", 6, 0)
     widgets.maxPostedHint:SetWidth(120)
 
-    local hideMaxedRow = CreateRow(container, postedRow, "Hide maxed crafts",
+    local hideMaxedRow = CreateRow(pages.queue, 1, "Hide maxed crafts",
         "Off: they still appear, marked as at their limit.")
 
     widgets.hideMaxed = Widgets.CreateCheckbox(hideMaxedRow, "Hide them", function(checked)
@@ -231,7 +537,7 @@ local function Build(outer)
     end, true)
     widgets.hideMaxed:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local subCraftRow = CreateRow(container, hideMaxedRow, "Queue sub-crafts",
+    local subCraftRow = CreateRow(pages.queue, 1, "Queue sub-crafts",
         "Also queue materials that are cheaper to make than to buy.")
 
     widgets.subCrafts = Widgets.CreateCheckbox(subCraftRow, "Queue them", function(checked)
@@ -244,7 +550,7 @@ local function Build(outer)
     end, true)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local altCraftRow = CreateRow(container, subCraftRow, "Suggest other characters",
+    local altCraftRow = CreateRow(pages.queue, 1, "Suggest other characters",
         "Point out materials one of your other characters can make for less than buying them.")
 
     widgets.altCrafts = Widgets.CreateCheckbox(altCraftRow, "Suggest swapping", function(checked)
@@ -253,7 +559,7 @@ local function Build(outer)
     end, true)
     widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local shareRow = CreateRow(container, altCraftRow, "Let alts make sub-crafts",
+    local shareRow = CreateRow(pages.queue, 1, "Let alts make sub-crafts",
         "Off: the shopping list only recommends making it on the other character. On: it goes on that character's queue, marked who it is for, and the mailbox lists what to send.")
 
     widgets.shareQueue = Widgets.CreateCheckbox(shareRow, "Hand them over", function(checked)
@@ -264,7 +570,8 @@ local function Build(outer)
     end, false)
     widgets.shareQueue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local queueMailRow = CreateRow(container, shareRow, "Queue mail at the mailbox",
+    CreateSection(pages.mail, 1, "AT THE MAILBOX")
+    local queueMailRow = CreateRow(pages.mail, 1, "Queue mail at the mailbox",
         "With alts making sub-crafts, lists what to send them for the queue, with a button that fills in the mail. You press Send.")
 
     widgets.queueMail = Widgets.CreateCheckbox(queueMailRow, "Show it", function(checked)
@@ -275,7 +582,7 @@ local function Build(outer)
 
     -- Izbode, 2026-10-04: a character to mail gear to for disenchanting.
     -- Typed rather than picked, so one on another account works too.
-    local disenchanterRow = CreateRow(container, queueMailRow, "Disenchanter",
+    local disenchanterRow = CreateRow(pages.mail, 1, "Disenchanter",
         "At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear or an upgrade for you. Leave empty for nobody.")
 
     widgets.disenchanter = Widgets.CreateSearchBox(disenchanterRow, "Character name", function(text)
@@ -296,7 +603,7 @@ local function Build(outer)
         self:ClearFocus()
     end)
 
-    local disenchantQualityRow = CreateRow(container, disenchanterRow, "Mail gear up to",
+    local disenchantQualityRow = CreateRow(pages.mail, 1, "Mail gear up to",
         "The best quality that goes to your disenchanter.")
 
     widgets.disenchantQuality = Widgets.CreateDropdown(disenchantQualityRow, {
@@ -310,7 +617,7 @@ local function Build(outer)
     widgets.disenchantQuality:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     -- Ezmode, 2026-10-05: big shuffles taken from the mail a bagful at a time.
-    local spareRow = CreateRow(container, disenchantQualityRow, "Bag slots kept free",
+    local spareRow = CreateRow(pages.mail, 1, "Bag slots kept free",
         "Left empty by each Take next batch at the mailbox, for what you craft and anything you pick up.")
 
     widgets.bagSpare = Widgets.CreateNumberBox(spareRow, {
@@ -322,7 +629,7 @@ local function Build(outer)
     })
     widgets.bagSpare:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    local mailBatchRow = CreateRow(container, spareRow, "Take queue mail in batches",
+    local mailBatchRow = CreateRow(pages.mail, 1, "Take queue mail in batches",
         "At the mailbox, a Take next batch button takes the queue's materials from your mail, as much as fits in your bags. Never mail asking for payment (COD).")
 
     widgets.mailBatch = Widgets.CreateCheckbox(mailBatchRow, "Show it", function(checked)
@@ -332,7 +639,7 @@ local function Build(outer)
     widgets.mailBatch:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- Ezmode, 2026-10-07: take a whole kind of mail in one click.
-    local mailTakeRow = CreateRow(container, mailBatchRow, "Take buttons at the mailbox",
+    local mailTakeRow = CreateRow(pages.mail, 1, "Take buttons at the mailbox",
         "Take sales, Take expired, Take cancelled and Take all, under the game's inbox. Never mail asking for payment (COD); nothing is deleted.")
 
     widgets.mailTake = Widgets.CreateCheckbox(mailTakeRow, "Show them", function(checked)
@@ -343,7 +650,7 @@ local function Build(outer)
 
     -- Ezmode, 2026-10-07: each queue row says AH, DE or Vendor, and what the
     -- queue made on DE or Vendor can be disenchanted or sold from here.
-    local deNextRow = CreateRow(container, mailTakeRow, "Disenchant next on the Queue tab",
+    local deNextRow = CreateRow(pages.queue, 1, "Disenchant next on the Queue tab",
         "A button that disenchants the next item your queue made on DE, one click each. Never blue or better, anything worn, or anything the queue did not make.")
 
     widgets.deNext = Widgets.CreateCheckbox(deNextRow, "Show it", function(checked)
@@ -352,7 +659,8 @@ local function Build(outer)
     end, false)
     widgets.deNext:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local sellMarkedRow = CreateRow(container, deNextRow, "Sell marked at vendors",
+    CreateSection(pages.mail, 2, "AT VENDORS")
+    local sellMarkedRow = CreateRow(pages.mail, 2, "Sell marked at vendors",
         "A button on the vendor window that sells what your queue made on Vendor, up to 12 a visit so buyback can undo any sale. Test selling checks whether one click can sell them all.")
 
     widgets.sellMarked = Widgets.CreateCheckbox(sellMarkedRow, "Show it", function(checked)
@@ -368,7 +676,8 @@ local function Build(outer)
     sellTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
 
     -- Asked 2026-10-06: the buy window opened at 1 after a Buy list search.
-    local fillBuyRow = CreateRow(container, sellMarkedRow, "Fill in how many to buy",
+    CreateSection(pages.auction, 1, "BUYING AND POSTING")
+    local fillBuyRow = CreateRow(pages.auction, 1, "Fill in how many to buy",
         "Search from the Buy list, the Queue tab or the Gather tab, pick the item in the auction house's results, and its quantity box shows how many the queue still needs. You still click Buy Now.")
 
     widgets.fillBuy = Widgets.CreateCheckbox(fillBuyRow, "Enabled", function(checked)
@@ -376,7 +685,8 @@ local function Build(outer)
     end, true)
     widgets.fillBuy:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local lossRow = CreateRow(container, fillBuyRow, "Recommend selling at a loss",
+    CreateSection(pages.pricing, 1, "WHEN TO SELL")
+    local lossRow = CreateRow(pages.pricing, 1, "Recommend selling at a loss",
         "Off: the Post tab shows them in red but will not list them.")
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, "Recommend anyway", function(checked)
@@ -387,7 +697,7 @@ local function Build(outer)
 
     -- Asked by a player on 2026-10-05: the guard above compares with what the
     -- materials cost today; this one with what the last craft actually cost.
-    local paidRow = CreateRow(container, lossRow, "Never below what I paid",
+    local paidRow = CreateRow(pages.pricing, 1, "Never below what I paid",
         "Won't list a crafted item for less than its last craft cost, after the auction house's cut.")
 
     widgets.neverBelowPaid = Widgets.CreateCheckbox(paidRow, "Enabled", function(checked)
@@ -401,7 +711,7 @@ local function Build(outer)
     -- click that lists. Posting needs a real click, and after the price
     -- check (an auction house search, answered later) there is no other.
     -- The switch never did anything; its saved value is left where it is.
-    local verifyRow = CreateRow(container, paidRow, "Check price before listing",
+    local verifyRow = CreateRow(pages.auction, 1, "Check price before listing",
         "Searches the auction house for that one item first, so you undercut the price as it is now.")
 
     widgets.verifyPrice = Widgets.CreateCheckbox(verifyRow, "Check first", function(checked)
@@ -411,7 +721,8 @@ local function Build(outer)
 
     -- The sale alarm and the scan chime moved down to SOUNDS, with a switch
     -- for every other sound (2026-10-02).
-    local mailReportRow = CreateRow(container, verifyRow, "Report after collecting mail",
+    CreateSection(pages.mail, 2, "AFTER A SALE")
+    local mailReportRow = CreateRow(pages.mail, 2, "Report after collecting mail",
         "Counts up what you collected at the mailbox and shows it when you walk away, with your best sale.")
 
     widgets.mailReport = Widgets.CreateCheckbox(mailReportRow, "Enabled", function(checked)
@@ -426,7 +737,7 @@ local function Build(outer)
 
     -- Requested by a player whose chat filled with sale lines: the Sales tab
     -- keeps every sale, so the chat copy can go.
-    local saleChatRow = CreateRow(container, mailReportRow, "Hide sale messages in chat",
+    local saleChatRow = CreateRow(pages.mail, 2, "Hide sale messages in chat",
         "Keeps \"A buyer has been found\" out of chat. Every sale is still on the Sales tab.")
 
     widgets.hideSaleChat = Widgets.CreateCheckbox(saleChatRow, "Hide them", function(checked)
@@ -435,9 +746,9 @@ local function Build(outer)
     end, false)
     widgets.hideSaleChat:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local filters = CreateSection(container, "FILTERS", { anchor = saleChatRow })
+    CreateSection(pages.pricing, 2, "WHAT COUNTS AS PROFIT")
 
-    local profitRow = CreateRow(container, filters, "Minimum profit",
+    local profitRow = CreateRow(pages.pricing, 2, "Minimum profit",
         "Crafts that make less than this are hidden from the Profit tab. " ..
         "For gear and bags, which are priced in whole silver, it also " ..
         "decides whether to undercut by a silver or just match the cheapest rival.")
@@ -457,7 +768,7 @@ local function Build(outer)
     widgets.minProfitPreview:SetPoint("LEFT", widgets.minProfit, "RIGHT", 6, 0)
     widgets.minProfitPreview:SetWidth(100)
 
-    local marginRow = CreateRow(container, profitRow, "Minimum margin",
+    local marginRow = CreateRow(pages.pricing, 2, "Minimum margin",
         "Profit as a share of the sale price.")
 
     widgets.minMargin = Widgets.CreateNumberBox(marginRow, {
@@ -470,7 +781,8 @@ local function Build(outer)
     widgets.minMargin:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(marginRow, widgets.minMargin, "%")
 
-    local staleRow = CreateRow(container, marginRow, "Prices go stale after",
+    CreateSection(pages.pricing, 2, "PRICE AGE")
+    local staleRow = CreateRow(pages.pricing, 2, "Prices go stale after",
         "Older prices are greyed out, but still used.")
 
     widgets.stale = Widgets.CreateDropdown(staleRow, {
@@ -486,93 +798,93 @@ local function Build(outer)
 
     -- Crafts taken off the Profit tab with its Ignore button. The rows are
     -- made in Refresh, one per craft, since the list grows and shrinks.
-    local ignored = CreateSection(container, "IGNORED CRAFTS", { anchor = staleRow })
+    local ignored = CreateSection(pages.queue, 2, "IGNORED CRAFTS")
     widgets.ignoredSection = ignored
+    Searchable(pages.queue, ignored, "Ignored crafts Restore puts one back on the Profit tab")
 
-    local ignoredHint = Theme.CreateLabel(container, "tiny", "muted")
+    local ignoredHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
     ignoredHint:SetPoint("TOPLEFT", ignored, "BOTTOMLEFT", 0, ROW_GAP)
     ignoredHint:SetWidth(COLUMN_WIDTH)
     ignoredHint:SetWordWrap(true)
     ignoredHint:SetText("Never shown on the Profit tab, on any character. Restore puts one back.")
     widgets.ignoredHint = ignoredHint
 
-    widgets.ignoredEmpty = Theme.CreateLabel(container, "small", "dim")
+    widgets.ignoredEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
     widgets.ignoredEmpty:SetWidth(COLUMN_WIDTH)
     widgets.ignoredEmpty:SetWordWrap(true)
     widgets.ignoredEmpty:SetText("None. Pick a craft on the Profit tab and click Ignore.")
     widgets.ignoredRows = {}
-    widgets.ignoredParent = container
+    widgets.ignoredParent = pages.queue.content
 
     -- Where the ignored crafts end, moved under the last of them in Refresh,
     -- so the section below follows the list as it grows and shrinks.
-    local ignoredEnd = CreateFrame("Frame", nil, container)
+    local ignoredEnd = CreateFrame("Frame", nil, pages.queue.content)
     ignoredEnd:SetSize(COLUMN_WIDTH, 1)
     ignoredEnd:SetPoint("TOPLEFT", widgets.ignoredEmpty, "BOTTOMLEFT", 0, 0)
     widgets.ignoredEnd = ignoredEnd
 
     -- Items taken off Ready to sell at the auction house with the x on
     -- their row (2026-10-04). Laid out as Ignored crafts is.
-    local ignoredItems = CreateSection(container, "IGNORED ITEMS", { anchor = ignoredEnd })
+    pages.queue.last[2] = ignoredEnd
+    local ignoredItems = CreateSection(pages.queue, 2, "IGNORED ITEMS")
     widgets.ignoredItemsSection = ignoredItems
+    Searchable(pages.queue, ignoredItems, "Ignored items Restore puts one back on Ready to sell")
 
-    local ignoredItemsHint = Theme.CreateLabel(container, "tiny", "muted")
+    local ignoredItemsHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
     ignoredItemsHint:SetPoint("TOPLEFT", ignoredItems, "BOTTOMLEFT", 0, ROW_GAP)
     ignoredItemsHint:SetWidth(COLUMN_WIDTH)
     ignoredItemsHint:SetWordWrap(true)
     ignoredItemsHint:SetText("Never offered for sale on Ready to sell or the Post tab, on any character. Restore puts one back.")
     widgets.ignoredItemsHint = ignoredItemsHint
 
-    widgets.ignoredItemsEmpty = Theme.CreateLabel(container, "small", "dim")
+    widgets.ignoredItemsEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
     widgets.ignoredItemsEmpty:SetWidth(COLUMN_WIDTH)
     widgets.ignoredItemsEmpty:SetWordWrap(true)
     widgets.ignoredItemsEmpty:SetText("None. Click the x on an item in Ready to sell at the auction house.")
     widgets.ignoredItemsRows = {}
 
-    ----------------------------------------------------------------------------
-    -- Column two: data and advanced
-    ----------------------------------------------------------------------------
-
-    local data = CreateSection(container, "DATA", { x = COLUMN_TWO_X, y = -16 })
+    local data = CreateSection(pages.data, 1, "SAVED DATA")
 
     -- All four wrap: "last scan 3h ago (stopped at the page limit)" and the
     -- bank and auction warnings are longer than the column, and were cut
     -- off. Refresh measures the page after setting them.
-    widgets.dataSummary = Theme.CreateLabel(container, "small", "text")
+    widgets.dataSummary = Theme.CreateLabel(pages.data.content, "small", "text")
     widgets.dataSummary:SetPoint("TOPLEFT", data, "BOTTOMLEFT", 0, -6)
     widgets.dataSummary:SetWidth(COLUMN_WIDTH)
     widgets.dataSummary:SetWordWrap(true)
 
-    widgets.recipeSummary = Theme.CreateLabel(container, "small", "text")
+    widgets.recipeSummary = Theme.CreateLabel(pages.data.content, "small", "text")
     widgets.recipeSummary:SetPoint("TOPLEFT", widgets.dataSummary, "BOTTOMLEFT", 0, -4)
     widgets.recipeSummary:SetWidth(COLUMN_WIDTH)
     widgets.recipeSummary:SetWordWrap(true)
 
-    widgets.bankSummary = Theme.CreateLabel(container, "tiny", "dim")
+    widgets.bankSummary = Theme.CreateLabel(pages.data.content, "tiny", "dim")
     widgets.bankSummary:SetPoint("TOPLEFT", widgets.recipeSummary, "BOTTOMLEFT", 0, -6)
     widgets.bankSummary:SetWidth(COLUMN_WIDTH)
     widgets.bankSummary:SetWordWrap(true)
 
-    widgets.auctionSummary = Theme.CreateLabel(container, "tiny", "dim")
+    widgets.auctionSummary = Theme.CreateLabel(pages.data.content, "tiny", "dim")
     widgets.auctionSummary:SetPoint("TOPLEFT", widgets.bankSummary, "BOTTOMLEFT", 0, -4)
     widgets.auctionSummary:SetWidth(COLUMN_WIDTH)
     widgets.auctionSummary:SetWordWrap(true)
 
-    widgets.loadWarning = Theme.CreateLabel(container, "tiny", "warn")
+    widgets.loadWarning = Theme.CreateLabel(pages.data.content, "tiny", "warn")
     widgets.loadWarning:SetPoint("TOPLEFT", widgets.auctionSummary, "BOTTOMLEFT", 0, -6)
     widgets.loadWarning:SetWidth(COLUMN_WIDTH)
     widgets.loadWarning:SetWordWrap(true)
 
-    local pruneButton = Widgets.CreateButton(container, "Remove old prices", function()
+    local pruneButton = Widgets.CreateButton(pages.data.content, "Remove old prices", function()
         local removed = ns.Prices:Prune()
         ns.Print(("removed %d old price(s)"):format(removed))
         UI:RefreshActiveTab()
     end, { width = 150, height = 22, tooltip = "Drop items not seen on the auction house for 21 days" })
-    pruneButton:SetPoint("TOPLEFT", widgets.loadWarning, "BOTTOMLEFT", 0, -18)
+    pages.data.last[1] = widgets.loadWarning
+    Place(pages.data, 1, pruneButton, -18)
     FitButton(pruneButton)
 
     -- Destructive, so it arms first rather than wiping a long price history on
     -- a misclick.
-    widgets.clearButton = Widgets.CreateButton(container, "Clear price data", function()
+    widgets.clearButton = Widgets.CreateButton(pages.data.content, "Clear price data", function()
         local button = widgets.clearButton
 
         if button.armed then
@@ -615,22 +927,23 @@ local function Build(outer)
     widgets.clearButton:SetPoint("LEFT", pruneButton, "RIGHT", 8, 0)
     FitButton(widgets.clearButton)
 
-    local exportButton = Widgets.CreateButton(container, "Export queue", function()
+    CreateSection(pages.queue, 1, "EXPORT AND IMPORT")
+    local exportButton = Widgets.CreateButton(pages.queue.content, "Export queue", function()
         UI:ShowTransferDialog("export")
     end, { width = 150, height = 22,
            tooltip = "Copy your queue, settings and stock limits to a code" })
-    exportButton:SetPoint("TOPLEFT", pruneButton, "BOTTOMLEFT", 0, -8)
+    Place(pages.queue, 1, exportButton, -8)
     FitButton(exportButton)
 
-    local importButton = Widgets.CreateButton(container, "Import", function()
+    local importButton = Widgets.CreateButton(pages.queue.content, "Import", function()
         UI:ShowTransferDialog("import")
     end, { width = 150, height = 22,
            tooltip = "Restore from a code" })
     importButton:SetPoint("LEFT", exportButton, "RIGHT", 8, 0)
 
-    local advanced = CreateSection(container, "ADVANCED", { anchor = exportButton })
+    CreateSection(pages.auction, 2, "SCANNING")
 
-    local budgetRow = CreateRow(container, advanced, "Scan speed",
+    local budgetRow = CreateRow(pages.auction, 2, "Scan speed",
         "How long each screen refresh spends reading auction data. Higher scans faster but can make the game stutter.")
 
     widgets.budget = Widgets.CreateNumberBox(budgetRow, {
@@ -640,7 +953,7 @@ local function Build(outer)
     widgets.budget:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(budgetRow, widgets.budget, "ms")
 
-    local autoScanRow = CreateRow(container, budgetRow, "Scan automatically",
+    local autoScanRow = CreateRow(pages.auction, 2, "Scan automatically",
         "Scans again when the auction house opens and prices are missing or out of date.")
 
     widgets.autoScan = Widgets.CreateCheckbox(autoScanRow, "Enabled", function(checked)
@@ -648,7 +961,7 @@ local function Build(outer)
     end, true)
     widgets.autoScan:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local learnRow = CreateRow(container, autoScanRow, "Learn from searches",
+    local learnRow = CreateRow(pages.auction, 2, "Learn from searches",
         "Also takes prices from searches you run in the auction house yourself.")
 
     widgets.learnFromSearches = Widgets.CreateCheckbox(learnRow, "Enabled", function(checked)
@@ -656,7 +969,8 @@ local function Build(outer)
     end, true)
     widgets.learnFromSearches:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local professionValueRow = CreateRow(container, learnRow, "Value in profession window",
+    CreateSection(pages.look, 1, "SHOWN IN THE GAME")
+    local professionValueRow = CreateRow(pages.look, 1, "Value in profession window",
         "Shows what one of each recipe sells for beside its name in Blizzard's own window.")
 
     widgets.professionValue = Widgets.CreateCheckbox(professionValueRow, "Enabled", function(checked)
@@ -665,7 +979,7 @@ local function Build(outer)
     end, true)
     widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local tooltipValueRow = CreateRow(container, professionValueRow, "Value on item tooltips",
+    local tooltipValueRow = CreateRow(pages.look, 1, "Value on item tooltips",
         "Adds what an item sells for to its tooltip, wherever the game shows one.")
 
     widgets.tooltipValue = Widgets.CreateCheckbox(tooltipValueRow, "Enabled", function(checked)
@@ -675,7 +989,7 @@ local function Build(outer)
 
     -- Asked 2026-10-05: is a recipe worth buying, at a glance. The button
     -- is /bts recipes.
-    local recipeTipRow = CreateRow(container, tooltipValueRow, "Recipe value on tooltips",
+    local recipeTipRow = CreateRow(pages.look, 1, "Recipe value on tooltips",
         "On a Pattern, Plans, Formula or Recipe: what it teaches, the cost to make, what it sells and disenchants for, and how many crafts pay it back.")
 
     widgets.recipeTooltips = Widgets.CreateCheckbox(recipeTipRow, "Enabled", function(checked)
@@ -690,7 +1004,7 @@ local function Build(outer)
     recipeList:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
     FitButton(recipeList)
 
-    local upgradeRow = CreateRow(container, recipeTipRow, "Upgrade arrows on gear",
+    local upgradeRow = CreateRow(pages.look, 1, "Upgrade arrows on gear",
         "A green arrow on the icon of gear that is an upgrade for you. Needs Blackthornes Equipment.")
 
     widgets.upgradeArrows = Widgets.CreateCheckbox(upgradeRow, "Enabled", function(checked)
@@ -700,7 +1014,7 @@ local function Build(outer)
     end, true)
     widgets.upgradeArrows:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local shopsRow = CreateRow(container, upgradeRow, "Open with the auction house",
+    local shopsRow = CreateRow(pages.auction, 1, "Open with the auction house",
         "Opens this window when the auction house or a vendor opens, and closes it with them.")
 
     widgets.openWithShops = Widgets.CreateCheckbox(shopsRow, "Enabled", function(checked)
@@ -711,7 +1025,8 @@ local function Build(outer)
     -- A player's request (2026-10-07): the window was too big on a 4K
     -- screen. The grip below its bottom right corner does the same, to any
     -- size; one dragged to shows in the box as its percent.
-    local sizeRow = CreateRow(container, shopsRow, "Window size",
+    CreateSection(pages.look, 1, "THIS WINDOW")
+    local sizeRow = CreateRow(pages.look, 1, "Window size",
         "How big this window is drawn. Drag the gold corner below its bottom right for any size, or right-click it for Normal. Also /bts size.")
 
     widgets.windowSize = Widgets.CreateDropdown(sizeRow, {}, function(value)
@@ -719,7 +1034,7 @@ local function Build(outer)
     end, { width = 150 })
     widgets.windowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    local effectsRow = CreateRow(container, sizeRow, "Window effects",
+    local effectsRow = CreateRow(pages.look, 1, "Window effects",
         "Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all.")
 
     widgets.effects = Widgets.CreateDropdown(effectsRow, {
@@ -733,7 +1048,8 @@ local function Build(outer)
     end, { width = 110 })
     widgets.effects:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    local debugRow = CreateRow(container, effectsRow, "Debug output",
+    CreateSection(pages.data, 1, "TROUBLESHOOTING")
+    local debugRow = CreateRow(pages.data, 1, "Debug output",
         "Extra messages in chat, to help track down problems.")
 
     widgets.debug = Widgets.CreateCheckbox(debugRow, "Enabled", function(checked)
@@ -744,12 +1060,11 @@ local function Build(outer)
     -- Every sound the addon plays, each with its own switch, all on to start
     -- with. The one sound not here is the warning that saved data failed to
     -- load, which is about losing data rather than an effect.
-    local sounds = CreateSection(container, "SOUNDS", { anchor = debugRow })
+    CreateSection(pages.look, 2, "SOUNDS")
     widgets.sounds = {}
 
-    local lastSoundRow = sounds
     local function SoundRow(key, label, description, test)
-        local row = CreateRow(container, lastSoundRow, label, description)
+        local row = CreateRow(pages.look, 2, label, description)
         local box = Widgets.CreateCheckbox(row, "Enabled", function(checked)
             Config:Set(key, checked)
         end, true)
@@ -762,7 +1077,6 @@ local function Build(outer)
             button:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
         end
 
-        lastSoundRow = row
         return box
     end
 
@@ -787,9 +1101,9 @@ local function Build(outer)
     -- Sharing (asked 2026-10-07): your characters on another account of
     -- yours, and prices within your guild. Logic/AccountLink.lua and
     -- Logic/GuildPrices.lua; every /bts share command has a control here.
-    local sharing = CreateSection(container, "SHARING", { anchor = lastSoundRow })
+    CreateSection(pages.sharing, 1, "ACCOUNT LINK")
 
-    local linkRow = CreateRow(container, sharing, "Your other account",
+    local linkRow = CreateRow(pages.sharing, 1, "Your other account",
         "Full names (first and last) of characters on another account of yours, separated by commas. Add this character's full name on that side too. While both are logged in on the same realm, each sends the other its characters.")
 
     widgets.linkNames = Widgets.CreateSearchBox(linkRow, "Character names", function(text)
@@ -814,15 +1128,13 @@ local function Build(outer)
     end)
 
     widgets.linkShares = {}
-    local lastShareRow = linkRow
     local function ShareRow(key, label, description)
-        local row = CreateRow(container, lastShareRow, label, description)
+        local row = CreateRow(pages.sharing, 1, label, description)
         local box = Widgets.CreateCheckbox(row, "Send", function(checked)
             Config:Set(key, checked)
         end, true)
         box:SetPoint("TOPLEFT", CONTROL_X, -2)
         widgets.linkShares[key] = box
-        lastShareRow = row
     end
 
     ShareRow("linkShareRecipes", "Share recipes", "Your characters' professions and recipes.")
@@ -830,15 +1142,15 @@ local function Build(outer)
     ShareRow("linkShareGold", "Share gold", "How much gold each of your characters has.")
     ShareRow("linkShareAuctions", "Share auctions", "What your characters have listed, so Keep in stock counts it.")
 
-    local syncButton = Widgets.CreateButton(container, "Sync now", function()
+    local syncButton = Widgets.CreateButton(pages.sharing.content, "Sync now", function()
         if ns.AccountLink then ns.AccountLink:Check() end
         ns.Print("asked your other account for anything new")
         C_Timer.After(3, function() UI:RefreshActiveTab() end)
     end, { width = 110, height = 22, tooltip = "Say hello to your other account now and swap anything that changed" })
-    syncButton:SetPoint("TOPLEFT", lastShareRow, "BOTTOMLEFT", 0, -10)
+    Place(pages.sharing, 1, syncButton, -10)
     FitButton(syncButton)
 
-    local testButton = Widgets.CreateButton(container, "Test messages", function()
+    local testButton = Widgets.CreateButton(pages.sharing.content, "Test messages", function()
         if ns.Comm then ns.Comm:Test() end
     end, { width = 120, height = 22, tooltip = "Whisper yourself a few addon messages and say in chat what the game did with them" })
     testButton:SetPoint("LEFT", syncButton, "RIGHT", 8, 0)
@@ -846,7 +1158,7 @@ local function Build(outer)
 
     -- Removes only copies from the other account, never your own
     -- characters; still arms first.
-    widgets.forgetLinked = Widgets.CreateButton(container, "Forget their characters", function()
+    widgets.forgetLinked = Widgets.CreateButton(pages.sharing.content, "Forget their characters", function()
         local button = widgets.forgetLinked
         if not button.armed then
             button.armed = true
@@ -869,15 +1181,16 @@ local function Build(outer)
         UI:RefreshActiveTab()
     end, { width = 170, height = 22,
            tooltip = "Remove the copies of your other account's characters. Your own characters are never touched. Asks you to click again first." })
-    widgets.forgetLinked:SetPoint("TOPLEFT", syncButton, "BOTTOMLEFT", 0, -8)
+    Place(pages.sharing, 1, widgets.forgetLinked, -8)
     FitButton(widgets.forgetLinked)
 
-    widgets.linkStatus = Theme.CreateLabel(container, "tiny", "muted")
-    widgets.linkStatus:SetPoint("TOPLEFT", widgets.forgetLinked, "BOTTOMLEFT", 0, -8)
+    widgets.linkStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
+    Place(pages.sharing, 1, widgets.linkStatus, -8)
     widgets.linkStatus:SetWidth(COLUMN_WIDTH)
     widgets.linkStatus:SetWordWrap(true)
 
-    local guildRow = CreateRow(container, widgets.linkStatus, "Guild prices",
+    CreateSection(pages.sharing, 2, "GUILD")
+    local guildRow = CreateRow(pages.sharing, 2, "Guild prices",
         "Shares your scans with guildmates who use this addon, at most once an hour, and fills gaps in your prices with theirs. Your own scans always win.")
     widgets.guildPrices = Widgets.CreateCheckbox(guildRow, "Enabled", function(checked)
         Config:Set("guildPrices", checked)
@@ -885,14 +1198,14 @@ local function Build(outer)
     end, false)
     widgets.guildPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    widgets.guildStatus = Theme.CreateLabel(container, "tiny", "muted")
-    widgets.guildStatus:SetPoint("TOPLEFT", guildRow, "BOTTOMLEFT", 0, -4)
+    widgets.guildStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
+    Place(pages.sharing, 2, widgets.guildStatus, -4)
     widgets.guildStatus:SetWidth(COLUMN_WIDTH)
     widgets.guildStatus:SetWordWrap(true)
 
     -- Every setting at once, so it arms first like Clear price data.
     local resetButton
-    resetButton = Widgets.CreateButton(container, "Reset to defaults", function()
+    resetButton = Widgets.CreateButton(pages.data.content, "Reset to defaults", function()
         if not resetButton.armed then
             resetButton.armed = true
             resetButton:SetText("Really reset?")
@@ -940,28 +1253,26 @@ local function Build(outer)
     -- Under the last setting rather than pinned to the page's bottom edge:
     -- measured from there, the page grew 4 pixels taller every time it was
     -- drawn, and left more empty space to scroll into each time.
-    resetButton:SetPoint("TOPLEFT", widgets.guildStatus, "BOTTOMLEFT", 0, -18)
+    Place(pages.data, 1, resetButton, -18)
     FitButton(resetButton)
+
+    -- The buttons standing on their own, so the search finds them too.
+    Searchable(pages.data, pruneButton, "Remove old prices Drop items not seen on the auction house for 21 days")
+    Searchable(pages.data, widgets.clearButton, "Clear price data Delete every stored price for this realm")
+    Searchable(pages.data, resetButton, "Reset to defaults Put every setting back to how it started")
+    Searchable(pages.queue, exportButton, "Export queue Copy your queue, settings and stock limits to a code")
+    Searchable(pages.queue, importButton, "Import Restore from a code")
+    Searchable(pages.sharing, syncButton, "Sync now Say hello to your other account now and swap anything that changed")
+    Searchable(pages.sharing, testButton, "Test messages Whisper yourself a few addon messages")
+    Searchable(pages.sharing, widgets.forgetLinked, "Forget their characters Remove the copies of your other account's characters")
+
+    widgets.describe:SetChecked(Config:Get("settingsDescriptions") == true)
+    ShowPage(CurrentPage())
 end
 
 --------------------------------------------------------------------------------
 -- Refresh
 --------------------------------------------------------------------------------
-
---- Size the scrolling area to the content, once it has real coordinates.
---
--- On the first build the frames have not been laid out yet, so GetTop() is
--- nil and there is nothing to measure. Retrying on the next frame costs one
--- timer and avoids a page that cannot scroll until you click away and back.
-local function FitScroll()
-    if not widgets.scroll then return end
-
-    if not widgets.scroll:FitContent() then
-        C_Timer.After(0, function()
-            if widgets.scroll then widgets.scroll:FitContent() end
-        end)
-    end
-end
 
 --- Write a stored value back into its box, unless the player is typing in
 --- it. Bag, mail and auction events redraw this page every few seconds at
@@ -1063,6 +1374,15 @@ local function Refresh()
     if not widgets.undercut then return end
 
     RefreshIgnored()
+
+    if widgets.shownPage ~= CurrentPage() then ShowPage(CurrentPage()) end
+
+    -- Reset to defaults can turn the descriptions back off.
+    local describe = ns.Config:Get("settingsDescriptions") == true
+    if widgets.describe:GetChecked() ~= describe then
+        widgets.describe:SetChecked(describe)
+        ShowDescriptions(describe)
+    end
 
     local Config = ns.Config
 
