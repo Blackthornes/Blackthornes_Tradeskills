@@ -606,44 +606,60 @@ function Util.GetItemIcon(itemID)
     return icon
 end
 
+--- A rarity's colour (0 grey to 5 legendary), as the game itself draws it,
+--- or nothing for a rarity it does not know.
+function Util.GetQualityColor(quality)
+    if type(quality) ~= "number" then return end
+
+    -- ITEM_QUALITY_COLORS is the table the default UI itself reads, so the
+    -- shades match Blizzard's exactly rather than being approximated here.
+    local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+    if color then return color.r, color.g, color.b end
+
+    if Util.HasFunction("C_Item.GetItemQualityColor") then
+        local gotColor, r, g, b = pcall(C_Item.GetItemQualityColor, quality)
+        if gotColor and r then return r, g, b end
+    end
+end
+
 --- The item's rarity colour, as the game itself draws it.
 --
 -- Returns nothing when the item is not in the client's cache yet, so callers
 -- fall back to their own colour rather than flashing white for one frame. The
 -- request below means the next render usually has it.
 --
+-- `knownQuality`, when the caller already has the item's rarity (the
+-- disenchant facts kept in the saved data), colours from that without asking
+-- the client at all. The Disenchanting tab lists items read in earlier
+-- sessions that the client's small cache no longer holds, and asking for
+-- each of them is what pushed bag items out of it (Logic/Disenchant.lua).
+--
 -- Cached only once a colour is actually found: a miss must stay a miss, or an
 -- item looked at before it loaded would be stuck uncoloured for the session.
 local qualityColors = {}
 
-function Util.GetItemQualityColor(itemID)
+function Util.GetItemQualityColor(itemID, knownQuality)
     if not itemID then return end
 
     local cached = qualityColors[itemID]
     if cached then return cached[1], cached[2], cached[3] end
 
-    if not Util.HasFunction("C_Item.GetItemInfo") then return end
+    local quality = type(knownQuality) == "number" and knownQuality or nil
 
-    local ok, _, _, quality = pcall(C_Item.GetItemInfo, itemID)
-    if not ok or not quality then
-        if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
-            pcall(C_Item.RequestLoadItemDataByID, itemID)
+    if not quality then
+        if not Util.HasFunction("C_Item.GetItemInfo") then return end
+
+        local ok, _, _, fromClient = pcall(C_Item.GetItemInfo, itemID)
+        if not ok or not fromClient then
+            if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
+                pcall(C_Item.RequestLoadItemDataByID, itemID)
+            end
+            return
         end
-        return
+        quality = fromClient
     end
 
-    -- ITEM_QUALITY_COLORS is the table the default UI itself reads, so the
-    -- shades match Blizzard's exactly rather than being approximated here.
-    local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-    local r, g, b
-
-    if color then
-        r, g, b = color.r, color.g, color.b
-    elseif Util.HasFunction("C_Item.GetItemQualityColor") then
-        local gotColor, cr, cg, cb = pcall(C_Item.GetItemQualityColor, quality)
-        if gotColor then r, g, b = cr, cg, cb end
-    end
-
+    local r, g, b = Util.GetQualityColor(quality)
     if not r then return end
 
     qualityColors[itemID] = { r, g, b }
