@@ -767,6 +767,7 @@ end
 -- @return true when it started, or false and why
 function QueueMail:TakeBatch(onDone)
     if self.taking or self.filling then return false, "still busy with the last one" end
+    if ns.MailTake and ns.MailTake.run then return false, "already taking mail" end
     if not ns.Mail or not ns.Mail.isOpen then return false, "the mailbox is not open" end
     if type(_G.TakeInboxItem) ~= "function" then
         return false, "this version of the game does not let addons take mail"
