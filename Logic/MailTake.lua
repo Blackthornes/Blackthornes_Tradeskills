@@ -149,9 +149,18 @@ end
 
 --- Does this mail belong to the group, and what can be taken from it?
 -- @return wantsGold, wantsItems
-function MailTake.Wants(group, mail)
+function MailTake.Wants(group, mail, run)
     if (mail.cod or 0) > 0 then return false, false end
     local gold, items = (mail.money or 0) > 0, (mail.itemCount or 0) > 0
+
+    -- One mail (the Tradeskills mailbox, UI/MailWindow.lua): known by its
+    -- place, sender and subject, so a mail sliding into that place after
+    -- the one above empties is not taken by mistake.
+    if group == "one" then
+        local mine = run and mail.index == run.index
+            and mail.sender == run.sender and mail.subject == run.subject
+        return mine and gold or false, mine and items or false
+    end
 
     if group == "sales" then return mail.kind == "sold" and gold, false end
     if group == "expired" then return false, mail.kind == "expired" and items end
@@ -219,7 +228,7 @@ end
 --- The next thing the run should take, read from the inbox as it is now.
 local function Pick(run, mails)
     for _, mail in ipairs(mails) do
-        local gold, items = MailTake.Wants(run.group, mail)
+        local gold, items = MailTake.Wants(run.group, mail, run)
         if gold then
             local key = "gold:" .. mail.index
             if (run.tries[key] or 0) < MAX_TRIES then
@@ -385,6 +394,33 @@ function MailTake:Start(group, opts)
     opts = opts or {}
     local run = {
         group = group, gold = 0, stacks = 0, takes = 0, errors = 0, tries = {},
+        onChange = opts.onChange, onDone = opts.onDone,
+    }
+    self.run = run
+    Step(run)
+    return run
+end
+
+--- Take everything from one mail (not COD), as the inbox shows it now.
+-- @param index the mail's place in the inbox
+-- @return run, or nil and why not
+function MailTake:StartOne(index, opts)
+    local why = self:CannotStart()
+    if why then return nil, why end
+
+    local target
+    for _, mail in ipairs((self:ReadInbox())) do
+        if mail.index == index then target = mail end
+    end
+    if not target then return nil, "that mail is gone" end
+    if target.cod > 0 then return nil, "it asks for payment (COD)" end
+
+    if ns.Mail and ns.Mail.Read then pcall(ns.Mail.Read, ns.Mail) end
+
+    opts = opts or {}
+    local run = {
+        group = "one", index = index, sender = target.sender, subject = target.subject,
+        gold = 0, stacks = 0, takes = 0, errors = 0, tries = {},
         onChange = opts.onChange, onDone = opts.onDone,
     }
     self.run = run
