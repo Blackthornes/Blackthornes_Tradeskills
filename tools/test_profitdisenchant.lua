@@ -239,6 +239,17 @@ check("green when disenchanting beats selling", profitRow.cells.disenchant.color
 profitList.opts.updateRow(profitRow, analyses[2])
 check("and nothing for a craft that cannot be disenchanted", profitRow.cells.disenchant.text == "")
 
+-- Ezmode (Discord, 2026-10-08): AGE said "DE" and "vendor" on these rows.
+profitList.opts.updateRow(profitRow, { recipeID = 4, name = "Cuffs", outputItemID = 14,
+    priceable = true, totalCost = 90, revenue = 323, unitRevenue = 323, profit = 217,
+    margin = 0.67, via = "disenchant", priceBasis = "disenchant", age = 3600, craftableNow = 0 })
+check("a disenchant row's AGE is its material's price age", profitRow.cells.age.text == "1h")
+
+profitList.opts.updateRow(profitRow, { recipeID = 5, name = "Oil", outputItemID = 15,
+    priceable = true, totalCost = 399, revenue = 500, unitRevenue = 500, profit = 101,
+    margin = 0.2, via = "vendor", priceBasis = "vendor", age = 3600, craftableNow = 3 })
+check("a vendor row's AGE is a dash, not the word vendor", profitRow.cells.age.text == "--")
+
 check("the column shows while something can be disenchanted",
     profitRow.cells.disenchant.hidden == false)
 
