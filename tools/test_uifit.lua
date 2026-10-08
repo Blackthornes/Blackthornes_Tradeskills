@@ -22,7 +22,9 @@
 --      when pressed.
 --   7. The auction house bar's status line fits its room, with the whole of
 --      it a hover away. The transfer dialog's code scrolls.
---   8. Settings: a redraw leaves a number being typed alone; Clear price data
+--   8. Settings: pages along the top, descriptions as tooltips until Show
+--      descriptions is ticked, and a search that finds a setting on any page.
+--      A redraw leaves a number being typed alone; Clear price data
 --      clears the page-limit stamp; Reset puts the side panels right.
 --   9. Prices: a new search, filter or sort starts at the top, and a redraw
 --      keeps the place. "now" for an age under a minute.
@@ -827,6 +829,73 @@ check("Enter saves it", settings.undercutCopper, 25)
 check("and lets go of the keyboard", undercut.editBox:HasFocus(), false)
 UI.tabs.settings.refresh()
 check("the next redraw shows it", undercut.editBox.text, "25")
+
+-- Pages (2026-10-08): the settings sit on category pages picked along the
+-- top, with what each does in a tooltip until Show descriptions is ticked.
+
+--- The page holder a control's row sits on: row, page, scroll, holder.
+local function Holder(control)
+    return control:GetParent():GetParent():GetParent():GetParent()
+end
+
+--- The tick box beside `text`, wherever it is.
+local function Tick(text)
+    for _, box in ipairs(made.CreateCheckbox) do
+        if box.strings[1] and box.strings[1].text == text then return box end
+    end
+end
+
+local describe = Tick("Show descriptions")
+local undercutRow = undercut:GetParent()
+local disenchanterBox
+for _, box in ipairs(made.CreateSearchBox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "Disenchanter" then disenchanterBox = box end
+end
+
+check("Settings opens on Pricing", Holder(undercut).shown, true)
+check("the mailbox page waits", Holder(disenchanterBox).shown, false)
+check("descriptions start as tooltips", rawget(undercutRow, "hint").shown, false)
+check("so a row is one line high", undercutRow.height, 24)
+
+undercutRow.mouseOver = true
+undercutRow.scripts.OnEnter(undercutRow)
+check("hovering a row lights it", undercutRow.hover.shown, true)
+check("and its tooltip names it", GameTooltip.lines[1], "Undercut by")
+check("then says what it does", (GameTooltip.lines[2] or ""):find("cheapest rival", 1, true) ~= nil, true)
+undercutRow.mouseOver = false
+undercutRow.scripts.OnUpdate(undercutRow)
+check("leaving it lets go", undercutRow.hover.shown, false)
+check("and hides the tooltip", GameTooltip.shown, false)
+
+describe.scripts.OnClick(describe)
+check("Show descriptions is saved", settings.settingsDescriptions, true)
+check("and puts the line under each row", rawget(undercutRow, "hint").shown, true)
+check("which grows to fit it", undercutRow.height >= 40, true)
+describe.scripts.OnClick(describe)
+check("unticked, back to one line", undercutRow.height, 24)
+
+local bar = describe:GetParent()
+local find
+for _, box in ipairs(made.CreateSearchBox) do
+    if box:GetParent() == bar then find = box end
+end
+find.editBox:SetText("disenchanter")
+find.editBox.scripts.OnTextChanged(find.editBox)
+check("a search shows the page with what it found", Holder(disenchanterBox).shown, true)
+check("and remembers it", settings.settingsPage, "mail")
+check("the page it left is hidden", Holder(undercut).shown, false)
+find.editBox:SetText("")
+find.editBox.scripts.OnTextChanged(find.editBox)
+check("clearing the search stays put", settings.settingsPage, "mail")
+
+local pricingButton
+for _, child in ipairs(bar.children) do
+    if child.strings[1] and child.strings[1].text == "PRICING" then pricingButton = child end
+end
+pricingButton.scripts.OnClick(pricingButton)
+check("a click on the switch shows its page", Holder(undercut).shown, true)
+check("and saves it", settings.settingsPage, "pricing")
 
 --- The control on the row whose label says `text`, if Settings offers one.
 local function Offered(text)
