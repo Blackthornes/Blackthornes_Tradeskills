@@ -318,6 +318,8 @@ local function ShowRowTooltip(row, line)
             why = "Your own price, set on the Prices tab"
         elseif line.priceBasis == "floor" then
             why = "Raised to the least you set on the Prices tab"
+        elseif line.priceBasis == "chosen" then
+            why = "Your price for now, set on Ready to sell"
         elseif line.priceBasis == "match" then
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.

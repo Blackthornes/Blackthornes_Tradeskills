@@ -622,6 +622,99 @@ function Posting:ApplyQuantity(line, quantity)
 end
 
 --------------------------------------------------------------------------------
+-- A price of the player's own, for now
+--------------------------------------------------------------------------------
+
+-- Asked 2026-10-08: a player wanted to sell under market value to get rid of
+-- a bad buy, without going back to the plain auction house to type it. The
+-- price editor on Ready to sell (UI/PriceEditor.lua) sets a price per unit,
+-- or a total split over the stack, for that item.
+--
+-- Session-only, like the quantity above: a dump price is for this visit, and
+-- one kept for good would go on undercutting the market next week. Keeping
+-- it for good is the Prices tab's "Use this price", which the editor offers
+-- as a tick box and never sets on its own.
+Posting.chosenPrice = {}
+
+--- A price the auction house will take for this item: whole silver for an
+--- item auction, any copper for a commodity. Rounded down, since the point
+--- of a price typed by hand is that it sells at or under what was asked.
+function Posting:NormalisePrice(price, isCommodity)
+    price = tonumber(price)
+    if not price or price < 1 then return nil end
+    price = math.floor(price)
+    if isCommodity == false then return Util.RoundToSilver(price) end
+    return price
+end
+
+--- The unit price that makes up a total over `quantity`, rounded down so the
+--- listing never comes to more than the total asked for (40s over 6 is
+--- 6s 66c each, 39s 96c in all).
+function Posting:PriceFromTotal(total, quantity, isCommodity)
+    total, quantity = tonumber(total), tonumber(quantity)
+    if not total or total < 1 or not quantity or quantity < 1 then return nil end
+    return self:NormalisePrice(math.floor(total / math.floor(quantity)), isCommodity)
+end
+
+--- The price the player set for this item this session, or nil.
+function Posting:GetChosenPrice(itemID)
+    return itemID and self.chosenPrice[itemID] or nil
+end
+
+--- Set the price for this item this session; nil goes back to the suggested
+--- price. Saved rules (the Prices tab's My price) are not touched.
+function Posting:SetChosenPrice(itemID, price)
+    if not itemID then return end
+    price = tonumber(price)
+    if price and price >= 1 then
+        self.chosenPrice[itemID] = math.floor(price)
+    else
+        self.chosenPrice[itemID] = nil
+    end
+end
+
+--- Change the price a line will list at, in place, as ApplyQuantity does.
+-- @param price  copper per unit, or nil to go back to the suggested price
+-- @return the unit price now on the line
+function Posting:ApplyPrice(line, price)
+    if not line then return end
+
+    if line.suggestedPrice == nil and line.priceBasis ~= "chosen" then
+        line.suggestedPrice, line.suggestedBasis = line.unitPrice, line.priceBasis
+    end
+
+    local commodity = line.isCommodity
+    if commodity == nil and ns.Scanner and ns.Scanner.IsCommodity then
+        commodity = ns.Scanner:IsCommodity(line.itemID)
+    end
+    price = self:NormalisePrice(price, commodity)
+    self:SetChosenPrice(line.itemID, price)
+
+    if price then
+        line.unitPrice, line.priceBasis = price, "chosen"
+    else
+        line.unitPrice, line.priceBasis = line.suggestedPrice, line.suggestedBasis
+    end
+
+    local unit = line.unitPrice
+    local quantity = line.postQuantity or line.maxQuantity or line.count or 1
+    line.postTotal = unit and (unit * quantity) or nil
+    line.total = unit and (unit * (line.count or quantity)) or nil
+
+    local belowCrafted = unit ~= nil and self:BelowCraftedCost(line.itemID, unit) ~= nil
+    local underFloor = unit ~= nil and line.lossFloor ~= nil and unit < line.lossFloor
+    line.belowCrafted = belowCrafted or nil
+    line.atALoss = belowCrafted or underFloor
+    if belowCrafted and not underFloor then
+        line.lossReason = "crafted"
+    elseif line.lossReason == "crafted" then
+        line.lossReason = line.lossFloorReason
+    end
+
+    return unit
+end
+
+--------------------------------------------------------------------------------
 -- What to list
 --------------------------------------------------------------------------------
 
@@ -773,6 +866,14 @@ function Posting:GetPostable(opts)
             local sellable, count = self:GetSellInfo(itemID, held)
             local price, basis = self:GetPostPrice(itemID)
 
+            -- A price the player set this session wins, with the suggested
+            -- one kept beside it for the editor's reset.
+            local suggested, suggestedBasis = price, basis
+            local chosen = self:GetChosenPrice(itemID)
+            if chosen then
+                price, basis = self:NormalisePrice(chosen, ns.Scanner:IsCommodity(itemID)), "chosen"
+            end
+
             local keep = reserved[itemID]
             if keep and count then
                 count = count - (type(keep) == "number" and keep or count)
@@ -830,9 +931,12 @@ function Posting:GetPostable(opts)
                     count = count,
                     unitPrice = price,
                     priceBasis = basis,
+                    suggestedPrice = suggested,
+                    suggestedBasis = suggestedBasis,
                     unitCost = unitCost,
                     vendorPrice = vendorPrice,
                     lossFloor = lossFloor,
+                    lossFloorReason = lossReason,
                     lossReason = (belowCrafted and not (price and lossFloor and price < lossFloor))
                         and "crafted" or lossReason,
                     atALoss = belowCrafted or (price ~= nil and lossFloor ~= nil
@@ -948,7 +1052,7 @@ end)
 --- stuck behind it.
 function Posting:IsUnderFloor(line)
     if not line.unitPrice then return false end
-    local floor = self:GetPriceFloor(line.itemID)
+    local floor = self:GetPriceFloor(line.itemID, line.priceBasis == "chosen")
     return floor ~= nil and line.unitPrice < floor
 end
 
@@ -1057,7 +1161,7 @@ end)
 --------------------------------------------------------------------------------
 
 --- List one item. Must be called from a hardware event.
-function Posting:Post(itemID, quantity, unitPrice)
+function Posting:Post(itemID, quantity, unitPrice, byHand)
     local allowed, reason = self:CanPost(itemID)
     if not allowed then
         ns.Print(reason)
@@ -1134,7 +1238,7 @@ function Posting:Post(itemID, quantity, unitPrice)
     -- A nonsense price is caught before anything irreversible happens. This
     -- is separate from the material-cost check below: that one is about
     -- profit, this one is about the number being wrong.
-    local floor, why = self:GetPriceFloor(itemID)
+    local floor, why = self:GetPriceFloor(itemID, byHand)
 
     if floor and unitPrice < floor then
         ns.Warn(("not listing %s at %s: %s."):format(
@@ -1253,8 +1357,11 @@ end
 -- whose quantity field meant something other than assumed. A guard here does
 -- not need to know why the number is wrong, only that it cannot be right.
 --
+-- @param byHand  the price is one the player typed (the price editor): the
+--   fifth-of-market guard stands aside, since selling far under market is
+--   then the point. The vendor floor still holds.
 -- @return floor, why
-function Posting:GetPriceFloor(itemID)
+function Posting:GetPriceFloor(itemID, byHand)
     local floor, why = 0, nil
 
     -- Below what a vendor pays, selling it to a vendor is strictly better.
@@ -1267,7 +1374,7 @@ function Posting:GetPriceFloor(itemID)
 
     -- A fifth of market value. Wide enough for a real undercut war, narrow
     -- enough to catch an order of magnitude going missing.
-    local market = ns.Prices:GetValue(itemID, "market")
+    local market = not byHand and ns.Prices:GetValue(itemID, "market")
     if market and market > 0 then
         local fraction = math.floor(market * 0.2)
         if fraction > floor then
@@ -1313,7 +1420,7 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
         if not data then return end
 
         Posting.confirming = nil
-        Posting:Post(data.itemID, data.quantity, data.unitPrice)
+        Posting:Post(data.itemID, data.quantity, data.unitPrice, data.byHand)
     end,
 
     -- "override" is the game replacing this dialog with the next one (a
@@ -1345,7 +1452,8 @@ end
 --   listings), "recent" (answered moments ago), "empty" (answered, nothing
 --   listed) or "unavailable" (no answer).
 function Posting:Confirm(itemID, quantity, unitPrice, check)
-    self:ShowConfirm(itemID, quantity, unitPrice, self:BuildConfirmText(itemID, quantity, unitPrice, check))
+    self:ShowConfirm(itemID, quantity, unitPrice, self:BuildConfirmText(itemID, quantity, unitPrice, check),
+        check and check.byHand)
 end
 
 --- The confirmation's text, kept apart from the dialog so it can be tested.
@@ -1409,6 +1517,18 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
         text = text .. ("\n|cffE5604FBelow the %s it cost to make.|r"):format(Money(unitCost))
     end
 
+    -- A price the player typed: said so, and how far under market it is,
+    -- since that guard stood aside for it.
+    if check.byHand then
+        local under = (market and market > 0 and unitPrice < market)
+            and math.floor((market - unitPrice) / market * 100 + 0.5) or 0
+        if under >= 1 then
+            text = text .. ("\n|c%sYour own price, %d%% under market value.|r"):format(ns.COLORS.warn, under)
+        else
+            text = text .. "\nYour own price."
+        end
+    end
+
     return text .. "\n\nDo you wish to continue?"
 end
 
@@ -1464,8 +1584,8 @@ function Posting:HideConfirmIcon(dialog)
     if icon then pcall(icon.Hide, icon) end
 end
 
-function Posting:ShowConfirm(itemID, quantity, unitPrice, text)
-    local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice }
+function Posting:ShowConfirm(itemID, quantity, unitPrice, text, byHand)
+    local confirming = { itemID = itemID, quantity = quantity, unitPrice = unitPrice, byHand = byHand or nil }
     self.confirming = confirming
 
     local dialog = StaticPopup_Show("BLACKTHORNES_TS_CONFIRM_POST", text, nil, confirming)
@@ -1584,9 +1704,9 @@ end
 --- about it. Asking "Do you wish to continue?" and refusing after Yes is the
 --- same answer, one click later and after a question it had no use for.
 -- @return true when it would be refused (and was said)
-function Posting:RefusesEarly(itemID, price)
+function Posting:RefusesEarly(itemID, price, byHand)
     -- Under what a vendor pays, or a fraction of market after a dump.
-    local floor, why = self:GetPriceFloor(itemID)
+    local floor, why = self:GetPriceFloor(itemID, byHand)
     if floor and price and price < floor then
         ns.Warn(("not listing %s at %s: %s. Expected at least %s."):format(
             Util.GetItemLabel(itemID), Util.FormatMoney(price), why or "the price looks wrong",
@@ -1632,13 +1752,20 @@ function Posting:Request(itemID, quantity, unitPrice)
     end
 
     quantity = quantity or 1
+
+    -- A price the player set in the price editor is the one listed, checked
+    -- or not: the check only brings the market figures up to date beside it.
+    local chosen = self:GetChosenPrice(itemID)
+    if chosen then
+        unitPrice = self:NormalisePrice(chosen, ns.Scanner:IsCommodity(itemID))
+    end
     unitPrice = unitPrice or self:GetPostPrice(itemID) or 0
 
     local verify = ns.Config:Get("verifyPriceBeforePosting") ~= false
 
     if not verify or not ns.Scanner.isAuctionHouseOpen then
-        if self:RefusesEarly(itemID, unitPrice) then return false end
-        self:Confirm(itemID, quantity, unitPrice)
+        if self:RefusesEarly(itemID, unitPrice, chosen ~= nil) then return false end
+        self:Confirm(itemID, quantity, unitPrice, { byHand = chosen ~= nil })
         return true
     end
 
@@ -1697,13 +1824,14 @@ function Posting:Request(itemID, quantity, unitPrice)
         -- that becomes a listing at market value instead of an undercut of
         -- a seller who is not there.
         local price = self:GetPostPrice(itemID) or unitPrice
+        if chosen then price = unitPrice end
 
         -- A price the listing step will refuse (under what a vendor pays, a
         -- fraction of market after a rival's dump, or under what it cost to
         -- make) is said now rather than after Yes.
-        if self:RefusesEarly(itemID, price) then return end
+        if self:RefusesEarly(itemID, price, chosen ~= nil) then return end
 
-        self:Confirm(itemID, quantity, price, { state = state })
+        self:Confirm(itemID, quantity, price, { state = state, byHand = chosen ~= nil })
     end
 
     local function OnAnswer(_, _, _, _, _, _, status)
