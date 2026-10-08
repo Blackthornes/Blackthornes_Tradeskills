@@ -786,6 +786,33 @@ local function Build(outer)
     end, { width = 110 })
     widgets.stale:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Crafts never made to go into another craft (Voldar, 2026-10-07),
+    -- marked from the Level Up tab or the x on a queued sub-craft. Laid out
+    -- as Ignored crafts below is, rows made in Refresh.
+    widgets.ignoredParent = pages.queue.content
+    local never = CreateSection(pages.queue, 2, "NEVER MADE AS SUB-CRAFTS")
+    widgets.neverSection = never
+    Searchable(pages.queue, never, "Never made as sub-crafts bought instead intermediates allow light leather")
+
+    local neverHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
+    neverHint:SetPoint("TOPLEFT", never, "BOTTOMLEFT", 0, ROW_GAP)
+    neverHint:SetWidth(COLUMN_WIDTH)
+    neverHint:SetWordWrap(true)
+    neverHint:SetText("Bought instead of made whenever another craft needs them, in costs, the queue and the shopping list, on every character. They can still be queued on their own. Allow makes one again when that is cheaper.")
+    widgets.neverHint = neverHint
+
+    widgets.neverEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
+    widgets.neverEmpty:SetWidth(COLUMN_WIDTH)
+    widgets.neverEmpty:SetWordWrap(true)
+    widgets.neverEmpty:SetText("None. Click Make beside a craft on the Level Up tab (tick Sub-crafts only), or the x on a sub-craft in the queue.")
+    widgets.neverRows = {}
+
+    local neverEnd = CreateFrame("Frame", nil, pages.queue.content)
+    neverEnd:SetSize(COLUMN_WIDTH, 1)
+    neverEnd:SetPoint("TOPLEFT", widgets.neverEmpty, "BOTTOMLEFT", 0, 0)
+    widgets.neverEnd = neverEnd
+    pages.queue.last[2] = neverEnd
+
     -- Crafts taken off the Profit tab with its Ignore button. The rows are
     -- made in Refresh, one per craft, since the list grows and shrinks.
     local ignored = CreateSection(pages.queue, 2, "IGNORED CRAFTS")
@@ -804,7 +831,6 @@ local function Build(outer)
     widgets.ignoredEmpty:SetWordWrap(true)
     widgets.ignoredEmpty:SetText("None. Pick a craft on the Profit tab and click Ignore.")
     widgets.ignoredRows = {}
-    widgets.ignoredParent = pages.queue.content
 
     -- Where the ignored crafts end, moved under the last of them in Refresh,
     -- so the section below follows the list as it grows and shrinks.
@@ -1305,7 +1331,7 @@ local RESTORE_WIDTH = 70
 --- One line per ignored craft or item: its name, and Restore at the
 --- column's edge. `rows` is the list's own row table, `hint` the label the
 --- rows hang under, `onRestore(key)` puts one back.
-local function IgnoredRow(rows, hint, index, onRestore, restoreTip)
+local function IgnoredRow(rows, hint, index, onRestore, restoreTip, buttonText)
     local row = rows[index]
     if row then return row end
 
@@ -1319,7 +1345,7 @@ local function IgnoredRow(rows, hint, index, onRestore, restoreTip)
     row.label:SetPoint("RIGHT", row, "RIGHT", -RESTORE_WIDTH - 8, 0)
     row.label:SetWordWrap(false)
 
-    row.restore = Widgets.CreateButton(row, "Restore", function()
+    row.restore = Widgets.CreateButton(row, buttonText or "Restore", function()
         if row.key then onRestore(row.key) end
     end, { width = RESTORE_WIDTH, height = 20, tooltip = restoreTip })
     row.restore:SetPoint("RIGHT", 0, 0)
@@ -1330,9 +1356,9 @@ local function IgnoredRow(rows, hint, index, onRestore, restoreTip)
 end
 
 --- Fill one ignored list; returns the last line drawn, for what follows.
-local function FillIgnored(list, rows, hint, empty, onRestore, restoreTip, color)
+local function FillIgnored(list, rows, hint, empty, onRestore, restoreTip, color, buttonText)
     for index, entry in ipairs(list) do
-        local row = IgnoredRow(rows, hint, index, onRestore, restoreTip)
+        local row = IgnoredRow(rows, hint, index, onRestore, restoreTip, buttonText)
         row.key = entry.key
         row.label:SetText(entry.name)
         if color then
@@ -1354,7 +1380,46 @@ local function FillIgnored(list, rows, hint, empty, onRestore, restoreTip, color
     return #list > 0 and rows[#list] or empty
 end
 
+--- One never-made sub-craft's line: its name in its item's colour, then
+--- what buying the item costs, or that nobody sells it.
+local function NeverLine(entry)
+    local name = entry.name
+    local r, g, b = Util.GetItemQualityColor(entry.outputItemID)
+    if r then
+        name = ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5),
+            math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)
+    end
+
+    if not entry.outputItemID then
+        return name .. " |cff7a8089· no character knows it|r"
+    end
+    local buy = ns.Cost:GetReagentUnitCost(entry.outputItemID)
+    if not buy then
+        return ("%s |cff7a8089·|r |c%sno price to buy it|r"):format(name, ns.COLORS.warn)
+    end
+    return ("%s |cff7a8089· buy %s each|r"):format(name,
+        Util.FormatMoney(buy, { noColor = true, short = true }))
+end
+
+local function RefreshNeverSubCrafts()
+    if not widgets.neverHint or not (ns.Cost and ns.Cost.GetNeverSubCrafts) then return end
+
+    local list = {}
+    for _, entry in ipairs(ns.Cost:GetNeverSubCrafts()) do
+        list[#list + 1] = { key = entry.recipeID, name = NeverLine(entry) }
+    end
+
+    local last = FillIgnored(list, widgets.neverRows, widgets.neverHint, widgets.neverEmpty,
+        function(recipeID) ns.Cost:SetNeverSubCraft(recipeID, false) end,
+        "Make it as a sub-craft again whenever that is cheaper than buying it",
+        nil, "Allow")
+
+    widgets.neverEnd:ClearAllPoints()
+    widgets.neverEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+end
+
 local function RefreshIgnored()
+    RefreshNeverSubCrafts()
     if not widgets.ignoredHint or not ns.Profit.GetIgnored then return end
 
     local crafts = {}

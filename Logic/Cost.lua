@@ -95,9 +95,10 @@ function Cost:RebuildOutputIndex()
     local index = {}
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
-        -- A dropped profession's crafts are not offered as sub-crafts.
+        -- A dropped profession's crafts are not offered as sub-crafts, nor
+        -- is one the player said never to make as a sub-craft.
         local dropped = ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe)
-        if recipe.outputItemID and not dropped then
+        if recipe.outputItemID and not dropped and not self:IsNeverSubCraft(recipeID) then
             index[recipe.outputItemID] = recipeID
         end
     end
@@ -121,6 +122,83 @@ end
 
 function Cost:InvalidateIndex()
     self.recipeIndexStale = true
+end
+
+--------------------------------------------------------------------------------
+-- Never made as a sub-craft
+--------------------------------------------------------------------------------
+
+-- Voldar on Discord (2026-10-07): scraps to light leather to medium to heavy
+-- costs more crafting time than it saves, and "Queue sub-crafts" is all or
+-- nothing. A craft marked here is never made to go into another one: its
+-- item is bought instead, in every cost, the queue and the shopping list.
+-- It can still be queued and sold as itself. Separate from the Profit tab's
+-- Ignore, which is about what to sell, not how to make it.
+--
+-- Saved account wide in `neverSubCrafts`, recipeID -> the craft's name, so
+-- Settings can list one the character playing does not know.
+
+function Cost:IsNeverSubCraft(recipeID)
+    local marked = recipeID ~= nil and ns.db ~= nil and ns.db.neverSubCrafts
+    return marked and marked[recipeID] ~= nil or false
+end
+
+--- Never make this craft as a sub-craft (never = true), or allow it again.
+-- Everything worked out from sub-crafts is worked out again at once: the
+-- queue's sub-crafts, its costs and every tab showing them.
+function Cost:SetNeverSubCraft(recipeID, never, name)
+    if not ns.db or not recipeID then return end
+    ns.db.neverSubCrafts = ns.db.neverSubCrafts or {}
+
+    if never then
+        local known = ns.Recipes and ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)
+        ns.db.neverSubCrafts[recipeID] = name or (known and known.name)
+            or ("recipe " .. tostring(recipeID))
+    else
+        ns.db.neverSubCrafts[recipeID] = nil
+    end
+
+    self:InvalidateIndex()
+
+    if ns.Queue and ns.Queue.RebuildDependencies then
+        ns.Queue:RebuildDependencies()
+        ns.Queue:Notify()
+    end
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end
+
+--- The crafts never made as sub-crafts, A to Z:
+--- { { recipeID, name, outputItemID }, ... }. outputItemID is nil for a
+--- craft no character on record knows any more.
+function Cost:GetNeverSubCrafts()
+    local list = {}
+    for recipeID, name in pairs(ns.db and ns.db.neverSubCrafts or {}) do
+        local known = ns.Recipes and ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)
+        list[#list + 1] = {
+            recipeID = recipeID,
+            name = type(name) == "string" and name or ("recipe " .. tostring(recipeID)),
+            outputItemID = known and known.outputItemID or nil,
+        }
+    end
+    table.sort(list, function(a, b)
+        local left, right = a.name:lower(), b.name:lower()
+        if left ~= right then return left < right end
+        return a.recipeID < b.recipeID
+    end)
+    return list
+end
+
+--- The craft a material would be made with, had it not been marked never
+--- to make as a sub-craft. For saying "bought, never made" beside it.
+function Cost:NeverMadeRecipeFor(itemID)
+    if not itemID or not (ns.db and ns.db.neverSubCrafts and next(ns.db.neverSubCrafts)) then
+        return nil
+    end
+    for recipeID in pairs(ns.db.neverSubCrafts) do
+        local recipe = ns.Recipes:GetAny(recipeID)
+        if recipe and recipe.outputItemID == itemID then return recipeID end
+    end
+    return nil
 end
 
 --- Total reagent cost for one craft of a recipe.
