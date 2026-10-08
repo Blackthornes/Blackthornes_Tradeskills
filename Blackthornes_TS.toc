@@ -78,6 +78,7 @@ UI\ItemTooltip.lua
 UI\MailReport.lua
 UI\QueueMailPanel.lua
 UI\MailTakeBar.lua
+UI\MailWindow.lua
 UI\RecipeBookView.lua
 UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua

@@ -648,6 +648,16 @@ local function Build(outer)
     end, true)
     widgets.mailTake:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Ezmode, 2026-10-07: a movable mailbox in place of the game's.
+    local mailReplaceRow = CreateRow(pages.mail, 1, "Tradeskills mailbox",
+        "A movable mailbox in place of the game's, with the Take buttons, sales first and letters to read. Untick to get the game's back.")
+
+    widgets.mailReplace = Widgets.CreateCheckbox(mailReplaceRow, "Use it", function(checked)
+        Config:Set("mailReplace", checked)
+        if ns.MailWindow then ns.MailWindow:SettingChanged() end
+    end, false)
+    widgets.mailReplace:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Ezmode, 2026-10-07: each queue row says AH, DE or Vendor, and what the
     -- queue made on DE or Vendor can be disenchanted or sold from here.
     local deNextRow = CreateRow(pages.queue, 1, "Disenchant next on the Queue tab",
@@ -1449,6 +1459,7 @@ local function Refresh()
     Put(widgets.bagSpare, type(spare) == "number" and spare or 5)
     widgets.mailBatch:SetChecked(Config:Get("mailBatchTake") == true)
     widgets.mailTake:SetChecked(Config:Get("mailTakeButtons") ~= false)
+    widgets.mailReplace:SetChecked(Config:Get("mailReplace") == true)
     widgets.deNext:SetChecked(Config:Get("queueDisenchantNext") == true)
     widgets.sellMarked:SetChecked(Config:Get("sellMarkedButton") ~= false)
     widgets.fillBuy:SetChecked(Config:Get("fillBuyQuantity") ~= false)
