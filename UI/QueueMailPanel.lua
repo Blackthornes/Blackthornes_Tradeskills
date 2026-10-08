@@ -219,6 +219,8 @@ function QueueMailPanel:Place()
     if not panel then return end
 
     local anchor = Shown(_G.OpenMailFrame) and _G.OpenMailFrame or _G.MailFrame
+    -- The Tradeskills mailbox, when it stands in for the game's.
+    if ns.MailWindow and ns.MailWindow:IsReplacing() then anchor = ns.MailWindow:Anchor() end
     if anchor == self.anchoredTo then return end
     self.anchoredTo = anchor
 
