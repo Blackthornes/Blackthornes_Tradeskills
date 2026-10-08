@@ -4,6 +4,23 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.39.0
+
+For WoW: Forever (interface 16001). A file was added and the TOC changed,
+so restart the game fully after updating (`/reload` is not enough).
+
+- The **Disenchanting** tab is back as its own tab, just as it was before
+  0.37.0: auction house items worth buying to disenchant, "Items in my
+  bags" with the one-click Disenchant button, and its tick boxes.
+  **Deals** keeps the vendor flips: its Sell to menu offers AH and Vendor,
+  with the VIA column and the other way's profit in the side pane. The
+  Profit tab's Disenchant button and the queue's AH/DE/Vendor marks are
+  unchanged.
+- Item names on the Disenchanting and Deals tabs now show in their rarity
+  colour (green, blue, purple and so on), as on the Queue and Profit tabs.
+  Many were plain white because the game no longer had the item in its
+  cache.
+
 ## 0.38.2
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
