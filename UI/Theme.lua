@@ -53,13 +53,41 @@ end
 
 Theme.FONT = FONT
 
-Theme.sizes = {
+-- The sizes at Normal text size.
+Theme.BASE_SIZES = {
     tiny = 10,
     small = 11,
     normal = 12,
     large = 14,
     title = 16,
 }
+
+-- Text size (asked 2026-10-07: "I'm getting old"): Large and Larger add a
+-- point or two to every size this addon draws, inside a window of the same
+-- size. Window size scales the whole window instead; the two stack.
+Theme.TEXT_STEPS = { normal = 0, large = 1, larger = 2 }
+
+-- Read once, the first time a size is asked for after the saved settings
+-- are in: text drawn before a change and after it would not match, so a
+-- change waits for /reload.
+local textStep
+
+--- The points added to every size: 0, 1 or 2.
+function Theme.TextStep()
+    if textStep then return textStep end
+    if not (ns.db and ns.Config) then return 0 end
+    textStep = Theme.TEXT_STEPS[ns.Config:Get("textSize")] or 0
+    return textStep
+end
+
+-- Looked up rather than stored, so the step is added wherever a size is
+-- read: Theme.sizes.small is 11 at Normal, 13 at Larger.
+Theme.sizes = setmetatable({}, {
+    __index = function(_, key)
+        local base = Theme.BASE_SIZES[key]
+        if base then return base + Theme.TextStep() end
+    end,
+})
 
 --------------------------------------------------------------------------------
 -- Helpers
