@@ -4,6 +4,58 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.38.0
+
+For WoW: Forever (interface 16001). Files were added, removed and renamed,
+so restart the game fully after updating (`/reload` is not enough).
+
+- New **Sharing** settings. Name a character on your other account (and
+  name this one from that side), and while both are logged in on the same
+  realm they swap characters: recipes, bags, bank and mail, gold and
+  auctions, each with its own Send box. They show up wherever your alts
+  do, marked "other account" on the Characters tab. Use first and last
+  names, as Forever needs.
+- **Guild prices**, on by default: Tradeskills shares a fresh scan with
+  guildmates at most once an hour, and uses theirs only for items you
+  haven't priced or whose price has gone stale. Turn it off in Settings or
+  with `/bts share guild off`; a choice you already made is kept.
+- Each queued craft now has an **AH / DE / Vendor** button, starting on
+  whichever pays most. Click it to change, right-click to go back to the
+  best. Items the queue makes for DE or Vendor are marked as they're made.
+- **Disenchant next** on the Queue tab (off by default, in Settings) aims
+  the Disenchant button at the next item marked DE, one cast per click.
+  **Sell marked** on the vendor window sells Vendor-marked items, one click
+  per stack and at most 12 per visit, so the buyback can undo any sale.
+  Neither ever touches anything blue or better, anything worn, or anything
+  the queue didn't make.
+- New **Deals** tab replaces Disenchanting and Vendor Flips: every auction
+  house buy worth making, with a "Sell to" menu (AH, DE, Vendor) and a VIA
+  column saying which way pays most. The Enchanting tab is gone, but its
+  parts moved: the Profit tab has the Disenchant button and a "breaks
+  into" tooltip, and the Prices tab has an "Enchanting materials" tick box
+  and an "In your bags" line. A saved tab or key binding for an old tab
+  opens its new home.
+- Mailbox **Take sales**, **Take expired**, **Take cancelled** and **Take
+  all** buttons under the inbox, each with a count. Payment-due (COD) mail
+  is never touched and nothing is deleted.
+- **Tradeskills mailbox** (off by default, in Settings) shows a movable
+  window instead of the game's mailbox, with sales listed first, the Take
+  buttons along the top, letters you can read, reply to or return, and the
+  game's own Send Mail page. "Use the game's mailbox" switches back for
+  that visit.
+- Settings now sit on seven pages (Pricing, Queue, Mail & vendors, Auction
+  house, Look & sound, Sharing, Data), one line per setting, with what each
+  does in its tooltip. **Show descriptions** puts the text back under every
+  row, and **Find a setting** searches every page. Nothing was removed or
+  renamed, so your choices stay as they were.
+- New **Text size** setting (Normal, Large, Larger) makes the text bigger
+  without growing the window. It works with Window size and takes effect
+  after `/reload`, with a **Reload now** button beside it.
+- Column headings are never cut off, and columns other than money are
+  centred. Money always reads like 1g 05s 00c, so the coins line up.
+  Item names that don't fit wrap onto a second line instead of ending in
+  "...".
+
 ## 0.37.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
