@@ -289,7 +289,6 @@ end
 -- last tab, or a call, naming one of them opens where it went.
 UI.MOVED_TABS = {
     enchanting = "profit",
-    disenchanting = "deals",
     vendorflips = "deals",
 }
 

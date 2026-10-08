@@ -405,13 +405,13 @@ tab.build(Stub())
 -- Sell to: Vendor only, as the Vendor Flips tab was.
 local sellTo = dropdowns[1]
 check("the Sell to menu takes more than one way", sellTo and sellTo.opts and sellTo.opts.multi == true)
-check("it offers the auction house, disenchanting and a vendor", #sellTo.options == 3
-    and sellTo.options[1].value == "auction" and sellTo.options[2].value == "disenchant"
-    and sellTo.options[3].value == "vendor")
-check("the box says All with every way ticked", sellTo.opts.summary({ auction = true, disenchant = true, vendor = true })
+-- Disenchanting went back to its own tab (2026-10-08): only these two.
+check("it offers the auction house and a vendor, not disenchanting", #sellTo.options == 2
+    and sellTo.options[1].value == "auction" and sellTo.options[2].value == "vendor")
+check("the box says All with both ticked", sellTo.opts.summary({ auction = true, vendor = true })
     == "Sell to: All")
-check("and names the ways otherwise", sellTo.opts.summary({ auction = true, vendor = true })
-    == "Sell to: AH, Vendor")
+check("and names the way otherwise", sellTo.opts.summary({ vendor = true })
+    == "Sell to: Vendor")
 sellTo.onSelect({ vendor = true })
 
 local list = lists[#lists]
