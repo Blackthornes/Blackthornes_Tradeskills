@@ -142,6 +142,11 @@ local DEFAULTS = {
         minProfit = 0,
         minMarginPercent = 0,
 
+        -- Deals, Merchant's Favor: leave bundles needing more than one stack
+        -- of a material out of the cheapest, as Forever could not fill a
+        -- crate from them when last reported (UI/DealsFavor.lua).
+        favorSkipOverStack = true,
+
         scanBudgetMs = 8,
 
         -- Scan automatically when the auction house opens and the price
@@ -423,6 +428,16 @@ local DEFAULTS = {
     -- What the selling test at a vendor found: { at, result }. See
     -- UI/SellMarked.lua.
     sellTest = {},
+
+    -- What Waylaid Crates were seen to be and to pay in game: crate item IDs
+    -- found by name, which sealed crate each kind fills into, and each
+    -- sealed crate's Merchant's Favor and money. No character names. See
+    -- Logic/MerchantsFavor.lua.
+    merchantsFavor = {
+        crateIDs = {},
+        links = {},
+        rewards = {},
+    },
 
     -- Written by Core/Compat.lua and Probe/Probe.lua.
     probe = {
