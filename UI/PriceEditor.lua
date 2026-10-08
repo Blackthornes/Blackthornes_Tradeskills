@@ -20,8 +20,18 @@ local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
 
-local WIDTH = 300
-local HEIGHT = 286
+local WIDTH = 320
+local HEIGHT = 300
+
+-- Below the notes: a gap, the tick box, a gap, the buttons and the margin
+-- under them. The notes wrap to as many lines as they need, and the window
+-- grows to fit them (the first in-game look had them running into the tick
+-- box, 2026-10-08).
+local BELOW_NOTES = 10 + 18 + 12 + 24 + 14
+
+-- From the window's top to the notes, for the first draw, before the game
+-- has laid the window out and can say.
+local NOTES_TOP = 190
 local INSET = 18
 local LABEL_WIDTH = 64
 
@@ -94,7 +104,7 @@ function PriceEditor.Notes(line, price, quantity)
     end
 
     if IsCommodity(line) == false then
-        notes[#notes + 1] = { "Gear lists at whole silver, so prices round down to it.", "muted" }
+        notes[#notes + 1] = { "Gear lists at whole silver.", "muted" }
     end
 
     if not refused and ns.Profit and ns.Profit.NetFromListing then
@@ -265,7 +275,7 @@ function PriceEditor:Build()
     self.notes = notes
 
     self.keep = Widgets.CreateCheckbox(frame, "Keep as my price", nil, false)
-    self.keep:SetPoint("BOTTOMLEFT", INSET, 44)
+    self.keep:SetPoint("TOPLEFT", notes, "BOTTOMLEFT", 0, -10)
     self.keep:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
         GameTooltip:SetText("Keep as my price", 1, 1, 1)
@@ -395,6 +405,25 @@ function PriceEditor:List()
     ns.Posting:Request(itemID, quantity, price)
 end
 
+--- Grow or shrink the window to its notes, so nothing runs into the tick
+--- box or the buttons whatever the text size.
+function PriceEditor:FitHeight()
+    local frame, notes = self.frame, self.notes
+    local ok, textHeight = pcall(notes.GetStringHeight, notes)
+    if not ok or type(textHeight) ~= "number" then textHeight = 0 end
+    notes:SetHeight(math.max(1, textHeight))
+
+    local top = NOTES_TOP
+    local okTop, frameTop = pcall(frame.GetTop, frame)
+    local okNotes, notesTop = pcall(notes.GetTop, notes)
+    if okTop and okNotes and type(frameTop) == "number" and type(notesTop) == "number"
+        and frameTop > notesTop then
+        top = frameTop - notesTop
+    end
+
+    frame:SetHeight(math.max(HEIGHT, math.ceil(top + textHeight + BELOW_NOTES)))
+end
+
 function PriceEditor:Draw()
     local line = self.line
     if not line or not self.frame then return end
@@ -424,6 +453,7 @@ function PriceEditor:Draw()
         parts[#parts + 1] = ("|c%s%s|r"):format(ns.COLORS[note[2]] or ns.COLORS.muted, note[1])
     end
     self.notes:SetText(table.concat(parts, "\n"))
+    self:FitHeight()
 
     self.list:SetText(("List %d"):format(quantity))
     self.list:SetEnabledState(price ~= nil and not refused)
