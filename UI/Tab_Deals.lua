@@ -14,6 +14,10 @@
 -- the other way would make. Buying to disenchant was here for a day and
 -- went back to its own Disenchanting tab at the owner's ask (2026-10-08).
 --
+-- The Show menu swaps the list for the Merchant's Favor view
+-- (UI/DealsFavor.lua, Voldar's idea, 2026-10-08): Waylaid Crates by what a
+-- point of favor costs bought on the auction house.
+--
 -- The addon cannot buy for you: the game wants a real click on its own Buy
 -- button for every purchase. What it can do is send the search, so the item
 -- is in the auction house list ready to click.
@@ -54,6 +58,7 @@ local COLUMNS = {
 }
 
 local state = {
+    view = "flips",
     routes = { auction = true, vendor = true },
     search = "",
     dealsOnly = true,
@@ -673,6 +678,7 @@ end
 
 local function Refresh()
     if not widgets.list then return end
+    if state.view == "favor" and ns.DealsFavor then return ns.DealsFavor:Refresh() end
 
     local rows = BuildRows()
     -- A clicked heading's order over the list's own.
@@ -721,13 +727,25 @@ local function Build(container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
+    widgets.toolbar = toolbar
+
+    -- Everything below the option bar for the flips, so the Merchant's
+    -- Favor view can take its place.
+    local flipsView = CreateFrame("Frame", nil, container)
+    flipsView:SetAllPoints(container)
+    widgets.flipsView = flipsView
+    widgets.container = container
 
     -- A new search or filter is a different list, so it starts at the top.
     -- The list keeps its place on the redraws that bag and auction events
     -- cause, which left a new search showing its results part way down.
     local function ShowFromTop()
         Refresh()
-        if widgets.list then widgets.list:ScrollToTop() end
+        if state.view == "favor" then
+            ns.DealsFavor:ScrollToTop()
+        elseif widgets.list then
+            widgets.list:ScrollToTop()
+        end
     end
 
     -- Option bar: the menu, then search, then the tick box, as on every
@@ -742,17 +760,31 @@ local function Build(container)
         state.selected = nil
         ShowFromTop()
     end, { width = 140, multi = true, summary = SellToSummary })
-    sellTo:SetPoint("LEFT", 0, 0)
     sellTo:SetValue(state.routes)
     sellTo.tooltipText = "Tick the ways you will sell what you buy. Each item shows on the one that pays most."
     widgets.sellTo = sellTo
 
+    -- Made after Sell to but placed first: what the tab shows.
+    local show = Widgets.CreateDropdown(toolbar, {
+        { text = "Show: Flips", value = "flips" },
+        { text = "Show: Merchant's Favor", value = "favor" },
+    }, function(value)
+        UI.DealsSetView(value)
+    end, { width = 160 })
+    show:SetPoint("LEFT", 0, 0)
+    show:SetValue(state.view)
+    show.tooltipText = "Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy."
+    widgets.show = show
+    sellTo:SetPoint("LEFT", show, "RIGHT", 8, 0)
+
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
+        if ns.DealsFavor then ns.DealsFavor:SetSearch(state.search) end
         ShowFromTop()
     end)
     search:SetPoint("LEFT", sellTo, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
+    widgets.search = search
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
         state.dealsOnly = checked
@@ -761,8 +793,18 @@ local function Build(container)
     dealsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
 
+    local skipOverStack = Widgets.CreateCheckbox(toolbar, "Skip bundles over a stack", function(checked)
+        ns.DealsFavor:SetSkipOverStack(checked)
+        ns.Config:Set("favorSkipOverStack", checked and true or false)
+        ShowFromTop()
+    end, not ns.DealsFavor or ns.DealsFavor:GetSkipOverStack())
+    skipOverStack:SetPoint("LEFT", search, "RIGHT", 12, 0)
+    skipOverStack.tooltipText = "Forever could not fill a crate from more than one stack of a material when last reported, so a bundle of 40 Linen Cloth is left out of the cheapest."
+    skipOverStack:Hide()
+    widgets.skipOverStack = skipOverStack
+
     -- Column headings
-    local headings = CreateFrame("Frame", nil, container)
+    local headings = CreateFrame("Frame", nil, flipsView)
     headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
     headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
     headings:SetHeight(16)
@@ -795,11 +837,11 @@ local function Build(container)
         function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name" }) end
 
-    local divider = Theme.CreateDivider(container, "borderLit")
+    local divider = Theme.CreateDivider(flipsView, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
     divider:SetPoint("TOPRIGHT", headings, "BOTTOMRIGHT", 0, -2)
 
-    local list = Widgets.CreateScrollList(container, {
+    local list = Widgets.CreateScrollList(flipsView, {
         -- The headings move in with the rows when the scrollbar takes its room.
         onScrollbarShown = function(shown)
             headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8 - (shown and 10 or 0), -8)
@@ -827,17 +869,17 @@ local function Build(container)
     list:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 24)
     widgets.list = list
 
-    local emptyLabel = Theme.CreateLabel(container, "small", "dim", "CENTER")
+    local emptyLabel = Theme.CreateLabel(flipsView, "small", "dim", "CENTER")
     emptyLabel:SetPoint("CENTER", list, "CENTER", 0, 10)
     emptyLabel:SetWidth(380)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
 
-    local countLabel = Theme.CreateLabel(container, "tiny", "dim")
+    local countLabel = Theme.CreateLabel(flipsView, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)
     widgets.countLabel = countLabel
 
-    local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
+    local hint = Theme.CreateLabel(flipsView, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
     hint:SetText("Right-click a row to search for it")
     widgets.hint = hint
@@ -849,7 +891,7 @@ local function Build(container)
     countLabel:SetJustifyH("LEFT")
     countLabel:SetWordWrap(false)
 
-    local detail = BuildDetail(container)
+    local detail = BuildDetail(flipsView)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
@@ -883,6 +925,35 @@ local function Build(container)
             if widgets.list:IsVisible() then Refresh() end
         end)
     end)
+end
+
+--- Show the flips or the Merchant's Favor view. The favor view is built the
+--- first time it is shown.
+function UI.DealsSetView(view)
+    view = (view == "favor" and ns.DealsFavor) and "favor" or "flips"
+    state.view = view
+    state.selected = nil
+    if not widgets.toolbar then return end
+
+    local favor = view == "favor"
+    if favor and not widgets.favorView then
+        local favorView = CreateFrame("Frame", nil, widgets.container)
+        favorView:SetAllPoints(widgets.container)
+        widgets.favorView = favorView
+        ns.DealsFavor:Build(favorView, widgets.toolbar)
+    end
+
+    widgets.flipsView:SetShown(not favor)
+    if widgets.favorView then widgets.favorView:SetShown(favor) end
+    widgets.sellTo:SetShown(not favor)
+    widgets.dealsOnly:SetShown(not favor)
+    widgets.skipOverStack:SetShown(favor)
+
+    widgets.search:ClearAllPoints()
+    widgets.search:SetPoint("LEFT", favor and widgets.show or widgets.sellTo, "RIGHT", 8, 0)
+
+    Refresh()
+    if favor then ns.DealsFavor:ScrollToTop() elseif widgets.list then widgets.list:ScrollToTop() end
 end
 
 UI:RegisterTab({
