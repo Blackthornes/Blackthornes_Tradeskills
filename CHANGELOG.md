@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.38.1
+
+For WoW: Forever (interface 16001). Files were removed, so restart the game
+fully after updating (`/reload` is not enough).
+
+- The mailbox **Take** buttons and the movable **Tradeskills mailbox** from
+  0.38.0 are off for now. The Take strip covered the game's Send Mail tab,
+  so both are coming back after more testing. The game's mailbox works as
+  it did before 0.38.0, and so do the queue's mail panel and "Take next
+  batch". Your settings for them are kept for when they return.
+
 ## 0.38.0
 
 For WoW: Forever (interface 16001). Files were added, removed and renamed,
