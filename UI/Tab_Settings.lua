@@ -1034,6 +1034,31 @@ local function Build(outer)
     end, { width = 150 })
     widgets.windowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Asked 2026-10-07 ("I'm getting old"): bigger letters in the same
+    -- window. Every size is read as text is drawn, so it waits for /reload.
+    local textRow = CreateRow(pages.look, 1, "Text size",
+        "Large and Larger add a point or two to all of this addon's text, in a window the same size. Works with Window size. Takes effect after /reload.")
+
+    widgets.textSize = Widgets.CreateDropdown(textRow, {
+        { text = "Normal", value = "normal" },
+        { text = "Large", value = "large" },
+        { text = "Larger", value = "larger" },
+    }, function(value)
+        Config:Set("textSize", value)
+        local now = Theme.TextStep and Theme.TextStep() or 0
+        local wanted = Theme.TEXT_STEPS and Theme.TEXT_STEPS[value] or 0
+        widgets.textReload:SetShown(now ~= wanted)
+    end, { width = 110 })
+    widgets.textSize:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    -- ReloadUI is allowed from a click, and saves everything first.
+    widgets.textReload = Widgets.CreateButton(textRow, "Reload now", function()
+        if ReloadUI then ReloadUI() end
+    end, { width = 90, height = 20, tooltip = "Reload the interface so the new text size shows (/reload)" })
+    widgets.textReload:SetPoint("LEFT", widgets.textSize, "RIGHT", 8, 0)
+    FitButton(widgets.textReload)
+    widgets.textReload:Hide()
+
     local effectsRow = CreateRow(pages.look, 1, "Window effects",
         "Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all.")
 
@@ -1444,6 +1469,9 @@ local function Refresh()
     widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
+    local textSize = Config:Get("textSize")
+    widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)
+    widgets.textReload:SetShown((Theme.TEXT_STEPS[textSize] or 0) ~= Theme.TextStep())
 
     -- The three sizes, and the one dragged to when it is none of them.
     local scale = UI.GetWindowScale and UI:GetWindowScale() or 1
