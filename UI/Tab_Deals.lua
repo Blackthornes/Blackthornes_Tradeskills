@@ -537,12 +537,12 @@ local function ShowBlock(detail, which)
         block.verdict:SetShown(shown)
         block.note:SetShown(shown)
         -- rawget: only the flip block has a bar, and a test's stand-in
-        -- frame answers any missing field with a function.
+        -- frame answers any missing field with a function. The bar is
+        -- Theme.CreateBar's plain table, not a frame: it has Set and
+        -- SetPoint only, and Set(nil) hides it. The shown block's own
+        -- update gives it a value.
         local bar = rawget(block, "bar")
-        if type(bar) == "table" then
-            bar:SetShown(shown)
-            if not shown then bar:Set(nil) end
-        end
+        if not shown and type(bar) == "table" then bar:Set(nil) end
     end
 end
 
