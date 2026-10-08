@@ -216,10 +216,11 @@ ns.Theme = {
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
     CreateMark = function(parent) return Frame("Texture", parent) end,
     SetMark = noop,
+    -- Theme.CreateBar's shape: a plain table, not a frame.
     CreateBar = function(parent)
-        local bar = Frame("Frame", parent)
-        bar.track = Frame("Texture", bar)
+        local bar = { track = Frame("Texture", parent), fill = Frame("Texture", parent) }
         function bar:Set(value) self.value = value end
+        function bar:SetPoint() end
         return bar
     end,
     SetMoneyText = function(label, copper) label:SetText(tostring(copper or 0)) end,

@@ -65,6 +65,15 @@ local function Showing(pattern)
     end
 end
 
+--- Theme.CreateBar's shape exactly: a plain table with Set and SetPoint,
+--- no frame methods, so code that treats it as a frame raises here too.
+local function Bar()
+    local bar = { track = Stub(), fill = Stub() }
+    function bar:Set(value) self.value = value end
+    function bar:SetPoint() end
+    return bar
+end
+
 CreateFrame = function() return Stub() end
 C_Timer = { After = function() end }
 GameTooltip = Stub()
@@ -80,7 +89,7 @@ ns.Theme = {
     AccentStripe = function() return Stub() end,
     Unpack = function(key) return key end,
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
-    CreateBar = function() return Shown({ track = Stub() }) end,
+    CreateBar = function() return Bar() end,
 }
 
 local checkboxes, dropdown, buttons = {}, nil, {}
