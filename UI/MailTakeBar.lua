@@ -77,6 +77,16 @@ function MailTakeBar:Build()
     bar.heading:SetPoint("TOPLEFT", PAD, -6)
     bar.heading:SetText("TAKE FROM THE MAIL")
 
+    -- Sullivan (2026-10-08): the way to the Tradeskills mailbox, from the
+    -- game's, so players find it.
+    bar.switch = Widgets.CreateButton(bar, "Tradeskills mailbox", function()
+        if ns.MailWindow then ns.MailWindow:UseOurs() end
+    end, { height = 16, fontSize = "tiny",
+        tooltip = "Swaps the game's mailbox for the Tradeskills one: movable, sales first, letters to read. The same as ticking it in Settings." })
+    local switchWidth = Theme.TextWidth and Theme.TextWidth(bar.switch.label)
+    bar.switch:SetWidth(type(switchWidth) == "number" and math.ceil(switchWidth) + 16 or 130)
+    bar.switch:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -PAD, -3)
+
     bar.buttons = {}
     for _, group in ipairs(ns.MailTake.GROUPS) do
         local button = Widgets.CreateButton(bar, WORDS[group][3], function()
@@ -119,9 +129,24 @@ function MailTakeBar:Place()
     end
     bar:SetWidth(width)
 
+    -- Below the game's own Inbox and Send Mail tabs, which hang under the
+    -- window: placed against the window's bottom it covered them, and
+    -- players couldn't reach Send Mail (Sullivan and Ezmode, 2026-10-08).
     bar:ClearAllPoints()
     if mailFrame then
-        bar:SetPoint("TOPLEFT", mailFrame, "BOTTOMLEFT", 0, -4)
+        local below = mailFrame
+        local lowest
+        for _, name in ipairs({ "MailFrameTab1", "MailFrameTab2" }) do
+            local tab = _G[name]
+            if Shown(tab) and tab.GetBottom then
+                local ok, bottom = pcall(tab.GetBottom, tab)
+                if ok and type(bottom) == "number" and (not lowest or bottom < lowest) then
+                    below, lowest = tab, bottom
+                end
+            end
+        end
+        bar:SetPoint("LEFT", mailFrame, "LEFT", 0, 0)
+        bar:SetPoint("TOP", below, "BOTTOM", 0, -4)
     else
         bar:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 20, -560)
     end
@@ -131,7 +156,7 @@ function MailTakeBar:Place()
     for index, button in ipairs(bar.buttons) do
         button:SetWidth(buttonWidth)
         button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD + (index - 1) * (buttonWidth + GAP), -20)
+        button:SetPoint("TOPLEFT", bar, "TOPLEFT", PAD + (index - 1) * (buttonWidth + GAP), -22)
     end
     self.buttonWidth = buttonWidth
 end
@@ -225,7 +250,7 @@ function MailTakeBar:Refresh()
         end
     end
 
-    bar:SetHeight(20 + BUTTON_HEIGHT + 24)
+    bar:SetHeight(22 + BUTTON_HEIGHT + 24)
     bar:Show()
 end
 

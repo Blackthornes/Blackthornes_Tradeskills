@@ -102,6 +102,7 @@ GameTooltip = Stub()
 -- The game's mailbox.
 MailFrame = Frame("MailFrame")
 MailFrame.scale, MailFrame.alpha, MailFrame.shown = 0.9, 1, true
+MailFrame.HookScript = function(self, what, fn) if what == "OnShow" then self.scripts.OnShow = fn end end
 SendMailFrame = Frame("SendMailFrame")
 SendMailFrame.parent = MailFrame
 SendMailFrame.points = { { "TOPLEFT", MailFrame, "TOPLEFT", 0, 0 } }
@@ -295,51 +296,59 @@ expect("the second returns it", returned[1] and returned[1].sender, "Stranger")
 
 --------------------------------------------------------------------------------
 print("")
-print("Send Mail")
+print("Send Mail is the game's")
 
+-- Drawn blank when moved into our window (2026-10-08), so Send Mail hands
+-- the visit to the game's own window on its Send Mail page.
 MailWindow:SelectTab("send")
-expect("the game's Send page is in our window", SendMailFrame.parent, MailWindow.frame.send)
-expect("the game's own tab switched", stockTab, 2)
-MailWindow:SelectTab("inbox")
-expect("given back", SendMailFrame.parent, MailFrame)
-expect("where it was", SendMailFrame.points[1][2], MailFrame)
+expect("the game's mailbox back", MailFrame.scale, 0.9)
+expect("on its Send Mail page", stockTab, 2)
+expect("the Send page never moved", SendMailFrame.parent, MailFrame)
+expect("still open", MailFrame.shown, true)
+expect("not closed", closedByAddon, 0)
+expect("the setting stays on", settings.mailReplace, true)
+MailWindow:Begin()
+expect("for the rest of this visit", MailWindow:IsReplacing(), false)
 
--- The craft queue's Send to buttons switch the game's tab: we follow.
+-- Next visit it's ours again, taken over as the game's window shows.
+Fire("MAIL_CLOSED")
+MailFrame:Show()
+expect("next visit, ours at once", MailWindow:IsReplacing(), true)
+expect("shrunk before it is drawn", MailFrame.scale, 0.001)
+
+-- The craft queue's Send to buttons switch the game's tab: we hand over.
 MailFrameTab_OnClick(MailFrameTab2, 2)
-expect("followed to Send", MailWindow.tab, "send")
-MailWindow:SelectTab("inbox")
+expect("the queue's Send to: the game's window", MailWindow:IsReplacing(), false)
+expect("on Send Mail", stockTab, 2)
 
 --------------------------------------------------------------------------------
 print("")
-print("Giving it back")
+print("Switching either way")
 
+Fire("MAIL_CLOSED")
+MailFrame:Show()
+expect("ours", MailWindow:IsReplacing(), true)
 MailWindow.frame.stockButton.onClick()
+expect("Use the game's mailbox: the setting off", settings.mailReplace, false)
 expect("the game's mailbox back", MailFrame.scale, 0.9)
-expect("seen again", MailFrame.alpha, 1)
 expect("clickable again", MailFrame.mouse, true)
 expect("still open", MailFrame.shown, true)
 expect("ours hidden", MailWindow.frame.shown, false)
 expect("not closed", closedByAddon, 0)
-MailWindow:Begin()
-expect("declined for this visit", MailWindow:IsReplacing(), false)
 
--- Next visit it stands in again; closing ours closes the mailbox.
-Fire("MAIL_CLOSED")
-MailFrame.shown = true
-Fire("MAIL_SHOW")
-Pump()
-expect("next visit, ours again", MailWindow:IsReplacing(), true)
-MailWindow:SelectTab("send")
+MailWindow:UseOurs()
+expect("Tradeskills mailbox button: the setting on", settings.mailReplace, true)
+expect("ours again", MailWindow:IsReplacing(), true)
+expect("on the inbox", stockTab, 1)
+
 MailWindow.frame:Hide()
 expect("closing ours closes the mailbox", closedByAddon, 1)
 expect("the game's put back", MailFrame.scale, 0.9)
-expect("the Send page put back", SendMailFrame.parent, MailFrame)
 expect("not standing in", MailWindow:IsReplacing(), false)
 
 -- Turning the setting off while open gives the game's window back.
-MailFrame.shown = true
-Fire("MAIL_SHOW")
-Pump()
+MailFrame:Show()
+expect("ours on the next visit", MailWindow:IsReplacing(), true)
 settings.mailReplace = false
 MailWindow:SettingChanged()
 expect("setting off: the game's back", MailFrame.scale, 0.9)
