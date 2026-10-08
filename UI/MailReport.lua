@@ -911,7 +911,11 @@ end
 local function PlaceTally(tally)
     tally:ClearAllPoints()
     local mailFrame = _G.MailFrame
-    if mailFrame and mailFrame.IsShown and mailFrame:IsShown() then
+    -- The Tradeskills mailbox, when it stands in for the game's; its plate
+    -- reaches above the top edge.
+    if ns.MailWindow and ns.MailWindow:IsReplacing() then
+        tally:SetPoint("BOTTOMLEFT", ns.MailWindow:Anchor(), "TOPLEFT", 0, 22)
+    elseif mailFrame and mailFrame.IsShown and mailFrame:IsShown() then
         tally:SetPoint("BOTTOMLEFT", mailFrame, "TOPLEFT", 0, 6)
     else
         tally:SetPoint("TOP", UIParent, "TOP", 0, -140)

@@ -249,6 +249,9 @@ local DEFAULTS = {
         -- Take sales, expired, cancelled or all at the mailbox (Ezmode,
         -- 2026-10-07). On by default: it only adds buttons under the inbox.
         mailTakeButtons = true,
+        -- The Tradeskills mailbox in place of the game's (Ezmode,
+        -- 2026-10-07). Off by default. See UI/MailWindow.lua.
+        mailReplace = false,
 
         -- Queue tab: a Disenchant next button aimed at the next item the
         -- queue made on DE (2026-10-07). Off until the player turns it on.
