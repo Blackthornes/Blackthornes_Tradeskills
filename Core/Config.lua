@@ -236,6 +236,9 @@ local DEFAULTS = {
         -- A Take next batch button at the mailbox, taking the queue's
         -- materials a bagful at a time. Off by default (2026-10-05).
         mailBatchTake = false,
+        -- Take sales, expired, cancelled or all at the mailbox (Ezmode,
+        -- 2026-10-07). On by default: it only adds buttons under the inbox.
+        mailTakeButtons = true,
 
         -- Queue tab: a Disenchant next button aimed at the next item the
         -- queue made on DE (2026-10-07). Off until the player turns it on.
