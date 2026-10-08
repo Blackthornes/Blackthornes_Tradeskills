@@ -638,6 +638,16 @@ local function Build(outer)
     end, false)
     widgets.mailBatch:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Ezmode, 2026-10-07: take a whole kind of mail in one click.
+    local mailTakeRow = CreateRow(pages.mail, 1, "Take buttons at the mailbox",
+        "Take sales, Take expired, Take cancelled and Take all, under the game's inbox. Never mail asking for payment (COD); nothing is deleted.")
+
+    widgets.mailTake = Widgets.CreateCheckbox(mailTakeRow, "Show them", function(checked)
+        Config:Set("mailTakeButtons", checked)
+        if ns.MailTakeBar then ns.MailTakeBar:Refresh() end
+    end, true)
+    widgets.mailTake:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Ezmode, 2026-10-07: each queue row says AH, DE or Vendor, and what the
     -- queue made on DE or Vendor can be disenchanted or sold from here.
     local deNextRow = CreateRow(pages.queue, 1, "Disenchant next on the Queue tab",
@@ -1413,6 +1423,7 @@ local function Refresh()
     local spare = Config:Get("bagSpareSlots")
     Put(widgets.bagSpare, type(spare) == "number" and spare or 5)
     widgets.mailBatch:SetChecked(Config:Get("mailBatchTake") == true)
+    widgets.mailTake:SetChecked(Config:Get("mailTakeButtons") ~= false)
     widgets.deNext:SetChecked(Config:Get("queueDisenchantNext") == true)
     widgets.sellMarked:SetChecked(Config:Get("sellMarkedButton") ~= false)
     widgets.fillBuy:SetChecked(Config:Get("fillBuyQuantity") ~= false)
