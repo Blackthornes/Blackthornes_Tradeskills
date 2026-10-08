@@ -4,6 +4,22 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.40.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- New **Merchant's Favor** view on the Deals tab (**Show: Merchant's
+  Favor**). It lists every Waylaid Crate, cheapest favor first, with the
+  crate's auction house price, its cheapest bundle, the total after the
+  silver the turn-in pays back, and what one favor costs. Click a crate to
+  see every bundle it takes, the cheapest in green, with buttons to search
+  for the crate or the bundle. **Skip bundles over a stack** (on by
+  default, also in Settings) leaves out bundles bigger than one stack.
+- Crate rewards are learned from the game at each turn-in, account wide.
+  Until a turn-in has been seen, the values players reported are used and
+  labelled as reported. Artisan crates show "?" and sort last.
+
 ## 0.39.0
 
 For WoW: Forever (interface 16001). A file was added and the TOC changed,
