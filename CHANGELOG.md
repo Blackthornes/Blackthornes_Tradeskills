@@ -4,6 +4,35 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.43.0
+
+For WoW: Forever (interface 16001). A file was added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Auction buys waiting in the mail count toward the queue.** "Still needed"
+  drops the moment a purchase goes through, the row shows "(12 in mail)" while
+  more is still needed, and the tooltip says how many are waiting. Once you
+  take the mail they're counted in your bags instead, never twice.
+- **Merchant's Favor bundles are priced from what can really be bought.**
+  Copper Modulators, Bronze Tubes and six other engineering parts use the
+  auction house unless you've seen a shop sell them, a limited-stock shop no
+  longer prices a bundle when there's a listing, and vendor-priced bundles
+  are marked "(vendor)".
+- **Gold per hour only for recipes you know:** TIME and GOLD/HR read "--" for
+  recipes you can't craft, on the Profit tab and in the craft pane.
+- **The version number** shows under the scan status at the top of the window
+  and in the minimap button's tooltip.
+- **Smoother crafting:** a run of crafts no longer re-reads every recipe and
+  rebuilds the craft pane on each craft, which made the game hitch about once
+  a second.
+- **Less CPU** at the auction house, for prices and for addon messages, and
+  cheaper tooltip reads when you hover items.
+- **Buy instead works again:** it takes every row of that sub-craft off the
+  queue and puts the item on the shopping list.
+- **Settings:** the "Recipes to learn", "Test vendor selling" and "Sample mail
+  report" buttons have their own rows instead of spilling into the next
+  column, and they show up in Find a setting.
+
 ## 0.42.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
