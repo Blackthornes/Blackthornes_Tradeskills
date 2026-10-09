@@ -1,0 +1,342 @@
+-- Blackthornes Tradeskills -- Logic/AHBuys.lua
+-- What you bought on the auction house and have not taken from the mail yet.
+--
+-- A purchase goes to the mailbox, not the bags. The shopping list counts bags
+-- and bank, so the twenty Linen you just bought still read "need 20" until you
+-- walked to a mailbox, and the buy quantity box offered to buy them again.
+-- Each purchase is kept here, per character, until it is taken from the mail.
+--
+-- Everything is read from the client, never assumed: the quantity is the one
+-- handed to the purchase call (a commodity's ConfirmCommoditiesPurchase, or the
+-- listing a buyout was placed on), it only counts once the client says it went
+-- through (the purchase event, or the gold leaving), and it stops counting when
+-- the attachment is taken or a reading of the mailbox no longer shows it.
+--
+-- Nothing here touches a Blizzard frame. The calls are watched with
+-- hooksecurefunc, which runs after Blizzard's own and changes nothing.
+
+local _, ns = ...
+
+local AHBuys = ns.NewModule("AHBuys")
+
+local Util = ns.Util
+
+-- Seconds a purchase may still be on its way to the mailbox. A reading of the
+-- mailbox sooner than this that does not show it yet leaves it alone.
+AHBuys.GRACE = 300
+
+-- Auction mail is kept 30 days. Anything older is gone, whatever happened.
+AHBuys.MAX_AGE = 30 * 24 * 3600
+
+-- A purchase that has not been confirmed by now never went through.
+AHBuys.CONFIRM_WINDOW = 30
+
+-- Enough for a long shopping trip, small enough for the saved data.
+AHBuys.MAX_KEPT = 100
+
+--------------------------------------------------------------------------------
+-- Storage
+--------------------------------------------------------------------------------
+
+--- This character's purchases, oldest first: { {itemID, quantity, at}, ... }.
+-- Per character, because the mail goes to the one who bought.
+function AHBuys:GetList(create)
+    local record = ns.Recipes and ns.Recipes.GetCharacterRecord
+        and ns.Recipes:GetCharacterRecord(create)
+    if not record then return nil end
+    if create and type(record.ahBuys) ~= "table" then record.ahBuys = {} end
+    return type(record.ahBuys) == "table" and record.ahBuys or nil
+end
+
+local function Now() return time() end
+
+--- Drop what is too old to be in the mail any more, and anything unreadable.
+function AHBuys:Prune(list)
+    list = list or self:GetList(false)
+    if not list then return end
+    local now = Now()
+    for i = #list, 1, -1 do
+        local buy = list[i]
+        if type(buy) ~= "table" or not tonumber(buy.itemID) or (tonumber(buy.quantity) or 0) <= 0
+            or now - (tonumber(buy.at) or 0) > self.MAX_AGE then
+            table.remove(list, i)
+        end
+    end
+    while #list > self.MAX_KEPT do table.remove(list, 1) end
+end
+
+--- Units of an item bought and not yet taken from the mail.
+-- Honours "count mail as stock", like every other mail count.
+function AHBuys:GetPending(itemID)
+    if not itemID then return 0 end
+    if ns.Config and ns.Config:Get("countMailAsStock") == false then return 0 end
+    local list = self:GetList(false)
+    if not list then return 0 end
+    local total = 0
+    for _, buy in ipairs(list) do
+        if buy.itemID == itemID then total = total + (tonumber(buy.quantity) or 0) end
+    end
+    return total
+end
+
+--- Units bought since the mailbox was last read: the ones a mail count
+--- cannot include yet. What came before is in the reading, or was trimmed.
+function AHBuys:GetUnread(itemID)
+    if not itemID then return 0 end
+    if ns.Config and ns.Config:Get("countMailAsStock") == false then return 0 end
+    local list = self:GetList(false)
+    if not list then return 0 end
+    local record = ns.Recipes:GetCharacterRecord(false)
+    local readAt = record and tonumber(record.mailAt) or 0
+    local total = 0
+    for _, buy in ipairs(list) do
+        if buy.itemID == itemID and (tonumber(buy.at) or 0) > readAt then
+            total = total + (tonumber(buy.quantity) or 0)
+        end
+    end
+    return total
+end
+
+local function Changed()
+    if ns.UI then
+        if ns.UI.OnInventoryUpdated then
+            pcall(ns.UI.OnInventoryUpdated, ns.UI)
+        elseif ns.UI.RefreshActiveTab then
+            pcall(ns.UI.RefreshActiveTab, ns.UI)
+        end
+    end
+end
+
+--- Put a purchase down.
+function AHBuys:Record(itemID, quantity)
+    itemID, quantity = tonumber(itemID), tonumber(quantity)
+    if not itemID or not quantity or quantity <= 0 then return end
+    local list = self:GetList(true)
+    if not list then return end
+    list[#list + 1] = { itemID = itemID, quantity = quantity, at = Now() }
+    self:Prune(list)
+    ns.Debug(("auction buy: %d x %d, waiting in the mail"):format(quantity, itemID))
+    Changed()
+end
+
+--- Take units off an item's purchases, oldest first.
+function AHBuys:Remove(itemID, quantity, list)
+    list = list or self:GetList(false)
+    if not list or not itemID then return 0 end
+    local left = tonumber(quantity) or 0
+    local removed = 0
+    for i = 1, #list do
+        if left <= 0 then break end
+        local buy = list[i]
+        if buy and buy.itemID == itemID then
+            local take = math.min(left, buy.quantity)
+            buy.quantity = buy.quantity - take
+            left, removed = left - take, removed + take
+        end
+    end
+    for i = #list, 1, -1 do
+        if (list[i].quantity or 0) <= 0 then table.remove(list, i) end
+    end
+    return removed
+end
+
+--------------------------------------------------------------------------------
+-- Buying
+--------------------------------------------------------------------------------
+
+-- The purchase the client was asked for and has not answered yet.
+-- { itemID, quantity, at, auctionID }
+AHBuys.awaiting = nil
+
+function AHBuys:Await(itemID, quantity, auctionID)
+    itemID, quantity = tonumber(itemID), tonumber(quantity)
+    if not itemID or not quantity or quantity <= 0 then return end
+    self.awaiting = { itemID = itemID, quantity = quantity, at = Now(),
+        auctionID = auctionID, money = self:Money() }
+end
+
+function AHBuys:Money()
+    local ok, money = pcall(GetMoney)
+    return ok and tonumber(money) or nil
+end
+
+--- The client said the purchase went through.
+function AHBuys:Confirm(auctionID)
+    local wait = self.awaiting
+    if not wait then return end
+    if Now() - wait.at > self.CONFIRM_WINDOW then self.awaiting = nil; return end
+    -- An item purchase names its auction; another one's answer is not ours.
+    if auctionID and wait.auctionID and auctionID ~= wait.auctionID then return end
+    self.awaiting = nil
+    self:Record(wait.itemID, wait.quantity)
+end
+
+function AHBuys:Fail()
+    self.awaiting = nil
+end
+
+--- Gold leaving right after a purchase was asked for is the purchase: a
+--- client that sends no purchase event still pays.
+function AHBuys:OnMoney()
+    local wait = self.awaiting
+    if not wait or not wait.money then return end
+    local money = self:Money()
+    if money and money < wait.money then self:Confirm(wait.auctionID) end
+end
+
+--- A commodity: the item and how many are named in the call itself.
+function AHBuys:OnConfirmCommodities(itemID, quantity)
+    self:Await(itemID, quantity)
+end
+
+-- The last item search shown, so a buyout can be matched to its listing.
+AHBuys.lastItemKey = nil
+
+function AHBuys:OnItemResults(itemKey)
+    if type(itemKey) == "table" and itemKey.itemID then self.lastItemKey = itemKey end
+end
+
+--- An item auction: PlaceBid names only the auction, so its listing is found
+--- among the results shown. A bid below the buyout is not a purchase yet,
+--- and only a buyout is counted.
+function AHBuys:OnPlaceBid(auctionID, bidAmount)
+    local key = self.lastItemKey
+    local auctions = _G.C_AuctionHouse
+    if not key or not auctionID or type(auctions) ~= "table" then return end
+    local ok, count = pcall(auctions.GetNumItemSearchResults, key)
+    if not ok or not tonumber(count) then return end
+    for i = 1, count do
+        local infoOk, info = pcall(auctions.GetItemSearchResultInfo, key, i)
+        if infoOk and type(info) == "table" and info.auctionID == auctionID then
+            local buyout = tonumber(info.buyoutAmount)
+            if buyout and buyout > 0 and (tonumber(bidAmount) or 0) >= buyout then
+                local itemID = (type(info.itemKey) == "table" and info.itemKey.itemID) or key.itemID
+                self:Await(itemID, info.quantity or 1, auctionID)
+            end
+            return
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- The mailbox
+--------------------------------------------------------------------------------
+
+local wonPattern
+
+--- Is this an auction you won? nil when the client has no subject to tell.
+local function IsWon(subject)
+    if wonPattern == nil then
+        wonPattern = ns.Mail and ns.Mail.SubjectPattern
+            and ns.Mail.SubjectPattern(_G.AUCTION_WON_MAIL_SUBJECT) or false
+    end
+    if not wonPattern or type(subject) ~= "string" then return nil end
+    return subject:match(wonPattern) ~= nil
+end
+
+function AHBuys:ResetMatcher() wonPattern = nil end
+
+local function Subject(index)
+    if not Util.HasFunction("GetInboxHeaderInfo") then return nil end
+    local ok, _, _, _, subject = pcall(GetInboxHeaderInfo, index)
+    return ok and subject or nil
+end
+
+--- An attachment is being taken: what it holds is no longer waiting.
+-- Only a won auction's, where the client can tell; otherwise any.
+function AHBuys:OnTake(index, slot)
+    if not ns.Mail or not index then return end
+    if IsWon(Subject(index)) == false then return end
+    local list = self:GetList(false)
+    if not list or #list == 0 then return end
+
+    local first, last = slot, slot
+    if not slot then
+        first, last = 1, tonumber(_G.ATTACHMENTS_MAX_RECEIVE) or 16
+    end
+
+    local removed = 0
+    for s = first, last do
+        local itemID, quantity = ns.Mail:ReadAttachment(index, s)
+        if itemID then removed = removed + self:Remove(itemID, quantity or 1, list) end
+    end
+    if removed > 0 then Changed() end
+end
+
+--- A complete reading of the mailbox: a purchase it does not show (taken by
+--- something we did not see, or returned) stops counting. One too new to
+--- have arrived is left alone.
+function AHBuys:Reconcile(mails, complete, more)
+    if not complete or more then return end
+    local list = self:GetList(false)
+    if not list or #list == 0 then return end
+
+    local shown = {}
+    for _, mail in ipairs(mails or {}) do
+        if IsWon(mail.subject) ~= false then
+            for _, attachment in ipairs(mail.attachments or {}) do
+                shown[attachment.itemID] = (shown[attachment.itemID] or 0)
+                    + (attachment.quantity or 1)
+            end
+        end
+    end
+
+    -- Oldest first, as the mail is shown. One too young to have arrived is
+    -- left alone and takes no room: room goes to what had time to arrive.
+    local now, changed = Now(), false
+    for _, buy in ipairs(list) do
+        if now - (tonumber(buy.at) or 0) >= self.GRACE then
+            local left = shown[buy.itemID] or 0
+            if left < buy.quantity then
+                buy.quantity, changed = left, true
+            end
+            shown[buy.itemID] = left - buy.quantity
+        end
+    end
+
+    for i = #list, 1, -1 do
+        if list[i].quantity <= 0 then table.remove(list, i) end
+    end
+    if changed then Changed() end
+end
+
+--------------------------------------------------------------------------------
+-- Setup
+--------------------------------------------------------------------------------
+
+local function Watch(owner, name, fn)
+    if type(hooksecurefunc) ~= "function" then return false end
+    if owner then
+        if type(owner) == "table" and type(owner[name]) == "function" then
+            return pcall(hooksecurefunc, owner, name, function(...) pcall(fn, ...) end)
+        end
+    elseif type(_G[name]) == "function" then
+        return pcall(hooksecurefunc, name, function(...) pcall(fn, ...) end)
+    end
+    return false
+end
+
+function AHBuys:OnEnable()
+    pcall(self.Prune, self)
+
+    local auctions = _G.C_AuctionHouse
+    Watch(auctions, "ConfirmCommoditiesPurchase", function(itemID, quantity)
+        AHBuys:OnConfirmCommodities(itemID, quantity)
+    end)
+    Watch(auctions, "PlaceBid", function(auctionID, bidAmount)
+        AHBuys:OnPlaceBid(auctionID, bidAmount)
+    end)
+
+    ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", function(_, _, itemKey)
+        AHBuys:OnItemResults(itemKey)
+    end)
+    ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function() AHBuys:Confirm() end)
+    ns.RegisterEvent(self, "COMMODITY_PURCHASE_FAILED", function() AHBuys:Fail() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_PURCHASE_COMPLETED", function(_, _, auctionID)
+        AHBuys:Confirm(auctionID)
+    end)
+    ns.RegisterEvent(self, "PLAYER_MONEY", function() AHBuys:OnMoney() end)
+
+    Watch(nil, "TakeInboxItem", function(index, slot) AHBuys:OnTake(index, slot) end)
+    Watch(nil, "AutoLootMailItem", function(index) AHBuys:OnTake(index) end)
+end
