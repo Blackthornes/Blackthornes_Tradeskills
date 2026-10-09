@@ -222,7 +222,7 @@ end
 --   total        copper cost of a single craft, or nil when unpriceable
 --   perUnit      cost per output item
 --   reagents     array of { itemID, quantity, unitCost, lineCost, source,
---                           have, shortfall, crafted }
+--                           have, shortfall, crafted, toMake, subCost }
 --   unpriced     array of itemIDs with no price data
 --   priceable    false when any reagent has no price
 function Cost:GetCraftCost(recipeID, depth, visited, opts)
@@ -260,6 +260,7 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
 
         local unitCost, source = self:GetReagentUnitCost(itemID)
         local crafted = false
+        local subCost
 
         -- If we know how to make this reagent and making it is cheaper than
         -- buying it, price it at the cheaper option and flag it as a sub-craft
@@ -279,6 +280,7 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
                         unitCost = subResult.perUnit
                         source = "craft"
                         crafted = true
+                        subCost = subResult
                     end
                 end
             end
@@ -305,6 +307,10 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
             lineCost = lineCost,
             source = source,
             crafted = crafted,
+            -- How many of it the sub-craft makes, and that sub-craft's own
+            -- costing, for the time a craft takes (Logic/CraftTime.lua).
+            toMake = (crafted and source == "craft") and (quantity - free) or 0,
+            subCost = subCost,
             have = have,
             inBags = inBags,
             shortfall = math.max(0, quantity - have),

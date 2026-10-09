@@ -42,6 +42,10 @@ local COLUMNS = {
     -- Which way the profit is for (AH, Vendor, DE), when the list is
     -- ranked by whichever pays most. Ranked by one way, it says nothing.
     { key = "via",    label = "VIA",    width = 44, justify = "CENTER", bestOnly = true },
+    -- How long one takes, sub-crafts included, and the profit that makes
+    -- an hour (asked 2026-10-09). Shown with the "Per hour" tick box.
+    { key = "time",    label = "TIME",    width = 44, justify = "CENTER", perHourOnly = true },
+    { key = "perHour", label = "GOLD/HR", width = 74, money = true, perHourOnly = true },
     { key = "profit", label = "PROFIT", width = 74, money = true },
     -- Beside SELLS so the two read against each other. Only shown when
     -- something in the list can be disenchanted.
@@ -56,6 +60,9 @@ local layoutVersion = 1
 
 -- Forward declaration: defined below, used by the toolbar built after it.
 local ApplyHeadingLayout
+
+-- Defined with the cells below, used by the rows.
+local UpdateTimeCells
 
 local state = {
     search = "",
@@ -100,6 +107,7 @@ local function IsColumnVisible(column)
     if column.accountWideOnly then return state.accountWide end
     if column.bestOnly then return Method() == "best" end
     if column.disenchantOnly then return state.showDisenchant end
+    if column.perHourOnly then return ns.Config:Get("profitShowsPerHour") == true end
     return true
 end
 
@@ -200,6 +208,60 @@ local function UpdateDisenchantCell(cells, analysis)
     else
         cell:SetText("")
     end
+end
+
+--- How long the craft takes and what that makes an hour. "?" until a cast
+--- of every craft in it has been seen or the game says how long it is.
+function UpdateTimeCells(cells, analysis)
+    local CraftTime = ns.CraftTime
+    if not CraftTime then
+        cells.time:SetText("")
+        cells.perHour:SetText("")
+        return
+    end
+
+    local seconds = analysis.timeSeconds or analysis.craftSeconds
+    cells.time:SetText(CraftTime.Format(seconds))
+    cells.time:SetTextColor(Theme.Unpack(seconds and "muted" or "dim"))
+
+    if analysis.goldPerHour then
+        Theme.SetMoneyText(cells.perHour, analysis.goldPerHour, { short = true })
+        cells.perHour:SetTextColor(Theme.ProfitColor(analysis.goldPerHour))
+    else
+        cells.perHour:SetText(analysis.priceable and "?" or "--")
+        cells.perHour:SetTextColor(Theme.Unpack("dim"))
+    end
+end
+
+--- The time line on a row's tooltip: how long it takes, what is in that
+--- time, and what it makes an hour.
+local function AddTimeLines(analysis)
+    local CraftTime = ns.CraftTime
+    if not CraftTime or not GameTooltip:IsShown() then return end
+
+    local timing = analysis.craftTime
+    local seconds = analysis.timeSeconds or analysis.craftSeconds
+    if not timing then return end
+
+    local r, g, b = 0.7, 0.7, 0.7
+    if not seconds then
+        GameTooltip:AddLine("Craft time not known yet: make one and it is kept.", r, g, b, true)
+        GameTooltip:Show()
+        return
+    end
+
+    local parts = {}
+    if (timing.casts or 1) > 1 + 1e-6 then parts[#parts + 1] = "sub-crafts included" end
+    if analysis.via == "disenchant" and analysis.timeSeconds then parts[#parts + 1] = "and disenchanting" end
+    local note = #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""
+
+    GameTooltip:AddDoubleLine("Craft time" .. note, CraftTime.Format(seconds), r, g, b, 1, 1, 1)
+    if analysis.goldPerHour then
+        local vr, vg, vb = Theme.Unpack(analysis.goldPerHour >= 0 and "profit" or "loss")
+        GameTooltip:AddDoubleLine("Per hour of casting",
+            Util.FormatMoney(analysis.goldPerHour, { noColor = true, short = true }), r, g, b, vr, vg, vb)
+    end
+    GameTooltip:Show()
 end
 
 --- Say so on the row's tooltip when disenchanting pays more than selling.
@@ -309,6 +371,9 @@ local function UpdateRow(row, analysis)
     else
         cells.posted:SetText("")
     end
+
+    -- The time needs no price, so it shows on unpriced rows too.
+    UpdateTimeCells(cells, analysis)
 
     if not analysis.priceable then
         cells.cost:SetText("--")
@@ -551,8 +616,8 @@ local function BuildDetail(parent)
     local summary = CreateFrame("Frame", nil, detail)
     summary:SetPoint("BOTTOMLEFT", 12, 84)
     summary:SetPoint("BOTTOMRIGHT", -12, 84)
-    -- Ten rows of 17: the sale, then what each way makes.
-    summary:SetHeight(170)
+    -- Twelve rows of 17: the sale, what each way makes, then the time.
+    summary:SetHeight(204)
     detail.summary = summary
     detail.summaryRows = {}
 
@@ -582,6 +647,9 @@ local function BuildDetail(parent)
         vendor = { SummaryRow(9, "If vendored") },
         disenchant = { SummaryRow(10, "If disenchanted") },
     }
+    -- How long one takes, sub-crafts included, and the profit an hour.
+    detail.timeValue = SummaryRow(11, "Craft time")
+    detail.perHourValue = SummaryRow(12, "Per hour")
 
     -- What the craft breaks into, with each chance, under the mouse on the
     -- "If disenchanted" line (from the Enchanting tab, 2026-10-07).
@@ -738,6 +806,41 @@ end
 --- nothing listed left a blank line between the prices; now a hidden row's
 --- space goes to the top of the block, and the rows shown stay together just
 --- above the queue controls, in their order.
+--- The craft pane's time rows: how long one takes and the profit an hour.
+local function UpdateTimeRows(detail, analysis)
+    if type(rawget(detail, "timeValue")) ~= "table" then return end
+    local CraftTime = ns.CraftTime
+    local seconds = analysis.timeSeconds or analysis.craftSeconds
+
+    if not CraftTime then
+        detail.timeValue:SetText("--")
+        detail.perHourValue:SetText("--")
+        return
+    end
+
+    if seconds then
+        local casts = analysis.craftTime and analysis.craftTime.casts or 1
+        local text = CraftTime.Format(seconds)
+        if casts > 1 + 1e-6 then
+            local count = ("%.1f"):format(casts):gsub("%.0$", "")
+            text = ("%s  (%s casts)"):format(text, count)
+        end
+        detail.timeValue:SetText(text)
+        detail.timeValue:SetTextColor(Theme.Unpack("text"))
+    else
+        detail.timeValue:SetText("make one to learn it")
+        detail.timeValue:SetTextColor(Theme.Unpack("dim"))
+    end
+
+    if analysis.goldPerHour then
+        detail.perHourValue:SetText(Util.FormatMoney(analysis.goldPerHour))
+        detail.perHourValue:SetTextColor(Theme.ProfitColor(analysis.goldPerHour))
+    else
+        detail.perHourValue:SetText("--")
+        detail.perHourValue:SetTextColor(Theme.Unpack("dim"))
+    end
+end
+
 local function LayoutSummary(detail)
     local rows = detail.summaryRows
     local shown = {}
@@ -1102,6 +1205,8 @@ function UpdateDetail(analysis)
                 label:SetTextColor(Theme.Unpack("muted"))
             end
         end
+
+        UpdateTimeRows(detail, analysis)
 
         LayoutSummary(detail)
     end
@@ -1524,6 +1629,16 @@ local function BuildCrafts(container)
     end, false)
     showMaxed:SetPoint("LEFT", accountWide, "RIGHT", 12, 0)
 
+    -- TIME and GOLD/HR (asked 2026-10-09). Kept in Settings; off, the
+    -- craft names keep their room. The craft pane always shows both.
+    local perHour = Widgets.CreateCheckbox(toolbar, "Per hour", function(checked)
+        ns.Config:Set("profitShowsPerHour", checked == true)
+        layoutVersion = layoutVersion + 1
+        ApplyHeadingLayout()
+        Refresh()
+    end, ns.Config:Get("profitShowsPerHour") == true)
+    perHour:SetPoint("LEFT", showMaxed, "RIGHT", 12, 0)
+
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)
     headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
@@ -1556,6 +1671,8 @@ local function BuildCrafts(container)
         who = function(a) return a.ownerName end,
         disenchant = function(a) return a.disenchantValue end,
         via = function(a) return a.via end,
+        time = function(a) return a.timeSeconds or a.craftSeconds end,
+        perHour = function(a) return a.goldPerHour end,
         demand = function(a)
             return ns.Demand and ns.Demand:Rank(ns.Demand:Get(a.outputItemID)) or 0
         end,
@@ -1587,6 +1704,7 @@ local function BuildCrafts(container)
                 Widgets.ShowItemOnly(row, analysis.outputItemID, analysis.name)
             end
             if not AddWaysLines(analysis) then AddDisenchantLine(analysis) end
+            AddTimeLines(analysis)
             AddOwnerLine(analysis)
         end,
 
