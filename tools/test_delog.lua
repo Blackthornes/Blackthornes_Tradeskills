@@ -258,26 +258,26 @@ check("a weapon of the same level is still on the table",
 
 print("\nan item that breaks differently from its row")
 
--- The table says a green weapon of item level 21 to 25 mostly gives Lesser
--- Astral Essence; this wand gives Greater Magic Essence every time.
+-- The table says a green weapon of item level 21 to 25 mostly gives Greater
+-- Magic Essence (Forever's own); this wand gives Lesser Astral every time.
 local wand = select(1, Disenchant:GetOutcomes(1004))
-check("before any, the wand is on the table", wand[1].itemID == LESSER_ASTRAL)
+check("before any, the wand is on the table", wand[1].itemID == GREATER_MAGIC)
 
 before = #printed
-Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
-Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 2 } } })
+Disenchantment({ click = 4, loot = { { LESSER_ASTRAL, 1 } } })
+Disenchantment({ click = 4, loot = { { LESSER_ASTRAL, 2 } } })
 outcomes, facts = Disenchant:GetOutcomes(1004)
 check("two of it are not yet enough", facts.source == "table" and not facts.byItem)
 
-Disenchantment({ click = 4, loot = { { GREATER_MAGIC, 1 } } })
+Disenchantment({ click = 4, loot = { { LESSER_ASTRAL, 1 } } })
 outcomes, facts = Disenchant:GetOutcomes(1004)
 check("at three, the wand uses what it gave", facts.source == "yours" and facts.byItem
     and facts.casts == 3)
-check("Greater Magic Essence every time", outcomes[1].itemID == GREATER_MAGIC
+check("Lesser Astral Essence every time", outcomes[1].itemID == LESSER_ASTRAL
     and outcomes[1].chance == 1 and #outcomes == 1)
 check("with the counts it gave", outcomes[1].min == 1 and outcomes[1].max == 2)
-check("the value follows it", Disenchant:GetValue(1004) == math.floor(400 * 4 / 3 + 0.5)
-    or math.abs(Disenchant:GetValue(1004) - 400 * 4 / 3) < 1)
+check("the value follows it", Disenchant:GetValue(1004) == math.floor(1000 * 4 / 3 + 0.5)
+    or math.abs(Disenchant:GetValue(1004) - 1000 * 4 / 3) < 1)
 check("chat says it was learnt and why", Said("Learned!.-item1004 does not break the way the table says", before) ~= nil)
 local learnedLines = 0
 for index = before, #printed do
@@ -296,9 +296,9 @@ check("an item that agrees with its row keeps the row's results", facts.casts ==
 print("\nper item results from before they were kept")
 
 ns.db = { disenchantLog = { bands = {}, missed = 0, recent = {
-    { itemID = 1005, results = { [GREATER_MAGIC] = 1 } },
-    { itemID = 1005, results = { [GREATER_MAGIC] = 2 } },
-    { itemID = 1005, results = { [GREATER_MAGIC] = 1 } },
+    { itemID = 1005, results = { [LESSER_ASTRAL] = 1 } },
+    { itemID = 1005, results = { [LESSER_ASTRAL] = 2 } },
+    { itemID = 1005, results = { [LESSER_ASTRAL] = 1 } },
 } } }
 check("the recent list fills them in", Log:GetItem(1005) and Log:GetItem(1005).casts == 3)
 check("so that item learns from them at once", select(2, Disenchant:GetOutcomes(1005)).byItem == true)
@@ -306,7 +306,7 @@ check("the bands are left as they were", next(Log:GetTable().bands) == nil)
 
 print("\nthree casts that only by luck lead with something else")
 
--- The sword's row mostly gives Lesser Astral Essence. Two dust and one
+-- The sword's row mostly gives Greater Magic Essence. Two dust and one
 -- essence in three is luck, not a different item: it stays on the table.
 local function Casts(itemID, list)
     local recent = {}
@@ -316,18 +316,18 @@ local function Casts(itemID, list)
     ns.db = { disenchantLog = { bands = {}, missed = 0, recent = recent } }
 end
 
-Casts(1003, { { [STRANGE_DUST] = 1 }, { [STRANGE_DUST] = 2 }, { [LESSER_ASTRAL] = 1 } })
+Casts(1003, { { [STRANGE_DUST] = 1 }, { [STRANGE_DUST] = 2 }, { [GREATER_MAGIC] = 1 } })
 check("the table's likeliest came out once: still the table",
     select(2, Disenchant:GetOutcomes(1003)).source == "table")
 
 local ten = {}
 for i = 1, 8 do ten[i] = { [STRANGE_DUST] = 1 } end
-ten[9], ten[10] = { [LESSER_ASTRAL] = 1 }, { [LESSER_ASTRAL] = 1 }
+ten[9], ten[10] = { [GREATER_MAGIC] = 1 }, { [GREATER_MAGIC] = 1 }
 Casts(1003, ten)
 check("ten that mostly give something else: its own results",
     select(2, Disenchant:GetOutcomes(1003)).byItem == true)
 
-Casts(1003, { { [GREATER_MAGIC] = 1 }, { [GREATER_MAGIC] = 1 }, { [STRANGE_DUST] = 1 } })
+Casts(1003, { { [LESSER_ASTRAL] = 1 }, { [LESSER_ASTRAL] = 1 }, { [STRANGE_DUST] = 1 } })
 check("three where the table's likeliest never came: its own results",
     select(2, Disenchant:GetOutcomes(1003)).byItem == true)
 
