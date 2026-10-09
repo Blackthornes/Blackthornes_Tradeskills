@@ -350,7 +350,7 @@ local tab = tabs.deals
 tab.build(Stub())
 
 local show = dropdowns[2]
-check("the Deals tab has a Show menu", show and #show.options == 2 and show.options[2].value == "favor")
+check("the Deals tab has a Show menu", show and #show.options == 3 and show.options[2].value == "favor")
 check("the flips stay the first view", #lists == 1)
 check("the tick box starts ticked, as Settings has nothing yet", checkboxes["Skip bundles over a stack"].initial == true)
 
