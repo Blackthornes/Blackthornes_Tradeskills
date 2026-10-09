@@ -35,6 +35,10 @@ local COLUMNS = {
     { key = "skill",      label = "SKILL",      width = 36, justify = "CENTER" },
 }
 
+-- Any column but the recipe's name can be hidden (UI/Columns.lua). The
+-- Profit and Level Up tabs' copies share the choice.
+ns.Columns:Register("recipes", "Recipes to learn", COLUMNS)
+
 --- One copy of the view, with its own filters and its own frames. The
 --- Profit tab and the Level Up tab each carry one (asked 2026-10-05: "recipes
 --- to learn should be under level up as well").
@@ -59,6 +63,13 @@ local function NewView(opts)
     -- Rows
     --------------------------------------------------------------------------------
 
+    --- The shown columns from the right edge; the name has the rest.
+    local function PlaceRow(row)
+        local offset = ns.Columns:Place("recipes", COLUMNS, row.cells, { gap = 8 })
+        row.name:SetPoint("RIGHT", row, "RIGHT", offset - 8, 0)
+        row.columnsVersion = ns.Columns.version
+    end
+
     local function CreateRow(row)
         row.icon = Theme.CreateItemIcon(row, 16)
         row.icon:SetPoint("LEFT", 8, 0)
@@ -68,20 +79,13 @@ local function NewView(opts)
         row.name:SetWordWrap(false)
 
         row.cells = {}
-
-        local offset, reserved = -8, 16
         for _, column in ipairs(COLUMNS) do
             local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
-            cell:SetPoint("RIGHT", offset, 0)
-            cell:SetWidth(column.width)
             cell:SetWordWrap(false)
             row.cells[column.key] = cell
-
-            offset = offset - column.width - 8
-            reserved = reserved + column.width + 8
         end
 
-        row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+        PlaceRow(row)
     end
 
     local function SetMoney(cell, copper, colorKey)
@@ -95,6 +99,8 @@ local function NewView(opts)
     end
 
     local function UpdateRow(row, entry)
+        if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
         -- No item made (an enchant): the recipe item's icon stands in.
         local iconItem = entry.outputItemID or (entry.record.recipeItems and entry.record.recipeItems[1])
         Theme.SetItemIcon(row.icon, iconItem)
@@ -507,15 +513,12 @@ local function NewView(opts)
         nameHeading:SetText("RECIPE")
 
         headings.cells = {}
-        local offset = -8
         for _, column in ipairs(COLUMNS) do
             local cell = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
-            cell:SetPoint("RIGHT", offset, 0)
-            cell:SetWidth(column.width)
             cell:SetText(column.label)
             headings.cells[column.key] = cell
-            offset = offset - column.width - 8
         end
+        ns.Columns:Place("recipes", COLUMNS, headings.cells, { gap = 8 })
 
         local sortLabels = { name = nameHeading }
         for key, cell in pairs(headings.cells) do sortLabels[key] = cell end
@@ -530,6 +533,14 @@ local function NewView(opts)
             learn = function(entry) return entry.known and "Known" or entry.learn end,
         }, function() instance.Refresh() end)
         if widgets.sorter then widgets.sorter:SetText({ "name", "learn" }) end
+
+        -- Right-click the headings to choose the columns.
+        ns.Columns:Attach(headings, "recipes", widgets.sorter)
+        ns.Columns:OnChange("recipes", function()
+            ns.Columns:Place("recipes", COLUMNS, headings.cells, { gap = 8 })
+            if widgets.sorter then widgets.sorter:Sync() end
+            if widgets.list then widgets.list:Refresh() end
+        end)
 
         local divider = Theme.CreateDivider(view, "borderLit")
         divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

@@ -607,6 +607,12 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
         return self.checked
     end
 
+    --- New words beside the box, the box widened to fit them.
+    function checkbox:SetLabel(words)
+        label:SetText(words)
+        self:SetWidth(label:GetStringWidth() + 24)
+    end
+
     checkbox:SetScript("OnClick", function(self)
         self:SetChecked(not self.checked)
 

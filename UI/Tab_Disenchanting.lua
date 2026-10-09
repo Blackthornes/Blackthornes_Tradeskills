@@ -64,6 +64,12 @@ local VIEWS = {
 
 local MAX_COLUMNS = 7
 
+-- Any column but the item's name can be hidden, each view on its own
+-- (UI/Columns.lua).
+local LIST_IDS = { auction = "disenchant", bag = "disenchantbags" }
+ns.Columns:Register("disenchant", "Disenchanting: auction house", VIEWS.auction.columns)
+ns.Columns:Register("disenchantbags", "Disenchanting: my bags", VIEWS.bag.columns)
+
 local state = {
     view = "auction",
     search = "",
@@ -75,6 +81,20 @@ local state = {
 }
 
 local widgets = {}
+
+local shownColumns = {}
+
+--- The view's columns that show, kept until the choice changes: every row
+--- asks.
+local function ViewColumns()
+    local kept = shownColumns[state.view]
+    if not kept or kept.version ~= ns.Columns.version then
+        kept = { version = ns.Columns.version,
+            columns = ns.Columns:Visible(LIST_IDS[state.view], VIEWS[state.view].columns) }
+        shownColumns[state.view] = kept
+    end
+    return kept.columns
+end
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -154,7 +174,7 @@ end
 --------------------------------------------------------------------------------
 
 local function ApplyRowLayout(row)
-    local columns = VIEWS[state.view].columns
+    local columns = ViewColumns()
     local offset = -8
 
     for index = 1, MAX_COLUMNS do
@@ -176,6 +196,7 @@ local function ApplyRowLayout(row)
 
     row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
     row.view = state.view
+    row.columnsVersion = ns.Columns.version
 end
 
 local function CreateRow(row)
@@ -258,7 +279,7 @@ local function FillCell(cell, key, entry)
 end
 
 local function UpdateRow(row, entry)
-    if row.view ~= state.view then ApplyRowLayout(row) end
+    if row.view ~= state.view or row.columnsVersion ~= ns.Columns.version then ApplyRowLayout(row) end
 
     Theme.SetRowName(row.name, entry.name or ("item " .. tostring(entry.itemID)))
     -- A bag row carries its link, so the upgrade arrow judges that very copy.
@@ -273,7 +294,7 @@ local function UpdateRow(row, entry)
         row.name:SetTextColor(Theme.Unpack("text"))
     end
 
-    for index, column in ipairs(VIEWS[state.view].columns) do
+    for index, column in ipairs(ViewColumns()) do
         FillCell(row.cells[index], column.key, entry)
     end
 end
@@ -959,7 +980,7 @@ local function ApplyView()
     local offset = -8
     for index = 1, MAX_COLUMNS do
         local heading = widgets.headings[index]
-        local column = view.columns[index]
+        local column = ViewColumns()[index]
 
         heading:ClearAllPoints()
 
@@ -1072,7 +1093,7 @@ local function Build(container)
     for index = 1, MAX_COLUMNS do
         sortLabels[index] = widgets.headings[index]
         values[index] = function(row)
-            local column = VIEWS[state.view].columns[index]
+            local column = ViewColumns()[index]
             if not column then return nil end
             local field = FIELDS[column.key]
             if field then return field(row) end
@@ -1082,6 +1103,16 @@ local function Build(container)
     widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, values,
         function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name" }) end
+
+    -- Right-click the headings to choose the columns of the view showing.
+    ns.Columns:Attach(headings, function() return LIST_IDS[state.view] end, widgets.sorter)
+    local function ColumnsChanged()
+        if not widgets.list then return end
+        ApplyView()
+        widgets.list:Refresh()
+    end
+    ns.Columns:OnChange("disenchant", ColumnsChanged)
+    ns.Columns:OnChange("disenchantbags", ColumnsChanged)
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

@@ -30,17 +30,22 @@ local ROW_HEIGHT = 26
 -- Right to left. Money and the price boxes sit to the right, so their
 -- digits line up; HAVE is centred under its heading. `width` is the least
 -- each gets: Widgets.FitColumns widens it to fit the heading and an amount.
+-- The amount to list and its price (G, S, C) always show: they are what
+-- the List button posts (`keep`).
 local COLUMNS = {
     { key = "action",  label = "",        width = 56 },
-    { key = "qty",     label = "LIST",    width = 44 },
+    { key = "qty",     label = "LIST",    width = 44, keep = true },
     { key = "total",   label = "TOTAL",   width = 78, money = true },
     { key = "deposit", label = "DEPOSIT", width = 62, money = true },
-    { key = "copper",  label = "C",       width = 34 },
-    { key = "silver",  label = "S",       width = 34 },
-    { key = "gold",    label = "G",       width = 40 },
+    { key = "copper",  label = "C",       width = 34, keep = true },
+    { key = "silver",  label = "S",       width = 34, keep = true },
+    { key = "gold",    label = "G",       width = 40, keep = true },
     { key = "cost",    label = "COST",    width = 66, money = true },
     { key = "count",   label = "HAVE",    width = 42, justify = "CENTER" },
 }
+
+-- TOTAL, DEPOSIT, COST and HAVE can be hidden (UI/Columns.lua).
+ns.Columns:Register("post", "Post", COLUMNS)
 
 local widgets = {}
 
@@ -52,6 +57,13 @@ local widgets = {}
 -- Rebuilding the whole list instead would scroll it back to the top, which
 -- loses your place every time you change a number.
 local UpdateRow
+
+--- The shown columns from the right edge; the name has the rest.
+local function PlaceRow(row)
+    local offset = ns.Columns:Place("post", COLUMNS, row.cells)
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 10, 0)
+    row.columnsVersion = ns.Columns.version
+end
 
 --- Is the player part-way through typing a number into this box?
 --
@@ -100,7 +112,6 @@ local function CreateRow(row)
     row.cells = {}
 
     local offset = -8
-    local reserved = 18
 
     for _, column in ipairs(COLUMNS) do
         if column.key == "qty" then
@@ -118,17 +129,14 @@ local function CreateRow(row)
             })
             row.quantity:SetPoint("RIGHT", offset, 0)
         elseif column.key ~= "action" then
-            local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
-            cell:SetPoint("RIGHT", offset, 0)
-            cell:SetWidth(column.width)
-            row.cells[column.key] = cell
+            row.cells[column.key] = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
         end
 
+        -- Every column right of the number box is kept, so it never moves.
         offset = offset - column.width - 6
-        reserved = reserved + column.width + 6
     end
 
-    row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+    PlaceRow(row)
 
     row.post = Widgets.CreateButton(row, "List", function()
         CommitTyping(widgets.list)
@@ -175,6 +183,8 @@ local function CreateRow(row)
 end
 
 function UpdateRow(row, line)
+    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
     Theme.SetRowName(row.name, line.label)
     Theme.SetItemIcon(row.icon, line.itemID, line.link)
 
@@ -562,17 +572,14 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 30, 0)
     nameHeading:SetText("ITEM")
 
-    local sortLabels = { name = nameHeading }
-    local offset = -8
+    local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
-        heading:SetPoint("RIGHT", offset, 0)
-        heading:SetWidth(column.width)
         heading:SetText(column.label)
         sortLabels[column.key] = heading
-
-        offset = offset - column.width - 6
+        cells[column.key] = heading
     end
+    ns.Columns:Place("post", COLUMNS, cells)
 
     -- Click a heading to sort by it. G, S and C are all the price.
     local function Price(line) return line.unitPrice end
@@ -589,6 +596,14 @@ local function Build(container)
         count = function(line) return line.count end,
     }, function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "post", widgets.sorter)
+    ns.Columns:OnChange("post", function()
+        ns.Columns:Place("post", COLUMNS, cells)
+        if widgets.sorter then widgets.sorter:Sync() end
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

@@ -32,6 +32,9 @@ local COLUMNS = {
     { key = "sub",    label = "SUB-CRAFT", width = 50, justify = "CENTER", button = true },
 }
 
+-- Any column but the recipe's name can be hidden (UI/Columns.lua).
+ns.Columns:Register("levelup", "Level Up", COLUMNS)
+
 -- How each way of getting gold back is named: short in the VIA column, in
 -- full in the tooltip and the detail panel.
 local WAY_SHORT = { vendor = "Vendor", auction = "AH", disenchant = "DE" }
@@ -140,6 +143,27 @@ local function SubCraftTooltip(entry)
     return text
 end
 
+--- The shown columns from the right edge; the name has the rest. The
+--- SUB-CRAFT button sits centred in its column, or stays hidden with it.
+local function PlaceRow(row)
+    local offset = ns.Columns:Place("levelup", COLUMNS, row.cells, {
+        place = function(column, offset, shown)
+            local button = column.button and row.subButton
+            if not button then return end
+            row.subHidden = not shown
+            if shown then
+                local width = math.min(column.width, 48)
+                button:ClearAllPoints()
+                button:SetPoint("RIGHT", row, "RIGHT", offset - (column.width - width) / 2, 0)
+            else
+                button:Hide()
+            end
+        end,
+    })
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    row.columnsVersion = ns.Columns.version
+end
+
 local function CreateRow(row)
     -- The item's icon beside its name, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 16)
@@ -149,28 +173,22 @@ local function CreateRow(row)
     row.name:SetPoint("LEFT", 28, 0)
 
     row.cells = {}
-
-    local offset = -8
     for _, column in ipairs(COLUMNS) do
         if column.button then
-            local button = Widgets.CreateButton(row, "Make", function()
+            row.subButton = Widgets.CreateButton(row, "Make", function()
                 ToggleSubCraft(row.data)
             end, { width = math.min(column.width, 48), height = 16 })
-            button:SetPoint("RIGHT", row, "RIGHT", offset - (column.width - math.min(column.width, 48)) / 2, 0)
-            row.subButton = button
         else
-            local cell = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
-            cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
-            cell:SetWidth(column.width)
-            row.cells[column.key] = cell
+            row.cells[column.key] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
         end
-        offset = offset - column.width - 6
     end
 
-    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    PlaceRow(row)
 end
 
 local function UpdateRow(row, entry)
+    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
     local cells = row.cells
 
     -- Coloured the way the profession window colours it, so the list reads
@@ -234,7 +252,7 @@ local function UpdateRow(row, entry)
     if button then
         row.data = entry
         local shown = entry.outputItemID ~= nil
-        button:SetShown(shown == true)
+        button:SetShown(shown == true and not row.subHidden)
         if shown then
             button:SetText(entry.neverSubCraft and "Buy" or "Make")
             button.tooltipText = SubCraftTooltip(entry)
@@ -814,14 +832,20 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 28, 0)
     nameHeading:SetText("RECIPE")
 
-    local offset = -8
+    local cells = {}
     for _, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
         heading:SetText(column.label)
-        heading:SetPoint("RIGHT", offset, 0)
-        heading:SetWidth(column.width)
-        offset = offset - column.width - 6
+        cells[column.key] = heading
     end
+    ns.Columns:Place("levelup", COLUMNS, cells)
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "levelup")
+    ns.Columns:OnChange("levelup", function()
+        ns.Columns:Place("levelup", COLUMNS, cells)
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

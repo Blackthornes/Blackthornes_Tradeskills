@@ -29,6 +29,9 @@ local COLUMNS = {
     { key = "favor",      label = "FAVOR",     width = 44, justify = "CENTER" },
 }
 
+-- Any column but the crate's name can be hidden (UI/Columns.lua).
+ns.Columns:Register("favor", "Deals: Merchant's Favor", COLUMNS)
+
 local state = {
     search = "",
     skipOverStack = nil,    -- read from Settings the first time it is asked
@@ -117,6 +120,13 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+--- The shown columns from the right edge; the name has the rest.
+local function PlaceRow(row)
+    local offset = ns.Columns:Place("favor", COLUMNS, row.cells, { byIndex = true })
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    row.columnsVersion = ns.Columns.version
+end
+
 local function CreateRow(row)
     row.icon = Theme.CreateItemIcon(row, 16)
     row.icon:SetPoint("LEFT", 8, 0)
@@ -125,17 +135,11 @@ local function CreateRow(row)
     row.name:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
 
     row.cells = {}
-    local offset = -8
     for index, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "text", "RIGHT")
-        cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
-        cell:SetWidth(column.width)
-        cell:SetJustifyH(column.justify or "RIGHT")
-        offset = offset - column.width - 6
-        row.cells[index] = cell
+        row.cells[index] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
     end
 
-    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    PlaceRow(row)
 end
 
 local function FillCell(cell, key, entry)
@@ -153,6 +157,8 @@ local function FillCell(cell, key, entry)
 end
 
 local function UpdateRow(row, entry)
+    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
     Theme.SetRowName(row.name, entry.have > 0 and ("%s  (%d)"):format(entry.name, entry.have) or entry.name)
     Theme.SetItemIcon(row.icon, entry.itemID or (entry.best and entry.best.itemID))
     row.name:SetTextColor(Theme.Unpack(entry.perFavor and "text" or "dim"))
@@ -444,22 +450,29 @@ function DealsFavor:Build(view, toolbar)
 
     local labels = { name = nameHeading }
     local values = { name = function(row) return row.name end }
-    local offset = -8
+    local cells = {}
     for index, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetText(column.label)
-        heading:SetPoint("RIGHT", offset, 0)
-        heading:SetWidth(column.width)
         heading:SetJustifyH(column.justify or "RIGHT")
-        offset = offset - column.width - 6
         labels[index] = heading
+        cells[index] = heading
         values[index] = function(row) return row[column.key] end
     end
+    ns.Columns:Place("favor", COLUMNS, cells, { byIndex = true })
 
     -- Click a heading to sort by it; until then, cheapest favor first.
     widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(labels, values,
         function() DealsFavor:Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "favor", widgets.sorter)
+    ns.Columns:OnChange("favor", function()
+        ns.Columns:Place("favor", COLUMNS, cells, { byIndex = true })
+        if widgets.sorter then widgets.sorter:Sync() end
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local divider = Theme.CreateDivider(view, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

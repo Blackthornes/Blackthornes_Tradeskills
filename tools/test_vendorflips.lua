@@ -395,6 +395,8 @@ ns.UI = Stub({
     SearchAuctionHouse = function(_, itemID) sent[#sent + 1] = "item" .. itemID; return true end,
 })
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+
 assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 
 local tab = tabs.deals
