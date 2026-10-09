@@ -908,6 +908,22 @@ local function Offered(text)
     end
 end
 
+-- A button placed on a settings row stays inside its column (a player's
+-- report, 2026-10-09: Recipes to learn sat 340 pixels in, past the edge,
+-- and covered the next column).
+local spills = {}
+for text, button in pairs(buttons) do
+    local row = button:GetParent()
+    local point, relativeTo, _, x = button:GetPoint(1)
+    if row and row.width == 400 and point == "TOPLEFT" and relativeTo == row
+        and x + button.width > row.width then
+        spills[#spills + 1] = text
+    end
+end
+table.sort(spills)
+check("no settings button runs past its column", table.concat(spills, ", "), "")
+check("Recipes to learn has its own row", buttons["Show list"]:GetParent().strings[1].text, "Recipes to learn")
+
 -- The confirmation's Yes is the click that lists, so there is no switch
 -- to turn it off: one was offered and never did anything.
 check("no switch that does nothing: every listing is confirmed", Offered("Confirm before each listing"), nil)
