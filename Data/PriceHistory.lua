@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- Data/PriceHistory.lua
 -- The cheapest price, hour by hour, for the items you craft and use.
 --
--- Asked 2026-10-06 (Sullivan): a price graph with 24 Hours and 7 Day views,
+-- Asked on Discord 2026-10-06: a price graph with 24 Hours and 7 Day views,
 -- and when in the day a material is cheapest to buy and a craft dearest to
 -- sell. The price table keeps only twelve smoothed readings per item, which
 -- can draw neither, so this keeps its own record beside it.
@@ -42,21 +42,26 @@ local TRACKED_REFRESH = 60
 -- Saved data
 --------------------------------------------------------------------------------
 
-local function RealmTable(create)
+-- The listed quantity each hour sits apart from the prices, in
+-- `priceListed[realm][itemID]`, the same hour, count pairs, for the volume
+-- bars under the line. Kept apart so the price lists saved before it read
+-- as they always did. Never rename it.
+local function RealmTable(create, root)
     local db = ns.db
     if not db then return nil end
+    root = root or "priceHistory"
 
-    if type(db.priceHistory) ~= "table" then
+    if type(db[root]) ~= "table" then
         if not create then return nil end
-        db.priceHistory = {}
+        db[root] = {}
     end
 
     local key = ns.Config:GetRealmKey()
-    local realm = db.priceHistory[key]
+    local realm = db[root][key]
     if type(realm) ~= "table" then
         if not create then return nil end
         realm = {}
-        db.priceHistory[key] = realm
+        db[root][key] = realm
     end
     return realm
 end
@@ -133,15 +138,10 @@ local function Trim(list, now)
     end
 end
 
---- Note what an item cost at a scan. One pair an hour: a second scan in the
---- same hour replaces the first, so the newest price stands for the hour.
--- @param price copper, the cheapest listing the scan saw
-function PriceHistory:Note(itemID, price, at)
-    if not itemID or type(price) ~= "number" or price <= 0 or price ~= price then return end
-    if not self:IsTracked(itemID) then return end
-
-    at = at or time()
-    local realm = RealmTable(true)
+--- Add one hour's value to an item's list in `root`. A second scan in the
+--- same hour replaces the first, so the newest stands for the hour.
+local function Append(root, itemID, value, at)
+    local realm = RealmTable(true, root)
     if not realm then return end
 
     local list = realm[itemID]
@@ -152,21 +152,36 @@ function PriceHistory:Note(itemID, price, at)
 
     local hour = math.floor(at / 3600)
     local count = #list
-    price = math.floor(price + 0.5)
+    value = math.floor(value + 0.5)
 
     if count >= 2 and list[count - 1] == hour then
-        list[count] = price
+        list[count] = value
     elseif count >= 2 and list[count - 1] > hour then
         -- Older than the newest pair (a clock change, or a scan read late):
         -- left out rather than written out of order.
         return
     else
         list[count + 1] = hour
-        list[count + 2] = price
+        list[count + 2] = value
     end
 
     Trim(list, at)
     PriceHistory.changes = (PriceHistory.changes or 0) + 1
+end
+
+--- Note what an item cost at a scan.
+-- @param price copper, the cheapest listing the scan saw
+function PriceHistory:Note(itemID, price, at)
+    if not itemID or type(price) ~= "number" or price <= 0 or price ~= price then return end
+    if not self:IsTracked(itemID) then return end
+    Append("priceHistory", itemID, price, at or time())
+end
+
+--- Note how many were listed at a scan; 0 when none were.
+function PriceHistory:NoteListed(itemID, quantity, at)
+    if not itemID or type(quantity) ~= "number" or quantity < 0 or quantity ~= quantity then return end
+    if not self:IsTracked(itemID) then return end
+    Append("priceListed", itemID, quantity, at or time())
 end
 
 --- A guildmate's price for an hour this account did not scan
@@ -226,6 +241,42 @@ function PriceHistory:GetPoints(itemID, since, now)
     end
 
     return points
+end
+
+--- How many were listed each hour a scan saw the item, oldest first, as
+--- { t = time(), q = count }, over the same span as GetPoints.
+function PriceHistory:GetListed(itemID, since, now)
+    now = now or time()
+    local realm = RealmTable(false, "priceListed")
+    local list = realm and itemID and realm[itemID]
+    if type(list) ~= "table" then return {} end
+
+    local from = since and (now - since) or (now - KEEP_SECONDS)
+    local listed = {}
+
+    for index = 1, #list - 1, 2 do
+        local hour, quantity = list[index], list[index + 1]
+        if type(hour) == "number" and type(quantity) == "number" then
+            local t = hour * 3600
+            if t + 3600 > from and t <= now then
+                listed[#listed + 1] = { t = t, q = quantity }
+            end
+        end
+    end
+
+    return listed
+end
+
+--- The average of the prices shown, for the graph's average line.
+function PriceHistory.Average(points)
+    local sum, count = 0, 0
+    for _, point in ipairs(points or {}) do
+        if type(point.p) == "number" then
+            sum, count = sum + point.p, count + 1
+        end
+    end
+    if count == 0 then return nil end
+    return math.floor(sum / count + 0.5)
 end
 
 --- An hour of the day as it reads on a clock: "4am", "12pm", "8pm".
@@ -364,19 +415,20 @@ end
 --- Drop items with nothing left in the last seven days.
 function PriceHistory:Prune(now)
     now = now or time()
-    local realm = RealmTable(false)
-    if not realm then return 0 end
-
     local removed = 0
-    for itemID, list in pairs(realm) do
-        if type(list) == "table" then
-            Trim(list, now)
-            if #list == 0 then
-                realm[itemID] = nil
-                removed = removed + 1
+
+    for _, root in ipairs({ "priceHistory", "priceListed" }) do
+        local realm = RealmTable(false, root)
+        for itemID, list in pairs(realm or {}) do
+            if type(list) == "table" then
+                Trim(list, now)
+                if #list == 0 then
+                    realm[itemID] = nil
+                    if root == "priceHistory" then removed = removed + 1 end
+                end
             end
+            -- Anything else is left as it is: never delete what cannot be read.
         end
-        -- Anything else is left as it is: never delete what cannot be read.
     end
     return removed
 end

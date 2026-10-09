@@ -269,6 +269,7 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     -- The hour by hour graph keeps the cheapest posting, as buying sees it.
     if ns.PriceHistory then
         ns.PriceHistory:Note(itemID, Prices.LowestListed(record), scannedAt)
+        ns.PriceHistory:NoteListed(itemID, quantity, scannedAt)
     end
 
     return record
@@ -319,6 +320,9 @@ function Prices:RecordEmpty(itemID, scannedAt)
     while #history > MAX_HISTORY do
         table.remove(history, 1)
     end
+
+    -- Sold out counts on the volume bars: none listed this hour.
+    if ns.PriceHistory then ns.PriceHistory:NoteListed(itemID, 0, scannedAt) end
 
     return record
 end
