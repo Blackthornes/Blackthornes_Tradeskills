@@ -102,6 +102,8 @@ ns.RecipeBook = {
 }
 ns.Recipes = { GetLearnedProfessions = function() return { { name = "Leatherworking" } } end }
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+
 assert(loadfile(lfs_cwd .. "/UI/RecipeBookView.lua"))("Blackthornes_TS", ns)
 local View = ns.RecipeBookView
 

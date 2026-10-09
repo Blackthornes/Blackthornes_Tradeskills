@@ -30,6 +30,8 @@ assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
 ns.Prices.GetAge = function() return 60 end
 ns.Prices.GetLiquidity = function() return nil end
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+
 assert(loadfile(lfs_cwd .. "/UI/Tab_Prices.lua"))("Blackthornes_TS", ns)
 
 local failures = 0

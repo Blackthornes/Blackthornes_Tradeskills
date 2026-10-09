@@ -31,6 +31,9 @@ local COLUMNS = {
     { key = "who",   label = "WHO",   width = 150, justify = "CENTER" },
 }
 
+-- Any column but the name can be hidden (UI/Columns.lua).
+ns.Columns:Register("banks", "Characters: Banks", COLUMNS)
+
 local state = {
     search = "",
     character = ALL,
@@ -102,6 +105,13 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+--- The shown columns from the right edge; the name has the rest.
+local function PlaceRow(row)
+    local offset = ns.Columns:Place("banks", COLUMNS, row.cells, { gap = 8 })
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 8, 0)
+    row.columnsVersion = ns.Columns.version
+end
+
 local function CreateRow(row)
     row.icon = Theme.CreateItemIcon(row, 18)
     row.icon:SetPoint("LEFT", 8, 0)
@@ -111,23 +121,17 @@ local function CreateRow(row)
     row.name:SetWordWrap(false)
 
     row.cells = {}
-
-    local offset, reserved = -8, 16
     for _, column in ipairs(COLUMNS) do
         local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
-        cell:SetPoint("RIGHT", offset, 0)
-        cell:SetWidth(column.width)
         cell:SetWordWrap(false)
         row.cells[column.key] = cell
-
-        offset = offset - column.width - 8
-        reserved = reserved + column.width + 8
     end
 
-    row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+    PlaceRow(row)
 end
 
 local function UpdateRow(row, entry)
+    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
     Theme.SetItemIcon(row.icon, entry.itemID)
     Theme.SetRowName(row.name, Util.GetItemLabel(entry.itemID))
 
@@ -490,15 +494,12 @@ function BankView.Build(view)
     itemHeading:SetText("ITEM")
 
     headings.cells = {}
-    local offset = -8
     for _, column in ipairs(COLUMNS) do
         local cell = Theme.CreateLabel(headings, "tiny", "dim", column.justify or "RIGHT")
-        cell:SetPoint("RIGHT", offset, 0)
-        cell:SetWidth(column.width)
         cell:SetText(column.label)
         headings.cells[column.key] = cell
-        offset = offset - column.width - 8
     end
+    ns.Columns:Place("banks", COLUMNS, headings.cells, { gap = 8 })
     widgets.headings = headings
 
     -- Click a heading to sort by it.
@@ -514,6 +515,14 @@ function BankView.Build(view)
         end,
     }, function() BankView.Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name", "who" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "banks", widgets.sorter)
+    ns.Columns:OnChange("banks", function()
+        ns.Columns:Place("banks", COLUMNS, headings.cells, { gap = 8 })
+        if widgets.sorter then widgets.sorter:Sync() end
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local list = Widgets.CreateScrollList(view, {
         rowHeight = ROW_HEIGHT,

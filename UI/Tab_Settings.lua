@@ -1125,6 +1125,44 @@ local function Build(outer)
     end, { width = 110 })
     widgets.effects:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Which columns each list shows (asked 2026-10-09). The same tick list
+    -- a right-click on a list's headings opens. See UI/Columns.lua.
+    CreateSection(pages.look, 1, "COLUMNS")
+    local columnsRow = CreateRow(pages.look, 1, "Columns shown",
+        "Pick a list to tick the columns it shows. Right-clicking a list's column headings does the same. The name column always shows.")
+
+    local listOptions = {}
+    for _, list in ipairs(ns.Columns:Lists()) do
+        listOptions[#listOptions + 1] = { text = list.title, value = list.id }
+    end
+    -- Picking a list opens its tick list under the box.
+    widgets.columnsList = Widgets.CreateDropdown(columnsRow, listOptions, function(id)
+        if id then ns.Columns:Open(id, widgets.columnsList) end
+    end, { width = 160 })
+    widgets.columnsList:SetPoint("TOPLEFT", CONTROL_X, 0)
+    if listOptions[1] then widgets.columnsList:SetValue(listOptions[1].value) end
+
+    local showAllRow = CreateRow(pages.look, 1, "Hidden columns",
+        "How many columns are hidden across every list. Show all puts every one back.")
+    widgets.columnsHidden = Theme.CreateLabel(showAllRow, "small", "muted")
+    widgets.columnsHidden:SetPoint("TOPLEFT", CONTROL_X, -4)
+
+    widgets.columnsShowAll = Widgets.CreateButton(showAllRow, "Show all", function()
+        ns.Columns:ShowAll()
+    end, { width = 80, height = 20, tooltip = "Show every column of every list again" })
+    widgets.columnsShowAll:SetPoint("TOPLEFT", CONTROL_X + 70, 0)
+    FitButton(widgets.columnsShowAll)
+
+    local function PaintHiddenCount()
+        local count = ns.Columns:HiddenCount()
+        widgets.columnsHidden:SetText(count == 0 and "None" or tostring(count))
+        widgets.columnsHidden:SetTextColor(Theme.Unpack(count == 0 and "muted" or "accent"))
+        widgets.columnsShowAll:SetEnabledState(count > 0)
+    end
+    widgets.paintHiddenColumns = PaintHiddenCount
+    ns.Columns.onAnyChange = PaintHiddenCount
+    PaintHiddenCount()
+
     CreateSection(pages.data, 1, "TROUBLESHOOTING")
     local debugRow = CreateRow(pages.data, 1, "Debug output",
         "Extra messages in chat, to help track down problems.")
@@ -1315,6 +1353,7 @@ local function Build(outer)
         ns.Queue:RebuildDependencies()
         ns.Queue:Notify()
         if ns.RecipeValue then ns.RecipeValue:Refresh() end
+        if ns.Columns then ns.Columns:Reload() end
         if UI.ApplyScale then UI:ApplyScale() end
         for _, panel in ipairs({ ns.PostPanel, ns.CraftPanel }) do
             if panel and panel.frame then
@@ -1492,6 +1531,8 @@ local function Refresh()
     RefreshIgnored()
 
     if widgets.shownPage ~= CurrentPage() then ShowPage(CurrentPage()) end
+
+    if widgets.paintHiddenColumns then widgets.paintHiddenColumns() end
 
     -- Reset to defaults can turn the descriptions back off.
     local describe = ns.Config:Get("settingsDescriptions") == true

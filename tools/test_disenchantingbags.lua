@@ -181,6 +181,8 @@ ns.Disenchanter = {
 local tabs = {}
 ns.UI = Stub({ RegisterTab = function(_, registered) tabs[registered.key] = registered end })
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+
 assert(loadfile(lfs_cwd .. "/UI/Tab_Disenchanting.lua"))("Blackthornes_TS", ns)
 
 local checks = 0

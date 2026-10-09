@@ -128,6 +128,8 @@ ns.Queue = { Add = function() end }
 local tabs = {}
 ns.UI = Stub({ RegisterTab = function(_, tab) tabs[tab.key] = tab end })
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+
 assert(loadfile(lfs_cwd .. "/UI/Tab_Profit.lua"))("Blackthornes_TS", ns)
 
 local function check(label, condition)

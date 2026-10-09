@@ -331,6 +331,7 @@ ns.Profit = {
 }
 
 assert(loadfile(lfs_cwd .. "/UI/Disenchanter.lua"))("Blackthornes_TS", ns)
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/UI/Tab_Profit.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/UI/Tab_Disenchanting.lua"))("Blackthornes_TS", ns)
 
