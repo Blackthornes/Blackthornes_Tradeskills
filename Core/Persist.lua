@@ -20,15 +20,15 @@
 -- persist registered CVars, Blizzard's own writer corrupts Config.wtf from
 -- about 3KB per value upward -- the value is truncated unterminated and the
 -- following entries merge onto its line (WoWUIBugs #410, acknowledged). This
--- store writes 8 x 60KB. That is harmless only for as long as these CVars
--- never reach disk on this client. If that ever changes, cap the chunk well
--- below 3KB or drop the mechanism; do not raise it.
+-- store used to write the whole database as 8 x 60KB, so on 2026-10-09 the
+-- database copy was turned off for good: SaveAll only empties chunks an older
+-- version left. Never bring it back above 3KB per value.
 --
 -- Since build 1.60.1.70009 (2026-09-24) the game hands SavedVariables back,
--- and on a login where it does, this whole store stands down: nothing is read
--- from it or written to it, and the database chunks left from earlier
--- sessions are emptied. See Persist:GameKeepsSavedData. On a client that
--- loses the saved file again it comes back by itself.
+-- and on a login where it does, the settings mirror stands down too: nothing
+-- is read from it or written to it. See Persist:GameKeepsSavedData. On a
+-- client that loses the saved file again, only the small settings mirror
+-- comes back.
 --
 -- Only keys in Config.DEFAULTS.settings are mirrored. A CVar is global client
 -- state that outlives the addon, so writing arbitrary keys into it would leave
@@ -233,15 +233,13 @@ end
 -- The whole database
 --------------------------------------------------------------------------------
 
--- Settings fit in one CVar. Everything else -- prices, recipes, the queue --
--- is serialised and split across numbered CVars. 8 x 64KB was measured to
--- survive a logout intact on this client, so that is the budget, and going
--- over it prunes rather than failing.
+-- Prices, recipes and the queue used to be serialised and split across
+-- numbered CVars. Nothing writes them any more (see SaveAll); these names are
+-- kept so chunks an older version left can be read once and emptied.
 
 local STORE_PREFIX = "BTS_store"
 local STORE_COUNT = "BTS_storeCount"
 local SESSION_CVAR = "BTS_session"
-local CHUNK_BYTES = 60000
 local MAX_CHUNKS = 8
 
 --------------------------------------------------------------------------------
@@ -298,80 +296,6 @@ function Persist:Peek()
     return peek
 end
 
---- Everything worth keeping, minus what is cheap to rebuild.
-local function Snapshot(db)
-    local snapshot = {}
-
-    for key, value in pairs(db) do
-        snapshot[key] = value
-    end
-
-    -- The stored probe report is a diagnostic of a session that has ended,
-    -- and it is large. The canary is not: it is how the next login knows
-    -- whether any of this worked.
-    if db.probe then
-        snapshot.probe = { canary = db.probe.canary, loadCount = db.probe.loadCount }
-    end
-
-    -- What the client said about items, kept by Logic/Disenchant.lua. The
-    -- game's own saved data keeps it; the client can tell it again, so it
-    -- does not spend this budget.
-    snapshot.itemFacts = nil
-
-    -- The price graph's hourly prices: worth having, not worth the budget.
-    -- The next scans start it again.
-    snapshot.priceHistory = nil
-    snapshot.priceListed = nil
-
-    -- Guildmates' prices: theirs to send again, not worth the budget.
-    snapshot.guildPrices = nil
-
-    return snapshot
-end
-
---- Drop the least useful prices until the payload fits the budget.
---
--- Oldest first: a price nobody has seen in days is the one worth losing, and
--- auto-scan replaces it on the next auction house visit anyway.
-local function TrimToFit(snapshot, budget)
-    local realmKey = ns.Config:GetRealmKey()
-    local prices = snapshot.prices and snapshot.prices[realmKey]
-    if not prices then return nil end
-
-    local order = {}
-    -- A price record stamps its last sighting as `seen` (Data/Prices.lua).
-    -- This read `lastSeen`, a field nothing writes, so every record tied at
-    -- zero and the trim dropped prices in whatever order the table walked.
-    for itemID, record in pairs(prices) do
-        order[#order + 1] = { itemID = itemID, seen = record.seen or 0 }
-    end
-    table.sort(order, function(a, b) return a.seen < b.seen end)
-
-    -- A handful of attempts rather than one per item: each re-encode costs
-    -- real time, and this runs while the player is logging out.
-    for _, share in ipairs({ 0.25, 0.5, 0.75 }) do
-        local trimmed = {}
-        for key, value in pairs(prices) do trimmed[key] = value end
-
-        local drop = math.floor(#order * share)
-        for index = 1, drop do
-            trimmed[order[index].itemID] = nil
-        end
-
-        local copy = {}
-        for key, value in pairs(snapshot) do copy[key] = value end
-
-        copy.prices = {}
-        for key, value in pairs(snapshot.prices) do copy.prices[key] = value end
-        copy.prices[realmKey] = trimmed
-
-        local text = ns.Serialize.Encode(copy)
-        if #text <= budget then return text, drop end
-    end
-
-    return nil
-end
-
 --- Empty the database chunks an earlier session left in CVars. Once a session.
 local function ClearStore(self, cvars)
     if self.storeCleared then return end
@@ -393,67 +317,21 @@ local function ClearStore(self, cvars)
     end
 end
 
---- Write the database out. Called at logout and after a scan.
+--- Called at logout and after a scan. Writes nothing any more.
+--
+-- This used to serialise the whole database into 8 x 60KB CVars whenever the
+-- game failed to hand SavedVariables back. Blizzard's own writer corrupts
+-- Config.wtf from about 3KB per value (see the note at the top of this
+-- file), so on a patch that both lost the saved file and let CVars reach
+-- disk, this store would have broken the game's settings too. Turned off
+-- 2026-10-09: the game's saved file is the only store. Chunks an older
+-- version left are still read once at login (LoadAll) and emptied here.
 function Persist:SaveAll()
     local available, cvars = self:IsAvailable()
-    if not available or not ns.db then return false end
+    if not available then return false end
 
-    -- The game writes the saved file itself.
-    if self:GameKeepsSavedData() then
-        ClearStore(self, cvars)
-        return true, 0
-    end
-
-    local ok, text = pcall(ns.Serialize.Encode, Snapshot(ns.db))
-    if not ok then
-        ns.Warn("could not pack up your saved data: " .. tostring(text))
-        return false
-    end
-
-    local budget = CHUNK_BYTES * MAX_CHUNKS
-    local dropped = 0
-
-    if #text > budget then
-        local trimmed, count = TrimToFit(Snapshot(ns.db), budget)
-        if not trimmed then
-            ns.Warn("too much data to store in CVars; nothing was saved.")
-            return false
-        end
-        text, dropped = trimmed, count or 0
-    end
-
-    local chunks = math.max(1, math.ceil(#text / CHUNK_BYTES))
-
-    for index = 1, chunks do
-        local name = STORE_PREFIX .. index
-        local first = (index - 1) * CHUNK_BYTES + 1
-
-        self:RegisterOne(name, "", cvars)
-        pcall(C_CVar.SetCVar, name, text:sub(first, first + CHUNK_BYTES - 1))
-    end
-
-    -- A shorter save than last time would otherwise leave old chunks behind
-    -- for the loader to concatenate onto the end of the new data.
-    for index = chunks + 1, MAX_CHUNKS do
-        local name = STORE_PREFIX .. index
-        self:RegisterOne(name, "", cvars)
-        pcall(C_CVar.SetCVar, name, "")
-    end
-
-    self:RegisterOne(STORE_COUNT, "0", cvars)
-    pcall(C_CVar.SetCVar, STORE_COUNT, tostring(chunks))
-
-    -- Stamped with this process, so the next login can say whether the client
-    -- restarted in between rather than taking anyone's word for it.
-    local started = ProcessStart()
-    if started then
-        self:RegisterOne(SESSION_CVAR, "", cvars)
-        pcall(C_CVar.SetCVar, SESSION_CVAR, ("%d,%d"):format(started, time()))
-    end
-
-    self.lastSave = { bytes = #text, chunks = chunks, dropped = dropped, at = time() }
-
-    return true, dropped
+    ClearStore(self, cvars)
+    return true, 0
 end
 
 --- Read the database back. Called from Config:Bootstrap.
@@ -537,20 +415,9 @@ function Persist:SaveLater(delay)
     end)
 end
 
-ns.RegisterCommand("save", "save your data to CVars now (only when the game loses it)", function()
-    if ns.Persist:GameKeepsSavedData() then
-        ns.Print("the game keeps your saved data now, so nothing needs saving to CVars.")
-        return
-    end
-
-    local ok, dropped = ns.Persist:SaveAll()
-    local last = ns.Persist.lastSave
-
-    if ok and last then
-        ns.Print(("saved %s bytes across %d CVar(s)%s."):format(
-            ns.Util.Comma(last.bytes), last.chunks,
-            (dropped or 0) > 0 and (", leaving out %d old prices to make it fit"):format(dropped) or ""))
-    end
+ns.RegisterCommand("save", "empty the old CVar copy of your data (the game keeps it now)", function()
+    ns.Persist:SaveAll()
+    ns.Print("nothing is saved to CVars any more; the game's own saved data keeps everything.")
 end)
 
 --------------------------------------------------------------------------------
@@ -810,17 +677,6 @@ end)
 -- and the symptom -- an empty database -- looks the same wherever it broke.
 -- Each line is an observation, not a conclusion.
 
-local function Ago(stamp)
-    if not stamp then return "never" end
-
-    local seconds = time() - stamp
-    if seconds < 90 then return ("%d seconds ago"):format(math.max(0, seconds)) end
-    if seconds < 5400 then return ("%d minutes ago"):format(math.floor(seconds / 60)) end
-    if seconds < 172800 then return ("%d hours ago"):format(math.floor(seconds / 3600)) end
-
-    return ("%d days ago"):format(math.floor(seconds / 86400))
-end
-
 local function Line(label, text)
     ns.PrintRaw(("  |c%s%-18s|r %s"):format(ns.COLORS.muted, label, text))
 end
@@ -839,11 +695,9 @@ function Persist:Report()
         Line("", "|c" .. ns.COLORS.warn .. "the game loaded the saved data late, after login|r")
     end
 
-    if self:GameKeepsSavedData() then
-        Line("CVar store", ("off, not needed: the game kept your saved data%s"):format(
-            (self.clearedChunks or 0) > 0
-                and (", and %d old part(s) were emptied"):format(self.clearedChunks) or ""))
-    end
+    Line("CVar store", ("off: the game's own saved data keeps everything%s"):format(
+        (self.clearedChunks or 0) > 0
+            and (", and %d old part(s) were emptied"):format(self.clearedChunks) or ""))
 
     if peek.coldStart == true then
         Line("this login", "|c" .. ns.COLORS.warn .. "first login since the game was restarted|r")
@@ -870,19 +724,9 @@ function Persist:Report()
         Line("restored from", "the game's own saved data")
     end
 
-    -- Nothing below applies when the CVar store is standing down.
-    if self:GameKeepsSavedData() then return end
-
-    local last = self.lastSave
-    Line("last save", last
-        and ("%s bytes across %d CVar(s), %s"):format(
-            ns.Util.Comma(last.bytes), last.chunks, Ago(last.at))
-        or ("nothing written yet this session; the previous one wrote %s"):format(Ago(peek.savedAt)))
-
-    if peek.coldStart == true and peek.present == 0 then
+    if peek.coldStart == true and peek.present == 0 and not self:GameKeepsSavedData() then
         ns.Print("|c" .. ns.COLORS.warn ..
-            "nothing was saved after a restart: the game is not keeping these CVars when you quit. " ..
-            "Check WTF\\Config.wtf for lines starting BTS_. If there are none, nothing was ever saved to disk.|r")
+            "the game did not hand your saved data back after a restart.|r")
     end
 end
 
