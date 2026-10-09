@@ -39,6 +39,8 @@ local recipes = {
         reagents = { { itemID = LIGHT, quantity = 4 } } },
     [30] = { recipeID = 30, name = "Cured Light Leather", outputItemID = LIGHT, quantityMin = 1,
         reagents = { { itemID = SCRAP, quantity = 3 } } },
+    [40] = { recipeID = 40, name = "Leather Boots", outputItemID = 4001, quantityMin = 1,
+        reagents = { { itemID = LIGHT, quantity = 2 } } },
 }
 
 ns.Recipes = {
@@ -154,6 +156,48 @@ for _, mode in ipairs({ "one character", "shared with alts" }) do
     auction[MEDIUM] = 500
     Queue:RebuildDependencies()
     check("made again once cheaper", entryFor(20) and not entryFor(20).buyCheaper)
+
+    print(("\nBuy instead on one of two rows of the same sub-craft, %s"):format(mode))
+
+    -- Light leather goes into the medium leather and straight into the
+    -- boots, so the queue holds two light leather rows at different depths.
+    -- Buy instead on one took it off, but the other kept it planned and the
+    -- rebuild put it straight back: the button seemed to do nothing.
+    auction[MEDIUM], auction[LIGHT] = 500, 100
+    bags = {}
+    ns.db.queue = {}
+    Cost:InvalidateIndex()
+    Queue:Add(10, 10)
+    Queue:Add(40, 5)
+    local lightRows = 0
+    for _, entry in ipairs(Queue:GetAll()) do
+        if entry.recipeID == 30 then lightRows = lightRows + 1 end
+    end
+    check("light leather is planned", lightRows >= 1)
+
+    auction[LIGHT] = 20
+    Queue:RebuildDependencies()
+    check("light leather says buying is cheaper", entryFor(30) and entryFor(30).buyCheaper == true)
+
+    check("Buy instead takes it off", Queue:BuyInstead(entryFor(30)) == true)
+    check("no light leather row is left", entryFor(30) == nil)
+    check("light leather is on the shopping list", row(LIGHT) and row(LIGHT).shortfall > 0)
+    Queue:RebuildDependencies()
+    check("and it does not come back", entryFor(30) == nil)
+    check("the medium leather stays", entryFor(20) ~= nil)
+
+    -- A row clicked before its redraw holds the sub-craft from before the
+    -- last rebuild; it still takes the queued one off.
+    auction[LIGHT] = 100
+    Queue:RebuildDependencies()
+    auction[LIGHT] = 20
+    Queue:RebuildDependencies()
+    local stale = entryFor(30)
+    check("light leather is back while making is planned", stale ~= nil)
+    Queue:RebuildDependencies()
+    check("a rebuild makes a new row", entryFor(30) ~= stale)
+    check("Buy instead on the old row still works", Queue:BuyInstead(stale) == true)
+    check("no light leather row is left after", entryFor(30) == nil)
 end
 
 print(("\n%d checks passed"):format(checks))
