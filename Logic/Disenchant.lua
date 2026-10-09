@@ -203,6 +203,10 @@ local gearMemo = {}
 local WAIT_SECONDS = 10
 local MAX_ATTEMPTS = 2
 
+-- What vt is set to once the tooltip has been read for its price and its
+-- charges. Older saves have true: read for the price only.
+local TOOLTIP_READ = 2
+
 -- New items asked for per second. Few enough that the client can hold them
 -- beside everything else it has loaded.
 Disenchant.REQUESTS_PER_SECOND = 20
@@ -249,12 +253,15 @@ local function Remember(itemID)
     -- tooltip's price wins over GetItemInfo's, which on Forever can still be
     -- Classic's (Util.GetTooltipSellPrice). vt says the tooltip was read, so
     -- prices saved before that are read once more.
-    local fromTooltip, tooltipRead = Util.GetTooltipSellPrice(itemID)
+    -- vt is 2 since the tooltip's charges are kept too (ch), so consumables
+    -- read before that are read once more for them.
+    local fromTooltip, tooltipRead, charges = Util.GetTooltipSellPrice(itemID)
     if fromTooltip then sellPrice = fromTooltip end
 
     local facts = { n = name, q = quality, l = itemLevel, c = classID, e = equipLoc,
                     v = type(sellPrice) == "number" and sellPrice or 0,
-                    vt = tooltipRead or nil }
+                    vt = tooltipRead and TOOLTIP_READ or nil,
+                    ch = charges }
     Store()[itemID] = facts
     waiting[itemID], attempts[itemID] = nil, nil
 
@@ -265,6 +272,15 @@ end
 
 -- Items whose saved price was read again this session for the tooltip's.
 local tooltipRetried = {}
+
+-- Only consumables carry charges worth knowing about (oils, mostly), so
+-- only they are read again for them: every item at once would crowd the
+-- client's item cache the way the comment on Remember warns.
+local CLASS_CONSUMABLE = 0
+local function NeedsTooltip(known)
+    if not known.vt then return true end
+    return known.vt ~= TOOLTIP_READ and known.c == CLASS_CONSUMABLE
+end
 
 --- Did this addon ask the client for this item, and is it on its way or
 --- just arrived? The tabs redraw only for those. Not for items read long
@@ -363,10 +379,14 @@ end
 function Disenchant:GetSellPrice(itemID)
     if not itemID then return nil end
 
+    -- What a vendor on Forever was seen paying beats what the client says.
+    local paid = ns.Vendor and ns.Vendor.GetPaid and ns.Vendor:GetPaid(itemID)
+    if paid then return paid end
+
     local known = Store()[itemID]
     if not known or known.v == nil then
         known = Fetch(itemID)
-    elseif not known.vt and not tooltipRetried[itemID] and Util.HasFunction("C_TooltipInfo.GetItemByID") then
+    elseif NeedsTooltip(known) and not tooltipRetried[itemID] and Util.HasFunction("C_TooltipInfo.GetItemByID") then
         -- Once a session: an item whose tooltip never has lines keeps the
         -- price it has rather than being read on every redraw.
         local fresh = Fetch(itemID)
@@ -377,6 +397,15 @@ function Disenchant:GetSellPrice(itemID)
     end
 
     return known and known.v
+end
+
+--- Is the vendor price for this item one the game's data may have wrong,
+--- because the item has charges and no sale on Forever has said what a
+--- vendor pays for it?
+function Disenchant:SellPriceUnsure(itemID)
+    if ns.Vendor and ns.Vendor.GetPaid and ns.Vendor:GetPaid(itemID) then return false end
+    local known = Store()[itemID]
+    return known ~= nil and (known.ch or 0) > 0
 end
 
 --- Forget what was read about items (for tests).

@@ -56,6 +56,107 @@ function Vendor:Count()
 end
 
 --------------------------------------------------------------------------------
+-- What a vendor really pays
+--------------------------------------------------------------------------------
+
+-- Forever's vendors pay less than the game's own item data says for some
+-- items, and on charged items neither the item info nor the tooltip shows
+-- it: Minor Wizard Oil reads 5s and a vendor pays 1s (kickemhard's report,
+-- 2026-10-09), which put a 1s "flip" on the Deals tab that lost 3s. So what
+-- a vendor actually paid, read off the merchant's buyback list after a sale,
+-- beats everything else. Until one is sold, this short list of payouts seen
+-- on Forever stands in, in copper for one.
+ns.FOREVER_SELL_PRICES = {
+    [20744] = 100, -- Minor Wizard Oil (item data says 5s)
+}
+
+-- Account wide, like the shop prices: [itemID] = { pay = copper for one, at = time() }.
+function Vendor:GetPaidTable()
+    if not ns.db then return {} end
+
+    ns.db.vendorPaid = ns.db.vendorPaid or {}
+    return ns.db.vendorPaid
+end
+
+--- What a vendor pays for one, as seen on Forever, or nil when nobody has
+--- seen one sold.
+-- @return copper, and "sold" (a sale of yours) or "reported" (the list above)
+function Vendor:GetPaid(itemID)
+    if not itemID then return nil end
+
+    local record = self:GetPaidTable()[itemID]
+    if type(record) == "table" and type(record.pay) == "number" then
+        return record.pay, "sold"
+    end
+
+    local reported = ns.FOREVER_SELL_PRICES[itemID]
+    if reported then return reported, "reported" end
+
+    return nil
+end
+
+local function BuybackItemID(index)
+    if Util.HasFunction("C_MerchantFrame.GetBuybackItemID") then
+        local ok, itemID = pcall(C_MerchantFrame.GetBuybackItemID, index)
+        if ok and type(itemID) == "number" and itemID > 0 then return itemID end
+    end
+
+    if Util.HasFunction("GetBuybackItemLink") then
+        local ok, link = pcall(GetBuybackItemLink, index)
+        if ok and type(link) == "string" then return tonumber(link:match("item:(%d+)")) end
+    end
+
+    return nil
+end
+
+--- Read what the merchant paid for everything on the buyback list. The
+--- price there is for the whole stack sold.
+-- @return how many payouts were new or changed
+function Vendor:ReadBuyback()
+    if not Util.HasFunction("GetNumBuybackItems") or not Util.HasFunction("GetBuybackItemInfo") then
+        return 0
+    end
+
+    local ok, count = pcall(GetNumBuybackItems)
+    if not ok or type(count) ~= "number" then return 0 end
+
+    local paid, changed = self:GetPaidTable(), 0
+
+    for index = 1, count do
+        local itemID = BuybackItemID(index)
+        local read, _, _, price, quantity = pcall(GetBuybackItemInfo, index)
+
+        -- Inside a pcall too: a value the client keeps secret raises when
+        -- compared.
+        local fine, pay = pcall(function()
+            if itemID and read and type(price) == "number" and type(quantity) == "number"
+                    and quantity > 0 and price >= 0 then
+                return math.floor(price / quantity)
+            end
+        end)
+
+        if fine and pay then
+            local record = paid[itemID]
+            if type(record) ~= "table" or record.pay ~= pay then
+                changed = changed + 1
+            end
+            paid[itemID] = { pay = pay, at = time() }
+        end
+    end
+
+    if changed > 0 then
+        ns.Debug(("learned what a vendor pays for %d item(s)"):format(changed))
+        -- Lists that read vendor prices rebuild when the item facts change.
+        if ns.Disenchant then
+            ns.Disenchant.factsVersion = (ns.Disenchant.factsVersion or 0) + 1
+        end
+        if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+    end
+
+    return changed
+end
+
+--------------------------------------------------------------------------------
 -- Reading a merchant
 --------------------------------------------------------------------------------
 
@@ -511,6 +612,7 @@ function Vendor:OnEnable()
         C_Timer.After(0.2, function()
             if not Vendor.isMerchantOpen then return end
             Vendor:Scan()
+            pcall(Vendor.ReadBuyback, Vendor)
             if ns.UI then ns.UI:AttachToMerchant() end
         end)
     end)
@@ -519,6 +621,8 @@ function Vendor:OnEnable()
         C_Timer.After(0.2, function()
             if not Vendor.isMerchantOpen then return end
             Vendor:Scan()
+            -- Selling something puts it on the buyback list.
+            pcall(Vendor.ReadBuyback, Vendor)
             if ns.UI then ns.UI:UpdateMerchantButton() end
         end)
     end)
@@ -528,6 +632,8 @@ function Vendor:OnEnable()
     -- kept offering what the bags already held.
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", function()
         if not Vendor.isMerchantOpen or Vendor.buying then return end
+        -- Something sold leaves the bags; the buyback list says for how much.
+        pcall(Vendor.ReadBuyback, Vendor)
         if Vendor.settling then
             Vendor:CheckSettled()
         elseif ns.UI then
