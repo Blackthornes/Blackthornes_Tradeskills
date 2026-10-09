@@ -4,6 +4,45 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.42.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Craftsman's Writs** on the Deals tab: the Show menu's new third choice
+  lists all 150 writs by what one point of trade camp reputation costs (the
+  writ plus the item it asks for, bought or made, whichever is cheaper). Pick
+  a **Goal** (Friendly to Exalted) and the side panel says how far you are,
+  how many writs of each kind it takes, and the cheapest and quickest way.
+- **Craft time and gold per hour.** The Profit tab's new **Per hour** tick box
+  adds TIME and GOLD/HR columns, the craft pane shows the craft time and per
+  hour rate, and the Disenchanting tab gets a GOLD/HR column.
+- **Choose your columns:** right-click any list's column headings to hide the
+  ones you don't use, or use Settings > Look & sound > Columns, with a
+  **Show all** button.
+- **Price graph:** dim bars show how many were listed each hour, and a dashed
+  line marks the average price.
+- **Level Up follows the Profit tab's "Profit:" choice** (Best, AH, Vendor or
+  DE) when it counts what a craft gets back.
+- **Turn undercut off** from Settings > Pricing: one button lists at the
+  cheapest rival's own price, and clicking it again puts your old amount back.
+  The default stays 1c.
+- **Sub-crafts from alts:** with **Sub-crafts only** ticked, Level Up lists
+  every character's sub-crafts with the alt's name beside them, and the
+  Make / Buy button shows on every craft that makes an item.
+- **Recipes show the skill Forever asks for**, read from the recipe's own
+  tooltip, on Level Up and the recipe tooltip. Several Leatherworking patterns
+  moved on Forever (Raptor Hide Harness needs 140, not 165).
+- **Deals uses what Forever's vendors really pay**, learned each time you sell.
+  Minor Wizard Oil now pays 1s, so it's no longer shown as a profitable flip,
+  and charged items nobody has sold yet aren't offered as flips.
+- **Disenchanting:** green weapons of item level 21 to 30 now show Greater
+  Magic Essence, which is what Forever gives, instead of astral essence.
+- Fixed: Level Up's skill colours no longer turn grey for a while after
+  logging in or a loading screen.
+- Saved data is never written into the game's own settings any more, so it
+  can't harm them if the game ever fails to load the addon's data.
+
 ## 0.41.0
 
 For WoW: Forever (interface 16001). A file was added, so restart the game
