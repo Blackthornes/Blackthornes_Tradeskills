@@ -94,10 +94,14 @@ local function Try(fn, ...)
     return nil
 end
 
+local function Index(object, key) return object[key] end
+
 local function Field(object, key)
     if type(object) ~= "table" then return nil end
 
-    local ok, value = pcall(function() return object[key] end)
+    -- A named function rather than a new one per read: this runs for every
+    -- field of every visible row, four times a second.
+    local ok, value = pcall(Index, object, key)
     if not ok then return nil end
 
     return value

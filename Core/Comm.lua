@@ -95,11 +95,15 @@ end
 --- A plain copy of a string the client handed over, or nil. Inside a
 --- dungeon the client can hand addons names that raise when compared, so
 --- the test and the copy happen inside the pcall.
+local function CopyPlain(value)
+    if type(value) ~= "string" or value == "" then return nil end
+    return value .. ""
+end
+
 function Comm.Plain(value)
-    local ok, copy = pcall(function()
-        if type(value) ~= "string" or value == "" then return nil end
-        return value .. ""
-    end)
+    -- A named function, not a new one per call: every addon's messages
+    -- come through here, hundreds a second in a raid.
+    local ok, copy = pcall(CopyPlain, value)
     return ok and copy or nil
 end
 
@@ -344,9 +348,12 @@ end
 
 --- One addon message arrived. Everything about it is read as plain data.
 function Comm:CHAT_MSG_ADDON(_, prefix, text, channel, sender)
-    prefix, text = Comm.Plain(prefix), Comm.Plain(text)
-    channel, sender = Comm.Plain(channel), Comm.Plain(sender)
-    if prefix ~= Comm.PREFIX or not text or not channel or not sender then return end
+    -- The prefix first: most messages are other addons', and theirs are
+    -- dropped before anything else of them is copied.
+    prefix = Comm.Plain(prefix)
+    if prefix ~= Comm.PREFIX then return end
+    text, channel, sender = Comm.Plain(text), Comm.Plain(channel), Comm.Plain(sender)
+    if not text or not channel or not sender then return end
     if #text > Comm.MAX_MESSAGE then return end
 
     self.received = self.received + 1
@@ -386,6 +393,8 @@ local function NotFoundName(message)
 end
 
 function Comm.FilterNotFound(_, _, message)
+    -- Nobody whispered lately: no line to hide, and nothing to read.
+    if next(whispered) == nil then return false end
     local plain = Comm.Plain(message)
     if not plain then return false end
     local name = NotFoundName(plain)

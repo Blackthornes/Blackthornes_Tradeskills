@@ -282,9 +282,14 @@ function Mail:Read()
     ns.Debug(("mailbox: %d mail(s), %d item stack(s)%s"):format(
         #mails, Util.Count(counts), complete and "" or " (still loading)"))
 
+    -- OnInventoryUpdated redraws the tab itself; asking here too drew it
+    -- twice on every mailbox update.
     if ns.UI then
-        ns.UI:RefreshActiveTab()
-        if ns.UI.OnInventoryUpdated then ns.UI:OnInventoryUpdated() end
+        if ns.UI.OnInventoryUpdated then
+            ns.UI:OnInventoryUpdated()
+        else
+            ns.UI:RefreshActiveTab()
+        end
     end
 end
 

@@ -572,8 +572,10 @@ ns.RegisterCommand("delog", "your recorded disenchants; /bts delog reset clears 
 --------------------------------------------------------------------------------
 
 function DisenchantLog:OnEnable()
-    ns.RegisterEvent(self, "UNIT_SPELLCAST_SENT", self.OnCastSent)
-    ns.RegisterEvent(self, "UNIT_SPELLCAST_SUCCEEDED", self.OnCastSucceeded)
+    -- Only the player's casts are wanted (ns.RegisterPlayerEvent).
+    local RegisterForPlayer = ns.RegisterPlayerEvent or ns.RegisterEvent
+    RegisterForPlayer(self, "UNIT_SPELLCAST_SENT", self.OnCastSent)
+    RegisterForPlayer(self, "UNIT_SPELLCAST_SUCCEEDED", self.OnCastSucceeded)
     ns.RegisterEvent(self, "LOOT_READY", self.OnLootReady)
     ns.RegisterEvent(self, "LOOT_OPENED", self.OnLootReady)
 

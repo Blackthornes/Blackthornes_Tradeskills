@@ -356,7 +356,9 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
 end
 
 function Crafting:OnEnable()
-    ns.RegisterEvent(self, "UNIT_SPELLCAST_SUCCEEDED", self.OnCastSucceeded)
+    -- Only the player's casts are wanted (ns.RegisterPlayerEvent).
+    local RegisterForPlayer = ns.RegisterPlayerEvent or ns.RegisterEvent
+    RegisterForPlayer(self, "UNIT_SPELLCAST_SUCCEEDED", self.OnCastSucceeded)
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", self.OnTradeSkillShow)
     ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", self.OnTradeSkillClose)
 
