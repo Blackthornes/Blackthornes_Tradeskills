@@ -293,6 +293,36 @@ check("the bolt can still be made and ranked itself",
     names(LevelUp:GetRanked({ skillLines = tailoring })):find("Bolt of Woolen Cloth", 1, true) ~= nil)
 ns.Cost:SetNeverSubCraft(3, false)
 check("allowed again, the bolt is made", LevelUp:BuildRow(2).cost == 900)
+
+-- Voldar (2026-10-09): a Lesser Mana Potion only an alt makes could not be
+-- marked. Sub-crafts only lists every character's, saying who knows it.
+local POTION, VIAL = 3385, 3371
+ns.db = { characters = {
+    ALT = { recipes = {
+        [20] = R(20, "Lesser Mana Potion", nil, 171, { { itemID = VIAL, quantity = 1 } }, POTION),
+        [21] = R(21, "Mana Draught", nil, 171, { { itemID = POTION, quantity = 1 } }),
+        [3] = recipes[3],
+    } },
+} }
+local altRecipes = ns.db.characters.ALT.recipes
+local savedGetAny, savedCount = ns.Recipes.GetAny, ns.Profit.GetCraftableCount
+ns.Recipes.GetAny = function(_, id) return recipes[id] or altRecipes[id] end
+ns.Profit.GetCraftableCount = function(self, id)
+    if recipes[id] then return savedCount(self, id) end
+    return 0
+end
+local plain = LevelUp:GetRanked({})
+check("left out of the usual list, which is this character's", not names(plain):find("Lesser Mana Potion", 1, true))
+local all = LevelUp:GetRanked({ subCraftsOnly = true })
+local potion
+for _, row in ipairs(all) do if row.recipeID == 20 then potion = row end end
+check("listed with Sub-crafts only (got " .. names(all) .. ")", potion ~= nil)
+check("and says the alt knows it", potion.knownBy == "ALT")
+local bolt
+for _, row in ipairs(all) do if row.recipeID == 3 then bolt = row end end
+check("a craft this character knows too is not named after the alt", bolt and bolt.knownBy == nil)
+check("an alt's craft nobody uses is not a sub-craft", not names(all):find("Mana Draught", 1, true))
+ns.Recipes.GetAny, ns.Profit.GetCraftableCount = savedGetAny, savedCount
 ns.db = nil
 
 print("\n  all level up checks passed\n")
