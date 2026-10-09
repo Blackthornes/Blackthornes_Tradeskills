@@ -221,12 +221,21 @@ local function UpdateDisenchantCell(cells, analysis)
 end
 
 --- How long the craft takes and what that makes an hour. "?" until a cast
---- of every craft in it has been seen or the game says how long it is.
+--- of every craft in it has been seen or the game says how long it is, and
+--- "--" for a recipe the character playing does not know.
 function UpdateTimeCells(cells, analysis)
     local CraftTime = ns.CraftTime
     if not CraftTime then
         cells.time:SetText("")
         cells.perHour:SetText("")
+        return
+    end
+
+    if analysis.knownByMe == false then
+        cells.time:SetText("--")
+        cells.time:SetTextColor(Theme.Unpack("dim"))
+        cells.perHour:SetText("--")
+        cells.perHour:SetTextColor(Theme.Unpack("dim"))
         return
     end
 
@@ -826,6 +835,15 @@ local function UpdateTimeRows(detail, analysis)
     if not CraftTime then
         detail.timeValue:SetText("--")
         detail.perHourValue:SetText("--")
+        return
+    end
+
+    -- A recipe this character does not know: nothing to time.
+    if analysis.knownByMe == false then
+        detail.timeValue:SetText("--")
+        detail.timeValue:SetTextColor(Theme.Unpack("dim"))
+        detail.perHourValue:SetText("--")
+        detail.perHourValue:SetTextColor(Theme.Unpack("dim"))
         return
     end
 
