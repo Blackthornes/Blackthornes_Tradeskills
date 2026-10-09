@@ -172,4 +172,41 @@ for _ = 1, 10 do RunTimers() end
 check("after a few tries it reads anyway", worker ~= nil)
 ready = true
 
+print("\na run of crafts does not read every recipe again per craft")
+-- The last harvest finishes, then a craft repeats with the window open.
+while worker.running do worker:Step() end
+worker = nil
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+worker:Step() worker:Step() worker:Step()
+check("a harvest finished", not worker.running)
+local repeating = true
+C_TradeSkillUI.IsRecipeRepeating = function() return repeating end
+worker = nil
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+check("a craft's bag change mid-run reads nothing", worker == nil)
+
+local levels = { [197] = 100 }
+ns.SkillUp.ReadSkillLevels = function() local copy = {} for k, v in pairs(levels) do copy[k] = v end return copy end
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+worker:Step() worker:Step() worker:Step()
+worker = nil
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+check("same skill, still nothing read", worker == nil)
+levels[197] = 101
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+check("a skill point mid-run reads the colours again", worker ~= nil and worker.running)
+worker:Step() worker:Step() worker:Step()
+
+repeating = false
+worker = nil
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+check("with no craft under way, an update reads as before", worker ~= nil)
+C_TradeSkillUI.IsRecipeRepeating = nil
+
 print(("\n%d checks passed"):format(checks))
