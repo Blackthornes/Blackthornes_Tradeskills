@@ -31,6 +31,7 @@ Data\Vendor.lua
 Data\WaylaidCrates.lua
 
 Logic\Cost.lua
+Logic\CraftTime.lua
 Logic\Disenchant.lua
 Logic\DisenchantLog.lua
 Logic\SkillUp.lua
