@@ -819,7 +819,11 @@ function Posting:GetPostable(opts)
 
     local outputs = {}
 
-    for _, recipe in pairs(ns.Recipes:GetAccountWide()) do
+    -- Straight from the saved recipes: GetAccountWide copies every recipe of
+    -- every character, and this runs every second at the auction house.
+    local recipes = ns.Recipes.GetAccountWideOutputs and ns.Recipes:GetAccountWideOutputs()
+        or ns.Recipes:GetAccountWide()
+    for _, recipe in pairs(recipes) do
         if recipe.outputItemID then
             outputs[recipe.outputItemID] = recipe.recipeID
         end
@@ -1061,10 +1065,11 @@ end
 -- Skips anything unpriced, anything under the price floor, and anything
 -- that would sell below material cost unless losses are explicitly allowed.
 
-function Posting:GetNextPostable(opts)
+-- @param lines  a GetPostable list already made, to save making it again
+function Posting:GetNextPostable(opts, lines)
     local allowLoss = ns.Config:Get("allowPostingAtALoss") == true
 
-    for _, line in ipairs(self:GetPostable(opts)) do
+    for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and not line.belowCrafted
             and not self:IsUnderFloor(line) then
             return line
@@ -1073,11 +1078,11 @@ function Posting:GetNextPostable(opts)
 end
 
 --- Count and total value of everything worth listing.
-function Posting:GetSummary(opts)
+function Posting:GetSummary(opts, lines)
     local allowLoss = ns.Config:Get("allowPostingAtALoss") == true
 
     local count, total = 0, 0
-    for _, line in ipairs(self:GetPostable(opts)) do
+    for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and not line.belowCrafted
             and not self:IsUnderFloor(line) then
             count = count + 1

@@ -375,6 +375,14 @@ check("not sent again within the hour", select(2, ana.ns.GuildPrices:Share()), "
 Scan(bob, { [2589] = 1500 }, clock)
 current = bob
 check("Bob's fresh scan wins", bob.ns.Prices:GetValue(2589), 1500)
+do
+    -- A fresh scan of his own wins, so the guild is not even asked.
+    local asked, real = 0, GuildPrices.GetValue
+    GuildPrices.GetValue = function(...) asked = asked + 1; return real(...) end
+    bob.ns.Prices:GetValue(2589)
+    check("with his own fresh price the guild's is not worked out", asked, 0)
+    GuildPrices.GetValue = real
+end
 GuildPrices:OnPrices("Eve-Realm", Comm.ToBase36(clock) .. ":" .. Comm.ToBase36(2589) .. ","
     .. Comm.ToBase36(15000000) .. ";", "GUILD")
 check("a price 10,000 times his own is refused", (GuildPrices:GetValue(2589)), 1100)

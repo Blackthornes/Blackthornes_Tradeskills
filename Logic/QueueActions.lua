@@ -360,7 +360,9 @@ function QueueActions:OnEnable()
     -- looted copy of the same item beside the crafted ones is never next.
     -- Compared inside a pcall: in an instance the spell can be a value the
     -- addon may not compare.
-    ns.RegisterEvent(self, "UNIT_SPELLCAST_SUCCEEDED", function(_, _, unit, _, spellID)
+    -- Only the player's casts are wanted (ns.RegisterPlayerEvent).
+    local RegisterForPlayer = ns.RegisterPlayerEvent or ns.RegisterEvent
+    RegisterForPlayer(self, "UNIT_SPELLCAST_SUCCEEDED", function(_, _, unit, _, spellID)
         local pending = QueueActions.pendingDisenchant
         if not pending then return end
 

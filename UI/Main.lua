@@ -1294,7 +1294,10 @@ function UI:UpdatePostButton()
     local button = self.postButton
     if not button then return end
 
-    local line = ns.Posting:GetNextPostable()
+    -- One list for the button and its tooltip's summary: making it reads
+    -- the bags and prices every craftable stack, once a second here.
+    local lines = ns.Posting:GetPostable()
+    local line = ns.Posting:GetNextPostable(nil, lines)
     self.postButtonItemID = line and line.itemID
 
     if not line then
@@ -1306,7 +1309,7 @@ function UI:UpdatePostButton()
         return
     end
 
-    local count, total = ns.Posting:GetSummary()
+    local count, total = ns.Posting:GetSummary(nil, lines)
     local allowed, reason = ns.Posting:CanPost(line.itemID)
     local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable(line.itemID)
 
