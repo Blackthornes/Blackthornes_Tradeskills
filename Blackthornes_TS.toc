@@ -29,6 +29,7 @@ Data\VendorPrices.lua
 Data\RecipeBook.lua
 Data\Vendor.lua
 Data\WaylaidCrates.lua
+Data\CraftsmansWrits.lua
 
 Logic\Cost.lua
 Logic\CraftTime.lua
@@ -52,6 +53,7 @@ Logic\Demand.lua
 Logic\FarmerGoals.lua
 Logic\VendorFlips.lua
 Logic\MerchantsFavor.lua
+Logic\Writs.lua
 Logic\Banks.lua
 Logic\Upgrades.lua
 Logic\BagsFull.lua
@@ -82,6 +84,7 @@ UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
 UI\Tab_Disenchanting.lua
 UI\DealsFavor.lua
+UI\DealsWrits.lua
 UI\Tab_Deals.lua
 UI\Tab_Queue.lua
 UI\Tab_Gather.lua
