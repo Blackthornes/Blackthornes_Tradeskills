@@ -198,6 +198,40 @@ function LevelUp:GetMaterialSet()
     return set
 end
 
+--- The recipes the list is drawn from: this character's, and with `alts`
+--- every other character's too (Voldar, 2026-10-09: an alt's Lesser Mana
+--- Potion or blasting powder could not be marked from here).
+-- @return { [recipeID] = recipe }, { [recipeID] = characterKey } for those
+--   only another character knows
+function LevelUp:ListedRecipes(alts)
+    local own = ns.Recipes:GetAll()
+    if not alts then return own, {} end
+
+    local list, knownBy = {}, {}
+    local selfKey = ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or nil
+    for recipeID, recipe in pairs(own) do
+        if not (ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe)) then list[recipeID] = recipe end
+    end
+
+    -- In a fixed order, so the same character is named every time.
+    local keys = {}
+    for characterKey, record in pairs((ns.db and ns.db.characters) or {}) do
+        if characterKey ~= selfKey and type(record) == "table" then keys[#keys + 1] = characterKey end
+    end
+    table.sort(keys)
+
+    for _, characterKey in ipairs(keys) do
+        for recipeID, recipe in pairs(ns.db.characters[characterKey].recipes or {}) do
+            local dropped = ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe, characterKey)
+            if type(recipe) == "table" and not list[recipeID] and not dropped then
+                list[recipeID] = recipe
+                knownBy[recipeID] = characterKey
+            end
+        end
+    end
+    return list, knownBy
+end
+
 --- Build one row of the list.
 -- @param materials  GetMaterialSet's answer, to say whether the craft makes
 --   something another craft uses (`isMaterial`); worked out when not given
@@ -247,7 +281,9 @@ end
 -- @param opts.craftableOnly   keep only what the bags cover right now
 -- @param opts.search          part of a name, any case
 -- @param opts.subCraftsOnly   keep only crafts whose item another craft
---   uses, grey ones too: where to mark one never to make as a sub-craft
+--   uses, grey ones too, from every character: where to mark one never to
+--   make as a sub-craft. A craft only another character knows says who
+--   (`knownBy`).
 function LevelUp:GetRanked(opts)
     opts = opts or {}
 
@@ -255,11 +291,16 @@ function LevelUp:GetRanked(opts)
     local rows = {}
     local materials = self:GetMaterialSet()
 
-    for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
+    local recipes, knownBy = self:ListedRecipes(opts.subCraftsOnly)
+
+    for recipeID, recipe in pairs(recipes) do
         local keep = not opts.skillLines or opts.skillLines[recipe.skillLineID]
 
         -- Not a profession this character has dropped.
-        if keep and ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe) then keep = false end
+        if keep and not knownBy[recipeID] and ns.Recipes.IsDropped
+            and ns.Recipes:IsDropped(recipe) then
+            keep = false
+        end
 
         if keep and needle then
             keep = (recipe.name or ""):lower():find(needle, 1, true) ~= nil
@@ -271,6 +312,7 @@ function LevelUp:GetRanked(opts)
 
         if keep then
             local row = self:BuildRow(recipeID, recipe, materials)
+            if row then row.knownBy = knownBy[recipeID] end
 
             if row then
                 -- A sub-craft gone grey is still made to go into others,

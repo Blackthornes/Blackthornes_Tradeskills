@@ -73,6 +73,9 @@ end
 -- Defined with the detail panel, used by the controls built inside it.
 local UpdateCraftButton
 
+-- Defined after Build; Sub-crafts only rebuilds the profession list with it.
+local OnShow
+
 -- Profession name -> set of skill-line IDs carrying it. Forever lists every
 -- profession under two IDs and a recipe may be tagged with either, so the
 -- dropdown works in names and filters by the whole set.
@@ -128,7 +131,11 @@ local function SubCraftTooltip(entry)
     if entry.neverSubCraft then
         return ("Buy: %s is never made to go into another craft. It is bought instead, in costs, the queue and the shopping list.\nClick to make it again when that is cheaper."):format(name)
     end
-    return ("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those."):format(name)
+    local text = ("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those."):format(name)
+    if not entry.isMaterial then
+        text = text .. "\nNo craft your characters know uses it yet."
+    end
+    return text
 end
 
 local function CreateRow(row)
@@ -166,7 +173,12 @@ local function UpdateRow(row, entry)
 
     -- Coloured the way the profession window colours it, so the list reads
     -- the same as the game without being told what orange means.
-    Theme.SetRowName(row.name, entry.name or ("recipe " .. entry.recipeID))
+    local name = entry.name or ("recipe " .. entry.recipeID)
+    -- A craft only another character knows (Sub-crafts only) says who.
+    if entry.knownBy and ns.Recipes.GetShortCharacterName then
+        name = ("%s |cff7a8089(%s)|r"):format(name, ns.Recipes:GetShortCharacterName(entry.knownBy))
+    end
+    Theme.SetRowName(row.name, name)
     row.name:SetTextColor(TierColor(entry.tier))
     Theme.SetItemIcon(row.icon, entry.outputItemID)
 
@@ -213,12 +225,13 @@ local function UpdateRow(row, entry)
     cells.make:SetText(tostring(craftable))
     cells.make:SetTextColor(Theme.Unpack(craftable > 0 and "text" or "loss"))
 
-    -- Only for an item another craft uses. A marked one keeps its button
-    -- wherever it shows, so it can always be made again from here.
+    -- On every craft that makes an item (Voldar, 2026-10-09): only on
+    -- those another known craft used, a craft whose user was never read
+    -- could not be marked.
     local button = row.subButton
     if button then
         row.data = entry
-        local shown = entry.isMaterial or entry.neverSubCraft
+        local shown = entry.outputItemID ~= nil
         button:SetShown(shown == true)
         if shown then
             button:SetText(entry.neverSubCraft and "Buy" or "Make")
@@ -761,6 +774,8 @@ local function Build(container)
     local subCrafts = Widgets.CreateCheckbox(toolbar, "Sub-crafts only", function(checked)
         state.subCraftsOnly = checked
         state.selected = nil
+        -- Other characters' professions join the menu, or leave it.
+        OnShow()
         widgets.list:ScrollToTop()
         Refresh()
     end, false)
@@ -768,7 +783,7 @@ local function Build(container)
     subCrafts:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
         GameTooltip:SetText("Sub-crafts only", 1, 1, 1)
-        GameTooltip:AddLine("Only crafts whose item goes into another craft, grey ones too. Their SUB-CRAFT button picks Make or Buy.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Only crafts whose item goes into another craft, grey ones too, on all your characters. Their SUB-CRAFT button picks Make or Buy.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     subCrafts:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -857,17 +872,23 @@ local function Build(container)
 end
 
 --- Rebuild the profession list, and follow the profession last opened.
-local function OnShow()
+OnShow = function()
     wipe(skillLinesByName)
     wipe(nameBySkillLine)
 
     local options = {}
 
-    for _, recipe in pairs(ns.Recipes:GetAll()) do
+    -- With Sub-crafts only, every character's professions, so an alt's
+    -- alchemy or engineering can be picked too.
+    local alts = state.subCraftsOnly
+    local recipes = ns.LevelUp.ListedRecipes and ns.LevelUp:ListedRecipes(alts) or ns.Recipes:GetAll()
+
+    for _, recipe in pairs(recipes) do
         local skillLineID = recipe.skillLineID
 
-        -- A dropped profession has no crafts left to list.
-        if ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe) then skillLineID = nil end
+        -- A dropped profession has no crafts left to list. ListedRecipes
+        -- has already left those out of every character's.
+        if not alts and ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe) then skillLineID = nil end
 
         if skillLineID and not nameBySkillLine[skillLineID] then
             local info = ProfessionInfo(skillLineID)
