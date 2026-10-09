@@ -424,6 +424,12 @@ local DEFAULTS = {
     -- See Logic/RecipeBook.lua.
     seenRecipes = {},
 
+    -- recipe item ID -> { skill, profession, teaches, at }: the skill a
+    -- recipe item's own tooltip says it needs. Forever moved some from
+    -- Classic's, and this wins over the shipped book. Game IDs and numbers
+    -- only. See RecipeBook:LearnSkill.
+    recipeSkills = {},
+
     -- realmKey -> when the history restored from macro storage was rolled up
     -- to. Ledger entries from before that moment are already inside it. See
     -- Mail:GetRestoredRollup.
