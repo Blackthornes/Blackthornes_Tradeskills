@@ -125,6 +125,8 @@ ns.Config = {
     Set = function(_, key, value) settings[key] = value end,
 }
 ns.Scanner = { isAuctionHouseOpen = false }
+local versionAsked = 0
+ns.VersionLabel = function() versionAsked = versionAsked + 1; return "v0.42.0" end
 
 local function Load(path)
     assert(loadfile(lfs_cwd .. path))("Blackthornes_TS", ns)
@@ -173,6 +175,8 @@ settings.windowScale = 0.8
 UI:Build()
 local window = UI.window
 check("opens at 80%", window:GetScale(), 0.8)
+-- A player asked to see at a glance which version he runs (2026-10-09).
+check("the header shows the version", UI.versionLabel ~= nil and versionAsked > 0, true)
 settings.windowScale = 1.5
 check("150% on a 1280x720 screen: as big as fits", UI:GetWindowScale() < 1.5, true)
 check("and the whole window fits", (1120 + 30) * UI:GetWindowScale() <= SCREEN_W, true)
