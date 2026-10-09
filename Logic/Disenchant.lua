@@ -80,14 +80,23 @@ end
 -- Uncommon (green) items. Each band covers item levels up to `upTo`. Armour
 -- mostly gives dust; a weapon swaps the dust and essence chances, so it
 -- mostly gives essence. The shard chance is the same for both.
+--
+-- weaponEssence is Forever's own: green weapons of item level 21 to 30 give
+-- Greater Magic Essence, not the astral essence Classic's table names, while
+-- their dust and shard are Classic's. Seen in game 2026-10-07 to 09: twelve
+-- Dire Wands (item level 26) gave Greater Magic 7 times, Soul Dust 3 and
+-- Large Glimmering 2, and a player's Forester's Axe (item level 23) gave
+-- Greater Magic too. Armour of the same levels still gives astral.
 local UNCOMMON = {
     { upTo = 15,  dust = { STRANGE_DUST, 1, 2 },  essence = { LESSER_MAGIC, 1, 2 },
       chances = { 0.80, 0.20, 0 } },
     { upTo = 20,  dust = { STRANGE_DUST, 2, 3 },  essence = { GREATER_MAGIC, 1, 2 },
       shard = SMALL_GLIMMERING, chances = { 0.75, 0.20, 0.05 } },
     { upTo = 25,  dust = { STRANGE_DUST, 4, 6 },  essence = { LESSER_ASTRAL, 1, 2 },
+      weaponEssence = { GREATER_MAGIC, 1, 2 },
       shard = SMALL_GLIMMERING, chances = { 0.75, 0.15, 0.10 } },
     { upTo = 30,  dust = { SOUL_DUST, 1, 2 },     essence = { GREATER_ASTRAL, 1, 2 },
+      weaponEssence = { GREATER_MAGIC, 1, 2 },
       shard = LARGE_GLIMMERING, chances = { 0.75, 0.20, 0.05 } },
     { upTo = 35,  dust = { SOUL_DUST, 2, 5 },     essence = { LESSER_MYSTIC, 1, 2 },
       shard = SMALL_GLOWING, chances = { 0.75, 0.20, 0.05 } },
@@ -518,7 +527,8 @@ function Disenchant:GetOutcomes(itemID)
 
         -- Most likely first, so the list reads in the order it will happen.
         local dust = { band.dust[1], dustChance, band.dust[2], band.dust[3] }
-        local essence = { band.essence[1], essenceChance, band.essence[2], band.essence[3] }
+        local essenceRow = facts.isWeapon and band.weaponEssence or band.essence
+        local essence = { essenceRow[1], essenceChance, essenceRow[2], essenceRow[3] }
 
         if essenceChance > dustChance then
             outcomes[1], outcomes[2] = essence, dust
