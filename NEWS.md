@@ -10,6 +10,18 @@ name, after their group; changes nobody asked for go in a group of their
 own with no thanks. This is the only report that names players. A version with no section here posts nothing in #general.
 This file does not ship in the addon.
 
+## 0.43.0
+
+Hey everyone! Another Tradeskills update just went up.
+
+Merchant's Favor bundles are priced right now, even right after a fresh scan. Gold per hour only shows for recipes you can actually make. The Settings buttons don't spill into the next column anymore. And you can see which version you have at the top of the window and on the minimap button. Ezmode asked for all of these. Thanks Ezmode!
+
+Hovering over items is lighter on your game now. Thanks Lottus27 for telling us about the lag!
+
+A few more fixes: things you bought on the auction house count toward your queue while they wait in the mail, crafting a bunch in a row doesn't make the game stutter anymore, and the Buy instead button works again.
+
+Restart the game fully after you update. Have fun!
+
 ## 0.42.0
 
 Hey everyone! A big Tradeskills update just went up.
