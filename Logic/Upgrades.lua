@@ -75,7 +75,9 @@ end
 
 --- Forget every answer, so the next draw asks again.
 function Upgrades:Forget()
-    known = {}
+    -- Items arrive from the server all the time (chat links, the auction
+    -- house); a new table each time is garbage when nothing was kept.
+    if next(known) then known = {} end
 end
 
 --- Forget, and redraw the open tab, the craft pane and the sell list once
