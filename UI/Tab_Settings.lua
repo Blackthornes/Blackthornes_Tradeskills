@@ -451,19 +451,55 @@ local function Build(outer)
 
     local undercutRow = CreateRow(pages.pricing, 1, "Undercut by",
         "Your posting price is the cheapest rival listing minus this. " ..
-        "Stackable goods only: gear and bags can only be priced in whole " ..
-        "silver, so those match the cheapest rival unless dropping a full " ..
-        "silver still leaves the minimum profit below.")
+        "Set it to 0 to stop undercutting and match the cheapest listing " ..
+        "instead. Stackable goods only: gear and bags can only be priced " ..
+        "in whole silver, so those match the cheapest rival unless dropping " ..
+        "a full silver still leaves the minimum profit below.")
 
     widgets.undercut = Widgets.CreateNumberBox(undercutRow, {
         width = 70, min = 0, max = 1000000,
         onChange = function(value)
             Config:Set("undercutCopper", value)
             UI:RefreshActiveTab()
+            if widgets.undercutSwitch then widgets.undercutSwitch:Update() end
         end,
     })
     widgets.undercut:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(undercutRow, widgets.undercut, "copper")
+
+    -- Undercutting on or off in one click (asked on Discord, 2026-10-09).
+    -- Off is the same setting at 0c; on puts back what it was before this
+    -- session, or 1c, so no second saved switch can disagree with the number.
+    local undercutSwitchRow = CreateRow(pages.pricing, 1, "Undercutting",
+        "Off lists at the cheapest rival's own price instead of going under " ..
+        "it. It is the same as Undercut by 0c, and turning it back on puts " ..
+        "back what you had.")
+
+    local lastUndercut
+    widgets.undercutSwitch = Widgets.CreateButton(undercutSwitchRow, "Turn undercut off", function()
+        local now = Config:Get("undercutCopper") or 1
+        if now > 0 then
+            lastUndercut = now
+            Config:Set("undercutCopper", 0)
+        else
+            Config:Set("undercutCopper", lastUndercut or 1)
+        end
+        widgets.undercut:SetValue(Config:Get("undercutCopper"), true)
+        widgets.undercutSwitch:Update()
+        UI:RefreshActiveTab()
+    end, { width = 140, height = 20 })
+    widgets.undercutSwitch:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    function widgets.undercutSwitch:Update()
+        local off = (Config:Get("undercutCopper") or 1) <= 0
+        self:SetText(off and ("Turn on, " .. Util.FormatMoney(lastUndercut or 1, { noColor = true }))
+            or "Turn undercut off")
+        self.tooltipText = off
+            and "Undercutting is off: you list at the cheapest rival's price. Click to undercut it again."
+            or "Match the cheapest rival's price instead of going under it (sets Undercut by to 0c)."
+        FitButton(self)
+    end
+    widgets.undercutSwitch:Update()
 
     local cutRow = CreateRow(pages.pricing, 1, "Auction house cut",
         "The share of each sale the auction house keeps.")
@@ -1470,6 +1506,7 @@ local function Refresh()
     -- box must not fire the change handler and write it straight back to
     -- the database.
     Put(widgets.undercut, Config:Get("undercutCopper") or 1)
+    widgets.undercutSwitch:Update()
     Put(widgets.cut, (Config:Get("auctionCut") or 0.05) * 100)
     Put(widgets.minProfit, (Config:Get("minProfit") or 0) / 100)
     Put(widgets.minMargin, Config:Get("minMarginPercent") or 0)
