@@ -518,6 +518,36 @@ end
 
 Recipes.ShowingSomeoneElses = ShowingSomeoneElses
 
+--- Is the open profession window still filling in or switching profession?
+--
+-- While it is, GetRecipeInfo can answer for a recipe with a difficulty that
+-- is not this character's: a player saw the Level Up colours vanish and come
+-- back on their own (2026-10-09). A client without these calls never waits.
+local function WindowSettling()
+    local api = C_TradeSkillUI
+    if type(api) ~= "table" then return false end
+
+    for _, call in ipairs({ { "IsTradeSkillReady", false }, { "IsDataSourceChanging", true } }) do
+        local fn = api[call[1]]
+        if type(fn) == "function" then
+            local ok, answer = pcall(function() return fn() == call[2] end)
+            if ok and answer then return true end
+        end
+    end
+    return false
+end
+
+Recipes.WindowSettling = WindowSettling
+
+-- Counted up whenever a profession window opens, closes or changes what it
+-- shows. A harvest that sees it move stops: the recipes it has left belong
+-- to a window that is gone, and the colours they would read are not theirs.
+Recipes.windowGeneration = 0
+
+function Recipes:OnWindowChanged()
+    self.windowGeneration = (self.windowGeneration or 0) + 1
+end
+
 function Recipes:Harvest()
     local trade = ns.Compat:Get().tradeskill
     if trade.mode ~= "modern" then return false end
@@ -533,6 +563,7 @@ function Recipes:Harvest()
     if not record then return false end
 
     self.harvesting = true
+    local generation = self.windowGeneration
 
     -- Difficulties are only readable while this window is open, so they are
     -- collected alongside the recipes rather than looked up later.
@@ -543,7 +574,13 @@ function Recipes:Harvest()
     local worker = Util.NewWorker({
         budgetMs = ns.Config:Get("scanBudgetMs") or 8,
 
-        onItem = function(recipeID)
+        onItem = function(recipeID, _, worker)
+            -- The window closed or moved on: the next harvest reads it.
+            if Recipes.windowGeneration ~= generation then
+                worker:Cancel()
+                return
+            end
+
             local infoOk, info = pcall(C_TradeSkillUI.GetRecipeInfo, recipeID)
             if not infoOk or not info then return end
 
@@ -651,10 +688,20 @@ function Recipes:OnTradeSkillUpdate()
         self.harvestTimer:Cancel()
     end
 
-    self.harvestTimer = C_Timer.NewTimer(0.5, function()
+    -- Not while the window is still settling, but never put off for good:
+    -- a client that always says "not ready" still gets read.
+    local waits = 0
+    local function Try()
+        if WindowSettling() and waits < 6 then
+            waits = waits + 1
+            Recipes.harvestTimer = C_Timer.NewTimer(0.5, Try)
+            return
+        end
         Recipes.harvestTimer = nil
         Recipes:Harvest()
-    end)
+    end
+
+    self.harvestTimer = C_Timer.NewTimer(0.5, Try)
 end
 
 --- Re-read professions into the cache, refusing to make things worse.
@@ -712,6 +759,15 @@ end
 function Recipes:OnEnable()
     ns.RegisterEvent(self, "TRADE_SKILL_LIST_UPDATE", self.OnTradeSkillUpdate)
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", self.OnTradeSkillUpdate)
+
+    -- A harvest that outlives its window stops (see Harvest). The data
+    -- source events are retail's, for switching profession with the window
+    -- open; a client without them still has show and close.
+    ns.RegisterEvent(self, "TRADE_SKILL_SHOW", self.OnWindowChanged)
+    ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", self.OnWindowChanged)
+    ns.RegisterEvent(self, "TRADE_SKILL_DATA_SOURCE_CHANGING", self.OnWindowChanged)
+    ns.RegisterEvent(self, "TRADE_SKILL_DATA_SOURCE_CHANGED", self.OnWindowChanged)
+    ns.RegisterEvent(self, "TRADE_SKILL_DATA_SOURCE_CHANGED", self.OnTradeSkillUpdate)
 
     -- Learning or dropping a profession, read at once rather than at the
     -- next profession window. Not every client has this event; RegisterEvent
