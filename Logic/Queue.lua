@@ -431,6 +431,20 @@ end
 --
 -- Deeper dependencies are placed first, so the queue reads in the order you can
 -- actually work through it.
+--- Auction buys still in the mail that a mail count of `inMail` does not
+--- already hold: all of them when no mail was counted, otherwise those
+--- bought since the mailbox was read, or the excess over what it showed.
+--- With no count given, the mailbox's own is used.
+local function BoughtBeyondMail(itemID, inMail)
+    local buys = ns.AHBuys
+    if not buys then return 0 end
+    local pending = buys:GetPending(itemID)
+    if pending <= 0 then return 0 end
+    if inMail == nil then inMail = ns.Inventory:GetMailCount(itemID) end
+    if (inMail or 0) <= 0 then return pending end
+    return math.max(buys:GetUnread(itemID), pending - inMail, 0)
+end
+
 function Queue:RebuildDependencies()
     local queue = self:GetAll()
 
@@ -504,7 +518,8 @@ function Queue:RebuildDependencies()
                 local subRecipe = subRecipeID and ns.Recipes:GetAny(subRecipeID)
 
                 if subRecipe then
-                    local short = math.max(0, need.units - ns.Inventory:GetOwnedCount(itemID))
+                    local short = math.max(0, need.units - ns.Inventory:GetOwnedCount(itemID)
+                        - BoughtBeyondMail(itemID))
 
                     if short > 0 then
                         -- Missing units become crafts, since one craft can
@@ -1079,8 +1094,14 @@ function Queue:GetShoppingList()
             local inMail = 0
             if queuedToMake[itemID] then
                 inMail = ns.Inventory:GetMailCount(itemID)
-                have = have + inMail
             end
+
+            -- Bought on the auction house and waiting in the mail: yours, so
+            -- not to be bought again. A mail count already taken holds the
+            -- ones the mailbox showed; only the rest are added.
+            local bought = ns.AHBuys and ns.AHBuys:GetPending(itemID) or 0
+            inMail = inMail + BoughtBeyondMail(itemID, inMail)
+            have = have + inMail
 
             local shortfall = math.max(0, needed - have)
 
@@ -1115,6 +1136,8 @@ function Queue:GetShoppingList()
                 inBags = inBags,
                 inBank = inBank,
                 inMail = inMail,
+                -- Of those, bought on the auction house and not taken yet.
+                bought = math.min(bought, inMail),
                 -- True when you own enough only by counting the bank, so the row
                 -- can say "go to the bank" rather than implying you can craft now.
                 needsBankTrip = inBags < needed and inBags + inBank >= needed,

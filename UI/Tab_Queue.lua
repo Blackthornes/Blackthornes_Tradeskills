@@ -349,7 +349,13 @@ local function UpdateMaterialRow(row, line)
     -- own colour shows over the label's, so a recoloured name goes without.
     local label = Util.GetItemLabel(line.itemID)
     local nameColour = line.shortfall <= 0 and "muted" or line.altCraft and "profit" or nil
-    Theme.SetRowName(row.name, nameColour and Util.Uncolored(label) or label)
+    local name = nameColour and Util.Uncolored(label) or label
+    -- Bought and still to collect: a quiet note, so a smaller "still needed"
+    -- is not a surprise. Once they cover the lot the cost column says so.
+    if (line.bought or 0) > 0 and line.shortfall > 0 then
+        name = name .. " |c" .. ns.COLORS.muted .. ("(%d in mail)"):format(line.bought) .. "|r"
+    end
+    Theme.SetRowName(row.name, name)
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells
@@ -420,6 +426,11 @@ local function ShowMaterialTooltip(row, line)
     if (line.inMail or 0) > 0 then
         GameTooltip:AddDoubleLine("In mail", tostring(line.inMail),
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
+    end
+
+    if (line.bought or 0) > 0 then
+        GameTooltip:AddLine(("%d bought on the auction house, waiting in the mail."):format(line.bought),
+            0.91, 0.76, 0.35)
     end
 
     if line.needsBankTrip then

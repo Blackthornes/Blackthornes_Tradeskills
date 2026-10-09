@@ -266,6 +266,9 @@ function Mail:Read()
 
     self:Reconcile(mails, complete)
 
+    -- Auction purchases taken out of the mail stop counting as on their way.
+    if ns.AHBuys then pcall(ns.AHBuys.Reconcile, ns.AHBuys, mails, complete, more) end
+
     -- Only a full reading can say a sale's mail is gone, and only one with
     -- every sale priced: one waiting on its amount is not in the ledger yet.
     -- An empty box the server has not answered for yet never gets here. Nor
