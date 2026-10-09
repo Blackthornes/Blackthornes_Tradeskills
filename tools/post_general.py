@@ -14,7 +14,9 @@ repository secret, which the owner makes in Discord (#general > Edit Channel >
 Integrations > Webhooks) and pastes into GitHub himself. Without the secret it
 does nothing. NEWS.md does not ship in the package, so before posting the
 text gets the same clear-to-post scan the package gets (check_package.py's
-PRIVATE list, and no player's name), and anything it finds stops the post. Mentions are switched
+PRIVATE list), and anything it finds stops the post. This post is the one
+place a player is named: it thanks, by their Discord name, whoever asked
+for or reported each change (the owner, 2026-10-09). Mentions are switched
 off, so nothing in it can ping the server.
 """
 
@@ -33,9 +35,10 @@ from check_package import PRIVATE  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIMIT = 1900  # Discord allows 2000 characters in a message; leave room for the link
 
-# A player's name never goes in a report (the owner, 2026-10-09). Names
-# can't be listed here without naming players, so this looks for the shapes
-# a name takes when someone is credited.
+# A player's name never goes in a report (the owner, 2026-10-09), except this
+# #general post, which thanks them; check_release.py uses this on CHANGELOG.md.
+# Names can't be listed here without naming players, so this looks for the
+# shapes a name takes when someone is credited.
 CREDIT = [
     re.compile(r"\b(?i:thanks|thank you|shout[- ]?out)[,!]?\s+(?:to\s+)?@?([A-Z][\w-]{2,})"),
     re.compile(r"\b(?i:requested|reported|asked|suggested|found|spotted|raised)\s+(?i:by)\s+@?([A-Z][\w-]{2,})"),
@@ -91,7 +94,7 @@ def main(argv):
     if not post:
         print("NEWS.md has no section for %s; nothing to post in #general." % version)
         return 0
-    found = not_clear(post) + ["a player's name (%s)" % n for n in names_a_player(post)]
+    found = not_clear(post)
     if found:
         print("Not posting in #general: the post holds %s." % ", ".join(found))
         return 1

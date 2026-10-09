@@ -10,8 +10,8 @@ with a section for that version, "## 0.2.0" or "## 0.2.0 - 2026-09-25". That
 is what players read on CurseForge, so a release without it is refused rather
 than shipped with last version's notes.
 
-It also refuses a CHANGELOG.md or NEWS.md section that credits a player by
-name: a player's name never goes in a report.
+It also refuses a CHANGELOG.md section that credits a player by name: a
+player's name never goes in a report (only the #general post thanks them).
 
 It also checks the TOC still says `## Version: @project-version@`: a version
 typed in by hand would disagree with the tag the packager builds.
@@ -56,25 +56,17 @@ def check(tag, changelog, toc):
 
 def named_players(tag, changelog):
     """A player's name never goes in a report (the owner, 2026-10-09): look in
-    this version's CHANGELOG.md and NEWS.md sections, which go to CurseForge
-    and Discord, for a credited player."""
+    this version's CHANGELOG.md section, which goes to CurseForge and
+    #announcements, for a credited player. NEWS.md, the #general post, is the
+    one place players are thanked by name, so it is not checked."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from announce_discord import section
     from post_general import names_a_player
     match = TAG.match(tag)
     if not match:
         return []
-    texts = [("CHANGELOG.md", changelog)]
-    news = os.path.join(ROOT, "NEWS.md")
-    if os.path.exists(news):
-        with open(news, encoding="utf-8") as f:
-            texts.append(("NEWS.md", f.read()))
-    problems = []
-    for name, text in texts:
-        for player in names_a_player(section(text, match.group(1)) or ""):
-            problems.append("%s names a player (%s); thank everyone instead"
-                            % (name, player))
-    return problems
+    return ["CHANGELOG.md names a player (%s); thank them in NEWS.md instead"
+            % player for player in names_a_player(section(changelog, match.group(1)) or "")]
 
 
 def main(argv):
