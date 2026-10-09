@@ -131,9 +131,15 @@ local function CreateCraftRow(row)
     end, { width = 18, height = 16 })
     row.plus:SetPoint("RIGHT", -24, 0)
 
+    -- On a sub-craft the x means never make it as one (Voldar, 2026-10-07):
+    -- taking it off alone would bring it straight back on the next rebuild.
     row.remove = Widgets.CreateButton(row, "x", function()
         if not row.data then return end
-        ns.Queue:Remove(row.data.recipeID)
+        if row.data.isDependency then
+            ns.Queue:NeverMake(row.data)
+        else
+            ns.Queue:Remove(row.data.recipeID)
+        end
     end, { width = 16, height = 16, tooltip = "Remove from queue" })
     row.remove:SetPoint("RIGHT", -4, 0)
 
@@ -273,7 +279,9 @@ local function UpdateCraftRow(row, entry)
     -- so anything set here would be recalculated away on the next change.
     row.minus:SetShown(not entry.isDependency)
     row.plus:SetShown(not entry.isDependency)
-    row.remove:SetShown(not entry.isDependency)
+    row.remove:Show()
+    row.remove.tooltipText = entry.isDependency and ns.Queue.NeverMakeTooltip
+        and ns.Queue:NeverMakeTooltip(entry) or nil
     row.quantity:SetShown(not entry.isDependency)
     row.count:SetShown(entry.isDependency == true)
     row.count:SetText(tostring(entry.quantity))

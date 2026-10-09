@@ -190,7 +190,9 @@ local function MakersByOutput()
             local itemID = type(recipe) == "table" and recipe.outputItemID
             local dropped = itemID and ns.Recipes.IsDropped
                 and ns.Recipes:IsDropped(recipe, characterKey)
-            if itemID and not dropped then
+            -- Nor a craft marked never to make as a sub-craft (Cost.lua).
+            local never = ns.Cost.IsNeverSubCraft and ns.Cost:IsNeverSubCraft(recipeID)
+            if itemID and not dropped and not never then
                 local list = byOutput[itemID] or {}
                 list[#list + 1] = { characterKey = characterKey, recipeID = recipeID, recipe = recipe }
                 byOutput[itemID] = list
@@ -585,6 +587,29 @@ function Queue:BuyInstead(entry)
     self:RebuildDependencies()
     self:Notify()
     return true
+end
+
+--- Never make this sub-craft again: buy its item instead, now and from now
+--- on (Cost:SetNeverSubCraft). The x on a sub-craft's row in the Queue tab
+--- and the craft pane. Settings > Queue lists it, with Allow to undo.
+function Queue:NeverMake(entry)
+    if not (entry and entry.isDependency) then return false end
+
+    local recipe = ns.Recipes:GetAny(entry.recipeID)
+    local name = (recipe and recipe.name) or ("recipe " .. tostring(entry.recipeID))
+    ns.Cost:SetNeverSubCraft(entry.recipeID, true, recipe and recipe.name)
+
+    ns.Print(("%s is no longer made as a sub-craft: the queue buys it instead. Allow puts it back, in Settings, Queue, Never made as sub-crafts.")
+        :format(name))
+    return true
+end
+
+--- The hover for the x on a sub-craft's row.
+function Queue:NeverMakeTooltip(entry)
+    local recipe = entry and ns.Recipes:GetAny(entry.recipeID)
+    local name = (recipe and recipe.name) or "this"
+    return ("Never make %s as a sub-craft\nBuy it instead, in this queue and from now on. It can still be queued on its own. Settings, Queue lists it with Allow to undo.")
+        :format(name)
 end
 
 --- What one of a sub-craft's items costs to buy and to make, for the note
@@ -1156,7 +1181,9 @@ local function AltRecipesByOutput()
                 local itemID = recipe.outputItemID
                 -- Not from a profession that character has dropped.
                 local dropped = ns.Recipes.IsDropped and ns.Recipes:IsDropped(recipe, characterKey)
-                if itemID and not dropped then
+                -- Nor one marked never to make as a sub-craft.
+                local never = ns.Cost.IsNeverSubCraft and ns.Cost:IsNeverSubCraft(recipeID)
+                if itemID and not dropped and not never then
                     local list = byOutput[itemID] or {}
                     list[#list + 1] = { characterKey = characterKey, recipeID = recipeID, recipe = recipe }
                     byOutput[itemID] = list
