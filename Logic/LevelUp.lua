@@ -45,8 +45,9 @@ end
 
 --- The order of the list: band, then real cost, then name.
 --
--- Real cost is the materials less the most the craft gets back (a vendor,
--- the auction house or a disenchant), so a craft that pays some of itself
+-- Real cost is the materials less what the craft gets back (a vendor, the
+-- auction house or a disenchant, as the Profit tab's "Profit:" choice says,
+-- the most of them on "Best"), so a craft that pays some of itself
 -- back ranks as the cheaper way up (asked 2026-10-05). It is the plain
 -- material cost where nothing comes back.
 --
@@ -123,9 +124,10 @@ end
 -- auction house cut like any listing. A soulbound craft never reaches the
 -- auction house, but a vendor and a disenchant still take it.
 --
--- @return { vendor, auction, disenchant, best, bestWay } in copper for one
---   craft (its whole yield), any of them nil; bestWay is "vendor", "auction"
---   or "disenchant". nil when the craft makes no item.
+-- @return { vendor, auction, disenchant, best, bestWay, method } in copper
+--   for one craft (its whole yield), any of them nil; bestWay is "vendor",
+--   "auction" or "disenchant", the way the Profit tab's choice counts.
+--   nil when the craft makes no item.
 function LevelUp:GetReturns(recipe, costDetail)
     local itemID = recipe and recipe.outputItemID
     if not itemID then return nil end
@@ -157,6 +159,17 @@ function LevelUp:GetReturns(recipe, costDetail)
         end
     end
 
+    -- The Profit tab's "Profit:" choice decides which way counts (asked
+    -- 2026-10-09), so the two tabs value a craft the same way. On "Best",
+    -- whichever pays most; on one way alone, that way or nothing back.
+    local method = LevelUp.Method()
+    result.method = method
+
+    if method ~= "best" then
+        if result[method] then result.best, result.bestWay = result[method], method end
+        return result
+    end
+
     -- Ties go to the vendor, then the auction house: the surer sale.
     for _, way in ipairs({ "vendor", "auction", "disenchant" }) do
         if result[way] and (not result.best or result[way] > result.best) then
@@ -165,6 +178,15 @@ function LevelUp:GetReturns(recipe, costDetail)
     end
 
     return result
+end
+
+--- How a craft's return is counted: the Profit tab's choice ("best",
+--- "auction", "vendor" or "disenchant"), "best" when there is none.
+function LevelUp.Method()
+    local Profit = ns.Profit
+    local method = Profit and Profit.GetMethod and Profit:GetMethod() or nil
+    if method == "auction" or method == "vendor" or method == "disenchant" then return method end
+    return "best"
 end
 
 --- One row of the list.
