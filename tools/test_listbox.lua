@@ -239,6 +239,7 @@ do
     Load(ns, "/Core/Util.lua")
     Load(ns, "/Logic/Posting.lua")
     Load(ns, "/UI/Widgets.lua")
+    Load(ns, "/UI/Columns.lua")
     Load(ns, "/UI/Tab_Post.lua")
 
     local lines = Lines()

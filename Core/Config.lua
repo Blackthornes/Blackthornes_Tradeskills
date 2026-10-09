@@ -330,6 +330,11 @@ local DEFAULTS = {
         -- from its "Per hour" tick box.
         profitShowsPerHour = false,
 
+        -- The columns a player hid (asked 2026-10-09): "list.key" for each,
+        -- separated by commas. Empty shows every column. Right-click a
+        -- list's headings, or Settings, Look & sound. See UI/Columns.lua.
+        hiddenColumns = "",
+
         -- Sharing (asked 2026-10-07, Ezmode on Discord). Characters on
         -- another account of yours, by name and separated by commas; empty
         -- shares nothing. Both sides add each other. See Logic/AccountLink.lua.

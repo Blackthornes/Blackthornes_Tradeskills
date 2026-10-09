@@ -141,7 +141,7 @@ ns.Recipes = { GetCharacters = function()
     return { { key = "Player-main", name = "Main", isCurrent = true, bankAt = 1000 } }
 end }
 
-for _, path in ipairs({ "Core/Util.lua", "Logic/Banks.lua", "UI/BankView.lua" }) do
+for _, path in ipairs({ "Core/Util.lua", "Logic/Banks.lua", "UI/Columns.lua", "UI/BankView.lua" }) do
     assert(loadfile(lfs_cwd .. "/" .. path))("Blackthornes_TS", ns)
 end
 

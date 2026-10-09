@@ -32,6 +32,9 @@ local COLUMNS = {
     { key = "need",   label = "NEED",   width = 42, justify = "CENTER" },
 }
 
+-- Any column with a heading can be hidden (UI/Columns.lua).
+ns.Columns:Register("gather", "Gather", COLUMNS)
+
 local SOURCE_LABELS = {
     vendor  = "Vendor",
     auction = "Auction",
@@ -98,6 +101,13 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+--- The shown columns from the right edge; the name has the rest.
+local function PlaceRow(row)
+    local offset = ns.Columns:Place("gather", COLUMNS, row.cells)
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 10, 0)
+    row.columnsVersion = ns.Columns.version
+end
+
 local function CreateRow(row)
     -- The item's icon beside its name, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 16)
@@ -107,23 +117,13 @@ local function CreateRow(row)
     row.name:SetPoint("LEFT", 30, 0)
 
     row.cells = {}
-
-    local offset = -8
-    local reserved = 18
-
     for _, column in ipairs(COLUMNS) do
         if column.key ~= "action" then
-            local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
-            cell:SetPoint("RIGHT", offset, 0)
-            cell:SetWidth(column.width)
-            row.cells[column.key] = cell
+            row.cells[column.key] = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
         end
-
-        offset = offset - column.width - 6
-        reserved = reserved + column.width + 6
     end
 
-    row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+    PlaceRow(row)
 
     row.search = Widgets.CreateButton(row, "AH", function()
         if row.data then UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall) end
@@ -142,6 +142,8 @@ local function CreateRow(row)
 end
 
 local function UpdateRow(row, line)
+    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
     local done = line.shortfall <= 0
 
     -- Greyed once you have it all. The link's own colour shows over the
@@ -362,18 +364,16 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 30, 0)
     nameHeading:SetText("MATERIAL")
 
-    local sortLabels = { name = nameHeading }
-    local offset = -8
+    local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(COLUMNS) do
         if column.label ~= "" then
             local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
-            heading:SetPoint("RIGHT", offset, 0)
-            heading:SetWidth(column.width)
             heading:SetText(column.label)
             sortLabels[column.key] = heading
+            cells[column.key] = heading
         end
-        offset = offset - column.width - 6
     end
+    ns.Columns:Place("gather", COLUMNS, cells)
 
     -- Click a heading to sort by it.
     widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
@@ -388,6 +388,14 @@ local function Build(container)
         need = function(line) return line.needed end,
     }, function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name", "source" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "gather", widgets.sorter)
+    ns.Columns:OnChange("gather", function()
+        ns.Columns:Place("gather", COLUMNS, cells)
+        if widgets.sorter then widgets.sorter:Sync() end
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

@@ -29,6 +29,9 @@ local COLUMNS = {
     { key = "market",    label = "MARKET",   width = 80, money = true, sample = "88g 88s 88c" },
 }
 
+-- Any column but the name can be hidden (UI/Columns.lua).
+ns.Columns:Register("prices", "Prices", COLUMNS)
+
 local state = {
     search = "",
     reagentsOnly = false,
@@ -335,6 +338,13 @@ local function CreateStar(parent, size, getItemID)
     return star
 end
 
+--- The shown columns from the right edge; the name has the rest.
+local function PlaceRow(row)
+    local offset = ns.Columns:Place("prices", COLUMNS, row.cells)
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 8, 0)
+    row.columnsVersion = ns.Columns.version
+end
+
 local function CreateRow(row)
     -- The favourite star at the row's left end, before the icon.
     row.star = CreateStar(row, 14, function() return row.data and row.data.itemID end)
@@ -348,25 +358,16 @@ local function CreateRow(row)
     row.name:SetPoint("LEFT", 46, 0)
 
     row.cells = {}
-
-    local offset = -8
-    local reserved = 16
-
     for _, column in ipairs(COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
-        cell:SetPoint("RIGHT", offset, 0)
-        cell:SetWidth(column.width)
-
-        row.cells[column.key] = cell
-
-        offset = offset - column.width - 6
-        reserved = reserved + column.width + 6
+        row.cells[column.key] = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
     end
 
-    row.name:SetPoint("RIGHT", row, "RIGHT", -reserved, 0)
+    PlaceRow(row)
 end
 
 local function UpdateRow(row, entry)
+    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
     entry.label = Util.GetItemLabel(entry.itemID)
     -- An item with its own price says so, in gold, beside its name.
     if Mine(entry.itemID) then
@@ -887,16 +888,14 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 46, 0)
     nameHeading:SetText("ITEM")
 
-    local sortLabels = { name = nameHeading }
-    local offset = -8
+    local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", column.justify or "RIGHT")
-        heading:SetPoint("RIGHT", offset, 0)
-        heading:SetWidth(column.width)
         heading:SetText(column.label)
         sortLabels[column.key] = heading
-        offset = offset - column.width - 6
+        cells[column.key] = heading
     end
+    ns.Columns:Place("prices", COLUMNS, cells)
 
     -- Click a heading to sort by it. Unknown ages sort as unknown, not as
     -- the oldest.
@@ -907,6 +906,14 @@ local function Build(container)
         age = function(row) return row.age ~= math.huge and row.age or nil end,
     }, function() ShowFromTop() end)
     if widgets.sorter then widgets.sorter:SetText({ "name" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "prices", widgets.sorter)
+    ns.Columns:OnChange("prices", function()
+        ns.Columns:Place("prices", COLUMNS, cells)
+        if widgets.sorter then widgets.sorter:Sync() end
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
