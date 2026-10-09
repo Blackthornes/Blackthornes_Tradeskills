@@ -160,5 +160,7 @@ function CraftTime:OnCastStart(_, unit, _, spellID)
 end
 
 function CraftTime:OnEnable()
-    ns.RegisterEvent(self, "UNIT_SPELLCAST_START", self.OnCastStart)
+    -- Only the player's casts are wanted (ns.RegisterPlayerEvent).
+    local RegisterForPlayer = ns.RegisterPlayerEvent or ns.RegisterEvent
+    RegisterForPlayer(self, "UNIT_SPELLCAST_START", self.OnCastStart)
 end

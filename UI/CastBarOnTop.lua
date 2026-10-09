@@ -160,10 +160,15 @@ function CastBar:OnCastEnd(_, unit)
     end)
 end
 
-CastBar:RegisterEvent("UNIT_SPELLCAST_START", CastBar.OnCastStart)
-CastBar:RegisterEvent("UNIT_SPELLCAST_STOP", CastBar.OnCastEnd)
-CastBar:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED", CastBar.OnCastEnd)
-CastBar:RegisterEvent("UNIT_SPELLCAST_FAILED", CastBar.OnCastEnd)
+-- Only the player's casts are wanted (ns.RegisterPlayerEvent).
+local function RegisterForPlayer(event, fn)
+    if ns.RegisterPlayerEvent then return ns.RegisterPlayerEvent(CastBar, event, fn) end
+    return CastBar:RegisterEvent(event, fn)
+end
+RegisterForPlayer("UNIT_SPELLCAST_START", CastBar.OnCastStart)
+RegisterForPlayer("UNIT_SPELLCAST_STOP", CastBar.OnCastEnd)
+RegisterForPlayer("UNIT_SPELLCAST_INTERRUPTED", CastBar.OnCastEnd)
+RegisterForPlayer("UNIT_SPELLCAST_FAILED", CastBar.OnCastEnd)
 
 --- /bts castbar: which cast bar was found and what layer it is on now.
 local function Describe()

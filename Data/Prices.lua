@@ -519,8 +519,10 @@ function Prices:GetValue(itemID, which)
     -- Guildmates' prices (Logic/GuildPrices.lua, off unless the player turns
     -- it on) fill a gap: an item never priced here, or one whose price has
     -- gone stale while theirs is newer. A fresh scan of your own always wins.
+    -- Only asked when it could be used: their answer is sorted out of every
+    -- guildmate's, and prices are read many times a redraw.
     local guild = ns.GuildPrices
-    if guild and guild.IsOn and guild:IsOn() then
+    if guild and guild.IsOn and guild:IsOn() and (not scanned or self:IsStale(itemID)) then
         local shared, sharedAt = guild:GetValue(itemID, which)
         if shared then
             local record = self:GetTable()[itemID]
