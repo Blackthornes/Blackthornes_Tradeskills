@@ -554,6 +554,9 @@ function()
     ns.PrintRaw(("  GetRecipeDifficulty: %s   classic list: %s"):format(
         Accent(tostring(Util.HasFunction("C_TradeSkillUI.GetRecipeDifficulty"))),
         Accent(tostring(Util.HasFunction("GetTradeSkillInfo")))))
+    ns.PrintRaw(("  IsTradeSkillReady: %s   window still settling: %s"):format(
+        Accent(tostring(Util.HasFunction("C_TradeSkillUI.IsTradeSkillReady"))),
+        Accent(tostring(ns.Recipes.WindowSettling and ns.Recipes.WindowSettling() or false))))
 
     -- A live read beats anything cached, so it is tried first and reported as
     -- what it is: what this client answered, just now.
