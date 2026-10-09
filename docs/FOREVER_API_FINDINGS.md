@@ -395,8 +395,16 @@ lower; on all the items above the two tables give the same answer, so this
 data cannot tell them apart, and neither explains magic essence from a Dire
 Wand. So an item's own results now win once it has been disenchanted three
 times and its most likely result differs from its row
-(`Disenchant.ITEM_LEARN_AFTER`, `DisenchantLog:GetItem`). Not yet seen: a
-green weapon above item level 20.
+(`Disenchant.ITEM_LEARN_AFTER`, `DisenchantLog:GetItem`).
+
+**Green weapons of item level 21 to 30 give Greater Magic Essence**
+(2026-10-09). Twelve Dire Wands (item level 26) gave Greater Magic 7 times
+(1-2 each), Soul Dust 3 and Large Glimmering Shard 2; a player's Forester's
+Axe (item level 23) gave 2 Greater Magic. The dust and shard are the Classic
+row's, only the essence is lower, and armour of the same levels still gives
+astral. The table carries this as `weaponEssence` on those two rows. Not yet
+seen: a green weapon above item level 30, or a weapon of 21 to 25 giving its
+dust or shard.
 
 ## Still unverified
 

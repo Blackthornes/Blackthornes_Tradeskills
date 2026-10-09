@@ -36,7 +36,7 @@ GetTime = function() return 1 end
 time = time or os.time
 
 local STRANGE_DUST, LESSER_ASTRAL, SMALL_GLIMMERING = 10940, 10998, 10978
-local SMALL_GLOWING, NEXUS = 11138, 20725
+local SMALL_GLOWING, NEXUS, GREATER_MAGIC = 11138, 20725, 10939
 
 -- itemID -> quality, itemLevel, equipLoc, classID, bindType, sellPrice
 local items = {
@@ -51,6 +51,8 @@ local items = {
     [1009] = { 2, 20, "INVTYPE_RANGEDRIGHT", 2, 0, 50 }, -- a green wand from a mob: can
     [11288] = { 2, 21, "INVTYPE_RANGEDRIGHT", 2, 0, 50, "Greater Magic Wand" },
     [1010] = { 2, 31, "INVTYPE_RANGEDRIGHT", 2, 0, 50, "Lesser Mystic Wand" },
+    [1011] = { 2, 26, "INVTYPE_RANGEDRIGHT", 2, 0, 50, "Dire Wand" },
+    [1012] = { 2, 26, "INVTYPE_FEET", 4, 0, 50 },     -- green armour, level 26
 }
 
 C_Item = {
@@ -64,6 +66,7 @@ C_Item = {
 
 local prices = {
     [STRANGE_DUST] = 160, [LESSER_ASTRAL] = 1000, [SMALL_GLIMMERING] = 2000,
+    [GREATER_MAGIC] = 1000,
     [1001] = 700,    -- worth less sold than disenchanted (800)
     [1002] = 5000,   -- worth more sold than disenchanted (1500)
 }
@@ -160,8 +163,19 @@ check("then a Small Glimmering Shard", armour[3].itemID == SMALL_GLIMMERING and 
 check("and needs Enchanting 25", facts.skill == 25)
 
 local weapon = Disenchant:GetOutcomes(1002)
-check("a weapon gives mostly essence", weapon[1].itemID == LESSER_ASTRAL and weapon[1].chance == 0.75)
+-- Forever's own (2026-10-09): green weapons of item level 21 to 30 give
+-- Greater Magic Essence where armour of the same level gives astral.
+check("a weapon gives mostly essence, Greater Magic on Forever",
+    weapon[1].itemID == GREATER_MAGIC and weapon[1].chance == 0.75)
 check("and dust less often", weapon[2].itemID == STRANGE_DUST and weapon[2].chance == 0.15)
+
+local direWand = Disenchant:GetOutcomes(1011)
+check("a level 26 green weapon gives Greater Magic Essence on Forever",
+    direWand[1].itemID == GREATER_MAGIC and direWand[1].min == 1 and direWand[1].max == 2)
+check("with Soul Dust and Large Glimmering Shard, as seen in game",
+    direWand[2].itemID == 11083 and direWand[3].itemID == 11084)
+local boots = Disenchant:GetOutcomes(1012)
+check("level 26 green armour still gives Greater Astral as its essence", boots[2].itemID == 11082)
 
 local blue = Disenchant:GetOutcomes(1003)
 check("a level 33 blue gives a Small Glowing Shard", #blue == 1 and blue[1].itemID == SMALL_GLOWING)
