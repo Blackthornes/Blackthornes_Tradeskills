@@ -479,7 +479,7 @@ check("GOLD/HR is the profit for an hour of casts", row.cells[2].color == "profi
 ns.CraftTime = nil
 ns.db.castTimes = nil
 
--- Trent, 2026-10-08: the names drew white. Most rows are items read in an
+-- Reported 2026-10-08: the names drew white. Most rows are items read in an
 -- earlier session that the client's cache no longer holds, so the name's
 -- rarity comes from the facts kept in the saved data, without asking the
 -- client for the item again.
