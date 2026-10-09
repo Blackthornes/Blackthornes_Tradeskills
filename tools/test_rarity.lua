@@ -135,6 +135,8 @@ ns.UI = Stub({
     RegisterTab = function(_, registered) tab = registered end,
 })
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+
 do
     local chunk = assert(loadfile(lfs_cwd .. "/UI/Tab_Profit.lua"))
     chunk("Blackthornes_TS", ns)

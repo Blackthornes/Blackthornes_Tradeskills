@@ -323,6 +323,7 @@ end
 Load("/Core/Util.lua")
 Load("/UI/Theme.lua")
 Load("/UI/Widgets.lua")
+Load("/UI/Columns.lua")
 Load("/UI/Collapse.lua")
 Load("/UI/PriceGraph.lua")
 Load("/UI/Main.lua")

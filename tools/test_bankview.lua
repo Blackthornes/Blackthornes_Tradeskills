@@ -124,7 +124,7 @@ ns.UI = {
     SelectTab = function() end,
 }
 
-for _, path in ipairs({ "Logic/Banks.lua", "UI/BankView.lua", "UI/Tab_Characters.lua" }) do
+for _, path in ipairs({ "Logic/Banks.lua", "UI/Columns.lua", "UI/BankView.lua", "UI/Tab_Characters.lua" }) do
     assert(loadfile(lfs_cwd .. "/" .. path))("Blackthornes_TS", ns)
 end
 

@@ -54,6 +54,14 @@ local COLUMNS = {
     { key = "cost",   label = "COST",   width = 70, money = true },
 }
 
+-- Any column but the craft's name can be hidden as well (UI/Columns.lua).
+ns.Columns:Register("profit", "Profit", COLUMNS)
+
+local MARGIN_COLUMN
+for _, column in ipairs(COLUMNS) do
+    if column.key == "margin" then MARGIN_COLUMN = column end
+end
+
 -- Bumped whenever the visible column set changes, so recycled rows know to
 -- re-anchor rather than keeping a stale layout.
 local layoutVersion = 1
@@ -104,6 +112,7 @@ local function Method()
 end
 
 local function IsColumnVisible(column)
+    if not ns.Columns:Shown("profit", column) then return false end
     if column.accountWideOnly then return state.accountWide end
     if column.bestOnly then return Method() == "best" end
     if column.disenchantOnly then return state.showDisenchant end
@@ -134,6 +143,7 @@ local function ApplyRowLayout(row)
     row.marginBar:SetPoint("TOP", row.cells.margin, "BOTTOM", 0, -1)
 
     row.layoutVersion = layoutVersion
+    row.columnsVersion = ns.Columns.version
 end
 
 local function CreateRow(row)
@@ -319,7 +329,7 @@ end
 local function UpdateRow(row, analysis)
     -- Rows are recycled, so one built under a different column set has to
     -- be re-anchored before it is filled.
-    if row.layoutVersion ~= layoutVersion then
+    if row.layoutVersion ~= layoutVersion or row.columnsVersion ~= ns.Columns.version then
         ApplyRowLayout(row)
     end
 
@@ -409,7 +419,8 @@ local function UpdateRow(row, analysis)
     cells.margin:SetTextColor(Theme.ProfitColor(analysis.profit))
 
     -- Full at 100% and over; a loss draws no bar, its red number says it.
-    if (analysis.profit or 0) > 0 then
+    -- Nor does a hidden MARGIN column.
+    if (analysis.profit or 0) > 0 and IsColumnVisible(MARGIN_COLUMN) then
         row.marginBar:Set(math.min(1, analysis.margin or 0), "profit")
     end
 
@@ -1681,6 +1692,14 @@ local function BuildCrafts(container)
     if widgets.sorter then widgets.sorter:SetText({ "name", "who", "via" }) end
 
     ApplyHeadingLayout()
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "profit", widgets.sorter)
+    ns.Columns:OnChange("profit", function()
+        layoutVersion = layoutVersion + 1
+        ApplyHeadingLayout()
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

@@ -59,6 +59,9 @@ local COLUMNS = {
     { key = "via",    label = "VIA",    width = 44, justify = "CENTER" },
 }
 
+-- Any column but the name can be hidden (UI/Columns.lua).
+ns.Columns:Register("deals", "Deals", COLUMNS)
+
 local state = {
     view = "flips",
     routes = { auction = true, vendor = true },
@@ -162,18 +165,9 @@ end
 --------------------------------------------------------------------------------
 
 local function ApplyRowLayout(row)
-    local offset = -8
-
-    for index, column in ipairs(COLUMNS) do
-        local cell = row.cells[index]
-        cell:ClearAllPoints()
-        cell:SetPoint("RIGHT", row, "RIGHT", offset, 0)
-        cell:SetWidth(column.width)
-        cell:SetJustifyH(column.justify or "RIGHT")
-        offset = offset - column.width - 6
-    end
-
+    local offset = ns.Columns:Place("deals", COLUMNS, row.cells, { byIndex = true })
     row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    row.columnsVersion = ns.Columns.version
 end
 
 local function CreateRow(row)
@@ -184,8 +178,8 @@ local function CreateRow(row)
     row.name:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
 
     row.cells = {}
-    for index = 1, #COLUMNS do
-        row.cells[index] = Theme.CreateLabel(row, "small", "text", "RIGHT")
+    for index, column in ipairs(COLUMNS) do
+        row.cells[index] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
     end
 
     ApplyRowLayout(row)
@@ -224,6 +218,8 @@ local function FillCell(cell, key, entry)
 end
 
 local function UpdateRow(row, entry)
+    if row.columnsVersion ~= ns.Columns.version then ApplyRowLayout(row) end
+
     Theme.SetRowName(row.name, entry.name or ("item " .. tostring(entry.itemID)))
     Theme.SetItemIcon(row.icon, entry.itemID)
 
@@ -844,16 +840,13 @@ local function Build(container)
     nameHeading:SetText("ITEM")
 
     widgets.headings = {}
-    local offset = -8
     for index, column in ipairs(COLUMNS) do
         local heading = Theme.CreateLabel(headings, "tiny", "muted", "RIGHT")
         heading:SetText(column.label)
-        heading:SetPoint("RIGHT", offset, 0)
-        heading:SetWidth(column.width)
         heading:SetJustifyH(column.justify or "RIGHT")
-        offset = offset - column.width - 6
         widgets.headings[index] = heading
     end
+    ns.Columns:Place("deals", COLUMNS, widgets.headings, { byIndex = true })
 
     -- Click a heading to sort by it.
     local sortLabels, values = { name = nameHeading }, {
@@ -866,6 +859,14 @@ local function Build(container)
     widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, values,
         function() Refresh() end)
     if widgets.sorter then widgets.sorter:SetText({ "name" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "deals", widgets.sorter)
+    ns.Columns:OnChange("deals", function()
+        ns.Columns:Place("deals", COLUMNS, widgets.headings, { byIndex = true })
+        if widgets.sorter then widgets.sorter:Sync() end
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     local divider = Theme.CreateDivider(flipsView, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)

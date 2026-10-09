@@ -23,27 +23,18 @@ local MATERIALS_WIDTH = 420
 -- AH button occupies the rightmost slot. COST sits to the right, so its
 -- coins line up; NEED and HAVE are centred under their headings. `width` is
 -- the least each gets: Widgets.FitColumns widens it to fit the heading and
--- all three coins ("12g 34s 56c"), and PlaceMaterialColumns works out the
--- offsets from there, with a gap between every column.
+-- all three coins ("12g 34s 56c"), and PlaceMaterialRow lays the shown
+-- ones out from there, with a gap between every column.
 local MATERIAL_COLUMNS = {
     { key = "cost", label = "COST", width = 70, money = true },
     { key = "have", label = "HAVE", width = 42, justify = "CENTER" },
     { key = "need", label = "NEED", width = 42, justify = "CENTER" },
 }
 
-local MATERIAL_NAME_INSET = -214
+-- Any of them can be hidden, never the material's name (UI/Columns.lua).
+ns.Columns:Register("queue", "Queue: materials", MATERIAL_COLUMNS)
 
-local function PlaceMaterialColumns()
-    if Widgets.FitColumns then Widgets.FitColumns(MATERIAL_COLUMNS) end
-
-    local offset = -36
-    for _, column in ipairs(MATERIAL_COLUMNS) do
-        column.offset = offset
-        offset = offset - column.width - 8
-    end
-    MATERIAL_NAME_INSET = offset
-end
-PlaceMaterialColumns()
+if Widgets.FitColumns then Widgets.FitColumns(MATERIAL_COLUMNS) end
 
 -- The queued amount is a box you can type in (asked 2026-10-05: taking 100
 -- off meant 100 clicks on -). Wide enough for four digits; the label it
@@ -325,21 +316,25 @@ end
 -- Material rows
 --------------------------------------------------------------------------------
 
+--- The shown columns from the AH button inward; the name has the rest.
+local function PlaceMaterialRow(row)
+    local offset = ns.Columns:Place("queue", MATERIAL_COLUMNS, row.cells, { start = -36, gap = 8 })
+    row.name:SetPoint("RIGHT", row, "RIGHT", offset, 0)
+    row.columnsVersion = ns.Columns.version
+end
+
 local function CreateMaterialRow(row)
     row.icon = Theme.CreateItemIcon(row, 14)
     row.icon:SetPoint("LEFT", 6, 0)
 
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 24, 0)
-    row.name:SetPoint("RIGHT", row, "RIGHT", MATERIAL_NAME_INSET, 0)
 
     row.cells = {}
     for _, column in ipairs(MATERIAL_COLUMNS) do
-        local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
-        cell:SetPoint("RIGHT", column.offset, 0)
-        cell:SetWidth(column.width)
-        row.cells[column.key] = cell
+        row.cells[column.key] = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
     end
+    PlaceMaterialRow(row)
 
     row.search = Widgets.CreateButton(row, "AH", function()
         if row.data then UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall) end
@@ -348,6 +343,8 @@ local function CreateMaterialRow(row)
 end
 
 local function UpdateMaterialRow(row, line)
+    if row.columnsVersion ~= ns.Columns.version then PlaceMaterialRow(row) end
+
     -- The name in its item colour, unless it is recoloured below: a link's
     -- own colour shows over the label's, so a recoloured name goes without.
     local label = Util.GetItemLabel(line.itemID)
@@ -773,8 +770,8 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
-    -- Before any row or heading is laid out: they read these places.
-    PlaceMaterialColumns()
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(MATERIAL_COLUMNS) end
 
     local heading = Theme.CreateLabel(container, "tiny", "accent")
     heading:SetPoint("TOPLEFT", 8, -10)
@@ -926,14 +923,14 @@ local function Build(container)
     nameHeading:SetPoint("LEFT", 24, 0)
     nameHeading:SetText("MATERIAL")
 
-    local sortLabels = { name = nameHeading }
+    local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(MATERIAL_COLUMNS) do
         local heading = Theme.CreateLabel(columnHeader, "tiny", "muted", column.justify or "RIGHT")
-        heading:SetPoint("RIGHT", column.offset, 0)
-        heading:SetWidth(column.width)
         heading:SetText(column.label)
         sortLabels[column.key] = heading
+        cells[column.key] = heading
     end
+    ns.Columns:Place("queue", MATERIAL_COLUMNS, cells, { start = -36, gap = 8 })
 
     -- Click a heading to sort the materials by it.
     widgets.materialSorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
@@ -946,6 +943,14 @@ local function Build(container)
         need = function(line) return line.needed end,
     }, function() Refresh() end)
     if widgets.materialSorter then widgets.materialSorter:SetText({ "name" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(columnHeader, "queue", widgets.materialSorter)
+    ns.Columns:OnChange("queue", function()
+        ns.Columns:Place("queue", MATERIAL_COLUMNS, cells, { start = -36, gap = 8 })
+        if widgets.materialSorter then widgets.materialSorter:Sync() end
+        if widgets.materialList then widgets.materialList:Refresh() end
+    end)
 
     local materialsDivider = Theme.CreateDivider(materials)
     materialsDivider:SetPoint("TOPLEFT", 10, -45)

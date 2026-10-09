@@ -198,6 +198,8 @@ end
 local tabs = {}
 ns.UI = Stub({ RegisterTab = function(_, registered) tabs[registered.key] = registered end })
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
+
 assert(loadfile(lfs_cwd .. "/UI/Tab_Profit.lua"))("Blackthornes_TS", ns)
 
 tabs.profit.build(Stub())
