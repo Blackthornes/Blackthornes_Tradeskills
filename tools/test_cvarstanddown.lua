@@ -74,9 +74,11 @@ assert(Persist.lastSave == nil, "a CVar save was recorded")
 Persist:SaveAll()
 assert(Persist.clearedChunks == 2, "second save misbehaved")
 
--- 5. And with the game losing the file, the store still works as before.
+-- 5. With the game losing the file, the database is still not written:
+--    big CVars can corrupt Config.wtf (turned off 2026-10-09).
 Fresh("nil")
 assert(Persist:SaveAll(), "fallback save failed")
-assert(cvars.BTS_store1 and #cvars.BTS_store1 > 0, "fallback wrote nothing")
+assert(cvars.BTS_store1 == nil, "the database was written to CVars")
+assert(cvars.BTS_session == nil, "a session stamp was written")
 
 print("all CVar stand-down tests passed")

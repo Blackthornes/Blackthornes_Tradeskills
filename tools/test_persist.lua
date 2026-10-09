@@ -1,4 +1,6 @@
--- Simulate the CVar store across a logout: save, wipe memory, load, compare.
+-- The CVar store no longer writes the database (turned off 2026-10-09: big
+-- CVars can corrupt Config.wtf). SaveAll must write nothing in any case and
+-- empty what an older version left; LoadAll still reads such leftovers once.
 local cvars = {}
 C_CVar = {
     RegisterCVar = function(name, value) if cvars[name] == nil then cvars[name] = value or "" end end,
@@ -61,43 +63,58 @@ local function Check(name, ok, detail)
     if not ok then failures = failures + 1 end
 end
 
--- 1. Normal round trip.
-ns.db = BuildDB(1000)
-local saved = Persist:SaveAll()
-Check("save 1000 prices", saved, "SaveAll returned false")
-Check("chunks used <= 8", Persist.lastSave.chunks <= 8, Persist.lastSave.chunks)
-
-local restored = Persist:LoadAll()
-Check("load returns a table", type(restored) == "table")
-Check("prices survived", restored and DeepEqual(ns.db.prices, restored.prices, "prices"))
-Check("queue survived", restored and DeepEqual(ns.db.queue, restored.queue, "queue"))
-Check("probe report excluded", restored and restored.probe and restored.probe.lastReport == nil)
-Check("canary kept", restored and restored.probe and restored.probe.canary.session == 3)
-
--- 2. A shorter save must not leave old chunks behind.
-local bigChunks = Persist.lastSave.chunks
-ns.db = BuildDB(5)
-Persist:SaveAll()
-Check("shorter save uses fewer chunks", Persist.lastSave.chunks < bigChunks,
-    Persist.lastSave.chunks .. " vs " .. bigChunks)
-local small = Persist:LoadAll()
-local count = 0
-for _ in pairs(small.prices["Classic Beta PvE 2-Horde"]) do count = count + 1 end
-Check("stale chunks did not corrupt load", count == 5, count)
-
--- 3. Over budget: must prune, not fail.
-ns.db = BuildDB(12000)
-warnings = {}
-local ok2 = Persist:SaveAll()
-Check("over-budget save still succeeds", ok2, table.concat(warnings, "; "))
-if ok2 then
-    Check("pruned to fit budget", Persist.lastSave.chunks <= 8, Persist.lastSave.chunks)
-    Check("reported dropping prices", (Persist.lastSave.dropped or 0) > 0, Persist.lastSave.dropped)
-    local trimmed = Persist:LoadAll()
-    Check("pruned data still loads", type(trimmed) == "table" and trimmed.queue[1].quantity == 5)
+--- Lay down chunks the way versions before 2026-10-09 wrote them.
+local function WriteOldStore(db)
+    local text = ns.Serialize.Encode(db)
+    local chunks = math.max(1, math.ceil(#text / 60000))
+    for index = 1, chunks do
+        cvars["BTS_store" .. index] = text:sub((index - 1) * 60000 + 1, index * 60000)
+    end
+    cvars["BTS_storeCount"] = tostring(chunks)
+    return chunks
 end
 
--- 4. A missing chunk must be refused, not half-loaded.
+local function Written()
+    local bytes = 0
+    for name, value in pairs(cvars) do
+        if name:find("^BTS_store%d") then bytes = bytes + #value end
+    end
+    return bytes
+end
+
+-- 1. The game lost the saved file: still nothing written.
+ns.Config.loadDiagnostics = { globalType = "nil" }
+ns.db = BuildDB(1000)
+local saved = Persist:SaveAll()
+Check("save reports success", saved, "SaveAll returned false")
+Check("no database chunks written", Written() == 0, Written())
+Check("no session stamp written", cvars["BTS_session"] == nil, cvars["BTS_session"])
+Check("no save recorded", Persist.lastSave == nil)
+
+-- 2. The game kept the file: nothing written either.
+ns.Config.loadDiagnostics = { globalType = "table" }
+Persist.storeCleared = nil
+Persist:SaveAll()
+Check("still no chunks when the game keeps data", Written() == 0, Written())
+
+-- 3. Chunks an older version left still load once.
+local old = BuildDB(1000)
+local chunks = WriteOldStore(old)
+Check("old store spans more than one chunk", chunks > 1, chunks)
+local restored = Persist:LoadAll()
+Check("old store loads", type(restored) == "table")
+Check("prices survived", restored and DeepEqual(old.prices, restored.prices, "prices"))
+Check("queue survived", restored and DeepEqual(old.queue, restored.queue, "queue"))
+
+-- 4. And the next save empties them.
+Persist.storeCleared = nil
+Persist:SaveAll()
+Check("old chunks emptied", Written() == 0, Written())
+Check("store count reset", cvars["BTS_storeCount"] == "0", cvars["BTS_storeCount"])
+Check("nothing loads afterwards", Persist:LoadAll() == nil)
+
+-- 5. A missing chunk must be refused, not half-loaded.
+WriteOldStore(BuildDB(1000))
 cvars["BTS_store2"] = ""
 warnings = {}
 local broken = Persist:LoadAll()
@@ -105,3 +122,4 @@ Check("missing chunk refuses to load", broken == nil, "returned data anyway")
 Check("missing chunk warns", #warnings > 0)
 
 print(failures == 0 and "\nall persistence tests passed" or ("\n" .. failures .. " failure(s)"))
+if failures > 0 then error(failures .. " persistence failure(s)") end

@@ -1,6 +1,6 @@
 -- The cold-start half of the CVar store.
 --
--- test_persist.lua covers the round trip against a client whose RegisterCVar
+-- test_persist.lua covers reading back against a client whose RegisterCVar
 -- leaves an existing value alone. That is the well-behaved case, and it is
 -- also the only case a /reload or a trip to character select can ever
 -- exercise, because neither ends the client process and the name is therefore
@@ -86,9 +86,17 @@ end
 
 --------------------------------------------------------------------------------
 
--- 1. Save from one process.
-ns.db = BuildDB(200)
-Check("save succeeds", Persist:SaveAll())
+-- 1. A store left by one process, written the way versions before
+--    2026-10-09 did (nothing writes it now; it is only read back once).
+do
+    local text = ns.Serialize.Encode(BuildDB(200))
+    local chunks = math.max(1, math.ceil(#text / 60000))
+    for index = 1, chunks do
+        cvars["BTS_store" .. index] = text:sub((index - 1) * 60000 + 1, index * 60000)
+    end
+    cvars["BTS_storeCount"] = tostring(chunks)
+    cvars["BTS_session"] = ("%d,%d"):format(Persist.ProcessStart(), time())
+end
 Check("session stamp written", cvars["BTS_session"] == "999500,1000000", cvars["BTS_session"])
 
 -- 2. A /reload: same process, so the clock agrees.
