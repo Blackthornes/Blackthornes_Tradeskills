@@ -4,6 +4,27 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.41.0
+
+For WoW: Forever (interface 16001). A file was added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- Any craft can now be marked **never made as a sub-craft**: crafts that
+  need its item buy it instead, in every cost, the queue, the shopping
+  list and the alt suggestions, on every character. The craft can still be
+  queued and sold on its own. Mark one with the new SUB-CRAFT Make / Buy
+  button on the Level Up tab (with a **Sub-crafts only** tick box to list
+  just those), or with the x on a queued sub-craft. Settings > Queue >
+  **Never made as sub-crafts** lists them with what each costs to buy and
+  an **Allow** button to undo it.
+- Set your own price on **Ready to sell**: click a row's price to open a
+  small "Your price" window with the price each, how many and the total,
+  all editable and kept in step. It shows the suggested price with a
+  **Use suggested** button, how far under market you are and roughly what
+  comes back after the cut. **List** lists it at that price; **Keep as my
+  price** saves it on the Prices tab, otherwise it lasts the session. The
+  window grows to fit its notes at any text size.
+
 ## 0.40.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
