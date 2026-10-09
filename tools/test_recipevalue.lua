@@ -437,6 +437,26 @@ do
   check("a hidden region is not measured", with, without)
 end
 
+-- Row 7: four times a second most rows are as they were, and placing a value
+-- again makes the game lay the row out again. An unchanged row is left alone;
+-- one whose text changed is placed again.
+do
+  local row = Row("Bolt of Woolen Cloth", { count = "[5]" })
+  RecipeValue:DecorateRow(row)
+
+  local placed = 0
+  local setPoint = row.label.SetPoint
+  row.label.SetPoint = function(...) placed = placed + 1; return setPoint(...) end
+
+  local outcome, placement = RecipeValue:DecorateRow(row)
+  check("an unchanged row is not placed again", placed, 0)
+  check("and still reports its value and place", outcome .. " " .. placement, "valued inline")
+
+  row.Text.text = "Bolt of Woolen Cloth [12]"
+  RecipeValue:DecorateRow(row)
+  check("a row whose text changed is placed again", placed, 1)
+end
+
 -- The measurement itself, for the justifications a client might use.
 do
   local left = Region("Copper Chain Belt", 20)

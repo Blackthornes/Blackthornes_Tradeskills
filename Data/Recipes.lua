@@ -590,6 +590,59 @@ function Recipes:OnWindowChanged()
     self.windowGeneration = (self.windowGeneration or 0) + 1
 end
 
+--- What a harvest's answers depend on that can change while the window stays
+--- open: how many recipes it lists, and every profession's skill level (a
+--- point gained turns recipe colours). Nil when the client will not say.
+function Recipes:HarvestSignature()
+    local ok, recipeIDs = pcall(C_TradeSkillUI.GetAllRecipeIDs)
+    if not ok or type(recipeIDs) ~= "table" then return nil end
+
+    local parts = { #recipeIDs }
+    if ns.SkillUp and ns.SkillUp.ReadSkillLevels then
+        local levels = ns.SkillUp:ReadSkillLevels()
+        local lines = {}
+        for skillLineID in pairs(levels) do lines[#lines + 1] = skillLineID end
+        table.sort(lines)
+        for _, skillLineID in ipairs(lines) do
+            parts[#parts + 1] = skillLineID .. "=" .. tostring(levels[skillLineID])
+        end
+    end
+    return table.concat(parts, ",")
+end
+
+--- Is a craft casting, or a run of them under way?
+local function CraftUnderWay()
+    if ns.Crafting and ns.Crafting.active then return true end
+
+    local api = C_TradeSkillUI
+    local repeating = type(api) == "table" and api.IsRecipeRepeating
+    if type(repeating) == "function" then
+        local ok, yes = pcall(function() return repeating() == true end)
+        if ok and yes then return true end
+    end
+
+    local castBar = ns.CastBarOnTop
+    if castBar and castBar.IsCrafting then
+        local ok, yes = pcall(castBar.IsCrafting, castBar)
+        if ok and yes then return true end
+    end
+    return false
+end
+
+--- Whether a list update in the middle of a run of crafts has nothing new to
+--- read. Every craft changes the bags, the window says its list changed, and
+--- reading every recipe again each time was a hitch per craft that a player
+--- saw as a jerky craft bar (2026-10-09). The bags are not in the cache, so
+--- such an update is skipped unless the same window has since listed more
+--- recipes or a skill point came, which still reads at once.
+function Recipes:NothingNewMidCraft()
+    local last = self.lastHarvest
+    if not last or last.generation ~= self.windowGeneration then return false end
+    if not CraftUnderWay() then return false end
+    local signature = self:HarvestSignature()
+    return signature ~= nil and signature == last.signature
+end
+
 function Recipes:Harvest()
     local trade = ns.Compat:Get().tradeskill
     if trade.mode ~= "modern" then return false end
@@ -606,6 +659,7 @@ function Recipes:Harvest()
 
     self.harvesting = true
     local generation = self.windowGeneration
+    local signature = self:HarvestSignature()
 
     -- Difficulties are only readable while this window is open, so they are
     -- collected alongside the recipes rather than looked up later.
@@ -694,6 +748,7 @@ function Recipes:Harvest()
         onDone = function()
             self.harvesting = false
             record.recipesCachedAt = time()
+            self.lastHarvest = { generation = generation, signature = signature }
 
             if ns.SkillUp then ns.SkillUp:EndCapture() end
 
@@ -740,6 +795,7 @@ function Recipes:OnTradeSkillUpdate()
             return
         end
         Recipes.harvestTimer = nil
+        if Recipes:NothingNewMidCraft() then return end
         Recipes:Harvest()
     end
 

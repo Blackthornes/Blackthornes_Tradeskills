@@ -762,6 +762,25 @@ RecipeValue.NAME_GAP = NAME_GAP
 RecipeValue.RIGHT_INSET = RIGHT_INSET
 RecipeValue.MIN_NAME_WIDTH = MIN_NAME_WIDTH
 
+-- What each row looked like when its value was last placed, so a row nothing
+-- has changed on is left alone. Weak keys, like the labels.
+local drawn = setmetatable({}, { __mode = "k" })
+
+--- One string for what a row's value placement depends on: the recipe, the
+--- value, the row's edges, and every piece of text on it with where it sits.
+local function RowKey(row, label, recipeID, text)
+    local parts = { tostring(recipeID), text,
+        tostring(Try(Field(row, "GetLeft"), row)), tostring(Try(Field(row, "GetRight"), row)) }
+
+    for _, region in ipairs(TextRegions(row, label)) do
+        parts[#parts + 1] = TextOf(region) or ""
+        parts[#parts + 1] = tostring(Try(Field(region, "GetLeft"), region))
+        parts[#parts + 1] = tostring(Try(Field(region, "GetWidth"), region))
+    end
+
+    return table.concat(parts, "\031")
+end
+
 --- Write one row's value, or take it away.
 -- @return outcome, placement -- outcome is "valued", "unpriced", "unresolved"
 --   or "nolabel"; placement is how a shown value had to be positioned.
@@ -772,6 +791,8 @@ function RecipeValue:DecorateRow(row)
     local label = labels[row]
 
     if not text then
+        drawn[row] = nil
+
         -- Quiet, not a zero: no price data is not a price of nothing.
         if label then Try(Field(label, "Hide"), label) end
 
@@ -784,9 +805,21 @@ function RecipeValue:DecorateRow(row)
     label = label or LabelFor(row)
     if not label then return "nolabel" end
 
+    -- Four times a second, most rows are as they were. Placing a value again
+    -- gives the name its width back and takes it away, which makes the game
+    -- lay the row out twice; with a craft bar moving beside it, that was a
+    -- stutter (2026-10-09). So a row is placed only when something on it
+    -- moved, its text changed or it shows another recipe.
+    local was = drawn[row]
+    if was and Try(Field(label, "IsShown"), label) and was.key == RowKey(row, label, recipeID, text) then
+        return "valued", was.placement
+    end
+
     label:SetText(text)
     local placement = PositionLabel(label, row, NameRegion(row))
     label:Show()
+
+    drawn[row] = { key = RowKey(row, label, recipeID, text), placement = placement }
 
     return "valued", placement
 end
@@ -832,6 +865,7 @@ function RecipeValue:Refresh()
                 report.placed[placement] = (report.placed[placement] or 0) + 1
             end
         else
+            drawn[row] = nil
             if labels[row] then Try(Field(labels[row], "Hide"), labels[row]) end
             ReleaseName(NameRegion(row))
         end
@@ -842,6 +876,8 @@ function RecipeValue:Refresh()
 end
 
 function RecipeValue:HideAll()
+    for row in pairs(drawn) do drawn[row] = nil end
+
     for _, label in pairs(labels) do
         Try(Field(label, "Hide"), label)
     end
