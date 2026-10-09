@@ -300,6 +300,7 @@ ns.Profit = {
     end,
 }
 
+ns.VersionLabel = function() return "v0.42.0" end
 ns.Scanner = {
     isAuctionHouseOpen = false,
     GetScanStatus = function() return scanStatus end,
@@ -711,6 +712,8 @@ Motion:Step(1)
 check("its icon swells under the mouse", icon.width, 20)
 local said = table.concat(GameTooltip.lines, "\n")
 check("and the tooltip says it can be dragged", said:find("Drag to move", 1, true) ~= nil, true)
+-- A player asked to see which version he runs from the button (2026-10-09).
+check("its second line is the version", GameTooltip.lines[2], "v0.42.0")
 minimapButton.scripts.OnMouseDown(minimapButton)
 check("pressed, it dips", icon.width, 16)
 minimapButton.scripts.OnMouseUp(minimapButton)
