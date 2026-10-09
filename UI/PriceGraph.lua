@@ -2,9 +2,14 @@
 -- The price graph: the cheapest price hour by hour, over the last 24 hours
 -- or 7 days, and when in the day it tends to be cheapest and dearest.
 --
--- Asked 2026-10-06 (Sullivan). Shown on the Profit tab's craft pane (for the
+-- Asked on Discord 2026-10-06. Shown on the Profit tab's craft pane (for the
 -- craft and each of its materials) and on the Prices tab. The prices come
 -- from Data/PriceHistory.lua; this only draws them.
+--
+-- Behind the line (asked 2026-10-09): bars for how many were listed each
+-- hour, and a dashed line at the average of the prices shown. The auction
+-- house never says what sold, so the bars are what was on offer; a bar
+-- that drops from one hour to the next is stock that sold or was taken down.
 --
 -- The line is the client's own line object where it has one, with a soft
 -- wider line under it for the glow. A client without one gets a dot at
@@ -156,14 +161,101 @@ local function PlaceDot(dot, plot, x, y, size, key, alpha)
     dot:Show()
 end
 
+local function Pooled(graph, pool, index, layer, sublevel)
+    local texture = graph[pool][index]
+    if texture then return texture end
+
+    texture = graph.plot:CreateTexture(nil, layer, nil, sublevel)
+    graph[pool][index] = texture
+    return texture
+end
+
+--- Volume bars (asked 2026-10-09): how many were listed each hour, rising
+--- from the foot of the plot behind the price line, at most this much of
+--- its height.
+PriceGraph.BAR_SHARE = 0.4
+
+--- Where each hour's bar sits: x by time as the price points are, height by
+--- the most listed in the window. Hours with none listed get no bar.
+-- @return { x, width, height, t, q } for each bar, and the most listed
+function PriceGraph.LayoutBars(listed, width, height, seconds, now)
+    local most = 0
+    for _, entry in ipairs(listed) do
+        if entry.q > most then most = entry.q end
+    end
+
+    local bars = {}
+    if most <= 0 then return bars, 0 end
+
+    local from = now - seconds
+    local barWidth = math.max(1, width * 3600 / seconds - 1)
+
+    for _, entry in ipairs(listed) do
+        if entry.q > 0 then
+            bars[#bars + 1] = {
+                x = Util.Clamp((entry.t - from) / seconds, 0, 1) * width,
+                width = barWidth,
+                height = math.max(1, entry.q / most * height * PriceGraph.BAR_SHARE),
+                t = entry.t,
+                q = entry.q,
+            }
+        end
+    end
+    return bars, most
+end
+
+local function DrawBars(graph, bars)
+    for index, bar in ipairs(bars) do
+        local texture = Pooled(graph, "bars", index, "ARTWORK", 0)
+        texture:ClearAllPoints()
+        texture:SetPoint("BOTTOM", graph.plot, "BOTTOMLEFT", bar.x, 0)
+        texture:SetSize(bar.width, bar.height)
+        texture:SetColorTexture(Theme.Unpack("metal", 0.55))
+        texture:Show()
+    end
+end
+
+--- The average of the prices shown, as a dashed line across the plot with
+--- its amount at the right.
+local function DrawAverage(graph, average, low, high, width, height)
+    if not average or high <= low then return end
+
+    local y = (average - low) / (high - low) * height
+    local dash, gap = 4, 3
+    local count = math.max(1, math.floor(width / (dash + gap)))
+    for index = 1, count do
+        local texture = Pooled(graph, "dashes", index, "ARTWORK", 1)
+        texture:ClearAllPoints()
+        texture:SetPoint("LEFT", graph.plot, "BOTTOMLEFT", (index - 1) * (dash + gap), y)
+        texture:SetSize(dash, 1)
+        texture:SetColorTexture(Theme.Unpack("muted", 0.8))
+        texture:Show()
+    end
+
+    graph.averageLabel:ClearAllPoints()
+    -- Above the line, or under it when the line runs along the top.
+    if y > height - 10 then
+        graph.averageLabel:SetPoint("TOPRIGHT", graph.plot, "BOTTOMRIGHT", 0, y - 2)
+    else
+        graph.averageLabel:SetPoint("BOTTOMRIGHT", graph.plot, "BOTTOMRIGHT", 0, y + 2)
+    end
+    graph.averageLabel:SetText("avg " .. Util.FormatMoney(average, { short = true }))
+    graph.averageLabel:Show()
+end
+
 local function HideDrawing(graph)
     for _, segment in ipairs(graph.segments) do
         segment.glow:Hide()
         segment.line:Hide()
     end
     for _, dot in ipairs(graph.dots) do dot:Hide() end
+    for _, bar in ipairs(graph.bars) do bar:Hide() end
+    for _, dash in ipairs(graph.dashes) do dash:Hide() end
+    graph.averageLabel:Hide()
     graph.hover:Hide()
     graph.placed = nil
+    graph.listedAt = nil
+    graph.average = nil
 end
 
 local function Draw(graph, placed, low, high)
@@ -258,6 +350,15 @@ local function ShowHover(graph)
     GameTooltip:SetText(date("%a ", point.t) .. ns.PriceHistory.HourText(date("*t", point.t).hour), 1, 1, 1)
     GameTooltip:AddDoubleLine(graph.kind == "market" and "Market value" or "Cheapest listed",
         Util.FormatMoney(point.p), 0.8, 0.8, 0.8, 1, 1, 1)
+    local listed = graph.listedAt and graph.listedAt[math.floor(point.t / 3600)]
+    if listed then
+        GameTooltip:AddDoubleLine("Listed", Util.Comma and Util.Comma(listed) or tostring(listed),
+            0.8, 0.8, 0.8, 1, 1, 1)
+    end
+    if graph.average then
+        GameTooltip:AddDoubleLine("Average shown", Util.FormatMoney(graph.average),
+            0.8, 0.8, 0.8, 0.75, 0.75, 0.75)
+    end
     if graph.kind == "market" then
         GameTooltip:AddLine("Star this item to keep its cheapest price every hour.", 0.6, 0.6, 0.6, true)
     end
@@ -411,6 +512,10 @@ function PriceGraph.Create(parent, opts)
     graph.hover = plot:CreateTexture(nil, "OVERLAY", nil, 2)
     graph.hover:Hide()
 
+    graph.bars, graph.dashes = {}, {}
+    graph.averageLabel = Theme.CreateLabel(plot, "tiny", "muted", "RIGHT")
+    graph.averageLabel:Hide()
+
     plot:SetScript("OnEnter", function()
         graph.hoverPoint = nil
         plot:SetScript("OnUpdate", function() ShowHover(graph) end)
@@ -548,6 +653,21 @@ function PriceGraph.Create(parent, opts)
             self.empty:Hide()
             local placed, low, high = PriceGraph.Layout(points, width, height, window.seconds, now)
             self.placed = placed
+
+            -- How many were listed, behind the line; hourly prices only,
+            -- since the scans' fallback has no hours to put them in.
+            if kind == "hourly" then
+                local listed = ns.PriceHistory.GetListed
+                    and ns.PriceHistory:GetListed(itemID, window.seconds, now) or {}
+                self.listedAt = {}
+                for _, entry in ipairs(listed) do
+                    self.listedAt[math.floor(entry.t / 3600)] = entry.q
+                end
+                DrawBars(self, (PriceGraph.LayoutBars(listed, width, height, window.seconds, now)))
+            end
+
+            self.average = ns.PriceHistory.Average(points)
+            DrawAverage(self, self.average, low, high, width, height)
             Draw(self, placed, low, high)
             self.highLabel:SetText(Util.FormatMoney(high, { short = true }))
             self.lowLabel:SetText(high > low and Util.FormatMoney(low, { short = true }) or "")

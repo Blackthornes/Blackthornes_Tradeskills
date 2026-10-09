@@ -387,6 +387,11 @@ local DEFAULTS = {
     -- See Data/PriceHistory.lua.
     priceHistory = {},
 
+    -- realmKey -> itemID -> { hour, count, ... }: how many were listed each
+    -- hour a scan saw it, same items and seven days as priceHistory. Drawn
+    -- as the volume bars under the price line.
+    priceListed = {},
+
     -- realmKey -> { entries, seen }: what sold and what came back, read out of
     -- the mailbox. See Data/Mail.lua.
     mailLedger = {},

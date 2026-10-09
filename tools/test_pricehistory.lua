@@ -1,4 +1,4 @@
--- The price graph's hourly prices (Sullivan, 2026-10-06).
+-- The price graph's hourly prices (asked 2026-10-06; volume and average 2026-10-09).
 --
 -- What must hold:
 --   1. Only what the account crafts, its materials and starred items are
@@ -209,6 +209,44 @@ series, kind = G.Series(WOOL, "day", now)
 check("a kept item with no prices draws nothing yet", kind, nil)
 check("the window is 24 hours by default", G.GetWindow(), "day")
 check("ticks say now at the right", G.TickText("day", now, true), "now")
+
+print("listed each hour")
+clock = now
+ns.db.priceHistory, ns.db.priceListed = nil, nil
+ns.Prices:Record(WOOL, 40, 35, 120, now, 35, nil, nil)
+ns.Prices:Record(WOOL, 40, 36, 90, now + HOUR, 36, nil, nil)
+ns.Prices:Record(OTHER, 40, 36, 90, now + HOUR, 36, nil, nil)
+clock = now + HOUR
+local listed = H:GetListed(WOOL, 24 * HOUR)
+check("Record keeps how many were listed each hour", #listed, 2)
+check("the first hour's count", listed[1].q, 120)
+check("the second hour's count", listed[2].q, 90)
+check("an item not kept has no counts", ns.db.priceListed[realm][OTHER], nil)
+ns.Prices:RecordEmpty(WOOL, now + 2 * HOUR)
+clock = now + 2 * HOUR
+listed = H:GetListed(WOOL, 24 * HOUR)
+check("sold out is a count of none", listed[3] and listed[3].q, 0)
+check("and adds no price", #H:GetPoints(WOOL, 24 * HOUR), 2)
+check("the prices list keeps its old shape", type(ns.db.priceHistory[realm][WOOL][2]), "number")
+clock = now + 30 * 24 * HOUR
+H:Prune()
+check("prune clears old counts too", ns.db.priceListed[realm][WOOL], nil)
+ns.db.priceListed = nil
+check("a save from before counts reads as none", #H:GetListed(WOOL), 0)
+
+print("average and bars")
+check("the average of what is shown", H.Average({ { p = 10 }, { p = 20 }, { p = 33 } }), 21)
+check("nothing shown, no average", H.Average({}), nil)
+local bars, most = G.LayoutBars({ { t = 0, q = 50 }, { t = 3600, q = 100 }, { t = 7200, q = 0 } },
+    240, 100, 24 * 3600, 24 * 3600)
+check("the most listed", most, 100)
+check("an hour with none listed gets no bar", #bars, 2)
+check("the tallest bar is the share of the height", bars[2].height, 100 * G.BAR_SHARE)
+check("half as many, half as tall", bars[1].height, 50 * G.BAR_SHARE)
+check("bars sit at their hour", bars[2].x, 10)
+check("an hour wide, less a gap", bars[1].width, 9)
+bars = G.LayoutBars({ { t = 0, q = 0 } }, 240, 100, 24 * 3600, 24 * 3600)
+check("all sold out draws no bars", #bars, 0)
 
 print(("%d passed, %d failed"):format(passed, failed))
 if failed > 0 then error(("%d check(s) failed"):format(failed)) end
