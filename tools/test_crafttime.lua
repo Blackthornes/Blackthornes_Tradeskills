@@ -217,6 +217,27 @@ a = Profit:Analyse(BELT_RECIPE, nil, "disenchant")
 check("a disenchant of unknown length: no gold an hour", a.goldPerHour, nil)
 ns.Disenchant = nil
 
+-- Only for recipes the character playing knows (a player asked, 2026-10-09):
+-- an alt's recipe, or one of a dropped profession, has no time to give.
+a = Profit:Analyse(BELT_RECIPE, nil, "auction")
+check("a recipe you know is known", a.knownByMe, true)
+
+local realGet, realGetAny = ns.Recipes.Get, ns.Recipes.GetAny
+ns.Recipes.Get = function() return nil end
+ns.Recipes.GetAny = function(_, id) return recipes[id], "Alt" end
+a = Profit:Analyse(BELT_RECIPE, "Alt", "auction")
+check("an alt's recipe is not known", a.knownByMe, false)
+check("and has no craft time", a.craftSeconds, nil)
+check("and no gold an hour", a.goldPerHour, nil)
+check("though its profit is still worked out", type(a.profit), "number")
+ns.Recipes.Get, ns.Recipes.GetAny = realGet, realGetAny
+
+ns.Recipes.IsDropped = function() return true end
+a = Profit:Analyse(BELT_RECIPE, nil, "auction")
+check("a dropped profession's recipe is not known", a.knownByMe, false)
+check("and has no gold an hour", a.goldPerHour, nil)
+ns.Recipes.IsDropped = function() return false end
+
 print("")
 print("written short")
 
