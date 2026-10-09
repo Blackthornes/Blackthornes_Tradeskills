@@ -35,6 +35,8 @@ local COLUMNS = {
 -- How each way of getting gold back is named: short in the VIA column, in
 -- full in the tooltip and the detail panel.
 local WAY_SHORT = { vendor = "Vendor", auction = "AH", disenchant = "DE" }
+-- In a sentence, for the note on which way the Profit tab counts.
+local WAY_WORD = { vendor = "vendor", auction = "auction house", disenchant = "disenchant" }
 local WAY_LONG = {
     vendor = "Vendor",
     auction = "Auction house, after the cut",
@@ -250,7 +252,8 @@ local function ShowRowTooltip(row, entry)
         0.7, 0.7, 0.7, 1, 1, 1)
 
     local returns = entry.returns
-    if returns and returns.best then
+    local anyWay = returns and (returns.vendor or returns.auction or returns.disenchant)
+    if anyWay then
         for _, way in ipairs({ "vendor", "auction", "disenchant" }) do
             if returns[way] then
                 local r, g, b = 1, 1, 1
@@ -267,6 +270,15 @@ local function ShowRowTooltip(row, entry)
             GameTooltip:AddDoubleLine(gain and "Pays you back" or "Real cost",
                 Util.FormatMoney(math.abs(entry.realCost), { noColor = true }),
                 1, 0.82, 0, r, g, b)
+        end
+
+        -- The Profit tab's "Profit:" choice picks the way that counts.
+        if returns.method and returns.method ~= "best" then
+            local label = WAY_WORD[returns.method] or returns.method
+            local text = returns.best
+                and ("Only the %s counts: the Profit tab is set to it."):format(label)
+                or ("Only the %s counts (the Profit tab is set to it), and it pays nothing for this."):format(label)
+            GameTooltip:AddLine(text, 0.7, 0.7, 0.7, true)
         end
     elseif entry.outputItemID then
         GameTooltip:AddLine("Nothing to sell it back for yet: no vendor, auction or disenchant price.", 0.7, 0.7, 0.7, true)

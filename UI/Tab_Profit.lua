@@ -1465,7 +1465,8 @@ local function BuildCrafts(container)
 
     -- What the profit is for (Sullivan, 2026-10-06): whichever way pays
     -- most, or one way alone. Kept in Settings, so /bts top and /bts why
-    -- rank the same way.
+    -- rank the same way, and the Level Up tab counts what a craft gets
+    -- back by it too.
     local labels = ns.Profit.WAY_LABELS or {}
     local methodOptions = { { text = "Profit: Best", value = "best" } }
     for _, method in ipairs(ns.Profit.METHODS or {}) do

@@ -237,6 +237,35 @@ check("in a colour, the lowest real cost goes first",
     names(rows) == "Woolen Cape, Linen Belt, Aaa Belt, Odd Gloves, "
         .. "Linen Bandana, Bolt of Woolen Cloth, Simple Kilt, Unread Shirt")
 
+print("\nthe Profit tab's choice of way")
+
+-- The belt: vendor 1s, auction 1s 90c, disenchant 2s 38c, materials 3s.
+local method = "auction"
+ns.Profit.GetMethod = function() return method end
+
+belt = LevelUp:BuildRow(1)
+check("set to AH, only the auction house counts",
+    belt.back == 190 and belt.backWay == "auction" and belt.realCost == 300 - 190)
+check("every way is still listed", belt.returns.vendor == 100 and belt.returns.disenchant == 238)
+
+method = "vendor"
+belt = LevelUp:BuildRow(1)
+check("set to Vendor, the vendor counts", belt.back == 100 and belt.backWay == "vendor")
+
+method = "disenchant"
+kilt = LevelUp:BuildRow(6)
+check("set to DE, a craft that cannot be disenchanted gets nothing back",
+    kilt.back == nil and kilt.realCost == nil and kilt.returns.vendor == 40)
+
+method = "best"
+belt = LevelUp:BuildRow(1)
+check("set to Best, whichever pays most", belt.back == 238 and belt.backWay == "disenchant")
+
+method = "something old"
+belt = LevelUp:BuildRow(1)
+check("an unknown choice counts as Best", belt.back == 238 and belt.returns.method == "best")
+ns.Profit.GetMethod = nil
+
 ns.Util.GetVendorSellPrice, ns.Util.IsBoundOnPickup = nil, nil
 ns.Profit.ChoosePostPrice, ns.Profit.NetFromListing, ns.Disenchant = nil, nil, nil
 
