@@ -345,6 +345,11 @@ end
 -- Only ask for an item the client already holds.
 --
 -- @return copper, then true when the tooltip was there to read at all
+--
+-- Also says whether the item has charges ("5 Charges"): a vendor on Forever
+-- can pay a charged item's price split across its charges while both the
+-- item info and the tooltip show the whole of it (Minor Wizard Oil, 2026-10-09).
+-- @return copper or nil, whether the tooltip was read, charges or nil
 function Util.GetTooltipSellPrice(itemID)
     if not itemID or not Util.HasFunction("C_TooltipInfo.GetItemByID") then return nil, false end
 
@@ -354,9 +359,10 @@ function Util.GetTooltipSellPrice(itemID)
     end
 
     local sellType = SellPriceLineType()
+    local found, charges
     for _, line in ipairs(data.lines) do
         if type(line) == "table" then
-            local price, kind = line.price, line.type
+            local price, kind, text = line.price, line.type, line.leftText
 
             -- Early 10.0 builds hand the fields over as an args list.
             if type(line.args) == "table" then
@@ -364,21 +370,31 @@ function Util.GetTooltipSellPrice(itemID)
                     if type(arg) == "table" then
                         if arg.field == "type" and kind == nil then kind = arg.intVal end
                         if arg.field == "price" and price == nil then price = arg.intVal end
+                        if arg.field == "leftText" and text == nil then text = arg.stringVal end
                     end
                 end
             end
 
-            if kind == sellType and type(price) == "number" and price >= 0 then
-                return price, true
+            if found == nil and kind == sellType and type(price) == "number" and price >= 0 then
+                found = price
+            end
+
+            if charges == nil and type(text) == "string" then
+                local read, count = pcall(string.match, text, "^(%d+) Charges?$")
+                charges = read and tonumber(count) or nil
             end
         end
     end
 
-    return nil, true
+    return found, true, charges
 end
 
 function Util.GetVendorSellPrice(itemID)
     if not itemID then return nil end
+
+    -- What a vendor on Forever was seen paying beats what the client says.
+    local paid = ns.Vendor and ns.Vendor.GetPaid and ns.Vendor:GetPaid(itemID)
+    if paid then return paid > 0 and paid or nil end
 
     local known = sellPriceMemo[itemID]
     if known ~= nil then return known or nil end
