@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from announce_discord import section  # noqa: E402
-from post_general import main, message, not_clear  # noqa: E402
+from post_general import main, message, names_a_player, not_clear  # noqa: E402
 
 NEWS = ("# News\n\n## 0.2.0\n\nHey everyone! A new update is out.\nIt fixes\n"
         "the map. Thanks @everyone for the reports!\n\n## 0.1.0\n\nFirst.\n")
@@ -38,6 +38,16 @@ expect("a plain post is clear to post", not_clear(post) == [])
 expect("a Windows path is caught", "a Windows path" in not_clear("See D:\\Games\\WoW for it."))
 expect("an email address is caught", "an email address" in not_clear("Mail me at someone@example.com"))
 expect("the owner's name is caught", "the owner's name" in not_clear("Thanks, " + "Tr" + "ent"))
+
+expect("a thanked player is caught", names_a_player("Thanks Ana for the idea!") == ["Ana"])
+expect("thanks after a comma is caught", names_a_player("Thanks, Bob27!") == ["Bob27"])
+expect("requested by a player is caught", names_a_player("Requested by Cara.") == ["Cara"])
+expect("a player's request is caught", names_a_player("It was Dax's request.") == ["Dax"])
+expect("a Discord handle is caught", names_a_player("@eli found it") == ["eli"])
+expect("thanking everyone is fine", names_a_player("Thanks everyone! Thanks again.") == [])
+expect("thanking the players who reported it is fine",
+       names_a_player("Thanks to the players who reported it.") == [])
+expect("game names are fine", names_a_player("Get the cloak from Ghost Howl in Mulgore.") == [])
 
 os.environ.pop("DISCORD_GENERAL_WEBHOOK_URL", None)
 expect("without the secret it does nothing and succeeds", main(["x", "v0.2.0"]) == 0)

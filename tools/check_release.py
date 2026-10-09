@@ -10,6 +10,9 @@ with a section for that version, "## 0.2.0" or "## 0.2.0 - 2026-09-25". That
 is what players read on CurseForge, so a release without it is refused rather
 than shipped with last version's notes.
 
+It also refuses a CHANGELOG.md or NEWS.md section that credits a player by
+name: a player's name never goes in a report.
+
 It also checks the TOC still says `## Version: @project-version@`: a version
 typed in by hand would disagree with the tag the packager builds.
 """
@@ -51,6 +54,29 @@ def check(tag, changelog, toc):
     return problems
 
 
+def named_players(tag, changelog):
+    """A player's name never goes in a report (the owner, 2026-10-09): look in
+    this version's CHANGELOG.md and NEWS.md sections, which go to CurseForge
+    and Discord, for a credited player."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from announce_discord import section
+    from post_general import names_a_player
+    match = TAG.match(tag)
+    if not match:
+        return []
+    texts = [("CHANGELOG.md", changelog)]
+    news = os.path.join(ROOT, "NEWS.md")
+    if os.path.exists(news):
+        with open(news, encoding="utf-8") as f:
+            texts.append(("NEWS.md", f.read()))
+    problems = []
+    for name, text in texts:
+        for player in names_a_player(section(text, match.group(1)) or ""):
+            problems.append("%s names a player (%s); thank everyone instead"
+                            % (name, player))
+    return problems
+
+
 def main(argv):
     if len(argv) != 2:
         print("usage: python tools/check_release.py v0.2.0")
@@ -59,7 +85,7 @@ def main(argv):
         changelog = f.read()
     with open(os.path.join(ROOT, "Blackthornes_TS.toc"), encoding="utf-8") as f:
         toc = f.read()
-    problems = check(argv[1], changelog, toc)
+    problems = check(argv[1], changelog, toc) + named_players(argv[1], changelog)
     for problem in problems:
         print("Not releasing: " + problem)
     if not problems:

@@ -170,7 +170,11 @@ in `NEWS.md` (`## X.Y.Z`, like CHANGELOG.md; it never ships) next to the
 CHANGELOG section. After the upload `tools/post_general.py` scans it with
 `check_package.py`'s PRIVATE list and posts it through the
 `DISCORD_GENERAL_WEBHOOK_URL` secret, which the owner sets himself, with the
-CurseForge link added. No section or no secret means no post. This tool is
+CurseForge link added. No section or no secret means no post.
+A player's name never goes in a report (the owner, 2026-10-09): no CHANGELOG,
+NEWS or Discord post names a player; thank everyone or "the players who
+reported it". `check_release.py` refuses a section that credits one
+(`names_a_player` in `post_general.py`). This tool is
 also the same in all four repos.
 
 ## The owner's standing rules (both addons)
