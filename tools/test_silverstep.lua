@@ -269,6 +269,29 @@ prices[CLOTH] = { market = 2, rival = 1 }
 check("and never goes below a copper", Profit:ChoosePostPrice(CLOTH), 1)
 
 --------------------------------------------------------------------------------
+print("")
+print("undercut by 0c: undercutting turned off")
+
+Reset()
+settings.undercutCopper = 0
+
+prices[CLOTH] = { market = 32, rival = 30 }
+check("a commodity lists at the rival's own price", Profit:ChoosePostPrice(CLOTH), 30)
+check("and that is a match", select(2, Profit:ChoosePostPrice(CLOTH)), "match")
+check("saying the setting is why",
+    (select(3, Profit:ChoosePostPrice(CLOTH)) or ""):find("0c") ~= nil, true)
+
+recipeByOutput[BAG] = BAG
+craftCost[BAG] = { priceable = true, total = 100, perUnit = 100, yield = 1 }
+prices[BAG] = { market = 320, rival = 300 }
+check("an item auction matches at 3s even when a silver pays", Profit:ChoosePostPrice(BAG), 300)
+check("for the same reason",
+    (select(3, Profit:ChoosePostPrice(BAG)) or ""):find("0c") ~= nil, true)
+
+prices[BAG] = { market = 400, rival = 350 }
+check("a rival with copper still gets a whole silver", Profit:ChoosePostPrice(BAG), 300)
+
+--------------------------------------------------------------------------------
 -- Money text: a fraction of a copper either way is no money at all, and
 -- "-0c" in red read as a loss that was not there.
 
