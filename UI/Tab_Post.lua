@@ -324,6 +324,9 @@ local function ShowRowTooltip(row, line)
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.
             why = "Matching the cheapest listing, since an undercut here costs a whole silver"
+            if (ns.Config:Get("undercutCopper") or 1) <= 0 then
+                why = "Matching the cheapest listing, since Undercut by is 0c in Settings"
+            end
         end
 
         GameTooltip:AddLine(why, 0.5, 0.5, 0.5)

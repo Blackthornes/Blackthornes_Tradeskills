@@ -178,6 +178,9 @@ function Profit:ChoosePostPrice(itemID, knownCost)
     return floor, "floor", "the least you set on the Prices tab", status == nil
 end
 
+-- Why a price matches the cheapest rival when Undercut by is set to 0c.
+local MATCH_BY_CHOICE = "your Undercut by is 0c, so it matches the cheapest listing"
+
 --- ChoosePostPrice from the auction house alone, before the player's own
 --- price is applied. Same returns.
 function Profit:ChooseMarketPostPrice(itemID, knownCost)
@@ -249,6 +252,15 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
     end
 
     local undercut = ns.Config:Get("undercutCopper") or 1
+
+    -- Undercut by 0c is the player turning undercutting off (asked on
+    -- Discord, 2026-10-09): list at the cheapest rival's own price, for
+    -- commodities and item auctions alike, and say that is why.
+    if undercut <= 0 then
+        local price = math.max(1, math.floor(rival))
+        if not isCommodity then price = Util.RoundToSilver(price) end
+        return price, "match", MATCH_BY_CHOICE, uncertain
+    end
 
     if isCommodity then
         return math.max(1, math.floor(rival - undercut)), "undercut", nil, uncertain
