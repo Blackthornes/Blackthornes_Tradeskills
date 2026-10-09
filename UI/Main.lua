@@ -1732,6 +1732,8 @@ function UI:BuildMinimapButton()
         ns.Motion:Blend(self, "hover", 1, 0.12, function(v) IconSize(18 + 2 * v) end)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Blackthornes Tradeskills")
+        -- Which version is installed, so a player can say when reporting.
+        GameTooltip:AddLine(ns.VersionLabel(), 0.5, 0.5, 0.5)
         GameTooltip:AddLine("Click to open", 0.7, 0.7, 0.7)
         GameTooltip:AddLine("Drag to move it round the minimap", 0.5, 0.5, 0.5)
         GameTooltip:Show()
