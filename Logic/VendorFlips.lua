@@ -58,8 +58,18 @@ function VendorFlips:GetAuctionRows(opts)
             pending = pending + 1
         end
 
+        -- A charged item nobody has sold on Forever yet: its price in the
+        -- game's data can be several times what a vendor pays (Minor Wizard
+        -- Oil showed a 1s flip that lost 3s, 2026-10-09). Left out until a
+        -- sale says what it is worth.
+        if vendor and ns.Disenchant.SellPriceUnsure and ns.Disenchant:SellPriceUnsure(itemID) then
+            vendor = nil
+        end
+
         if vendor and vendor > buy then
             local gain = vendor - buy
+            local paidFrom
+            if ns.Vendor and ns.Vendor.GetPaid then _, paidFrom = ns.Vendor:GetPaid(itemID) end
 
             local row = {
                 kind = "vendor",
@@ -69,6 +79,9 @@ function VendorFlips:GetAuctionRows(opts)
                 loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
                 listed = record.quantity,
                 vendor = vendor,
+                -- "sold" when a sale of yours set the price, "reported" from
+                -- the shipped list, nil from the game's item data.
+                vendorFrom = paidFrom,
                 sell = vendor,
                 extra = record.quantity,
                 gain = gain,
@@ -317,11 +330,17 @@ ns.RegisterCommand("sellprice", "say what the item info and the tooltip each say
         local ok, name, _, _, _, _, _, _, _, _, _, sellPrice = pcall(C_Item.GetItemInfo, itemID)
         if ok and name then info = sellPrice end
     end
-    local tooltip, read = Util.GetTooltipSellPrice(itemID)
+    local tooltip, read, charges = Util.GetTooltipSellPrice(itemID)
     local saved = ns.Disenchant:GetSellPrice(itemID)
+    local paid, paidFrom
+    if ns.Vendor and ns.Vendor.GetPaid then paid, paidFrom = ns.Vendor:GetPaid(itemID) end
 
     local function Money(copper) return copper and Util.FormatMoney(copper, { noColor = true }) or "none" end
-    ns.Print(("sellprice: %s (%d): item info %s, tooltip %s%s, used %s")
+    local paidText = paid and (paidFrom == "sold" and "a vendor paid you %s" or "reported on Forever as %s"):format(Money(paid))
+        or "never seen sold"
+    ns.Print(("sellprice: %s (%d): item info %s, tooltip %s%s%s, %s, used %s")
         :format(Util.GetItemLabel(itemID), itemID, Money(info), Money(tooltip),
-            read and "" or " (no tooltip data)", Money(saved)))
+            read and "" or " (no tooltip data)",
+            charges and (", %d charges"):format(charges) or "",
+            paidText, Money(saved)))
 end)

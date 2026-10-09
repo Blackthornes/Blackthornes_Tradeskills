@@ -450,6 +450,13 @@ local function UpdateVendorDetail(detail, entry)
     parts[#parts + 1] = ("The buy price is the cheapest listing from another seller when last scanned (%s). Prices are per item, so a stack pays the same on every one in it."):format(
         age and Util.FormatAgeAgo(age) or "never")
     if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = "That was a while ago, so it may have sold." end
+    if entry.vendorFrom == "sold" then
+        parts[#parts + 1] = "The vendor price is what a vendor paid you when you last sold one."
+    elseif entry.vendorFrom == "reported" then
+        parts[#parts + 1] = "The vendor price is what vendors on Forever were seen paying."
+    else
+        parts[#parts + 1] = "The vendor price comes from the game's item data, which Forever has changed for some items. Sell one and what a vendor really pays is used from then on."
+    end
     block.note:SetText(table.concat(parts, " "))
 end
 
