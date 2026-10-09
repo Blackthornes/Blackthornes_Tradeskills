@@ -229,15 +229,15 @@ list.opts.createRow(row)
 list.opts.updateRow(row, bagRows[1])
 check("the row shows how much more disenchanting pays", row.cells[1].text == "400"
     and row.cells[1].color == "profit")
-check("its disenchant value is green", row.cells[2].text == "500" and row.cells[2].color == "profit")
-check("what it sells for", row.cells[3].text == "100")
-check("and how many are carried", row.cells[4].text == "2")
-check("the auction columns are hidden", row.cells[5].shown == false and row.cells[6].shown == false)
+check("its disenchant value is green", row.cells[3].text == "500" and row.cells[3].color == "profit")
+check("what it sells for", row.cells[4].text == "100")
+check("and how many are carried", row.cells[5].text == "2")
+check("the auction columns are hidden", row.cells[6].shown == false and row.cells[7].shown == false)
 
 list.opts.updateRow(row, bagRows[2])
 check("an item that sells better shows the loss in red", row.cells[1].text == "-600"
     and row.cells[1].color == "loss")
-check("and what a vendor pays when that is more", row.cells[3].text == "900")
+check("and what a vendor pays when that is more", row.cells[4].text == "900")
 
 print("\npicking and disenchanting")
 list.opts.onClick(bagRows[2], 2, "LeftButton")

@@ -326,6 +326,10 @@ local DEFAULTS = {
         priceGraphWindow = "day",
         profitShowsGraph = false,
 
+        -- The Profit tab's TIME and GOLD/HR columns (asked 2026-10-09),
+        -- from its "Per hour" tick box.
+        profitShowsPerHour = false,
+
         -- Sharing (asked 2026-10-07, Ezmode on Discord). Characters on
         -- another account of yours, by name and separated by commas; empty
         -- shares nothing. Both sides add each other. See Logic/AccountLink.lua.
