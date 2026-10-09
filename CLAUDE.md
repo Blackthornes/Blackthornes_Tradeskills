@@ -216,6 +216,25 @@ also the same in all four repos.
   "your data stays yours" notes and any explanation of public emotes or their
   switches: "they don't care to know this." Those belong in the README and
   CHANGELOG.
+- **Smooth play comes first, but never at the cost of looks** (the owner,
+  2026-10-09, after a hitch while crafting). Nothing on a timer or
+  OnUpdate rebuilds or re-places a whole list, map or set of markers when
+  only one thing moved: keep what is drawn, and redo only rows or pins
+  whose inputs changed (a per-row key, a version number). Bag, loot,
+  cast, skill and profession-list events arrive in bursts, several per
+  craft or loot: coalesce them, read only what they changed, and skip
+  work for windows that are hidden. Work over hundreds of items (recipes,
+  sources, saved spots) is spread over frames (a worker with a small
+  per-frame budget) rather than done in one frame, and shown when done.
+  Clicks and typing still answer at once. The two causes found: Farmer's
+  minimap markers gathered, sorted and re-placed every saved spot once a
+  second because the clock second was in their redraw key (now only the
+  fade moves, `MapMarkers:FadeMinimap`); and on every craft Tradeskills
+  re-read every recipe in the profession window and repriced the whole
+  craft pane in one frame (now `Recipes:NothingNewMidCraft` skips the
+  re-read mid-run and `CraftPanel:RefreshInSlices` spreads the pane over
+  frames). Visuals and usability are never traded away for speed. This
+  rule is in all four addons' notes; keep them the same.
 - **The client is WoW: Forever, a retail engine** (`## Interface: 16001`,
   modern Lua), not 1.12. Instances hand addons secret values that raise when
   compared, concatenated or formatted, so read client values inside a pcall.
