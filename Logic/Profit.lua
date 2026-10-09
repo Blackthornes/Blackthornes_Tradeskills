@@ -513,6 +513,14 @@ function Profit:Analyse(recipeID, characterKey, method)
     local cost = ns.Cost:GetCraftCost(recipeID)
     analysis.cost = cost
 
+    -- How long one takes, sub-crafts included, before the early exits: the
+    -- time needs no price.
+    if ns.CraftTime and cost then
+        local timing = ns.CraftTime:ForCost(recipeID, cost)
+        analysis.craftTime = timing
+        analysis.craftSeconds = timing.seconds
+    end
+
     -- Read before the early exits below, so a craft that cannot be priced can
     -- still say it would raise your skill.
     analysis.skillUp = ns.SkillUp and ns.SkillUp:GetForRecipe(recipeID, recipe) or nil
@@ -749,6 +757,16 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     analysis.profit = chosen.profit
     analysis.profitPerUnit = analysis.profit / yield
+
+    -- Gold an hour, for the time the crafts take. Disenchanted, each item
+    -- made is a disenchant cast more.
+    local seconds = analysis.craftSeconds
+    if seconds and via == "disenchant" then
+        local cast = ns.CraftTime:GetCast(ns.CraftTime.DISENCHANT_SPELL)
+        seconds = cast and (seconds + cast * yield) or nil
+    end
+    analysis.timeSeconds = seconds
+    analysis.goldPerHour = ns.CraftTime and ns.CraftTime.PerHour(analysis.profit, seconds) or nil
 
     -- Margin is profit against revenue; ROI is profit against the gold you must
     -- actually front. They rank very differently and both are worth seeing.
