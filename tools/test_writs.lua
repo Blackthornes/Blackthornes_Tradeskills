@@ -356,6 +356,7 @@ ns.VendorFlips = {
 }
 ns.Demand = { TooltipText = function() return nil end }
 
+assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/UI/DealsWrits.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 
