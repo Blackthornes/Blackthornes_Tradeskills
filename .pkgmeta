@@ -18,6 +18,8 @@ ignore:
   # Notes for Claude about working on the addon, shared with the other
   # addon's project. Not for players.
   - CLAUDE.md
+  # The #general Discord posts; tools/post_general.py checks and posts them.
+  - NEWS.md
   - README.md
 
 # Ship CHANGELOG.md as written. Without this the packager writes its own from
