@@ -147,6 +147,10 @@ local DEFAULTS = {
         -- crate from them when last reported (UI/DealsFavor.lua).
         favorSkipOverStack = true,
 
+        -- Deals, Craftsman's Writs: the reputation goal the panel works
+        -- towards (UI/DealsWrits.lua).
+        writGoal = "honored",
+
         scanBudgetMs = 8,
 
         -- Scan automatically when the auction house opens and the price
@@ -453,10 +457,15 @@ local DEFAULTS = {
     -- found by name, which sealed crate each kind fills into, and each
     -- sealed crate's Merchant's Favor and money. No character names. See
     -- Logic/MerchantsFavor.lua.
+    -- Craftsman's Writs are kept here too: writ item IDs found by name, and
+    -- the reputation each level of writ was seen to pay, per character GUID
+    -- (a racial bonus can change it). See Logic/Writs.lua.
     merchantsFavor = {
         crateIDs = {},
         links = {},
         rewards = {},
+        writIDs = {},
+        writRewards = {},
     },
 
     -- Written by Core/Compat.lua and Probe/Probe.lua.
