@@ -587,17 +587,41 @@ end
 -- For a sub-craft kept after buying turned cheaper (`buyCheaper`). Its item
 -- goes back on the shopping list, and whatever only went into it leaves the
 -- queue too. If making it turns cheaper again, it comes back like any other.
+-- Every sub-craft row making the same item goes: one item often goes into
+-- two crafts (light leather into medium leather and into boots), and a row
+-- left behind kept the item planned, so the rebuild put the clicked row
+-- straight back and the button seemed to do nothing (2026-10-09).
 function Queue:BuyInstead(entry)
     local queue = self:GetAll()
-    local removed = false
+    if not (entry and entry.recipeID) then return false end
 
-    for index = #queue, 1, -1 do
-        if queue[index] == entry then
-            table.remove(queue, index)
-            removed = true
+    -- A rebuild makes new sub-craft rows, so a row clicked before its redraw
+    -- holds an old one; the queued sub-craft of the same recipe stands in.
+    local present = false
+    for index = 1, #queue do
+        local other = queue[index]
+        if other == entry or (entry.isDependency and other.isDependency
+            and other.recipeID == entry.recipeID) then
+            present = true
+            break
         end
     end
-    if not removed then return false end
+    if not present then return false end
+
+    local recipe = ns.Recipes:GetAny(entry.recipeID)
+    local output = recipe and recipe.outputItemID
+
+    local function sameItem(other)
+        if other == entry then return true end
+        if not (entry.isDependency and other.isDependency) then return false end
+        if other.recipeID == entry.recipeID then return true end
+        local otherRecipe = output and ns.Recipes:GetAny(other.recipeID)
+        return otherRecipe ~= nil and otherRecipe.outputItemID == output
+    end
+
+    for index = #queue, 1, -1 do
+        if sameItem(queue[index]) then table.remove(queue, index) end
+    end
 
     self:RebuildDependencies()
     self:Notify()
