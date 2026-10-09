@@ -41,10 +41,8 @@ function Recipes:GetProfessions()
         if infoOk and info and info.professionName then
             local name = info.professionName
 
-            if not seen[name] and not name:find(IGNORED_PROFESSION_PATTERN) then
-                seen[name] = true
-
-                professions[#professions + 1] = {
+            if not name:find(IGNORED_PROFESSION_PATTERN) then
+                local entry = {
                     name = name,
                     skillLineID = skillLineID,
                     skillLevel = info.skillLevel or 0,
@@ -52,6 +50,17 @@ function Recipes:GetProfessions()
                     -- Levels of zero mean the profession is listed but unlearned.
                     learned = (info.maxSkillLevel or 0) > 0,
                 }
+
+                -- Forever lists each profession under two IDs, and only one
+                -- of them may carry the levels. The one that does wins,
+                -- whichever the client happens to list first.
+                local old = seen[name]
+                if not old then
+                    seen[name] = entry
+                    professions[#professions + 1] = entry
+                elseif entry.maxSkillLevel > old.maxSkillLevel then
+                    for key, value in pairs(entry) do old[key] = value end
+                end
             end
         end
     end
@@ -104,13 +113,32 @@ function Recipes:IsDropped(recipe, characterKey)
     return lines[recipe.skillLineID] == false
 end
 
+--- This character's professions, with their levels.
+--
+-- Read from the client, and from the last good read saved for this character
+-- when the client has not loaded skill levels yet (just after login or a
+-- loading screen, when everything reads as level 0). Without it, Recipes to
+-- learn lost its SKILL colours until the levels arrived (a player saw them
+-- vanish and come back on their own, 2026-10-09).
 function Recipes:GetLearnedProfessions()
-    local learned = {}
+    local learned, byName = {}, {}
     for _, profession in ipairs(self:GetProfessions()) do
         if profession.learned then
             learned[#learned + 1] = profession
+            byName[profession.name] = true
         end
     end
+
+    local record = self.GetCharacterRecord and self:GetCharacterRecord(false)
+    for _, profession in ipairs(type(record) == "table" and record.professions or {}) do
+        if type(profession) == "table" and profession.learned and profession.name
+            and not byName[profession.name] then
+            learned[#learned + 1] = profession
+            byName[profession.name] = true
+        end
+    end
+
+    table.sort(learned, function(a, b) return a.name < b.name end)
     return learned
 end
 
