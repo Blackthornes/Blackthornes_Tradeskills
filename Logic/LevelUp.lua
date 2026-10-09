@@ -177,9 +177,34 @@ end
 --   says how), and realCost the cost less that, below zero when the craft
 --   pays. missing is how many materials are short for one craft, counting
 --   the bank, the same way the Profit tab's breakdown does.
-function LevelUp:BuildRow(recipeID, recipe)
+--- Every item a known craft uses, on any character: what can be a sub-craft.
+-- @return { [itemID] = true }
+function LevelUp:GetMaterialSet()
+    local set = {}
+    local function add(recipes)
+        for _, recipe in pairs(recipes or {}) do
+            for _, reagent in ipairs(type(recipe) == "table" and recipe.reagents or {}) do
+                set[reagent.itemID] = true
+            end
+        end
+    end
+
+    -- Read in place rather than through Recipes:GetAccountWide, which copies
+    -- every recipe and this runs on every redraw.
+    add(ns.Recipes:GetAll())
+    for _, record in pairs((ns.db and ns.db.characters) or {}) do
+        if type(record) == "table" then add(record.recipes) end
+    end
+    return set
+end
+
+--- Build one row of the list.
+-- @param materials  GetMaterialSet's answer, to say whether the craft makes
+--   something another craft uses (`isMaterial`); worked out when not given
+function LevelUp:BuildRow(recipeID, recipe, materials)
     recipe = recipe or ns.Recipes:GetAny(recipeID)
     if not recipe then return nil end
+    materials = materials or self:GetMaterialSet()
 
     local skillUp = ns.SkillUp and ns.SkillUp:GetForRecipe(recipeID, recipe) or nil
     local costDetail = ns.Cost:GetCraftCost(recipeID)
@@ -208,6 +233,8 @@ function LevelUp:BuildRow(recipeID, recipe)
         realCost = cost and back and (cost - back) or nil,
         craftableNow = ns.Profit:GetCraftableCount(recipeID),
         missing = missing,
+        isMaterial = recipe.outputItemID ~= nil and materials[recipe.outputItemID] == true,
+        neverSubCraft = ns.Cost.IsNeverSubCraft and ns.Cost:IsNeverSubCraft(recipeID) or false,
     }
 end
 
@@ -219,11 +246,14 @@ end
 -- @param opts.includeTrivial  keep grey recipes (always last)
 -- @param opts.craftableOnly   keep only what the bags cover right now
 -- @param opts.search          part of a name, any case
+-- @param opts.subCraftsOnly   keep only crafts whose item another craft
+--   uses, grey ones too: where to mark one never to make as a sub-craft
 function LevelUp:GetRanked(opts)
     opts = opts or {}
 
     local needle = opts.search and opts.search ~= "" and opts.search:lower() or nil
     local rows = {}
+    local materials = self:GetMaterialSet()
 
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         local keep = not opts.skillLines or opts.skillLines[recipe.skillLineID]
@@ -235,11 +265,18 @@ function LevelUp:GetRanked(opts)
             keep = (recipe.name or ""):lower():find(needle, 1, true) ~= nil
         end
 
+        if keep and opts.subCraftsOnly then
+            keep = recipe.outputItemID ~= nil and materials[recipe.outputItemID] == true
+        end
+
         if keep then
-            local row = self:BuildRow(recipeID, recipe)
+            local row = self:BuildRow(recipeID, recipe, materials)
 
             if row then
-                if row.tier == "trivial" and not opts.includeTrivial then row = nil end
+                -- A sub-craft gone grey is still made to go into others,
+                -- often the very one to stop making.
+                local showGrey = opts.includeTrivial or opts.subCraftsOnly
+                if row.tier == "trivial" and not showGrey then row = nil end
                 if row and opts.craftableOnly and row.craftableNow < 1 then row = nil end
             end
 

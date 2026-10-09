@@ -362,6 +362,11 @@ local DEFAULTS = {
     -- one the character playing does not know. See Profit:SetIgnored.
     ignoredCrafts = {},
 
+    -- recipeID -> the craft's name: crafts never made to go into another
+    -- craft, their item bought instead (Voldar, 2026-10-07). Account wide,
+    -- the name kept for Settings. See Cost:SetNeverSubCraft.
+    neverSubCrafts = {},
+
     -- itemID -> the item's name: items the player told Ready to sell to stop
     -- offering. Account wide; the name is kept so Settings can list one the
     -- client has not loaded. See Posting:SetIgnored.

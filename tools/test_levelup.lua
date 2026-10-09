@@ -240,4 +240,30 @@ check("in a colour, the lowest real cost goes first",
 ns.Util.GetVendorSellPrice, ns.Util.IsBoundOnPickup = nil, nil
 ns.Profit.ChoosePostPrice, ns.Profit.NetFromListing, ns.Disenchant = nil, nil, nil
 
+print("\nsub-crafts only, and never made as one")
+
+-- Voldar (2026-10-07): the crafts whose item another craft uses, grey ones
+-- too, each marked Make or Buy.
+recipes[3].skillUp = { tier = "trivial" }
+local subs = LevelUp:GetRanked({ skillLines = tailoring, subCraftsOnly = true })
+check("only the bolt, which the cape uses, grey or not (got " .. names(subs) .. ")",
+    names(subs) == "Bolt of Woolen Cloth")
+check("it is a material, made as a sub-craft", subs[1].isMaterial and not subs[1].neverSubCraft)
+recipes[3].skillUp = { tier = "medium" }
+
+ns.db = {}
+local before = LevelUp:BuildRow(2).cost
+ns.Cost:SetNeverSubCraft(3, true)
+local after = LevelUp:BuildRow(2)
+check("the cape's bolt is made while allowed (got " .. tostring(before) .. ")", before == 900)
+check("marked, the cape buys its bolt (got " .. tostring(after.cost) .. ")", after.cost == 2000)
+check("its material says it is not made", not after.costDetail.reagents[1].crafted
+    and ns.Cost:NeverMadeRecipeFor(BOLT) == 3)
+check("the bolt's row says Buy", LevelUp:BuildRow(3).neverSubCraft == true)
+check("the bolt can still be made and ranked itself",
+    names(LevelUp:GetRanked({ skillLines = tailoring })):find("Bolt of Woolen Cloth", 1, true) ~= nil)
+ns.Cost:SetNeverSubCraft(3, false)
+check("allowed again, the bolt is made", LevelUp:BuildRow(2).cost == 900)
+ns.db = nil
+
 print("\n  all level up checks passed\n")

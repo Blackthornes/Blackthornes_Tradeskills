@@ -1462,8 +1462,14 @@ local function CreateQueuedRow(row)
     row.detail:SetPoint("TOPLEFT", 8, -17)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -17)
 
+    -- On a sub-craft: never make it as one, buy it instead (Queue:NeverMake).
     row.remove = Widgets.CreateButton(row, "x", function()
-        if row.data then ns.Queue:Remove(row.data.recipeID) end
+        if not row.data then return end
+        if row.data.isDependency then
+            ns.Queue:NeverMake(row.data)
+        else
+            ns.Queue:Remove(row.data.recipeID)
+        end
     end, { width = 16, height = 15, tooltip = "Take this off the queue" })
     row.remove:SetPoint("TOPRIGHT", -8, -1)
 
@@ -1494,7 +1500,8 @@ local function UpdateQueuedRow(row, entry)
     local status, colour, craftable = CraftPanel:QueuedStatus(entry, CraftPanel.queuedOpen)
 
     -- A material the queue added for another craft says which, as the Queue
-    -- tab does, and has no x: it is sized from that craft.
+    -- tab does. Its x never makes it as a sub-craft again: it is sized from
+    -- that craft, so taking it off alone would bring it straight back.
     local texts = {}
     if entry.isDependency then
         local parents = ns.Queue:GetDependencyParents(entry)
@@ -1528,7 +1535,9 @@ local function UpdateQueuedRow(row, entry)
     Theme.FitText(row.detail, texts)
     row.detail:SetTextColor(Theme.Unpack(colour))
 
-    row.remove:SetShown(not entry.isDependency)
+    row.remove:Show()
+    row.remove.tooltipText = entry.isDependency and ns.Queue.NeverMakeTooltip
+        and ns.Queue:NeverMakeTooltip(entry) or nil
 
     local busy = ns.Crafting:IsBusy()
     row.craft:SetText(busy and "Stop" or "Craft")
