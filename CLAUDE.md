@@ -183,8 +183,11 @@ CHANGELOG, #announcements post, commit or PR text names a player, and
 `check_release.py` refuses a CHANGELOG section that credits one
 (`names_a_player` in `post_general.py`). The #general post is the one
 exception: it thanks, by their Discord name, whoever asked for or reported
-each change, next to that change ("thanks Ana for spotting this"). Find who
-asked from the project's threads. This tool is
+the changes. Group the changes by that person (the owner, 2026-10-09), so
+each one is thanked once, after their group ("Ana asked for these two.
+Thanks Ana!"); changes several people asked for go with one group and
+thank them together, and changes nobody asked for go in their own group
+with no thanks. Find who asked from the project's threads. This tool is
 also the same in all four repos.
 
 ## The owner's standing rules (both addons)
