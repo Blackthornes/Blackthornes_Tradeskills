@@ -344,15 +344,26 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
---- What one of an item costs to buy: the reagent price the rest of the
---- addon uses (a vendor's price where one sells it, else the cheapest
---- listing).
+--- What one of an item costs to buy for a bundle: the reagent price the
+--- rest of the addon uses (a vendor's price where one sells it, else the
+--- cheapest listing), and "vendor" when a shop sets it.
+--
+-- A shop seen with limited stock sells a few at a time, never a bundle's
+-- twenty, so here it gives way to the auction house whenever there is a
+-- listing. A bundle of 20 Heavy Leather read 20s, 1s each, against 10s 58c
+-- on the auction house (2026-10-09); a shop is the likeliest source, and
+-- the panel now marks a bundle a vendor priced, so it shows if not.
 local function UnitCost(itemID)
-    if ns.Cost and ns.Cost.GetReagentUnitCost then
-        local cost = ns.Cost:GetReagentUnitCost(itemID)
-        return cost
+    if not (ns.Cost and ns.Cost.GetReagentUnitCost) then
+        return ns.Prices and ns.Prices:GetValue(itemID, "lowest"), nil
     end
-    return ns.Prices and ns.Prices:GetValue(itemID, "lowest")
+
+    local cost, source = ns.Cost:GetReagentUnitCost(itemID)
+    if source == "vendor" and ns.Vendor and ns.Vendor.IsLimited and ns.Vendor:IsLimited(itemID) then
+        local auction = ns.Prices and ns.Prices:GetValue(itemID, "lowest")
+        if auction then return auction, nil end
+    end
+    return cost, source == "vendor" and "vendor" or nil
 end
 
 --- Every crate, with what it costs to buy and fill and what a favor costs.
@@ -375,7 +386,7 @@ function MerchantsFavor:GetRows(opts)
         local bundles, best = {}, nil
         for _, bundle in ipairs(crate.bundles) do
             local materialID, count = bundle[1], bundle[2]
-            local unit = UnitCost(materialID)
+            local unit, from = UnitCost(materialID)
             local stack = Util.GetMaxStackSize(materialID)
 
             local entry = {
@@ -383,6 +394,7 @@ function MerchantsFavor:GetRows(opts)
                 count = count,
                 unit = unit,
                 cost = unit and unit * count or nil,
+                vendor = from == "vendor",
                 overStack = (stack ~= nil and count > stack) or false,
             }
             bundles[#bundles + 1] = entry

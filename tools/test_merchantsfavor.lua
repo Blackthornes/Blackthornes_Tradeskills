@@ -10,6 +10,9 @@
 --   * filling a crate says which sealed crate it becomes, and a sealed crate
 --     leaving the bags with favor and money coming in is what it paid; the
 --     smallest favor seen is kept, as a perk doubles some turn-ins;
+--   * a bundle is priced as the rest of the addon prices a material, except
+--     that a shop with limited stock gives way to an auction listing, and a
+--     vendor price is marked;
 --   * the game's item ID for a crate beats the typed one;
 --   * the Deals tab's Show menu swaps in the view, which lists, sorts and
 --     explains the crates, and its tick box is kept in Settings.
@@ -90,7 +93,16 @@ ns.Prices = {
     GetValue = function(_, itemID) return prices[itemID] end,
     Count = function() return 6 end,
 }
-ns.Cost = { GetReagentUnitCost = function(_, itemID) return prices[itemID], "buy" end }
+-- Shops, as Cost prices them: a vendor's price beats the auction house's.
+-- itemID -> { price, limited }
+local shops = {}
+ns.Cost = {
+    GetReagentUnitCost = function(_, itemID)
+        if shops[itemID] then return shops[itemID][1], "vendor" end
+        return prices[itemID], "buy"
+    end,
+}
+ns.Vendor = { IsLimited = function(_, itemID) return shops[itemID] ~= nil and shops[itemID][2] == true end }
 
 local bags = {}
 ns.Inventory = {
@@ -166,6 +178,28 @@ rows = MerchantsFavor:GetRows({ skipOverStack = false })
 textiles = Row(rows, "apprentice-textiles")
 check("counting over-stack bundles, the linen is cheapest", textiles.best.itemID == LINEN
     and textiles.perFavor == (2000 + 1200 - 250) / 5)
+
+--------------------------------------------------------------------------------
+print("\nvendor prices in a bundle")
+
+-- Reported 2026-10-09: 20 Heavy Leather read 20s, 1s each, while the
+-- auction house wanted 10s 58c.
+shops[SILVERLEAF] = { 1, true }
+shops[PEACEBLOOM] = { 2, false }
+herbs = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-herbs")
+local silverleaf, peacebloom = herbs.bundles[2], herbs.bundles[1]
+check("a shop with limited stock gives way to the auction house", silverleaf.itemID == SILVERLEAF
+    and silverleaf.unit == 5 and silverleaf.cost == 100 and not silverleaf.vendor)
+check("a shop that never runs out keeps its price, marked", peacebloom.itemID == PEACEBLOOM
+    and peacebloom.unit == 2 and peacebloom.vendor == true and herbs.best == peacebloom)
+
+prices[SILVERLEAF] = nil
+herbs = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-herbs")
+check("with nothing listed, the limited shop is all there is", herbs.bundles[2].unit == 1
+    and herbs.bundles[2].vendor == true)
+
+prices[SILVERLEAF] = 5
+shops[SILVERLEAF], shops[PEACEBLOOM] = nil, nil
 
 --------------------------------------------------------------------------------
 print("\nfinding crates in the game")
