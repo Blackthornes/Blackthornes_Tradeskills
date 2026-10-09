@@ -162,6 +162,17 @@ himself; never ask him to paste the webhook address anywhere. Without it the
 step does nothing, and a failed post never undoes the upload. The tool is the
 same in all four repos; a fix to it belongs in all four.
 
+The owner asked (2026-10-09) for one friendly post in #general per release
+too: plain words, a sixth-grade reading level, warm, in his voice (short,
+contractions, no jargon, no file or setting names, never his name), saying
+what players will notice. Each release PR writes the new version's section
+in `NEWS.md` (`## X.Y.Z`, like CHANGELOG.md; it never ships) next to the
+CHANGELOG section. After the upload `tools/post_general.py` scans it with
+`check_package.py`'s PRIVATE list and posts it through the
+`DISCORD_GENERAL_WEBHOOK_URL` secret, which the owner sets himself, with the
+CurseForge link added. No section or no secret means no post. This tool is
+also the same in all four repos.
+
 ## The owner's standing rules (both addons)
 
 - **"Always check that it's clear to post."** Anything that goes public (a

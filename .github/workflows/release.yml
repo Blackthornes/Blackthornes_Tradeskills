@@ -50,6 +50,7 @@ jobs:
           python tools/test_check_release.py
           python tools/test_check_package.py
           python tools/test_announce_discord.py
+          python tools/test_post_general.py
 
       # Build first with nothing uploaded, so the package can be checked
       # before anything leaves the repository.
@@ -84,3 +85,15 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python tools/announce_discord.py "${{ github.ref_name }}"
+
+      # Tells the players: posts this version's NEWS.md section, a short
+      # friendly post in plain words, in #general. Needs the
+      # DISCORD_GENERAL_WEBHOOK_URL repository secret, which the owner sets
+      # himself; without it, or without a NEWS.md section, this step does
+      # nothing. The post gets the clear-to-post scan first. A failure here
+      # shows as a warning and never undoes the upload above.
+      - name: "Post the news in #general"
+        continue-on-error: true
+        env:
+          DISCORD_GENERAL_WEBHOOK_URL: ${{ secrets.DISCORD_GENERAL_WEBHOOK_URL }}
+        run: python tools/post_general.py "${{ github.ref_name }}"
