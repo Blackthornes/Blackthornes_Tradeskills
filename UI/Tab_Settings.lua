@@ -687,7 +687,7 @@ local function Build(outer)
 
     CreateSection(pages.mail, 2, "AT VENDORS")
     local sellMarkedRow = CreateRow(pages.mail, 2, "Sell marked at vendors",
-        "A button on the vendor window that sells what your queue made on Vendor, up to 12 a visit so buyback can undo any sale. Test selling checks whether one click can sell them all.")
+        "A button on the vendor window that sells what your queue made on Vendor, up to 12 a visit so buyback can undo any sale.")
 
     widgets.sellMarked = Widgets.CreateCheckbox(sellMarkedRow, "Show it", function(checked)
         Config:Set("sellMarkedButton", checked)
@@ -695,11 +695,17 @@ local function Build(outer)
     end, true)
     widgets.sellMarked:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local sellTest = Widgets.CreateButton(sellMarkedRow, "Test selling", function()
+    -- Buttons beside a tick box ran past the column's edge (2026-10-09), so
+    -- each has its own row now.
+    local sellTestRow = CreateRow(pages.mail, 2, "Test vendor selling",
+        "At a vendor: sells your cheapest grey item from the addon, to see whether one click can sell what is marked. Also /bts selltest.")
+
+    local sellTest = Widgets.CreateButton(sellTestRow, "Test selling", function()
         if ns.SellMarked then ns.SellMarked:Test() end
     end, { width = 96, height = 20,
         tooltip = "At a vendor: sells your cheapest grey item from the addon, to see whether the game allows it (/bts selltest)" })
-    sellTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+    sellTest:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(sellTest)
 
     -- Asked 2026-10-06: the buy window opened at 1 after a Buy list search.
     CreateSection(pages.auction, 1, "BUYING AND POSTING")
@@ -756,10 +762,14 @@ local function Build(outer)
     end, true)
     widgets.mailReport:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local mailReportTest = Widgets.CreateButton(mailReportRow, "Preview", function()
+    local mailPreviewRow = CreateRow(pages.mail, 2, "Sample mail report",
+        "Shows the report with made-up mail, so you can see what it looks like.")
+
+    local mailReportTest = Widgets.CreateButton(mailPreviewRow, "Preview", function()
         if ns.MailReport and ns.MailHaul then ns.MailReport:Show(ns.MailHaul:Sample()) end
     end, { width = 70, height = 20, tooltip = "Show a sample report" })
-    mailReportTest:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+    mailReportTest:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(mailReportTest)
 
     -- Requested by a player whose chat filled with sale lines: the Sales tab
     -- keeps every sale, so the chat copy can go.
@@ -1049,11 +1059,16 @@ local function Build(outer)
     end, true)
     widgets.recipeTooltips:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local recipeList = Widgets.CreateButton(recipeTipRow, "Recipes to learn", function()
+    -- Its own row (a player's report, 2026-10-09): beside the tick box it
+    -- started 340 pixels in and ran past the column into the next one.
+    local recipeListRow = CreateRow(pages.look, 1, "Recipes to learn",
+        "Every recipe of your professions you have not learned, with what each is worth. Also /bts recipes.")
+
+    local recipeList = Widgets.CreateButton(recipeListRow, "Show list", function()
         if ns.ProfitTab and ns.ProfitTab.ShowRecipesToLearn then ns.ProfitTab.ShowRecipesToLearn() end
-    end, { width = 120, height = 20,
+    end, { width = 110, height = 20,
            tooltip = "Every recipe of your professions you have not learned, with what each is worth" })
-    recipeList:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+    recipeList:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(recipeList)
 
     local upgradeRow = CreateRow(pages.look, 1, "Upgrade arrows on gear",
