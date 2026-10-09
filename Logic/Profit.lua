@@ -525,9 +525,16 @@ function Profit:Analyse(recipeID, characterKey, method)
     local cost = ns.Cost:GetCraftCost(recipeID)
     analysis.cost = cost
 
+    -- Whether the character playing can make it: an alt's recipe, or one of
+    -- a dropped profession, has no time or gold an hour (a player asked,
+    -- 2026-10-09), since those only mean something for crafts you can cast.
+    local myRecipe = ns.Recipes.Get and ns.Recipes:Get(recipeID)
+    analysis.knownByMe = myRecipe ~= nil and not (ns.Recipes.IsDropped
+        and ns.Recipes:IsDropped(myRecipe, ns.Config:GetCharacterKey()))
+
     -- How long one takes, sub-crafts included, before the early exits: the
     -- time needs no price.
-    if ns.CraftTime and cost then
+    if ns.CraftTime and cost and analysis.knownByMe then
         local timing = ns.CraftTime:ForCost(recipeID, cost)
         analysis.craftTime = timing
         analysis.craftSeconds = timing.seconds
