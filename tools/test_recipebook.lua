@@ -215,5 +215,58 @@ local dropShort, dropWhere = Book:LearnFrom(Book:Get(2158))
 check("a world drop", dropShort, "Drop")
 check("says how widely", dropWhere[1], "World drop (569 kinds of creature)")
 
+print("\nthe skill Forever asks for")
+-- A Classic recipe a player reported Forever moved (165 -> 140).
+ns.RECIPE_BOOK.RECIPES[4097] = { 165, 165, 4456, 1, 1, { HEAVY, 4 }, "Raptor Hide Belt" }
+ns.RECIPE_BOOK.ITEMS[13288] = { 4097, 2500 }
+Book:Invalidate()
+check("a reported Forever skill beats Classic's", Book:GetSkill(4097), 140)
+check("Classic's stands where nobody said", Book:GetSkill(2158), 90)
+check("an unknown recipe has none", Book:GetSkill(424242), nil)
+
+-- The game's own recipe item tooltip.
+local tooltips = {}
+C_TooltipInfo = { GetItemByID = function(id) return tooltips[id] end }
+ns.Util.HasFunction = function(path)
+  return path == "C_TooltipInfo.GetItemByID" or path == "C_Item.IsItemDataCachedByID"
+end
+C_Item.IsItemDataCachedByID = function(id) return tooltips[id] ~= nil end
+itemInfo[PATTERN_BOOTS] = { "Pattern: Fine Leather Boots", 9 }
+itemInfo[13288] = { "Pattern: Raptor Hide Belt", 9 }
+tooltips[PATTERN_BOOTS] = { lines = {
+  { leftText = "Pattern: Fine Leather Boots" },
+  { leftText = "Requires Tailoring (50)" },          -- the item it makes
+  { leftText = "Use: Teaches you how to craft Fine Leather Boots." },
+  { leftText = "|cffff2020Requires Leatherworking (75)|r" },
+} }
+tooltips[13288] = { lines = { { args = {
+  { field = "leftText", stringVal = "Requires Leatherworking (135)" } } } } }
+
+check("hovering reads the tooltip", Book:LearnSkill(PATTERN_BOOTS), true)
+check("the recipe's own line wins", Book:GetSkill(2158), 75)
+check("and is kept by item", ns.db.recipeSkills[PATTERN_BOOTS].skill, 75)
+check("with what it teaches", ns.db.recipeSkills[PATTERN_BOOTS].teaches, "fine leather boots")
+check("read once a session", Book:LearnSkill(PATTERN_BOOTS), false)
+check("the tooltip shows it",
+  Line(Book:TooltipLines(PATTERN_BOOTS), "Teaches")[2], "Fine Leather Boots  (Leatherworking 75)")
+
+Book:SweepSkills()
+check("a sweep reads held recipe items", Book:GetSkill(4097), 135)
+check("the game beats a player's report", ns.db.recipeSkills[13288].skill, 135)
+
+-- A Forever recipe with no Classic pattern is matched by name.
+itemInfo[400002] = { "Pattern: Forever Bag", 9 }
+tooltips[400002] = { lines = { { leftText = "Requires Leatherworking (110)" } } }
+check("an unlisted pattern is read too", Book:LearnSkill(400002), true)
+check("and sets its recipe's skill", Book:GetSkill(1263000), 110)
+
+-- Saved from an earlier session: still applied after a reload.
+local saved = ns.db.recipeSkills
+Book:Invalidate()
+check("kept skills survive a reload", Book:GetSkill(1263000), 110)
+check("nothing about who looked is kept with a skill", saved[400002].owner, nil)
+C_TooltipInfo = nil
+C_Item.IsItemDataCachedByID = nil
+
 if failures > 0 then error(("%d recipe book check(s) failed"):format(failures)) end
 print("\n  recipe book: all checks passed")
