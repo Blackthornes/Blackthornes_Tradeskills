@@ -321,6 +321,7 @@ local function Snapshot(db)
     -- The price graph's hourly prices: worth having, not worth the budget.
     -- The next scans start it again.
     snapshot.priceHistory = nil
+    snapshot.priceListed = nil
 
     -- Guildmates' prices: theirs to send again, not worth the budget.
     snapshot.guildPrices = nil
