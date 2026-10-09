@@ -55,6 +55,12 @@ local function SeenTable(create)
     return ns.db.seenRecipes
 end
 
+local function SkillTable(create)
+    if not ns.db then return nil end
+    if create and type(ns.db.recipeSkills) ~= "table" then ns.db.recipeSkills = {} end
+    return type(ns.db.recipeSkills) == "table" and ns.db.recipeSkills or nil
+end
+
 --- A plain, non-empty string from a client call, or nil. Copied inside the
 --- pcall: in a dungeon the client can hand back one that raises when used.
 local function PlainString(fn, ...)
@@ -70,6 +76,24 @@ end
 local function Now()
     return (type(GetTime) == "function" and GetTime()) or time()
 end
+
+-- Skill levels Forever changed from Classic, as players reported them
+-- before a recipe item's tooltip had been read on this account (a player
+-- on Discord, 2026-10-09: "Seems levels have changed a bit?"). Keyed by
+-- the recipe's name in lower case. What the game's own tooltip says wins
+-- over these (RecipeBook:LearnSkill).
+local FOREVER_SKILLS = {
+    ["hillman's leather boots"] = 110,
+    ["herbalist's gloves"] = 110,
+    ["raptor hide belt"] = 140,
+    ["raptor hide harness"] = 140,
+    ["green whelp armor"] = 150,
+}
+
+-- Required skills read from recipe items' tooltips, one read per item a
+-- session (a skill can change again on a patch, so it is read again on
+-- the next login).
+local skillReadThisSession = {}
 
 --------------------------------------------------------------------------------
 -- Professions
@@ -209,6 +233,36 @@ function RecipeBook:GetAll()
         end
     end
 
+    -- The skill each recipe needs on Forever: players' reports, then what
+    -- the game's own recipe item tooltips say, which beats everything.
+    for _, record in pairs(merged) do
+        local fixed = record.name and FOREVER_SKILLS[record.name:lower()]
+        if fixed then
+            record.skill = fixed
+        end
+    end
+    for itemID, learned in pairs(SkillTable(false) or {}) do
+        if type(learned) == "table" and type(learned.skill) == "number" then
+            local row = book.ITEMS[itemID]
+            local record = row and (merged[row[1]] or merged[aliases[row[1]] or false])
+            if not record and type(learned.teaches) == "string" then
+                record = byName[learned.teaches]
+                if not record then
+                    for _, candidate in pairs(merged) do
+                        if candidate.name and candidate.name:lower() == learned.teaches then
+                            record = candidate
+                            break
+                        end
+                    end
+                end
+            end
+            if record and (not learned.profession or not record.profession
+                    or learned.profession == record.profession) then
+                record.skill = learned.skill
+            end
+        end
+    end
+
     self.merged, self.aliases = merged, aliases
     return merged, aliases
 end
@@ -222,6 +276,14 @@ end
 function RecipeBook:Get(recipeID)
     local merged, aliases = self:GetAll()
     return merged[recipeID] or merged[aliases[recipeID] or false]
+end
+
+--- The skill a recipe needs, Forever's where it is known, else Classic's;
+--- nil when nothing says. Equipment reads this (inside a pcall) for its
+--- crafted upgrades, so keep it stable.
+function RecipeBook:GetSkill(recipeID)
+    local record = self:Get(recipeID)
+    return record and record.skill or nil
 end
 
 --- Every profession the book has recipes for, sorted.
@@ -292,6 +354,174 @@ function RecipeBook:RecipeItemsFor(record, extraItemID)
         if not listed then items[#items + 1] = extraItemID end
     end
     return items
+end
+
+--------------------------------------------------------------------------------
+-- The skill a recipe needs, read from the game
+--------------------------------------------------------------------------------
+
+-- Forever moved some recipes to other skill levels (Raptor Hide Belt needs
+-- Leatherworking 140 there, 165 in Classic). A recipe item's own tooltip
+-- says what it needs ("Requires Leatherworking (140)"), so that is read
+-- whenever one is hovered, and for every recipe item the client already
+-- holds after the auction house closes and soon after logging in.
+
+-- How many recipe items one step of the sweep reads, and how often.
+local SWEEP_BATCH = 20
+local SWEEP_STEP = 0.2
+
+--- "Requires %s (%d)" as a Lua pattern catching the name and the number.
+local function RequiresPattern()
+    local format = type(_G.ITEM_MIN_SKILL) == "string" and _G.ITEM_MIN_SKILL or "Requires %s (%d)"
+    format = format:gsub("%%%d%$", "%%")
+    format = format:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
+    format = format:gsub("%%s", "(.-)"):gsub("%%d", "(%%d+)")
+    return "^" .. format .. "$"
+end
+
+local function LineText(line)
+    if type(line) ~= "table" then return nil end
+    local text = line.leftText
+    if text == nil and type(line.args) == "table" then
+        for _, arg in ipairs(line.args) do
+            if type(arg) == "table" and arg.field == "leftText" then text = arg.stringVal end
+        end
+    end
+    if type(text) ~= "string" then return nil end
+    return (text .. ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+end
+
+local function IsProfession(name)
+    for _, profession in pairs(Book().PROFESSIONS) do
+        if profession == name then return true end
+    end
+    return false
+end
+
+--- What a recipe item's tooltip says it needs.
+--
+-- The tooltip also shows the item the recipe makes, which can need a skill
+-- of its own (engineering goggles), and the recipe's line comes after it,
+-- so the last matching line wins, and one naming the recipe's own
+-- profession beats the rest.
+--
+-- @return skill, profession, or nil when the client has no lines for it
+function RecipeBook:ReadSkill(itemID, profession)
+    if not Util.HasFunction("C_TooltipInfo.GetItemByID") then return nil end
+
+    local found, foundProfession
+    local ok = pcall(function()
+        local data = C_TooltipInfo.GetItemByID(itemID)
+        if type(data) ~= "table" or type(data.lines) ~= "table" then return end
+
+        local pattern = RequiresPattern()
+        for _, line in ipairs(data.lines) do
+            local text = LineText(line)
+            local name, number = nil, nil
+            if text then name, number = text:match(pattern) end
+            number = tonumber(number)
+            if name and number and IsProfession(name) then
+                if not profession or name == profession or foundProfession ~= profession then
+                    found, foundProfession = number, name
+                end
+            end
+        end
+    end)
+    if not ok then return nil end
+    return found, foundProfession
+end
+
+--- Read and keep the skill one recipe item needs, once a session.
+--
+-- @return true when it changed what was kept
+function RecipeBook:LearnSkill(itemID)
+    if type(itemID) ~= "number" or skillReadThisSession[itemID] then return false end
+
+    local name, classID = ItemInfo(itemID)
+    if not name or classID ~= CLASS_RECIPE then return false end
+
+    local record = self:ForItem(itemID)
+    local skill, profession = self:ReadSkill(itemID, record and record.profession)
+    if not skill then return false end
+    skillReadThisSession[itemID] = true
+
+    local taught = name:match("^[^:]+:%s*(.+)$")
+    local skills = SkillTable(true)
+    if not skills then return false end
+
+    local old = skills[itemID]
+    if type(old) == "table" and old.skill == skill and old.profession == profession then return false end
+
+    -- Game IDs and numbers only; nothing about who looked.
+    skills[itemID] = {
+        skill = skill,
+        profession = profession,
+        teaches = taught and taught:lower() or nil,
+        at = time(),
+    }
+    -- A sweep rebuilds the book once at its end, not once per item.
+    if not self.sweeping then self.merged = nil end
+    return true
+end
+
+local function AuctionHouseOpen()
+    return ns.Scanner ~= nil and ns.Scanner.isAuctionHouseOpen == true
+end
+
+--- Is the item already in the client's cache? Only those are read in a
+--- sweep: reading any other would fetch it and push bag items out.
+local function Cached(itemID)
+    if not Util.HasFunction("C_Item.IsItemDataCachedByID") then return false end
+    local ok, answer = pcall(C_Item.IsItemDataCachedByID, itemID)
+    return ok and answer == true
+end
+
+--- Read every recipe item the client holds, a few at a time. Nothing
+--- happens while the auction house is open.
+function RecipeBook:SweepSkills()
+    if self.sweeping or not Util.HasFunction("C_TooltipInfo.GetItemByID") then return end
+
+    local queue = {}
+    for itemID in pairs(Book().ITEMS) do
+        if not skillReadThisSession[itemID] then queue[#queue + 1] = itemID end
+    end
+    for itemID in pairs(SkillTable(false) or {}) do
+        if type(itemID) == "number" and not skillReadThisSession[itemID] and not Book().ITEMS[itemID] then
+            queue[#queue + 1] = itemID
+        end
+    end
+    if #queue == 0 then return end
+    table.sort(queue)
+
+    self.sweeping = true
+    local index, changed = 1, false
+    local function Step()
+        if AuctionHouseOpen() then
+            self.sweeping = false
+            if changed then self.merged = nil end
+            return
+        end
+        local last = math.min(index + SWEEP_BATCH - 1, #queue)
+        for i = index, last do
+            local itemID = queue[i]
+            if Cached(itemID) and self:LearnSkill(itemID) then changed = true end
+        end
+        index = last + 1
+        if index <= #queue and C_Timer and C_Timer.After then
+            C_Timer.After(SWEEP_STEP, Step)
+            return
+        end
+        self.sweeping = false
+        if changed then self.merged = nil end
+        if changed and ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end
+    Step()
+end
+
+--- Sweep a little later, out of the way of whatever is loading now.
+function RecipeBook:SweepSoon(delay)
+    if not (C_Timer and C_Timer.After) then return end
+    C_Timer.After(delay or 2, function() self:SweepSkills() end)
 end
 
 --------------------------------------------------------------------------------
@@ -622,6 +852,9 @@ function RecipeBook:TooltipLines(itemID)
     local lines = {}
     if not self:TooltipEnabled() then return lines end
 
+    -- The tooltip on screen says what skill the recipe needs on Forever.
+    self:LearnSkill(itemID)
+
     local record = self:ForItem(itemID)
     if not record then return lines end
 
@@ -693,6 +926,9 @@ end
 --------------------------------------------------------------------------------
 
 function RecipeBook:OnEnable()
+    ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", function() self:SweepSoon(15) end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() self:SweepSoon(2) end)
+
     ns.RegisterCommand("recipes", "list recipes you have not learned, with what each is worth",
         function(input)
             input = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")

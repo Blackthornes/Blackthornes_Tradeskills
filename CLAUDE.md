@@ -113,7 +113,14 @@ ns.Recipes:GetShortCharacterName(key)  -- an alt's short name
 ns.Config:GetCharacterKey()            -- the character playing
 ns.db.characters[key].faction          -- to leave out the other faction's alts
 ns.Prices:GetValue(itemID)             -- material and auction prices
+ns.RecipeBook:GetSkill(recipeID)       -- the skill a recipe needs on Forever, or nil
 ```
+
+`GetSkill` (added 2026-10-09, after a player found Forever had moved some
+Leatherworking patterns to lower skills) answers what the recipe item's
+own tooltip says (`Logic/RecipeBook.lua`, `RecipeBook:LearnSkill`, kept
+account wide in `recipeSkills[recipe item ID]`, never rename it), then
+the players' reports in `FOREVER_SKILLS`, then Classic's book.
 
 Keep these stable as well; if one changes, change Equipment's
 `Logic/Crafting.lua` in the same breath.
