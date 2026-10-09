@@ -319,6 +319,7 @@ local function UpdateDetail(entry)
             elseif bundle.overStack then
                 labelColor, valueColor = "dim", "dim"
             end
+            if bundle.vendor then label = label .. " (vendor)" end
             if bundle.overStack then
                 label = label .. " *"
                 overStack = true
