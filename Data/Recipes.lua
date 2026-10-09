@@ -415,6 +415,20 @@ function Recipes:GetAccountWide(skipDropped)
     return results
 end
 
+--- Every saved recipe of every character, not copied and not merged: one
+--- entry per character that knows it. For readers that only look (an
+--- output's recipe ID) and must not pay for GetAccountWide's copies.
+function Recipes:GetAccountWideOutputs()
+    local results = {}
+    if not ns.db then return results end
+    for _, record in pairs(ns.db.characters) do
+        for _, recipe in pairs(record.recipes or {}) do
+            results[#results + 1] = recipe
+        end
+    end
+    return results
+end
+
 --- Which skill line a recipe belongs to.
 --
 -- GetRecipeInfo does not carry skillLineID on Forever -- it comes back nil for

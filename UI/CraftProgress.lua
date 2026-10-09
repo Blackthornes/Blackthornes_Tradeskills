@@ -155,6 +155,7 @@ end
 
 local function Update(bar, cast)
     if not cast then
+        bar.drawnKey = nil
         if bar:IsShown() then
             bar:Hide()
             if bar.covers then bar.covers:Show() end
@@ -166,6 +167,19 @@ local function Update(bar, cast)
         bar:Show()
         if bar.covers then bar.covers:Hide() end
     end
+
+    -- The words only change ten times a second (the time is shown to a
+    -- tenth) but this runs every frame: with the same words and the same
+    -- bar width, only the fill moves, and the text is left as it is.
+    local okWidth, width = pcall(bar.GetWidth, bar)
+    local key = ("%s\n%.1f\n%s\n%s\n%s"):format(cast.name, cast.secondsLeft, tostring(cast.remaining),
+        tostring(cast.remaining and math.ceil(math.max(0, cast.secondsLeft + cast.remaining * (cast.castSeconds or 0)))),
+        tostring(okWidth and width))
+    if key == bar.drawnKey then
+        bar.fill:SetWidth(math.max(1, (bar:GetWidth() - 2) * cast.fraction))
+        return
+    end
+    bar.drawnKey = key
 
     local name, choices = Progress.Describe(cast)
     bar.label:SetText(name)
