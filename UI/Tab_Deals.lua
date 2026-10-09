@@ -16,7 +16,9 @@
 --
 -- The Show menu swaps the list for the Merchant's Favor view
 -- (UI/DealsFavor.lua, Voldar's idea, 2026-10-08): Waylaid Crates by what a
--- point of favor costs bought on the auction house.
+-- point of favor costs bought on the auction house. And for the Craftsman's
+-- Writs view (UI/DealsWrits.lua, a player's idea, 2026-10-09): writs by what a
+-- point of reputation costs, and what a reputation goal still costs.
 --
 -- The addon cannot buy for you: the game wants a real click on its own Buy
 -- button for every purchase. What it can do is send the search, so the item
@@ -682,6 +684,7 @@ end
 local function Refresh()
     if not widgets.list then return end
     if state.view == "favor" and ns.DealsFavor then return ns.DealsFavor:Refresh() end
+    if state.view == "writs" and ns.DealsWrits then return ns.DealsWrits:Refresh() end
 
     local rows = BuildRows()
     -- A clicked heading's order over the list's own.
@@ -746,6 +749,8 @@ local function Build(container)
         Refresh()
         if state.view == "favor" then
             ns.DealsFavor:ScrollToTop()
+        elseif state.view == "writs" then
+            ns.DealsWrits:ScrollToTop()
         elseif widgets.list then
             widgets.list:ScrollToTop()
         end
@@ -771,18 +776,36 @@ local function Build(container)
     local show = Widgets.CreateDropdown(toolbar, {
         { text = "Show: Flips", value = "flips" },
         { text = "Show: Merchant's Favor", value = "favor" },
+        { text = "Show: Craftsman's Writs", value = "writs" },
     }, function(value)
         UI.DealsSetView(value)
     end, { width = 160 })
     show:SetPoint("LEFT", 0, 0)
     show:SetValue(state.view)
-    show.tooltipText = "Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy."
+    show.tooltipText = "Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."
     widgets.show = show
     sellTo:SetPoint("LEFT", show, "RIGHT", 8, 0)
+
+    -- The reputation goal, for the writs; it takes Sell to's place.
+    local goals = {}
+    for _, goal in ipairs(ns.Writs and ns.Writs.GOALS or {}) do
+        goals[#goals + 1] = { text = "Goal: " .. goal.text, value = goal.key }
+    end
+    local goal = Widgets.CreateDropdown(toolbar, goals, function(value)
+        ns.DealsWrits:SetGoal(value)
+        ns.Config:Set("writGoal", value)
+        ShowFromTop()
+    end, { width = 130 })
+    goal:SetPoint("LEFT", show, "RIGHT", 8, 0)
+    if ns.DealsWrits then goal:SetValue(ns.DealsWrits:GetGoal()) end
+    goal.tooltipText = "The standing with your side's trade camp to work towards. The panel on the right says how many writs it still takes and what they cost."
+    goal:Hide()
+    widgets.goal = goal
 
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
         state.search = text or ""
         if ns.DealsFavor then ns.DealsFavor:SetSearch(state.search) end
+        if ns.DealsWrits then ns.DealsWrits:SetSearch(state.search) end
         ShowFromTop()
     end)
     search:SetPoint("LEFT", sellTo, "RIGHT", 8, 0)
@@ -935,33 +958,42 @@ local function Build(container)
     end)
 end
 
---- Show the flips or the Merchant's Favor view. The favor view is built the
---- first time it is shown.
+-- The views the Show menu swaps in, each built the first time it is shown.
+local VIEWS = {
+    favor = "DealsFavor",
+    writs = "DealsWrits",
+}
+
+--- Show the flips, the Merchant's Favor view or the Craftsman's Writs view.
 function UI.DealsSetView(view)
-    view = (view == "favor" and ns.DealsFavor) and "favor" or "flips"
+    if not (VIEWS[view] and ns[VIEWS[view]]) then view = "flips" end
     state.view = view
     state.selected = nil
     if not widgets.toolbar then return end
 
-    local favor = view == "favor"
-    if favor and not widgets.favorView then
-        local favorView = CreateFrame("Frame", nil, widgets.container)
-        favorView:SetAllPoints(widgets.container)
-        widgets.favorView = favorView
-        ns.DealsFavor:Build(favorView, widgets.toolbar)
+    widgets.views = widgets.views or {}
+    local module = VIEWS[view] and ns[VIEWS[view]]
+    if module and not widgets.views[view] then
+        local frame = CreateFrame("Frame", nil, widgets.container)
+        frame:SetAllPoints(widgets.container)
+        widgets.views[view] = frame
+        module:Build(frame, widgets.toolbar)
     end
 
-    widgets.flipsView:SetShown(not favor)
-    if widgets.favorView then widgets.favorView:SetShown(favor) end
-    widgets.sellTo:SetShown(not favor)
-    widgets.dealsOnly:SetShown(not favor)
-    widgets.skipOverStack:SetShown(favor)
+    widgets.flipsView:SetShown(view == "flips")
+    for key, frame in pairs(widgets.views) do frame:SetShown(key == view) end
+    widgets.sellTo:SetShown(view == "flips")
+    widgets.dealsOnly:SetShown(view == "flips")
+    widgets.skipOverStack:SetShown(view == "favor")
+    widgets.goal:SetShown(view == "writs")
 
+    -- Search sits after the menus this view shows.
+    local before = view == "flips" and widgets.sellTo or view == "writs" and widgets.goal or widgets.show
     widgets.search:ClearAllPoints()
-    widgets.search:SetPoint("LEFT", favor and widgets.show or widgets.sellTo, "RIGHT", 8, 0)
+    widgets.search:SetPoint("LEFT", before, "RIGHT", 8, 0)
 
     Refresh()
-    if favor then ns.DealsFavor:ScrollToTop() elseif widgets.list then widgets.list:ScrollToTop() end
+    if module then module:ScrollToTop() elseif widgets.list then widgets.list:ScrollToTop() end
 end
 
 UI:RegisterTab({
