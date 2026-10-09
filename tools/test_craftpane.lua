@@ -828,6 +828,62 @@ do
   _G.GetTime, _G.C_Timer = savedGetTime, savedTimer
 end
 
+--------------------------------------------------------------------------------
+-- A refresh an event asks for is spread over frames
+--------------------------------------------------------------------------------
+
+-- Every craft in a run changes the bags, and pricing every recipe in one
+-- frame each time was a hitch per craft (2026-10-09). Event refreshes now work
+-- the rows out a few at a time and show them all at once when done; clicks
+-- and typing still refresh on the spot.
+do
+  _G.C_TradeSkillUI = nil
+  local workers = {}
+  ns.Util.NewWorker = function(opts)
+    local w = { opts = opts, running = false }
+    function w:Start(items) self.items, self.index, self.running = items, 0, true; workers[#workers + 1] = self; return self end
+    function w:Cancel() self.running = false end
+    function w:Step()
+      if not self.running then return end
+      self.index = self.index + 1
+      if self.index <= #self.items then self.opts.onItem(self.items[self.index], self.index, self) end
+      if self.index >= #self.items then self.running = false; self.opts.onDone(self) end
+    end
+    return w
+  end
+
+  local applied, asked = {}, 0
+  local saved = { CraftPanel.BeginRefresh, CraftPanel.ApplyRows, CraftPanel.IsShown,
+    CraftPanel.IsCollapsed, CraftPanel.RequestRefresh }
+  CraftPanel.BeginRefresh = function() return { sortBy = "name" } end
+  CraftPanel.ApplyRows = function(_, rows) applied[#applied + 1] = names(rows) end
+  CraftPanel.IsShown = function() return true end
+  CraftPanel.IsCollapsed = function() return false end
+  CraftPanel.RequestRefresh = function() asked = asked + 1 end
+
+  CraftPanel:RefreshInSlices()
+  local w = workers[1]
+  check("an event refresh starts working through the recipes", w and w.running, true)
+  w:Step()
+  check("nothing is shown halfway", #applied, 0)
+  CraftPanel:RefreshInSlices()
+  check("a second ask while one runs starts nothing new", #workers, 1)
+  w:Step() w:Step()
+  check("the rows show once all are worked out", applied[1],
+    "Brown Linen Shirt, Copper Chain Belt, Rough Sharpening Stone")
+  check("and the second ask runs after it", asked, 1)
+
+  CraftPanel:RefreshInSlices()
+  local second = workers[2]
+  CraftPanel:Refresh()
+  check("a refresh at once drops the one under way", second.running, false)
+  check("and shows its own rows", #applied, 2)
+
+  CraftPanel.BeginRefresh, CraftPanel.ApplyRows, CraftPanel.IsShown,
+    CraftPanel.IsCollapsed, CraftPanel.RequestRefresh = unpack(saved)
+  ns.Util.NewWorker = nil
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))

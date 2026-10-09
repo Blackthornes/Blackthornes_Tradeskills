@@ -322,91 +322,95 @@ local function RoomInCrafts(room, recipe)
     return math.max(1, math.floor(room / perCraft))
 end
 
---- The rows to draw: one per recipe, with what it is worth and what is queued.
---
--- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit }
-function CraftPanel:GetRows(opts)
-    opts = opts or {}
-
+--- What the rows are read from: the search, the recipes the open window
+--- shows, and what is cached for them.
+local function RowSources(self, opts)
     local search = (opts.search or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     local open = self:GetOpenRecipeIDs()
 
-    local rows = {}
-    -- How many were left out for being at the Keep in stock limit, so an
-    -- empty pane can say that rather than blame the recipes not being read.
-    self.hiddenAtLimit = 0
-
+    local list = {}
     for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
         -- Only what this profession window is showing, when it will say. The
         -- cache spans every profession the character has opened this session,
         -- and a tailoring list beside the blacksmithing window is noise.
         if not open or open[recipeID] then
-            local name = recipe.name or ("recipe " .. tostring(recipeID))
-
-            -- Plain substring, not a pattern: a recipe name with a hyphen in
-            -- it would otherwise be a malformed pattern and match nothing.
-            if search == "" or name:lower():find(search, 1, true) then
-                local analysis = ns.Profit:Analyse(recipeID)
-                local _, queued = ns.Queue:Find(recipeID, true)
-
-                local atLimit = (analysis and analysis.atPostLimit) == true
-
-                -- Already holding as many as the limit in Settings allows.
-                -- Suppressed here by the same setting as on the Profit tab,
-                -- because the pane's whole job is answering "what should I
-                -- make next" and a craft you have enough of is not an answer.
-                --
-                -- A search is not a suggestion, though: someone typing a name
-                -- is looking for that one recipe, and hiding the thing they
-                -- just named would read as the pane having lost it.
-                --
-                -- Nor is a row already on screen: queueing up to the limit
-                -- would otherwise make the row vanish under the cursor.
-                local suppressed = atLimit
-                    and search == ""
-                    and not opts.ignoreLimit
-                    and not (opts.keepOrder and opts.keepOrder[recipeID])
-                    and ns.Config:Get("hideAtPostLimit") ~= false
-
-                if suppressed then
-                    self.hiddenAtLimit = self.hiddenAtLimit + 1
-                else
-                    rows[#rows + 1] = {
-                        recipeID = recipeID,
-                        name = name,
-                        outputItemID = recipe.outputItemID,
-                        priceable = (analysis and analysis.priceable) == true,
-                        profit = (analysis and analysis.profit) or 0,
-
-                        -- Does it still skill you up, and is it worth a star.
-                        skillUpTier = analysis and analysis.skillUp
-                            and analysis.skillUp.tier or nil,
-                        skillUpStale = analysis and analysis.skillUp
-                            and analysis.skillUp.stale or nil,
-                        recommended = (analysis and analysis.recommended) == true,
-                        materialCost = analysis and analysis.cost
-                            and analysis.cost.priceable and analysis.cost.total or nil,
-                        rank = RankOf(analysis),
-                        reason = analysis and analysis.reason or nil,
-                        soulbound = (analysis and analysis.soulbound) == true,
-                        craftable = ns.Profit:GetCraftableCount(recipeID) or 0,
-                        queued = (queued and queued.quantity) or 0,
-
-                        -- What you already hold of it, which is the number
-                        -- that was missing from this pane entirely.
-                        posted = (analysis and analysis.posted) or 0,
-                        stock = (analysis and analysis.stock) or 0,
-                        postLimit = (analysis and analysis.postLimit) or 0,
-                        atPostLimit = atLimit,
-                        queuedElsewhere = (analysis and analysis.queuedElsewhere) or 0,
-                        roomInCrafts = RoomInCrafts(
-                            analysis and analysis.postRoom, recipe),
-                    }
-                end
-            end
+            list[#list + 1] = { recipeID = recipeID, recipe = recipe }
         end
     end
+    return list, search
+end
 
+--- One recipe's row, or nil when it is left out. `tally` counts what the
+--- Keep in stock limit hid.
+local function RowFor(recipeID, recipe, opts, search, tally)
+    local name = recipe.name or ("recipe " .. tostring(recipeID))
+
+    -- Plain substring, not a pattern: a recipe name with a hyphen in
+    -- it would otherwise be a malformed pattern and match nothing.
+    if search == "" or name:lower():find(search, 1, true) then
+        local analysis = ns.Profit:Analyse(recipeID)
+        local _, queued = ns.Queue:Find(recipeID, true)
+
+        local atLimit = (analysis and analysis.atPostLimit) == true
+
+        -- Already holding as many as the limit in Settings allows.
+        -- Suppressed here by the same setting as on the Profit tab,
+        -- because the pane's whole job is answering "what should I
+        -- make next" and a craft you have enough of is not an answer.
+        --
+        -- A search is not a suggestion, though: someone typing a name
+        -- is looking for that one recipe, and hiding the thing they
+        -- just named would read as the pane having lost it.
+        --
+        -- Nor is a row already on screen: queueing up to the limit
+        -- would otherwise make the row vanish under the cursor.
+        local suppressed = atLimit
+            and search == ""
+            and not opts.ignoreLimit
+            and not (opts.keepOrder and opts.keepOrder[recipeID])
+            and ns.Config:Get("hideAtPostLimit") ~= false
+
+        if suppressed then
+            tally.hiddenAtLimit = tally.hiddenAtLimit + 1
+        else
+            return {
+                recipeID = recipeID,
+                name = name,
+                outputItemID = recipe.outputItemID,
+                priceable = (analysis and analysis.priceable) == true,
+                profit = (analysis and analysis.profit) or 0,
+
+                -- Does it still skill you up, and is it worth a star.
+                skillUpTier = analysis and analysis.skillUp
+                    and analysis.skillUp.tier or nil,
+                skillUpStale = analysis and analysis.skillUp
+                    and analysis.skillUp.stale or nil,
+                recommended = (analysis and analysis.recommended) == true,
+                materialCost = analysis and analysis.cost
+                    and analysis.cost.priceable and analysis.cost.total or nil,
+                rank = RankOf(analysis),
+                reason = analysis and analysis.reason or nil,
+                soulbound = (analysis and analysis.soulbound) == true,
+                craftable = ns.Profit:GetCraftableCount(recipeID) or 0,
+                queued = (queued and queued.quantity) or 0,
+
+                -- What you already hold of it, which is the number
+                -- that was missing from this pane entirely.
+                posted = (analysis and analysis.posted) or 0,
+                stock = (analysis and analysis.stock) or 0,
+                postLimit = (analysis and analysis.postLimit) or 0,
+                atPostLimit = atLimit,
+                queuedElsewhere = (analysis and analysis.queuedElsewhere) or 0,
+                roomInCrafts = RoomInCrafts(
+                    analysis and analysis.postRoom, recipe),
+            }
+        end
+    end
+    return nil
+end
+
+--- The rows in the order chosen. Rows already on screen keep their places.
+local function SortRows(rows, opts)
     local sort = SORTS[opts.sortBy] or SORTS.profit
     local keep = opts.keepOrder
 
@@ -424,6 +428,26 @@ function CraftPanel:GetRows(opts)
     end
 
     return rows
+end
+
+--- The rows to draw: one per recipe, with what it is worth and what is queued.
+--
+-- @param opts { search, sortBy = "profit"|"levelup"|"name", ignoreLimit }
+function CraftPanel:GetRows(opts)
+    opts = opts or {}
+
+    local list, search = RowSources(self, opts)
+    local rows = {}
+    -- How many were left out for being at the Keep in stock limit, so an
+    -- empty pane can say that rather than blame the recipes not being read.
+    local tally = { hiddenAtLimit = 0 }
+
+    for _, item in ipairs(list) do
+        rows[#rows + 1] = RowFor(item.recipeID, item.recipe, opts, search, tally)
+    end
+    self.hiddenAtLimit = tally.hiddenAtLimit
+
+    return SortRows(rows, opts)
 end
 
 --- What the list's order was worked out for. While this stays the same, rows
@@ -1315,8 +1339,11 @@ function CraftPanel:UpdateCraftButton()
     button.tooltipText = "One click makes every craft in this entry"
 end
 
-function CraftPanel:Refresh()
-    if not self.frame or not self.frame:IsShown() then return end
+--- The part of a refresh that comes before the rows: the frame laid out, the
+--- folded pane filled in (all it needs), and the options the rows are read
+--- with. Nil when there are no rows to read.
+function CraftPanel:BeginRefresh()
+    if not self.frame or not self.frame:IsShown() then return nil end
 
     self:Reflow()
 
@@ -1328,7 +1355,7 @@ function CraftPanel:Refresh()
             and ("Craft queue (%d queued)"):format(queued)
             or "Craft queue")
         self:RefreshQueued()
-        return
+        return nil
     end
 
     self.title:SetText("Craft queue")
@@ -1344,9 +1371,11 @@ function CraftPanel:Refresh()
         self.orderKey, self.heldOrder = key, nil
     end
     opts.keepOrder = self.heldOrder
+    return opts
+end
 
-    local rows = self:GetRows(opts)
-
+--- Put rows worked out for `opts` on screen, with everything that follows them.
+function CraftPanel:ApplyRows(rows, opts)
     self.heldOrder = {}
     for index, row in ipairs(rows) do
         self.heldOrder[row.recipeID] = index
@@ -1369,6 +1398,73 @@ function CraftPanel:Refresh()
     self:UpdateClearButton()
     self:RefreshQueued()
     self:UpdateSummary()
+end
+
+function CraftPanel:Refresh()
+    self:StopSlicedRefresh()
+
+    local opts = self:BeginRefresh()
+    if not opts then return end
+
+    self:ApplyRows(self:GetRows(opts), opts)
+end
+
+-- How much of a frame a refresh in the background may take, in milliseconds.
+local SLICE_MS = 3
+
+--- Refresh with the rows worked out a few at a time, over as many frames as
+--- that takes, then shown all at once.
+--
+-- A refresh prices every recipe the profession window shows, several hundred
+-- on a maxed profession, and during a run of crafts the bags change with
+-- every craft. Done in one go, that was a hitch per craft that a player saw
+-- as a jerky craft bar (2026-10-09). Clicks and typing still refresh at once
+-- (Refresh); only the refreshes events ask for are spread out.
+function CraftPanel:RefreshInSlices()
+    if not (Util and type(Util.NewWorker) == "function") then return self:Refresh() end
+
+    -- One already under way finishes, then goes again with what changed since.
+    if self.slicing then
+        self.sliceAgain = true
+        return
+    end
+
+    local opts = self:BeginRefresh()
+    if not opts then return end
+
+    local list, search = RowSources(self, opts)
+    local rows, tally = {}, { hiddenAtLimit = 0 }
+
+    local worker = Util.NewWorker({
+        budgetMs = SLICE_MS,
+        onItem = function(item)
+            rows[#rows + 1] = RowFor(item.recipeID, item.recipe, opts, search, tally)
+        end,
+        onDone = function(done)
+            if CraftPanel.slicing ~= done then return end
+            CraftPanel.slicing = nil
+
+            if CraftPanel:IsShown() and not CraftPanel:IsCollapsed() then
+                CraftPanel.hiddenAtLimit = tally.hiddenAtLimit
+                CraftPanel:ApplyRows(SortRows(rows, opts), opts)
+            end
+
+            if CraftPanel.sliceAgain then
+                CraftPanel.sliceAgain = nil
+                CraftPanel:RequestRefresh()
+            end
+        end,
+    })
+
+    self.slicing = worker
+    worker:Start(list)
+end
+
+--- Drop a refresh under way in the background: one taken at once replaces it.
+function CraftPanel:StopSlicedRefresh()
+    local worker = self.slicing
+    self.slicing, self.sliceAgain = nil, nil
+    if worker then worker:Cancel() end
 end
 
 --- The queue total along the bottom of the pane.
@@ -1919,7 +2015,7 @@ function CraftPanel:RequestRefresh()
 
     C_Timer.After(0.35, function()
         CraftPanel.refreshPending = false
-        CraftPanel:Refresh()
+        CraftPanel:RefreshInSlices()
     end)
 end
 
