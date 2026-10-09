@@ -183,6 +183,14 @@ function UI:BuildHeader()
     status:SetPoint("LEFT", header, "LEFT", 58, -6)
     self.statusLabel = status
 
+    -- The installed version, small and faint under that line, so a player
+    -- can see at a glance which one they run. The header is on every tab,
+    -- Settings included.
+    local version = Theme.CreateLabel(header, "tiny", "dim")
+    version:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 58, 4)
+    version:SetText(ns.VersionLabel())
+    self.versionLabel = version
+
     -- Something for the scan button to sit beside, where the close button
     -- used to be: the gem is on the window's corner now.
     local close = CreateFrame("Frame", nil, header)
