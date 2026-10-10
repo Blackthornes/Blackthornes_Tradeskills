@@ -5,9 +5,13 @@ announce_discord.py (which posts the full changelog in #announcements):
 
     python tools/post_general.py v0.2.0
 
-The text is the version's section of NEWS.md: one short post in plain words
-for players, written with the CHANGELOG section in each release PR. A version
-with no NEWS.md section posts nothing.
+The text is the version's section of NEWS.md: a few short bullets in plain
+words for players, written with the CHANGELOG section in each release PR,
+ending with the thanks. The post opens with the addon's name and version, so
+each addon's bullets read as their own group, and that line points players to
+#announcements for the full list, leaving the thanks last. No CurseForge link and no link preview, so
+the post stays small (the owner, 2026-10-10). A version with no NEWS.md
+section posts nothing.
 
 It posts through a channel webhook kept in the DISCORD_GENERAL_WEBHOOK_URL
 repository secret, which the owner makes in Discord (#general > Edit Channel >
@@ -33,7 +37,9 @@ from announce_discord import TAG, section, toc_field, unwrap  # noqa: E402
 from check_package import PRIVATE  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LIMIT = 1900  # Discord allows 2000 characters in a message; leave room for the link
+LIMIT = 1800  # Discord allows 2000 characters in a message; leave room for the heading
+POINTER = "(full list of changes in #announcements)"
+SUPPRESS_EMBEDS = 4  # Discord's message flag: no link previews or cards
 
 # A player's name never goes in a report (the owner, 2026-10-09), except this
 # #general post, which thanks them; check_release.py uses this on CHANGELOG.md.
@@ -65,16 +71,17 @@ def not_clear(text):
     return [label for label, pattern in PRIVATE if pattern.search(text)]
 
 
-def message(project_id, post):
-    """The webhook body: the post as written, then the download link."""
+def message(title, version, post):
+    """The webhook body: the addon and version with the pointer to
+    #announcements, then the post as written. No link and no card."""
     text = unwrap(post)
     if len(text) > LIMIT:
         cut = text.rfind("\n", 0, LIMIT)
         text = text[:cut if cut > 0 else LIMIT].rstrip() + "\n..."
-    if project_id:
-        text += "\n\nGet it on CurseForge: https://www.curseforge.com/projects/%s" % project_id
+    heading = "**%s %s**" % (title, version) if title else "**%s**" % version
+    text = "%s %s\n%s" % (heading, POINTER, text)
     return {"username": "Blackthornes AddOns", "content": text,
-            "allowed_mentions": {"parse": []}}
+            "flags": SUPPRESS_EMBEDS, "allowed_mentions": {"parse": []}}
 
 
 def main(argv):
@@ -100,7 +107,7 @@ def main(argv):
         return 1
     with open(glob.glob(os.path.join(ROOT, "*.toc"))[0], encoding="utf-8") as f:
         toc = f.read()
-    body = json.dumps(message(toc_field(toc, "X-Curse-Project-ID"), post))
+    body = json.dumps(message(toc_field(toc, "Title"), version, post))
     req = urllib.request.Request(hook + ("&" if "?" in hook else "?") + "wait=true",
                                  data=body.encode("utf-8"), method="POST",
                                  headers={"Content-Type": "application/json",

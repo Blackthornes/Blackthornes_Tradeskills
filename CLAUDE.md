@@ -196,26 +196,27 @@ himself; never ask him to paste the webhook address anywhere. Without it the
 step does nothing, and a failed post never undoes the upload. The tool is the
 same in all four repos; a fix to it belongs in all four.
 
-The owner asked (2026-10-09) for one friendly post in #general per release
-too: plain words, a sixth-grade reading level, warm, in his voice (short,
-contractions, no jargon, no file or setting names, never his name), saying
-what players will notice. Each release PR writes the new version's section
-in `NEWS.md` (`## X.Y.Z`, like CHANGELOG.md; it never ships) next to the
-CHANGELOG section. After the upload `tools/post_general.py` scans it with
-`check_package.py`'s PRIVATE list and posts it through the
-`DISCORD_GENERAL_WEBHOOK_URL` secret, which the owner sets himself, with the
-CurseForge link added. No section or no secret means no post.
+The owner asked (2026-10-09) for one post in #general per release too,
+and (2026-10-10) for it to be short: a few bullets in plain words, a
+sixth-grade reading level, warm, in his voice (short, contractions, no
+jargon, no file or setting names, never his name), saying what players will
+notice. Each release PR writes the new version's section in `NEWS.md`
+(`## X.Y.Z`, like CHANGELOG.md; it never ships) next to the CHANGELOG
+section: the bullets, then one line of thanks. After the upload
+`tools/post_general.py` scans it with `check_package.py`'s PRIVATE list and
+posts it through the `DISCORD_GENERAL_WEBHOOK_URL` secret, which the owner
+sets himself, under a line with the addon's name and version (so each
+addon's bullets are their own group) and "(full list of changes in
+#announcements)", so the thanks comes last. It carries no CurseForge link and no card (link previews
+are turned off). No section or no secret means no post.
 A player's name never goes in a report (the owner, 2026-10-09): no
 CHANGELOG, #announcements post, commit or PR text names a player, and
 `check_release.py` refuses a CHANGELOG section that credits one
 (`names_a_player` in `post_general.py`). The #general post is the one
-exception: it thanks, by their Discord name, whoever asked for or reported
-the changes. Group the changes by that person (the owner, 2026-10-09), so
-each one is thanked once, after their group ("Ana asked for these two.
-Thanks Ana!"); changes several people asked for go with one group and
-thank them together, and changes nobody asked for go in their own group
-with no thanks. Find who asked from the project's threads. This tool is
-also the same in all four repos.
+exception: its last line thanks, by their Discord name, everyone who asked
+for or reported the changes, each name once ("Thanks Ana and Bob for the
+ideas and reports!"); leave it out when nobody asked. Find who asked from
+the project's threads. This tool is also the same in all four repos.
 
 ## The owner's standing rules (both addons)
 
