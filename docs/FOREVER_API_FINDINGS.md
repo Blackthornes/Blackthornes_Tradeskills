@@ -442,7 +442,11 @@ first name, so whispers need the first and last name; a guild message came
 back with the sender read as "First Last" (a space, no realm). The client
 said "sent" to a 256-byte message and to twelve in a row, so neither the
 size limit nor the throttle shows on the sending side; the addon keeps to
-255 bytes and paces anyway. Still to measure: a whisper to the full name. `/bts share test` (Settings, Sharing, Test messages) whispers this
+255 bytes and paces anyway. Retested 2026-10-07 after whispers moved to the
+full name: a whisper to "First Last" arrives, with no "No player named" line,
+and all fifteen test messages came back, the 256-byte one, the twelve in a
+row and the guild one included, so Forever neither refused 256 bytes nor
+throttled twelve. `/bts share test` (Settings, Sharing, Test messages) whispers this
 character a full-size and an oversize message and twelve in a row, sends one
 to the guild, and says what came back and how the sender's name reads. Also
 open: whether a whisper's sender name tells apart two characters with the
