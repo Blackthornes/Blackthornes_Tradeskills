@@ -1,4 +1,4 @@
--- Batches that fit the bags (Ezmode, 2026-10-05).
+-- Batches that fit the bags (2026-10-05).
 --
 -- A thousand Lesser Magic Wands is a thousand Simple Wood (20 a stack) and a
 -- thousand Lesser Magic Essence (10 a stack): 150 slots. With 30 free and 5

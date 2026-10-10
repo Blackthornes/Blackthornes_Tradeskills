@@ -1,8 +1,8 @@
 -- Your own listings in a full scan, told apart by the whole name.
 --
 -- Forever lets any number of characters share a first name. Matching the
--- scan's seller by first name read a rival called "Voldar Stone" as the
--- player "Voldar Ash", so the rival's listing was never undercut. With a
+-- scan's seller by first name read a rival called "Bob Stone" as the
+-- player "Bob Ash", so the rival's listing was never undercut. With a
 -- last name known, only the whole name is the player's.
 
 local ns = {}
@@ -27,7 +27,7 @@ ns.AHQueue = { PRIORITY = { urgent = 10, normal = 50, scan = 90 } }
 
 GetTime = function() return 100 end
 Enum = { ItemCommodityStatus = { Commodity = 2 }, BagIndex = {} }
-UnitName = function() return "Voldar" end
+UnitName = function() return "Bob" end
 GetRealmName = function() return "Test Realm" end
 C_Timer = { After = function() end, NewTimer = function() return { Cancel = function() end } end }
 
@@ -48,20 +48,20 @@ end
 
 print("\na character with a last name")
 fresh()
-check("your whole name is you", Scanner:IsOwnAuction("Voldar Ash", nil))
-check("your whole name with the realm is you", Scanner:IsOwnAuction(nil, "Voldar Ash-TestRealm"))
-check("a rival sharing your first name is not you", not Scanner:IsOwnAuction("Voldar Stone", "Voldar Stone-TestRealm"))
+check("your whole name is you", Scanner:IsOwnAuction("Bob Ash", nil))
+check("your whole name with the realm is you", Scanner:IsOwnAuction(nil, "Bob Ash-TestRealm"))
+check("a rival sharing your first name is not you", not Scanner:IsOwnAuction("Bob Stone", "Bob Stone-TestRealm"))
 -- A row with only a first name cannot be told apart. It is read as you, so
 -- your own listings are never undercut if Forever writes sellers that way.
-check("a bare first name is still taken as you", Scanner:IsOwnAuction("Voldar", "Voldar-TestRealm"))
+check("a bare first name is still taken as you", Scanner:IsOwnAuction("Bob", "Bob-TestRealm"))
 check("a bare other name is not you", not Scanner:IsOwnAuction("Grimble", "Grimble-TestRealm"))
-check("the same name on another realm is not you", not Scanner:IsOwnAuction(nil, "Voldar Ash-OtherRealm"))
+check("the same name on another realm is not you", not Scanner:IsOwnAuction(nil, "Bob Ash-OtherRealm"))
 
 print("\na character with no last name")
 surname = nil
 fresh()
-check("the first name still matches", Scanner:IsOwnAuction("Voldar", nil))
-check("so does name and realm", Scanner:IsOwnAuction(nil, "Voldar-TestRealm"))
+check("the first name still matches", Scanner:IsOwnAuction("Bob", nil))
+check("so does name and realm", Scanner:IsOwnAuction(nil, "Bob-TestRealm"))
 check("someone else is not you", not Scanner:IsOwnAuction("Grimble", "Grimble-TestRealm"))
 
 print(("\n%d check(s) passed\n"):format(checks))

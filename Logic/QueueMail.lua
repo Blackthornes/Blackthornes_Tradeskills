@@ -341,7 +341,7 @@ end
 -- Gear for the disenchanter
 --------------------------------------------------------------------------------
 
--- Izbode, 2026-10-04: "Setting a disenchant character to mail all BoEs to
+-- Asked 2026-10-04: "Setting a disenchant character to mail all BoEs to
 -- (with threshold option, like only greens, or maybe only green and blues)".
 -- The name is typed in Settings, so it can be any character, one on another
 -- account included. What goes: green and better armour and weapons that can
@@ -688,7 +688,7 @@ end
 -- Taking the next batch out of the mailbox
 --------------------------------------------------------------------------------
 --
--- Ezmode (2026-10-05): a thousand essence waiting in the mail is a hundred
+-- Asked 2026-10-05: a thousand essence waiting in the mail is a hundred
 -- slots, and the bags hold thirty. With the setting on (mailBatchTake, off by
 -- default) the panel offers Take next batch: the queue's materials from the
 -- mail, as much as fits with the spare slots kept (Logic/BagsFull.lua), in the

@@ -1,4 +1,4 @@
--- Sharing (Ezmode on Discord, 2026-10-07): characters between two accounts
+-- Sharing (on Discord, 2026-10-07): characters between two accounts
 -- of one player, and prices within a guild, over addon messages.
 --
 -- What must hold:

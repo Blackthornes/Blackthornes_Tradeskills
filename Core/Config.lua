@@ -265,7 +265,7 @@ local DEFAULTS = {
         -- A warning when your bags fill up. See Logic/BagsFull.lua.
         bagsFullSound = true,
 
-        -- Slots Take next batch leaves free (Ezmode, 2026-10-05). See
+        -- Slots Take next batch leaves free (2026-10-05). See
         -- Logic/BagsFull.lua. Vendor buys were batched the same way until
         -- 2026-10-06, when that was taken out; its saved fitBuysToBags is
         -- left in players' data, unread.
@@ -314,7 +314,7 @@ local DEFAULTS = {
         -- queue, with a button that fills in the mail.
         queueMailPanel = true,
 
-        -- The character gear goes to for disenchanting (Izbode, 2026-10-04),
+        -- The character gear goes to for disenchanting (2026-10-04),
         -- typed in Settings: any name, so a character on another account
         -- works too. Empty: nobody, and the mailbox lists nothing for it.
         disenchanterName = "",
@@ -333,16 +333,16 @@ local DEFAULTS = {
         -- one thing that cannot be checked outside it.
         skillUpMarker = "star",
 
-        -- What the Profit tab's profit is for (Sullivan, 2026-10-06): "best"
+        -- What the Profit tab's profit is for (2026-10-06): "best"
         -- for whichever of the auction house, a vendor and disenchanting
         -- pays most, or "auction", "vendor" or "disenchant" alone. Picked on
         -- the tab's option bar; /bts top and /bts why follow it.
         profitBy = "best",
 
-        -- The Prices tab shows only starred items (Voldar, 2026-10-06).
+        -- The Prices tab shows only starred items (2026-10-06).
         pricesFavouritesOnly = false,
 
-        -- The price graph (Sullivan, 2026-10-06): "day" for the last 24
+        -- The price graph (2026-10-06): "day" for the last 24
         -- hours, "week" for 7 days. And whether the Profit tab's craft pane
         -- shows the graph where the materials list goes.
         priceGraphWindow = "day",
@@ -357,7 +357,7 @@ local DEFAULTS = {
         -- list's headings, or Settings, Look & sound. See UI/Columns.lua.
         hiddenColumns = "",
 
-        -- Sharing (asked 2026-10-07, Ezmode on Discord). Characters on
+        -- Sharing (asked 2026-10-07 on Discord). Characters on
         -- another account of yours, by name and separated by commas; empty
         -- shares nothing. Both sides add each other. See Logic/AccountLink.lua.
         linkNames = "",
@@ -399,7 +399,7 @@ local DEFAULTS = {
     ignoredCrafts = {},
 
     -- recipeID -> the craft's name: crafts never made to go into another
-    -- craft, their item bought instead (Voldar, 2026-10-07). Account wide,
+    -- craft, their item bought instead (2026-10-07). Account wide,
     -- the name kept for Settings. See Cost:SetNeverSubCraft.
     neverSubCrafts = {},
 
@@ -578,7 +578,7 @@ end
 
 --- Forever lets any number of characters share a first name; only the first
 --- and last name together are unique. Name and realm therefore filed
---- "Voldar Ash" and "Voldar Stone" as one character. The character's GUID is
+--- "Bob Ash" and "Bob Stone" as one character. The character's GUID is
 --- unique and never changes, so it is the key now.
 ---
 --- The game has always handed the GUID over by PLAYER_LOGIN. Asked any

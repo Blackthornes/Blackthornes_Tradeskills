@@ -361,7 +361,7 @@ end
 -- Several copies of an item that does not stack, in one listing click
 --------------------------------------------------------------------------------
 
--- Izbode, 2026-10-04: Mana Oils do not stack, so each went up on its own
+-- Asked 2026-10-04: Mana Oils do not stack, so each went up on its own
 -- click, with the wait for the last one to be confirmed in between. The
 -- auction house's item listing takes a quantity: for an item that does not
 -- stack it puts up that many separate auctions, one per copy, which is what

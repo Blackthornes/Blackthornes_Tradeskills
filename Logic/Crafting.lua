@@ -490,7 +490,7 @@ function Crafting:StartWatching()
 end
 
 --- A chime when a run of two or more crafts ends having made something, so a
---- long run can be left to finish (Izbode's request, 2026-10-02). Stop
+--- long run can be left to finish (a player's request, 2026-10-02). Stop
 --- clears the run before this is reached, so a stopped run stays quiet.
 function Crafting:AnnounceRunDone(run)
     if not run or (run.requested or 0) < 2 then return end

@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- UI/DealsFavor.lua
 -- The Deals tab's Merchant's Favor view: Waylaid Crates by what a favor costs.
 --
--- Voldar's idea (2026-10-08), from his spreadsheet. Each row is a crate:
+-- A player's idea (2026-10-08), from their spreadsheet. Each row is a crate:
 -- what it costs on the auction house, its cheapest bundle, the silver its
 -- turn-in pays back, and what that makes one point of Merchant's Favor
 -- cost. The sums are Logic/MerchantsFavor.lua. Tab_Deals.lua shows this in

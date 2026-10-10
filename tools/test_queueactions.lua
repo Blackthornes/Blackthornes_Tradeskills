@@ -1,5 +1,5 @@
 -- Queue row actions, marks, Disenchant next and Sell marked, outside WoW
--- (Ezmode's request, 2026-10-07).
+-- (a player's request, 2026-10-07).
 --
 -- What must hold:
 --   1. A row starts on whichever way pays most (the Profit tab's Best), a

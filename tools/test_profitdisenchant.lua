@@ -241,7 +241,7 @@ check("green when disenchanting beats selling", profitRow.cells.disenchant.color
 profitList.opts.updateRow(profitRow, analyses[2])
 check("and nothing for a craft that cannot be disenchanted", profitRow.cells.disenchant.text == "")
 
--- Ezmode (Discord, 2026-10-08): AGE said "DE" and "vendor" on these rows.
+-- A player (Discord, 2026-10-08): AGE said "DE" and "vendor" on these rows.
 profitList.opts.updateRow(profitRow, { recipeID = 4, name = "Cuffs", outputItemID = 14,
     priceable = true, totalCost = 90, revenue = 323, unitRevenue = 323, profit = 217,
     margin = 0.67, via = "disenchant", priceBasis = "disenchant", age = 3600, craftableNow = 0 })
