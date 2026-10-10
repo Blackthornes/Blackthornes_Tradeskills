@@ -62,6 +62,7 @@ Logic\AccountLink.lua
 Logic\GuildPrices.lua
 
 UI\Theme.lua
+UI\BlizzardLook.lua
 UI\Widgets.lua
 UI\Columns.lua
 UI\Titanforged.lua

@@ -1126,6 +1126,29 @@ local function Build(outer)
     FitButton(widgets.textReload)
     widgets.textReload:Hide()
 
+    -- Asked 2026-10-10: the game's own look for players who would rather
+    -- the windows matched the rest of their screen. Read at login, so it
+    -- waits for /reload as Text size does. See UI/BlizzardLook.lua.
+    local styleRow = CreateRow(pages.look, 1, "Window style",
+        "Titanforged is the house look, with a gold rim and glowing edges. Blizzard uses the game's own frames, red buttons, tabs and tick boxes. Takes effect after /reload.")
+
+    widgets.windowStyle = Widgets.CreateDropdown(styleRow, {
+        { text = "Titanforged", value = "titanforged" },
+        { text = "Blizzard", value = "blizzard" },
+    }, function(value)
+        Config:Set("windowStyle", value)
+        local Look = ns.BlizzardLook
+        widgets.styleReload:SetShown(Look and Look.Style() ~= value or false)
+    end, { width = 110 })
+    widgets.windowStyle:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    widgets.styleReload = Widgets.CreateButton(styleRow, "Reload now", function()
+        if ReloadUI then ReloadUI() end
+    end, { width = 90, height = 20, tooltip = "Reload the interface so the new window style shows (/reload)" })
+    widgets.styleReload:SetPoint("LEFT", widgets.windowStyle, "RIGHT", 8, 0)
+    FitButton(widgets.styleReload)
+    widgets.styleReload:Hide()
+
     local effectsRow = CreateRow(pages.look, 1, "Window effects",
         "Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all.")
 
@@ -1619,6 +1642,11 @@ local function Refresh()
     local textSize = Config:Get("textSize")
     widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)
     widgets.textReload:SetShown((Theme.TEXT_STEPS[textSize] or 0) ~= Theme.TextStep())
+    local Look = ns.BlizzardLook
+    if Look then
+        widgets.windowStyle:SetValue(Look.Wanted(), true)
+        widgets.styleReload:SetShown(Look.Wanted() ~= Look.Style())
+    end
 
     -- The three sizes, and the one dragged to when it is none of them.
     local scale = UI.GetWindowScale and UI:GetWindowScale() or 1
