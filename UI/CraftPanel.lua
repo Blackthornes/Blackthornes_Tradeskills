@@ -656,6 +656,7 @@ local function CreateRow(row)
         height = 15,
         background = "panel",
         min = 0,
+        max = 9999,
         onChange = function(value)
             if row.data then CraftPanel:SetQueued(row.data, value) end
         end,
@@ -2034,6 +2035,9 @@ function CraftPanel:RequestRefresh()
 end
 
 function CraftPanel:Hide()
+    -- A refresh still spread over frames would price on for a pane nobody
+    -- sees, and throw the result away at the end.
+    self:StopSlicedRefresh()
     if self.frame then self.frame:Hide() end
 end
 

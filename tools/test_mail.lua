@@ -974,6 +974,46 @@ GetInboxNumItems = shown
 ns.db.heardSales = nil
 
 print("")
+print("inbox events in a burst")
+
+-- Taking mail fires one or more inbox events a mail, and each used to walk
+-- the whole box and redraw the open tab.
+local handlers = {}
+ns.RegisterEvent = function(_, event, fn) handlers[event] = fn return true end
+local due
+C_Timer.NewTimer = function(_, fn) due = fn return { Cancel = function() due = nil end } end
+Mail:OnEnable()
+local reads = 0
+local realRead = Mail.Read
+Mail.Read = function(self) reads = reads + 1 end
+handlers.MAIL_INBOX_UPDATE(nil, "MAIL_INBOX_UPDATE")
+handlers.MAIL_INBOX_UPDATE(nil, "MAIL_INBOX_UPDATE")
+handlers.MAIL_INBOX_UPDATE(nil, "MAIL_INBOX_UPDATE")
+check("three events, no read yet",               reads, 0)
+local fn = due
+due = nil
+fn()
+check("one read once they stop",                 reads, 1)
+handlers.MAIL_INBOX_UPDATE(nil, "MAIL_INBOX_UPDATE")
+handlers.MAIL_CLOSED(nil, "MAIL_CLOSED")
+check("a read still waiting is taken as the box shuts", reads, 2)
+check("and nothing waits after",                 due, nil)
+Mail.Read = realRead
+C_Timer.NewTimer = function() return { Cancel = function() end } end
+
+print("")
+print("a sale filed by name learns its item after a new recipe")
+
+check("a craft the addon has not seen is not an output", Mail:OutputSet()[9999], nil)
+local realWide = ns.Recipes.GetAccountWide
+ns.Recipes.GetAccountWide = function() return { [3] = { outputItemID = 9999 } } end
+check("the set is kept for the session",         Mail:OutputSet()[9999], nil)
+Mail:ForgetOutputSet()
+check("until recipes are added",                 Mail:OutputSet()[9999], true)
+ns.Recipes.GetAccountWide = realWide
+Mail:ForgetOutputSet()
+
+print("")
 if failures > 0 then
     error(("%d check(s) failed"):format(failures), 0)
 end

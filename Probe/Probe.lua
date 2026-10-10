@@ -354,7 +354,7 @@ function Probe:PrintReport()
     Line("buy from vendor", Yes(Util.HasFunction("BuyMerchantItem")))
     Line("take from mail", Yes(Util.HasFunction("TakeInboxItem")))
     if ns.SellMarked then Line("sell from addon", ns.SellMarked:ProbeText()) end
-    Line("item stack size", Yes(Util.HasFunction("C_Item.GetItemMaxStackByID")))
+    Line("item stack size", Yes(Util.HasFunction("C_Item.GetItemMaxStackSizeByID")))
     Line("prices learned", ns.Vendor and ns.Vendor:Count() or 0)
 
     if self.auctionSample and #self.auctionSample.items > 0 then

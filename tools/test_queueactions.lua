@@ -188,6 +188,20 @@ analyses[3] = { via = "auction", ways = { auction = { profit = 9 }, vendor = { p
 QA:NoteMade({ recipeID = 3, quantity = 5 }, 2003, 5)
 check("an auction house craft is not marked", marks[2003] == nil)
 
+-- At the first login the bags have not been reported yet and read as
+-- empty; settling then dropped every mark. A reload settles as before.
+do
+    local before = {}
+    for id, mark in pairs(marks) do before[id] = mark.count end
+    local carried = bags
+    bags = {}
+    events.PLAYER_ENTERING_WORLD(nil, "PLAYER_ENTERING_WORLD", true, false)
+    check("the first login's empty bags take no mark", marks[2001] ~= nil and marks[2001].count == before[2001])
+    bags = carried
+    events.PLAYER_ENTERING_WORLD(nil, "PLAYER_ENTERING_WORLD", false, true)
+    check("a reload settles against the bags", marks[2001].count == 2)
+end
+
 -- A looted bracer joins the two crafted ones: still only two marked.
 bags[3] = { id = 2001 }
 QA:Settle()

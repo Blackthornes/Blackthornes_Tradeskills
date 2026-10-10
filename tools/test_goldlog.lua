@@ -19,7 +19,13 @@ ns.RegisterEvent = function(_, event, fn) events[event] = fn return true end
 
 local realm = "Realm-A"
 ns.Config = { GetRealmKey = function() return realm end }
-ns.db = { characters = { ["Ana-Realm A"] = {}, ["Bob-Realm A"] = {} } }
+-- Ana and Bob are filed by GUID, the way the addon keeps characters now;
+-- Cal is a record from before that, still under its name-realm key.
+ns.db = { characters = {
+  ["Player-1-0A"] = { name = "Ana", realm = "Realm A" },
+  ["Player-1-0B"] = { name = "Bob", realm = "Realm A" },
+  ["Cal-Realm A"] = {},
+} }
 
 local inbox = {}
 GetInboxHeaderInfo = function(index)
@@ -103,13 +109,15 @@ check("anyone else", GL:MailSource(3), "mail")
 check("a lost bid's gold back", GL:MailSource(6), "auctionBuys")
 check("own character by name and realm", GL:IsOwnCharacter("Ana-RealmA"), true)
 check("another realm's Ana is not", GL:IsOwnCharacter("Ana-Elsewhere"), false)
+check("a record from before GUID keys, by its key", GL:IsOwnCharacter("Cal-RealmA"), true)
+check("the GUID key itself is nobody", GL:IsOwnCharacter("Player-1-0A"), false)
 -- Mail to an alt is addressed "Name Surname", since Forever names repeat.
-ns.db.characters["Ana-Realm A"].surname = "Brightwood"
+ns.db.characters["Player-1-0A"].surname = "Brightwood"
 check("own character by name and surname", GL:IsOwnCharacter("Ana Brightwood"), true)
 check("so is a surname in other letters", GL:IsOwnCharacter("Ana brightwood"), true)
 check("another Ana with another surname is not", GL:IsOwnCharacter("Ana Smith"), false)
 check("a surname not known yet still counts", GL:IsOwnCharacter("Bob Stone"), true)
-ns.db.characters["Ana-Realm A"].surname = nil
+ns.db.characters["Player-1-0A"].surname = nil
 GL:NoteTakeMail(4)
 GL:NoteTakeMail(1)
 check("an item-only mail leaves no tag", GL:Classify(900, NOW), "auctionSales")
@@ -144,6 +152,15 @@ check("income leaves moves out", totals.income, 10005)
 check("spending", totals.spending, 2000)
 check("net", totals.net, 8005)
 check("moves kept apart", totals.moved, 50000)
+
+-- Where the zone is offset by a half hour, hour buckets start at :30 local
+-- time, and the Today chart used to find none of them.
+local halfPast = GL.DayStart(NOW) + 3 * 3600 + 1800
+log.hours[halfPast] = { loot = { i = 77, o = 0 } }
+local todayAgain = GL:Bins("today", nil, nil, NOW)
+check("a half-hour bucket lands in its hour", todayAgain[4].sources.loot and todayAgain[4].sources.loot.i, 77)
+check("and counts in the day", GL:Totals(todayAgain).income, 10082)
+log.hours[halfPast] = nil
 
 local week = GL:Bins("week", nil, nil, NOW)
 check("a week is 7 days", #week, 7)

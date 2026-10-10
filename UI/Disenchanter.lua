@@ -170,6 +170,15 @@ function Disenchanter:CreateOverlay()
     overlay:SetScript("PreClick", function(button)
         Disenchanter.lastClick = GetTime()
 
+        -- The key binding reaches this button in combat, when its
+        -- attributes may not be written: the write would be refused and
+        -- the click would run with whatever slot was aimed at last. The
+        -- button is emptied as combat starts, so nothing runs here.
+        if InCombat() then
+            ns.Print("can't disenchant in combat")
+            return
+        end
+
         local wanted = Disenchanter.itemID
 
         -- The key binding clicks this button even when no tab has set it.
@@ -181,7 +190,7 @@ function Disenchanter:CreateOverlay()
 
         local bag, slot = Disenchanter:FindSlot(wanted)
 
-        if not bag or InCombat() then
+        if not bag then
             button:SetAttribute("type", nil)
             ns.Print("that item is no longer in your bags, so nothing was disenchanted")
             return
@@ -292,6 +301,7 @@ function Disenchanter:Disarm()
     if self.overlay then
         self.overlay:Hide()
         -- Nothing left aimed at a slot while it is not in use.
+        self.overlay:SetAttribute("type", nil)
         self.overlay:SetAttribute("target-bag", nil)
         self.overlay:SetAttribute("target-slot", nil)
     end
@@ -304,7 +314,15 @@ end
 
 function Disenchanter:OnEnable()
     ns.RegisterEvent(self, "PLAYER_REGEN_DISABLED", function()
-        if Disenchanter.overlay then Disenchanter.overlay:Hide() end
+        local overlay = Disenchanter.overlay
+        if overlay then
+            overlay:Hide()
+            -- Emptied while attributes may still be written, so the key
+            -- binding casts nothing at a slot the fight has since refilled.
+            overlay:SetAttribute("type", nil)
+            overlay:SetAttribute("target-bag", nil)
+            overlay:SetAttribute("target-slot", nil)
+        end
         SetAnchorMouse(Disenchanter.anchor, true)
     end)
 
