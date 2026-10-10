@@ -400,6 +400,8 @@ local function RowFor(recipeID, recipe, opts, search, tally)
                 stock = (analysis and analysis.stock) or 0,
                 postLimit = (analysis and analysis.postLimit) or 0,
                 atPostLimit = atLimit,
+                waitingForLow = (analysis and analysis.waitingForLow) == true,
+                restockAt = analysis and analysis.restockAt or nil,
                 queuedElsewhere = (analysis and analysis.queuedElsewhere) or 0,
                 roomInCrafts = RoomInCrafts(
                     analysis and analysis.postRoom, recipe),
@@ -520,14 +522,19 @@ local function QueueMore(line, quantity)
     -- after a change, and three quick clicks on + all saw the same room.
     local queuedNow = 0
     if room and line.outputItemID then
-        local fresh, _, _, queued = ns.Auctions:GetRoom(line.outputItemID)
+        local fresh, _, _, queued, _, _, waiting = ns.Auctions:GetRoom(line.outputItemID)
         queuedNow = queued or 0
         room = RoomInCrafts(fresh, ns.Recipes:GetAny(line.recipeID)) or room
+        line.waitingForLow = waiting == true
+        line.restockAt = waiting and ns.Auctions:GetRestockAt() or nil
     end
 
     if room then
         if room <= 0 then
-            if queuedNow > 0 then
+            if line.waitingForLow then
+                ns.Warn(("%s: you have %d (%d queued). Wait until it runs low is on, so more are made once you are down to %d."):format(
+                    line.name, (line.stock or 0) + queuedNow, queuedNow, line.restockAt or 0))
+            elseif queuedNow > 0 then
                 ns.Warn(("%s: you have %d and %d queued, which fills your limit of %d, so none were queued."):format(
                     line.name, line.stock or 0, queuedNow, line.postLimit or 0))
             else
@@ -688,6 +695,10 @@ local function StockText(line)
         local text = ("have %d of %d"):format(stock, line.postLimit)
         -- Queued crafts count toward the limit too; without saying so,
         -- "have 0 of 5, at your limit" contradicted itself.
+        if line.atPostLimit and line.waitingForLow then
+            return ("have %d, restock at %d"):format(
+                stock + (line.queuedElsewhere or 0), line.restockAt or 0), true
+        end
         if line.atPostLimit and (line.queuedElsewhere or 0) > 0 then
             return ("have %d, %d queued, limit %d"):format(stock, line.queuedElsewhere, line.postLimit), true
         end

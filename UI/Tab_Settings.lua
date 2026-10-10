@@ -549,7 +549,7 @@ local function Build(outer)
 
     CreateSection(pages.queue, 1, "WHAT GETS QUEUED")
     local postedRow = CreateRow(pages.queue, 1, "Keep in stock per item",
-        "Counts listings, bags and bank together. 0 = no limit. Equipped gear is not counted.")
+        "The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit. Equipped gear is not counted.")
 
     widgets.maxPosted = Widgets.CreateNumberBox(postedRow, {
         width = 70, min = 0, max = 999,
@@ -563,6 +563,48 @@ local function Build(outer)
     widgets.maxPostedHint = Theme.CreateLabel(postedRow, "small", "muted")
     widgets.maxPostedHint:SetPoint("LEFT", widgets.maxPosted, "RIGHT", 6, 0)
     widgets.maxPostedHint:SetWidth(120)
+
+    local lowRow = CreateRow(pages.queue, 1, "Wait until it runs low",
+        "On: a craft is only suggested again once what you hold drops to the number below, then it is made back up to Keep in stock. Off: it is topped up whenever you hold fewer than Keep in stock.")
+
+    widgets.restockWhenLow = Widgets.CreateCheckbox(lowRow, "Wait for it", function(checked)
+        Config:Set("restockWhenLow", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.restockWhenLow:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local restockRow = CreateRow(pages.queue, 1, "Restock when down to",
+        "Used with Wait until it runs low. 0 = only when you have none left. Queued crafts count as held.")
+
+    widgets.restockAt = Widgets.CreateNumberBox(restockRow, {
+        width = 70, min = 0, max = 999,
+        onChange = function(value)
+            Config:Set("restockAt", value)
+            UI:RefreshActiveTab()
+        end,
+    })
+    widgets.restockAt:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local fastRow = CreateRow(pages.queue, 1, "Fast sellers keep more",
+        "Lets items that sell well for you go past Keep in stock by the number below. Sells well means at least 3 of your own listings have ended and 6 in 10 of them sold (High demand from your Sales tab). The market alone never counts.")
+
+    widgets.fastSellerBoost = Widgets.CreateCheckbox(fastRow, "Keep more", function(checked)
+        Config:Set("fastSellerBoost", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.fastSellerBoost:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local extraRow = CreateRow(pages.queue, 1, "Extra for fast sellers",
+        "How many more a fast seller may be held, on top of Keep in stock.")
+
+    widgets.fastSellerExtra = Widgets.CreateNumberBox(extraRow, {
+        width = 70, min = 0, max = 999,
+        onChange = function(value)
+            Config:Set("fastSellerExtra", value)
+            UI:RefreshActiveTab()
+        end,
+    })
+    widgets.fastSellerExtra:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     local hideMaxedRow = CreateRow(pages.queue, 1, "Hide maxed crafts",
         "Off: they still appear, marked as at their limit.")
@@ -1608,6 +1650,11 @@ local function Refresh()
         and ("%d set per item"):format(overrides)
         or "")
 
+    widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
+    Put(widgets.restockAt, Config:Get("restockAt") or 0)
+    widgets.fastSellerBoost:SetChecked(Config:Get("fastSellerBoost") == true)
+    local extra = Config:Get("fastSellerExtra")
+    Put(widgets.fastSellerExtra, type(extra) == "number" and extra or 2)
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)

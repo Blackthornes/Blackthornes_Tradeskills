@@ -69,6 +69,19 @@ local DEFAULTS = {
         -- Zero means no limit. Per-item overrides live in db.postLimits.
         maxPostedPerItem = 0,
 
+        -- Wait until it runs low (asked 2026-10-10): off, a craft is
+        -- suggested whenever you hold fewer than the above, as before. On,
+        -- only once what you hold (queued included) is down to restockAt,
+        -- then back up to the limit. 0 = only when you have none.
+        restockWhenLow = false,
+        restockAt = 0,
+
+        -- Fast sellers keep more: an item your own sales show selling well
+        -- (Logic/Demand.lua, "High" from your record) may be held this many
+        -- more than the limit. Off by default.
+        fastSellerBoost = false,
+        fastSellerExtra = 2,
+
         -- Auction duration: 1 = 2h, 2 = 8h, 3 = 24h on this server. How long
         -- each listing stays up, and so what its deposit is.
         postDuration = 2,
