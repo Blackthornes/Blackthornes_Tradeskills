@@ -203,6 +203,11 @@ local DEFAULTS = {
         -- /reload. See Theme.TextStep in UI/Theme.lua.
         textSize = "normal",
 
+        -- Window style: "titanforged" (the house look) or "blizzard" (the
+        -- game's own frames, buttons and tabs, asked 2026-10-10). Read at
+        -- login, so a change waits for /reload. See UI/BlizzardLook.lua.
+        windowStyle = "titanforged",
+
         -- Whether each setting's description sits under it on the Settings
         -- tab rather than in its tooltip (2026-10-08). The page showing
         -- there is kept too (settingsPage), but is not a setting to reset.

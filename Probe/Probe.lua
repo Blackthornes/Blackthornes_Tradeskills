@@ -266,6 +266,16 @@ function Probe:PrintReport()
     Line("version", ("%s (build %s, interface %s)"):format(
         tostring(report.client.version), tostring(report.client.build), tostring(report.client.interface)))
 
+    -- The Blizzard window style draws with the game's own art; this says
+    -- which pieces the client has (UI/BlizzardLook.lua).
+    if ns.BlizzardLook then
+        Heading("Window style")
+        for _, text in ipairs(ns.BlizzardLook.ProbeLines()) do
+            local name, value = text:match("^(.-): (.*)$")
+            Line(name or "style", value or text)
+        end
+    end
+
     Heading("Saved data (SavedVariables)")
     local persistence = report.persistence
     if persistence.loadCountBefore == 0 then

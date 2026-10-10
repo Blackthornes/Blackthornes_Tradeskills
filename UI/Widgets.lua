@@ -301,12 +301,16 @@ function Widgets.CreateButton(parent, text, onClick, opts)
     -- Dark lettering only on a gold face: a primary button given its own
     -- dark resting colour (opts.baseColor) keeps the gold label, or its text
     -- would be dark on dark.
-    local goldFace = opts.primary and not opts.baseColor
+    -- The Blizzard window style has no gold face: every button wears the
+    -- game's red with a gold label (UI/BlizzardLook.lua).
+    local Look = ns.BlizzardLook
+    local blizzard = Look and Look.On()
+    local goldFace = opts.primary and not opts.baseColor and not blizzard
     local labelKey = goldFace and "ink" or opts.danger and "loss" or "gilt"
     local labelHot = goldFace and "ink" or opts.danger and "loss" or { 1, 0.953, 0.784 }
     Theme.Border(button, borderKey, borderAlpha)
     button.sheen = Theme.TopSheen(button, 0.10)
-    if Theme.Bevel then Theme.Bevel(button) end
+    if Theme.Bevel then button.bevel = { Theme.Bevel(button) } end
 
     -- An explicit resting colour, for buttons that sit over the game world and
     -- need to stay fully opaque rather than picking up the panel palette.
@@ -515,6 +519,8 @@ function Widgets.CreateButton(parent, text, onClick, opts)
         if onClick then onClick(self, mouseButton) end
     end)
 
+    if blizzard then Look.Button(button) end
+
     return button
 end
 
@@ -640,6 +646,8 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
         end)
         PaintBox(false)
     end)
+
+    if ns.BlizzardLook then ns.BlizzardLook.Checkbox(checkbox, box, tick) end
 
     return checkbox
 end
@@ -1306,6 +1314,7 @@ local function HangingEdges(button)
     local left = Edge("TOPLEFT", "BOTTOMLEFT", 2)
     local right = Edge("TOPRIGHT", "BOTTOMRIGHT", 2)
     local foot = Edge("BOTTOMLEFT", "BOTTOMRIGHT", nil, 2)
+    button.edges = { left, right, foot }
 
     if Gradient then
         Gradient(left, "VERTICAL", hi, metalLo)
@@ -1330,13 +1339,19 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
     strip.tabs = {}
     strip.selected = nil
 
+    -- In the Blizzard window style a resting tab's name is the game's gold,
+    -- and hanging tabs wear the character window's tab art.
+    local Look = ns.BlizzardLook
+    local blizzard = Look and Look.On()
+    local restKey = blizzard and "gilt" or "muted"
+
     --- How lit a tab is under the mouse, 0 to 1: its wash, its underline
     --- and its label.
     local function Hover(button, p)
         button.hover:SetAlpha(p)
         button.underline:SetAlpha(p)
         if strip.selected ~= button.key then
-            button.label:SetTextColor(Motion.Mix("muted", "text", p))
+            button.label:SetTextColor(Motion.Mix(restKey, "text", p))
         end
     end
 
@@ -1375,9 +1390,11 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
         -- A step smaller on a narrow tab given its width, so its name stays
         -- inside it. Tabs sized to their names are sized below.
         local labelSize = tab.width and tab.width < 90 and "small" or "normal"
-        button.label = Theme.CreateLabel(button, labelSize, "muted", "CENTER")
+        button.label = Theme.CreateLabel(button, labelSize, restKey, "CENTER")
         button.label:SetPoint("CENTER", 0, 0)
         button.label:SetText(tab.text)
+
+        if blizzard and hanging then Look.Tab(button) end
 
         button.key = tab.key
         button.fixedWidth = tab.width
@@ -1471,6 +1488,7 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
     pcall(glow.SetBlendMode, glow, "ADD")
     glow:Hide()
     strip.lineGlow = glow
+    if blizzard and hanging then Look.TabStrip(strip) end
 
     --- Put the line under `button`, sliding there from wherever it is now,
     --- so a tab picked mid-slide turns the line round rather than making it
@@ -1505,7 +1523,7 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
             button.hover:SetAlpha(0)
             button.underline:SetAlpha(0)
             button.lit:SetShown(active)
-            button.label:SetTextColor(Theme.Unpack(active and (hanging and "accentHi" or "accent") or "muted"))
+            button.label:SetTextColor(Theme.Unpack(active and (hanging and "accentHi" or "accent") or restKey))
             button.background:SetColorTexture(Theme.Unpack(active and "header" or (hanging and "window" or "panel")))
             if hanging then
                 -- The tab showing is taller, reaching up over the window's
@@ -1516,6 +1534,7 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
                 if rawget(button, "haloTextures") then Theme.SetHalo(button, active and 0.22 or 0) end
             end
             if active then MarkTab(button) end
+            if blizzard then Look.SelectTab(button, active) end
         end
     end
 
@@ -1538,9 +1557,18 @@ end
 --              which is then drawn lit with a gold edge
 --- Light a scrollbar's thumb gold while the mouse is over the bar.
 function Widgets.LightThumb(bar, thumb)
+    -- The Blizzard window style draws the thumb as the game's knob, lit by
+    -- tint (UI/BlizzardLook.lua).
+    local Look = ns.BlizzardLook
+    if Look then Look.Thumb(thumb) end
+
     bar:EnableMouse(true)
-    bar:HookScript("OnEnter", function() thumb:SetColorTexture(Theme.Unpack("accent")) end)
-    bar:HookScript("OnLeave", function() thumb:SetColorTexture(Theme.Unpack("metal")) end)
+    bar:HookScript("OnEnter", function()
+        if not (Look and Look.LightThumb(thumb, true)) then thumb:SetColorTexture(Theme.Unpack("accent")) end
+    end)
+    bar:HookScript("OnLeave", function()
+        if not (Look and Look.LightThumb(thumb, false)) then thumb:SetColorTexture(Theme.Unpack("metal")) end
+    end)
 end
 
 --------------------------------------------------------------------------------
