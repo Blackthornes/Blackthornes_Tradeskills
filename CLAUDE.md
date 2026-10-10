@@ -204,6 +204,32 @@ It never touches a Blizzard frame. Each file is checked once
 house look, and `/bts probe` lists what is missing. Not yet seen in game.
 New widgets should look right in both styles.
 
+## Reading the probe
+
+The owner asked (2026-10-10) for check results without screenshots, in all
+four addons. `ns.KeepCheck(name, fn)` in `Core/Init.lua` runs a check that
+prints to chat, keeps every line it prints (colours and links taken out, a
+secret value kept as "(secret)") and saves them in the account save as
+`lastProbe = { check, at, version, lines }`, replacing the last one; chat
+adds "Saved for Claude, /reload to write it." It wraps `/bts probe`
+(Tradeskills, saved under `BlackthornesTSDB.global`), `/beq probe` and
+`/beq arrow check` (Equipment), `/bpet probe` and `/bpet arrow check`
+(Pets), and `/farm arrow check` and `/farm gathering check` (Farmer, which
+has no probe). Each has a Settings button. Never rename `lastProbe`; a new
+check that players run for a report goes through `ns.KeepCheck` too, and a
+fix to it belongs in all four.
+
+When the owner says "read the probe": he has run the check and typed
+`/reload` (or logged out). In the thread, connect to his device, ask for
+his game's WTF folder (already approved; the path is in the project's
+memory) and stage the addon's account save from
+`WTF\Account\<account>\SavedVariables\` (`Blackthornes_TS.lua`,
+`Blackthornes_Farmer.lua`, `Blackthornes_Equipment.lua` or
+`Blackthornes_Pets.lua`), read only. Read its `lastProbe`: `check` says
+which one ran and `at` when; one older than his message means the save was
+not written yet, so ask him to `/reload`. Use only the probe lines; never
+commit the save or copy anything else out of it.
+
 ## Discord
 
 The addons share a Discord server, Blackthornes AddOns (public invite

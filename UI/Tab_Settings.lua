@@ -1210,6 +1210,19 @@ local function Build(outer)
     end, false)
     widgets.debug:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The probe as a button (asked 2026-10-10); what it finds is also kept
+    -- in the saved data for Claude to read after a /reload.
+    local probeRow = CreateRow(pages.data, 1, "Client check",
+        "Lists in chat what this version of the game supports and whether your data is kept. It only reads. Same as /bts probe.")
+
+    widgets.probe = Widgets.CreateButton(probeRow, "Check", function()
+        local command = ns.commands and ns.commands.probe
+        if command then command.fn("") end
+    end, { width = 80, height = 20,
+           tooltip = "Lists in chat what this version of the game supports. Same as /bts probe" })
+    widgets.probe:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(widgets.probe)
+
     -- Every sound the addon plays, each with its own switch, all on to start
     -- with. The one sound not here is the warning that saved data failed to
     -- load, which is about losing data rather than an effect.

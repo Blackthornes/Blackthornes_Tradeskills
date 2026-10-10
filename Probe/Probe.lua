@@ -443,5 +443,5 @@ end
 ns.RegisterCommand("probe", "check what this version of the game supports, and whether your data is kept", function()
     ns.Probe:SampleTradeskill()
     ns.Probe:SampleAuction()
-    ns.Probe:PrintReport()
+    ns.KeepCheck("probe", ns.Probe.PrintReport, ns.Probe)
 end)
