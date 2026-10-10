@@ -188,6 +188,26 @@ check("throttled sends were tried again", Comm.retried >= 1, true)
 local huge = { text = ("x"):rep(236 * (Comm.MAX_CHUNKS + 1)) }
 check("a table too big is not sent", Comm:SendTable("X", huge, "WHISPER", "Bob"), 0)
 
+-- One sender's stuck transfers cap only that sender's. Eight of Carl's
+-- first parts, never finished, used to stop Dora's table from arriving.
+do
+    local arrived
+    bob.ns.Comm:OnTable("X", function(_, value) arrived = value end)
+    current = bob
+    local b36 = Comm.ToBase36
+    for id = 1, bob.ns.Comm.MAX_PARTIAL do
+        bob.ns.Comm:CHAT_MSG_ADDON("CHAT_MSG_ADDON", Comm.PREFIX,
+            "DX" .. b36(1000 + id) .. "," .. b36(1) .. "," .. b36(2) .. ":stuck", "WHISPER", "Carl-Realm")
+    end
+    local text = bob.ns.Serialize.Encode({ hello = "Dora" })
+    bob.ns.Comm:CHAT_MSG_ADDON("CHAT_MSG_ADDON", Comm.PREFIX,
+        "DX" .. b36(1) .. "," .. b36(1) .. "," .. b36(2) .. ":" .. text:sub(1, 3), "WHISPER", "Dora-Realm")
+    bob.ns.Comm:CHAT_MSG_ADDON("CHAT_MSG_ADDON", Comm.PREFIX,
+        "DX" .. b36(1) .. "," .. b36(2) .. "," .. b36(2) .. ":" .. text:sub(4), "WHISPER", "Dora-Realm")
+    check("another sender's table still arrives past one sender's stuck ones", arrived and arrived.hello, "Dora")
+    bob.ns.Comm:OnTable("X", nil)
+end
+
 -- Hidden only for a name just whispered.
 current = ana
 Comm:NoteWhisper("Carl")
@@ -207,6 +227,22 @@ check("another Eve is not", eve.ns.Comm.IsMe("Eve Rivers"), false)
 current = ana
 check("without a last name, the first word decides", ana.ns.Comm.IsMe("Ana Whoever"), true)
 check("and someone else is not me", ana.ns.Comm.IsMe("Bob Smith"), false)
+
+-- A name the game would not let the addon read (in a dungeon) is asked
+-- for again next time, not remembered as "no last name" for the session.
+local fay = NewClient("Fay", "Forever-Alliance", "Hill")
+local asks = 0
+fay.ns.Config.ReadSurname = function()
+    asks = asks + 1
+    if asks == 1 then error("attempt to compare a secret string value", 0) end
+    return "Hill"
+end
+current = fay
+check("a read that raised gives no last name yet", fay.ns.Comm.PlayerName(), "Fay")
+check("the next ask gets it", fay.ns.Comm.PlayerName(), "Fay Hill")
+check("and it is kept from then on", asks, 2)
+fay.ns.Comm.PlayerName()
+check("asked no more", asks, 2)
 
 --------------------------------------------------------------------------------
 print("\naccounts")
@@ -393,6 +429,29 @@ end
 GuildPrices:OnPrices("Eve-Realm", Comm.ToBase36(clock) .. ":" .. Comm.ToBase36(2589) .. ","
     .. Comm.ToBase36(15000000) .. ";", "GUILD")
 check("a price 10,000 times his own is refused", (GuildPrices:GetValue(2589)), 1100)
+-- A guildmate sending item IDs no item has, without end, used to grow the
+-- save with every one of them.
+GuildPrices:OnPrices("Eve-Realm", Comm.ToBase36(clock) .. ":" .. Comm.ToBase36(GuildPrices.MAX_ITEM_ID + 1) .. ","
+    .. Comm.ToBase36(1000) .. ";", "GUILD")
+check("an item ID past any item is refused", GuildPrices:GetValue(GuildPrices.MAX_ITEM_ID + 1), nil)
+do
+    local before = GuildPrices:Count()
+    local wasMax = GuildPrices.MAX_STORED
+    GuildPrices.MAX_STORED = before + 2
+    GuildPrices.stored = nil
+    local body = { Comm.ToBase36(clock) .. ":" }
+    for id = 50001, 50010 do
+        body[#body + 1] = Comm.ToBase36(id) .. "," .. Comm.ToBase36(1000) .. ";"
+    end
+    GuildPrices:OnPrices("Eve-Realm", table.concat(body), "GUILD")
+    check("a realm keeps so many items and no more", GuildPrices:Count(), before + 2)
+    check("a kept item still takes a newer price", (GuildPrices:GetValue(50001)), 1000)
+    GuildPrices:OnPrices("Eve-Realm", Comm.ToBase36(clock + 1) .. ":" .. Comm.ToBase36(50001) .. ","
+        .. Comm.ToBase36(1200) .. ";", "GUILD")
+    check("and is updated past the cap", (GuildPrices:GetValue(50001)), 1200)
+    GuildPrices.MAX_STORED = wasMax
+    GuildPrices.stored = nil
+end
 bob.settings.staleAfterSeconds = 3600
 bob.ns.Prices:GetTable()[2589].seen = clock - 7200
 check("once his is stale, the newer guild price wins", bob.ns.Prices:GetValue(2589), 1100)

@@ -56,7 +56,14 @@ MerchantFrame = NewFrame()
 time = function() return 100000 end
 
 local timers = {}
-C_Timer = { After = function(delay, fn) timers[#timers + 1] = { delay = delay, fn = fn } end }
+C_Timer = {
+    After = function(delay, fn) timers[#timers + 1] = { delay = delay, fn = fn } end,
+    NewTimer = function(delay, fn)
+        local timer = { delay = delay, fn = fn }
+        timers[#timers + 1] = timer
+        return { Cancel = function() timer.fn = function() end end }
+    end,
+}
 local function RunTimers()
     local due = timers
     timers = {}
@@ -265,6 +272,37 @@ check("the button redraws", label:GetText(), "Nothing needed here")
 
 Close()
 check("closing the vendor hides it", Shown(), false)
+
+print("")
+print("a run of merchant updates")
+
+-- Every stack bought or sold fires MERCHANT_UPDATE, and each used to read
+-- the whole vendor again and throw the cost index away whether or not a
+-- price had changed.
+Open()
+local scans, invalidated = 0, 0
+local realScan = Vendor.Scan
+Vendor.Scan = function(self) scans = scans + 1 return realScan(self) end
+ns.Cost.InvalidateIndex = function() invalidated = invalidated + 1 end
+Fire("MERCHANT_UPDATE")
+Fire("MERCHANT_UPDATE")
+Fire("MERCHANT_UPDATE")
+RunTimers()
+check("three updates in a burst read the vendor once", scans, 1)
+check("the same prices again are not news", invalidated, 0)
+local realInfo = C_MerchantFrame.GetItemInfo
+C_MerchantFrame.GetItemInfo = function(index)
+    local info = realInfo(index)
+    if info then info.price = 16000 end
+    return info
+end
+Fire("MERCHANT_UPDATE")
+RunTimers()
+check("a changed price is", invalidated, 1)
+C_MerchantFrame.GetItemInfo = realInfo
+Vendor.Scan = realScan
+ns.Cost.InvalidateIndex = noop
+Close()
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

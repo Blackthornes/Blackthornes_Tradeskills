@@ -20,6 +20,9 @@ local missing = {}
 local saved = { CreateFrame = CreateFrame, UIParent = UIParent, CreateColor = CreateColor,
     GameTooltip = GameTooltip }
 
+-- Whether this client can desaturate a texture (SetDesaturated's answer).
+local desaturates = false
+
 local function Region(parent)
     local region = { shown = true, parent = parent, scripts = {}, points = {}, alpha = 1,
         width = 0, height = 0, events = {}, children = {} }
@@ -111,7 +114,7 @@ local function Region(parent)
         return 1
     end
     region.SetVertexColor = function(self, r, g, b, a) self.vertex = { r, g, b, a } end
-    region.SetDesaturated = function(self, on) self.desaturated = on end
+    region.SetDesaturated = function(self, on) self.desaturated = on return desaturates end
     region.CreateFontString = function(self) return Region(self) end
     region.GetParent = function(self) return self.parent end
     region.GetMinMaxValues = function(self) return self.min or 0, self.max or 0 end
@@ -214,6 +217,12 @@ check("no corner gems", #btrim.corners, 0)
 check("the name on the title", btrim.plate.label.text, "Blackthornes Tradeskills")
 check("wide enough for it", btrim.plate.width >= #"Blackthornes Tradeskills" * 6 + 30, true)
 check("a portrait in a silver ring", btrim.portrait ~= nil, true)
+local ring = btrim.portrait.regions[1]
+check("a client that cannot desaturate tints the ring silver", ring.vertex ~= nil, true)
+desaturates = true
+local _, dtrim = Dress(ns)
+check("one that can leaves the ring's colour alone", dtrim.portrait.regions[1].vertex, nil)
+desaturates = false
 check("the game's close button", btrim.closeButton.template, "UIPanelCloseButton")
 btrim.closeButton.scripts.OnClick(btrim.closeButton)
 check("which closes the window", closed.done, true)

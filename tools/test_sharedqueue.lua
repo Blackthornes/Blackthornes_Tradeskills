@@ -189,6 +189,21 @@ end
 check("and is told so at login", said)
 check("the bag reads as Bob's", Queue:DescribeWho(entryFor(10))[1] == "Bob's craft")
 
+print("\nbolts bought at the auction house, still in the mail")
+
+-- Bob bought the three bolts; with alts sharing the queue they used to be
+-- queued for Loom to make all the same.
+queueOneBag()
+ns.AHBuys = {
+    GetPending = function(_, id) return id == BOLT and 3 or 0 end,
+    GetUnread = function() return 0 end,
+}
+Queue:RebuildDependencies()
+check("bought bolts in the mail are not queued again", entryFor(20) == nil)
+ns.AHBuys = nil
+Queue:RebuildDependencies()
+check("without them the bolts are queued", entryFor(20) ~= nil)
+
 print("\nat Bob's mailbox")
 
 queueOneBag()
@@ -203,6 +218,21 @@ QueueMail:NoteSent(LOOM, { { itemID = WOOL, count = 9 } })
 bags = { [WOOL] = 3 }
 check("once sent, it is not offered again", delivery(LOOM) == nil)
 check("it counts as Loom's on its way", Queue:HeldBy(LOOM, WOOL) == 9)
+
+-- Mail to your own alt lands at once: a mailbox read a minute later
+-- holds it, and it is not still on its way as well.
+clock = clock + 60
+ns.db.characters[LOOM].mailAt = clock
+ns.db.characters[LOOM].mail = { [WOOL] = 9 }
+check("read from Loom's mailbox a minute on, it is counted once", Queue:HeldBy(LOOM, WOOL) == 9)
+-- A character on a linked account gets its mail an hour later.
+ns.db.characters[LOOM].linkedFrom = "other"
+ns.db.characters[LOOM].mail = nil
+check("a linked account's is still on its way inside the hour", Queue:HeldBy(LOOM, WOOL) == 9)
+ns.db.characters[LOOM].mailAt = clock + 3600
+check("and not after it", Queue:HeldBy(LOOM, WOOL) == 0)
+ns.db.characters[LOOM].linkedFrom = nil
+ns.db.characters[LOOM].mail = nil
 
 clock = clock + 2 * 3600
 ns.db.characters[LOOM].mailAt = clock

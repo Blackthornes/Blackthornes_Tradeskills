@@ -148,11 +148,11 @@ end
 -- { itemID, quantity, at, auctionID }
 AHBuys.awaiting = nil
 
-function AHBuys:Await(itemID, quantity, auctionID)
+function AHBuys:Await(itemID, quantity, auctionID, price)
     itemID, quantity = tonumber(itemID), tonumber(quantity)
     if not itemID or not quantity or quantity <= 0 then return end
     self.awaiting = { itemID = itemID, quantity = quantity, at = Now(),
-        auctionID = auctionID, money = self:Money() }
+        auctionID = auctionID, money = self:Money(), price = tonumber(price) }
 end
 
 function AHBuys:Money()
@@ -181,7 +181,8 @@ function AHBuys:OnMoney()
     local wait = self.awaiting
     if not wait or not wait.money then return end
     local money = self:Money()
-    if money and money < wait.money then self:Confirm(wait.auctionID) end
+    -- Less than the buyout leaving (a deposit, a repair) is not the buy.
+    if money and wait.money - money >= (wait.price or 1) then self:Confirm(wait.auctionID) end
 end
 
 --- A commodity: the item and how many are named in the call itself.
@@ -211,7 +212,7 @@ function AHBuys:OnPlaceBid(auctionID, bidAmount)
             local buyout = tonumber(info.buyoutAmount)
             if buyout and buyout > 0 and (tonumber(bidAmount) or 0) >= buyout then
                 local itemID = (type(info.itemKey) == "table" and info.itemKey.itemID) or key.itemID
-                self:Await(itemID, info.quantity or 1, auctionID)
+                self:Await(itemID, info.quantity or 1, auctionID, buyout)
             end
             return
         end
@@ -242,8 +243,13 @@ local function Subject(index)
     return ok and subject or nil
 end
 
---- An attachment is being taken: what it holds is no longer waiting.
+--- An attachment is being taken: what it holds is noted, and stops waiting
+--- once the inbox shows it gone (SettleTakes).
 -- Only a won auction's, where the client can tell; otherwise any.
+--
+-- The take is only asked for here. With the bags full the server refuses
+-- it and the attachment stays, and striking the purchase off at the ask
+-- put it back on the shopping list to be bought a second time.
 function AHBuys:OnTake(index, slot)
     if not ns.Mail or not index then return end
     if IsWon(Subject(index)) == false then return end
@@ -255,11 +261,34 @@ function AHBuys:OnTake(index, slot)
         first, last = 1, tonumber(_G.ATTACHMENTS_MAX_RECEIVE) or 16
     end
 
-    local removed = 0
+    self.takes = self.takes or {}
     for s = first, last do
         local itemID, quantity = ns.Mail:ReadAttachment(index, s)
-        if itemID then removed = removed + self:Remove(itemID, quantity or 1, list) end
+        if itemID then
+            self.takes[#self.takes + 1] = { index = index, slot = s, itemID = itemID, quantity = quantity or 1 }
+        end
     end
+end
+
+--- The inbox changed: a take whose attachment has gone went through.
+--- One still there as it was is waited on (a whole mail is taken one
+--- attachment at a time), until the mailbox closes.
+function AHBuys:SettleTakes()
+    local takes = self.takes
+    if not takes or #takes == 0 then return end
+    local list = self:GetList(false)
+    if not list then self.takes = nil return end
+
+    local kept, removed = {}, 0
+    for _, take in ipairs(takes) do
+        local itemID, quantity = ns.Mail:ReadAttachment(take.index, take.slot)
+        if itemID == take.itemID and (quantity or 1) == take.quantity then
+            kept[#kept + 1] = take
+        else
+            removed = removed + self:Remove(take.itemID, take.quantity, list)
+        end
+    end
+    self.takes = #kept > 0 and kept or nil
     if removed > 0 then Changed() end
 end
 
@@ -332,6 +361,11 @@ function AHBuys:OnEnable()
     end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function() AHBuys:Confirm() end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_FAILED", function() AHBuys:Fail() end)
+    -- A buyout that fails because the listing just sold says so only here;
+    -- without it the ask lived on, and the next gold leaving confirmed it.
+    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW_ERROR", function() AHBuys:Fail() end)
+    ns.RegisterEvent(self, "MAIL_INBOX_UPDATE", function() AHBuys:SettleTakes() end)
+    ns.RegisterEvent(self, "MAIL_CLOSED", function() AHBuys.takes = nil end)
     ns.RegisterEvent(self, "AUCTION_HOUSE_PURCHASE_COMPLETED", function(_, _, auctionID)
         AHBuys:Confirm(auctionID)
     end)

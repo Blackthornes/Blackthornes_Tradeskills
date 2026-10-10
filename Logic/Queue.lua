@@ -278,9 +278,12 @@ end
 -- each level, the shortfall made into crafts. What differs is who makes them
 -- and what counts as already held: what everyone the material is for holds,
 -- and what the one making it holds, since what they made waits to be sent.
+local BoughtBeyondMail
+
 function Queue:DeriveAcrossCharacters(manual, derived, maxDepth, planned)
     local makers = MakersByOutput()
     planned = planned or {}
+    local selfKey = SelfKey()
 
     local function process(entries, depth)
         if depth >= maxDepth or #entries == 0 then return end
@@ -322,6 +325,12 @@ function Queue:DeriveAcrossCharacters(manual, derived, maxDepth, planned)
                 end
                 if not need.crafters[maker.characterKey] then
                     held = held + self:HeldBy(maker.characterKey, itemID)
+                end
+                -- The single-character plan counts auction buys still in
+                -- the mail as held; this one left them out, so a material
+                -- just bought was queued as a sub-craft all the same.
+                if need.crafters[selfKey] or maker.characterKey == selfKey then
+                    held = held + BoughtBeyondMail(itemID)
                 end
 
                 local short = math.max(0, need.units - held)
@@ -438,7 +447,7 @@ end
 --- already hold: all of them when no mail was counted, otherwise those
 --- bought since the mailbox was read, or the excess over what it showed.
 --- With no count given, the mailbox's own is used.
-local function BoughtBeyondMail(itemID, inMail)
+function BoughtBeyondMail(itemID, inMail)
     local buys = ns.AHBuys
     if not buys then return 0 end
     local pending = buys:GetPending(itemID)
@@ -772,7 +781,13 @@ end
 --
 -- @param options { depth, forRecipeID } -- internal, for dependency queueing
 function Queue:Add(recipeID, quantity, options)
-    quantity = math.max(1, math.floor(tonumber(quantity) or 1))
+    quantity = tonumber(quantity) or 1
+    -- "1e999" typed into a box is a number, an endless one; saved, every
+    -- "%d" that showed the queue would raise from then on.
+    if quantity ~= quantity or quantity == math.huge or quantity == -math.huge then
+        return nil, "that is not a quantity"
+    end
+    quantity = math.max(1, math.floor(quantity))
     options = options or {}
 
     -- GetAny: an alt's craft can be queued from the account-wide view, and
