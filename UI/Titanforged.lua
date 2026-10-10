@@ -273,6 +273,11 @@ end
 -- .plate, .portrait and .closeButton when made. The rim and the soft light
 -- along the top are drawn on `frame` itself.
 function Titanforged:Dress(frame, opts)
+    -- The Blizzard window style (UI/BlizzardLook.lua) frames it instead,
+    -- with the same trim, so callers never need to know which is on.
+    local Look = ns.BlizzardLook
+    if Look and Look.On() then return Look.Dress(frame, opts) end
+
     opts = opts or {}
 
     for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do Side(frame, side) end
