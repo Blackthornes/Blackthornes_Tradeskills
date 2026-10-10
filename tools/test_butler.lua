@@ -166,6 +166,41 @@ now = now + 5
 Butler:Advise(1)
 check("kept too long: one new plan", plans, before + 2)
 
+print("\nevery character's holdings")
+ns.db.characters[SELF].inventory = { [1] = 99 }
+ns.db.characters[SELF].bank = { [3] = 4, [7] = 0 }
+ns.db.characters[ALT].inventory = { [1] = 2, ["x"] = 5 }
+ns.db.characters[ALT].inventoryAt = 50
+ns.db.characters[ALT].mail = { [4] = 1 }
+ns.db.characters[ALT].mailAt = 60
+ns.Inventory.GetBagCounts = function() return { [1] = 3, [5] = 1 } end
+ns.Recipes.GetCharacters = function()
+  return {
+    { key = SELF, name = "Mia", isCurrent = true },
+    { key = ALT, name = "Ana", isCurrent = false },
+    { key = ALT2, name = "Bo", isCurrent = false, linkedFrom = "other" },
+    { key = "Gone-1", name = "Gone", isCurrent = false },
+  }
+end
+local held = Butler:Holdings()
+check("one entry per character on record", #held, 3)
+check("the character playing first", held[1].key, SELF)
+check("its bags are read live", held[1].bags[1], 3)
+check("its bank is the snapshot", held[1].bank[3], 4)
+check("empty counts are left out", held[1].bank[7], nil)
+check("an alt's bags are its snapshot", held[2].bags[1], 2)
+check("a key that is not an item is left out", held[2].bags["x"], nil)
+check("when the bags were read", held[2].bagsAt, 50)
+check("its mail", held[2].mail[4], 1)
+check("when the mail was read", held[2].mailAt, 60)
+check("never read is nil", held[2].bankAt, nil)
+check("another account's character says so", held[3].linked, "other")
+check("the short name", held[2].short, "Ana")
+held[2].bags[1] = 1000
+check("a copy: the save is untouched", ns.db.characters[ALT].inventory[1], 2)
+ns.Recipes.GetCharacters = function() error("boom") end
+check("an error gives nil", Butler:Holdings(), nil)
+
 print("\nnever raises")
 ns.Prices.GetValue = function() error("boom") end
 check("an error inside gives nil", Butler:Advise(1), nil)
