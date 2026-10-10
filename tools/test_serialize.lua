@@ -160,6 +160,18 @@ local survived = type(resilientDecoded) == "table"
 print("  one bad field keeps the rest: " .. (survived and "ok" or "FAIL"))
 if not survived then failures = failures + 1 end
 
+-- A message from anyone can carry a bad length. A negative one used to step
+-- back through the text, and the table around it never ended: the game froze.
+local function Refused(text)
+    local ok = S.Decode(text)
+    return ok == false
+end
+for _, bad in ipairs({ "ts-4:", "ts-1:x", "ts99:ab", "ts1.5:ab", "tn1;" }) do
+    local refused = Refused(bad)
+    print(("  %-10s refused: %s"):format(bad, refused and "ok" or "FAIL"))
+    if not refused then failures = failures + 1 end
+end
+
 print(failures == 0 and "\nall serializer tests passed" or ("\n" .. failures .. " failure(s)"))
 
 -- Reported and nothing more, until now: this suite printed FAIL and still let

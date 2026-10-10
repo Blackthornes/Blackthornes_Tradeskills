@@ -348,10 +348,12 @@ Scan(dora, { [2589] = 900000 }, clock - 60)
 
 -- Searched with nothing listed and never priced: seen, but no market value.
 ana.ns.Prices:GetTable()[4306] = { seen = clock - 60, scans = 1, quantity = 0, history = {} }
+-- Sold out in that scan: an old market value, nothing listed.
+ana.ns.Prices:GetTable()[4338] = { market = 700, seen = clock - 60, scans = 3, quantity = 0, history = {} }
 
 current = ana
 check("Ana shares her scan", (ana.ns.GuildPrices:Share()), true)
-check("an item with no market value is left out", (select(3, ana.ns.GuildPrices:Batches(clock - 60))), 2)
+check("no market value, or sold out: left out", (select(3, ana.ns.GuildPrices:Batches(clock - 60))), 2)
 Run()
 current = carl
 check("Carl's scan is covered by Ana's", select(2, carl.ns.GuildPrices:Share()), "a guildmate shared one")

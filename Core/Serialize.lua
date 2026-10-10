@@ -187,9 +187,13 @@ DecodeValue = function(text, position)
         if not colon then error("unterminated string") end
 
         local length = tonumber(text:sub(position + 1, colon - 1))
-        if not length then error("malformed string length") end
-
         local first = colon + 1
+        -- A negative length stepped back through the text, and a table being
+        -- read then never reached its end: one bad message from anyone froze
+        -- the game. A length past the end is as broken.
+        if not length or length < 0 or length % 1 ~= 0 or first + length - 1 > #text then
+            error("malformed string length")
+        end
         return text:sub(first, first + length - 1), first + length
 
     elseif tag == "t" then
@@ -201,9 +205,13 @@ DecodeValue = function(text, position)
                 return result, position + 1
             end
 
-            local key, value
+            if position > #text then error("unterminated table") end
+
+            local key, value, before = nil, nil, position
             key, position = DecodeValue(text, position)
             value, position = DecodeValue(text, position)
+            -- Every pair moves on, or the stream is corrupt.
+            if position <= before then error("malformed table") end
 
             -- A nil key would be a corrupt stream rather than real data.
             if key ~= nil then result[key] = value end
