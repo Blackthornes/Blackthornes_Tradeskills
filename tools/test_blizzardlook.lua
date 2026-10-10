@@ -39,11 +39,17 @@ local function Region(parent)
     region.IsVisible = function(self) return self.shown end
     region.SetAlpha = function(self, a) self.alpha = a end
     region.GetAlpha = function(self) return self.alpha end
-    region.SetWidth = function(self, w) self.width = w end
+    region.SetWidth = function(self, w)
+        self.width = w
+        if self.scripts.OnSizeChanged then self.scripts.OnSizeChanged(self, w, self.height) end
+    end
     region.SetHeight = function(self, h) self.height = h end
     region.GetWidth = function(self) return self.width end
     region.GetHeight = function(self) return self.height end
-    region.SetSize = function(self, w, h) self.width, self.height = w, h end
+    region.SetSize = function(self, w, h)
+        self.width, self.height = w, h
+        if self.scripts.OnSizeChanged then self.scripts.OnSizeChanged(self, w, h) end
+    end
     region.SetColorTexture = function(self, r, g, b, a) self.color = { r, g, b, a or 1 } end
     region.SetGradient = function(self, orientation, from, to)
         self.gradient = { orientation, from, to }
@@ -231,6 +237,15 @@ button.scripts.OnMouseDown(button)
 check("down while held", button.blizzardFace.pieces[2].texture, ART.buttonDown)
 button.scripts.OnMouseUp(button)
 check("up again", button.blizzardFace.pieces[2].texture, ART.button)
+button.scripts.OnMouseDown(button)
+button:Hide()
+button:Show()
+check("hidden mid-press, it opens up", button.blizzardFace.pieces[2].texture, ART.button)
+check("and lets go", rawget(button, "held"), nil)
+local narrow = Widgets.CreateButton(Region(), "+", nil, { width = 22 })
+check("a narrow button's caps don't cross", narrow.blizzardFace.pieces[1].width, 11)
+narrow:SetWidth(120)
+check("they grow back when it widens", narrow.blizzardFace.pieces[1].width, 12)
 button:SetEnabledState(false)
 check("grey when it cannot be pressed", button.blizzardFace.pieces[2].texture, ART.buttonDisabled)
 button:SetEnabledState(true)
@@ -263,6 +278,13 @@ check("the others gold", strip.tabs[2].label.textColor[3], 0)
 check("no gliding gold line", strip.line.alpha, 0)
 strip:Select("b")
 check("picking another swaps them", strip.tabs[2].blizzardFace.pieces[2].texture, ART.tabActive)
+local hovered = strip.tabs[1]
+if hovered.scripts.OnEnter then hovered.scripts.OnEnter(hovered) end
+ns.Motion:FinishAll()
+check("hovering a tab brings back no house wash", hovered.hover.shown == false and hovered.hover.alpha == 0, true)
+check("nor its underline", hovered.underline.shown == false and hovered.underline.alpha == 0, true)
+check("the house light stays out on the tab picked", strip.tabs[2].lit.shown, false)
+check("and the strip's glow", strip.lineGlow.shown, false)
 
 local bar, thumb = Region(), Region()
 Widgets.LightThumb(bar, thumb)
@@ -279,6 +301,9 @@ ns.db = {}
 local plain = ns.Widgets.CreateButton(Region(), "Max", nil, {})
 check("the button keeps the house look", plain.blizzardFace, nil)
 check("its face showing", plain.background.alpha, 1)
+local main = ns.Widgets.CreateButton(Region(), "Scan", nil, { primary = true })
+local ink = ns.Theme.colors.ink
+check("the main action's label stays readable on its face", main.label.textColor[1] == ink[1] and main.label.textColor[3] == ink[3], true)
 local lines = ns.BlizzardLook.ProbeLines()
 check("the probe names what is missing", lines[2]:find("button", 1, true) ~= nil, true)
 missing[ART.button] = nil
@@ -290,6 +315,16 @@ ns.settings.windowStyle = "titanforged"
 check("waits for /reload", ns.BlizzardLook.Style(), "blizzard")
 check("the setting says what comes next", ns.BlizzardLook.Wanted(), "titanforged")
 check("the probe says so", ns.BlizzardLook.ProbeLines()[1]:find("after /reload", 1, true) ~= nil, true)
+local function CloseButtons()
+    local count = 0
+    for _, template in ipairs(templates) do
+        if template == "UIPanelCloseButton" then count = count + 1 end
+    end
+    return count
+end
+local before = CloseButtons()
+ns.BlizzardLook.ProbeLines()
+check("running the probe again adds no frames", CloseButtons(), before)
 
 ns.Motion:FinishAll()
 for key, value in pairs(saved) do _G[key] = value end
