@@ -446,6 +446,17 @@ function Inventory:OnBankClosed()
     self.bankOpen = false
 end
 
+--- A bank slot changed. Only a bank window that is open now is worth reading.
+--
+-- On Forever these also fire with no banker in sight. They used to count as
+-- opening the bank: the snapshot was retaken from a shut bank, which reads as
+-- slots with nothing in them, and the time stamped on it said the bank had
+-- been seen minutes ago when it had not been opened in days.
+function Inventory:OnBankSlotsChanged()
+    if not self.bankOpen then return end
+    self:OnBankOpened()
+end
+
 --- Is this container one of the bank's?
 local function IsBankContainer(bag)
     if type(bag) ~= "number" then return false end
@@ -553,8 +564,8 @@ function Inventory:OnEnable()
 
     ns.RegisterEvent(self, "BANKFRAME_OPENED", self.OnBankOpened)
     ns.RegisterEvent(self, "BANKFRAME_CLOSED", self.OnBankClosed)
-    ns.RegisterEvent(self, "PLAYERBANKSLOTS_CHANGED", self.OnBankOpened)
-    ns.RegisterEvent(self, "PLAYERREAGENTBANKSLOTS_CHANGED", self.OnBankOpened)
+    ns.RegisterEvent(self, "PLAYERBANKSLOTS_CHANGED", self.OnBankSlotsChanged)
+    ns.RegisterEvent(self, "PLAYERREAGENTBANKSLOTS_CHANGED", self.OnBankSlotsChanged)
 
     self:Snapshot()
 end

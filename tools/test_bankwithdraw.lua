@@ -195,6 +195,33 @@ check("the main bank empties too",              Inventory:GetBankCount(BOLT), 0)
 check("and everything is in the bags",          Inventory:GetOwnedCount(BOLT), 25)
 
 print("")
+print("the bank shuts, and its slot events fire with no banker in sight")
+
+Fire("BANKFRAME_CLOSED")
+local seenAt = record.bankAt - 3600
+record.bankAt = seenAt
+Inventory.readThisSession = false
+
+-- On a retail engine a shut bank still answers with its slot count, just
+-- with nothing in the slots.
+local shutBankSlots = function(bag)
+    return containers[bag] and 16 or 0
+end
+local readable = C_Container.GetContainerNumSlots
+C_Container.GetContainerNumSlots = shutBankSlots
+bankReadable = false
+local snapshot = record.bank
+Fire("PLAYERBANKSLOTS_CHANGED", 1)
+Fire("PLAYERREAGENTBANKSLOTS_CHANGED", 1)
+Fire("BAG_UPDATE", 6)
+Tick()
+C_Container.GetContainerNumSlots = readable
+
+check("the time the bank was seen stays put",   record.bankAt, seenAt)
+check("the snapshot is not retaken",            record.bank == snapshot, true)
+check("the bank is not called read this session", Inventory:HasReadBankThisSession(), false)
+
+print("")
 print("a bank container is told apart from a bag")
 
 check("the main bank",                          Inventory.IsBankContainer(-1), true)
