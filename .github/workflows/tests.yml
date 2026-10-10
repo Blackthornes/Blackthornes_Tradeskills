@@ -30,3 +30,9 @@ jobs:
 
       - name: Logic tests
         run: python tools/runtests.py
+
+      - name: No saved variables, WTF folders, keys or .env files
+        run: python tools/check_private_files.py
+
+      - name: The private-files check catches what it should
+        run: python tools/test_check_private_files.py
