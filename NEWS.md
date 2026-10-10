@@ -12,6 +12,14 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.45.0
+
+- You can pick a new window look that matches the game's own windows. The gold look is still the default.
+- Lists are calmer now. The gold glow only shows on the row under your mouse.
+- The queue can wait until you're almost out of something before it makes more, and things that sell fast can keep a few extra.
+- When you buy at the auction house, the amount you need stays put instead of going back to 1.
+- The bank time on the Queue tab is right now, plus a bunch of other fixes.
+
 ## 0.44.0
 
 Hey everyone! A small Tradeskills update just went up.

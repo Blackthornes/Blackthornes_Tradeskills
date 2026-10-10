@@ -4,6 +4,36 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.45.0
+
+For WoW: Forever (interface 16001). A file was added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Window style:** Settings > Look & sound has a new Window style choice.
+  Titanforged stays the default. Blizzard gives the windows the game's own
+  look: grey colours, a silver rim, the game's close button, buttons, tick
+  boxes, tabs and scroll knobs, plain list rows and no glows. A change takes
+  effect after a reload, and a Reload now button appears when it's needed.
+- **Calmer list rows:** rows in the tables look like dark glass, every other
+  one a shade lighter with a fine line under each. The gold glow shows only
+  on the row under the mouse.
+- **Queue: wait until stock runs low** (Settings > Queue, off by default): a
+  profit craft is only suggested again once what you hold drops to the
+  number you pick, then it's made back up to Keep in stock.
+- **Queue: fast sellers keep more** (off by default): items your own sales
+  show selling well get extra room on their cap.
+- **Auction house buys:** the number needed now stays in the Quantity box
+  instead of jumping back to 1.
+- **Bank age on the Queue tab** shows your last real bank visit. Bank events
+  that fire away from a banker no longer replace your saved bank with an
+  empty one.
+- **Fixes:** a sub-craft queued for another craft no longer counts as stock;
+  Keep in stock no longer grows each time you edit it; a broken shared
+  message can no longer freeze the game; sold-out items aren't shared as
+  fresh guild prices, and items with no price no longer stop the share; the
+  auction house sell lists only rebuild when something in them changed; and
+  six fixes to the Blizzard window style.
+
 ## 0.44.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
