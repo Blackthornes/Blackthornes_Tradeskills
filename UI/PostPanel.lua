@@ -995,6 +995,13 @@ function PostPanel:RefreshShopping()
     self.summary:SetText(text)
 end
 
+--- Back in place, and laid out against the main window, without rebuilding
+--- the list: what the one-second ticker does when nothing on it changed.
+function PostPanel:Place()
+    self:Redock()
+    if self.frame and self.frame:IsShown() then self:Reflow() end
+end
+
 function PostPanel:Refresh()
     -- Before the shown check: this is how a panel that stepped aside for the
     -- character window comes back.

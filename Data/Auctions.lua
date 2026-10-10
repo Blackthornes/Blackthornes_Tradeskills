@@ -294,7 +294,10 @@ function Auctions:GetRoom(itemID, ignoreRecipeID)
 
     local queued = 0
     for _, entry in ipairs(ns.Queue:GetAll()) do
-        if entry.recipeID ~= ignoreRecipeID then
+        -- A sub-craft queued for another craft is used up by it, so it is
+        -- not stock: 30 bolts queued for 10 bags left none to sell, yet hid
+        -- bolts from the Profit tab as "at your limit".
+        if entry.recipeID ~= ignoreRecipeID and not entry.isDependency then
             local recipe = ns.Recipes:GetAny(entry.recipeID)
 
             if recipe and recipe.outputItemID == itemID then
@@ -314,9 +317,13 @@ function Auctions:GetRoom(itemID, ignoreRecipeID)
     local held = posted + onHand + inMail + queued
     local remaining = math.max(0, limit - held)
 
+    -- Whether stock has run low is read from what you hold, not what is
+    -- queued: counting the queue, one craft queued with + put the rest of the
+    -- restock out of reach. The room is still filled up to the limit with the
+    -- queue counted, so queueing twice never goes over it.
     local restockAt = self:GetRestockAt()
     local waiting = false
-    if restockAt and remaining > 0 and held > restockAt then
+    if restockAt and remaining > 0 and held - queued > restockAt then
         remaining, waiting = 0, true
     end
 

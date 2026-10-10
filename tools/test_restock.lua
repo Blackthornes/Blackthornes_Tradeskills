@@ -57,10 +57,17 @@ bags[ITEM] = 0
 room, _, _, _, _, _, waiting = A:GetRoom(ITEM)
 check("holding none: room back up to 5", room == 5 and not waiting)
 
--- Queued counts as held, so queueing once does not queue again.
+-- Queued counts toward the limit, but not as stock still held: one craft
+-- queued with + leaves room to queue the rest.
 ns.db.queue = { { recipeID = 1, quantity = 2 } }
 room, _, _, _, _, _, waiting = A:GetRoom(ITEM)
-check("2 queued, restock at 0: waits", room == 0 and waiting)
+check("2 queued, restock at 0: room for 3 more", room == 3 and not waiting)
+ns.db.queue = { { recipeID = 1, quantity = 5 } }
+room, _, _, _, _, _, waiting = A:GetRoom(ITEM)
+check("5 queued: at the limit, not waiting", room == 0 and not waiting)
+ns.db.queue = { { recipeID = 1, quantity = 30, isDependency = true } }
+room, _, _, _, _, _, waiting = A:GetRoom(ITEM)
+check("a sub-craft queued for another craft is not stock", room == 5 and not waiting)
 ns.db.queue = {}
 
 -- On at 2: 3 held waits, 2 held tops up to 5.

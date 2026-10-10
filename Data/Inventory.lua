@@ -480,6 +480,8 @@ Inventory.IsBankContainer = IsBankContainer
 -- bank container changing while the bank is open takes the snapshot again.
 function Inventory:OnBagChanged(event, bag)
     self:InvalidateBagCounts()
+    -- Counted, so a list built from the bags can tell nothing moved.
+    self.changes = (self.changes or 0) + 1
 
     if event == "BAG_UPDATE" and self.bankOpen and IsBankContainer(bag) then
         self:OnBankOpened()

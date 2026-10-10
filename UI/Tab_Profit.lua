@@ -1262,9 +1262,9 @@ function UpdateDetail(analysis)
         local box = detail.limitBox
         local typing = box.editBox.HasFocus and box.editBox:HasFocus()
         if not typing then
-            box:SetValue(analysis.postLimit or 0, true)
+            box:SetValue(analysis.baseLimit or analysis.postLimit or 0, true)
         elseif newCraft then
-            box:SetValue(analysis.postLimit or 0, true)
+            box:SetValue(analysis.baseLimit or analysis.postLimit or 0, true)
             box.editBox:ClearFocus()
         end
 
@@ -1286,6 +1286,11 @@ function UpdateDetail(analysis)
         end
 
         local where = #parts > 0 and table.concat(parts, ", ") or "none yet"
+        -- A fast seller's limit is the box's number plus the extra; said
+        -- here, since the box shows only the number set.
+        if (analysis.fastSellerExtra or 0) > 0 then
+            where = ("%s, +%d fast seller"):format(where, analysis.fastSellerExtra)
+        end
 
         if analysis.postLimit and analysis.postLimit > 0 and analysis.waitingForLow then
             detail.limitHint:SetText(("%s, restock at %d"):format(where, analysis.restockAt or 0))
@@ -1815,7 +1820,15 @@ local function BuildCrafts(container)
         elseif noLimit == #rows then
             ns.Print("nothing queued: set Keep in stock per item in Settings first")
         else
-            ns.Print("nothing queued: every listed craft is already at its Max on hand")
+            local waiting = false
+            for _, row in ipairs(rows) do
+                if row.waitingForLow then waiting = true break end
+            end
+            if waiting then
+                ns.Print("nothing queued: every listed craft is at its Max on hand or waiting until it runs low")
+            else
+                ns.Print("nothing queued: every listed craft is already at its Max on hand")
+            end
         end
     end, { width = 90, height = 20,
            tooltip = "Queue every craft in this list up to your Max on hand (Keep in stock per item in Settings), less what you already have or have queued" })

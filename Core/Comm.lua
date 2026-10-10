@@ -164,7 +164,10 @@ end
 Comm.queue = {}
 Comm.sent, Comm.refused, Comm.retried = 0, 0, 0
 local tokens, lastRefill = BURST, nil
-local nextTransfer = 0
+-- Started from the clock, not 0: after a /reload the first transfer reused
+-- the last session's ID, and a partner still holding half of that one merged
+-- the old parts with the new.
+local nextTransfer = math.floor((type(time) == "function" and time() or 0) % 1296)
 
 local function Now()
     local ok, now = pcall(GetTime)
