@@ -38,7 +38,29 @@
 -- built again on the next question, never on a timer. Each question is then
 -- a few table reads and the per-item prices.
 --
--- Butler's CLAUDE.md and its Logic/Sisters.lua lean on this call and these
+-- Butler's "All characters" list (2026-10-10) asks one more thing, once
+-- each time that list is built, never per item:
+--
+--   _G.BlackthornesTS.Butler:Holdings()   -- a list, or nil
+--
+-- One entry per character Tradeskills has a record for, the character
+-- playing first (Recipes:GetCharacters' order and names):
+--
+--   key            "Name-Realm", as Tradeskills keys it.
+--   name           the name Recipes:GetCharacters gives (told apart by
+--                  level and class when two share it).
+--   short          the short name (Recipes:GetShortCharacterName).
+--   realm, faction as recorded, or nil.
+--   isCurrent      true for the character playing.
+--   linked         the character it came through when it is on another
+--                  account of yours (Logic/AccountLink.lua), else nil.
+--   bags, bank,    { [itemID] = count }, each a fresh copy: the bags of the
+--   mail           character playing are read live (Inventory:GetBagCounts),
+--                  everything else is the last snapshot.
+--   bagsAt,        when each was last read (time()), nil when never; the
+--   bankAt, mailAt live bags say now.
+--
+-- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
 
 local _, ns = ...
@@ -298,5 +320,78 @@ function Butler:Advise(itemID)
     if not itemID then return nil end
     local ok, answer = pcall(Answer, itemID)
     if ok then return answer end
+    return nil
+end
+
+--------------------------------------------------------------------------------
+-- Every character's bags, bank and mail, for Butler's All characters list
+--------------------------------------------------------------------------------
+
+--- A copy of an { [itemID] = count } table, keeping only real counts.
+local function Counts(counts)
+    local copy = {}
+    if type(counts) ~= "table" then return copy end
+    for itemID, count in pairs(counts) do
+        if type(itemID) == "number" and type(count) == "number" and count > 0 then
+            copy[itemID] = count
+        end
+    end
+    return copy
+end
+
+local function Stamp(value)
+    return type(value) == "number" and value or nil
+end
+
+local function LiveBags()
+    local inventory = ns.Inventory
+    if not (inventory and inventory.GetBagCounts) then return nil end
+    local ok, live = pcall(inventory.GetBagCounts, inventory)
+    if ok and type(live) == "table" then return live end
+    return nil
+end
+
+local function Holdings()
+    local list = {}
+    local records = Characters()
+    local recipes = ns.Recipes
+    if not (recipes and recipes.GetCharacters) then return list end
+
+    for _, character in ipairs(recipes:GetCharacters()) do
+        local record = records[character.key]
+        if type(record) == "table" then
+            local entry = {
+                key = character.key,
+                name = character.name,
+                short = ShortName(character.key),
+                realm = type(record.realm) == "string" and record.realm or nil,
+                faction = type(record.faction) == "string" and record.faction or nil,
+                isCurrent = character.isCurrent == true,
+                linked = character.linkedFrom,
+                bank = Counts(record.bank),
+                mail = Counts(record.mail),
+                bankAt = Stamp(record.bankAt),
+                mailAt = Stamp(record.mailAt),
+            }
+            local live = entry.isCurrent and LiveBags()
+            if live then
+                entry.bags = Counts(live)
+                entry.bagsAt = type(time) == "function" and time() or Stamp(record.inventoryAt)
+            else
+                entry.bags = Counts(record.inventory)
+                entry.bagsAt = Stamp(record.inventoryAt)
+            end
+            list[#list + 1] = entry
+        end
+    end
+    return list
+end
+
+--- What every character on record carries, banks and has waiting in the
+-- mail, for Butler. Never raises, writes nothing; nil when anything goes
+-- wrong. Fresh tables each time, so Butler may keep or change them.
+function Butler:Holdings()
+    local ok, list = pcall(Holdings)
+    if ok then return list end
     return nil
 end
