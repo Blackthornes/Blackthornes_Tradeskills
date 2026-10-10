@@ -106,15 +106,15 @@ local list = Widgets.CreateScrollList(Region(), {
 list:SetHeight(100)
 list:SetData({ { id = 1 }, { id = 2 }, { id = 3 } })
 
-check("the selected entry's row is lit", Same(list.rows[2].background.color, "rowActive"), true)
+check("the selected entry's row is lit", Same(list.rows[2].background.color, "glassActive"), true)
 check("with the gold edge", list.rows[2].hoverEdge.shown, true)
-check("another row is not", Same(list.rows[1].background.color, "rowActive"), false)
+check("another row is not", Same(list.rows[1].background.color, "glassActive"), false)
 check("and has no edge", list.rows[1].hoverEdge.shown, false)
 
 list.rows[3].scripts.OnClick(list.rows[3], "LeftButton")
 check("clicking a row selects it", clicked, 3)
-check("and it lights at once", Same(list.rows[3].background.color, "rowActive"), true)
-check("the old one goes back to its band", Same(list.rows[2].background.color, "rowAlt"), true)
+check("and it lights at once", Same(list.rows[3].background.color, "glassActive"), true)
+check("the old one goes back to its band", Same(list.rows[2].background.color, "glassAlt"), true)
 
 list.rows[3].scripts.OnLeave(list.rows[3])
 check("the mouse leaving keeps the selected edge", list.rows[3].hoverEdge.shown, true)
