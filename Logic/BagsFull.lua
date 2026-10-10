@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- Logic/BagsFull.lua
 -- A warning the moment your bags fill up.
 --
--- Asked for by a player (Izbode, 2026-10-02) for long crafting and
+-- Asked for by a player (2026-10-02) for long crafting and
 -- disenchanting runs, where the game stops the run quietly when there is
 -- nowhere to put the next item. Only the ordinary bags count: a full herb
 -- bag still leaves room for everything else. The warning sounds when the
@@ -66,7 +66,7 @@ end
 -- Batches that fit the bags
 --------------------------------------------------------------------------------
 --
--- Asked for by a player (Ezmode, 2026-10-05) for big vendor and disenchant
+-- Asked for by a player (2026-10-05) for big vendor and disenchant
 -- shuffles: a thousand wands is a thousand wood and a thousand essence, about
 -- 150 slots, and the bags hold 30. Buying it all at once filled the bags and
 -- the game quietly refused the rest. So the Buy materials button, and the

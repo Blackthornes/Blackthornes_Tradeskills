@@ -1,4 +1,4 @@
--- Gear for the disenchanter (Izbode, 2026-10-04): "Setting a disenchant
+-- Gear for the disenchanter (2026-10-04): "Setting a disenchant
 -- character to mail all BoEs to (with threshold option, like only greens, or
 -- maybe only green and blues)".
 --

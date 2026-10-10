@@ -10,7 +10,7 @@
 -- Prices are learned by watching merchants, and until a merchant has been seen
 -- selling something, Data/VendorPrices.lua says what Classic's vendors charge
 -- for it. A player who has never stood at a trade goods vendor still gets vials
--- and thread costed at the shop price instead of the auction house's (Izbode's
+-- and thread costed at the shop price instead of the auction house's (a player's
 -- report, 2026-10-02). What a merchant is seen charging always wins.
 
 local _, ns = ...
@@ -61,7 +61,7 @@ end
 
 -- Forever's vendors pay less than the game's own item data says for some
 -- items, and on charged items neither the item info nor the tooltip shows
--- it: Minor Wizard Oil reads 5s and a vendor pays 1s (kickemhard's report,
+-- it: Minor Wizard Oil reads 5s and a vendor pays 1s (a player's report,
 -- 2026-10-09), which put a 1s "flip" on the Deals tab that lost 3s. So what
 -- a vendor actually paid, read off the merchant's buyback list after a sale,
 -- beats everything else. Until one is sold, this short list of payouts seen

@@ -178,7 +178,7 @@ host = PostPanel:Placement(AH)
 check("a pane somewhere else is ignored", host == profession, true)
 ns.CraftPanel = nil
 
--- Buttons hanging off the window's right side (Izbode's custom interface,
+-- Buttons hanging off the window's right side (a player's custom interface,
 -- 2026-10-04): the panel docks past them, not on top of them. The measure is
 -- the craft pane's own, stubbed here to say how far they stick out.
 ns.CraftPanel = { RightOverhang = function(_, frame) return frame == profession and 32 or 0 end }

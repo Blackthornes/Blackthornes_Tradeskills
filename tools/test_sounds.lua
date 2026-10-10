@@ -1,5 +1,5 @@
 -- Every sound can be switched off in Settings, and the two new ones play
--- when they should (the owner and Izbode, 2026-10-02).
+-- when they should (the owner and a player, 2026-10-02).
 --
 -- What must hold:
 --   1. Bags filling up warns once, as the last slot goes, never at login.

@@ -140,7 +140,7 @@ print("")
 print("a rival at 85c: a bigger number, but less in the pocket")
 
 -- Listed at 84c the belt pays 84 less the 5% cut less a 3c deposit, under
--- 77c. The vendor's 80c is the better sale (Izbode, 2026-10-02: take the max
+-- 77c. The vendor's 80c is the better sale (2026-10-02: take the max
 -- of auction profit and vendor profit).
 ns.Prices:Record(BELT, 85, 85, 4, time(), 85, nil)
 a = Profit:Analyse(RECIPE)

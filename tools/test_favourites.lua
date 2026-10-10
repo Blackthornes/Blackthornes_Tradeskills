@@ -1,4 +1,4 @@
--- Favourites on the Prices tab (Voldar, 2026-10-06): star an item to keep an
+-- Favourites on the Prices tab (2026-10-06): star an item to keep an
 -- eye on it, and tick Favourites only to see just the starred ones. Kept for
 -- the whole account by item; a starred item with no price still shows.
 

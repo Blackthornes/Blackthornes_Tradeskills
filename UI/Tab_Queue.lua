@@ -41,7 +41,7 @@ if Widgets.FitColumns then Widgets.FitColumns(MATERIAL_COLUMNS) end
 -- replaced was 22 wide and lost the last digit of 100.
 local QUANTITY_WIDTH = 42
 
--- The row's AH / DE / Vendor button (Ezmode, 2026-10-07). Wide enough for
+-- The row's AH / DE / Vendor button (2026-10-07). Wide enough for
 -- "Vendor" at the client's font, with the button's own insets.
 local ACTION_WIDTH = 54
 
@@ -122,7 +122,7 @@ local function CreateCraftRow(row)
     end, { width = 18, height = 16 })
     row.plus:SetPoint("RIGHT", -24, 0)
 
-    -- On a sub-craft the x means never make it as one (Voldar, 2026-10-07):
+    -- On a sub-craft the x means never make it as one (2026-10-07):
     -- taking it off alone would bring it straight back on the next rebuild.
     row.remove = Widgets.CreateButton(row, "x", function()
         if not row.data then return end

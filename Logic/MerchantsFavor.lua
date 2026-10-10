@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- Logic/MerchantsFavor.lua
 -- What a point of Merchant's Favor costs, bought through Waylaid Crates.
 --
--- Voldar's idea (2026-10-08): handing in a Waylaid Crate does not depend on
+-- A player's idea (2026-10-08): handing in a Waylaid Crate does not depend on
 -- your professions, so the crate and the materials that fill it can both be
 -- bought on the auction house. One crate costs
 --

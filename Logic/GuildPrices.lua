@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- Logic/GuildPrices.lua
 -- Auction prices shared within a guild.
 --
--- Asked 2026-10-07 (Ezmode on Discord, Sullivan: "this would make the Price
+-- Asked 2026-10-07 (on Discord, a player: "this would make the Price
 -- History Chart wildly more useful"). The owner chose the guild rather than
 -- the whole server: a guild is a smaller, known group, so there is far less
 -- traffic and far less room for someone to feed in made-up prices.

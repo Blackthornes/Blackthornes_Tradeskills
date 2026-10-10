@@ -1,4 +1,4 @@
--- Profit by way (Sullivan, Discord, 2026-10-06): what a craft makes sold at
+-- Profit by way (Discord, 2026-10-06): what a craft makes sold at
 -- the auction house, sold to a vendor and disenchanted, and a profit for
 -- whichever pays most or for one way alone.
 
@@ -135,7 +135,7 @@ check("less the cut on the materials", a.cut, 10)
 check("with no deposit", a.deposit, 0)
 check("and it says how", a.priceBasis, "disenchant")
 check("margin is on what it disenchants to", a.margin, 120 / 200)
--- Ezmode (Discord, 2026-10-08): AGE said "DE" here instead of an age.
+-- A player (Discord, 2026-10-08): AGE said "DE" here instead of an age.
 check("its age is the dust's scan, not the belt's", a.age, 3 * 86400)
 check("which is past the stale limit", a.stale, true)
 check("read off the material it is valued at", a.ageItemID, DUST)

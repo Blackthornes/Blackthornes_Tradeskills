@@ -1014,7 +1014,7 @@ craftWith.scripts.OnClick(craftWith)
 check("so does a filter", pricesList.offset, 0)
 craftWith.scripts.OnClick(craftWith)
 
--- No sort menu any more (Ezmode, 2026-10-06): the headings sort.
+-- No sort menu any more (2026-10-06): the headings sort.
 ScrollDown()
 sorter.buttons.name.scripts.OnClick(sorter.buttons.name)
 check("and a new sort", pricesList.offset, 0)

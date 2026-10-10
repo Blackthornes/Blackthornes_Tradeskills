@@ -147,7 +147,7 @@ changes, change Equipment's `Logic/TradeskillsQueue.lua` too.
 
 ## Sharing between accounts and with a guild
 
-Asked 2026-10-07 (Ezmode on Discord, the owner agreeing). Over addon
+Asked 2026-10-07 (on Discord, the owner agreeing). Over addon
 messages (`Core/Comm.lua`, prefix `BTSshare`):
 
 - `Logic/AccountLink.lua`: the player names characters on another account

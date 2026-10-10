@@ -135,7 +135,7 @@ mail[BOLT] = nil
 
 print("\nsub-crafts switched off")
 
--- Voldar on Discord (2026-10-07): with "Queue sub-crafts" off, To buy went
+-- On Discord (2026-10-07): with "Queue sub-crafts" off, To buy went
 -- up to the bought materials but the rows and the footer still priced
 -- them as made.
 config.autoQueueSubCrafts = false

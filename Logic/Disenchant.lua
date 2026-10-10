@@ -805,7 +805,7 @@ function Disenchant:GetCraftRows(opts)
             local gain = (net and costEach) and (net - costEach) or nil
 
             -- A craft is only worth making to disenchant when what it breaks
-            -- into pays for its materials (Izbode's report, 2026-10-02). A
+            -- into pays for its materials (a player's report, 2026-10-02). A
             -- soulbound craft beat its vendor price and showed as a win while
             -- every one made lost money against what went into it.
             local beatsSale = Beats(value, sells)
