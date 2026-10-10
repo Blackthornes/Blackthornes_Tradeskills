@@ -145,6 +145,45 @@ is queued (`Queue:Add`), when the gear is owned or worn, with its row's x
 on the Queue tab, or with Clear all. Keep these four stable; if one
 changes, change Equipment's `Logic/TradeskillsQueue.lua` too.
 
+## What Butler calls here
+
+**Blackthornes_Butler** (`Blackthornes/Blackthornes_Butler`, the owner's
+new addon, 2026-10-10) tells the player what to do with each item in the
+bags. It asks Tradeskills one thing, through its `Logic/Sisters.lua`,
+inside a pcall, read only, with no TOC dependency:
+
+```lua
+_G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
+```
+
+`Logic/Butler.lua` answers with a fresh table, any field nil when unknown:
+
+- `auction`: copper for one sold on the auction house, after the cut and
+  the deposit (`Profit:NetFromListing` on `Prices:GetValue(itemID,
+  "market")`), never below 0. nil for greys (vendor only), gear that binds
+  when picked up, and items never priced.
+- `fast`: `Demand:Get` "high" is true, "low" false, "some" or no reading nil.
+- `disenchant`: `Disenchant:GetValue`, copper for one; nil when it cannot
+  be broken or its material has no price.
+- `canDisenchant`: the character playing knows Disenchant
+  (`Disenchanter:Knows`) and has the Enchanting the item needs; false for
+  anything that cannot be disenchanted, nil while the item is not loaded.
+- `enchanter`: only when the character playing cannot: the disenchanter
+  typed in Settings (`QueueMail:GetDisenchanter`, up to its quality), else
+  the alt on this account (not `linkedFrom`, `Queue:CanMail`) with the most
+  Enchanting that is enough. A short name.
+- `need`: what this character's own queued crafts use from its bags (use,
+  less what it makes, less its bank), as `QueueMail:GetDeliveries` keeps back.
+- `mailTo`, `mailCount`: the alt `GetDeliveries` would send the most of it
+  to, short name, and how many.
+
+Butler asks once per bag item, a hundred in a burst, so the queue plan,
+the deliveries and the characters' Enchanting are read once into a lookup,
+kept until `Queue.version` (moved by `Queue:Notify`) or
+`Inventory.changes` moves, or two seconds pass, and built again only on
+the next question. Keep the call and the fields stable; if one has to
+change, change Butler's `Logic/Sisters.lua` in the same breath.
+
 ## Sharing between accounts and with a guild
 
 Asked 2026-10-07 (on Discord, the owner agreeing). Over addon
