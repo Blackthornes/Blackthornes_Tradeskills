@@ -17,6 +17,15 @@
 -- docs/FOREVER_API_FINDINGS.md), and an item auction has no quantity box.
 -- The buy window's parts are read by name inside a pcall, as on retail;
 -- `/bts probe` says whether this client has them.
+--
+-- Fixed 2026-10-10: the box jumped to the number, then back to 1. The buy
+-- window has two halves that each keep a quantity: the box, and the list of
+-- listings beside it, which Blizzard sets to 1 for each new item. Every time
+-- the list redraws (its results arriving, more rows loading) it tells the
+-- box its own number, so a number written into the box alone was put back
+-- to 1. Now the number goes in the way typing in the box does: through the
+-- auction house's "quantity changed" message, which both halves listen to,
+-- so the list keeps it too and its redraws say the same number.
 
 local _, ns = ...
 
@@ -85,9 +94,23 @@ function BuyQuantity:ShownQuantity()
     if ok and type(quantity) == "number" then return quantity end
 end
 
+--- The auction house's "quantity changed" message, which the box sends when
+--- the player types and both halves of the buy window listen to.
+function BuyQuantity:QuantityEvent()
+    local events = Field(Field(_G, "AuctionHouseFrameMixin"), "Event")
+    return Field(events, "CommoditiesQuantitySelectionChanged")
+end
+
 --- Put a number in the quantity box, by the first way this client offers.
 -- @return true when one of them took it
 function BuyQuantity:SetShownQuantity(quantity)
+    -- As the player's typing does, so the list beside the box keeps it too.
+    local event = self:QuantityEvent()
+    local house = Field(_G, "AuctionHouseFrame")
+    if event ~= nil and Call(house, "TriggerEvent", event, quantity) then
+        if self:ShownQuantity() == quantity then return true end
+    end
+
     local display = self:Display()
     if Call(display, "SetQuantitySelected", quantity) then return true end
 
@@ -205,6 +228,13 @@ function BuyQuantity:Hook()
     -- And in case this client sets it some other way, whenever it shows.
     if type(Field(frame, "HookScript")) == "function" then
         pcall(frame.HookScript, frame, "OnShow", function() BuyQuantity:FillSoon() end)
+    end
+
+    -- The list of listings only hears the quantity message while it shows,
+    -- and may show after the window does: fill once more when it does.
+    local list = Field(frame, "ItemList")
+    if type(Field(list, "HookScript")) == "function" then
+        pcall(list.HookScript, list, "OnShow", function() BuyQuantity:Fill() end)
     end
 
     return true
