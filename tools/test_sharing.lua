@@ -15,7 +15,8 @@
 --      middle of three guildmates used, a price far from a fresh one of your
 --      own refused, your own fresh scan always wins, a stale one gives way,
 --      not sent again within the hour or when a guildmate covered it, and
---      the price graph gets the hours you did not scan.
+--      the price graph gets the hours you did not scan; an item seen with
+--      nothing listed and no market value is left out, not an error.
 
 local saved = {}
 for _, name in ipairs({ "time", "GetTime", "UnitName", "C_ChatInfo", "C_Timer", "InCombatLockdown",
@@ -345,8 +346,12 @@ Scan(ana, { [2589] = 1000, [2592] = 500 }, clock - 60)
 Scan(carl, { [2589] = 1100 }, clock - 60)
 Scan(dora, { [2589] = 900000 }, clock - 60)
 
+-- Searched with nothing listed and never priced: seen, but no market value.
+ana.ns.Prices:GetTable()[4306] = { seen = clock - 60, scans = 1, quantity = 0, history = {} }
+
 current = ana
 check("Ana shares her scan", (ana.ns.GuildPrices:Share()), true)
+check("an item with no market value is left out", (select(3, ana.ns.GuildPrices:Batches(clock - 60))), 2)
 Run()
 current = carl
 check("Carl's scan is covered by Ana's", select(2, carl.ns.GuildPrices:Share()), "a guildmate shared one")
