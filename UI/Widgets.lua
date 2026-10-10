@@ -1990,16 +1990,23 @@ function Widgets.CreateScrollList(parent, opts)
         row:SetHeight(rowHeight)
         row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
-        row.background = Theme.Fill(row, "row")
+        -- Dark glass: the row sits in the list's well, a faint band apart
+        -- from its neighbours, with a fine line under it.
+        row.background = Theme.Fill(row, "glass")
+        row.line = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+        row.line:SetPoint("BOTTOMLEFT")
+        row.line:SetPoint("BOTTOMRIGHT")
+        row.line:SetHeight(1)
+        row.line:SetColorTexture(Theme.Unpack("border", 0.6))
         -- Drawn in full and faded with SetAlpha. It used to be made with a
         -- colour alpha of 0, which no SetAlpha can lift, so the wash under
         -- the mouse never showed at all (Farmer had the same bug).
-        row.highlight = Theme.Fill(row, "rowHover", nil, "BORDER")
+        row.highlight = Theme.Fill(row, "glassHover", nil, "BORDER")
         row.highlight:SetAlpha(0)
 
-        -- The row the detail pane is showing sits in a gold light from its
-        -- left edge, as Farmer's lit rows do.
-        if Theme.GlowBand then row.glowBand = Theme.GlowBand(row, 0.16) end
+        -- The row the detail pane is showing sits in a faint gold light from
+        -- its left edge.
+        if Theme.GlowBand then row.glowBand = Theme.GlowBand(row, 0.08) end
 
         -- A gold edge on the row under the mouse, as Farmer's lists do, so the
         -- eye can follow a row across a wide table.
@@ -2009,21 +2016,18 @@ function Widgets.CreateScrollList(parent, opts)
         row.hoverEdge:Hide()
 
         -- Titanforged: under the mouse the row lights from the left too, a
-        -- gold wash fading across it and a glow off the gold edge.
+        -- soft gold wash fading across it and a glow off the gold edge. Only
+        -- that row: both are dark and hidden at rest.
         row.hoverWash = row:CreateTexture(nil, "BORDER", nil, 1)
         row.hoverWash:SetAllPoints(row)
-        row.hoverWash:SetAlpha(0)
+        row.hoverWash:Hide()
 
         row.edgeGlow = row:CreateTexture(nil, "ARTWORK", nil, 7)
         row.edgeGlow:SetPoint("TOPLEFT", 2, 0)
         row.edgeGlow:SetPoint("BOTTOMLEFT", 2, 0)
         row.edgeGlow:SetWidth(10)
-        if Theme.SetGradientAlpha then
-            Theme.SetGradientAlpha(row.hoverWash, "HORIZONTAL", "accent", 0.20, 0)
-            Theme.SetGradientAlpha(row.edgeGlow, "HORIZONTAL", "accentHi", 0.35, 0)
-        end
         pcall(row.edgeGlow.SetBlendMode, row.edgeGlow, "ADD")
-        row.edgeGlow:SetAlpha(0)
+        row.edgeGlow:Hide()
 
         if opts.createRow then
             opts.createRow(row)
@@ -2031,8 +2035,10 @@ function Widgets.CreateScrollList(parent, opts)
 
         local function Light(value)
             row.highlight:SetAlpha(value)
-            row.hoverWash:SetAlpha(value)
-            row.edgeGlow:SetAlpha(value)
+            if Theme.LightGradient then
+                Theme.LightGradient(row.hoverWash, "HORIZONTAL", "accent", 0.10, 0, value)
+                Theme.LightGradient(row.edgeGlow, "HORIZONTAL", "accentHi", 0.25, 0, value)
+            end
         end
 
         row:SetScript("OnEnter", function(self)
@@ -2119,10 +2125,10 @@ function Widgets.CreateScrollList(parent, opts)
                     row.selected = opts.isSelected and opts.isSelected(entry) or false
 
                     if row.selected then
-                        row.background:SetColorTexture(Theme.Unpack("rowActive"))
+                        row.background:SetColorTexture(Theme.Unpack("glassActive"))
                     else
                         row.background:SetColorTexture(Theme.Unpack(
-                            dataIndex % 2 == 0 and "rowAlt" or "row"))
+                            dataIndex % 2 == 0 and "glassAlt" or "glass"))
                     end
 
                     row.hoverEdge:SetShown(row.selected or row:IsMouseOver())
