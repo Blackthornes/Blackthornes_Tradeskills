@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.44.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Crafted upgrades from Blackthornes Equipment** land on the Queue tab:
+  gear you or an alt can make is queued as a craft, gear you still have to
+  learn has its materials put on the shopping list, and gear nobody on your
+  account makes goes on the list itself, to buy from a vendor or the auction
+  house. Each line has a small x to take it off and says which upgrade it's
+  for, and it goes by itself once you own or wear the gear or its craft is
+  queued, so nothing is bought twice.
+
 ## 0.43.0
 
 For WoW: Forever (interface 16001). A file was added, so restart the game
