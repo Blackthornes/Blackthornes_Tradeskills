@@ -69,10 +69,37 @@ local function Join(...)
     return table.concat(parts, " ")
 end
 
+-- Checks kept for Claude (the owner asked 2026-10-10): while a check such as
+-- the probe runs, every line it prints is kept as well, and ns.KeepCheck
+-- saves them as lastProbe in the account save, replacing the last one. The
+-- game writes the save on /reload or logout, so the results can be read from
+-- there instead of from screenshots.
+local kept
+
+--- A printed line as plain text: colours, links and icons taken out. A
+--- secret value never reaches the save.
+local function Plain(line)
+    local ok, text = pcall(function()
+        local isSecret = _G.issecretvalue
+        if type(isSecret) == "function" and isSecret(line) then return "(secret)" end
+        local plain = table.concat({ tostring(line) })
+        plain = plain:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        plain = plain:gsub("|H.-|h", ""):gsub("|h", ""):gsub("|T.-|t", "")
+        return plain
+    end)
+    return ok and text or "(unreadable)"
+end
+
+local function Keep(line)
+    if kept then kept[#kept + 1] = Plain(line) end
+end
+
 function ns.Print(...)
     local frame = DEFAULT_CHAT_FRAME
     if frame then
-        frame:AddMessage(PREFIX .. Join(...))
+        local line = PREFIX .. Join(...)
+        frame:AddMessage(line)
+        Keep(line)
     end
 end
 
@@ -80,7 +107,9 @@ end
 function ns.PrintRaw(...)
     local frame = DEFAULT_CHAT_FRAME
     if frame then
-        frame:AddMessage(Join(...))
+        local line = Join(...)
+        frame:AddMessage(line)
+        Keep(line)
     end
 end
 
@@ -95,6 +124,29 @@ function ns.Warn(...)
     -- which would turn the rest of the line white; pick the colour up again.
     local text = Join(...):gsub("|r", "|r|c" .. ns.COLORS.warn)
     ns.Print("|c" .. ns.COLORS.warn .. text .. "|r")
+end
+
+--- Runs fn, a check that prints to chat, and saves what it printed as
+--- lastProbe: which check, when, the addon version and the lines. Chat shows
+--- the same as before, plus one line saying it was kept.
+function ns.KeepCheck(name, fn, ...)
+    kept = {}
+    local ok, err = pcall(fn, ...)
+    local lines = kept
+    kept = nil
+    if not ok then lines[#lines + 1] = "error: " .. Plain(err) end
+
+    local db = ns.db and ns.db.global
+    if type(db) == "table" then
+        db.lastProbe = {
+            check = name,
+            at = type(date) == "function" and date("%Y-%m-%d %H:%M:%S") or nil,
+            version = ns.VERSION,
+            lines = lines,
+        }
+        ns.Print("Saved for Claude, /reload to write it.")
+    end
+    if not ok then error(err, 0) end
 end
 
 --------------------------------------------------------------------------------
