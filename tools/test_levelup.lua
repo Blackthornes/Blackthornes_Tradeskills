@@ -271,7 +271,7 @@ ns.Profit.ChoosePostPrice, ns.Profit.NetFromListing, ns.Disenchant = nil, nil, n
 
 print("\nsub-crafts only, and never made as one")
 
--- Voldar (2026-10-07): the crafts whose item another craft uses, grey ones
+-- Asked 2026-10-07: the crafts whose item another craft uses, grey ones
 -- too, each marked Make or Buy.
 recipes[3].skillUp = { tier = "trivial" }
 local subs = LevelUp:GetRanked({ skillLines = tailoring, subCraftsOnly = true })
@@ -294,7 +294,7 @@ check("the bolt can still be made and ranked itself",
 ns.Cost:SetNeverSubCraft(3, false)
 check("allowed again, the bolt is made", LevelUp:BuildRow(2).cost == 900)
 
--- Voldar (2026-10-09): a Lesser Mana Potion only an alt makes could not be
+-- Asked 2026-10-09: a Lesser Mana Potion only an alt makes could not be
 -- marked. Sub-crafts only lists every character's, saying who knows it.
 local POTION, VIAL = 3385, 3371
 ns.db = { characters = {

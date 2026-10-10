@@ -1,5 +1,5 @@
 -- Blackthornes Tradeskills -- UI/SellMarked.lua
--- The vendor window's Sell marked button (Ezmode's request, 2026-10-07).
+-- The vendor window's Sell marked button (a player's request, 2026-10-07).
 --
 -- It sells what the craft queue made on Vendor (Logic/QueueActions.lua), and
 -- nothing else: never an item the player looted, bought or wears, never blue

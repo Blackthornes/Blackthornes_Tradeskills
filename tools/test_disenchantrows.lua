@@ -167,7 +167,7 @@ check("and stays out of the \"pays more\" list", CraftRows(true)[1002] == nil)
 check("a craft worth more disenchanted is still in it", CraftRows(true)[1001] ~= nil)
 
 print("\na craft that beats its sale price but not its materials")
--- Izbode's report: a soulbound craft disenchanted beat the vendor price and
+-- A player's report: a soulbound craft disenchanted beat the vendor price and
 -- showed as a win, though every one made lost money against its materials.
 local realCost = ns.Cost.GetCraftCost
 ns.Cost.GetCraftCost = function(self, recipeID)

@@ -1,6 +1,6 @@
 -- Blackthornes Tradeskills -- Logic/QueueActions.lua
 -- What each queued craft is for once it is made: the auction house, a
--- disenchant or a vendor (Ezmode's request, 2026-10-07).
+-- disenchant or a vendor (a player's request, 2026-10-07).
 --
 -- A queue row starts on whichever of the three pays most, the way the Profit
 -- tab's Best works it out, and a click changes it. When the craft is made,

@@ -221,7 +221,7 @@ function LevelUp:GetMaterialSet()
 end
 
 --- The recipes the list is drawn from: this character's, and with `alts`
---- every other character's too (Voldar, 2026-10-09: an alt's Lesser Mana
+--- every other character's too (2026-10-09: an alt's Lesser Mana
 --- Potion or blasting powder could not be marked from here).
 -- @return { [recipeID] = recipe }, { [recipeID] = characterKey } for those
 --   only another character knows

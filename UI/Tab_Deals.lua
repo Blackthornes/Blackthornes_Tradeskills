@@ -1,12 +1,12 @@
 -- Blackthornes Tradeskills -- UI/Tab_Deals.lua
 -- Items on the auction house worth buying, and what to do with them.
 --
--- The Vendor Flips tab grown (Ezmode's idea, 2026-10-07). Every item someone
+-- The Vendor Flips tab grown (a player's idea, 2026-10-07). Every item someone
 -- else has listed, priced at their cheapest listing from your last scan,
 -- against the ways it can be sold on:
 --
 --   AH      list it again under its usual price (Logic/VendorFlips.lua,
---           Voldar's idea, 2026-10-06)
+--           A player's idea, 2026-10-06)
 --   Vendor  sell it to any vendor for more than it cost (Logic/VendorFlips.lua)
 --
 -- The Sell to menu ticks which ways count. An item shows once, on the way
@@ -15,7 +15,7 @@
 -- went back to its own Disenchanting tab at the owner's ask (2026-10-08).
 --
 -- The Show menu swaps the list for the Merchant's Favor view
--- (UI/DealsFavor.lua, Voldar's idea, 2026-10-08): Waylaid Crates by what a
+-- (UI/DealsFavor.lua, a player's idea, 2026-10-08): Waylaid Crates by what a
 -- point of favor costs bought on the auction house. And for the Craftsman's
 -- Writs view (UI/DealsWrits.lua, a player's idea, 2026-10-09): writs by what a
 -- point of reputation costs, and what a reputation goal still costs.
@@ -757,7 +757,7 @@ local function Build(container)
     end
 
     -- Option bar: the menu, then search, then the tick box, as on every
-    -- tab (Ezmode, 2026-10-06).
+    -- tab (2026-10-06).
     local options = {}
     for _, route in ipairs(ROUTES) do
         options[#options + 1] = { text = route.text, value = route.key }

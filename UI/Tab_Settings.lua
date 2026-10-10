@@ -658,7 +658,7 @@ local function Build(outer)
     end, true)
     widgets.queueMail:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- Izbode, 2026-10-04: a character to mail gear to for disenchanting.
+    -- Asked 2026-10-04: a character to mail gear to for disenchanting.
     -- Typed rather than picked, so one on another account works too.
     local disenchanterRow = CreateRow(pages.mail, 1, "Disenchanter",
         "At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear or an upgrade for you. Leave empty for nobody.")
@@ -694,7 +694,7 @@ local function Build(outer)
     end, { width = 150 })
     widgets.disenchantQuality:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    -- Ezmode, 2026-10-05: big shuffles taken from the mail a bagful at a time.
+    -- Asked 2026-10-05: big shuffles taken from the mail a bagful at a time.
     local spareRow = CreateRow(pages.mail, 1, "Bag slots kept free",
         "Left empty by each Take next batch at the mailbox, for what you craft and anything you pick up.")
 
@@ -716,7 +716,7 @@ local function Build(outer)
     end, false)
     widgets.mailBatch:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- Ezmode, 2026-10-07: each queue row says AH, DE or Vendor, and what the
+    -- Asked 2026-10-07: each queue row says AH, DE or Vendor, and what the
     -- queue made on DE or Vendor can be disenchanted or sold from here.
     local deNextRow = CreateRow(pages.queue, 1, "Disenchant next on the Queue tab",
         "A button that disenchants the next item your queue made on DE, one click each. Never blue or better, anything worn, or anything the queue did not make.")
@@ -874,7 +874,7 @@ local function Build(outer)
     end, { width = 110 })
     widgets.stale:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    -- Crafts never made to go into another craft (Voldar, 2026-10-07),
+    -- Crafts never made to go into another craft (2026-10-07),
     -- marked from the Level Up tab or the x on a queued sub-craft. Laid out
     -- as Ignored crafts below is, rows made in Refresh.
     widgets.ignoredParent = pages.queue.content

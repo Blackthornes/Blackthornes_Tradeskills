@@ -888,7 +888,7 @@ end
 -- An option with `header = true` is a line of dim words that cannot be
 -- picked, to split a long menu into groups.
 --
--- With `opts.multi`, any number of options can be ticked at once (Ezmode's
+-- With `opts.multi`, any number of options can be ticked at once (a player's
 -- Sell to menu, 2026-10-07): the value is a set, { [value] = true }, a click
 -- ticks or unticks one and leaves the menu open, onSelect gets the new set,
 -- and the box shows `opts.summary(set)`, or the ticked options' words.
@@ -1593,7 +1593,7 @@ Widgets.MONEY_SAMPLE = "9g 99s 99c"
 
 --- Widen a list's columns so every heading shows whole beside its sort arrow
 --- and every money column holds a full amount, never ending in "..."
---- (Ezmode's request, 2026-10-07). Measured, since the game's font runs
+--- (a player's request, 2026-10-07). Measured, since the game's font runs
 --- wider than any width picked by eye.
 --
 -- Each column is a table with `width` (the least it is given; kept as
@@ -1637,7 +1637,7 @@ function Widgets.FitColumns(columns, texts)
     end
 end
 
---- Make a list's column headings sort it when clicked (Izbode's request,
+--- Make a list's column headings sort it when clicked (a player's request,
 --- 2026-10-02).
 --
 -- The first click on a heading sorts by that column, biggest first (names A
@@ -2088,7 +2088,7 @@ function Widgets.CreateScrollList(parent, opts)
 
         row:SetScript("OnClick", function(self, mouseButton)
             -- Shift-click any item row with the auction house open and the
-            -- house searches for it (Izbode, 2026-10-04). Right-click stays
+            -- house searches for it (2026-10-04). Right-click stays
             -- what each list already made it.
             if self.data and Widgets.ShiftClickSearch(self.data, opts.searchItem) then return end
 

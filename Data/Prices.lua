@@ -654,7 +654,7 @@ end
 -- Favourites
 --------------------------------------------------------------------------------
 
--- Asked 2026-10-06 (Voldar): star the items you keep an eye on, like Spider
+-- Asked 2026-10-06 (a player): star the items you keep an eye on, like Spider
 -- Silk, and show only those on the Prices tab. Kept for the whole account in
 -- `favouritePrices`, by item, with the item's name so a search still finds
 -- one the game has not loaded. Separate from the price table, so a price
@@ -693,7 +693,7 @@ end
 -- My prices
 --------------------------------------------------------------------------------
 
--- Asked 2026-10-06 (Ponyboy): set your own price on an item. Two kinds:
+-- Asked 2026-10-06 (a player): set your own price on an item. Two kinds:
 --   "use"    this price instead of the auction price, everywhere: a reagent
 --            you make for less than the auction house asks.
 --   "floor"  the auction price, but never below this: a craft worth more

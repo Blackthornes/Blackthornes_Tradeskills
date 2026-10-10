@@ -30,7 +30,7 @@ local MAX_SUBCRAFT_DEPTH = 3
 -- @return copper, source  -- source is "vendor", "buy", "mine" (the player's
 --   own price, from the Prices tab) or nil when unknown
 function Cost:GetReagentUnitCost(itemID)
-    -- A price the player set wins (Ponyboy, 2026-10-06). "use" is the cost,
+    -- A price the player set wins (2026-10-06). "use" is the cost,
     -- whoever sells it; "floor" is the least it costs, vendor or auction.
     local mine, mode
     if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
@@ -128,7 +128,7 @@ end
 -- Never made as a sub-craft
 --------------------------------------------------------------------------------
 
--- Voldar on Discord (2026-10-07): scraps to light leather to medium to heavy
+-- On Discord (2026-10-07): scraps to light leather to medium to heavy
 -- costs more crafting time than it saves, and "Queue sub-crafts" is all or
 -- nothing. A craft marked here is never made to go into another one: its
 -- item is bought instead, in every cost, the queue and the shopping list.

@@ -481,7 +481,7 @@ do
       GetChildren = function() end,
     }), 0)
 
-  -- Izbode, 2026-10-04: the tabs held in a container of their own. The
+  -- Asked 2026-10-04: the tabs held in a container of their own. The
   -- container sits inside the window; the tabs in it hang out past it.
   local function Tab(left, right, top, bottom)
     return {

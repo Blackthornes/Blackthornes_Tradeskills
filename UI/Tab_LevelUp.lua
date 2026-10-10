@@ -28,7 +28,7 @@ local COLUMNS = {
     { key = "cost",   label = "COST",      width = 74, money = true },
     { key = "chance", label = "SKILL UP",  width = 80, justify = "CENTER" },
     -- Make or Buy when another craft uses the item: a button that says
-    -- whether it is made as a sub-craft (Voldar, 2026-10-07).
+    -- whether it is made as a sub-craft (2026-10-07).
     { key = "sub",    label = "SUB-CRAFT", width = 50, justify = "CENTER", button = true },
 }
 
@@ -245,7 +245,7 @@ local function UpdateRow(row, entry)
     cells.make:SetText(tostring(craftable))
     cells.make:SetTextColor(Theme.Unpack(craftable > 0 and "text" or "loss"))
 
-    -- On every craft that makes an item (Voldar, 2026-10-09): only on
+    -- On every craft that makes an item (2026-10-09): only on
     -- those another known craft used, a craft whose user was never read
     -- could not be marked.
     local button = row.subButton
@@ -799,7 +799,7 @@ local function Build(container)
     end, false)
     trivial:SetPoint("LEFT", craftable, "RIGHT", 12, 0)
 
-    -- Voldar, 2026-10-07: the crafts that make another's materials, grey
+    -- Asked 2026-10-07: the crafts that make another's materials, grey
     -- ones too, to choose which to make and which to buy.
     local subCrafts = Widgets.CreateCheckbox(toolbar, "Sub-crafts only", function(checked)
         state.subCraftsOnly = checked

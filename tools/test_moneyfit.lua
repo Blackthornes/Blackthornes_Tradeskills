@@ -99,7 +99,7 @@ check("a loss keeps its sign", Plain(Util.FormatMoney(-AMOUNT, { parts = 2 })):f
 check("without parts nothing changes", Plain(Util.FormatMoney(AMOUNT)), "12g 34s 56c")
 
 print("")
-print("one shape for every amount (Ezmode's request, 2026-10-07)")
+print("one shape for every amount (a player's request, 2026-10-07)")
 
 check("every coin below gold shows, two digits", Plain(Util.FormatMoney(10500)), "1g 05s 00c")
 check("no silver still shows its 00s", Plain(Util.FormatMoney(10053)), "1g 00s 53c")

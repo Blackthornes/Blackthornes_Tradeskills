@@ -154,7 +154,7 @@ end
 function Profit:ChoosePostPrice(itemID, knownCost)
     if not itemID then return nil, nil end
 
-    -- A price the player set on the Prices tab (Ponyboy, 2026-10-06): "use"
+    -- A price the player set on the Prices tab (2026-10-06): "use"
     -- lists at it, "floor" undercuts as usual but never goes below it.
     local mine, mode
     if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
@@ -421,7 +421,7 @@ end
 -- Ways to turn a craft into gold
 --------------------------------------------------------------------------------
 
--- Sullivan's request (Discord, 2026-10-06): see what a craft makes sold at
+-- A player's request (Discord, 2026-10-06): see what a craft makes sold at
 -- the auction house, sold to a vendor and disenchanted, and rank the list by
 -- whichever is picked. "best" takes whichever pays most, as the Level Up
 -- tab's GETS BACK does. Ties go to the vendor, then the auction house: the
@@ -613,7 +613,7 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- shown as a loss and hidden could be making money at the vendor.
     --
     -- Compared on what each puts in your pocket, as Vendor Flips compares
-    -- (Izbode's report, 2026-10-02): a listing loses the house's cut and its
+    -- (a player's report, 2026-10-02): a listing loses the house's cut and its
     -- deposit, a vendor pays in full. A 1g listing against a 97s vendor price
     -- is the vendor's sale, though 1g is the bigger number.
     local vendor = Util.GetVendorSellPrice(recipe.outputItemID)
@@ -801,7 +801,7 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     analysis.confidence, analysis.confidenceReason = ns.Prices:GetConfidence(recipe.outputItemID)
     analysis.liquidity = ns.Prices:GetLiquidity(recipe.outputItemID)
-    -- The age of the price the profit is for (Ezmode, Discord, 2026-10-08):
+    -- The age of the price the profit is for (Discord, 2026-10-08):
     -- a disenchant is valued at its material, so that scan's age is the one
     -- that says how far to trust it. A vendor's price does not age; the
     -- output's own scan stays here for /bts why and the row draws a dash.

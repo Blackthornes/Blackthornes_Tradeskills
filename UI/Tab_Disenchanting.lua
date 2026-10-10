@@ -1021,8 +1021,8 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
-    -- Search first, then the tick boxes, as on every tab (Ezmode,
-    -- 2026-10-06). The view stays a tick box rather than a menu (Izbode's
+    -- Search first, then the tick boxes, as on every tab
+    -- (2026-10-06). The view stays a tick box rather than a menu (a player's
     -- request, 2026-10-02): one click between the auction house deals and
     -- disenchanting from the bags.
     local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)

@@ -458,7 +458,7 @@ function BankView.Build(view)
 
     local right = -DETAIL_WIDTH - 16
 
-    -- Dropdown, search, tick box, as on every tab (Ezmode, 2026-10-06). No
+    -- Dropdown, search, tick box, as on every tab (2026-10-06). No
     -- sort menu: the headings sort, and the list opens by worth.
     local character = Widgets.CreateDropdown(view, {}, function(value)
         state.character = value

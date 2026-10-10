@@ -469,7 +469,7 @@ function Queue:RebuildDependencies()
         end
     end
 
-    -- What the last plan was making, by the item it makes. Voldar on
+    -- What the last plan was making, by the item it makes. A player on
     -- Discord (2026-10-05): halfway through turning scraps into light
     -- leather, buying medium leather became cheaper than making it, so the
     -- medium leather dropped off the queue, the light leather with it, and
@@ -1157,7 +1157,7 @@ function Queue:GetEntryCosts()
     local cashView = not ns.Config:Get("valueOwnedMaterials")
     local bagsLeft = {}
 
-    -- What the queue is making, by item. Voldar on Discord (2026-10-07):
+    -- What the queue is making, by item. On Discord (2026-10-07):
     -- with "Queue sub-crafts" off the leather was bought, To buy went up,
     -- and every row and the footer still priced it as made from scraps.
     -- A material is costed as made only when a sub-craft on the queue makes

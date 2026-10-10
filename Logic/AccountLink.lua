@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- Logic/AccountLink.lua
 -- Your characters on another account of yours, shared in game.
 --
--- Asked 2026-10-07 (Ezmode on Discord, the owner agreeing): recipes, bags,
+-- Asked 2026-10-07 (on Discord, the owner agreeing): recipes, bags,
 -- gold and auctions from a second account, without a desktop app. Each side
 -- names a character on the other account in Settings (Sharing), and while
 -- both are logged in each sends the other its characters. They then show up

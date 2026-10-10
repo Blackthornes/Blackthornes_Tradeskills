@@ -1,6 +1,6 @@
 -- Forever lets characters share a first name; only first and last name
 -- together are unique. The addon used to file characters as "Name-Realm", so
--- "Voldar Ash" and "Voldar Stone" were one character on the Characters tab.
+-- "Bob Ash" and "Bob Stone" were one character on the Characters tab.
 -- Characters are now keyed by GUID, and the old record moves to the first
 -- character that owns it without anything being deleted or merged.
 
@@ -51,23 +51,23 @@ local function Login(db, who)
     return ns
 end
 
-local ASH = { name = "Voldar", guid = "Player-1-000A", class = "Mage", level = 40 }
-local STONE = { name = "Voldar", guid = "Player-1-000B", class = "Warrior", level = 22 }
+local ASH = { name = "Bob", guid = "Player-1-000A", class = "Mage", level = 40 }
+local STONE = { name = "Bob", guid = "Player-1-000B", class = "Warrior", level = 22 }
 
 -- Saved data from before the fix: one shared record under the old key.
-local legacyRecord = { name = "Voldar", realm = "Forever PvE", recipes = { [1] = { name = "Bolt" } }, gold = 500 }
-local db = { characters = { ["Voldar-Forever PvE"] = legacyRecord } }
+local legacyRecord = { name = "Bob", realm = "Forever PvE", recipes = { [1] = { name = "Bolt" } }, gold = 500 }
+local db = { characters = { ["Bob-Forever PvE"] = legacyRecord } }
 
 local ns = Login(db, ASH)
 Check("first login keys the character by GUID", ns.Config:GetCharacterKey() == ASH.guid, ns.Config:GetCharacterKey())
-Check("old record moved, not copied", db.characters[ASH.guid] == legacyRecord and db.characters["Voldar-Forever PvE"] == nil)
+Check("old record moved, not copied", db.characters[ASH.guid] == legacyRecord and db.characters["Bob-Forever PvE"] == nil)
 Check("old recipes and gold kept", legacyRecord.recipes[1] and legacyRecord.gold == 500)
 Check("record stamped with its owner", legacyRecord.guid == ASH.guid, legacyRecord.guid)
 
 ns = Login(db, STONE)
-Check("second Voldar gets a record of its own", db.characters[STONE.guid] ~= nil and db.characters[STONE.guid] ~= legacyRecord)
-Check("second Voldar does not inherit the first one's recipes", next(db.characters[STONE.guid].recipes) == nil)
-Check("first Voldar's record untouched", db.characters[ASH.guid] == legacyRecord and legacyRecord.recipes[1] ~= nil)
+Check("second Bob gets a record of its own", db.characters[STONE.guid] ~= nil and db.characters[STONE.guid] ~= legacyRecord)
+Check("second Bob does not inherit the first one's recipes", next(db.characters[STONE.guid].recipes) == nil)
+Check("first Bob's record untouched", db.characters[ASH.guid] == legacyRecord and legacyRecord.recipes[1] ~= nil)
 
 local list = ns.Recipes:GetCharacters()
 Check("Characters tab lists both", #list == 2, #list)
@@ -81,24 +81,24 @@ ns = Login(db, ASH)
 Check("logging back in finds the same record", ns.Config:GetCharacterKey() == ASH.guid and db.characters[ASH.guid] == legacyRecord)
 
 -- An old record already claimed by someone else is left alone.
-local claimed = { name = "Voldar", guid = "Player-1-000C", recipes = {} }
-local db2 = { characters = { ["Voldar-Forever PvE"] = claimed } }
+local claimed = { name = "Bob", guid = "Player-1-000C", recipes = {} }
+local db2 = { characters = { ["Bob-Forever PvE"] = claimed } }
 Login(db2, STONE)
-Check("an old record claimed by another GUID stays put", db2.characters["Voldar-Forever PvE"] == claimed)
+Check("an old record claimed by another GUID stays put", db2.characters["Bob-Forever PvE"] == claimed)
 
 -- Last name found in a name the game returns.
 player.fullName = nil
-UnitFullName = function() return "Voldar Stone", "ForeverPvE" end
+UnitFullName = function() return "Bob Stone", "ForeverPvE" end
 local db3 = { characters = {} }
 ns = Login(db3, STONE)
 Check("last name read from a full name", db3.characters[STONE.guid].surname == "Stone", db3.characters[STONE.guid].surname)
-Check("display name includes the last name", ns.Recipes:GetCharacterName(STONE.guid) == "Voldar Stone", ns.Recipes:GetCharacterName(STONE.guid))
+Check("display name includes the last name", ns.Recipes:GetCharacterName(STONE.guid) == "Bob Stone", ns.Recipes:GetCharacterName(STONE.guid))
 UnitFullName = nil
 
 -- Before the game hands over a GUID, the old key is used and not remembered.
 player.guid = nil
 ns = Load({ characters = {} })
-Check("no GUID yet: old key, not cached", ns.Config:GetCharacterKey() == "Voldar-Forever PvE" and ns.Config.characterKey == nil)
+Check("no GUID yet: old key, not cached", ns.Config:GetCharacterKey() == "Bob-Forever PvE" and ns.Config.characterKey == nil)
 
 -- The account-wide file coming back emptier than this character remembers.
 -- A fresh install's new character remembers nothing, so it never warns.

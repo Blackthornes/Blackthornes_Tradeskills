@@ -5,13 +5,13 @@
 -- the list on its label, and the filled crate is handed to the faction's
 -- Supply Officer for Merchant's Favor and a little silver. Any character can
 -- do it whatever their professions, so buying the crate and the cheapest
--- bundle on the auction house is a way to buy favor (Voldar's idea and
+-- bundle on the auction house is a way to buy favor (a player's idea and
 -- spreadsheet, 2026-10-08). Logic/MerchantsFavor.lua works out what each
 -- favor costs.
 --
 -- What is typed here, and where it came from:
 --
---   bundles  item ID and count. From Voldar's spreadsheet, which he read off
+--   bundles  item ID and count. From a player's spreadsheet, which they read off
 --            the crates in game; Apprentice Textiles matches the item's own
 --            "Use:" text. The item IDs are the Classic ones, checked against
 --            the recipe book and Farmer's data.

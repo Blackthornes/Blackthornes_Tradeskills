@@ -1,6 +1,6 @@
 -- Several copies of an item that does not stack, in one listing click.
 --
--- Izbode, 2026-10-04: Mana Oils do not stack, so each went up on its own
+-- Asked 2026-10-04: Mana Oils do not stack, so each went up on its own
 -- click with the wait for the last one in between. An item that cannot stack
 -- and has no random suffix may now list every copy at once (one auction
 -- each); a stackable item auction still lists one slot. A batch that comes

@@ -1,6 +1,6 @@
 -- A craft marked never to make as a sub-craft is bought instead.
 --
--- Voldar on Discord (2026-10-07): scraps to light leather to medium to heavy
+-- On Discord (2026-10-07): scraps to light leather to medium to heavy
 -- costs too much crafting time, and "Queue sub-crafts" is all or nothing.
 -- Marking Cured Light Leather leaves the medium leather made, from bought
 -- light leather, in the costs, the queue and the shopping list, on one

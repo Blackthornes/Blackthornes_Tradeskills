@@ -443,7 +443,7 @@ local function UpdateRow(row, analysis)
     elseif analysis.priceBasis == "vendor" then
         -- What a vendor pays never goes out of date, so there is no age to
         -- show. VIA already says Vendor; repeating it here read as a bug
-        -- (Ezmode, Discord, 2026-10-08).
+        -- (Discord, 2026-10-08).
         cells.age:SetText("--")
         cells.age:SetTextColor(Theme.Unpack("dim"))
     elseif analysis.priceBasis == "mine" or analysis.priceBasis == "floor" then
@@ -559,7 +559,7 @@ local function BuildDetail(parent)
     reagentHeading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.reagentHeading = reagentHeading
 
-    -- The price graph (Sullivan, 2026-10-06) goes where the materials list
+    -- The price graph (2026-10-06) goes where the materials list
     -- does, for the craft and each material, hour by hour. This swaps the
     -- two; which one shows is remembered.
     if ns.PriceGraph then
@@ -1602,7 +1602,7 @@ local function BuildCrafts(container)
     toolbar:SetHeight(24)
 
     -- Every tab's option bar runs dropdowns, then search, then tick boxes
-    -- (Ezmode's request, 2026-10-06). The headings do the sorting.
+    -- (a player's request, 2026-10-06). The headings do the sorting.
     local profession = Widgets.CreateDropdown(toolbar, { { text = "All professions", value = nil } },
         function(value)
             state.profession = value
@@ -1611,7 +1611,7 @@ local function BuildCrafts(container)
     profession:SetPoint("LEFT", 0, 0)
     widgets.professionDropdown = profession
 
-    -- What the profit is for (Sullivan, 2026-10-06): whichever way pays
+    -- What the profit is for (2026-10-06): whichever way pays
     -- most, or one way alone. Kept in Settings, so /bts top and /bts why
     -- rank the same way, and the Level Up tab counts what a craft gets
     -- back by it too.

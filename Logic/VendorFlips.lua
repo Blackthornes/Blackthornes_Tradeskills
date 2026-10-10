@@ -114,7 +114,7 @@ end
 
 -- Scans of an item, the one that found the deal included, before its usual
 -- price is trusted. Fewer, and one seller's cheap stack may simply be where
--- it sells now (Voldar's idea, 2026-10-06).
+-- it sells now (a player's idea, 2026-10-06).
 local MIN_RESALE_SCANS = 5
 
 VendorFlips.MIN_RESALE_SCANS = MIN_RESALE_SCANS

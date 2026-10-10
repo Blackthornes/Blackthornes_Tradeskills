@@ -1,4 +1,4 @@
--- My prices (Ponyboy, 2026-10-06): a price the player sets on an item, used
+-- My prices (2026-10-06): a price the player sets on an item, used
 -- instead of the auction price ("use") or as the least it can be ("floor").
 --
 -- What must hold:

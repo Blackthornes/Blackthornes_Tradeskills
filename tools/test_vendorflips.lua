@@ -506,7 +506,7 @@ tab.refresh()
 check("with no scan it says to scan", list.data and #list.data == 0)
 
 --------------------------------------------------------------------------------
--- Sell to: Auction house (Voldar's idea, 2026-10-06)
+-- Sell to: Auction house (a player's idea, 2026-10-06)
 --------------------------------------------------------------------------------
 
 print("\nbuy under the usual price and list it again")
