@@ -51,6 +51,9 @@ local MAX_DEPENDENCY_DEPTH = 3
 -- whichever character is logged in: Ana queues a bag, her tailor alt is
 -- given the bolts, and logging into the tailor shows them as made for Ana.
 
+-- Set with the list to buy, further down; Queue:Add calls it.
+local DropBuysFor
+
 local function SelfKey()
     return ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or nil
 end
@@ -779,6 +782,10 @@ function Queue:Add(recipeID, quantity, options)
 
     local analysis = ns.Profit:Analyse(recipeID)
 
+    -- Queued to make: whatever was on the list to buy for it now comes from
+    -- the craft's own materials.
+    DropBuysFor(recipe.outputItemID)
+
     local _, existing = self:Find(recipeID, true)
     if existing then
         existing.quantity = existing.quantity + quantity
@@ -891,6 +898,9 @@ function Queue:Clear()
     for i = #queue, 1, -1 do
         queue[i] = nil
     end
+    -- Clear all empties the shopping list too, so nothing is left to buy
+    -- for a list the player just threw away.
+    self:ClearBuys()
     self:Notify()
 end
 
@@ -901,6 +911,186 @@ function Queue:Notify()
     if ns.UI and ns.UI.OnQueueUpdated then
         ns.UI:OnQueueUpdated()
     end
+end
+
+--------------------------------------------------------------------------------
+-- Things to buy rather than make
+--------------------------------------------------------------------------------
+
+-- Blackthornes Equipment's Queue it button (a player asked on Discord, 2026-10-10)
+-- puts gear the character cannot make on the shopping list, or the
+-- materials of a recipe it still has to learn. Each line is
+-- { itemID, count, forItem, owner, addedAt }, kept account wide in
+-- `queueBuys` (never rename it), and shows only to the character it is for
+-- (`owner`), since an upgrade is one character's. A line goes when the gear
+-- it is for is queued as a craft, owned or worn, when its row's x is
+-- clicked, or with Clear all.
+
+local function Buys(create)
+    if not ns.db then return {} end
+    if type(ns.db.queueBuys) ~= "table" then
+        if not create then return {} end
+        ns.db.queueBuys = {}
+    end
+    return ns.db.queueBuys
+end
+
+local function OwnsItem(itemID)
+    local inventory = ns.Inventory
+    if not (inventory and itemID) then return false end
+    local ok, owned = pcall(function()
+        return inventory:GetOwnedCount(itemID) + inventory:GetEquippedCount(itemID)
+    end)
+    return ok and (owned or 0) > 0
+end
+
+local function MineToSee(line, selfKey)
+    return line.owner == nil or line.owner == selfKey
+end
+
+--- This character's lines, after letting go of any whose gear is owned.
+-- A handful of lines at most, so cheap enough for every shopping list.
+function Queue:GetBuys()
+    local buys, mine = Buys(false), {}
+    local selfKey = SelfKey()
+
+    for index = #buys, 1, -1 do
+        local line = buys[index]
+        if type(line) ~= "table" or not line.itemID then
+            -- Unreadable: skipped, never deleted.
+        elseif MineToSee(line, selfKey) and line.forItem and OwnsItem(line.forItem) then
+            table.remove(buys, index)
+        elseif MineToSee(line, selfKey) then
+            table.insert(mine, 1, line)
+        end
+    end
+    return mine
+end
+
+--- Is anything on this character's list to buy?
+function Queue:HasBuys()
+    return #self:GetBuys() > 0
+end
+
+--- Let go of the lines for the gear a craft now makes: the craft's own
+--- materials replace them, so they would be bought twice.
+DropBuysFor = function(itemID)
+    if not itemID then return false end
+    local buys, dropped = Buys(false), false
+    local selfKey = SelfKey()
+    for index = #buys, 1, -1 do
+        local line = buys[index]
+        if type(line) == "table" and line.forItem == itemID and MineToSee(line, selfKey) then
+            table.remove(buys, index)
+            dropped = true
+        end
+    end
+    return dropped
+end
+
+--- Have `count` of an item on the shopping list for a piece of gear. Set,
+--- not added, so a second click on the same gear changes nothing.
+-- @param itemID   what to buy
+-- @param count    how many
+-- @param forItem  the gear it is for (the item itself when buying the gear)
+-- @return true, or nil and why
+function Queue:EnsureBuy(itemID, count, forItem)
+    itemID, forItem = tonumber(itemID), tonumber(forItem)
+    count = math.floor(tonumber(count) or 1)
+    if not itemID or count < 1 then return nil, "nothing to buy" end
+    if not ns.db then return nil, "Tradeskills has not loaded its saved data yet" end
+    forItem = forItem or itemID
+    if OwnsItem(forItem) then return nil, "you already have it" end
+
+    local selfKey = SelfKey()
+    local buys = Buys(true)
+    for _, line in ipairs(buys) do
+        if type(line) == "table" and line.itemID == itemID and line.forItem == forItem
+            and MineToSee(line, selfKey) then
+            if line.count == count then return true end
+            line.count = count
+            self:Notify()
+            return true
+        end
+    end
+
+    buys[#buys + 1] = {
+        itemID = itemID, count = count, forItem = forItem,
+        owner = selfKey, addedAt = time(),
+    }
+    self:Notify()
+    return true
+end
+
+--- Take an item off this character's list to buy (the x on its row).
+function Queue:RemoveBuys(itemID)
+    local buys, removed = Buys(false), false
+    local selfKey = SelfKey()
+    for index = #buys, 1, -1 do
+        local line = buys[index]
+        if type(line) == "table" and line.itemID == itemID and MineToSee(line, selfKey) then
+            table.remove(buys, index)
+            removed = true
+        end
+    end
+    if removed then self:Notify() end
+    return removed
+end
+
+--- Empty this character's list to buy. Other characters' lines stay.
+function Queue:ClearBuys()
+    local buys = Buys(false)
+    local selfKey = SelfKey()
+    for index = #buys, 1, -1 do
+        local line = buys[index]
+        if type(line) == "table" and MineToSee(line, selfKey) then table.remove(buys, index) end
+    end
+end
+
+--- Have at least `quantity` of a craft queued. For Blackthornes Equipment:
+--- a second click on the same gear queues no more.
+-- @return true, or nil and why
+function Queue:Ensure(recipeID, quantity)
+    recipeID = tonumber(recipeID)
+    quantity = math.max(1, math.floor(tonumber(quantity) or 1))
+    if not recipeID then return nil, "no recipe" end
+    if not ns.Recipes:GetAny(recipeID) then
+        return nil, "Tradeskills has not seen this recipe yet: open the profession window once on the character who knows it"
+    end
+
+    local _, existing = self:Find(recipeID, true)
+    if existing then
+        if existing.quantity >= quantity then return true end
+        if not self:SetQuantity(recipeID, quantity) then return nil, "the queue would not take it" end
+        return true
+    end
+    if not self:Add(recipeID, quantity) then return nil, "the queue would not take it" end
+    return true
+end
+
+--- What the queue holds for a piece of gear: "craft" when a craft of it is
+--- queued, "buy" when it or its materials are on the list to buy, else nil.
+function Queue:ForUpgrade(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return nil end
+    for _, entry in ipairs(self:GetAll()) do
+        if not entry.isDependency then
+            local recipe = ns.Recipes:GetAny(entry.recipeID)
+            if recipe and recipe.outputItemID == itemID then return "craft" end
+        end
+    end
+    for _, line in ipairs(self:GetBuys()) do
+        if line.forItem == itemID then return "buy" end
+    end
+    return nil
+end
+
+--- Open the window on the Queue tab, where the shopping list is.
+function Queue:ShowQueue()
+    if not (ns.UI and ns.UI.Show) then return false end
+    ns.UI:Show()
+    if ns.UI.SelectTab then ns.UI:SelectTab("queue") end
+    return true
 end
 
 --------------------------------------------------------------------------------
@@ -1087,6 +1277,15 @@ function Queue:GetShoppingList()
         end
     end
 
+    -- What this character asked to buy rather than make (EnsureBuy).
+    local wanted = {}
+    for _, line in ipairs(self:GetBuys()) do
+        required[line.itemID] = (required[line.itemID] or 0) + line.count
+        local forItems = wanted[line.itemID] or {}
+        forItems[#forItems + 1] = { forItem = line.forItem, count = line.count }
+        wanted[line.itemID] = forItems
+    end
+
     local list = {}
 
     -- On unless unticked in Settings. Shared across lines so the alts' recipes
@@ -1184,6 +1383,9 @@ function Queue:GetShoppingList()
                 -- and how many of those they already hold.
                 forOthers = othersNeed,
                 othersHold = othersHold,
+                -- { { forItem, count }, ... } asked for by EnsureBuy: the
+                -- row gets an x, and the tooltip says what it is for.
+                buys = wanted[itemID],
                 -- Cheaper to make on another character, when asked to look.
                 altCraft = altContext and shortfall > 0
                     and self:GetAltCraftOffer(itemID, shortfall, unitCost, altContext) or nil,

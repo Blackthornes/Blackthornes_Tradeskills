@@ -125,6 +125,26 @@ the players' reports in `FOREVER_SKILLS`, then Classic's book.
 Keep these stable as well; if one changes, change Equipment's
 `Logic/Crafting.lua` in the same breath.
 
+Equipment's **Queue it** button (a player asked on Discord, the owner agreeing
+2026-10-10; on crafted rows in Where to get upgrades and the Upgrade
+quest's Crafted tab) calls, inside a pcall, through its
+`Logic/TradeskillsQueue.lua`:
+
+```lua
+ns.Queue:Ensure(recipeID, quantity)         -- at least that many queued; true, or nil and why
+ns.Queue:EnsureBuy(itemID, count, forItem)  -- that many on the list to buy for forItem; true, or nil and why
+ns.Queue:ForUpgrade(itemID)                 -- "craft", "buy" or nil: what the queue holds for the gear
+ns.Queue:ShowQueue()                        -- opens the window on the Queue tab
+```
+
+Gear the character or an alt can make is queued; gear it still has to
+learn has its materials put on the list to buy; gear nobody makes goes on
+the list itself. The list to buy is `queueBuys` (account wide, each line
+kept for its `owner`, never rename it). A line goes when the gear's craft
+is queued (`Queue:Add`), when the gear is owned or worn, with its row's x
+on the Queue tab, or with Clear all. Keep these four stable; if one
+changes, change Equipment's `Logic/TradeskillsQueue.lua` too.
+
 ## Sharing between accounts and with a guild
 
 Asked 2026-10-07 (Ezmode on Discord, the owner agreeing). Over addon
