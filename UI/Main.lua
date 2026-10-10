@@ -1290,6 +1290,49 @@ function UI:UpdateWaitLabels()
     end
 end
 
+--- Everything the sell lists at the auction house are made from, as one
+--- string: the bags, prices, the queue (reagents it holds back), settings,
+--- prices and amounts chosen this session, ignored items, item data the game
+--- has just loaded, the owned auctions read, and whether listing is open
+--- (blocked, a scan, the house busy, a listing still being confirmed). The
+--- lists are rebuilt only when it changes.
+local itemInfoSeen = 0
+do
+    local watcher = {}
+    ns.RegisterEvent(watcher, "GET_ITEM_INFO_RECEIVED", function()
+        itemInfoSeen = itemInfoSeen + 1
+    end)
+end
+
+function UI.SellListKey()
+    local queued, amount = 0, 0
+    for _, entry in ipairs(ns.Queue:GetAll() or {}) do
+        queued = queued + 1
+        amount = amount + (tonumber(entry.quantity) or 0)
+    end
+
+    local Posting = ns.Posting
+    local blocked = Posting.IsBlocked and Posting:IsBlocked()
+    local throttled = Posting.IsThrottled and Posting:IsThrottled()
+    local pending = Posting.pending and tostring(Posting.pending.itemID) or "-"
+
+    -- And what is showing: a panel or tab that has just come into view is
+    -- filled at once.
+    local panel = ns.PostPanel
+    local frame = panel and panel.frame
+    local shown = frame and frame:IsShown() and (tostring(panel.view) .. tostring(panel:IsCollapsed())) or "hidden"
+    local tab = UI.window and UI.window:IsShown() and tostring(UI.activeTab) or "closed"
+
+    return table.concat({
+        shown, tab,
+        ns.Inventory.changes or 0, ns.Prices.changes or 0,
+        queued, amount,
+        ns.Config.changes or 0, Posting.changes or 0, itemInfoSeen,
+        ns.Auctions.readCount or 0,
+        tostring(blocked), tostring(ns.Scanner.isScanning), tostring(throttled), pending,
+    }, ":")
+end
+
 function UI:UpdatePostButton()
     local button = self.postButton
     if not button then return end
@@ -1920,8 +1963,23 @@ function UI:OnEnable()
         -- the house is busy, long after it stopped being busy.
         if UI.postTicker then UI.postTicker:Cancel() end
 
+        -- It used to rebuild the sell lists every second whatever happened,
+        -- walking the bags and pricing every stack three times over. Now it
+        -- rebuilds only when something they are made from has changed; a
+        -- second with nothing new costs a handful of comparisons.
+        UI.sellListKey = nil
         UI.postTicker = C_Timer.NewTicker(1, function()
             if not ns.Scanner.isAuctionHouseOpen then return end
+
+            local key = UI.SellListKey()
+            if key == UI.sellListKey then
+                -- Still each second, and cheap: the panel steps back in when
+                -- the character window closes, and follows the main window
+                -- when it is dragged, and neither has an event.
+                if ns.PostPanel and ns.PostPanel.Place then ns.PostPanel:Place() end
+                return
+            end
+            UI.sellListKey = key
 
             UI:UpdatePostButton()
 

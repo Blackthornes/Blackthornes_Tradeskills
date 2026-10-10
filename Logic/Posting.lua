@@ -586,11 +586,13 @@ function Posting:SetChosenQuantity(itemID, quantity)
     if not quantity then return end
 
     self.chosenQuantity[itemID] = math.max(1, math.floor(quantity))
+    Posting.changes = (Posting.changes or 0) + 1
 end
 
 --- Forget a choice, so the item goes back to listing everything.
 function Posting:ClearChosenQuantity(itemID)
     if itemID then self.chosenQuantity[itemID] = nil end
+    Posting.changes = (Posting.changes or 0) + 1
 end
 
 --- Change how many a line will list, and everything that follows from it.
@@ -671,6 +673,7 @@ function Posting:SetChosenPrice(itemID, price)
     else
         self.chosenPrice[itemID] = nil
     end
+    Posting.changes = (Posting.changes or 0) + 1
 end
 
 --- Change the price a line will list at, in place, as ApplyQuantity does.
@@ -774,6 +777,7 @@ end
 --- Ignore an item (ignored = true) or bring it back (false).
 function Posting:SetIgnored(itemID, ignored, name)
     if not ns.db or not itemID then return end
+    Posting.changes = (Posting.changes or 0) + 1
     ns.db.ignoredSellItems = ns.db.ignoredSellItems or {}
 
     if ignored then
