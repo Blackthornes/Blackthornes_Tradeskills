@@ -444,6 +444,10 @@ end
 
 function Inventory:OnBankClosed()
     self.bankOpen = false
+    if self.bankTimer then
+        self.bankTimer:Cancel()
+        self.bankTimer = nil
+    end
 end
 
 --- A bank slot changed. Only a bank window that is open now is worth reading.
@@ -454,7 +458,22 @@ end
 -- been seen minutes ago when it had not been opened in days.
 function Inventory:OnBankSlotsChanged()
     if not self.bankOpen then return end
-    self:OnBankOpened()
+    self:ReadBankSoon()
+end
+
+--- The bank changed while open: read it again once the burst is over.
+--
+-- Putting a stack of reagents away fires one of these a slot, and dragging
+-- a few stacks fires dozens inside a frame or two. Each used to walk the
+-- whole bank and redraw the open tab on its own; now they share one read,
+-- a moment after the last of them, and the counts are stale for that long.
+function Inventory:ReadBankSoon()
+    self:InvalidateBagCounts()
+    if self.bankTimer then return end
+    self.bankTimer = C_Timer.NewTimer(0.3, function()
+        Inventory.bankTimer = nil
+        if Inventory.bankOpen then Inventory:OnBankOpened() end
+    end)
 end
 
 --- Is this container one of the bank's?
@@ -484,7 +503,7 @@ function Inventory:OnBagChanged(event, bag)
     self.changes = (self.changes or 0) + 1
 
     if event == "BAG_UPDATE" and self.bankOpen and IsBankContainer(bag) then
-        self:OnBankOpened()
+        self:ReadBankSoon()
     end
 end
 

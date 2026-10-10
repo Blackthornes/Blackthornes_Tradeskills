@@ -308,12 +308,18 @@ function GoldLog:IsOwnCharacter(name)
     local first, last = short:match("^(%S+)%s+(.-)%s*$")
     if first then short = first end
 
+    -- Characters are filed by GUID now ("Player-1234-..."), so the name and
+    -- realm come from the record itself; only a record saved before that
+    -- still carries them in its "Name-Realm" key.
     for key, record in pairs(ns.db.characters or {}) do
         if type(key) == "string" then
-            local keyName = key:match("^([^%-]+)")
-            local keyRealm = key:match("%-(.+)$")
-            local surname = type(record) == "table" and type(record.surname) == "string"
-                and record.surname ~= "" and record.surname or nil
+            local fields = type(record) == "table" and record or {}
+            local keyName = type(fields.name) == "string" and fields.name ~= "" and fields.name
+                or key:match("^([^%-]+)")
+            local keyRealm = type(fields.realm) == "string" and fields.realm ~= "" and fields.realm
+                or key:match("%-(.+)$")
+            local surname = type(fields.surname) == "string"
+                and fields.surname ~= "" and fields.surname or nil
             if keyName == short
                 and (not last or not surname or surname:lower() == last:lower())
                 and (not realm or not keyRealm
@@ -453,9 +459,17 @@ function GoldLog:Bins(period, fromKey, toKey, now)
         local midnight = GoldLog.DayStart(now)
         for hour = 0, 23 do
             local from = midnight + hour * HOUR
-            local bin = NewBin(("%02d"):format(hour), from, from + HOUR)
-            AddBucket(bin, log.hours[from])
-            bins[#bins + 1] = bin
+            bins[#bins + 1] = NewBin(("%02d"):format(hour), from, from + HOUR)
+        end
+        -- Hour buckets start on the clock's hour (UTC), the bins on the
+        -- local one. Where the zone is offset by a half or quarter hour the
+        -- two never meet, and looking a bin's start up as a key found
+        -- nothing; each bucket goes to the bin its start falls in instead.
+        for key, bucket in pairs(log.hours) do
+            if type(key) == "number" then
+                local index = math.floor((key - midnight) / HOUR)
+                if index >= 0 and index < 24 then AddBucket(bins[index + 1], bucket) end
+            end
         end
         return bins
     end

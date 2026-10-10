@@ -103,7 +103,14 @@ CreateFrame = function()
     return frame
 end
 
-C_Timer = { NewTimer = function() return { Cancel = function() end } end }
+-- A bank read waits for the burst of events to end; the test runs it.
+local waiting
+C_Timer = { NewTimer = function(_, fn) waiting = fn return { Cancel = function() waiting = nil end } end }
+local function Settle()
+    local fn = waiting
+    waiting = nil
+    if fn then fn() end
+end
 
 local clock = 0
 GetTime = function() return clock end
@@ -161,6 +168,8 @@ containers[6] = {}
 containers[0] = { { itemID = BOLT, stackCount = 20 } }
 Fire("BAG_UPDATE", 6)
 Fire("BAG_UPDATE", 0)
+check("the bank is read once the burst is over, not during it", Inventory:GetBankCount(BOLT), 25)
+Settle()
 Tick()
 
 check("the bags now hold twenty",               Inventory:GetBagCount(BOLT), 20)
@@ -189,6 +198,7 @@ containers[-1] = {}
 containers[0][3] = { itemID = BOLT, stackCount = 5 }
 Fire("PLAYERBANKSLOTS_CHANGED", 1)
 Fire("BAG_UPDATE", 0)
+Settle()
 Tick()
 
 check("the main bank empties too",              Inventory:GetBankCount(BOLT), 0)
@@ -214,6 +224,7 @@ local snapshot = record.bank
 Fire("PLAYERBANKSLOTS_CHANGED", 1)
 Fire("PLAYERREAGENTBANKSLOTS_CHANGED", 1)
 Fire("BAG_UPDATE", 6)
+Settle()
 Tick()
 C_Container.GetContainerNumSlots = readable
 

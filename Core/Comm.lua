@@ -126,11 +126,14 @@ local surname, surnameAsked
 --- This character's last name, when the game will say it (Config:ReadSurname).
 local function Surname()
     if surnameAsked then return surname end
-    surnameAsked = true
     local config = ns.Config
     if config and config.ReadSurname then
         local ok, found = pcall(config.ReadSurname, config)
-        if ok and type(found) == "string" and found ~= "" then surname = found end
+        -- A read that raised (a name the game would not let the addon see
+        -- just then) is asked again next time, not remembered as "none".
+        if not ok then return nil end
+        surnameAsked = true
+        if type(found) == "string" and found ~= "" then surname = found end
     end
     return surname
 end
@@ -305,12 +308,15 @@ local function Dispatch(fn, ...)
     if not ok then ns.Debug("share: a message could not be read:", tostring(err)) end
 end
 
-local function DropExpired(now)
+--- Drops the transfers that went quiet; answers how many of `sender`'s
+--- are still in flight, so one sender's stuck transfers cap only theirs.
+local function DropExpired(now, sender)
     local count = 0
+    local prefix = sender .. "\001"
     for key, entry in pairs(partial) do
         if now - entry.at > PARTIAL_TIMEOUT then
             partial[key] = nil
-        else
+        elseif key:sub(1, #prefix) == prefix then
             count = count + 1
         end
     end
@@ -328,7 +334,7 @@ local function ReceiveChunk(sender, body, channel)
     local key = sender .. "\001" .. channel .. "\001" .. kind .. id
     local entry = partial[key]
     if not entry then
-        if DropExpired(now) >= Comm.MAX_PARTIAL then return end
+        if DropExpired(now, sender) >= Comm.MAX_PARTIAL then return end
         entry = { parts = {}, have = 0, total = total, at = now }
         partial[key] = entry
     end

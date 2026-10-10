@@ -95,8 +95,17 @@ end
 --- How many of an item one bag slot holds. 1 when the game does not say, so
 --- a batch is too small rather than too big.
 function BagsFull.MaxStack(itemID)
-    if C_Item and type(C_Item.GetItemMaxStackByID) == "function" then
-        local ok, stack = pcall(C_Item.GetItemMaxStackByID, itemID)
+    -- The retail call is GetItemMaxStackSizeByID; it was asked for under a
+    -- name the client does not have, so every batch was sized as if nothing
+    -- stacked. The kept item-info read (Posting uses the same two) comes
+    -- first, since a scan has usually filled it already.
+    local util = ns.Util
+    if util and type(util.GetMaxStackSize) == "function" then
+        local ok, stack = pcall(util.GetMaxStackSize, itemID)
+        if ok and type(stack) == "number" and stack >= 1 then return stack end
+    end
+    if C_Item and type(C_Item.GetItemMaxStackSizeByID) == "function" then
+        local ok, stack = pcall(C_Item.GetItemMaxStackSizeByID, itemID)
         if ok and type(stack) == "number" and stack >= 1 then return stack end
     end
     if type(GetItemInfo) == "function" then

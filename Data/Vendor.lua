@@ -214,7 +214,7 @@ function Vendor:Scan()
                 -- Vendors sell in stacks; we want the price of one unit.
                 local stack = math.max(1, info.stackCount or 1)
 
-                prices[itemID] = {
+                local record = {
                     price = math.floor(info.price / stack),
                     stack = stack,
                     -- numAvailable is -1 for unlimited stock. A limited item
@@ -224,6 +224,15 @@ function Vendor:Scan()
                     seenAt = time(),
                     method = method,
                 }
+                -- Learned means changed: every buy and sale at a vendor
+                -- scans it again, and reading the same prices back is not
+                -- news worth throwing the cost index away for.
+                local was = prices[itemID]
+                if type(was) ~= "table" or was.price ~= record.price or was.stack ~= record.stack
+                    or was.limited ~= record.limited or was.extendedCost ~= record.extendedCost then
+                    learned = learned + 1
+                end
+                prices[itemID] = record
 
                 self.merchantItems[itemID] = {
                     index = index,
@@ -236,8 +245,6 @@ function Vendor:Scan()
                     numAvailable = info.numAvailable or -1,
                     extendedCost = info.hasExtendedCost == true,
                 }
-
-                learned = learned + 1
             else
                 unresolved = unresolved + 1
             end
@@ -617,8 +624,12 @@ function Vendor:OnEnable()
         end)
     end)
 
+    -- These come one a stack bought or sold, so a run of buys is a run of
+    -- them; one read a moment after the last, not one each.
     ns.RegisterEvent(self, "MERCHANT_UPDATE", function()
-        C_Timer.After(0.2, function()
+        if Vendor.updateTimer then return end
+        Vendor.updateTimer = C_Timer.NewTimer(0.2, function()
+            Vendor.updateTimer = nil
             if not Vendor.isMerchantOpen then return end
             Vendor:Scan()
             -- Selling something puts it on the buyback list.

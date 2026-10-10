@@ -163,6 +163,29 @@ do
     clock = clock + AHBuys.CONFIRM_WINDOW + 1
     AHBuys:Confirm()
     check("an answer long after the ask is not trusted", AHBuys:GetPending(CLOTH), 20)
+
+    -- An item buyout knows its price: a deposit leaving is not the buy.
+    clock = 100000
+    AHBuys:Await(CLOTH, 5, 77, 500)
+    money = money - 100
+    AHBuys:OnMoney()
+    check("less gold leaving than the buyout confirms nothing", AHBuys:GetPending(CLOTH), 20)
+    money = money - 400
+    AHBuys:OnMoney()
+    check("the buyout leaving does", AHBuys:GetPending(CLOTH), 25)
+end
+
+print("")
+print("a quantity that is not one")
+
+do
+    Reset()
+    local entry, why = Queue:Add(BOLT_RECIPE, "1e999")
+    check("an endless number is refused", entry, nil)
+    check("and says so", why, "that is not a quantity")
+    check("nothing was queued", #Queue:GetAll(), 0)
+    Queue:Add(BOLT_RECIPE, "2.7")
+    check("a plain one is floored", Queue:GetAll()[1].quantity, 2)
 end
 
 print("")
@@ -181,10 +204,33 @@ do
     check("an expired auction's Linen leaves the purchase alone", AHBuys:GetPending(CLOTH), 20)
 
     AHBuys:OnTake(2)                    -- the whole mail, as Open All does
+    check("asking for the take settles nothing yet", AHBuys:GetPending(CLOTH), 20)
+    -- Full bags: the server refuses, the attachment stays, the box changes.
+    AHBuys:SettleTakes()
+    check("a take the server refused leaves the purchase waiting", AHBuys:GetPending(CLOTH), 20)
+    -- Room made; the attachment goes and the inbox says so.
+    inbox[2].attachments = {}
+    AHBuys:SettleTakes()
     bags[CLOTH] = 40
     local line = Line(CLOTH)
     check("the purchase taken stops counting", AHBuys:GetPending(CLOTH), 0)
     check("counted once, in the bags", line.have, 40)
+    check("nothing left to settle", AHBuys.takes, nil)
+
+    -- Open All on a mail with two attachments: they leave one at a time.
+    Reset()
+    Queue:Add(BOLT_RECIPE, 10)
+    Buy(CLOTH, 20)
+    inbox = { { subject = "Auction won: Linen Cloth",
+        attachments = { { itemID = CLOTH, quantity = 12 }, { itemID = CLOTH, quantity = 8 } } } }
+    AHBuys:OnTake(1)
+    inbox[1].attachments[1] = nil
+    AHBuys:SettleTakes()
+    check("the first attachment taken is struck off", AHBuys:GetPending(CLOTH), 8)
+    check("the second is still waited on", AHBuys.takes and #AHBuys.takes, 1)
+    inbox[1].attachments[2] = nil
+    AHBuys:SettleTakes()
+    check("then the second", AHBuys:GetPending(CLOTH), 0)
 end
 
 print("")

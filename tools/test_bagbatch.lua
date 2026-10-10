@@ -32,7 +32,7 @@ end
 
 local WOOD, ESSENCE = 4470, 10938
 local STACKS = { [WOOD] = 20, [ESSENCE] = 10 }
-C_Item = { GetItemMaxStackByID = function(itemID) return STACKS[itemID] end }
+C_Item = { GetItemMaxStackSizeByID = function(itemID) return STACKS[itemID] end }
 
 local settings = { bagSpareSlots = 5, mailBatchTake = true }
 ns.Config = { Get = function(_, key) return settings[key] end }
@@ -62,6 +62,14 @@ print("Planning a batch")
 expect("a part stack is topped up before a new slot", BagsFull.SlotsFor(WOOD, 25, 15), 1)
 expect("a full stack in the bags takes nothing off", BagsFull.SlotsFor(WOOD, 25, 20), 2)
 expect("an item the game says nothing about is one a slot", BagsFull.SlotsFor(1, 3, 0), 3)
+
+-- The kept item-info stack size comes first, and the client's own call is
+-- asked for by its real name (it used to be asked for by one the client
+-- does not have, so every batch was sized as if nothing stacked).
+ns.Util.GetMaxStackSize = function(itemID) return itemID == WOOD and 5 or nil end
+expect("the kept stack size wins", BagsFull.MaxStack(WOOD), 5)
+expect("else the client's stack size call", BagsFull.MaxStack(ESSENCE), 10)
+ns.Util.GetMaxStackSize = nil
 
 local plan = BagsFull:PlanBatch(ns.Queue:GetShoppingList(), 25)
 expect("1000 wands' worth needs 150 slots", plan.slots, 150)
