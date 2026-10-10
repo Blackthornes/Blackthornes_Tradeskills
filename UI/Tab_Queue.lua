@@ -317,9 +317,17 @@ end
 --------------------------------------------------------------------------------
 
 --- The shown columns from the AH button inward; the name has the rest.
+-- The x on a line put there to buy (Queue:EnsureBuy), between the name and
+-- the columns.
+local REMOVE_WIDTH = 16
+
 local function PlaceMaterialRow(row)
     local offset = ns.Columns:Place("queue", MATERIAL_COLUMNS, row.cells, { start = -36, gap = 8 })
-    row.name:SetPoint("RIGHT", row, "RIGHT", offset, 0)
+    row.columnsOffset = offset
+    row.remove:ClearAllPoints()
+    row.remove:SetPoint("RIGHT", row, "RIGHT", offset - 2, 0)
+    local nameRight = row.remove:IsShown() and offset - REMOVE_WIDTH - 6 or offset
+    row.name:SetPoint("RIGHT", row, "RIGHT", nameRight, 0)
     row.columnsVersion = ns.Columns.version
 end
 
@@ -334,6 +342,13 @@ local function CreateMaterialRow(row)
     for _, column in ipairs(MATERIAL_COLUMNS) do
         row.cells[column.key] = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
     end
+
+    -- Takes a line asked for from Blackthornes Equipment off the list.
+    row.remove = Widgets.CreateButton(row, "x", function()
+        if row.data then ns.Queue:RemoveBuys(row.data.itemID) end
+    end, { width = REMOVE_WIDTH, height = 16, danger = true,
+        tooltip = "Take this off the list to buy. Your queued crafts keep what they need." })
+    row.remove:Hide()
     PlaceMaterialRow(row)
 
     row.search = Widgets.CreateButton(row, "AH", function()
@@ -343,7 +358,11 @@ local function CreateMaterialRow(row)
 end
 
 local function UpdateMaterialRow(row, line)
-    if row.columnsVersion ~= ns.Columns.version then PlaceMaterialRow(row) end
+    local asked = line.buys ~= nil
+    if row.columnsVersion ~= ns.Columns.version or row.remove:IsShown() ~= asked then
+        row.remove:SetShown(asked)
+        PlaceMaterialRow(row)
+    end
 
     -- The name in its item colour, unless it is recoloured below: a link's
     -- own colour shows over the label's, so a recoloured name goes without.
@@ -487,6 +506,18 @@ local function ShowMaterialTooltip(row, line)
             GameTooltip:AddDoubleLine("They already hold", tostring(line.othersHold),
                 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
+    end
+
+    -- Put here by Blackthornes Equipment's Queue it button.
+    if line.buys then
+        GameTooltip:AddLine(" ")
+        for _, wanted in ipairs(line.buys) do
+            local label = wanted.forItem == line.itemID and "To buy for your upgrade"
+                or ("For your upgrade, %s"):format(Util.GetItemLabel(wanted.forItem))
+            GameTooltip:AddDoubleLine(label, tostring(wanted.count), 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
+        end
+        GameTooltip:AddLine("The x on the Queue tab takes it off. It goes by itself once you have the upgrade.",
+            0.7, 0.7, 0.7, true)
     end
 
     -- Alt-held stock is never counted as yours automatically: it is not in
@@ -761,7 +792,10 @@ local function Refresh()
 
     if #entries == 0 then
         widgets.summaryLabel:SetText("")
-        widgets.shoppingLabel:SetText("")
+        -- Nothing queued, but gear may still be on the list to buy.
+        widgets.shoppingLabel:SetText(#shopping > 0 and ("To buy: %s%s"):format(
+            Util.FormatMoney(shoppingCost, { short = true }),
+            unknown > 0 and ("  (+%d unpriced)"):format(unknown) or "") or "")
         return
     end
 
@@ -809,7 +843,7 @@ local function Build(container)
             return
         end
 
-        if ns.Queue:Count() == 0 then return end
+        if ns.Queue:Count() == 0 and not ns.Queue:HasBuys() then return end
 
         armedUntil = GetTime() + 4
         clear:SetText("Really clear?")
