@@ -209,8 +209,18 @@ end
 
 --- Put a texture out of sight for good: code that shows it again (a tick
 --- drawn, a light raised) leaves it see-through.
+--- Put out a piece of the house look for good. The house code shows and
+--- fades these again (hover, the tab picked, the strip's glow), and a
+--- gradient faded with SetAlpha alone stayed lit on Forever, so it is hidden
+--- and kept hidden.
+local function Stay() end
 local function Quiet(texture)
-    if texture and type(texture.SetAlpha) == "function" then texture:SetAlpha(0) end
+    if not (texture and type(texture.SetAlpha) == "function") then return end
+    texture:SetAlpha(0)
+    if type(texture.Hide) == "function" then texture:Hide() end
+    texture.SetAlpha = Stay
+    texture.Show = Stay
+    texture.SetShown = Stay
 end
 
 local function QuietAll(list)
@@ -219,7 +229,9 @@ local function QuietAll(list)
 end
 
 --- Three pieces of one texture across `frame`: a fixed cap at each end and
---- the middle stretched, as the game's own buttons and tabs are drawn.
+--- the middle stretched, as the game's own buttons and tabs are drawn. On a
+--- frame narrower than both caps (a stepper's - and +) each cap takes half,
+--- or they would cross and draw the middle backwards.
 --- coords: { left, leftEnd, rightStart, right, top, bottom }.
 local function ThreeSlice(frame, layer, sublevel, cap, coords, inset)
     inset = inset or 0
@@ -229,10 +241,20 @@ local function ThreeSlice(frame, layer, sublevel, cap, coords, inset)
 
     left:SetPoint("TOPLEFT", 0, -inset)
     left:SetPoint("BOTTOMLEFT", 0, inset)
-    left:SetWidth(cap)
     right:SetPoint("TOPRIGHT", 0, -inset)
     right:SetPoint("BOTTOMRIGHT", 0, inset)
-    right:SetWidth(cap)
+
+    local function FitCaps()
+        local width = frame.GetWidth and frame:GetWidth()
+        local fit = cap
+        if type(width) == "number" and width > 0 then
+            fit = math.min(cap, math.floor(width / 2))
+        end
+        left:SetWidth(fit)
+        right:SetWidth(fit)
+    end
+    FitCaps()
+    if frame.HookScript then frame:HookScript("OnSizeChanged", FitCaps) end
     middle:SetPoint("TOPLEFT", left, "TOPRIGHT")
     middle:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT")
 
@@ -268,15 +290,21 @@ local TAB_COORDS = { 0, 0.15625, 0.84375, 1, 0, 1 }
 -- Buttons
 --------------------------------------------------------------------------------
 
+--- True when Look.Button will dress buttons: the style is on and the client
+--- has all the art. Widgets.CreateButton asks before picking a label colour,
+--- so a button left in the house look keeps the house's readable label.
+function Look.DressesButtons()
+    return Look.On() and HasAll("button", "buttonDown", "buttonDisabled", "buttonHighlight")
+end
+
 --- Dress a house button (Widgets.CreateButton) in UIPanelButtonTemplate's
 --- red: up, down while held, grey when it cannot be pressed, and the game's
 --- light under the mouse. Its label keeps the house code, now in the game's
 --- gold turning white under the mouse.
 function Look.Button(button)
-    if not Look.On() or not button then return false end
+    if not button or not Look.DressesButtons() then return false end
     -- A button sitting over the game world keeps its own solid face.
     if rawget(button, "baseColor") then return false end
-    if not HasAll("button", "buttonDown", "buttonDisabled", "buttonHighlight") then return false end
 
     Quiet(rawget(button, "background"))
     QuietAll(rawget(button, "borderTextures"))
@@ -304,7 +332,12 @@ function Look.Button(button)
     if button.HookScript then
         button:HookScript("OnMouseDown", Paint)
         button:HookScript("OnMouseUp", Paint)
-        button:HookScript("OnHide", Paint)
+        -- Hidden mid-press, it never hears the mouse come up: let go here,
+        -- or it opens next time still pressed.
+        button:HookScript("OnHide", function(self)
+            self.held = nil
+            Paint(self)
+        end)
     end
 
     local setEnabled = button.SetEnabledState
@@ -607,8 +640,12 @@ function Look.ProbeLines()
         lines[#lines + 1] = ("Blizzard style art missing: %s"):format(table.concat(missing, ", "))
     end
 
-    local made, close = pcall(CreateFrame, "Button", nil, UIParent, "UIPanelCloseButton")
-    if made and close then close:Hide() end
-    lines[#lines + 1] = "UIPanelCloseButton template: " .. ((made and close) and "yes" or "no")
+    -- Made once and kept hidden, so running the probe again adds no frames.
+    if Look.probeClose == nil then
+        local made, close = pcall(CreateFrame, "Button", nil, UIParent, "UIPanelCloseButton")
+        if made and close then close:Hide() end
+        Look.probeClose = (made and close) or false
+    end
+    lines[#lines + 1] = "UIPanelCloseButton template: " .. (Look.probeClose and "yes" or "no")
     return lines
 end
