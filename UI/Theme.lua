@@ -18,6 +18,14 @@ Theme.colors = {
     rowAlt    = { 0.106, 0.118, 0.141 },
     rowHover  = { 0.180, 0.200, 0.239 },
     rowActive = { 0.220, 0.190, 0.110 },
+    -- Dark glass (2026-10-10, asked to calm the gold glare behind list
+    -- rows): table rows sit in the well they are recessed in, a faint band
+    -- apart, with a fine line under each. Hover and the picked row lift a
+    -- little and keep the gold to their edge.
+    glass       = { 0.067, 0.075, 0.094 },   -- #111318
+    glassAlt    = { 0.039, 0.047, 0.063 },   -- #0A0C10, the well itself
+    glassHover  = { 0.094, 0.106, 0.129 },   -- #181B21
+    glassActive = { 0.141, 0.122, 0.078 },   -- #241F14, gold in the dark
 
     border    = { 0.204, 0.224, 0.263 },
     borderLit = { 0.302, 0.333, 0.388 },
@@ -462,6 +470,18 @@ function Theme.SetGradientAlpha(texture, orientation, key, fromAlpha, toAlpha)
         texture:SetColorTexture(r, g, b, math.max(fromAlpha, toAlpha) * 0.4)
     end
     return ok
+end
+
+--- Light a gradient made by Theme.SetGradientAlpha to `p` of its full
+--- strength, hiding it at 0. The alpha goes into the gradient itself and the
+--- texture hides when dark: faded with SetAlpha alone, the rows' hover wash
+--- showed lit on every row of a list on Forever (seen 2026-10-10).
+function Theme.LightGradient(texture, orientation, key, fromAlpha, toAlpha, p)
+    p = math.max(0, math.min(1, tonumber(p) or 0))
+    texture:SetShown(p > 0)
+    if p > 0 then
+        Theme.SetGradientAlpha(texture, orientation, key, fromAlpha * p, toAlpha * p)
+    end
 end
 
 --- A soft gold glow fading down from the top of a header: the same light
