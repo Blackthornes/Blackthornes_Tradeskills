@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from announce_discord import section  # noqa: E402
 from post_general import main, message, names_a_player, not_clear  # noqa: E402
 
-NEWS = ("# News\n\n## 0.2.0\n\nHey everyone! A new update is out.\nIt fixes\n"
-        "the map. Thanks @everyone for the reports!\n\n## 0.1.0\n\nFirst.\n")
+NEWS = ("# News\n\n## 0.2.0\n\n- The map shows\n  herbs again.\n- Goals sort by name.\n\n"
+        "Thanks @everyone for the reports!\n\n## 0.1.0\n\nFirst.\n")
 
 checks = 0
 failures = 0
@@ -23,16 +23,20 @@ def expect(label, ok):
 
 
 post = section(NEWS, "0.2.0")
-body = message("123", post)
-expect("the post is the version's section, lines joined",
-       body["content"].startswith("Hey everyone! A new update is out. It fixes the map."))
-expect("ends with the CurseForge link",
-       body["content"].endswith("https://www.curseforge.com/projects/123"))
+body = message("Blackthornes Farmer", "0.2.0", post)
+lines = body["content"].split("\n")
+expect("opens with the addon and version, pointing to #announcements",
+       lines[0] == "**Blackthornes Farmer 0.2.0** (full list of changes in #announcements)")
+expect("the bullets follow, wrapped lines joined",
+       lines[1] == "- The map shows herbs again." and lines[2] == "- Goals sort by name.")
+expect("the thanks comes last", lines[-1] == "Thanks @everyone for the reports!")
+expect("no CurseForge link", "curseforge" not in body["content"].lower())
+expect("no link previews or cards", body["flags"] == 4)
 expect("nothing in it can ping", body["allowed_mentions"] == {"parse": []})
 expect("posted as the house name", body["username"] == "Blackthornes AddOns")
-expect("no project ID, no link", "curseforge" not in message(None, "Hi.")["content"])
+expect("no title, still the version", message(None, "0.2.0", "- Hi.")["content"].startswith("**0.2.0** ("))
 long_post = "\n\n".join("Paragraph %d of a very long post about the update." % i for i in range(200))
-expect("a long post fits in one message", len(message("1", long_post)["content"]) <= 2000)
+expect("a long post fits in one message", len(message("Blackthornes Farmer", "0.2.0", long_post)["content"]) <= 2000)
 
 expect("a plain post is clear to post", not_clear(post) == [])
 expect("a Windows path is caught", "a Windows path" in not_clear("See D:\\Games\\WoW for it."))
