@@ -12,6 +12,12 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.45.1
+
+- Gold sent between your own characters doesn't mess up the gold chart anymore.
+- Auction buys and mail to your alts are counted right on the shopping list and queue.
+- Lots of small fixes, and the bank, vendor and mailbox windows are a bit lighter.
+
 ## 0.45.0
 
 - You can pick a new window look that matches the game's own windows. The gold look is still the default.

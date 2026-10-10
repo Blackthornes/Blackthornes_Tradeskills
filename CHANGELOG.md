@@ -4,6 +4,25 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.45.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Fixes:** gold mailed between your own characters no longer shows as
+  mail income and spending on the gold chart, and the Today chart works in
+  half-hour time zones. An auction buy taken from the mail with full bags
+  stays off the shopping list, and a buyout lost to a quicker buyer is no
+  longer confirmed by the next gold that leaves. Materials mailed to your
+  own alt aren't counted twice, and materials just bought aren't still
+  queued as sub-crafts. Buy materials now counts stacks. The Disenchant key
+  does nothing in combat instead of casting at an old bag slot. Silly
+  quantities typed into a craft box are refused. Guild price sharing keeps
+  the save from growing without end, and one guildmate's stuck transfer no
+  longer blocks the rest. The bank, vendor and mailbox are read once per
+  burst of events instead of once per event. The Blizzard window style's
+  portrait ring stays silver on every client.
+
 ## 0.45.0
 
 For WoW: Forever (interface 16001). A file was added, so restart the game
