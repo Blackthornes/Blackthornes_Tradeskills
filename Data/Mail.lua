@@ -229,6 +229,19 @@ function Mail:ReadInbox()
     return mails, complete, more
 end
 
+--- Read the mailbox once the burst of inbox events is over.
+function Mail:ReadSoon()
+    if self.readTimer then return end
+    if not C_Timer or type(C_Timer.NewTimer) ~= "function" then
+        self:Read()
+        return
+    end
+    self.readTimer = C_Timer.NewTimer(0.2, function()
+        Mail.readTimer = nil
+        Mail:Read()
+    end)
+end
+
 --- Read the mailbox and store what it holds.
 --
 -- Local reads only, nothing throttled, safe to call on every inbox update.
@@ -517,6 +530,11 @@ function Mail:OutputSet()
 
     self.outputSet = set
     return set
+end
+
+--- Recipes were added, so a sale filed by name may be one of them now.
+function Mail:ForgetOutputSet()
+    self.outputSet = nil
 end
 
 --- A sale filed by name only gets its item once the game loads that item.
@@ -1477,10 +1495,13 @@ function Mail:OnEnable()
     -- kept and reported by `/bts mail` rather than assumed either way.
     self.inboxEventCount = 0
 
+    -- Taking mail fires one or more of these a mail, and each read walks
+    -- the whole box and redraws the open tab, so a burst shares one read a
+    -- moment after the last of them.
     self.hasInboxEvent = ns.RegisterEvent(self, "MAIL_INBOX_UPDATE", function()
         Mail.inboxEventCount = (Mail.inboxEventCount or 0) + 1
         Mail.inboxUpdatedThisVisit = true
-        Mail:Read()
+        Mail:ReadSoon()
     end) and true or false
 
     ns.RegisterEvent(self, "MAIL_SHOW", function()
@@ -1491,6 +1512,13 @@ function Mail:OnEnable()
     end)
 
     ns.RegisterEvent(self, "MAIL_CLOSED", function()
+        -- A read still waiting is taken now, as it would have been on the
+        -- last inbox event before the box shut.
+        if Mail.readTimer then
+            Mail.readTimer:Cancel()
+            Mail.readTimer = nil
+            Mail:Read()
+        end
         Mail.isOpen = false
     end)
 
@@ -1500,7 +1528,7 @@ function Mail:OnEnable()
 
     -- Taking an attachment moves stock from the mailbox to the bags, and both
     -- counts have to move together or the item is briefly counted twice.
-    ns.RegisterEvent(self, "MAIL_SEND_SUCCESS", function() Mail:Read() end)
+    ns.RegisterEvent(self, "MAIL_SEND_SUCCESS", function() Mail:ReadSoon() end)
 end
 
 --------------------------------------------------------------------------------

@@ -676,14 +676,17 @@ function Config:ReadSurname()
         local results = { pcall(fn, ...) }
         local values = {}
         for i = 2, #results do
-            values[#values + 1] = tostring(results[i])
+            -- Inside a dungeon a name can come back as a value that raises
+            -- when read; such a one is noted as that and passed over.
+            local readable, text = pcall(function() return tostring(results[i]) .. "" end)
+            values[#values + 1] = readable and text or "(secret)"
         end
         asked[#asked + 1] = { label = label, ok = results[1], values = values }
 
         if not results[1] or surname then return end
         for i = 2, #results do
-            local found = SurnameFrom(first, results[i])
-            if found then surname = found return end
+            local readable, found = pcall(SurnameFrom, first, results[i])
+            if readable and found then surname = found return end
         end
     end
 
@@ -699,7 +702,8 @@ function Config:ReadSurname()
         local last = asked[#asked]
         if not before and not surname and last.ok then
             local value = last.values[1]
-            if value and value ~= "nil" and value ~= first and not value:find("[%s%-]") then
+            if value and value ~= "nil" and value ~= "(secret)" and value ~= first
+                and not value:find("[%s%-]") then
                 surname = value
             end
         end

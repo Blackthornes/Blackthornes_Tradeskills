@@ -755,6 +755,7 @@ function Recipes:Harvest()
             if added > 0 or updated > 0 then
                 ns.Debug(("saved %d new and %d updated recipe(s)"):format(added, updated))
             end
+            if added > 0 and ns.Mail and ns.Mail.ForgetOutputSet then ns.Mail:ForgetOutputSet() end
 
             if ns.UI and ns.UI.OnRecipesUpdated then
                 ns.UI:OnRecipesUpdated()

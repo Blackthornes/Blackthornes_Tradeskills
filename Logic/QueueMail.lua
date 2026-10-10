@@ -73,7 +73,11 @@ end
 local function StillComing(sent, record)
     if Now() - (sent.at or 0) > KEEP_SENT then return false end
     local mailAt = record and record.mailAt
-    if mailAt and mailAt > (sent.at or 0) + DELIVERY_WAIT then return false end
+    -- Mail to your own characters lands at once; only another account's
+    -- (a linked one's) takes the hour. Waiting the hour for an alt counted
+    -- the wool twice, in its mailbox and still on its way.
+    local wait = (record and record.linkedFrom) and DELIVERY_WAIT or 0
+    if mailAt and mailAt > (sent.at or 0) + wait then return false end
     return true
 end
 

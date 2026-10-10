@@ -352,7 +352,10 @@ function QueueActions:OnEnable()
         end)
     end)
 
-    ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", function()
+    -- Not at the first login: bags not yet reported read as empty, and a
+    -- settle then would drop every mark. The bag event that follows settles.
+    ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", function(_, _, isInitialLogin)
+        if isInitialLogin then return end
         QueueActions:Settle()
     end)
 

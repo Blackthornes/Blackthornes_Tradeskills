@@ -36,6 +36,8 @@ GuildPrices.MAX_ITEMS = 5000
 GuildPrices.SENDERS_PER_ITEM = 3
 GuildPrices.FAR = 10                  -- 10x from a fresh price of yours is refused
 GuildPrices.MAX_PER_SENDER_HOUR = 6000
+GuildPrices.MAX_ITEM_ID = 10000000      -- an item ID past this is not an item
+GuildPrices.MAX_STORED = 4 * GuildPrices.MAX_ITEMS  -- items kept for a realm
 
 --------------------------------------------------------------------------------
 -- Saved data
@@ -74,6 +76,12 @@ function GuildPrices:Store(itemID, sender, at, market, lowest)
 
     local list = realm[itemID]
     if type(list) ~= "table" then
+        -- A guildmate could send item IDs no one has, without end, and the
+        -- save would grow with them. A realm keeps so many items and no more;
+        -- the count is taken once a session and kept up from there.
+        if type(self.stored) ~= "number" then self.stored = self:Count() end
+        if self.stored >= self.MAX_STORED then return end
+        self.stored = self.stored + 1
         list = {}
         realm[itemID] = list
     end
@@ -130,6 +138,7 @@ end
 function GuildPrices:Prune(now)
     now = now or time()
     local removed = 0
+    self.stored = nil
     for _, realm in pairs((ns.db and ns.db.guildPrices) or {}) do
         if type(realm) == "table" then
             for itemID, list in pairs(realm) do
@@ -310,7 +319,8 @@ function GuildPrices:OnPrices(sender, body, channel)
 
         local itemID, market = Comm.FromBase36(idText), Comm.FromBase36(marketText)
         local lowest = lowestText ~= "" and Comm.FromBase36(lowestText) or market
-        if itemID and itemID > 0 and ns.Prices.IsCredible(market) and ns.Prices.IsCredible(lowest)
+        if itemID and itemID > 0 and itemID <= self.MAX_ITEM_ID and itemID == math.floor(itemID)
+            and ns.Prices.IsCredible(market) and ns.Prices.IsCredible(lowest)
             and not TooFar(itemID, market) then
             self:Store(itemID, who, at, market, lowest)
             if ns.PriceHistory and ns.PriceHistory.Fill then ns.PriceHistory:Fill(itemID, lowest, at) end
