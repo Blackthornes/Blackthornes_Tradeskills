@@ -651,7 +651,7 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- you nothing you do not already own, and ties up gold doing it. Read
     -- before the price checks below, since none of it needs a price: a craft
     -- with no price still has a Keep in stock limit.
-    local room, posted, onHand, queued, limit, inMail =
+    local room, posted, onHand, queued, limit, inMail, waiting, extra =
         ns.Auctions:GetRoom(recipe.outputItemID)
 
     analysis.posted = posted
@@ -663,6 +663,10 @@ function Profit:Analyse(recipeID, characterKey, method)
     analysis.postRoom = room
     analysis.roomInCrafts = RoomInCrafts(room, recipe)
     analysis.atPostLimit = room ~= nil and room <= 0
+    -- Held back only by "Wait until it runs low", not by the limit itself.
+    analysis.waitingForLow = waiting == true
+    analysis.restockAt = waiting and ns.Auctions:GetRestockAt() or nil
+    analysis.fastSellerExtra = extra or 0
 
     -- Ranked by disenchanting, a craft no auction or vendor prices may
     -- still be worth breaking down.

@@ -767,7 +767,10 @@ local function BuildDetail(parent)
         -- is the converted figure that may be compared against a craft count.
         local most = ns.Profit.MaxCrafts(state.selected.craftableNow,
             state.selected.roomInCrafts)
-        if most == 0 then
+        if most == 0 and state.selected.waitingForLow then
+            ns.Print(("no more %s yet: Wait until it runs low is on, so more are made once you are down to %d")
+                :format(state.selected.name or "of that craft", state.selected.restockAt or 0))
+        elseif most == 0 then
             ns.Print(("no room for more %s: you already hold your Max on hand (Keep in stock in Settings)")
                 :format(state.selected.name or "of that craft"))
         end
@@ -1284,7 +1287,10 @@ function UpdateDetail(analysis)
 
         local where = #parts > 0 and table.concat(parts, ", ") or "none yet"
 
-        if analysis.postLimit and analysis.postLimit > 0 then
+        if analysis.postLimit and analysis.postLimit > 0 and analysis.waitingForLow then
+            detail.limitHint:SetText(("%s, restock at %d"):format(where, analysis.restockAt or 0))
+            detail.limitHint:SetTextColor(Theme.Unpack("warn"))
+        elseif analysis.postLimit and analysis.postLimit > 0 then
             detail.limitHint:SetText(("%s, room for %d"):format(where, analysis.postRoom or 0))
             detail.limitHint:SetTextColor(Theme.Unpack(
                 analysis.atPostLimit and "warn" or "dim"))
@@ -1321,7 +1327,10 @@ function UpdateDetail(analysis)
         -- Queued crafts count toward the limit too, and "You already have 0,
         -- your limit" read as nonsense when they were all that filled it.
         local queued = analysis.queuedElsewhere or 0
-        if queued > 0 then
+        if analysis.waitingForLow then
+            detail.subtitle:SetText(("You have %d, more once you are down to %d"):format(
+                (analysis.stock or 0) + queued, analysis.restockAt or 0))
+        elseif queued > 0 then
             detail.subtitle:SetText(("You have %d and %d more queued, your limit"):format(
                 analysis.stock or 0, queued))
         else

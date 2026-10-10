@@ -215,6 +215,32 @@ function Auctions:GetLimit(itemID)
     return ns.Config:Get("maxPostedPerItem") or 0
 end
 
+--- The extra a fast seller may hold beyond its cap, or 0.
+--
+-- Only your own sales count as "confirmed": the Sales tab's ledger has to show
+-- at least three of your listings ended and six in ten of those sold (Demand's
+-- "High" from your own record). The market's movement alone never raises it,
+-- since that only guesses at what other people sold.
+function Auctions:GetFastSellerExtra(itemID)
+    if ns.Config:Get("fastSellerBoost") ~= true then return 0 end
+
+    local extra = math.floor(tonumber(ns.Config:Get("fastSellerExtra")) or 0)
+    if extra <= 0 or not (ns.Demand and ns.Demand.Get) then return 0 end
+
+    local ok, reading = pcall(ns.Demand.Get, ns.Demand, itemID)
+    if ok and reading and reading.source == "yours" and reading.level == "high" then
+        return extra
+    end
+    return 0
+end
+
+--- The amount to wait for before making more, or nil when restocking
+-- whenever there is room under the cap (the old way, and the default).
+function Auctions:GetRestockAt()
+    if ns.Config:Get("restockWhenLow") ~= true then return nil end
+    return math.max(0, math.floor(tonumber(ns.Config:Get("restockAt")) or 0))
+end
+
 --- Set a per-item cap. Passing nil clears the override back to the default.
 function Auctions:SetLimit(itemID, limit)
     if not ns.db or not itemID then return end
@@ -247,8 +273,19 @@ end
 -- "2 held" and "2 on their way back from a listing that did not sell" mean
 -- quite different things to someone deciding what to make next.
 --
--- @return remaining, posted, onHand, queued, limit, inMail
---         remaining is nil when uncapped
+-- Two settings change that (asked 2026-10-10):
+--
+--   restock at   with "Wait until it runs low" ticked, nothing more is made
+--                while what you hold (queued included) is above this; once it
+--                drops to it, the room is back up to the cap. So 0 means
+--                only when you have none left.
+--   fast sellers with "Fast sellers keep more" ticked, an item your own
+--                sales show selling well gets that many more on its cap.
+--
+-- @return remaining, posted, onHand, queued, limit, inMail, waiting, extra
+--         remaining is nil when uncapped; limit includes the fast-seller
+--         extra; waiting is true when the room is 0 only because stock has
+--         not yet dropped to the restock amount
 function Auctions:GetRoom(itemID, ignoreRecipeID)
     local limit = self:GetLimit(itemID)
     local posted = self:GetPostedCount(itemID)
@@ -271,8 +308,19 @@ function Auctions:GetRoom(itemID, ignoreRecipeID)
         return nil, posted, onHand, queued, 0, inMail
     end
 
-    return math.max(0, limit - posted - onHand - inMail - queued),
-        posted, onHand, queued, limit, inMail
+    local extra = self:GetFastSellerExtra(itemID)
+    limit = limit + extra
+
+    local held = posted + onHand + inMail + queued
+    local remaining = math.max(0, limit - held)
+
+    local restockAt = self:GetRestockAt()
+    local waiting = false
+    if restockAt and remaining > 0 and held > restockAt then
+        remaining, waiting = 0, true
+    end
+
+    return remaining, posted, onHand, queued, limit, inMail, waiting, extra
 end
 
 --- Everything you already hold of an item: listed, bags, bank and mailbox.
