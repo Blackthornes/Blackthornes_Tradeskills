@@ -173,8 +173,12 @@ function GuildPrices:Batches(scanAt)
     local prices = ns.Prices:GetTable()
     local ids = {}
     for itemID, record in pairs(prices) do
+        -- An item searched with nothing listed and never priced keeps a
+        -- fresh seen time but no market value (Prices:RecordEmpty), and
+        -- IsCredible lets nil through, so the number is checked here.
         if type(itemID) == "number" and type(record) == "table" and type(record.seen) == "number"
-            and record.seen >= scanAt - self.SCAN_FRESH and ns.Prices.IsCredible(record.market) then
+            and record.seen >= scanAt - self.SCAN_FRESH and type(record.market) == "number"
+            and ns.Prices.IsCredible(record.market) then
             ids[#ids + 1] = itemID
         end
     end
@@ -274,7 +278,7 @@ end
 --- How far from your own fresh price a guildmate's may be.
 local function TooFar(itemID, value)
     local own = ns.Prices:GetTable()[itemID]
-    if type(own) ~= "table" or not own.market or ns.Prices:IsStale(itemID) then return false end
+    if type(own) ~= "table" or type(own.market) ~= "number" or ns.Prices:IsStale(itemID) then return false end
     return value > own.market * GuildPrices.FAR or value * GuildPrices.FAR < own.market
 end
 
