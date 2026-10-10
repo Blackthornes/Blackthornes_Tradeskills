@@ -919,7 +919,12 @@ function Queue:Clear()
     self:Notify()
 end
 
+-- Moves on every change to the queue, so a lookup built from it (Butler's
+-- needs) knows when to build again.
+Queue.version = 0
+
 function Queue:Notify()
+    Queue.version = (Queue.version or 0) + 1
     if ns.Crafting and ns.Crafting.OnQueueChanged then
         ns.Crafting:OnQueueChanged()
     end
