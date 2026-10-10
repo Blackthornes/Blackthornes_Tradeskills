@@ -1,6 +1,6 @@
 -- What a vendor really pays (2026-10-09).
 --
--- kickemhard's report: the Deals tab listed Minor Wizard Oil at 4s to sell
+-- A player's report: the Deals tab listed Minor Wizard Oil at 4s to sell
 -- to a vendor for 5s, when a vendor on Forever pays 1s for it. Both the
 -- item info and the tooltip say 5s, and the oil has 5 charges.
 --

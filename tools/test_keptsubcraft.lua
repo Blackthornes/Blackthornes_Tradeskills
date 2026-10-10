@@ -1,6 +1,6 @@
 -- A sub-craft already planned stays when buying turns cheaper.
 --
--- Voldar on Discord (2026-10-05): ten crafts queued, the scraps bought, and
+-- On Discord (2026-10-05): ten crafts queued, the scraps bought, and
 -- halfway through turning scraps into light leather, medium leather became
 -- cheaper to buy than to make. The queue dropped the medium leather, and the
 -- light leather with it, so the leather already made had nothing to go into

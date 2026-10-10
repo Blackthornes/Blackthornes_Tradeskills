@@ -178,8 +178,8 @@ ns.db = { characters = {
     ["Player-1-ALT"] = { inventory = { [CLOTH] = 40 } },
 } }
 ns.Recipes = {
-    GetCharacterName = function(_, key) return key == "Player-1-ALT" and "Voldar Ashbringer" or "Me" end,
-    GetShortCharacterName = function(_, key) return key == "Player-1-ALT" and "Voldar" or "Me" end,
+    GetCharacterName = function(_, key) return key == "Player-1-ALT" and "Bob Ashbringer" or "Me" end,
+    GetShortCharacterName = function(_, key) return key == "Player-1-ALT" and "Bob" or "Me" end,
 }
 
 local function ShoppingRow(room)
@@ -191,14 +191,14 @@ local function ShoppingRow(room)
 end
 
 do
-    check("another character is named by the short name", (CraftPanel:AltHolder(CLOTH)), "Voldar")
+    check("another character is named by the short name", (CraftPanel:AltHolder(CLOTH)), "Bob")
 
     local row = ShoppingRow(1000)
     local onAlt = { itemID = CLOTH, needed = 30, have = 0, shortfall = 30, estimatedCost = 300 }
     CraftPanel.UpdateShoppingRow(row, onAlt)
-    check("so the tag reads", row.tag.text, "on Voldar")
+    check("so the tag reads", row.tag.text, "on Bob")
 
-    row.tag.room = Measure("on Voldar") - 1
+    row.tag.room = Measure("on Bob") - 1
     CraftPanel.UpdateShoppingRow(row, onAlt)
     check("with no room for the name, on an alt", row.tag.text, "on an alt")
 

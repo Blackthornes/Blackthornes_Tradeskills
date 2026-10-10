@@ -121,7 +121,7 @@ end
 -- anchored far away should not push the pane off the side of the screen.
 local MAX_OVERHANG = 120
 
--- How deep to look for them. Izbode, 2026-10-04: the pane still covered the
+-- How deep to look for them. Asked 2026-10-04: the pane still covered the
 -- tabs to pick a profession. A window can hold its tabs in a container of
 -- their own, whose rectangle sits inside the window while the tabs in it
 -- hang out, so the window's own children said nothing stood out. Their

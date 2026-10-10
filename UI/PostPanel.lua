@@ -598,7 +598,7 @@ end
 --- How far a window's own buttons stick out past its right edge, in the
 -- panel's coordinates.
 --
--- Izbode's screenshot, 2026-10-04: with a custom interface, the Professions
+-- A player's screenshot, 2026-10-04: with a custom interface, the Professions
 -- window carries a column of buttons hanging off its right side, and the
 -- list docked to the window's edge sat on top of them. The craft queue pane
 -- already measures the same thing beside the profession window

@@ -5,7 +5,7 @@
 -- list now stops where it fits and ends in a "+N more materials" line whose
 -- tooltip holds the whole list.
 --
--- WHO is a narrow column and "Voldar Ashenmoor" was cut off. It now shows the
+-- WHO is a narrow column and "Bob Ashenmoor" was cut off. It now shows the
 -- first name, and the last name's initial as well when another character has
 -- the same first name. The full name is on the row's tooltip.
 
@@ -37,8 +37,8 @@ do
     assert(loadfile(lfs_cwd .. "/Data/Recipes.lua"))("Blackthornes_TS", ns)
 
     ns.db = { characters = {
-        ["Player-1-A"] = { name = "Voldar", surname = "Ashenmoor" },
-        ["Player-1-B"] = { name = "Voldar", surname = "Blackthorne" },
+        ["Player-1-A"] = { name = "Bob", surname = "Ashenmoor" },
+        ["Player-1-B"] = { name = "Bob", surname = "Blackthorne" },
         ["Player-1-C"] = { name = "Mirel", surname = "Blackthorne" },
         ["Player-1-D"] = { name = "Tomas" },
         ["Old-Forever PvE"] = { name = "Grunt" },
@@ -50,9 +50,9 @@ do
     check("a first name no one else has is shown alone",
         Recipes:GetShortCharacterName("Player-1-C") == "Mirel")
     check("a shared first name gets the last name's initial",
-        Recipes:GetShortCharacterName("Player-1-A") == "Voldar A.")
+        Recipes:GetShortCharacterName("Player-1-A") == "Bob A.")
     check("and the other one gets its own",
-        Recipes:GetShortCharacterName("Player-1-B") == "Voldar B.")
+        Recipes:GetShortCharacterName("Player-1-B") == "Bob B.")
     check("a character with no last name known keeps its name",
         Recipes:GetShortCharacterName("Player-1-D") == "Tomas")
     check("an old record keeps its name", Recipes:GetShortCharacterName("Old-Forever PvE") == "Grunt")
@@ -175,7 +175,7 @@ local analyses = {
     { recipeID = 1, name = "Big Kit", outputItemID = 11, priceable = true, totalCost = 90,
       revenue = 700, unitRevenue = 700, profit = 565, margin = 0.8, craftableNow = 1,
       cost = { reagents = reagents },
-      ownerName = "Voldar Ashenmoor", ownerShortName = "Voldar A.", isMine = true },
+      ownerName = "Bob Ashenmoor", ownerShortName = "Bob A.", isMine = true },
 }
 
 ns.Profit = { GetRanked = function() return analyses end, Analyse = function() return analyses[1] end,
@@ -250,13 +250,13 @@ checkboxes["All characters"](true)
 local row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, analyses[1])
-check("WHO shows the short name", row.cells.who.text == "Voldar A.")
+check("WHO shows the short name", row.cells.who.text == "Bob A.")
 
 tooltip = {}
 list.opts.onEnter(row, analyses[1])
 local named = false
 for _, line in ipairs(tooltip) do
-    if tostring(line):find("Voldar Ashenmoor", 1, true) then named = true end
+    if tostring(line):find("Bob Ashenmoor", 1, true) then named = true end
 end
 check("the row's tooltip has the full name", named)
 

@@ -14,7 +14,7 @@ local function check(label, condition)
     print(("  ok  %s"):format(label))
 end
 
-UnitName = function() return "Voldar" end
+UnitName = function() return "Bob" end
 UnitGUID = function() return "Player-1-A" end
 UnitClass = function() return "Mage", "MAGE" end
 UnitLevel = function() return 40 end
@@ -56,7 +56,7 @@ local mystery = { recipeID = 30, name = "Mystery", outputItemID = 300 }
 local odd = { recipeID = 40, name = "Odd", outputItemID = 400, skillLineID = 9999 }
 
 ns.db = { characters = {
-    [SELF] = { name = "Voldar", recipes = { [10] = robe, [20] = bar, [30] = mystery, [40] = odd },
+    [SELF] = { name = "Bob", recipes = { [10] = robe, [20] = bar, [30] = mystery, [40] = odd },
                professions = { { name = "Tailoring", skillLineID = 2942, learned = true } } },
     [ALT] = { name = "Mirel", recipes = { [10] = { recipeID = 10, name = "Robe", skillLineID = 2942 } } },
 } }

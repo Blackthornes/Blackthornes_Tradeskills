@@ -293,7 +293,7 @@ end
 -- State
 --------------------------------------------------------------------------------
 
--- Tabs that were folded into others (Ezmode's idea, 2026-10-07). A saved
+-- Tabs that were folded into others (a player's idea, 2026-10-07). A saved
 -- last tab, or a call, naming one of them opens where it went.
 UI.MOVED_TABS = {
     enchanting = "profit",
@@ -795,7 +795,7 @@ function UI:Hide()
     if ns.PostPanel then ns.PostPanel:Reflow() end
 end
 
--- Names for Bindings.xml, shown under Options, Keybindings, AddOns (Izbode's
+-- Names for Bindings.xml, shown under Options, Keybindings, AddOns (a player's
 -- request, 2026-10-02). The Disenchant key clicks the same secure button the
 -- Deals and Profit tabs put over their Disenchant buttons, so it
 -- works while one of those tabs shows a picked item, as the button does.
@@ -1872,7 +1872,7 @@ function UI:SearchAuctionHouse(itemID, quantity)
 end
 
 --- With "Open with the auction house and vendors" ticked, the window opens
---- as either opens and closes again as it closes (Izbode's request,
+--- as either opens and closes again as it closes (a player's request,
 --- 2026-10-02). Only a window opened this way is closed: one the player
 --- already had open stays open.
 function UI:OpenWithShop(which)

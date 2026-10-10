@@ -1,7 +1,7 @@
 -- Blackthornes Tradeskills -- Core/Comm.lua
 -- Addon messages: talking to the same addon on another player's client.
 --
--- Asked 2026-10-07 (Ezmode on Discord, the owner agreeing): share a player's
+-- Asked 2026-10-07 (on Discord, the owner agreeing): share a player's
 -- characters between their own accounts, and auction prices within a guild,
 -- without a desktop app. Logic/AccountLink.lua and Logic/GuildPrices.lua are
 -- the two features; this file is only the wire they share.

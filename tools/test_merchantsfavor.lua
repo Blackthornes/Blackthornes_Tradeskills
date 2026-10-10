@@ -1,5 +1,5 @@
 -- Merchant's Favor on the Deals tab: Waylaid Crates by what a point of
--- favor costs bought on the auction house (Voldar's idea, 2026-10-08).
+-- favor costs bought on the auction house (a player's idea, 2026-10-08).
 --
 -- What this pins down:
 --   * crate names are read whole word by whole word, whatever the order;

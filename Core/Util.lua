@@ -72,7 +72,7 @@ function Util.FormatMoney(copper, opts)
 
     -- Once a larger coin shows, every smaller one shows too, two digits wide
     -- ("1g 05s 00c", "8s 00c", "45c"): one shape for every amount, so a
-    -- right-aligned column lines its coins up (Ezmode's request, 2026-10-07).
+    -- right-aligned column lines its coins up (a player's request, 2026-10-07).
     if showSilver and (silver > 0 or gold > 0) then
         parts[#parts + 1] = (gold > 0 and ("%02d"):format(silver) or tostring(silver)) .. s
     end

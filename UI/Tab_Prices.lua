@@ -144,8 +144,8 @@ local function BuildList()
 
     local prices = ns.Prices:GetTable()
 
-    -- The Enchanting tab's materials list lives here now (Ezmode,
-    -- 2026-10-07): every enchanting material, priced or not.
+    -- The Enchanting tab's materials list lives here now
+    -- (2026-10-07): every enchanting material, priced or not.
     local materials
     if state.enchantingOnly and ns.Disenchant and ns.Disenchant.MATERIALS then
         materials = {}
@@ -420,7 +420,7 @@ end
 -- Detail panel
 --------------------------------------------------------------------------------
 
--- My price (Ponyboy, 2026-10-06): the player's own price for the item, in
+-- My price (2026-10-06): the player's own price for the item, in
 -- gold, silver and copper boxes, and whether it is used instead of the
 -- auction price or only as the least it can be. Saved as it is typed;
 -- a price of nothing clears it, and so does Clear.
@@ -850,7 +850,7 @@ local function Build(container)
     end, false)
     reagentsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
-    -- Only the starred items (Voldar, 2026-10-06). Remembered, so the tab
+    -- Only the starred items (2026-10-06). Remembered, so the tab
     -- opens on the watch list for whoever keeps one.
     state.favouritesOnly = ns.Config:Get("pricesFavouritesOnly") == true
     local favouritesOnly = Widgets.CreateCheckbox(toolbar, "Favourites only", function(checked)
@@ -860,7 +860,7 @@ local function Build(container)
     end, state.favouritesOnly)
     favouritesOnly:SetPoint("LEFT", reagentsOnly, "RIGHT", 12, 0)
 
-    -- Only the items given their own price (Ponyboy, 2026-10-06).
+    -- Only the items given their own price (2026-10-06).
     local mineOnly = Widgets.CreateCheckbox(toolbar, "My prices only", function(checked)
         state.mineOnly = checked
         ShowFromTop()
@@ -868,14 +868,14 @@ local function Build(container)
     mineOnly:SetPoint("LEFT", favouritesOnly, "RIGHT", 12, 0)
 
     -- Every enchanting material, scanned or not: the Enchanting tab's
-    -- materials list, which moved here (Ezmode, 2026-10-07).
+    -- materials list, which moved here (2026-10-07).
     local enchantingOnly = Widgets.CreateCheckbox(toolbar, "Enchanting materials", function(checked)
         state.enchantingOnly = checked
         ShowFromTop()
     end, false)
     enchantingOnly:SetPoint("LEFT", mineOnly, "RIGHT", 12, 0)
 
-    -- No sort menu: the headings sort (Ezmode, 2026-10-06). The list opens
+    -- No sort menu: the headings sort (2026-10-06). The list opens
     -- by market value.
 
     -- Column headings

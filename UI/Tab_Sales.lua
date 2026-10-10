@@ -976,7 +976,7 @@ end
 
 local function Build(container)
     -- Across the top, over the list and the panel, like every other tab's
-    -- option bar: the menu first, then search (Ezmode, 2026-10-06).
+    -- option bar: the menu first, then search (2026-10-06).
     local toolbar = CreateFrame("Frame", nil, container)
     toolbar:SetPoint("TOPLEFT", 8, -8)
     toolbar:SetPoint("TOPRIGHT", -8, -8)

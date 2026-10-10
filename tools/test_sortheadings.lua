@@ -1,4 +1,4 @@
--- Click a column heading to sort the list by it (Izbode's request,
+-- Click a column heading to sort the list by it (a player's request,
 -- 2026-10-02).
 --
 -- What must hold:
@@ -131,7 +131,7 @@ sorter:Reset()
 check("Reset gives the list its own order", Names(sorter:Sort(rows)), "Bolt,apron,Cloak,Belt")
 
 print("")
-print("columns fit their headings (Ezmode's request, 2026-10-07)")
+print("columns fit their headings (a player's request, 2026-10-07)")
 
 -- 6 pixels a letter, as the stub frames measure.
 ns.Theme.MeasureText = function(_, text) return #text * 6 end
