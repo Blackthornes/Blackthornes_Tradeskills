@@ -175,10 +175,12 @@ function GuildPrices:Batches(scanAt)
     for itemID, record in pairs(prices) do
         -- An item searched with nothing listed and never priced keeps a
         -- fresh seen time but no market value (Prices:RecordEmpty), and
-        -- IsCredible lets nil through, so the number is checked here.
+        -- IsCredible lets nil through, so the number is checked here. A sold
+        -- out item (quantity 0) keeps its old market value with a fresh seen
+        -- time; sent, guildmates stored it as a listing seen this hour.
         if type(itemID) == "number" and type(record) == "table" and type(record.seen) == "number"
             and record.seen >= scanAt - self.SCAN_FRESH and type(record.market) == "number"
-            and ns.Prices.IsCredible(record.market) then
+            and ns.Prices.IsCredible(record.market) and (tonumber(record.quantity) or 1) > 0 then
             ids[#ids + 1] = itemID
         end
     end

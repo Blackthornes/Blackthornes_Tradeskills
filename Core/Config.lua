@@ -1035,6 +1035,8 @@ end
 function Config:Set(key, value)
     if not ns.db then return end
     ns.db.settings[key] = value
+    -- Counted, so a list built from the settings can tell one changed.
+    Config.changes = (Config.changes or 0) + 1
 
     -- Mirrored out immediately rather than at logout: this client loses the
     -- saved file, and a setting only survives if the CVar is already written

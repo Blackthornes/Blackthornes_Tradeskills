@@ -43,6 +43,7 @@ local BROWSE_TIMEOUT = 15
 
 -- Enum.ItemCommodityStatus.Commodity, hardcoded only as a fallback.
 local COMMODITY_STATUS = (Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity) or 2
+local ITEM_STATUS = (Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Item) or 1
 
 Scanner.isAuctionHouseOpen = false
 Scanner.isScanning = false
@@ -240,6 +241,9 @@ function Scanner:GetCommodityStatus(itemID, location)
         return nil
     end
 
+    -- Only a clear answer is kept for good. Unknown (0, item data not in yet)
+    -- was saved as "not a commodity" and priced listings per stack.
+    if status ~= COMMODITY_STATUS and status ~= ITEM_STATUS then return nil end
     local result = (status == COMMODITY_STATUS)
 
     self:LearnCommodity(itemID, result)

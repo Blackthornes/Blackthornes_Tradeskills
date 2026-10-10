@@ -827,7 +827,10 @@ local function UpdateRow(row, line)
         row.detail:SetTextColor(Theme.Unpack("muted"))
     end
 
-    if limitApplies then
+    if limitApplies and line.waitingForLow then
+        row.add.tooltipText = ("You have %d %s. Wait until it runs low is on, so more are queued once you are down to %d. Tick Ignore max on hand to queue more now."):format(
+            (line.stock or 0) + (line.queuedElsewhere or 0), line.name, line.restockAt or 0)
+    elseif limitApplies then
         row.add.tooltipText = ((line.queuedElsewhere or 0) > 0
             and ("You have %d %s and %d queued, which fills your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
                 line.stock or 0, line.name, line.queuedElsewhere)
