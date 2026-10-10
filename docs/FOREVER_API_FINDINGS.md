@@ -450,3 +450,13 @@ character a full-size and an oversize message and twelve in a row, sends one
 to the guild, and says what came back and how the sender's name reads. Also
 open: whether a whisper's sender name tells apart two characters with the
 same first name, since Forever allows that.
+
+## Bank slot events fire with the bank shut
+
+`PLAYERBANKSLOTS_CHANGED` and `PLAYERREAGENTBANKSLOTS_CHANGED` arrive on
+Forever when no bank window has been opened (seen 2026-10-10: two characters'
+saved bank snapshots were stamped minutes old, one of them empty, after days
+away from a banker). A shut bank still reports its slot count, with nothing in
+the slots. So `Data/Inventory.lua` reads the bank only between
+`BANKFRAME_OPENED` and `BANKFRAME_CLOSED`; the slot events re-read it only
+inside that window.
