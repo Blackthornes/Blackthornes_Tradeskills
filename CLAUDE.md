@@ -262,6 +262,9 @@ exception: its last line thanks, by their Discord name, everyone who asked
 for or reported the changes, each name once ("Thanks Ana and Bob for the
 ideas and reports!"); leave it out when nobody asked. Find who asked from
 the project's threads. This tool is also the same in all four repos.
+Changes to the Discord bots, the digest or the release posting tools
+(like this one) never go in a CHANGELOG, #announcements or #general
+section (the owner, 2026-10-10): they are not changes to the addon.
 
 ## The owner's standing rules (both addons)
 
