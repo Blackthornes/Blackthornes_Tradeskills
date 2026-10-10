@@ -667,6 +667,9 @@ function Profit:Analyse(recipeID, characterKey, method)
     analysis.waitingForLow = waiting == true
     analysis.restockAt = waiting and ns.Auctions:GetRestockAt() or nil
     analysis.fastSellerExtra = extra or 0
+    -- The limit as set, without the fast-seller extra: what the Keep in
+    -- stock box shows and saves, or each edit would add the extra again.
+    analysis.baseLimit = room ~= nil and math.max(0, (limit or 0) - (extra or 0)) or 0
 
     -- Ranked by disenchanting, a craft no auction or vendor prices may
     -- still be worth breaking down.
