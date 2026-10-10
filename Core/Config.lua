@@ -362,6 +362,11 @@ local DEFAULTS = {
     -- Persisted craft queue.
     queue = {},
 
+    -- Things to buy rather than make, put on the shopping list by
+    -- Blackthornes Equipment's Queue it button: { itemID, count, forItem,
+    -- owner, addedAt }. Never rename it. See Queue:EnsureBuy.
+    queueBuys = {},
+
     -- Auction deposits per item, learned at the auction house so profit can
     -- account for them anywhere.
     deposits = {},
