@@ -178,6 +178,13 @@ true })`. Tradeskills got it first. Farmer, Equipment and Pets copy the file,
 the art and the tool, changing only `EMBLEM` in the tool (pick, shield,
 paw). Glows and glints follow the Window effects setting.
 
+List rows are dark glass (the owner picked it 2026-10-10 over a gold glow
+that lit every row): `glass`/`glassAlt` bands in the well with a fine line
+under each, `glassHover` and the gold wash only under the mouse,
+`glassActive` for the picked row. A gradient that fades goes through
+`Theme.LightGradient`, which hides it at 0; faded with SetAlpha alone it
+stayed lit on Forever. Equipment's gear window and finder have the same.
+
 ## Discord
 
 The addons share a Discord server, Blackthornes AddOns (public invite
