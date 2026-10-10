@@ -156,6 +156,74 @@ frame3:SetItemIDAndPrice(2589, 100)
 assert(not BQ:HasQuantityBox())
 assert(BQ:ProbeText():find("no quantity box"), BQ:ProbeText())
 
+-- The bug seen in game (2026-10-10): Blizzard's buy window keeps a second
+-- quantity in its list of listings, set to 1 for each new item, and every
+-- redraw of that list tells the box its number. Written into the box alone,
+-- the fill flashed up and went back to 1. Modelled the way retail has it.
+do
+    local savedMixin = AuctionHouseFrameMixin
+    AuctionHouseFrameMixin = { Event = { CommoditiesQuantitySelectionChanged = "QtyChanged" } }
+
+    local listeners = {}
+    local house = {}
+    function house:TriggerEvent(event, ...)
+        for _, fn in ipairs(listeners[event] or {}) do fn(...) end
+    end
+
+    local display = { quantity = 1 }
+    function display:GetItemID() return self.itemID end
+    function display:GetQuantitySelected() return self.quantity end
+    function display:SetQuantitySelected(n) self.quantity = n end
+
+    local list = { quantitySelected = 1, onShow = {} }
+    function list:SetItemID(itemID) self.itemID = itemID; self.quantitySelected = 1 end
+    function list:Refresh()
+        house:TriggerEvent("QtyChanged", self.quantitySelected)
+    end
+    function list:HookScript(_, fn) self.onShow[#self.onShow + 1] = fn end
+
+    listeners.QtyChanged = {
+        function(n) display:SetQuantitySelected(n) end,
+        function(n) list.quantitySelected = n end,
+    }
+
+    local frame = { BuyDisplay = display, ItemList = list }
+    function frame:SetItemIDAndPrice(itemID)
+        display.itemID, display.quantity = itemID, 1
+        list:SetItemID(itemID)
+    end
+    function frame:HookScript() end
+    house.CommoditiesBuyFrame = frame
+    AuctionHouseFrame = house
+
+    assert(BQ:Hook() == true)
+    BQ:Want(2589, 20)
+    frame:SetItemIDAndPrice(2589, 100)
+    assert(display.quantity == 20, "filled, got " .. tostring(display.quantity))
+    -- Results arrive and the list redraws: the number stays.
+    list:Refresh()
+    assert(display.quantity == 20, "the list put the box back to " .. tostring(display.quantity))
+    assert(list.quantitySelected == 20)
+    RunTimers()
+    list:Refresh()
+    assert(display.quantity == 20)
+
+    -- The player types 5: the list redraws and 5 stays, the fill keeps out.
+    house:TriggerEvent("QtyChanged", 5)
+    RunTimers()
+    BQ:Fill()
+    list:Refresh()
+    assert(display.quantity == 5, "never write over the player's number")
+
+    -- The list shows after the window: its own OnShow fills it again.
+    display.quantity, list.quantitySelected = 1, 1
+    for _, fn in ipairs(list.onShow) do fn(list) end
+    list:Refresh()
+    assert(display.quantity == 20)
+
+    AuctionHouseFrameMixin = savedMixin
+end
+
 -- A frame whose parts raise when touched: still no error.
 AuctionHouseFrame = setmetatable({}, { __index = function() error("secret") end })
 assert(BQ:Fill(2589) == false)
