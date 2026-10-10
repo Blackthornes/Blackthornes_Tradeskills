@@ -250,12 +250,22 @@ list:SetData({ { id = 1 }, { id = 2 }, { id = 3 } })
 local row = list.rows[1]
 check("a row's wash is drawn at full strength", row.highlight.color[4], 1)
 check("and hidden by its alpha", row.highlight.alpha, 0)
+-- The gold wash and edge glow hide at rest rather than trusting SetAlpha,
+-- which left every row lit gold on Forever (2026-10-10).
+check("the gold wash is hidden at rest", row.hoverWash.shown, false)
+check("so is the edge glow", row.edgeGlow.shown, false)
+check("and on every other row", list.rows[3].hoverWash.shown, false)
 row.scripts.OnEnter(row)
 Motion:Step(1)
 check("under the mouse it shows", row.highlight.alpha, 1)
+check("with its gold wash", row.hoverWash.shown, true)
+check("and edge glow", row.edgeGlow.shown, true)
+check("but not on the row beside it", list.rows[3].hoverWash.shown, false)
 row.scripts.OnLeave(row)
 Motion:Step(1)
 check("and fades when the mouse leaves", row.highlight.alpha, 0)
+check("its gold wash goes dark again", row.hoverWash.shown, false)
+check("and its edge glow", row.edgeGlow.shown, false)
 check("the selected row sits in a gold light", list.rows[2].glowBand.shown, true)
 check("the others do not", list.rows[1].glowBand.shown, false)
 
