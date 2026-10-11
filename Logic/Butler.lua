@@ -705,6 +705,20 @@ local function Jobs()
         if byKey[key] then return byKey[key] end
         local record = records[key]
         if type(record) ~= "table" or record.linkedFrom then return nil end
+        -- Another record of a character already listed (an old name-realm
+        -- one beside its GUID one) is that character, never a second line
+        -- (a player was told to log out for the character they were on,
+        -- 2026-10-11).
+        for otherKey, other in pairs(byKey) do
+            if SameCharacter(records, otherKey, key) then
+                -- Named by its GUID record, which has the whole name.
+                if tostring(key):find("^Player%-") and not tostring(other.key):find("^Player%-") then
+                    other.key, other.name = key, FullName(key)
+                end
+                byKey[key] = other
+                return other
+            end
+        end
         if not playing and not queue:CanMail(selfKey, key) then return nil end
         local job = { key = key, name = FullName(key), isCurrent = playing, steps = {} }
         byKey[key] = job
@@ -752,10 +766,13 @@ local function Jobs()
     -- owner, 2026-10-11: a sub-craft whose materials are on hand goes to
     -- the top). An old name-realm record of the crafter itself counts as
     -- the crafter's own.
-    local blocked = {}
+    local blocked, counted = {}, {}
     for _, job in pairs(byKey) do
-        for _, step in ipairs(job.steps) do
-            if step.kind == "craft" and not step.ready then blocked[#blocked + 1] = { job = job, step = step } end
+        if not counted[job] then
+            counted[job] = true
+            for _, step in ipairs(job.steps) do
+                if step.kind == "craft" and not step.ready then blocked[#blocked + 1] = { job = job, step = step } end
+            end
         end
     end
     table.sort(blocked, function(a, b)
@@ -801,7 +818,7 @@ local function Jobs()
             for _, item in ipairs(delivery.items or {}) do
                 items[#items + 1] = { itemID = item.itemID, count = item.count }
             end
-            if #items > 0 then
+            if #items > 0 and not Playing(delivery.to) then
                 job.steps[#job.steps + 1] = { kind = "mail", to = FullName(delivery.to),
                     items = items, crafts = delivery.crafts == true }
             end
@@ -821,7 +838,9 @@ local function Jobs()
                 table.sort(targets, function(a, b) return tostring(a) < tostring(b) end)
                 for _, toKey in ipairs(targets) do
                     local items = ItemList(owed[toKey])
-                    local job = #items > 0 and toKey ~= fromKey and Job(fromKey)
+                    -- Never a mail to itself, under any record of it.
+                    local job = #items > 0 and not SameCharacter(records, fromKey, toKey)
+                        and not (Playing(toKey) and Playing(fromKey)) and Job(fromKey)
                     if job then
                         job.steps[#job.steps + 1] = { kind = "mail", to = FullName(toKey),
                             items = items, crafts = true }
@@ -831,8 +850,12 @@ local function Jobs()
         end
     end
 
+    local seen = {}
     for _, job in pairs(byKey) do
-        if #job.steps > 0 then list[#list + 1] = job end
+        if #job.steps > 0 and not seen[job] then
+            seen[job] = true
+            list[#list + 1] = job
+        end
     end
     table.sort(list, function(a, b)
         if a.isCurrent ~= b.isCurrent then return a.isCurrent end

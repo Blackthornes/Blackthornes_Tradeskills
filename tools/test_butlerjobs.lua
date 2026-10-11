@@ -150,6 +150,28 @@ check("the craft is ready", jobs[2].steps[1].ready, true)
 ns.db.characters["Blackthornes-R"] = nil
 held[WITHER][2318] = 80
 
+print("\nan old record of another character is that character")
+local LEGACY = "Ana-R"
+ns.db.characters[LEGACY] = { name = "Ana", realm = "R", faction = "Alliance" }
+owed[LEGACY] = { [ANA] = { [2319] = 8 } }
+queue[#queue + 1] = { recipeID = 12, quantity = 1, crafter = LEGACY }
+selfKey = WITHER
+jobs = Butler:Jobs()
+local anas, selfMail = 0, false
+for _, job in ipairs(jobs) do
+  if job.name:find("^Ana") then anas = anas + 1 end
+  for _, step in ipairs(job.steps) do
+    if step.kind == "mail" and step.to == job.name then selfMail = true end
+  end
+end
+check("one line for Ana, not two", anas, 1)
+check("no step mails a character to itself", selfMail, false)
+check("named in full", jobs[2] and jobs[2].name, "Ana Blackthorne")
+selfKey = ANA
+ns.db.characters[LEGACY] = nil
+owed[LEGACY] = nil
+queue[#queue] = nil
+
 print("\ncraft")
 local started, shown = nil, 0
 ns.Crafting = {

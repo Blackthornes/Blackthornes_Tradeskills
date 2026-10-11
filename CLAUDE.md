@@ -294,7 +294,11 @@ banks names it as that missing item's `from`, and that character gets a
 mail step to the crafter first (`forCraft = true`), so Butler can send the
 player there before the craft (the owner, 2026-10-11: a sub-craft whose
 materials are on hand goes to the top); an old name-realm record of the
-crafter (`SameCharacter`) counts as the crafter's own. `Craft`
+crafter (`SameCharacter`) counts as the crafter's own. Records of one
+character (its GUID one and an old name-realm one) are one entry, named
+by the GUID record, and no step mails a character to itself under any
+of its records (a player was told to log out for the character they were
+on, 2026-10-11). `Craft`
 runs the playing character's queued craft of that recipe from Butler's
 click: `Crafting:Start` when the profession window shows it, else
 `Queue:ShowQueue()` so the Open button opens the profession. Tested in
