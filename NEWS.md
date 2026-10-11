@@ -12,6 +12,12 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.49.2
+
+- The Disenchanting tab won't show deals that are already gone anymore. Buy the last one and the row moves to the next price or goes away.
+
+Thanks Ezmode for the report!
+
 ## 0.49.1
 
 - Demand now reads the same no matter how often you scan the auction house.
