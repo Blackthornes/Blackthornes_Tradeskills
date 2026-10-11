@@ -91,6 +91,7 @@ ns.Recipes = {
   GetShortCharacterName = function(_, key) return ns.db.characters[key].name end,
 }
 
+assert(loadfile(lfs_cwd .. "/Core/Characters.lua"))("Blackthornes_TS", ns)
 local chunk = assert(loadfile(lfs_cwd .. "/Logic/Butler.lua"))
 chunk("Blackthornes_TS", ns)
 local Butler = ns.Butler

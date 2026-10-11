@@ -122,6 +122,7 @@ local function RunTimers()
     end
 end
 
+assert(loadfile(lfs_cwd .. "/Core/Characters.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/QueueMail.lua"))("Blackthornes_TS", ns)
 local QueueMail = ns.QueueMail
 

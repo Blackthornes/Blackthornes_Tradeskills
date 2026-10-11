@@ -593,14 +593,23 @@ end
 --- Forever lets any number of characters share a first name; only the first
 --- and last name together are unique. Name and realm therefore filed
 --- "Bob Ash" and "Bob Stone" as one character. The character's GUID is
---- unique and never changes, so it is the key now.
+--- unique and never changes, so it is the key now: the one way a character
+--- is named in saved data (see "One key per character" in CLAUDE.md).
 ---
 --- The game has always handed the GUID over by PLAYER_LOGIN. Asked any
---- earlier, this answers with the old key and does not remember it.
+--- earlier, or when it hands back a value that cannot be read (a /reload
+--- inside a dungeon), the GUID this character's own file remembers from an
+--- earlier session answers; only a character that never had one gets the old
+--- key, and that is not remembered.
 function Config:GetCharacterKey()
     if self.characterKey then return self.characterKey end
 
+    local charDb = type(ns.charDb) == "table" and ns.charDb or nil
     local guid = SafeGUID()
+    if guid and charDb then charDb.guid = guid end
+    if not guid and charDb and type(charDb.guid) == "string" and charDb.guid ~= "" then
+        guid = charDb.guid
+    end
     if not guid or not ns.db then
         return self:GetLegacyCharacterKey()
     end
@@ -610,27 +619,98 @@ function Config:GetCharacterKey()
     return guid
 end
 
---- Move this character's saved record from the old name-realm key to its GUID.
+local function SameText(a, b)
+    if type(a) ~= "string" or type(b) ~= "string" then return nil end
+    return a:gsub("%s", ""):lower() == b:gsub("%s", ""):lower()
+end
+
+--- Could `old`, a record under the old name-realm key, be this character's?
+--- One stamped with another GUID, from another account, or whose class,
+--- faction or last name differs from this character's record is somebody
+--- else's. `mine` is this character's record, or nil when it has none yet.
+local function MightBeMine(old, mine, guid)
+    if old.guid ~= nil then return old.guid == guid end
+    if old.linkedFrom ~= nil then return false end
+    if type(mine) ~= "table" then return true end
+    for _, field in ipairs({ "class", "faction", "surname", "realm" }) do
+        if SameText(old[field], mine[field]) == false then return false end
+    end
+    return true
+end
+
+--- Point every reference to `from` in the queue at `to`: who queued an
+--- entry, who makes it and who it is for. A few dozen entries at most, once.
+local function Repoint(from, to)
+    for _, entry in ipairs(type(ns.db.queue) == "table" and ns.db.queue or {}) do
+        if type(entry) == "table" then
+            if entry.owner == from then entry.owner = to end
+            if entry.crafter == from then entry.crafter = to end
+            local forCharacters = entry.forCharacters
+            if type(forCharacters) == "table" and forCharacters[from] ~= nil then
+                forCharacters[to] = forCharacters[to] or forCharacters[from]
+                forCharacters[from] = nil
+            end
+        end
+    end
+    for _, line in pairs(type(ns.db.queueBuys) == "table" and ns.db.queueBuys or {}) do
+        if type(line) == "table" and line.owner == from then line.owner = to end
+    end
+end
+
+--- Bring this character's record under its GUID, once a session, the first
+--- time the key is known. Nothing is ever deleted:
 ---
---- Nothing is deleted or merged. An old record already claimed by a different
---- character is left for that character, and if this one already has a record
---- under its GUID the old one stays where it is.
+--- * Only an old record: it moves to the GUID, as it always has.
+--- * Both (an old record left beside the GUID one; the cause of a player
+---   being told to mail Medium Leather to the character they were on, and
+---   of Butler filling a mail to itself, 2026-10-11): the old record moves
+---   to `formerCharacters[old key]` (never rename it), kept whole and marked
+---   `retiredInto = guid`, so every list of characters has this one once.
+---   When it was stamped with this GUID, anything the GUID record lacks is
+---   filled from it, and the queue's references to the old key follow.
+---
+--- An old record that is somebody else's (MightBeMine) is left where it is.
 function Config:AdoptLegacyCharacter(guid)
     local characters = ns.db and ns.db.characters
     if type(characters) ~= "table" then return end
 
     local legacy = self:GetLegacyCharacterKey()
+    if legacy == guid then return end
     local old = characters[legacy]
-
     if type(old) ~= "table" then return end
-    if old.guid and old.guid ~= guid then return end
-    if characters[guid] ~= nil then return end
 
-    old.guid = guid
-    characters[guid] = old
+    local mine = characters[guid]
+    if not MightBeMine(old, mine, guid) then return end
+
+    if mine == nil then
+        old.guid = guid
+        characters[guid] = old
+        characters[legacy] = nil
+        Repoint(legacy, guid)
+        self.adoptedFrom = legacy
+        return
+    end
+
+    if type(mine) ~= "table" then return end
+    if type(ns.db.formerCharacters) ~= "table" then ns.db.formerCharacters = {} end
+    local former = ns.db.formerCharacters
+    local slot, n = legacy, 1
+    while former[slot] ~= nil do
+        n = n + 1
+        slot = legacy .. "#" .. n
+    end
+
+    if old.guid == guid then
+        for field, value in pairs(old) do
+            if mine[field] == nil then mine[field] = value end
+        end
+    end
+    old.retiredInto = guid
+    old.retiredAt = type(time) == "function" and time() or nil
+    former[slot] = old
     characters[legacy] = nil
-
-    self.adoptedFrom = legacy
+    Repoint(legacy, guid)
+    self.retiredFrom = legacy
 end
 
 --- The last name, when the game will say what it is.
@@ -1149,6 +1229,9 @@ ns.RegisterCommand("whoami", "show what the game says this character is called",
 
     if Config.adoptedFrom then
         ns.PrintRaw(("  moved saved data from %s this session"):format(Config.adoptedFrom))
+    end
+    if Config.retiredFrom then
+        ns.PrintRaw(("  folded the old record %s into this one this session"):format(Config.retiredFrom))
     end
 
     local realmOk, realm = pcall(GetRealmName)

@@ -274,6 +274,7 @@ end
 --- is known. Old keys are "Name-Realm"; new ones are the character's GUID.
 function Recipes:GetCharacterName(characterKey)
     if not characterKey then return "?" end
+    if ns.Characters then characterKey = ns.Characters:Canonical(characterKey) end
 
     local record = ns.db and ns.db.characters[characterKey]
     if type(record) == "table" and type(record.name) == "string" then
