@@ -74,16 +74,22 @@
 --                  everything else is the last snapshot.
 --   bagsAt,        when each was last read (time()), nil when never; the
 --   bankAt, mailAt live bags say now.
+--   gold, goldAt   copper on the character when last seen, and when
+--                  (the bags' snapshot time); live for the character
+--                  playing. nil when never recorded (2026-10-11, for
+--                  Butler's gold top-ups).
 --
 -- At a mailbox and the bank (2026-10-11), Butler asks two more things:
 --
---   _G.BlackthornesTS.Butler:FillMail(name, items)   -- true, or false and why
+--   _G.BlackthornesTS.Butler:FillMail(name, items, money)   -- true, or false and why
 --   _G.BlackthornesTS.Butler:FromBank()              -- { [itemID] = count }, or nil
 --
 -- FillMail fills the game's Send Mail page for one of the player's
 -- characters (QueueMail:Fill, the same one the Mail panel uses): `name` is
 -- the short name Advise gave as mailTo or enchanter, `items` a list of
--- { itemID, count }. The player presses Send; what goes is written down by
+-- { itemID, count }, `money` optional copper put in the gold boxes (gold
+-- alone is a mail too; never with COD ticked, never more than the purse
+-- less postage). The player presses Send; what goes is written down by
 -- QueueMail's own SendMail hook, as for the Mail panel. FromBank says what
 -- the character playing's own queued crafts still want from its bank: what
 -- they use, less what it makes and what it carries, no more than its bank
@@ -438,6 +444,17 @@ local function Holdings()
                 bankAt = Stamp(record.bankAt),
                 mailAt = Stamp(record.mailAt),
             }
+            -- Gold as last seen, for Butler's gold top-ups (2026-10-11):
+            -- the character playing's purse is live.
+            entry.gold = type(record.gold) == "number" and record.gold or nil
+            entry.goldAt = entry.gold and Stamp(record.inventoryAt) or nil
+            if entry.isCurrent and type(GetMoney) == "function" then
+                local okMoney, money = pcall(function() return tonumber(GetMoney()) end)
+                if okMoney and money then
+                    entry.gold = money
+                    entry.goldAt = type(time) == "function" and time() or entry.goldAt
+                end
+            end
             local live = entry.isCurrent and LiveBags()
             if live then
                 entry.bags = Counts(live)
@@ -515,11 +532,14 @@ end
 -- (a player found one, 2026-10-11): that is "false" and why.
 -- @return true when filling started, or false and why; then the name the
 --   mail is addressed to, in full
-function Butler:FillMail(name, items)
+function Butler:FillMail(name, items, money)
     local mail = ns.QueueMail
     if not (mail and mail.Fill) then return false, "Tradeskills cannot fill mail here" end
     if type(name) ~= "string" or name == "" then return false, "nobody to mail" end
-    if type(items) ~= "table" or #items == 0 then return false, "nothing to mail" end
+    money = tonumber(money)
+    money = money and money >= 1 and math.floor(money) or nil
+    if type(items) ~= "table" then items = {} end
+    if #items == 0 and not money then return false, "nothing to mail" end
 
     local list = {}
     for _, item in ipairs(items) do
@@ -529,7 +549,7 @@ function Butler:FillMail(name, items)
             list[#list + 1] = { itemID = itemID, count = math.floor(count) }
         end
     end
-    if #list == 0 then return false, "nothing to mail" end
+    if #list == 0 and not money then return false, "nothing to mail" end
 
     local toSelf = "that's the character you're on"
     local recipient
@@ -539,7 +559,8 @@ function Butler:FillMail(name, items)
         if key ~= nil and mail.IsPlaying and mail:IsPlaying(key) then return false, toSelf end
         recipient = key and mail.MailName and mail.MailName(Characters()[key]) or name
         if mail.IsPlayingName and mail:IsPlayingName(recipient) then return false, toSelf end
-        return mail:Fill({ recipient = recipient, items = list, subject = "From Blackthornes Butler" })
+        return mail:Fill({ recipient = recipient, items = list, money = money,
+            subject = #list == 0 and "Gold from Blackthornes Butler" or "From Blackthornes Butler" })
     end)
     if not ok then return false, "Tradeskills could not fill the mail" end
     if started == true then return true, nil, recipient end
