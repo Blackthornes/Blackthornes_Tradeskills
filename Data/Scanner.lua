@@ -1472,7 +1472,7 @@ end
 --
 -- Returns true only when the database actually changed, so callers can report
 -- what happened rather than what was attempted.
-function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow)
+function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder)
     if not itemID or not marketValue or marketValue <= 0 then return false end
 
     self.passiveSeen = self.passiveSeen or {}
@@ -1486,7 +1486,7 @@ function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMi
 
     self.passiveSeen[itemID] = { at = now, price = marketValue }
 
-    ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin, ignoredLow)
+    ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin, ignoredLow, ladder)
 
     self.passiveCount = (self.passiveCount or 0) + 1
 
@@ -1542,11 +1542,15 @@ function Scanner:CapturePassiveListings(itemID, listings)
     -- Empty is not recorded; see the rules above.
     if not listings or #listings == 0 then return false end
 
-    local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow =
+    local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
         ns.Prices:Summarise(listings, ns.Prices:GetScanValue(itemID, "market"))
     if not marketValue then return false end
 
-    local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow)
+    -- The player is looking at what they may buy: what the shopping list
+    -- said before this is the estimate a purchase is held to.
+    if ns.Prices.KeepBeforeLook then ns.Prices:KeepBeforeLook(itemID) end
+
+    local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder)
 
     if learned and ns.Persist then ns.Persist:SaveLater() end
 
@@ -1808,8 +1812,11 @@ function Scanner:FinishItemScan(itemID, listings, isCommodity)
     local pending = self.pendingItem
     self.pendingItem = nil
 
-    local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow =
+    local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
         ns.Prices:Summarise(listings, ns.Prices:GetScanValue(itemID, "market"))
+
+    -- As CapturePassiveListings: the estimate from before this look is kept.
+    if ns.Prices.KeepBeforeLook then ns.Prices:KeepBeforeLook(itemID) end
 
     -- "fresh" and "empty" both mean the auction house answered. They are told
     -- apart because an empty answer is information -- there is nothing listed
@@ -1817,7 +1824,7 @@ function Scanner:FinishItemScan(itemID, listings, isCommodity)
     local status = "fresh"
 
     if marketValue then
-        ns.Prices:Record(itemID, marketValue, minBuyout, quantity, nil, rivalMin, ownMin, ignoredLow)
+        ns.Prices:Record(itemID, marketValue, minBuyout, quantity, nil, rivalMin, ownMin, ignoredLow, ladder)
     else
         -- The search came back with nothing in it. Recording that is the whole
         -- point of asking: it clears the rival price, so the next listing
@@ -1838,6 +1845,8 @@ end
 
 function Scanner:AUCTION_HOUSE_SHOW()
     self.isAuctionHouseOpen = true
+    -- A new visit: purchases are held to what the list says from now on.
+    if ns.Prices.ForgetBeforeLook then ns.Prices:ForgetBeforeLook() end
     self.settledSearchDisplay = false
 
     -- Give the auction house a moment to be ready for queries. Longer than it

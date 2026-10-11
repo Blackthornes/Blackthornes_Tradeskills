@@ -65,6 +65,33 @@ function Cost:GetReagentUnitCost(itemID)
     return nil, nil
 end
 
+--- What `count` of a reagent costs to buy.
+--
+-- Priced as GetReagentUnitCost prices one, except that what comes off the
+-- auction house is bought up the listings from the last scan: when 3 are
+-- listed at 10s and the rest at 14s, 20 do not cost 20 x 10s (a player
+-- asked, the owner agreeing 2026-10-11). A vendor's price is the same for
+-- every one.
+-- @param skip units already bought since the scan (their listings are gone)
+-- @return copper, source  (as GetReagentUnitCost), or nil
+function Cost:GetReagentCost(itemID, count, skip)
+    local unit, source = self:GetReagentUnitCost(itemID)
+    return self:CostOfMany(itemID, count, unit, source, skip), source
+end
+
+--- GetReagentCost for a unit price and source already looked up.
+function Cost:CostOfMany(itemID, count, unit, source, skip)
+    count = math.max(0, math.floor(tonumber(count) or 0))
+    if not unit then return nil end
+    if count == 0 then return 0 end
+
+    if source == "buy" or (source == "mine" and not ns.Vendor:GetUnitPrice(itemID)) then
+        local total = ns.Prices.GetCostFor and ns.Prices:GetCostFor(itemID, count, skip)
+        if total then return total end
+    end
+    return unit * count
+end
+
 --------------------------------------------------------------------------------
 -- Craft cost
 --------------------------------------------------------------------------------
@@ -296,6 +323,10 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
         -- but only that many. The rest of the line is still bought or made.
         local free = (not valueOwned) and math.min(quantity, inBags) or 0
         local lineCost = unitCost and (unitCost * (quantity - free)) or nil
+        -- Bought, more than one goes up the listings (GetReagentCost).
+        if lineCost and (source == "buy" or source == "mine") and quantity - free > 1 then
+            lineCost = self:CostOfMany(itemID, quantity - free, unitCost, source) or lineCost
+        end
         if free > 0 and free >= quantity then
             unitCost, source, lineCost = 0, "owned", 0
         end
@@ -380,10 +411,11 @@ function Cost:GetShortfall(recipeID, craftCount)
         local short = math.max(0, needed - have)
 
         if short > 0 then
-            -- Priced as GetReagentUnitCost prices it: the vendor price for
-            -- what a vendor sells, else the auction price, lone low listing
-            -- aside.
+            -- Priced as GetReagentCost prices it: the vendor price for
+            -- what a vendor sells, else up the auction listings, lone low
+            -- listing aside.
             local unitCost = self:GetReagentUnitCost(reagent.itemID)
+            local estimatedCost = self:GetReagentCost(reagent.itemID, short)
 
             missing[#missing + 1] = {
                 itemID = reagent.itemID,
@@ -391,7 +423,7 @@ function Cost:GetShortfall(recipeID, craftCount)
                 have = have,
                 shortfall = short,
                 unitCost = unitCost,
-                estimatedCost = unitCost and (unitCost * short) or nil,
+                estimatedCost = estimatedCost,
                 onAlts = ns.Inventory:GetAltTotal(reagent.itemID),
             }
         end
