@@ -400,7 +400,10 @@ function Writs:GetRows()
 
     for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
         local writID = self:GetWritID(writ)
-        local writPrice = writID and ns.Prices and ns.Prices:GetValue(writID, "lowest") or nil
+        -- Only what is listed now: with none on the auction house there is
+        -- no writ to buy, so no price and no total (Prices:ListedNow).
+        local writPrice, noneListed
+        if writID and ns.Prices then writPrice, noneListed = ns.Prices:ListedNow(writID) end
 
         local count = writ.count or 1
         local buy, make = ItemCosts(writ.item)
@@ -426,6 +429,7 @@ function Writs:GetRows()
             writID = writID,
             count = count,
             writPrice = writPrice,
+            noneListed = noneListed or nil,
             buy = buy and buy * count or nil,
             make = make and make * count or nil,
             how = how,

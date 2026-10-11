@@ -381,7 +381,10 @@ function MerchantsFavor:GetRows(opts)
 
     for _, crate in ipairs(ns.WAYLAID_CRATES or {}) do
         local itemID = self:GetCrateID(crate)
-        local cratePrice = itemID and ns.Prices and ns.Prices:GetValue(itemID, "lowest") or nil
+        -- Only what is listed now: with none on the auction house there is
+        -- no crate to buy, so no price and no total (Prices:ListedNow).
+        local cratePrice, noneListed
+        if itemID and ns.Prices then cratePrice, noneListed = ns.Prices:ListedNow(itemID) end
 
         local bundles, best = {}, nil
         for _, bundle in ipairs(crate.bundles) do
@@ -419,6 +422,7 @@ function MerchantsFavor:GetRows(opts)
             name = crate.label,
             tier = crate.tier,
             cratePrice = cratePrice,
+            noneListed = noneListed or nil,
             bundles = bundles,
             best = best,
             bundleCost = best and best.cost,
