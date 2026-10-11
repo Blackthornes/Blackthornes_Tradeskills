@@ -67,6 +67,8 @@ local state = {
     routes = { auction = true, vendor = true },
     search = "",
     dealsOnly = true,
+    -- Only deals first seen in the latest scan (VendorFlips:NoteSeen).
+    newOnly = false,
     selected = nil,
     hidden = 0,
     pending = 0,
@@ -164,9 +166,13 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
+local NEW_TAG_WIDTH = 30
+
 local function ApplyRowLayout(row)
     local offset = ns.Columns:Place("deals", COLUMNS, row.cells, { byIndex = true })
-    row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
+    row.nameRight = offset - 4
+    row.newTag:SetPoint("RIGHT", row, "RIGHT", row.nameRight, 0)
+    row.name:SetPoint("RIGHT", row, "RIGHT", row.nameRight - (row.newShown and NEW_TAG_WIDTH or 0), 0)
     row.columnsVersion = ns.Columns.version
 end
 
@@ -176,6 +182,11 @@ local function CreateRow(row)
 
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
+
+    -- First seen in the latest scan.
+    row.newTag = Theme.CreateLabel(row, "tiny", "accent", "RIGHT")
+    row.newTag:SetText("NEW")
+    row.newTag:Hide()
 
     row.cells = {}
     for index, column in ipairs(COLUMNS) do
@@ -218,7 +229,12 @@ local function FillCell(cell, key, entry)
 end
 
 local function UpdateRow(row, entry)
-    if row.columnsVersion ~= ns.Columns.version then ApplyRowLayout(row) end
+    local isNew = entry.isNew and true or false
+    if row.columnsVersion ~= ns.Columns.version or row.newShown ~= isNew then
+        row.newShown = isNew
+        row.newTag:SetShown(isNew)
+        ApplyRowLayout(row)
+    end
 
     Theme.SetRowName(row.name, entry.name or ("item " .. tostring(entry.itemID)))
     Theme.SetItemIcon(row.icon, entry.itemID)
@@ -260,6 +276,13 @@ local function ShowRowTooltip(row, entry)
 
     local others = OthersText(entry)
     if others then GameTooltip:AddLine(others, 0.7, 0.7, 0.7, true) end
+
+    if entry.isNew then
+        GameTooltip:AddLine("New: first seen in the latest scan.", 0.91, 0.76, 0.35, true)
+    elseif entry.firstSeen and Now() then
+        GameTooltip:AddLine(("First seen %s."):format(Util.FormatAgeAgo(Now() - entry.firstSeen)),
+            0.7, 0.7, 0.7, true)
+    end
 
     -- Read now, as the AGE column is: the list can be kept for hours, and
     -- the warning it was built with never came on as the scan aged.
@@ -570,6 +593,7 @@ local function BuildRows()
 
     if key ~= built.key then
         local rows, hidden, pending, thin = MergeRoutes()
+        if ns.VendorFlips.NoteSeen then ns.VendorFlips:NoteSeen(rows) end
         built.key, built.rows = key, rows
         built.hidden, built.pending, built.thin = hidden, pending, thin
     end
@@ -579,13 +603,16 @@ local function BuildRows()
     state.pending = built.pending
     state.thin = built.thin
 
-    if state.search == "" then return rows end
+    if state.search == "" and not state.newOnly then return rows end
 
     local needle = state.search:lower()
     local filtered = {}
 
     for _, row in ipairs(rows) do
-        if (row.name or ""):lower():find(needle, 1, true) then filtered[#filtered + 1] = row end
+        if (not state.newOnly or row.isNew)
+            and (needle == "" or (row.name or ""):lower():find(needle, 1, true)) then
+            filtered[#filtered + 1] = row
+        end
     end
 
     return filtered
@@ -594,6 +621,10 @@ end
 local function EmptyText()
     if state.search ~= "" then
         return ("Nothing matching \"%s\"."):format(state.search)
+    end
+
+    if state.newOnly and #(built.rows or {}) > 0 then
+        return "Nothing new in the latest scan. Untick \"New only\" to see every deal."
     end
 
     if not AnyRoute() then
@@ -819,6 +850,13 @@ local function Build(container)
     dealsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
 
+    local newOnly = Widgets.CreateCheckbox(toolbar, "New only", function(checked)
+        state.newOnly = checked
+        ShowFromTop()
+    end, state.newOnly)
+    newOnly:SetPoint("LEFT", dealsOnly, "RIGHT", 12, 0)
+    widgets.newOnly = newOnly
+
     local skipOverStack = Widgets.CreateCheckbox(toolbar, "Skip bundles over a stack", function(checked)
         ns.DealsFavor:SetSkipOverStack(checked)
         ns.Config:Set("favorSkipOverStack", checked and true or false)
@@ -984,6 +1022,7 @@ function UI.DealsSetView(view)
     for key, frame in pairs(widgets.views) do frame:SetShown(key == view) end
     widgets.sellTo:SetShown(view == "flips")
     widgets.dealsOnly:SetShown(view == "flips")
+    widgets.newOnly:SetShown(view == "flips")
     widgets.skipOverStack:SetShown(view == "favor")
     widgets.goal:SetShown(view == "writs")
 
