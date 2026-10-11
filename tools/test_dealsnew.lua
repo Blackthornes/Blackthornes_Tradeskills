@@ -70,5 +70,29 @@ realm = "B"
 rows = Rows(3)
 check("its first time: not new", rows[3].isNew, false)
 
+print("\nthe minimums box unticked")
+realm, lastScan = "C", 100
+Rows(1)
+lastScan = 200
+local function Mixed(spec)
+    local list = {}
+    for _, r in ipairs(spec) do list[#list + 1] = { itemID = r[1], clears = r[2] } end
+    VendorFlips:NoteSeen(list)
+    local byID = {}
+    for _, row in ipairs(list) do byID[row.itemID] = row end
+    return byID
+end
+rows = Mixed({ { 1, true }, { 99, false } })
+check("an item under the minimums is not new", rows[99].isNew, false)
+check("and is not written down", ns.db.dealsSeen.C.items[99], nil)
+rows = Mixed({ { 98, false, }, })
+rows[98] = nil
+local merged = { itemID = 97, clears = false, others = { { itemID = 97, clears = true } } }
+VendorFlips:NoteSeen({ merged })
+check("a deal by another route counts", merged.isNew, true)
+lastScan = 300
+rows = Mixed({ { 99, true } })
+check("once it clears them, it is new", rows[99].isNew, true)
+
 print(("\n%d passed, %d failed"):format(passed, failed))
 if failed > 0 then error(("%d deals-new check(s) failed"):format(failed)) end
