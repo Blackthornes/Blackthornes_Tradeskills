@@ -431,11 +431,21 @@ function QueueMail:IsPlaying(characterKey)
     return ns.Characters ~= nil and ns.Characters:IsPlaying(characterKey) == true
 end
 
+--- Is a saved profession entry Enchanting? Recipes knows it by skill line
+--- in any client language; the English name stands in without it.
+local function IsEnchanting(profession)
+    local recipes = ns.Recipes
+    if recipes and type(recipes.IsEnchanting) == "function" then
+        return recipes.IsEnchanting(profession) == true
+    end
+    return profession.name == "Enchanting"
+end
+
 --- A character's Enchanting skill, or nil when it has none on record.
 local function EnchantingSkill(record)
     if type(record) ~= "table" then return nil end
     for _, profession in ipairs(type(record.professions) == "table" and record.professions or {}) do
-        if type(profession) == "table" and profession.name == "Enchanting"
+        if type(profession) == "table" and IsEnchanting(profession)
             and profession.learned ~= false then
             return tonumber(profession.skillLevel) or 0
         end

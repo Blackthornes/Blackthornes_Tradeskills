@@ -14,7 +14,89 @@ local Util = ns.Util
 
 -- Blizzard ships an internal test profession on the Forever beta. It has no
 -- recipes and no business appearing in anyone's profession list.
+-- Matched by its skill lines too (docs/FOREVER_API_FINDINGS.md), so a
+-- client that words the tag differently still leaves it out.
 local IGNORED_PROFESSION_PATTERN = "%[DNT%]"
+local IGNORED_SKILL_LINES = { [2933] = true, [2934] = true }
+
+-- Every profession under both of Forever's skill lines (the findings
+-- file), by the English name the addon keeps. The client names them in its
+-- own language ("Verzauberkunst" on a German client), so a check by name
+-- alone only worked in English.
+Recipes.SKILL_LINE_PROFESSIONS = {
+    [2937] = "Alchemy",        [171] = "Alchemy",
+    [2938] = "Blacksmithing",  [164] = "Blacksmithing",
+    [2940] = "Enchanting",     [333] = "Enchanting",
+    [2941] = "Engineering",    [202] = "Engineering",
+    [2944] = "Herbalism",      [182] = "Herbalism",
+    [2945] = "Leatherworking", [165] = "Leatherworking",
+    [2946] = "Mining",         [186] = "Mining",
+    [2947] = "Skinning",       [393] = "Skinning",
+    [2948] = "Tailoring",      [197] = "Tailoring",
+    [185] = "Cooking",         [129] = "First Aid",
+}
+
+local ENGLISH_PROFESSIONS = {}
+for _, name in pairs(Recipes.SKILL_LINE_PROFESSIONS) do ENGLISH_PROFESSIONS[name] = true end
+
+-- [the client's name for a profession] = its English name. Read from the
+-- client once it answers, then kept for the session.
+local clientProfessionNames
+
+local function ClientProfessionNames()
+    if clientProfessionNames then return clientProfessionNames end
+
+    local names, any = {}, false
+    local get = C_TradeSkillUI and C_TradeSkillUI.GetProfessionInfoBySkillLineID
+    if type(get) == "function" then
+        for skillLineID, english in pairs(Recipes.SKILL_LINE_PROFESSIONS) do
+            -- Copied inside the pcall: a secret value raises when touched.
+            local ok, name = pcall(function()
+                local info = get(skillLineID)
+                local value = type(info) == "table" and info.professionName
+                if type(value) == "string" and value ~= "" then return value .. "" end
+            end)
+            if ok and name then
+                names[name] = english
+                any = true
+            end
+        end
+    end
+
+    if any then clientProfessionNames = names end
+    return names
+end
+
+--- The English name the addon keeps for a profession, in any client
+--- language: from a profession entry ({ name, skillLineID }, as saved in
+--- a character's `professions`) or a name alone. By skill line first, then
+--- an English name as it is (old records), then the client's own names.
+-- @return the English name, or nil when it is none of the known ones
+function Recipes.EnglishProfessionName(profession)
+    local skillLineID, name
+    if type(profession) == "table" then
+        skillLineID, name = profession.skillLineID, profession.name
+    else
+        name = profession
+    end
+
+    local english = type(skillLineID) == "number" and Recipes.SKILL_LINE_PROFESSIONS[skillLineID]
+    if english then return english end
+    if type(name) ~= "string" then return nil end
+    if ENGLISH_PROFESSIONS[name] then return name end
+    return ClientProfessionNames()[name]
+end
+
+--- Is this profession entry (or name) Enchanting? Never raises.
+function Recipes.IsEnchanting(profession)
+    local ok, english = pcall(Recipes.EnglishProfessionName, profession)
+    return ok and english == "Enchanting"
+end
+
+--- Forget the client's names (for tests, whose pretend client changes).
+function Recipes._ForgetProfessionNames()
+    clientProfessionNames = nil
+end
 
 --------------------------------------------------------------------------------
 -- Professions
@@ -41,7 +123,7 @@ function Recipes:GetProfessions()
         if infoOk and info and info.professionName then
             local name = info.professionName
 
-            if not name:find(IGNORED_PROFESSION_PATTERN) then
+            if not name:find(IGNORED_PROFESSION_PATTERN) and not IGNORED_SKILL_LINES[skillLineID] then
                 local entry = {
                     name = name,
                     skillLineID = skillLineID,
