@@ -272,6 +272,29 @@ the enchanter and `FindCharacter` leave those records out too. `FromBank` is wha
 the playing character's own queued crafts use, less what it makes and
 carries, no more than its bank holds. Keep both stable too.
 
+Butler's step list for jobs on other characters (the owner asked
+2026-10-11: "craft Medium Leather on another, then send it back") calls
+two more, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:Jobs()            -- a list, or nil; never raises; reads only
+_G.BlackthornesTS.Butler:Craft(recipeID)   -- true and "crafting" or "opened", or false and why
+```
+
+`Jobs` is one entry per character with something to do in the queue (the
+character playing first, then by name; only characters it can mail, never
+`linkedFrom`): `key`, `name` (full), `isCurrent`, `steps`. A step is a
+craft (`kind = "craft"`, `recipeID`, `itemID`, `name`, `count` made,
+`crafts`, `forNames` in full, `ready`, `missing = { { itemID, count } }`
+from `Queue:HeldBy`) or a mail (`kind = "mail"`, `to` in full, `items`,
+`crafts`): the playing character's `QueueMail:GetDeliveries`, the others'
+`QueueMail:GetOwedBy(key)` (made for someone, not yet mailed). `Craft`
+runs the playing character's queued craft of that recipe from Butler's
+click: `Crafting:Start` when the profession window shows it, else
+`Queue:ShowQueue()` so the Open button opens the profession. Tested in
+`tools/test_butlerjobs.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
+reads them.
+
 Butler takes over the mailbox (the owner picked it, 2026-10-11): its
 window comes up at every mailbox, and while it is up there it calls
 

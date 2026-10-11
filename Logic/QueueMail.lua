@@ -139,6 +139,14 @@ function QueueMail:GetOwed(toKey)
     return (mine and mine[toKey]) or {}
 end
 
+--- What any character still owes the others, as made for them and not yet
+--- mailed: { [toKey] = { [itemID] = count } }. Read only (Butler's jobs).
+function QueueMail:GetOwedBy(fromKey)
+    local store = Store()
+    local owed = store and fromKey and store.owed[fromKey]
+    return type(owed) == "table" and owed or {}
+end
+
 --- Mail went out. Writes down what it carried, and takes it off what was owed.
 -- @param items list of { itemID, count }
 function QueueMail:NoteSent(toKey, items)
