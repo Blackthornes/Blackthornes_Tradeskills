@@ -605,10 +605,27 @@ local function FromBank()
         local take = math.min(short, banked)
         if take > 0 then wants[itemID] = take end
     end
+
+    -- And what its mail for another character's craft has to take out of
+    -- the bank first (a player opened the bank with the leather for one
+    -- in it, and Butler stayed shut, 2026-10-11).
+    for _, job in ipairs(Butler:Jobs() or {}) do
+        if job.isCurrent then
+            for _, step in ipairs(job.steps) do
+                for _, item in ipairs(step.kind == "mail" and step.forCraft and step.items or {}) do
+                    if item.bank then
+                        local banked = inventory.GetBankCount and inventory:GetBankCount(item.itemID) or 0
+                        wants[item.itemID] = math.min(banked, (wants[item.itemID] or 0) + item.bank)
+                    end
+                end
+            end
+        end
+    end
     return wants
 end
 
---- What the character playing's own queued crafts want from its bank:
+--- What the character playing's own queued crafts want from its bank, and
+-- what its mail for another character's craft has to take out first:
 -- { [itemID] = count }. Never raises, writes nothing; nil on any error.
 function Butler:FromBank()
     local ok, wants = pcall(FromBank)
