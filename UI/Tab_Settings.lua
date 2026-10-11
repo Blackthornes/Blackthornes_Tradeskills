@@ -1350,6 +1350,24 @@ local function Build(outer)
     widgets.probe:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(widgets.probe)
 
+    -- /bts perf and /bts perf clear as buttons; what Show lists is kept for
+    -- Claude too.
+    local perfRow = CreateRow(pages.data, 1, "Speed check",
+        "Lists in chat the slowest things Tradeskills did since you logged in or last cleared, to find a hitch. Same as /bts perf.")
+
+    local function Perf(rest)
+        local command = ns.commands and ns.commands.perf
+        if command then command.fn(rest) end
+    end
+    widgets.perfShow = Widgets.CreateButton(perfRow, "Show", function() Perf("") end,
+        { width = 60, height = 20, tooltip = "Lists in chat what took longest. Same as /bts perf" })
+    widgets.perfShow:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(widgets.perfShow)
+    widgets.perfClear = Widgets.CreateButton(perfRow, "Clear", function() Perf("clear") end,
+        { width = 60, height = 20, tooltip = "Starts the speed check over. Same as /bts perf clear" })
+    widgets.perfClear:SetPoint("LEFT", widgets.perfShow, "RIGHT", 6, 0)
+    FitButton(widgets.perfClear)
+
     -- Every sound the addon plays, each with its own switch, all on to start
     -- with. The one sound not here is the warning that saved data failed to
     -- load, which is about losing data rather than an effect.

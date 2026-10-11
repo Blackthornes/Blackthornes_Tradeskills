@@ -1158,6 +1158,62 @@ function Queue:ShowQueue()
 end
 
 --------------------------------------------------------------------------------
+-- Kept for one redraw
+--------------------------------------------------------------------------------
+
+-- Each finished craft redraws the Queue tab and the craft pane, which
+-- between them asked for the entry costs and the shopping list three or
+-- four times in one go, each build pricing every material again. While a
+-- redraw runs (Queue:Keeping), the first answer is kept and handed to the
+-- rest, and forgotten the moment the queue, the bags, a setting or a price
+-- moves; outside a redraw nothing is kept. A hitch each time a craft
+-- finished (2026-10-11).
+
+local keeping = 0
+local kept = {}
+
+local function KeepKey()
+    return ("%s:%s:%s:%s"):format(tostring(Queue.version), tostring(ns.Inventory and ns.Inventory.changes),
+        tostring(ns.Config and ns.Config.changes), tostring(ns.Prices and ns.Prices.changes))
+end
+
+local function Kept(name, build)
+    if keeping == 0 then return build() end
+    local key = KeepKey()
+    local entry = kept[name]
+    if entry and entry.key == key then return entry.value end
+    local value = build()
+    kept[name] = { key = key, value = value }
+    return value
+end
+
+local function Done(ok, ...)
+    keeping = keeping - 1
+    if keeping == 0 then kept = {} end
+    if not ok then error((...), 0) end
+    return ...
+end
+
+--- Run fn (a redraw) with the entry costs and the shopping list built at
+--- most once for it. Passes fn's results and errors on.
+function Queue:Keeping(fn, ...)
+    keeping = keeping + 1
+    return Done(pcall(fn, ...))
+end
+
+--- The cost and profit of each queued craft, by entry.
+function Queue:GetEntryCosts()
+    return Kept("costs", function() return self:BuildEntryCosts() end)
+end
+
+--- What the queue still needs, line by line. Within a redraw the same list
+--- goes to every caller: a caller may add fields to a line, never take any
+--- away or reorder the list.
+function Queue:GetShoppingList()
+    return Kept("shopping", function() return self:BuildShoppingList() end)
+end
+
+--------------------------------------------------------------------------------
 -- Derived views
 --------------------------------------------------------------------------------
 
@@ -1201,7 +1257,7 @@ end
 --
 -- @return { [entry] = { cost = copper, profit = copper } } for every entry
 --   that is not a sub-craft and can be priced
-function Queue:GetEntryCosts()
+function Queue:BuildEntryCosts()
     local result = {}
     local cashView = not ns.Config:Get("valueOwnedMaterials")
     local bagsLeft = {}
@@ -1326,7 +1382,7 @@ function Queue:GetReservedItems()
     return reserved
 end
 
-function Queue:GetShoppingList()
+function Queue:BuildShoppingList()
     local required = {}
     local queuedToMake = {}
 

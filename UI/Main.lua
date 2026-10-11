@@ -425,7 +425,13 @@ function UI:OnAuctionsUpdated()
 end
 
 function UI:OnInventoryUpdated()
-    self:RefreshActiveTab()
+    -- One build of the queue's costs and shopping list for the whole
+    -- redraw (Queue:Keeping).
+    if ns.Queue and ns.Queue.Keeping then
+        ns.Queue:Keeping(self.RefreshActiveTab, self)
+    else
+        self:RefreshActiveTab()
+    end
 
     -- Crafting something new changes what there is to list.
     if self.postButton and self.postButton:IsVisible() then
