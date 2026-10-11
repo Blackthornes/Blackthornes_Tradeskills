@@ -4,6 +4,25 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.50.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Pick the sale sound:** Settings > Sounds > "An auction sells" now
+  offers Cash register, Coins, Raid warning or Off, with a Play button.
+  An old cash register is the new default.
+- **Sister addons:** a few seconds after login, one chat line names the
+  Blackthornes addons you don't have yet and what each one adds. It shows
+  once per account, comes back only for an addon it has never named, and
+  never names one you have installed but turned off. "Sister addons" in
+  Settings turns it off in all of them at once.
+- **Fixes:** with no Waylaid crate or writ on the auction house, the
+  CRATE and WRIT columns are blank and say "none listed", so totals and
+  cost per favor or reputation no longer count something you can't buy.
+  Enchanters, recipe skill lines, Recipes to learn and item charges now
+  work on German and other non-English clients.
+
 ## 0.49.2
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is

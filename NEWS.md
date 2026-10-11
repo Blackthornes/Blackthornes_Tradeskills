@@ -12,6 +12,12 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.50.0
+
+- Sold something? You'll hear an old cash register now. You can pick another sound or turn it off.
+- Crate and writ prices go blank when none are for sale.
+- Works on German game clients too.
+
 ## 0.49.2
 
 - The Disenchanting tab won't show deals that are already gone anymore. Buy the last one and the row moves to the next price or goes away.
