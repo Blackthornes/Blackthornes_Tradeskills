@@ -451,6 +451,24 @@ Changes to the Discord bots, the digest or the release posting tools
 (like this one) never go in a CHANGELOG, #announcements or #general
 section (the owner, 2026-10-10): they are not changes to the addon.
 
+## The sister note
+
+The owner asked (2026-10-11) for the addons to say, once, which of the
+others a player does not have. `Core/SisterNote.lua` is the same file in
+all five (a fix to it belongs in all five), and so is
+`tools/test_sisternote.lua`. Every copy signs up in `_G.BlackthornesSisterNote`
+as it loads; the first to reach PLAYER_LOGIN starts the only timer
+(`SisterNote.DELAY`, 8 s, no ticker), and that one check prints one line for
+all of them: the sisters not installed (`C_AddOns.DoesAddOnExist`, else
+`GetAddOnInfo`'s "MISSING"), each with what it adds. One installed but
+turned off is never named. Once per account: what it named is kept in every
+loaded addon's account save as `sisterNoteTold[folder] = true`, so only a
+sister never named before (one released later) brings it back. "Sister
+addons" in Settings (`sisterNote`, on unless unticked) and the `sisters`
+command on each addon: off in any is off in all, and changing it writes all.
+Never rename `sisterNote` or `sisterNoteTold`. A new addon goes in
+`SisterNote.ADDONS` in all the copies. It names only our own addons.
+
 ## One key per character
 
 The owner asked (2026-10-11) that a character can never be mistaken for
