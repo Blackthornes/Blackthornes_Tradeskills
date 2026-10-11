@@ -12,6 +12,7 @@
 ## X-Curse-Project-ID: 1710638
 
 Core\Init.lua
+Core\SisterNote.lua
 Core\Util.lua
 Core\AHQueue.lua
 Core\Config.lua
