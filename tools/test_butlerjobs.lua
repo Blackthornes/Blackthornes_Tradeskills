@@ -123,6 +123,33 @@ check("its craft first", jobs[1].steps[1].kind, "craft")
 check("Ana is next", jobs[2] and jobs[2].name, "Ana Blackthorne")
 selfKey = ANA
 
+print("\nmaterials on another character come first")
+local DEE = "Player-5"
+ns.db.characters[DEE] = { name = "Dee", surname = "Tanner", realm = "R", faction = "Alliance",
+  inventory = { [2318] = 50 }, bank = { [2318] = 10 } }
+held[WITHER][2318] = 0
+jobs = Butler:Jobs()
+local dee
+for _, job in ipairs(jobs) do if job.name == "Dee Tanner" then dee = job end end
+check("the character with the leather gets a job", dee ~= nil, true)
+check("to mail it first", dee and dee.steps[1].kind, "mail")
+check("to the crafter", dee and dee.steps[1].to, "Blackthornes Wither")
+check("for a craft", dee and dee.steps[1].forCraft, true)
+check("all 60 it has toward the 80", dee and dee.steps[1].items[1].count, 60)
+local waiting = jobs[3] and jobs[3].name == "Blackthornes Wither" and jobs[3] or jobs[2]
+check("the craft still waits", waiting.steps[1].ready, false)
+check("and says who has it", waiting.steps[1].missing[1].from, "Dee Tanner")
+
+print("\nan old record of the crafter counts as its own")
+ns.db.characters[DEE] = nil
+ns.db.characters["Blackthornes-R"] = { name = "Blackthornes", realm = "R", faction = "Alliance",
+  inventory = { [2318] = 80 } }
+jobs = Butler:Jobs()
+check("no one else gets a job", #jobs, 2)
+check("the craft is ready", jobs[2].steps[1].ready, true)
+ns.db.characters["Blackthornes-R"] = nil
+held[WITHER][2318] = 80
+
 print("\ncraft")
 local started, shown = nil, 0
 ns.Crafting = {
