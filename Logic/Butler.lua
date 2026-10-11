@@ -469,3 +469,20 @@ function Butler:FromBank()
     if ok then return wants end
     return nil
 end
+
+--- Butler takes over the mailbox (the owner picked it, 2026-10-11): while
+-- its window is up at a mailbox it says `covered` true, and the mail panel
+-- beside the mailbox (UI/QueueMailPanel.lua) steps aside; false brings it
+-- back. Never raises.
+function Butler:Mailbox(covered)
+    pcall(function()
+        local panel = ns.QueueMailPanel
+        if not panel then return end
+        panel.coveredByButler = covered == true
+        if panel.coveredByButler then
+            if panel.frame then panel.frame:Hide() end
+        else
+            panel:Refresh()
+        end
+    end)
+end
