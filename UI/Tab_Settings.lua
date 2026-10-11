@@ -828,6 +828,22 @@ local function Build(outer)
     end, true)
     widgets.fillBuy:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Asked 2026-10-11: the real cost of many could run far past the estimate.
+    local buyWarnRow = CreateRow(pages.auction, 1, "Warn when buying costs more",
+        "On the auction house's buy window, a line under Buy Now when that many of a queue material costs this many percent more than the shopping list said, with both amounts and the difference. 0 turns it off.")
+
+    widgets.buyWarn = Widgets.CreateNumberBox(buyWarnRow, {
+        width = 70, min = 0, max = 500,
+        onChange = function(value)
+            Config:Set("buyWarnPercent", value)
+            if ns.BuyQuantity then ns.BuyQuantity:CheckCostSoon() end
+        end,
+    })
+    widgets.buyWarn:SetPoint("TOPLEFT", CONTROL_X, 0)
+    local buyWarnUnit = Theme.CreateLabel(buyWarnRow, "small", "muted")
+    buyWarnUnit:SetPoint("LEFT", widgets.buyWarn, "RIGHT", 6, 0)
+    buyWarnUnit:SetText("% over")
+
     CreateSection(pages.pricing, 1, "WHEN TO SELL")
     local lossRow = CreateRow(pages.pricing, 1, "Recommend selling at a loss",
         "Off: the Post tab shows them in red but will not list them.")
@@ -1753,6 +1769,8 @@ local function Refresh()
     widgets.deNext:SetChecked(Config:Get("queueDisenchantNext") == true)
     widgets.sellMarked:SetChecked(Config:Get("sellMarkedButton") ~= false)
     widgets.fillBuy:SetChecked(Config:Get("fillBuyQuantity") ~= false)
+    local buyWarn = Config:Get("buyWarnPercent")
+    Put(widgets.buyWarn, type(buyWarn) == "number" and buyWarn or 25)
     local disenchanterBox = widgets.disenchanter.editBox
     if not (disenchanterBox.HasFocus and disenchanterBox:HasFocus()) then
         local saved = Config:Get("disenchanterName") or ""
