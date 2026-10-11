@@ -407,6 +407,11 @@ function QueueMailPanel:FillFor(row)
         else
             texts = { ("All attached.%s Press Send."):format(cost), "Press Send." }
         end
+        -- Part of a stack needs an empty bag slot to be split into first.
+        if ns.QueueMail.splitBlocked then
+            texts = { "Free one bag slot to split a stack, then press the button again.",
+                "Free a bag slot, then try again." }
+        end
         -- Forever's characters share first names, so the mail needs the
         -- last name too. One not yet on record (that character has not
         -- logged in since last names were read) has to be typed.

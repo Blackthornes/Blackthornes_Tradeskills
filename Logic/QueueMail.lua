@@ -516,6 +516,11 @@ end
 -- the game has moved it, and the next pick-up from the bags waits for that.
 local ATTACH_STEP = 0.2
 
+-- A split is looked for in its new bag slot this often, this many times,
+-- before it is given up on and left in the bags.
+local SPLIT_STEP = 0.1
+local SPLIT_TRIES = 20
+
 local function Call(fn, ...)
     if type(fn) ~= "function" then return false end
     return pcall(fn, ...)
@@ -539,6 +544,45 @@ local function FreeSlot()
     for slot = 1, MaxAttachments() do
         if not used[slot] then return slot end
     end
+end
+
+--- What a bag slot holds: itemID, count, locked. nil when it is empty.
+-- Copied inside the pcall: the client can hand out values that raise.
+local function SlotHolds(bag, slot)
+    local ok, itemID, count, locked = Call(function()
+        local info = C_Container.GetContainerItemInfo(bag, slot)
+        if type(info) ~= "table" then return nil end
+        return tonumber(info.itemID), tonumber(info.stackCount) or 1, info.isLocked == true
+    end)
+    if ok then return itemID, count, locked end
+end
+
+--- An empty slot in an ordinary bag (not a herb or mining bag, which would
+--- refuse most things), skipping those in `reserved`.
+local function EmptyBagSlot(reserved)
+    local bags = ns.Inventory.GetCarriedBags and ns.Inventory:GetCarriedBags() or {}
+    for _, bag in ipairs(bags) do
+        local okFree, free, family = Call(C_Container.GetContainerNumFreeSlots, bag)
+        if okFree and (tonumber(free) or 0) > 0 and (tonumber(family) or 0) == 0 then
+            local okSlots, slots = Call(C_Container.GetContainerNumSlots, bag)
+            for slot = 1, (okSlots and tonumber(slots)) or 0 do
+                local key = bag .. ":" .. slot
+                local okInfo, info = Call(C_Container.GetContainerItemInfo, bag, slot)
+                if okInfo and info == nil and not reserved[key] then
+                    reserved[key] = true
+                    return bag, slot
+                end
+            end
+        end
+    end
+end
+
+--- How many of what is in a Send Mail slot, or nil when it cannot be read.
+local function AttachedCount(slot)
+    local ok, name, _, _, count = Call(_G.GetSendMailItem, slot)
+    if not ok or name == nil then return nil end
+    local copied, n = pcall(function() return (count or 1) + 0 end)
+    return copied and n or nil
 end
 
 --- The bag stacks to take for `count` of an item: whole stacks first, the
@@ -595,6 +639,14 @@ end
 --
 -- The name and subject go in at once, the items one at a time after. As many
 -- stacks as one mail holds; what is left stays on the list for the next mail.
+--
+-- Part of a stack (a player's report, 2026-10-11: mailing sub-crafts to an
+-- alt sent the whole stack, not what its queue needed) is first split into
+-- an empty bag slot, and only once the game shows it there as its own stack
+-- is it put in the mail. Dropped straight from the cursor, the mail took the
+-- stack it was split from. Each attachment is then counted, and one that
+-- came out bigger than asked for is taken back out of the mail. With no
+-- empty bag slot to split into, that item is left for the player.
 -- @param onDone function(attached, leftOver) when the last item is in
 -- @return true when it started, or false and why
 function QueueMail:Fill(delivery, onDone)
@@ -638,7 +690,9 @@ function QueueMail:Fill(delivery, onDone)
     end
 
     self.filling = true
+    self.splitBlocked = nil
     local attached = 0
+    local reserved = {}
 
     local function Finish()
         QueueMail.filling = false
@@ -646,29 +700,28 @@ function QueueMail:Fill(delivery, onDone)
         if onDone then onDone(attached, leftOver) end
     end
 
-    local index = 0
-    local function Next()
-        index = index + 1
-        local step = steps[index]
-        if not step or not (_G.SendMailFrame and _G.SendMailFrame:IsShown()) then
-            return Finish()
-        end
+    local function HasCursor()
+        return CursorHasItem and CursorHasItem() and true or false
+    end
 
+    local function MailOpen()
+        return _G.SendMailFrame and _G.SendMailFrame:IsShown()
+    end
+
+    local index = 0
+    local Next
+
+    --- Put a whole bag stack in the mail, then check what went in.
+    local function Attach(step)
         local slot = FreeSlot()
         if not slot then return Finish() end
 
-        if CursorHasItem and CursorHasItem() then Call(ClearCursor) end
+        if HasCursor() then Call(ClearCursor) end
+        local picked = Call(C_Container.PickupContainerItem, step.bag, step.slot)
 
-        local picked
-        if step.split then
-            picked = Call(C_Container.SplitContainerItem, step.bag, step.slot, step.count)
-        else
-            picked = Call(C_Container.PickupContainerItem, step.bag, step.slot)
-        end
-
-        if picked and CursorHasItem and CursorHasItem() then
+        if picked and HasCursor() then
             Call(_G.ClickSendMailItemButton, slot)
-            if CursorHasItem() then
+            if HasCursor() then
                 -- The mail would not take it: put it back and stop.
                 Call(ClearCursor)
                 leftOver = leftOver + (#steps - index + 1)
@@ -677,7 +730,66 @@ function QueueMail:Fill(delivery, onDone)
             attached = attached + 1
         end
 
-        C_Timer.After(ATTACH_STEP, Next)
+        C_Timer.After(ATTACH_STEP, function()
+            -- More in the mail than asked for: never send it. The game puts
+            -- it back in the bags, and it counts as not attached.
+            local count = AttachedCount(slot)
+            if count and count > step.count then
+                Call(_G.ClickSendMailItemButton, slot, true)
+                attached = attached - 1
+                leftOver = leftOver + 1
+            end
+            Next()
+        end)
+    end
+
+    --- Split part of a stack into an empty bag slot, wait for the game to
+    --- show it there, then attach it as a stack of its own.
+    local function SplitThenAttach(step)
+        local toBag, toSlot = EmptyBagSlot(reserved)
+        if not toBag then
+            QueueMail.splitBlocked = true
+            leftOver = leftOver + 1
+            return Next()
+        end
+
+        if HasCursor() then Call(ClearCursor) end
+        Call(C_Container.SplitContainerItem, step.bag, step.slot, step.count)
+        if not HasCursor() then
+            leftOver = leftOver + 1
+            return Next()
+        end
+        Call(C_Container.PickupContainerItem, toBag, toSlot)
+        if HasCursor() then
+            Call(ClearCursor)
+            leftOver = leftOver + 1
+            return Next()
+        end
+
+        local tries = 0
+        local function Settled()
+            tries = tries + 1
+            local itemID, count, locked = SlotHolds(toBag, toSlot)
+            if itemID == step.itemID and count == step.count and not locked then
+                if not MailOpen() then return Finish() end
+                return Attach({ bag = toBag, slot = toSlot, count = step.count, itemID = step.itemID })
+            end
+            if tries >= SPLIT_TRIES or not MailOpen() then
+                -- The split never showed up as asked: leave it in the bags.
+                leftOver = leftOver + 1
+                return Next()
+            end
+            C_Timer.After(SPLIT_STEP, Settled)
+        end
+        C_Timer.After(SPLIT_STEP, Settled)
+    end
+
+    Next = function()
+        index = index + 1
+        local step = steps[index]
+        if not step or not MailOpen() then return Finish() end
+        if step.split then return SplitThenAttach(step) end
+        return Attach(step)
     end
 
     Next()
