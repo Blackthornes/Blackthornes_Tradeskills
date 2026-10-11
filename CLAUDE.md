@@ -184,6 +184,22 @@ kept until `Queue.version` (moved by `Queue:Notify`) or
 the next question. Keep the call and the fields stable; if one has to
 change, change Butler's `Logic/Sisters.lua` in the same breath.
 
+Butler's All characters list (a player asked, the owner agreeing
+2026-10-10) asks once each time that list is built, never per item:
+
+```lua
+_G.BlackthornesTS.Butler:Holdings()   -- a list, or nil; never raises; reads only
+```
+
+One entry per character on record, in `Recipes:GetCharacters`' order (the
+character playing first): `key`, `name`, `short`, `realm`, `faction`,
+`isCurrent`, `linked` (the character it came through, for another account
+of the owner's), and `bags`, `bank`, `mail` as fresh `{ [itemID] = count }`
+copies with `bagsAt`, `bankAt`, `mailAt` (`time()`, nil when never read).
+The playing character's bags are live (`Inventory:GetBagCounts`), the rest
+the saved snapshots (`inventory`, `bank`, `mail` on its record). Keep it
+stable too; Butler's `Logic/Everyone.lua` reads it.
+
 ## Sharing between accounts and with a guild
 
 Asked 2026-10-07 (on Discord, the owner agreeing). Over addon
