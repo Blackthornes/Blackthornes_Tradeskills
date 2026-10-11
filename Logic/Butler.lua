@@ -25,6 +25,13 @@
 --                  disenchanter typed in Settings, else of the alt on this
 --                  account (same realm and faction) with the most Enchanting
 --                  that is enough.
+--   disenchanter   the disenchanter typed in Settings (full name) when this
+--                  item is gear the Mail page sends there: green up to the
+--                  quality picked, can be disenchanted, does not bind when
+--                  picked up, not crafted, no upgrade for the character playing
+--                  (QueueMail:GoesToDisenchanter, 2026-10-11). nil with no
+--                  disenchanter typed. A soulbound copy is Butler's to leave
+--                  out.
 --   need           how many the character playing's own queued crafts still
 --                  use from its bags (what they use, less what it makes and
 --                  what is in its bank), as the Mail panel works it out.
@@ -324,6 +331,14 @@ local function Bought(itemID)
     return count > 0 and count or nil
 end
 
+--- The disenchanter typed in Settings, when the Mail page sends it this item.
+local function Disenchanter(itemID, kept, quality)
+    local chosen, mail = kept.chosen, ns.QueueMail
+    if not (chosen and mail and mail.GoesToDisenchanter) then return nil end
+    if mail:GoesToDisenchanter(itemID, quality) then return chosen.name end
+    return nil
+end
+
 local function Answer(itemID)
     local kept = Lookup()
     local quality = Quality(itemID)
@@ -336,6 +351,7 @@ local function Answer(itemID)
         disenchant = disenchant,
         canDisenchant = canDisenchant,
         enchanter = enchanter,
+        disenchanter = Disenchanter(itemID, kept, quality),
         need = kept.need[itemID],
         mailTo = mail and mail.name or nil,
         mailCount = mail and mail.count or nil,

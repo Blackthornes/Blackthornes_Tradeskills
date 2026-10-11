@@ -676,7 +676,7 @@ local function Build(outer)
     -- Asked 2026-10-04: a character to mail gear to for disenchanting.
     -- Typed rather than picked, so one on another account works too.
     local disenchanterRow = CreateRow(pages.mail, 1, "Disenchanter",
-        "At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear or an upgrade for you. Leave empty for nobody.")
+        "At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear, crafted gear or an upgrade for you. Leave empty for nobody.")
 
     widgets.disenchanter = Widgets.CreateSearchBox(disenchanterRow, "Character name", function(text)
         local trimmed = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
