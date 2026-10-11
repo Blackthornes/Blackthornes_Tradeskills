@@ -1050,7 +1050,24 @@ function PostPanel:Refresh()
     -- Cheap, and it catches the main window being dragged, which has no event.
     self:Reflow()
 
-    if self.hideLosses then self.hideLosses:SetShown(self.view ~= "buy") end
+    if self.hideLosses then
+        local showBox = self.view ~= "buy"
+        self.hideLosses:SetShown(showBox)
+        if self.summaryBeside ~= showBox then
+            -- On Buy the box is gone, so the summary has the whole width
+            -- rather than wrapping to two lines beside an empty space.
+            if self.summary and self.frame then
+                self.summary:ClearAllPoints()
+                self.summary:SetPoint("TOPLEFT", self.switch, "BOTTOMLEFT", 0, -6)
+                if showBox then
+                    self.summary:SetPoint("RIGHT", self.hideLosses, "LEFT", -8, 0)
+                else
+                    self.summary:SetPoint("RIGHT", self.frame, "RIGHT", -14, 0)
+                end
+            end
+            self.summaryBeside = showBox
+        end
+    end
 
     if self.view == "buy" then
         self.worth:SetText("")
