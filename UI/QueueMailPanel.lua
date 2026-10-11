@@ -313,7 +313,6 @@ function QueueMailPanel:Refresh()
         row:SetPoint("TOPLEFT", PAD, top - (index - 1) * ROW_HEIGHT)
 
         local short = ShortName(delivery)
-        local first = short:match("^(%S+)") or short
         row.name:SetTextColor(Theme.Unpack(delivery.crafts and "profit" or "text"))
         if delivery.take then
             local batch = delivery.batch
@@ -343,12 +342,11 @@ function QueueMailPanel:Refresh()
             Theme.FitText(row.items, ItemTexts(delivery.items), room)
         end
         if delivery.crafts then
-            Theme.FitText(row.send.label, { "Send crafts to " .. short, "Send crafts to " .. first,
-                "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
+            Theme.FitText(row.send.label, { "Send crafts to " .. short, "Send to " .. short, "Send" }, BUTTON_WIDTH - 8)
             row.send.tooltipText = ("Opens Send Mail to %s with the crafts their queue needs attached. You press Send."):format(short)
             row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
         elseif not delivery.take then
-            Theme.FitText(row.send.label, { "Send to " .. short, "Send to " .. first, "Send" }, BUTTON_WIDTH - 8)
+            Theme.FitText(row.send.label, { "Send to " .. short, "Send" }, BUTTON_WIDTH - 8)
             row.send.tooltipText = "Opens Send Mail with the name filled in and these attached. You press Send."
             row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
         end

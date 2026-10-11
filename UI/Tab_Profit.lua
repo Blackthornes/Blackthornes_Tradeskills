@@ -37,7 +37,7 @@ local COLUMNS = {
     -- together they say whether to make more.
     { key = "demand", label = "DEMAND", width = 50, justify = "CENTER" },
     { key = "make",   label = "MAKE",   width = 40, justify = "CENTER" },
-    { key = "who",    label = "WHO",    width = 58, justify = "CENTER", accountWideOnly = true },
+    { key = "who",    label = "WHO",    width = 96, justify = "CENTER", accountWideOnly = true },
     { key = "margin", label = "MARGIN", width = 46, justify = "CENTER" },
     -- Which way the profit is for (AH, Vendor, DE), when the list is
     -- ranked by whichever pays most. Ranked by one way, it says nothing.
@@ -314,7 +314,7 @@ local function AddWaysLines(analysis)
     return true
 end
 
---- The full name of who can make it, since the WHO column shows it shortened.
+--- The full name of who can make it, for the WHO column's tooltip.
 local function AddOwnerLine(analysis)
     if not state.accountWide or not analysis.ownerName or not GameTooltip:IsShown() then return end
 
@@ -362,7 +362,8 @@ local function UpdateRow(row, analysis)
 
     -- Only meaningful when several characters are in play.
     if state.accountWide then
-        cells.who:SetText(analysis.ownerShortName or analysis.ownerName or "")
+        -- The whole name, wrapped smaller when it is long (never shortened).
+        Theme.SetRowName(cells.who, analysis.ownerShortName or analysis.ownerName or "")
         cells.who:SetTextColor(Theme.Unpack(analysis.isMine and "accent" or "muted"))
     else
         cells.who:SetText("")

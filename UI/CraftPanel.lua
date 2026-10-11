@@ -1703,8 +1703,8 @@ function CraftPanel:AltHolder(itemID)
     if not bestKey then return nil end
     local name = Util.CharacterName(bestKey)
 
-    -- The short name, as the narrow columns elsewhere show it: Forever names
-    -- are first and last, and "on Firstname Lastname" ran off the tag.
+    -- The full name (never shortened, the owner's rule 2026-10-11); a tag
+    -- with too little room for it falls back to its shorter wording.
     if name ~= "" and ns.Recipes and ns.Recipes.GetShortCharacterName then
         local short = ns.Recipes:GetShortCharacterName(bestKey)
         if type(short) == "string" and short ~= "" then name = short end
