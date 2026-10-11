@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.49.2
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Fixes:** on the Disenchanting tab, buying the last item listed at a
+  price now moves its row to the next known price, or drops the row when
+  none is left, and a search by full name that finds nothing listed drops
+  the row too, so the tab no longer offers deals that are already gone.
+
 ## 0.49.1
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
