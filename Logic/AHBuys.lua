@@ -288,6 +288,18 @@ function AHBuys:NotePaid(wait)
     elseif wait.money then
         self.settling = { entry = entry, money = wait.money, at = Now() }
     end
+
+    -- A cost to measure a later sale or disenchant against. One still
+    -- waiting for the gold to leave is written down when it does.
+    if not self.settling or self.settling.entry ~= entry then
+        self:NoteCost(entry)
+    end
+end
+
+function AHBuys:NoteCost(entry)
+    if ns.MethodProfit then
+        pcall(ns.MethodProfit.NoteBought, ns.MethodProfit, entry.itemID, entry.quantity, entry.paid)
+    end
 end
 
 function AHBuys:Money()
@@ -337,6 +349,7 @@ function AHBuys:OnMoney()
             settling.entry.paid = settling.money - money
             Changed()
         end
+        self:NoteCost(settling.entry)
     end
 
     local wait = self.awaiting
