@@ -21,6 +21,17 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ALL = "all"
 
+--- The book's (English) name for one of the character's professions. The
+--- client names them in its own language, and the book in English.
+local function BookName(profession)
+    local recipes = ns.Recipes
+    if recipes and type(recipes.EnglishProfessionName) == "function" then
+        local ok, english = pcall(recipes.EnglishProfessionName, profession)
+        if ok and english then return english end
+    end
+    return profession.name
+end
+
 -- Right to left, measured from the list's right edge. Money sits to the
 -- right, so its coins line up; the rest is centred under its heading.
 -- `width` is the least each gets: Widgets.FitColumns widens it to fit the
@@ -373,7 +384,7 @@ local function NewView(opts)
 
         if ns.Recipes and ns.Recipes.GetLearnedProfessions then
             for _, profession in ipairs(ns.Recipes:GetLearnedProfessions()) do
-                mine[profession.name] = true
+                mine[BookName(profession)] = true
             end
         end
 
@@ -411,7 +422,7 @@ local function NewView(opts)
         state.skills = {}
         if ns.Recipes and ns.Recipes.GetLearnedProfessions then
             for _, profession in ipairs(ns.Recipes:GetLearnedProfessions()) do
-                state.skills[profession.name] = profession.skillLevel
+                state.skills[BookName(profession)] = profession.skillLevel
             end
         end
 

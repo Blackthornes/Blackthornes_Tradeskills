@@ -28,7 +28,8 @@ local DisenchantLog = ns.NewModule("DisenchantLog")
 local Util = ns.Util
 
 -- Disenchant's spell ID on Classic. The name is checked too, in case Forever
--- numbers it differently.
+-- numbers it differently: the English one, and the one this client gives
+-- that spell ID ("Entzaubern" on a German client).
 local DISENCHANT_SPELL = 13262
 local DISENCHANT_NAME = "Disenchant"
 
@@ -328,10 +329,7 @@ local function IsPlayer(unit)
     return ok and yes == true
 end
 
-local function IsDisenchant(spellID)
-    local ok, yes = pcall(function() return spellID == DISENCHANT_SPELL end)
-    if ok and yes then return true end
-
+local function SpellName(spellID)
     local name
     if Util.HasFunction("C_Spell.GetSpellName") then
         local gotName, value = pcall(C_Spell.GetSpellName, spellID)
@@ -340,8 +338,31 @@ local function IsDisenchant(spellID)
         local gotName, value = pcall(GetSpellInfo, spellID)
         if gotName then name = value end
     end
+    return name
+end
 
-    local same, match = pcall(function() return name == DISENCHANT_NAME end)
+-- The client's own name for Disenchant, read once it answers.
+local clientName
+
+local function ClientName()
+    if clientName then return clientName end
+    local ok, name = pcall(function()
+        local value = SpellName(DISENCHANT_SPELL)
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
+    if ok and name then clientName = name end
+    return clientName
+end
+
+local function IsDisenchant(spellID)
+    local ok, yes = pcall(function() return spellID == DISENCHANT_SPELL end)
+    if ok and yes then return true end
+
+    local name = SpellName(spellID)
+    local own = ClientName()
+    local same, match = pcall(function()
+        return name == DISENCHANT_NAME or (own ~= nil and name == own)
+    end)
     return same and match == true
 end
 
