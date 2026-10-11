@@ -527,7 +527,7 @@ ns.Demand = {
     Label = function(_, reading) return reading and (reading.level == "high" and "High" or reading.level == "some" and "Some" or "Low") end,
     Color = function(_, reading) return reading and "profit" or "muted" end,
     Rank = function(_, reading) return reading and 3 or 0 end,
-    TooltipText = function(_, reading) return reading and "High (20% of its stock sells between scans)" end,
+    TooltipText = function(_, reading) return reading and "High (20% of its stock sells a day)" end,
 }
 
 --- A record seen in `count` scans: every earlier one at `usual`, the latest
