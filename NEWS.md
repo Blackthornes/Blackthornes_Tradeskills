@@ -21,6 +21,8 @@ This file does not ship in the addon.
 - Mail to your alts sends just what they need, not the whole stack.
 - Characters show their full names, and the emblem got a fresh look.
 
+Thanks Voldar for the ideas and reports!
+
 ## 0.45.2
 
 - The Blizzard window look got a little cleanup: the open tab looks right now.
