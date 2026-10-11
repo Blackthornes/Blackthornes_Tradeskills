@@ -316,7 +316,9 @@ function QueueMail:GetDeliveries()
     local owedByMe = store and store.owed[selfKey] or {}
     local owedTo = {}
     for toKey in pairs(owedByMe) do
-        if toKey ~= selfKey and Queue:CanMail(selfKey, toKey) then owedTo[#owedTo + 1] = toKey end
+        if toKey ~= selfKey and not self:IsPlaying(toKey) and Queue:CanMail(selfKey, toKey) then
+            owedTo[#owedTo + 1] = toKey
+        end
     end
     table.sort(owedTo)
 
@@ -424,6 +426,9 @@ function QueueMail:IsPlaying(characterKey)
     local record, me = CharacterRecord(characterKey), CharacterRecord(selfKey)
     if not (record and me) then return false end
     if record.guid ~= nil and record.guid == selfKey then return true end
+    -- A record filed by GUID that is not this one is another character, even
+    -- one of the same first name whose last name is not read yet.
+    if tostring(characterKey):find("^Player%-") then return false end
 
     local name = Fold(record.name)
     if not name or name ~= Fold(me.name) then return false end
@@ -704,6 +709,10 @@ function QueueMail:Fill(delivery, onDone)
     local subject = _G.SendMailSubjectEditBox
     if subject then Call(subject.SetText, subject, delivery.subject or "Materials for the craft queue") end
 
+    -- Cleared before anything can return, so a fill with nothing to attach
+    -- never repeats the last fill's "free a bag slot".
+    self.splitBlocked = nil
+
     local _, alreadyIn = UsedSlots()
     local room = MaxAttachments() - alreadyIn
 
@@ -724,7 +733,6 @@ function QueueMail:Fill(delivery, onDone)
     end
 
     self.filling = true
-    self.splitBlocked = nil
     local attached = 0
     local reserved = {}
 

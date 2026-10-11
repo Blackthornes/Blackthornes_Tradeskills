@@ -390,6 +390,17 @@ check("a record that carries this character's GUID is it", QueueMail:IsPlaying(L
 playing[LEGACY].guid = nil
 playing[LEGACY].realm = "Elsewhere"
 check("another name is not", not QueueMail:IsPlaying(LEGACY))
+playing[LEGACY].realm, playing[LEGACY].name = "Forever", "Bob"
+local store = ns.db.queueMail or {}
+ns.db.queueMail = store
+store.owed = { [BOB] = { [LEGACY] = { [BAG] = 1 } } }
+bags = { [BAG] = 1 }
+check("a craft owed to the old record is never mailed to it", delivery(LEGACY) == nil)
+store.owed = {}
+playing["Player-BOB2"] = { name = "Bob", realm = "Forever", faction = "Horde", recipes = {} }
+check("another Bob filed by GUID, last name not read yet, is not",
+    not QueueMail:IsPlaying("Player-BOB2"))
+playing["Player-BOB2"] = nil
 local realUnitName, realRealm = UnitName, GetRealmName
 UnitName, GetRealmName = function() return "Bob" end, function() return "Forever" end
 check("a name typed as the character playing is it", QueueMail:IsPlayingName("Bob Wither"))
