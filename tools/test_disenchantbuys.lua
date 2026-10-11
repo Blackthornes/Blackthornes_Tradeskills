@@ -140,6 +140,7 @@ check("and is cleared", ns.db.boughtToDisenchant[999], nil)
 -- 5. Butler. Only the parts of Logic/Butler.lua the new field touches.
 local version = Buys.version
 local stubNs = setmetatable({ NewModule = function(name) local m = {}; ns[name] = m; return m end }, { __index = ns })
+assert(loadfile(lfs_cwd .. "/Core/Characters.lua"))("Blackthornes_TS", stubNs)
 assert(loadfile(lfs_cwd .. "/Logic/Butler.lua"))("Blackthornes_TS", stubNs)
 local Butler = ns.Butler
 local done = Butler:SetBoughtToDisenchant(WAND, true, 2)

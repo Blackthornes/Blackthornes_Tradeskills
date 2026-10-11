@@ -61,12 +61,15 @@
 -- One entry per character Tradeskills has a record for, the character
 -- playing first (Recipes:GetCharacters' order and names):
 --
---   key            "Name-Realm", as Tradeskills keys it.
+--   key            the character's GUID, as Tradeskills keys it ("Name-Realm"
+--                  for a character not seen since before GUIDs).
 --   name           the name Recipes:GetCharacters gives (told apart by
 --                  level and class when two share it).
 --   short          the short name (Recipes:GetShortCharacterName).
 --   realm, faction as recorded, or nil.
 --   isCurrent      true for the character playing.
+--   playing        true for the character playing under any of its
+--                  records (Characters:IsPlaying); never mail or log out for it.
 --   linked         the character it came through when it is on another
 --                  account of yours (Logic/AccountLink.lua), else nil.
 --   bags, bank,    { [itemID] = count }, each a fresh copy: the bags of the
@@ -461,6 +464,11 @@ local function Holdings()
                 realm = type(record.realm) == "string" and record.realm or nil,
                 faction = type(record.faction) == "string" and record.faction or nil,
                 isCurrent = character.isCurrent == true,
+                -- The character playing under any of its records (an old
+                -- name-realm one beside its GUID one): never one to mail,
+                -- top up or log out for (Characters:IsPlaying).
+                playing = character.isCurrent == true
+                    or (ns.Characters ~= nil and ns.Characters:IsPlaying(character.key) == true),
                 linked = character.linkedFrom,
                 bank = Counts(record.bank),
                 mail = Counts(record.mail),
@@ -657,29 +665,10 @@ local function ItemList(counts)
     return list
 end
 
-local function Fold(text)
-    if type(text) ~= "string" then return nil end
-    text = text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
-    if text == "" then return nil end
-    return text:lower()
-end
-
--- Are two records the same character? One may be the old name-realm
--- record left beside the GUID one (Config:AdoptLegacyCharacter): it names
--- the same first name and realm, with no last name, or the same one.
-local function SameCharacter(records, a, b)
+-- Are two records the same character? Characters:Same, the one test.
+local function SameCharacter(_, a, b)
     if a == b then return true end
-    local one, two = records[a], records[b]
-    if type(one) ~= "table" or type(two) ~= "table" then return false end
-    if one.guid == b or two.guid == a then return true end
-    local guidKey = "^Player%-"
-    if tostring(a):find(guidKey) and tostring(b):find(guidKey) then return false end
-    if not Fold(one.name) or Fold(one.name) ~= Fold(two.name) then return false end
-    if one.realm and two.realm and one.realm:gsub("%s", "") ~= two.realm:gsub("%s", "") then return false end
-    if one.faction and two.faction and one.faction ~= two.faction then return false end
-    local s1, s2 = Fold(one.surname), Fold(two.surname)
-    if s1 and s2 then return s1 == s2 end
-    return true
+    return ns.Characters ~= nil and ns.Characters:Same(a, b) == true
 end
 
 -- The other character holding the most of an item in its bags and bank,
