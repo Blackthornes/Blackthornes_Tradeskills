@@ -652,6 +652,15 @@ local function Build(outer)
     end, true)
     widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    local followRow = CreateRow(pages.queue, 1, "Goals follow the queue",
+        "With Blackthornes Farmer: a goal made with Set goal on the Gather tab changes when the queue does, and goes when nothing queued needs it. A goal you change yourself in Farmer is left alone.")
+
+    widgets.followGoals = Widgets.CreateCheckbox(followRow, "Follow it", function(checked)
+        Config:Set("farmerGoalsFollowQueue", checked)
+        if checked then ns.FarmerGoals:Follow() end
+    end, true)
+    widgets.followGoals:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local shareRow = CreateRow(pages.queue, 1, "Let alts make sub-crafts",
         "Off: the shopping list only recommends making it on the other character. On: it goes on that character's queue, marked who it is for, and the mailbox lists what to send.")
 
@@ -1689,6 +1698,7 @@ local function Refresh()
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
+    widgets.followGoals:SetChecked(Config:Get("farmerGoalsFollowQueue") ~= false)
     widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
     widgets.queueMail:SetChecked(Config:Get("queueMailPanel") ~= false)
     local spare = Config:Get("bagSpareSlots")

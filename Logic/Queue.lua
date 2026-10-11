@@ -931,6 +931,10 @@ function Queue:Notify()
     if ns.UI and ns.UI.OnQueueUpdated then
         ns.UI:OnQueueUpdated()
     end
+    -- Farmer goals made from the queue follow it (Logic/FarmerGoals.lua).
+    if ns.FarmerGoals and ns.FarmerGoals.QueueChanged then
+        ns.FarmerGoals:QueueChanged()
+    end
 end
 
 --------------------------------------------------------------------------------
