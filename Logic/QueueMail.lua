@@ -443,16 +443,62 @@ function QueueMail:IsPlaying(characterKey)
     return true
 end
 
---- The disenchanter's name as typed, trimmed, or nil when there is none
---- (or it is the character playing).
+--- A character's Enchanting skill, or nil when it has none on record.
+local function EnchantingSkill(record)
+    if type(record) ~= "table" then return nil end
+    for _, profession in ipairs(type(record.professions) == "table" and record.professions or {}) do
+        if type(profession) == "table" and profession.name == "Enchanting"
+            and profession.learned ~= false then
+            return tonumber(profession.skillLevel) or 0
+        end
+    end
+    return nil
+end
+
+--- The disenchanter picked for the player while the box is empty (the
+--- owner, 2026-10-11: the addons should do the work): the alt on this
+--- account, on this realm and side, with the most Enchanting, when it has
+--- more than the character playing. Its whole name, or nil. "Pick one for
+--- me" (`disenchanterGuess`, on unless unticked) turns it off.
+function QueueMail:GuessDisenchanter()
+    if ns.Config:Get("disenchanterGuess") == false then return nil end
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" then return nil end
+    local selfKey = SelfKey()
+    local queue = ns.Queue
+
+    local own = EnchantingSkill(characters[selfKey]) or -1
+    local bestKey, bestSkill
+    for characterKey, record in pairs(characters) do
+        local skill = EnchantingSkill(record)
+        -- The same skill: the lower key, so the pick never flickers.
+        local better = skill and skill > own and (not bestKey or skill > bestSkill
+            or (skill == bestSkill and tostring(characterKey) < tostring(bestKey)))
+        if better and characterKey ~= selfKey and record.linkedFrom == nil
+            and not self:IsPlaying(characterKey)
+            and (not (queue and queue.CanMail) or queue:CanMail(selfKey, characterKey)) then
+            bestKey, bestSkill = characterKey, skill
+        end
+    end
+    return bestKey and QueueMail.MailName(characters[bestKey]) or nil
+end
+
+--- The disenchanter's name as typed, trimmed, else the one picked for the
+--- player (`GuessDisenchanter`), or nil when there is none (or it is the
+--- character playing). The second return is true for a picked one.
 function QueueMail:GetDisenchanter()
     local typed = ns.Config:Get("disenchanterName")
-    if type(typed) ~= "string" then return nil end
-    typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
-    if typed == "" then return nil end
+    if type(typed) == "string" then
+        typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
+        if typed ~= "" then
+            if IsCharacterPlaying(typed) then return nil end
+            return typed, false
+        end
+    end
 
-    if IsCharacterPlaying(typed) then return nil end
-    return typed
+    local picked = self:GuessDisenchanter()
+    if picked and not IsCharacterPlaying(picked) then return picked, true end
+    return nil
 end
 
 --- The best quality mailed to the disenchanter: 2 to 4.
