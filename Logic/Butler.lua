@@ -28,7 +28,7 @@
 --   disenchanter   the disenchanter typed in Settings (full name) when this
 --                  item is gear the Mail page sends there: green up to the
 --                  quality picked, can be disenchanted, does not bind when
---                  picked up, no upgrade for the character playing
+--                  picked up, not crafted, no upgrade for the character playing
 --                  (QueueMail:GoesToDisenchanter, 2026-10-11). nil with no
 --                  disenchanter typed. A soulbound copy is Butler's to leave
 --                  out.
