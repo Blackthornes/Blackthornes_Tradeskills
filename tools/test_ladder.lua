@@ -220,6 +220,26 @@ do
     check("units bought count as gone from the book", AHBuys:BoughtSince(CLOTH, clock), 20)
 end
 
+print("\nthe Queue tab agrees with the list")
+do
+    Reset()
+    local analyse = ns.Profit.Analyse
+    ns.Profit.Analyse = function() return { priceable = true, totalCost = 20, profit = 0 } end
+    Scan(CLOTH, { Listing(10, 3), Listing(14, 50) })
+    Queue:Add(BOLT_RECIPE, 10)          -- 20 Linen
+    local cost
+    for _, priced in pairs(Queue:GetEntryCosts()) do cost = priced.cost end
+    check("ten crafts are priced up the listings", cost, Line(CLOTH).estimatedCost)
+
+    settings.valueOwnedMaterials = false
+    ns.Inventory.GetBagCount = function(_, id) return id == CLOTH and 5 or 0 end
+    for _, priced in pairs(Queue:GetEntryCosts()) do cost = priced.cost end
+    check("unticked: the bags are free, the rest up the listings", cost, 3 * 10 + 12 * 14)
+    ns.Inventory.GetBagCount = function() return 0 end
+    settings.valueOwnedMaterials = true
+    ns.Profit.Analyse = analyse
+end
+
 print("\ngold that leaves after the purchase event")
 do
     Reset()
