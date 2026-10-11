@@ -363,4 +363,37 @@ check("with the realm", QueueMail:FindCharacter("Loom Weaver-Forever") == LOOM)
 check("another Loom is not", QueueMail:FindCharacter("Loom Tanner") == nil)
 check("the first name alone still finds the only Loom", QueueMail:FindCharacter("Loom") == LOOM)
 
+print("\nnever a mail to the character playing")
+
+-- The old name-realm record stays beside the GUID one when both exist, and
+-- it filed every character of that first name as one. A player found a
+-- mail filled to the character they were on, 2026-10-11.
+local LEGACY = "Bob-Forever"
+local playing = freshCharacters()
+playing[BOB].surname = "Wither"
+playing[LOOM] = nil
+playing[LEGACY] = { name = "Bob", realm = "Forever", faction = "Horde", recipes = { [20] = BOLT_RECIPE } }
+queueOneBag(playing)
+bags = { [WOOL] = 9 }
+check("the old record is the character playing", QueueMail:IsPlaying(LEGACY))
+check("so are its own key", QueueMail:IsPlaying(BOB))
+check("no delivery is made to it", delivery(LEGACY) == nil)
+check("and it is never found by name", QueueMail:FindCharacter("Bob Wither") == nil
+    and QueueMail:FindCharacter("Bob") == nil)
+playing[LEGACY].surname = "Stone"
+check("another Bob with a last name of their own is not", not QueueMail:IsPlaying(LEGACY))
+check("and gets the bolts' wool", sends(delivery(LEGACY), WOOL) > 0)
+playing[LEGACY].surname = nil
+playing[LEGACY].guid = BOB
+playing[LEGACY].name = "Someone"
+check("a record that carries this character's GUID is it", QueueMail:IsPlaying(LEGACY))
+playing[LEGACY].guid = nil
+playing[LEGACY].realm = "Elsewhere"
+check("another name is not", not QueueMail:IsPlaying(LEGACY))
+local realUnitName, realRealm = UnitName, GetRealmName
+UnitName, GetRealmName = function() return "Bob" end, function() return "Forever" end
+check("a name typed as the character playing is it", QueueMail:IsPlayingName("Bob Wither"))
+check("another Bob is not", not QueueMail:IsPlayingName("Bob Stone"))
+UnitName, GetRealmName = realUnitName, realRealm
+
 print(("\n%d passed, 0 failed"):format(checks))
