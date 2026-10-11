@@ -564,7 +564,7 @@ local function Build(outer)
 
     CreateSection(pages.queue, 1, "WHAT GETS QUEUED")
     local postedRow = CreateRow(pages.queue, 1, "Keep in stock per item",
-        "The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit. Equipped gear is not counted.")
+        "The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week. Equipped gear is not counted.")
 
     widgets.maxPosted = Widgets.CreateNumberBox(postedRow, {
         width = 70, min = 0, max = 999,
@@ -578,6 +578,14 @@ local function Build(outer)
     widgets.maxPostedHint = Theme.CreateLabel(postedRow, "small", "muted")
     widgets.maxPostedHint:SetPoint("LEFT", widgets.maxPosted, "RIGHT", 6, 0)
     widgets.maxPostedHint:SetWidth(120)
+
+    local soldRow = CreateRow(pages.queue, 1, "Restock what sells",
+        "When one of your auctions sells, queue another of it while there is room under Keep in stock (or about two days of what sold for you this week, when that is 0). Never for a craft that loses money.")
+
+    widgets.restockOnSale = Widgets.CreateCheckbox(soldRow, "On", function(checked)
+        Config:Set("restockOnSale", checked)
+    end, true)
+    widgets.restockOnSale:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local lowRow = CreateRow(pages.queue, 1, "Wait until it runs low",
         "On: a craft is only suggested again once what you hold drops to the number below, then it is made back up to Keep in stock. Off: it is topped up whenever you hold fewer than Keep in stock.")
@@ -1688,6 +1696,7 @@ local function Refresh()
         or "")
 
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
+    widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
     Put(widgets.restockAt, Config:Get("restockAt") or 0)
     widgets.fastSellerBoost:SetChecked(Config:Get("fastSellerBoost") == true)
     local extra = Config:Get("fastSellerExtra")

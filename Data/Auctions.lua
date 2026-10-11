@@ -215,6 +215,68 @@ function Auctions:GetLimit(itemID)
     return ns.Config:Get("maxPostedPerItem") or 0
 end
 
+--- How many to keep in stock when no number is set, learned from your own
+--- sales (the owner, 2026-10-11: Queue All should work on the first day).
+--
+-- About two days of what sold over the last week: the ledger's sold entries
+-- (Data/Mail.lua) plus sales heard in chat whose mail is not read yet, at
+-- least 1 once anything sold and never more than LEARN_MOST. nil when
+-- nothing sold that week. The fold over the ledger is kept until the ledger
+-- or the heard list changes, since the Profit tab asks once per row.
+Auctions.LEARN_DAYS = 7
+Auctions.LEARN_HOLD_DAYS = 2
+Auctions.LEARN_MOST = 20
+
+local learnedCache, learnedKey
+
+local function LearnedUnits()
+    local Mail = ns.Mail
+    if not (Mail and Mail.GetLedger) then return {} end
+
+    local entries = Mail:GetLedger().entries or {}
+    local heard = Mail.GetHeardList and Mail:GetHeardList() or {}
+    local last = entries[#entries]
+    local lastHeard = heard[#heard]
+    local today = math.floor(time() / 3600)
+    local key = ("%d:%s:%d:%s:%d"):format(#entries, tostring(last and last.t),
+        #heard, tostring(lastHeard and lastHeard.t), today)
+    if learnedCache and learnedKey == key then return learnedCache end
+
+    local since = time() - Auctions.LEARN_DAYS * 86400
+    local names = Mail.NameIndex and Mail:NameIndex() or {}
+    local units = {}
+
+    for _, entry in ipairs(entries) do
+        if entry.kind == "sold" and (entry.t or 0) >= since then
+            local itemID = entry.itemID or names[entry.name]
+            if itemID then units[itemID] = (units[itemID] or 0) + (entry.quantity or 1) end
+        end
+    end
+    for _, sale in ipairs(heard) do
+        if not sale.collected and (sale.t or 0) >= since then
+            local itemID = sale.itemID or names[sale.name]
+            if itemID then units[itemID] = (units[itemID] or 0) + 1 end
+        end
+    end
+
+    learnedCache, learnedKey = units, key
+    return units
+end
+
+function Auctions:GetLearnedLimit(itemID)
+    if not itemID then return nil end
+    local ok, units = pcall(LearnedUnits)
+    local sold = ok and units[itemID] or nil
+    if not sold or sold <= 0 then return nil end
+    local keep = math.ceil(sold * Auctions.LEARN_HOLD_DAYS / Auctions.LEARN_DAYS)
+    return math.max(1, math.min(Auctions.LEARN_MOST, keep))
+end
+
+--- Forget the learned fold. Tests call it; the key catches real changes.
+function Auctions:ForgetLearned()
+    learnedCache, learnedKey = nil, nil
+end
+
 --- The extra a fast seller may hold beyond its cap, or 0.
 --
 -- Only your own sales count as "confirmed": the Sales tab's ledger has to show
@@ -282,12 +344,21 @@ end
 --   fast sellers with "Fast sellers keep more" ticked, an item your own
 --                sales show selling well gets that many more on its cap.
 --
--- @return remaining, posted, onHand, queued, limit, inMail, waiting, extra
+-- @param useLearned with no number set, use what your sales taught
+--        (GetLearnedLimit): Queue All and restocking a sale pass it
+-- @return remaining, posted, onHand, queued, limit, inMail, waiting, extra,
+--         learned
 --         remaining is nil when uncapped; limit includes the fast-seller
 --         extra; waiting is true when the room is 0 only because stock has
---         not yet dropped to the restock amount
-function Auctions:GetRoom(itemID, ignoreRecipeID)
+--         not yet dropped to the restock amount; learned is the learned
+--         number when that is the limit used
+function Auctions:GetRoom(itemID, ignoreRecipeID, useLearned)
     local limit = self:GetLimit(itemID)
+    local learned
+    if limit <= 0 and useLearned then
+        learned = self:GetLearnedLimit(itemID)
+        limit = learned or 0
+    end
     local posted = self:GetPostedCount(itemID)
     local onHand = ns.Inventory:GetBagCount(itemID) + ns.Inventory:GetBankCount(itemID)
     local inMail = ns.Inventory:GetMailCount(itemID)
@@ -327,7 +398,7 @@ function Auctions:GetRoom(itemID, ignoreRecipeID)
         remaining, waiting = 0, true
     end
 
-    return remaining, posted, onHand, queued, limit, inMail, waiting, extra
+    return remaining, posted, onHand, queued, limit, inMail, waiting, extra, learned
 end
 
 --- Everything you already hold of an item: listed, bags, bank and mailbox.
