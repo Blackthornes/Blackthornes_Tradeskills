@@ -705,7 +705,45 @@ function QueueMail:PlanStacks(itemID, count, taken)
     return steps
 end
 
+-- What sending one mail costs.
+QueueMail.POSTAGE = 30
+
+--- Put `copper` in the Send Mail page's gold boxes, as a player types it
+--- (Blackthornes Butler's gold top-ups, 2026-10-11). Never with COD ticked,
+--- and never more than the purse holds less the postage.
+-- @return true, or false and why
+function QueueMail.PutMoney(copper)
+    copper = math.floor(tonumber(copper) or 0)
+    if copper <= 0 then return true end
+    local cod = _G.SendMailCODButton
+    if cod and cod.GetChecked then
+        local ok, checked = pcall(cod.GetChecked, cod)
+        if ok and checked then return false, "the mail is set to COD" end
+    end
+    local okMoney, purse = pcall(function() return tonumber(GetMoney()) end)
+    if okMoney and purse and purse < copper + QueueMail.POSTAGE then
+        return false, "not enough gold on you"
+    end
+    local frame = _G.SendMailMoney
+    if not frame then return false, "the mail has no gold box" end
+    if type(_G.MoneyInputFrame_SetCopper) == "function"
+        and pcall(_G.MoneyInputFrame_SetCopper, frame, copper) then
+        return true
+    end
+    local gold = _G.SendMailMoneyGold or frame.gold
+    local silver = _G.SendMailMoneySilver or frame.silver
+    local bronze = _G.SendMailMoneyCopper or frame.copper
+    if not (gold and silver and bronze) then return false, "the mail has no gold box" end
+    Call(gold.SetText, gold, tostring(math.floor(copper / 10000)))
+    Call(silver.SetText, silver, tostring(math.floor(copper / 100) % 100))
+    Call(bronze.SetText, bronze, tostring(copper % 100))
+    return true
+end
+
 --- Open the Send Mail page and fill it in for one delivery.
+--
+-- `delivery.money`, copper, goes in the gold boxes first (Butler's gold
+-- top-ups); a delivery can be gold alone.
 --
 -- The name and subject go in at once, the items one at a time after. As many
 -- stacks as one mail holds; what is left stays on the list for the next mail.
@@ -744,11 +782,16 @@ function QueueMail:Fill(delivery, onDone)
     -- never repeats the last fill's "free a bag slot".
     self.splitBlocked = nil
 
+    if delivery.money then
+        local put, why = QueueMail.PutMoney(delivery.money)
+        if not put then return false, why end
+    end
+
     local _, alreadyIn = UsedSlots()
     local room = MaxAttachments() - alreadyIn
 
     local steps, taken = {}, {}
-    for _, item in ipairs(delivery.items) do
+    for _, item in ipairs(delivery.items or {}) do
         for _, step in ipairs(self:PlanStacks(item.itemID, item.count, taken)) do
             step.itemID = item.itemID
             steps[#steps + 1] = step

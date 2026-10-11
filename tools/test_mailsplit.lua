@@ -200,4 +200,35 @@ C_Container.PickupContainerItem = realPickup
 check("the eight are not left in the mail", Mailed(BOLT) == 0)
 check("counted as not attached", result.attached == 0 and result.leftOver == 1)
 
+print("\ngold in the mail (Butler's gold top-ups)")
+
+local purse = 100000
+GetMoney = function() return purse end
+local codChecked = false
+SendMailCODButton = { GetChecked = function() return codChecked end }
+SendMailMoney = {}
+local boxes = {}
+for _, key in ipairs({ "Gold", "Silver", "Copper" }) do
+    boxes[key] = { SetText = function(self, text) self.text = text end }
+    _G["SendMailMoney" .. key] = boxes[key]
+end
+
+Reset({})
+started = QueueMail:Fill({ recipient = "Bob Wither", items = {}, money = 52307 }, function() end)
+check("gold alone fills a mail", started == true)
+check("in the gold, silver and copper boxes",
+    boxes.Gold.text == "5" and boxes.Silver.text == "23" and boxes.Copper.text == "7")
+local setTo
+MoneyInputFrame_SetCopper = function(frame, copper) setTo = { frame, copper } end
+QueueMail:Fill({ recipient = "Bob Wither", items = {}, money = 500 }, function() end)
+check("through the game's own money boxes where it has them", setTo and setTo[1] == SendMailMoney and setTo[2] == 500)
+MoneyInputFrame_SetCopper = nil
+local ok, why = QueueMail:Fill({ recipient = "Bob Wither", items = {}, money = purse }, function() end)
+check("never more than the purse less postage", ok == false and why == "not enough gold on you")
+codChecked = true
+ok, why = QueueMail:Fill({ recipient = "Bob Wither", items = {}, money = 100 }, function() end)
+check("never into a COD mail", ok == false and why == "the mail is set to COD")
+GetMoney, SendMailCODButton, SendMailMoney = nil, nil, nil
+SendMailMoneyGold, SendMailMoneySilver, SendMailMoneyCopper = nil, nil, nil
+
 print(("\n%d passed, 0 failed"):format(checks))
