@@ -219,6 +219,23 @@ ns.Recipes.GetShortCharacterName = function(_, key) return key == ALT and "Ana S
 ns.QueueMail.FindCharacter = function() return nil end
 Butler:FillMail("Ana S.", { { itemID = 3, count = 1 } })
 check("a shared first name still gets the full name", filled.recipient, "Ana Smith")
+-- The same character kept under a second key gives the same short name;
+-- the account's own record on this realm is the one mailed.
+ns.db.characters["Ana-Old"] = { name = "Ana", realm = "Elsewhere", linkedFrom = "Bob" }
+ns.Recipes.GetShortCharacterName = function(_, key)
+  return (key == ALT or key == "Ana-Old") and "Ana S." or key
+end
+ns.QueueMail.MailName = function(record) return record.name .. (record.linkedFrom and " Copy" or " Smith") end
+Butler:FillMail("Ana S.", { { itemID = 3, count = 1 } })
+check("two records with that short name: still the full name", filled.recipient, "Ana Smith")
+ns.db.characters["Ana-Old"] = nil
+-- Short names worked out differently since: the full name still matches.
+ns.Recipes.GetShortCharacterName = function(_, key) return key end
+ns.Recipes.GetCharacterName = function(_, key) return key == ALT and "Ana Smith" or key end
+Butler:FillMail("Ana S.", { { itemID = 3, count = 1 } })
+check("matched by the full name when short names differ", filled.recipient, "Ana Smith")
+ns.Recipes.GetCharacterName = nil
+ns.QueueMail.MailName = function(record) return record.name .. " Smith" end
 ns.Recipes.GetShortCharacterName = shortNames
 ns.QueueMail.FindCharacter = function(_, typed) return typed == "Ana" and ALT or nil end
 local none, why = Butler:FillMail("Ana", {})
