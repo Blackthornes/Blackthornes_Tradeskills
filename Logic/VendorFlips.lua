@@ -42,9 +42,25 @@ local function SeenTable()
     return seen
 end
 
+--- A row that clears the deal minimums, by itself or by another way to
+--- make money on the same item (row.others). Rows built without the
+--- minimums known (clears nil) count as deals.
+local function IsDeal(row)
+    if row.clears ~= false then return true end
+    for _, other in ipairs(row.others or {}) do
+        if other.clears ~= false then return true end
+    end
+    return false
+end
+
 --- Mark each row with the scan it was first seen in (row.firstSeen) and
 --- whether that is the latest scan (row.isNew). The deals listed the first
 --- time this runs on a realm are not new: they were there before it.
+--
+-- Only deals that clear the minimums are written down. With "Only deals
+-- over my minimums" unticked the list also shows items that are no deal;
+-- writing those down tagged them NEW the moment the box was unticked,
+-- and kept the tag off when one later became a real deal.
 -- @param rows the Deals tab's rows, as built
 function VendorFlips:NoteSeen(rows)
     local scanAt = ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan()
@@ -59,14 +75,18 @@ function VendorFlips:NoteSeen(rows)
 
     local items = seen.items
     for _, row in ipairs(rows) do
-        local entry = items[row.itemID]
-        if type(entry) ~= "table" then
-            entry = { f = first and 0 or scanAt }
-            items[row.itemID] = entry
+        if IsDeal(row) then
+            local entry = items[row.itemID]
+            if type(entry) ~= "table" then
+                entry = { f = first and 0 or scanAt }
+                items[row.itemID] = entry
+            end
+            entry.l = scanAt
+            row.firstSeen = entry.f > 0 and entry.f or nil
+            row.isNew = entry.f == scanAt
+        else
+            row.firstSeen, row.isNew = nil, false
         end
-        entry.l = scanAt
-        row.firstSeen = entry.f > 0 and entry.f or nil
-        row.isNew = entry.f == scanAt
     end
 
     -- Once a scan: forget what has not been a deal for a while.
@@ -153,6 +173,7 @@ function VendorFlips:GetAuctionRows(opts)
 
             local clears = gain >= minProfit and row.margin >= minMargin
 
+            row.clears = clears
             if not opts.profitableOnly or clears then
                 rows[#rows + 1] = row
             else
@@ -290,6 +311,7 @@ function VendorFlips:GetResaleRows(opts)
                     stale = ns.Prices:IsStale(itemID),
                 }
 
+                row.clears = clears
                 if not opts.profitableOnly or clears then
                     rows[#rows + 1] = row
                 else
