@@ -1173,6 +1173,22 @@ function Queue:GetEntryCosts()
         if recipe and recipe.outputItemID then made[recipe.outputItemID] = true end
     end
 
+    -- Bought off the auction house, each craft goes further up the
+    -- listings (Cost:CostOfMany): 3 at 10s and the rest at 14s make 20
+    -- cost more than 20 x 10s, as To buy says. The listings are shared
+    -- down the queue, so two crafts using the same cloth do not both buy
+    -- the cheap ones.
+    local boughtSoFar = {}
+    local function BuyMore(reagent, more)
+        if more <= 0 then return 0 end
+        local itemID, unit, source = reagent.itemID, reagent.unitCost or 0, reagent.source
+        local before = boughtSoFar[itemID] or 0
+        boughtSoFar[itemID] = before + more
+        local was = ns.Cost:CostOfMany(itemID, before, unit, source) or unit * before
+        local now = ns.Cost:CostOfMany(itemID, before + more, unit, source) or unit * (before + more)
+        return now - was
+    end
+
     for _, entry in ipairs(self:GetAll()) do
         local analysis = not entry.isDependency and ns.Profit:Analyse(entry.recipeID)
 
@@ -1185,25 +1201,32 @@ function Queue:GetEntryCosts()
                 cost = planned.total * count
             end
 
-            if cashView then
-                -- Every line at what it is worth, then the bags taken off.
-                local full = ns.Cost:GetCraftCost(entry.recipeID, nil, nil,
-                    { valueOwned = true, made = made })
+            -- Every line at what it is worth, then the bags taken off
+            -- ("Charge market price" unticked) and what is bought priced
+            -- up the listings.
+            local full = ns.Cost:GetCraftCost(entry.recipeID, nil, nil,
+                { valueOwned = true, made = made })
 
-                if full and full.priceable then
-                    cost = full.total * count
+            if full and full.priceable then
+                cost = 0
 
-                    for _, reagent in ipairs(full.reagents) do
-                        local itemID = reagent.itemID
+                for _, reagent in ipairs(full.reagents) do
+                    local itemID, needed = reagent.itemID, reagent.quantity * count
+                    local unit = reagent.unitCost or 0
+                    local free = 0
+
+                    if cashView then
                         if bagsLeft[itemID] == nil then
                             bagsLeft[itemID] = ns.Inventory:GetBagCount(itemID)
                         end
+                        free = math.min(needed, bagsLeft[itemID])
+                        bagsLeft[itemID] = bagsLeft[itemID] - free
+                    end
 
-                        local free = math.min(reagent.quantity * count, bagsLeft[itemID])
-                        if free > 0 then
-                            bagsLeft[itemID] = bagsLeft[itemID] - free
-                            cost = cost - (reagent.unitCost or 0) * free
-                        end
+                    if not reagent.crafted and (reagent.source == "buy" or reagent.source == "mine") then
+                        cost = cost + BuyMore(reagent, needed - free)
+                    else
+                        cost = cost + unit * (needed - free)
                     end
                 end
             end
