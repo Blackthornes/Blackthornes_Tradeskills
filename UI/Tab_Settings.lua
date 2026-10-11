@@ -1208,6 +1208,16 @@ local function Build(outer)
     end, true)
     widgets.upgradeArrows:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
+    -- addons the player does not have. Off here is off in all of them.
+    local sistersRow = CreateRow(pages.look, 1, "Sister addons",
+        "Once, a few seconds after login, says in chat which Blackthornes addons you don't have and what each adds. Turning it off here turns it off in all of them. Also /bts sisters.")
+
+    widgets.sisters = Widgets.CreateCheckbox(sistersRow, "Mention them", function(checked)
+        ns.SisterNote:SetOn(checked)
+    end, true)
+    widgets.sisters:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local shopsRow = CreateRow(pages.auction, 1, "Open with the auction house",
         "Opens this window when the auction house or a vendor opens, and closes it with them.")
 
@@ -1805,6 +1815,7 @@ local function Refresh()
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
+    widgets.sisters:SetChecked(ns.SisterNote:IsOn())
     widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")

@@ -311,6 +311,7 @@ ns.Auctions = { GetAge = function() return nil end }
 ns.Inventory = { GetBankAge = function() return nil end }
 ns.Queue = { RebuildDependencies = function() Count("rebuild") end, Notify = function() Count("notify") end }
 ns.RecipeValue = { Refresh = function() Count("recipeValue") end }
+ns.SisterNote = { IsOn = function() return true end, SetOn = noop }
 ns.Transfer = {
     Export = function() return "CODE" end,
     Describe = function() return 1, 2, 3 end,

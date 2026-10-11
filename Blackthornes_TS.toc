@@ -9,6 +9,7 @@
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
 
 Core\Init.lua
+Core\SisterNote.lua
 Core\Util.lua
 Core\AHQueue.lua
 Core\Config.lua
