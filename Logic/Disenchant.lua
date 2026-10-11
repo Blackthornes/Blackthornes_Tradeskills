@@ -984,6 +984,16 @@ end
 -- Auction house deals, for the Disenchanting tab
 --------------------------------------------------------------------------------
 
+--- Is a saved profession entry Enchanting? Recipes knows it by skill line
+--- in any client language; the English name stands in without it.
+local function IsEnchanting(profession)
+    local recipes = ns.Recipes
+    if recipes and type(recipes.IsEnchanting) == "function" then
+        return recipes.IsEnchanting(profession) == true
+    end
+    return profession.name == "Enchanting"
+end
+
 --- The best Enchanting skill among your characters, and whose it is.
 --
 -- Read from what each character last recorded, so an alt's enchanter counts
@@ -996,7 +1006,7 @@ function Disenchant:GetBestEnchanter()
 
     for characterKey, record in pairs(characters) do
         for _, profession in ipairs(type(record) == "table" and record.professions or {}) do
-            if profession.name == "Enchanting" and profession.learned ~= false then
+            if type(profession) == "table" and IsEnchanting(profession) and profession.learned ~= false then
                 local level = profession.skillLevel or 0
                 if not best or level > best then
                     best = level
