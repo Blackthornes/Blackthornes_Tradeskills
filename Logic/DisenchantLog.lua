@@ -141,6 +141,8 @@ function DisenchantLog:Record(itemID, results, from)
     })
     while #log.recent > RECENT_KEPT do table.remove(log.recent) end
 
+    if ns.MethodProfit then pcall(ns.MethodProfit.NoteDisenchant, ns.MethodProfit, itemID, results) end
+
     self:Announce(itemID, results, facts.key, band, usual, newFinds, itemLearned)
     self:AddToSession(results)
 

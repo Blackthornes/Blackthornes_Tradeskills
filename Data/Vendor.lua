@@ -121,6 +121,7 @@ function Vendor:ReadBuyback()
     if not ok or type(count) ~= "number" then return 0 end
 
     local paid, changed = self:GetPaidTable(), 0
+    local sales = {}
 
     for index = 1, count do
         local itemID = BuybackItemID(index)
@@ -141,8 +142,12 @@ function Vendor:ReadBuyback()
                 changed = changed + 1
             end
             paid[itemID] = { pay = pay, at = time() }
+            sales[#sales + 1] = { itemID = itemID, quantity = quantity, price = price }
         end
     end
+
+    -- What is new on the list was just sold: the Sales tab's Profit by method.
+    if ns.MethodProfit then pcall(ns.MethodProfit.NoteBuyback, ns.MethodProfit, sales) end
 
     if changed > 0 then
         ns.Debug(("learned what a vendor pays for %d item(s)"):format(changed))
