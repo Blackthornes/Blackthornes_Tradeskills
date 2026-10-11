@@ -19,6 +19,67 @@ local Util = ns.Util
 
 local VendorFlips = ns.NewModule("VendorFlips")
 
+--------------------------------------------------------------------------------
+-- What is new
+--------------------------------------------------------------------------------
+
+-- The Deals tab's "New only" and NEW tag (a player asked, the owner agreeing
+-- 2026-10-11): each deal keeps the scan it was first seen in, per realm, in
+-- dealsSeen[realm] = { since, items = { [itemID] = { f = first, l = last } } }
+-- (never rename it). One not shown for this long starts over as new.
+VendorFlips.SEEN_FORGET = 7 * 24 * 3600
+
+local function SeenTable()
+    local db = ns.db
+    local realm = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
+    if not db or not realm then return nil end
+    if type(db.dealsSeen) ~= "table" then db.dealsSeen = {} end
+    local seen = db.dealsSeen[realm]
+    if type(seen) ~= "table" or type(seen.items) ~= "table" then
+        seen = { items = {} }
+        db.dealsSeen[realm] = seen
+    end
+    return seen
+end
+
+--- Mark each row with the scan it was first seen in (row.firstSeen) and
+--- whether that is the latest scan (row.isNew). The deals listed the first
+--- time this runs on a realm are not new: they were there before it.
+-- @param rows the Deals tab's rows, as built
+function VendorFlips:NoteSeen(rows)
+    local scanAt = ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan()
+    local seen = scanAt and SeenTable()
+    if not seen then
+        for _, row in ipairs(rows) do row.isNew = false end
+        return
+    end
+
+    local first = seen.since == nil
+    if first then seen.since = scanAt end
+
+    local items = seen.items
+    for _, row in ipairs(rows) do
+        local entry = items[row.itemID]
+        if type(entry) ~= "table" then
+            entry = { f = first and 0 or scanAt }
+            items[row.itemID] = entry
+        end
+        entry.l = scanAt
+        row.firstSeen = entry.f > 0 and entry.f or nil
+        row.isNew = entry.f == scanAt
+    end
+
+    -- Once a scan: forget what has not been a deal for a while.
+    if seen.pruned ~= scanAt then
+        seen.pruned = scanAt
+        for itemID, entry in pairs(items) do
+            if type(entry) ~= "table" or (tonumber(entry.l) or 0) < scanAt - self.SEEN_FORGET then
+                items[itemID] = nil
+            end
+        end
+    end
+end
+
 --- Every item someone else has on the auction house for less than a vendor
 --- pays, with what buying one and selling it to a vendor makes.
 --
