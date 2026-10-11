@@ -196,6 +196,9 @@ check("the leather is in one mail, not two", leatherMails, 1)
 local crafter
 for _, job in ipairs(jobs) do if job.name == "Blackthornes Wither" then crafter = job end end
 check("the craft says who has it", crafter and crafter.steps[1].missing[1].from, "Ana Blackthorne")
+ns.QueueMail.GetPlan = function() return {}, {} end
+check("Take from bank brings out what the mail needs", Butler:FromBank()[2318], 20)
+ns.QueueMail.GetPlan = nil
 selfKey = WITHER
 jobs = Butler:Jobs()
 check("never the crafter's own bags when it plays", jobs[1].steps[1].missing[1].from, nil)
