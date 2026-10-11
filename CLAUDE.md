@@ -200,6 +200,22 @@ The playing character's bags are live (`Inventory:GetBagCounts`), the rest
 the saved snapshots (`inventory`, `bank`, `mail` on its record). Keep it
 stable too; Butler's `Logic/Everyone.lua` reads it.
 
+At a mailbox and the bank (the owner said start, 2026-10-11), Butler's
+`Logic/Errands.lua` calls two more, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:FillMail(name, items)  -- true, or false and why; never raises
+_G.BlackthornesTS.Butler:FromBank()             -- { [itemID] = count }, or nil; reads only
+```
+
+`FillMail` fills the Send Mail page through `QueueMail:Fill` for one of
+the player's characters (`name` as Advise gave it, resolved with
+`QueueMail:FindCharacter` and `MailName`; `items` a list of `{ itemID,
+count }`, subject "From Blackthornes Butler"); the player presses Send and
+QueueMail's own SendMail hook writes down what went. `FromBank` is what
+the playing character's own queued crafts use, less what it makes and
+carries, no more than its bank holds. Keep both stable too.
+
 ## Sharing between accounts and with a guild
 
 Asked 2026-10-07 (on Discord, the owner agreeing). Over addon
