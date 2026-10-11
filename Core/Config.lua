@@ -160,6 +160,10 @@ local DEFAULTS = {
         -- crate from them when last reported (UI/DealsFavor.lua).
         favorSkipOverStack = true,
 
+        -- Ready to sell at the auction house: leave out the rows at a loss
+        -- (UI/PostPanel.lua, "Hide losses"). Off until ticked.
+        postHideLosses = false,
+
         -- Deals, Craftsman's Writs: the reputation goal the panel works
         -- towards (UI/DealsWrits.lua).
         writGoal = "honored",

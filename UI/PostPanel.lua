@@ -462,9 +462,29 @@ function PostPanel:Build()
     switch:Select(self.view)
     self.switch = switch
 
+    -- Hide losses (asked 2026-10-11): a small box at the summary line's right
+    -- end that leaves out the rows drawn red, the ones the auction house would
+    -- sell for less than they cost. Off by default and kept between sessions.
+    local hideLosses = Widgets.CreateCheckbox(body, "Hide losses", function(checked)
+        ns.Config:Set("postHideLosses", checked and true or false)
+        PostPanel:Refresh()
+    end, PostPanel:HidingLosses())
+    hideLosses:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, ns.Collapse.CONTENT_TOP - 28 - 3)
+    hideLosses:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Hide losses")
+        GameTooltip:AddLine("Hides items the auction house would sell for less than they cost you: "
+            .. "less than the materials, less than you paid to make them after the cut, "
+            .. "or less than a vendor pays.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    hideLosses:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    self.hideLosses = hideLosses
+
     local summary = Theme.CreateLabel(body, "tiny", "muted")
     summary:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -6)
-    summary:SetWidth(PANEL_WIDTH - 28)
+    summary:SetPoint("RIGHT", hideLosses, "LEFT", -8, 0)
+    summary:SetWordWrap(true)
     self.summary = summary
 
     local divider = Theme.CreateDivider(body)
@@ -889,6 +909,24 @@ end
 
 PostPanel.view = "sell"
 
+--- Is Hide losses ticked? Off until the player ticks it.
+function PostPanel:HidingLosses()
+    return ns.Config ~= nil and ns.Config:Get("postHideLosses") == true
+end
+
+--- The lines left once those at a loss are taken out, and how many went.
+function PostPanel.WithoutLosses(lines)
+    local kept, hidden = {}, 0
+    for _, line in ipairs(lines) do
+        if line.atALoss then
+            hidden = hidden + 1
+        else
+            kept[#kept + 1] = line
+        end
+    end
+    return kept, hidden
+end
+
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
     self.view = view == "buy" and "buy" or "sell"
@@ -1012,6 +1050,8 @@ function PostPanel:Refresh()
     -- Cheap, and it catches the main window being dragged, which has no event.
     self:Reflow()
 
+    if self.hideLosses then self.hideLosses:SetShown(self.view ~= "buy") end
+
     if self.view == "buy" then
         self.worth:SetText("")
         self:RefreshShopping()
@@ -1024,6 +1064,8 @@ function PostPanel:Refresh()
     if TypingInList(self.list) then return end
 
     local lines = ns.Posting:GetPostable({ includeAll = true })
+    local hidden = 0
+    if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
 
     -- Folded away, the title is all there is to read, so it carries the count.
     if self:IsCollapsed() then
@@ -1038,8 +1080,10 @@ function PostPanel:Refresh()
     self.empty:SetShown(#lines == 0)
 
     if #lines == 0 then
-        self.empty:SetText(
-            "Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for.")
+        self.empty:SetText(hidden > 0
+            and ("Everything here would sell at a loss (%d item%s).\n\nUntick Hide losses to see them."):format(
+                hidden, hidden == 1 and "" or "s")
+            or "Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for.")
         self.summary:SetText("")
         self.worth:SetText("")
         return
@@ -1057,7 +1101,8 @@ function PostPanel:Refresh()
         #lines, #lines == 1 and "" or "s",
         ns.COLORS.accent,
         Util.FormatMoney(total, { noColor = true, short = true }),
-        losses > 0 and (("  ·  |c%s%d at a loss|r"):format(ns.COLORS.loss, losses)) or ""))
+        hidden > 0 and (("  ·  %d hidden"):format(hidden))
+            or losses > 0 and (("  ·  |c%s%d at a loss|r"):format(ns.COLORS.loss, losses)) or ""))
 end
 
 --- Put the current wait on every visible List button.
