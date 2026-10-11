@@ -187,7 +187,15 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
   green up to the quality picked, can be disenchanted, does not bind when
   picked up, not crafted (`RecipeBook:IsCrafted`: any recipe makes it),
   no upgrade for the character playing; the owner asked 2026-10-11 for
-  Butler to follow that setting, for "disenchantable, non-crafted items"). nil with nobody typed.
+  Butler to follow that setting, for "disenchantable, non-crafted items").
+  With the box empty it is the one picked for the player
+  (`QueueMail:GuessDisenchanter`, 2026-10-11, "do the work for the
+  player"): the alt on this account, same realm and side (`Queue:CanMail`,
+  not `linkedFrom`), with the most Enchanting, if more than the character
+  playing; "Pick one for me" on the Mail page (`disenchanterGuess`, on
+  unless unticked, never rename it) turns that off, and then it is nil.
+  `GetDisenchanter` returns the name and `true` when it was picked; the box
+  shows the pick where "Character name" sits. A typed name always wins.
   `GetDisenchantDelivery` uses the same rule, so the two never disagree.
 - `need`: what this character's own queued crafts use from its bags (use,
   less what it makes, less its bank), as `QueueMail:GetDeliveries` keeps back.
