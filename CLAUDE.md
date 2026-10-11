@@ -324,6 +324,23 @@ _G.BlackthornesTS.Butler:Mailbox(covered)   -- true: the mail panel steps aside;
 Butler's Always mail list names characters from `Holdings()` (same realm
 and faction). Keep `Mailbox` stable; Butler's `Logic/Errands.lua` calls it.
 
+## Profit by method
+
+A player asked (2026-10-11, the owner agreeing) for profit split by how it
+was made. The Sales tab's **Profit by method** view (`Logic/MethodProfit.lua`,
+a Period menu like Gold in and out) lists Crafted, Flipped, Vendored,
+Disenchanted and Other sales, each with its items beneath. Auction sales are
+read from the mail ledger: a stamped `entry.cost` is crafted, or flipped
+when `entry.bought` (the average paid on the auction house, stamped in
+`Mail:Describe` from `MethodProfit:BuyCost`). Vendor sales come from the
+buyback list (`Vendor:ReadBuyback` hands it to `MethodProfit:NoteBuyback`;
+the first look of a visit is the baseline) and disenchants from
+`DisenchantLog:Record`; both are kept per realm in `methodLog[realm].events`
+(never rename it), and `AHBuys:NoteCost` keeps what was paid in
+`methodLog[realm].buys`. An item with no cost known counts as all profit and
+the panel says how many. Tested in `tools/test_methodprofit.lua`. Not yet
+seen in game.
+
 ## Sharing between accounts and with a guild
 
 Asked 2026-10-07 (on Discord, the owner agreeing). Over addon

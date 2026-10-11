@@ -613,7 +613,17 @@ local function Describe(mail, kind, itemName, invoice)
         -- What one cost to make, as it stood when this sold, so a later craft
         -- at a different price does not rewrite what this sale made.
         local made = entry.itemID and ns.CraftedCost and ns.CraftedCost:Get(entry.itemID)
-        if made then entry.cost = made.cost end
+        if made then
+            entry.cost = made.cost
+        elseif entry.itemID and ns.MethodProfit then
+            -- Not made by you: what it cost on the auction house, if you
+            -- bought it there. Kept as it stood, like a craft's cost.
+            local paid = ns.MethodProfit:BuyCost(entry.itemID)
+            if paid then
+                entry.cost = paid
+                entry.bought = true
+            end
+        end
     else
         -- An expired or cancelled auction comes back as the item itself, so
         -- the attachment is the authority and the subject is only a label.

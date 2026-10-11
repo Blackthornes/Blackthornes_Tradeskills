@@ -39,6 +39,7 @@ local VIEWS = {
     { text = "Recent, all",    value = "all" },
     { text = "Still listed",   value = "listed" },
     { text = "By item",        value = "item" },
+    { text = "Profit by method", value = "methods" },
     { text = "Mailbox visits", value = "visits" },
     { text = "Gold in and out", value = "gold" },
 }
@@ -349,9 +350,68 @@ local function UpdateVisitRow(row, haul)
     row.when:SetTextColor(Theme.Unpack("dim"))
 end
 
+--- What a group of sales made, for the line under a name.
+local function MethodDetail(group, unit)
+    local parts = {
+        ("%d %s"):format(group.n, unit),
+        "in " .. Util.FormatMoney(group.income, { short = true, noColor = true }),
+    }
+    if group.cost > 0 then
+        parts[#parts + 1] = "cost " .. Util.FormatMoney(group.cost, { short = true, noColor = true })
+    end
+    if group.unknown > 0 then
+        parts[#parts + 1] = group.unknown == group.n and "cost not known"
+            or ("%d with no cost known"):format(group.unknown)
+    end
+    return table.concat(parts, "  ·  ")
+end
+
+local METHOD_UNITS = {
+    crafted = "sold", flipped = "sold", other = "sold",
+    vendored = "sold to vendors", disenchanted = "disenchanted",
+}
+
+--- A method's heading: its profit, and what it is made of.
+local function UpdateMethodRow(row, data)
+    Theme.SetItemIcon(row.icon, nil)
+
+    row.name:SetText(data.method.text)
+    row.name:SetTextColor(Theme.Unpack("accent"))
+
+    row.amount:SetText(SignedMoney(data.group.profit))
+    row.detail:SetText(MethodDetail(data.group, METHOD_UNITS[data.method.key] or "sold"))
+    row.detail:SetTextColor(Theme.Unpack("muted"))
+
+    row.when:SetText(data.method.hint)
+    row.when:SetTextColor(Theme.Unpack("dim"))
+end
+
+--- One item under its method.
+local function UpdateMethodItemRow(row, data)
+    Theme.SetItemIcon(row.icon, data.itemID)
+
+    row.name:SetText(data.itemID and ItemLabel(data.itemID) or "unknown item")
+    ApplyNameColor(row.name, data.itemID)
+
+    row.amount:SetText(SignedMoney(data.item.profit))
+    row.detail:SetText(MethodDetail(data.item, METHOD_UNITS[data.key] or "sold"))
+    row.detail:SetTextColor(Theme.Unpack("muted"))
+    row.when:SetText("")
+end
+
 local function UpdateRow(row, data)
     if data.haul then
         UpdateVisitRow(row, data)
+        return
+    end
+
+    if data.methodRow then
+        UpdateMethodRow(row, data)
+        return
+    end
+
+    if data.methodItem then
+        UpdateMethodItemRow(row, data)
         return
     end
 
@@ -712,37 +772,43 @@ end
 --- Show the controls and panes the view needs, hide the rest.
 local function ApplyLayout()
     local gold = state.view == "gold"
+    local methods = state.view == "methods"
 
     widgets.list:SetShown(not gold)
     widgets.detail:SetShown(not gold)
     widgets.chart:SetShown(gold)
     widgets.legend:SetShown(gold)
-    widgets.search:SetShown(not gold)
-    widgets.period:SetShown(gold)
+    widgets.search:SetShown(not gold and not methods)
+    widgets.period:SetShown(gold or methods)
 
-    local picking = gold and state.period == "pick"
+    local picking = (gold or methods) and state.period == "pick"
     widgets.fromDay:SetShown(picking)
     widgets.toLabel:SetShown(picking)
     widgets.toDay:SetShown(picking)
 
-    if gold then
+    if gold or methods then
         widgets.emptyLabel:Hide()
         widgets.carried:Hide()
     end
 end
 
+--- The day menus, when dates are being picked.
+local function FillPickedDays()
+    if state.period ~= "pick" then return end
+
+    local options = DayOptions()
+    widgets.fromDay:SetOptions(options)
+    widgets.toDay:SetOptions(options)
+    state.toDay = state.toDay or options[1].value
+    state.fromDay = state.fromDay or (options[7] or options[#options]).value
+    widgets.fromDay:SetValue(state.fromDay)
+    widgets.toDay:SetValue(state.toDay)
+end
+
 local function RefreshGold()
     if not ns.GoldLog then return end
 
-    if state.period == "pick" then
-        local options = DayOptions()
-        widgets.fromDay:SetOptions(options)
-        widgets.toDay:SetOptions(options)
-        state.toDay = state.toDay or options[1].value
-        state.fromDay = state.fromDay or (options[7] or options[#options]).value
-        widgets.fromDay:SetValue(state.fromDay)
-        widgets.toDay:SetValue(state.toDay)
-    end
+    FillPickedDays()
 
     local bins = ns.GoldLog:Bins(state.period, state.fromDay, state.toDay)
     for _, bin in ipairs(bins) do
@@ -768,12 +834,74 @@ local function RefreshGold()
         PeriodText()))
 end
 
+--- Profit by method (Logic/MethodProfit.lua): each way of making money, its
+--- items beneath it, and the totals in the panel.
+local function RefreshMethods()
+    awaitingItemData = false
+    FillPickedDays()
+
+    if not ns.MethodProfit then return end
+
+    local from, to = ns.MethodProfit.Range(state.period, state.fromDay, state.toDay)
+    local summary = ns.MethodProfit:Summary(from, to)
+    local total = summary.total
+
+    local data = {}
+    for _, method in ipairs(ns.MethodProfit.METHODS) do
+        local group = summary.methods[method.key]
+        if group.n > 0 then
+            data[#data + 1] = { methodRow = true, method = method, group = group }
+            for _, item in ipairs(group.list) do
+                data[#data + 1] = { methodItem = true, key = method.key,
+                    itemID = item.itemID, item = item }
+            end
+        end
+    end
+    widgets.list:SetData(data)
+
+    if #data == 0 then
+        widgets.emptyLabel:SetText("Nothing yet for this period. Sales at auction, to vendors and disenchants are written down as they happen, with what each cost you.")
+        widgets.emptyLabel:Show()
+    else
+        widgets.emptyLabel:Hide()
+    end
+
+    local detail = widgets.detail
+    local lines = {}
+    for _, method in ipairs(ns.MethodProfit.METHODS) do
+        local group = summary.methods[method.key]
+        if group.n > 0 then
+            lines[#lines + 1] = { method.text, SignedMoney(group.profit),
+                group.profit < 0 and "loss" or "profit" }
+        end
+    end
+    lines[#lines + 1] = { "Profit", SignedMoney(total.profit), total.profit < 0 and "loss" or "profit" }
+    lines[#lines + 1] = { "Taken in", Util.FormatMoney(total.income), "profit" }
+    lines[#lines + 1] = { "Cost", Util.FormatMoney(total.cost), total.cost > 0 and "loss" or "muted" }
+
+    detail.title:SetText("Profit by method")
+    detail.subtitle:SetText(PeriodText())
+    SetLines(detail, lines)
+    detail.note:SetText(total.unknown > 0
+        and ("%d of %d had no cost known (loot, say), so all they brought in counts as profit."):format(
+            total.unknown, total.n)
+        or "Costs are what crafting or buying on the auction house cost you.")
+
+    widgets.summary:SetText(("Profit %s  ·  in %s  ·  %s"):format(
+        SignedMoney(total.profit), Util.FormatMoney(total.income, { short = true }), PeriodText()))
+end
+
 local function Refresh()
     if not widgets.list then return end
 
     ApplyLayout()
     if state.view == "gold" then
         RefreshGold()
+        return
+    end
+
+    if state.view == "methods" then
+        RefreshMethods()
         return
     end
 
@@ -985,7 +1113,7 @@ local function Build(container)
     local view = Widgets.CreateDropdown(toolbar, VIEWS, function(value)
         state.view = value
         Refresh()
-    end, { width = 150 })
+    end, { width = 168 })
     view:SetPoint("LEFT", 0, 0)
     view:SetValue(state.view)
     widgets.view = view
@@ -1043,6 +1171,7 @@ local function Build(container)
         createRow = CreateRow,
         updateRow = UpdateRow,
         onEnter = function(row, data)
+            if data.methodRow then return end
             if data.haul then
                 GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
                 GameTooltip:SetText("Click to see this visit's report again", 1, 1, 1)
@@ -1054,10 +1183,11 @@ local function Build(container)
         onLeave = function() GameTooltip:Hide() end,
         -- The item the detail pane is showing is lit, as on every other tab.
         isSelected = function(data)
-            if data.haul or not state.selected then return false end
+            if data.haul or data.methodRow or data.methodItem or not state.selected then return false end
             return SelectionKey(data) == state.selected
         end,
         onClick = function(data)
+            if data.methodRow or data.methodItem then return end
             if data.haul then
                 if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end
                 return
