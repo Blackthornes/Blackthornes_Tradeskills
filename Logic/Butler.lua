@@ -415,18 +415,40 @@ end
 --------------------------------------------------------------------------------
 
 --- The character a short name from Advise or Holdings means: the one whose
--- ShortName is exactly `name`, or nil when none or more than one is. A
--- short name can be "Ana B." when two characters share a first name, which
+-- ShortName is exactly `name`, or nil when none is. A short name can be
+-- "Ana B." when two characters share a first name, which
 -- QueueMail:FindCharacter cannot read back (the mail went to "Ana B.").
+-- More than one record can give the same short name (a character kept
+-- under two keys, or a linked copy), so of those the best is taken: one of
+-- this account's own, on this realm, then the lowest key.
 local function CharacterNamed(name)
-    local found
+    local selfRecord = Characters()[SelfKey() or ""]
+    local realm = type(selfRecord) == "table" and selfRecord.realm or nil
+
+    -- "Ana S." also matches any "Ana S..." by full name, in case the short
+    -- names were worked out differently when Advise gave this one.
+    local first, initial = name:match("^(%S+) (%S+)%.$")
+    local prefix = first and (first .. " " .. initial)
+    local recipes = ns.Recipes
+    local function Matches(characterKey)
+        if ShortName(characterKey) == name then return true end
+        if not (prefix and recipes and recipes.GetCharacterName) then return false end
+        local ok, full = pcall(recipes.GetCharacterName, recipes, characterKey)
+        return ok and type(full) == "string" and full:sub(1, #prefix) == prefix
+    end
+
+    local best, bestScore
     for characterKey, record in pairs(Characters()) do
-        if type(record) == "table" and ShortName(characterKey) == name then
-            if found then return nil end
-            found = characterKey
+        if type(record) == "table" and Matches(characterKey) then
+            local score = (record.linkedFrom == nil and 2 or 0)
+                + ((realm and record.realm == realm) and 1 or 0)
+            if not best or score > bestScore
+                or (score == bestScore and tostring(characterKey) < tostring(best)) then
+                best, bestScore = characterKey, score
+            end
         end
     end
-    return found
+    return best
 end
 
 --- Fill the game's Send Mail page for one of the player's characters.
