@@ -280,13 +280,16 @@ local strip = Widgets.CreateTabStrip(Region(), {
     { key = "b", text = "Queue", width = 90 },
 }, nil, { hanging = true })
 strip:Select("a")
-check("the tab showing wears the active art", strip.tabs[1].blizzardFace.pieces[2].texture, ART.tabActive)
+check("every tab wears the game's tab", strip.tabs[1].blizzardFace.pieces[2].texture, ART.tab)
+check("the tab showing is lit", strip.tabs[1].blizzardPicked.pieces[2].shown, true)
+check("the others are not", strip.tabs[2].blizzardPicked.pieces[2].shown, false)
 check("the others the resting art", strip.tabs[2].blizzardFace.pieces[2].texture, ART.tab)
 check("its name white", strip.tabs[1].label.textColor[3], 1)
 check("the others gold", strip.tabs[2].label.textColor[3], 0)
 check("no gliding gold line", strip.line.alpha, 0)
 strip:Select("b")
-check("picking another swaps them", strip.tabs[2].blizzardFace.pieces[2].texture, ART.tabActive)
+check("picking another moves the light", strip.tabs[2].blizzardPicked.pieces[2].shown and not strip.tabs[1].blizzardPicked.pieces[2].shown, true)
+check("and keeps the game's tab", strip.tabs[2].blizzardFace.pieces[2].texture, ART.tab)
 local hovered = strip.tabs[1]
 if hovered.scripts.OnEnter then hovered.scripts.OnEnter(hovered) end
 ns.Motion:FinishAll()
