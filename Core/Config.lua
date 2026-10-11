@@ -300,6 +300,10 @@ local DEFAULTS = {
         -- house's quantity box with what the queue still needs (2026-10-06).
         -- See UI/BuyQuantity.lua.
         fillBuyQuantity = true,
+        -- A warning line on the auction house's buy window when buying a
+        -- queue material costs this many percent more than the shopping list
+        -- said (2026-10-11). 0 turns it off. See UI/BuyQuantity.lua.
+        buyWarnPercent = 25,
 
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.

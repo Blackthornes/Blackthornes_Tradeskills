@@ -27,6 +27,19 @@
 -- auction house's "quantity changed" message, which both halves listen to,
 -- so the list keeps it too and its redraws say the same number.
 
+--
+-- Added 2026-10-11: a warning line under the Buy Now button. Buying a
+-- queue material can cost far more than the shopping list said, when the
+-- cheap listings went since the last scan or the amount reaches up into
+-- dearer ones. Whenever the buy window changes (its item, the number in the
+-- box, the listings arriving), the live cost of that many is counted up the
+-- listings shown and held against the shopping list's estimate from before
+-- the search (AHBuys:Estimate). Past "Warn when buying costs more" percent
+-- the line shows both and the difference, in coin colours. It is the
+-- addon's own frame, placed by the button; the button still buys. The
+-- search itself already refreshed the saved price (Scanner's passive
+-- capture), so the next estimate starts from what was just seen.
+
 local _, ns = ...
 
 local BuyQuantity = ns.NewModule("BuyQuantity")
@@ -221,13 +234,26 @@ function BuyQuantity:Hook()
     -- Picking a result in Blizzard's list sets the buy window's item.
     if type(Field(frame, "SetItemIDAndPrice")) == "function" then
         pcall(hooksecurefunc, frame, "SetItemIDAndPrice", function(_, itemID)
+            BuyQuantity.quoted = nil
             BuyQuantity:FillSoon(type(itemID) == "number" and itemID or nil)
+            BuyQuantity:CheckCostSoon()
         end)
     end
 
     -- And in case this client sets it some other way, whenever it shows.
     if type(Field(frame, "HookScript")) == "function" then
-        pcall(frame.HookScript, frame, "OnShow", function() BuyQuantity:FillSoon() end)
+        pcall(frame.HookScript, frame, "OnShow", function()
+            BuyQuantity:FillSoon()
+            BuyQuantity:CheckCostSoon()
+        end)
+        pcall(frame.HookScript, frame, "OnHide", function() BuyQuantity:HideWarning() end)
+    end
+
+    -- The number in the box, typed or filled: cost it again.
+    local box = Field(Field(self:Display(), "QuantityInput"), "InputBox")
+    if type(box) == "table" and not hooked[box] and type(Field(box, "HookScript")) == "function" then
+        hooked[box] = true
+        pcall(box.HookScript, box, "OnTextChanged", function() BuyQuantity:CheckCostSoon() end)
     end
 
     -- The list of listings only hears the quantity message while it shows,
@@ -240,11 +266,221 @@ function BuyQuantity:Hook()
     return true
 end
 
+--------------------------------------------------------------------------------
+-- Costs more than expected
+--------------------------------------------------------------------------------
+
+-- Below this many copper of difference the line stays away: 30% over on a
+-- few copper is not worth a warning.
+BuyQuantity.WARN_MIN_COPPER = 100
+-- Coalesce a burst of updates (typing, results paging in) into one look.
+local WARN_DELAY = 0.2
+
+-- The warning's frame, made the first time it is needed.
+BuyQuantity.warnFrame = nil
+-- What the line said last, for the probe: "+1g 20s on 20", "none", ...
+BuyQuantity.lastWarn = nil
+-- The auction house's own total for a purchase it priced:
+-- { itemID, quantity, total }, from COMMODITY_PRICE_UPDATED.
+BuyQuantity.quoted = nil
+
+--- What buying `quantity` costs up a list of listings, cheapest first, past
+--- the player's own units.
+-- @param listings { { unitPrice, quantity, own }, ... } in price order
+-- @return copper, or nil when the listings hold fewer than `quantity`
+function BuyQuantity.CostUp(listings, quantity)
+    quantity = math.floor(tonumber(quantity) or 0)
+    if quantity < 1 or type(listings) ~= "table" then return nil end
+    local left, total = quantity, 0
+    for _, listing in ipairs(listings) do
+        local price = tonumber(listing.unitPrice)
+        local units = math.max(0, (tonumber(listing.quantity) or 0) - (tonumber(listing.own) or 0))
+        if price and price > 0 and units > 0 then
+            local take = math.min(units, left)
+            total = total + take * price
+            left = left - take
+            if left == 0 then return total end
+        end
+    end
+    return nil
+end
+
+--- The listings the auction house holds for a commodity right now.
+function BuyQuantity:LiveListings(itemID)
+    local house = Field(_G, "C_AuctionHouse")
+    local num = Field(house, "GetNumCommoditySearchResults")
+    local info = Field(house, "GetCommoditySearchResultInfo")
+    if type(num) ~= "function" or type(info) ~= "function" then return nil end
+
+    local ok, count = pcall(num, itemID)
+    if not ok or type(count) ~= "number" or count < 1 then return nil end
+
+    local listings = {}
+    for i = 1, count do
+        local got, row = pcall(info, itemID, i)
+        if got and type(row) == "table" then
+            local price = tonumber(row.unitPrice)
+            if price and ns.Prices and ns.Prices.IsCredible and not ns.Prices.IsCredible(price) then
+                price = nil
+            end
+            if price then
+                listings[#listings + 1] = {
+                    unitPrice = price,
+                    quantity = tonumber(row.quantity) or 0,
+                    own = tonumber(row.numOwnerItems) or 0,
+                }
+            end
+        end
+    end
+    return listings
+end
+
+--- Is the item one the shopping list is buying?
+function BuyQuantity:OnShoppingList(itemID)
+    local queue = ns.Queue
+    if not (queue and type(queue.GetShoppingList) == "function") then return false end
+    local ok, lines = pcall(queue.GetShoppingList, queue)
+    if not ok or type(lines) ~= "table" then return false end
+    for _, line in ipairs(lines) do
+        if type(line) == "table" and line.itemID == itemID then return true end
+    end
+    return false
+end
+
+--- The warning for buying `quantity` of a material, or nil when it costs
+--- about what the shopping list said.
+-- @param live copper for that many now, from the listings or the auction
+--   house's own quote
+-- @return { live, estimate, more, percent } or nil
+function BuyQuantity:Judge(itemID, quantity, live)
+    local percent = ns.Config and tonumber(ns.Config:Get("buyWarnPercent"))
+    if percent == nil then percent = 25 end
+    if percent <= 0 or not live or live <= 0 then return nil end
+
+    local estimate
+    if ns.AHBuys and ns.AHBuys.Estimate then
+        local ok, value = pcall(ns.AHBuys.Estimate, ns.AHBuys, itemID, quantity)
+        estimate = ok and tonumber(value) or nil
+    end
+    if not estimate or estimate <= 0 then return nil end
+
+    local more = live - estimate
+    if more < self.WARN_MIN_COPPER then return nil end
+    if live < estimate * (1 + percent / 100) then return nil end
+
+    return {
+        live = live, estimate = estimate, more = more,
+        percent = math.floor(more / estimate * 100 + 0.5),
+    }
+end
+
+--- The line's words: "Buying 20 costs 5g 20s 00c. The shopping list said
+--- 3g 90s 00c: 1g 30s 00c more (33% over)."
+function BuyQuantity.WarnText(quantity, warning)
+    local money = ns.Util.FormatMoney
+    local warn = "|c" .. ns.COLORS.warn
+    return warn .. ("Buying %d costs |r%s%s. The shopping list said |r%s%s: |r%s%s more (%d%% over).|r"):format(
+        quantity, money(warning.live), warn, money(warning.estimate), warn,
+        money(warning.more), warn, warning.percent)
+end
+
+function BuyQuantity:WarnFrame()
+    if self.warnFrame then return self.warnFrame end
+    local Theme = ns.Theme
+    if not (Theme and CreateFrame) then return nil end
+
+    local frame = Theme.CreatePanel(UIParent, "panel", "warn")
+    frame:SetFrameStrata("DIALOG")
+    frame:Hide()
+
+    local label = Theme.CreateLabel(frame, "small", "text", "CENTER")
+    label:SetPoint("TOPLEFT", 8, -5)
+    label:SetPoint("TOPRIGHT", -8, -5)
+    if label.SetWordWrap then label:SetWordWrap(true) end
+    frame.label = label
+
+    self.warnFrame = frame
+    return frame
+end
+
+function BuyQuantity:HideWarning()
+    if self.warnFrame then self.warnFrame:Hide() end
+end
+
+--- Place and fill the line, under the Buy Now button.
+function BuyQuantity:ShowWarning(quantity, warning)
+    local frame = self:WarnFrame()
+    if not frame then return end
+
+    local display = self:Display()
+    local button = Field(display, "BuyButton")
+    local anchor = type(button) == "table" and button or display
+    if type(anchor) ~= "table" then return end
+
+    local width = 260
+    local ok, w = Call(display, "GetWidth")
+    if ok and type(w) == "number" and w > 80 then width = math.min(w - 16, 320) end
+
+    frame:ClearAllPoints()
+    frame:SetPoint("TOP", anchor, "BOTTOM", 0, -6)
+    frame:SetWidth(width)
+    frame.label:SetText(self.WarnText(quantity, warning))
+    local textHeight = frame.label.GetStringHeight and frame.label:GetStringHeight() or 24
+    frame:SetHeight(math.max(24, (tonumber(textHeight) or 24) + 10))
+    frame:Show()
+end
+
+--- Look at the buy window now and show or hide the line.
+function BuyQuantity:CheckCost()
+    self.checkPending = nil
+    local frame = self:BuyFrame()
+    local ok, shown = Call(frame, "IsVisible")
+    if not (ok and shown) then
+        self:HideWarning()
+        return
+    end
+
+    local itemID = self:ShownItemID()
+    local quantity = self:ShownQuantity()
+    if not itemID or not quantity or quantity < 1 or not self:OnShoppingList(itemID) then
+        self.lastWarn = "none"
+        self:HideWarning()
+        return
+    end
+
+    local live
+    local quoted = self.quoted
+    if quoted and quoted.itemID == itemID and quoted.quantity == quantity then
+        live = quoted.total
+    else
+        live = self.CostUp(self:LiveListings(itemID), quantity)
+    end
+
+    local warning = self:Judge(itemID, quantity, live)
+    if not warning then
+        self.lastWarn = "none"
+        self:HideWarning()
+        return
+    end
+
+    self.lastWarn = ("+%s on %d"):format(ns.Util.FormatMoney(warning.more, { noColor = true }), quantity)
+    self:ShowWarning(quantity, warning)
+end
+
+--- Look once, a moment after a burst of changes settles.
+function BuyQuantity:CheckCostSoon()
+    if self.checkPending then return end
+    if not (C_Timer and C_Timer.After) then return self:CheckCost() end
+    self.checkPending = true
+    C_Timer.After(WARN_DELAY, function() BuyQuantity:CheckCost() end)
+end
+
 --- The probe's line: can this client's buy window be filled?
 function BuyQuantity:ProbeText()
     if not self:BuyFrame() then return "open the auction house and run this again" end
     local text = self:HasQuantityBox() and "yes" or "no quantity box found"
     if self.lastResult then text = text .. ", last: " .. self.lastResult end
+    if self.lastWarn then text = text .. ", cost warning: " .. self.lastWarn end
     return text
 end
 
@@ -260,5 +496,24 @@ function BuyQuantity:OnEnable()
     -- A want is for this visit only.
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
         BuyQuantity.want = nil
+        BuyQuantity.quoted = nil
+        BuyQuantity:HideWarning()
+    end)
+
+    -- The listings for the item in the buy window arrived or changed.
+    ns.RegisterEvent(self, "COMMODITY_SEARCH_RESULTS_UPDATED", function(_, _, itemID)
+        if not BuyQuantity:BuyFrame() then return end
+        if itemID ~= nil and itemID ~= BuyQuantity:ShownItemID() then return end
+        BuyQuantity.quoted = nil
+        BuyQuantity:CheckCostSoon()
+    end)
+
+    -- Buy Now asked the auction house for the total: its own number beats
+    -- the listings counted up.
+    ns.RegisterEvent(self, "COMMODITY_PRICE_UPDATED", function(_, _, _, total)
+        local quote = ns.AHBuys and ns.AHBuys.quote
+        if type(quote) ~= "table" or type(total) ~= "number" then return end
+        BuyQuantity.quoted = { itemID = quote.itemID, quantity = quote.quantity, total = total }
+        BuyQuantity:CheckCostSoon()
     end)
 end
