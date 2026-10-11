@@ -221,7 +221,10 @@ One entry per character on record, in `Recipes:GetCharacters`' order (the
 character playing first): `key`, `name`, `short`, `realm`, `faction`,
 `isCurrent`, `linked` (the character it came through, for another account
 of the owner's), and `bags`, `bank`, `mail` as fresh `{ [itemID] = count }`
-copies with `bagsAt`, `bankAt`, `mailAt` (`time()`, nil when never read).
+copies with `bagsAt`, `bankAt`, `mailAt` (`time()`, nil when never read),
+and `gold`, `goldAt` (copper as last seen with the bags' snapshot, live for
+the character playing; nil when never recorded; added 2026-10-11 for
+Butler's gold top-ups).
 The playing character's bags are live (`Inventory:GetBagCounts`), the rest
 the saved snapshots (`inventory`, `bank`, `mail` on its record). Keep it
 stable too; Butler's `Logic/Everyone.lua` reads it.
@@ -230,14 +233,17 @@ At a mailbox and the bank (the owner said start, 2026-10-11), Butler's
 `Logic/Errands.lua` calls two more, inside a pcall:
 
 ```lua
-_G.BlackthornesTS.Butler:FillMail(name, items)  -- true, or false and why; never raises
+_G.BlackthornesTS.Butler:FillMail(name, items, money)  -- true, or false and why; never raises
 _G.BlackthornesTS.Butler:FromBank()             -- { [itemID] = count }, or nil; reads only
 ```
 
 `FillMail` fills the Send Mail page through `QueueMail:Fill` for one of
 the player's characters (`name` as Advise gave it, resolved with
 `QueueMail:FindCharacter` and `MailName`; `items` a list of `{ itemID,
-count }`, subject "From Blackthornes Butler"); the player presses Send and
+count }`, subject "From Blackthornes Butler"; `money`, optional copper,
+goes in the gold boxes through `QueueMail.PutMoney`, gold alone being a
+mail of its own, never with COD ticked and never more than the purse less
+postage); the player presses Send and
 QueueMail's own SendMail hook writes down what went. It never fills a mail
 to the character playing, under any record of it (`QueueMail:IsPlaying`:
 its key, a record carrying its GUID, or the old name-realm record left

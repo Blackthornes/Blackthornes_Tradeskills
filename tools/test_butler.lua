@@ -188,7 +188,12 @@ ns.Recipes.GetCharacters = function()
     { key = "Gone-1", name = "Gone", isCurrent = false },
   }
 end
+ns.db.characters[ALT].gold = 1234
+ns.db.characters[SELF].gold = 5
+local oldGetMoney = GetMoney
+GetMoney = function() return 99999 end
 local held = Butler:Holdings()
+GetMoney = oldGetMoney
 check("one entry per character on record", #held, 3)
 check("the character playing first", held[1].key, SELF)
 check("its bags are read live", held[1].bags[1], 3)
@@ -202,6 +207,10 @@ check("when the mail was read", held[2].mailAt, 60)
 check("never read is nil", held[2].bankAt, nil)
 check("another account's character says so", held[3].linked, "other")
 check("the short name", held[2].short, "Ana")
+check("an alt's gold as last seen", held[2].gold, 1234)
+check("when it was seen", held[2].goldAt, 50)
+check("never seen is nil", held[3].gold, nil)
+check("the character playing's purse is live", held[1].gold, 99999)
 held[2].bags[1] = 1000
 check("a copy: the save is untouched", ns.db.characters[ALT].inventory[1], 2)
 ns.Recipes.GetCharacters = function() error("boom") end
@@ -258,6 +267,13 @@ ns.QueueMail.IsPlayingName = function(_, typed) return typed == "Zed" or typed =
 check("nor to a name that is the character playing", (Butler:FillMail("Zed", { { itemID = 3, count = 1 } })), false)
 check("nor when the full name is", (Butler:FillMail("Ana", { { itemID = 3, count = 1 } })), false)
 ns.QueueMail.IsPlayingName = nil
+-- Gold alone is a mail (Butler's gold top-ups, 2026-10-11).
+check("gold alone fills a mail", (Butler:FillMail("Ana", {}, 50000)), true)
+check("with the gold", filled.money, 50000)
+check("and no items", #filled.items, 0)
+check("under its own subject", filled.subject, "Gold from Blackthornes Butler")
+Butler:FillMail("Ana", { { itemID = 3, count = 1 } })
+check("no gold asked, none put in", filled.money, nil)
 local none, why = Butler:FillMail("Ana", {})
 check("nothing to mail", none, false)
 check("and says why", why, "nothing to mail")
