@@ -12,6 +12,12 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.51.0
+
+- See how much you made from crafting, flipping, vendoring and disenchanting, all split out on the Sales tab.
+
+Thanks Ezmode for the idea!
+
 ## 0.50.0
 
 - Sold something? You'll hear an old cash register now. You can pick another sound or turn it off.

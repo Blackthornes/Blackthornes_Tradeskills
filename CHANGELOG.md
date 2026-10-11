@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.51.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Profit by method:** a new view on the Sales tab, with a Period menu
+  like Gold in and out, splits your profit into Crafted, Flipped,
+  Vendored, Disenchanted and Other, each with its items beneath (best
+  first) and the totals in the side panel. Flips, vendor sales and
+  disenchants count from this version on. An item with no known cost
+  counts as all profit, and the panel says how many.
+
 ## 0.50.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
