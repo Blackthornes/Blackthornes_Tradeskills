@@ -176,6 +176,25 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
   less what it makes, less its bank), as `QueueMail:GetDeliveries` keeps back.
 - `mailTo`, `mailCount`: the alt `GetDeliveries` would send the most of it
   to, full name, and how many.
+- `bought`: how many the account bought on the auction house to
+  disenchant (`DisenchantBuys:Count`), nil for none.
+
+Bought to disenchant (the owner asked 2026-10-11): `Logic/DisenchantBuys.lua`
+marks an auction house buy that follows a search sent from the
+Disenchanting tab (`Intend`, then `OnBought` from `AHBuys:Confirm`, within
+15 minutes). Marks are account wide, by item and count, in
+`boughtToDisenchant[itemID] = { count, at }` (never rename it), so mailing
+or banking keeps them; they only shrink on a disenchant
+(`DisenchantLog:Record` calls `Used`) or when the account holds fewer
+(`Settle`: every character's bags, bank and mail, mail on its way, auction
+buys in the mail; once per burst of bag events, never while the mailbox is
+open). The tab's bags list puts them first, tagged, and picks them first
+for its Disenchant button; a right-click there marks or unmarks. Butler's
+menu calls, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:SetBoughtToDisenchant(itemID, on, count)  -- true, or false and why
+```
 
 Butler asks once per bag item, a hundred in a burst, so the queue plan,
 the deliveries and the characters' Enchanting are read once into a lookup,
