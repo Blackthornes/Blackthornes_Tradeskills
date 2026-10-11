@@ -672,6 +672,22 @@ function Prices.LowestListed(record)
     return lowest
 end
 
+--- What buying one costs on the auction house now: the cheapest posting at
+--- the last look (LowestListed, or a lone low listing when it is all there
+--- is). A record that says nothing is listed answers nil and true, so a
+--- list can show it blank rather than at its average (a player asked,
+--- 2026-10-11, for the Waylaid crate and writ columns). An item never read
+--- at all falls back to GetValue's "lowest", the best guess there is.
+-- @return copper or nil, and true when none are listed
+function Prices:ListedNow(itemID)
+    local record = itemID and self:GetTable()[itemID]
+    if type(record) ~= "table" then return self:GetValue(itemID, "lowest"), false end
+
+    local lowest = Prices.LowestListed(record) or record.ignoredLow
+    if lowest then return lowest, false end
+    return nil, true
+end
+
 --- Best estimate of what one unit is worth.
 --
 -- `which` is one of:

@@ -139,7 +139,20 @@ check("a commodity's buy takes the cheapest units, whatever they cost",
 
 check("an item never priced is left alone", Prices:NoteBought(99999, 100, 1, now) == false)
 
-print("\nwhich items changed")
+print("\nwhat buying one costs now")
+
+ring = Ring({ rivalMin = 420, min = 420 })
+check("listed: its cheapest listing", select(1, Prices:ListedNow(RING)) == 420)
+Prices:NoteBought(RING, 420, 1, now)
+local price, none = Prices:ListedNow(RING)
+check("bought out: none listed, not its average", price == nil and none == true)
+ring = Ring({ min = 300, ignoredLow = 300 })
+ring.rivalMin = nil
+check("a lone low listing is still one to buy", select(1, Prices:ListedNow(RING)) == 300)
+priceTable[BRACERS] = nil
+price, none = Prices:ListedNow(BRACERS)
+check("never read: not called none listed", none == false)
+
 
 local mark = Prices.changes
 Prices:Touch(RING)

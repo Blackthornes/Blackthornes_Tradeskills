@@ -331,7 +331,8 @@ local function UpdateDetail(entry)
     end
 
     local sums = detail.sums.lines
-    SetLine(sums[1], "Crate on the AH", entry.cratePrice and Plain(entry.cratePrice) or "not priced")
+    SetLine(sums[1], "Crate on the AH", entry.cratePrice and Plain(entry.cratePrice)
+        or (entry.noneListed and "none listed" or "not priced"))
     SetLine(sums[2], "Cheapest bundle", entry.bundleCost and Plain(entry.bundleCost) or "not priced")
     SetLine(sums[3], "Silver back", entry.money and Plain(entry.money) or "not known")
     SetLine(sums[4], entry.favor and ("Each of %d favor"):format(entry.favor) or "Each favor",

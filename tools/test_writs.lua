@@ -80,8 +80,14 @@ ns.Config = {
     Set = function(_, key, value) config[key] = value end,
     GetCharacterKey = function() return "Player-1-0001" end,
 }
+-- Items whose record says none are listed now.
+local noneListed = {}
 ns.Prices = {
     GetValue = function(_, itemID) return prices[itemID] end,
+    ListedNow = function(_, itemID)
+        if noneListed[itemID] then return nil, true end
+        return prices[itemID], false
+    end,
     Count = function() return 7 end,
 }
 
@@ -168,6 +174,15 @@ check("the item is made when that is cheaper", rod.how == "make" and rod.itemCos
 check("with the reported 75 reputation", rod.rep == 75 and rod.source == "reported")
 check("total is writ + item", rod.total == 550)
 check("and a point is a 75th of that", math.abs(rod.perRep - 550 / 75) < 1e-9)
+
+-- None on the auction house: no writ to buy, so no price (a player asked,
+-- 2026-10-11, for the column to go blank rather than show the average).
+noneListed[ROD_WRIT] = true
+local gone = Row(Writs:GetRows(), ROD)
+check("with none listed the writ column is blank", gone.writPrice == nil and gone.noneListed == true
+    and gone.total == nil and gone.perRep == nil)
+check("but the item is still worked out", gone.itemCost == 250)
+noneListed[ROD_WRIT] = nil
 
 local shot = Row(rows, SHOT)
 check("an order for 200 counts all 200", shot.count == 200 and shot.itemCost == 400)
