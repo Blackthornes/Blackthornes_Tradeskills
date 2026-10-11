@@ -25,9 +25,24 @@ local _, ns = ...
 
 local SaleAlarm = ns.NewModule("SaleAlarm")
 
+-- The sounds a player can pick on the Settings tab (saleSound), asked
+-- 2026-10-11 after players found the raid warning too much and asked for an
+-- old cash register. "register" is an antique register's ka-ching, cut from a
+-- public domain (CC0) recording (where it came from is in docs/SOUNDS.md);
+-- "coins" is the game's own loot coin jingle, played by file ID; "raid" is the
+-- raid warning the alarm always played. Off is the saleAlarm switch.
+local ADDON = ...
+local MEDIA = ([[Interface\AddOns\%s\Media\Sounds\]]):format(ADDON or "Blackthornes_TS")
+SaleAlarm.REGISTER_FILE = MEDIA .. "sale-register.ogg"
+SaleAlarm.COINS_FILE = 567413          -- sound/interface/lootcoinlarge.ogg
+SaleAlarm.CHOICES = { "register", "coins", "raid" }
+SaleAlarm.DEFAULT_SOUND = "register"
+SaleAlarm.NAMES = { register = "Cash register", coins = "Coins", raid = "Raid warning" }
+
 -- RAID_WARNING: loud, short and unlike anything the auction house plays itself,
 -- so it cannot be mistaken for the window opening or a click. Read from the
--- game's own table when it has one.
+-- game's own table when it has one. Also what plays when a picked sound
+-- cannot: the register file is only found after a full restart.
 local RAID_WARNING_SOUND = 8959
 
 -- Two routes can report the same sale within a moment of each other, and so
@@ -106,27 +121,50 @@ end
 -- The sound
 --------------------------------------------------------------------------------
 
+--- The sound picked on the Settings tab: "register", "coins" or "raid".
+-- Anything else saved (or nothing) is the default, the register.
+function SaleAlarm:Sound()
+    local picked = ns.Config:Get("saleSound")
+    for _, choice in ipairs(self.CHOICES) do
+        if picked == choice then return picked end
+    end
+    return self.DEFAULT_SOUND
+end
+
+-- What the game answered: true or false, or "unknown" when it returns nothing
+-- (older versions do, and that is not a refusal). nil when it raised.
+local function Answer(ok, willPlay)
+    if not ok then return nil end
+    if willPlay == nil then return "unknown" end
+    return willPlay and true or false
+end
+
 --- Play the alarm now. Returns whether the game said it would play it.
--- The "Master" channel is used so it still sounds with game effects turned
--- down or off; only the game's master volume, or the game being in the
--- background with background sound off, silences it.
-function SaleAlarm:Play()
-    if type(PlaySound) ~= "function" then
+-- `sound` picks one to hear (the Settings tab's play button); without it the
+-- player's pick plays. The "Master" channel is used so it still sounds with
+-- game effects turned down or off; only the game's master volume, or the
+-- game being in the background with background sound off, silences it.
+function SaleAlarm:Play(sound)
+    if type(PlaySound) ~= "function" and type(PlaySoundFile) ~= "function" then
         self.lastPlayAccepted = false
         return false
     end
+    sound = sound or self:Sound()
 
-    local kit = (_G.SOUNDKIT and _G.SOUNDKIT.RAID_WARNING) or RAID_WARNING_SOUND
-    local ok, willPlay = pcall(PlaySound, kit, "Master")
-
-    -- Older versions return nothing at all, which is not a refusal.
-    if not ok then
-        self.lastPlayAccepted = false
-    elseif willPlay == nil then
-        self.lastPlayAccepted = "unknown"
-    else
-        self.lastPlayAccepted = willPlay and true or false
+    local answer
+    if sound ~= "raid" and type(PlaySoundFile) == "function" then
+        local file = sound == "coins" and self.COINS_FILE or self.REGISTER_FILE
+        answer = Answer(pcall(PlaySoundFile, file, "Master"))
     end
+
+    -- The raid warning: picked, or the one to fall back on when the file did
+    -- not play (a new file waits for a full restart).
+    if (answer == nil or answer == false) and type(PlaySound) == "function" then
+        local kit = (_G.SOUNDKIT and _G.SOUNDKIT.RAID_WARNING) or RAID_WARNING_SOUND
+        answer = Answer(pcall(PlaySound, kit, "Master"))
+    end
+
+    self.lastPlayAccepted = answer or false
 
     self.played = self.played + 1
     self.lastPlayAt = Now()
@@ -336,7 +374,8 @@ end
 function SaleAlarm:Report()
     local accent, muted = ns.COLORS.accent, ns.COLORS.muted
 
-    ns.Print(("Sale alarm: |c%s%s|r"):format(accent, self:IsOn() and "on" or "off"))
+    ns.Print(("Sale alarm: |c%s%s|r"):format(accent,
+        self:IsOn() and ("on, " .. self.NAMES[self:Sound()]:lower()) or "off"))
 
     ns.PrintRaw(("  |c%slistening for the sold chat line:|r %s"):format(
         muted, Yes(self.listening.chat)))
@@ -373,9 +412,18 @@ function SaleAlarm:Report()
     end
 end
 
-ns.RegisterCommand("salealarm", "sound an alarm when an auction sells: /bts salealarm [on|off|test]",
+ns.RegisterCommand("salealarm", "sound an alarm when an auction sells: /bts salealarm [on|off|test|register|coins|raid]",
     function(args)
         local word = (args or ""):lower():match("^(%S+)")
+
+        if SaleAlarm.NAMES[word] then
+            ns.Config:Set("saleSound", word)
+            ns.Config:Set("saleAlarm", true)
+            ns.Print(("Sale alarm: %s."):format(SaleAlarm.NAMES[word]:lower()))
+            SaleAlarm:Play(word)
+            if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+            return
+        end
 
         if word == "on" or word == "off" then
             ns.Config:Set("saleAlarm", word == "on")
