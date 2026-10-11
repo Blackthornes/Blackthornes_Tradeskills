@@ -286,30 +286,13 @@ function Recipes:GetCharacterName(characterKey)
     return (characterKey:match("^([^-]+)")) or characterKey
 end
 
---- The character's name for a narrow column: the first name alone, unless
---- another known character has the same first name, and then the first name
---- and the last name's initial ("Bob B."). The full name is for tooltips.
+--- The name shown wherever a character is named. It was once shortened
+--- ("Bob", or "Bob B." when two shared a first name), but the owner's rule
+--- (2026-10-11) is never to shorten a last name: Forever names are first and
+--- last together, and a short one could not address a mail. So it is the
+--- full name now; the function is kept because Equipment and Butler call it.
 function Recipes:GetShortCharacterName(characterKey)
-    local full = self:GetCharacterName(characterKey)
-    local first, rest = full:match("^(%S+)%s+(.+)$")
-    if not first then return full end
-
-    local shared = false
-    if ns.db and ns.db.characters then
-        for otherKey in pairs(ns.db.characters) do
-            if otherKey ~= characterKey
-                and self:GetCharacterName(otherKey):match("^%S+") == first then
-                shared = true
-                break
-            end
-        end
-    end
-
-    if not shared then return first end
-    -- The first whole letter, not the first byte: "Élan" starts with two
-    -- bytes, and cutting it after one left half a letter on screen.
-    local initial = rest:match("^[%z\1-\127\194-\244][\128-\191]*") or rest:sub(1, 1)
-    return ("%s %s."):format(first, initial)
+    return self:GetCharacterName(characterKey)
 end
 
 --- What to add after a name that another character also has.

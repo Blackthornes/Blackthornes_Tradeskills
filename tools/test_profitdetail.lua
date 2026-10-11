@@ -47,17 +47,18 @@ do
     } }
 
     local Recipes = ns.Recipes
-    check("a first name no one else has is shown alone",
-        Recipes:GetShortCharacterName("Player-1-C") == "Mirel")
-    check("a shared first name gets the last name's initial",
-        Recipes:GetShortCharacterName("Player-1-A") == "Bob A.")
-    check("and the other one gets its own",
-        Recipes:GetShortCharacterName("Player-1-B") == "Bob B.")
+    -- Never shortened (the owner's rule, 2026-10-11): first and last name.
+    check("a first name no one else has keeps its last name",
+        Recipes:GetShortCharacterName("Player-1-C") == "Mirel Blackthorne")
+    check("a shared first name keeps the whole last name",
+        Recipes:GetShortCharacterName("Player-1-A") == "Bob Ashenmoor")
+    check("and the other one its own",
+        Recipes:GetShortCharacterName("Player-1-B") == "Bob Blackthorne")
     check("a character with no last name known keeps its name",
         Recipes:GetShortCharacterName("Player-1-D") == "Tomas")
     check("an old record keeps its name", Recipes:GetShortCharacterName("Old-Forever PvE") == "Grunt")
-    check("an accented initial keeps its whole letter",
-        Recipes:GetShortCharacterName("Player-1-E") == "Aria \195\137.")
+    check("an accented last name is whole",
+        Recipes:GetShortCharacterName("Player-1-E") == "Aria \195\137lan")
 end
 
 --------------------------------------------------------------------------------
