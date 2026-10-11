@@ -160,10 +160,16 @@ local function UpdateRow(row, line)
     if done then
         row.name:SetTextColor(Theme.Unpack("muted"))
 
-        cells.source:SetText("have it")
+        cells.source:SetText(line.paid and "bought" or "have it")
         cells.source:SetTextColor(Theme.Unpack("dim"))
         cells.unit:SetText("")
-        cells.cost:SetText("")
+        -- Bought: what it cost, amber when well over the estimate.
+        if line.paid then
+            cells.cost:SetText(Util.FormatMoney(line.paid, { short = true }))
+            cells.cost:SetTextColor(Theme.Unpack(line.overpaid and "warn" or "muted"))
+        else
+            cells.cost:SetText("")
+        end
 
         row.search:Hide()
         row.goal:Hide()
@@ -181,7 +187,7 @@ local function UpdateRow(row, line)
     cells.unit:SetText(line.unitCost and Util.FormatMoney(line.unitCost, { short = true }) or "?")
     cells.cost:SetText(line.estimatedCost
         and Util.FormatMoney(line.estimatedCost, { short = true }) or "?")
-    cells.cost:SetTextColor(Theme.Unpack("text"))
+    cells.cost:SetTextColor(Theme.Unpack(line.overpaid and "warn" or "text"))
 
     -- No auction search for something a vendor sells cheaper: following it
     -- would be acting against the recommendation the row just made.
@@ -225,6 +231,14 @@ local function ShowRowTooltip(row, line)
         GameTooltip:AddLine("Not seen on the auction house", 0.5, 0.5, 0.5)
     end
 
+    -- Too few at the cheapest price: the rest cost more, up the listings.
+    if line.source == "auction" and line.auctionUnit and line.unitCost
+        and line.unitCost > line.auctionUnit and line.shortfall > 0 then
+        GameTooltip:AddDoubleLine(("Buying %d, each on average"):format(line.shortfall),
+            Util.FormatMoney(line.unitCost, { noColor = true }),
+            0.7, 0.7, 0.7, 1, 1, 1)
+    end
+
     if line.savingTotal and line.savingTotal > 0 then
         GameTooltip:AddDoubleLine(
             ("Saved by buying from the %s"):format(
@@ -241,6 +255,8 @@ local function ShowRowTooltip(row, line)
         GameTooltip:AddDoubleLine("On other characters", tostring(line.onAlts),
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
     end
+
+    if UI.AddPaidLines then UI.AddPaidLines(line) end
 
     GameTooltip:Show()
 end

@@ -1353,10 +1353,38 @@ function Queue:GetShoppingList()
             local auction = ns.Prices:GetValue(itemID, "lowest")
             local vendor = ns.Vendor:GetUnitPrice(itemID)
 
+            -- All that is still to buy, up the listings from the last scan
+            -- (Prices:GetCostFor), past the ones bought since it.
+            local auctionCost
+            if auction and shortfall > 0 and ns.Prices.GetCostFor then
+                local skip = 0
+                local record = ns.Prices:Get(itemID)
+                if ns.AHBuys and ns.AHBuys.BoughtSince and type(record) == "table" and record.seen then
+                    skip = ns.AHBuys:BoughtSince(itemID, record.seen)
+                end
+                auctionCost = ns.Prices:GetCostFor(itemID, shortfall, skip)
+            end
+            local auctionEach = auctionCost and math.floor(auctionCost / shortfall + 0.5) or auction
+
             -- Cheaper from a vendor means the shopping list should send you to
             -- one, not to the auction house.
-            local fromVendor = vendor ~= nil and (not auction or vendor <= auction)
-            local unitCost = fromVendor and vendor or auction
+            local fromVendor = vendor ~= nil and (not auctionEach or vendor <= auctionEach)
+            local unitCost = fromVendor and vendor or auctionEach
+            local estimatedCost
+            if fromVendor then
+                estimatedCost = vendor * shortfall
+            elseif auctionCost then
+                estimatedCost = auctionCost
+            elseif unitCost then
+                estimatedCost = unitCost * shortfall
+            end
+
+            -- What was paid for it on the auction house today, against what
+            -- this list had said; amber when well over (AHBuys.OVERPAID).
+            local paid, paidUnits, paidEstimate
+            if ns.AHBuys and ns.AHBuys.PaidFor then
+                paid, paidUnits, paidEstimate = ns.AHBuys:PaidFor(itemID, needed)
+            end
 
             -- Where to go, and what the choice is worth. Only a genuine choice
             -- when both sources actually have the item.
@@ -1388,8 +1416,14 @@ function Queue:GetShoppingList()
                 -- waiting there, and the row said "in bank" for them.
                 needsMailTrip = inBags + inBank < needed and have >= needed,
                 shortfall = shortfall,
+                -- Each, on average, for the shortfall: up the listings.
                 unitCost = unitCost,
-                estimatedCost = unitCost and (unitCost * shortfall) or nil,
+                estimatedCost = estimatedCost,
+                paid = paid,
+                paidUnits = paidUnits,
+                paidEstimate = paidEstimate,
+                overpaid = ns.AHBuys and ns.AHBuys.Overpaid
+                    and ns.AHBuys.Overpaid(paid, paidEstimate) or false,
                 fromVendor = fromVendor,
                 vendorLimited = fromVendor and ns.Vendor:IsLimited(itemID) or false,
                 source = source,

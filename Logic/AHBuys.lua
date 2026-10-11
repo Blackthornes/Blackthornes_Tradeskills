@@ -34,6 +34,18 @@ AHBuys.CONFIRM_WINDOW = 30
 -- Enough for a long shopping trip, small enough for the saved data.
 AHBuys.MAX_KEPT = 100
 
+-- What each purchase cost, against what the shopping list had estimated for
+-- it (a player asked, the owner agreeing 2026-10-11). Kept a week, and the
+-- shopping list shows the last day's.
+AHBuys.PAID_MAX_AGE = 7 * 24 * 3600
+AHBuys.PAID_SHOWN = 24 * 3600
+
+-- Paying more than this times the estimate is flagged in amber.
+AHBuys.OVERPAID = 1.25
+
+-- Seconds after a purchase in which gold leaving is still its price.
+AHBuys.SETTLE_WINDOW = 10
+
 --------------------------------------------------------------------------------
 -- Storage
 --------------------------------------------------------------------------------
@@ -50,19 +62,84 @@ end
 
 local function Now() return time() end
 
+--- This character's purchase prices, oldest first:
+--- { {itemID, quantity, paid, estimate, at}, ... }. paid is nil when the
+--- client never said; estimate is nil when the item had no price.
+function AHBuys:GetPaidList(create)
+    local record = ns.Recipes and ns.Recipes.GetCharacterRecord
+        and ns.Recipes:GetCharacterRecord(create)
+    if not record then return nil end
+    if create and type(record.ahPaid) ~= "table" then record.ahPaid = {} end
+    return type(record.ahPaid) == "table" and record.ahPaid or nil
+end
+
 --- Drop what is too old to be in the mail any more, and anything unreadable.
 function AHBuys:Prune(list)
     list = list or self:GetList(false)
-    if not list then return end
     local now = Now()
-    for i = #list, 1, -1 do
-        local buy = list[i]
-        if type(buy) ~= "table" or not tonumber(buy.itemID) or (tonumber(buy.quantity) or 0) <= 0
-            or now - (tonumber(buy.at) or 0) > self.MAX_AGE then
-            table.remove(list, i)
+    if list then
+        for i = #list, 1, -1 do
+            local buy = list[i]
+            if type(buy) ~= "table" or not tonumber(buy.itemID) or (tonumber(buy.quantity) or 0) <= 0
+                or now - (tonumber(buy.at) or 0) > self.MAX_AGE then
+                table.remove(list, i)
+            end
+        end
+        while #list > self.MAX_KEPT do table.remove(list, 1) end
+    end
+
+    local paid = self:GetPaidList(false)
+    if paid then
+        for i = #paid, 1, -1 do
+            local buy = paid[i]
+            if type(buy) ~= "table" or not tonumber(buy.itemID) or (tonumber(buy.quantity) or 0) <= 0
+                or now - (tonumber(buy.at) or 0) > self.PAID_MAX_AGE then
+                table.remove(paid, i)
+            end
+        end
+        while #paid > self.MAX_KEPT do table.remove(paid, 1) end
+    end
+end
+
+--- Units of an item bought on the auction house at or after `at`: listings
+--- a scan from then still shows, though they are gone.
+function AHBuys:BoughtSince(itemID, at)
+    local list = self:GetPaidList(false)
+    if not list or not itemID or not at then return 0 end
+    local total = 0
+    for _, buy in ipairs(list) do
+        if buy.itemID == itemID and (tonumber(buy.at) or 0) >= at then
+            total = total + (tonumber(buy.quantity) or 0)
         end
     end
-    while #list > self.MAX_KEPT do table.remove(list, 1) end
+    return total
+end
+
+--- What the last day's purchases of an item cost, newest first, until they
+--- cover `units`.
+-- @return paid, paidUnits, estimate (estimate nil when any of them had none),
+--   or nil when none were bought with a price the client gave
+function AHBuys:PaidFor(itemID, units)
+    local list = self:GetPaidList(false)
+    if not list or not itemID then return nil end
+    local since = Now() - self.PAID_SHOWN
+    local paid, count, estimate = 0, 0, 0
+    for i = #list, 1, -1 do
+        local buy = list[i]
+        if count >= (units or math.huge) then break end
+        if buy.itemID == itemID and (tonumber(buy.at) or 0) >= since and tonumber(buy.paid) then
+            paid = paid + buy.paid
+            count = count + (tonumber(buy.quantity) or 0)
+            estimate = estimate and tonumber(buy.estimate) and (estimate + buy.estimate) or nil
+        end
+    end
+    if count <= 0 then return nil end
+    return paid, count, estimate
+end
+
+--- Paid more than OVERPAID times the estimate?
+function AHBuys.Overpaid(paid, estimate)
+    return paid ~= nil and estimate ~= nil and estimate > 0 and paid > estimate * AHBuys.OVERPAID
 end
 
 --- Units of an item bought and not yet taken from the mail.
@@ -148,11 +225,69 @@ end
 -- { itemID, quantity, at, auctionID }
 AHBuys.awaiting = nil
 
+--- What the shopping list would have said these units cost, before the
+--- player looked them up (Prices:CostBeforeLook): the vendor's price for
+--- what a vendor sells, else up the auction listings.
+function AHBuys:Estimate(itemID, quantity)
+    local vendor = ns.Vendor and ns.Vendor.GetUnitPrice and ns.Vendor:GetUnitPrice(itemID)
+    local auction
+    if ns.Prices and ns.Prices.CostBeforeLook then
+        local ok, cost = pcall(ns.Prices.CostBeforeLook, ns.Prices, itemID, quantity,
+            function(seen) return AHBuys:BoughtSince(itemID, seen) end)
+        auction = ok and tonumber(cost) or nil
+    end
+    if vendor and (not auction or vendor * quantity <= auction) then return vendor * quantity end
+    return auction
+end
+
+-- The price the auction house last quoted for a commodity purchase:
+-- { itemID, quantity, total, at }.
+AHBuys.quote = nil
+
+function AHBuys:OnStartCommodities(itemID, quantity)
+    self.quote = { itemID = tonumber(itemID), quantity = tonumber(quantity), at = Now() }
+end
+
+function AHBuys:OnPriceUpdated(unitPrice, totalPrice)
+    local quote = self.quote
+    if quote and Now() - quote.at <= self.CONFIRM_WINDOW then quote.total = tonumber(totalPrice) end
+end
+
 function AHBuys:Await(itemID, quantity, auctionID, price)
     itemID, quantity = tonumber(itemID), tonumber(quantity)
     if not itemID or not quantity or quantity <= 0 then return end
+
+    -- A commodity's total comes from the quote for this item and count.
+    local quoted
+    local quote = self.quote
+    if not price and quote and quote.itemID == itemID and quote.quantity == quantity
+        and Now() - quote.at <= self.CONFIRM_WINDOW then
+        quoted = quote.total
+    end
+
+    -- The last purchase's gold has left by now, or its price stays as given.
+    self.settling = nil
     self.awaiting = { itemID = itemID, quantity = quantity, at = Now(),
-        auctionID = auctionID, money = self:Money(), price = tonumber(price) }
+        auctionID = auctionID, money = self:Money(), price = tonumber(price),
+        quoted = quoted, estimate = self:Estimate(itemID, quantity) }
+end
+
+--- Write down what a purchase cost. The gold that left is the surest
+--- figure; the buyout or the quote stand in until it does, and a purchase
+--- confirmed before the gold leaves is settled when it does (OnMoney).
+function AHBuys:NotePaid(wait)
+    local list = self:GetPaidList(true)
+    if not list then return end
+    local entry = { itemID = wait.itemID, quantity = wait.quantity, at = Now(),
+        estimate = wait.estimate, paid = wait.price or wait.quoted }
+    list[#list + 1] = entry
+
+    local money = wait.money and self:Money()
+    if money and wait.money - money > 0 then
+        entry.paid = wait.money - money
+    elseif wait.money then
+        self.settling = { entry = entry, money = wait.money, at = Now() }
+    end
 end
 
 function AHBuys:Money()
@@ -168,6 +303,7 @@ function AHBuys:Confirm(auctionID)
     -- An item purchase names its auction; another one's answer is not ours.
     if auctionID and wait.auctionID and auctionID ~= wait.auctionID then return end
     self.awaiting = nil
+    self:NotePaid(wait)
     self:Record(wait.itemID, wait.quantity)
 end
 
@@ -178,6 +314,16 @@ end
 --- Gold leaving right after a purchase was asked for is the purchase: a
 --- client that sends no purchase event still pays.
 function AHBuys:OnMoney()
+    local settling = self.settling
+    if settling then
+        self.settling = nil
+        local money = self:Money()
+        if money and settling.money - money > 0 and Now() - settling.at <= self.SETTLE_WINDOW then
+            settling.entry.paid = settling.money - money
+            Changed()
+        end
+    end
+
     local wait = self.awaiting
     if not wait or not wait.money then return end
     local money = self:Money()
@@ -349,6 +495,12 @@ function AHBuys:OnEnable()
     pcall(self.Prune, self)
 
     local auctions = _G.C_AuctionHouse
+    Watch(auctions, "StartCommoditiesPurchase", function(itemID, quantity)
+        AHBuys:OnStartCommodities(itemID, quantity)
+    end)
+    ns.RegisterEvent(self, "COMMODITY_PRICE_UPDATED", function(_, _, unitPrice, totalPrice)
+        AHBuys:OnPriceUpdated(unitPrice, totalPrice)
+    end)
     Watch(auctions, "ConfirmCommoditiesPurchase", function(itemID, quantity)
         AHBuys:OnConfirmCommodities(itemID, quantity)
     end)
