@@ -349,7 +349,7 @@ end
 -- The name is typed in Settings, so it can be any character, one on another
 -- account included. What goes: green and better armour and weapons that can
 -- be disenchanted, up to the quality picked, never a soulbound copy, never
--- gear that binds when picked up, and never an upgrade for the character
+-- crafted gear (asked 2026-10-11), never gear that binds when picked up, and never an upgrade for the character
 -- carrying it (when Equipment is loaded to say so). Like the queue's mail,
 -- nothing is sent from here: the panel fills the mail and the player
 -- presses Send.
@@ -471,6 +471,38 @@ local function UpgradeForMe(itemID, link)
     return ok and result == true
 end
 
+--- Made by a profession (any recipe, learned or not)? Crafted gear stays
+--- with the player (the owner, 2026-10-11: "disenchantable, non-crafted").
+local function Crafted(itemID)
+    local book = ns.RecipeBook
+    if not (book and book.IsCrafted) then return false end
+    local ok, made = pcall(book.IsCrafted, book, itemID)
+    return ok and made == true
+end
+
+--- Does this item go to the disenchanter, by the rule above? Green up to the
+--- quality picked, can be disenchanted, does not bind when picked up, is not
+--- made by a profession, and is no upgrade for the character carrying it. A soulbound copy is the
+--- caller's to leave out. Blackthornes Butler asks it too (Butler:Advise's
+--- `disenchanter`), so both offer the same gear (the owner, 2026-10-11).
+-- @param quality the item's quality, read when nil
+-- @param link the carried copy's link, when known
+function QueueMail:GoesToDisenchanter(itemID, quality, link)
+    itemID = tonumber(itemID)
+    if not itemID then return false end
+    local Disenchant = ns.Disenchant
+    if not (Disenchant and Disenchant.IsDisenchantable) then return false end
+    if quality == nil and type(C_Item) == "table" and type(C_Item.GetItemQualityByID) == "function" then
+        local ok, read = pcall(C_Item.GetItemQualityByID, itemID)
+        quality = ok and tonumber(read) or nil
+    end
+    quality = tonumber(quality)
+    if not quality or quality < GREEN or quality > self:GetDisenchantQuality() then return false end
+    if Disenchant:IsDisenchantable(itemID) ~= true or Bound(itemID) then return false end
+    if Crafted(itemID) then return false end
+    return not UpgradeForMe(itemID, link)
+end
+
 --- What the bags hold for the disenchanter, as a delivery the panel can
 --- draw and Fill can attach, or nil when there is nobody or nothing.
 -- @return { to, name, recipient, subject, disenchant = true,
@@ -505,8 +537,7 @@ function QueueMail:GetDisenchantDelivery()
                 and not refused[itemID] then
                 -- One copy an upgrade keeps them all: the mail is filled by
                 -- item, and could take that copy rather than another.
-                if Disenchant:IsDisenchantable(itemID) ~= true or Bound(itemID)
-                    or UpgradeForMe(itemID, link) then
+                if not self:GoesToDisenchanter(itemID, quality, link) then
                     refused[itemID] = true
                 else
                     if not counts[itemID] then

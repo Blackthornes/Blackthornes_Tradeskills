@@ -270,6 +270,23 @@ end
 function RecipeBook:Invalidate()
     self.merged = nil
     self.known = nil
+    self.made = nil
+end
+
+--- Is this item made by a profession? Any recipe in the book or seen in a
+--- profession window, learned or not. The disenchanter's mail leaves these
+--- out (the owner, 2026-10-11: "disenchantable, non-crafted items").
+function RecipeBook:IsCrafted(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return false end
+    if not self.made then
+        local made = {}
+        for _, record in pairs((self:GetAll())) do
+            if record.outputItemID then made[record.outputItemID] = true end
+        end
+        self.made = made
+    end
+    return self.made[itemID] == true
 end
 
 --- One recipe by ID, or nil.
