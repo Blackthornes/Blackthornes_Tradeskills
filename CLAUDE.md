@@ -341,6 +341,12 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   theirs is newer. So Farmer's `GetValue` can now answer from a guild
   price unless the player turned it off; still copper or nil.
 
+Farmer shares its own counts the same way (2026-10-11): its `Core/Comm.lua`
+and `Core/Serialize.lua` are copies of ours (prefix `BFRshare` instead of
+`BTSshare`, no test command, listening only while sharing is on), and it has
+its own pairing (`shareNames`) rather than reading `linkNames`. A fix to
+`Core/Comm.lua` or `Core/Serialize.lua` here belongs in Farmer's too.
+
 ## The house frame (Titanforged)
 
 The owner picked this look for all four addons on 2026-10-04 from two mockups
