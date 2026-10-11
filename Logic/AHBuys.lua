@@ -304,6 +304,18 @@ function AHBuys:Confirm(auctionID)
     if auctionID and wait.auctionID and auctionID ~= wait.auctionID then return end
     self.awaiting = nil
     self:NotePaid(wait)
+    -- What was bought is off the auction house now, so the lists that offer
+    -- it (Disenchanting, Deals) stop offering it at that price. Before
+    -- Record, whose redraw then shows it. An item's buyout names its unit
+    -- price; a commodity's buy takes the cheapest units, so none is given.
+    if ns.Prices and ns.Prices.NoteBought then
+        local unit = wait.price and Util.UnitPriceFromStack(wait.itemID, wait.price, wait.quantity) or nil
+        local ok, changed = pcall(ns.Prices.NoteBought, ns.Prices, wait.itemID, unit, wait.quantity, wait.at)
+        -- Seen again at the same price, it is another listing: read it.
+        if ok and changed and ns.Scanner and ns.Scanner.ForgetPassive then
+            ns.Scanner:ForgetPassive(wait.itemID)
+        end
+    end
     self:Record(wait.itemID, wait.quantity)
     -- Bought after a search from the Disenchanting tab: marked to disenchant.
     local buys = ns.DisenchantBuys
