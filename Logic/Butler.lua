@@ -169,6 +169,7 @@ local function Enchanters(selfKey)
     for characterKey, record in pairs(Characters()) do
         local skill = EnchantingSkill(record)
         if skill and characterKey ~= selfKey and record.linkedFrom == nil
+            and not (ns.QueueMail and ns.QueueMail.IsPlaying and ns.QueueMail:IsPlaying(characterKey))
             and (not (queue and queue.CanMail) or queue:CanMail(selfKey, characterKey)) then
             list[#list + 1] = { name = ShortName(characterKey), skill = skill }
         end
@@ -420,7 +421,8 @@ end
 -- QueueMail:FindCharacter cannot read back (the mail went to "Ana B.").
 -- More than one record can give the same short name (a character kept
 -- under two keys, or a linked copy), so of those the best is taken: one of
--- this account's own, on this realm, then the lowest key.
+-- this account's own, on this realm, then the lowest key. The character
+-- playing, under any of its records, is never the answer.
 local function CharacterNamed(name)
     local selfRecord = Characters()[SelfKey() or ""]
     local realm = type(selfRecord) == "table" and selfRecord.realm or nil
@@ -437,9 +439,14 @@ local function CharacterNamed(name)
         return ok and type(full) == "string" and full:sub(1, #prefix) == prefix
     end
 
+    local mail = ns.QueueMail
+    local function Playing(characterKey)
+        return mail and mail.IsPlaying and mail:IsPlaying(characterKey) == true
+    end
+
     local best, bestScore
     for characterKey, record in pairs(Characters()) do
-        if type(record) == "table" and Matches(characterKey) then
+        if type(record) == "table" and not Playing(characterKey) and Matches(characterKey) then
             local score = (record.linkedFrom == nil and 2 or 0)
                 + ((realm and record.realm == realm) and 1 or 0)
             if not best or score > bestScore
@@ -454,8 +461,10 @@ end
 --- Fill the game's Send Mail page for one of the player's characters.
 -- `name` is a short name (as Advise gives it) or a name typed in Settings;
 -- `items` is a list of { itemID, count }. Nothing is sent: the player
--- presses Send. Never raises.
--- @return true when filling started, or false and why
+-- presses Send. Never raises. Never fills a mail to the character playing
+-- (a player found one, 2026-10-11): that is "false" and why.
+-- @return true when filling started, or false and why; then the name the
+--   mail is addressed to, in full
 function Butler:FillMail(name, items)
     local mail = ns.QueueMail
     if not (mail and mail.Fill) then return false, "Tradeskills cannot fill mail here" end
@@ -472,13 +481,19 @@ function Butler:FillMail(name, items)
     end
     if #list == 0 then return false, "nothing to mail" end
 
+    local toSelf = "that's the character you're on"
+    local recipient
     local ok, started, why = pcall(function()
         local key = CharacterNamed(name) or (mail.FindCharacter and mail:FindCharacter(name))
-        local recipient = key and mail.MailName and mail.MailName(Characters()[key]) or name
+        if key == nil and mail.IsPlayingName and mail:IsPlayingName(name) then return false, toSelf end
+        if key ~= nil and mail.IsPlaying and mail:IsPlaying(key) then return false, toSelf end
+        recipient = key and mail.MailName and mail.MailName(Characters()[key]) or name
+        if mail.IsPlayingName and mail:IsPlayingName(recipient) then return false, toSelf end
         return mail:Fill({ recipient = recipient, items = list, subject = "From Blackthornes Butler" })
     end)
     if not ok then return false, "Tradeskills could not fill the mail" end
-    return started == true, why
+    if started == true then return true, nil, recipient end
+    return false, why
 end
 
 local function FromBank()

@@ -171,11 +171,11 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
 - `enchanter`: only when the character playing cannot: the disenchanter
   typed in Settings (`QueueMail:GetDisenchanter`, up to its quality), else
   the alt on this account (not `linkedFrom`, `Queue:CanMail`) with the most
-  Enchanting that is enough. A short name.
+  Enchanting that is enough. The full name.
 - `need`: what this character's own queued crafts use from its bags (use,
   less what it makes, less its bank), as `QueueMail:GetDeliveries` keeps back.
 - `mailTo`, `mailCount`: the alt `GetDeliveries` would send the most of it
-  to, short name, and how many.
+  to, full name, and how many.
 
 Butler asks once per bag item, a hundred in a burst, so the queue plan,
 the deliveries and the characters' Enchanting are read once into a lookup,
@@ -212,7 +212,13 @@ _G.BlackthornesTS.Butler:FromBank()             -- { [itemID] = count }, or nil;
 the player's characters (`name` as Advise gave it, resolved with
 `QueueMail:FindCharacter` and `MailName`; `items` a list of `{ itemID,
 count }`, subject "From Blackthornes Butler"); the player presses Send and
-QueueMail's own SendMail hook writes down what went. `FromBank` is what
+QueueMail's own SendMail hook writes down what went. It never fills a mail
+to the character playing, under any record of it (`QueueMail:IsPlaying`:
+its key, a record carrying its GUID, or the old name-realm record left
+beside the GUID one; a player found Butler filling one, 2026-10-11), and
+answers false and "that's the character you're on"; filled, its third
+return is the full name it went to, for Butler's chat line. Deliveries,
+the enchanter and `FindCharacter` leave those records out too. `FromBank` is what
 the playing character's own queued crafts use, less what it makes and
 carries, no more than its bank holds. Keep both stable too.
 
@@ -394,6 +400,13 @@ section (the owner, 2026-10-10): they are not changes to the addon.
   re-read mid-run and `CraftPanel:RefreshInSlices` spreads the pane over
   frames). Visuals and usability are never traded away for speed. This
   rule is in all four addons' notes; keep them the same.
+- **Never shorten a character's last name** (the owner, 2026-10-11:
+  "they must be included in WoW Forever"). Forever names are first and
+  last together, so every place a character is named shows the whole name,
+  made to fit by growing or wrapping (`Theme.SetRowName`, `FitText` with a
+  wording that drops words, never the surname), never "Bob B." or the
+  first name alone. `Recipes:GetShortCharacterName` keeps its name for
+  Equipment and Butler but returns the full name.
 - **The client is WoW: Forever, a retail engine** (`## Interface: 16001`,
   modern Lua), not 1.12. Instances hand addons secret values that raise when
   compared, concatenated or formatted, so read client values inside a pcall.
