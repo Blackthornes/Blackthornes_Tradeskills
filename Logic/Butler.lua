@@ -95,6 +95,26 @@
 -- they use, less what it makes and what it carries, no more than its bank
 -- holds.
 --
+-- Butler's step list for jobs on other characters (the owner asked
+-- 2026-10-11 for a way to "go craft Medium Leather on another, then send it
+-- back") asks two more:
+--
+--   _G.BlackthornesTS.Butler:Jobs()             -- a list, or nil; reads only
+--   _G.BlackthornesTS.Butler:Craft(recipeID)    -- true, or false and why
+--
+-- Jobs is one entry per character with something to do in the queue, the
+-- character playing first, then by name: { key, name (full), isCurrent,
+-- steps }. Each step is a craft, { kind = "craft", recipeID, itemID, name,
+-- count (items it makes), crafts, forNames (full names it is for, other
+-- than the crafter), ready, missing = { { itemID, count } } }, or a mail,
+-- { kind = "mail", to (full name), items = { { itemID, count } }, crafts }:
+-- what the character playing can send now (QueueMail:GetDeliveries), and
+-- for the others what they made for someone and still owe
+-- (QueueMail:GetOwedBy). Only characters this one can mail (same realm and
+-- side), never another account's. Craft makes the character playing's
+-- queued craft of that recipe, from Butler's click: started when its
+-- profession window shows it, else the Queue tab opens on its Open button.
+--
 -- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
 
@@ -591,6 +611,187 @@ function Butler:FromBank()
     local ok, wants = pcall(FromBank)
     if ok then return wants end
     return nil
+end
+
+--------------------------------------------------------------------------------
+-- Jobs across characters, for Butler's step list
+--------------------------------------------------------------------------------
+
+local function FullName(characterKey)
+    local recipes = ns.Recipes
+    if recipes and recipes.GetCharacterName then
+        local ok, name = pcall(recipes.GetCharacterName, recipes, characterKey)
+        if ok and type(name) == "string" and name ~= "" then return name end
+    end
+    return tostring(characterKey)
+end
+
+local function ItemList(counts)
+    local list = {}
+    for itemID, count in pairs(type(counts) == "table" and counts or {}) do
+        if type(itemID) == "number" and type(count) == "number" and count > 0 then
+            list[#list + 1] = { itemID = itemID, count = count }
+        end
+    end
+    table.sort(list, function(a, b) return a.itemID < b.itemID end)
+    return list
+end
+
+local function Jobs()
+    local list = {}
+    local queue, mail = ns.Queue, ns.QueueMail
+    local selfKey = SelfKey()
+    if not (selfKey and queue and queue.GetAll and queue.GetCrafter and ns.Recipes) then return list end
+
+    local records = Characters()
+    local byKey = {}
+    local function Playing(characterKey)
+        return characterKey == selfKey
+            or (mail and mail.IsPlaying and mail:IsPlaying(characterKey) == true)
+    end
+
+    -- A character's entry, made the first time it has a step. The character
+    -- playing, under any of its records, is one entry.
+    local function Job(characterKey)
+        local playing = Playing(characterKey)
+        local key = playing and selfKey or characterKey
+        if byKey[key] then return byKey[key] end
+        local record = records[key]
+        if type(record) ~= "table" or record.linkedFrom then return nil end
+        if not playing and not queue:CanMail(selfKey, key) then return nil end
+        local job = { key = key, name = FullName(key), isCurrent = playing, steps = {} }
+        byKey[key] = job
+        return job
+    end
+
+    for _, entry in ipairs(queue:GetAll()) do
+        local recipe = type(entry) == "table" and ns.Recipes:GetAny(entry.recipeID)
+        local crafts = type(entry) == "table" and tonumber(entry.quantity) or 0
+        if recipe and crafts > 0 then
+            local crafter = queue:GetCrafter(entry)
+            local job = crafter and Job(crafter)
+            if job then
+                local forNames = {}
+                for _, characterKey in ipairs(queue:GetRecipients(entry)) do
+                    if not Playing(characterKey) or not job.isCurrent then
+                        forNames[#forNames + 1] = FullName(characterKey)
+                    end
+                end
+                local missing = {}
+                for _, reagent in ipairs(recipe.reagents or {}) do
+                    local want = (reagent.quantity or 0) * crafts
+                    local held = queue:HeldBy(job.key, reagent.itemID) or 0
+                    if want > held then
+                        missing[#missing + 1] = { itemID = reagent.itemID, count = want - held }
+                    end
+                end
+                job.steps[#job.steps + 1] = {
+                    kind = "craft",
+                    recipeID = entry.recipeID,
+                    itemID = recipe.outputItemID,
+                    name = recipe.name,
+                    crafts = crafts,
+                    count = crafts * math.max(1, recipe.quantityMin or 1),
+                    forNames = forNames,
+                    ready = #missing == 0,
+                    missing = missing,
+                }
+            end
+        end
+    end
+
+    -- What the character playing can mail now, as the Mail panel has it.
+    if mail and mail.GetDeliveries then
+        local job = Job(selfKey)
+        for _, delivery in ipairs(job and mail:GetDeliveries() or {}) do
+            local items = {}
+            for _, item in ipairs(delivery.items or {}) do
+                items[#items + 1] = { itemID = item.itemID, count = item.count }
+            end
+            if #items > 0 then
+                job.steps[#job.steps + 1] = { kind = "mail", to = FullName(delivery.to),
+                    items = items, crafts = delivery.crafts == true }
+            end
+        end
+    end
+
+    -- The others: what they made for someone and still owe.
+    if mail and mail.GetOwedBy then
+        local keys = {}
+        for characterKey in pairs(records) do keys[#keys + 1] = characterKey end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        for _, fromKey in ipairs(keys) do
+            if not Playing(fromKey) then
+                local owed = mail:GetOwedBy(fromKey)
+                local targets = {}
+                for toKey in pairs(owed) do targets[#targets + 1] = toKey end
+                table.sort(targets, function(a, b) return tostring(a) < tostring(b) end)
+                for _, toKey in ipairs(targets) do
+                    local items = ItemList(owed[toKey])
+                    local job = #items > 0 and toKey ~= fromKey and Job(fromKey)
+                    if job then
+                        job.steps[#job.steps + 1] = { kind = "mail", to = FullName(toKey),
+                            items = items, crafts = true }
+                    end
+                end
+            end
+        end
+    end
+
+    for _, job in pairs(byKey) do
+        if #job.steps > 0 then list[#list + 1] = job end
+    end
+    table.sort(list, function(a, b)
+        if a.isCurrent ~= b.isCurrent then return a.isCurrent end
+        if a.name ~= b.name then return a.name < b.name end
+        return tostring(a.key) < tostring(b.key)
+    end)
+    return list
+end
+
+--- Every character's jobs in the queue, for Butler's step list. Never
+--- raises, writes nothing; nil on any error. Fresh tables each time.
+function Butler:Jobs()
+    local ok, list = pcall(Jobs)
+    if ok then return list end
+    return nil
+end
+
+--- Make the character playing's queued craft of a recipe, from Butler's
+--- click (a craft needs a real click, and Butler's is one). Started when
+--- the profession window shows the recipe; otherwise the Queue tab opens,
+--- where the Open button opens the profession. Never raises.
+-- @return true and "crafting" or "opened", or false and why
+function Butler:Craft(recipeID)
+    recipeID = tonumber(recipeID)
+    if not recipeID then return false, "nothing to craft" end
+    local ok, done, why = pcall(function()
+        local queue, crafting = ns.Queue, ns.Crafting
+        local selfKey = SelfKey()
+        local entry
+        for _, queued in ipairs(queue:GetAll()) do
+            if queued.recipeID == recipeID and (tonumber(queued.quantity) or 0) > 0
+                and queue:GetCrafter(queued) == selfKey then
+                entry = queued
+                break
+            end
+        end
+        if not entry then return false, "it's no longer in your queue" end
+        local ready, reason = crafting:GetReadiness(recipeID)
+        if not ready then return false, reason end
+        if crafting:IsBusy() then return false, "already crafting" end
+        local opener = ns.ProfessionOpener
+        local shows = crafting.isTradeSkillOpen
+            and (not (opener and opener.WindowShowsRecipe) or opener:WindowShowsRecipe(recipeID))
+        if shows then
+            if crafting:Start(recipeID, entry.quantity) then return true, "crafting" end
+            return false, "the game didn't start it"
+        end
+        if queue:ShowQueue() then return true, "opened" end
+        return false, "open your profession first"
+    end)
+    if not ok then return false, "Tradeskills could not start the craft" end
+    return done == true, why
 end
 
 --- Butler takes over the mailbox (the owner picked it, 2026-10-11): while
