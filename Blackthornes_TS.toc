@@ -43,6 +43,7 @@ Logic\Queue.lua
 Logic\QueueActions.lua
 Logic\QueueMail.lua
 Logic\AHBuys.lua
+Logic\DisenchantBuys.lua
 Logic\Crafting.lua
 Logic\Posting.lua
 Logic\CraftedCost.lua

@@ -122,6 +122,10 @@ function DisenchantLog:Record(itemID, results, from)
     -- What one of these was expected to give, before this one counts.
     local usual = ns.Disenchant:GetValue(itemID)
 
+    -- One bought to disenchant has been (Logic/DisenchantBuys.lua).
+    local buys = ns.DisenchantBuys
+    if buys and buys.Used then pcall(buys.Used, buys, itemID, 1) end
+
     local log = self:GetTable()
     local band, newFinds = DisenchantLog.Add(log.bands, facts.key, results)
     local item = DisenchantLog.Add(log.items, itemID, results)
