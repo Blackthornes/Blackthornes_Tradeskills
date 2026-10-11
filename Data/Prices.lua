@@ -245,6 +245,36 @@ function Prices:GetTable()
     return ns.Config:GetPriceTable()
 end
 
+-- Which item each recent change was about, so a list can redo only the rows
+-- those items fill rather than rebuild itself for one price (the owner's
+-- smooth play rule). Keyed by the change's number: an item ID, or false for
+-- a change that touched no one item. Only the last TOUCH_KEPT are kept.
+Prices.touched = {}
+local TOUCH_KEPT = 32
+
+--- Count a change to the prices, and remember which item it was about.
+function Prices:Touch(itemID)
+    Prices.changes = (Prices.changes or 0) + 1
+    Prices.touched[Prices.changes] = itemID or false
+    Prices.touched[Prices.changes - TOUCH_KEPT] = nil
+end
+
+--- The items changed since change number `since`, as { [itemID] = true },
+--- or nil when that cannot be told: too many changes, one that touched no
+--- one item, or one counted without Touch (a guild's prices). nil means
+--- build again from scratch.
+function Prices:TouchedSince(since)
+    local now = Prices.changes or 0
+    if type(since) ~= "number" or since > now or now - since > TOUCH_KEPT then return nil end
+    local items = {}
+    for change = since + 1, now do
+        local itemID = Prices.touched[change]
+        if not itemID then return nil end
+        items[itemID] = true
+    end
+    return items
+end
+
 --- Is this a ladder that can be walked: pairs of a credible price and a
 --- count above 0, cheapest first?
 local function ValidLadder(ladder)
@@ -268,7 +298,7 @@ Prices.ValidLadder = ValidLadder
 --   the cheapest rival, and dropped when it is not.
 function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
     -- Lets a list know prices moved without comparing every record.
-    Prices.changes = (Prices.changes or 0) + 1
+    Prices:Touch(itemID)
 
     if not itemID or not marketValue then return end
 
@@ -352,7 +382,7 @@ end
 -- go is everything that describes the current book, because there isn't one.
 function Prices:RecordEmpty(itemID, scannedAt)
     -- Lets a list know prices moved without comparing every record.
-    Prices.changes = (Prices.changes or 0) + 1
+    Prices:Touch(itemID)
 
     if not itemID then return end
 
@@ -390,6 +420,86 @@ function Prices:RecordEmpty(itemID, scannedAt)
     if ns.PriceHistory then ns.PriceHistory:NoteListed(itemID, 0, scannedAt) end
 
     return record
+end
+
+--- You bought from this item's listings: what you bought is no longer there.
+--
+-- A player found the Disenchanting tab still offering an item at the price
+-- of the listing they had just bought, the last one at that price, until
+-- the next scan. The client may or may not show the listings again after a
+-- buy, so the record is put right here, from what was paid.
+--
+-- The units bought come off the cheapest on record, and anything on record
+-- under the price paid goes too: you would have bought the cheapest, so a
+-- cheaper one had already gone. The rest of the ladder stays; with no ladder to
+-- say what comes next, the cheapest rival is unknown (nil) until the next
+-- look, so nothing is offered at a price nobody is selling at. No price
+-- history is written: nothing was scanned, and your own buy says nothing
+-- about Demand.
+--
+-- @param unitPrice what one listing's unit cost, or nil for a commodity,
+--   where one buy takes the cheapest units whatever their price
+-- @param quantity  how many were bought
+-- @param askedAt   time() the buy was asked for. A record read after that
+--   already saw the book without it, and is left alone.
+-- @return true when the record changed
+function Prices:NoteBought(itemID, unitPrice, quantity, askedAt)
+    local record = itemID and self:GetTable()[itemID]
+    if type(record) ~= "table" then return false end
+    if askedAt and (record.seen or 0) > askedAt then return false end
+
+    quantity = math.max(1, math.floor(tonumber(quantity) or 1))
+    local paid = tonumber(unitPrice)
+
+    local cheapest = record.rivalMin
+    if record.ignoredLow and (not cheapest or record.ignoredLow < cheapest) then cheapest = record.ignoredLow end
+    if not cheapest then return false end
+    if paid and paid < cheapest - 1 then return false end
+    local unitPrice = paid or cheapest
+
+    local left = quantity
+
+    -- The lone low listing first: it is the cheapest of all, and one unit.
+    if record.ignoredLow and record.ignoredLow <= unitPrice + 1 then
+        record.ignoredLow = nil
+        left = left - 1
+    end
+
+    if ValidLadder(record.ladder) then
+        local kept = {}
+        for i = 1, #record.ladder, 2 do
+            local price, count = record.ladder[i], record.ladder[i + 1]
+            -- Under the price paid had already gone (a copper either way is
+            -- the same listing: a stack's unit price is rounded). The units
+            -- bought come off the cheapest of the rest.
+            if paid and price < paid - 1 then
+                count = 0
+            elseif left > 0 then
+                local take = math.min(left, count)
+                count, left = count - take, left - take
+            end
+            if count > 0 then
+                kept[#kept + 1] = price
+                kept[#kept + 1] = count
+            end
+        end
+        record.ladder = #kept >= 2 and kept or nil
+        record.rivalMin = record.ladder and record.ladder[1] or nil
+    else
+        record.ladder = nil
+        if left > 0 and record.rivalMin and record.rivalMin <= unitPrice + 1 then record.rivalMin = nil end
+    end
+
+    record.quantity = math.max(0, (tonumber(record.quantity) or 0) - quantity)
+
+    local min = record.rivalMin
+    for _, price in ipairs({ record.ignoredLow or false, record.ownMin or false }) do
+        if price and (not min or price < min) then min = price end
+    end
+    record.min = min
+
+    self:Touch(itemID)
+    return true
 end
 
 --- After a complete full scan, mark every item it did not see as sold out.
@@ -969,7 +1079,7 @@ function Prices:SetMine(itemID, price, mode, name)
         local realm = MyPrices(false)
         if realm and realm[itemID] ~= nil then
             realm[itemID] = nil
-            Prices.changes = (Prices.changes or 0) + 1
+            Prices:Touch(itemID)
         end
         return true
     end
@@ -986,7 +1096,7 @@ function Prices:SetMine(itemID, price, mode, name)
     end
 
     realm[itemID] = { price = math.floor(price), mode = mode, name = name }
-    Prices.changes = (Prices.changes or 0) + 1
+    Prices:Touch(itemID)
     return true
 end
 

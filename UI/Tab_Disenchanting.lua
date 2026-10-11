@@ -771,14 +771,18 @@ end
 -- a bag change or an auction event reuses it. At the auction house those
 -- redraws come often, and walking thousands of items each time pushed bag
 -- items out of the client's memory, so Ready to sell kept losing them.
-local built = { key = nil, rows = nil, hidden = 0, pending = 0 }
+--
+-- A price that moved for a few items (a buy, a search that found none, a
+-- price read from a search) redoes only their rows (PatchAuctionRows), so
+-- the list never walks every item for one listing.
+local built = { key = nil, rows = nil, hidden = 0, pending = 0, places = nil, changes = nil }
 
 local function BuildKey()
     local skill = ns.Disenchant:GetBestEnchanter()
 
     return table.concat({
-        tostring(ns.Prices and ns.Prices.changes or 0),
         tostring(ns.Prices and ns.Prices:Count() or 0),
+        tostring(ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan() or 0),
         tostring(ns.Disenchant.factsVersion or 0),
         -- Your own disenchants taking over from the built-in table.
         tostring(ns.DisenchantLog and ns.DisenchantLog.version or 0),
@@ -811,10 +815,21 @@ local function BuildRows()
     if state.view == "bag" then return BuildBagRows() end
 
     local key = BuildKey()
+    local changes = ns.Prices and ns.Prices.changes or 0
+    local opts = { profitableOnly = state.dealsOnly }
 
-    if key ~= built.key then
-        local rows, hidden, pending = ns.Disenchant:GetAuctionRows({ profitableOnly = state.dealsOnly })
+    local patched = false
+    if key == built.key and changes ~= built.changes and built.places then
+        local items = ns.Prices.TouchedSince and ns.Prices:TouchedSince(built.changes)
+        patched = items ~= nil and ns.Disenchant.PatchAuctionRows ~= nil
+            and ns.Disenchant:PatchAuctionRows(built, items, opts)
+        if patched then built.changes = changes end
+    end
+
+    if not patched and (key ~= built.key or changes ~= built.changes) then
+        local rows, hidden, pending, places = ns.Disenchant:GetAuctionRows(opts)
         built.key, built.rows, built.hidden, built.pending = key, rows, hidden or 0, pending or 0
+        built.places, built.changes = places, changes
 
         -- For /bts dedeals: what the tab is showing and when it was built.
         ns.Disenchant.shownRows, ns.Disenchant.shownBuiltAt = rows, Now()

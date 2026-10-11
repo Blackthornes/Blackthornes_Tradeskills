@@ -1850,6 +1850,8 @@ function UI:SearchAuctionHouse(itemID, quantity)
         expires = 8,
 
         send = function()
+            -- An answer without the item then says nobody is selling one.
+            if ns.Scanner.ExpectSearch then ns.Scanner:ExpectSearch(itemID, name) end
             local ok = pcall(C_AuctionHouse.SendBrowseQuery, {
                 searchString = name,
                 sorts = {},
