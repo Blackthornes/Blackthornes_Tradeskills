@@ -8,8 +8,9 @@
 -- Farmer's Goals panel, with its milestones and finish fanfare.
 --
 -- Read through `_G.BlackthornesFarmer`, inside a pcall. Farmer's CLAUDE.md
--- asks its side to keep that global, `Goals`, `Goals:Set(name, amount)` and
--- `GoalsUI:Show()` stable.
+-- asks its side to keep that global, `Goals`, `Goals:Find(name)`,
+-- `Goals:Set(name, amount)`, `Goals:Remove(name)` and `GoalsUI:Show()`
+-- stable.
 
 local _, ns = ...
 
@@ -79,7 +80,124 @@ local function Apply(farmer, itemID, amount)
     if not ok then return nil, "Farmer could not make it. It may need updating" end
     if type(goal) ~= "table" then return nil, tostring(why or "Farmer said no"), name end
 
+    FarmerGoals:Remember(itemID, name, tonumber(goal.target) or amount)
     return goal, existed
+end
+
+--------------------------------------------------------------------------------
+-- Goals that follow the queue
+--
+-- A goal made here is the queue's (the owner, 2026-10-11: the addons should
+-- do the work for the player): when the queue grows or shrinks its target
+-- moves with it, and when nothing queued needs the material any more it
+-- goes. Only goals made here, by this character, and only while their
+-- target is still the one set here: a goal the player changed in Farmer is
+-- theirs and is let go. Kept account wide by character key in
+-- `farmerGoalsFromQueue[key][itemID] = { name, target }` (never rename it).
+-- "Goals follow the queue" in Settings (`farmerGoalsFollowQueue`, on unless
+-- unticked). Smooth play: worked out once, a second after a burst of queue
+-- changes, only when this character has such a goal.
+--------------------------------------------------------------------------------
+
+FarmerGoals.WAIT = 1
+
+local function Followed(create)
+    if not ns.db then return nil end
+    local key = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    if not key then return nil end
+    if type(ns.db.farmerGoalsFromQueue) ~= "table" then
+        if not create then return nil end
+        ns.db.farmerGoalsFromQueue = {}
+    end
+    local all = ns.db.farmerGoalsFromQueue
+    if type(all[key]) ~= "table" then
+        if not create then return nil end
+        all[key] = {}
+    end
+    return all[key]
+end
+
+--- Is a goal's target to follow the queue?
+function FarmerGoals:Follows()
+    return not (ns.Config and ns.Config:Get("farmerGoalsFollowQueue") == false)
+end
+
+--- Note a goal made from the queue, to follow it.
+function FarmerGoals:Remember(itemID, name, target)
+    local followed = Followed(true)
+    if followed and itemID then followed[itemID] = { name = name, target = target } end
+end
+
+--- The queue changed (Queue:Notify): look again a moment later, once a
+--- burst is over.
+function FarmerGoals:QueueChanged()
+    if self.soon or not self:Follows() then return end
+    local followed = Followed(false)
+    if not followed or next(followed) == nil then return end
+    self.soon = true
+    C_Timer.After(self.WAIT, function()
+        FarmerGoals.soon = false
+        FarmerGoals:Follow()
+    end)
+end
+
+--- Move each followed goal to what the queue needs now, or take it away
+--- when nothing queued needs it. Says what changed in one chat line.
+function FarmerGoals:Follow()
+    if not self:Follows() then return end
+    local followed = Followed(false)
+    if not followed or next(followed) == nil then return end
+    local farmer = self:Farmer()
+    if not farmer then return end
+    local Goals = farmer.Goals
+
+    local needs = {}
+    local okList, list = pcall(ns.Queue.GetShoppingList, ns.Queue)
+    if not okList or type(list) ~= "table" then return end
+    for _, line in ipairs(list) do needs[line.itemID] = tonumber(line.needed) or 0 end
+
+    local moved, gone = {}, {}
+    for itemID, kept in pairs(followed) do
+        local name = type(kept) == "table" and kept.name
+        local goal
+        if name and type(Goals.Find) == "function" then
+            local ok, found = pcall(Goals.Find, Goals, name)
+            goal = ok and type(found) == "table" and found or nil
+        end
+        local target = goal and tonumber(goal.target)
+
+        if not goal or goal.done or target ~= kept.target then
+            -- Finished, removed, or changed by the player: no longer the queue's.
+            followed[itemID] = nil
+        else
+            local need = math.floor(needs[itemID] or 0)
+            if need <= 0 then
+                if type(Goals.Remove) == "function" then pcall(Goals.Remove, Goals, name) end
+                followed[itemID] = nil
+                gone[#gone + 1] = name
+            elseif need ~= target then
+                local ok, changed = pcall(Goals.Set, Goals, name, need)
+                if ok and type(changed) == "table" then
+                    kept.target = tonumber(changed.target) or need
+                    moved[#moved + 1] = ("%s %d"):format(name, kept.target)
+                else
+                    -- Already have that many: the queue needs no gathering.
+                    if type(Goals.Remove) == "function" then pcall(Goals.Remove, Goals, name) end
+                    followed[itemID] = nil
+                    gone[#gone + 1] = name
+                end
+            end
+        end
+    end
+
+    if #moved == 0 and #gone == 0 then return end
+    table.sort(moved)
+    table.sort(gone)
+    local parts = {}
+    if #moved > 0 then parts[#parts + 1] = "now " .. table.concat(moved, ", ") end
+    if #gone > 0 then parts[#parts + 1] = "no longer needed: " .. table.concat(gone, ", ") end
+    ns.Print(("|c%sFarmer goals follow your queue:|r %s."):format(
+        ns.COLORS.accent or "ffffffff", table.concat(parts, "; ")))
 end
 
 local function ShowPanel(farmer)
