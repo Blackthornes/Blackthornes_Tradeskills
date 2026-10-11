@@ -58,6 +58,15 @@ function Prices.IsCredible(price)
         and price <= MAX_CREDIBLE_COPPER
 end
 
+-- How many price steps of the book are kept for buying many at once. A craft
+-- that needs 20 of something cannot all be bought at the cheapest listing
+-- when only 3 are listed there (a player asked, the owner agreeing 2026-10-11),
+-- so the cost of N walks up these steps. A handful covers a run of crafts;
+-- past the last step, what is left is priced at it.
+local LADDER_STEPS = 5
+
+Prices.LADDER_STEPS = LADDER_STEPS
+
 -- Keeping full history for every item on the auction house would bloat
 -- SavedVariables badly, so history is a short ring and stale items are pruned.
 local MAX_HISTORY = 12
@@ -98,16 +107,43 @@ local function IsLoneLow(listings, reference, totalQuantity)
     return true
 end
 
+--- The cheap end of the book as it can be bought: other sellers' listings,
+--- cheapest first, one step per price, kept flat as { price, count, price,
+--- count, ... } so the saved data stays small. Your own listings cannot be
+--- bought, so they are left out.
+-- @param listings sorted cheapest first, the lone low listing already out
+local function BuildLadder(listings)
+    local ladder = {}
+    for i = 1, #listings do
+        local listing = listings[i]
+        if not listing.isOwn then
+            local n = #ladder
+            local quantity = listing.quantity or 1
+            if n > 0 and ladder[n - 1] == listing.unitPrice then
+                ladder[n] = ladder[n] + quantity
+            elseif n >= LADDER_STEPS * 2 then
+                break
+            else
+                ladder[n + 1] = listing.unitPrice
+                ladder[n + 2] = quantity
+            end
+        end
+    end
+    return ladder
+end
+
 --- Collapse one item's listings into a single representative unit price.
 -- @param listings array of { unitPrice = copper, quantity = n, isOwn = bool }
 -- @param reference the item's stored market value, when known. Only used to
 --   decide whether the cheapest listing is a lone low one.
--- @return marketValue, minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow
+-- @return marketValue, minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow,
+--   ladder
 --   ignoredLow is the price of a lone low listing left out of rivalMin and
---   market value, or nil.
+--   market value, or nil. ladder is the first price steps of other sellers'
+--   listings (BuildLadder), empty when none are listed.
 function Prices:Summarise(listings, reference)
     if not listings or #listings == 0 then
-        return nil, nil, 0, nil, nil, nil
+        return nil, nil, 0, nil, nil, nil, nil
     end
 
     table.sort(listings, function(a, b) return a.unitPrice < b.unitPrice end)
@@ -141,6 +177,8 @@ function Prices:Summarise(listings, reference)
     -- hides a cheaper competitor.
     --
     -- Market value still counts your listings: they are part of the market.
+    local ladder = BuildLadder(listings)
+
     local rivalMin, ownMin
     for i = 1, #listings do
         local listing = listings[i]
@@ -170,7 +208,7 @@ function Prices:Summarise(listings, reference)
     end
 
     if takenQuantity == 0 then
-        return minBuyout, minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow
+        return minBuyout, minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow, ladder
     end
 
     local firstPass = weightedSum / takenQuantity
@@ -196,7 +234,7 @@ function Prices:Summarise(listings, reference)
 
     local marketValue = keptQuantity > 0 and (keptSum / keptQuantity) or firstPass
 
-    return math.floor(marketValue + 0.5), minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow
+    return math.floor(marketValue + 0.5), minBuyout, totalQuantity, rivalMin, ownMin, ignoredLow, ladder
 end
 
 --------------------------------------------------------------------------------
@@ -207,8 +245,28 @@ function Prices:GetTable()
     return ns.Config:GetPriceTable()
 end
 
+--- Is this a ladder that can be walked: pairs of a credible price and a
+--- count above 0, cheapest first?
+local function ValidLadder(ladder)
+    if type(ladder) ~= "table" or #ladder < 2 or #ladder % 2 ~= 0 then return false end
+    local last = -1
+    for i = 1, #ladder, 2 do
+        local price, count = ladder[i], ladder[i + 1]
+        if type(price) ~= "number" or not Prices.IsCredible(price) or price < last then return false end
+        if type(count) ~= "number" or count <= 0 then return false end
+        last = price
+    end
+    return true
+end
+
+Prices.ValidLadder = ValidLadder
+
 --- Fold one item's scan result into the database.
-function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow)
+-- @param ladder the book's first price steps (Summarise), when this reading
+--   saw the listings. nil from a reading that saw only the cheapest price (a
+--   browse row): the ladder on record is kept while its first step is still
+--   the cheapest rival, and dropped when it is not.
+function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
     -- Lets a list know prices moved without comparing every record.
     Prices.changes = (Prices.changes or 0) + 1
 
@@ -248,6 +306,12 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
         record.market = math.floor(record.market * (1 - EMA_ALPHA) + marketValue * EMA_ALPHA + 0.5)
     else
         record.market = marketValue
+    end
+
+    if ladder ~= nil then
+        record.ladder = ValidLadder(ladder) and ladder or nil
+    elseif record.ladder and not (rivalMin and record.ladder[1] == rivalMin) then
+        record.ladder = nil
     end
 
     record.min = minBuyout
@@ -309,6 +373,7 @@ function Prices:RecordEmpty(itemID, scannedAt)
     record.rivalMin = nil
     record.ownMin = nil
     record.ignoredLow = nil
+    record.ladder = nil
     record.quantity = 0
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
@@ -461,10 +526,10 @@ function Prices:CommitScan(observations, scannedAt)
 
     local recorded = 0
     for itemID, listings in pairs(observations) do
-        local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow =
+        local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
             self:Summarise(listings, self:GetValue(itemID, "market"))
         if marketValue then
-            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow)
+            self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
             recorded = recorded + 1
         end
     end
@@ -557,6 +622,111 @@ function Prices:GetScanValue(itemID, which)
     end
 
     return record.market or record.min
+end
+
+--------------------------------------------------------------------------------
+-- Buying many
+--------------------------------------------------------------------------------
+
+--- What buying `count` costs walking up a ladder, after the first `skip`
+--- units (already bought since it was read) are passed over. Past the last
+--- step, the rest are priced at it. Each step is lifted to `floor` when one
+--- is given.
+local function Walk(ladder, count, skip, floor)
+    local total, left, last = 0, count, nil
+    skip = skip or 0
+    for i = 1, #ladder, 2 do
+        local price, units = ladder[i], ladder[i + 1]
+        if floor and price < floor then price = floor end
+        last = price
+        if skip >= units then
+            skip = skip - units
+        else
+            local take = math.min(units - skip, left)
+            skip = 0
+            total = total + price * take
+            left = left - take
+            if left <= 0 then return total end
+        end
+    end
+    return total + last * left
+end
+
+Prices.Walk = Walk
+
+--- What buying `count` of an item costs on the auction house, going up the
+--- listings from the last scan rather than paying the cheapest price for all
+--- of them.
+--
+-- Answers as GetValue(itemID, "lowest") does for one: the player's own "use"
+-- price is the price of every one, a "floor" lifts every step, and with no
+-- book to walk (a stale scan, a guildmate's price, one browse row) it is that
+-- one price times the count.
+--
+-- @param skip units bought since the scan, whose listings are gone
+-- @param record a record to read instead of the one on file (CostBeforeLook)
+-- @return copper, or nil when the item has no auction price
+function Prices:GetCostFor(itemID, count, skip, record)
+    count = math.floor(tonumber(count) or 0)
+    if count <= 0 then return 0 end
+
+    local mine, mode = self:GetMine(itemID)
+    if mine and mode == "use" then return mine * count end
+
+    local current = record == nil
+    record = record or self:GetTable()[itemID]
+    local ladder = type(record) == "table" and record.ladder
+    local stale = type(record) ~= "table" or not record.seen
+        or time() - record.seen > (ns.Config:Get("staleAfterSeconds") or (48 * 3600))
+    if ValidLadder(ladder) and not stale then
+        return Walk(ladder, count, skip, mode == "floor" and mine or nil)
+    end
+
+    local unit
+    if current then
+        unit = self:GetValue(itemID, "lowest")
+    else
+        unit = Prices.LowestListed(record) or (type(record) == "table" and record.market) or nil
+        if unit and mine and mode == "floor" and unit < mine then unit = mine end
+    end
+    return unit and unit * count or nil
+end
+
+-- The book as it stood before the player looked an item up at this visit to
+-- the auction house, by item. The player's own search records the listings
+-- they are about to buy from, so what the shopping list said beforehand
+-- would be gone by the time they pay. Not saved; emptied each visit.
+Prices.beforeLook = {}
+
+--- Keep the item's book as it is, once a visit, before a search of the
+--- player's own records over it.
+function Prices:KeepBeforeLook(itemID)
+    if not itemID or self.beforeLook[itemID] ~= nil then return end
+    local record = self:GetTable()[itemID]
+    if type(record) ~= "table" then
+        self.beforeLook[itemID] = false
+        return
+    end
+    self.beforeLook[itemID] = {
+        ladder = record.ladder, rivalMin = record.rivalMin, ownMin = record.ownMin,
+        min = record.min, ignoredLow = record.ignoredLow, market = record.market,
+        seen = record.seen,
+    }
+end
+
+function Prices:ForgetBeforeLook()
+    self.beforeLook = {}
+end
+
+--- What buying `count` was estimated at before the player looked it up:
+--- the book kept by KeepBeforeLook, else the one on file.
+-- @param boughtSince function(seen) -> units bought since a scan at `seen`
+function Prices:CostBeforeLook(itemID, count, boughtSince)
+    local kept = self.beforeLook[itemID]
+    local record = kept or self:GetTable()[itemID]
+    local seen = type(record) == "table" and record.seen or nil
+    local skip = (seen and boughtSince) and boughtSince(seen) or 0
+    return self:GetCostFor(itemID, count, skip, kept or nil)
 end
 
 --- True when your own auction is currently the cheapest listing.

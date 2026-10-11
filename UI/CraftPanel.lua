@@ -1736,6 +1736,18 @@ function CraftPanel:ShoppingLook(line)
         else
             look.colour, look.tag, look.tagColour = "profit", "have all", "profit"
         end
+
+        -- Bought on the auction house today: what it cost, amber when it
+        -- came to well over what this list had said.
+        if line.paid then
+            local where = look.tag
+            local function Paid(coins)
+                return "paid " .. Util.FormatMoney(line.paid, { short = true, parts = coins })
+            end
+            look.tag = where .. ", " .. Paid(nil)
+            look.shorter = { Paid(nil), Paid(2), where }
+            if line.overpaid then look.tagColour = "warn" end
+        end
         return look
     end
 
@@ -1755,7 +1767,8 @@ function CraftPanel:ShoppingLook(line)
         end
         look.tag = Cost(nil)
         look.shorter = { Cost(2), Cost(1) }
-        look.tagColour = "text"
+        -- Amber: what was bought of it today came to well over the estimate.
+        look.tagColour = line.overpaid and "warn" or "text"
     else
         look.tag, look.tagColour = "no price", "muted"
     end
