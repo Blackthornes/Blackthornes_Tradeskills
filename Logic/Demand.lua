@@ -8,13 +8,14 @@
 --             expired. Cancelled ones are left out, as the Sales tab leaves
 --             them out: pulling a listing says nothing about whether it
 --             would have sold. Used once MIN_OWN listings have ended.
---   market -- how fast the auction house's stock of it shrinks between your
---             scans (Prices:GetLiquidity). It under-reports, because a
---             restock hides sales, so its bar for "high" is lower.
+--   market -- how fast the auction house's stock of it shrinks, per day
+--             (Prices:GetSalesPerDay), so scanning every minute or every day
+--             reads the same. It under-reports, because a restock hides
+--             sales, so its bar for "high" is lower.
 --
 -- The answer is one of three levels, "high", "some" or "low", with a line
 -- saying what it was worked out from. Nothing is answered without data: an
--- item never listed and seen in fewer than three scans has no demand reading,
+-- item never listed and not watched for at least an hour has no demand reading,
 -- and says so rather than guessing.
 
 local _, ns = ...
@@ -25,15 +26,11 @@ local Demand = ns.NewModule("Demand")
 -- the market's.
 local MIN_OWN = 3
 
--- Scans of an item before its market movement means anything.
-local MIN_SCANS = 3
-
 -- Sold out of ended: at or above HIGH sells well, below SOME rarely sells.
 local OWN_HIGH, OWN_SOME = 0.6, 0.3
 
--- Share of the listed stock gone per scan. The Prices tab draws MOVES green
--- from 15%, and this follows it.
-local MARKET_HIGH, MARKET_SOME = 0.15, 0.05
+-- Share of the listed stock gone per day.
+local MARKET_HIGH, MARKET_SOME = 0.30, 0.10
 
 local LEVELS = {
     high = { label = "High", color = "profit", rank = 3 },
@@ -103,12 +100,9 @@ function Demand:Get(itemID)
 
     if not ns.Prices then return nil end
 
-    local record = ns.Prices.Get and ns.Prices:Get(itemID)
-    if not record or type(record.history) ~= "table" or #record.history < MIN_SCANS then
-        return nil
-    end
+    if not ns.Prices.GetSalesPerDay then return nil end
 
-    local ok, rate = pcall(ns.Prices.GetLiquidity, ns.Prices, itemID)
+    local ok, rate = pcall(ns.Prices.GetSalesPerDay, ns.Prices, itemID)
     if not ok or not rate then return nil end
 
     return {
@@ -142,7 +136,7 @@ function Demand:Describe(reading)
         return ("you sold %d of %d listed"):format(reading.sold or 0, reading.ended or 0)
     end
 
-    return ("%d%% of its stock sells between scans"):format(math.floor((reading.rate or 0) * 100 + 0.5))
+    return ("%d%% of its stock sells a day"):format(math.floor((reading.rate or 0) * 100 + 0.5))
 end
 
 --- The tooltip line: "High (you sold 7 of 9 listed)".
