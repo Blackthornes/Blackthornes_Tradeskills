@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.49.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Fixes:** Demand read from the auction house's stock no longer depends
+  on how often you scan. It is now the share of an item's stock that sells
+  a day (High at 30%, Some at 10%), so scanning every minute or once a day
+  gives the same answer, and the tooltip says "N% of its stock sells a
+  day". An empty scan no longer counts as the whole stock selling out.
+  Your own sales still decide once three of your listings have ended.
+
 ## 0.49.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game

@@ -12,6 +12,10 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.49.1
+
+- Demand now reads the same no matter how often you scan the auction house.
+
 ## 0.49.0
 
 - Buying materials at the auction house now warns you when the price has jumped past what your shopping list expected.
