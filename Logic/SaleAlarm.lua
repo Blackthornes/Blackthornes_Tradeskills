@@ -203,9 +203,20 @@ function SaleAlarm:LogHeard(item, via)
     end
 
     self.unpaired[#self.unpaired + 1] = { item = item, via = via, at = now }
-    pcall(ns.Mail.NoteHeardSale, ns.Mail, item)
+    local noted, heard = pcall(ns.Mail.NoteHeardSale, ns.Mail, item)
     self.logged = (self.logged or 0) + 1
+    if noted and type(heard) == "table" then self:Restock(heard.itemID, item) end
     if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    return true
+end
+
+--- Queue another of what sold, when there is room (Queue:RestockSold),
+--- and say so under the game's sale line.
+function SaleAlarm:Restock(itemID, item)
+    if not itemID or not ns.Queue then return false end
+    local ok, recipeID = pcall(ns.Queue.RestockSold, ns.Queue, itemID)
+    if not (ok and recipeID) then return false end
+    ns.Print(("%s sold: queued another to keep your stock up."):format(item))
     return true
 end
 

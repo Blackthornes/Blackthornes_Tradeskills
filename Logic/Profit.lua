@@ -670,6 +670,10 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- The limit as set, without the fast-seller extra: what the Keep in
     -- stock box shows and saves, or each edit would add the extra again.
     analysis.baseLimit = room ~= nil and math.max(0, (limit or 0) - (extra or 0)) or 0
+    -- With no number set, what your sales taught: Queue All and a sale's
+    -- restock use it, and the detail pane says so.
+    analysis.learnedLimit = room == nil and ns.Auctions.GetLearnedLimit
+        and ns.Auctions:GetLearnedLimit(recipe.outputItemID) or nil
 
     -- Ranked by disenchanting, a craft no auction or vendor prices may
     -- still be worth breaking down.
