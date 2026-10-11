@@ -75,6 +75,10 @@ local DEFAULTS = {
         -- then back up to the limit. 0 = only when you have none.
         restockWhenLow = false,
         restockAt = 0,
+        -- When one of your auctions sells, queue another while there is
+        -- room under Keep in stock, or what your sales taught (asked
+        -- 2026-10-11, Queue:RestockSold).
+        restockOnSale = true,
 
         -- Fast sellers keep more: an item your own sales show selling well
         -- (Logic/Demand.lua, "High" from your record) may be held this many
