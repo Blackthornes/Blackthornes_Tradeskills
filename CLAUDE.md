@@ -289,11 +289,15 @@ craft (`kind = "craft"`, `recipeID`, `itemID`, `name`, `count` made,
 from `Queue:HeldBy`) or a mail (`kind = "mail"`, `to` in full, `items`,
 `crafts`): the playing character's `QueueMail:GetDeliveries`, the others'
 `QueueMail:GetOwedBy(key)` (made for someone, not yet mailed). A craft
-held up for materials another character (not the one playing) carries or
-banks names it as that missing item's `from`, and that character gets a
-mail step to the crafter first (`forCraft = true`), so Butler can send the
-player there before the craft (the owner, 2026-10-11: a sub-craft whose
-materials are on hand goes to the top); an old name-realm record of the
+held up for materials another character carries or banks names it as
+that missing item's `from`, and that character gets a mail step to the
+crafter first (`forCraft = true`), so Butler can send the player there
+before the craft (the owner, 2026-10-11: a sub-craft whose materials are
+on hand goes to the top). The character playing counts too, read live,
+its item's `bank` saying how many to take out of the bank first, and the
+same item in its deliveries joins that mail rather than making a second
+(a player logged in on the holder and the mail step was gone,
+2026-10-11). An old name-realm record of the
 crafter (`SameCharacter`) counts as the crafter's own. Records of one
 character (its GUID one and an old name-realm one) are one entry, named
 by the GUID record, and no step mails a character to itself under any
