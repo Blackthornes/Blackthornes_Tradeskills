@@ -12,6 +12,15 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.46.0
+
+- Material costs are more honest now. If you need 20 and only 3 are cheap, the rest are priced at what they really cost.
+- After you buy at the auction house, you'll see what you actually paid. It turns amber if you paid a lot more than expected.
+- New deals get a NEW tag, and you can show only the new ones.
+- You can hide the items that would sell at a loss.
+- Mail to your alts sends just what they need, not the whole stack.
+- Characters show their full names, and the emblem got a fresh look.
+
 ## 0.45.2
 
 - The Blizzard window look got a little cleanup: the open tab looks right now.

@@ -4,6 +4,35 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.46.0
+
+For WoW: Forever (interface 16001). No files were added, but the emblem
+art changed, so restart the game fully once after updating to see it
+(`/reload` is enough for everything else).
+
+- **Material costs go up the listings:** a craft or shopping list that
+  needs 20 of a material prices them going up the auction listings from
+  your last scan (3 at the cheapest, then the next price up), not all 20 at
+  the cheapest. Your own price settings still win.
+- **What you paid:** after an auction house buy, the shopping list shows
+  what you actually paid in place of the estimate, in amber when it came to
+  more than about 25% over what the list said. The tooltip gives both.
+- **Deals: New only:** deals first seen in your latest scan carry a gold
+  NEW tag, and a New only tick box lists just those. A deal's tooltip says
+  when it was first seen.
+- **Ready to sell: Hide losses:** a Hide losses box on the auction house
+  Sell view leaves out the red rows, and the summary says how many are
+  hidden. Off by default.
+- **Alt mail sends only what's needed:** mailing materials to an alt sends
+  just the amount its queue needs, split off into an empty bag slot, rather
+  than the whole stack. With no free slot, the mail panel asks you to free
+  one.
+- **Full character names:** characters are named in full (first and last
+  name) everywhere, and a mail is never planned for the character you're
+  playing.
+- **New emblem:** the window's emblem is redrawn as a hammer striking an
+  anvil, with sparks.
+
 ## 0.45.2
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
