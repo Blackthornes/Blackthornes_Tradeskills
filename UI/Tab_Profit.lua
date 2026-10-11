@@ -1300,6 +1300,10 @@ function UpdateDetail(analysis)
             detail.limitHint:SetText(("%s, room for %d"):format(where, analysis.postRoom or 0))
             detail.limitHint:SetTextColor(Theme.Unpack(
                 analysis.atPostLimit and "warn" or "dim"))
+        elseif analysis.learnedLimit then
+            -- No number set: Queue All keeps what your sales taught.
+            detail.limitHint:SetText(("%s, learned %d from your sales"):format(where, analysis.learnedLimit))
+            detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         elseif (analysis.stockDivisor or 1) > 1 then
             -- Say out loud that the list order is not pure profit. A craft
             -- sitting lower than its profit suggests, with no explanation, is
@@ -1810,16 +1814,17 @@ local function BuildCrafts(container)
     -- already held, listed, in the mail or queued.
     local queueAll = Widgets.CreateButton(container, "Queue All", function()
         local rows = BuildList()
-        local crafts, items, noLimit = ns.Queue:AddUpToLimit(rows)
+        local crafts, items, noLimit, learned = ns.Queue:AddUpToLimit(rows)
 
         if crafts > 0 then
-            ns.Print(("queued %d craft%s (%d item%s) from %d listed"):format(
+            ns.Print(("queued %d craft%s (%d item%s) from %d listed%s"):format(
                 crafts, crafts == 1 and "" or "s",
-                items, items == 1 and "" or "s", #rows))
+                items, items == 1 and "" or "s", #rows,
+                (learned or 0) > 0 and ", topping up what sells for you" or ""))
         elseif #rows == 0 then
             ns.Print("nothing listed to queue")
         elseif noLimit == #rows then
-            ns.Print("nothing queued: set Keep in stock per item in Settings first")
+            ns.Print("nothing queued: none of these has sold for you this week, so set Keep in stock per item in Settings")
         else
             local waiting = false
             for _, row in ipairs(rows) do
@@ -1832,7 +1837,7 @@ local function BuildCrafts(container)
             end
         end
     end, { width = 90, height = 20,
-           tooltip = "Queue every craft in this list up to your Max on hand (Keep in stock per item in Settings), less what you already have or have queued" })
+           tooltip = "Queue every craft in this list up to your Max on hand (Keep in stock per item in Settings, or about two days of what sold for you this week when that is 0), less what you already have or have queued" })
     queueAll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 2)
     widgets.queueAll = queueAll
 

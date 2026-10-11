@@ -827,20 +827,23 @@ end
 --
 -- Room is read fresh for every craft rather than taken from the analyses,
 -- because two recipes can make the same item and the first one queued uses up
--- the second one's room. Crafts with no limit set are skipped, not queued
--- without end. The queue is rebuilt and announced once, at the end.
+-- the second one's room. A craft with no number set goes up to what your
+-- sales taught (Auctions:GetLearnedLimit); one that never sold either is
+-- skipped, not queued without end. The queue is rebuilt and announced once,
+-- at the end.
 --
 -- @param analyses list of Profit:Analyse results (the rows on screen)
--- @return crafts queued, items those make, crafts skipped for having no limit
+-- @return crafts queued, items those make, crafts skipped for having no
+--         limit, crafts queued on a learned limit
 function Queue:AddUpToLimit(analyses)
-    local crafts, items, noLimit = 0, 0, 0
+    local crafts, items, noLimit, learnedCrafts = 0, 0, 0, 0
     local queue = self:GetAll()
 
     for _, analysis in ipairs(analyses or {}) do
         local recipe = analysis.recipeID and ns.Recipes:GetAny(analysis.recipeID)
 
         if recipe and recipe.outputItemID then
-            local room = ns.Auctions:GetRoom(recipe.outputItemID)
+            local room, _, _, _, _, _, _, _, learned = ns.Auctions:GetRoom(recipe.outputItemID, nil, true)
 
             if room == nil then
                 noLimit = noLimit + 1
@@ -864,6 +867,7 @@ function Queue:AddUpToLimit(analyses)
                     end
 
                     crafts = crafts + count
+                    if learned then learnedCrafts = learnedCrafts + count end
                     items = items + count * math.max(1, recipe.quantityMin or 1)
                 end
             end
@@ -875,7 +879,43 @@ function Queue:AddUpToLimit(analyses)
         self:Notify()
     end
 
-    return crafts, items, noLimit
+    return crafts, items, noLimit, learnedCrafts
+end
+
+--- The recipe that makes `itemID`, for queueing another of it: one already
+--- in the queue first, then the character playing's own, then an alt's.
+function Queue:RecipeFor(itemID)
+    for _, entry in ipairs(self:GetAll()) do
+        local recipe = not entry.isDependency and ns.Recipes:GetAny(entry.recipeID)
+        if recipe and recipe.outputItemID == itemID then return entry.recipeID, recipe end
+    end
+    for recipeID, recipe in pairs(ns.Recipes:GetAll()) do
+        if recipe.outputItemID == itemID then return recipeID, recipe end
+    end
+    for _, recipe in ipairs(ns.Recipes:GetAccountWideOutputs()) do
+        if recipe.outputItemID == itemID and recipe.recipeID then return recipe.recipeID, recipe end
+    end
+    return nil
+end
+
+--- One of your auctions sold: queue one more of it while there is room
+--- under Keep in stock, or under what your sales taught when no number is
+--- set (the owner, 2026-10-11: stock that tops itself up). Never for a craft
+--- that loses money, nor while "Wait until it runs low" is waiting.
+--- @return the recipe ID queued, or nil
+function Queue:RestockSold(itemID)
+    if not itemID or ns.Config:Get("restockOnSale") == false then return nil end
+    local recipeID = self:RecipeFor(itemID)
+    if not recipeID then return nil end
+
+    local room, _, _, _, _, _, waiting = ns.Auctions:GetRoom(itemID, nil, true)
+    if not room or room <= 0 or waiting then return nil end
+
+    local ok, analysis = pcall(ns.Profit.Analyse, ns.Profit, recipeID)
+    if ok and analysis and analysis.profit and analysis.profit <= 0 then return nil end
+
+    if self:Add(recipeID, 1) then return recipeID end
+    return nil
 end
 
 function Queue:SetQuantity(recipeID, quantity)
