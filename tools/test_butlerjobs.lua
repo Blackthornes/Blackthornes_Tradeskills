@@ -172,6 +172,37 @@ ns.db.characters[LEGACY] = nil
 owed[LEGACY] = nil
 queue[#queue] = nil
 
+print("\nthe character playing holds the materials")
+held[WITHER][2318] = 0
+ns.Inventory = {
+  GetBagCount = function(_, itemID) if itemID == 2318 then return 20 end return 0 end,
+  GetBankCount = function(_, itemID) if itemID == 2318 then return 20 end return 0 end,
+}
+jobs = Butler:Jobs()
+local mine = jobs[1]
+check("its own line comes first", mine.name, "Ana Blackthorne")
+local letter = mine.steps[1]
+check("a mail for the craft first", letter.kind == "mail" and letter.forCraft, true)
+check("to the crafter", letter.to, "Blackthornes Wither")
+check("all 40, bags and bank", letter.items[1].count, 40)
+check("20 to take from the bank first", letter.items[1].bank, 20)
+local leatherMails = 0
+for _, step in ipairs(mine.steps) do
+  for _, item in ipairs(step.kind == "mail" and step.items or {}) do
+    if item.itemID == 2318 then leatherMails = leatherMails + 1 end
+  end
+end
+check("the leather is in one mail, not two", leatherMails, 1)
+local crafter
+for _, job in ipairs(jobs) do if job.name == "Blackthornes Wither" then crafter = job end end
+check("the craft says who has it", crafter and crafter.steps[1].missing[1].from, "Ana Blackthorne")
+selfKey = WITHER
+jobs = Butler:Jobs()
+check("never the crafter's own bags when it plays", jobs[1].steps[1].missing[1].from, nil)
+selfKey = ANA
+ns.Inventory = nil
+held[WITHER][2318] = 80
+
 print("\ncraft")
 local started, shown = nil, 0
 ns.Crafting = {

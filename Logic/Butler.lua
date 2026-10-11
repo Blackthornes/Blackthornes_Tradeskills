@@ -666,9 +666,12 @@ local function SameCharacter(records, a, b)
 end
 
 -- The other character holding the most of an item in its bags and bank,
--- never the character playing (its own mail is the Mail panel's) nor
--- another account's. The key and how many, or nil.
-local function Holder(records, crafterKey, itemID, Playing)
+-- never another account's. The character playing counts, read live, so
+-- the leather it holds is a step on its own line (a player logged in on
+-- the holder and the mail step was gone, 2026-10-11); its other records
+-- never do. The key, how many, and for the character playing how many of
+-- them are in its bags; or nil.
+local function Holder(records, crafterKey, itemID, Playing, selfKey)
     local bestKey, bestCount = nil, 0
     for key, record in pairs(records) do
         if key ~= crafterKey and type(record) == "table" and not record.linkedFrom and not Playing(key) then
@@ -678,6 +681,14 @@ local function Holder(records, crafterKey, itemID, Playing)
             if count > bestCount or (count == bestCount and count > 0 and tostring(key) < tostring(bestKey)) then
                 bestKey, bestCount = key, count
             end
+        end
+    end
+    local inventory = ns.Inventory
+    if selfKey and not Playing(crafterKey) and inventory and inventory.GetBagCount then
+        local bags = inventory:GetBagCount(itemID) or 0
+        local bank = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        if bags + bank > 0 and bags + bank >= bestCount then
+            return selfKey, bags + bank, bags
         end
     end
     if bestKey then return bestKey, bestCount end
@@ -783,7 +794,7 @@ local function Jobs()
         local job, step = item.job, item.step
         local still = {}
         for _, need in ipairs(step.missing) do
-            local holderKey, holderCount = Holder(records, job.key, need.itemID, Playing)
+            local holderKey, holderCount, inBags = Holder(records, job.key, need.itemID, Playing, selfKey)
             if holderKey and SameCharacter(records, holderKey, job.key) then
                 need.count = need.count - holderCount
                 if need.count > 0 then still[#still + 1] = need end
@@ -802,7 +813,10 @@ local function Jobs()
                         letter = { kind = "mail", to = to, items = {}, crafts = false, forCraft = true }
                         table.insert(holder.steps, 1, letter)
                     end
-                    letter.items[#letter.items + 1] = { itemID = need.itemID, count = count }
+                    -- What the character playing has to take out of its bank first.
+                    local bank = inBags and math.max(0, count - inBags) or 0
+                    letter.items[#letter.items + 1] = { itemID = need.itemID, count = count,
+                        bank = bank > 0 and bank or nil }
                 end
             end
         end
@@ -814,12 +828,27 @@ local function Jobs()
     if mail and mail.GetDeliveries then
         local job = Job(selfKey)
         for _, delivery in ipairs(job and mail:GetDeliveries() or {}) do
+            local to = FullName(delivery.to)
+            -- A material already in a letter for a craft to the same
+            -- character is that letter's, never a second step.
+            local letter
+            for _, step in ipairs(job.steps) do
+                if step.kind == "mail" and step.forCraft and step.to == to then letter = step end
+            end
             local items = {}
             for _, item in ipairs(delivery.items or {}) do
-                items[#items + 1] = { itemID = item.itemID, count = item.count }
+                local same
+                for _, other in ipairs(letter and letter.items or {}) do
+                    if other.itemID == item.itemID then same = other end
+                end
+                if same then
+                    if (tonumber(item.count) or 0) > same.count then same.count = item.count end
+                else
+                    items[#items + 1] = { itemID = item.itemID, count = item.count }
+                end
             end
             if #items > 0 and not Playing(delivery.to) then
-                job.steps[#job.steps + 1] = { kind = "mail", to = FullName(delivery.to),
+                job.steps[#job.steps + 1] = { kind = "mail", to = to,
                     items = items, crafts = delivery.crafts == true }
             end
         end
