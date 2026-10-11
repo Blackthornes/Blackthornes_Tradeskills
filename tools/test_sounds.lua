@@ -121,6 +121,7 @@ do
             "bagsFullSound", "disenchantSound", "altCraftSound", "goalSound" }) do
         check(key, defaults[key], true)
     end
+    check("the sale alarm starts on the cash register", defaults.saleSound, "register")
 end
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end

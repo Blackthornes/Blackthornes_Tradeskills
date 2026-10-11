@@ -22,6 +22,9 @@ PlaySound = function(kit, channel)
   sounds[#sounds + 1] = { kit = kit, channel = channel }
   return true, #sounds
 end
+-- Another suite may have left one behind. Without it the picked sound
+-- cannot play, so the raid warning does, as on a game without the call.
+PlaySoundFile = nil
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -49,6 +52,7 @@ Enum = { AuctionHouseNotification = {
   AuctionOutbid = 3, AuctionSold = 4, AuctionExpired = 5,
 } }
 SOUNDKIT = { RAID_WARNING = 8959 }
+settings.saleSound = "raid"
 
 local chunk = assert(loadfile(lfs_cwd .. "/Logic/SaleAlarm.lua"))
 chunk("Blackthornes_TS", ns)
@@ -180,6 +184,57 @@ PlaySound = function() end
 check("a game that returns nothing is not a refusal", SaleAlarm:Play(), "unknown")
 PlaySound = function() error("no such sound") end
 check("a game that throws is a refusal", SaleAlarm:Play(), false)
+
+print("\npicking the sound")
+SOUNDKIT = { RAID_WARNING = 8959 }
+local files = {}
+local fileAnswer = true
+PlaySoundFile = function(file, channel)
+  files[#files + 1] = { file = file, channel = channel }
+  return fileAnswer
+end
+PlaySound = function(kit, channel)
+  sounds[#sounds + 1] = { kit = kit, channel = channel }
+  return true, #sounds
+end
+
+settings.saleSound = nil
+check("nothing picked: the cash register", SaleAlarm:Sound(), "register")
+local before = #sounds
+SaleAlarm:Play()
+check("the register file plays", files[#files] and files[#files].file,
+  "Interface\\AddOns\\Blackthornes_TS\\Media\\Sounds\\sale-register.ogg")
+check("on the master channel", files[#files] and files[#files].channel, "Master")
+check("and no raid warning on top", #sounds, before)
+
+settings.saleSound = "coins"
+SaleAlarm:Play()
+check("coins: the game's loot coins by file ID", files[#files].file, 567413)
+
+settings.saleSound = "raid"
+local fileCount = #files
+SaleAlarm:Play()
+check("raid: no file", #files, fileCount)
+check("raid: the raid warning", sounds[#sounds].kit, 8959)
+
+settings.saleSound = "something old"
+check("an unknown saved value is the register", SaleAlarm:Sound(), "register")
+
+settings.saleSound = "raid"
+SaleAlarm:Play("coins")
+check("the play button can ask for one that is not picked", files[#files].file, 567413)
+
+settings.saleSound = "register"
+fileAnswer = false
+before = #sounds
+SaleAlarm:Play()
+check("a file the game refuses (before a restart): the raid warning", #sounds, before + 1)
+check("and that is the raid warning", sounds[#sounds].kit, 8959)
+PlaySoundFile = function() error("no such file") end
+SaleAlarm:Play()
+check("a file call that throws: the raid warning too", #sounds, before + 2)
+PlaySoundFile = nil
+settings.saleSound = nil
 
 print("\nthe Sales tab and the chat filter")
 

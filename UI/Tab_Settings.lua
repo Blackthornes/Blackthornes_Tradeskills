@@ -1401,9 +1401,41 @@ local function Build(outer)
         return box
     end
 
-    widgets.saleAlarm = SoundRow("saleAlarm", "An auction sells",
-        "An alarm as soon as one of your auctions sells, wherever you are.",
-        function() if ns.SaleAlarm then ns.SaleAlarm:Play() end end)
+    -- The sale alarm picks its sound (asked 2026-10-11: players found the
+    -- raid warning too much and asked for an old cash register). Off is the
+    -- saleAlarm switch; the sound is saleSound. Picking one plays it.
+    local saleRow = CreateRow(pages.look, 2, "An auction sells",
+        "A sound as soon as one of your auctions sells, wherever you are: an old cash register, coins, or the raid warning. Press Play to hear it.")
+
+    local function SaleSound()
+        if Config:Get("saleAlarm") == false then return "off" end
+        return ns.SaleAlarm and ns.SaleAlarm:Sound() or "register"
+    end
+
+    widgets.saleAlarm = Widgets.CreateDropdown(saleRow, {
+        { text = "Cash register", value = "register" },
+        { text = "Coins", value = "coins" },
+        { text = "Raid warning", value = "raid" },
+        { text = "Off", value = "off" },
+    }, function(value)
+        if value == "off" then
+            Config:Set("saleAlarm", false)
+            return
+        end
+        Config:Set("saleAlarm", true)
+        Config:Set("saleSound", value)
+        if ns.SaleAlarm then ns.SaleAlarm:Play(value) end
+    end, { width = 100 })
+    widgets.saleAlarm:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    widgets.saleAlarmPlay = Widgets.CreateButton(saleRow, "Play", function()
+        local value = SaleSound()
+        if ns.SaleAlarm then ns.SaleAlarm:Play(value ~= "off" and value or nil) end
+    end, { width = 50, height = 20, tooltip = "Play the sale sound now" })
+    widgets.saleAlarmPlay:SetPoint("LEFT", widgets.saleAlarm, "RIGHT", 6, 0)
+    FitButton(widgets.saleAlarmPlay)
+    widgets.saleAlarm.Refresh = function(self) self:SetValue(SaleSound()) end
+
     widgets.scanSounds = SoundRow("scanSounds", "A scan finishes",
         "A chime when a scan finishes, and another when it finds disenchant or vendor deals.")
     SoundRow("mailReportSound", "Mail report",
@@ -1846,6 +1878,7 @@ local function Refresh()
     for key, box in pairs(widgets.sounds) do
         box:SetChecked(Config:Get(key) ~= false)
     end
+    widgets.saleAlarm:Refresh()
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local linkBox = widgets.linkNames.editBox
