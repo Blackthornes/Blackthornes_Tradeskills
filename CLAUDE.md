@@ -270,7 +270,9 @@ answers false and "that's the character you're on"; filled, its third
 return is the full name it went to, for Butler's chat line. Deliveries,
 the enchanter and `FindCharacter` leave those records out too. `FromBank` is what
 the playing character's own queued crafts use, less what it makes and
-carries, no more than its bank holds. Keep both stable too.
+carries, no more than its bank holds, plus the `bank` count of its Jobs
+mail for another character's craft (so Butler opens at the bank and
+takes it out; 2026-10-11). Keep both stable too.
 
 Butler's step list for jobs on other characters (the owner asked
 2026-10-11: "craft Medium Leather on another, then send it back") calls
