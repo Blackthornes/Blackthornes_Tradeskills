@@ -60,6 +60,20 @@
 --   bagsAt,        when each was last read (time()), nil when never; the
 --   bankAt, mailAt live bags say now.
 --
+-- At a mailbox and the bank (2026-10-11), Butler asks two more things:
+--
+--   _G.BlackthornesTS.Butler:FillMail(name, items)   -- true, or false and why
+--   _G.BlackthornesTS.Butler:FromBank()              -- { [itemID] = count }, or nil
+--
+-- FillMail fills the game's Send Mail page for one of the player's
+-- characters (QueueMail:Fill, the same one the Mail panel uses): `name` is
+-- the short name Advise gave as mailTo or enchanter, `items` a list of
+-- { itemID, count }. The player presses Send; what goes is written down by
+-- QueueMail's own SendMail hook, as for the Mail panel. FromBank says what
+-- the character playing's own queued crafts still want from its bank: what
+-- they use, less what it makes and what it carries, no more than its bank
+-- holds.
+--
 -- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
 
@@ -393,5 +407,65 @@ end
 function Butler:Holdings()
     local ok, list = pcall(Holdings)
     if ok then return list end
+    return nil
+end
+
+--------------------------------------------------------------------------------
+-- The mailbox and the bank, for Butler
+--------------------------------------------------------------------------------
+
+--- Fill the game's Send Mail page for one of the player's characters.
+-- `name` is a short name (as Advise gives it) or a name typed in Settings;
+-- `items` is a list of { itemID, count }. Nothing is sent: the player
+-- presses Send. Never raises.
+-- @return true when filling started, or false and why
+function Butler:FillMail(name, items)
+    local mail = ns.QueueMail
+    if not (mail and mail.Fill) then return false, "Tradeskills cannot fill mail here" end
+    if type(name) ~= "string" or name == "" then return false, "nobody to mail" end
+    if type(items) ~= "table" or #items == 0 then return false, "nothing to mail" end
+
+    local list = {}
+    for _, item in ipairs(items) do
+        local itemID = type(item) == "table" and tonumber(item.itemID)
+        local count = type(item) == "table" and tonumber(item.count)
+        if itemID and count and count > 0 then
+            list[#list + 1] = { itemID = itemID, count = math.floor(count) }
+        end
+    end
+    if #list == 0 then return false, "nothing to mail" end
+
+    local ok, started, why = pcall(function()
+        local key = mail.FindCharacter and mail:FindCharacter(name)
+        local recipient = key and mail.MailName and mail.MailName(Characters()[key]) or name
+        return mail:Fill({ recipient = recipient, items = list, subject = "From Blackthornes Butler" })
+    end)
+    if not ok then return false, "Tradeskills could not fill the mail" end
+    return started == true, why
+end
+
+local function FromBank()
+    local wants = {}
+    local selfKey = SelfKey()
+    local mail, inventory = ns.QueueMail, ns.Inventory
+    if not (selfKey and mail and mail.GetPlan and inventory) then return wants end
+
+    local uses, makes = mail:GetPlan()
+    local myUse, myMake = uses[selfKey] or {}, makes[selfKey] or {}
+    for itemID, used in pairs(myUse) do
+        local carried = inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
+        local banked = inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        local short = used - (myMake[itemID] or 0) - carried
+        local take = math.min(short, banked)
+        if take > 0 then wants[itemID] = take end
+    end
+    return wants
+end
+
+--- What the character playing's own queued crafts want from its bank:
+-- { [itemID] = count }. Never raises, writes nothing; nil on any error.
+function Butler:FromBank()
+    local ok, wants = pcall(FromBank)
+    if ok then return wants end
     return nil
 end

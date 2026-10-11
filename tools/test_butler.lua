@@ -201,6 +201,39 @@ check("a copy: the save is untouched", ns.db.characters[ALT].inventory[1], 2)
 ns.Recipes.GetCharacters = function() error("boom") end
 check("an error gives nil", Butler:Holdings(), nil)
 
+print("\nfilling mail and taking from the bank")
+local filled
+ns.QueueMail.Fill = function(_, delivery) filled = delivery return true end
+ns.QueueMail.FindCharacter = function(_, typed) return typed == "Ana" and ALT or nil end
+ns.QueueMail.MailName = function(record) return record.name .. " Smith" end
+local started = Butler:FillMail("Ana", { { itemID = 3, count = 5 }, { itemID = "x" }, { itemID = 4, count = 0 } })
+check("filling starts", started, true)
+check("to the character's full mail name", filled and filled.recipient, "Ana Smith")
+check("only real counts go in", filled and #filled.items, 1)
+Butler:FillMail("Zed", { { itemID = 3, count = 1 } })
+check("a name not on record is used as typed", filled.recipient, "Zed")
+local none, why = Butler:FillMail("Ana", {})
+check("nothing to mail", none, false)
+check("and says why", why, "nothing to mail")
+ns.QueueMail.Fill = function() return false, "the mailbox is not open" end
+local _, whyNot = Butler:FillMail("Ana", { { itemID = 3, count = 1 } })
+check("the mailbox shut", whyNot, "the mailbox is not open")
+ns.QueueMail.Fill = function() error("boom") end
+check("an error inside is false", (Butler:FillMail("Ana", { { itemID = 3, count = 1 } })), false)
+
+-- The plan uses 10 of item 3 and 1 of item 1 (makes 4 of item 1); the bank
+-- holds 2 of item 3.
+ns.Inventory.GetBagCount = function(_, itemID) return itemID == 3 and 3 or 0 end
+local wants = Butler:FromBank()
+check("what the bank should give: no more than it holds", wants[3], 2)
+check("nothing for what it makes", wants[1], nil)
+ns.Inventory.GetBankCount = function(_, itemID) return itemID == 3 and 20 or 0 end
+check("up to what the crafts are short", Butler:FromBank()[3], 7)
+ns.Inventory.GetBagCount = function() return 10 end
+check("carried enough: nothing", Butler:FromBank()[3], nil)
+ns.QueueMail.GetPlan = function() error("boom") end
+check("an error gives nil", Butler:FromBank(), nil)
+
 print("\nnever raises")
 ns.Prices.GetValue = function() error("boom") end
 check("an error inside gives nil", Butler:Advise(1), nil)
