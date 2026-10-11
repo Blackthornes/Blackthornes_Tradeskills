@@ -224,6 +224,21 @@ local function AddUnit(row, control, text)
     return unit
 end
 
+--- Put a row's Reload button under its control, lined up with the
+--- control's right edge, the row a line taller for it. Every Reload in
+--- Settings sits the same way, as in the other Blackthornes addons.
+local function ReloadUnder(row, control, reload)
+    reload:ClearAllPoints()
+    reload:SetPoint("TOPRIGHT", control, "BOTTOMRIGHT", 0, -4)
+    row.compactHeight = row.compactHeight + 24
+    row.fullHeight = row.fullHeight + 24
+    if row.hint then
+        row.hint:ClearAllPoints()
+        row.hint:SetPoint("TOPLEFT", 0, -row.compactHeight)
+    end
+    row:SetHeight(row.compactHeight)
+end
+
 --- Widen a button to its label when the label, measured at the player's
 --- font, needs more room than the button was given: "Remove old prices"
 --- and "Reset to defaults" ended in "..." on 140-pixel buttons.
@@ -1164,8 +1179,8 @@ local function Build(outer)
     widgets.textReload = Widgets.CreateButton(textRow, "Reload now", function()
         if ReloadUI then ReloadUI() end
     end, { width = 90, height = 20, tooltip = "Reload the interface so the new text size shows (/reload)" })
-    widgets.textReload:SetPoint("LEFT", widgets.textSize, "RIGHT", 8, 0)
     FitButton(widgets.textReload)
+    ReloadUnder(textRow, widgets.textSize, widgets.textReload)
     widgets.textReload:Hide()
 
     -- Asked 2026-10-10: the game's own look for players who would rather
@@ -1187,8 +1202,8 @@ local function Build(outer)
     widgets.styleReload = Widgets.CreateButton(styleRow, "Reload now", function()
         if ReloadUI then ReloadUI() end
     end, { width = 90, height = 20, tooltip = "Reload the interface so the new window style shows (/reload)" })
-    widgets.styleReload:SetPoint("LEFT", widgets.windowStyle, "RIGHT", 8, 0)
     FitButton(widgets.styleReload)
+    ReloadUnder(styleRow, widgets.windowStyle, widgets.styleReload)
     widgets.styleReload:Hide()
 
     local effectsRow = CreateRow(pages.look, 1, "Window effects",
