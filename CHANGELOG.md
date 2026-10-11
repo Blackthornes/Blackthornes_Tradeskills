@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.45.2
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Fixes:** in the Blizzard window style, the tab showing now wears the
+  game's tab art, lit, with a white label, instead of a dark bar with gold
+  corners. The Reload buttons for Text size and Window style sit under
+  their setting, the same way in all four addons.
+
 ## 0.45.1
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is

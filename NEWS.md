@@ -12,6 +12,10 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.45.2
+
+- The Blizzard window look got a little cleanup: the open tab looks right now.
+
 ## 0.45.1
 
 - Gold sent between your own characters doesn't mess up the gold chart anymore.
