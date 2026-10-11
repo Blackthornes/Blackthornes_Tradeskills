@@ -212,6 +212,15 @@ check("to the character's full mail name", filled and filled.recipient, "Ana Smi
 check("only real counts go in", filled and #filled.items, 1)
 Butler:FillMail("Zed", { { itemID = 3, count = 1 } })
 check("a name not on record is used as typed", filled.recipient, "Zed")
+-- Two characters sharing a first name are "Ana S." and "Ana T." to Butler,
+-- which FindCharacter cannot read back: the full name still goes in.
+local shortNames = ns.Recipes.GetShortCharacterName
+ns.Recipes.GetShortCharacterName = function(_, key) return key == ALT and "Ana S." or key end
+ns.QueueMail.FindCharacter = function() return nil end
+Butler:FillMail("Ana S.", { { itemID = 3, count = 1 } })
+check("a shared first name still gets the full name", filled.recipient, "Ana Smith")
+ns.Recipes.GetShortCharacterName = shortNames
+ns.QueueMail.FindCharacter = function(_, typed) return typed == "Ana" and ALT or nil end
 local none, why = Butler:FillMail("Ana", {})
 check("nothing to mail", none, false)
 check("and says why", why, "nothing to mail")
