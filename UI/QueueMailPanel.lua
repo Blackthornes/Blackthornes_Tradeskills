@@ -11,6 +11,11 @@
 -- Asked 2026-10-06: an alt that has finished a craft another character
 -- needs gets its own row for it at the mailbox, "Crafts for Bob", in the
 -- profit green, with a Send crafts to Bob button, ahead of any materials.
+--
+-- Blackthornes Butler takes over the mailbox when it is loaded (the owner
+-- picked it, 2026-10-11): while Butler's window is up there it says so
+-- through Butler:Mailbox (Logic/Butler.lua), and this panel stays hidden
+-- until that window closes.
 
 local _, ns = ...
 
@@ -268,6 +273,10 @@ end
 
 function QueueMailPanel:Refresh()
     if self.dismissed or not self.MailboxOpen() then return end
+    if self.coveredByButler then
+        if self.frame then self.frame:Hide() end
+        return
+    end
 
     local deliveries, hasGear = self:GetDeliveries()
 
@@ -495,6 +504,7 @@ ns.RegisterEvent(QueueMailPanel, "MAIL_INBOX_UPDATE", function()
 end)
 
 ns.RegisterEvent(QueueMailPanel, "MAIL_CLOSED", function()
+    QueueMailPanel.coveredByButler = false
     if QueueMailPanel.frame then QueueMailPanel.frame:Hide() end
 end)
 
