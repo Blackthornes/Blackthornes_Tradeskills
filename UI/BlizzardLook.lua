@@ -54,7 +54,7 @@ Look.ART_ORDER = {
     "button", "buttonDown", "buttonDisabled", "buttonHighlight",
     "check", "checkHighlight", "checkTick",
     "close", "closeDown", "closeHighlight",
-    "tab", "tabActive", "tabHighlight", "knob",
+    "tab", "tabHighlight", "knob",
 }
 
 -- The game's colours, laid over the house palette when this style is on.
@@ -409,7 +409,7 @@ end
 --- character window's tab art. The strip calls Look.SelectTab as it picks.
 function Look.Tab(button)
     if not Look.On() or not button then return false end
-    if not HasAll("tab", "tabActive", "tabHighlight") then return false end
+    if not HasAll("tab", "tabHighlight") then return false end
 
     Quiet(rawget(button, "background"))
     Quiet(rawget(button, "hover"))
@@ -425,16 +425,27 @@ function Look.Tab(button)
     light:SetFile(Look.ART.tabHighlight)
     light:SetBlend("ADD")
 
+    -- The tab showing keeps the game's light on. The game's active tab art
+    -- is cut to rise into a window's bottom edge, and these tabs hang below
+    -- it, so on them it read as a dark bar with stray gold corners.
+    local picked = ThreeSlice(button, "BORDER", nil, 20, TAB_COORDS, 4)
+    picked:SetFile(Look.ART.tabHighlight)
+    picked:SetBlend("ADD")
+    picked:SetShown(false)
+
     button.blizzardFace = face
+    button.blizzardPicked = picked
     return true
 end
 
---- The tab showing wears the active art and a white label; the others the
---- resting art and the game's gold.
+--- The tab showing is lit, with a white label; the others rest in the
+--- game's gold.
 function Look.SelectTab(button, active)
     local face = button and rawget(button, "blizzardFace")
     if not face then return end
-    face:SetFile(active and Look.ART.tabActive or Look.ART.tab)
+    face:SetFile(Look.ART.tab)
+    local picked = rawget(button, "blizzardPicked")
+    if picked then picked:SetShown(active and true or false) end
     if button.label then
         if active then button.label:SetTextColor(1, 1, 1, 1)
         else button.label:SetTextColor(GOLD[1], GOLD[2], GOLD[3], 1) end
