@@ -265,6 +265,12 @@ local saved = ns.db.recipeSkills
 Book:Invalidate()
 check("kept skills survive a reload", Book:GetSkill(1263000), 110)
 check("nothing about who looked is kept with a skill", saved[400002].owner, nil)
+-- Crafted: made by any recipe, the book's or one a window showed.
+check("the book's boots are crafted", Book:IsCrafted(BOOTS), true)
+check("a Forever recipe's item is crafted", Book:IsCrafted(NEWBAG), true)
+check("leather is not", Book:IsCrafted(LEATHER), false)
+check("not an item is not", Book:IsCrafted(nil), false)
+
 C_TooltipInfo = nil
 C_Item.IsItemDataCachedByID = nil
 

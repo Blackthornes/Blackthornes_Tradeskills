@@ -149,6 +149,17 @@ check("never what cannot be disenchanted", QueueMail:GoesToDisenchanter(WAND, 2)
 check("never white", QueueMail:GoesToDisenchanter(CLOTH, 1), false)
 check("not an item", QueueMail:GoesToDisenchanter(nil, 2), false)
 
+-- Crafted gear stays (the owner, 2026-10-11: "non-crafted items").
+ns.RecipeBook = { IsCrafted = function(_, itemID) return itemID == GREEN_BOOTS end }
+check("crafted gear is never sent", QueueMail:GoesToDisenchanter(GREEN_BOOTS, 2), false)
+Reset()
+delivery = QueueMail:GetDisenchantDelivery()
+check("nor listed on the mail", Count(delivery, GREEN_BOOTS), 0)
+check("found gear still goes", Count(delivery, GREEN_BAND), 2)
+ns.RecipeBook = { IsCrafted = function() error("broken") end }
+check("a recipe book that raises sends it", QueueMail:GoesToDisenchanter(GREEN_BOOTS, 2), true)
+ns.RecipeBook = nil
+
 print("")
 print("who it goes to")
 

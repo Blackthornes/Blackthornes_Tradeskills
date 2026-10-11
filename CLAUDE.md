@@ -175,8 +175,9 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
 - `disenchanter`: the disenchanter typed in Settings (full name) when the
   item is gear the Mail page sends there (`QueueMail:GoesToDisenchanter`:
   green up to the quality picked, can be disenchanted, does not bind when
-  picked up, no upgrade for the character playing; the owner asked
-  2026-10-11 for Butler to follow that setting). nil with nobody typed.
+  picked up, not crafted (`RecipeBook:IsCrafted`: any recipe makes it),
+  no upgrade for the character playing; the owner asked 2026-10-11 for
+  Butler to follow that setting, for "disenchantable, non-crafted items"). nil with nobody typed.
   `GetDisenchantDelivery` uses the same rule, so the two never disagree.
 - `need`: what this character's own queued crafts use from its bags (use,
   less what it makes, less its bank), as `QueueMail:GetDeliveries` keeps back.
