@@ -13,6 +13,10 @@ than shipped with last version's notes.
 It also refuses a CHANGELOG.md section that credits a player by name: a
 player's name never goes in a report (only the #general post thanks them).
 
+It also warns, without refusing, when this version's CHANGELOG.md or NEWS.md
+section says "German" without "Deutsch": the posts call the language Deutsch
+(the owner, 2026-10-11), or "Deutsch (German)" where English readers need it.
+
 It also checks the TOC still says `## Version: @project-version@`: a version
 typed in by hand would disagree with the tag the packager builds.
 """
@@ -69,6 +73,25 @@ def named_players(tag, changelog):
             % player for player in names_a_player(section(changelog, match.group(1)) or "")]
 
 
+def language_warnings(tag, changelog, news):
+    """The language is "Deutsch" in every post (the owner, 2026-10-11), or
+    "Deutsch (German)" where English readers need the hint. A warning, not a
+    refusal: this version's CHANGELOG.md (#announcements) or NEWS.md
+    (#general) section saying German without Deutsch."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from announce_discord import section
+    match = TAG.match(tag)
+    if not match:
+        return []
+    warnings = []
+    for name, text in (("CHANGELOG.md", changelog), ("NEWS.md", news)):
+        body = section(text or "", match.group(1)) or ""
+        if re.search(r"\bGerman\b", body) and "Deutsch" not in body:
+            warnings.append('%s says "German" without "Deutsch"; call the '
+                            'language Deutsch, or "Deutsch (German)"' % name)
+    return warnings
+
+
 def main(argv):
     if len(argv) != 2:
         print("usage: python tools/check_release.py v0.2.0")
@@ -77,6 +100,12 @@ def main(argv):
         changelog = f.read()
     with open(os.path.join(ROOT, "Blackthornes_TS.toc"), encoding="utf-8") as f:
         toc = f.read()
+    news = ""
+    if os.path.exists(os.path.join(ROOT, "NEWS.md")):
+        with open(os.path.join(ROOT, "NEWS.md"), encoding="utf-8") as f:
+            news = f.read()
+    for warning in language_warnings(argv[1], changelog, news):
+        print("Warning: " + warning)
     problems = check(argv[1], changelog, toc) + named_players(argv[1], changelog)
     for problem in problems:
         print("Not releasing: " + problem)

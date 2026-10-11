@@ -4,7 +4,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from check_release import check  # noqa: E402
+from check_release import check, language_warnings  # noqa: E402
 
 TOC = "## Interface: 16001\n## Version: @project-version@\n"
 LOG = "# Changelog\n\n## 0.2.0 - 2026-09-30\n\n- New.\n\n## 0.1.0\n\n- First.\n"
@@ -30,6 +30,17 @@ expect("a tag that is not a version is refused", check("vnext", LOG, TOC) != [])
 expect("a changelog with no sections is refused", check("v0.2.0", "# Changelog\n", TOC) != [])
 expect("a hand-typed TOC version is refused",
        check("v0.2.0", LOG, TOC.replace("@project-version@", "0.2.0")) != [])
+
+DE = "## 0.2.0\n\n- Works on German game clients.\n\n## 0.1.0\n\n- German.\n"
+expect("German alone warns, in either file",
+       len(language_warnings("v0.2.0", DE, DE)) == 2)
+expect("Deutsch (German) does not warn",
+       language_warnings("v0.2.0", DE.replace("German game", "Deutsch (German) game"), "") == [])
+expect("an older section saying German does not warn",
+       language_warnings("v0.2.0", LOG + "\n- German.\n", "") == [])
+expect("Germany is not the language",
+       language_warnings("v0.2.0", "## 0.2.0\n\n- Germany.\n", "") == [])
+expect("a missing NEWS.md does not warn", language_warnings("v0.2.0", LOG, None) == [])
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 with open(os.path.join(root, "Blackthornes_TS.toc"), encoding="utf-8") as f:
