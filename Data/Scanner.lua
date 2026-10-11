@@ -550,6 +550,7 @@ function Scanner:OnBrowseResults()
         -- search, most likely. There is nothing of ours to page or to finish,
         -- but the rows are real prices and reading them is free.
         local learned = self:CapturePassiveBrowse()
+        pcall(self.SettleNameSearch, self)
 
         self:Report(("picked up %d price(s) from a search the addon did not start")
             :format(learned))
@@ -1453,6 +1454,8 @@ end
 --    cleared for the next query. Clearing a real rival price on that guess is
 --    how the addon would talk itself into listing far under value, so a
 --    passive observation may only ever add a price, never remove one.
+--    The one exception is a search by an item's own name whose whole answer
+--    leaves it out (SettleNameSearch, below).
 
 -- The same rows arrive several times over as a search fills in, and a browse
 -- of the whole house repeats every item the player scrolls past. Recording a
@@ -1533,6 +1536,122 @@ function Scanner:CapturePassiveBrowse()
     if learned > 0 and ns.Persist then ns.Persist:SaveLater() end
 
     return learned
+end
+
+--- Forget the last price passive capture read for an item, so the next
+--- reading is recorded even at the same price: after a buy or an empty
+--- search, the same price again is another listing, not a repeat.
+function Scanner:ForgetPassive(itemID)
+    if self.passiveSeen and itemID then self.passiveSeen[itemID] = nil end
+end
+
+--------------------------------------------------------------------------------
+-- "No items found"
+--------------------------------------------------------------------------------
+--
+-- A player found the Disenchanting tab still listing an item after searching
+-- the auction house for it by name and getting "no items found". Passive
+-- capture never records an empty answer (see above): an empty shared set is
+-- as likely to be one cleared for the next query. A search by an item's own
+-- name is different: when the whole answer to it is in and the item is not
+-- in it, nobody is selling one, and that is recorded like a sold out item
+-- (Prices:RecordEmpty), whoever typed it.
+--
+-- Which item a search names: the one the addon's own search buttons sent
+-- (UI:SearchAuctionHouse calls ExpectSearch), else a row of the
+-- Disenchanting tab with exactly that name. Any other query sent after it
+-- owns the results, so it stops waiting (NameSearchSent).
+
+-- Seconds a search by name may take to answer.
+Scanner.NAME_SEARCH_WAIT = 10
+
+--- The addon is about to search for this item by name.
+function Scanner:ExpectSearch(itemID, name)
+    if not itemID or type(name) ~= "string" or name == "" then return end
+    self.expectedSearch = { itemID = itemID, text = name:lower() }
+end
+
+--- The item a search text names exactly, or nil.
+function Scanner:ItemNamedBy(text)
+    if type(text) ~= "string" or text == "" then return nil end
+    local lower = text:lower()
+
+    local expected = self.expectedSearch
+    if expected and expected.text == lower then return expected.itemID end
+
+    local shown = ns.Disenchant and ns.Disenchant.shownRows
+    if type(shown) == "table" then
+        for _, row in ipairs(shown) do
+            if type(row.name) == "string" and row.name:lower() == lower then return row.itemID end
+        end
+    end
+    return nil
+end
+
+--- A query went out (hooked, after the client's own). Only a plain browse by
+--- an item's name, with no filter that could hide it, is waited on.
+function Scanner:NameSearchSent(query)
+    self.nameSearch = nil
+    if self.isBrowsing or self.sendingOwnBrowse or type(query) ~= "table" then return end
+
+    if (tonumber(query.minLevel) or 0) > 0 or (tonumber(query.maxLevel) or 0) > 0 then return end
+    if type(query.itemClassFilters) == "table" and #query.itemClassFilters > 0 then return end
+
+    local filters = type(Enum) == "table" and Enum.AuctionHouseFilter
+    if type(query.filters) == "table" and type(filters) == "table" then
+        for _, filter in ipairs(query.filters) do
+            if filter == filters.UsableOnly or filter == filters.UpgradesOnly then return end
+        end
+    end
+
+    local itemID = self:ItemNamedBy(query.searchString)
+    self.expectedSearch = nil
+    if itemID then self.nameSearch = { itemID = itemID, at = GetTime() } end
+end
+
+--- Browse results came in: does the search by name we wait on have its
+--- whole answer, without the item? Then nobody is selling one.
+-- @return true when the item was recorded as not listed
+function Scanner:SettleNameSearch()
+    local search = self.nameSearch
+    if not search then return false end
+    if GetTime() - search.at > self.NAME_SEARCH_WAIT then
+        self.nameSearch = nil
+        return false
+    end
+
+    local ok, results = pcall(C_AuctionHouse.GetBrowseResults)
+    if not ok or type(results) ~= "table" then return false end
+
+    for _, row in ipairs(results) do
+        local key = type(row) == "table" and row.itemKey
+        if type(key) == "table" and key.itemID == search.itemID then
+            -- Listed: passive capture has just read its price.
+            self.nameSearch = nil
+            return false
+        end
+    end
+
+    -- Only the client saying the answer is whole will do; more rows may
+    -- still come (AUCTION_HOUSE_BROWSE_RESULTS_ADDED). A client without the
+    -- call can only be believed when nothing at all came back.
+    local whole
+    if Util.HasFunction("C_AuctionHouse.HasFullBrowseResults") then
+        local fullOk, full = pcall(C_AuctionHouse.HasFullBrowseResults)
+        whole = fullOk and full == true
+    else
+        whole = #results == 0
+    end
+    if not whole then return false end
+
+    self.nameSearch = nil
+    ns.Prices:RecordEmpty(search.itemID)
+    self:ForgetPassive(search.itemID)
+    self:Report(("item %d is not listed: recorded as sold out"):format(search.itemID))
+
+    if ns.Persist then ns.Persist:SaveLater() end
+    if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    return true
 end
 
 --- Record the order book of a search the player ran on a single item.
@@ -1920,7 +2039,12 @@ function Scanner:OnEnable()
         end
         for _, name in ipairs({ "SendBrowseQuery", "SearchForFavorites", "SearchForItemKeys" }) do
             if type(C_AuctionHouse[name]) == "function" then
-                pcall(hooksecurefunc, C_AuctionHouse, name, Foreign)
+                pcall(hooksecurefunc, C_AuctionHouse, name, function(query)
+                    Foreign()
+                    -- Whichever query went last owns the results, so only a
+                    -- browse by name can be read as "not listed" (NameSearchSent).
+                    pcall(Scanner.NameSearchSent, Scanner, name == "SendBrowseQuery" and query or nil)
+                end)
             end
         end
     end
