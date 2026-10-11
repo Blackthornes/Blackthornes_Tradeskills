@@ -291,7 +291,8 @@ function QueueMail:GetDeliveries()
 
     local others = {}
     for characterKey in pairs(uses) do
-        if characterKey ~= selfKey and Queue:CanMail(selfKey, characterKey) then
+        if characterKey ~= selfKey and not self:IsPlaying(characterKey)
+            and Queue:CanMail(selfKey, characterKey) then
             others[#others + 1] = characterKey
         end
     end
@@ -401,6 +402,39 @@ local function IsCharacterPlaying(typed)
     if realm and type(here) == "string" then
         return realm:gsub("%s", ""):lower() == here:gsub("%s", ""):lower()
     end
+    return true
+end
+
+--- Is this name, as a player would type it, the character playing?
+function QueueMail:IsPlayingName(typed)
+    if type(typed) ~= "string" or typed == "" then return false end
+    return IsCharacterPlaying(typed) == true
+end
+
+--- Is this record the character playing? Its own key, or another record of
+--- it: the old name-realm key stays beside the GUID one when both exist
+--- (Config:AdoptLegacyCharacter), and it filed every character of that
+--- first name as one. Mail to it lands in the bags it came from, so it is
+--- never offered a delivery (a player found Butler filling a mail to the
+--- character they were on, 2026-10-11).
+function QueueMail:IsPlaying(characterKey)
+    if characterKey == nil then return false end
+    local selfKey = SelfKey()
+    if characterKey == selfKey then return true end
+    local record, me = CharacterRecord(characterKey), CharacterRecord(selfKey)
+    if not (record and me) then return false end
+    if record.guid ~= nil and record.guid == selfKey then return true end
+
+    local name = Fold(record.name)
+    if not name or name ~= Fold(me.name) then return false end
+    if record.realm and me.realm and record.realm:gsub("%s", "") ~= me.realm:gsub("%s", "") then
+        return false
+    end
+    if record.faction and me.faction and record.faction ~= me.faction then return false end
+    local surname, mine = Fold(record.surname), Fold(me.surname)
+    if surname and mine then return surname == mine end
+    -- One of them has no last name on record: an old name-realm record, which
+    -- may be this character, so it is never mailed to.
     return true
 end
 
@@ -986,7 +1020,7 @@ function QueueMail:FindCharacter(typed)
         end
     end
 
-    if found == SelfKey() then return nil end
+    if found and self:IsPlaying(found) then return nil end
     return found
 end
 

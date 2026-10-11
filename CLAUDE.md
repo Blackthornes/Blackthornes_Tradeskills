@@ -212,7 +212,13 @@ _G.BlackthornesTS.Butler:FromBank()             -- { [itemID] = count }, or nil;
 the player's characters (`name` as Advise gave it, resolved with
 `QueueMail:FindCharacter` and `MailName`; `items` a list of `{ itemID,
 count }`, subject "From Blackthornes Butler"); the player presses Send and
-QueueMail's own SendMail hook writes down what went. `FromBank` is what
+QueueMail's own SendMail hook writes down what went. It never fills a mail
+to the character playing, under any record of it (`QueueMail:IsPlaying`:
+its key, a record carrying its GUID, or the old name-realm record left
+beside the GUID one; a player found Butler filling one, 2026-10-11), and
+answers false and "that's the character you're on"; filled, its third
+return is the full name it went to, for Butler's chat line. Deliveries,
+the enchanter and `FindCharacter` leave those records out too. `FromBank` is what
 the playing character's own queued crafts use, less what it makes and
 carries, no more than its bank holds. Keep both stable too.
 

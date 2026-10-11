@@ -238,6 +238,20 @@ ns.Recipes.GetCharacterName = nil
 ns.QueueMail.MailName = function(record) return record.name .. " Smith" end
 ns.Recipes.GetShortCharacterName = shortNames
 ns.QueueMail.FindCharacter = function(_, typed) return typed == "Ana" and ALT or nil end
+-- Never a mail to the character playing, under any record of it (a player
+-- found one, 2026-10-11), and the full name comes back for the chat line.
+local _, _, fullName = Butler:FillMail("Ana", { { itemID = 3, count = 1 } })
+check("the full name it went to comes back", fullName, "Ana Smith")
+ns.QueueMail.IsPlaying = function(_, key) return key == ALT end
+filled = nil
+local toMe, whyMe = Butler:FillMail("Ana", { { itemID = 3, count = 1 } })
+check("a mail to the character playing is not filled", toMe == false and filled == nil, true)
+check("and says why", whyMe, "that's the character you're on")
+ns.QueueMail.IsPlaying = nil
+ns.QueueMail.IsPlayingName = function(_, typed) return typed == "Zed" or typed == "Ana Smith" end
+check("nor to a name that is the character playing", (Butler:FillMail("Zed", { { itemID = 3, count = 1 } })), false)
+check("nor when the full name is", (Butler:FillMail("Ana", { { itemID = 3, count = 1 } })), false)
+ns.QueueMail.IsPlayingName = nil
 local none, why = Butler:FillMail("Ana", {})
 check("nothing to mail", none, false)
 check("and says why", why, "nothing to mail")
