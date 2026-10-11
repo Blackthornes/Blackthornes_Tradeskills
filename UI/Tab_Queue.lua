@@ -405,7 +405,8 @@ local function UpdateMaterialRow(row, line)
         else
             cells.cost:SetText("?")
         end
-        cells.cost:SetTextColor(Theme.Unpack(line.fromVendor and "accent" or "muted"))
+        cells.cost:SetTextColor(Theme.Unpack(line.overpaid and "warn"
+            or line.fromVendor and "accent" or "muted"))
 
         -- Green: another of your characters can make it for less.
         row.name:SetTextColor(Theme.Unpack(nameColour or "text"))
@@ -413,6 +414,14 @@ local function UpdateMaterialRow(row, line)
         -- Buying a vendor reagent off the auction house is a mistake, so do
         -- not offer the search for it.
         row.search:SetShown(not line.fromVendor)
+    elseif line.paid and not line.needsBankTrip then
+        -- Bought: what it cost stands where the estimate stood, amber when
+        -- it came to well over it.
+        Theme.SetMoneyText(cells.cost, line.paid, { short = true })
+        cells.cost:SetTextColor(Theme.Unpack(line.overpaid and "warn" or "muted"))
+
+        row.name:SetTextColor(Theme.Unpack(nameColour))
+        row.search:Hide()
     else
         cells.cost:SetText(line.needsBankTrip and "in bank"
             or line.needsMailTrip and "in mail" or "")
@@ -420,6 +429,26 @@ local function UpdateMaterialRow(row, line)
 
         row.name:SetTextColor(Theme.Unpack(nameColour))
         row.search:Hide()
+    end
+end
+
+--- What was paid on the auction house today against the estimate, for a
+--- shopping list tooltip. Shared with the Gather tab.
+function UI.AddPaidLines(line)
+    if not line.paid then return end
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddDoubleLine(("Paid for %d today"):format(line.paidUnits or 0),
+        Util.FormatMoney(line.paid, { noColor = true }),
+        0.7, 0.7, 0.7, 1, 1, 1)
+    if line.paidEstimate then
+        GameTooltip:AddDoubleLine("The list had said",
+            Util.FormatMoney(line.paidEstimate, { noColor = true }),
+            0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    if line.overpaid then
+        local over = math.floor((line.paid / line.paidEstimate - 1) * 100 + 0.5)
+        GameTooltip:AddLine(("%d%% more than expected. The cheap listings may have sold out."):format(over),
+            0.91, 0.76, 0.35, true)
     end
 end
 
@@ -475,6 +504,8 @@ local function ShowMaterialTooltip(row, line)
             GameTooltip:AddLine("No auction data for this material", 0.9, 0.38, 0.31)
         end
     end
+
+    UI.AddPaidLines(line)
 
     local offer = line.altCraft
     if offer then
