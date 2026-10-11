@@ -140,6 +140,15 @@ delivery = QueueMail:GetDisenchantDelivery()
 check("an upgrade for you is kept", Count(delivery, GREEN_BAND), 0)
 check("the rest still goes", Count(delivery, GREEN_BOOTS), 1)
 
+-- Blackthornes Butler asks the same rule one item at a time.
+check("Butler is told the upgrade stays", QueueMail:GoesToDisenchanter(GREEN_BAND, 2), false)
+check("and the boots go", QueueMail:GoesToDisenchanter(GREEN_BOOTS, 2), true)
+check("never above the quality picked", QueueMail:GoesToDisenchanter(BLUE_SWORD, 3), false)
+check("never bind on pickup", QueueMail:GoesToDisenchanter(BOP_GLOVES, 2), false)
+check("never what cannot be disenchanted", QueueMail:GoesToDisenchanter(WAND, 2), false)
+check("never white", QueueMail:GoesToDisenchanter(CLOTH, 1), false)
+check("not an item", QueueMail:GoesToDisenchanter(nil, 2), false)
+
 print("")
 print("who it goes to")
 
