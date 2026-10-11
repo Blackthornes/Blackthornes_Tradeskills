@@ -1,0 +1,155 @@
+-- Logic/Butler.lua's Jobs and Craft outside WoW.
+--
+-- Butler's step list asks Tradeskills for every character's jobs in the
+-- queue (the owner asked 2026-10-11 for a way to craft on another
+-- character and send it back). What must hold:
+--   1. One entry per character with a step, the character playing first,
+--      then by name; full names, never shortened.
+--   2. A craft step says what it makes, for whom, and what it still needs.
+--   3. The character playing's mail is the Mail panel's deliveries; the
+--      others' is what they made and still owe.
+--   4. Characters on another realm, side or account are left out.
+--   5. Craft starts the craft only with the profession open, else opens
+--      the Queue tab; never raises.
+
+GetTime = function() return 100 end
+
+local ns = {}
+ns.NewModule = function(name) local m = {} ns[name] = m return m end
+
+local ANA, WITHER, CY, LINKED = "Player-1", "Player-2", "Player-3", "Player-4"
+ns.db = {
+  characters = {
+    [ANA] = { name = "Ana", surname = "Blackthorne", realm = "R", faction = "Alliance" },
+    [WITHER] = { name = "Blackthornes", surname = "Wither", realm = "R", faction = "Alliance" },
+    [CY] = { name = "Cy", surname = "Horde", realm = "R", faction = "Horde" },
+    [LINKED] = { name = "Lin", surname = "Ked", realm = "R", faction = "Alliance", linkedFrom = ANA },
+  },
+}
+local selfKey = ANA
+ns.Config = { GetCharacterKey = function() return selfKey end, Get = function() return nil end }
+
+local recipes = {
+  [10] = { name = "Medium Leather", outputItemID = 2319, quantityMin = 1,
+    reagents = { { itemID = 2318, quantity = 4 } } },
+  [11] = { name = "Linen Bag", outputItemID = 4238, reagents = { { itemID = 2996, quantity = 3 } } },
+  [12] = { name = "Orc Thing", outputItemID = 9, reagents = {} },
+}
+ns.Recipes = {
+  GetAny = function(_, recipeID) return recipes[recipeID] end,
+  GetCharacterName = function(_, key)
+    local r = ns.db.characters[key]
+    return r.name .. " " .. r.surname
+  end,
+}
+
+local queue = {
+  { recipeID = 10, quantity = 20, isDependency = true, crafter = WITHER, forCharacters = { [ANA] = true } },
+  { recipeID = 11, quantity = 1, owner = ANA, crafter = ANA },
+  { recipeID = 12, quantity = 1, crafter = CY },
+  { recipeID = 11, quantity = 2, crafter = LINKED },
+}
+local held = { [WITHER] = { [2318] = 80 }, [ANA] = { [2996] = 1 } }
+ns.Queue = {
+  GetAll = function() return queue end,
+  GetCrafter = function(_, entry) return entry.crafter end,
+  GetRecipients = function(_, entry)
+    local list = {}
+    for key in pairs(entry.forCharacters or {}) do if key ~= entry.crafter then list[#list + 1] = key end end
+    return list
+  end,
+  HeldBy = function(_, key, itemID) return (held[key] or {})[itemID] or 0 end,
+  CanMail = function(_, from, to)
+    return ns.db.characters[from].faction == ns.db.characters[to].faction
+  end,
+}
+local owed = { [WITHER] = { [ANA] = { [2319] = 5 } } }
+ns.QueueMail = {
+  IsPlaying = function(_, key) return key == selfKey end,
+  GetDeliveries = function()
+    return { { to = WITHER, name = "Blackthornes Wither", items = { { itemID = 2318, count = 30 } } } }
+  end,
+  GetOwedBy = function(_, from) return owed[from] or {} end,
+}
+
+local chunk = assert(loadfile(lfs_cwd .. "/Logic/Butler.lua"))
+chunk("Blackthornes_TS", ns)
+local Butler = ns.Butler
+
+local failures = 0
+local function check(label, got, want)
+  if got ~= want then
+    failures = failures + 1
+    print(string.format("  FAIL  %-52s got %s, wanted %s", label, tostring(got), tostring(want)))
+  else
+    print(string.format("  ok    %-52s %s", label, tostring(got)))
+  end
+end
+
+print("\njobs")
+local jobs = Butler:Jobs()
+check("two characters have jobs", #jobs, 2)
+check("the character playing first", jobs[1].name, "Ana Blackthorne")
+check("and says so", jobs[1].isCurrent, true)
+check("then the alt, by full name", jobs[2].name, "Blackthornes Wither")
+check("the alt is not the one playing", jobs[2].isCurrent, false)
+
+local bag = jobs[1].steps[1]
+check("Ana crafts the bag", bag.kind, "craft")
+check("one of them", bag.count, 1)
+check("short of linen", bag.ready, false)
+check("by two", bag.missing[1] and bag.missing[1].count, 2)
+check("for nobody else", #bag.forNames, 0)
+local send = jobs[1].steps[2]
+check("then mails the leather over", send.kind, "mail")
+check("to the alt, by full name", send.to, "Blackthornes Wither")
+check("30 of it", send.items[1].count, 30)
+
+local leather = jobs[2].steps[1]
+check("the alt crafts leather", leather.name, "Medium Leather")
+check("20 of it", leather.count, 20)
+check("and has what it takes", leather.ready, true)
+check("for Ana", leather.forNames[1], "Ana Blackthorne")
+local back = jobs[2].steps[2]
+check("then mails back what it made", back.kind, "mail")
+check("to Ana", back.to, "Ana Blackthorne")
+check("five owed", back.items[1].count, 5)
+
+print("\nwhen the alt plays")
+selfKey = WITHER
+jobs = Butler:Jobs()
+check("the alt comes first", jobs[1].name, "Blackthornes Wither")
+check("its craft first", jobs[1].steps[1].kind, "craft")
+check("Ana is next", jobs[2] and jobs[2].name, "Ana Blackthorne")
+selfKey = ANA
+
+print("\ncraft")
+local started, shown = nil, 0
+ns.Crafting = {
+  isTradeSkillOpen = false,
+  GetReadiness = function(_, id) if id == 11 then return true end return false, "on someone else" end,
+  IsBusy = function() return false end,
+  Start = function(_, id, count) started = { id, count } return true end,
+}
+ns.Queue.ShowQueue = function() shown = shown + 1 return true end
+local ok, why = Butler:Craft(11)
+check("closed profession opens the Queue tab", why, "opened")
+check("and starts nothing", started, nil)
+ns.Crafting.isTradeSkillOpen = true
+ok, why = Butler:Craft(11)
+check("open profession crafts", why, "crafting")
+check("the queued amount", started and started[2], 1)
+ok, why = Butler:Craft(10)
+check("not this character's craft", ok, false)
+check("says why", why, "it's no longer in your queue")
+ns.Crafting.GetReadiness = function() error("boom") end
+check("never raises", (Butler:Craft(11)), false)
+ns.Queue.GetAll = function() error("boom") end
+check("Jobs gives nil on an error", Butler:Jobs(), nil)
+
+print("")
+if failures > 0 then
+  error(string.format("%d Butler jobs check(s) failed", failures))
+end
+print("  all Butler jobs checks passed")
+print("")
