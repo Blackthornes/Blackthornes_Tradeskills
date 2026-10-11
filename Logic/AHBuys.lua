@@ -305,6 +305,9 @@ function AHBuys:Confirm(auctionID)
     self.awaiting = nil
     self:NotePaid(wait)
     self:Record(wait.itemID, wait.quantity)
+    -- Bought after a search from the Disenchanting tab: marked to disenchant.
+    local buys = ns.DisenchantBuys
+    if buys and buys.OnBought then pcall(buys.OnBought, buys, wait.itemID, wait.quantity) end
 end
 
 function AHBuys:Fail()

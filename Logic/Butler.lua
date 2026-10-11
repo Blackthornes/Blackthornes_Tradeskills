@@ -30,6 +30,14 @@
 --                  what is in its bank), as the Mail panel works it out.
 --   mailTo,        the alt whose queued crafts this character's bags can
 --   mailCount      supply, and how many (QueueMail:GetDeliveries).
+--   bought         how many the account bought on the auction house to
+--                  disenchant (DisenchantBuys:Count, 2026-10-11), nil when
+--                  none.
+--
+-- Butler's right-click menu marks or unmarks one (2026-10-11):
+--
+--   _G.BlackthornesTS.Butler:SetBoughtToDisenchant(itemID, on, count)
+--     -- true, or false and why; never raises
 --
 -- Butler asks once per bag item, a hundred times in a burst. So the queue,
 -- the mail plan and the characters' Enchanting are read once into a lookup
@@ -309,6 +317,13 @@ local function Breaking(itemID, kept, quality)
     return value, false, nil
 end
 
+--- How many the account bought to disenchant, or nil for none.
+local function Bought(itemID)
+    local buys = ns.DisenchantBuys
+    local count = buys and buys.Count and buys:Count(itemID) or 0
+    return count > 0 and count or nil
+end
+
 local function Answer(itemID)
     local kept = Lookup()
     local quality = Quality(itemID)
@@ -324,6 +339,7 @@ local function Answer(itemID)
         need = kept.need[itemID],
         mailTo = mail and mail.name or nil,
         mailCount = mail and mail.count or nil,
+        bought = Bought(itemID),
     }
 end
 
@@ -336,6 +352,24 @@ function Butler:Advise(itemID)
     local ok, answer = pcall(Answer, itemID)
     if ok then return answer end
     return nil
+end
+
+--- Mark an item bought to disenchant, `count` of them (at least one), or
+--- take the mark off. Never raises.
+-- @return true, or false and why
+function Butler:SetBoughtToDisenchant(itemID, on, count)
+    itemID = tonumber(itemID)
+    local buys = ns.DisenchantBuys
+    if not itemID or not buys then return false, "Tradeskills can't mark that." end
+    local ok, err = pcall(function()
+        if on then
+            buys:Mark(itemID, math.max(1, tonumber(count) or 1))
+        else
+            buys:Unmark(itemID)
+        end
+    end)
+    if not ok then return false, tostring(err) end
+    return true
 end
 
 --------------------------------------------------------------------------------

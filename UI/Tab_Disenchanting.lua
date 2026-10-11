@@ -19,6 +19,12 @@
 -- it would sell for, with a Disenchant button. That button is the same secure
 -- one the Profit tab and the queue use (UI/Disenchanter.lua): one disenchant
 -- per click.
+--
+-- Items bought on the auction house to disenchant (Logic/DisenchantBuys.lua,
+-- 2026-10-11) head the bags list, tagged, and are picked first, so clicking
+-- on down the Disenchant button breaks them before anything else. A buy is
+-- marked when it follows a search sent from here; a right-click on a bags
+-- row marks or unmarks it by hand.
 
 local _, ns = ...
 
@@ -58,7 +64,7 @@ local VIEWS = {
             { key = "sells",      label = "SELLS",      width = 70, money = true },
             { key = "count",      label = "HAVE",       width = 40, justify = "CENTER" },
         },
-        hint = "Pick an item, then click Disenchant",
+        hint = "Pick an item, then click Disenchant. Right-click to mark it bought to disenchant",
     },
 }
 
@@ -131,6 +137,22 @@ local function PerHour(entry)
     return CraftTime.PerHour(amount, seconds)
 end
 
+-- The tag on a bags row bought to disenchant.
+local BOUGHT_TAG = "  |cffb98cff(bought to DE)|r"
+
+--- Mark or unmark a bags row as bought to disenchant (its right-click).
+local function ToggleBought(entry)
+    local buys = ns.DisenchantBuys
+    if not (buys and entry and entry.itemID) then return end
+    if buys:Count(entry.itemID) > 0 then
+        buys:Unmark(entry.itemID)
+        ns.Print(("%s is no longer marked bought to disenchant."):format(Util.GetItemLabel(entry.itemID)))
+    else
+        buys:Mark(entry.itemID, entry.count or 1)
+        ns.Print(("marked %d %s bought to disenchant."):format(entry.count or 1, Util.GetItemLabel(entry.itemID)))
+    end
+end
+
 local function SameRow(a, b)
     return a and b and a.kind == b.kind and a.itemID == b.itemID
 end
@@ -165,7 +187,10 @@ local function SearchAuctionHouse(entry)
     -- could replace a waiting scan (or a scan could drop this search).
     if not ns.UI:SearchAuctionHouse(entry.itemID) then return end
 
-    ns.Print(("Searching the auction house for %s. Buy it in the auction house window at %s or less. If the list there does not change, type the name into its search box."):format(
+    -- What is bought of it now is marked to disenchant.
+    if ns.DisenchantBuys then ns.DisenchantBuys:Intend(entry.itemID) end
+
+    ns.Print(("Searching the auction house for %s. Buy it in the auction house window at %s or less, and it is marked to disenchant. If the list there does not change, type the name into its search box."):format(
         Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.buy, { noColor = true })))
 end
 
@@ -281,7 +306,8 @@ end
 local function UpdateRow(row, entry)
     if row.view ~= state.view or row.columnsVersion ~= ns.Columns.version then ApplyRowLayout(row) end
 
-    Theme.SetRowName(row.name, entry.name or ("item " .. tostring(entry.itemID)))
+    Theme.SetRowName(row.name, (entry.name or ("item " .. tostring(entry.itemID)))
+        .. (entry.bought and BOUGHT_TAG or ""))
     -- A bag row carries its link, so the upgrade arrow judges that very copy.
     Theme.SetItemIcon(row.icon, entry.itemID, entry.link)
 
@@ -334,7 +360,14 @@ local function ShowBagTooltip(entry)
 
     AddPerHourLine(entry)
 
+    if entry.bought then
+        GameTooltip:AddLine(("%d bought on the auction house to disenchant."):format(entry.bought),
+            0.73, 0.55, 1, true)
+    end
+
     GameTooltip:AddLine("Click to pick it, then click Disenchant.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(entry.bought and "Right-click to unmark it." or "Right-click to mark it bought to disenchant.",
+        0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -366,7 +399,8 @@ local function ShowRowTooltip(row, entry)
 
     AddPerHourLine(entry)
 
-    GameTooltip:AddLine("Right-click to search the auction house for it.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine("Right-click to search the auction house for it. What you buy then is marked to disenchant.",
+        0.5, 0.5, 0.5, true)
     GameTooltip:Show()
 end
 
@@ -601,7 +635,11 @@ local function UpdateBagDetail(entry)
         SetLine(lines[2], "Sells for", entry.soulbound and "soulbound, no vendor price" or "no price", "dim")
     end
 
-    SetLine(lines[3], "In your bags", tostring(entry.count or 0), "muted")
+    if entry.bought then
+        SetLine(lines[3], "In your bags", ("%d, %d bought to disenchant"):format(entry.count or 0, entry.bought), "muted")
+    else
+        SetLine(lines[3], "In your bags", tostring(entry.count or 0), "muted")
+    end
 
     -- A running total that grows with every click.
     local count, worth = Session()
@@ -612,7 +650,10 @@ local function UpdateBagDetail(entry)
         SetLine(lines[4], nil)
     end
 
-    if entry.value and entry.sells then
+    if entry.bought then
+        detail.verdict:SetText("You bought it to disenchant. Right-click its row to unmark it.")
+        detail.verdict:SetTextColor(0.73, 0.55, 1)
+    elseif entry.value and entry.sells then
         if entry.beatsSale then
             detail.verdict:SetText(("Disenchanting pays %s more than selling."):format(
                 Util.FormatMoney(entry.value - entry.sells, { noColor = true })))
@@ -871,12 +912,14 @@ end
 
 --- The count line and the picked row, for the bags list.
 local function RefreshBags(rows)
-    local beats = 0
+    local beats, bought = 0, 0
     for _, row in ipairs(rows) do
         if row.beatsSale then beats = beats + 1 end
+        bought = bought + (row.bought or 0)
     end
 
     local text = ("%d item%s, %d worth more disenchanted"):format(#rows, #rows == 1 and "" or "s", beats)
+    if bought > 0 then text = text .. ("  ·  %d bought to disenchant"):format(bought) end
     local count, worth = Session()
     if count > 0 then
         text = text .. ("  ·  %d disenchanted this session, worth %s"):format(count,
@@ -899,6 +942,15 @@ local function RefreshBags(rows)
     -- under the same button. One that sells for more is never picked for you,
     -- or clicking on down the list broke things worth more sold; a click on
     -- it still picks it.
+    -- What was bought to disenchant is picked first, whatever it sells for.
+    if not fresh then
+        for _, row in ipairs(rows) do
+            if row.bought then
+                fresh = row
+                break
+            end
+        end
+    end
     if not fresh then
         for _, row in ipairs(rows) do
             if row.beatsSale then
@@ -1138,7 +1190,9 @@ local function Build(container)
             state.selected = entry
             UpdateDetail(entry)
 
-            if mouseButton == "RightButton" and entry.kind ~= "bag" then SearchAuctionHouse(entry) end
+            if mouseButton == "RightButton" then
+                if entry.kind == "bag" then ToggleBought(entry) else SearchAuctionHouse(entry) end
+            end
         end,
     })
 

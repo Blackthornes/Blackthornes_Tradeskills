@@ -930,7 +930,12 @@ function Disenchant:GetBagRows(opts)
                 beatsSale = Beats(value, sells),
             }
 
-            if not opts.beatsOnly or row.beatsSale then
+            -- Bought on the auction house to disenchant: no more than carried.
+            local buys = ns.DisenchantBuys
+            local bought = buys and buys.Count and buys:Count(itemID) or 0
+            if bought > 0 then row.bought = math.min(bought, count) end
+
+            if not opts.beatsOnly or row.beatsSale or row.bought then
                 rows[#rows + 1] = row
             end
         end
@@ -942,7 +947,9 @@ function Disenchant:GetBagRows(opts)
     local links = BagLinks(wanted)
     for _, row in ipairs(rows) do row.link = links[row.itemID] end
 
+    -- What was bought to disenchant comes first, then the best.
     table.sort(rows, function(a, b)
+        if (a.bought ~= nil) ~= (b.bought ~= nil) then return a.bought ~= nil end
         local left, right = a.gain or -math.huge, b.gain or -math.huge
         if left ~= right then return left > right end
         return a.itemID < b.itemID
