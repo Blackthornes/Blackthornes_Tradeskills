@@ -278,6 +278,116 @@ function ns.GetUnknownEvents()
     return unknownEvents
 end
 
+--------------------------------------------------------------------------------
+-- Speed check (/bts perf): how long each piece of work took, this session
+-- only, nothing saved but what /bts perf keeps for Claude. A hitch in game
+-- can then be traced to its cause (a hitch each time a craft finished,
+-- 2026-10-11). Equipment's /beq perf is the same idea.
+--------------------------------------------------------------------------------
+
+local Perf = { rows = {} }
+ns.Perf = Perf
+
+--- Milliseconds from the client's high resolution clock, or nil.
+function Perf.Clock()
+    local clock = rawget(_G, "debugprofilestop")
+    if type(clock) == "function" then
+        local ok, now = pcall(clock)
+        if ok and type(now) == "number" then return now end
+    end
+    return nil
+end
+
+--- Note that `label` took `ms` milliseconds.
+function Perf:Add(label, ms)
+    if type(ms) ~= "number" then return end
+    local row = self.rows[label]
+    if not row then
+        row = { label = label, runs = 0, total = 0, worst = 0, slow = 0 }
+        self.rows[label] = row
+    end
+    row.runs = row.runs + 1
+    row.total = row.total + ms
+    if ms > row.worst then row.worst = ms end
+    if ms >= Perf.SLOW then row.slow = row.slow + 1 end
+end
+
+-- A run this long (ms) is counted as one a player could feel.
+Perf.SLOW = 16
+
+local function Finish(label, started, ok, ...)
+    local finished = Perf.Clock()
+    if finished then Perf:Add(label, finished - started) end
+    if not ok then error((...), 0) end
+    return ...
+end
+
+--- Time `module[method]` from now on, under "Module:Method".
+function Perf:Wrap(module, method)
+    local fn = type(module) == "table" and rawget(module, method)
+    if type(fn) ~= "function" then return false end
+    local label = ("%s:%s"):format(rawget(module, "moduleName") or "?", method)
+    module[method] = function(...)
+        local started = Perf.Clock()
+        if not started then return fn(...) end
+        return Finish(label, started, pcall(fn, ...))
+    end
+    return true
+end
+
+-- The pieces of work big enough to hitch, wrapped once every module is
+-- enabled. Event handlers are timed where they are dispatched.
+Perf.WATCH = {
+    { "UI", "OnQueueUpdated" }, { "UI", "OnInventoryUpdated" }, { "UI", "RefreshActiveTab" },
+    { "Queue", "BuildEntryCosts" }, { "Queue", "BuildShoppingList" }, { "Queue", "RebuildDependencies" },
+    { "Queue", "SetQuantity" }, { "QueueMail", "GetPlan" }, { "QueueMail", "GetDeliveries" },
+    { "CraftPanel", "OnQueueChanged" }, { "CraftPanel", "ApplyRows" }, { "CraftPanel", "RefreshQueued" },
+    { "CraftPanel", "UpdateSummary" }, { "Inventory", "Snapshot" }, { "Recipes", "RefreshProfessions" },
+    { "FarmerGoals", "Follow" }, { "CraftedCost", "NoteCraft" }, { "DisenchantBuys", "Settle" },
+    { "Butler", "Advise" }, { "Butler", "Jobs" }, { "Butler", "Holdings" }, { "Butler", "FromBank" },
+    { "Upgrades", "Redraw" },
+}
+
+function Perf:WrapAll()
+    if self.wrapped or not Perf.Clock() then return end
+    self.wrapped = true
+    for _, pair in ipairs(Perf.WATCH) do Perf:Wrap(ns.modules[pair[1]], pair[2]) end
+end
+
+--- The rows, slowest first.
+function Perf:Slowest()
+    local list = {}
+    for _, row in pairs(self.rows) do list[#list + 1] = row end
+    table.sort(list, function(a, b)
+        if a.worst ~= b.worst then return a.worst > b.worst end
+        return a.label < b.label
+    end)
+    return list
+end
+
+function Perf:Reset()
+    self.rows = {}
+end
+
+--- Print the slowest pieces of work to chat.
+function Perf:Report(count)
+    if not self.Clock() then
+        ns.Print("speed check: this client has no timer to measure with.")
+        return
+    end
+    local list = Perf:Slowest()
+    if #list == 0 then
+        ns.Print("speed check: nothing measured yet. Play for a bit and try again.")
+        return
+    end
+    ns.Print("speed check, slowest first (since login or the last clear):")
+    for i = 1, math.min(count or 15, #list) do
+        local row = list[i]
+        ns.PrintRaw(("  %s  worst %.1f ms, %d runs, %.1f ms average, %d over %d ms"):format(
+            row.label, row.worst, row.runs, row.total / row.runs, row.slow, Perf.SLOW))
+    end
+end
+
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     local list = handlers[event]
     if not list then return end
@@ -286,7 +396,21 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     for i = 1, #list do
         local entry = list[i]
         if entry then
+            local started = Perf.wrapped and Perf.Clock()
             local ok, err = pcall(entry.fn, entry.owner, event, ...)
+            if started then
+                local finished = Perf.Clock()
+                if finished then
+                    -- The label made once per handler, not on every event.
+                    local label = entry.label
+                    if not label then
+                        local owner = type(entry.owner) == "table" and rawget(entry.owner, "moduleName") or "?"
+                        label = ("%s on %s"):format(owner, event)
+                        entry.label = label
+                    end
+                    Perf:Add(label, finished - started)
+                end
+            end
             if not ok then
                 geterrorhandler()(err)
             end
@@ -336,6 +460,7 @@ function bootstrap:PLAYER_LOGIN()
     if enabled then return end
     enabled = true
     RunLifecycle("OnEnable")
+    Perf:WrapAll()
 end
 
 ns.RegisterEvent(bootstrap, "ADDON_LOADED", bootstrap.ADDON_LOADED)
@@ -386,6 +511,14 @@ local function ShowHelp(args)
 end
 
 ns.RegisterCommand("help", "show the main commands (/bts help all: every command)", ShowHelp)
+ns.RegisterCommand("perf", "what took longest this session, to find a hitch (/bts perf clear starts over)", function(rest)
+    if (rest or ""):lower():match("^%s*clear") then
+        Perf:Reset()
+        ns.Print("speed check cleared.")
+        return
+    end
+    ns.KeepCheck("perf", Perf.Report, Perf, 15)
+end)
 
 SLASH_BLACKTHORNESTS1 = "/bts"
 SLASH_BLACKTHORNESTS2 = "/blackthorne"

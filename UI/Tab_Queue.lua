@@ -1105,6 +1105,28 @@ function UI:OnQueueMarksChanged()
 end
 
 function UI:OnQueueUpdated()
+    -- A finished sub-craft changes the queue twice in one frame, and each
+    -- redraw prices the whole queue. The first redraws at once (a click
+    -- answers at once); any more in the same frame make one on the next.
+    local now = type(GetTime) == "function" and GetTime() or nil
+    if now and self.queueRedrawnAt == now then
+        if not self.queueRedrawSoon and C_Timer and C_Timer.After then
+            self.queueRedrawSoon = true
+            C_Timer.After(0, function()
+                UI.queueRedrawSoon = false
+                UI.queueRedrawnAt = nil
+                UI:OnQueueUpdated()
+            end)
+        end
+        return
+    end
+    self.queueRedrawnAt = now
+    ns.Queue:Keeping(UI.RedrawQueue, self)
+end
+
+--- The craft pane and the Queue tab (or the tab showing), sharing one
+--- build of the costs and the shopping list (Queue:Keeping).
+function UI:RedrawQueue()
     -- The craft pane beside the profession window shows the same queue, and
     -- is usually the thing that just changed it.
     if ns.CraftPanel then ns.CraftPanel:OnQueueChanged() end
