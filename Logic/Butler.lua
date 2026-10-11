@@ -414,6 +414,21 @@ end
 -- The mailbox and the bank, for Butler
 --------------------------------------------------------------------------------
 
+--- The character a short name from Advise or Holdings means: the one whose
+-- ShortName is exactly `name`, or nil when none or more than one is. A
+-- short name can be "Ana B." when two characters share a first name, which
+-- QueueMail:FindCharacter cannot read back (the mail went to "Ana B.").
+local function CharacterNamed(name)
+    local found
+    for characterKey, record in pairs(Characters()) do
+        if type(record) == "table" and ShortName(characterKey) == name then
+            if found then return nil end
+            found = characterKey
+        end
+    end
+    return found
+end
+
 --- Fill the game's Send Mail page for one of the player's characters.
 -- `name` is a short name (as Advise gives it) or a name typed in Settings;
 -- `items` is a list of { itemID, count }. Nothing is sent: the player
@@ -436,7 +451,7 @@ function Butler:FillMail(name, items)
     if #list == 0 then return false, "nothing to mail" end
 
     local ok, started, why = pcall(function()
-        local key = mail.FindCharacter and mail:FindCharacter(name)
+        local key = CharacterNamed(name) or (mail.FindCharacter and mail:FindCharacter(name))
         local recipient = key and mail.MailName and mail.MailName(Characters()[key]) or name
         return mail:Fill({ recipient = recipient, items = list, subject = "From Blackthornes Butler" })
     end)
