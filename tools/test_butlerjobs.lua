@@ -72,6 +72,7 @@ ns.QueueMail = {
   GetOwedBy = function(_, from) return owed[from] or {} end,
 }
 
+assert(loadfile(lfs_cwd .. "/Core/Characters.lua"))("Blackthornes_TS", ns)
 local chunk = assert(loadfile(lfs_cwd .. "/Logic/Butler.lua"))
 chunk("Blackthornes_TS", ns)
 local Butler = ns.Butler

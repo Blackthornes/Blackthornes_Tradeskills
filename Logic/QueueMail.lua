@@ -422,33 +422,13 @@ function QueueMail:IsPlayingName(typed)
 end
 
 --- Is this record the character playing? Its own key, or another record of
---- it: the old name-realm key stays beside the GUID one when both exist
---- (Config:AdoptLegacyCharacter), and it filed every character of that
---- first name as one. Mail to it lands in the bags it came from, so it is
---- never offered a delivery (a player found Butler filling a mail to the
---- character they were on, 2026-10-11).
+--- it (an old name-realm one: Characters:Same). Mail to it lands in the
+--- bags it came from, so it is never offered a delivery (a player found
+--- Butler filling a mail to the character they were on, 2026-10-11).
 function QueueMail:IsPlaying(characterKey)
     if characterKey == nil then return false end
-    local selfKey = SelfKey()
-    if characterKey == selfKey then return true end
-    local record, me = CharacterRecord(characterKey), CharacterRecord(selfKey)
-    if not (record and me) then return false end
-    if record.guid ~= nil and record.guid == selfKey then return true end
-    -- A record filed by GUID that is not this one is another character, even
-    -- one of the same first name whose last name is not read yet.
-    if tostring(characterKey):find("^Player%-") then return false end
-
-    local name = Fold(record.name)
-    if not name or name ~= Fold(me.name) then return false end
-    if record.realm and me.realm and record.realm:gsub("%s", "") ~= me.realm:gsub("%s", "") then
-        return false
-    end
-    if record.faction and me.faction and record.faction ~= me.faction then return false end
-    local surname, mine = Fold(record.surname), Fold(me.surname)
-    if surname and mine then return surname == mine end
-    -- One of them has no last name on record: an old name-realm record, which
-    -- may be this character, so it is never mailed to.
-    return true
+    if characterKey == SelfKey() then return true end
+    return ns.Characters ~= nil and ns.Characters:IsPlaying(characterKey) == true
 end
 
 --- A character's Enchanting skill, or nil when it has none on record.
