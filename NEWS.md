@@ -12,6 +12,13 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.48.0
+
+- Farmer goals you set from your queue now keep up with it on their own.
+- Keep in stock learns what sells for you, and a sale queues another one.
+- No disenchanter typed in? Your best enchanter alt gets picked for you.
+- Crafted gear doesn't get mailed off to be disenchanted anymore.
+
 ## 0.47.0
 
 - Things you buy to disenchant are marked now. They go to the top of your bags list, and the Disenchant button breaks them first.

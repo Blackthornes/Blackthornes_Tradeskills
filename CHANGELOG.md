@@ -4,6 +4,28 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.48.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Farmer goals follow the queue:** a goal made with Set goal (or Set all
+  goals) now grows when you queue more and goes away once the queue no
+  longer needs it, with one chat line saying what moved. A goal you change
+  yourself in Farmer is left alone. "Goals follow the queue" on the Queue
+  page of Settings turns it off.
+- **Keep in stock learns from your sales:** with no number typed, Queue All
+  keeps about two days' worth of what sold for you this week, and the
+  detail pane says how many it learned. When one of your auctions sells,
+  another is queued straight away, unless the craft loses money or "Wait
+  until it runs low" is holding back. A typed number always wins. "Restock
+  what sells" in Settings turns the auto-queue off.
+- **A disenchanter picked for you:** with the Disenchanter box empty, your
+  character with the most Enchanting is picked, and the box shows their
+  name. A typed name still wins, and "Pick one for me" turns it off.
+- **Crafted gear stays with you:** the Mail page no longer sends gear a
+  profession makes to the disenchanter.
+
 ## 0.47.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
