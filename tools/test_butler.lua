@@ -234,6 +234,23 @@ check("carried enough: nothing", Butler:FromBank()[3], nil)
 ns.QueueMail.GetPlan = function() error("boom") end
 check("an error gives nil", Butler:FromBank(), nil)
 
+print("\nthe mailbox, when Butler takes it over")
+local realPanel = ns.QueueMailPanel
+local hidden, refreshed = 0, 0
+ns.QueueMailPanel = {
+  frame = { Hide = function() hidden = hidden + 1 end },
+  Refresh = function() refreshed = refreshed + 1 end,
+}
+Butler:Mailbox(true)
+check("covered: the mail panel steps aside", ns.QueueMailPanel.coveredByButler, true)
+check("and is hidden", hidden, 1)
+Butler:Mailbox(false)
+check("uncovered: it comes back", ns.QueueMailPanel.coveredByButler, false)
+check("drawn again", refreshed, 1)
+ns.QueueMailPanel.Refresh = function() error("boom") end
+check("never raises", pcall(Butler.Mailbox, Butler, false), true)
+ns.QueueMailPanel = realPanel
+
 print("\nnever raises")
 ns.Prices.GetValue = function() error("boom") end
 check("an error inside gives nil", Butler:Advise(1), nil)

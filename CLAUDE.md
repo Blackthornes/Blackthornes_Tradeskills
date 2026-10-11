@@ -216,6 +216,18 @@ QueueMail's own SendMail hook writes down what went. `FromBank` is what
 the playing character's own queued crafts use, less what it makes and
 carries, no more than its bank holds. Keep both stable too.
 
+Butler takes over the mailbox (the owner picked it, 2026-10-11): its
+window comes up at every mailbox, and while it is up there it calls
+
+```lua
+_G.BlackthornesTS.Butler:Mailbox(covered)   -- true: the mail panel steps aside; false: it comes back
+```
+
+`UI/QueueMailPanel.lua` stays hidden while `coveredByButler` is set
+(cleared on `MAIL_CLOSED`), so closing Butler's window brings it back.
+Butler's Always mail list names characters from `Holdings()` (same realm
+and faction). Keep `Mailbox` stable; Butler's `Logic/Errands.lua` calls it.
+
 ## Sharing between accounts and with a guild
 
 Asked 2026-10-07 (on Discord, the owner agreeing). Over addon
