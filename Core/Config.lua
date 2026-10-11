@@ -237,6 +237,10 @@ local DEFAULTS = {
         -- Play a sound the moment the game says one of your auctions has
         -- sold, wherever you are. See Logic/SaleAlarm.lua.
         saleAlarm = true,
+        -- Which sound it plays (asked 2026-10-11): "register" (an old cash
+        -- register), "coins" (the game's loot coins) or "raid" (the raid
+        -- warning it always played). Off is saleAlarm above.
+        saleSound = "register",
 
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
