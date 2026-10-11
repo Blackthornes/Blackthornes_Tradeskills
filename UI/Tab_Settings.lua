@@ -436,6 +436,30 @@ end
 -- Build
 --------------------------------------------------------------------------------
 
+--- While the Disenchanter box is empty, the name picked for the player
+--- shows where "Character name" sits, and the row's tooltip says so. A whole
+--- name too wide for the box is never cut: the box then says "Picked for
+--- you" and the tooltip names them.
+local DISENCHANTER_HINT_ROOM = 124
+local function ShowPickedDisenchanter()
+    local box = widgets.disenchanter
+    if not (box and box.hint) then return end
+    local picked
+    if ns.QueueMail and ns.QueueMail.GuessDisenchanter then
+        local ok, name = pcall(ns.QueueMail.GuessDisenchanter, ns.QueueMail)
+        picked = ok and name or nil
+    end
+    box.hint:SetText(picked or "Character name")
+    if picked and (box.hint:GetStringWidth() or 0) > DISENCHANTER_HINT_ROOM then
+        box.hint:SetText("Picked for you")
+    end
+    local row = widgets.disenchanterRow
+    if row then
+        row.description = widgets.disenchanterTip
+            .. (picked and (" Picked for you now: " .. picked .. ".") or "")
+    end
+end
+
 local function Build(outer)
     local Config = ns.Config
 
@@ -693,7 +717,9 @@ local function Build(outer)
     -- Asked 2026-10-04: a character to mail gear to for disenchanting.
     -- Typed rather than picked, so one on another account works too.
     local disenchanterRow = CreateRow(pages.mail, 1, "Disenchanter",
-        "At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear, crafted gear or an upgrade for you. Leave empty for nobody.")
+        "At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear, crafted gear or an upgrade for you. Left empty, your alt with the most Enchanting is picked for you.")
+    widgets.disenchanterRow = disenchanterRow
+    widgets.disenchanterTip = disenchanterRow.description
 
     widgets.disenchanter = Widgets.CreateSearchBox(disenchanterRow, "Character name", function(text)
         local trimmed = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -712,6 +738,17 @@ local function Build(outer)
         self:SetText(Config:Get("disenchanterName") or "")
         self:ClearFocus()
     end)
+
+    -- Asked 2026-10-11 (the owner: the addons should do the work).
+    local guessRow = CreateRow(pages.mail, 1, "Pick one for me",
+        "While the Disenchanter box is empty, your alt with more Enchanting than the character you're on gets the gear. Untick for nobody.")
+
+    widgets.disenchanterGuess = Widgets.CreateCheckbox(guessRow, "Pick", function(checked)
+        Config:Set("disenchanterGuess", checked)
+        if ns.QueueMailPanel then ns.QueueMailPanel:Refresh() end
+        ShowPickedDisenchanter()
+    end, true)
+    widgets.disenchanterGuess:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local disenchantQualityRow = CreateRow(pages.mail, 1, "Mail gear up to",
         "The best quality that goes to your disenchanter.")
@@ -1721,6 +1758,8 @@ local function Refresh()
         local saved = Config:Get("disenchanterName") or ""
         if widgets.disenchanter:GetText() ~= saved then widgets.disenchanter:SetText(saved) end
     end
+    widgets.disenchanterGuess:SetChecked(Config:Get("disenchanterGuess") ~= false)
+    ShowPickedDisenchanter()
     widgets.disenchantQuality:SetValue(ns.QueueMail and ns.QueueMail:GetDisenchantQuality()
         or Config:Get("disenchanterQuality") or 2, true)
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)

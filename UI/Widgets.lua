@@ -689,6 +689,7 @@ function Widgets.CreateSearchBox(parent, placeholder, onChange)
     local hint = Theme.CreateLabel(container, "small", "dim")
     hint:SetPoint("LEFT", 22, 0)
     hint:SetText(placeholder or "Search")
+    container.hint = hint
 
     -- A target bigger than the letter on it, filling the gap the edit box
     -- leaves at the right, and lit gold under the mouse so it reads as a

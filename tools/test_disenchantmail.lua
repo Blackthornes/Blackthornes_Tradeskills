@@ -214,6 +214,43 @@ check("above purple reads as purple", QueueMail:GetDisenchantQuality(), 4)
 settings.disenchanterQuality = nil
 check("unset reads as greens only", QueueMail:GetDisenchantQuality(), 2)
 
+print("")
+print("picked for you while the box is empty")
+
+local function Enchanting(skill) return { { name = "Enchanting", skillLevel = skill } } end
+Reset()
+settings.disenchanterName = ""
+check("no enchanter on the account: nobody", QueueMail:GetDisenchanter(), nil)
+ns.db.characters["Player-DUSTY"].professions = Enchanting(120)
+ns.db.characters["Player-DUSTY"].surname = "Dustwhisper"
+ns.db.characters["Player-ENZO"] = { name = "Enzo", surname = "Sparks", realm = "Forever",
+    professions = Enchanting(200) }
+local name, picked = QueueMail:GetDisenchanter()
+check("the most Enchanting is picked, whole name", name, "Enzo Sparks")
+check("and said to be picked", picked, true)
+check("the delivery goes to them", (QueueMail:GetDisenchantDelivery() or {}).recipient, "Enzo Sparks")
+ns.db.characters["Player-ENZO"].linkedFrom = "Player-OTHER"
+check("a character from another account is never picked", QueueMail:GetDisenchanter(), "Dusty Dustwhisper")
+ns.db.characters["Player-ENZO"].linkedFrom = nil
+ns.Queue = { CanMail = function(_, _, to) return to ~= "Player-ENZO" end }
+check("nor one that can't be mailed", QueueMail:GetDisenchanter(), "Dusty Dustwhisper")
+ns.Queue = nil
+ns.db.characters["Player-BOB"].professions = Enchanting(250)
+check("nobody when you out-enchant them all", QueueMail:GetDisenchanter(), nil)
+ns.db.characters["Player-BOB"].professions = Enchanting(150)
+check("but one with more still is", QueueMail:GetDisenchanter(), "Enzo Sparks")
+ns.db.characters["Player-BOB"].professions = nil
+settings.disenchanterName = "Dusty"
+name, picked = QueueMail:GetDisenchanter()
+check("a typed name wins", name, "Dusty")
+check("and is not picked", picked, false)
+settings.disenchanterName = ""
+settings.disenchanterGuess = false
+check("Pick one for me unticked: nobody", QueueMail:GetDisenchanter(), nil)
+settings.disenchanterGuess = nil
+ns.db.characters["Player-DUSTY"].professions, ns.db.characters["Player-DUSTY"].surname = nil, nil
+ns.db.characters["Player-ENZO"] = nil
+
 C_Container = nil
 UnitName, GetRealmName = oldUnitName, oldRealmName
 

@@ -327,8 +327,11 @@ local DEFAULTS = {
 
         -- The character gear goes to for disenchanting (2026-10-04),
         -- typed in Settings: any name, so a character on another account
-        -- works too. Empty: nobody, and the mailbox lists nothing for it.
+        -- works too. Empty: the alt with the most Enchanting, picked for
+        -- the player (QueueMail:GuessDisenchanter, 2026-10-11), unless
+        -- disenchanterGuess is off; then nobody.
         disenchanterName = "",
+        disenchanterGuess = true,
         -- The best quality mailed to them: 2 greens only, 3 greens and
         -- blues, 4 up to purples.
         disenchanterQuality = 2,
