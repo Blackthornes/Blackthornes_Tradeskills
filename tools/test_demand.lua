@@ -25,7 +25,7 @@ local prices = {}
 local liquidity = {}
 ns.Prices = {
   Get = function(_, itemID) return prices[itemID] end,
-  GetLiquidity = function(_, itemID) return liquidity[itemID] end,
+  GetSalesPerDay = function(_, itemID) return liquidity[itemID] end,
 }
 
 local chunk = assert(loadfile(lfs_cwd .. "/Logic/Demand.lua"))
@@ -49,12 +49,6 @@ local function Ledger(newItems)
   entries[#entries + 1] = { t = #entries + 1 }
 end
 
-local function History(n)
-  local h = {}
-  for i = 1, n do h[i] = { t = i, q = 10 } end
-  return h
-end
-
 print("\nyour own sales")
 Ledger({ { itemID = 1, sold = 7, expired = 2, cancelled = 5 } })
 local r = Demand:Get(1)
@@ -73,18 +67,17 @@ check("two of five is some", Demand:Get(1).level, "some")
 
 print("\nthe market, until three of yours have ended")
 Ledger({ { itemID = 2, sold = 1, expired = 1 } })
-prices[2] = { history = History(4) }
-liquidity[2] = 0.2
+liquidity[2] = 0.35
 r = Demand:Get(2)
 check("two ended is not enough of your own", r and r.source, "market")
-check("a fifth of the stock moving is high", r and r.level, "high")
-check("the tooltip says why", Demand:TooltipText(r), "High (20% of its stock sells between scans)")
+check("over a third of the stock a day is high", r and r.level, "high")
+check("the tooltip says why", Demand:TooltipText(r), "High (35% of its stock sells a day)")
 
 liquidity[2] = 0.01
 check("barely moving is low", Demand:Get(2).level, "low")
 
-prices[2] = { history = History(2) }
-check("two scans are not enough", Demand:Get(2), nil)
+liquidity[2] = nil
+check("too little time to go on has no reading", Demand:Get(2), nil)
 
 check("never seen has no reading", Demand:Get(99), nil)
 check("and no label", Demand:Label(nil), nil)

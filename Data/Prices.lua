@@ -779,6 +779,61 @@ function Prices:GetLiquidity(itemID)
     return Util.Clamp(drops / total, 0, 1)
 end
 
+-- Scans closer together than this are one look at the book for Demand, so
+-- scanning every minute neither waters the reading down nor lets listings
+-- that come and go inflate it.
+local SALES_GAP = 15 * 60
+
+-- Time the readings must span before the stock's movement says anything.
+local SALES_MIN_SPAN = 3600
+
+Prices.SALES_GAP = SALES_GAP
+Prices.SALES_MIN_SPAN = SALES_MIN_SPAN
+
+--- Share of an item's listed stock that goes per day, 0..1, however often it
+-- was scanned.
+--
+-- GetLiquidity counts per scan, so the same item reads quieter the more often
+-- it is scanned. This one spaces the readings by the clock: looks less than
+-- SALES_GAP apart count once, the drops in stock are added up, and the total is
+-- divided by the average stock and by the days the readings span. An empty
+-- answer is left out (it cannot say whether the stock sold or expired), and
+-- nothing is answered for under SALES_MIN_SPAN of readings. Like GetLiquidity
+-- it under-reports, because a restock hides sales.
+-- @return nil when there is not enough time or stock to go on
+function Prices:GetSalesPerDay(itemID)
+    local record = self:GetTable()[itemID]
+    if not record or type(record.history) ~= "table" then return nil end
+
+    local kept = {}
+    for _, point in ipairs(record.history) do
+        local q = point.q
+        if type(point.t) == "number" and type(q) == "number" and q > 0 then
+            local last = kept[#kept]
+            if not last or point.t - last.t >= SALES_GAP then
+                kept[#kept + 1] = point
+            end
+        end
+    end
+
+    if #kept < 2 then return nil end
+
+    local span = kept[#kept].t - kept[1].t
+    if span < SALES_MIN_SPAN then return nil end
+
+    local drops, stock = 0, 0
+    for i = 2, #kept do
+        local previous, current = kept[i - 1].q, kept[i].q
+        if current < previous then drops = drops + (previous - current) end
+        stock = stock + previous
+    end
+
+    if stock == 0 then return nil end
+
+    local average = stock / (#kept - 1)
+    return Util.Clamp(drops / average / (span / 86400), 0, 1)
+end
+
 --- How much to trust this item's price: scan count, recency and depth.
 -- Returns 0..1 and a short reason for the weakest factor.
 -- Above this, a component is not worth calling out as a weakness.
