@@ -1059,81 +1059,161 @@ end
 -- @return rows best profit first, how many profitable rows were held back
 --   by the minimums, and how many listed items are still to be read (none
 --   are read while the auction house is open)
-function Disenchant:GetAuctionRows(opts)
+--- What GetAuctionRows works out once for every row.
+function Disenchant:AuctionContext(opts)
     opts = opts or {}
+    local skill, enchanter = self:GetBestEnchanter()
+    return {
+        profitableOnly = opts.profitableOnly,
+        cut = ns.Config and ns.Config:Get("auctionCut") or 0.05,
+        minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0,
+        minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100,
+        skill = skill,
+        enchanter = enchanter,
+        -- Only what the last scan (or a search since) actually saw. A listing
+        -- missing from the last scan has sold or expired, but its record keeps
+        -- the old price, so without this it stays listed as a deal for days.
+        since = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan)),
+    }
+end
 
+--- One item's place in the auction list.
+-- @return "row" and the row, "hidden" (profitable but under the minimums),
+--   "pending" (listed, not read yet), or nil when it is not in the list
+function Disenchant:AuctionRow(itemID, record, ctx)
+    local buy = type(record) == "table" and BuyPrice(record)
+    if buy and ctx.since and (record.seen or 0) < ctx.since then buy = nil end
+
+    local disenchantable = buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID)
+    if buy and disenchantable == nil and CouldBeGear(itemID) and not self:GaveUp(itemID) then
+        return "pending"
+    end
+    if not disenchantable then return nil end
+
+    local value, partial, breakdown = self:GetValue(itemID)
+    if not value then return nil end
+
+    local facts = breakdown.facts or {}
+    local net = math.floor(value * (1 - ctx.cut) + 0.5)
+    local gain = net - buy
+
+    local row = {
+        kind = "auction",
+        itemID = itemID,
+        name = self:ItemName(itemID),
+        buy = buy,
+        loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
+        listed = record.quantity,
+        value = value,
+        net = net,
+        partial = partial,
+        breakdown = breakdown,
+        gain = gain,
+        margin = gain / buy,
+        beatsSale = gain > 0,
+        needs = facts.skill,
+        enchanter = ctx.enchanter,
+        enchanterSkill = ctx.skill,
+        -- nil when no character has Enchanting at all.
+        canDisenchant = CanDisenchant(ctx.skill, facts.skill),
+        age = ns.Prices:GetAge(itemID),
+        stale = ns.Prices:IsStale(itemID),
+    }
+
+    local clears = gain > 0 and gain >= ctx.minProfit and row.margin >= ctx.minMargin
+
+    if not ctx.profitableOnly or clears then return "row", row end
+    if gain > 0 then return "hidden" end
+    return nil
+end
+
+local function BestFirst(a, b)
+    if a.gain ~= b.gain then return a.gain > b.gain end
+    return a.itemID < b.itemID
+end
+
+--- Every disenchantable item someone else has on the auction house, with
+--- what buying and disenchanting one makes.
+--
+-- Profit is the disenchant value less the auction house cut you pay when
+-- you sell the materials, less the buy price. Margin is that profit over the
+-- buy price. Your own listings are left out: buying back your own item is
+-- not a deal.
+--
+-- @param opts { profitableOnly, minProfit, minMargin }
+--   profitableOnly keeps rows that clear minProfit (at least 1 copper) and
+--   minMargin (a percent); both default to Settings.
+-- @return rows best profit first, how many profitable rows were held back
+--   by the minimums, how many listed items are still to be read (none
+--   are read while the auction house is open), and each item's place
+--   ([itemID] = "row", "hidden" or "pending"), for PatchAuctionRows
+function Disenchant:GetAuctionRows(opts)
     -- Counted for /bts readysell, which says how often this ran.
     self.rowBuilds = (self.rowBuilds or 0) + 1
 
-    local rows, hidden, pending = {}, 0, 0
+    local rows, hidden, pending, places = {}, 0, 0, {}
     local prices = ns.Prices and ns.Prices:GetTable() or {}
-    local cut = ns.Config and ns.Config:Get("auctionCut") or 0.05
-    local minProfit = opts.minProfit or (ns.Config and ns.Config:Get("minProfit")) or 0
-    local minMargin = (opts.minMargin or (ns.Config and ns.Config:Get("minMarginPercent")) or 0) / 100
-    local skill, enchanter = self:GetBestEnchanter()
-
-    -- Only what the last scan (or a search since) actually saw. A listing
-    -- missing from the last scan has sold or expired, but its record keeps
-    -- the old price, so without this it stays listed as a deal for days.
-    local since = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
+    local ctx = self:AuctionContext(opts)
 
     for itemID, record in pairs(prices) do
-        local buy = type(record) == "table" and BuyPrice(record)
-        if buy and since and (record.seen or 0) < since then buy = nil end
-
-        local disenchantable = buy and CouldBeGear(itemID) and self:IsDisenchantable(itemID)
-        if buy and disenchantable == nil and CouldBeGear(itemID) and not self:GaveUp(itemID) then
+        local place, row = self:AuctionRow(itemID, record, ctx)
+        places[itemID] = place
+        if place == "row" then
+            rows[#rows + 1] = row
+        elseif place == "hidden" then
+            hidden = hidden + 1
+        elseif place == "pending" then
             pending = pending + 1
-        end
-
-        if disenchantable then
-            local value, partial, breakdown = self:GetValue(itemID)
-
-            if value then
-                local facts = breakdown.facts or {}
-                local net = math.floor(value * (1 - cut) + 0.5)
-                local gain = net - buy
-
-                local row = {
-                    kind = "auction",
-                    itemID = itemID,
-                    name = self:ItemName(itemID),
-                    buy = buy,
-                    loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
-                    listed = record.quantity,
-                    value = value,
-                    net = net,
-                    partial = partial,
-                    breakdown = breakdown,
-                    gain = gain,
-                    margin = gain / buy,
-                    beatsSale = gain > 0,
-                    needs = facts.skill,
-                    enchanter = enchanter,
-                    enchanterSkill = skill,
-                    -- nil when no character has Enchanting at all.
-                    canDisenchant = CanDisenchant(skill, facts.skill),
-                    age = ns.Prices:GetAge(itemID),
-                    stale = ns.Prices:IsStale(itemID),
-                }
-
-                local clears = gain > 0 and gain >= minProfit and row.margin >= minMargin
-
-                if not opts.profitableOnly or clears then
-                    rows[#rows + 1] = row
-                elseif gain > 0 then
-                    hidden = hidden + 1
-                end
-            end
         end
     end
 
-    table.sort(rows, function(a, b)
-        if a.gain ~= b.gain then return a.gain > b.gain end
-        return a.itemID < b.itemID
-    end)
+    table.sort(rows, BestFirst)
 
-    return rows, hidden, pending
+    return rows, hidden, pending, places
+end
+
+--- Redo the rows of a few items in a list GetAuctionRows built, in place:
+--- a buy or an empty search changes one item, and walking every price again
+--- for it is the kind of rebuild the owner's smooth play rule rules out.
+-- @param built { rows, hidden, pending, places } as GetAuctionRows gave them
+-- @param items { [itemID] = true }
+-- @return false, with nothing changed, when a full rebuild is needed: one
+--   of the items is a disenchanting material, whose price moves every row
+function Disenchant:PatchAuctionRows(built, items, opts)
+    for itemID in pairs(items) do
+        if self:IsMaterial(itemID) then return false end
+    end
+
+    local prices = ns.Prices and ns.Prices:GetTable() or {}
+    local ctx = self:AuctionContext(opts)
+    local rows, places = built.rows, built.places
+
+    for itemID in pairs(items) do
+        local old = places[itemID]
+        if old == "hidden" then built.hidden = built.hidden - 1 end
+        if old == "pending" then built.pending = built.pending - 1 end
+        if old == "row" then
+            for i = #rows, 1, -1 do
+                if rows[i].itemID == itemID then table.remove(rows, i) end
+            end
+        end
+
+        local place, row = self:AuctionRow(itemID, prices[itemID], ctx)
+        places[itemID] = place
+        if place == "hidden" then built.hidden = built.hidden + 1 end
+        if place == "pending" then built.pending = built.pending + 1 end
+        if place == "row" then
+            -- Into its place, best profit first, as the full build sorts.
+            local at = #rows + 1
+            for i = 1, #rows do
+                if BestFirst(row, rows[i]) then at = i break end
+            end
+            table.insert(rows, at, row)
+        end
+    end
+
+    self.rowPatches = (self.rowPatches or 0) + 1
+    return true
 end
 
 --- After a scan: say how many deals it found and the best one, with a chime

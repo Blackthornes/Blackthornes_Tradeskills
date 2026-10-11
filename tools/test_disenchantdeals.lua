@@ -520,6 +520,42 @@ check("a redraw with nothing changed does not walk every item again", Disenchant
 ns.Prices.changes = 1
 tab.refresh()
 check("new prices do", Disenchant.rowBuilds == builds + 1)
+
+-- A buy, or a search that finds none, changes one item: only its row is
+-- redone (a player found a ring still offered after buying the last one).
+local chestBuy = records[2001].rivalMin
+records[2001].rivalMin = nil
+ns.Prices.TouchedSince = function(_, since) return since == 1 and { [2001] = true } or nil end
+ns.Prices.changes = 2
+builds = Disenchant.rowBuilds
+tab.refresh()
+check("the last one bought: its row goes, the list is not walked again",
+    Disenchant.rowBuilds == builds and Find(list.data, 2001) == nil and Find(list.data, 2003) ~= nil)
+
+records[2001].rivalMin = 700
+ns.Prices.TouchedSince = function(_, since) return since == 2 and { [2001] = true } or nil end
+ns.Prices.changes = 3
+tab.refresh()
+check("a dearer listing seen later comes back at its price",
+    Disenchant.rowBuilds == builds and Find(list.data, 2001) and Find(list.data, 2001).buy == 700)
+local patchedOrder = {}
+for i, row in ipairs(list.data) do patchedOrder[i] = row.itemID end
+
+ns.Prices.TouchedSince = function() return { [STRANGE_DUST] = true } end
+ns.Prices.changes = 4
+tab.refresh()
+check("a material's price moves every row, so the list is built again", Disenchant.rowBuilds == builds + 1)
+local same = #patchedOrder == #list.data
+for i, row in ipairs(list.data) do same = same and patchedOrder[i] == row.itemID end
+check("and the patched list matched the full build", same)
+
+ns.Prices.TouchedSince = function() return nil end
+ns.Prices.changes = 5
+tab.refresh()
+check("changes it cannot name build it again", Disenchant.rowBuilds == builds + 2)
+
+records[2001].rivalMin = chestBuy
+ns.Prices.TouchedSince = nil
 ns.Prices.changes = nil
 
 -- Items that waited while the auction house was open are read once it shuts.
