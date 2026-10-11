@@ -408,4 +408,33 @@ check("a name typed as the character playing is it", QueueMail:IsPlayingName("Bo
 check("another Bob is not", not QueueMail:IsPlayingName("Bob Stone"))
 UnitName, GetRealmName = realUnitName, realRealm
 
+print("\nthe bolts mailed to Bob, before and after his mailbox")
+
+-- Loom made the bolts and mailed them; Bob logs in before opening his
+-- mailbox (2026-10-11: the leather's sub-craft came back on the crafter).
+queueOneBag()
+check("the bolts are Loom's to make", entryFor(20) ~= nil)
+ns.db.characters[BOB].mailAt = clock
+clock = clock + 60
+loginAs(LOOM, { [BOLT] = 3 })
+QueueMail:NoteSent(BOB, { { itemID = BOLT, count = 3 } })
+loginAs(BOB, {})
+Queue:RebuildDependencies()
+check("on their way to Bob, they are not made again", entryFor(20) == nil)
+check("nor is their wool wanted", row(WOOL) == nil)
+
+-- Mailbox read and the bolts taken: only the bags hold them now.
+clock = clock + 60
+ns.db.characters[BOB].mailAt = clock
+table.insert(ns.db.queue, { recipeID = 20, quantity = 3, isDependency = true,
+    forRecipes = { [10] = true }, forCharacters = { [BOB] = true }, crafter = LOOM, owner = BOB })
+check("a stale sub-craft left over", entryFor(20) ~= nil)
+check("an item the queue does not use rebuilds nothing", Queue:HoldingsChanged({ [12345] = true }) == false)
+check("a stale sub-craft is still there", entryFor(20) ~= nil)
+bags = { [BOLT] = 3 }
+check("taking the bolts out of the mail rebuilds", Queue:HoldingsChanged({ [BOLT] = true }) == true)
+check("and the sub-craft is gone", entryFor(20) == nil)
+check("with its wool", row(WOOL) == nil)
+check("nothing moved, nothing to say", Queue:HoldingsChanged({ [BOLT] = true }) == false)
+
 print(("\n%d passed, 0 failed"):format(checks))

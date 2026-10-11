@@ -163,7 +163,15 @@ end
 --- seen, plus what has been mailed to them since.
 function Queue:HeldBy(characterKey, itemID)
     if not characterKey or characterKey == SelfKey() then
-        return ns.Inventory:GetOwnedCount(itemID)
+        -- Mail an alt sent here counts until the mailbox is read, as it does
+        -- for any other character. Logged in before opening the mailbox, the
+        -- crafter saw none of the Medium Leather sent to it and the queue
+        -- made it again, with its Light Leather to mail (2026-10-11).
+        local held = ns.Inventory:GetOwnedCount(itemID)
+        if ns.QueueMail and ns.QueueMail.InFlight then
+            held = held + ns.QueueMail:InFlight(characterKey or SelfKey(), itemID)
+        end
+        return held
     end
 
     local record = CharacterRecord(characterKey)
@@ -962,6 +970,52 @@ end
 -- Moves on every change to the queue, so a lookup built from it (Butler's
 -- needs) knows when to build again.
 Queue.version = 0
+
+--- The queue's sub-crafts in one line, to tell whether a rebuild moved them.
+local function DependencyKey(queue)
+    local parts = {}
+    for _, entry in ipairs(queue) do
+        if entry.isDependency then
+            parts[#parts + 1] = ("%s:%s:%s"):format(tostring(entry.recipeID),
+                tostring(entry.quantity), tostring(entry.crafter))
+        end
+    end
+    table.sort(parts)
+    return table.concat(parts, ",")
+end
+
+--- Bags changed (Inventory, once per burst, with the items whose count
+--- moved). Sub-crafts are sized by what is held, and were only rebuilt
+--- when the queue changed or a mail went, so taking the Medium Leather out
+--- of the mailbox left its sub-craft, and the Light Leather for it, queued
+--- (2026-10-11). Only an item the queue makes or uses rebuilds, and the
+--- queue only says it changed when the sub-crafts did.
+-- @param changed { [itemID] = true }
+-- @return true when the sub-crafts changed
+function Queue:HoldingsChanged(changed)
+    if type(changed) ~= "table" or next(changed) == nil then return false end
+    local queue = self:GetAll()
+    if #queue == 0 then return false end
+
+    local touched = false
+    for _, entry in ipairs(queue) do
+        local recipe = ns.Recipes and ns.Recipes:GetAny(entry.recipeID)
+        if recipe then
+            if recipe.outputItemID and changed[recipe.outputItemID] then touched = true end
+            for _, reagent in ipairs(recipe.reagents or {}) do
+                if changed[reagent.itemID] then touched = true break end
+            end
+        end
+        if touched then break end
+    end
+    if not touched then return false end
+
+    local before = DependencyKey(queue)
+    self:RebuildDependencies()
+    if DependencyKey(self:GetAll()) == before then return false end
+    self:Notify()
+    return true
+end
 
 function Queue:Notify()
     Queue.version = (Queue.version or 0) + 1

@@ -425,7 +425,21 @@ function Inventory:OnBagUpdate()
 
     self.snapshotTimer = C_Timer.NewTimer(2, function()
         Inventory.snapshotTimer = nil
-        Inventory:Snapshot()
+        local record = GetRecord(false)
+        local before = record and record.inventory or {}
+        local after = Inventory:Snapshot() or {}
+
+        -- What moved, so the queue's sub-crafts follow what is held.
+        local changed = {}
+        for itemID, count in pairs(after) do
+            if before[itemID] ~= count then changed[itemID] = true end
+        end
+        for itemID in pairs(before) do
+            if after[itemID] == nil then changed[itemID] = true end
+        end
+        if ns.Queue and ns.Queue.HoldingsChanged then
+            pcall(ns.Queue.HoldingsChanged, ns.Queue, changed)
+        end
 
         if ns.UI and ns.UI.OnInventoryUpdated then
             ns.UI:OnInventoryUpdated()
