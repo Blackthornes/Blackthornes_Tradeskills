@@ -89,8 +89,14 @@ ns.Config = {
     Get = function(_, key) return config[key] end,
     Set = function(_, key, value) config[key] = value end,
 }
+-- Items whose record says none are listed now.
+local noneListed = {}
 ns.Prices = {
     GetValue = function(_, itemID) return prices[itemID] end,
+    ListedNow = function(_, itemID)
+        if noneListed[itemID] then return nil, true end
+        return prices[itemID], false
+    end,
     Count = function() return 6 end,
 }
 -- Shops, as Cost prices them: a vendor's price beats the auction house's.
@@ -163,6 +169,15 @@ check("with the reported 5 favor and 2s 50c", textiles.favor == 5 and textiles.m
     and textiles.source == "reported")
 check("total is crate + bundle - silver back", textiles.total == 2000 + 1600 - 250)
 check("and a favor is a fifth of that", textiles.perFavor == 670)
+
+-- None on the auction house: no crate to buy, so no price (a player asked,
+-- 2026-10-11, for the column to go blank rather than show the average).
+noneListed[textiles.itemID] = true
+local gone = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-textiles")
+check("with none listed the crate column is blank", gone.cratePrice == nil and gone.noneListed == true
+    and gone.total == nil and gone.perFavor == nil)
+check("but its bundle is still worked out", gone.bundleCost == 1600)
+noneListed[textiles.itemID] = nil
 
 local herbs = Row(rows, "apprentice-herbs")
 check("a crate the game has not shown yet has no price", herbs.itemID == nil and herbs.cratePrice == nil
