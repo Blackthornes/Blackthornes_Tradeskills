@@ -4,6 +4,29 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.49.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **A warning before you overpay:** when you buy a shopping list material
+  at the auction house and that many now costs well over what the list
+  said, a line under Buy Now shows the cost now, the list's estimate and
+  how much more, in coin colours. It's a line, not a popup, and Buy Now
+  still buys. "Warn when buying costs more" on the Auction house page of
+  Settings sets how far over (25% to start; 0 turns it off).
+- **Smoother crafting:** with the Queue tab open, a finished craft no
+  longer prices the whole queue and rebuilds the shopping list several
+  times over, which could freeze the game for a moment. A new speed check
+  (`/bts perf`, or Settings > Data) lists the slowest work since login.
+- **Fixes:** a sub-craft another character already made and sent to
+  the crafter (on its way, in the mailbox or in the bags) now leaves the
+  queue, along with the materials it asked for. A character that also
+  had an old saved record from an earlier version is now listed once
+  everywhere, instead of twice. Nothing
+  is deleted; the old record is kept and its queued crafts and shopping
+  list lines move to the character.
+
 ## 0.48.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is

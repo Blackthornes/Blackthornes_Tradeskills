@@ -12,6 +12,14 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.49.0
+
+- Buying materials at the auction house now warns you when the price has jumped past what your shopping list expected.
+- Crafting a batch with the queue open is smoother.
+- Fixed finished sub-crafts staying in the queue, and some characters showing up twice.
+
+Thanks Voldar and Sullivan for the report!
+
 ## 0.48.0
 
 - Farmer goals you set from your queue now keep up with it on their own.
