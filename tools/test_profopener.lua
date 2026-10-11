@@ -217,4 +217,15 @@ local before = #printed
 events.TRADE_SKILL_SHOW()
 check(#printed == before, "unrelated window opening is not reported")
 
+-- A German client names Skinning "Kürschnerei": still no window, by its
+-- skill line.
+RECIPES[7] = { recipeID = 7, name = "Skinning thing", skillLineID = 2947 }
+local englishInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID
+C_TradeSkillUI.GetProfessionInfoBySkillLineID = function(id)
+  if id == 2947 then return { professionName = "Kürschnerei" } end
+  return englishInfo(id)
+end
+check(Opener:ProfessionFor(7) == nil, "a gathering skill in German has no window")
+C_TradeSkillUI.GetProfessionInfoBySkillLineID = englishInfo
+
 print("profession opener: all checks passed")

@@ -408,11 +408,24 @@ local function LineText(line)
     return (text .. ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 end
 
-local function IsProfession(name)
+--- The book's (English) name for a profession the tooltip names, or nil.
+--- The tooltip is in the client's language ("Benötigt Lederverarbeitung
+--- (140)" on a German client), so its name goes through Recipes.
+local function BookProfession(name)
     for _, profession in pairs(Book().PROFESSIONS) do
-        if profession == name then return true end
+        if profession == name then return profession end
     end
-    return false
+
+    local recipes = ns.Recipes
+    if recipes and type(recipes.EnglishProfessionName) == "function" then
+        local ok, english = pcall(recipes.EnglishProfessionName, name)
+        if ok and english then
+            for _, profession in pairs(Book().PROFESSIONS) do
+                if profession == english then return profession end
+            end
+        end
+    end
+    return nil
 end
 
 --- What a recipe item's tooltip says it needs.
@@ -437,7 +450,8 @@ function RecipeBook:ReadSkill(itemID, profession)
             local name, number = nil, nil
             if text then name, number = text:match(pattern) end
             number = tonumber(number)
-            if name and number and IsProfession(name) then
+            name = name and BookProfession(name)
+            if name and number then
                 if not profession or name == profession or foundProfession ~= profession then
                     found, foundProfession = number, name
                 end

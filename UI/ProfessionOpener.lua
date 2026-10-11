@@ -36,8 +36,11 @@ local SKILL_LINE_NAMES = {
 -- Mining's window is opened by casting Smelting, not Mining.
 local SMELTING_SPELL_ID = 2656
 
--- Gathering skills have no window to open.
+-- Gathering skills have no window to open. By skill line (Herbalism,
+-- Skinning), since the client names them in its own language, and by the
+-- English name as before.
 local NO_WINDOW = { Herbalism = true, Skinning = true, Fishing = true }
+local NO_WINDOW_LINES = { [2944] = true, [182] = true, [2947] = true, [393] = true }
 
 -- How long after a click the window has to open before we call it a miss.
 local OPEN_TIMEOUT = 3
@@ -80,7 +83,7 @@ function Opener:ProfessionFor(recipeID)
     end
 
     name = name or SKILL_LINE_NAMES[skillLineID]
-    if not name or NO_WINDOW[name] then return nil end
+    if not name or NO_WINDOW[name] or NO_WINDOW_LINES[skillLineID] then return nil end
 
     local spell = name
     if name == "Mining" or skillLineID == 2946 or skillLineID == 186 then

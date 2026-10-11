@@ -335,6 +335,32 @@ local function SellPriceLineType()
     return (type(enum) == "table" and enum.SellPrice) or 11
 end
 
+-- "5 Charges" as Lua patterns: the English line, then the client's own
+-- ITEM_SPELL_CHARGES ("%d |4Aufladung:Aufladungen;" on a German client),
+-- once with each word of its |4one:many; choice. Built once.
+local chargesPatterns
+
+local function ChargesPatterns()
+    if chargesPatterns then return chargesPatterns end
+    local patterns = { "^(%d+) Charges?$" }
+
+    local format = _G.ITEM_SPELL_CHARGES
+    if type(format) == "string" and format:find("%d", 1, true) then
+        for _, pick in ipairs({ "%1", "%2" }) do
+            local ok, pattern = pcall(function()
+                local text = format:gsub("|4([^:;]*):([^;]*);", pick)
+                text = text:gsub("%%d", "\1")
+                text = text:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+                return "^" .. text:gsub("\1", "(%%d+)") .. "$"
+            end)
+            if ok and type(pattern) == "string" then patterns[#patterns + 1] = pattern end
+        end
+    end
+
+    chargesPatterns = patterns
+    return patterns
+end
+
 --- What the item's own tooltip says a vendor pays for one, or nil when the
 --- client has no tooltip data for it or the tooltip shows no sell price.
 --
@@ -380,8 +406,11 @@ function Util.GetTooltipSellPrice(itemID)
             end
 
             if charges == nil and type(text) == "string" then
-                local read, count = pcall(string.match, text, "^(%d+) Charges?$")
-                charges = read and tonumber(count) or nil
+                for _, pattern in ipairs(ChargesPatterns()) do
+                    local read, count = pcall(string.match, text, pattern)
+                    charges = read and tonumber(count) or nil
+                    if charges then break end
+                end
             end
         end
     end
