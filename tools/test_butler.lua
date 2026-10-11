@@ -84,6 +84,8 @@ ns.QueueMail = {
   GetDisenchanter = function() return typed end,
   GetDisenchantQuality = function() return 2 end,
   FindCharacter = function() return nil end,
+  -- The Mail page's rule for the disenchanter, as QueueMail has it.
+  GoesToDisenchanter = function(_, itemID, q) return itemID == 1 and q == 2 end,
 }
 ns.Recipes = {
   GetShortCharacterName = function(_, key) return ns.db.characters[key].name end,
@@ -130,7 +132,11 @@ typed = "Zed"
 Butler:Forget()
 check("the disenchanter typed in Settings comes first", Butler:Advise(1).enchanter, "Zed")
 check("but not above the quality picked", Butler:Advise(4).enchanter, nil)
+check("gear the Mail page sends there names it", Butler:Advise(1).disenchanter, "Zed")
+check("gear it does not send names nobody", Butler:Advise(4).disenchanter, nil)
 typed = nil
+Butler:Forget()
+check("no disenchanter typed names nobody", Butler:Advise(1).disenchanter, nil)
 
 knows = true
 ns.db.characters[SELF].professions = { { name = "Enchanting", skillLevel = 150 } }
