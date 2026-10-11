@@ -4,6 +4,24 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.47.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Bought to disenchant:** anything you buy on the auction house after
+  searching for it from the Disenchanting tab is marked "bought to DE",
+  and chat says so. The mark follows the item through the mail, the bank
+  and on to your enchanter. On the tab's "Items in my bags" list, marked
+  items come first with a violet tag and are broken first by the
+  Disenchant button. Right-click a bags row to mark or unmark it by hand.
+- **Fixes:** NEW on the Deals tab now only marks real new deals, even with
+  "Only deals over my minimums" unticked. The mailbox never offers a mail
+  to the character you're on, and no longer skips an alt who shares your
+  first name. The Queue tab and its footer price bought materials up the
+  auction listings, the same as To buy. On Ready to sell's Buy view, the
+  summary uses the full width.
+
 ## 0.46.0
 
 For WoW: Forever (interface 16001). No files were added, but the emblem

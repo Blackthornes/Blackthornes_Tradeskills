@@ -12,6 +12,12 @@ is the only report that names players. A version with no section here posts
 nothing in #general.
 This file does not ship in the addon.
 
+## 0.47.0
+
+- Things you buy to disenchant are marked now. They go to the top of your bags list, and the Disenchant button breaks them first.
+- New deals only get the NEW tag when they're really new.
+- The mailbox won't try to mail the character you're on anymore.
+
 ## 0.46.0
 
 - Material costs are more honest now. If you need 20 and only 3 are cheap, the rest are priced at what they really cost.
