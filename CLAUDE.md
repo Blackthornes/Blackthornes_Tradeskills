@@ -288,7 +288,13 @@ craft (`kind = "craft"`, `recipeID`, `itemID`, `name`, `count` made,
 `crafts`, `forNames` in full, `ready`, `missing = { { itemID, count } }`
 from `Queue:HeldBy`) or a mail (`kind = "mail"`, `to` in full, `items`,
 `crafts`): the playing character's `QueueMail:GetDeliveries`, the others'
-`QueueMail:GetOwedBy(key)` (made for someone, not yet mailed). `Craft`
+`QueueMail:GetOwedBy(key)` (made for someone, not yet mailed). A craft
+held up for materials another character (not the one playing) carries or
+banks names it as that missing item's `from`, and that character gets a
+mail step to the crafter first (`forCraft = true`), so Butler can send the
+player there before the craft (the owner, 2026-10-11: a sub-craft whose
+materials are on hand goes to the top); an old name-realm record of the
+crafter (`SameCharacter`) counts as the crafter's own. `Craft`
 runs the playing character's queued craft of that recipe from Butler's
 click: `Crafting:Start` when the profession window shows it, else
 `Queue:ShowQueue()` so the Open button opens the profession. Tested in

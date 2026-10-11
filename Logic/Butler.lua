@@ -106,11 +106,14 @@
 -- character playing first, then by name: { key, name (full), isCurrent,
 -- steps }. Each step is a craft, { kind = "craft", recipeID, itemID, name,
 -- count (items it makes), crafts, forNames (full names it is for, other
--- than the crafter), ready, missing = { { itemID, count } } }, or a mail,
--- { kind = "mail", to (full name), items = { { itemID, count } }, crafts }:
--- what the character playing can send now (QueueMail:GetDeliveries), and
--- for the others what they made for someone and still owe
--- (QueueMail:GetOwedBy). Only characters this one can mail (same realm and
+-- than the crafter), ready, missing = { { itemID, count, from } } }, or a
+-- mail, { kind = "mail", to (full name), items = { { itemID, count } },
+-- crafts, forCraft }: what the character playing can send now
+-- (QueueMail:GetDeliveries), and for the others what they made for someone
+-- and still owe (QueueMail:GetOwedBy). A craft held up for materials
+-- another character carries or banks names it as the missing item's
+-- `from`, and that character gets a mail step to the crafter first
+-- (`forCraft`), so it can be done before the craft. Only characters this one can mail (same realm and
 -- side), never another account's. Craft makes the character playing's
 -- queued craft of that recipe, from Butler's click: started when its
 -- profession window shows it, else the Queue tab opens on its Open button.
@@ -637,6 +640,50 @@ local function ItemList(counts)
     return list
 end
 
+local function Fold(text)
+    if type(text) ~= "string" then return nil end
+    text = text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
+    if text == "" then return nil end
+    return text:lower()
+end
+
+-- Are two records the same character? One may be the old name-realm
+-- record left beside the GUID one (Config:AdoptLegacyCharacter): it names
+-- the same first name and realm, with no last name, or the same one.
+local function SameCharacter(records, a, b)
+    if a == b then return true end
+    local one, two = records[a], records[b]
+    if type(one) ~= "table" or type(two) ~= "table" then return false end
+    if one.guid == b or two.guid == a then return true end
+    local guidKey = "^Player%-"
+    if tostring(a):find(guidKey) and tostring(b):find(guidKey) then return false end
+    if not Fold(one.name) or Fold(one.name) ~= Fold(two.name) then return false end
+    if one.realm and two.realm and one.realm:gsub("%s", "") ~= two.realm:gsub("%s", "") then return false end
+    if one.faction and two.faction and one.faction ~= two.faction then return false end
+    local s1, s2 = Fold(one.surname), Fold(two.surname)
+    if s1 and s2 then return s1 == s2 end
+    return true
+end
+
+-- The other character holding the most of an item in its bags and bank,
+-- never the character playing (its own mail is the Mail panel's) nor
+-- another account's. The key and how many, or nil.
+local function Holder(records, crafterKey, itemID, Playing)
+    local bestKey, bestCount = nil, 0
+    for key, record in pairs(records) do
+        if key ~= crafterKey and type(record) == "table" and not record.linkedFrom and not Playing(key) then
+            local count = 0
+            if type(record.inventory) == "table" then count = count + (tonumber(record.inventory[itemID]) or 0) end
+            if type(record.bank) == "table" then count = count + (tonumber(record.bank[itemID]) or 0) end
+            if count > bestCount or (count == bestCount and count > 0 and tostring(key) < tostring(bestKey)) then
+                bestKey, bestCount = key, count
+            end
+        end
+    end
+    if bestKey then return bestKey, bestCount end
+    return nil
+end
+
 local function Jobs()
     local list = {}
     local queue, mail = ns.Queue, ns.QueueMail
@@ -698,6 +745,52 @@ local function Jobs()
                 }
             end
         end
+    end
+
+    -- A craft held up for materials another character has: that character
+    -- mails them over first, so its line can come first in Butler (the
+    -- owner, 2026-10-11: a sub-craft whose materials are on hand goes to
+    -- the top). An old name-realm record of the crafter itself counts as
+    -- the crafter's own.
+    local blocked = {}
+    for _, job in pairs(byKey) do
+        for _, step in ipairs(job.steps) do
+            if step.kind == "craft" and not step.ready then blocked[#blocked + 1] = { job = job, step = step } end
+        end
+    end
+    table.sort(blocked, function(a, b)
+        if a.job.name ~= b.job.name then return a.job.name < b.job.name end
+        return (a.step.recipeID or 0) < (b.step.recipeID or 0)
+    end)
+    for _, item in ipairs(blocked) do
+        local job, step = item.job, item.step
+        local still = {}
+        for _, need in ipairs(step.missing) do
+            local holderKey, holderCount = Holder(records, job.key, need.itemID, Playing)
+            if holderKey and SameCharacter(records, holderKey, job.key) then
+                need.count = need.count - holderCount
+                if need.count > 0 then still[#still + 1] = need end
+            else
+                still[#still + 1] = need
+                local holder = holderKey and queue:CanMail(holderKey, job.key) and Job(holderKey)
+                if holder then
+                    local count = math.min(holderCount, need.count)
+                    need.from = holder.name
+                    local to = job.name
+                    local letter
+                    for _, other in ipairs(holder.steps) do
+                        if other.kind == "mail" and other.to == to and other.forCraft then letter = other end
+                    end
+                    if not letter then
+                        letter = { kind = "mail", to = to, items = {}, crafts = false, forCraft = true }
+                        table.insert(holder.steps, 1, letter)
+                    end
+                    letter.items[#letter.items + 1] = { itemID = need.itemID, count = count }
+                end
+            end
+        end
+        step.missing = still
+        step.ready = #still == 0
     end
 
     -- What the character playing can mail now, as the Mail panel has it.
