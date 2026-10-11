@@ -176,7 +176,8 @@ local function ShowRowTooltip(row, entry)
         0.7, 0.7, 0.7)
 
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine(("Writ: %s"):format(entry.writPrice and Plain(entry.writPrice) or "not priced"),
+    GameTooltip:AddLine(("Writ: %s"):format(entry.writPrice and Plain(entry.writPrice)
+        or (entry.noneListed and "none listed" or "not priced")),
         0.85, 0.85, 0.85)
     GameTooltip:AddLine(ItemLine(entry) or "Item: not priced", 0.85, 0.85, 0.85, true)
     if entry.perRep then
@@ -343,7 +344,8 @@ local function UpdateWrit(entry)
         for index = 2, 4 do SetLine(lines[index], nil) end
     else
         detail.writHeading:SetText(("%s %s"):format(TierName(entry.tier), entry.prof):upper())
-        SetLine(lines[1], "Writ on the AH", entry.writPrice and Plain(entry.writPrice) or "not priced")
+        SetLine(lines[1], "Writ on the AH", entry.writPrice and Plain(entry.writPrice)
+            or (entry.noneListed and "none listed" or "not priced"))
         local what = entry.count > 1 and ("%d %s"):format(entry.count, entry.name) or entry.name
         SetLine(lines[2], what .. (entry.how == "make" and " (made)" or ""),
             entry.itemCost and Plain(entry.itemCost) or "not priced")
