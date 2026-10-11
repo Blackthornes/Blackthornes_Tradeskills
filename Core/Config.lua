@@ -258,6 +258,9 @@ local DEFAULTS = {
         disenchantSound = true,
         -- The cheer when Set goal makes a Farmer goal.
         goalSound = true,
+        -- Farmer goals made with Set goal move with the queue, and go
+        -- when nothing queued needs them (Logic/FarmerGoals.lua).
+        farmerGoalsFollowQueue = true,
         -- The coin when another character can make a material for less.
         altCraftSound = true,
         -- Open the window when the auction house or a vendor opens, and close

@@ -119,6 +119,78 @@ check("and a no for all", FarmerGoals:SetGoals({ { itemID = 2770, needed = 5 } }
 BlackthornesFarmer = nil
 check("set all without Farmer sets nothing", FarmerGoals:SetGoals({ { itemID = 2770, needed = 5 } }), 0)
 
+print("\ngoals follow the queue")
+-- A Farmer with real goals: Set keeps a target, Remove takes it off.
+local goals = {}
+local have = { ["Copper Ore"] = 6, ["Light Leather"] = 0, ["Linen Cloth"] = 0 }
+BlackthornesFarmer = { Goals = {
+  Find = function(_, name) return goals[name] end,
+  Set = function(_, name, amount)
+    if amount < 1 then return nil, "the amount has to be 1 or more" end
+    if (have[name] or 0) >= amount then return nil, "you already have that many" end
+    goals[name] = goals[name] or { item = name }
+    goals[name].target, goals[name].have = amount, have[name] or 0
+    return goals[name]
+  end,
+  Remove = function(_, name) local was = goals[name] goals[name] = nil return was ~= nil end,
+}, GoalsUI = { Show = function() end } }
+
+local settings = {}
+ns.db = {}
+ns.Config = {
+  GetCharacterKey = function() return "me" end,
+  Get = function(_, key) return settings[key] end,
+}
+local shopping = {}
+ns.Queue = { GetShoppingList = function() return shopping end }
+local waits = 0
+C_Timer = { After = function(_, fn) waits = waits + 1 fn() end }
+
+FarmerGoals:SetGoal(2770, 40)
+FarmerGoals:SetGoal(2318, 12)
+check("Set goal remembers the queue's goal", ns.db.farmerGoalsFromQueue.me[2770].target, 40)
+
+-- The queue grows: more ore needed; the leather is no longer queued.
+shopping = { { itemID = 2770, needed = 60 } }
+FarmerGoals:QueueChanged()
+check("waits for the burst to end", waits, 1)
+check("the ore goal grows with the queue", goals["Copper Ore"].target, 60)
+check("the leather goal goes", goals["Light Leather"], nil)
+check("and is no longer followed", ns.db.farmerGoalsFromQueue.me[2318], nil)
+check("chat says so in one line", last():find("now Copper Ore 60; no longer needed: Light Leather", 1, true) ~= nil, true)
+
+-- The player changes the goal in Farmer: theirs now, never moved again.
+goals["Copper Ore"].target = 80
+shopping = { { itemID = 2770, needed = 20 } }
+FarmerGoals:QueueChanged()
+check("a goal the player changed is left alone", goals["Copper Ore"].target, 80)
+check("and let go", ns.db.farmerGoalsFromQueue.me[2770], nil)
+
+-- Already have what the queue needs now: the goal goes.
+FarmerGoals:SetGoal(2770, 40)
+shopping = { { itemID = 2770, needed = 5 } }
+FarmerGoals:QueueChanged()
+check("already holding enough takes the goal off", goals["Copper Ore"], nil)
+
+-- Turned off: nothing moves.
+FarmerGoals:SetGoal(2770, 40)
+settings.farmerGoalsFollowQueue = false
+shopping = {}
+FarmerGoals:QueueChanged()
+check("with following off, nothing moves", goals["Copper Ore"] and goals["Copper Ore"].target, 40)
+settings.farmerGoalsFollowQueue = nil
+
+-- A goal the player made in Farmer, not from the queue, is never touched.
+goals["Linen Cloth"] = { item = "Linen Cloth", target = 30 }
+FarmerGoals:QueueChanged()
+check("Farmer's own goals are never touched", goals["Linen Cloth"].target, 30)
+
+-- No followed goals: the queue changing does nothing at all.
+ns.db.farmerGoalsFromQueue.me = {}
+waits = 0
+FarmerGoals:QueueChanged()
+check("nothing followed, nothing worked out", waits, 0)
+
 print("")
 if failures > 0 then
   error(string.format("%d Farmer goal check(s) failed", failures))

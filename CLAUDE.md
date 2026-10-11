@@ -65,9 +65,19 @@ calls, inside a pcall:
 _G.BlackthornesFarmer.Goals:Find(name)            -- optional, to say "updated"
 _G.BlackthornesFarmer.Goals:Set(name, amount)     -- goal table, or nil and why
 _G.BlackthornesFarmer.GoalsUI:Show()              -- opens Farmer's Goals panel
+_G.BlackthornesFarmer.Goals:Remove(name)          -- the queue no longer needs it
 ```
 
-`name` is the item's plain name and `amount` the row's NEED. Farmer's goals
+`name` is the item's plain name and `amount` the row's NEED. A goal made
+with Set goal follows the queue (the owner, 2026-10-11, "work for the user
+almost like magic"): `FarmerGoals:Remember` keeps it in
+`farmerGoalsFromQueue[characterKey][itemID] = { name, target }` (never
+rename it), and a second after a burst of `Queue:Notify` calls
+`FarmerGoals:Follow` sets it to the shopping list's new `needed`, or
+removes it when nothing queued needs it or the bags already hold enough.
+A goal whose target the player changed in Farmer, or that finished or was
+removed, is let go and never touched again. "Goals follow the queue"
+(`farmerGoalsFollowQueue`, on unless unticked) on the Queue page. Farmer's goals
 belong to the character that set them, so `Find` and `Set` act on the
 character playing. Farmer's `CLAUDE.md` asks its side to keep these stable;
 if one changes, change `Logic/FarmerGoals.lua` in the same breath.
