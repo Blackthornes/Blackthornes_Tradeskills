@@ -252,6 +252,10 @@ local DEFAULTS = {
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
         tradeRequests = false,
 
+        -- Learn next on the Level Up tab (2026-10-12): recipes not learned
+        -- yet that raise the skill now, under the ones known.
+        levelUpLearnNext = true,
+
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
         -- heard sales), so nothing is lost. Off unless the player turns it on.
