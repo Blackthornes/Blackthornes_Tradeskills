@@ -31,6 +31,17 @@ local function SameText(a, b)
 end
 Characters.SameText = SameText
 
+--- One record's name matches the other's: the same first name, or one
+--- saved with the whole name ("Ana Blackthorne") and the other's first and
+--- last name together.
+local function SameName(one, two)
+    local a, b = Fold(one.name), Fold(two.name)
+    if not a or not b then return false end
+    if a == b then return true end
+    local sa, sb = Fold(one.surname), Fold(two.surname)
+    return (sb ~= nil and a == b .. " " .. sb) or (sa ~= nil and b == a .. " " .. sa)
+end
+
 local function Records()
     local characters = ns.db and ns.db.characters
     return type(characters) == "table" and characters or nil
@@ -74,7 +85,7 @@ function Characters:Same(a, b)
     if tostring(a):find(GUID_KEY) and tostring(b):find(GUID_KEY) then return false end
     if one.guid ~= nil and two.guid ~= nil and one.guid ~= two.guid then return false end
     if (one.linkedFrom ~= nil) ~= (two.linkedFrom ~= nil) then return false end
-    if not Fold(one.name) or Fold(one.name) ~= Fold(two.name) then return false end
+    if not SameName(one, two) then return false end
     for _, field in ipairs({ "realm", "faction", "class" }) do
         if SameText(one[field], two[field]) == false then return false end
     end

@@ -351,6 +351,12 @@ function Recipes:StampIdentity(record)
 
     local levelOk, level = pcall(UnitLevel, "player")
     if levelOk and tonumber(level) then record.level = tonumber(level) end
+
+    -- Now that the last name is known, an old record saved under the whole
+    -- name is this character's too (Config:AdoptLegacyCharacter).
+    if guid and ns.Config.AdoptLegacyCharacter then
+        pcall(ns.Config.AdoptLegacyCharacter, ns.Config, guid)
+    end
 end
 
 --- The character's name, for display: first and last name when the last one
