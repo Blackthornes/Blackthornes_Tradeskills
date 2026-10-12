@@ -31,7 +31,7 @@ local handlers = {}
 ns.RegisterEvent = function(_, event, fn) handlers[event] = fn return true end
 
 local ANA, WITHER = "Player-1", "Player-2"
-local settings = {}
+local settings = { tradeRequests = true }
 ns.db = { characters = {
     [ANA] = { recipes = {
         [17187] = { name = "Transmute: Arcanite", outputItemID = 12360 },
@@ -113,7 +113,7 @@ check("your own line says nothing", (Trade("WTB arcanite bar", "Ana-Realm", "Pla
 check("another channel says nothing", (Trade("WTB arcanite bar", "Ivy-Realm", "Player-7", 1)), 0)
 settings.tradeRequests = false
 check("off says nothing", (Trade("WTB arcanite bar", "Jo-Realm", "Player-6")), 0)
-settings.tradeRequests = nil
+settings.tradeRequests = true
 check("a secret value is swallowed", (Trade(setmetatable({}, { __index = function() error("secret") end }), "Kim-Realm")), 0)
 
 print("\nafter a while")
@@ -123,6 +123,12 @@ ns.db.characters[ANA].recipes[3275] = { name = "Linen Bandage", outputItemID = 1
 clock = clock + CR.REBUILD_GAP + 1
 n, line = Trade("need linen bandage", "Lou-Realm")
 check("a new recipe is found", line and line:find("[3275]", 1, true) ~= nil, true)
+
+print("\noff by default")
+settings.tradeRequests = nil
+clock = clock + CR.REPEAT_GAP + 1
+check("unset says nothing", (Trade("WTB |Hitem:12360::::|h[Arcanite Bar]|h", "Max-Realm", "Player-5")), 0)
+settings.tradeRequests = true
 
 print("\nthe command")
 ns.commands.requests("off")

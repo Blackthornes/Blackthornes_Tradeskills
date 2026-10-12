@@ -20,8 +20,8 @@
 --
 -- Read only: nothing is saved and nothing is sent. The player's own lines
 -- are skipped, and one asker is told about one item once every REPEAT_GAP.
--- "Craft requests in Trade" on the Look page (`tradeRequests`, on unless
--- unticked) and /bts requests.
+-- "Craft requests in Trade" on the Look page (`tradeRequests`, off unless
+-- ticked; the owner, 2026-10-12) and /bts requests.
 --
 -- Smooth play: a line without an asking word costs a few string finds; the
 -- names are laid out once and again only when the characters' recipes
@@ -60,7 +60,7 @@ CraftRequests.TRADE_CHANNEL_ID = 2
 CraftRequests.TRADE_NAMES = { "trade", "handel" }
 
 local function IsOn()
-    return ns.Config:Get("tradeRequests") ~= false
+    return ns.Config:Get("tradeRequests") == true
 end
 CraftRequests.IsOn = IsOn
 

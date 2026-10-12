@@ -250,7 +250,7 @@ local DEFAULTS = {
 
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
-        tradeRequests = true,
+        tradeRequests = false,
 
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's

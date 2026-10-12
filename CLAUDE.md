@@ -360,7 +360,7 @@ nothing; one asker and item once per `REPEAT_GAP`; the player's own lines
 skipped; every read in a pcall (chat can be secret). The names are laid
 out again only when the recipe count changes (checked at most every
 `REBUILD_GAP`). "Craft requests in Trade" on the Look page
-(`tradeRequests`, on unless unticked, never rename it) and `/bts requests`.
+(`tradeRequests`, off unless ticked, the owner 2026-10-12; never rename it) and `/bts requests`.
 Tested in `tools/test_craftrequests.lua`. Not yet seen in game.
 
 ## Profit by method
