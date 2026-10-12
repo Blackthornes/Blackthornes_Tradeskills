@@ -19,6 +19,7 @@
 -- and says so rather than guessing.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Demand = ns.NewModule("Demand")
 
@@ -33,9 +34,9 @@ local OWN_HIGH, OWN_SOME = 0.6, 0.3
 local MARKET_HIGH, MARKET_SOME = 0.30, 0.10
 
 local LEVELS = {
-    high = { label = "High", color = "profit", rank = 3 },
-    some = { label = "Some", color = "warn",   rank = 2 },
-    low  = { label = "Low",  color = "loss",   rank = 1 },
+    high = { label = L["High"], color = "profit", rank = 3 },
+    some = { label = L["Some"], color = "warn",   rank = 2 },
+    low  = { label = L["Low"], color = "loss",   rank = 1 },
 }
 
 --------------------------------------------------------------------------------
@@ -133,10 +134,10 @@ function Demand:Describe(reading)
     if not reading then return nil end
 
     if reading.source == "yours" then
-        return ("you sold %d of %d listed"):format(reading.sold or 0, reading.ended or 0)
+        return L.Format("you sold %d of %d listed", reading.sold or 0, reading.ended or 0)
     end
 
-    return ("%d%% of its stock sells a day"):format(math.floor((reading.rate or 0) * 100 + 0.5))
+    return L.Format("%d%% of its stock sells a day", math.floor((reading.rate or 0) * 100 + 0.5))
 end
 
 --- The tooltip line: "High (you sold 7 of 9 listed)".
@@ -161,8 +162,11 @@ function Demand:WarnIfLow(itemID, name)
     if not reading or reading.level ~= "low" then return false end
 
     warned[itemID] = true
-    ns.Warn(("%s rarely sells: %s. Check the Sales tab before making many."):format(
-        name or "This", self:Describe(reading)))
+    if name then
+        ns.Warn(L.Format("%s rarely sells: %s. Check the Sales tab before making many.", name, self:Describe(reading)))
+    else
+        ns.Warn(L.Format("This rarely sells: %s. Check the Sales tab before making many.", self:Describe(reading)))
+    end
     return true
 end
 

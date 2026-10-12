@@ -7,6 +7,7 @@
 -- it runs through a frame-budgeted worker instead of blocking the client.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Scanner = ns.NewModule("Scanner")
 
@@ -236,7 +237,7 @@ function Scanner:GetCommodityStatus(itemID, location)
     if not ok then
         if not self.warnedCommodityStatus then
             self.warnedCommodityStatus = true
-            ns.Warn("the game would not say whether this item is a commodity; posting it may go wrong.")
+            ns.Warn(L["the game would not say whether this item is a commodity; posting it may go wrong."])
         end
         return nil
     end
@@ -272,18 +273,18 @@ end
 -- is slower but always available, so the button should still work.
 function Scanner:CanFullScan()
     if not self.isAuctionHouseOpen then
-        return false, "the auction house must be open"
+        return false, L["the auction house must be open"]
     end
     if self.isScanning then
-        return false, "a scan is already running"
+        return false, L["a scan is already running"]
     end
     if self.scanQueued or self.browseQueued then
-        return false, "a scan is already waiting to start"
+        return false, L["a scan is already waiting to start"]
     end
 
     local caps = ns.Compat:Get().auction
     if not caps.hasReplicate and not caps.hasBrowseQuery then
-        return false, "this version of the game does not let addons scan the auction house"
+        return false, L["this version of the game does not let addons scan the auction house"]
     end
 
     return true
@@ -317,13 +318,13 @@ function Scanner:StartFullScan()
     if cooldown then
         -- Says when it was last used as well, so a cooldown nobody remembers
         -- starting can be checked against what the player was doing then.
-        ns.Print(("the quick full scan was last used %s and can be used again in %s, so scanning page by page instead")
-            :format(Util.FormatAgeAgo(REPLICATE_COOLDOWN - cooldown),
-                cooldown < 60 and "under a minute" or Util.FormatAge(cooldown)))
+        ns.Print(L.Format("the quick full scan was last used %s and can be used again in %s, so scanning page by page instead",
+            Util.FormatAgeAgo(REPLICATE_COOLDOWN - cooldown),
+                cooldown < 60 and L["under a minute"] or Util.FormatAge(cooldown)))
         return self:StartBrowseScan()
     end
 
-    ns.Print("asking for a quick full scan...")
+    ns.Print(L["asking for a quick full scan..."])
 
     -- Queued rather than sent. A scan is the addon's heaviest use of a channel
     -- the player is also posting on, so it waits behind anything they clicked
@@ -352,7 +353,7 @@ function Scanner:StartFullScan()
 
             if not pcall(C_AuctionHouse.ReplicateItems) then
                 Scanner.awaitingReplicate = false
-                ns.Print("the game refused the quick full scan, so scanning page by page instead")
+                ns.Print(L["the game refused the quick full scan, so scanning page by page instead"])
                 Scanner:StartBrowseScan()
                 return true
             end
@@ -367,8 +368,8 @@ function Scanner:StartFullScan()
             Scanner.timeoutHandle = C_Timer.NewTimer(QUICK_SCAN_WAIT, function()
                 Scanner.timeoutHandle = nil
                 if Scanner.isScanning and not Scanner.isReading then
-                    ns.Print(("the quick full scan has not answered in %d seconds, so scanning page by page until it does")
-                        :format(QUICK_SCAN_WAIT))
+                    ns.Print(L.Format("the quick full scan has not answered in %d seconds, so scanning page by page until it does",
+                        QUICK_SCAN_WAIT))
                     Scanner:StartBrowseScan()
                 end
             end)
@@ -381,7 +382,7 @@ function Scanner:StartFullScan()
 
             if not Scanner.isScanning then
                 if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
-                    ns.Print("the auction house stayed busy; the scan was not sent.")
+                    ns.Print(L["the auction house stayed busy; the scan was not sent."])
                 end
                 if ns.UI then ns.UI:OnScanComplete() end
             end
@@ -405,7 +406,7 @@ function Scanner:StartBrowseScan()
 
     if not Util.HasFunction("C_AuctionHouse.SendBrowseQuery") then
         self.isScanning = false
-        ns.Warn("this version of the game does not let addons scan page by page either")
+        ns.Warn(L["this version of the game does not let addons scan page by page either"])
         return false
     end
 
@@ -420,7 +421,7 @@ function Scanner:StartBrowseScan()
     -- scan -- and then page through it, one throttled request at a time.
     self.browseQueued = true
 
-    ns.Print("scanning the auction house page by page...")
+    ns.Print(L["scanning the auction house page by page..."])
 
     if self.verbose then
         -- A rejected event registration is silent and looks exactly like a
@@ -449,7 +450,7 @@ function Scanner:StartBrowseScan()
             Scanner.isBrowsing = false
 
             if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
-                ns.Warn("the auction house stayed busy; the scan was not sent.")
+                ns.Warn(L["the auction house stayed busy; the scan was not sent."])
             end
             if ns.UI then ns.UI:OnScanComplete() end
         end,
@@ -490,7 +491,7 @@ function Scanner:QueueBrowseQuery(searchString, opts)
             Scanner.sendingOwnBrowse = false
 
             if not ok then
-                ns.Warn("the game refused the page-by-page scan")
+                ns.Warn(L["the game refused the page-by-page scan"])
                 return false
             end
 
@@ -515,8 +516,8 @@ function Scanner:ArmBrowseTimeout()
         Scanner.browseTimeout = nil
         if not Scanner.isBrowsing then return end
 
-        ns.Warn(("the page-by-page scan stopped answering after %ds, so keeping the %d page(s) read")
-            :format(BROWSE_TIMEOUT, Scanner.browsePages or 0))
+        ns.Warn(L.Format("the page-by-page scan stopped answering after %ds, so keeping the %d page(s) read",
+            BROWSE_TIMEOUT, Scanner.browsePages or 0))
 
         -- Finish it properly rather than just stopping: save what was read,
         -- hide the progress bar and give the Scan button back. Only setting
@@ -822,9 +823,12 @@ function Scanner:CommitBrowseResults(results, opts)
     implausible = implausible + ns.Prices:TakeImplausibleCount()
 
     if implausible > 0 then
-        ns.Print(("%d %s ignored: priced above %s"):format(
-            implausible, implausible == 1 and "listing" or "listings",
-            Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
+        local ceiling = Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })
+        if implausible == 1 then
+            ns.Print(L.Format("%d listing ignored: priced above %s", implausible, ceiling))
+        else
+            ns.Print(L.Format("%d listings ignored: priced above %s", implausible, ceiling))
+        end
     end
 
     self:FollowUpOwned(unsettled)
@@ -844,7 +848,7 @@ function Scanner:CommitBrowseResults(results, opts)
     local elapsed = GetTime() - (self.scanStartedAt or GetTime())
     if opts.ended then
         ns.Prices:SetLastFullScan(now)
-        ns.Print(("scan complete: %s items in %.1fs"):format(Util.Comma(recorded), elapsed))
+        ns.Print(L.Format("scan complete: %s items in %.1fs", Util.Comma(recorded), elapsed))
     elseif opts.capped then
         -- Remembered apart from the full scan stamp, so the automatic scan
         -- does not start the same capped sweep again on every visit.
@@ -852,13 +856,13 @@ function Scanner:CommitBrowseResults(results, opts)
             ns.db.lastCappedScanByRealm = ns.db.lastCappedScanByRealm or {}
             ns.db.lastCappedScanByRealm[ns.Config:GetRealmKey()] = now
         end
-        ns.Print(("scan stopped at the %d page limit: %s items updated in %.1fs. Items on later pages were not reached, so this does not count as a full scan.")
-            :format(MAX_BROWSE_PAGES, Util.Comma(recorded), elapsed))
+        ns.Print(L.Format("scan stopped at the %d page limit: %s items updated in %.1fs. Items on later pages were not reached, so this does not count as a full scan.",
+            MAX_BROWSE_PAGES, Util.Comma(recorded), elapsed))
     else
-        ns.Print(("scan stopped early: %s items updated in %.1fs"):format(Util.Comma(recorded), elapsed))
+        ns.Print(L.Format("scan stopped early: %s items updated in %.1fs", Util.Comma(recorded), elapsed))
     end
     if soldOut > 0 then
-        ns.Print(("%s item(s) sold out since they were last seen"):format(Util.Comma(soldOut)))
+        ns.Print(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
     end
 
     if ns.UI and ns.UI.OnScanComplete then
@@ -888,7 +892,7 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     if late then
         if not answered then return end
         self:StopBrowse()
-        ns.Print("the quick full scan answered after all, so reading it instead")
+        ns.Print(L["the quick full scan answered after all, so reading it instead"])
     end
 
     if self.timeoutHandle then
@@ -899,7 +903,7 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     self.awaitingReplicate = false
 
     if not answered then
-        ns.Print("the quick full scan came back empty, so scanning page by page instead")
+        ns.Print(L["the quick full scan came back empty, so scanning page by page instead"])
         self:StartBrowseScan()
         return
     end
@@ -1092,20 +1096,23 @@ function Scanner:ReadReplicateResults(numItems)
             self.isScanning = false
             self.isReading = false
 
-            ns.Print(("scan complete: %s listings across %s items in %.1fs%s"):format(
+            ns.Print(L.Format("scan complete: %s listings across %s items in %.1fs%s",
                 Util.Comma(numItems - skipped), Util.Comma(recorded), elapsed,
-                skipped > 0 and (" (%s skipped)"):format(Util.Comma(skipped)) or ""))
+                skipped > 0 and L.Format(" (%s skipped)", Util.Comma(skipped)) or ""))
 
             if soldOut > 0 then
-                ns.Print(("%s item(s) sold out since they were last seen"):format(Util.Comma(soldOut)))
+                ns.Print(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
             end
 
             implausible = implausible + ns.Prices:TakeImplausibleCount()
 
             if implausible > 0 then
-                ns.Print(("%s %s ignored: priced above %s"):format(
-                    Util.Comma(implausible), implausible == 1 and "listing" or "listings",
-                    Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
+                local ceiling = Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })
+                if implausible == 1 then
+                    ns.Print(L.Format("%s listing ignored: priced above %s", Util.Comma(implausible), ceiling))
+                else
+                    ns.Print(L.Format("%s listings ignored: priced above %s", Util.Comma(implausible), ceiling))
+                end
             end
 
             if ns.UI and ns.UI.OnScanComplete then
@@ -1116,7 +1123,7 @@ function Scanner:ReadReplicateResults(numItems)
         onCancel = function()
             self.isScanning = false
             self.isReading = false
-            ns.Print("scan cancelled")
+            ns.Print(L["scan cancelled"])
 
             if ns.UI and ns.UI.OnScanComplete then
                 ns.UI:OnScanComplete()
@@ -1127,7 +1134,7 @@ function Scanner:ReadReplicateResults(numItems)
     self.worker = worker
     worker:Start(indices)
 
-    ns.Print(("reading %s listings..."):format(Util.Comma(numItems)))
+    ns.Print(L.Format("reading %s listings...", Util.Comma(numItems)))
 end
 
 function Scanner:CancelScan()
@@ -1187,7 +1194,7 @@ function Scanner:GetScanStatus()
     if self.isReading then
         local fraction = self:GetProgress() or 0
         return {
-            text = ("Reading listings %d%%"):format(math.floor(fraction * 100)),
+            text = L.Format("Reading listings %d%%", math.floor(fraction * 100)),
             fraction = fraction,
         }
     end
@@ -1195,8 +1202,8 @@ function Scanner:GetScanStatus()
     if self.isBrowsing then
         local pages = self.browsePages or 0
         return {
-            text = pages == 0 and "Scanning page 1"
-                or ("Scanning page %d (%d read)"):format(pages + 1, pages),
+            text = pages == 0 and L["Scanning page 1"]
+                or L.Format("Scanning page %d (%d read)", pages + 1, pages),
             fraction = math.min(0.95, pages / BROWSE_PAGES_FOR_BAR),
         }
     end
@@ -1205,15 +1212,15 @@ function Scanner:GetScanStatus()
     -- scan is still "running" while the page-by-page one waits its turn,
     -- and the bar said it was asking for a quick scan all that time.
     if self.browseQueued then
-        return { text = "Waiting to start the page-by-page scan" }
+        return { text = L["Waiting to start the page-by-page scan"] }
     end
 
     if self.isScanning then
-        return { text = "Asking for a quick scan" }
+        return { text = L["Asking for a quick scan"] }
     end
 
     if self.scanQueued then
-        return { text = "Waiting to start the scan" }
+        return { text = L["Waiting to start the scan"] }
     end
 
     return nil
@@ -1280,7 +1287,7 @@ function Scanner:ScanItem(itemID, callback, opts)
     opts = opts or {}
 
     if not self.isAuctionHouseOpen then
-        ns.Print("the auction house must be open")
+        ns.Print(L["the auction house must be open"])
         return false
     end
 
@@ -1288,7 +1295,7 @@ function Scanner:ScanItem(itemID, callback, opts)
     if not itemKey then
         local keyOk, made = pcall(C_AuctionHouse.MakeItemKey, itemID)
         if not keyOk or not made then
-            ns.Warn(("could not look up item %s"):format(tostring(itemID)))
+            ns.Warn(L.Format("could not look up item %s", tostring(itemID)))
             return false
         end
         itemKey = made
@@ -1360,7 +1367,7 @@ function Scanner:ScanItem(itemID, callback, opts)
             local refused = Scanner.pendingItem
             Scanner.pendingItem = nil
 
-            ns.Warn("the game refused the search")
+            ns.Warn(L["the game refused the search"])
 
             -- Say so now rather than leaving the caller to time out. A button
             -- that sits doing nothing for five seconds before admitting the
@@ -1397,7 +1404,7 @@ function Scanner:ScanItem(itemID, callback, opts)
             Scanner.recentItemScans[recentKey] = nil
 
             if not pending.quiet then
-                ns.Warn("the auction house did not answer that search; using the last known price.")
+                ns.Warn(L["the auction house did not answer that search; using the last known price."])
             end
             Scanner:SettleSearchDisplay("a search did not answer")
 
@@ -1414,7 +1421,7 @@ function Scanner:ScanItem(itemID, callback, opts)
         Scanner.pendingItem = nil
 
         if not mine.quiet and not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
-            ns.Warn("the auction house stayed busy; using the last known price.")
+            ns.Warn(L["the auction house stayed busy; using the last known price."])
         end
         if mine.callback then
             mine.callback(itemID, nil, nil, nil, nil, nil, "unavailable")
@@ -2012,8 +2019,8 @@ function Scanner:ConsiderAutoScan(attempt)
     if count > 0 and not stale then return end
 
     ns.Print(count == 0
-        and "no price data, so scanning automatically"
-        or "prices are out of date, so scanning automatically")
+        and L["no price data, so scanning automatically"]
+        or L["prices are out of date, so scanning automatically"])
 
     self:StartFullScan()
 end
@@ -2069,18 +2076,18 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("scan", "scan the auction house (open it first)", function()
+ns.RegisterCommand("scan", L["scan the auction house (open it first)"], function()
     ns.Scanner:StartFullScan()
 end)
 
-ns.RegisterCommand("cancel", "stop the running scan", function()
+ns.RegisterCommand("cancel", L["stop the running scan"], function()
     ns.Scanner:CancelScan()
 end)
 
 -- What the addon knows about the quick full scan's cooldown, and what a
 -- running scan is doing. The cooldown is the server's, so this can only say
 -- when the addon last really sent the request and whether anything came back.
-ns.RegisterCommand("scanstatus", "show when the quick full scan was last used and what a scan is doing", function()
+ns.RegisterCommand("scanstatus", L["show when the quick full scan was last used and what a scan is doing"], function()
     local S = ns.Scanner
     local sent = ns.db and ns.db.lastReplicateRequest
     local answered = ns.db and ns.db.lastReplicateAnswered
@@ -2114,9 +2121,9 @@ end)
 
 -- Forces the paged path, skipping the rate-limited snapshot entirely. Useful
 -- when the snapshot is unavailable and for testing the fallback on its own.
-ns.RegisterCommand("browse", "scan page by page, skipping the quick full scan", function()
+ns.RegisterCommand("browse", L["scan page by page, skipping the quick full scan"], function()
     if not ns.Scanner.isAuctionHouseOpen then
-        ns.Print("the auction house must be open")
+        ns.Print(L["the auction house must be open"])
         return
     end
 
@@ -2130,7 +2137,7 @@ end)
 -- Proves, rather than assumes, that the bulk snapshot's prices are being read
 -- with the right units: a targeted search is authoritative, so if the two
 -- disagree the snapshot maths is wrong.
-ns.RegisterCommand("listings", "what the last price check found", function()
+ns.RegisterCommand("listings", L["what the last price check found"], function()
     local last = ns.Scanner.lastItemListings
 
     if not last or not last.raw or #last.raw == 0 then
@@ -2184,7 +2191,7 @@ ns.RegisterCommand("listings", "what the last price check found", function()
     end
 end)
 
-ns.RegisterCommand("verify", "<itemID>: compare the scanned price with a fresh search", function(args)
+ns.RegisterCommand("verify", L["<itemID>: compare the scanned price with a fresh search"], function(args)
     local itemID = tonumber(args:match("(%d+)"))
     if not itemID then
         ns.Print("usage: /bts verify <itemID>")
@@ -2237,7 +2244,7 @@ end)
 -- prices this session actually took from searches the addon did not make, and
 -- which items they were. A diagnostic that says "enabled" would have been true
 -- the whole time the handlers were dropping every row on the floor.
-ns.RegisterCommand("learned", "prices picked up from your own auction house searches", function()
+ns.RegisterCommand("learned", L["prices picked up from your own auction house searches"], function()
     local Scanner = ns.Scanner
 
     if not Scanner:PassiveCaptureEnabled() then

@@ -5,12 +5,21 @@
 -- owns its own layout and this file only routes between them.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local UI = ns.NewModule("UI")
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
+
+--- Widen the header's scan button to its label when the words need more
+--- than its usual width (German runs longer), never narrower than that.
+local SCAN_BUTTON_WIDTH = 120
+local function FitScanButton(button)
+    local width = button and button.label and Theme.TextWidth and Theme.TextWidth(button.label)
+    if width then button:SetWidth(math.max(SCAN_BUTTON_WIDTH, math.ceil(width) + 24)) end
+end
 
 -- 1120 since 2026-10-05 (was 1060): the room went to the Queue tab's
 -- materials list, whose headings sat tight against each other.
@@ -49,9 +58,9 @@ local AUCTION_BAR_CLEAR_LEFT = 80
 local SCALE_MIN = 0.5
 local SCALE_MAX = 1.5
 UI.SIZES = {
-    { key = "small", text = "Small", scale = 0.8 },
-    { key = "normal", text = "Normal", scale = 1 },
-    { key = "large", text = "Large", scale = 1.2 },
+    { key = "small", text = L["Small"], scale = 0.8 },
+    { key = "normal", text = L["Normal"], scale = 1 },
+    { key = "large", text = L["Large"], scale = 1.2 },
 }
 
 -- The grip hangs below the window's bottom right corner, right of the tabs
@@ -202,9 +211,10 @@ function UI:BuildHeader()
     -- The button stays clickable even when a scan is not currently possible:
     -- a greyed-out control that cannot say why is worse than one that tells
     -- you to open the auction house.
-    local scanButton = Widgets.CreateButton(header, "Scan auctions", function()
+    local scanButton = Widgets.CreateButton(header, L["Scan auctions"], function()
         UI:TriggerScan()
-    end, { width = 120, height = 24, primary = true })
+    end, { width = SCAN_BUTTON_WIDTH, height = 24, primary = true })
+    FitScanButton(scanButton)
 
     scanButton:SetPoint("TOPRIGHT", close, "TOPLEFT", -8, -1)
     self.scanButton = scanButton
@@ -238,9 +248,9 @@ function UI:TriggerScan()
     local allowed, reason = ns.Scanner:CanFullScan()
     if not allowed then
         if self.scanHint then
-            self.scanHint:SetText(reason or "cannot scan right now")
+            self.scanHint:SetText(reason or L["cannot scan right now"])
         end
-        ns.Print(reason or "cannot scan right now")
+        ns.Print(reason or L["cannot scan right now"])
         return
     end
 
@@ -329,11 +339,14 @@ function UI:UpdateHeader()
     -- A sweep stopped at the page limit counts as a scan here. On a big
     -- auction house every sweep stops there, and "never scanned" was wrong.
     local lastScan, capped = ns.Prices:GetLastScan()
-    local scanText = lastScan and ("scanned " .. Util.FormatAgeAgo(time() - lastScan)
-        .. (capped and " (stopped at the page limit)" or ""))
-        or "never scanned"
+    local scanText = L["never scanned"]
+    if lastScan then
+        local ago = Util.FormatAgeAgo(time() - lastScan)
+        scanText = capped and L.Format("scanned %s (stopped at the page limit)", ago)
+            or L.Format("scanned %s", ago)
+    end
 
-    self.statusLabel:SetText(("%s items priced  ·  %s recipes known  ·  %s"):format(
+    self.statusLabel:SetText(L.Format("%s items priced  ·  %s recipes known  ·  %s",
         Util.Comma(priceCount), Util.Comma(recipeCount), scanText))
 
     -- The scan button stays live and explains itself rather than greying out
@@ -342,21 +355,27 @@ function UI:UpdateHeader()
     if scanner.isScanning or scanner.scanQueued or scanner.browseQueued then
         -- A scan waiting its turn is cancelled by this button too, so it
         -- says so rather than offering to start one.
-        self.scanButton:SetText("Cancel scan")
-        self.scanButton.tooltipText = "Stop the running scan"
+        self.scanButton:SetText(L["Cancel scan"])
+        FitScanButton(self.scanButton)
+        self.scanButton.tooltipText = L["Stop the running scan"]
         -- The progress ("scanning... 42%") lives here while a scan runs, and
         -- clearing it on this five-second tick made it blink out.
         if not scanner.isScanning then
-            self.scanHint:SetText("|c" .. ns.COLORS.warn .. "waiting to start...|r")
-        elseif not (self.scanHint:GetText() or ""):find("^scanning") then
-            self.scanHint:SetText("scanning...")
+            self.scanHint:SetText("|c" .. ns.COLORS.warn .. L["waiting to start..."] .. "|r")
+        else
+            -- The progress line starts with the same words ("scanning... 42%").
+            local scanning = L["scanning..."]
+            if (self.scanHint:GetText() or ""):sub(1, #scanning) ~= scanning then
+                self.scanHint:SetText(scanning)
+            end
         end
     else
-        self.scanButton:SetText("Scan auctions")
+        self.scanButton:SetText(L["Scan auctions"])
+        FitScanButton(self.scanButton)
 
         local allowed, reason = ns.Scanner:CanFullScan()
         self.scanButton.tooltipText = allowed
-            and "Scan the whole auction house in one go"
+            and L["Scan the whole auction house in one go"]
             or reason
 
         self.scanHint:SetText(allowed and "" or (reason or ""))
@@ -374,7 +393,7 @@ function UI:SetScanProgress(fraction)
     self:RefreshAuctionStatus()
 
     if self.scanHint then
-        self.scanHint:SetText(("scanning... %d%%"):format(math.floor((fraction or 0) * 100)))
+        self.scanHint:SetText(L.Format("scanning... %d%%", math.floor((fraction or 0) * 100)))
     end
 end
 
@@ -718,9 +737,9 @@ function UI:BuildSizeGrip()
         Light(true)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(UI.ScaleText(window:GetScale()), Theme.Unpack("accentHi"))
-        GameTooltip:AddLine("Drag to make the window bigger or smaller.", 1, 1, 1, true)
-        GameTooltip:AddLine("Right-click: back to the normal size.", 1, 1, 1, true)
-        GameTooltip:AddLine("Also on the Settings tab, and /bts size.", Theme.Unpack("accent"))
+        GameTooltip:AddLine(L["Drag to make the window bigger or smaller."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["Right-click: back to the normal size."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["Also on the Settings tab, and /bts size."], Theme.Unpack("accent"))
         GameTooltip:Show()
     end)
     grip:SetScript("OnLeave", function(self)
@@ -749,16 +768,16 @@ function UI.ParseSize(text)
 end
 
 if ns.RegisterCommand then
-    ns.RegisterCommand("size", "how big the window is: /bts size [small|normal|large|50-150%]", function(args)
+    ns.RegisterCommand("size", L["how big the window is: /bts size [small|normal|large|50-150%]"], function(args)
         local scale = UI.ParseSize(args)
         if not scale then
-            ns.Print(("the window is at %s. /bts size small, normal, large or a percent from %d%% to %d%% changes it, or drag the corner below its bottom right."):format(
+            ns.Print(L.Format("the window is at %s. /bts size small, normal, large or a percent from %d%% to %d%% changes it, or drag the corner below its bottom right.",
                 UI.ScaleText(UI:GetWindowScale()), math.floor(SCALE_MIN * 100 + 0.5), math.floor(SCALE_MAX * 100 + 0.5)))
             return
         end
 
         local now = UI:SetWindowScale(scale)
-        ns.Print(("window size: %s."):format(UI.ScaleText(now)))
+        ns.Print(L.Format("window size: %s.", UI.ScaleText(now)))
     end)
 end
 
@@ -806,8 +825,8 @@ end
 -- Deals and Profit tabs put over their Disenchant buttons, so it
 -- works while one of those tabs shows a picked item, as the button does.
 _G.BINDING_HEADER_BLACKTHORNESTS = "Blackthornes Tradeskills"
-_G.BINDING_NAME_BLACKTHORNESTS_TOGGLE = "Open or close the window"
-_G["BINDING_NAME_CLICK BlackthornesTSDisenchant:LeftButton"] = "Disenchant the picked item"
+_G.BINDING_NAME_BLACKTHORNESTS_TOGGLE = L["Open or close the window"]
+_G["BINDING_NAME_CLICK BlackthornesTSDisenchant:LeftButton"] = L["Disenchant the picked item"]
 
 function UI:Toggle()
     self:Build()
@@ -974,7 +993,7 @@ function UI:RefreshAuctionStatus()
 
     if scan then
         bar.doneUntil = nil
-        SetAuctionStatus(bar, { scan.text, scan.fraction and "Scanning" or "Waiting to scan" })
+        SetAuctionStatus(bar, { scan.text, scan.fraction and L["Scanning"] or L["Waiting to scan"] })
         bar.status:SetTextColor(Theme.Unpack("text"))
         bar.progress:Show()
         bar.progress:SetProgress(scan.fraction or 0)
@@ -993,16 +1012,16 @@ function UI:RefreshAuctionStatus()
 
     local lastScan, capped = ns.Prices:GetLastScan()
     if not lastScan then
-        SetAuctionStatus(bar, { "No scan yet. Click Scan to price everything.", "No scan yet" })
+        SetAuctionStatus(bar, { L["No scan yet. Click Scan to price everything."], L["No scan yet"] })
         return
     end
 
     local ago = Util.FormatAgeAgo(time() - lastScan)
     if capped then
-        SetAuctionStatus(bar, { "Last scan " .. ago .. ", stopped at the page limit",
-            "Last scan " .. ago .. " (page limit)", "Scanned " .. ago })
+        SetAuctionStatus(bar, { L.Format("Last scan %s, stopped at the page limit", ago),
+            L.Format("Last scan %s (page limit)", ago), L.Format("Scanned %s", ago) })
     else
-        SetAuctionStatus(bar, { "Last scan " .. ago, "Scanned " .. ago })
+        SetAuctionStatus(bar, { L.Format("Last scan %s", ago), L.Format("Scanned %s", ago) })
     end
 end
 
@@ -1018,13 +1037,21 @@ function UI:CelebrateScan(result)
     bar.progress:SetProgress(1)
 
     local prices = Util.Comma(result.items or 0)
-    local soldOut = (result.soldOut or 0) > 0 and (", %s sold out"):format(Util.Comma(result.soldOut)) or ""
-    SetAuctionStatus(bar, {
-        ("Scan complete: %s prices updated%s"):format(prices, soldOut),
-        ("Scan complete: %s prices%s"):format(prices, soldOut),
-        ("Scan complete: %s prices"):format(prices),
-        "Scan complete",
-    })
+    local texts
+    if (result.soldOut or 0) > 0 then
+        local soldOut = Util.Comma(result.soldOut)
+        texts = {
+            L.Format("Scan complete: %s prices updated, %s sold out", prices, soldOut),
+            L.Format("Scan complete: %s prices, %s sold out", prices, soldOut),
+        }
+    else
+        texts = {
+            L.Format("Scan complete: %s prices updated", prices),
+        }
+    end
+    texts[#texts + 1] = L.Format("Scan complete: %s prices", prices)
+    texts[#texts + 1] = L["Scan complete"]
+    SetAuctionStatus(bar, texts)
     bar.status:SetTextColor(Theme.Unpack("profit"))
     bar.flashLeft = 1
 
@@ -1075,7 +1102,7 @@ function UI:AttachToAuctionHouse()
     local button = self.auctionButton
 
     if not button then
-        button = Widgets.CreateButton(bar, "Scan", function()
+        button = Widgets.CreateButton(bar, L["Scan"], function()
             UI:TriggerScan()
             UI:UpdateAuctionButton()
         end, {
@@ -1133,15 +1160,15 @@ function UI:UpdateAuctionButton()
     if not button then return end
 
     if ns.Scanner.isScanning or ns.Scanner.scanQueued or ns.Scanner.browseQueued then
-        button:SetText("Cancel")
-        button.tooltipText = "Stop the running scan"
+        button:SetText(L["Cancel"])
+        button.tooltipText = L["Stop the running scan"]
         -- Cancelling is always allowed, even when the button was disabled a
         -- moment ago because a scan was waiting to start.
         button:SetEnabledState(true)
         return
     end
 
-    button:SetText("Scan")
+    button:SetText(L["Scan"])
 
     local allowed, reason = ns.Scanner:CanFullScan()
     button:SetEnabledState(allowed)
@@ -1152,9 +1179,9 @@ function UI:UpdateAuctionButton()
 
     button.tooltipText = allowed
         and (cooldown
-            and ("Scan the auction house page by page.\nThe faster full scan can be used again in %s.")
-                :format(Util.FormatAge(cooldown))
-            or "Scan the whole auction house in one go")
+            and L.Format("Scan the auction house page by page.\nThe faster full scan can be used again in %s.",
+                Util.FormatAge(cooldown))
+            or L["Scan the whole auction house in one go"])
         or reason
 end
 
@@ -1168,7 +1195,7 @@ function UI:AttachPostButton()
     local button = self.postButton
 
     if not button then
-        button = Widgets.CreateButton(bar, "Post Crafted", function(_, mouseButton)
+        button = Widgets.CreateButton(bar, L["Post Crafted"], function(_, mouseButton)
             if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
                 UI:Show()
                 UI:SelectTab("post")
@@ -1179,14 +1206,14 @@ function UI:AttachPostButton()
 
             local allowed, reason = ns.Posting:CanPost(line and line.itemID)
             if not allowed then
-                ns.Print(reason or "cannot post right now")
+                ns.Print(reason or L["cannot post right now"])
                 return
             end
 
             if line then
                 ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
             else
-                ns.Print("nothing in your bags worth listing right now")
+                ns.Print(L["nothing in your bags worth listing right now"])
             end
 
             UI:UpdatePostButton()
@@ -1263,7 +1290,7 @@ local function ApplyWaitLabel(button, name, seconds, reason)
         -- No number to give: the client's throttle and the player's own sell
         -- window both end when they end. Saying "wait" beats counting down to
         -- zero and then carrying on refusing.
-        button:SetText("wait")
+        button:SetText(L["wait"])
         button.waitingLabel = true
         button.waitTip = reason
     else
@@ -1287,7 +1314,7 @@ function UI:UpdateWaitLabels()
     -- The button lists the item UpdatePostButton last found, and another copy
     -- of an item being confirmed does not wait for it.
     local buttonSeconds, buttonReason = ns.Posting:SecondsUntilPostable(self.postButtonItemID)
-    ApplyWaitLabel(self.postButton, "Post Crafted", buttonSeconds, buttonReason)
+    ApplyWaitLabel(self.postButton, L["Post Crafted"], buttonSeconds, buttonReason)
 
     local seconds, reason = ns.Posting:SecondsUntilPostable()
 
@@ -1351,10 +1378,10 @@ function UI:UpdatePostButton()
 
     if not line then
         -- Inert rather than absent, so it never looks like it failed to load.
-        button:SetText("Post Crafted")
+        button:SetText(L["Post Crafted"])
         button:SetEnabledState(true)
         button.tooltipText =
-            "Nothing in your bags that one of your recipes makes, at a price worth listing."
+            L["Nothing in your bags that one of your recipes makes, at a price worth listing."]
         return
     end
 
@@ -1362,15 +1389,15 @@ function UI:UpdatePostButton()
     local allowed, reason = ns.Posting:CanPost(line.itemID)
     local waitSeconds, waitReason = ns.Posting:SecondsUntilPostable(line.itemID)
 
-    ApplyWaitLabel(button, "Post Crafted", waitSeconds, waitReason)
+    ApplyWaitLabel(button, L["Post Crafted"], waitSeconds, waitReason)
     button:SetEnabledState(true)
 
     button.tooltipText = allowed
-        and ("Lists %d x %s at %s each.\n%d stack(s) to sell, worth about %s.\n\nRight-click for the full list."):format(
+        and L.Format("Lists %d x %s at %s each.\n%d stack(s) to sell, worth about %s.\n\nRight-click for the full list.",
             line.postQuantity, line.label,
             Util.FormatMoney(line.unitPrice, { noColor = true }),
             count, Util.FormatMoney(total, { noColor = true, short = true }))
-        or ((reason or "cannot post right now") .. "\n\nRight-click for the full list and prices.")
+        or ((reason or L["cannot post right now"]) .. "\n\n" .. L["Right-click for the full list and prices."])
 end
 
 --------------------------------------------------------------------------------
@@ -1478,7 +1505,7 @@ function UI:ShowTransferDialog(mode)
         end)
         dialog.scrollTo = ScrollTo
 
-        dialog.action = Widgets.CreateButton(dialog, "Import", function()
+        dialog.action = Widgets.CreateButton(dialog, L["Import"], function()
             local ok, message = ns.Transfer:Import(dialog.editBox:GetText())
 
             ns.Print(message)
@@ -1486,7 +1513,7 @@ function UI:ShowTransferDialog(mode)
         end, { width = 120, height = 26, primary = true })
         dialog.action:SetPoint("BOTTOMRIGHT", -20, 18)
 
-        local close = Widgets.CreateButton(dialog, "Close", function()
+        local close = Widgets.CreateButton(dialog, L["Close"], function()
             dialog:Hide()
         end, { width = 90, height = 26 })
         close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
@@ -1499,8 +1526,8 @@ function UI:ShowTransferDialog(mode)
         local code = ns.Transfer:Export()
         local queued, settings, limits = ns.Transfer:Describe()
 
-        dialog.title:SetText("Export")
-        dialog.hint:SetText(("%d craft(s), %d changed setting(s), %d stock limit(s). Press Ctrl+C to copy, then keep it somewhere until you need it."):format(
+        dialog.title:SetText(L["Export"])
+        dialog.hint:SetText(L.Format("%d craft(s), %d changed setting(s), %d stock limit(s). Press Ctrl+C to copy, then keep it somewhere until you need it.",
             queued, settings, limits))
 
         dialog.editBox:SetText(code)
@@ -1511,8 +1538,8 @@ function UI:ShowTransferDialog(mode)
         dialog.close:ClearAllPoints()
         dialog.close:SetPoint("BOTTOMRIGHT", -20, 18)
     else
-        dialog.title:SetText("Import")
-        dialog.hint:SetText("Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits in the code replace yours.")
+        dialog.title:SetText(L["Import"])
+        dialog.hint:SetText(L["Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits in the code replace yours."])
 
         dialog.editBox:SetText("")
         dialog.action:Show()
@@ -1570,7 +1597,7 @@ function UI:AttachToMerchant()
     local button = self.merchantButton
 
     if not button then
-        button = Widgets.CreateButton(UIParent, "Buy materials", function()
+        button = Widgets.CreateButton(UIParent, L["Buy materials"], function()
             ns.Vendor:BuyNeeded()
             UI:UpdateMerchantButton()
         end, {
@@ -1608,10 +1635,10 @@ function UI:UpdateMerchantButton()
     if not button then return end
 
     if ns.Vendor:IsBuying() then
-        button:SetText("Buying...")
+        button:SetText(L["Buying..."])
         FitMerchantButton(button)
         button:SetEnabledState(false)
-        button.tooltipText = "Purchases in progress"
+        button.tooltipText = L["Purchases in progress"]
         return
     end
 
@@ -1621,45 +1648,46 @@ function UI:UpdateMerchantButton()
     -- Materials this vendor has but the auction house sells for less are
     -- left for the auction house, and the tooltip says so, or the button
     -- reads as though the vendor did not have them.
-    local cheaperNote = cheaperElsewhere > 0
-        and ("%d material%s this vendor has %s cheaper on the auction house, so %s not bought here"):format(
-            cheaperElsewhere, cheaperElsewhere == 1 and "" or "s",
-            cheaperElsewhere == 1 and "is" or "are",
-            cheaperElsewhere == 1 and "it is" or "they are")
-        or nil
+    local cheaperNote
+    if cheaperElsewhere == 1 then
+        cheaperNote = L["1 material this vendor has is cheaper on the auction house, so it is not bought here"]
+    elseif cheaperElsewhere > 1 then
+        cheaperNote = L.Format("%d materials this vendor has are cheaper on the auction house, so they are not bought here",
+            cheaperElsewhere)
+    end
 
     if #lines == 0 then
         -- Present but inert, so it never looks like it failed to appear.
-        button:SetText("Nothing needed here")
+        button:SetText(L["Nothing needed here"])
         FitMerchantButton(button)
         button:SetEnabledState(false)
         button.tooltipText = ns.Queue:Count() == 0
-            and "Your craft queue is empty"
+            and L["Your craft queue is empty"]
             or cheaperNote
-            or "This vendor sells none of the materials your queue needs"
+            or L["This vendor sells none of the materials your queue needs"]
         return
     end
 
-    button:SetText(("%s  %s"):format("Buy materials",
+    button:SetText(("%s  %s"):format(L["Buy materials"],
         Util.FormatMoney(total, { short = true })))
     FitMerchantButton(button)
     button:SetEnabledState(true)
 
     -- Spell out exactly what will be bought before any gold moves.
-    local parts = { ("Buys %d material%s for your queue, %s in all:"):format(
-        #lines, #lines == 1 and "" or "s",
-        Util.FormatMoney(total, { noColor = true, short = true })) }
+    local totalText = Util.FormatMoney(total, { noColor = true, short = true })
+    local parts = { #lines == 1 and L.Format("Buys %d material for your queue, %s in all:", #lines, totalText)
+        or L.Format("Buys %d materials for your queue, %s in all:", #lines, totalText) }
 
     for index = 1, math.min(#lines, 10) do
         local line = lines[index]
         parts[#parts + 1] = ("  %dx %s  (%s)%s"):format(
             line.amount, Util.GetItemLabel(line.itemID),
             Util.FormatMoney(line.cost, { noColor = true, short = true }),
-            line.short and "  (vendor stock limited)" or "")
+            line.short and ("  " .. L["(vendor stock limited)"]) or "")
     end
 
     if #lines > 10 then
-        parts[#parts + 1] = ("  ...and %d more"):format(#lines - 10)
+        parts[#parts + 1] = "  " .. L.Format("...and %d more", #lines - 10)
     end
 
     if cheaperNote then parts[#parts + 1] = cheaperNote end
@@ -1783,8 +1811,8 @@ function UI:BuildMinimapButton()
         GameTooltip:AddLine("Blackthornes Tradeskills")
         -- Which version is installed, so a player can say when reporting.
         GameTooltip:AddLine(ns.VersionLabel(), 0.5, 0.5, 0.5)
-        GameTooltip:AddLine("Click to open", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Drag to move it round the minimap", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine(L["Click to open"], 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(L["Drag to move it round the minimap"], 0.5, 0.5, 0.5)
         GameTooltip:Show()
     end)
 
@@ -1807,14 +1835,14 @@ end
 -- (UI/BuyQuantity.lua). Other searches leave it out and fill nothing.
 function UI:SearchAuctionHouse(itemID, quantity)
     if not ns.Scanner.isAuctionHouseOpen then
-        ns.Print("open the auction house first")
+        ns.Print(L["open the auction house first"])
         return false
     end
 
     -- A search sent mid-scan takes over the scan's shared results, which
     -- ends the scan early. Wait for it instead.
     if ns.Scanner.isScanning then
-        ns.Print("a scan is running; search again once it finishes")
+        ns.Print(L["a scan is running; search again once it finishes"])
         return false
     end
 
@@ -1832,7 +1860,7 @@ function UI:SearchAuctionHouse(itemID, quantity)
     end
 
     if not name then
-        ns.Print("the game has not loaded that item yet; hover over it once and try again")
+        ns.Print(L["the game has not loaded that item yet; hover over it once and try again"])
         return false
     end
 
@@ -1862,7 +1890,7 @@ function UI:SearchAuctionHouse(itemID, quantity)
             })
 
             if not ok then
-                ns.Warn("the game refused that search")
+                ns.Warn(L["the game refused that search"])
                 return false
             end
 
@@ -1871,7 +1899,7 @@ function UI:SearchAuctionHouse(itemID, quantity)
 
         onGiveUp = function()
             if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
-                ns.Warn("the auction house stayed busy; that search was not sent.")
+                ns.Warn(L["the auction house stayed busy; that search was not sent."])
             end
         end,
     })

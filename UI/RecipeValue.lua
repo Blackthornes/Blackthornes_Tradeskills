@@ -21,6 +21,7 @@
 -- weak table keyed by the row, so a Blizzard frame carries nothing of ours.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local RecipeValue = ns.NewModule("RecipeValue")
 
@@ -1025,7 +1026,7 @@ function RecipeValue:OnEnable()
     end)
 
     ns.RegisterCommand("value",
-        "show what the recipe values in the profession window are doing", function()
+        L["show what the recipe values in the profession window are doing"], function()
             RecipeValue:PrintReport()
         end)
 end

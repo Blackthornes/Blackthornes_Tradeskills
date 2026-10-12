@@ -26,6 +26,7 @@
 -- from a missing number.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local RecipeBook = ns.NewModule("RecipeBook")
 
@@ -597,7 +598,8 @@ function RecipeBook:KnowsIt(record, knownBy)
     return false
 end
 
---- "you", "Ana", "Ana, Bob" or "you and Ana"; nil when nobody does.
+--- "you", "Ana", "Ana, Bob" or "you and Ana"; nil when nobody does. The
+--- second value is true when the character playing is among them.
 function RecipeBook:KnownByText(record)
     local knownBy = self:WhoKnows(record)
     if #knownBy == 0 then return nil end
@@ -613,8 +615,8 @@ function RecipeBook:KnownByText(record)
     end
     table.sort(others)
 
-    if mine and #others == 0 then return "you" end
-    if mine then return "you and " .. table.concat(others, ", ") end
+    if mine and #others == 0 then return L["you"], true end
+    if mine then return L.Format("you and %s", table.concat(others, ", ")), true end
     return table.concat(others, ", ")
 end
 
@@ -653,18 +655,18 @@ end
 --   the whole story for a tooltip or the detail pane, most useful first.
 function RecipeBook:LearnFrom(record)
     local short, lines = nil, {}
-    if not record then return "Unknown", lines end
+    if not record then return L["Unknown"], lines end
 
     if record.starter then
-        short = "Starter"
-        lines[#lines + 1] = "Comes with the profession"
+        short = L["Starter"]
+        lines[#lines + 1] = L["Comes with the profession"]
     end
 
     if record.trainerCost then
-        short = short or "Trainer"
+        short = short or L["Trainer"]
         lines[#lines + 1] = record.trainerCost > 0
-            and ("Trainer, " .. Util.FormatMoney(record.trainerCost, { noColor = true }))
-            or "Trainer"
+            and L.Format("Trainer, %s", Util.FormatMoney(record.trainerCost, { noColor = true }))
+            or L["Trainer"]
     end
 
     local drops, named, otherItem = 0, nil, false
@@ -672,33 +674,33 @@ function RecipeBook:LearnFrom(record)
         local row = Book().ITEMS[itemID]
         local vendors = VendorsOf(itemID)
         for _, vendor in ipairs(vendors) do
-            short = short or "Vendor"
-            lines[#lines + 1] = vendor.zone ~= "" and ("Vendor: %s, %s"):format(vendor.name, vendor.zone)
-                or ("Vendor: " .. vendor.name)
+            short = short or L["Vendor"]
+            lines[#lines + 1] = vendor.zone ~= "" and L.Format("Vendor: %s, %s", vendor.name, vendor.zone)
+                or L.Format("Vendor: %s", vendor.name)
         end
         if row and (row.d or 0) > drops then drops, named = row.d, row.n end
         if #vendors == 0 and not (row and row.d) then otherItem = true end
     end
 
     if drops > 0 then
-        short = short or "Drop"
+        short = short or L["Drop"]
         if named then
-            lines[#lines + 1] = "Drops from " .. table.concat(named, ", ")
+            lines[#lines + 1] = L.Format("Drops from %s", table.concat(named, ", "))
         else
-            lines[#lines + 1] = ("World drop (%d kinds of creature)"):format(drops)
+            lines[#lines + 1] = L.Format("World drop (%d kinds of creature)", drops)
         end
     end
 
     if otherItem then
-        short = short or "Quest or other"
-        lines[#lines + 1] = "Recipe item from a quest, reputation or the other faction"
+        short = short or L["Quest or other"]
+        lines[#lines + 1] = L["Recipe item from a quest, reputation or the other faction"]
     end
 
     if not short and record.seenInGame and not record.recipeItems then
-        lines[#lines + 1] = "Seen in a profession window; where it is learned is not known yet"
+        lines[#lines + 1] = L["Seen in a profession window; where it is learned is not known yet"]
     end
 
-    return short or "Unknown", lines
+    return short or L["Unknown"], lines
 end
 
 --------------------------------------------------------------------------------
@@ -815,7 +817,7 @@ function RecipeBook:List(opts)
                 rows[#rows + 1] = {
                     recipeID = recipeID,
                     record = record,
-                    name = record.name or ("recipe " .. recipeID),
+                    name = record.name or L.Format("recipe %s", recipeID),
                     profession = record.profession,
                     skill = record.skill,
                     outputItemID = record.outputItemID,
@@ -875,7 +877,7 @@ local function Money(copper)
     return Util.FormatMoney(copper, { short = true })
 end
 
-local WAY_NAMES = { vendor = "vendor", auction = "auction", disenchant = "disenchant" }
+local WAY_NAMES = { vendor = L["vendor"], auction = L["auction"], disenchant = L["disenchant"] }
 
 --- Lines for a recipe item's tooltip, in ItemTooltip's `{ label, value }`
 --- shape. Nothing for an item that teaches no recipe the book knows.
@@ -900,52 +902,52 @@ function RecipeBook:TooltipLines(itemID)
 
     local needs = record.profession and record.skill and record.skill > 0
         and ("%s %d"):format(record.profession, record.skill) or record.profession
-    lines[#lines + 1] = { "Teaches", (record.name or "?") .. (needs and ("  (" .. needs .. ")") or "") }
+    lines[#lines + 1] = { L["Teaches"], (record.name or "?") .. (needs and ("  (" .. needs .. ")") or "") }
 
-    local knownBy = self:KnownByText(record)
+    local knownBy, mine = self:KnownByText(record)
     if knownBy then
-        lines[#lines + 1] = { "Known by", knownBy, color = knownBy:find("^you") and "profit" or "text" }
+        lines[#lines + 1] = { L["Known by"], knownBy, color = mine and "profit" or "text" }
     else
-        lines[#lines + 1] = { "Known by", "nobody on this account", color = "warn" }
+        lines[#lines + 1] = { L["Known by"], L["nobody on this account"], color = "warn" }
     end
 
     local value = self:Value(record, itemID)
 
-    lines[#lines + 1] = { "Cost to make", value.cost and Money(value.cost) or "materials not scanned",
+    lines[#lines + 1] = { L["Cost to make"], value.cost and Money(value.cost) or L["materials not scanned"],
         not value.cost }
 
     if not record.outputItemID then
-        lines[#lines + 1] = { "Makes", "no item to sell", true }
+        lines[#lines + 1] = { L["Makes"], L["no item to sell"], true }
         return lines
     end
 
     if not ItemInfo(record.outputItemID) then
-        lines[#lines + 1] = { "Sells for", "loading, hover again", true }
+        lines[#lines + 1] = { L["Sells for"], L["loading, hover again"], true }
         return lines
     end
 
     local returns = value.returns or {}
-    lines[#lines + 1] = { "Sells for", returns.auction and (Money(returns.auction) .. " after the cut")
-        or "not scanned yet", not returns.auction }
+    lines[#lines + 1] = { L["Sells for"], returns.auction and L.Format("%s after the cut", Money(returns.auction))
+        or L["not scanned yet"], not returns.auction }
     if returns.disenchant then
-        lines[#lines + 1] = { "Disenchants for", Money(returns.disenchant) }
+        lines[#lines + 1] = { L["Disenchants for"], Money(returns.disenchant) }
     end
     if returns.vendor and value.backWay == "vendor" then
-        lines[#lines + 1] = { "Vendors for", Money(returns.vendor) }
+        lines[#lines + 1] = { L["Vendors for"], Money(returns.vendor) }
     end
 
     if value.profit then
         local text = Money(value.profit)
         if value.backWay and value.backWay ~= "auction" then
-            text = ("%s  (by %s)"):format(text, WAY_NAMES[value.backWay] or value.backWay)
+            text = L.Format("%s  (by %s)", text, WAY_NAMES[value.backWay] or value.backWay)
         end
-        lines[#lines + 1] = { "Profit per craft", text, color = value.profit >= 0 and "profit" or "loss" }
+        lines[#lines + 1] = { L["Profit per craft"], text, color = value.profit >= 0 and "profit" or "loss" }
 
         if value.payback then
-            lines[#lines + 1] = { "Pays for itself", value.payback == 1 and "after 1 craft"
-                or ("after %d crafts"):format(value.payback), color = "profit" }
+            lines[#lines + 1] = { L["Pays for itself"], value.payback == 1 and L["after 1 craft"]
+                or L.Format("after %d crafts", value.payback), color = "profit" }
         elseif value.profit <= 0 then
-            lines[#lines + 1] = { "Pays for itself", "not at today's prices", color = "warn" }
+            lines[#lines + 1] = { L["Pays for itself"], L["not at today's prices"], color = "warn" }
         end
     end
 
@@ -960,7 +962,7 @@ function RecipeBook:OnEnable()
     ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", function() self:SweepSoon(15) end)
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() self:SweepSoon(2) end)
 
-    ns.RegisterCommand("recipes", "list recipes you have not learned, with what each is worth",
+    ns.RegisterCommand("recipes", L["list recipes you have not learned, with what each is worth"],
         function(input)
             input = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
             if ns.ProfitTab and ns.ProfitTab.ShowRecipesToLearn then

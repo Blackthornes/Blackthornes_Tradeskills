@@ -6,6 +6,7 @@
 -- pane also show.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -21,29 +22,29 @@ local DETAIL_WIDTH = 300
 -- under its heading. `width` is the least each gets: Widgets.FitColumns
 -- widens it to fit the heading and a full amount.
 local COLUMNS = {
-    { key = "make",   label = "MAKE",      width = 40, justify = "CENTER" },
-    { key = "real",   label = "REAL COST", width = 74, money = true },
-    { key = "via",    label = "VIA",       width = 44, justify = "CENTER" },
-    { key = "back",   label = "GETS BACK", width = 74, money = true },
-    { key = "cost",   label = "COST",      width = 74, money = true },
-    { key = "chance", label = "SKILL UP",  width = 80, justify = "CENTER" },
+    { key = "make",   label = L["MAKE"], width = 40, justify = "CENTER" },
+    { key = "real",   label = L["REAL COST"], width = 74, money = true },
+    { key = "via",    label = L["VIA"], width = 44, justify = "CENTER" },
+    { key = "back",   label = L["GETS BACK"], width = 74, money = true },
+    { key = "cost",   label = L["COST"], width = 74, money = true },
+    { key = "chance", label = L["SKILL UP"], width = 80, justify = "CENTER" },
     -- Make or Buy when another craft uses the item: a button that says
     -- whether it is made as a sub-craft (2026-10-07).
-    { key = "sub",    label = "SUB-CRAFT", width = 50, justify = "CENTER", button = true },
+    { key = "sub",    label = L["SUB-CRAFT"], width = 50, justify = "CENTER", button = true },
 }
 
 -- Any column but the recipe's name can be hidden (UI/Columns.lua).
-ns.Columns:Register("levelup", "Level Up", COLUMNS)
+ns.Columns:Register("levelup", L["Level Up"], COLUMNS)
 
 -- How each way of getting gold back is named: short in the VIA column, in
 -- full in the tooltip and the detail panel.
-local WAY_SHORT = { vendor = "Vendor", auction = "AH", disenchant = "DE" }
+local WAY_SHORT = { vendor = L["Vendor"], auction = L["AH"], disenchant = L["DE"] }
 -- In a sentence, for the note on which way the Profit tab counts.
-local WAY_WORD = { vendor = "vendor", auction = "auction house", disenchant = "disenchant" }
+local WAY_WORD = { vendor = L["vendor"], auction = L["auction house"], disenchant = L["disenchant"] }
 local WAY_LONG = {
-    vendor = "Vendor",
-    auction = "Auction house, after the cut",
-    disenchant = "Disenchant, most likely result",
+    vendor = L["Vendor"],
+    auction = L["Auction house, after the cut"],
+    disenchant = L["Disenchant, most likely result"],
 }
 
 local state = {
@@ -61,9 +62,9 @@ local widgets = {}
 
 -- The row hint, as much of it as fits beside the count on its left.
 local HINT_TEXTS = {
-    "Right-click a row to queue one, Shift-click to search the auction house",
-    "Right-click to queue, Shift-click to search",
-    "Right-click a row to queue one",
+    L["Right-click a row to queue one, Shift-click to search the auction house"],
+    L["Right-click to queue, Shift-click to search"],
+    L["Right-click a row to queue one"],
 }
 
 local function FitHint()
@@ -125,20 +126,20 @@ local function ToggleSubCraft(entry)
     local never = not ns.Cost:IsNeverSubCraft(entry.recipeID)
     ns.Cost:SetNeverSubCraft(entry.recipeID, never, entry.name)
     if never then
-        ns.Print(("%s is no longer made as a sub-craft: crafts that use it buy it instead."):format(entry.name or "that craft"))
+        ns.Print(L.Format("%s is no longer made as a sub-craft: crafts that use it buy it instead.", entry.name or L["that craft"]))
     else
-        ns.Print(("%s is made as a sub-craft again when that is cheaper than buying it."):format(entry.name or "that craft"))
+        ns.Print(L.Format("%s is made as a sub-craft again when that is cheaper than buying it.", entry.name or L["that craft"]))
     end
 end
 
 local function SubCraftTooltip(entry)
-    local name = entry.name or "this"
+    local name = entry.name or L["this"]
     if entry.neverSubCraft then
-        return ("Buy: %s is never made to go into another craft. It is bought instead, in costs, the queue and the shopping list.\nClick to make it again when that is cheaper."):format(name)
+        return L.Format("Buy: %s is never made to go into another craft. It is bought instead, in costs, the queue and the shopping list.\nClick to make it again when that is cheaper.", name)
     end
-    local text = ("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those."):format(name)
+    local text = L.Format("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those.", name)
     if not entry.isMaterial then
-        text = text .. "\nNo craft your characters know uses it yet."
+        text = text .. "\n" .. L["No craft your characters know uses it yet."]
     end
     return text
 end
@@ -175,7 +176,7 @@ local function CreateRow(row)
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
         if column.button then
-            row.subButton = Widgets.CreateButton(row, "Make", function()
+            row.subButton = Widgets.CreateButton(row, L["Make"], function()
                 ToggleSubCraft(row.data)
             end, { width = math.min(column.width, 48), height = 16 })
         else
@@ -193,7 +194,7 @@ local function UpdateRow(row, entry)
 
     -- Coloured the way the profession window colours it, so the list reads
     -- the same as the game without being told what orange means.
-    local name = entry.name or ("recipe " .. entry.recipeID)
+    local name = entry.name or L.Format("recipe %s", entry.recipeID)
     -- A craft only another character knows (Sub-crafts only) says who.
     if entry.knownBy and ns.Recipes.GetShortCharacterName then
         name = ("%s |cff7a8089(%s)|r"):format(name, ns.Recipes:GetShortCharacterName(entry.knownBy))
@@ -209,7 +210,7 @@ local function UpdateRow(row, entry)
         Theme.SetMoneyText(cells.cost, entry.cost, { short = true })
         cells.cost:SetTextColor(Theme.Unpack("text"))
     else
-        cells.cost:SetText("no price")
+        cells.cost:SetText(L["no price"])
         cells.cost:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -237,7 +238,7 @@ local function UpdateRow(row, entry)
         Theme.SetMoneyText(cells.real, entry.realCost or entry.cost, { short = true })
         cells.real:SetTextColor(Theme.Unpack("text"))
     else
-        cells.real:SetText("no price")
+        cells.real:SetText(L["no price"])
         cells.real:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -254,7 +255,7 @@ local function UpdateRow(row, entry)
         local shown = entry.outputItemID ~= nil
         button:SetShown(shown == true and not row.subHidden)
         if shown then
-            button:SetText(entry.neverSubCraft and "Buy" or "Make")
+            button:SetText(entry.neverSubCraft and L["Buy"] or L["Make"])
             button.tooltipText = SubCraftTooltip(entry)
         end
     end
@@ -265,21 +266,21 @@ end
 local function StaleNote(skillUp)
     if not skillUp or not skillUp.stale then return nil end
 
-    return ("Colour read at skill %d and you are %d now, so it may have changed. Open the profession to update it.")
-        :format(skillUp.skill or 0, skillUp.currentSkill or 0)
+    return L.Format("Colour read at skill %d and you are %d now, so it may have changed. Open the profession to update it.",
+        skillUp.skill or 0, skillUp.currentSkill or 0)
 end
 
 local function ShowRowTooltip(row, entry)
-    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.outputItemID, entry.name or "craft")
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.outputItemID, entry.name or L["craft"])
     GameTooltip:AddLine(" ")
 
     local r, g, b = TierColor(entry.tier)
-    local chance = entry.tier == "unknown" and "not read yet"
+    local chance = entry.tier == "unknown" and L["not read yet"]
         or ns.SkillUp:GetTierLabel(entry.tier)
-    GameTooltip:AddDoubleLine("Skill up", chance, 0.7, 0.7, 0.7, r, g, b)
+    GameTooltip:AddDoubleLine(L["Skill up"], chance, 0.7, 0.7, 0.7, r, g, b)
 
-    GameTooltip:AddDoubleLine("Materials", entry.cost
-        and Util.FormatMoney(entry.cost, { noColor = true }) or "no price",
+    GameTooltip:AddDoubleLine(L["Materials"], entry.cost
+        and Util.FormatMoney(entry.cost, { noColor = true }) or L["no price"],
         0.7, 0.7, 0.7, 1, 1, 1)
 
     local returns = entry.returns
@@ -298,7 +299,7 @@ local function ShowRowTooltip(row, entry)
             local gain = entry.realCost < 0
             local r, g, b = 1, 1, 1
             if gain then r, g, b = Theme.Unpack("profit") end
-            GameTooltip:AddDoubleLine(gain and "Pays you back" or "Real cost",
+            GameTooltip:AddDoubleLine(gain and L["Pays you back"] or L["Real cost"],
                 Util.FormatMoney(math.abs(entry.realCost), { noColor = true }),
                 1, 0.82, 0, r, g, b)
         end
@@ -307,22 +308,22 @@ local function ShowRowTooltip(row, entry)
         if returns.method and returns.method ~= "best" then
             local label = WAY_WORD[returns.method] or returns.method
             local text = returns.best
-                and ("Only the %s counts: the Profit tab is set to it."):format(label)
-                or ("Only the %s counts (the Profit tab is set to it), and it pays nothing for this."):format(label)
+                and L.Format("Only the %s counts: the Profit tab is set to it.", label)
+                or L.Format("Only the %s counts (the Profit tab is set to it), and it pays nothing for this.", label)
             GameTooltip:AddLine(text, 0.7, 0.7, 0.7, true)
         end
     elseif entry.outputItemID then
-        GameTooltip:AddLine("Nothing to sell it back for yet: no vendor, auction or disenchant price.", 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L["Nothing to sell it back for yet: no vendor, auction or disenchant price."], 0.7, 0.7, 0.7, true)
     end
 
     local note = StaleNote(entry.skillUp)
     if note then GameTooltip:AddLine(note, 0.91, 0.76, 0.35, true) end
 
     if entry.neverSubCraft then
-        GameTooltip:AddLine("Never made as a sub-craft: crafts that use it buy it instead.", 0.91, 0.76, 0.35, true)
+        GameTooltip:AddLine(L["Never made as a sub-craft: crafts that use it buy it instead."], 0.91, 0.76, 0.35, true)
     end
 
-    GameTooltip:AddLine("Right-click to queue one. Shift-click to search the auction house.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Right-click to queue one. Shift-click to search the auction house."], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -395,7 +396,7 @@ local function BuildDetail(parent)
     local reagentHeading = Theme.CreateLabel(detail, "tiny", "dim")
     -- Back out under the icon, so the list of materials starts at the edge.
     reagentHeading:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -38, -12)
-    reagentHeading:SetText("MATERIALS")
+    reagentHeading:SetText(L["MATERIALS"])
     Theme.StyleHeading(reagentHeading, detail)
     detail.reagentHeading = reagentHeading
 
@@ -419,14 +420,14 @@ local function BuildDetail(parent)
         return value, label
     end
 
-    detail.costValue = SummaryRow(1, "Materials for one")
+    detail.costValue = SummaryRow(1, L["Materials for one"])
     detail.wayValues = {
-        vendor = SummaryRow(2, "Vendor pays"),
-        auction = SummaryRow(3, "Auction, after cut"),
-        disenchant = SummaryRow(4, "Disenchant, likely"),
+        vendor = SummaryRow(2, L["Vendor pays"]),
+        auction = SummaryRow(3, L["Auction, after cut"]),
+        disenchant = SummaryRow(4, L["Disenchant, likely"]),
     }
-    detail.realValue, detail.realLabel = SummaryRow(5, "Real cost")
-    detail.makeValue = SummaryRow(6, "You can make now")
+    detail.realValue, detail.realLabel = SummaryRow(5, L["Real cost"])
+    detail.makeValue = SummaryRow(6, L["You can make now"])
 
     -- What the Craft button will do, or why it cannot. A craft's progress bar
     -- takes this line's place while it casts. Wrapped, growing upwards into
@@ -472,7 +473,7 @@ local function BuildDetail(parent)
     -- Crafting needs a real click, so this runs straight from the button.
     -- When the recipe's window is not open, the secure Open button laid over
     -- this one takes the click instead and this handler never runs.
-    local craftButton = Widgets.CreateButton(detail, "Craft", function(button)
+    local craftButton = Widgets.CreateButton(detail, L["Craft"], function(button)
         local entry = state.selected
         if not entry then return end
 
@@ -489,21 +490,21 @@ local function BuildDetail(parent)
     craftButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 6, 0)
     detail.craftButton = craftButton
 
-    local addButton = Widgets.CreateButton(detail, "Queue", function()
+    local addButton = Widgets.CreateButton(detail, L["Queue"], function()
         if not state.selected then return end
 
         local count = Wanted()
         ns.Queue:Add(state.selected.recipeID, count)
-        ns.Print(("queued %dx %s"):format(count, state.selected.name or "craft"))
-    end, { width = 64, height = 24, tooltip = "Add this many to the craft queue" })
+        ns.Print(L.Format("queued %dx %s", count, state.selected.name or L["craft"]))
+    end, { width = 64, height = 24, tooltip = L["Add this many to the craft queue"] })
     addButton:SetPoint("BOTTOMLEFT", craftButton, "BOTTOMRIGHT", 6, 0)
     detail.addButton = addButton
 
-    local maxButton = Widgets.CreateButton(detail, "Max", function()
+    local maxButton = Widgets.CreateButton(detail, L["Max"], function()
         if not state.selected then return end
         quantity:SetText(tostring(math.max(1, state.selected.craftableNow or 1)))
         UpdateCraftButton()
-    end, { width = 40, height = 24, tooltip = "As many as the materials in your bags make" })
+    end, { width = 40, height = 24, tooltip = L["As many as the materials in your bags make"] })
     maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 6, 0)
     detail.maxButton = maxButton
 
@@ -511,7 +512,7 @@ local function BuildDetail(parent)
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
     empty:SetWordWrap(true)
-    empty:SetText("Pick a recipe to see its materials")
+    empty:SetText(L["Pick a recipe to see its materials"])
     detail.empty = empty
 
     return detail
@@ -544,12 +545,12 @@ local function UpdateDetail(entry)
         return
     end
 
-    detail.title:SetText(entry.name or ("recipe " .. entry.recipeID))
+    detail.title:SetText(entry.name or L.Format("recipe %s", entry.recipeID))
     Theme.SetItemIcon(detail.icon, entry.outputItemID)
 
     local r, g, b = TierColor(entry.tier)
     if entry.tier == "unknown" then
-        detail.subtitle:SetText("Skill up chance not read yet. Open the profession window to read it.")
+        detail.subtitle:SetText(L["Skill up chance not read yet. Open the profession window to read it."])
     else
         local text = ns.SkillUp:GetTierLabel(entry.tier)
         detail.subtitle:SetText(text:sub(1, 1):upper() .. text:sub(2))
@@ -588,10 +589,10 @@ local function UpdateDetail(entry)
 
         local label = ("%dx %s"):format(reagent.quantity, Util.GetItemLabel(reagent.itemID))
         if reagent.crafted then
-            label = label .. " (make it)"
+            label = L.Format("%s (make it)", label)
         elseif ns.Cost.NeverMadeRecipeFor and ns.Cost:NeverMadeRecipeFor(reagent.itemID) then
             -- Marked never to make as a sub-craft, so it is bought.
-            label = label .. " (bought, never made)"
+            label = L.Format("%s (bought, never made)", label)
         end
         line.name:SetText(label)
         Theme.SetItemIcon(line.icon, reagent.itemID)
@@ -599,13 +600,13 @@ local function UpdateDetail(entry)
         -- Have or need first: it answers "can I make this" without a second
         -- screen. Bank stock counts here, the same as on the Profit tab.
         if (reagent.shortfall or 0) > 0 then
-            line.value:SetText(("need %d"):format(reagent.shortfall))
+            line.value:SetText(L.Format("need %d", reagent.shortfall))
             line.value:SetTextColor(Theme.Unpack("loss"))
         elseif reagent.lineCost then
             line.value:SetText(Util.FormatMoney(reagent.lineCost, { short = true }))
             line.value:SetTextColor(Theme.Unpack("muted"))
         else
-            line.value:SetText("no price")
+            line.value:SetText(L["no price"])
             line.value:SetTextColor(Theme.Unpack("dim"))
         end
 
@@ -616,7 +617,7 @@ local function UpdateDetail(entry)
     if entry.cost then
         detail.costValue:SetText(Util.FormatMoney(entry.cost))
     else
-        detail.costValue:SetText("a material has no price")
+        detail.costValue:SetText(L["a material has no price"])
     end
 
     -- Each way back, the one the list counts in green.
@@ -636,11 +637,11 @@ local function UpdateDetail(entry)
     end
 
     if entry.realCost and entry.realCost < 0 then
-        detail.realLabel:SetText("Pays you back")
+        detail.realLabel:SetText(L["Pays you back"])
         detail.realValue:SetText(Util.FormatMoney(-entry.realCost))
         detail.realValue:SetTextColor(Theme.Unpack("profit"))
     else
-        detail.realLabel:SetText("Real cost")
+        detail.realLabel:SetText(L["Real cost"])
         local real = entry.realCost or entry.cost
         detail.realValue:SetText(real and Util.FormatMoney(real) or "--")
         detail.realValue:SetTextColor(Theme.Unpack(real and "text" or "dim"))
@@ -677,7 +678,7 @@ local function UpdateSkillLabel()
         local info = ProfessionInfo(skillLineID)
 
         if info and (info.maxSkillLevel or 0) > 0 then
-            label:SetText(("Skill %d / %d"):format(info.skillLevel or 0, info.maxSkillLevel))
+            label:SetText(L.Format("Skill %d / %d", info.skillLevel or 0, info.maxSkillLevel))
             return
         end
     end
@@ -710,8 +711,8 @@ local function Refresh()
     -- Its own words: the CHANCE column's "Small" and "None" read as "25
     -- small  200 none" down here.
     local FOOTER_WORDS = {
-        optimal = "guaranteed", medium = "likely", easy = "small chance",
-        unknown = "not read", trivial = "no skill-up",
+        optimal = L["guaranteed"], medium = L["likely"], easy = L["small chance"],
+        unknown = L["not read"], trivial = L["no skill-up"],
     }
 
     local parts = {}
@@ -727,15 +728,15 @@ local function Refresh()
 
     if #rows == 0 then
         if ns.Recipes:Count() == 0 then
-            widgets.emptyLabel:SetText("Open a profession window once so your recipes can be read.")
+            widgets.emptyLabel:SetText(L["Open a profession window once so your recipes can be read."])
         elseif state.search ~= "" then
-            widgets.emptyLabel:SetText(("Nothing matching \"%s\"."):format(state.search))
+            widgets.emptyLabel:SetText(L.Format("Nothing matching \"%s\".", state.search))
         elseif state.subCraftsOnly then
-            widgets.emptyLabel:SetText("Nothing you know here makes a material for another craft.")
+            widgets.emptyLabel:SetText(L["Nothing you know here makes a material for another craft."])
         elseif state.craftableOnly then
-            widgets.emptyLabel:SetText("Nothing that gives skill can be made from your bags right now.")
+            widgets.emptyLabel:SetText(L["Nothing that gives skill can be made from your bags right now."])
         else
-            widgets.emptyLabel:SetText("Nothing you know gives skill any more. Tick \"Show grey\" to see the rest, or learn new recipes.")
+            widgets.emptyLabel:SetText(L["Nothing you know gives skill any more. Tick \"Show grey\" to see the rest, or learn new recipes."])
         end
     end
 
@@ -743,7 +744,7 @@ local function Refresh()
     -- list that is all "not read" is one that has never been opened since
     -- this addon was installed, and says so.
     if #rows > 0 and unread == #rows then
-        widgets.countLabel:SetText("Open this profession once so the skill up colours can be read.")
+        widgets.countLabel:SetText(L["Open this profession once so the skill up colours can be read."])
     end
     FitHint()
 
@@ -770,7 +771,7 @@ local function Build(container)
     toolbar:SetPoint("TOPRIGHT", -8, -8)
     toolbar:SetHeight(24)
 
-    local profession = Widgets.CreateDropdown(toolbar, { { text = "All professions", value = nil } },
+    local profession = Widgets.CreateDropdown(toolbar, { { text = L["All professions"], value = nil } },
         function(value)
             state.profession = value
             state.selected = nil
@@ -780,20 +781,20 @@ local function Build(container)
     profession:SetPoint("LEFT", 0, 0)
     widgets.professionDropdown = profession
 
-    local search = Widgets.CreateSearchBox(toolbar, "Search recipes", function(text)
+    local search = Widgets.CreateSearchBox(toolbar, L["Search recipes"], function(text)
         state.search = text or ""
         Refresh()
     end)
     search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
-    local craftable = Widgets.CreateCheckbox(toolbar, "Craftable now", function(checked)
+    local craftable = Widgets.CreateCheckbox(toolbar, L["Craftable now"], function(checked)
         state.craftableOnly = checked
         Refresh()
     end, false)
     craftable:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
-    local trivial = Widgets.CreateCheckbox(toolbar, "Show grey", function(checked)
+    local trivial = Widgets.CreateCheckbox(toolbar, L["Show grey"], function(checked)
         state.includeTrivial = checked
         Refresh()
     end, false)
@@ -801,7 +802,7 @@ local function Build(container)
 
     -- Asked 2026-10-07: the crafts that make another's materials, grey
     -- ones too, to choose which to make and which to buy.
-    local subCrafts = Widgets.CreateCheckbox(toolbar, "Sub-crafts only", function(checked)
+    local subCrafts = Widgets.CreateCheckbox(toolbar, L["Sub-crafts only"], function(checked)
         state.subCraftsOnly = checked
         state.selected = nil
         -- Other characters' professions join the menu, or leave it.
@@ -812,8 +813,8 @@ local function Build(container)
     subCrafts:SetPoint("LEFT", trivial, "RIGHT", 12, 0)
     subCrafts:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
-        GameTooltip:SetText("Sub-crafts only", 1, 1, 1)
-        GameTooltip:AddLine("Only crafts whose item goes into another craft, grey ones too, on all your characters. Their SUB-CRAFT button picks Make or Buy.", 0.8, 0.8, 0.8, true)
+        GameTooltip:SetText(L["Sub-crafts only"], 1, 1, 1)
+        GameTooltip:AddLine(L["Only crafts whose item goes into another craft, grey ones too, on all your characters. Their SUB-CRAFT button picks Make or Buy."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     subCrafts:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -830,7 +831,7 @@ local function Build(container)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 28, 0)
-    nameHeading:SetText("RECIPE")
+    nameHeading:SetText(L["RECIPE"])
 
     local cells = {}
     for _, column in ipairs(COLUMNS) do
@@ -871,7 +872,7 @@ local function Build(container)
         onClick = function(entry, _, mouseButton)
             if mouseButton == "RightButton" then
                 ns.Queue:Add(entry.recipeID, 1)
-                ns.Print(("queued 1x %s"):format(entry.name or "craft"))
+                ns.Print(L.Format("queued %dx %s", 1, entry.name or L["craft"]))
                 return
             end
 
@@ -928,7 +929,7 @@ OnShow = function()
 
         if skillLineID and not nameBySkillLine[skillLineID] then
             local info = ProfessionInfo(skillLineID)
-            local name = (info and info.professionName) or ("Skill line " .. skillLineID)
+            local name = (info and info.professionName) or L.Format("Skill line %s", skillLineID)
 
             nameBySkillLine[skillLineID] = name
 
@@ -944,7 +945,7 @@ OnShow = function()
     -- "All professions" first, as in every profession menu (it sat last
     -- here, first on the Profit tab).
     table.sort(options, function(a, b) return a.text < b.text end)
-    table.insert(options, 1, { text = "All professions", value = nil })
+    table.insert(options, 1, { text = L["All professions"], value = nil })
 
     local dropdown = widgets.professionDropdown
     dropdown:SetOptions(options)
@@ -978,8 +979,8 @@ end
 -- UI/RecipeBookView.lua (the tests load this file alone) the tab is the list.
 local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     mainKey = "recipes",
-    mainText = "MY RECIPES",
-    mainTip = "The recipes you know, cheapest way up first",
+    mainText = L["MY RECIPES"],
+    mainTip = L["The recipes you know, cheapest way up first"],
     buildMain = Build,
     refreshMain = Refresh,
     learn = ns.RecipeBookView.New({ order = "skill" }),
@@ -987,7 +988,7 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
 
 UI:RegisterTab({
     key = "levelup",
-    text = "Level Up",
+    text = L["Level Up"],
     order = 1.5,
     build = switch and switch.Build or Build,
     refresh = switch and switch.Refresh or Refresh,

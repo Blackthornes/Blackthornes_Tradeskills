@@ -23,6 +23,7 @@
 -- `/bts mail` reports which of the two you are getting.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Mail = ns.NewModule("Mail")
 
@@ -1554,7 +1555,7 @@ local function PackResults(...)
     return select("#", ...), { ... }
 end
 
-ns.RegisterCommand("mail", "[reset]: what is in the mailbox and what has sold", function(args)
+ns.RegisterCommand("mail", L["[reset]: what is in the mailbox and what has sold"], function(args)
     local sub = (args or ""):lower():match("^(%S*)")
 
     if sub == "reset" then
@@ -1562,32 +1563,33 @@ ns.RegisterCommand("mail", "[reset]: what is in the mailbox and what has sold", 
         local entries = #ledger.entries
 
         if entries == 0 then
-            ns.Print("the sales record is already empty")
+            ns.Print(L["the sales record is already empty"])
             return
         end
 
         -- Clearing it is not undoable and it is the only record of what sold,
         -- so it takes a second word rather than happening on a typo.
         if not (args or ""):lower():match("^reset%s+confirm") then
-            ns.Print(("this will delete %d recorded sale(s) and return(s) for %s"):format(
+            ns.Print(L.Format("this will delete %d recorded sale(s) and return(s) for %s",
                 entries, ns.Config:GetRealmKey()))
-            ns.PrintRaw(("  taken in so far: %s"):format(
+            ns.PrintRaw("  " .. L.Format("taken in so far: %s",
                 Util.FormatMoney(Mail:GetSummary().net)))
 
             local unpriced = Mail:CountUnpriced()
             if unpriced > 0 then
-                ns.PrintRaw(("  %d of them show no gold (recorded before an addon fix)"):format(
+                ns.PrintRaw("  " .. L.Format("%d of them show no gold (recorded before an addon fix)",
                     unpriced))
             end
 
-            ns.PrintRaw(("  to go ahead: |c%s/bts mail reset confirm|r"):format(
+            ns.PrintRaw("  " .. L.Format("to go ahead: |c%s/bts mail reset confirm|r",
                 ns.COLORS.accent))
             return
         end
 
         local had = Mail:ResetLedger()
-        ns.Print(("cleared %d sales record entr%s"):format(had, had == 1 and "y" or "ies"))
-        ns.PrintRaw("  anything still in the mailbox is recorded again next time you open it")
+        ns.Print(had == 1 and L.Format("cleared %d sales record entry", had)
+            or L.Format("cleared %d sales record entries", had))
+        ns.PrintRaw("  " .. L["anything still in the mailbox is recorded again next time you open it"])
 
         -- Whatever is in the box is unrecorded again, so read it now if we can.
         if Mail.isOpen then Mail:Read() end

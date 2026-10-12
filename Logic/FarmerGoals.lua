@@ -13,6 +13,7 @@
 -- stable.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local FarmerGoals = ns.NewModule("FarmerGoals")
 
@@ -65,7 +66,7 @@ end
 --- existed, or nil and why not. Prints nothing.
 local function Apply(farmer, itemID, amount)
     local name = ItemName(itemID)
-    if not name then return nil, "the game has not sent its name yet" end
+    if not name then return nil, L["the game has not sent its name yet"] end
 
     amount = math.floor(tonumber(amount) or 0)
 
@@ -77,8 +78,8 @@ local function Apply(farmer, itemID, amount)
     end
 
     local ok, goal, why = pcall(Goals.Set, Goals, name, amount)
-    if not ok then return nil, "Farmer could not make it. It may need updating" end
-    if type(goal) ~= "table" then return nil, tostring(why or "Farmer said no"), name end
+    if not ok then return nil, L["Farmer could not make it. It may need updating"] end
+    if type(goal) ~= "table" then return nil, tostring(why or L["Farmer said no"]), name end
 
     FarmerGoals:Remember(itemID, name, tonumber(goal.target) or amount)
     return goal, existed
@@ -194,9 +195,9 @@ function FarmerGoals:Follow()
     table.sort(moved)
     table.sort(gone)
     local parts = {}
-    if #moved > 0 then parts[#parts + 1] = "now " .. table.concat(moved, ", ") end
-    if #gone > 0 then parts[#parts + 1] = "no longer needed: " .. table.concat(gone, ", ") end
-    ns.Print(("|c%sFarmer goals follow your queue:|r %s."):format(
+    if #moved > 0 then parts[#parts + 1] = L.Format("now %s", table.concat(moved, ", ")) end
+    if #gone > 0 then parts[#parts + 1] = L.Format("no longer needed: %s", table.concat(gone, ", ")) end
+    ns.Print(L.Format("|c%sFarmer goals follow your queue:|r %s.",
         ns.COLORS.accent or "ffffffff", table.concat(parts, "; ")))
 end
 
@@ -212,21 +213,26 @@ end
 function FarmerGoals:SetGoal(itemID, amount)
     local farmer = self:Farmer()
     if not farmer then
-        ns.Print("Blackthornes Farmer is not loaded, so there is nowhere to put a goal.")
+        ns.Print(L["Blackthornes Farmer is not loaded, so there is nowhere to put a goal."])
         return false, "no farmer"
     end
 
     local goal, existed = Apply(farmer, itemID, amount)
     if not goal then
-        ns.Print(("No Farmer goal set: %s."):format(existed))
+        ns.Print(L.Format("No Farmer goal set: %s.", existed))
         return false, existed
     end
 
     local target = tonumber(goal.target) or amount
     local have = tonumber(goal.have) or 0
-    ns.Print(("|c%sFarmer goal %s:|r %d %s. You have %d, %d to go."):format(
-        ns.COLORS.profit or ns.COLORS.accent, existed and "updated" or "set",
-        target, tostring(goal.item), have, math.max(0, target - have)))
+    local colour, left = ns.COLORS.profit or ns.COLORS.accent, math.max(0, target - have)
+    if existed then
+        ns.Print(L.Format("|c%sFarmer goal updated:|r %d %s. You have %d, %d to go.",
+            colour, target, tostring(goal.item), have, left))
+    else
+        ns.Print(L.Format("|c%sFarmer goal set:|r %d %s. You have %d, %d to go.",
+            colour, target, tostring(goal.item), have, left))
+    end
 
     ShowPanel(farmer)
     Cheer()
@@ -240,7 +246,7 @@ end
 function FarmerGoals:SetGoals(lines)
     local farmer = self:Farmer()
     if not farmer then
-        ns.Print("Blackthornes Farmer is not loaded, so there is nowhere to put goals.")
+        ns.Print(L["Blackthornes Farmer is not loaded, so there is nowhere to put goals."])
         return 0
     end
 
@@ -251,25 +257,28 @@ function FarmerGoals:SetGoals(lines)
             set[#set + 1] = tostring(goal.item)
         else
             missed[#missed + 1] = ("%s (%s)"):format(
-                name or ItemName(line.itemID) or ("item " .. tostring(line.itemID)), existed)
+                name or ItemName(line.itemID) or L.Format("item %s", tostring(line.itemID)), existed)
         end
     end
 
     if #set == 0 and #missed == 0 then
-        ns.Print("Nothing still needed, so no Farmer goals to set.")
+        ns.Print(L["Nothing still needed, so no Farmer goals to set."])
         return 0
     end
 
     if #set > 0 then
-        ns.Print(("|c%s%d Farmer goal%s set:|r %s."):format(
-            ns.COLORS.profit or ns.COLORS.accent, #set, #set == 1 and "" or "s",
-            table.concat(set, ", ")))
+        local colour = ns.COLORS.profit or ns.COLORS.accent
+        if #set == 1 then
+            ns.Print(L.Format("|c%s%d Farmer goal set:|r %s.", colour, #set, table.concat(set, ", ")))
+        else
+            ns.Print(L.Format("|c%s%d Farmer goals set:|r %s.", colour, #set, table.concat(set, ", ")))
+        end
         ShowPanel(farmer)
         Cheer()
     end
 
     if #missed > 0 then
-        ns.Print(("Not set: %s."):format(table.concat(missed, "; ")))
+        ns.Print(L.Format("Not set: %s.", table.concat(missed, "; ")))
     end
 
     return #set

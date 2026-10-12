@@ -23,6 +23,7 @@
 -- without `linkedFrom` would read as one of this account's own.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local AccountLink = ns.NewModule("AccountLink")
 
@@ -494,7 +495,7 @@ end
 
 function AccountLink:Describe()
     local partners = self:GetPartners()
-    if #partners == 0 then return "Not sharing with another account." end
+    if #partners == 0 then return L["Not sharing with another account."] end
 
     local counts = self:CountLinked()
     local parts = {}
@@ -504,12 +505,19 @@ function AccountLink:Describe()
         for name, count in pairs(counts) do
             if Comm.NameKey(name) == partner.key then held = held + count end
         end
-        local status = state.online and "online" or "not heard from this session"
-        parts[#parts + 1] = ("%s: %s, %d character%s held"):format(
-            partner.name, status, held, held == 1 and "" or "s")
+        local status = state.online and L["online"] or L["not heard from this session"]
+        if held == 1 then
+            parts[#parts + 1] = L.Format("%s: %s, %d character held", partner.name, status, held)
+        else
+            parts[#parts + 1] = L.Format("%s: %s, %d characters held", partner.name, status, held)
+        end
     end
     local pending = Comm:Pending()
-    if pending > 0 then parts[#parts + 1] = ("%d message%s waiting to go"):format(pending, pending == 1 and "" or "s") end
+    if pending == 1 then
+        parts[#parts + 1] = L.Format("%d message waiting to go", pending)
+    elseif pending > 1 then
+        parts[#parts + 1] = L.Format("%d messages waiting to go", pending)
+    end
     return table.concat(parts, ".  ") .. "."
 end
 
@@ -539,7 +547,7 @@ function AccountLink:SetNames(text)
     ns.Config:Set("linkNames", text)
 end
 
-ns.RegisterCommand("share", "share with your other account and guild: with <names>, sync, guild on|off, forget, test",
+ns.RegisterCommand("share", L["share with your other account and guild: with <names>, sync, guild on|off, forget, test"],
     function(args)
         local word, rest = (args or ""):match("^(%S*)%s*(.-)%s*$")
         word = (word or ""):lower()
@@ -547,17 +555,21 @@ ns.RegisterCommand("share", "share with your other account and guild: with <name
         if word == "with" then
             AccountLink:SetNames(rest)
             AccountLink:Check()
-            ns.Print(rest ~= "" and ("sharing with: " .. rest) or "not sharing with another account")
+            ns.Print(rest ~= "" and L.Format("sharing with: %s", rest) or L["not sharing with another account"])
         elseif word == "sync" then
             AccountLink:Check()
-            ns.Print("asked your other account for anything new")
+            ns.Print(L["asked your other account for anything new"])
         elseif word == "guild" then
             local on = (rest or ""):lower() == "on"
             ns.Config:Set("guildPrices", on)
-            ns.Print(on and "guild prices on" or "guild prices off")
+            ns.Print(on and L["guild prices on"] or L["guild prices off"])
         elseif word == "forget" then
             local count = AccountLink:Forget(rest ~= "" and rest or nil)
-            ns.Print(("forgot %d character%s from your other account"):format(count, count == 1 and "" or "s"))
+            if count == 1 then
+                ns.Print(L.Format("forgot %d character from your other account", count))
+            else
+                ns.Print(L.Format("forgot %d characters from your other account", count))
+            end
         elseif word == "test" then
             ns.Comm:Test()
         else

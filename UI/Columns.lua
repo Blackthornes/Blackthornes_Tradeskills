@@ -17,6 +17,7 @@
 -- out at.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -222,7 +223,10 @@ local LINE_HEIGHT = 22
 local function Words(column)
     if column.menuText then return column.menuText end
     local label = column.label
-    return label:sub(1, 1) .. label:sub(2):lower()
+    -- Lua's lower() leaves letters past ASCII alone, so German's capital
+    -- umlauts are lowered by hand ("GEBÜHR" reads "Gebühr", not "GebÜhr").
+    local rest = label:sub(2):lower():gsub("\195\132", "\195\164"):gsub("\195\150", "\195\182"):gsub("\195\156", "\195\188")
+    return label:sub(1, 1) .. rest
 end
 
 local function BuildPopup()
@@ -244,11 +248,11 @@ local function BuildPopup()
     popup.note:SetWidth(POPUP_WIDTH - 20)
     popup.note:SetWordWrap(true)
 
-    popup.showAll = Widgets.CreateButton(popup, "Show all", function()
+    popup.showAll = Widgets.CreateButton(popup, L["Show all"], function()
         if popup.list then Columns:ShowAll(popup.list) end
-    end, { width = 80, height = 20, tooltip = "Tick every column of this list again" })
+    end, { width = 80, height = 20, tooltip = L["Tick every column of this list again"] })
 
-    popup.done = Widgets.CreateButton(popup, "Done", function() popup:Hide() end,
+    popup.done = Widgets.CreateButton(popup, L["Done"], function() popup:Hide() end,
         { width = 60, height = 20, primary = true })
 
     popup.boxes = {}
@@ -276,7 +280,7 @@ function Columns:Fill()
     local list = popup and lists[popup.list]
     if not list then return end
 
-    popup.title:SetText(("COLUMNS: %s"):format(list.title:upper()))
+    popup.title:SetText(L.Format("COLUMNS: %s", list.title:upper()))
     local titleHeight = popup.title.GetStringHeight and popup.title:GetStringHeight()
 
     local y = -8 - (type(titleHeight) == "number" and math.ceil(titleHeight) or 12) - 6
@@ -304,7 +308,7 @@ function Columns:Fill()
 
     popup.note:ClearAllPoints()
     popup.note:SetPoint("TOPLEFT", 10, y - 2)
-    popup.note:SetText("The name column always shows.")
+    popup.note:SetText(L["The name column always shows."])
     local noteHeight = popup.note.GetStringHeight and popup.note:GetStringHeight()
     y = y - 4 - (type(noteHeight) == "number" and math.ceil(noteHeight) or 12) - 8
 
@@ -359,7 +363,7 @@ function Columns:Attach(headings, id, sorter)
     local function Tip(owner)
         if not GameTooltip then return end
         GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-        GameTooltip:SetText("Right-click to choose which columns show", 1, 1, 1)
+        GameTooltip:SetText(L["Right-click to choose which columns show"], 1, 1, 1)
         GameTooltip:Show()
     end
     local function Untip(owner)

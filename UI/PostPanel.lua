@@ -12,6 +12,8 @@
 
 local _, ns = ...
 
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
 local PostPanel = ns.NewModule("PostPanel")
 
 local Theme = ns.Theme
@@ -24,6 +26,20 @@ local PANEL_WIDTH = 348
 local ROW_HEIGHT = 30
 
 local BUTTON_WIDTH = 46
+
+-- Wider when the List or Search word needs it (German runs longer). Measured
+-- once at load; a client that cannot measure yet keeps 46.
+do
+    local measure = Theme and Theme.MeasureText
+    if type(measure) == "function" then
+        for _, word in ipairs({ L["List"], L["Search"] }) do
+            local ok, width = pcall(measure, "small", word)
+            if ok and type(width) == "number" then
+                BUTTON_WIDTH = math.max(BUTTON_WIDTH, width + 10)
+            end
+        end
+    end
+end
 local QUANTITY_WIDTH = 42
 
 -- The red x that ignores an item, at the row's right end past List. A
@@ -140,10 +156,10 @@ local function CreateRow(row)
         Theme.SetBorderColor(self, "accentHi")
         if rawget(self, "haloTextures") then Theme.SetHalo(self, 0.25) end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText("Set your own price", 1, 1, 1)
-        GameTooltip:AddLine("Click to change the price each, or type a total and have it split over the stack. Handy for selling under market value.", 0.9, 0.9, 0.9, true)
+        GameTooltip:SetText(L["Set your own price"], 1, 1, 1)
+        GameTooltip:AddLine(L["Click to change the price each, or type a total and have it split over the stack. Handy for selling under market value."], 0.9, 0.9, 0.9, true)
         if row.data and row.data.priceBasis == "chosen" and row.data.suggestedPrice then
-            GameTooltip:AddDoubleLine("Suggested",
+            GameTooltip:AddDoubleLine(L["Suggested"],
                 Util.FormatMoney(row.data.suggestedPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
         end
         GameTooltip:Show()
@@ -159,7 +175,7 @@ local function CreateRow(row)
     end)
     row.priceField = field
 
-    row.post = Widgets.CreateButton(row, "List", function()
+    row.post = Widgets.CreateButton(row, L["List"], function()
         CommitTyping(PostPanel.list)
         if not row.data then return end
 
@@ -194,10 +210,10 @@ local function CreateRow(row)
         -- all Lead Bands, and Settings names it by the plain item name.
         local line = row.data
         ns.Posting:SetIgnored(line.itemID, true)
-        ns.Print(("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.")
-            :format(line.label or "that item"))
+        ns.Print(L.Format("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.",
+            line.label or L["that item"]))
     end, { width = IGNORE_WIDTH, height = 18, danger = true,
-           tooltip = "Ignore this item: it stops showing on Ready to sell. Settings lists ignored items, each with a Restore button." })
+           tooltip = L["Ignore this item: it stops showing on Ready to sell. Settings lists ignored items, each with a Restore button."] })
     row.ignore:SetPoint("RIGHT", -6, 0)
 end
 
@@ -243,12 +259,12 @@ PostPanel._DetailTooWide = DetailTooWide
 --- Why a line is a loss, in words the player can act on.
 local function LossText(line)
     if line.lossReason == "vendor" then
-        return "Below what a vendor would pay for it."
+        return L["Below what a vendor would pay for it."]
     end
     if line.lossReason == "crafted" then
-        return "Below what you paid to make it, after the auction house's cut."
+        return L["Below what you paid to make it, after the auction house's cut."]
     end
-    return "Below what the materials cost."
+    return L["Below what the materials cost."]
 end
 
 function UpdateRow(row, line)
@@ -274,10 +290,10 @@ function UpdateRow(row, line)
     -- and a commodity posting 63 at once is worth noticing before clicking.
     -- Listing part of a stack says so, since "7 @ 6c" out of 20 in the bag
     -- reads the same as all of them otherwise.
-    local each = ("%d%s @ %s"):format(
-        line.postQuantity,
-        line.postQuantity < maxQuantity and (" of " .. maxQuantity) or "",
-        Util.FormatMoney(line.unitPrice, { noColor = true, short = true }))
+    local eachPrice = Util.FormatMoney(line.unitPrice, { noColor = true, short = true })
+    local each = line.postQuantity < maxQuantity
+        and L.Format("%d of %d @ %s", line.postQuantity, maxQuantity, eachPrice)
+        or L.Format("%d @ %s", line.postQuantity, eachPrice)
     local total = "  =  " .. Util.FormatMoney(line.postTotal or 0, { noColor = true, short = true })
 
     -- Beside the price, so selling and disenchanting read against each
@@ -285,7 +301,7 @@ function UpdateRow(row, line)
     local disenchant, beats = DisenchantFor(line)
     local de = ""
     if disenchant then
-        de = "   DE " .. Util.FormatMoney(disenchant, { noColor = true, short = true })
+        de = "   " .. L.Format("DE %s", Util.FormatMoney(disenchant, { noColor = true, short = true }))
         if beats then de = ("|c%s%s|r"):format(ns.COLORS.profit, de) end
     end
 
@@ -330,7 +346,7 @@ function UpdateRow(row, line)
 
     row.post.tooltipText = line.atALoss
         and LossText(line)
-        or ("List %d of %d at %s each."):format(
+        or L.Format("List %d of %d at %s each.",
             line.postQuantity, maxQuantity,
             Util.FormatMoney(line.unitPrice or 0, { noColor = true }))
 end
@@ -349,12 +365,12 @@ local function ShowRowTooltip(row, line)
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label)
     GameTooltip:AddLine(" ")
 
-    GameTooltip:AddDoubleLine("In bags", tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("Listing", ("%d of %d"):format(
+    GameTooltip:AddDoubleLine(L["In bags"], tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Listing"], L.Format("%d of %d",
         line.postQuantity, line.maxQuantity or line.count), 0.7, 0.7, 0.7, 1, 1, 1)
 
     if line.unitCost then
-        GameTooltip:AddDoubleLine("Cost each",
+        GameTooltip:AddDoubleLine(L["Cost each"],
             Util.FormatMoney(line.unitCost, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
@@ -363,35 +379,35 @@ local function ShowRowTooltip(row, line)
     AddCraftedLines(line)
 
     if line.vendorPrice then
-        GameTooltip:AddDoubleLine("Vendor pays",
+        GameTooltip:AddDoubleLine(L["Vendor pays"],
             Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
     local disenchant, beats = DisenchantFor(line)
     if disenchant then
-        GameTooltip:AddDoubleLine("Disenchant value",
+        GameTooltip:AddDoubleLine(L["Disenchant value"],
             Util.FormatMoney(disenchant, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
         if beats then
-            GameTooltip:AddLine(("Disenchanting it is worth %s more than listing it."):format(
+            GameTooltip:AddLine(L.Format("Disenchanting it is worth %s more than listing it.",
                 Util.FormatMoney(disenchant - line.unitPrice, { noColor = true })), 0.35, 0.85, 0.45, true)
         end
     end
 
     GameTooltip:AddLine(line.isCommodity
-        and "Commodity: sells from every bag at once"
-        or "Item auction: one stack at a time", 0.5, 0.5, 0.5)
+        and L["Commodity: sells from every bag at once"]
+        or L["Item auction: one stack at a time"], 0.5, 0.5, 0.5)
 
     if line.priceBasis == "chosen" then
-        GameTooltip:AddDoubleLine("Your price",
+        GameTooltip:AddDoubleLine(L["Your price"],
             Util.FormatMoney(line.unitPrice, { noColor = true }), 0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
         if line.suggestedPrice then
-            GameTooltip:AddDoubleLine("Suggested",
+            GameTooltip:AddDoubleLine(L["Suggested"],
                 Util.FormatMoney(line.suggestedPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
         end
     end
 
-    GameTooltip:AddLine("Type in the box to list fewer than that.", 0.5, 0.5, 0.5)
-    GameTooltip:AddLine("Click the price to set your own.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Type in the box to list fewer than that."], 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Click the price to set your own."], 0.5, 0.5, 0.5)
 
     GameTooltip:Show()
 end
@@ -425,7 +441,7 @@ function PostPanel:Build()
     -- The house glow round its edge, flaring as it opens.
     Theme.Halo(frame, 8, 0.08)
 
-    local header, title = ns.Collapse.CreateHeader(frame, "Ready to sell")
+    local header, title = ns.Collapse.CreateHeader(frame, L["Ready to sell"])
     self.title = title
 
     -- What everything listed here would fetch, in gold on the header, so it
@@ -453,8 +469,8 @@ function PostPanel:Build()
 
     local half = math.floor((PANEL_WIDTH - 28) / 2)
     local switch = Widgets.CreateTabStrip(body, {
-        { key = "sell", text = "Sell", width = half },
-        { key = "buy", text = "Buy", width = half },
+        { key = "sell", text = L["Sell"], width = half },
+        { key = "buy", text = L["Buy"], width = half },
     }, function(key)
         PostPanel:SetView(key)
     end)
@@ -465,17 +481,15 @@ function PostPanel:Build()
     -- Hide losses (asked 2026-10-11): a small box at the summary line's right
     -- end that leaves out the rows drawn red, the ones the auction house would
     -- sell for less than they cost. Off by default and kept between sessions.
-    local hideLosses = Widgets.CreateCheckbox(body, "Hide losses", function(checked)
+    local hideLosses = Widgets.CreateCheckbox(body, L["Hide losses"], function(checked)
         ns.Config:Set("postHideLosses", checked and true or false)
         PostPanel:Refresh()
     end, PostPanel:HidingLosses())
     hideLosses:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, ns.Collapse.CONTENT_TOP - 28 - 3)
     hideLosses:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Hide losses")
-        GameTooltip:AddLine("Hides items the auction house would sell for less than they cost you: "
-            .. "less than the materials, less than you paid to make them after the cut, "
-            .. "or less than a vendor pays.", 1, 1, 1, true)
+        GameTooltip:SetText(L["Hide losses"])
+        GameTooltip:AddLine(L["Hides items the auction house would sell for less than they cost you: less than the materials, less than you paid to make them after the cut, or less than a vendor pays."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     hideLosses:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -950,11 +964,11 @@ local SEARCH_WIDTH = BUTTON_WIDTH
 function PostPanel.CreateShoppingRow(row)
     ns.CraftPanel.CreateShoppingRow(row)
 
-    row.search = Widgets.CreateButton(row, "Search", function()
+    row.search = Widgets.CreateButton(row, L["Search"], function()
         if PostPanel:CanSearch(row.data) then
             ns.UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall)
         end
-    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = "Search the auction house for this. Pick it in the results and the quantity is filled in with how many you still need." })
+    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = L["Search the auction house for this. Pick it in the results and the quantity is filled in with how many you still need."] })
     row.search:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 
     local inset = -(8 + SEARCH_WIDTH + 6)
@@ -972,7 +986,7 @@ function PostPanel.ShowShoppingTooltip(row, line)
     if ns.UI and ns.UI.ShowMaterialTooltip then ns.UI.ShowMaterialTooltip(row, line) end
     if PostPanel:CanSearch(line) then
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Click to search the auction house", 0.78, 0.64, 0.30)
+        GameTooltip:AddLine(L["Click to search the auction house"], 0.78, 0.64, 0.30)
         GameTooltip:Show()
     end
 end
@@ -997,16 +1011,16 @@ function PostPanel:ShoppingSummary(lines)
     end
 
     if short == 0 then
-        return "You have everything the queue needs.", 0
+        return L["You have everything the queue needs."], 0
     end
 
     -- From the lines in hand. Asked for on its own, the total built the whole
     -- list again on every one-second tick, which the cache above is there
     -- to stop.
     local cost = ns.Queue:GetShoppingTotal(lines)
-    return ("%d material%s to buy, about %s"):format(
-        short, short == 1 and "" or "s",
-        Util.FormatMoney(cost or 0, { short = true })), short
+    local about = Util.FormatMoney(cost or 0, { short = true })
+    return short == 1 and L.Format("%d material to buy, about %s", short, about)
+        or L.Format("%d materials to buy, about %s", short, about), short
 end
 
 function PostPanel:RefreshShopping()
@@ -1017,15 +1031,15 @@ function PostPanel:RefreshShopping()
     local text, short = self:ShoppingSummary(lines)
 
     self.title:SetText(self:IsCollapsed() and short > 0
-        and ("Shopping list (%d)"):format(short) or "Shopping list")
+        and L.Format("Shopping list (%d)", short) or L["Shopping list"])
 
     self.shoppingList:SetData(lines)
     self.empty:SetShown(#lines == 0)
 
     if #lines == 0 then
         self.empty:SetText(ns.Queue:Count() == 0
-            and "Nothing queued.\n\nQueue crafts and the materials they need show up here."
-            or "You already have everything the queue needs.")
+            and L["Nothing queued.\n\nQueue crafts and the materials they need show up here."]
+            or L["You already have everything the queue needs."])
         self.summary:SetText("")
         return
     end
@@ -1087,10 +1101,10 @@ function PostPanel:Refresh()
     -- Folded away, the title is all there is to read, so it carries the count.
     if self:IsCollapsed() then
         self.title:SetText(#lines > 0
-            and ("Ready to sell (%d)"):format(#lines)
-            or "Ready to sell")
+            and L.Format("Ready to sell (%d)", #lines)
+            or L["Ready to sell"])
     else
-        self.title:SetText("Ready to sell")
+        self.title:SetText(L["Ready to sell"])
     end
 
     self.list:SetData(lines)
@@ -1098,9 +1112,10 @@ function PostPanel:Refresh()
 
     if #lines == 0 then
         self.empty:SetText(hidden > 0
-            and ("Everything here would sell at a loss (%d item%s).\n\nUntick Hide losses to see them."):format(
-                hidden, hidden == 1 and "" or "s")
-            or "Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for.")
+            and (hidden == 1
+                and L.Format("Everything here would sell at a loss (%d item).\n\nUntick Hide losses to see them.", hidden)
+                or L.Format("Everything here would sell at a loss (%d items).\n\nUntick Hide losses to see them.", hidden))
+            or L["Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for."])
         self.summary:SetText("")
         self.worth:SetText("")
         return
@@ -1114,12 +1129,13 @@ function PostPanel:Refresh()
 
     self.worth:SetText(Util.FormatMoney(total, { noColor = true, short = true }))
 
-    self.summary:SetText(("%d item%s, about |c%s%s|r%s"):format(
-        #lines, #lines == 1 and "" or "s",
-        ns.COLORS.accent,
-        Util.FormatMoney(total, { noColor = true, short = true }),
-        hidden > 0 and (("  ·  %d hidden"):format(hidden))
-            or losses > 0 and (("  ·  |c%s%d at a loss|r"):format(ns.COLORS.loss, losses)) or ""))
+    local about = ("|c%s%s|r"):format(ns.COLORS.accent,
+        Util.FormatMoney(total, { noColor = true, short = true }))
+    self.summary:SetText((#lines == 1
+            and L.Format("%d item, about %s", #lines, about)
+            or L.Format("%d items, about %s", #lines, about))
+        .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))
+            or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or ""))
 end
 
 --- Put the current wait on every visible List button.
@@ -1148,9 +1164,9 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
             -- Another copy of the item being confirmed does not wait for it.
             local pending = ns.Posting and ns.Posting.pending
             if pending and pending.itemID == row.data.itemID then
-                Apply(row.post, "List", ns.Posting:SecondsUntilPostable(row.data.itemID))
+                Apply(row.post, L["List"], ns.Posting:SecondsUntilPostable(row.data.itemID))
             else
-                Apply(row.post, "List", seconds, reason)
+                Apply(row.post, L["List"], seconds, reason)
             end
         end
     end

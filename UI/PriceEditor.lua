@@ -13,6 +13,7 @@
 -- Prices tab's "Use this price", offered here as a tick box, off unless ticked.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local PriceEditor = ns.NewModule("PriceEditor")
 
@@ -65,7 +66,7 @@ end
 function PriceEditor.Notes(line, price, quantity)
     local notes, refused = {}, false
     if not price then
-        notes[1] = { "Type a price each, or a total.", "muted" }
+        notes[1] = { L["Type a price each, or a total."], "muted" }
         return notes, true
     end
 
@@ -74,19 +75,21 @@ function PriceEditor.Notes(line, price, quantity)
 
     local floor, why = Posting:GetPriceFloor(line.itemID, true)
     if floor and price < floor then
-        notes[#notes + 1] = { ("Under %s each: %s, so it will not be listed."):format(Money(floor), why or "too low"), "loss" }
+        notes[#notes + 1] = { L.Format("Under %s each: %s, so it will not be listed.", Money(floor), why or L["too low"]), "loss" }
         refused = true
     end
 
     local cost = Posting:BelowCost(line.itemID, price)
     if cost then
-        notes[#notes + 1] = { ("Under the %s the materials cost. Turn on 'Recommend selling at a loss' in Settings to list it."):format(Money(cost)), "loss" }
+        notes[#notes + 1] = { L.Format("Under the %s the materials cost. Turn on '%s' in Settings to list it.",
+            Money(cost), L["Recommend selling at a loss"]), "loss" }
         refused = true
     end
 
     local paid = Posting:BelowCraftedCost(line.itemID, price)
     if paid then
-        notes[#notes + 1] = { ("Under the %s you paid to make it. Turn off 'Never below what I paid' in Settings to list it."):format(Money(paid)), "loss" }
+        notes[#notes + 1] = { L.Format("Under the %s you paid to make it. Turn off '%s' in Settings to list it.",
+            Money(paid), L["Never below what I paid"]), "loss" }
         refused = true
     end
 
@@ -94,23 +97,23 @@ function PriceEditor.Notes(line, price, quantity)
     if market and price < market then
         local under = math.floor((market - price) / market * 100 + 0.5)
         if under >= 1 then
-            notes[#notes + 1] = { ("%d%% under market value (%s each)."):format(under, Money(market)), "warn" }
+            notes[#notes + 1] = { L.Format("%d%% under market value (%s each).", under, Money(market)), "warn" }
         end
     elseif market and price > market then
         local over = math.floor((price - market) / market * 100 + 0.5)
         if over >= 1 then
-            notes[#notes + 1] = { ("%d%% over market value (%s each)."):format(over, Money(market)), "muted" }
+            notes[#notes + 1] = { L.Format("%d%% over market value (%s each).", over, Money(market)), "muted" }
         end
     end
 
     if IsCommodity(line) == false then
-        notes[#notes + 1] = { "Gear lists at whole silver.", "muted" }
+        notes[#notes + 1] = { L["Gear lists at whole silver."], "muted" }
     end
 
     if not refused and ns.Profit and ns.Profit.NetFromListing then
         local ok, net = pcall(ns.Profit.NetFromListing, ns.Profit, line.itemID, price)
         if ok and type(net) == "number" then
-            notes[#notes + 1] = { ("You get about %s after the auction house's cut."):format(
+            notes[#notes + 1] = { L.Format("You get about %s after the auction house's cut.",
                 Money(math.max(0, math.floor(net * (quantity or 1))))), "muted" }
         end
     end
@@ -211,7 +214,7 @@ function PriceEditor:Build()
 
     Theme.Fill(frame, "window")
     if ns.Titanforged then
-        ns.Titanforged:Dress(frame, { title = "Your price", close = function() PriceEditor:Hide() end })
+        ns.Titanforged:Dress(frame, { title = L["Your price"], close = function() PriceEditor:Hide() end })
     else
         Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
     end
@@ -230,25 +233,25 @@ function PriceEditor:Build()
     self.name = name
 
     -- What Ready to sell suggested, and the way back to it.
-    local suggested = RowLabel(frame, "Suggested", icon, -14)
+    local suggested = RowLabel(frame, L["Suggested"], icon, -14)
     local suggestedValue = Theme.CreateLabel(frame, "small", "accent")
     suggestedValue:SetPoint("LEFT", suggested, "RIGHT", 0, 0)
     self.suggested = suggestedValue
 
-    self.reset = Widgets.CreateButton(frame, "Use suggested", function()
+    self.reset = Widgets.CreateButton(frame, L["Use suggested"], function()
         PriceEditor:SetPrice(nil)
     end, { width = 100, height = 20,
-           tooltip = "Go back to the price Ready to sell suggested." })
+           tooltip = L["Go back to the price Ready to sell suggested."] })
     self.reset:SetPoint("RIGHT", frame, "RIGHT", -INSET, 0)
     self.reset:SetPoint("TOP", suggested, "TOP", 0, 4)
 
     -- Each, how many, and the total: change any one and the others follow.
-    local each = RowLabel(frame, "Each", suggested, -16)
+    local each = RowLabel(frame, L["Each"], suggested, -16)
     self.each = MoneyBoxes(frame, function(copper) PriceEditor:SetPrice(copper) end)
     self.each:SetPoint("LEFT", each, "RIGHT", 0, 0)
-    self.each:Hover("Price each", "What one sells for. The total follows.")
+    self.each:Hover(L["Price each"], L["What one sells for. The total follows."])
 
-    local count = RowLabel(frame, "How many", each, -16)
+    local count = RowLabel(frame, L["How many"], each, -16)
     self.quantity = Widgets.CreateNumberBox(frame, {
         width = 48, height = 20, min = 1, background = "panel",
         onChange = function(value) PriceEditor:SetQuantity(value) end,
@@ -257,10 +260,10 @@ function PriceEditor:Build()
     self.ofLabel = Theme.CreateLabel(frame, "small", "dim")
     self.ofLabel:SetPoint("LEFT", self.quantity, "RIGHT", 6, 0)
 
-    local total = RowLabel(frame, "Total", count, -16)
+    local total = RowLabel(frame, L["Total"], count, -16)
     self.total = MoneyBoxes(frame, function(copper) PriceEditor:SetTotal(copper) end)
     self.total:SetPoint("LEFT", total, "RIGHT", 0, 0)
-    self.total:Hover("Total", "What the lot sells for. It is split over how many you list, rounded down.")
+    self.total:Hover(L["Total"], L["What the lot sells for. It is split over how many you list, rounded down."])
 
     local divider = Theme.CreateDivider(frame)
     divider:SetPoint("TOPLEFT", total, "BOTTOMLEFT", 0, -12)
@@ -274,23 +277,23 @@ function PriceEditor:Build()
     notes:SetJustifyV("TOP")
     self.notes = notes
 
-    self.keep = Widgets.CreateCheckbox(frame, "Keep as my price", nil, false)
+    self.keep = Widgets.CreateCheckbox(frame, L["Keep as my price"], nil, false)
     self.keep:SetPoint("TOPLEFT", notes, "BOTTOMLEFT", 0, -10)
     self.keep:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
-        GameTooltip:SetText("Keep as my price", 1, 1, 1)
-        GameTooltip:AddLine("Ticked, this price is saved on the Prices tab as \"Use this price\" and used from now on. Unticked, it lasts until you log out or /reload.", 0.9, 0.9, 0.9, true)
+        GameTooltip:SetText(L["Keep as my price"], 1, 1, 1)
+        GameTooltip:AddLine(L["Ticked, this price is saved on the Prices tab as \"Use this price\" and used from now on. Unticked, it lasts until you log out or /reload."], 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
     self.keep:HookScript("OnLeave", function() GameTooltip:Hide() end)
 
-    self.list = Widgets.CreateButton(frame, "List", function() PriceEditor:List() end,
+    self.list = Widgets.CreateButton(frame, L["List"], function() PriceEditor:List() end,
         { width = 110, height = 24, primary = true })
     self.list:SetPoint("BOTTOMRIGHT", -INSET, 14)
 
-    self.done = Widgets.CreateButton(frame, "Done", function() PriceEditor:Done() end,
+    self.done = Widgets.CreateButton(frame, L["Done"], function() PriceEditor:Done() end,
         { width = 80, height = 24,
-          tooltip = "Keep this price on Ready to sell and close. Nothing is listed." })
+          tooltip = L["Keep this price on Ready to sell and close. Nothing is listed."] })
     self.done:SetPoint("RIGHT", self.list, "LEFT", -8, 0)
 
     self.frame = frame
@@ -383,7 +386,7 @@ function PriceEditor:KeepIfTicked()
         if ok and type(itemName) == "string" and itemName ~= "" then name = itemName end
     end
     ns.Prices:SetMine(line.itemID, line.unitPrice, "use", name)
-    ns.Print(("saved %s as your price for %s on the Prices tab."):format(
+    ns.Print(L.Format("saved %s as your price for %s on the Prices tab.",
         Util.FormatMoney(line.unitPrice), line.label or Util.GetItemLabel(line.itemID)))
 end
 
@@ -434,14 +437,14 @@ function PriceEditor:Draw()
     if r then self.name:SetTextColor(r, g, b) else self.name:SetTextColor(Theme.Unpack("text")) end
 
     local suggested = line.priceBasis == "chosen" and line.suggestedPrice or line.unitPrice
-    self.suggested:SetText(suggested and (Util.FormatMoney(suggested) .. " each") or "no price yet")
+    self.suggested:SetText(suggested and L.Format("%s each", Util.FormatMoney(suggested)) or L["no price yet"])
     self.reset:SetEnabledState(line.priceBasis == "chosen")
 
     local maxQuantity = line.maxQuantity or line.count or 1
     local quantity = line.postQuantity or maxQuantity
     self.quantity:SetLimits(1, math.max(1, maxQuantity))
     self.quantity:SetValue(quantity, true)
-    self.ofLabel:SetText(("of %d"):format(maxQuantity))
+    self.ofLabel:SetText(L.Format("of %d", maxQuantity))
 
     local price = line.unitPrice
     self.each:Set(price or 0)
@@ -455,11 +458,11 @@ function PriceEditor:Draw()
     self.notes:SetText(table.concat(parts, "\n"))
     self:FitHeight()
 
-    self.list:SetText(("List %d"):format(quantity))
+    self.list:SetText(L.Format("List %d", quantity))
     self.list:SetEnabledState(price ~= nil and not refused)
     self.list.tooltipText = refused
-        and "This price would be refused. The note above says why."
-        or (price and ("List %d at %s each, %s in all."):format(quantity,
+        and L["This price would be refused. The note above says why."]
+        or (price and L.Format("List %d at %s each, %s in all.", quantity,
             Util.FormatMoney(price, { noColor = true }),
             Util.FormatMoney(price * quantity, { noColor = true })))
 end

@@ -6,6 +6,7 @@
 -- worse trade than ~200 lines of framework we control.
 
 local ADDON_NAME, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 _G.BlackthornesTS = ns
 
@@ -149,7 +150,7 @@ function ns.KeepCheck(name, fn, ...)
             version = ns.VERSION,
             lines = lines,
         }
-        ns.Print("Saved for Claude, /reload to write it.")
+        ns.Print(L["Saved for Claude, /reload to write it."])
     end
     if not ok then error(err, 0) end
 end
@@ -440,7 +441,7 @@ local function RunLifecycle(method)
         if type(fn) == "function" then
             local ok, err = pcall(fn, module)
             if not ok then
-                ns.Warn(("module %s:%s failed"):format(module.moduleName, method))
+                ns.Warn(L.Format("module %s:%s failed", module.moduleName, method))
                 geterrorhandler()(err)
             end
         end
@@ -509,14 +510,14 @@ local function ShowHelp(args)
         return
     end
 
-    ns.PrintRaw(("  |c%s/bts|r  |c%sopen or close the window|r"):format(ns.COLORS.accent, ns.COLORS.muted))
+    ns.PrintRaw(("  |c%s/bts|r  |c%s%s|r"):format(ns.COLORS.accent, ns.COLORS.muted, L["open or close the window"]))
     for _, name in ipairs(PLAYER_COMMANDS) do HelpLine(name) end
-    ns.PrintRaw(("  |c%s/bts help all|r shows more, including checks and developer tools."):format(
+    ns.PrintRaw(L.Format("  |c%s/bts help all|r shows more, including checks and developer tools.",
         ns.COLORS.accent))
 end
 
-ns.RegisterCommand("help", "show the main commands (/bts help all: every command)", ShowHelp)
-ns.RegisterCommand("perf", "what took longest this session, to find a hitch (/bts perf clear starts over)", function(rest)
+ns.RegisterCommand("help", L["show the main commands (/bts help all: every command)"], ShowHelp)
+ns.RegisterCommand("perf", L["what took longest this session, to find a hitch (/bts perf clear starts over)"], function(rest)
     if (rest or ""):lower():match("^%s*clear") then
         Perf:Reset()
         ns.Print("speed check cleared.")
@@ -544,7 +545,7 @@ SlashCmdList["BLACKTHORNESTS"] = function(input)
 
     local command = ns.commands[keyword:lower()]
     if not command then
-        ns.Print(("unknown command '%s'. Try |c%s/bts help|r."):format(keyword, ns.COLORS.accent))
+        ns.Print(L.Format("unknown command '%s'. Try |c%s/bts help|r.", keyword, ns.COLORS.accent))
         return
     end
 
@@ -556,7 +557,7 @@ SlashCmdList["BLACKTHORNESTS"] = function(input)
     local ok, err = pcall(command.fn, rest or "")
 
     if not ok then
-        ns.Warn(("/bts %s failed: %s"):format(keyword, tostring(err)))
+        ns.Warn(L.Format("/bts %s failed: %s", keyword, tostring(err)))
         geterrorhandler()(err)
     end
 end

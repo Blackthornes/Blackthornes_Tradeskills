@@ -17,6 +17,7 @@
 -- another frame may as well not exist.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local CraftPanel = ns.NewModule("CraftPanel")
 
@@ -273,7 +274,7 @@ local SORTS = {
 
 -- What the sort button steps through, and what it says for each.
 local SORT_ORDER = { "profit", "levelup", "name" }
-local SORT_LABEL = { profit = "Profit", levelup = "Level Up", name = "A-Z" }
+local SORT_LABEL = { profit = L["Profit"], levelup = L["Level Up"], name = L["A-Z"] }
 
 CraftPanel.SORT_ORDER = SORT_ORDER
 
@@ -343,7 +344,7 @@ end
 --- One recipe's row, or nil when it is left out. `tally` counts what the
 --- Keep in stock limit hid.
 local function RowFor(recipeID, recipe, opts, search, tally)
-    local name = recipe.name or ("recipe " .. tostring(recipeID))
+    local name = recipe.name or L.Format("recipe %s", tostring(recipeID))
 
     -- Plain substring, not a pattern: a recipe name with a hyphen in
     -- it would otherwise be a malformed pattern and match nothing.
@@ -532,13 +533,13 @@ local function QueueMore(line, quantity)
     if room then
         if room <= 0 then
             if line.waitingForLow then
-                ns.Warn(("%s: you have %d (%d queued). Wait until it runs low is on, so more are made once you are down to %d."):format(
+                ns.Warn(L.Format("%s: you have %d (%d queued). Wait until it runs low is on, so more are made once you are down to %d.",
                     line.name, (line.stock or 0) + queuedNow, queuedNow, line.restockAt or 0))
             elseif queuedNow > 0 then
-                ns.Warn(("%s: you have %d and %d queued, which fills your limit of %d, so none were queued."):format(
+                ns.Warn(L.Format("%s: you have %d and %d queued, which fills your limit of %d, so none were queued.",
                     line.name, line.stock or 0, queuedNow, line.postLimit or 0))
             else
-                ns.Warn(("%s: you already have %d and your limit is %d, so none were queued."):format(
+                ns.Warn(L.Format("%s: you already have %d and your limit is %d, so none were queued.",
                     line.name, line.stock or 0, line.postLimit or 0))
             end
             return
@@ -546,7 +547,7 @@ local function QueueMore(line, quantity)
 
         if quantity > room then
             quantity = room
-            ns.Print(("%s: queued %d, your limit of %d has room for no more."):format(
+            ns.Print(L.Format("%s: queued %d, your limit of %d has room for no more.",
                 line.name, quantity, line.postLimit or 0))
         end
     end
@@ -579,7 +580,7 @@ function CraftPanel:SetQueued(line, wanted)
         ns.Queue:SetQuantity(line.recipeID, wanted)
         if line.roomInCrafts then line.roomInCrafts = line.roomInCrafts + (current - wanted) end
     elseif not entry and wanted == 0 and ns.Queue:Find(line.recipeID) then
-        ns.Print(("%s is only queued as a material for another craft. Lower that craft to need fewer."):format(line.name))
+        ns.Print(L.Format("%s is only queued as a material for another craft. Lower that craft to need fewer.", line.name))
     end
 end
 
@@ -674,7 +675,7 @@ local function CreateRow(row)
 
     -- Only on rows with something queued, so the names on the rest keep
     -- their room.
-    row.craft = Widgets.CreateButton(row, "Craft", function()
+    row.craft = Widgets.CreateButton(row, L["Craft"], function()
         if row.data then CraftPanel:CraftRow(row.data) end
     end, { width = CRAFT_WIDTH, height = 15, primary = true })
     row.craft:SetPoint("RIGHT", row.remove, "LEFT", -CRAFT_GAP, 0)
@@ -693,17 +694,17 @@ local function StockText(line)
     -- Nothing held says nothing: "have 0 of 5" on every row was most of what
     -- pushed the line off the end.
     if line.postLimit and line.postLimit > 0 and (stock > 0 or line.atPostLimit) then
-        local text = ("have %d of %d"):format(stock, line.postLimit)
+        local text = L.Format("have %d of %d", stock, line.postLimit)
         -- Queued crafts count toward the limit too; without saying so,
         -- "have 0 of 5, at your limit" contradicted itself.
         if line.atPostLimit and line.waitingForLow then
-            return ("have %d, restock at %d"):format(
+            return L.Format("have %d, restock at %d",
                 stock + (line.queuedElsewhere or 0), line.restockAt or 0), true
         end
         if line.atPostLimit and (line.queuedElsewhere or 0) > 0 then
-            return ("have %d, %d queued, limit %d"):format(stock, line.queuedElsewhere, line.postLimit), true
+            return L.Format("have %d, %d queued, limit %d", stock, line.queuedElsewhere, line.postLimit), true
         end
-        if line.atPostLimit then return text .. ", at your limit" end
+        if line.atPostLimit then return L.Format("%s, at your limit", text) end
         return text
     end
 
@@ -712,10 +713,10 @@ local function StockText(line)
     if line.postLimit and line.postLimit > 0 then return nil end
 
     if (line.posted or 0) > 0 then
-        return ("have %d, %d listed"):format(stock, line.posted)
+        return L.Format("have %d, %d listed", stock, line.posted)
     end
 
-    return ("have %d"):format(stock)
+    return L.Format("have %d", stock)
 end
 
 local function UpdateRow(row, line)
@@ -751,12 +752,12 @@ local function UpdateRow(row, line)
         local open = CraftPanel:GetOpenRecipeIDs()
         local here = not open or open[line.recipeID]
 
-        row.craft:SetText(busy and "Stop" or "Craft")
+        row.craft:SetText(busy and L["Stop"] or L["Craft"])
         row.craft:SetEnabledState(busy or (ready and here) or false)
-        row.craft.tooltipText = busy and "Stop crafting"
-            or not here and "Open the profession that makes this to craft it"
-            or not ready and (reason or "Nothing to make it with yet")
-            or ("Craft the %d queued, as many as your materials make"):format(line.queued)
+        row.craft.tooltipText = busy and L["Stop crafting"]
+            or not here and L["Open the profession that makes this to craft it"]
+            or not ready and (reason or L["Nothing to make it with yet"])
+            or L.Format("Craft the %d queued, as many as your materials make", line.queued)
     end
 
     -- Rarity, the same as the Profit tab and the sell list, so the three read
@@ -788,25 +789,25 @@ local function UpdateRow(row, line)
         local parts = {}
 
         if line.priceable then
-            parts[#parts + 1] = ("%s each"):format(
+            parts[#parts + 1] = L.Format("%s each",
                 Util.FormatMoney(line.profit, { noColor = true, short = true, parts = coins }))
         elseif line.soulbound then
             -- The whole reason is in the tooltip; the row has room for one word.
-            parts[#parts + 1] = "soulbound"
+            parts[#parts + 1] = L["soulbound"]
         else
-            parts[#parts + 1] = line.reason or "no price data"
+            parts[#parts + 1] = line.reason or L["no price data"]
         end
 
         parts[#parts + 1] = line.craftable > 0
-            and ("can make %d"):format(line.craftable)
-            or "no materials"
+            and L.Format("can make %d", line.craftable)
+            or L["no materials"]
 
         if stockText then parts[#parts + 1] = stockText end
 
         -- Once: at the limit the stock already says how many are queued, and
         -- the line said "queued" twice.
         if withQueued and line.queued > 0 and not saysQueued then
-            parts[#parts + 1] = ("queued %d"):format(line.queued)
+            parts[#parts + 1] = L.Format("queued %d", line.queued)
         end
 
         return table.concat(parts, " · ")
@@ -829,24 +830,24 @@ local function UpdateRow(row, line)
     end
 
     if limitApplies and line.waitingForLow then
-        row.add.tooltipText = ("You have %d %s. Wait until it runs low is on, so more are queued once you are down to %d. Tick Ignore max on hand to queue more now."):format(
+        row.add.tooltipText = L.Format("You have %d %s. Wait until it runs low is on, so more are queued once you are down to %d. Tick Ignore max on hand to queue more now.",
             (line.stock or 0) + (line.queuedElsewhere or 0), line.name, line.restockAt or 0)
     elseif limitApplies then
         row.add.tooltipText = ((line.queuedElsewhere or 0) > 0
-            and ("You have %d %s and %d queued, which fills your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
+            and L.Format("You have %d %s and %d queued, which fills your limit. Tick Ignore max on hand, or raise it in Settings, to queue more.",
                 line.stock or 0, line.name, line.queuedElsewhere)
-            or ("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more."):format(
+            or L.Format("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more.",
                 line.stock or 0, line.name))
     else
-        row.add.tooltipText = ("Queue one more %s. Or type how many you want in the box."):format(line.name)
+        row.add.tooltipText = L.Format("Queue one more %s. Or type how many you want in the box.", line.name)
     end
 
     -- Greyed out with nothing of this recipe's own in the queue, so the
     -- button never looks like it did something when it could not.
     row.remove:SetEnabledState(line.queued > 0)
     row.remove.tooltipText = line.queued > 0
-        and ("Queue one fewer %s. Right-click the row to take all of it off."):format(line.name)
-        or "Nothing of this queued yet"
+        and L.Format("Queue one fewer %s. Right-click the row to take all of it off.", line.name)
+        or L["Nothing of this queued yet"]
 end
 
 CraftPanel._UpdateRow = UpdateRow
@@ -856,26 +857,26 @@ local function ShowRowTooltip(row, line)
     GameTooltip:AddLine(" ")
 
     if line.priceable then
-        GameTooltip:AddDoubleLine("Profit each",
+        GameTooltip:AddDoubleLine(L["Profit each"],
             Util.FormatMoney(line.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     else
-        GameTooltip:AddLine(line.reason or "No price data for this yet", 0.9, 0.38, 0.31)
+        GameTooltip:AddLine(line.reason or L["No price data for this yet"], 0.9, 0.38, 0.31)
     end
 
     -- Above materials, because on a profession still climbing it is the thing
     -- that decides what to make with them.
     if line.skillUpTier then
         local r, g, b = ns.SkillUp:GetTierColor(line.skillUpTier)
-        GameTooltip:AddDoubleLine("Skill up",
+        GameTooltip:AddDoubleLine(L["Skill up"],
             ns.SkillUp:GetTierLabel(line.skillUpTier), 0.7, 0.7, 0.7, r, g, b)
 
         if line.skillUpStale then
-            GameTooltip:AddLine("Read at a lower skill. It may have gone green since.",
+            GameTooltip:AddLine(L["Read at a lower skill. It may have gone green since."],
                 0.91, 0.76, 0.35, true)
         end
     end
 
-    GameTooltip:AddDoubleLine("Materials for", tostring(line.craftable),
+    GameTooltip:AddDoubleLine(L["Materials for"], tostring(line.craftable),
         0.7, 0.7, 0.7, 1, 1, 1)
 
     -- Stock first: it is the thing that decides whether to make more at all,
@@ -884,19 +885,19 @@ local function ShowRowTooltip(row, line)
 
     if stockText then
         if line.atPostLimit then
-            GameTooltip:AddDoubleLine("Already have", stockText,
+            GameTooltip:AddDoubleLine(L["Already have"], stockText,
                 0.7, 0.7, 0.7, 0.95, 0.65, 0.25)
         else
-            GameTooltip:AddDoubleLine("Already have", stockText, 0.7, 0.7, 0.7, 1, 1, 1)
+            GameTooltip:AddDoubleLine(L["Already have"], stockText, 0.7, 0.7, 0.7, 1, 1, 1)
         end
     end
 
     if line.queued > 0 then
-        GameTooltip:AddDoubleLine("Already queued", tostring(line.queued),
+        GameTooltip:AddDoubleLine(L["Already queued"], tostring(line.queued),
             0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
     end
 
-    GameTooltip:AddLine("Left-click to queue, right-click to remove, Shift-click to search the auction house.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Left-click to queue, right-click to remove, Shift-click to search the auction house."], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -946,7 +947,7 @@ function CraftPanel:Build()
     -- The house glow round its edge, flaring as it opens.
     Theme.Halo(frame, 8, 0.08)
 
-    local header, title = ns.Collapse.CreateHeader(frame, "Craft queue")
+    local header, title = ns.Collapse.CreateHeader(frame, L["Craft queue"])
     self.title = title
 
     -- Everything under the title, so the collapse button can fold it away in
@@ -979,7 +980,7 @@ function CraftPanel:Build()
         CraftPanel.sortBy = SORT_ORDER[nextIndex]
         CraftPanel:UpdateSortButton()
         CraftPanel:Refresh()
-    end, { width = 116, height = 18, tooltip = "Change the order of this list" })
+    end, { width = 116, height = 18, tooltip = L["Change the order of this list"] })
     -- On the header strip, though it folds away with the body.
     sort:SetPoint("RIGHT", header, "RIGHT", -6, 0)
     self.sortButton = sort
@@ -988,7 +989,7 @@ function CraftPanel:Build()
     -- Coalesced rather than refreshed per keystroke: every refresh prices
     -- every recipe the profession is showing, and typing "copper" would
     -- otherwise do that six times before the word is finished.
-    local search = Widgets.CreateSearchBox(body, "Search recipes", function()
+    local search = Widgets.CreateSearchBox(body, L["Search recipes"], function()
         CraftPanel:RequestRefresh()
     end)
     -- One anchor and an explicit size. A TOPLEFT under the title plus a
@@ -1028,7 +1029,7 @@ function CraftPanel:Build()
     -- list ends clearly where the buttons begin.
     ns.Collapse.CreateFooter(body, 78)
 
-    local craft = Widgets.CreateButton(body, "Craft next", function()
+    local craft = Widgets.CreateButton(body, L["Craft next"], function()
         if ns.Crafting:IsBusy() then
             ns.Crafting:Stop()
         else
@@ -1048,15 +1049,15 @@ function CraftPanel:Build()
     -- The Keep in stock limit (Settings) hides crafts you already hold enough
     -- of and caps what + will queue. Ticking this lifts both, for this pane
     -- only, without changing the limit itself. Remembered between sessions.
-    local ignoreLimit = Widgets.CreateCheckbox(body, "Ignore max on hand", function(checked)
+    local ignoreLimit = Widgets.CreateCheckbox(body, L["Ignore max on hand"], function(checked)
         ns.Config:Set("craftPaneIgnoreLimit", checked)
         CraftPanel:Refresh()
     end, self:IgnoringLimit())
     ignoreLimit:SetPoint("BOTTOMLEFT", 14, 70)
     ignoreLimit:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
-        GameTooltip:SetText("Ignore max on hand", 1, 1, 1)
-        GameTooltip:AddLine("Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and the boxes queue the full number you type. Your setting is not changed.", 0.8, 0.8, 0.8, true)
+        GameTooltip:SetText(L["Ignore max on hand"], 1, 1, 1)
+        GameTooltip:AddLine(L["Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and the boxes queue the full number you type. Your setting is not changed."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1090,14 +1091,14 @@ function CraftPanel:Build()
     progress:SetPoint("LEFT", summary, "LEFT", 0, 0)
     self.progress = progress
 
-    local openQueue = Widgets.CreateButton(body, "Queue tab", function()
+    local openQueue = Widgets.CreateButton(body, L["Queue tab"], function()
         ns.UI:Show()
         ns.UI:SelectTab("queue")
-    end, { width = QUEUE_TAB_WIDTH, height = 18, tooltip = "Open the full queue, with its shopping list" })
+    end, { width = QUEUE_TAB_WIDTH, height = 18, tooltip = L["Open the full queue, with its shopping list"] })
     openQueue:SetPoint("BOTTOMRIGHT", -14, 18)
 
     -- A queue can take a while to build, so emptying it takes a second click.
-    local clear = Widgets.CreateButton(body, "Clear queue", function()
+    local clear = Widgets.CreateButton(body, L["Clear queue"], function()
         CraftPanel:OnClearClicked()
     end, { width = CLEAR_WIDTH, height = 18 })
     clear:SetPoint("RIGHT", openQueue, "LEFT", -6, 0)
@@ -1116,7 +1117,8 @@ function CraftPanel:OnClearClicked()
         self.clearArmedUntil = nil
         local count = ns.Queue:Count()
         ns.Queue:Clear()
-        ns.Print(("Craft queue cleared (%d entr%s)."):format(count, count == 1 and "y" or "ies"))
+        ns.Print(count == 1 and L.Format("Craft queue cleared (%d entry).", count)
+            or L.Format("Craft queue cleared (%d entries).", count))
         self:UpdateClearButton()
         return
     end
@@ -1143,23 +1145,23 @@ function CraftPanel:UpdateClearButton()
 
     local armed = self.clearArmedUntil ~= nil and GetTime() < self.clearArmedUntil
 
-    button:SetText(armed and "Click to clear" or "Clear queue")
+    button:SetText(armed and L["Click to clear"] or L["Clear queue"])
     button:SetEnabledState(not empty)
     button:SetConfirming(armed)
 
-    button.tooltipText = empty and "The queue is empty"
-        or armed and "Click again to empty the whole craft queue"
-        or "Empty the whole craft queue. Asks you to click again first."
+    button.tooltipText = empty and L["The queue is empty"]
+        or armed and L["Click again to empty the whole craft queue"]
+        or L["Empty the whole craft queue. Asks you to click again first."]
 end
 
 function CraftPanel:UpdateSortButton()
     if not self.sortButton then return end
 
-    self.sortButton:SetText("Sort by: " .. (SORT_LABEL[self.sortBy] or "Profit"))
+    self.sortButton:SetText(L.Format("Sort by: %s", SORT_LABEL[self.sortBy] or L["Profit"]))
     self.sortButton.tooltipText = ({
-        profit = "Best-paying crafts first. Click to sort by Level Up.",
-        levelup = "Best chance of a skill up first (orange, yellow, green), cheapest materials first within each colour. Click to sort by name.",
-        name = "Sorted by name. Click to sort by profit.",
+        profit = L["Best-paying crafts first. Click to sort by Level Up."],
+        levelup = L["Best chance of a skill up first (orange, yellow, green), cheapest materials first within each colour. Click to sort by name."],
+        name = L["Sorted by name. Click to sort by profit."],
     })[self.sortBy]
 end
 
@@ -1311,47 +1313,47 @@ function CraftPanel:UpdateCraftButton()
     if not button then return end
 
     if ns.Crafting:IsBusy() then
-        button:SetText("Stop crafting")
+        button:SetText(L["Stop crafting"])
         button:SetEnabledState(true)
-        button.tooltipText = "Stop after the current craft"
+        button.tooltipText = L["Stop after the current craft"]
         return
     end
 
     if ns.Queue:Count() == 0 then
-        button:SetText("Craft next")
+        button:SetText(L["Craft next"])
         button:SetEnabledState(false)
-        button.tooltipText = "Nothing is queued"
+        button.tooltipText = L["Nothing is queued"]
         return
     end
 
     local entry, readyElsewhere = self:GetNextReadyHere()
 
     if not entry then
-        button:SetText("Craft next")
+        button:SetText(L["Craft next"])
         button:SetEnabledState(false)
 
         if readyElsewhere > 0 then
             -- Ready, but not at this window. Say so, rather than reporting the
             -- first entry's obstacle: "need materials" would be a lie about a
             -- craft whose materials are sitting in the bags.
-            button.tooltipText = ("%d queued craft%s ready, but for another profession. Open that profession to make %s."):format(
-                readyElsewhere, readyElsewhere == 1 and " is" or "s are",
-                readyElsewhere == 1 and "it" or "them")
+            button.tooltipText = readyElsewhere == 1
+                and L.Format("%d queued craft is ready, but for another profession. Open that profession to make it.", readyElsewhere)
+                or L.Format("%d queued crafts are ready, but for another profession. Open that profession to make them.", readyElsewhere)
             return
         end
 
         -- Report the first entry's actual obstacle rather than a generic one.
         local _, reason = ns.Crafting:GetReadiness(ns.Queue:GetAll()[1].recipeID)
-        button.tooltipText = reason or "Nothing here can be made yet"
+        button.tooltipText = reason or L["Nothing here can be made yet"]
         return
     end
 
     local recipe = ns.Recipes:GetAny(entry.recipeID)
     local canMake = math.min(entry.quantity, ns.Profit:GetCraftableCount(entry.recipeID))
 
-    button:SetText(("Craft %dx %s"):format(canMake, (recipe and recipe.name) or "item"))
+    button:SetText(L.Format("Craft %dx %s", canMake, (recipe and recipe.name) or L["item"]))
     button:SetEnabledState(true)
-    button.tooltipText = "One click makes every craft in this entry"
+    button.tooltipText = L["One click makes every craft in this entry"]
 end
 
 --- The part of a refresh that comes before the rows: the frame laid out, the
@@ -1367,13 +1369,13 @@ function CraftPanel:BeginRefresh()
     if self:IsCollapsed() then
         local queued = ns.Queue:Count()
         self.title:SetText(queued > 0
-            and ("Craft queue (%d queued)"):format(queued)
-            or "Craft queue")
+            and L.Format("Craft queue (%d queued)", queued)
+            or L["Craft queue"])
         self:RefreshQueued()
         return nil
     end
 
-    self.title:SetText("Craft queue")
+    self.title:SetText(L["Craft queue"])
 
     local opts = {
         search = self.search and self.search:GetText() or "",
@@ -1403,10 +1405,10 @@ function CraftPanel:ApplyRows(rows, opts)
         local searching = self.search and self.search:GetText() ~= ""
 
         self.empty:SetText(searching
-            and "Nothing here matches that."
+            and L["Nothing here matches that."]
             or (self.hiddenAtLimit or 0) > 0
-                and "Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."
-            or "No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment.")
+                and L["Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."]
+            or L["No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment."])
     end
 
     self:UpdateCraftButton()
@@ -1490,7 +1492,7 @@ function CraftPanel:UpdateSummary()
     self.summaryNote = nil
 
     if queued == 0 then
-        self.summary:SetText("Nothing queued")
+        self.summary:SetText(L["Nothing queued"])
         self.summary:SetTextColor(Theme.Unpack("dim"))
         return
     end
@@ -1503,7 +1505,7 @@ function CraftPanel:UpdateSummary()
     local marker = ""
     if not totals.priceable then
         marker = ("|c%s*|r"):format(ns.COLORS.warn)
-        self.summaryNote = "Some queued crafts have no price, so this profit leaves them out."
+        self.summaryNote = L["Some queued crafts have no price, so this profit leaves them out."]
     end
 
     -- The profit in its own colour: green when the queue pays, red when not.
@@ -1511,7 +1513,7 @@ function CraftPanel:UpdateSummary()
     -- and an amount too long for it loses coins rather than its end.
     local texts = {}
     for _, coins in ipairs({ 3, 2, 1 }) do
-        texts[#texts + 1] = ("%d queued · profit |c%s%s|r%s"):format(totals.crafts, colour,
+        texts[#texts + 1] = L.Format("%d queued · profit |c%s%s|r%s", totals.crafts, colour,
             Util.FormatMoney(totals.profit, { noColor = true, short = true, parts = coins }),
             marker)
     end
@@ -1542,7 +1544,7 @@ CraftPanel.QUEUED_WIDTH = QUEUED_WIDTH
 function CraftPanel:QueuedStatus(entry, open)
     local active = ns.Crafting.active
     if active and active.recipeID == entry.recipeID then
-        return "crafting now", "accent", true
+        return L["crafting now"], "accent", true
     end
 
     local ready, reason = ns.Crafting:GetReadiness(entry.recipeID)
@@ -1551,12 +1553,12 @@ function CraftPanel:QueuedStatus(entry, open)
     if ready and here then
         local canMake = math.min(entry.quantity,
             ns.Profit:GetCraftableCount(entry.recipeID) or 0)
-        return ("ready, materials for %d"):format(canMake), "profit", true
+        return L.Format("ready, materials for %d", canMake), "profit", true
     end
 
-    if ready then return "ready, in another profession", "muted", false end
+    if ready then return L["ready, in another profession"], "muted", false end
 
-    return reason or "missing materials", "muted", false
+    return reason or L["missing materials"], "muted", false
 end
 
 local BUY_WIDTH = 34
@@ -1581,17 +1583,17 @@ local function CreateQueuedRow(row)
         else
             ns.Queue:Remove(row.data.recipeID)
         end
-    end, { width = 16, height = 15, tooltip = "Take this off the queue" })
+    end, { width = 16, height = 15, tooltip = L["Take this off the queue"] })
     row.remove:SetPoint("TOPRIGHT", -8, -1)
 
-    row.craft = Widgets.CreateButton(row, "Craft", function()
+    row.craft = Widgets.CreateButton(row, L["Craft"], function()
         if row.data then CraftPanel:CraftEntry(row.data) end
     end, { width = CRAFT_WIDTH, height = 15, primary = true })
     row.craft:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
 
     -- On a sub-craft kept after buying its item turned cheaper, at the end
     -- of the line that says so.
-    row.buy = Widgets.CreateButton(row, "Buy", function()
+    row.buy = Widgets.CreateButton(row, L["Buy"], function()
         if row.data then ns.Queue:BuyInstead(row.data) end
     end, { width = BUY_WIDTH, height = 13 })
     row.buy:SetPoint("TOPRIGHT", -8, -16)
@@ -1602,7 +1604,7 @@ local function UpdateQueuedRow(row, entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
 
     row.name:SetText(("%dx %s"):format(entry.quantity,
-        (recipe and recipe.name) or ("recipe " .. tostring(entry.recipeID))))
+        (recipe and recipe.name) or L.Format("recipe %s", tostring(entry.recipeID))))
     Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
 
     local r, g, b = Util.GetItemQualityColor(recipe and recipe.outputItemID)
@@ -1616,24 +1618,24 @@ local function UpdateQueuedRow(row, entry)
     local texts = {}
     if entry.isDependency then
         local parents = ns.Queue:GetDependencyParents(entry)
-        status = ("for %s · %s"):format(
-            #parents > 0 and table.concat(parents, ", ") or "another craft", status)
+        status = L.Format("for %s · %s",
+            #parents > 0 and table.concat(parents, ", ") or L["another craft"], status)
     end
 
     -- Kept after buying turned cheaper (Queue:RebuildDependencies): said
     -- first, in amber, with a Buy button to take it off.
     local kept = entry.isDependency and entry.buyCheaper == true
     if kept then
-        status = "buying is cheaper now · " .. status
+        status = L.Format("buying is cheaper now · %s", status)
         colour = "warn"
-        local name = (recipe and recipe.name) or "this"
+        local name = (recipe and recipe.name) or L["this"]
         local buy, make = ns.Queue:GetBuyOrMake(entry)
-        local tip = ("Buying %s is now cheaper than making it."):format(name)
+        local tip = L.Format("Buying %s is now cheaper than making it.", name)
         if buy and make then
-            tip = ("%s\nBuy: %s each. Make: %s each."):format(tip,
+            tip = L.Format("%s\nBuy: %s each. Make: %s each.", tip,
                 Util.FormatMoney(buy), Util.FormatMoney(make))
         end
-        row.buy.tooltipText = tip .. "\nBuy takes it off the queue and puts it on the shopping list."
+        row.buy.tooltipText = tip .. "\n" .. L["Buy takes it off the queue and puts it on the shopping list."]
     end
     row.buy:SetShown(kept)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", kept and -(8 + BUY_WIDTH + 4) or -8, -17)
@@ -1651,10 +1653,10 @@ local function UpdateQueuedRow(row, entry)
         and ns.Queue:NeverMakeTooltip(entry) or nil
 
     local busy = ns.Crafting:IsBusy()
-    row.craft:SetText(busy and "Stop" or "Craft")
+    row.craft:SetText(busy and L["Stop"] or L["Craft"])
     row.craft:SetEnabledState(busy or craftable)
-    row.craft.tooltipText = busy and "Stop crafting"
-        or craftable and "Craft these now, as many as your materials make"
+    row.craft.tooltipText = busy and L["Stop crafting"]
+        or craftable and L["Craft these now, as many as your materials make"]
         or status
 end
 
@@ -1710,7 +1712,7 @@ function CraftPanel:AltHolder(itemID)
         if type(short) == "string" and short ~= "" then name = short end
     end
 
-    if name == "" then name = "another character" end
+    if name == "" then name = L["another character"] end
     return name, bestCount
 end
 
@@ -1730,11 +1732,11 @@ function CraftPanel:ShoppingLook(line)
 
     if (line.shortfall or 0) <= 0 then
         if line.needsBankTrip then
-            look.colour, look.tag, look.tagColour = "warn", "in bank", "warn"
+            look.colour, look.tag, look.tagColour = "warn", L["in bank"], "warn"
         elseif line.needsMailTrip then
-            look.colour, look.tag, look.tagColour = "warn", "in mail", "warn"
+            look.colour, look.tag, look.tagColour = "warn", L["in mail"], "warn"
         else
-            look.colour, look.tag, look.tagColour = "profit", "have all", "profit"
+            look.colour, look.tag, look.tagColour = "profit", L["have all"], "profit"
         end
 
         -- Bought on the auction house today: what it cost, amber when it
@@ -1742,7 +1744,7 @@ function CraftPanel:ShoppingLook(line)
         if line.paid then
             local where = look.tag
             local function Paid(coins)
-                return "paid " .. Util.FormatMoney(line.paid, { short = true, parts = coins })
+                return L.Format("paid %s", Util.FormatMoney(line.paid, { short = true, parts = coins }))
             end
             look.tag = where .. ", " .. Paid(nil)
             look.shorter = { Paid(nil), Paid(2), where }
@@ -1755,22 +1757,22 @@ function CraftPanel:ShoppingLook(line)
 
     local altName, altCount = self:AltHolder(line.itemID)
     if altName and altCount >= line.shortfall then
-        look.colour, look.tag, look.tagColour = "warn", "on " .. altName, "warn"
-        look.shorter = { "on an alt" }
+        look.colour, look.tag, look.tagColour = "warn", L.Format("on %s", altName), "warn"
+        look.shorter = { L["on an alt"] }
         return look
     end
 
     if line.estimatedCost then
         local function Cost(coins)
             local cost = Util.FormatMoney(line.estimatedCost, { short = true, parts = coins })
-            return line.fromVendor and ("|c%svendor|r %s"):format(ns.COLORS.accent, cost) or cost
+            return line.fromVendor and L.Format("|c%svendor|r %s", ns.COLORS.accent, cost) or cost
         end
         look.tag = Cost(nil)
         look.shorter = { Cost(2), Cost(1) }
         -- Amber: what was bought of it today came to well over the estimate.
         look.tagColour = line.overpaid and "warn" or "text"
     else
-        look.tag, look.tagColour = "no price", "muted"
+        look.tag, look.tagColour = L["no price"], "muted"
     end
     return look
 end
@@ -1781,7 +1783,7 @@ end
 --   built a second time for the total
 function CraftPanel:ShoppingTotalText(lines)
     local cost = ns.Queue:GetShoppingTotal(lines)
-    return "To buy " .. Util.FormatMoney(cost or 0, { short = true })
+    return L.Format("To buy %s", Util.FormatMoney(cost or 0, { short = true }))
 end
 
 local function CreateShoppingRow(row)
@@ -1877,7 +1879,7 @@ function CraftPanel:BuildQueued()
     end
     Theme.Halo(frame, 8, 0.08)
 
-    local _, title = ns.Collapse.CreateHeader(frame, "Queued crafts")
+    local _, title = ns.Collapse.CreateHeader(frame, L["Queued crafts"])
     self.queuedTitle = title
 
     local list = Widgets.CreateScrollList(frame, {
@@ -1906,19 +1908,19 @@ function CraftPanel:BuildQueued()
     total:SetPoint("LEFT", frame, "BOTTOMLEFT", 14, 24)
     self.shoppingTotal = total
 
-    local toggle = Widgets.CreateButton(frame, "Hide list", function()
+    local toggle = Widgets.CreateButton(frame, L["Hide list"], function()
         CraftPanel:SetShoppingShown(not CraftPanel:IsShoppingShown())
     end, { width = 56, height = 16 })
     toggle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 16)
     total:SetPoint("RIGHT", toggle, "LEFT", -6, 0)
     self.shoppingToggle = toggle
 
-    local heading = Theme.CreateHeading(frame, "SHOPPING LIST")
+    local heading = Theme.CreateHeading(frame, L["SHOPPING LIST"])
     heading:SetPoint("TOPLEFT", list, "BOTTOMLEFT", 0, -8)
     self.shoppingHeading = heading
 
     local columns = Theme.CreateLabel(frame, "tiny", "muted", "RIGHT")
-    columns:SetText("have / need")
+    columns:SetText(L["have / need"])
     columns:SetPoint("TOPRIGHT", list, "BOTTOMRIGHT", 0, -8)
     heading.rule:SetPoint("RIGHT", columns, "LEFT", -6, 0)
     self.shoppingColumns = columns
@@ -1974,7 +1976,7 @@ function CraftPanel:RefreshQueued()
     frame:Show()
     if opening and ns.Motion then ns.Motion:Open(frame, 0) end
 
-    self.queuedTitle:SetText(("Queued crafts (%d)"):format(#entries))
+    self.queuedTitle:SetText(L.Format("Queued crafts (%d)", #entries))
     self.queuedOpen = self:GetOpenRecipeIDs()
 
     -- Between the title and the footer, shared with the shopping list when
@@ -1996,9 +1998,9 @@ function CraftPanel:RefreshQueued()
     self.shoppingHeading:SetShown(shown)
     self.shoppingColumns:SetShown(shown)
     self.shoppingList:SetShown(shown)
-    self.shoppingToggle:SetText(shown and "Hide list" or "Shopping")
-    self.shoppingToggle.tooltipText = shown and "Hide the materials list"
-        or "Show what the queue still needs, minus what you have"
+    self.shoppingToggle:SetText(shown and L["Hide list"] or L["Shopping"])
+    self.shoppingToggle.tooltipText = shown and L["Hide the materials list"]
+        or L["Show what the queue still needs, minus what you have"]
     self.shoppingTotal:SetText(self:ShoppingTotalText(lines))
 
     self.queuedList:SetData(entries)
@@ -2066,7 +2068,7 @@ end
 function CraftPanel:Toggle()
     if self:IsShown() then
         self:Hide()
-        ns.Print("craft pane hidden. It comes back when you open a profession.")
+        ns.Print(L["craft pane hidden. It comes back when you open a profession."])
         return
     end
 
@@ -2075,11 +2077,12 @@ function CraftPanel:Toggle()
     if self:IsShown() then
         local _, frameName = self:FindTradeSkillFrame()
 
-        ns.Print(("craft pane shown%s, %d recipe(s) listed."):format(
-            frameName and ", docked to the profession window" or " (no profession window open)",
-            #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit() })))
+        local count = #self:GetRows({ sortBy = self.sortBy, ignoreLimit = self:IgnoringLimit() })
+        ns.Print(frameName
+            and L.Format("craft pane shown, docked to the profession window, %d recipe(s) listed.", count)
+            or L.Format("craft pane shown (no profession window open), %d recipe(s) listed.", count))
     else
-        ns.Warn("the craft pane would not show.")
+        ns.Warn(L["the craft pane would not show."])
     end
 end
 
@@ -2105,7 +2108,7 @@ function CraftPanel:OnEnable()
         CraftPanel:Hide()
     end)
 
-    ns.RegisterCommand("pane", "show or hide the craft pane", function()
+    ns.RegisterCommand("pane", L["show or hide the craft pane"], function()
         CraftPanel:Toggle()
     end)
 end

@@ -18,6 +18,7 @@
 -- guard (allowPostingAtALoss), which compares against today's prices.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local CraftedCost = ns.NewModule("CraftedCost")
 
@@ -236,7 +237,7 @@ end
 
 --- The chat line for a refused listing.
 function CraftedCost:RefusalText(itemID, price, cost, net)
-    return ("not listing %s at %s: you paid %s to make one, and after the auction house's cut it brings in %s"):format(
+    return L.Format("not listing %s at %s: you paid %s to make one, and after the auction house's cut it brings in %s",
         Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(cost), Util.FormatMoney(net))
 end
 
@@ -256,11 +257,11 @@ function CraftedCost:Lines(itemID, price)
         return "  (" .. Util.FormatAgeAgo(math.max(0, time() - at)) .. ")"
     end
 
-    lines[#lines + 1] = { "Made for", Util.FormatMoney(record.cost, { short = true }) .. Ago(record.at) }
+    lines[#lines + 1] = { L["Made for"], Util.FormatMoney(record.cost, { short = true }) .. Ago(record.at) }
 
     local posted = self:GetLastPosted(itemID)
     if posted then
-        lines[#lines + 1] = { "Last posted", Util.FormatMoney(posted.price, { short = true }) .. Ago(posted.at) }
+        lines[#lines + 1] = { L["Last posted"], Util.FormatMoney(posted.price, { short = true }) .. Ago(posted.at) }
     end
 
     -- An estimate from the materials is not a price anyone pays, so no
@@ -274,8 +275,8 @@ function CraftedCost:Lines(itemID, price)
     if profit then
         local sign = profit > 0 and "+" or (profit < 0 and "-" or "")
         lines[#lines + 1] = {
-            "Profit now",
-            ("%s%s at %s"):format(sign,
+            L["Profit now"],
+            L.Format("%s%s at %s", sign,
                 Util.FormatMoney(math.abs(profit), { short = true, noColor = true }),
                 Util.FormatMoney(price, { short = true, noColor = true })),
             color = profit < 0 and "loss" or "profit",

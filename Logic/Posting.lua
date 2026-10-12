@@ -15,6 +15,8 @@
 
 local _, ns = ...
 
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
 local Posting = ns.NewModule("Posting")
 
 local Util = ns.Util
@@ -39,9 +41,9 @@ local VERIFY_GIVE_UP = 15
 -- 24 hours: this is a Classic auction house, not retail's 12/24/48. The choice
 -- is the length every listing goes up for, and sets its deposit.
 local DURATIONS = {
-    { text = "2 hours", value = 1 },
-    { text = "8 hours", value = 2 },
-    { text = "24 hours", value = 3 },
+    { text = L["2 hours"], value = 1 },
+    { text = L["8 hours"], value = 2 },
+    { text = L["24 hours"], value = 3 },
 }
 
 Posting.DURATIONS = DURATIONS
@@ -66,8 +68,8 @@ function Posting:MarkBlocked()
     if self.blocked then return end
 
     self.blocked = true
-    ns.Warn("the game will not let addons list auctions.")
-    ns.Warn("the Post tab still shows what to list and at what price.")
+    ns.Warn(L["the game will not let addons list auctions."])
+    ns.Warn(L["the Post tab still shows what to list and at what price."])
 
     if ns.UI then ns.UI:RefreshActiveTab() end
 end
@@ -77,15 +79,15 @@ end
 --   item still being confirmed can go straight away (see Post).
 function Posting:CanPost(itemID)
     if self:IsBlocked() then
-        return false, "the game will not let addons list auctions"
+        return false, L["the game will not let addons list auctions"]
     end
 
     if not ns.Scanner.isAuctionHouseOpen then
-        return false, "the auction house must be open"
+        return false, L["the auction house must be open"]
     end
 
     if ns.Scanner.isScanning then
-        return false, "wait for the scan to finish"
+        return false, L["wait for the scan to finish"]
     end
 
     -- Restored as a real gate. It was demoted to advisory to unstick a button
@@ -94,7 +96,7 @@ function Posting:CanPost(itemID)
     -- blocks the player's own manual listings, not just ours. The one-second
     -- ticker now re-checks this, so a refusal here clears on its own.
     if self:IsThrottled() then
-        return false, "the auction house is busy, try again in a moment"
+        return false, L["the auction house is busy, try again in a moment"]
     end
 
     -- Only one listing is in flight at a time, because a second one started
@@ -112,7 +114,7 @@ function Posting:CanPost(itemID)
     -- apart). Its listing joins the one being confirmed and both are counted
     -- together, so nothing has to be told apart.
     if self.pending and not (itemID and self.pending.itemID == itemID) then
-        return false, "still confirming the last listing"
+        return false, L["still confirming the last listing"]
     end
 
     return true
@@ -138,7 +140,7 @@ function Posting:SecondsUntilPostable(itemID)
     if not ns.Scanner.isAuctionHouseOpen then return 0, nil end
 
     if ns.Scanner.isScanning then
-        return 0, "waiting for the scan to finish"
+        return 0, L["waiting for the scan to finish"]
     end
 
     local seconds, reason =
@@ -165,14 +167,14 @@ function Posting:SecondsUntilPostable(itemID)
             -- and it is the same clock the countdown above was running on.
             -- Past that it settles when the server answers, which is not a
             -- length that can honestly be named.
-            reason = "still confirming the last listing"
+            reason = L["still confirming the last listing"]
         else
             local left = (pending.startedAt or 0) + POST_VERIFY_DELAY + spacing - GetTime()
 
             if left > seconds then
-                seconds, reason = left, "still confirming the last listing"
+                seconds, reason = left, L["still confirming the last listing"]
             elseif left > 0 then
-                reason = reason or "still confirming the last listing"
+                reason = reason or L["still confirming the last listing"]
             end
         end
     end
@@ -180,7 +182,7 @@ function Posting:SecondsUntilPostable(itemID)
     -- CanPost gates on this separately, so a countdown that ignored it would
     -- run to zero and leave the button still refusing.
     if self:IsThrottled() then
-        reason = reason or "the auction house is busy"
+        reason = reason or L["the auction house is busy"]
     end
 
     return seconds, reason
@@ -205,7 +207,7 @@ end
 --- Whether live prices and deposits are available, and why not when they are not.
 function Posting:CanPrice()
     if not ns.Scanner.isAuctionHouseOpen then
-        return false, "open the auction house for deposits and live prices"
+        return false, L["open the auction house for deposits and live prices"]
     end
     return true
 end
@@ -1039,7 +1041,7 @@ function Posting:WatchReadyToSell(lines, skipped)
     end
 end
 
-ns.RegisterCommand("readysell", "watch Ready to sell for 15 seconds and say why items come and go", function()
+ns.RegisterCommand("readysell", L["watch Ready to sell for 15 seconds and say why items come and go"], function()
     readyWatch.seconds = 15
     readyWatch.untilTime = GetTime() + readyWatch.seconds
     readyWatch.last, readyWatch.changes = nil, 0
@@ -1129,7 +1131,7 @@ function Posting:OnEnable()
 
         pcall(StaticPopup_Hide, "BLACKTHORNES_TS_CONFIRM_POST")
         if data then
-            ns.Print(("the auction house closed, so %s was not listed."):format(
+            ns.Print(L.Format("the auction house closed, so %s was not listed.",
                 Util.GetItemLabel(data.itemID)))
         end
     end)
@@ -1141,7 +1143,7 @@ end
 
 -- Kept because the answer is not obvious and the symptoms mislead: a protected
 -- call returns without error and simply does nothing.
-ns.RegisterCommand("taint", "check whether the game lets this addon post and craft for you", function()
+ns.RegisterCommand("taint", L["check whether the game lets this addon post and craft for you"], function()
     ns.Print("what the game lets addons do")
 
     local secure = issecure and issecure()
@@ -1181,13 +1183,13 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     -- and the check counts both (see CanPost).
     local previous = self.pending
     if previous and previous.itemID ~= itemID then
-        ns.Print("a listing is already going through")
+        ns.Print(L["a listing is already going through"])
         return false
     end
 
     local sellable, available = self:GetSellInfo(itemID)
     if not sellable then
-        ns.Print(("%s cannot be auctioned"):format(Util.GetItemLabel(itemID)))
+        ns.Print(L.Format("%s cannot be auctioned", Util.GetItemLabel(itemID)))
         return false
     end
 
@@ -1200,7 +1202,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     local location = bag and MakeLocation(bag, slot)
 
     if not location then
-        ns.Warn("could not find that item in your bags")
+        ns.Warn(L["could not find that item in your bags"])
         return false
     end
 
@@ -1220,13 +1222,13 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     end
 
     if available < 1 then
-        ns.Print("you have none of that to list")
+        ns.Print(L["you have none of that to list"])
         return false
     end
 
     unitPrice = math.floor(unitPrice or self:GetPostPrice(itemID) or 0)
     if unitPrice < 1 then
-        ns.Print("no price data for that item. Scan the auction house first")
+        ns.Print(L["no price data for that item. Scan the auction house first"])
         return false
     end
 
@@ -1238,7 +1240,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     if not isCommodity and not Util.IsWholeSilver(unitPrice) then
         local rounded = Util.RoundToSilver(unitPrice)
 
-        ns.Print(("item auctions only take whole silver, so %s becomes %s"):format(
+        ns.Print(L.Format("item auctions only take whole silver, so %s becomes %s",
             Util.FormatMoney(unitPrice), Util.FormatMoney(rounded)))
 
         unitPrice = rounded
@@ -1250,9 +1252,9 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     local floor, why = self:GetPriceFloor(itemID, byHand)
 
     if floor and unitPrice < floor then
-        ns.Warn(("not listing %s at %s: %s."):format(
-            Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or "the price looks wrong"))
-        ns.Warn(("expected at least %s. Run a scan, or list it by hand."):format(
+        ns.Warn(L.Format("not listing %s at %s: %s.",
+            Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or L["the price looks wrong"]))
+        ns.Warn(L.Format("expected at least %s. Run a scan, or list it by hand.",
             Util.FormatMoney(floor)))
         return false
     end
@@ -1262,10 +1264,10 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     -- every sale.
     local unitCost = self:BelowCost(itemID, unitPrice)
     if unitCost then
-        ns.Warn(("not listing %s at %s, the materials cost %s"):format(
+        ns.Warn(L.Format("not listing %s at %s, the materials cost %s",
             Util.GetItemLabel(itemID),
             Util.FormatMoney(unitPrice), Util.FormatMoney(unitCost)))
-        ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
+        ns.Warn(L["turn on 'Recommend selling at a loss' in Settings to allow it."])
         return false
     end
 
@@ -1273,7 +1275,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     local paid, net = self:BelowCraftedCost(itemID, unitPrice)
     if paid then
         ns.Warn(ns.CraftedCost:RefusalText(itemID, unitPrice, paid, net))
-        ns.Warn("turn off 'Never below what I paid' in Settings to allow it.")
+        ns.Warn(L["turn off 'Never below what I paid' in Settings to allow it."])
         return false
     end
 
@@ -1330,8 +1332,8 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         if tostring(err):lower():find("addon") then
             self:MarkBlocked()
         else
-            ns.Warn(("the game refused the listing: %s"):format(
-                tostring(err):gsub("^.-:%d+: ", "")))
+            ns.Warn(L.Format("the game refused the listing: %s",
+                (tostring(err):gsub("^.-:%d+: ", ""))))
         end
         return false
     end
@@ -1340,14 +1342,14 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     -- a listing that is genuinely created, so reading it as a refusal reports
     -- failure on every successful commodity sale. Only the server's own view
     -- settles this, which is what VerifyPending goes and asks for.
-    ns.Print(("listing %dx %s at %s each"):format(
+    ns.Print(L.Format("listing %dx %s at %s each",
         quantity, Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice)))
 
     if ns.CraftedCost then ns.CraftedCost:NotePosted(itemID, unitPrice) end
 
     -- Nothing of ours competes with a listing that is settling. Verification is
     -- urgent and still gets through; scans and bookkeeping wait.
-    ns.AHQueue:Yield(POST_VERIFY_DELAY + 2, "your listing is going through")
+    ns.AHQueue:Yield(POST_VERIFY_DELAY + 2, L["your listing is going through"])
 
     -- The auction house is throttled and can take several seconds to reply, so
     -- wait, then ask the server what is actually listed.
@@ -1378,7 +1380,7 @@ function Posting:GetPriceFloor(itemID, byHand)
     -- at the auction house.
     local sellPrice = Util.GetVendorSellPrice(itemID)
     if sellPrice and sellPrice > 0 then
-        floor, why = sellPrice, "a vendor pays more than that"
+        floor, why = sellPrice, L["a vendor pays more than that"]
     end
 
     -- A fifth of market value. Wide enough for a real undercut war, narrow
@@ -1387,7 +1389,7 @@ function Posting:GetPriceFloor(itemID, byHand)
     if market and market > 0 then
         local fraction = math.floor(market * 0.2)
         if fraction > floor then
-            floor, why = fraction, "that is a fraction of what it normally sells for"
+            floor, why = fraction, L["that is a fraction of what it normally sells for"]
         end
     end
 
@@ -1412,8 +1414,8 @@ if type(StaticPopupDialogs) == "table" then
 
 StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
     text = "%s",
-    button1 = YES or "List it",
-    button2 = NO or "Skip",
+    button1 = YES or L["List it"],
+    button2 = NO or L["Skip"],
     timeout = 0,
     whileDead = true,
     hideOnEscape = true,
@@ -1438,7 +1440,7 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
     OnCancel = function(_, _, reason)
         if reason == "override" then return end
         Posting.confirming = nil
-        ns.Print("skipped.")
+        ns.Print(L["skipped."])
     end,
 
     -- The game lends this popup frame to other dialogs later, so the icon
@@ -1476,43 +1478,44 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     -- The auction house's own figure, beside the price the player set.
     local market = ns.Prices.GetScanValue and ns.Prices:GetScanValue(itemID, "market")
         or ns.Prices:GetValue(itemID, "market")
-    local marketText = (market and market > 0) and Money(market) or "none"
+    local NONE = L["none"]
+    local marketText = (market and market > 0) and Money(market) or NONE
 
     -- Someone else's cheapest, never the player's own: the price being
     -- competed with. The check has just rewritten it, and an empty auction
     -- house has just cleared it, so nil here really does mean nobody.
     local lowest = ns.Prices:GetValue(itemID, "rival")
-    local lowestText = (lowest and lowest > 0) and Money(lowest) or "none"
+    local lowestText = (lowest and lowest > 0) and Money(lowest) or NONE
 
     -- Only the player's own listings are up: say so, rather than "none"
     -- beside an auction house that plainly has one.
-    if lowestText == "none" then
+    if lowestText == NONE then
         local record = ns.Prices:Get(itemID)
         local own = record and record.ownMin
-        if own and own > 0 then lowestText = Money(own) .. " (yours)" end
+        if own and own > 0 then lowestText = L.Format("%s (yours)", Money(own)) end
     end
 
     -- A lone listing far below the rest is not undercut. Say so, or the
     -- dialog disagrees with the auction house the player is looking at.
     local record = ns.Prices:Get(itemID)
     if record and record.ignoredLow then
-        lowestText = lowestText .. (" (ignored a lone one at %s)"):format(Money(record.ignoredLow))
+        lowestText = L.Format("%s (ignored a lone one at %s)", lowestText, Money(record.ignoredLow))
     end
 
     if check.state == "unavailable" then
-        lowestText = lowestText .. " (could not check, last seen)"
+        lowestText = L.Format("%s (could not check, last seen)", lowestText)
     end
 
     -- The price about to go up is the one number that matters, so it is
     -- drawn in gold to stand out from the two it is being compared with.
     local postingText = ("|c%s%s|r"):format(ns.COLORS.accent, Money(unitPrice))
     if quantity > 1 then
-        postingText = ("%s each, %d x %s"):format(postingText, quantity, Util.GetItemLabel(itemID))
+        postingText = L.Format("%s each, %d x %s", postingText, quantity, Util.GetItemLabel(itemID))
     else
         postingText = ("%s, %s"):format(postingText, Util.GetItemLabel(itemID))
     end
 
-    local text = ("Average Market Value: %s\nLowest Market Posting: %s\nPosting at: %s"):format(
+    local text = L.Format("Average Market Value: %s\nLowest Market Posting: %s\nPosting at: %s",
         marketText, lowestText, postingText)
 
     -- The one case worth a fifth line: this listing loses gold. Any
@@ -1523,7 +1526,7 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     local unitCost = analysis and analysis.costPerUnit
 
     if unitCost and unitPrice < unitCost then
-        text = text .. ("\n|cffE5604FBelow the %s it cost to make.|r"):format(Money(unitCost))
+        text = text .. "\n|cffE5604F" .. L.Format("Below the %s it cost to make.", Money(unitCost)) .. "|r"
     end
 
     -- A price the player typed: said so, and how far under market it is,
@@ -1532,13 +1535,13 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
         local under = (market and market > 0 and unitPrice < market)
             and math.floor((market - unitPrice) / market * 100 + 0.5) or 0
         if under >= 1 then
-            text = text .. ("\n|c%sYour own price, %d%% under market value.|r"):format(ns.COLORS.warn, under)
+            text = text .. ("\n|c%s%s|r"):format(ns.COLORS.warn, L.Format("Your own price, %d%% under market value.", under))
         else
-            text = text .. "\nYour own price."
+            text = text .. "\n" .. L["Your own price."]
         end
     end
 
-    return text .. "\n\nDo you wish to continue?"
+    return text .. "\n\n" .. L["Do you wish to continue?"]
 end
 
 -- The item's icon in the confirmation, one texture per popup frame it has
@@ -1612,7 +1615,7 @@ function Posting:ShowConfirm(itemID, quantity, unitPrice, text, byHand)
         self:ShowConfirmIcon(dialog, itemID)
     else
         self.confirming = nil
-        ns.Warn("could not open the confirmation dialog; nothing was listed.")
+        ns.Warn(L["could not open the confirmation dialog; nothing was listed."])
     end
 end
 
@@ -1637,12 +1640,12 @@ function Posting:CheckPrice(itemID, onDone)
 
     local allowed, reason = self:CanPrice()
     if not allowed then
-        ns.Print(reason or "cannot check prices right now")
+        ns.Print(reason or L["cannot check prices right now"])
         if onDone then onDone(itemID, nil, "unavailable") end
         return false
     end
 
-    ns.Print(("checking the current price of %s..."):format(Util.GetItemLabel(itemID)))
+    ns.Print(L.Format("checking the current price of %s...", Util.GetItemLabel(itemID)))
 
     -- One answer only. A search can settle through the callback, through the
     -- fallback timer, or through both, and reporting twice would redraw the
@@ -1672,7 +1675,7 @@ function Posting:CheckPrice(itemID, onDone)
         -- check's answer, so it must not be served as a checked price later.
         ns.Scanner:AbandonItemScan(OnAnswer)
 
-        ns.Warn("the price check did not come back.")
+        ns.Warn(L["the price check did not come back."])
         Settle("unavailable")
     end)
 
@@ -1717,8 +1720,8 @@ function Posting:RefusesEarly(itemID, price, byHand)
     -- Under what a vendor pays, or a fraction of market after a dump.
     local floor, why = self:GetPriceFloor(itemID, byHand)
     if floor and price and price < floor then
-        ns.Warn(("not listing %s at %s: %s. Expected at least %s."):format(
-            Util.GetItemLabel(itemID), Util.FormatMoney(price), why or "the price looks wrong",
+        ns.Warn(L.Format("not listing %s at %s: %s. Expected at least %s.",
+            Util.GetItemLabel(itemID), Util.FormatMoney(price), why or L["the price looks wrong"],
             Util.FormatMoney(floor)))
         return true
     end
@@ -1726,9 +1729,9 @@ function Posting:RefusesEarly(itemID, price, byHand)
     -- Under what the materials cost, with selling at a loss turned off.
     local unitCost = self:BelowCost(itemID, price)
     if unitCost then
-        ns.Warn(("not listing %s at %s, the materials cost %s"):format(
+        ns.Warn(L.Format("not listing %s at %s, the materials cost %s",
             Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(unitCost)))
-        ns.Warn("turn on 'Recommend selling at a loss' in Settings to allow it.")
+        ns.Warn(L["turn on 'Recommend selling at a loss' in Settings to allow it."])
         return true
     end
 
@@ -1736,7 +1739,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
     local paid, net = self:BelowCraftedCost(itemID, price)
     if paid then
         ns.Warn(ns.CraftedCost:RefusalText(itemID, price, paid, net) .. ".")
-        ns.Warn("turn off 'Never below what I paid' in Settings to allow it.")
+        ns.Warn(L["turn off 'Never below what I paid' in Settings to allow it."])
         return true
     end
 
@@ -1756,7 +1759,7 @@ end
 function Posting:Request(itemID, quantity, unitPrice)
     local allowed, reason = self:CanPost(itemID)
     if not allowed then
-        ns.Print(reason or "cannot post right now")
+        ns.Print(reason or L["cannot post right now"])
         return false
     end
 
@@ -1778,7 +1781,7 @@ function Posting:Request(itemID, quantity, unitPrice)
         return true
     end
 
-    ns.Print(("checking the current price of %s..."):format(Util.GetItemLabel(itemID)))
+    ns.Print(L.Format("checking the current price of %s...", Util.GetItemLabel(itemID)))
 
     -- Whether an earlier click on this item is still waiting for its check.
     -- Only then is a "recent" answer already on its way to a dialog; the
@@ -1805,7 +1808,7 @@ function Posting:Request(itemID, quantity, unitPrice)
             -- it again" then was wrong, with the dialog about to appear.
             if (Posting.requesting[itemID] or 0) > 0 then return end
 
-            ns.Print(("the price check for %s was interrupted by another search; nothing was listed. Click it again."):format(
+            ns.Print(L.Format("the price check for %s was interrupted by another search; nothing was listed. Click it again.",
                 Util.GetItemLabel(itemID)))
             return
         end
@@ -1814,7 +1817,7 @@ function Posting:Request(itemID, quantity, unitPrice)
         -- only be made there, and a confirm popping up after walking away
         -- asks about something that cannot happen.
         if ns.Scanner.isAuctionHouseOpen == false then
-            ns.Print(("the auction house closed before the price check for %s came back; nothing was listed."):format(
+            ns.Print(L.Format("the auction house closed before the price check for %s came back; nothing was listed.",
                 Util.GetItemLabel(itemID)))
             return
         end
@@ -1861,7 +1864,7 @@ function Posting:Request(itemID, quantity, unitPrice)
             return
         end
 
-        ns.Warn("the price check did not come back; using the last known price.")
+        ns.Warn(L["the price check did not come back; using the last known price."])
         Proceed("unavailable")
     end)
 
@@ -1942,42 +1945,42 @@ function Posting:ResolvePending(posted, appeared)
     end
 
     if several and posted and gained >= pending.quantity then
-        ns.Print(("listed %d x %s"):format(pending.quantity, Util.GetItemLabel(pending.itemID)))
+        ns.Print(L.Format("listed %d x %s", pending.quantity, Util.GetItemLabel(pending.itemID)))
 
     elseif several and posted and posted > 0 and not pending.idsBefore then
         -- Measured against last visit's count (see below), so a shortfall
         -- may only be listings that sold since. Nothing is concluded from it.
-        ns.Print(("%s: you have %d listed now. This was the first check since the auction house opened, so the new listings could not be told apart from older ones.")
-            :format(Util.GetItemLabel(pending.itemID), posted))
+        ns.Print(L.Format("%s: you have %d listed now. This was the first check since the auction house opened, so the new listings could not be told apart from older ones.",
+            Util.GetItemLabel(pending.itemID), posted))
 
     elseif several and posted and gained > 0 then
-        ns.Print(("listed %d of %d x %s."):format(gained, pending.quantity, Util.GetItemLabel(pending.itemID)))
+        ns.Print(L.Format("listed %d of %d x %s.", gained, pending.quantity, Util.GetItemLabel(pending.itemID)))
         if refused then
-            ns.Print("the auction house took one at a time, so the rest go up one per click.")
+            ns.Print(L["the auction house took one at a time, so the rest go up one per click."])
         end
 
     elseif posted and (appeared or posted > (pending.postedBefore or 0)) then
-        ns.Print(("listed %s"):format(Util.GetItemLabel(pending.itemID)))
+        ns.Print(L.Format("listed %s", Util.GetItemLabel(pending.itemID)))
 
     elseif posted and posted > 0 and not pending.idsBefore then
         -- Listed before your auctions had been read this visit, so the count
         -- it is measured against is from last time. Listings that sold since
         -- then made a good listing read as missing. What is there can only be
         -- reported, not told apart.
-        ns.Print(("%s: you have %d listed now. This was the first check since the auction house opened, so the new listing could not be told apart from older ones.")
-            :format(Util.GetItemLabel(pending.itemID), posted))
+        ns.Print(L.Format("%s: you have %d listed now. This was the first check since the auction house opened, so the new listing could not be told apart from older ones.",
+            Util.GetItemLabel(pending.itemID), posted))
 
     elseif posted then
         -- The server answered and it is not there: it genuinely did not go up.
-        ns.Warn(("%s did not appear in your auctions."):format(
+        ns.Warn(L.Format("%s did not appear in your auctions.",
             Util.GetItemLabel(pending.itemID)))
         if pending.many and not pending.joined then
-            ns.Warn("listing several at once may not work here, so the next click lists one.")
+            ns.Warn(L["listing several at once may not work here, so the next click lists one."])
         else
-            ns.Warn("the auction house may be refusing listings; try Blizzard's own Sell tab.")
+            ns.Warn(L["the auction house may be refusing listings; try Blizzard's own Sell tab."])
         end
     else
-        ns.Warn("could not tell whether that listing went up. Check your Auctions tab")
+        ns.Warn(L["could not tell whether that listing went up. Check your Auctions tab"])
     end
 
     if ns.UI then
@@ -1990,7 +1993,7 @@ end
 --
 -- Posting blocks while the throttle says it is busy, so if this client never
 -- reports ready that block is a bug on our side rather than a real wait.
-ns.RegisterCommand("throttle", "check how often the auction house is ready for requests", function()
+ns.RegisterCommand("throttle", L["check how often the auction house is ready for requests"], function()
     ns.AHQueue:Report()
 
     if not ns.Util.HasFunction("C_AuctionHouse.IsThrottledMessageSystemReady") then
@@ -2027,7 +2030,7 @@ end)
 -- causes that look identical from the chat frame: the call being refused, the
 -- call succeeding but the server dropping it, or the listing genuinely being
 -- created and the addon failing to notice.
-ns.RegisterCommand("posttest", "try one listing and show every step: /bts posttest [name]", function(args)
+ns.RegisterCommand("posttest", L["try one listing and show every step: /bts posttest [name]"], function(args)
     local line
 
     if args and args ~= "" then
@@ -2192,7 +2195,7 @@ end)
 -- ItemLocation rather than an item ID, after three wrong guesses.
 --
 -- Creates nothing: every call here is designed to fail.
-ns.RegisterCommand("sig", "show which auction functions this version of the game has", function()
+ns.RegisterCommand("sig", L["show which auction functions this version of the game has"], function()
     -- PostItem and PostCommodity are deliberately absent. Calling them at all
     -- outside a real click trips "Interface action failed because of an
     -- AddOn", so probing their signature costs a scary red error for a string
@@ -2314,7 +2317,7 @@ local function TryLegacyPost(bagID, slotID, bid, buyout, duration)
     return true
 end
 
-ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n> [name]", function(args)
+ns.RegisterCommand("posttry", L["try one way of calling PostItem: /bts posttry <n> [name]"], function(args)
     local index, needle = (args or ""):match("^(%d+)%s*(.*)$")
     index = tonumber(index)
 
@@ -2347,7 +2350,7 @@ ns.RegisterCommand("posttry", "try one way of calling PostItem: /bts posttry <n>
     local bagID, slotID = FindInBags(itemID)
     local location = bagID and MakeLocation(bagID, slotID)
     if not location then
-        ns.Warn("could not find that item in your bags")
+        ns.Warn(L["could not find that item in your bags"])
         return
     end
 
@@ -2395,7 +2398,7 @@ end)
 --
 -- hooksecurefunc observes without replacing, so Blizzard's call is unaffected
 -- and nothing here can taint it.
-ns.RegisterCommand("watchpost", "show what Blizzard's Sell tab sends when you post", function()
+ns.RegisterCommand("watchpost", L["show what Blizzard's Sell tab sends when you post"], function()
     if Posting.watching then
         ns.Print("already watching. Post something with Blizzard's Sell tab.")
         return
