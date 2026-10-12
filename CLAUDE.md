@@ -673,6 +673,16 @@ Equipment. The rule, in every addon:
 
 ## The owner's standing rules (both addons)
 
+- **Every list is dark glass** (the owner, 2026-10-12: "keep this as the
+  standard across all Blackthornes addons", after Farmer's Kills & Loot
+  panel was given the look of Tradeskills' queue). Rows or lines take
+  `glass` and `glassAlt` in turn, by place, with a 1 px `border` line
+  (alpha 0.6) under each; under the mouse `glassHover` and a gold edge,
+  only on that row; the row picked or open is `glassActive` with a bright
+  gold edge down its left. Never the older `row`/`rowAlt` bands for a
+  list, a panel's lines or cards. A gradient fades through
+  `Theme.LightGradient` or is hidden, never with SetAlpha alone (it stayed
+  lit on Forever). This rule is in every addon's notes; keep them the same.
 - **"Always check that it's clear to post."** Anything that goes public (a
   release, a CurseForge page, a post) is checked for private or unexpected
   content first, and nothing is published or uploaded without the owner's
