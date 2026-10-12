@@ -116,10 +116,15 @@
 -- and still owe (QueueMail:GetOwedBy). A craft held up for materials
 -- another character carries or banks names it as the missing item's
 -- `from`, and that character gets a mail step to the crafter first
--- (`forCraft`), so it can be done before the craft. Only characters this one can mail (same realm and
+-- (`forCraft`), so it can be done before the craft. A profession cooldown
+-- that is up (Logic/Cooldowns.lua, 2026-10-12) is a step too, { kind =
+-- "cooldown", name (its group: "Transmute"), craft (the craft's name),
+-- recipeID, or itemID for an item such as the Salt Shaker }; a Butler that
+-- does not know the kind leaves it out. Only characters this one can mail (same realm and
 -- side), never another account's. Craft makes the character playing's
 -- queued craft of that recipe, from Butler's click: started when its
 -- profession window shows it, else the Queue tab opens on its Open button.
+-- A ready cooldown craft is made once, queued or not, with the window open.
 --
 -- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
@@ -896,6 +901,20 @@ local function Jobs()
         end
     end
 
+    -- A profession cooldown that is up (a transmute, Mooncloth): a step on
+    -- that character's line, so Butler can send the player there
+    -- (Logic/Cooldowns.lua; the owner asked 2026-10-12).
+    local cooldowns = ns.Cooldowns
+    if cooldowns and cooldowns.ReadyList then
+        for _, ready in ipairs(cooldowns:ReadyList()) do
+            local job = Job(ready.key)
+            if job then
+                job.steps[#job.steps + 1] = { kind = "cooldown", recipeID = ready.recipeID,
+                    itemID = ready.itemID, name = ready.group, craft = ready.name }
+            end
+        end
+    end
+
     local seen = {}
     for _, job in pairs(byKey) do
         if #job.steps > 0 and not seen[job] then
@@ -938,6 +957,11 @@ function Butler:Craft(recipeID)
                 break
             end
         end
+        -- A profession cooldown that is up is made once, queued or not.
+        local cooldowns = ns.Cooldowns
+        if not entry and cooldowns and cooldowns.ReadyHere and cooldowns:ReadyHere(recipeID) then
+            entry = { recipeID = recipeID, quantity = 1, cooldown = true }
+        end
         if not entry then return false, L["it's no longer in your queue"] end
         local ready, reason = crafting:GetReadiness(recipeID)
         if not ready then return false, reason end
@@ -949,6 +973,7 @@ function Butler:Craft(recipeID)
             if crafting:Start(recipeID, entry.quantity) then return true, "crafting" end
             return false, L["the game didn't start it"]
         end
+        if entry.cooldown then return false, L["open your profession first"] end
         if queue:ShowQueue() then return true, "opened" end
         return false, L["open your profession first"]
     end)
