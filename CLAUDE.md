@@ -544,6 +544,13 @@ Equipment. The rule, in every addon:
   tag from the merged PRs and commits (`git log vX.Y.Z..origin/main --merges`);
   never ask the owner what went in. Claude drafts the CHANGELOG section in a PR;
   The owner merges, pulls `main`, tags and pushes.
+- **A checkout shows the real version number** (the owner,
+  2026-10-12). `ns.RELEASED_VERSION` in `Core/Init.lua` is the newest
+  `## X.Y.Z` in CHANGELOG.md, shown when the packager has not filled in the
+  TOC's `@project-version@` (he plays from a clone). The release PR that
+  writes the CHANGELOG section changes it too; `tools/check_release.py`
+  refuses a tag it does not match, and `tools/test_check_release.py` fails
+  while the two disagree. This rule is in every addon's notes.
 - **Every reply that ships code ends with the GitHub Desktop steps,** naming
   the branch: merge the PR on github.com (Ready for review, then Merge pull
   request); in GitHub Desktop switch **Current branch** to **main** and click
