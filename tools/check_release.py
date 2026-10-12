@@ -20,6 +20,9 @@ section says "German" without "Deutsch": the posts call the language Deutsch
 It also checks the TOC still says `## Version: @project-version@`: a version
 typed in by hand would disagree with the tag the packager builds.
 
+It also checks Core/WhatsNewText.lua, the in-game What's New window's
+notes, is what tools/make_whatsnew.py writes from NEWS.md.
+
 And it checks `ns.RELEASED_VERSION` in Core/Init.lua is the tag's version:
 played from a checkout, that is the version the addon shows, so the release
 PR that writes the CHANGELOG.md section changes it in the same breath.
@@ -124,6 +127,11 @@ def main(argv):
     with open(os.path.join(ROOT, "Core", "Init.lua"), encoding="utf-8") as f:
         init = f.read()
     problems = check(argv[1], changelog, toc, init) + named_players(argv[1], changelog)
+    # The in-game What's New window ships NEWS.md as Core/WhatsNewText.lua;
+    # a release whose file is behind NEWS.md would show last version's news.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import make_whatsnew
+    problems += make_whatsnew.problems()
     for problem in problems:
         print("Not releasing: " + problem)
     if not problems:

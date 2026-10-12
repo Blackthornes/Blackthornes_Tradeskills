@@ -1228,6 +1228,30 @@ local function Build(outer)
     end, true)
     widgets.sisters:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- UI/WhatsNew.lua: one window after an update for every Blackthornes
+    -- addon. Off here is off in all of them, as the sister note is.
+    local whatsNewRow = CreateRow(pages.look, 1, L["What's New"],
+        L["Opens the What's New window: what changed in each of your Blackthornes addons. Same as /bts whatsnew."])
+    widgets.whatsnew = Widgets.CreateButton(whatsNewRow, L["Show it"], function()
+        ns.WhatsNew:Toggle()
+    end, { width = 100, height = 20 })
+    FitButton(widgets.whatsnew)
+    widgets.whatsnew:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local whatsNewPopupRow = CreateRow(pages.look, 1, L["After an update"],
+        L["Brings up the What's New window the first time you play after a Blackthornes addon updates. Turning it off here turns it off in all of them."])
+    widgets.whatsNewPopup = Widgets.CreateCheckbox(whatsNewPopupRow, L["Show What's New"], function(checked)
+        ns.WhatsNew:SetOn(checked)
+    end, true)
+    widgets.whatsNewPopup:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local whatsNewMotionRow = CreateRow(pages.look, 1, L["What's New motion"],
+        L["The What's New window rises in, and its news slides up and glows. Turning it off here turns it off in all of them."])
+    widgets.whatsNewMotion = Widgets.CreateCheckbox(whatsNewMotionRow, L["Motion"], function(checked)
+        ns.WhatsNew:SetMotionOn(checked)
+    end, true)
+    widgets.whatsNewMotion:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local shopsRow = CreateRow(pages.auction, 1, L["Open with the auction house"],
         L["Opens this window when the auction house or a vendor opens, and closes it with them."])
 
@@ -1889,6 +1913,10 @@ local function Refresh()
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.sisters:SetChecked(ns.SisterNote:IsOn())
+    if ns.WhatsNew then
+        widgets.whatsNewPopup:SetChecked(ns.WhatsNew:IsOn())
+        widgets.whatsNewMotion:SetChecked(ns.WhatsNew:IsMotionOn())
+    end
     widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
