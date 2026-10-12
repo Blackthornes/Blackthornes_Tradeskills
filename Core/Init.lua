@@ -24,23 +24,28 @@ local function GetMeta(field)
     return nil
 end
 
+-- The newest version in CHANGELOG.md. The release PR that writes that
+-- section changes this line too, and tools/check_release.py refuses a tag it
+-- does not match. Played straight from the repository there is no packager
+-- to fill in the TOC's version, so this is the one shown.
+ns.RELEASED_VERSION = "0.51.0"
+
 -- The TOC carries @project-version@, which the release packager rewrites to
 -- the tag it is building, "v0.2.0" say. Running straight from the repository
--- there is no packager, so the keyword arrives unsubstituted and is shown as
--- "dev".
+-- the keyword arrives unsubstituted, so the version is the changelog's newest.
 local function ReadVersion()
     local value = GetMeta("Version")
-    if type(value) ~= "string" or value == "" then return "0.0.0" end
-    if value:find("@", 1, true) then return "dev" end
+    if type(value) ~= "string" or value == "" or value:find("@", 1, true) then
+        return ns.RELEASED_VERSION
+    end
     -- Tags start with a "v"; the version itself does not.
     return (value:gsub("^[vV]", ""))
 end
 
 ns.VERSION = ReadVersion()
 
---- The version as players see it: "v0.2.0", or "dev build" from a checkout.
+--- The version as players see it: "v0.2.0".
 function ns.VersionLabel()
-    if ns.VERSION == "dev" then return "dev build" end
     return "v" .. ns.VERSION
 end
 
