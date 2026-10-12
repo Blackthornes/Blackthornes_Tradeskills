@@ -810,7 +810,7 @@ function Profit:Analyse(recipeID, characterKey, method)
     analysis.roi = cost.total > 0 and (analysis.profit / cost.total) or 0
 
     analysis.confidence, analysis.confidenceReason = ns.Prices:GetConfidence(recipe.outputItemID)
-    analysis.liquidity = ns.Prices:GetLiquidity(recipe.outputItemID)
+    analysis.liquidity = ns.Prices:GetSalesPerDay(recipe.outputItemID)
     -- The age of the price the profit is for (Discord, 2026-10-08):
     -- a disenchant is valued at its material, so that scan's age is the one
     -- that says how far to trust it. A vendor's price does not age; the
