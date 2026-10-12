@@ -379,6 +379,13 @@ prices have the item ("rival" never). "TSM prices" on the Sharing page
 and Butler's `GetValue` can answer from TSM too; still copper or nil. TSM's
 prices come from its desktop app, which may not cover Forever's realms; then
 it answers nil. Tested in `tools/test_tsmprices.lua`. Not yet seen in game.
+Auctionator comes after TSM (the owner said yes and allowed naming it,
+2026-10-12): `Logic/AuctionatorPrices.lua` reads
+`Auctionator.API.v1.GetAuctionPriceByItemID("Blackthornes_TS", itemID)`
+the same way, one price for market, min and lowest. Its price is the
+player's own scans, so it has Forever prices (other Forever addons read the
+same call). "Auctionator prices" (`auctionatorPrices`, on unless unticked,
+never rename it). Tested in `tools/test_auctionatorprices.lua`.
 
 Farmer shares its own counts the same way (2026-10-11): its `Core/Comm.lua`
 and `Core/Serialize.lua` are copies of ours (prefix `BFRshare` instead of

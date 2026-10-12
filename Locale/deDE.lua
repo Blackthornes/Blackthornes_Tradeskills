@@ -770,7 +770,13 @@ L["Buying %d costs %s. The shopping list said %s: %s more (%d%% over)."] = "%d z
 -- Prices
 -- ======================================================================
 L["Guild prices are off."] = "Gildenpreise sind aus."
-L["TRADESKILLMASTER"] = "TRADESKILLMASTER"
+L["OTHER PRICE ADDONS"] = "ANDERE PREIS-ADDONS"
+L["Auctionator prices"] = "Auctionator-Preise"
+L["When Auctionator is loaded, its prices from your own scans fill in items that nothing above has priced. Your own scans always win."] = "Wenn Auctionator geladen ist, füllen seine Preise aus deinen eigenen Scans Gegenstände, die nichts darüber bepreist hat. Deine eigenen Scans gewinnen immer."
+L["Auctionator prices are off."] = "Auctionator-Preise sind aus."
+L["Auctionator isn't loaded, so nothing changes."] = "Auctionator ist nicht geladen, also ändert sich nichts."
+L["Auctionator is loaded. It hasn't filled any gaps yet this session."] = "Auctionator ist geladen. In dieser Sitzung hat es noch keine Lücken gefüllt."
+L["Auctionator is loaded and is filling gaps in your prices."] = "Auctionator ist geladen und füllt Lücken in deinen Preisen."
 L["TSM prices"] = "TSM-Preise"
 L["When TradeSkillMaster is loaded, its prices fill in items that neither you nor your guildmates have priced. Your own scans always win."] = "Wenn TradeSkillMaster geladen ist, füllen seine Preise Gegenstände, die weder du noch deine Gildenmitglieder bepreist habt. Deine eigenen Scans gewinnen immer."
 L["TSM prices are off."] = "TSM-Preise sind aus."
