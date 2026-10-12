@@ -2409,3 +2409,14 @@ L["Brings up the What's New window the first time you play after a Blackthornes 
 L["Show What's New"] = "Neuigkeiten zeigen"
 L["What's New motion"] = "Bewegung der Neuigkeiten"
 L["The What's New window rises in, and its news slides up and glows. Turning it off here turns it off in all of them."] = "Das Neuigkeiten-Fenster gleitet herein, und seine Neuigkeiten schieben sich hoch und leuchten. Hier ausgeschaltet ist es in allen aus."
+
+-- Logic/CraftRequests.lua: craft requests in Trade
+L["Craft requests in Trade"] = "Handwerksanfragen im Handelschannel"
+L["Says in chat when someone in the Trade channel asks for something one of your characters can make, with their name to click and whisper. Also /bts requests."] = "Sagt im Chat Bescheid, wenn jemand im Handelschannel nach etwas fragt, das einer deiner Charaktere herstellen kann, mit dem Namen zum Anklicken und Anflüstern. Auch /bts requests."
+L["%s in Trade wants %s. %s"] = "%s sucht im Handel %s. %s"
+L["You can make it."] = "Du kannst es herstellen."
+L["You and %s can make it."] = "Du und %s könnt es herstellen."
+L["%s can make it."] = "%s kann es herstellen."
+L["say in chat when someone in Trade asks for something you can make (on or off)"] = "im Chat Bescheid sagen, wenn jemand im Handel etwas sucht, das du herstellen kannst (on oder off)"
+L["craft requests in Trade: on."] = "Handwerksanfragen im Handel: an."
+L["craft requests in Trade: off."] = "Handwerksanfragen im Handel: aus."
