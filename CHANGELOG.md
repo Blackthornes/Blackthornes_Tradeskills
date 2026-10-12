@@ -12,6 +12,12 @@ fully after updating (`/reload` is not enough).
 - **Deutsch:** on a Deutsch (German) client, every Tradeskills window,
   tab, button, tooltip and chat line is in German. English clients see
   exactly what they saw before.
+- **TradeSkillMaster prices:** with TradeSkillMaster installed, its prices
+  fill in items that neither you nor your guild have scanned, so Farmer,
+  Equipment and Butler price them too. Your own scans and guild prices
+  always come first. "TSM prices" on Settings > Sharing turns it off and
+  says whether TSM is filling anything. TSM's prices may not cover Forever
+  realms; when they don't, nothing changes.
 - **Shorter scan line:** listings left out for being priced far too high
   are now one short line, "2 listings ignored: priced above 214,748g".
 - **Fixes:** an old record of the character you're on, kept from before
