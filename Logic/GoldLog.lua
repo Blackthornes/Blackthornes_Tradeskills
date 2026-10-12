@@ -24,6 +24,7 @@
 -- changes are held in memory only.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local GoldLog = ns.NewModule("GoldLog")
 
@@ -34,21 +35,21 @@ local GoldLog = ns.NewModule("GoldLog")
 -- In the order the chart stacks them and the legend lists them. The colours
 -- are picked to stay apart from one another on the dark window.
 GoldLog.SOURCES = {
-    { key = "auctionSales", text = "Auction sales",    color = { 0.31, 0.82, 0.55 } },
-    { key = "vendorSales",  text = "Vendor sales",     color = { 0.53, 0.78, 0.95 } },
-    { key = "loot",         text = "Loot",             color = { 0.98, 0.84, 0.35 } },
-    { key = "quests",       text = "Quests",           color = { 0.78, 0.60, 0.98 } },
-    { key = "auctionBuys",  text = "Auction buys",     color = { 0.92, 0.42, 0.33 } },
-    { key = "auctionFees",  text = "Auction deposits", color = { 0.96, 0.62, 0.30 } },
-    { key = "vendorBuys",   text = "Vendor buys",      color = { 0.42, 0.62, 0.98 } },
-    { key = "repairs",      text = "Repairs",          color = { 0.70, 0.70, 0.74 } },
-    { key = "training",     text = "Training",         color = { 0.95, 0.50, 0.75 } },
-    { key = "flights",      text = "Flights",          color = { 0.40, 0.85, 0.85 } },
-    { key = "mail",         text = "Mail",             color = { 0.85, 0.75, 0.55 } },
-    { key = "trade",        text = "Trades",           color = { 0.65, 0.88, 0.40 } },
-    { key = "other",        text = "Other",            color = { 0.55, 0.57, 0.62 } },
+    { key = "auctionSales", text = L["Auction sales"],    color = { 0.31, 0.82, 0.55 } },
+    { key = "vendorSales",  text = L["Vendor sales"],     color = { 0.53, 0.78, 0.95 } },
+    { key = "loot",         text = L["Loot"],             color = { 0.98, 0.84, 0.35 } },
+    { key = "quests",       text = L["Quests"],           color = { 0.78, 0.60, 0.98 } },
+    { key = "auctionBuys",  text = L["Auction buys"],     color = { 0.92, 0.42, 0.33 } },
+    { key = "auctionFees",  text = L["Auction deposits"], color = { 0.96, 0.62, 0.30 } },
+    { key = "vendorBuys",   text = L["Vendor buys"],      color = { 0.42, 0.62, 0.98 } },
+    { key = "repairs",      text = L["Repairs"],          color = { 0.70, 0.70, 0.74 } },
+    { key = "training",     text = L["Training"],         color = { 0.95, 0.50, 0.75 } },
+    { key = "flights",      text = L["Flights"],          color = { 0.40, 0.85, 0.85 } },
+    { key = "mail",         text = L["Mail"],             color = { 0.85, 0.75, 0.55 } },
+    { key = "trade",        text = L["Trades"],           color = { 0.65, 0.88, 0.40 } },
+    { key = "other",        text = L["Other"],            color = { 0.55, 0.57, 0.62 } },
     -- Never in income or spending, never charted: listed on its own.
-    { key = "transfer",     text = "Your characters",  color = { 0.45, 0.47, 0.52 }, moved = true },
+    { key = "transfer",     text = L["Your characters"],  color = { 0.45, 0.47, 0.52 }, moved = true },
 }
 
 local SOURCE_BY_KEY = {}
@@ -374,11 +375,11 @@ end
 
 -- Periods offered on the Sales tab, in menu order.
 GoldLog.PERIODS = {
-    { text = "This session",  value = "session" },
-    { text = "Today",         value = "today" },
-    { text = "Last 7 days",   value = "week" },
-    { text = "Last 30 days",  value = "month" },
-    { text = "Pick dates",    value = "pick" },
+    { text = L["This session"],  value = "session" },
+    { text = L["Today"],         value = "today" },
+    { text = L["Last 7 days"],   value = "week" },
+    { text = L["Last 30 days"],  value = "month" },
+    { text = L["Pick dates"],    value = "pick" },
 }
 
 local function NewBin(label, from, to)

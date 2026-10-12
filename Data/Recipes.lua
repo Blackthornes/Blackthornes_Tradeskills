@@ -7,6 +7,7 @@
 -- are standing at the auction house with no profession open.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Recipes = ns.NewModule("Recipes")
 
@@ -383,10 +384,10 @@ local function Distinguish(record)
     if type(record) ~= "table" then return nil end
 
     if record.level and record.class then
-        return ("level %d %s"):format(record.level, record.class)
+        return L.Format("level %d %s", record.level, record.class)
     end
     if record.class then return record.class end
-    if not record.guid then return "saved before last names" end
+    if not record.guid then return L["saved before last names"] end
 end
 
 --- Every known character, newest data first.
@@ -537,7 +538,7 @@ function Recipes:GetDisplayLink(recipeID)
         if ok and link then return link end
     end
 
-    return (recipe and recipe.name) or ("recipe " .. tostring(recipeID))
+    return (recipe and recipe.name) or L.Format("recipe %s", tostring(recipeID))
 end
 
 --- Resolve whatever the player typed into matching recipes.
@@ -965,22 +966,22 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("professions", "list this character's professions", function()
+ns.RegisterCommand("professions", L["list this character's professions"], function()
     local professions = ns.Recipes:GetProfessions()
     if #professions == 0 then
-        ns.Print("no professions found")
+        ns.Print(L["no professions found"])
         return
     end
 
-    ns.Print("professions")
+    ns.Print(L["professions"])
     for _, profession in ipairs(professions) do
         if profession.learned then
             ns.PrintRaw(("  |c%s%s|r %d/%d"):format(
                 ns.COLORS.accent, profession.name, profession.skillLevel, profession.maxSkillLevel))
         else
-            ns.PrintRaw(("  |c%s%s (not learned)|r"):format(ns.COLORS.muted, profession.name))
+            ns.PrintRaw(L.Format("  |c%s%s (not learned)|r", ns.COLORS.muted, profession.name))
         end
     end
 
-    ns.PrintRaw(("  |c%s%d recipe(s) saved|r"):format(ns.COLORS.muted, ns.Recipes:Count()))
+    ns.PrintRaw(L.Format("  |c%s%d recipe(s) saved|r", ns.COLORS.muted, ns.Recipes:Count()))
 end)

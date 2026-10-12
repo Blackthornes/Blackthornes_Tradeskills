@@ -14,6 +14,7 @@
 -- auction value. It is a long-run average, not a promise about any one cast.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Disenchant = ns.NewModule("Disenchant")
 
@@ -166,6 +167,9 @@ local NOT_DISENCHANTABLE_NAME = {
 }
 
 local QUALITY_NAME = { [2] = "uncommon", [3] = "rare", [4] = "epic" }
+-- The same, shown to players.
+local QUALITY_WORDS = { uncommon = L["uncommon"], rare = L["rare"], epic = L["epic"] }
+Disenchant.QUALITY_WORDS = QUALITY_WORDS
 
 local function Band(bands, itemLevel)
     for _, band in ipairs(bands) do
@@ -479,8 +483,10 @@ end
 --- Where the chances came from, for notes: "your own 4 disenchants of this
 --- item" or "your own 12 disenchants of items like this".
 function Disenchant:YoursPhrase(facts)
-    return ("your own %d disenchants of %s"):format(facts.casts or 0,
-        facts.byItem and "this item" or "items like this")
+    if facts.byItem then
+        return L.Format("your own %d disenchants of this item", facts.casts or 0)
+    end
+    return L.Format("your own %d disenchants of items like this", facts.casts or 0)
 end
 
 --- Which row of the table an item falls in, as a key for recording results.
@@ -500,6 +506,14 @@ end
 
 local COLOUR_WORD = { [2] = "green", [3] = "blue", [4] = "purple" }
 
+-- The colour and kind in words, one whole phrase each so a translation can
+-- order them its own way.
+local KIND_WORDS = {
+    [2] = { weapon = L["green weapon"], armor = L["green armor"], any = L["green items"] },
+    [3] = { weapon = L["blue weapon"], armor = L["blue armor"], any = L["blue items"] },
+    [4] = { weapon = L["purple weapon"], armor = L["purple armor"], any = L["purple items"] },
+}
+
 --- A key from BandKey in words: "green armor, item level 21 to 25".
 function Disenchant:DescribeKey(key)
     local quality, kind, top = tostring(key or ""):match("^(%d):(%a+):(%w+)$")
@@ -517,15 +531,16 @@ function Disenchant:DescribeKey(key)
 
     local levels
     if upTo == math.huge then
-        levels = ("item level %d and up"):format(from)
+        levels = L.Format("item level %d and up", from)
     elseif from <= 1 then
-        levels = ("item level %d and below"):format(upTo)
+        levels = L.Format("item level %d and below", upTo)
     else
-        levels = ("item level %d to %d"):format(from, upTo)
+        levels = L.Format("item level %d to %d", from, upTo)
     end
 
-    local what = kind == "any" and "items" or kind
-    return ("%s %s, %s"):format(COLOUR_WORD[quality], what, levels)
+    local what = KIND_WORDS[quality][kind]
+        or ("%s %s"):format(COLOUR_WORD[quality], kind == "any" and "items" or kind)
+    return L.Format("%s, %s", what, levels)
 end
 
 --- What one disenchant of this item can give.
@@ -726,7 +741,7 @@ function Disenchant:ItemName(itemID)
         if ok and name then return name end
     end
 
-    return MATERIAL_NAME[itemID] or ("item " .. tostring(itemID))
+    return MATERIAL_NAME[itemID] or L.Format("item %s", tostring(itemID))
 end
 
 --------------------------------------------------------------------------------
@@ -1246,7 +1261,7 @@ function Disenchant:AnnounceDeals()
     local total = 0
     for _, row in ipairs(rows) do total = total + row.gain end
 
-    ns.Print(("Disenchant deals: %d on the auction house worth %s together. Best: %s for %s, makes %s. See the Disenchanting tab."):format(
+    ns.Print(L.Format("Disenchant deals: %d on the auction house worth %s together. Best: %s for %s, makes %s. See the Disenchanting tab.",
         #rows, Util.FormatMoney(total, { noColor = true }),
         Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
         Util.FormatMoney(best.gain, { noColor = true })))
@@ -1269,32 +1284,33 @@ local function Report(input)
     local itemID = tonumber((input or ""):match("item:(%d+)") or (input or ""):match("(%d+)"))
 
     if not itemID then
-        ns.Print("usage: /bts de <item link or item ID>")
+        ns.Print(L["usage: /bts de <item link or item ID>"])
         return
     end
 
     local disenchantable = Disenchant:IsDisenchantable(itemID)
 
     if disenchantable == nil then
-        ns.Print(("%s is not cached yet, try again in a moment"):format(Util.GetItemLabel(itemID)))
+        ns.Print(L.Format("%s is not cached yet, try again in a moment", Util.GetItemLabel(itemID)))
         return
     elseif not disenchantable then
-        ns.Print(("%s cannot be disenchanted"):format(Util.GetItemLabel(itemID)))
+        ns.Print(L.Format("%s cannot be disenchanted", Util.GetItemLabel(itemID)))
         return
     end
 
     local value, partial, breakdown = Disenchant:GetValue(itemID)
     local facts = breakdown and breakdown.facts or {}
 
-    ns.Print(("%s: item level %d, %s %s, needs Enchanting about %d"):format(
-        Util.GetItemLabel(itemID), facts.itemLevel or 0, facts.qualityName or "?",
-        facts.isWeapon and "weapon" or "armor", facts.skill or 0))
+    ns.Print(L.Format(facts.isWeapon and L["%s: item level %d, %s weapon, needs Enchanting about %d"]
+            or L["%s: item level %d, %s armor, needs Enchanting about %d"],
+        Util.GetItemLabel(itemID), facts.itemLevel or 0, QUALITY_WORDS[facts.qualityName] or facts.qualityName or "?",
+        facts.skill or 0))
 
     if facts.source == "yours" then
-        ns.Print("  from " .. Disenchant:YoursPhrase(facts))
+        ns.Print(L.Format("  from %s", Disenchant:YoursPhrase(facts)))
     else
-        ns.Print(("  from the built-in table (%d of yours recorded, yours are used from %d)")
-            :format(facts.casts or 0, Disenchant.LEARN_AFTER))
+        ns.Print(L.Format("  from the built-in table (%d of yours recorded, yours are used from %d)",
+            facts.casts or 0, Disenchant.LEARN_AFTER))
     end
 
     for _, line in ipairs(breakdown and breakdown.outcomes or {}) do
@@ -1303,21 +1319,21 @@ local function Report(input)
 
         ns.Print(("  %s%%  %sx %s  %s%s"):format(
             Util.Round(line.chance * 100, 1), count, line.name or Util.GetItemLabel(line.itemID),
-            line.price and (Util.FormatMoney(line.price, { noColor = true }) .. " each") or "no price",
-            line.counted and "" or "  (bonus)"))
+            line.price and L.Format("%s each", Util.FormatMoney(line.price, { noColor = true })) or L["no price"],
+            line.counted and "" or L["  (bonus)"]))
     end
 
     if value then
-        ns.Print(("disenchant value %s%s"):format(Util.FormatMoney(value, { noColor = true }),
-            partial and " (some materials have no price yet)" or ""))
+        ns.Print(L.Format(partial and L["disenchant value %s (some materials have no price yet)"] or L["disenchant value %s"],
+            Util.FormatMoney(value, { noColor = true })))
     else
-        ns.Print("disenchant value unknown: the most likely material has not been scanned")
+        ns.Print(L["disenchant value unknown: the most likely material has not been scanned"])
     end
 end
 
 Disenchant._Report = Report
 
-ns.RegisterCommand("de", "<item link or ID>: what an item disenchants into and its value", Report)
+ns.RegisterCommand("de", L["<item link or ID>: what an item disenchants into and its value"], Report)
 
 --------------------------------------------------------------------------------
 -- /bts dedeals: why each disenchant deal is on the Disenchanting tab
@@ -1328,7 +1344,7 @@ local function Ago(stamp)
     return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
-ns.RegisterCommand("dedeals", "say why each disenchant deal on the Disenchanting tab is there", function()
+ns.RegisterCommand("dedeals", L["say why each disenchant deal on the Disenchanting tab is there"], function()
     local lastScan = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
     ns.Print(("dedeals: last scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))

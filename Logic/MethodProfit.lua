@@ -26,6 +26,7 @@
 -- Nothing here is written into the ledger or rewrites an old record.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local MethodProfit = ns.NewModule("MethodProfit")
 
@@ -33,11 +34,11 @@ local Util = ns.Util
 
 --- In the order they are listed.
 MethodProfit.METHODS = {
-    { key = "crafted",      text = "Crafted",      hint = "sold at auction, made by you" },
-    { key = "flipped",      text = "Flipped",      hint = "bought at auction, sold again" },
-    { key = "vendored",     text = "Vendored",     hint = "sold to a vendor" },
-    { key = "disenchanted", text = "Disenchanted", hint = "broken down for materials" },
-    { key = "other",        text = "Other sales",  hint = "sold at auction, cost not known" },
+    { key = "crafted",      text = L["Crafted"],      hint = L["sold at auction, made by you"] },
+    { key = "flipped",      text = L["Flipped"],      hint = L["bought at auction, sold again"] },
+    { key = "vendored",     text = L["Vendored"],     hint = L["sold to a vendor"] },
+    { key = "disenchanted", text = L["Disenchanted"], hint = L["broken down for materials"] },
+    { key = "other",        text = L["Other sales"],  hint = L["sold at auction, cost not known"] },
 }
 
 local DAY = 86400

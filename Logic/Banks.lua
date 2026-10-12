@@ -8,6 +8,7 @@
 -- without logging round the whole account.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Banks = ns.NewModule("Banks")
 
@@ -52,7 +53,7 @@ function Banks:GetName(itemID)
         if ok and type(known) == "string" then return known end
     end
 
-    return ("item %d"):format(itemID)
+    return L.Format("item %d", itemID)
 end
 
 --- What one of an item is worth, in copper, or nil when nothing is known.
@@ -230,7 +231,7 @@ end
 -- Command
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("bank", "see what is in every character's bank", function()
+ns.RegisterCommand("bank", L["see what is in every character's bank"], function()
     if ns.UI and ns.UI.Show then
         ns.UI:Show()
         if ns.UI.SelectTab then ns.UI:SelectTab("characters") end
@@ -240,5 +241,5 @@ ns.RegisterCommand("bank", "see what is in every character's bank", function()
         return
     end
 
-    ns.Print("the window is not ready yet, try again in a moment")
+    ns.Print(L["the window is not ready yet, try again in a moment"])
 end)

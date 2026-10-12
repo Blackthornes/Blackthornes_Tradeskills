@@ -14,6 +14,7 @@
 -- report, 2026-10-02). What a merchant is seen charging always wins.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Vendor = ns.NewModule("Vendor")
 
@@ -275,10 +276,10 @@ Vendor.isMerchantOpen = false
 
 function Vendor:CanBuy()
     if not self.isMerchantOpen then
-        return false, "no vendor is open"
+        return false, L["no vendor is open"]
     end
     if not Util.HasFunction("BuyMerchantItem") then
-        return false, "this version of the game does not let addons buy from vendors"
+        return false, L["this version of the game does not let addons buy from vendors"]
     end
     return true
 end
@@ -408,23 +409,23 @@ function Vendor:BuyNeeded()
     end
 
     if self.buying then
-        ns.Print("already buying")
+        ns.Print(L["already buying"])
         return false
     end
 
     local lines, total, cheaperElsewhere = self:GetNeeded()
     if #lines == 0 then
         if cheaperElsewhere > 0 then
-            ns.Print("the auction house is cheaper for everything this vendor has that the queue needs")
+            ns.Print(L["the auction house is cheaper for everything this vendor has that the queue needs"])
         else
-            ns.Print("this vendor has nothing the queue needs")
+            ns.Print(L["this vendor has nothing the queue needs"])
         end
         return false
     end
 
     local moneyOk, money = pcall(GetMoney)
     if moneyOk and money and money < total then
-        ns.Warn(("that would cost %s and you have %s"):format(
+        ns.Warn(L.Format("that would cost %s and you have %s",
             Util.FormatMoney(total), Util.FormatMoney(money)))
         return false
     end
@@ -444,7 +445,7 @@ function Vendor:BuyNeeded()
         self.buyStartBags[line.itemID] = BagCount(line.itemID)
     end
 
-    ns.Print(("buying %d material(s) for %s..."):format(#lines, Util.FormatMoney(total)))
+    ns.Print(L.Format("buying %d material(s) for %s...", #lines, Util.FormatMoney(total)))
 
     self:BuyStep()
     return true
@@ -463,7 +464,7 @@ function Vendor:BuyStep()
 
     self.buySteps = self.buySteps + 1
     if self.buySteps > MAX_BUY_STEPS then
-        ns.Warn("stopped buying after a lot of purchases in a row; click again if you still need more")
+        ns.Warn(L["stopped buying after a lot of purchases in a row; click again if you still need more"])
         self:FinishBuying()
         return
     end
@@ -517,7 +518,7 @@ function Vendor:BuyStep()
 
     local ok = pcall(BuyMerchantItem, line.index, amount)
     if not ok then
-        ns.Warn(("could not buy %s"):format(Util.GetItemLabel(line.itemID)))
+        ns.Warn(L.Format("could not buy %s", Util.GetItemLabel(line.itemID)))
         self.buyIndex = self.buyIndex + 1
     else
         self.buyPurchased[line.itemID] = purchased + amount
@@ -558,7 +559,7 @@ function Vendor:FinishBuying()
     self.buyStartBags = nil
     self.settling = waiting
 
-    ns.Print(("done buying (about %s spent)"):format(Util.FormatMoney(self.buySpent or 0)))
+    ns.Print(L.Format("done buying (about %s spent)", Util.FormatMoney(self.buySpent or 0)))
 
     if waiting then
         -- A purchase the game turned down (bags full) never arrives, so the
@@ -678,15 +679,15 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("vendor", "show learned vendor prices", function()
+ns.RegisterCommand("vendor", L["show learned vendor prices"], function()
     local count = ns.Vendor:Count()
 
     if count == 0 then
-        ns.Print("no vendor prices learned yet. Open a trade goods vendor once")
+        ns.Print(L["no vendor prices learned yet. Open a trade goods vendor once"])
         return
     end
 
-    ns.Print(("%d vendor price(s) learned"):format(count))
+    ns.Print(L.Format("%d vendor price(s) learned", count))
 
     local shown = 0
     for itemID, record in pairs(ns.Vendor:GetTable()) do
@@ -694,7 +695,7 @@ ns.RegisterCommand("vendor", "show learned vendor prices", function()
             ns.PrintRaw(("  %s  %s%s"):format(
                 Util.GetItemLabel(itemID),
                 Util.FormatMoney(record.price),
-                record.limited and "  |cff7a8089(limited stock)|r" or ""))
+                record.limited and ("  |cff7a8089" .. L["(limited stock)"] .. "|r") or ""))
             shown = shown + 1
         end
     end

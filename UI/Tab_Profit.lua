@@ -2,6 +2,7 @@
 -- The headline table: what is worth making, and why.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -31,31 +32,31 @@ local ICON_GUTTER = ICON_SIZE + 4
 -- WHO only earns its space when more than one character is in play, so it
 -- is hidden otherwise and the craft name takes the room back.
 local COLUMNS = {
-    { key = "age",    label = "AGE",    width = 40, justify = "CENTER" },
-    { key = "posted", label = "STOCK",  width = 44, justify = "CENTER" },
+    { key = "age",    label = L["AGE"],    width = 40, justify = "CENTER" },
+    { key = "posted", label = L["STOCK"],  width = 44, justify = "CENTER" },
     -- How well it sells (Logic/Demand.lua), beside what you already hold:
     -- together they say whether to make more.
-    { key = "demand", label = "DEMAND", width = 50, justify = "CENTER" },
-    { key = "make",   label = "MAKE",   width = 40, justify = "CENTER" },
-    { key = "who",    label = "WHO",    width = 96, justify = "CENTER", accountWideOnly = true },
-    { key = "margin", label = "MARGIN", width = 46, justify = "CENTER" },
+    { key = "demand", label = L["DEMAND"], width = 50, justify = "CENTER" },
+    { key = "make",   label = L["MAKE"],   width = 40, justify = "CENTER" },
+    { key = "who",    label = L["WHO"],    width = 96, justify = "CENTER", accountWideOnly = true },
+    { key = "margin", label = L["MARGIN"], width = 46, justify = "CENTER" },
     -- Which way the profit is for (AH, Vendor, DE), when the list is
     -- ranked by whichever pays most. Ranked by one way, it says nothing.
-    { key = "via",    label = "VIA",    width = 44, justify = "CENTER", bestOnly = true },
+    { key = "via",    label = L["VIA"],    width = 44, justify = "CENTER", bestOnly = true },
     -- How long one takes, sub-crafts included, and the profit that makes
     -- an hour (asked 2026-10-09). Shown with the "Per hour" tick box.
-    { key = "time",    label = "TIME",    width = 44, justify = "CENTER", perHourOnly = true },
-    { key = "perHour", label = "GOLD/HR", width = 74, money = true, perHourOnly = true },
-    { key = "profit", label = "PROFIT", width = 74, money = true },
+    { key = "time",    label = L["TIME"],    width = 44, justify = "CENTER", perHourOnly = true },
+    { key = "perHour", label = L["GOLD/HR"], width = 74, money = true, perHourOnly = true },
+    { key = "profit", label = L["PROFIT"], width = 74, money = true },
     -- Beside SELLS so the two read against each other. Only shown when
     -- something in the list can be disenchanted.
-    { key = "disenchant", label = "DISENCHANT", width = 62, money = true, disenchantOnly = true },
-    { key = "sells",  label = "SELLS",  width = 70, money = true },
-    { key = "cost",   label = "COST",   width = 70, money = true },
+    { key = "disenchant", label = L["DISENCHANT"], width = 62, money = true, disenchantOnly = true },
+    { key = "sells",  label = L["SELLS"],  width = 70, money = true },
+    { key = "cost",   label = L["COST"],   width = 70, money = true },
 }
 
 -- Any column but the craft's name can be hidden as well (UI/Columns.lua).
-ns.Columns:Register("profit", "Profit", COLUMNS)
+ns.Columns:Register("profit", L["Profit"], COLUMNS)
 
 local MARGIN_COLUMN
 for _, column in ipairs(COLUMNS) do
@@ -88,9 +89,9 @@ local widgets = {}
 
 -- The row hint, as much of it as fits beside the count on its left.
 local HINT_TEXTS = {
-    "Right-click a row to queue one, Shift-click to search the auction house",
-    "Right-click to queue, Shift-click to search",
-    "Right-click a row to queue one",
+    L["Right-click a row to queue one, Shift-click to search the auction house"],
+    L["Right-click to queue, Shift-click to search"],
+    L["Right-click a row to queue one"],
 }
 
 local function FitHint()
@@ -213,7 +214,7 @@ local function UpdateDisenchantCell(cells, analysis)
         Theme.SetMoneyText(cell, analysis.disenchantValue, { short = true })
         cell:SetTextColor(Theme.Unpack(analysis.disenchantBeatsSale and "profit" or "muted"))
     elseif analysis.disenchantable then
-        cell:SetText("no price")
+        cell:SetText(L["no price"])
         cell:SetTextColor(Theme.Unpack("dim"))
     else
         cell:SetText("")
@@ -264,20 +265,20 @@ local function AddTimeLines(analysis)
 
     local r, g, b = 0.7, 0.7, 0.7
     if not seconds then
-        GameTooltip:AddLine("Craft time not known yet: make one and it is kept.", r, g, b, true)
+        GameTooltip:AddLine(L["Craft time not known yet: make one and it is kept."], r, g, b, true)
         GameTooltip:Show()
         return
     end
 
     local parts = {}
-    if (timing.casts or 1) > 1 + 1e-6 then parts[#parts + 1] = "sub-crafts included" end
-    if analysis.via == "disenchant" and analysis.timeSeconds then parts[#parts + 1] = "and disenchanting" end
+    if (timing.casts or 1) > 1 + 1e-6 then parts[#parts + 1] = L["sub-crafts included"] end
+    if analysis.via == "disenchant" and analysis.timeSeconds then parts[#parts + 1] = L["and disenchanting"] end
     local note = #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""
 
-    GameTooltip:AddDoubleLine("Craft time" .. note, CraftTime.Format(seconds), r, g, b, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Craft time"] .. note, CraftTime.Format(seconds), r, g, b, 1, 1, 1)
     if analysis.goldPerHour then
         local vr, vg, vb = Theme.Unpack(analysis.goldPerHour >= 0 and "profit" or "loss")
-        GameTooltip:AddDoubleLine("Per hour of casting",
+        GameTooltip:AddDoubleLine(L["Per hour of casting"],
             Util.FormatMoney(analysis.goldPerHour, { noColor = true, short = true }), r, g, b, vr, vg, vb)
     end
     GameTooltip:Show()
@@ -287,7 +288,7 @@ end
 local function AddDisenchantLine(analysis)
     if not analysis.disenchantBeatsSale or not GameTooltip:IsShown() then return end
 
-    GameTooltip:AddLine(("Disenchanting it is worth %s more than selling it."):format(
+    GameTooltip:AddLine(L.Format("Disenchanting it is worth %s more than selling it.",
         Util.FormatMoney(analysis.disenchantValue - (analysis.unitRevenue or 0), { noColor = true })),
         0.35, 0.85, 0.45, true)
     GameTooltip:Show()
@@ -318,7 +319,7 @@ end
 local function AddOwnerLine(analysis)
     if not state.accountWide or not analysis.ownerName or not GameTooltip:IsShown() then return end
 
-    GameTooltip:AddLine(("Crafted by %s"):format(analysis.ownerName), 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(L.Format("Crafted by %s", analysis.ownerName), 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end
 
@@ -342,7 +343,7 @@ local function UpdateRow(row, analysis)
         ApplyRowLayout(row)
     end
 
-    Theme.SetRowName(row.name, analysis.name or ("recipe " .. analysis.recipeID))
+    Theme.SetRowName(row.name, analysis.name or L.Format("recipe %s", analysis.recipeID))
     Theme.SetItemIcon(row.icon, analysis.outputItemID)
     row.marginBar:Set(nil)
 
@@ -404,9 +405,9 @@ local function UpdateRow(row, analysis)
 
         -- STOCK stays: what you hold needs no price, and it was blanked
         -- here on exactly the rows the Keep in stock limit still applies to.
-        cells.profit:SetText(analysis.soulbound and "soulbound"
-            or analysis.reason == "output has no price data" and "no price"
-            or "no data")
+        cells.profit:SetText(analysis.soulbound and L["soulbound"]
+            or analysis.reason == L["output has no price data"] and L["no price"]
+            or L["no data"])
         cells.profit:SetTextColor(Theme.Unpack("dim"))
         return
     end
@@ -439,7 +440,7 @@ local function UpdateRow(row, analysis)
         -- lie. The column says what the price actually is instead: the
         -- materials-plus-markup estimate, which is a different kind of
         -- number from everything else in the list.
-        SetFitted(cells.age, "estimate", "est.")
+        SetFitted(cells.age, L["estimate"], L["est."])
         cells.age:SetTextColor(Theme.Unpack("warn"))
     elseif analysis.priceBasis == "vendor" then
         -- What a vendor pays never goes out of date, so there is no age to
@@ -449,11 +450,11 @@ local function UpdateRow(row, analysis)
         cells.age:SetTextColor(Theme.Unpack("dim"))
     elseif analysis.priceBasis == "mine" or analysis.priceBasis == "floor" then
         -- Priced at what the player set on the Prices tab, not a scan.
-        SetFitted(cells.age, "my price", "mine")
+        SetFitted(cells.age, L["my price"], L["mine"])
         cells.age:SetTextColor(Theme.Unpack("warn"))
     else
         local age = Util.FormatAge(analysis.age)
-        SetFitted(cells.age, age, age == "just now" and "now" or nil)
+        SetFitted(cells.age, age, age == L["just now"] and L["now"] or nil)
         cells.age:SetTextColor(Theme.Unpack(analysis.stale and "warn" or "dim"))
     end
 end
@@ -466,24 +467,24 @@ local function ShowMarkTooltip(row, analysis)
     local skillUp = analysis.skillUp
     if not skillUp then return end
 
-    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", analysis.outputItemID, analysis.name or "craft")
+    ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", analysis.outputItemID, analysis.name or L["craft"])
     GameTooltip:AddLine(" ")
 
     local r, g, b = ns.SkillUp:GetTierColor(skillUp.tier)
-    GameTooltip:AddDoubleLine("Skill up", ns.SkillUp:GetTierLabel(skillUp.tier),
+    GameTooltip:AddDoubleLine(L["Skill up"], ns.SkillUp:GetTierLabel(skillUp.tier),
         0.7, 0.7, 0.7, r, g, b)
 
-    GameTooltip:AddDoubleLine("Profit each",
+    GameTooltip:AddDoubleLine(L["Profit each"],
         Util.FormatMoney(analysis.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
 
     -- Skill only rises, so a reading taken lower down may have gone green
     -- since. Better said than quietly trusted.
     if skillUp.stale then
-        GameTooltip:AddLine(("Read at skill %d, you are %d now. Open your profession to refresh."):format(
+        GameTooltip:AddLine(L.Format("Read at skill %d, you are %d now. Open your profession to refresh.",
             skillUp.skill or 0, skillUp.currentSkill or 0), 0.91, 0.76, 0.35, true)
     end
 
-    GameTooltip:AddLine("Starred: it raises your skill and it pays.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Starred: it raises your skill and it pays."], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -504,7 +505,7 @@ local function ShowBreaksInto(owner, analysis)
     breakdown = breakdown or {}
 
     GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
-    GameTooltip:SetText("Breaks into", 1, 1, 1)
+    GameTooltip:SetText(L["Breaks into"], 1, 1, 1)
 
     for _, outcome in ipairs(breakdown.outcomes or {}) do
         local count = outcome.min == outcome.max and tostring(outcome.min)
@@ -512,22 +513,34 @@ local function ShowBreaksInto(owner, analysis)
         GameTooltip:AddDoubleLine(
             ("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
                 outcome.name or Util.GetItemLabel(outcome.itemID),
-                outcome.counted == false and "  (bonus)" or ""),
-            outcome.price and (Util.FormatMoney(outcome.price, { noColor = true, short = true }) .. " each")
-                or "no price",
+                outcome.counted == false and L["  (bonus)"] or ""),
+            outcome.price and L.Format("%s each", Util.FormatMoney(outcome.price, { noColor = true, short = true }))
+                or L["no price"],
             1, 1, 1, 0.8, 0.8, 0.8)
     end
 
     local facts = breakdown.facts or {}
     if facts.skill then
-        GameTooltip:AddLine(("Needs Enchanting about %d."):format(facts.skill), 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L.Format("Needs Enchanting about %d.", facts.skill), 0.7, 0.7, 0.7, true)
     end
     if facts.source == "yours" then
-        GameTooltip:AddLine(("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts)), 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts)), 0.5, 0.5, 0.5, true)
     else
-        GameTooltip:AddLine("Chances come from the Classic table built into the addon until you have done enough disenchants of your own.", 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(L["Chances come from the Classic table built into the addon until you have done enough disenchants of your own."], 0.5, 0.5, 0.5, true)
     end
     GameTooltip:Show()
+end
+
+--- Widen a fixed-width button to its label when the label is longer (a
+--- German one is): never narrower than it was made, never "...".
+local function GrowToFit(button)
+    local label = rawget(button, "label")
+    if type(label) ~= "table" or not Theme.TextWidth then return end
+    local text = Theme.TextWidth(label)
+    local ok, width = pcall(button.GetWidth, button)
+    if type(text) == "number" and ok and type(width) == "number" and text + 12 > width then
+        button:SetWidth(math.ceil(text + 12))
+    end
 end
 
 local function BuildDetail(parent)
@@ -555,7 +568,7 @@ local function BuildDetail(parent)
     subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
-    local reagentHeading = Theme.CreateHeading(detail, "MATERIALS")
+    local reagentHeading = Theme.CreateHeading(detail, L["MATERIALS"])
     -- Back out under the icon, so the list of materials starts at the edge.
     reagentHeading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.reagentHeading = reagentHeading
@@ -564,10 +577,11 @@ local function BuildDetail(parent)
     -- does, for the craft and each material, hour by hour. This swaps the
     -- two; which one shows is remembered.
     if ns.PriceGraph then
-        local graphButton = Widgets.CreateButton(detail, "Price graph", function()
+        local graphButton = Widgets.CreateButton(detail, L["Price graph"], function()
             ns.Config:Set("profitShowsGraph", not ns.Config:Get("profitShowsGraph"))
             UpdateDetail(state.selected)
         end, { width = 76, height = 16, fontSize = "tiny" })
+        GrowToFit(graphButton)
         graphButton:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
         graphButton:SetPoint("TOP", reagentHeading, "TOP", 0, 4)
         detail.graphButton = graphButton
@@ -588,16 +602,17 @@ local function BuildDetail(parent)
     -- 2026-10-07). The click itself is taken by the secure button
     -- UI/Disenchanter.lua lays over this one; this handler only runs when
     -- that button is not there, so it says why.
-    local disenchantButton = Widgets.CreateButton(detail, "Disenchant", function()
+    local disenchantButton = Widgets.CreateButton(detail, L["Disenchant"], function()
         local analysis = state.selected
         local check = ns.Disenchanter:Check(analysis and analysis.outputItemID)
 
         if not check.ok then
             ns.Print(check.why)
         else
-            ns.Warn("that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints.")
+            ns.Warn(L["that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints."])
         end
     end, { width = 76, height = 16, fontSize = "tiny", primary = true })
+    GrowToFit(disenchantButton)
     disenchantButton:SetPoint("TOP", reagentHeading, "TOP", 0, 4)
     if detail.graphButton then
         disenchantButton:SetPoint("RIGHT", detail.graphButton, "LEFT", -6, 0)
@@ -618,11 +633,11 @@ local function BuildDetail(parent)
     more.label:SetPoint("LEFT", 18, 0)
     more:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:SetText("Materials", 1, 1, 1)
+        GameTooltip:SetText(L["Materials"], 1, 1, 1)
         for _, reagent in ipairs(self.reagents or {}) do
             GameTooltip:AddDoubleLine(
                 ("%dx %s"):format(reagent.quantity, Util.GetItemLabel(reagent.itemID)),
-                reagent.shortfall > 0 and ("need %d"):format(reagent.shortfall)
+                reagent.shortfall > 0 and L.Format("need %d", reagent.shortfall)
                     or Util.FormatMoney(reagent.lineCost, { short = true }),
                 1, 1, 1, 1, 1, 1)
         end
@@ -654,23 +669,23 @@ local function BuildDetail(parent)
         return value, label
     end
 
-    detail.costValue = SummaryRow(1, "Materials")
-    detail.rivalValue, detail.rivalLabel = SummaryRow(2, "Cheapest rival")
-    detail.ownValue, detail.ownLabel = SummaryRow(3, "Your listing")
-    detail.postValue, detail.postLabel = SummaryRow(4, "You post at")
-    detail.cutValue = SummaryRow(5, "Auction cut")
-    detail.depositValue, detail.depositLabel = SummaryRow(6, "Deposit")
-    detail.profitValue = SummaryRow(7, "Profit")
+    detail.costValue = SummaryRow(1, L["Materials"])
+    detail.rivalValue, detail.rivalLabel = SummaryRow(2, L["Cheapest rival"])
+    detail.ownValue, detail.ownLabel = SummaryRow(3, L["Your listing"])
+    detail.postValue, detail.postLabel = SummaryRow(4, L["You post at"])
+    detail.cutValue = SummaryRow(5, L["Auction cut"])
+    detail.depositValue, detail.depositLabel = SummaryRow(6, L["Deposit"])
+    detail.profitValue = SummaryRow(7, L["Profit"])
     -- What each way makes, when there is more than one. The one the
     -- profit above is for is lit.
     detail.wayRows = {
-        auction = { SummaryRow(8, "If sold at AH") },
-        vendor = { SummaryRow(9, "If vendored") },
-        disenchant = { SummaryRow(10, "If disenchanted") },
+        auction = { SummaryRow(8, L["If sold at AH"]) },
+        vendor = { SummaryRow(9, L["If vendored"]) },
+        disenchant = { SummaryRow(10, L["If disenchanted"]) },
     }
     -- How long one takes, sub-crafts included, and the profit an hour.
-    detail.timeValue = SummaryRow(11, "Craft time")
-    detail.perHourValue = SummaryRow(12, "Per hour")
+    detail.timeValue = SummaryRow(11, L["Craft time"])
+    detail.perHourValue = SummaryRow(12, L["Per hour"])
 
     -- What the craft breaks into, with each chance, under the mouse on the
     -- "If disenchanted" line (from the Enchanting tab, 2026-10-07).
@@ -686,7 +701,7 @@ local function BuildDetail(parent)
     -- thing that decides how many you should be adding.
     local limitLabel = Theme.CreateLabel(detail, "small", "muted")
     limitLabel:SetPoint("BOTTOMLEFT", 12, 46)
-    limitLabel:SetText("Keep in stock")
+    limitLabel:SetText(L["Keep in stock"])
     detail.limitLabel = limitLabel
 
     detail.limitBox = Widgets.CreateNumberBox(detail, {
@@ -728,7 +743,7 @@ local function BuildDetail(parent)
     quantity:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     detail.quantity = quantity
 
-    local addButton = Widgets.CreateButton(detail, "Add to queue", function()
+    local addButton = Widgets.CreateButton(detail, L["Add to queue"], function()
         if not state.selected then return end
 
         -- Whole crafts, one at least: Queue:Add clamps the same way, and the
@@ -738,14 +753,14 @@ local function BuildDetail(parent)
         -- Max writes 0 when the stock limit leaves no room. Queue:Add would
         -- still make that one craft, which is not what the box says.
         if tonumber(quantity:GetText()) == 0 then
-            ns.Print(("nothing queued: the amount for %s is 0"):format(
-                state.selected.name or "that craft"))
+            ns.Print(L.Format("nothing queued: the amount for %s is 0",
+                state.selected.name or L["that craft"]))
             return
         end
 
         local recipeID, name = state.selected.recipeID, state.selected.name
         ns.Queue:Add(recipeID, count)
-        ns.Print(("queued %dx %s"):format(count, name or "craft"))
+        ns.Print(L.Format("queued %dx %s", count, name or L["craft"]))
         if ns.Demand then ns.Demand:WarnIfLow(state.selected.outputItemID, name) end
 
         -- Suggest again from what is now queued, as Max would. Left as it
@@ -757,10 +772,11 @@ local function BuildDetail(parent)
             quantity:SetText(tostring(ns.Profit.MaxCrafts(fresh.craftableNow, fresh.roomInCrafts)))
         end
     end, { width = 100, primary = true, height = 24 })
+    GrowToFit(addButton)
     addButton:SetPoint("BOTTOMLEFT", quantityBox, "BOTTOMRIGHT", 8, 0)
     detail.addButton = addButton
 
-    local maxButton = Widgets.CreateButton(detail, "Max", function()
+    local maxButton = Widgets.CreateButton(detail, L["Max"], function()
         if not state.selected then return end
 
         -- Whichever runs out first: materials, or room under the limit.
@@ -769,22 +785,23 @@ local function BuildDetail(parent)
         local most = ns.Profit.MaxCrafts(state.selected.craftableNow,
             state.selected.roomInCrafts)
         if most == 0 and state.selected.waitingForLow then
-            ns.Print(("no more %s yet: Wait until it runs low is on, so more are made once you are down to %d")
-                :format(state.selected.name or "of that craft", state.selected.restockAt or 0))
+            ns.Print(L.Format("no more %s yet: Wait until it runs low is on, so more are made once you are down to %d",
+                state.selected.name or L["of that craft"], state.selected.restockAt or 0))
         elseif most == 0 then
-            ns.Print(("no room for more %s: you already hold your Max on hand (Keep in stock in Settings)")
-                :format(state.selected.name or "of that craft"))
+            ns.Print(L.Format("no room for more %s: you already hold your Max on hand (Keep in stock in Settings)",
+                state.selected.name or L["of that craft"]))
         end
 
         quantity:SetText(tostring(most))
     end, { width = 44, height = 24,
-           tooltip = "As many as your materials and stock limit allow" })
+           tooltip = L["As many as your materials and stock limit allow"] })
+    GrowToFit(maxButton)
     maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 8, 0)
     detail.maxButton = maxButton
 
     -- Takes the craft off this list for good, on every character. Settings
     -- lists what is ignored, with a Restore button for each.
-    local ignoreButton = Widgets.CreateButton(detail, "Ignore", function()
+    local ignoreButton = Widgets.CreateButton(detail, L["Ignore"], function()
         local analysis = state.selected
         if not analysis then return end
 
@@ -792,16 +809,17 @@ local function BuildDetail(parent)
         -- not go on showing a craft the list no longer has.
         state.selected = nil
         ns.Profit:SetIgnored(analysis.recipeID, true, analysis.name)
-        ns.Print(("ignored %s: it no longer shows on the Profit tab. Restore it under Ignored crafts in Settings.")
-            :format(analysis.name or "that craft"))
+        ns.Print(L.Format("ignored %s: it no longer shows on the Profit tab. Restore it under Ignored crafts in Settings.",
+            analysis.name or L["that craft"]))
     end, { width = 60, height = 24,
-           tooltip = "Stop recommending this craft. Settings lists ignored crafts, each with a Restore button." })
+           tooltip = L["Stop recommending this craft. Settings lists ignored crafts, each with a Restore button."] })
+    GrowToFit(ignoreButton)
     ignoreButton:SetPoint("BOTTOMLEFT", maxButton, "BOTTOMRIGHT", 8, 0)
     detail.ignoreButton = ignoreButton
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
-    empty:SetText("Select a craft to see the breakdown")
+    empty:SetText(L["Select a craft to see the breakdown"])
     detail.empty = empty
 
     return detail
@@ -856,12 +874,12 @@ local function UpdateTimeRows(detail, analysis)
         local text = CraftTime.Format(seconds)
         if casts > 1 + 1e-6 then
             local count = ("%.1f"):format(casts):gsub("%.0$", "")
-            text = ("%s  (%s casts)"):format(text, count)
+            text = L.Format("%s  (%s casts)", text, count)
         end
         detail.timeValue:SetText(text)
         detail.timeValue:SetTextColor(Theme.Unpack("text"))
     else
-        detail.timeValue:SetText("make one to learn it")
+        detail.timeValue:SetText(L["make one to learn it"])
         detail.timeValue:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -898,11 +916,12 @@ local function UpdateGraph(detail, analysis)
     local showGraph = analysis ~= nil and ns.Config:Get("profitShowsGraph") == true
 
     detail.graphButton:SetShown(analysis ~= nil)
-    detail.graphButton:SetText(showGraph and "Materials" or "Price graph")
+    detail.graphButton:SetText(showGraph and L["Materials"] or L["Price graph"])
+    GrowToFit(detail.graphButton)
     detail.graphButton.tooltipText = showGraph
-        and "Show the materials list again"
-        or "The cheapest price hour by hour, for this craft and its materials, and when in the day each is cheapest and dearest"
-    detail.reagentHeading:SetText(showGraph and "PRICE HISTORY" or "MATERIALS")
+        and L["Show the materials list again"]
+        or L["The cheapest price hour by hour, for this craft and its materials, and when in the day each is cheapest and dearest"]
+    detail.reagentHeading:SetText(showGraph and L["PRICE HISTORY"] or L["MATERIALS"])
     detail.graph:SetShown(showGraph)
     if not showGraph then return false end
 
@@ -962,7 +981,7 @@ local function UpdateDisenchantButton(detail, analysis)
     local check = disenchanter:Check(itemID)
     button:SetEnabledState(check.ok)
     button.tooltipText = check.ok
-        and ("Disenchant one %s from your bags."):format(analysis.name or "item") or check.why
+        and L.Format("Disenchant one %s from your bags.", analysis.name or L["item"]) or check.why
 
     if check.ok then
         disenchanter:Arm(button, itemID, check.bag, check.slot)
@@ -1007,7 +1026,7 @@ function UpdateDetail(analysis)
         return
     end
 
-    detail.title:SetText(analysis.name or ("recipe " .. analysis.recipeID))
+    detail.title:SetText(analysis.name or L.Format("recipe %s", analysis.recipeID))
     Theme.SetItemIcon(detail.icon, analysis.outputItemID)
 
     -- The skill-up clause is coloured inline rather than by the whole label,
@@ -1021,16 +1040,16 @@ function UpdateDetail(analysis)
     end
 
     if analysis.craftableNow and analysis.craftableNow > 0 then
-        detail.subtitle:SetText(("You can make %d now"):format(analysis.craftableNow) .. skillUpText)
+        detail.subtitle:SetText(L.Format("You can make %d now", analysis.craftableNow) .. skillUpText)
         detail.subtitle:SetTextColor(Theme.Unpack("profit"))
     else
-        detail.subtitle:SetText("Missing materials" .. skillUpText)
+        detail.subtitle:SetText(L["Missing materials"] .. skillUpText)
         detail.subtitle:SetTextColor(Theme.Unpack("muted"))
     end
 
     if not analysis.priceable then
         detail.summary:Hide()
-        detail.subtitle:SetText(analysis.reason or "cannot be priced")
+        detail.subtitle:SetText(analysis.reason or L["cannot be priced"])
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
     end
 
@@ -1077,11 +1096,11 @@ function UpdateDetail(analysis)
         -- this" without a second screen.
         if reagent.shortfall > 0 then
             line.name:SetText(("%dx %s"):format(reagent.quantity, label))
-            line.value:SetText(("need %d"):format(reagent.shortfall))
+            line.value:SetText(L.Format("need %d", reagent.shortfall))
             line.value:SetTextColor(Theme.Unpack("loss"))
         elseif reagent.source == "mine" then
             -- Costed at the player's own price from the Prices tab.
-            line.name:SetText(("%dx %s |c%s(my price)|r"):format(reagent.quantity, label, ns.COLORS.warn))
+            line.name:SetText(L.Format("%dx %s |c%s(my price)|r", reagent.quantity, label, ns.COLORS.warn))
             line.value:SetText(Util.FormatMoney(reagent.lineCost, { short = true }))
             line.value:SetTextColor(Theme.Unpack("warn"))
         else
@@ -1100,7 +1119,7 @@ function UpdateDetail(analysis)
         more:ClearAllPoints()
         more:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, shownCount == 0 and -6 or 0)
         more:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
-        more.label:SetText(("+%d more materials"):format(#reagents - shownCount))
+        more.label:SetText(L.Format("+%d more materials", #reagents - shownCount))
         more.reagents = reagents
         more:Show()
     end
@@ -1114,7 +1133,7 @@ function UpdateDetail(analysis)
             -- matched instead, and the label says so rather than implying a
             -- price below the rival's.
             detail.rivalLabel:SetText(analysis.matchedRival
-                and "Matching rival" or "Cheapest rival")
+                and L["Matching rival"] or L["Cheapest rival"])
             detail.rivalValue:SetText(Util.FormatMoney(analysis.competitorPrice))
             detail.rivalValue:SetTextColor(Theme.Unpack("muted"))
         elseif analysis.priceUncontested then
@@ -1122,34 +1141,34 @@ function UpdateDetail(analysis)
             -- materials rather than anything the book says. Checked before
             -- "You hold lowest" below, which is the same situation described
             -- less usefully: what matters is where the price came from.
-            detail.rivalLabel:SetText("No competition")
-            detail.rivalValue:SetText("materials + markup")
+            detail.rivalLabel:SetText(L["No competition"])
+            detail.rivalValue:SetText(L["materials + markup"])
             detail.rivalValue:SetTextColor(Theme.Unpack("profit"))
         elseif analysis.youHoldLowest then
             -- Your own auction is the cheapest. Undercutting it would just walk
             -- your own price down, so we hold at market and say so.
-            detail.rivalLabel:SetText("You hold lowest")
-            detail.rivalValue:SetText("no rival")
+            detail.rivalLabel:SetText(L["You hold lowest"])
+            detail.rivalValue:SetText(L["no rival"])
             detail.rivalValue:SetTextColor(Theme.Unpack("profit"))
         elseif analysis.priceDerived then
             -- No scan has ever priced this one, so the sale price above is
             -- the material value plus the markup in Settings. Named
             -- differently from "None listed" below, which is an item the
             -- auction house has seen and simply has none of right now.
-            detail.rivalLabel:SetText("Never scanned")
-            detail.rivalValue:SetText("from materials")
+            detail.rivalLabel:SetText(L["Never scanned"])
+            detail.rivalValue:SetText(L["from materials"])
             detail.rivalValue:SetTextColor(Theme.Unpack("warn"))
         elseif analysis.priceBasis == "vendor" then
             -- Nothing listed, and the price below is what a vendor pays:
             -- not an estimate, as "None listed" below would call it.
-            detail.rivalLabel:SetText("None listed")
-            detail.rivalValue:SetText("no rival")
+            detail.rivalLabel:SetText(L["None listed"])
+            detail.rivalValue:SetText(L["no rival"])
             detail.rivalValue:SetTextColor(Theme.Unpack("muted"))
         else
             -- Nothing listed means no competition to undercut, so the number
             -- shown is an estimate rather than an observed price.
-            detail.rivalLabel:SetText("None listed")
-            detail.rivalValue:SetText("estimate")
+            detail.rivalLabel:SetText(L["None listed"])
+            detail.rivalValue:SetText(L["estimate"])
             detail.rivalValue:SetTextColor(Theme.Unpack("warn"))
         end
 
@@ -1176,13 +1195,13 @@ function UpdateDetail(analysis)
         local toVendor = analysis.priceBasis == "vendor"
         local toEnchanter = analysis.priceBasis == "disenchant"
 
-        detail.postLabel:SetText(toVendor and "Vendor pays"
-            or toEnchanter and "Disenchants to" or "You post at")
+        detail.postLabel:SetText(toVendor and L["Vendor pays"]
+            or toEnchanter and L["Disenchants to"] or L["You post at"])
         detail.postValue:SetText(Util.FormatMoney(analysis.unitRevenue))
         detail.postValue:SetTextColor(Theme.Unpack("accent"))
 
         if toVendor then
-            detail.cutValue:SetText("none")
+            detail.cutValue:SetText(L["none"])
             detail.cutValue:SetTextColor(Theme.Unpack("dim"))
         else
             detail.cutValue:SetText("-" .. Util.FormatMoney(analysis.cut))
@@ -1191,16 +1210,16 @@ function UpdateDetail(analysis)
 
         -- Only known once the item has been priced at an auction house.
         if toVendor or toEnchanter then
-            detail.depositLabel:SetText("Deposit")
-            detail.depositValue:SetText("none")
+            detail.depositLabel:SetText(L["Deposit"])
+            detail.depositValue:SetText(L["none"])
             detail.depositValue:SetTextColor(Theme.Unpack("dim"))
         elseif analysis.depositKnown then
-            detail.depositLabel:SetText("Deposit")
+            detail.depositLabel:SetText(L["Deposit"])
             detail.depositValue:SetText("-" .. Util.FormatMoney(analysis.deposit))
             detail.depositValue:SetTextColor(Theme.Unpack("muted"))
         else
-            detail.depositLabel:SetText("Deposit")
-            detail.depositValue:SetText("unknown")
+            detail.depositLabel:SetText(L["Deposit"])
+            detail.depositValue:SetText(L["unknown"])
             detail.depositValue:SetTextColor(Theme.Unpack("dim"))
         end
 
@@ -1233,7 +1252,7 @@ function UpdateDetail(analysis)
                 value:SetTextColor(Theme.ProfitColor(line.profit))
                 label:SetTextColor(Theme.Unpack(line.chosen and "accent" or "muted"))
             elseif unscanned then
-                value:SetText("materials not scanned")
+                value:SetText(L["materials not scanned"])
                 value:SetTextColor(Theme.Unpack("dim"))
                 label:SetTextColor(Theme.Unpack("muted"))
             end
@@ -1272,43 +1291,43 @@ function UpdateDetail(analysis)
         -- Spell out where the stock is, so a hidden craft is explicable.
         local parts = {}
         if (analysis.posted or 0) > 0 then
-            parts[#parts + 1] = ("%d listed"):format(analysis.posted)
+            parts[#parts + 1] = L.Format("%d listed", analysis.posted)
         end
         if (analysis.onHand or 0) > 0 then
-            parts[#parts + 1] = ("%d held"):format(analysis.onHand)
+            parts[#parts + 1] = L.Format("%d held", analysis.onHand)
         end
         -- Named separately from "held": an item in the mailbox is one that came
         -- back from a listing that did not sell, which is worth knowing.
         if (analysis.inMail or 0) > 0 then
-            parts[#parts + 1] = ("%d in mail"):format(analysis.inMail)
+            parts[#parts + 1] = L.Format("%d in mail", analysis.inMail)
         end
         if (analysis.queuedElsewhere or 0) > 0 then
-            parts[#parts + 1] = ("%d queued"):format(analysis.queuedElsewhere)
+            parts[#parts + 1] = L.Format("%d queued", analysis.queuedElsewhere)
         end
 
-        local where = #parts > 0 and table.concat(parts, ", ") or "none yet"
+        local where = #parts > 0 and table.concat(parts, ", ") or L["none yet"]
         -- A fast seller's limit is the box's number plus the extra; said
         -- here, since the box shows only the number set.
         if (analysis.fastSellerExtra or 0) > 0 then
-            where = ("%s, +%d fast seller"):format(where, analysis.fastSellerExtra)
+            where = L.Format("%s, +%d fast seller", where, analysis.fastSellerExtra)
         end
 
         if analysis.postLimit and analysis.postLimit > 0 and analysis.waitingForLow then
-            detail.limitHint:SetText(("%s, restock at %d"):format(where, analysis.restockAt or 0))
+            detail.limitHint:SetText(L.Format("%s, restock at %d", where, analysis.restockAt or 0))
             detail.limitHint:SetTextColor(Theme.Unpack("warn"))
         elseif analysis.postLimit and analysis.postLimit > 0 then
-            detail.limitHint:SetText(("%s, room for %d"):format(where, analysis.postRoom or 0))
+            detail.limitHint:SetText(L.Format("%s, room for %d", where, analysis.postRoom or 0))
             detail.limitHint:SetTextColor(Theme.Unpack(
                 analysis.atPostLimit and "warn" or "dim"))
         elseif analysis.learnedLimit then
             -- No number set: Queue All keeps what your sales taught.
-            detail.limitHint:SetText(("%s, learned %d from your sales"):format(where, analysis.learnedLimit))
+            detail.limitHint:SetText(L.Format("%s, learned %d from your sales", where, analysis.learnedLimit))
             detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         elseif (analysis.stockDivisor or 1) > 1 then
             -- Say out loud that the list order is not pure profit. A craft
             -- sitting lower than its profit suggests, with no explanation, is
             -- exactly the sort of thing that reads as a bug.
-            detail.limitHint:SetText(("%s, so ranked as %s"):format(
+            detail.limitHint:SetText(L.Format("%s, so ranked as %s",
                 where, Util.FormatMoney(
                     (analysis.profit or 0) > 0
                         and (analysis.profit / analysis.stockDivisor)
@@ -1318,7 +1337,7 @@ function UpdateDetail(analysis)
             detail.limitHint:SetText(where)
             detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         else
-            detail.limitHint:SetText("none on hand")
+            detail.limitHint:SetText(L["none on hand"])
             detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         end
     else
@@ -1338,13 +1357,13 @@ function UpdateDetail(analysis)
         -- your limit" read as nonsense when they were all that filled it.
         local queued = analysis.queuedElsewhere or 0
         if analysis.waitingForLow then
-            detail.subtitle:SetText(("You have %d, more once you are down to %d"):format(
+            detail.subtitle:SetText(L.Format("You have %d, more once you are down to %d",
                 (analysis.stock or 0) + queued, analysis.restockAt or 0))
         elseif queued > 0 then
-            detail.subtitle:SetText(("You have %d and %d more queued, your limit"):format(
+            detail.subtitle:SetText(L.Format("You have %d and %d more queued, your limit",
                 analysis.stock or 0, queued))
         else
-            detail.subtitle:SetText(("You already have %d, your limit"):format(
+            detail.subtitle:SetText(L.Format("You already have %d, your limit",
                 analysis.stock or 0))
         end
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
@@ -1459,9 +1478,9 @@ local function Refresh()
 
     if #data == 0 then
         if ns.Recipes:Count() == 0 then
-            widgets.emptyLabel:SetText("Open a profession window once so your recipes can be read.")
+            widgets.emptyLabel:SetText(L["Open a profession window once so your recipes can be read."])
         elseif ns.Prices:Count() == 0 then
-            widgets.emptyLabel:SetText("No auction data yet.")
+            widgets.emptyLabel:SetText(L["No auction data yet."])
             widgets.emptyScan:Show()
         else
             -- "Nothing matches these filters" is true and useless. A threshold
@@ -1484,19 +1503,20 @@ local function Refresh()
             -- A search that matches nothing says so first: the minimums
             -- message would be about crafts the search never named.
             if state.search ~= "" then
-                widgets.emptyLabel:SetText(("Nothing matching \"%s\"."):format(state.search))
+                widgets.emptyLabel:SetText(L.Format("Nothing matching \"%s\".", state.search))
             elseif #hidden > 0 and (minProfit > 0 or minMargin > 0) then
                 local best = hidden[1]
 
-                widgets.emptyLabel:SetText((
-                    "%d craft%s hidden by your minimums in Settings (%s profit, %d%% margin).\nThe best right now makes %s."):format(
-                    #hidden, #hidden == 1 and "" or "s",
-                    Util.FormatMoney(minProfit, { noColor = true, short = true }),
-                    minMargin,
-                    Util.FormatMoney(best.profit or 0, { noColor = true, short = true })))
+                local floor = Util.FormatMoney(minProfit, { noColor = true, short = true })
+                local bestText = Util.FormatMoney(best.profit or 0, { noColor = true, short = true })
+                widgets.emptyLabel:SetText(#hidden == 1
+                    and L.Format("%d craft hidden by your minimums in Settings (%s profit, %d%% margin).\nThe best right now makes %s.",
+                        #hidden, floor, minMargin, bestText)
+                    or L.Format("%d crafts hidden by your minimums in Settings (%s profit, %d%% margin).\nThe best right now makes %s.",
+                        #hidden, floor, minMargin, bestText))
 
             else
-                widgets.emptyLabel:SetText("Nothing matches these filters.")
+                widgets.emptyLabel:SetText(L["Nothing matches these filters."])
             end
         end
     end
@@ -1513,8 +1533,8 @@ local function Refresh()
     end
 
     local ignored = ns.Profit.GetIgnored and #ns.Profit:GetIgnored() or 0
-    widgets.countLabel:SetText(("%d craft%s"):format(#data, #data == 1 and "" or "s")
-        .. (ignored > 0 and (", %d ignored"):format(ignored) or ""))
+    widgets.countLabel:SetText((#data == 1 and L.Format("%d craft", #data) or L.Format("%d crafts", #data))
+        .. (ignored > 0 and L.Format(", %d ignored", ignored) or ""))
     FitHint()
 end
 
@@ -1551,7 +1571,7 @@ local function RefreshProfessionOptions()
         end
     end
 
-    local options = { { text = "All professions", value = nil } }
+    local options = { { text = L["All professions"], value = nil } }
 
     local seen = {}
     for _, recipe in pairs(recipes) do
@@ -1571,7 +1591,7 @@ local function RefreshProfessionOptions()
             end
 
             options[#options + 1] = {
-                text = name or savedNames[skillLineID] or ("Skill line " .. skillLineID),
+                text = name or savedNames[skillLineID] or L.Format("Skill line %s", skillLineID),
                 value = skillLineID,
             }
         end
@@ -1608,7 +1628,7 @@ local function BuildCrafts(container)
 
     -- Every tab's option bar runs dropdowns, then search, then tick boxes
     -- (a player's request, 2026-10-06). The headings do the sorting.
-    local profession = Widgets.CreateDropdown(toolbar, { { text = "All professions", value = nil } },
+    local profession = Widgets.CreateDropdown(toolbar, { { text = L["All professions"], value = nil } },
         function(value)
             state.profession = value
             Refresh()
@@ -1621,10 +1641,10 @@ local function BuildCrafts(container)
     -- rank the same way, and the Level Up tab counts what a craft gets
     -- back by it too.
     local labels = ns.Profit.WAY_LABELS or {}
-    local methodOptions = { { text = "Profit: Best", value = "best" } }
+    local methodOptions = { { text = L["Profit: Best"], value = "best" } }
     for _, method in ipairs(ns.Profit.METHODS or {}) do
         if labels[method] then
-            methodOptions[#methodOptions + 1] = { text = "Profit: " .. labels[method], value = method }
+            methodOptions[#methodOptions + 1] = { text = L.Format("Profit: %s", labels[method]), value = method }
         end
     end
 
@@ -1641,26 +1661,26 @@ local function BuildCrafts(container)
     method:SetValue(Method() or "best")
     widgets.methodDropdown = method
 
-    local search = Widgets.CreateSearchBox(toolbar, "Search crafts", function(text)
+    local search = Widgets.CreateSearchBox(toolbar, L["Search crafts"], function(text)
         state.search = text or ""
         Refresh()
     end)
     search:SetPoint("LEFT", method, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
-    local craftable = Widgets.CreateCheckbox(toolbar, "Craftable now", function(checked)
+    local craftable = Widgets.CreateCheckbox(toolbar, L["Craftable now"], function(checked)
         state.craftableOnly = checked
         Refresh()
     end, false)
     craftable:SetPoint("LEFT", search, "RIGHT", 12, 0)
 
-    local unpriceable = Widgets.CreateCheckbox(toolbar, "Show unpriced", function(checked)
+    local unpriceable = Widgets.CreateCheckbox(toolbar, L["Show unpriced"], function(checked)
         state.includeUnpriceable = checked
         Refresh()
     end, false)
     unpriceable:SetPoint("LEFT", craftable, "RIGHT", 12, 0)
 
-    local accountWide = Widgets.CreateCheckbox(toolbar, "All characters", function(checked)
+    local accountWide = Widgets.CreateCheckbox(toolbar, L["All characters"], function(checked)
         state.accountWide = checked
         RefreshProfessionOptions()
 
@@ -1672,7 +1692,7 @@ local function BuildCrafts(container)
     end, false)
     accountWide:SetPoint("LEFT", unpriceable, "RIGHT", 12, 0)
 
-    local showMaxed = Widgets.CreateCheckbox(toolbar, "Show maxed", function(checked)
+    local showMaxed = Widgets.CreateCheckbox(toolbar, L["Show maxed"], function(checked)
         state.ignorePostLimit = checked
         Refresh()
     end, false)
@@ -1680,7 +1700,7 @@ local function BuildCrafts(container)
 
     -- TIME and GOLD/HR (asked 2026-10-09). Kept in Settings; off, the
     -- craft names keep their room. The craft pane always shows both.
-    local perHour = Widgets.CreateCheckbox(toolbar, "Per hour", function(checked)
+    local perHour = Widgets.CreateCheckbox(toolbar, L["Per hour"], function(checked)
         ns.Config:Set("profitShowsPerHour", checked == true)
         layoutVersion = layoutVersion + 1
         ApplyHeadingLayout()
@@ -1696,7 +1716,7 @@ local function BuildCrafts(container)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 8 + MARK_GUTTER + ICON_GUTTER, 0)
-    nameHeading:SetText("CRAFT")
+    nameHeading:SetText(L["CRAFT"])
 
     widgets.headings = {}
     for _, column in ipairs(COLUMNS) do
@@ -1776,7 +1796,7 @@ local function BuildCrafts(container)
             if mouseButton == "RightButton" then
                 -- Right-click is the fast path: queue one without leaving the list.
                 ns.Queue:Add(analysis.recipeID, 1)
-                ns.Print(("queued 1x %s"):format(analysis.name or "craft"))
+                ns.Print(L.Format("queued 1x %s", analysis.name or L["craft"]))
                 if ns.Demand then ns.Demand:WarnIfLow(analysis.outputItemID, analysis.name) end
                 return
             end
@@ -1798,9 +1818,10 @@ local function BuildCrafts(container)
 
     -- When there is simply no data, the fix is one click away; put it here
     -- rather than making the player go hunting for the header.
-    local emptyScan = Widgets.CreateButton(container, "Scan auctions", function()
+    local emptyScan = Widgets.CreateButton(container, L["Scan auctions"], function()
         UI:TriggerScan()
     end, { width = 130, height = 26, primary = true })
+    GrowToFit(emptyScan)
     emptyScan:SetPoint("TOP", emptyLabel, "BOTTOM", 0, -12)
     emptyScan:Hide()
     widgets.emptyScan = emptyScan
@@ -1812,32 +1833,33 @@ local function BuildCrafts(container)
     -- Queues every row on screen, so the filters and search above decide
     -- what it covers. Each craft goes up to its Max on hand, less what is
     -- already held, listed, in the mail or queued.
-    local queueAll = Widgets.CreateButton(container, "Queue All", function()
+    local queueAll = Widgets.CreateButton(container, L["Queue All"], function()
         local rows = BuildList()
         local crafts, items, noLimit, learned = ns.Queue:AddUpToLimit(rows)
 
         if crafts > 0 then
-            ns.Print(("queued %d craft%s (%d item%s) from %d listed%s"):format(
-                crafts, crafts == 1 and "" or "s",
-                items, items == 1 and "" or "s", #rows,
-                (learned or 0) > 0 and ", topping up what sells for you" or ""))
+            ns.Print(L.Format("queued %d %s (%d %s) from %d listed%s",
+                crafts, crafts == 1 and L["craft"] or L["crafts"],
+                items, items == 1 and L["item"] or L["items"], #rows,
+                (learned or 0) > 0 and L[", topping up what sells for you"] or ""))
         elseif #rows == 0 then
-            ns.Print("nothing listed to queue")
+            ns.Print(L["nothing listed to queue"])
         elseif noLimit == #rows then
-            ns.Print("nothing queued: none of these has sold for you this week, so set Keep in stock per item in Settings")
+            ns.Print(L["nothing queued: none of these has sold for you this week, so set Keep in stock per item in Settings"])
         else
             local waiting = false
             for _, row in ipairs(rows) do
                 if row.waitingForLow then waiting = true break end
             end
             if waiting then
-                ns.Print("nothing queued: every listed craft is at its Max on hand or waiting until it runs low")
+                ns.Print(L["nothing queued: every listed craft is at its Max on hand or waiting until it runs low"])
             else
-                ns.Print("nothing queued: every listed craft is already at its Max on hand")
+                ns.Print(L["nothing queued: every listed craft is already at its Max on hand"])
             end
         end
     end, { width = 90, height = 20,
-           tooltip = "Queue every craft in this list up to your Max on hand (Keep in stock per item in Settings, or about two days of what sold for you this week when that is 0), less what you already have or have queued" })
+           tooltip = L["Queue every craft in this list up to your Max on hand (Keep in stock per item in Settings, or about two days of what sold for you this week when that is 0), less what you already have or have queued"] })
+    GrowToFit(queueAll)
     queueAll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 2)
     widgets.queueAll = queueAll
 
@@ -1883,8 +1905,8 @@ end
 -- Without that file (the tests load this one alone) the tab is the crafts.
 local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     mainKey = "crafts",
-    mainText = "MY CRAFTS",
-    mainTip = "The crafts you know, by profit",
+    mainText = L["MY CRAFTS"],
+    mainTip = L["The crafts you know, by profit"],
     buildMain = BuildCrafts,
     refreshMain = Refresh,
 })
@@ -1906,7 +1928,7 @@ ns.ProfitTab = {
     ShowView = ShowView,
     ShowRecipesToLearn = function(profession)
         if not (ns.UI and ns.UI.Show) then
-            ns.Print("the window is not ready yet, try again in a moment")
+            ns.Print(L["the window is not ready yet, try again in a moment"])
             return
         end
         if profession and ns.RecipeBookView then ns.RecipeBookView.SetProfession(profession) end
@@ -1918,7 +1940,7 @@ ns.ProfitTab = {
 
 UI:RegisterTab({
     key = "profit",
-    text = "Profit",
+    text = L["Profit"],
     order = 1,
     build = Build,
     refresh = RefreshView,

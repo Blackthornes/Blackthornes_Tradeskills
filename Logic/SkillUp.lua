@@ -17,6 +17,7 @@
 -- command says so in as many words.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local SkillUp = ns.NewModule("SkillUp")
 
@@ -31,10 +32,10 @@ local TIER_RANK = { optimal = 1, medium = 2, easy = 3, trivial = 4 }
 local WORTH_IT = { optimal = true, medium = true }
 
 SkillUp.TIER_LABEL = {
-    optimal = "guaranteed skill up",
-    medium  = "very likely skill up",
-    easy    = "small chance of a skill up",
-    trivial = "no skill up",
+    optimal = L["guaranteed skill up"],
+    medium  = L["very likely skill up"],
+    easy    = L["small chance of a skill up"],
+    trivial = L["no skill up"],
 }
 
 -- The game's own difficulty colours, used when the client does not expose its
@@ -69,7 +70,7 @@ function SkillUp:GetTierColorCode(tier)
 end
 
 function SkillUp:GetTierLabel(tier)
-    return self.TIER_LABEL[tier or ""] or "unknown"
+    return self.TIER_LABEL[tier or ""] or L["unknown"]
 end
 
 --------------------------------------------------------------------------------
@@ -542,7 +543,7 @@ local function ReportCapture(capture, heading)
 end
 
 ns.RegisterCommand("skillup",
-    "what the game says about skill ups, and what is starred right now",
+    L["what the game says about skill ups, and what is starred right now"],
 function()
     ns.Print(("|c%sSkill ups|r"):format(ns.COLORS.accent))
 
@@ -617,22 +618,22 @@ function()
     end
 end)
 
-ns.RegisterCommand("star", "how the skill-up mark is drawn: /bts star [star|raid|pip]",
+ns.RegisterCommand("star", L["how the skill-up mark is drawn: /bts star [star|raid|pip]"],
 function(args)
     local choice = (args or ""):lower():gsub("%s", "")
     local styles = ns.Theme and ns.Theme.marks
 
     if choice == "" or not styles or not styles[choice] then
-        ns.Print(("the skill-up mark is drawn as %s"):format(
+        ns.Print(L.Format("the skill-up mark is drawn as %s",
             Accent(ns.Config:Get("skillUpMarker") or "star")))
-        ns.PrintRaw(Muted("  /bts star star: this addon's own gold star"))
-        ns.PrintRaw(Muted("  /bts star raid: the game's raid-target star"))
-        ns.PrintRaw(Muted("  /bts star pip:  a plain gold square, if neither draws"))
+        ns.PrintRaw(Muted(L["  /bts star star: this addon's own gold star"]))
+        ns.PrintRaw(Muted(L["  /bts star raid: the game's raid-target star"]))
+        ns.PrintRaw(Muted(L["  /bts star pip:  a plain gold square, if neither draws"]))
         return
     end
 
     ns.Config:Set("skillUpMarker", choice)
-    ns.Print(("the skill-up mark is now %s. Reopen the window to see it."):format(
+    ns.Print(L.Format("the skill-up mark is now %s. Reopen the window to see it.",
         Accent(choice)))
 
     if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end

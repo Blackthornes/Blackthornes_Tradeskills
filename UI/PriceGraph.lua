@@ -16,6 +16,7 @@
 -- each price instead, which still shows the shape.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -27,8 +28,8 @@ ns.PriceGraph = PriceGraph
 PriceGraph.all = {}
 
 PriceGraph.WINDOWS = {
-    day = { seconds = 24 * 3600, text = "24 Hours" },
-    week = { seconds = 7 * 24 * 3600, text = "7 Day" },
+    day = { seconds = 24 * 3600, text = L["24 Hours"] },
+    week = { seconds = 7 * 24 * 3600, text = L["7 Day"] },
 }
 
 local HEADER_HEIGHT = 16
@@ -115,7 +116,7 @@ end
 --- The time under each of the graph's ticks: the hour for 24 hours, the day
 --- for 7 days, and "now" at the right.
 function PriceGraph.TickText(windowKey, t, isLast)
-    if isLast then return "now" end
+    if isLast then return L["now"] end
     if windowKey == "week" then return date("%a", t) end
     return ns.PriceHistory.HourText(date("*t", t).hour)
 end
@@ -239,7 +240,7 @@ local function DrawAverage(graph, average, low, high, width, height)
     else
         graph.averageLabel:SetPoint("BOTTOMRIGHT", graph.plot, "BOTTOMRIGHT", 0, y + 2)
     end
-    graph.averageLabel:SetText("avg " .. Util.FormatMoney(average, { short = true }))
+    graph.averageLabel:SetText(L.Format("avg %s", Util.FormatMoney(average, { short = true })))
     graph.averageLabel:Show()
 end
 
@@ -348,19 +349,19 @@ local function ShowHover(graph)
 
     GameTooltip:SetOwner(graph.plot, "ANCHOR_TOP")
     GameTooltip:SetText(date("%a ", point.t) .. ns.PriceHistory.HourText(date("*t", point.t).hour), 1, 1, 1)
-    GameTooltip:AddDoubleLine(graph.kind == "market" and "Market value" or "Cheapest listed",
+    GameTooltip:AddDoubleLine(graph.kind == "market" and L["Market value"] or L["Cheapest listed"],
         Util.FormatMoney(point.p), 0.8, 0.8, 0.8, 1, 1, 1)
     local listed = graph.listedAt and graph.listedAt[math.floor(point.t / 3600)]
     if listed then
-        GameTooltip:AddDoubleLine("Listed", Util.Comma and Util.Comma(listed) or tostring(listed),
+        GameTooltip:AddDoubleLine(L["Listed"], Util.Comma and Util.Comma(listed) or tostring(listed),
             0.8, 0.8, 0.8, 1, 1, 1)
     end
     if graph.average then
-        GameTooltip:AddDoubleLine("Average shown", Util.FormatMoney(graph.average),
+        GameTooltip:AddDoubleLine(L["Average shown"], Util.FormatMoney(graph.average),
             0.8, 0.8, 0.8, 0.75, 0.75, 0.75)
     end
     if graph.kind == "market" then
-        GameTooltip:AddLine("Star this item to keep its cheapest price every hour.", 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine(L["Star this item to keep its cheapest price every hour."], 0.6, 0.6, 0.6, true)
     end
     GameTooltip:Show()
 end
@@ -384,7 +385,7 @@ local function CreateToggle(graph, key)
         PriceGraph.SetWindow(key)
         PriceGraph.RefreshAll()
     end, { width = 50, height = TOGGLE_HEIGHT, fontSize = "tiny",
-           tooltip = key == "week" and "The last seven days" or "The last 24 hours" })
+           tooltip = key == "week" and L["The last seven days"] or L["The last 24 hours"] })
 
     -- Fit the label: a client font wider than the test's must not cut it.
     local width = Theme.TextWidth(button.label)
@@ -427,7 +428,7 @@ local function CreatePickerIcon(graph, index)
     button:SetScript("OnEnter", function(self)
         if self.itemID then
             Widgets.ShowItemTooltip(self, "ANCHOR_TOP", self.itemID, "item")
-            GameTooltip:AddLine("Click to see its price history", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine(L["Click to see its price history"], 0.6, 0.6, 0.6)
             GameTooltip:Show()
         end
     end)
@@ -560,7 +561,7 @@ function PriceGraph.Create(parent, opts)
     best:SetScript("OnEnter", function(self)
         if not self.why then return end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText("Best time to buy and sell", 1, 1, 1)
+        GameTooltip:SetText(L["Best time to buy and sell"], 1, 1, 1)
         GameTooltip:AddLine(self.why, 0.85, 0.85, 0.85, true)
         GameTooltip:Show()
     end)
@@ -642,11 +643,12 @@ function PriceGraph.Create(parent, opts)
             self.lowLabel:SetText("")
             if tracked then
                 self.empty:SetText(#points == 1
-                    and "One price so far. Scan again later to draw the line."
-                    or ("No scans in the last %s. Scan the auction house to start the line.")
-                        :format(windowKey == "week" and "7 days" or "24 hours"))
+                    and L["One price so far. Scan again later to draw the line."]
+                    or (windowKey == "week"
+                        and L["No scans in the last 7 days. Scan the auction house to start the line."]
+                        or L["No scans in the last 24 hours. Scan the auction house to start the line."]))
             else
-                self.empty:SetText("Prices are kept every hour for what you craft and its materials. Star this item to keep its prices too.")
+                self.empty:SetText(L["Prices are kept every hour for what you craft and its materials. Star this item to keep its prices too."])
             end
             self.empty:Show()
         else
@@ -678,7 +680,7 @@ function PriceGraph.Create(parent, opts)
         if tracked or kind == "hourly" then
             texts, why, best = ns.PriceHistory:DescribeBestTimes(itemID, now)
         else
-            texts = { "Best times: star it to start learning", "Best times: star it" }
+            texts = { L["Best times: star it to start learning"], L["Best times: star it"] }
         end
         self.best.label:SetTextColor(Theme.Unpack(best and best.ready and "gilt" or "dim"))
         Theme.FitText(self.best.label, texts, self.best:GetWidth())

@@ -7,6 +7,7 @@
 -- last bank visit, and the pane says how old each one is.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -26,13 +27,13 @@ local ALL = "all"
 -- centred under its heading. `width` is the least each gets:
 -- Widgets.FitColumns widens it to fit the heading and a full amount.
 local COLUMNS = {
-    { key = "worth", label = "WORTH", width = 96, money = true },
-    { key = "have",  label = "HAVE",  width = 52, justify = "CENTER" },
-    { key = "who",   label = "WHO",   width = 150, justify = "CENTER" },
+    { key = "worth", label = L["WORTH"], width = 96, money = true },
+    { key = "have",  label = L["HAVE"],  width = 52, justify = "CENTER" },
+    { key = "who",   label = L["WHO"],   width = 150, justify = "CENTER" },
 }
 
 -- Any column but the name can be hidden (UI/Columns.lua).
-ns.Columns:Register("banks", "Characters: Banks", COLUMNS)
+ns.Columns:Register("banks", L["Characters: Banks"], COLUMNS)
 
 local state = {
     search = "",
@@ -58,8 +59,8 @@ end
 --- "bank 40  ·  bags 4", leaving out a side that holds none.
 local function WhereText(bank, bags)
     local parts = {}
-    if bank > 0 then parts[#parts + 1] = ("bank %s"):format(Util.Comma(bank)) end
-    if bags > 0 then parts[#parts + 1] = ("bags %s"):format(Util.Comma(bags)) end
+    if bank > 0 then parts[#parts + 1] = L.Format("bank %s", Util.Comma(bank)) end
+    if bags > 0 then parts[#parts + 1] = L.Format("bags %s", Util.Comma(bags)) end
     return table.concat(parts, "  ·  ")
 end
 
@@ -143,7 +144,7 @@ local function UpdateRow(row, entry)
     if #entry.holders == 1 then
         who = names[entry.holders[1].key] or "?"
     else
-        who = ("%d characters"):format(#entry.holders)
+        who = L.Format("%d characters", #entry.holders)
     end
     row.cells.who:SetText(who)
 end
@@ -152,7 +153,7 @@ local function ShowRowTooltip(row, entry)
     Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", entry.itemID, entry.name)
 
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Held by", Theme.Unpack("accent"))
+    GameTooltip:AddLine(L["Held by"], Theme.Unpack("accent"))
 
     for _, holder in ipairs(entry.holders) do
         local r, g, b = Theme.Unpack(NameColor(holder.key))
@@ -266,9 +267,9 @@ local function SetItemSubtitle(label, entry, room)
             return Util.FormatMoney(copper, { short = true, parts = parts or nil })
         end
 
-        label:SetText(("%s held  ·  %s%s"):format(
+        label:SetText(L.Format("%s held  ·  %s%s",
             Util.Comma(entry.total), Amount(entry.worth),
-            entry.unit and ("  ·  " .. Amount(entry.unit) .. " each") or ""))
+            entry.unit and L.Format("  ·  %s each", Amount(entry.unit)) or ""))
         if Fits(label, room) then return end
     end
 end
@@ -290,14 +291,14 @@ local function ShowOverview(detail, overview)
         if row.worth > best then best = row.worth end
     end
 
-    SetTitle(detail.title, "Every bank", TITLE_ROOM)
-    detail.subtitle:SetText(("%d of %d banks read  ·  %s"):format(read, #overview, Money(total)))
-    detail.heading:SetText("BY CHARACTER")
+    SetTitle(detail.title, L["Every bank"], TITLE_ROOM)
+    detail.subtitle:SetText(L.Format("%d of %d banks read  ·  %s", read, #overview, Money(total)))
+    detail.heading:SetText(L["BY CHARACTER"])
 
     for index, row in ipairs(overview) do
         local line = detail.lines[index]
         if not line then
-            detail.more:SetText(("and %d more"):format(#overview - DETAIL_LINES))
+            detail.more:SetText(L.Format("and %d more", #overview - DETAIL_LINES))
             break
         end
 
@@ -308,13 +309,13 @@ local function ShowOverview(detail, overview)
             line.value:SetText(Money(row.worth))
 
             local age = row.isCurrent and ns.Inventory and ns.Inventory.bankOpen
-                and "open now" or ("read " .. Util.FormatAgeAgo(time() - row.bankAt))
-            line.sub:SetText(("%s items  ·  %s"):format(Util.Comma(row.count), age))
+                and L["open now"] or L.Format("read %s", Util.FormatAgeAgo(time() - row.bankAt))
+            line.sub:SetText(L.Format("%s items  ·  %s", Util.Comma(row.count), age))
             line.sub:SetTextColor(Theme.Unpack("dim"))
             line.bar:Set(best > 0 and row.worth / best or 0, row.isCurrent and "accent" or "profit")
         else
             line.value:SetText("")
-            line.sub:SetText("Bank not opened yet")
+            line.sub:SetText(L["Bank not opened yet"])
             line.sub:SetTextColor(Theme.Unpack("warn"))
             line.bar:Set(nil)
         end
@@ -322,7 +323,7 @@ local function ShowOverview(detail, overview)
         line:Show()
     end
 
-    detail.note:SetText("Open the bank once on each character to add it here. Click an item to see who has it.")
+    detail.note:SetText(L["Open the bank once on each character to add it here. Click an item to see who has it."])
 end
 
 --- An item picked: who holds it and how many.
@@ -336,12 +337,12 @@ local function ShowItem(detail, entry)
     SetTitle(detail.title, Util.GetItemLabel(entry.itemID), ITEM_TITLE_ROOM)
 
     SetItemSubtitle(detail.subtitle, entry, ITEM_TITLE_ROOM)
-    detail.heading:SetText("WHO HAS IT")
+    detail.heading:SetText(L["WHO HAS IT"])
 
     for index, holder in ipairs(entry.holders) do
         local line = detail.lines[index]
         if not line then
-            detail.more:SetText(("and %d more"):format(#entry.holders - DETAIL_LINES))
+            detail.more:SetText(L.Format("and %d more", #entry.holders - DETAIL_LINES))
             break
         end
 
@@ -357,7 +358,7 @@ local function ShowItem(detail, entry)
         line:Show()
     end
 
-    detail.note:SetText("Counts are from each character's last bank visit. Bags are from their last time online.")
+    detail.note:SetText(L["Counts are from each character's last bank visit. Bags are from their last time online."])
 end
 
 --------------------------------------------------------------------------------
@@ -365,7 +366,7 @@ end
 --------------------------------------------------------------------------------
 
 local function CharacterOptions(characters)
-    local options = { { value = ALL, text = "All characters" } }
+    local options = { { value = ALL, text = L["All characters"] } }
     for _, character in ipairs(characters) do
         options[#options + 1] = { value = character.key, text = character.name }
     end
@@ -418,15 +419,15 @@ function BankView.Refresh()
     widgets.empty:SetShown(#list == 0)
     if #list == 0 then
         if not anyRead and not state.bags then
-            widgets.empty:SetText("No bank read yet. Open your bank on each character and it shows up here.")
+            widgets.empty:SetText(L["No bank read yet. Open your bank on each character and it shows up here."])
         elseif state.search ~= "" then
-            widgets.empty:SetText(("Nothing matches \"%s\"."):format(state.search))
+            widgets.empty:SetText(L.Format("Nothing matches \"%s\".", state.search))
         else
-            widgets.empty:SetText("Nothing here yet.")
+            widgets.empty:SetText(L["Nothing here yet."])
         end
     end
 
-    widgets.summary:SetText(("%s different items  ·  %s in all  ·  "):format(
+    widgets.summary:SetText(L.Format("%s different items  ·  %s in all  ·  ",
         Util.Comma(#list), Util.Comma(count)))
     CountTo(widgets.total, "", total)
 
@@ -468,7 +469,7 @@ function BankView.Build(view)
     character:SetPoint("TOPLEFT", 8, -32)
     widgets.character = character
 
-    local search = Widgets.CreateSearchBox(view, "Search every bank", function(text)
+    local search = Widgets.CreateSearchBox(view, L["Search every bank"], function(text)
         state.search = text or ""
         BankView.Refresh()
     end)
@@ -476,7 +477,7 @@ function BankView.Build(view)
     search:SetWidth(Widgets.SEARCH_WIDTH)
     widgets.search = search
 
-    local bags = Widgets.CreateCheckbox(view, "Bags too", function(checked)
+    local bags = Widgets.CreateCheckbox(view, L["Bags too"], function(checked)
         state.bags = checked and true or false
         BankView.Refresh()
     end, state.bags)
@@ -491,7 +492,7 @@ function BankView.Build(view)
 
     local itemHeading = Theme.CreateLabel(headings, "tiny", "dim")
     itemHeading:SetPoint("LEFT", 32, 0)
-    itemHeading:SetText("ITEM")
+    itemHeading:SetText(L["ITEM"])
 
     headings.cells = {}
     for _, column in ipairs(COLUMNS) do

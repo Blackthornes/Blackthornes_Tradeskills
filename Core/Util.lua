@@ -3,6 +3,7 @@
 -- through thousands of recipes or auction rows without stuttering the client.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Util = {}
 ns.Util = Util
@@ -585,7 +586,7 @@ function Util.GetItemLabel(itemID)
         pcall(C_Item.RequestLoadItemDataByID, itemID)
     end
 
-    return ("item %d"):format(itemID)
+    return L.Format("item %d", itemID)
 end
 
 --- Text without its colour codes, so a label's own colour shows. An item
@@ -768,11 +769,11 @@ end
 
 --- Seconds elapsed rendered as a compact age, e.g. "3h", "12m", "just now".
 function Util.FormatAge(seconds)
-    if not seconds then return "never" end
-    if seconds < 60 then return "just now" end
-    if seconds < 3600 then return math.floor(seconds / 60) .. "m" end
-    if seconds < 86400 then return math.floor(seconds / 3600) .. "h" end
-    return math.floor(seconds / 86400) .. "d"
+    if not seconds then return L["never"] end
+    if seconds < 60 then return L["just now"] end
+    if seconds < 3600 then return L.Format("%dm", math.floor(seconds / 60)) end
+    if seconds < 86400 then return L.Format("%dh", math.floor(seconds / 3600)) end
+    return L.Format("%dd", math.floor(seconds / 86400))
 end
 
 --- The same age, phrased to sit in a sentence: "seen %s".
@@ -781,8 +782,8 @@ end
 -- phrases, so callers that appended " ago" to it produced "just now ago".
 function Util.FormatAgeAgo(seconds)
     local age = Util.FormatAge(seconds)
-    if age == "just now" or age == "never" then return age end
-    return age .. " ago"
+    if age == L["just now"] or age == L["never"] then return age end
+    return L.Format("%s ago", age)
 end
 
 --- Round a price down to something an item auction will actually accept.

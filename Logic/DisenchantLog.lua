@@ -22,6 +22,7 @@
 -- the first disenchant in game says which of these this client supports.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local DisenchantLog = ns.NewModule("DisenchantLog")
 
@@ -118,7 +119,7 @@ end
 -- @return true when it was recorded
 function DisenchantLog:Record(itemID, results, from)
     local _, facts = ns.Disenchant:GetOutcomes(itemID)
-    if not facts or not facts.key then return false, "that item cannot be disenchanted" end
+    if not facts or not facts.key then return false, L["that item cannot be disenchanted"] end
 
     -- What one of these was expected to give, before this one counts.
     local usual = ns.Disenchant:GetValue(itemID)
@@ -218,14 +219,14 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
     local worth = Worth(results)
     local progress
     if band.casts < learnAfter then
-        progress = ("learning %s: %d of %d"):format(kind, band.casts, learnAfter)
+        progress = L.Format("learning %s: %d of %d", kind, band.casts, learnAfter)
     else
-        progress = ("%s: %d recorded"):format(kind, band.casts)
+        progress = L.Format("%s: %d recorded", kind, band.casts)
     end
 
-    ns.Print(("%s %s: %s%s. %s.")
-        :format(Colour("profit", "Disenchanted"), Util.GetItemLabel(itemID), table.concat(parts, ", "),
-            worth and (", worth " .. Util.FormatMoney(worth)) or "", Colour("muted", progress)))
+    ns.Print(L.Format("%s %s: %s%s. %s.",
+        Colour("profit", L["Disenchanted"]), Util.GetItemLabel(itemID), table.concat(parts, ", "),
+            worth and L.Format(", worth %s", Util.FormatMoney(worth)) or "", Colour("muted", progress)))
 
     local big = false
 
@@ -242,9 +243,9 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
             odds[index] = ("%s %d%%"):format(odd.name, math.floor(odd.chance * 100 + 0.5))
         end
 
-        ns.Print(("%s %s now uses your own results: %s. Values for these follow what you get from now on.")
-            :format(Colour("accent", "Learned!"), kind, table.concat(odds, ", ")))
-        Flash(("Learned: %s"):format(kind))
+        ns.Print(L.Format("%s %s now uses your own results: %s. Values for these follow what you get from now on.",
+            Colour("accent", L["Learned!"]), kind, table.concat(odds, ", ")))
+        Flash(L.Format("Learned: %s", kind))
         big = true
     end
 
@@ -262,24 +263,24 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
             odds[index] = ("%s %d%%"):format(odd.name, math.floor(odd.chance * 100 + 0.5))
         end
 
-        ns.Print(("%s %s does not break the way the table says for %s, so it now uses your own results: %s.")
-            :format(Colour("accent", "Learned!"), Util.GetItemLabel(itemID), kind, table.concat(odds, ", ")))
-        Flash(("Learned: %s"):format(Util.GetItemLabel(itemID)))
+        ns.Print(L.Format("%s %s does not break the way the table says for %s, so it now uses your own results: %s.",
+            Colour("accent", L["Learned!"]), Util.GetItemLabel(itemID), kind, table.concat(odds, ", ")))
+        Flash(L.Format("Learned: %s", Util.GetItemLabel(itemID)))
         big = true
     end
 
     for _, materialID in ipairs(newFinds or {}) do
-        ns.Print(("%s %s can come from %s."):format(Colour("accent", "New find!"),
+        ns.Print(L.Format("%s %s can come from %s.", Colour("accent", L["New find!"]),
             MaterialLabel(materialID), kind))
-        Flash(("New find: %s"):format(MaterialLabel(materialID)))
+        Flash(L.Format("New find: %s", MaterialLabel(materialID)))
     end
 
     local lucky = worth and usual and usual > 0 and worth >= usual * LUCKY
     if lucky then
-        ns.Print(("%s That one was worth %s; about %s is usual.")
-            :format(Colour("accent", "Lucky!"), Util.FormatMoney(worth), Util.FormatMoney(usual)))
+        ns.Print(L.Format("%s That one was worth %s; about %s is usual.",
+            Colour("accent", L["Lucky!"]), Util.FormatMoney(worth), Util.FormatMoney(usual)))
         if #(newFinds or {}) == 0 then
-            Flash(("Lucky disenchant: %s"):format(Util.FormatMoney(worth, { noColor = true })))
+            Flash(L.Format("Lucky disenchant: %s", Util.FormatMoney(worth, { noColor = true })))
         end
     end
 
@@ -313,7 +314,7 @@ function DisenchantLog:Miss(reason)
     log.missed = log.missed + 1
     log.lastMiss = reason
 
-    ns.Print(("could not record that disenchant: %s. /bts delog has more."):format(reason))
+    ns.Print(L.Format("could not record that disenchant: %s. /bts delog has more.", reason))
 end
 
 --------------------------------------------------------------------------------
@@ -493,7 +494,7 @@ function DisenchantLog:OnLootReady()
         if not gotLink then materialID = nil end
 
         if not materialID or not ns.Disenchant:IsMaterial(materialID) then
-            self:Miss("the loot was not enchanting materials")
+            self:Miss(L["the loot was not enchanting materials"])
             return
         end
 
@@ -513,12 +514,12 @@ function DisenchantLog:OnLootReady()
     if not any then return end
 
     if not itemID then
-        self:Miss("the game did not say which item was disenchanted")
+        self:Miss(L["the game did not say which item was disenchanted"])
         return
     end
 
     local recorded, why = self:Record(itemID, results, from)
-    if not recorded then self:Miss(why or "unknown") end
+    if not recorded then self:Miss(why or L["unknown"]) end
 end
 
 --------------------------------------------------------------------------------
@@ -526,9 +527,9 @@ end
 --------------------------------------------------------------------------------
 
 local FROM = {
-    loot = "loot window",
-    click = "bag click",
-    name = "cast name",
+    loot = L["loot window"],
+    click = L["bag click"],
+    name = L["cast name"],
 }
 
 local function Describe(results)
@@ -547,7 +548,7 @@ local function Report(input)
     if (input or ""):lower() == "reset" then
         ns.db.disenchantLog = nil
         DisenchantLog.version = (DisenchantLog.version or 0) + 1
-        ns.Print("your recorded disenchants are cleared; values use the built-in table again")
+        ns.Print(L["your recorded disenchants are cleared; values use the built-in table again"])
         if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
         return
     end
@@ -559,10 +560,11 @@ local function Report(input)
         if (band.casts or 0) >= ns.Disenchant.LEARN_AFTER then trusted = trusted + 1 end
     end
 
-    ns.Print(("%d disenchant%s recorded across %d kind%s of item; %d kind%s use%s your results (after %d each)")
-        :format(total, total == 1 and "" or "s", groups, groups == 1 and "" or "s",
-            trusted, trusted == 1 and "" or "s", trusted == 1 and "s" or "",
-            ns.Disenchant.LEARN_AFTER))
+    ns.Print(L.Format("%s recorded across %s; %s your results (after %d each)",
+        total == 1 and L.Format("%d disenchant", total) or L.Format("%d disenchants", total),
+        groups == 1 and L.Format("%d kind of item", groups) or L.Format("%d kinds of item", groups),
+        trusted == 1 and L.Format("%d kind uses", trusted) or L.Format("%d kinds use", trusted),
+        ns.Disenchant.LEARN_AFTER))
 
     local items = {}
     for itemID in pairs(log.items) do
@@ -571,28 +573,28 @@ local function Report(input)
     end
     if #items > 0 then
         table.sort(items)
-        ns.Print(("breaking differently from the table, so using their own results: %s")
-            :format(table.concat(items, ", ")))
+        ns.Print(L.Format("breaking differently from the table, so using their own results: %s",
+            table.concat(items, ", ")))
     end
 
     if log.missed > 0 then
-        ns.Print(("%d could not be recorded; the last because %s"):format(log.missed, log.lastMiss or "?"))
+        ns.Print(L.Format("%d could not be recorded; the last because %s", log.missed, log.lastMiss or "?"))
     end
 
     for index = 1, math.min(5, #log.recent) do
         local entry = log.recent[index]
-        ns.Print(("  %s gave %s (item found by %s)"):format(Util.GetItemLabel(entry.itemID),
+        ns.Print(L.Format("  %s gave %s (item found by %s)", Util.GetItemLabel(entry.itemID),
             Describe(entry.results), FROM[entry.from] or entry.from or "?"))
     end
 
     if total == 0 and log.missed == 0 then
-        ns.Print("disenchant something, then run /bts delog again to see it recorded")
+        ns.Print(L["disenchant something, then run /bts delog again to see it recorded"])
     end
 end
 
 DisenchantLog._Report = Report
 
-ns.RegisterCommand("delog", "your recorded disenchants; /bts delog reset clears them", Report)
+ns.RegisterCommand("delog", L["your recorded disenchants; /bts delog reset clears them"], Report)
 
 --------------------------------------------------------------------------------
 -- Setup

@@ -10,6 +10,7 @@
 -- counting casts, so crafting by hand in Blizzard's window works the same.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Crafting = ns.NewModule("Crafting")
 
@@ -37,7 +38,7 @@ function Crafting:MarkBlocked()
     if self.blocked then return end
 
     self.blocked = true
-    ns.Warn("the game will not let addons start crafts; use Blizzard's own profession window.")
+    ns.Warn(L["the game will not let addons start crafts; use Blizzard's own profession window."])
 
     if ns.UI then ns.UI:RefreshActiveTab() end
 end
@@ -50,25 +51,25 @@ end
 -- @return ready, reason
 function Crafting:GetReadiness(recipeID)
     if self:IsBlocked() then
-        return false, "blocked by the game"
+        return false, L["blocked by the game"]
     end
 
     local recipe, owner = ns.Recipes:GetAny(recipeID)
     if not recipe then
-        return false, "recipe not read yet"
+        return false, L["recipe not read yet"]
     end
 
     -- Queued from the account-wide view: this character simply cannot make it.
     if owner ~= ns.Config:GetCharacterKey() then
-        return false, ("on %s"):format(ns.Recipes:GetCharacterName(owner))
+        return false, L.Format("on %s", ns.Recipes:GetCharacterName(owner))
     end
 
     if ns.Profit:GetCraftableCount(recipeID) < 1 then
-        return false, "need materials"
+        return false, L["need materials"]
     end
 
     if not self.isTradeSkillOpen then
-        return true, "open your profession"
+        return true, L["open your profession"]
     end
 
     return true
@@ -116,10 +117,10 @@ local CAST_KEPT_FOR = 10
 -- craft of the batch stayed on the queue.
 local AFTER_BATCH_SECONDS = 3
 
---- The end of a "made N of X" line: how many are still queued.
+--- How many are still queued after a "made N of X" line, or nil when all are done.
 local function LeftText(left)
-    if left and left > 0 then return (", %d left"):format(left) end
-    return ", all done"
+    if left and left > 0 then return left end
+    return nil
 end
 
 function Crafting:OnBagUpdate()
@@ -225,7 +226,7 @@ function Crafting:OnBagUpdate()
                     dependencyMade = true
                     unclaimed[output] = unclaimed[output] - made * perCraft
 
-                    ns.Print(("made %d of %s, as materials for another craft"):format(made,
+                    ns.Print(L.Format("made %d of %s, as materials for another craft", made,
                         ns.Recipes:GetDisplayLink(entry.recipeID)))
 
                 elseif made > 0 then
@@ -249,8 +250,14 @@ function Crafting:OnBagUpdate()
                         ns.QueueMail:NoteMadeFor(owner, output, made * perCraft)
                     end
 
-                    ns.Print(("made %d of %s%s"):format(made,
-                        ns.Recipes:GetDisplayLink(entry.recipeID), LeftText(left)))
+                    local stillLeft = LeftText(left)
+                    if stillLeft then
+                        ns.Print(L.Format("made %d of %s, %d left", made,
+                            ns.Recipes:GetDisplayLink(entry.recipeID), stillLeft))
+                    else
+                        ns.Print(L.Format("made %d of %s, all done", made,
+                            ns.Recipes:GetDisplayLink(entry.recipeID)))
+                    end
                 end
             end
         end
@@ -347,8 +354,11 @@ function Crafting:OnCastSucceeded(_, unit, _, spellID)
             if recipe and not recipe.outputItemID then
                 local left = entry.quantity - 1
                 ns.Queue:SetQuantity(entry.recipeID, left)
-                ns.Print(("made 1 of %s%s"):format(ns.Recipes:GetDisplayLink(entry.recipeID),
-                    LeftText(left)))
+                if LeftText(left) then
+                    ns.Print(L.Format("made 1 of %s, %d left", ns.Recipes:GetDisplayLink(entry.recipeID), left))
+                else
+                    ns.Print(L.Format("made 1 of %s, all done", ns.Recipes:GetDisplayLink(entry.recipeID)))
+                end
             end
             return
         end
@@ -395,12 +405,12 @@ end
 function Crafting:Start(recipeID, count)
     local ready, reason = self:GetReadiness(recipeID)
     if not ready then
-        ns.Print(reason or "cannot craft that")
+        ns.Print(reason or L["cannot craft that"])
         return false
     end
 
     if self.active then
-        ns.Print("already crafting")
+        ns.Print(L["already crafting"])
         return false
     end
 
@@ -429,13 +439,13 @@ function Crafting:Start(recipeID, count)
         if tostring(err):lower():find("addon") then
             self:MarkBlocked()
         else
-            ns.Warn(("the game refused the craft: %s"):format(
+            ns.Warn(L.Format("the game refused the craft: %s",
                 tostring(err):gsub("^.-:%d+: ", "")))
         end
         return false
     end
 
-    ns.Print(("crafting %dx %s..."):format(count, ns.Recipes:GetDisplayLink(recipeID)))
+    ns.Print(L.Format("crafting %dx %s...", count, ns.Recipes:GetDisplayLink(recipeID)))
 
     self:StartWatching()
     return true

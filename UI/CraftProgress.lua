@@ -7,6 +7,7 @@
 -- the game's bar does, so the two always agree.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 
@@ -64,11 +65,11 @@ end
 --- "45s", "1m 20s", "1h 05m".
 function Progress.FormatTotal(seconds)
     seconds = math.ceil(math.max(0, seconds))
-    if seconds < 60 then return ("%ds"):format(seconds) end
+    if seconds < 60 then return L.Format("%ds", seconds) end
     if seconds < 3600 then
-        return ("%dm %02ds"):format(math.floor(seconds / 60), seconds % 60)
+        return L.Format("%dm %02ds", math.floor(seconds / 60), seconds % 60)
     end
-    return ("%dh %02dm"):format(math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
+    return L.Format("%dh %02dm", math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
 end
 
 --- The text on the bar: the craft on the left, and on the right how many
@@ -79,14 +80,14 @@ end
 -- @return name, choices  -- the right-hand text, longest first; the bar uses
 --   the first that leaves the name room. One choice on the last craft.
 function Progress.Describe(cast)
-    local time = ("%.1fs"):format(cast.secondsLeft)
+    local time = L.Format("%.1fs", cast.secondsLeft)
     if not cast.remaining then return cast.name, { time } end
 
-    local count = ("%d more"):format(cast.remaining)
+    local count = L.Format("%d more", cast.remaining)
     local total = Progress.FormatTotal(cast.secondsLeft + cast.remaining * (cast.castSeconds or 0))
     return cast.name, {
-        ("%s · %s · %s left"):format(count, time, total),
-        ("%s · %s left"):format(count, total),
+        L.Format("%s · %s · %s left", count, time, total),
+        L.Format("%s · %s left", count, total),
         count,
     }
 end

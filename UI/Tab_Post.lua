@@ -19,6 +19,8 @@
 
 local _, ns = ...
 
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
@@ -34,20 +36,24 @@ local ROW_HEIGHT = 26
 -- the List button posts (`keep`).
 local COLUMNS = {
     { key = "action",  label = "",        width = 56 },
-    { key = "qty",     label = "LIST",    width = 44, keep = true },
-    { key = "total",   label = "TOTAL",   width = 78, money = true },
-    { key = "deposit", label = "DEPOSIT", width = 62, money = true },
-    { key = "copper",  label = "C",       width = 34, keep = true },
-    { key = "silver",  label = "S",       width = 34, keep = true },
-    { key = "gold",    label = "G",       width = 40, keep = true },
-    { key = "cost",    label = "COST",    width = 66, money = true },
-    { key = "count",   label = "HAVE",    width = 42, justify = "CENTER" },
+    { key = "qty",     label = L["LIST"],    width = 44, keep = true },
+    { key = "total",   label = L["TOTAL"],   width = 78, money = true },
+    { key = "deposit", label = L["DEPOSIT"], width = 62, money = true },
+    { key = "copper",  label = L["C"],       width = 34, keep = true },
+    { key = "silver",  label = L["S"],       width = 34, keep = true },
+    { key = "gold",    label = L["G"],       width = 40, keep = true },
+    { key = "cost",    label = L["COST"],    width = 66, money = true },
+    { key = "count",   label = L["HAVE"],    width = 42, justify = "CENTER" },
 }
 
 -- TOTAL, DEPOSIT, COST and HAVE can be hidden (UI/Columns.lua).
-ns.Columns:Register("post", "Post", COLUMNS)
+ns.Columns:Register("post", L["Post"], COLUMNS)
 
 local widgets = {}
+
+-- The row's List / Price button, as wide as its longer word needs (German
+-- runs longer), set once the tab is built.
+local postButtonWidth = 50
 
 --------------------------------------------------------------------------------
 -- Rows
@@ -138,7 +144,7 @@ local function CreateRow(row)
 
     PlaceRow(row)
 
-    row.post = Widgets.CreateButton(row, "List", function()
+    row.post = Widgets.CreateButton(row, L["List"], function()
         CommitTyping(widgets.list)
         local line = row.data
         if not line then return end
@@ -155,12 +161,12 @@ local function CreateRow(row)
                 local stillAsking = status == "recent" and pending and pending.itemID == itemID
 
                 if not price and not stillAsking then
-                    ns.Print(("%s: %s"):format(Util.GetItemLabel(itemID),
+                    ns.Print(L.Format("%s: %s", Util.GetItemLabel(itemID),
                         -- "recent": searched moments ago, and that search
                         -- found nobody selling it.
                         (status == "empty" or status == "recent")
-                            and "nobody is selling one right now, so there is no price to go on."
-                            or "the auction house did not answer. Try again in a moment."))
+                            and L["nobody is selling one right now, so there is no price to go on."]
+                            or L["the auction house did not answer. Try again in a moment."]))
                 end
 
                 UI:RefreshActiveTab()
@@ -172,13 +178,13 @@ local function CreateRow(row)
         -- explanation rather than nothing at all.
         local allowed, reason = ns.Posting:CanPost(line.itemID)
         if not allowed then
-            ns.Print(reason or "cannot post right now")
+            ns.Print(reason or L["cannot post right now"])
             return
         end
 
         ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
         UI:RefreshActiveTab()
-    end, { width = 50, height = 18, primary = true })
+    end, { width = postButtonWidth, height = 18, primary = true })
     row.post:SetPoint("RIGHT", -8, 0)
 end
 
@@ -239,7 +245,7 @@ function UpdateRow(row, line)
             cells[key]:SetTextColor(Theme.Unpack("dim"))
         end
 
-        cells.total:SetText("no price")
+        cells.total:SetText(L["no price"])
         cells.total:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -264,19 +270,19 @@ function UpdateRow(row, line)
     local allowed, reason = ns.Posting:CanPost(line.itemID)
 
     if line.unitPrice then
-        row.post:SetText("List")
+        row.post:SetText(L["List"])
         row.post:SetEnabledState(true)
 
         if not allowed then
             row.post.tooltipText = reason
         elseif line.atALoss then
             row.post.tooltipText = (line.lossReason == "vendor"
-                and "This would sell for less than a vendor pays, so it will not be listed. Sell it to a vendor instead."
+                and L["This would sell for less than a vendor pays, so it will not be listed. Sell it to a vendor instead."]
                 or line.lossReason == "crafted"
-                and "After the auction house's cut, this brings in less than you paid to make it. Blocked while 'Never below what I paid' is on in Settings."
-                or "This would sell below its material cost. Blocked unless you allow it in Settings.")
+                and L["After the auction house's cut, this brings in less than you paid to make it. Blocked while 'Never below what I paid' is on in Settings."]
+                or L["This would sell below its material cost. Blocked unless you allow it in Settings."])
         else
-            row.post.tooltipText = ("List %d of %d at %s each"):format(
+            row.post.tooltipText = L.Format("List %d of %d at %s each",
                 line.postQuantity, line.maxQuantity or line.count,
                 Util.FormatMoney(line.unitPrice, { noColor = true }))
         end
@@ -286,12 +292,12 @@ function UpdateRow(row, line)
         -- on a client that prints no error.
         local canPrice, priceReason = ns.Posting:CanPrice()
 
-        row.post:SetText("Price")
+        row.post:SetText(L["Price"])
         row.post:SetEnabledState(canPrice)
 
         row.post.tooltipText = canPrice
-            and "No scan has priced this yet.\nSearch the auction house for it now."
-            or (priceReason or "open the auction house to check a price")
+            and L["No scan has priced this yet.\nSearch the auction house for it now."]
+            or (priceReason or L["open the auction house to check a price"])
     end
 end
 
@@ -299,43 +305,43 @@ local function ShowRowTooltip(row, line)
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", line.itemID, line.label, line.link)
     GameTooltip:AddLine(" ")
 
-    GameTooltip:AddDoubleLine("In bags", tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["In bags"], tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
 
-    GameTooltip:AddDoubleLine("Listing", ("%d of %d"):format(
+    GameTooltip:AddDoubleLine(L["Listing"], L.Format("%d of %d",
         line.postQuantity, line.maxQuantity or line.count), 0.7, 0.7, 0.7, 1, 1, 1)
 
     if line.unitPrice and line.postTotal then
-        GameTooltip:AddDoubleLine("That comes to",
+        GameTooltip:AddDoubleLine(L["That comes to"],
             Util.FormatMoney(line.postTotal, { noColor = true }),
             0.7, 0.7, 0.7, 1, 1, 1)
     end
 
     if line.unitPrice then
-        GameTooltip:AddDoubleLine("List each at",
+        GameTooltip:AddDoubleLine(L["List each at"],
             Util.FormatMoney(line.unitPrice, { noColor = true }),
             0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
 
-        local why = "Nothing listed to undercut, so using market value"
+        local why = L["Nothing listed to undercut, so using market value"]
 
         if line.priceBasis == "undercut" then
-            why = "Undercutting the cheapest listing that is not yours"
+            why = L["Undercutting the cheapest listing that is not yours"]
         elseif line.priceBasis == "derived" then
             -- Neither of these two is a market observation at all.
-            why = "No scan has priced this, so it is estimated from what its materials are worth"
+            why = L["No scan has priced this, so it is estimated from what its materials are worth"]
         elseif line.priceBasis == "uncontested" then
-            why = "Nobody else is listing one, so it is priced at your materials plus the markup"
+            why = L["Nobody else is listing one, so it is priced at your materials plus the markup"]
         elseif line.priceBasis == "mine" then
-            why = "Your own price, set on the Prices tab"
+            why = L["Your own price, set on the Prices tab"]
         elseif line.priceBasis == "floor" then
-            why = "Raised to the least you set on the Prices tab"
+            why = L["Raised to the least you set on the Prices tab"]
         elseif line.priceBasis == "chosen" then
-            why = "Your price for now, set on Ready to sell"
+            why = L["Your price for now, set on Ready to sell"]
         elseif line.priceBasis == "match" then
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.
-            why = "Matching the cheapest listing, since an undercut here costs a whole silver"
+            why = L["Matching the cheapest listing, since an undercut here costs a whole silver"]
             if (ns.Config:Get("undercutCopper") or 1) <= 0 then
-                why = "Matching the cheapest listing, since Undercut by is 0c in Settings"
+                why = L["Matching the cheapest listing, since Undercut by is 0c in Settings"]
             end
         end
 
@@ -343,13 +349,13 @@ local function ShowRowTooltip(row, line)
     end
 
     if not line.unitPrice then
-        GameTooltip:AddLine("No scan has priced this one yet.", 0.9, 0.7, 0.3)
-        GameTooltip:AddLine("Press Price to search the auction house for it.",
+        GameTooltip:AddLine(L["No scan has priced this one yet."], 0.9, 0.7, 0.3)
+        GameTooltip:AddLine(L["Press Price to search the auction house for it."],
             0.5, 0.5, 0.5)
     end
 
     if line.unitCost then
-        GameTooltip:AddDoubleLine("Materials cost, each",
+        GameTooltip:AddDoubleLine(L["Materials cost, each"],
             Util.FormatMoney(line.unitCost, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
@@ -364,20 +370,20 @@ local function ShowRowTooltip(row, line)
     end
 
     if line.vendorPrice then
-        GameTooltip:AddDoubleLine("Vendor pays, each",
+        GameTooltip:AddDoubleLine(L["Vendor pays, each"],
             Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     end
 
     if line.atALoss then
         GameTooltip:AddLine(line.lossReason == "vendor"
-            and "Would sell for less than a vendor pays"
+            and L["Would sell for less than a vendor pays"]
             or line.lossReason == "crafted"
-            and "Would bring in less than you paid to make it"
-            or "Would sell below material cost", 0.9, 0.38, 0.31)
+            and L["Would bring in less than you paid to make it"]
+            or L["Would sell below material cost"], 0.9, 0.38, 0.31)
     end
 
     if not line.isCrafted then
-        GameTooltip:AddLine("Not something your recipes make, just something in your bags.",
+        GameTooltip:AddLine(L["Not something your recipes make, just something in your bags."],
             0.5, 0.5, 0.5)
     end
 
@@ -385,14 +391,14 @@ local function ShowRowTooltip(row, line)
     -- item that does not stack (one auction each); other gear goes up one at
     -- a time.
     local together = line.isCommodity
-        and ("Commodity: all %d can go up together"):format(line.count)
+        and L.Format("Commodity: all %d can go up together", line.count)
         or ((line.maxQuantity or 1) > 1
-            and ("All %d go up in one click, one auction each"):format(line.maxQuantity)
-            or "Item auction: one listing at a time")
+            and L.Format("All %d go up in one click, one auction each", line.maxQuantity)
+            or L["Item auction: one listing at a time"])
     GameTooltip:AddLine(together, 0.5, 0.5, 0.5)
 
-    GameTooltip:AddLine("Type into the LIST box to sell fewer than that.", 0.5, 0.5, 0.5)
-    GameTooltip:AddLine("Right-click to search the auction house for it.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Type into the LIST box to sell fewer than that."], 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Right-click to search the auction house for it."], 0.5, 0.5, 0.5)
 
     GameTooltip:Show()
 end
@@ -468,13 +474,13 @@ local function Refresh()
         -- between a tab that looks broken and one that has answered.
         if found > 0 then
             widgets.emptyLabel:SetText(
-                "Nothing in your bags matches that.\nClear the search box to see the rest.")
+                L["Nothing in your bags matches that.\nClear the search box to see the rest."])
         elseif showAll then
             widgets.emptyLabel:SetText(
-                "Nothing in your bags can go on the auction house.\nSoulbound items and reagents your queue needs are left out.")
+                L["Nothing in your bags can go on the auction house.\nSoulbound items and reagents your queue needs are left out."])
         else
             widgets.emptyLabel:SetText(
-                "Nothing in your bags that one of your recipes makes.\nTick 'Everything in my bags' to sell the rest of it.")
+                L["Nothing in your bags that one of your recipes makes.\nTick 'Everything in my bags' to sell the rest of it."])
         end
     end
 
@@ -486,13 +492,16 @@ local function Refresh()
         if not line.unitPrice then unpriced = unpriced + 1 end
     end
 
-    widgets.summary:SetText(("%d stack%s worth about %s%s"):format(
-        #lines, #lines == 1 and "" or "s", Util.FormatMoney(total, { short = true }),
-        unpriced > 0 and ("  ·  %d with no price yet"):format(unpriced) or ""))
+    local worth = Util.FormatMoney(total, { short = true })
+    widgets.summary:SetText((#lines == 1
+            and L.Format("%d stack worth about %s", #lines, worth)
+            or L.Format("%d stacks worth about %s", #lines, worth))
+        .. (unpriced > 0 and "  ·  " .. L.Format("%d with no price yet", unpriced) or ""))
 
     widgets.warning:SetText(losses > 0
-        and ("%d item%s would sell at a loss"):format(
-            losses, losses == 1 and "" or "s")
+        and (losses == 1
+            and L.Format("%d item would sell at a loss", losses)
+            or L.Format("%d items would sell at a loss", losses))
         or "")
 
     local allowed, reason = ns.Posting:CanPost()
@@ -507,6 +516,13 @@ end
 
 local function Build(container)
     -- Before any row or heading is laid out: they read these widths.
+    -- The row button fits its longer word, and the action column the button.
+    local measured = Theme.MeasureText and Theme.MeasureText("small", L["List"])
+    local measuredPrice = Theme.MeasureText and Theme.MeasureText("small", L["Price"])
+    local widest = math.max(measured or 0, measuredPrice or 0)
+    postButtonWidth = math.max(50, widest + 12)
+    COLUMNS[1].width = math.max(COLUMNS[1].width, postButtonWidth + 6)
+
     if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
     local toolbar = CreateFrame("Frame", nil, container)
@@ -516,7 +532,7 @@ local function Build(container)
 
     local durationLabel = Theme.CreateLabel(toolbar, "small", "muted")
     durationLabel:SetPoint("LEFT", 2, 0)
-    durationLabel:SetText("Duration")
+    durationLabel:SetText(L["Duration"])
 
     widgets.duration = Widgets.CreateDropdown(toolbar, ns.Posting.DURATIONS, function(value)
         ns.Config:Set("postDuration", value)
@@ -526,7 +542,7 @@ local function Build(container)
 
     local durationHint = Theme.CreateLabel(toolbar, "tiny", "dim")
     durationHint:SetPoint("LEFT", widgets.duration, "RIGHT", 8, 0)
-    durationHint:SetText("how long listings stay up")
+    durationHint:SetText(L["how long listings stay up"])
 
     widgets.statusLabel = Theme.CreateLabel(toolbar, "small", "warn", "RIGHT")
     widgets.statusLabel:SetPoint("RIGHT", 0, 0)
@@ -538,7 +554,7 @@ local function Build(container)
     filterBar:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -6)
     filterBar:SetHeight(22)
 
-    widgets.showAll = Widgets.CreateCheckbox(filterBar, "Everything in my bags",
+    widgets.showAll = Widgets.CreateCheckbox(filterBar, L["Everything in my bags"],
         function(checked)
             ns.Config:Set("postShowAllItems", checked)
             Refresh()
@@ -547,9 +563,9 @@ local function Build(container)
 
     local showAllHint = Theme.CreateLabel(filterBar, "tiny", "dim")
     showAllHint:SetPoint("LEFT", widgets.showAll, "RIGHT", 8, 0)
-    showAllHint:SetText("untick to show only things you craft")
+    showAllHint:SetText(L["untick to show only things you craft"])
 
-    widgets.search = Widgets.CreateSearchBox(filterBar, "Find an item", function()
+    widgets.search = Widgets.CreateSearchBox(filterBar, L["Find an item"], function()
         Refresh()
     end)
     widgets.search:SetPoint("RIGHT", 0, 0)
@@ -560,7 +576,7 @@ local function Build(container)
     note:SetPoint("TOPLEFT", filterBar, "BOTTOMLEFT", 2, -6)
     note:SetPoint("TOPRIGHT", filterBar, "BOTTOMRIGHT", 0, -6)
     note:SetWordWrap(true)
-    note:SetText("Set LIST to sell part of a stack. Or type the G / S / C price into Blizzard's own Sell tab.")
+    note:SetText(L["Set LIST to sell part of a stack. Or type the G / S / C price into Blizzard's own Sell tab."])
 
     -- Column headings
     local headings = CreateFrame("Frame", nil, container)
@@ -570,7 +586,7 @@ local function Build(container)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 30, 0)
-    nameHeading:SetText("ITEM")
+    nameHeading:SetText(L["ITEM"])
 
     local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(COLUMNS) do
@@ -648,7 +664,7 @@ end
 
 UI:RegisterTab({
     key = "post",
-    text = "Post",
+    text = L["Post"],
     order = 4,
     build = Build,
     refresh = Refresh,

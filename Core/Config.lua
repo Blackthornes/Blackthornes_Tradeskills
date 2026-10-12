@@ -7,6 +7,7 @@
 -- survived. `/bts probe` reads the answer out.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Config = ns.NewModule("Config")
 
@@ -935,9 +936,9 @@ end
 --- A first run has no saved data because there never was any, which is not
 --- something to warn about.
 function Config:Welcome()
-    ns.Print(("welcome! Type |c%s/bts|r to open the window, or |c%s/bts help|r for the commands."):format(
+    ns.Print(L.Format("welcome! Type |c%s/bts|r to open the window, or |c%s/bts help|r for the commands.",
         ns.COLORS.accent, ns.COLORS.accent))
-    ns.Print("Open each profession once and visit the auction house to fill in recipes and prices.")
+    ns.Print(L["Open each profession once and visit the auction house to fill in recipes and prices."])
 end
 
 --- Did the account-wide saved file come back with fewer sessions in it than
@@ -987,16 +988,16 @@ function Config:WarnAccountDataLost()
     local lost = self.accountDataLost
     if not lost then return end
 
-    ns.Warn("YOUR SAVED DATA DID NOT LOAD. Prices, recipes, your queue and sales history are missing this session.")
-    ns.Warn(("This character remembers %d sessions of it; the game handed back %d."):format(
+    ns.Warn(L["YOUR SAVED DATA DID NOT LOAD. Prices, recipes, your queue and sales history are missing this session."])
+    ns.Warn(L.Format("This character remembers %d sessions of it; the game handed back %d.",
         lost.remembered, math.max(0, lost.now)))
-    ns.Warn("To get it back: quit the game now, without a /reload first. Then open your World of Warcraft game folder, then WTF, Account, your account name and SavedVariables, and copy Blackthornes_TS.lua.bak over Blackthornes_TS.lua. Then start the game.")
-    ns.Warn("Do this before you log out a second time: each save replaces the .bak with the newer, empty file.")
-    ns.Warn("If you meant to start fresh, type /bts db fresh and this warning stops.")
+    ns.Warn(L["To get it back: quit the game now, without a /reload first. Then open your World of Warcraft game folder, then WTF, Account, your account name and SavedVariables, and copy Blackthornes_TS.lua.bak over Blackthornes_TS.lua. Then start the game."])
+    ns.Warn(L["Do this before you log out a second time: each save replaces the .bak with the newer, empty file."])
+    ns.Warn(L["If you meant to start fresh, type /bts db fresh and this warning stops."])
 
     local frame = _G.UIErrorsFrame
     if type(frame) == "table" and type(frame.AddMessage) == "function" then
-        pcall(frame.AddMessage, frame, "Blackthornes Tradeskills: your saved data did not load. See chat.", 1, 0.3, 0.3, 1)
+        pcall(frame.AddMessage, frame, L["Blackthornes Tradeskills: your saved data did not load. See chat."], 1, 0.3, 0.3, 1)
     end
 
     if type(PlaySound) == "function" then
@@ -1021,7 +1022,7 @@ function Config:CheckLateSavedVariables()
         -- first run. Left set, the welcome printed beside this warning.
         self.loadDiagnostics.firstRun = nil
 
-        ns.Warn("the game loaded your saved data late, after login instead of at load. Please report this, then run /bts persist.")
+        ns.Warn(L["the game loaded your saved data late, after login instead of at load. Please report this, then run /bts persist."])
     end
 end
 
@@ -1036,8 +1037,8 @@ function Config:Migrate(db)
     end
 
     if from > Config.SCHEMA_VERSION then
-        ns.Warn(("your saved data is from a newer version of the addon (format %d, this version reads %d); leaving it alone")
-            :format(from, Config.SCHEMA_VERSION))
+        ns.Warn(L.Format("your saved data is from a newer version of the addon (format %d, this version reads %d); leaving it alone",
+            from, Config.SCHEMA_VERSION))
         return
     end
 
@@ -1164,7 +1165,7 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("db", "show what saved data loaded (/bts db fresh: stop the missing data warning)", function(args)
+ns.RegisterCommand("db", L["show what saved data loaded (/bts db fresh: stop the missing data warning)"], function(args)
     -- Starting over on purpose: this session's data is the data from now on.
     if (args or ""):lower():match("^%s*fresh") then
         local charDb = _G.BlackthornesTSCharDB
@@ -1179,7 +1180,7 @@ ns.RegisterCommand("db", "show what saved data loaded (/bts db fresh: stop the m
             charDb.accountFreshAt = ns.db.probe.freshAt
         end
         ns.Config.accountDataLost = nil
-        ns.Print("starting fresh: the missing saved data warning will not show again.")
+        ns.Print(L["starting fresh: the missing saved data warning will not show again."])
         return
     end
 
@@ -1225,7 +1226,7 @@ ns.RegisterCommand("db", "show what saved data loaded (/bts db fresh: stop the m
     end
 end)
 
-ns.RegisterCommand("whoami", "show what the game says this character is called", function()
+ns.RegisterCommand("whoami", L["show what the game says this character is called"], function()
     local Config = ns.Config
     local key = Config:GetCharacterKey()
     local surname, asked = Config:ReadSurname()
@@ -1267,9 +1268,9 @@ ns.RegisterCommand("whoami", "show what the game says this character is called",
     ns.PrintRaw(("  saved characters with this first name: %d"):format(sameName))
 end)
 
-ns.RegisterCommand("debug", "turn extra chat detail on or off", function()
+ns.RegisterCommand("debug", L["turn extra chat detail on or off"], function()
     if not ns.db then return end
 
     ns.db.global.debug = not ns.db.global.debug
-    ns.Print("extra chat detail " .. (ns.db.global.debug and "on" or "off"))
+    ns.Print(ns.db.global.debug and L["extra chat detail on"] or L["extra chat detail off"])
 end)
