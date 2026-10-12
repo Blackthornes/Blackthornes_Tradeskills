@@ -822,8 +822,8 @@ function Scanner:CommitBrowseResults(results, opts)
     implausible = implausible + ns.Prices:TakeImplausibleCount()
 
     if implausible > 0 then
-        ns.Print(("%d listing(s) ignored: priced above %s, which nobody can pay"):format(
-            implausible,
+        ns.Print(("%d %s ignored: priced above %s"):format(
+            implausible, implausible == 1 and "listing" or "listings",
             Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
 
@@ -1103,8 +1103,8 @@ function Scanner:ReadReplicateResults(numItems)
             implausible = implausible + ns.Prices:TakeImplausibleCount()
 
             if implausible > 0 then
-                ns.Print(("%s listing(s) ignored: priced above %s, which nobody can pay"):format(
-                    Util.Comma(implausible),
+                ns.Print(("%s %s ignored: priced above %s"):format(
+                    Util.Comma(implausible), implausible == 1 and "listing" or "listings",
                     Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
             end
 
