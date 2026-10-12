@@ -703,6 +703,7 @@ end
 -- A price the player set on the Prices tab (see My prices below) wins over
 -- all but "rival": "use" replaces the scanned price, "floor" lifts it.
 -- Rival stays the auction house's own, since it is the price to undercut.
+-- An item nobody has priced may take TradeSkillMaster's (Logic/TSMPrices.lua).
 -- GetScanValue answers from the scans alone.
 function Prices:GetValue(itemID, which)
     local scanned = self:GetScanValue(itemID, which)
@@ -720,6 +721,16 @@ function Prices:GetValue(itemID, which)
             local record = self:GetTable()[itemID]
             local seen = type(record) == "table" and record.seen or 0
             if not scanned or (self:IsStale(itemID) and sharedAt > seen) then scanned = shared end
+        end
+    end
+
+    -- TradeSkillMaster's price (Logic/TSMPrices.lua, on unless unticked)
+    -- only for an item neither you nor your guildmates have priced.
+    if not scanned then
+        local tsm = ns.TSMPrices
+        if tsm and tsm.GetValue then
+            scanned = tsm:GetValue(itemID, which)
+            if scanned and tsm.Used then tsm:Used() end
         end
     end
 
