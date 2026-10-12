@@ -1226,7 +1226,7 @@ local function Build(outer)
 
     widgets.tradeRequests = Widgets.CreateCheckbox(requestsRow, L["Enabled"], function(checked)
         Config:Set("tradeRequests", checked)
-    end, true)
+    end, false)
     widgets.tradeRequests:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
@@ -1960,7 +1960,7 @@ local function Refresh()
     end
     widgets.saleAlarm:Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
-    widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") ~= false)
+    widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local linkBox = widgets.linkNames.editBox
