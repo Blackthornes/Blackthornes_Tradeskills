@@ -324,6 +324,27 @@ _G.BlackthornesTS.Butler:Mailbox(covered)   -- true: the mail panel steps aside;
 Butler's Always mail list names characters from `Holdings()` (same realm
 and faction). Keep `Mailbox` stable; Butler's `Logic/Errands.lua` calls it.
 
+## Profession cooldowns
+
+The owner said yes (2026-10-12) to keeping profession cooldowns for every
+character. `Logic/Cooldowns.lua` keeps, account wide,
+`professionCooldowns[characterKey][id] = { name, group, readyAt, recipeID
+or itemID, told }` (never rename it; `id` is `spell:N` or `item:N`): Classic's
+cooldown crafts (`Cooldowns.KNOWN`: transmutes, Mooncloth) once the
+character's recipes include them, any learned craft the game says is
+cooling down (the profession window's harvest calls `Cooldowns:NoteRecipe`
+with `C_TradeSkillUI.GetRecipeCooldown`; a cast by the character reads its
+spell cooldown a second later), and the Salt Shaker while carried
+(`Cooldowns.ITEMS`). Crafts sharing a cooldown show once, by `group` (the
+name before the colon). A ready one is said in chat once each time it comes
+ready (`told`), at login and from one timer for the next to come ready, and
+the Characters tab's detail lists them. "Profession cooldowns" on the Look
+page (`cooldownAlerts`, on unless unticked) and `/bts cooldowns`. Butler's
+`Jobs()` gives each ready group as a `cooldown` step, and `Butler:Craft`
+makes a ready cooldown craft once, queued or not. Tested in
+`tools/test_cooldowns.lua` and `tools/test_butlerjobs.lua`. Not yet seen in
+game.
+
 ## Profit by method
 
 A player asked (2026-10-11, the owner agreeing) for profit split by how it
