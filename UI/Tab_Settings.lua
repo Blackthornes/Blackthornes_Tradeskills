@@ -1200,6 +1200,24 @@ local function Build(outer)
     end, true)
     widgets.upgradeArrows:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Logic/Cooldowns.lua (asked 2026-10-12): a line in chat when a
+    -- transmute, Mooncloth or the Salt Shaker is ready on any character,
+    -- and a step for it in Blackthornes Butler. The button is /bts cooldowns.
+    local cooldownRow = CreateRow(pages.look, 1, L["Profession cooldowns"],
+        L["Says in chat when a transmute, Mooncloth or the Salt Shaker is ready on any of your characters, and Blackthornes Butler shows it as a step. Show lists them all. Also /bts cooldowns."])
+
+    widgets.cooldownAlerts = Widgets.CreateCheckbox(cooldownRow, L["Enabled"], function(checked)
+        Config:Set("cooldownAlerts", checked)
+        if ns.Cooldowns then ns.Cooldowns:Schedule() end
+    end, true)
+    widgets.cooldownAlerts:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local cooldownList = Widgets.CreateButton(cooldownRow, L["Show"], function()
+        if ns.Cooldowns then ns.Cooldowns:Report() end
+    end, { width = 60, height = 20, tooltip = L["List every character's profession cooldowns in chat"] })
+    cooldownList:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
+    FitButton(cooldownList)
+
     -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
     -- addons the player does not have. Off here is off in all of them.
     local sistersRow = CreateRow(pages.look, 1, L["Sister addons"],
@@ -1902,6 +1920,7 @@ local function Refresh()
         box:SetChecked(Config:Get(key) ~= false)
     end
     widgets.saleAlarm:Refresh()
+    widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local linkBox = widgets.linkNames.editBox
