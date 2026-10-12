@@ -673,6 +673,11 @@ function WhatsNew:Build()
     end
 
     frame:SetScript("OnHide", function()
+        -- Closed with the scroll thumb held: it never hears the mouse come up.
+        if WhatsNew.thumb then
+            WhatsNew.thumb.dragging = nil
+            WhatsNew.thumb:SetScript("OnUpdate", nil)
+        end
         if WhatsNew.doneGlowAnim then pcall(WhatsNew.doneGlowAnim.Stop, WhatsNew.doneGlowAnim) end
         WhatsNew.closing = nil
         pcall(frame.SetAlpha, frame, 1)
