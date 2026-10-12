@@ -48,6 +48,7 @@ jobs:
       - name: Package tests
         run: |
           python tools/test_check_release.py
+          python tools/test_make_whatsnew.py
           python tools/test_check_package.py
           python tools/test_announce_discord.py
           python tools/test_post_general.py

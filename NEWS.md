@@ -10,7 +10,10 @@ under a line with the addon's name and version that points players to
 #announcements for the full list. No link or addon card goes with it. This
 is the only report that names players. A version with no section here posts
 nothing in #general.
-This file does not ship in the addon.
+This file does not ship in the addon, but its newest sections do, without
+the thanks line: `python tools/make_whatsnew.py` writes them into
+Core/WhatsNewText.lua for the in-game What's New window. Run it after
+writing a section; the release check refuses a tag while it is behind.
 
 ## 0.52.0
 

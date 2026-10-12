@@ -38,6 +38,9 @@ jobs:
       - name: The release check refuses what it should
         run: python tools/test_check_release.py
 
+      - name: The What's New window's notes match NEWS.md
+        run: python tools/test_make_whatsnew.py
+
       - name: The clear-to-post check catches what it should
         run: python tools/test_check_package.py
 

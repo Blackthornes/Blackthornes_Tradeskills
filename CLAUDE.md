@@ -541,6 +541,39 @@ not refuse) when this version's CHANGELOG.md or NEWS.md section says
 German without Deutsch. This rule is in every addon's notes; keep them
 the same.
 
+## What's New
+
+The owner asked (2026-10-12) for the Discord #general post to show in game,
+the first time it loads after an update, in one window for every addon.
+`UI/WhatsNew.lua` is the same file in all five (a fix to it belongs in all
+five), and so are `tools/test_whatsnew.lua`, `tools/make_whatsnew.py` and
+`tools/test_make_whatsnew.py`. There is no shared core addon: every copy
+signs up in `_G.BlackthornesWhatsNew` as it loads, the first to reach
+PLAYER_LOGIN starts the only timer (`WhatsNew.DELAY`, 5 s, never in a
+fight), and that one check gathers what is new in all of them. The copy
+with the highest `FILE_VERSION` draws the window (first in
+`WhatsNew.ADDONS` on a tie); raise it when a change needs the newer copy.
+
+The words are NEWS.md's: it never ships, so `tools/make_whatsnew.py` writes
+its newest three sections, bullets only (the thanks line names players and
+never ships), into `Core/WhatsNewText.lua` (`ns.WHATS_NEW`; never edit it by
+hand). **Every release PR that writes a NEWS.md section runs
+`python tools/make_whatsnew.py` too**; `check_release.py` refuses a tag
+while the file is behind, and `tools/test_make_whatsnew.py` fails on every
+push. The bullets stay in English, also on a German client.
+
+Shown once a version: each addon keeps the newest version shown in its own
+account save (`whatsNewSeen`); after an update the sections newer than that
+(at most three) show, and an addon that never kept one shows its newest.
+"After an update" (`whatsNewPopup`) and "What's New motion"
+(`whatsNewMotion`) are on unless unticked, off in all when off in any;
+`whatsNewScale` is the size grip's, where the addon has one. Never rename
+them. The `whatsnew` command and a Settings button open it any time, with
+each addon's newest. It rises in, its divider draws out, each addon's card
+slides up with its icon popping and a light crossing it, and the Got it
+button glows (one looping animation the game plays, only while it shows);
+Motion off lands it all at once. Not yet seen in game.
+
 ## The sister note
 
 The owner asked (2026-10-11) for the addons to say, once, which of the

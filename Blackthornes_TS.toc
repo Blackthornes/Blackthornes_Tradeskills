@@ -16,6 +16,7 @@ Locale\deDE.lua
 
 Core\Init.lua
 Core\SisterNote.lua
+Core\WhatsNewText.lua
 Core\Util.lua
 Core\AHQueue.lua
 Core\Config.lua
@@ -80,6 +81,7 @@ UI\BlizzardLook.lua
 UI\Widgets.lua
 UI\Columns.lua
 UI\Titanforged.lua
+UI\WhatsNew.lua
 UI\Collapse.lua
 UI\PriceGraph.lua
 UI\Main.lua
