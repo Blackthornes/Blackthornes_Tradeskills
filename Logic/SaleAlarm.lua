@@ -22,6 +22,7 @@
 -- only at a mailbox. An alarm is only useful at the moment of the sale.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local SaleAlarm = ns.NewModule("SaleAlarm")
 
@@ -37,7 +38,9 @@ SaleAlarm.REGISTER_FILE = MEDIA .. "sale-register.ogg"
 SaleAlarm.COINS_FILE = 567413          -- sound/interface/lootcoinlarge.ogg
 SaleAlarm.CHOICES = { "register", "coins", "raid" }
 SaleAlarm.DEFAULT_SOUND = "register"
-SaleAlarm.NAMES = { register = "Cash register", coins = "Coins", raid = "Raid warning" }
+SaleAlarm.NAMES = { register = L["Cash register"], coins = L["Coins"], raid = L["Raid warning"] }
+-- The same names inside a sentence ("Sale alarm: cash register.").
+SaleAlarm.LOWER_NAMES = { register = L["cash register"], coins = L["coins"], raid = L["raid warning"] }
 
 -- RAID_WARNING: loud, short and unlike anything the auction house plays itself,
 -- so it cannot be mistaken for the window opening or a click. Read from the
@@ -254,7 +257,7 @@ function SaleAlarm:Restock(itemID, item)
     if not itemID or not ns.Queue then return false end
     local ok, recipeID = pcall(ns.Queue.RestockSold, ns.Queue, itemID)
     if not (ok and recipeID) then return false end
-    ns.Print(("%s sold: queued another to keep your stock up."):format(item))
+    ns.Print(L.Format("%s sold: queued another to keep your stock up.", item))
     return true
 end
 
@@ -374,8 +377,8 @@ end
 function SaleAlarm:Report()
     local accent, muted = ns.COLORS.accent, ns.COLORS.muted
 
-    ns.Print(("Sale alarm: |c%s%s|r"):format(accent,
-        self:IsOn() and ("on, " .. self.NAMES[self:Sound()]:lower()) or "off"))
+    ns.Print(L.Format("Sale alarm: |c%s%s|r", accent,
+        self:IsOn() and L.Format("on, %s", self.LOWER_NAMES[self:Sound()] or self:Sound()) or L["off"]))
 
     ns.PrintRaw(("  |c%slistening for the sold chat line:|r %s"):format(
         muted, Yes(self.listening.chat)))
@@ -407,19 +410,19 @@ function SaleAlarm:Report()
 
     local background = BackgroundSound()
     if background == false then
-        ns.PrintRaw(("  |c%sSound in Background is off, so the alarm is silent while the game is not the window in front. Turn it on in Options > Sound.|r"):format(
+        ns.PrintRaw(L.Format("  |c%sSound in Background is off, so the alarm is silent while the game is not the window in front. Turn it on in Options > Sound.|r",
             ns.COLORS.warn))
     end
 end
 
-ns.RegisterCommand("salealarm", "sound an alarm when an auction sells: /bts salealarm [on|off|test|register|coins|raid]",
+ns.RegisterCommand("salealarm", L["sound an alarm when an auction sells: /bts salealarm [on|off|test|register|coins|raid]"],
     function(args)
         local word = (args or ""):lower():match("^(%S+)")
 
         if SaleAlarm.NAMES[word] then
             ns.Config:Set("saleSound", word)
             ns.Config:Set("saleAlarm", true)
-            ns.Print(("Sale alarm: %s."):format(SaleAlarm.NAMES[word]:lower()))
+            ns.Print(L.Format("Sale alarm: %s.", SaleAlarm.LOWER_NAMES[word]))
             SaleAlarm:Play(word)
             if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
             return
@@ -427,7 +430,7 @@ ns.RegisterCommand("salealarm", "sound an alarm when an auction sells: /bts sale
 
         if word == "on" or word == "off" then
             ns.Config:Set("saleAlarm", word == "on")
-            ns.Print(("Sale alarm %s."):format(word))
+            ns.Print(word == "on" and L["Sale alarm on."] or L["Sale alarm off."])
             if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
             return
         end
@@ -435,9 +438,9 @@ ns.RegisterCommand("salealarm", "sound an alarm when an auction sells: /bts sale
         if word == "test" then
             local accepted = SaleAlarm:Play()
             if accepted == false then
-                ns.Warn("The game refused to play the alarm sound.")
+                ns.Warn(L["The game refused to play the alarm sound."])
             else
-                ns.Print("Played the sale alarm. If you heard nothing, check the game's master volume.")
+                ns.Print(L["Played the sale alarm. If you heard nothing, check the game's master volume."])
             end
             return
         end

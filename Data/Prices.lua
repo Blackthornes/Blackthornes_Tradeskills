@@ -8,6 +8,7 @@
 -- authoritative-looking price built from three listings.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Prices = ns.NewModule("Prices")
 
@@ -620,7 +621,7 @@ function Prices:ClearMissingIfWhole(seen, startedAt, scannedAt)
         local agrees = refused and math.abs(count - refused) <= refused * 0.1
         if not agrees then
             db.sweepRefusedByRealm[key] = count
-            return 0, ("the scan saw %d items against %d last time"):format(count, last)
+            return 0, L.Format("the scan saw %d items against %d last time", count, last)
         end
     end
 
@@ -967,7 +968,7 @@ local WEAKNESS_THRESHOLD = 0.8
 
 function Prices:GetConfidence(itemID)
     local record = self:GetTable()[itemID]
-    if not record then return 0, "never seen" end
+    if not record then return 0, L["never seen"] end
 
     local scanScore = Util.Clamp((record.scans or 0) / 5, 0, 1)
     local depthScore = Util.Clamp((record.quantity or 0) / 20, 0, 1)
@@ -991,11 +992,11 @@ function Prices:GetConfidence(itemID)
 
     local reason
     if ageScore == weakest then
-        reason = "stale data"
+        reason = L["stale data"]
     elseif depthScore == weakest then
-        reason = "few listed"
+        reason = L["few listed"]
     else
-        reason = "few scans"
+        reason = L["few scans"]
     end
 
     return score, reason
@@ -1173,7 +1174,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
-        ns.Warn(("removed %d price(s) and %d figure(s) above %s, which nobody could pay"):format(
+        ns.Warn(L.Format("removed %d price(s) and %d figure(s) above %s, which nobody could pay",
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
 
@@ -1197,7 +1198,7 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("price", "<item link or name>: what the auction house says", function(args)
+ns.RegisterCommand("price", L["<item link or name>: what the auction house says"], function(args)
     -- Shift-clicking an item into chat is the natural way to name one.
     local itemID = tonumber(args:match("item:(%d+)")) or tonumber(args:match("^%s*(%d+)%s*$"))
 
@@ -1210,14 +1211,14 @@ ns.RegisterCommand("price", "<item link or name>: what the auction house says", 
     end
 
     if not itemID then
-        ns.Print("usage: /bts price <shift-clicked item, or exact item name>")
+        ns.Print(L["usage: /bts price <shift-clicked item, or exact item name>"])
         return
     end
 
     local record = ns.Prices:Get(itemID)
     if not record then
-        ns.Print(("no auction data for %s. Run |cffc8a44d/bts scan|r at the auction house")
-            :format(Util.GetItemLabel(itemID)))
+        ns.Print(L.Format("no auction data for %s. Run |cffc8a44d/bts scan|r at the auction house",
+            Util.GetItemLabel(itemID)))
 
         -- There may still be a price to give: something this account can make
         -- is valued off its materials until a scan finds a real one. Asked of
@@ -1226,7 +1227,7 @@ ns.RegisterCommand("price", "<item link or name>: what the auction house says", 
         local estimate, basis, why = ns.Profit:ChoosePostPrice(itemID)
 
         if estimate and basis == "derived" then
-            ns.PrintRaw(("  |c%syou would list at %s (an estimate, not a market price)|r"):format(
+            ns.PrintRaw(L.Format("  |c%syou would list at %s (an estimate, not a market price)|r",
                 ns.COLORS.warn, Util.FormatMoney(estimate)))
             if why then ns.PrintRaw(("    %s"):format(why)) end
         end
@@ -1237,7 +1238,7 @@ ns.RegisterCommand("price", "<item link or name>: what the auction house says", 
     local liquidity = ns.Prices:GetLiquidity(itemID)
 
     ns.Print(Util.GetItemLabel(itemID))
-    ns.PrintRaw(("  market %s   min %s   qty %d"):format(
+    ns.PrintRaw(L.Format("  market %s   min %s   qty %d",
         Util.FormatMoney(record.market), Util.FormatMoney(record.min), record.quantity or 0))
 
     if record.rivalMin then
@@ -1245,10 +1246,10 @@ ns.RegisterCommand("price", "<item link or name>: what the auction house says", 
         -- cannot drift from the price the Sell tab would actually use.
         local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
 
-        ns.PrintRaw(("  cheapest rival %s   you would post at %s (%s)"):format(
+        ns.PrintRaw(L.Format("  cheapest rival %s   you would post at %s (%s)",
             Util.FormatMoney(record.rivalMin),
             Util.FormatMoney(postPrice or record.rivalMin),
-            basis or "no price"))
+            basis or L["no price"]))
 
         -- "match" on its own does not say whether undercutting was rejected
         -- on the numbers or never costed at all, and those want different
@@ -1260,18 +1261,18 @@ ns.RegisterCommand("price", "<item link or name>: what the auction house says", 
         local postPrice, basis, why = ns.Profit:ChoosePostPrice(itemID)
 
         if ns.Prices:HoldsLowest(itemID) then
-            ns.PrintRaw(("  |c%syou hold the lowest listing|r"):format(ns.COLORS.profit))
+            ns.PrintRaw(L.Format("  |c%syou hold the lowest listing|r", ns.COLORS.profit))
         end
 
         if postPrice then
-            ns.PrintRaw(("  no rival listed   you would post at %s (%s)"):format(
-                Util.FormatMoney(postPrice), basis or "no price"))
+            ns.PrintRaw(L.Format("  no rival listed   you would post at %s (%s)",
+                Util.FormatMoney(postPrice), basis or L["no price"]))
             if why then ns.PrintRaw(("    %s"):format(why)) end
         end
     end
-    ns.PrintRaw(("  seen %s over %d scan(s)"):format(
+    ns.PrintRaw(L.Format("  seen %s over %d scan(s)",
         Util.FormatAgeAgo(ns.Prices:GetAge(itemID)), record.scans or 0))
-    ns.PrintRaw(("  confidence %d%%%s   stock moving %s"):format(
+    ns.PrintRaw(L.Format("  confidence %d%%%s   stock moving %s",
         math.floor(confidence * 100), reason and (" (" .. reason .. ")") or "",
-        liquidity and ("%d%%"):format(math.floor(liquidity * 100)) or "unknown"))
+        liquidity and ("%d%%"):format(math.floor(liquidity * 100)) or L["unknown"]))
 end)

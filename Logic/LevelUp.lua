@@ -18,6 +18,7 @@
 -- list drops them, but they level a profession as well as anything.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local LevelUp = ns.NewModule("LevelUp")
 
@@ -31,11 +32,11 @@ LevelUp.BAND = BAND
 -- Short words for the CHANCE column. SkillUp's own labels are sentences,
 -- which is right for a tooltip and too long for a column.
 LevelUp.CHANCE_LABEL = {
-    optimal = "Guaranteed",
-    medium  = "Likely",
-    easy    = "Small",
-    trivial = "None",
-    unknown = "Not read",
+    optimal = L["Guaranteed"],
+    medium  = L["Likely"],
+    easy    = L["Small"],
+    trivial = L["None"],
+    unknown = L["Not read"],
 }
 
 --- Which band a row falls in.
@@ -371,16 +372,16 @@ function LevelUp:CraftAction(recipeID, wanted)
     local Crafting = ns.Crafting
 
     if Crafting:IsBusy() then
-        return { kind = "stop", text = "Stop", status = "Crafting. Click Stop to end after this one." }
+        return { kind = "stop", text = L["Stop"], status = L["Crafting. Click Stop to end after this one."] }
     end
 
     local ready, reason = Crafting:GetReadiness(recipeID)
 
     if not ready then
-        local status = reason == "need materials"
-            and "You are short of materials for this one."
-            or ("Cannot craft: %s."):format(reason or "unknown reason")
-        return { kind = "none", text = "Craft", status = status }
+        local status = reason == L["need materials"]
+            and L["You are short of materials for this one."]
+            or L.Format("Cannot craft: %s.", reason or L["unknown reason"])
+        return { kind = "none", text = L["Craft"], status = status }
     end
 
     local craftable = ns.Profit:GetCraftableCount(recipeID)
@@ -393,20 +394,20 @@ function LevelUp:CraftAction(recipeID, wanted)
         if profession then
             return {
                 kind = "open",
-                text = ("Open %s"):format(profession.name),
-                status = ("Opens your %s window. Click again to craft."):format(profession.name),
+                text = L.Format("Open %s", profession.name),
+                status = L.Format("Opens your %s window. Click again to craft.", profession.name),
                 count = count,
                 profession = profession,
             }
         end
     end
 
-    local status = ("Makes %d now."):format(count)
+    local status = L.Format("Makes %d now.", count)
     if (tonumber(wanted) or 1) > craftable then
-        status = ("Your bags only have materials for %d."):format(craftable)
+        status = L.Format("Your bags only have materials for %d.", craftable)
     end
 
-    return { kind = "craft", text = ("Craft %d"):format(count), status = status, count = count }
+    return { kind = "craft", text = L.Format("Craft %d", count), status = status, count = count }
 end
 
 --------------------------------------------------------------------------------

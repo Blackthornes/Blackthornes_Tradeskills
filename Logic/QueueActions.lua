@@ -19,6 +19,7 @@
 -- secure button (UI/Disenchanter.lua, UI/SellMarked.lua).
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local QueueActions = ns.NewModule("QueueActions")
 
@@ -26,12 +27,12 @@ local Util = ns.Util
 
 QueueActions.ORDER = { "auction", "disenchant", "vendor" }
 
-QueueActions.SHORT = { auction = "AH", disenchant = "DE", vendor = "Vendor" }
+QueueActions.SHORT = { auction = L["AH"], disenchant = L["DE"], vendor = L["Vendor"] }
 
 QueueActions.LONG = {
-    auction = "Sell on the auction house",
-    disenchant = "Disenchant",
-    vendor = "Sell to a vendor",
+    auction = L["Sell on the auction house"],
+    disenchant = L["Disenchant"],
+    vendor = L["Sell to a vendor"],
 }
 
 -- Greens and below. A blue or purple is never disenchanted or sold from here.
@@ -390,7 +391,7 @@ end
 -- /bts marks
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("marks", "list the items your queue marked to disenchant or vendor", function()
+ns.RegisterCommand("marks", L["list the items your queue marked to disenchant or vendor"], function()
     local any = false
     for _, action in ipairs({ "disenchant", "vendor" }) do
         local marks = QueueActions:GetMarks(false) or {}
@@ -398,10 +399,15 @@ ns.RegisterCommand("marks", "list the items your queue marked to disenchant or v
             if type(mark) == "table" and mark.action == action then
                 any = true
                 local safe = QueueActions:SafeQuality(itemID)
-                ns.Print(("%s: %dx %s%s"):format(QueueActions.LONG[action], tonumber(mark.count) or 0,
-                    Util.GetItemLabel(itemID), safe and "" or " (blue or better, or not loaded yet: left alone)"))
+                if safe then
+                    ns.Print(("%s: %dx %s"):format(QueueActions.LONG[action], tonumber(mark.count) or 0,
+                        Util.GetItemLabel(itemID)))
+                else
+                    ns.Print(L.Format("%s: %dx %s (blue or better, or not loaded yet: left alone)",
+                        QueueActions.LONG[action], tonumber(mark.count) or 0, Util.GetItemLabel(itemID)))
+                end
             end
         end
     end
-    if not any then ns.Print("nothing is marked. Crafts made from the queue on DE or Vendor are marked as they are made.") end
+    if not any then ns.Print(L["nothing is marked. Crafts made from the queue on DE or Vendor are marked as they are made."]) end
 end)

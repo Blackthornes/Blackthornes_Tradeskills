@@ -9,6 +9,7 @@
 -- The numbers come from Logic/GoldLog.lua; this only draws them.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Util = ns.Util
@@ -136,11 +137,11 @@ function GoldChart.ShowTooltip(owner, bin)
     end
 
     if income == 0 and spending == 0 then
-        GameTooltip:AddLine("No gold in or out", Theme.Unpack("muted"))
+        GameTooltip:AddLine(L["No gold in or out"], Theme.Unpack("muted"))
     else
         local net = income - spending
         local r, g, b = Theme.ProfitColor(net)
-        GameTooltip:AddDoubleLine("Net", GoldChart.Signed(net), 1, 1, 1, r, g, b)
+        GameTooltip:AddDoubleLine(L["Net"], GoldChart.Signed(net), 1, 1, 1, r, g, b)
     end
 
     GameTooltip:Show()
@@ -316,7 +317,7 @@ end
 --- Fill the legend from GoldLog:Totals: income by source, spending by
 --- source, the net, and gold moved between your own characters.
 function GoldChart.SetTotals(legend, totals, subtitle)
-    legend.title:SetText("Gold in and out")
+    legend.title:SetText(L["Gold in and out"])
     legend.subtitle:SetText(subtitle or "")
 
     local lines = {}
@@ -343,18 +344,18 @@ function GoldChart.SetTotals(legend, totals, subtitle)
         end
     end
 
-    Add("Income", GoldChart.Signed(totals.income), "profit", nil, true)
+    Add(L["Income"], GoldChart.Signed(totals.income), "profit", nil, true)
     Side("i", 1, "profit")
 
-    Add("Spending", GoldChart.Signed(-totals.spending), "loss", nil, true)
+    Add(L["Spending"], GoldChart.Signed(-totals.spending), "loss", nil, true)
     Side("o", -1, "loss")
 
-    Add("Net", GoldChart.Signed(totals.net),
+    Add(L["Net"], GoldChart.Signed(totals.net),
         totals.net < 0 and "loss" or (totals.net > 0 and "profit" or "muted"), nil, true)
 
     if totals.moved > 0 then
         local moved = totals.sources.transfer
-        Add("Moved between alts", Util.FormatMoney((moved and moved.i or 0) + (moved and moved.o or 0),
+        Add(L["Moved between alts"], Util.FormatMoney((moved and moved.i or 0) + (moved and moved.o or 0),
             { short = true, noColor = true }), "muted", nil, true)
     end
 
@@ -392,5 +393,5 @@ function GoldChart.SetTotals(legend, totals, subtitle)
         end
     end
 
-    legend.note:SetText("Hover a bar to see what made it up. Gold mailed between your own characters is not counted as income or spending.")
+    legend.note:SetText(L["Hover a bar to see what made it up. Gold mailed between your own characters is not counted as income or spending."])
 end

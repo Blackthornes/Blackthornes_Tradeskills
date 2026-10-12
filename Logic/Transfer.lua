@@ -12,6 +12,7 @@
 -- When SavedVariables start loading again this becomes redundant, and harmless.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Transfer = ns.NewModule("Transfer")
 
@@ -116,7 +117,7 @@ function Transfer:Import(code)
     code = (code or ""):gsub("%s", "")
 
     if code == "" then
-        return false, "nothing to import"
+        return false, L["nothing to import"]
     end
 
     local sections = {}
@@ -125,7 +126,7 @@ function Transfer:Import(code)
     end
 
     if sections[1] ~= FORMAT then
-        return false, "that does not look like a Blackthornes Tradeskills code"
+        return false, L["that does not look like a Blackthornes Tradeskills code"]
     end
 
     local queued, settingsApplied, limitsApplied = 0, 0, 0
@@ -193,13 +194,14 @@ function Transfer:Import(code)
         ns.Queue:Notify()
     end
 
-    local summary = ("restored %d craft(s), %d setting(s), %d limit(s)")
-        :format(queued, settingsApplied, limitsApplied)
-
+    local summary
     if skipped > 0 then
         -- Said plainly: silently dropping crafts would look like data loss.
-        summary = summary .. ("; skipped %d recipe(s) none of your characters know")
-            :format(skipped)
+        summary = L.Format("restored %d craft(s), %d setting(s), %d limit(s); skipped %d recipe(s) none of your characters know",
+            queued, settingsApplied, limitsApplied, skipped)
+    else
+        summary = L.Format("restored %d craft(s), %d setting(s), %d limit(s)",
+            queued, settingsApplied, limitsApplied)
     end
 
     if ns.UI then
@@ -216,7 +218,7 @@ end
 -- Commands
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("export", "copy your queue and settings to a code", function()
+ns.RegisterCommand("export", L["copy your queue and settings to a code"], function()
     if ns.UI then ns.UI:ShowTransferDialog("export") end
 end)
 
@@ -227,7 +229,7 @@ end)
 -- reckoned from the longer command, with a few letters spare for spaces.
 local CHAT_ROOM = 255 - #"/blackthorne import " - 5
 
-ns.RegisterCommand("import", "restore your queue and settings from a code", function(args)
+ns.RegisterCommand("import", L["restore your queue and settings from a code"], function(args)
     -- Pasting into the box is easier than typing after the command, but accept
     -- both rather than insisting.
     if args and args:gsub("%s", "") ~= "" then
@@ -237,7 +239,7 @@ ns.RegisterCommand("import", "restore your queue and settings from a code", func
             return ok
         end
 
-        ns.Print("that code is too long for the chat box, which cuts it short. Paste it into this window instead.")
+        ns.Print(L["that code is too long for the chat box, which cuts it short. Paste it into this window instead."])
     end
 
     if ns.UI then ns.UI:ShowTransferDialog("import") end

@@ -25,6 +25,7 @@
 -- is in the auction house list ready to click.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -39,8 +40,8 @@ local ICON_GUTTER = 20
 -- The ways to sell, in the Sell to menu's order, with the VIA column's word
 -- for each. The same words as the Profit tab's VIA and the queue's marks.
 local ROUTES = {
-    { key = "auction",    via = "AH",     text = "Auction house" },
-    { key = "vendor",     via = "Vendor", text = "Vendor" },
+    { key = "auction",    via = L["AH"],     text = L["Auction house"] },
+    { key = "vendor",     via = L["Vendor"], text = L["Vendor"] },
 }
 
 local VIA = {}
@@ -51,16 +52,16 @@ for _, route in ipairs(ROUTES) do VIA[route.key] = route.via end
 -- its heading. `width` is the least each gets: Widgets.FitColumns widens it
 -- to fit the heading and an amount.
 local COLUMNS = {
-    { key = "gain",   label = "PROFIT", width = 66, money = true },
-    { key = "margin", label = "MARGIN", width = 50, justify = "CENTER" },
-    { key = "gets",   label = "GETS",   width = 70, money = true },
-    { key = "buy",    label = "BUY",    width = 66, money = true },
-    { key = "age",    label = "AGE",    width = 44, justify = "CENTER" },
-    { key = "via",    label = "VIA",    width = 44, justify = "CENTER" },
+    { key = "gain",   label = L["PROFIT"], width = 66, money = true },
+    { key = "margin", label = L["MARGIN"], width = 50, justify = "CENTER" },
+    { key = "gets",   label = L["GETS"], width = 70, money = true },
+    { key = "buy",    label = L["BUY"], width = 66, money = true },
+    { key = "age",    label = L["AGE"], width = 44, justify = "CENTER" },
+    { key = "via",    label = L["VIA"], width = 44, justify = "CENTER" },
 }
 
 -- Any column but the name can be hidden (UI/Columns.lua).
-ns.Columns:Register("deals", "Deals", COLUMNS)
+ns.Columns:Register("deals", L["Deals"], COLUMNS)
 
 local state = {
     view = "flips",
@@ -117,8 +118,9 @@ end
 
 --- One way's profit in words, for a line on what the other ways make.
 local function OtherWay(row)
-    local how = row.route == "vendor" and "sold to a vendor" or "listed again"
-    return ("%s, %s"):format(how, Util.FormatMoney(row.gain, { noColor = true, short = true }))
+    local money = Util.FormatMoney(row.gain, { noColor = true, short = true })
+    if row.route == "vendor" then return L.Format("sold to a vendor, %s", money) end
+    return L.Format("listed again, %s", money)
 end
 
 --- "Other ways: ..." for a row that more than one way pays on, or nil.
@@ -127,7 +129,7 @@ local function OthersText(entry)
 
     local parts = {}
     for _, other in ipairs(entry.others) do parts[#parts + 1] = OtherWay(other) end
-    return ("Other ways: %s."):format(table.concat(parts, "; "))
+    return L.Format("Other ways: %s.", table.concat(parts, "; "))
 end
 
 --- Send a search for this item, so it shows in the auction house list ready
@@ -137,12 +139,12 @@ local function SearchAuctionHouse(entry)
 
     local scanner = ns.Scanner
     if not scanner or not scanner.isAuctionHouseOpen then
-        ns.Print("Open the auction house first, then search again.")
+        ns.Print(L["Open the auction house first, then search again."])
         return
     end
 
     if scanner.isScanning then
-        ns.Print("A scan is running. Search again once it finishes.")
+        ns.Print(L["A scan is running. Search again once it finishes."])
         return
     end
 
@@ -154,10 +156,10 @@ local function SearchAuctionHouse(entry)
     local label = Util.GetItemLabel(entry.itemID)
 
     if entry.route == "auction" then
-        ns.Print(("Searching the auction house for %s. Anything under %s each pays to list again at %s. If the list there does not change, type the name into its search box."):format(
+        ns.Print(L.Format("Searching the auction house for %s. Anything under %s each pays to list again at %s. If the list there does not change, type the name into its search box.",
             label, Plain(math.floor(entry.net)), Plain(entry.resell)))
     else
-        ns.Print(("Searching the auction house for %s. Anything at %s each or less is a vendor flip. If the list there does not change, type the name into its search box."):format(
+        ns.Print(L.Format("Searching the auction house for %s. Anything at %s each or less is a vendor flip. If the list there does not change, type the name into its search box.",
             label, Plain(entry.vendor - 1)))
     end
 end
@@ -185,7 +187,7 @@ local function CreateRow(row)
 
     -- First seen in the latest scan.
     row.newTag = Theme.CreateLabel(row, "tiny", "accent", "RIGHT")
-    row.newTag:SetText("NEW")
+    row.newTag:SetText(L["NEW"])
     row.newTag:Hide()
 
     row.cells = {}
@@ -220,7 +222,7 @@ local function FillCell(cell, key, entry)
         -- rather than "just now", which is wider than the column.
         local age = ns.Prices:GetAge(entry.itemID) or entry.age
         text = age and Util.FormatAge(age) or ""
-        if text == "just now" then text = "now" end
+        if text == L["just now"] then text = L["now"] end
         color = ns.Prices:IsStale(entry.itemID) and "warn" or "dim"
     end
 
@@ -236,7 +238,7 @@ local function UpdateRow(row, entry)
         ApplyRowLayout(row)
     end
 
-    Theme.SetRowName(row.name, entry.name or ("item " .. tostring(entry.itemID)))
+    Theme.SetRowName(row.name, entry.name or L.Format("item %s", tostring(entry.itemID)))
     Theme.SetItemIcon(row.icon, entry.itemID)
 
     -- Coloured by rarity from the facts kept in the saved data: most rows
@@ -259,38 +261,38 @@ local function ShowRowTooltip(row, entry)
     GameTooltip:AddLine(" ")
 
     if entry.route == "auction" then
-        GameTooltip:AddLine(("Buy at %s, list it again at %s: %s profit each after the cut."):format(
+        GameTooltip:AddLine(L.Format("Buy at %s, list it again at %s: %s profit each after the cut.",
             Plain(entry.buy), Plain(entry.resell), Plain(entry.gain)), 0.35, 0.85, 0.45, true)
-        GameTooltip:AddLine(("Usually sells for %s (middle of %d scans)."):format(
+        GameTooltip:AddLine(L.Format("Usually sells for %s (middle of %d scans).",
             Plain(entry.usual), entry.scans - 1), 0.85, 0.85, 0.85, true)
         local demand = ns.Demand:TooltipText(entry.demand)
-        if demand then GameTooltip:AddLine("Demand: " .. demand, 0.85, 0.85, 0.85, true) end
+        if demand then GameTooltip:AddLine(L.Format("Demand: %s", demand), 0.85, 0.85, 0.85, true) end
     else
-        GameTooltip:AddLine(("Buy at %s, sell to any vendor for %s: %s profit each."):format(
+        GameTooltip:AddLine(L.Format("Buy at %s, sell to any vendor for %s: %s profit each.",
             Plain(entry.buy), Plain(entry.vendor), Plain(entry.gain)), 0.35, 0.85, 0.45, true)
     end
 
     if entry.listed then
-        GameTooltip:AddLine(("%d listed."):format(entry.listed), 0.85, 0.85, 0.85, true)
+        GameTooltip:AddLine(L.Format("%d listed.", entry.listed), 0.85, 0.85, 0.85, true)
     end
 
     local others = OthersText(entry)
     if others then GameTooltip:AddLine(others, 0.7, 0.7, 0.7, true) end
 
     if entry.isNew then
-        GameTooltip:AddLine("New: first seen in the latest scan.", 0.91, 0.76, 0.35, true)
+        GameTooltip:AddLine(L["New: first seen in the latest scan."], 0.91, 0.76, 0.35, true)
     elseif entry.firstSeen and Now() then
-        GameTooltip:AddLine(("First seen %s."):format(Util.FormatAgeAgo(Now() - entry.firstSeen)),
+        GameTooltip:AddLine(L.Format("First seen %s.", Util.FormatAgeAgo(Now() - entry.firstSeen)),
             0.7, 0.7, 0.7, true)
     end
 
     -- Read now, as the AGE column is: the list can be kept for hours, and
     -- the warning it was built with never came on as the scan aged.
     if ns.Prices:IsStale(entry.itemID) then
-        GameTooltip:AddLine("Scanned a while ago, so it may have sold.", 0.91, 0.76, 0.35, true)
+        GameTooltip:AddLine(L["Scanned a while ago, so it may have sold."], 0.91, 0.76, 0.35, true)
     end
 
-    GameTooltip:AddLine("Right-click to search the auction house for it.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Right-click to search the auction house for it."], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -338,7 +340,7 @@ local function BuildDetail(parent)
     subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
-    local heading = Theme.CreateHeading(detail, "THE FLIP")
+    local heading = Theme.CreateHeading(detail, L["THE FLIP"])
     heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.heading = heading
 
@@ -367,18 +369,18 @@ local function BuildDetail(parent)
     flip.note:SetJustifyV("TOP")
     detail.flip = flip
 
-    local searchButton = Widgets.CreateButton(detail, "Search the auction house", function()
+    local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], function()
         SearchAuctionHouse(state.selected)
     end, { width = 200, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
-    searchButton.tooltipText = "Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."
+    searchButton.tooltipText = L["Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
     detail.searchButton = searchButton
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
     empty:SetWordWrap(true)
-    empty:SetText("Pick a row to see the deal")
+    empty:SetText(L["Pick a row to see the deal"])
     detail.empty = empty
 
     return detail
@@ -397,9 +399,9 @@ end
 --- How many are listed, for the top of a flip's detail.
 local function ListedText(entry)
     if entry.listed and entry.listed > 1 then
-        return ("%d listed. Only the cheapest is sure to be at this price."):format(entry.listed)
+        return L.Format("%d listed. Only the cheapest is sure to be at this price.", entry.listed)
     end
-    return "One listed."
+    return L["One listed."]
 end
 
 --- The detail panel for a row bought to list again.
@@ -410,34 +412,37 @@ local function UpdateResaleDetail(detail, entry)
     detail.subtitle:SetTextColor(Theme.Unpack("muted"))
 
     local lines = block.lines
-    SetLine(lines[1], entry.loneLow and "Buy for (lone low)" or "Buy for", Util.FormatMoney(entry.buy), "text")
-    SetLine(lines[2], "Usually sells for", Util.FormatMoney(entry.usual), "text")
-    SetLine(lines[3], entry.capped and "List again at (next listing)" or "List again at",
+    SetLine(lines[1], entry.loneLow and L["Buy for (lone low)"] or L["Buy for"], Util.FormatMoney(entry.buy), "text")
+    SetLine(lines[2], L["Usually sells for"], Util.FormatMoney(entry.usual), "text")
+    SetLine(lines[3], entry.capped and L["List again at (next listing)"] or L["List again at"],
         Util.FormatMoney(entry.resell), "text")
-    SetLine(lines[4], "Profit each", ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
+    SetLine(lines[4], L["Profit each"], ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
         "profit")
 
     block.bar:SetPoint("TOPLEFT", block, "TOPLEFT", 0, -71)
     block.bar:Set(entry.resell > 0 and entry.gain / entry.resell or 0, "profit")
 
     local cut = math.floor((ns.Config:Get("auctionCut") or 0.05) * 100 + 0.5)
-    local paid = entry.depositKnown and ("the %d%% cut and the deposit"):format(cut)
-        or ("the %d%% cut"):format(cut)
-    block.verdict:SetText(("Buy it, list it again at %s, and keep about %s each after %s."):format(
-        Plain(entry.resell), Plain(entry.gain), paid))
+    if entry.depositKnown then
+        block.verdict:SetText(L.Format("Buy it, list it again at %s, and keep about %s each after the %d%% cut and the deposit.",
+            Plain(entry.resell), Plain(entry.gain), cut))
+    else
+        block.verdict:SetText(L.Format("Buy it, list it again at %s, and keep about %s each after the %d%% cut.",
+            Plain(entry.resell), Plain(entry.gain), cut))
+    end
     block.verdict:SetTextColor(Theme.Unpack("profit"))
 
     local parts = { OthersText(entry) }
-    parts[#parts + 1] = ("The usual price is the middle of the %d scans before the last one, so the cheap listing does not drag it down."):format(entry.scans - 1)
+    parts[#parts + 1] = L.Format("The usual price is the middle of the %d scans before the last one, so the cheap listing does not drag it down.", entry.scans - 1)
     local demand = ns.Demand:TooltipText(entry.demand)
-    if demand then parts[#parts + 1] = ("Demand: %s."):format(demand) end
+    if demand then parts[#parts + 1] = L.Format("Demand: %s.", demand) end
     if not entry.depositKnown then
-        parts[#parts + 1] = "The deposit is not known until you have listed one, so it is not counted yet."
+        parts[#parts + 1] = L["The deposit is not known until you have listed one, so it is not counted yet."]
     end
-    parts[#parts + 1] = "Your gold is tied up until it sells."
+    parts[#parts + 1] = L["Your gold is tied up until it sells."]
     local age = ns.Prices:GetAge(entry.itemID) or entry.age
-    parts[#parts + 1] = ("Scanned %s."):format(age and Util.FormatAgeAgo(age) or "never")
-    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = "That was a while ago, so it may have sold." end
+    parts[#parts + 1] = age and L.Format("Scanned %s.", Util.FormatAgeAgo(age)) or L["Never scanned."]
+    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = L["That was a while ago, so it may have sold."] end
     block.note:SetText(table.concat(parts, " "))
 end
 
@@ -451,16 +456,16 @@ local function UpdateVendorDetail(detail, entry)
     -- Short enough to stay clear of the price on its right; the longer
     -- "(a lone low listing)" ran over it.
     local lines = block.lines
-    SetLine(lines[1], entry.loneLow and "Buy for (lone low)" or "Buy for", Util.FormatMoney(entry.buy), "text")
-    SetLine(lines[2], "A vendor pays", Util.FormatMoney(entry.vendor), "text")
-    SetLine(lines[3], "Profit each", ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
+    SetLine(lines[1], entry.loneLow and L["Buy for (lone low)"] or L["Buy for"], Util.FormatMoney(entry.buy), "text")
+    SetLine(lines[2], L["A vendor pays"], Util.FormatMoney(entry.vendor), "text")
+    SetLine(lines[3], L["Profit each"], ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
         "profit")
     SetLine(lines[4], nil)
 
     block.bar:SetPoint("TOPLEFT", block, "TOPLEFT", 0, -54)
     block.bar:Set(entry.vendor > 0 and entry.gain / entry.vendor or 0, "profit")
 
-    block.verdict:SetText(("Buy it, sell it to any vendor, and keep about %s each. No auction house cut."):format(
+    block.verdict:SetText(L.Format("Buy it, sell it to any vendor, and keep about %s each. No auction house cut.",
         Plain(entry.gain)))
     block.verdict:SetTextColor(Theme.Unpack("profit"))
 
@@ -468,15 +473,15 @@ local function UpdateVendorDetail(detail, entry)
     -- kept for hours, and the age it was built with went on saying "2m ago".
     local age = ns.Prices:GetAge(entry.itemID) or entry.age
     local parts = { OthersText(entry) }
-    parts[#parts + 1] = ("The buy price is the cheapest listing from another seller when last scanned (%s). Prices are per item, so a stack pays the same on every one in it."):format(
-        age and Util.FormatAgeAgo(age) or "never")
-    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = "That was a while ago, so it may have sold." end
+    parts[#parts + 1] = L.Format("The buy price is the cheapest listing from another seller when last scanned (%s). Prices are per item, so a stack pays the same on every one in it.",
+        age and Util.FormatAgeAgo(age) or L["never"])
+    if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = L["That was a while ago, so it may have sold."] end
     if entry.vendorFrom == "sold" then
-        parts[#parts + 1] = "The vendor price is what a vendor paid you when you last sold one."
+        parts[#parts + 1] = L["The vendor price is what a vendor paid you when you last sold one."]
     elseif entry.vendorFrom == "reported" then
-        parts[#parts + 1] = "The vendor price is what vendors on Forever were seen paying."
+        parts[#parts + 1] = L["The vendor price is what vendors on Forever were seen paying."]
     else
-        parts[#parts + 1] = "The vendor price comes from the game's item data, which Forever has changed for some items. Sell one and what a vendor really pays is used from then on."
+        parts[#parts + 1] = L["The vendor price comes from the game's item data, which Forever has changed for some items. Sell one and what a vendor really pays is used from then on."]
     end
     block.note:SetText(table.concat(parts, " "))
 end
@@ -499,7 +504,7 @@ local function UpdateDetail(entry)
         return
     end
 
-    detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
+    detail.title:SetText(entry.name or L.Format("item %s", tostring(entry.itemID)))
     Theme.SetItemIcon(detail.icon, entry.itemID)
 
     if entry.route == "auction" then return UpdateResaleDetail(detail, entry) end
@@ -620,33 +625,33 @@ end
 
 local function EmptyText()
     if state.search ~= "" then
-        return ("Nothing matching \"%s\"."):format(state.search)
+        return L.Format("Nothing matching \"%s\".", state.search)
     end
 
     if state.newOnly and #(built.rows or {}) > 0 then
-        return "Nothing new in the latest scan. Untick \"New only\" to see every deal."
+        return L["Nothing new in the latest scan. Untick \"New only\" to see every deal."]
     end
 
     if not AnyRoute() then
-        return "Tick at least one way to sell in the Sell to menu."
+        return L["Tick at least one way to sell in the Sell to menu."]
     end
 
     if (ns.Prices and ns.Prices:Count() or 0) == 0 then
-        return "Scan the auction house to find items worth buying."
+        return L["Scan the auction house to find items worth buying."]
     end
 
-    local text = "Nothing on the auction house is worth buying right now."
+    local text = L["Nothing on the auction house is worth buying right now."]
 
     if state.dealsOnly and state.hidden > 0 then
-        return text .. (" %d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin). Untick \"Only deals over my minimums\" to see them."):format(
+        return text .. " " .. L.Format("%d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin). Untick \"Only deals over my minimums\" to see them.",
             state.hidden,
             Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
             ns.Config:Get("minMarginPercent") or 0)
     end
 
     if state.routes.auction and (state.thin or 0) > 0 then
-        text = text .. (" %d more are cheap, but have fewer than %d scans, little demand, or are grey. Scan again over the next days to build up their history.")
-            :format(state.thin, ns.VendorFlips.MIN_RESALE_SCANS)
+        text = text .. " " .. L.Format("%d more are cheap, but have fewer than %d scans, little demand, or are grey. Scan again over the next days to build up their history.",
+            state.thin, ns.VendorFlips.MIN_RESALE_SCANS)
     end
 
     return text
@@ -665,31 +670,38 @@ local function SetDealsCount(rows)
 
     local found
     if deals > 0 then
-        local plural = deals == 1 and "" or "s"
         local money = Util.FormatMoney(total, { noColor = true, short = true })
-        found = {
-            ("%d deal%s, about %s if you buy one of each"):format(deals, plural, money),
-            ("%d deal%s, about %s for one of each"):format(deals, plural, money),
-            ("%d deal%s"):format(deals, plural),
-        }
+        if deals == 1 then
+            found = {
+                L.Format("%d deal, about %s if you buy one of each", deals, money),
+                L.Format("%d deal, about %s for one of each", deals, money),
+                L.Format("%d deal", deals),
+            }
+        else
+            found = {
+                L.Format("%d deals, about %s if you buy one of each", deals, money),
+                L.Format("%d deals, about %s for one of each", deals, money),
+                L.Format("%d deals", deals),
+            }
+        end
     elseif #rows > 0 then
-        found = { ("%d item%s"):format(#rows, #rows == 1 and "" or "s") }
+        found = { #rows == 1 and L.Format("%d item", #rows) or L.Format("%d items", #rows) }
     end
 
     -- Items not read yet wait for the auction house to close, so reading
     -- them cannot upset Ready to sell. Say so, or the list looks short.
     local waiting
     if (state.pending or 0) > 0 then
-        local when = ns.Scanner and ns.Scanner.isAuctionHouseOpen
-            and "read once the auction house is closed" or "reading them now"
+        local closed = not (ns.Scanner and ns.Scanner.isAuctionHouseOpen)
         waiting = {
-            ("%d more listed items not checked yet, %s"):format(state.pending, when),
-            ("%d not checked yet"):format(state.pending),
+            closed and L.Format("%d more listed items not checked yet, reading them now", state.pending)
+                or L.Format("%d more listed items not checked yet, read once the auction house is closed", state.pending),
+            L.Format("%d not checked yet", state.pending),
         }
     elseif state.routes.auction and (state.thin or 0) > 0 then
         waiting = {
-            ("%d more held back: few scans or little demand"):format(state.thin),
-            ("%d held back"):format(state.thin),
+            L.Format("%d more held back: few scans or little demand", state.thin),
+            L.Format("%d held back", state.thin),
         }
     end
 
@@ -751,9 +763,9 @@ local function SellToSummary(set)
     for _, route in ipairs(ROUTES) do
         if set[route.key] then names[#names + 1] = route.via else all = false end
     end
-    if all then return "Sell to: All" end
-    if #names == 0 then return "Sell to: none" end
-    return "Sell to: " .. table.concat(names, ", ")
+    if all then return L["Sell to: All"] end
+    if #names == 0 then return L["Sell to: none"] end
+    return L.Format("Sell to: %s", table.concat(names, ", "))
 end
 
 local function Build(container)
@@ -800,27 +812,27 @@ local function Build(container)
         ShowFromTop()
     end, { width = 140, multi = true, summary = SellToSummary })
     sellTo:SetValue(state.routes)
-    sellTo.tooltipText = "Tick the ways you will sell what you buy. Each item shows on the one that pays most."
+    sellTo.tooltipText = L["Tick the ways you will sell what you buy. Each item shows on the one that pays most."]
     widgets.sellTo = sellTo
 
     -- Made after Sell to but placed first: what the tab shows.
     local show = Widgets.CreateDropdown(toolbar, {
-        { text = "Show: Flips", value = "flips" },
-        { text = "Show: Merchant's Favor", value = "favor" },
-        { text = "Show: Craftsman's Writs", value = "writs" },
+        { text = L["Show: Flips"], value = "flips" },
+        { text = L["Show: Merchant's Favor"], value = "favor" },
+        { text = L["Show: Craftsman's Writs"], value = "writs" },
     }, function(value)
         UI.DealsSetView(value)
     end, { width = 160 })
     show:SetPoint("LEFT", 0, 0)
     show:SetValue(state.view)
-    show.tooltipText = "Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."
+    show.tooltipText = L["Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
     widgets.show = show
     sellTo:SetPoint("LEFT", show, "RIGHT", 8, 0)
 
     -- The reputation goal, for the writs; it takes Sell to's place.
     local goals = {}
     for _, goal in ipairs(ns.Writs and ns.Writs.GOALS or {}) do
-        goals[#goals + 1] = { text = "Goal: " .. goal.text, value = goal.key }
+        goals[#goals + 1] = { text = L.Format("Goal: %s", goal.text), value = goal.key }
     end
     local goal = Widgets.CreateDropdown(toolbar, goals, function(value)
         ns.DealsWrits:SetGoal(value)
@@ -829,11 +841,11 @@ local function Build(container)
     end, { width = 130 })
     goal:SetPoint("LEFT", show, "RIGHT", 8, 0)
     if ns.DealsWrits then goal:SetValue(ns.DealsWrits:GetGoal()) end
-    goal.tooltipText = "The standing with your side's trade camp to work towards. The panel on the right says how many writs it still takes and what they cost."
+    goal.tooltipText = L["The standing with your side's trade camp to work towards. The panel on the right says how many writs it still takes and what they cost."]
     goal:Hide()
     widgets.goal = goal
 
-    local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
+    local search = Widgets.CreateSearchBox(toolbar, L["Search items"], function(text)
         state.search = text or ""
         if ns.DealsFavor then ns.DealsFavor:SetSearch(state.search) end
         if ns.DealsWrits then ns.DealsWrits:SetSearch(state.search) end
@@ -843,27 +855,27 @@ local function Build(container)
     search:SetWidth(Widgets.SEARCH_WIDTH)
     widgets.search = search
 
-    local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
+    local dealsOnly = Widgets.CreateCheckbox(toolbar, L["Only deals over my minimums"], function(checked)
         state.dealsOnly = checked
         ShowFromTop()
     end, state.dealsOnly)
     dealsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
 
-    local newOnly = Widgets.CreateCheckbox(toolbar, "New only", function(checked)
+    local newOnly = Widgets.CreateCheckbox(toolbar, L["New only"], function(checked)
         state.newOnly = checked
         ShowFromTop()
     end, state.newOnly)
     newOnly:SetPoint("LEFT", dealsOnly, "RIGHT", 12, 0)
     widgets.newOnly = newOnly
 
-    local skipOverStack = Widgets.CreateCheckbox(toolbar, "Skip bundles over a stack", function(checked)
+    local skipOverStack = Widgets.CreateCheckbox(toolbar, L["Skip bundles over a stack"], function(checked)
         ns.DealsFavor:SetSkipOverStack(checked)
         ns.Config:Set("favorSkipOverStack", checked and true or false)
         ShowFromTop()
     end, not ns.DealsFavor or ns.DealsFavor:GetSkipOverStack())
     skipOverStack:SetPoint("LEFT", search, "RIGHT", 12, 0)
-    skipOverStack.tooltipText = "Forever could not fill a crate from more than one stack of a material when last reported, so a bundle of 40 Linen Cloth is left out of the cheapest."
+    skipOverStack.tooltipText = L["Forever could not fill a crate from more than one stack of a material when last reported, so a bundle of 40 Linen Cloth is left out of the cheapest."]
     skipOverStack:Hide()
     widgets.skipOverStack = skipOverStack
 
@@ -875,7 +887,7 @@ local function Build(container)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
-    nameHeading:SetText("ITEM")
+    nameHeading:SetText(L["ITEM"])
 
     widgets.headings = {}
     for index, column in ipairs(COLUMNS) do
@@ -950,7 +962,7 @@ local function Build(container)
 
     local hint = Theme.CreateLabel(flipsView, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText("Right-click a row to search for it")
+    hint:SetText(L["Right-click a row to search for it"])
     widgets.hint = hint
 
     -- The count line grows a long "not checked yet" note while items load,
@@ -1037,7 +1049,7 @@ end
 
 UI:RegisterTab({
     key = "deals",
-    text = "Deals",
+    text = L["Deals"],
     order = 1.9,
     build = Build,
     refresh = Refresh,

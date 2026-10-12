@@ -8,6 +8,9 @@
 ## OptionalDeps: Blackthornes_Farmer, Blackthornes_Equipment
 ## IconTexture: Interface\Icons\Trade_BlackSmithing
 
+Locale\Locale.lua
+Locale\deDE.lua
+
 Core\Init.lua
 Core\SisterNote.lua
 Core\Util.lua

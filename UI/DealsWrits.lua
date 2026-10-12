@@ -11,6 +11,7 @@
 -- in place of its flips when its Show menu says so, and owns the option bar.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -24,15 +25,15 @@ local ICON_GUTTER = 20
 
 -- Columns, laid out right to left, as on the flips list.
 local COLUMNS = {
-    { key = "perRep",    label = "PER REP", width = 66, money = true },
-    { key = "total",     label = "TOTAL",   width = 66, money = true },
-    { key = "itemCost",  label = "ITEM",    width = 66, money = true },
-    { key = "writPrice", label = "WRIT",    width = 66, money = true },
-    { key = "rep",       label = "REP",     width = 40, justify = "CENTER" },
+    { key = "perRep",    label = L["PER REP"], width = 66, money = true },
+    { key = "total",     label = L["TOTAL"], width = 66, money = true },
+    { key = "itemCost",  label = L["ITEM"], width = 66, money = true },
+    { key = "writPrice", label = L["WRIT"], width = 66, money = true },
+    { key = "rep",       label = L["REP"], width = 40, justify = "CENTER" },
 }
 
 -- Any column but the item's name can be hidden (UI/Columns.lua).
-ns.Columns:Register("writs", "Deals: Craftsman's Writs", COLUMNS)
+ns.Columns:Register("writs", L["Deals: Craftsman's Writs"], COLUMNS)
 
 local state = {
     search = "",
@@ -69,37 +70,43 @@ end
 --- Where the reputation figure came from, in a few words.
 local function RewardText(row)
     if row.source == "learned" then
-        local times = row.turnIns == 1 and "one turn-in" or ("%d turn-ins"):format(row.turnIns or 1)
-        return ("%d reputation, seen paid on %s."):format(row.rep, times)
+        if row.turnIns == 1 then
+            return L.Format("%d reputation, seen paid on one turn-in.", row.rep)
+        end
+        return L.Format("%d reputation, seen paid on %d turn-ins.", row.rep, row.turnIns or 1)
     elseif row.source == "reported" then
-        return ("Guides report %d reputation. Not seen paid here yet."):format(row.rep)
+        return L.Format("Guides report %d reputation. Not seen paid here yet.", row.rep)
     end
-    return "Nobody knows what it pays yet."
+    return L["Nobody knows what it pays yet."]
 end
 
 local function Search(itemID, what)
     local scanner = ns.Scanner
     if not scanner or not scanner.isAuctionHouseOpen then
-        ns.Print("Open the auction house first, then search again.")
+        ns.Print(L["Open the auction house first, then search again."])
         return
     end
     if scanner.isScanning then
-        ns.Print("A scan is running. Search again once it finishes.")
+        ns.Print(L["A scan is running. Search again once it finishes."])
         return
     end
     if not itemID then
-        ns.Print(("The game has not shown this addon %s yet, so type its name into the auction house search box."):format(what))
+        if what == "writ" then
+            ns.Print(L["The game has not shown this addon this writ yet, so type its name into the auction house search box."])
+        else
+            ns.Print(L["The game has not shown this addon this item yet, so type its name into the auction house search box."])
+        end
         return
     end
     ns.UI:SearchAuctionHouse(itemID)
 end
 
 local function SearchWrit(row)
-    if row then Search(row.writID, "this writ") end
+    if row then Search(row.writID, "writ") end
 end
 
 local function SearchItem(row)
-    if row then Search(row.itemID, "this item") end
+    if row then Search(row.itemID, "item") end
 end
 
 --------------------------------------------------------------------------------
@@ -162,32 +169,38 @@ end
 
 local function ItemLine(entry)
     if not entry.itemCost then return nil end
-    local made = entry.how == "make" and "made from materials" or "bought"
-    if entry.count > 1 then
-        return ("%d %s, %s: %s"):format(entry.count, entry.name, made, Plain(entry.itemCost))
+    local cost = Plain(entry.itemCost)
+    if entry.how == "make" then
+        if entry.count > 1 then
+            return L.Format("%d %s, made from materials: %s", entry.count, entry.name, cost)
+        end
+        return L.Format("%s, made from materials: %s", entry.name, cost)
     end
-    return ("%s, %s: %s"):format(entry.name, made, Plain(entry.itemCost))
+    if entry.count > 1 then
+        return L.Format("%d %s, bought: %s", entry.count, entry.name, cost)
+    end
+    return L.Format("%s, bought: %s", entry.name, cost)
 end
 
 local function ShowRowTooltip(row, entry)
     GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-    GameTooltip:AddLine("Craftsman's Writ: " .. entry.name)
-    GameTooltip:AddLine(("%s %s, skill %d"):format(TierName(entry.tier), entry.prof, entry.writ.skill),
+    GameTooltip:AddLine(L.Format("Craftsman's Writ: %s", entry.name))
+    GameTooltip:AddLine(L.Format("%s %s, skill %d", TierName(entry.tier), entry.prof, entry.writ.skill),
         0.7, 0.7, 0.7)
 
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine(("Writ: %s"):format(entry.writPrice and Plain(entry.writPrice)
-        or (entry.noneListed and "none listed" or "not priced")),
+    GameTooltip:AddLine(L.Format("Writ: %s", entry.writPrice and Plain(entry.writPrice)
+        or (entry.noneListed and L["none listed"] or L["not priced"])),
         0.85, 0.85, 0.85)
-    GameTooltip:AddLine(ItemLine(entry) or "Item: not priced", 0.85, 0.85, 0.85, true)
+    GameTooltip:AddLine(ItemLine(entry) or L["Item: not priced"], 0.85, 0.85, 0.85, true)
     if entry.perRep then
-        GameTooltip:AddLine(("%s for each reputation."):format(Plain(Round(entry.perRep))), 0.35, 0.85, 0.45, true)
+        GameTooltip:AddLine(L.Format("%s for each reputation.", Plain(Round(entry.perRep))), 0.35, 0.85, 0.45, true)
     end
     GameTooltip:AddLine(RewardText(entry), 0.7, 0.7, 0.7, true)
     if entry.haveWrits > 0 then
-        GameTooltip:AddLine(("You carry %d of these writs."):format(entry.haveWrits), 0.85, 0.85, 0.85)
+        GameTooltip:AddLine(L.Format("You carry %d of these writs.", entry.haveWrits), 0.85, 0.85, 0.85)
     end
-    GameTooltip:AddLine("Right-click to search the auction house for the writ.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Right-click to search the auction house for the writ."], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -241,14 +254,14 @@ local function BuildDetail(parent)
     detail.goal:SetPoint("TOPLEFT", detail.title, "BOTTOMLEFT", 0, -10)
     detail.goal:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 
-    detail.routeHeading = Theme.CreateHeading(detail, "BUYING WRITS AND ITEMS")
+    detail.routeHeading = Theme.CreateHeading(detail, L["BUYING WRITS AND ITEMS"])
     detail.routeHeading:SetPoint("TOPLEFT", detail.goal, "BOTTOMLEFT", 0, -12)
 
     detail.route = Lines(detail, 2)
     detail.route:SetPoint("TOPLEFT", detail.routeHeading, "BOTTOMLEFT", 0, -8)
     detail.route:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 
-    detail.writHeading = Theme.CreateHeading(detail, "PICK A WRIT")
+    detail.writHeading = Theme.CreateHeading(detail, L["PICK A WRIT"])
     detail.writHeading:SetPoint("TOPLEFT", detail.route, "BOTTOMLEFT", 0, -12)
 
     detail.writ = Lines(detail, 4)
@@ -261,17 +274,17 @@ local function BuildDetail(parent)
     detail.note:SetWordWrap(true)
     detail.note:SetJustifyV("TOP")
 
-    detail.writButton = Widgets.CreateButton(detail, "Search writ", function()
+    detail.writButton = Widgets.CreateButton(detail, L["Search writ"], function()
         SearchWrit(state.selected)
     end, { width = 134, primary = true, height = 24 })
     detail.writButton:SetPoint("BOTTOMLEFT", 12, 14)
-    detail.writButton.tooltipText = "Sends a search for this writ, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."
+    detail.writButton.tooltipText = L["Sends a search for this writ, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
 
-    detail.itemButton = Widgets.CreateButton(detail, "Search item", function()
+    detail.itemButton = Widgets.CreateButton(detail, L["Search item"], function()
         SearchItem(state.selected)
     end, { width = 134, height = 24 })
     detail.itemButton:SetPoint("LEFT", detail.writButton, "RIGHT", 8, 0)
-    detail.itemButton.tooltipText = "Sends a search for the item the writ asks for."
+    detail.itemButton.tooltipText = L["Sends a search for the item the writ asks for."]
 
     return detail
 end
@@ -283,29 +296,29 @@ local function UpdateGoal(plan)
 
     if not faction then
         detail.title:SetText(plan.goal.text)
-        SetLine(lines[1], "Writs pay reputation with your side's trade camp.", "")
+        SetLine(lines[1], L["Writs pay reputation with your side's trade camp."], "")
         for index = 2, 5 do SetLine(lines[index], nil) end
         return
     end
 
-    detail.title:SetText(("%s with %s"):format(plan.goal.text, faction.name))
+    detail.title:SetText(L.Format("%s with %s", plan.goal.text, faction.name))
 
     if plan.standing then
-        SetLine(lines[1], ("Now (%s)"):format(ns.Writs.StandingText(plan.standing)), tostring(plan.standing))
+        SetLine(lines[1], L.Format("Now (%s)", ns.Writs.StandingText(plan.standing)), tostring(plan.standing))
     else
-        SetLine(lines[1], "The game did not say your standing", "?", "warn", "warn")
+        SetLine(lines[1], L["The game did not say your standing"], "?", "warn", "warn")
     end
 
     if plan.need == 0 then
-        SetLine(lines[2], "Goal reached", "", "profit")
+        SetLine(lines[2], L["Goal reached"], "", "profit")
         for index = 3, 5 do SetLine(lines[index], nil) end
     else
-        SetLine(lines[2], "Still to go", tostring(plan.need), "text", "accent")
+        SetLine(lines[2], L["Still to go"], tostring(plan.need), "text", "accent")
         for tier = 1, 3 do
             local entry = plan.perTier[tier]
             if entry and entry.writs then
                 local marked = entry.source == "reported" and "*" or ""
-                SetLine(lines[tier + 2], ("%s writs (%d each%s)"):format(TierName(tier), entry.rep, marked),
+                SetLine(lines[tier + 2], L.Format("%s writs (%d each%s)", TierName(tier), entry.rep, marked),
                     tostring(entry.writs))
             else
                 SetLine(lines[tier + 2], nil)
@@ -316,13 +329,14 @@ local function UpdateGoal(plan)
     local route = detail.route.lines
     if plan.cheapest then
         local cheapest = plan.cheapest
-        SetLine(route[1], ("Cheapest: %d %s, one a day"):format(cheapest.writs, cheapest.row.name),
+        SetLine(route[1], L.Format("Cheapest: %d %s, one a day", cheapest.writs, cheapest.row.name),
             Plain(Round(cheapest.cost)), "text", "accent")
         local quickest = plan.quickest
-        local days = quickest.days == 1 and "1 day" or ("%d days"):format(quickest.days)
-        SetLine(route[2], ("Quickest: %d writs over %s"):format(quickest.writs, days), Plain(Round(quickest.cost)))
+        local text = quickest.days == 1 and L.Format("Quickest: %d writs over 1 day", quickest.writs)
+            or L.Format("Quickest: %d writs over %d days", quickest.writs, quickest.days)
+        SetLine(route[2], text, Plain(Round(quickest.cost)))
     elseif plan.need > 0 then
-        SetLine(route[1], "No writ is fully priced yet", "")
+        SetLine(route[1], L["No writ is fully priced yet"], "")
         SetLine(route[2], nil)
     else
         SetLine(route[1], nil)
@@ -339,37 +353,37 @@ local function UpdateWrit(entry)
     detail.itemButton:SetShown(entry ~= nil)
 
     if not entry then
-        detail.writHeading:SetText("PICK A WRIT")
-        SetLine(lines[1], "Click a row for its sums.", "")
+        detail.writHeading:SetText(L["PICK A WRIT"])
+        SetLine(lines[1], L["Click a row for its sums."], "")
         for index = 2, 4 do SetLine(lines[index], nil) end
     else
         detail.writHeading:SetText(("%s %s"):format(TierName(entry.tier), entry.prof):upper())
-        SetLine(lines[1], "Writ on the AH", entry.writPrice and Plain(entry.writPrice)
-            or (entry.noneListed and "none listed" or "not priced"))
+        SetLine(lines[1], L["Writ on the AH"], entry.writPrice and Plain(entry.writPrice)
+            or (entry.noneListed and L["none listed"] or L["not priced"]))
         local what = entry.count > 1 and ("%d %s"):format(entry.count, entry.name) or entry.name
-        SetLine(lines[2], what .. (entry.how == "make" and " (made)" or ""),
-            entry.itemCost and Plain(entry.itemCost) or "not priced")
-        SetLine(lines[3], "Money back", entry.money and entry.money > 0 and Plain(entry.money) or "none known")
-        SetLine(lines[4], entry.rep and ("Each of %d reputation"):format(entry.rep) or "Each reputation",
-            entry.perRep and Plain(Round(entry.perRep)) or "not known", "text", "accent")
+        SetLine(lines[2], entry.how == "make" and L.Format("%s (made)", what) or what,
+            entry.itemCost and Plain(entry.itemCost) or L["not priced"])
+        SetLine(lines[3], L["Money back"], entry.money and entry.money > 0 and Plain(entry.money) or L["none known"])
+        SetLine(lines[4], entry.rep and L.Format("Each of %d reputation", entry.rep) or L["Each reputation"],
+            entry.perRep and Plain(Round(entry.perRep)) or L["not known"], "text", "accent")
     end
 
     local parts = {}
     if entry then
         parts[#parts + 1] = RewardText(entry)
         if entry.how == "make" and entry.buy then
-            parts[#parts + 1] = ("Bought, it would be %s."):format(Plain(entry.buy))
+            parts[#parts + 1] = L.Format("Bought, it would be %s.", Plain(entry.buy))
         end
         if entry.haveWrits > 0 then
-            parts[#parts + 1] = ("You carry %d of these writs."):format(entry.haveWrits)
+            parts[#parts + 1] = L.Format("You carry %d of these writs.", entry.haveWrits)
         end
         if not entry.writID then
-            parts[#parts + 1] = "This writ has not been seen in the game yet, so it has no auction house price."
+            parts[#parts + 1] = L["This writ has not been seen in the game yet, so it has no auction house price."]
         end
     else
-        parts[#parts + 1] = "* As the guides report it, until a turn-in is seen here."
+        parts[#parts + 1] = L["* As the guides report it, until a turn-in is seen here."]
     end
-    parts[#parts + 1] = "Each order can be done once a day. The coin pouch a turn-in gives is not counted."
+    parts[#parts + 1] = L["Each order can be done once a day. The coin pouch a turn-in gives is not counted."]
     detail.note:SetText(table.concat(parts, " "))
 end
 
@@ -388,17 +402,23 @@ local function CountText(rows)
 
     if not cheapest then
         if (ns.Prices and ns.Prices:Count() or 0) == 0 then
-            return { "Scan the auction house to price the writs and what they ask for." }
+            return { L["Scan the auction house to price the writs and what they ask for."] }
         end
-        return { "No writ is fully priced yet. Scan again once some are listed." }
+        return { L["No writ is fully priced yet. Scan again once some are listed."] }
     end
 
-    local plural = priced == 1 and "" or "s"
     local money = Util.FormatMoney(Round(cheapest.perRep), { noColor = true, short = true })
+    if priced == 1 then
+        return {
+            L.Format("%d writ priced, cheapest reputation %s each (%s)", priced, money, cheapest.name),
+            L.Format("%d writ priced, cheapest reputation %s", priced, money),
+            L.Format("%d writ priced", priced),
+        }
+    end
     return {
-        ("%d writ%s priced, cheapest reputation %s each (%s)"):format(priced, plural, money, cheapest.name),
-        ("%d writ%s priced, cheapest reputation %s"):format(priced, plural, money),
-        ("%d writ%s priced"):format(priced, plural),
+        L.Format("%d writs priced, cheapest reputation %s each (%s)", priced, money, cheapest.name),
+        L.Format("%d writs priced, cheapest reputation %s", priced, money),
+        L.Format("%d writs priced", priced),
     }
 end
 
@@ -425,7 +445,7 @@ function DealsWrits:Refresh()
     widgets.list:SetData(rows)
 
     widgets.emptyLabel:SetShown(#rows == 0)
-    if #rows == 0 then widgets.emptyLabel:SetText(("No writ matching \"%s\"."):format(state.search)) end
+    if #rows == 0 then widgets.emptyLabel:SetText(L.Format("No writ matching \"%s\".", state.search)) end
 
     local texts = CountText(rows)
     if Theme.FitText then Theme.FitText(widgets.countLabel, texts) else widgets.countLabel:SetText(texts[1]) end
@@ -475,7 +495,7 @@ function DealsWrits:Build(view, toolbar)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
-    nameHeading:SetText("WRIT ASKS FOR")
+    nameHeading:SetText(L["WRIT ASKS FOR"])
 
     local labels = { name = nameHeading }
     local values = { name = function(row) return row.name end }
@@ -535,7 +555,7 @@ function DealsWrits:Build(view, toolbar)
 
     local hint = Theme.CreateLabel(view, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText("Right-click a row to search for the writ")
+    hint:SetText(L["Right-click a row to search for the writ"])
 
     local countLabel = Theme.CreateLabel(view, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)

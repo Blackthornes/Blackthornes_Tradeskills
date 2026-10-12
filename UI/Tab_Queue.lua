@@ -6,6 +6,7 @@
 -- between tabs to answer it.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -26,13 +27,13 @@ local MATERIALS_WIDTH = 420
 -- all three coins ("12g 34s 56c"), and PlaceMaterialRow lays the shown
 -- ones out from there, with a gap between every column.
 local MATERIAL_COLUMNS = {
-    { key = "cost", label = "COST", width = 70, money = true },
-    { key = "have", label = "HAVE", width = 42, justify = "CENTER" },
-    { key = "need", label = "NEED", width = 42, justify = "CENTER" },
+    { key = "cost", label = L["COST"], width = 70, money = true },
+    { key = "have", label = L["HAVE"], width = 42, justify = "CENTER" },
+    { key = "need", label = L["NEED"], width = 42, justify = "CENTER" },
 }
 
 -- Any of them can be hidden, never the material's name (UI/Columns.lua).
-ns.Columns:Register("queue", "Queue: materials", MATERIAL_COLUMNS)
+ns.Columns:Register("queue", L["Queue: materials"], MATERIAL_COLUMNS)
 
 if Widgets.FitColumns then Widgets.FitColumns(MATERIAL_COLUMNS) end
 
@@ -74,7 +75,7 @@ local function CreateCraftRow(row)
 
     -- What the craft is for once made: AH, DE or Vendor. A click steps to
     -- the next, a right-click goes back to whichever pays most.
-    row.action = Widgets.CreateButton(row, "AH", function(_, mouseButton)
+    row.action = Widgets.CreateButton(row, L["AH"], function(_, mouseButton)
         if not row.data or not ns.QueueActions then return end
         if mouseButton == "RightButton" then
             ns.QueueActions:Set(row.data, nil)
@@ -131,12 +132,12 @@ local function CreateCraftRow(row)
         else
             ns.Queue:Remove(row.data.recipeID)
         end
-    end, { width = 16, height = 16, tooltip = "Remove from queue" })
+    end, { width = 16, height = 16, tooltip = L["Remove from queue"] })
     row.remove:SetPoint("RIGHT", -4, 0)
 
     -- On a sub-craft kept after buying its item turned cheaper, in the
     -- profit column, which such a row has no use for.
-    row.buyInstead = Widgets.CreateButton(row, "Buy instead", function()
+    row.buyInstead = Widgets.CreateButton(row, L["Buy instead"], function()
         if row.data then ns.Queue:BuyInstead(row.data) end
     end, { width = 80, height = 18 })
     row.buyInstead:SetPoint("RIGHT", -114, 0)
@@ -158,38 +159,38 @@ local function UpdateActionButton(row, entry)
     row.action:SetText(actions.SHORT[action])
 
     local ways = analysis and analysis.ways or {}
-    local lines = { chosen and ("%s, picked by you."):format(actions.LONG[action])
-        or ("%s, because it pays most."):format(actions.LONG[action]) }
+    local lines = { chosen and L.Format("%s, picked by you.", actions.LONG[action])
+        or L.Format("%s, because it pays most.", actions.LONG[action]) }
 
     for _, way in ipairs(choices) do
         local option = ways[way]
         local pays = option and Util.FormatMoney(option.profit * entry.quantity, { noColor = true, short = true })
-            or "no price yet"
+            or L["no price yet"]
         lines[#lines + 1] = ("%s %s: %s"):format(way == action and ">" or "  ", actions.LONG[way], pays)
     end
 
     if action == "disenchant" then
-        lines[#lines + 1] = "Made items are marked for Disenchant next on this tab."
+        lines[#lines + 1] = L["Made items are marked for Disenchant next on this tab."]
     elseif action == "vendor" then
-        lines[#lines + 1] = "Made items are marked for Sell marked at a vendor."
+        lines[#lines + 1] = L["Made items are marked for Sell marked at a vendor."]
     end
-    lines[#lines + 1] = #choices > 1 and "Click to change. Right-click for whichever pays most."
-        or "Nothing else is open to this item."
+    lines[#lines + 1] = #choices > 1 and L["Click to change. Right-click for whichever pays most."]
+        or L["Nothing else is open to this item."]
     row.action.tooltipText = table.concat(lines, "\n")
 end
 
 --- The hover for Buy instead: both prices, when known, and what it does.
 local function BuyInsteadTooltip(entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
-    local name = (recipe and recipe.name) or "this"
+    local name = (recipe and recipe.name) or L["this"]
     local buy, make = ns.Queue:GetBuyOrMake(entry)
 
-    local text = ("Buying %s is now cheaper than making it."):format(name)
+    local text = L.Format("Buying %s is now cheaper than making it.", name)
     if buy and make then
-        text = ("%s\nBuy: %s each. Make: %s each."):format(text,
+        text = text .. "\n" .. L.Format("Buy: %s each. Make: %s each.",
             Util.FormatMoney(buy), Util.FormatMoney(make))
     end
-    return text .. "\nBuy instead takes it off the queue and puts it on the shopping list."
+    return text .. "\n" .. L["Buy instead takes it off the queue and puts it on the shopping list."]
 end
 
 -- A queued craft's name is the colour of what it makes (asked 2026-10-07),
@@ -213,7 +214,7 @@ local function UpdateCraftRow(row, entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
     local analysis = ns.Profit:Analyse(entry.recipeID)
 
-    local plain = (recipe and recipe.name) or ("recipe " .. entry.recipeID)
+    local plain = (recipe and recipe.name) or L.Format("recipe %s", tostring(entry.recipeID))
     local label = plain
     Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
 
@@ -221,9 +222,9 @@ local function UpdateCraftRow(row, entry)
     if entry.isDependency then
         local parents = ns.Queue:GetDependencyParents(entry)
 
-        label = ("|cff7a8089>|r %s |cff7a8089(for %s)|r"):format(
+        label = L.Format("|cff7a8089>|r %s |cff7a8089(for %s)|r",
             plain,
-            #parents > 0 and table.concat(parents, ", ") or "another craft")
+            #parents > 0 and table.concat(parents, ", ") or L["another craft"])
     end
 
     -- Who it is for and who makes it, when that is not all this character:
@@ -238,7 +239,7 @@ local function UpdateCraftRow(row, entry)
     -- Kept after buying turned cheaper: said on the row ahead of who makes
     -- it, so it is not mistaken for the cheaper way.
     if entry.buyCheaper then
-        local cheaper = ("|c%sbuying is cheaper now|r"):format(ns.COLORS.warn)
+        local cheaper = L.Format("|c%sbuying is cheaper now|r", ns.COLORS.warn)
         texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(label, cheaper)
         texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(plain, cheaper)
     end
@@ -249,7 +250,7 @@ local function UpdateCraftRow(row, entry)
     if not entry.isDependency and analysis and analysis.priceable
         and entry.snapshotProfit and entry.snapshotProfit > 0
         and analysis.profit / entry.snapshotProfit < 0.6 then
-        local dropped = ("|c%sworth less than when queued|r"):format(ns.COLORS.warn)
+        local dropped = L.Format("|c%sworth less than when queued|r", ns.COLORS.warn)
         texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(label, dropped)
         texts[#texts + 1] = ("%s |cff7a8089·|r %s"):format(plain, dropped)
     end
@@ -299,7 +300,7 @@ local function UpdateCraftRow(row, entry)
         -- Made to go into another craft, not sold, so it earns nothing of
         -- its own. The footer already counts it that way; a sale profit here
         -- made the column add up to more than the total under it.
-        row.profit:SetText("used")
+        row.profit:SetText(L["used"])
         row.profit:SetTextColor(Theme.Unpack("dim"))
     elseif analysis and analysis.priceable then
         local priced = entryCosts[entry]
@@ -347,13 +348,13 @@ local function CreateMaterialRow(row)
     row.remove = Widgets.CreateButton(row, "x", function()
         if row.data then ns.Queue:RemoveBuys(row.data.itemID) end
     end, { width = REMOVE_WIDTH, height = 16, danger = true,
-        tooltip = "Take this off the list to buy. Your queued crafts keep what they need." })
+        tooltip = L["Take this off the list to buy. Your queued crafts keep what they need."] })
     row.remove:Hide()
     PlaceMaterialRow(row)
 
-    row.search = Widgets.CreateButton(row, "AH", function()
+    row.search = Widgets.CreateButton(row, L["AH"], function()
         if row.data then UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall) end
-    end, { width = 26, height = 16, tooltip = "Search the auction house for this" })
+    end, { width = 26, height = 16, tooltip = L["Search the auction house for this"] })
     row.search:SetPoint("RIGHT", -4, 0)
 end
 
@@ -372,7 +373,7 @@ local function UpdateMaterialRow(row, line)
     -- Bought and still to collect: a quiet note, so a smaller "still needed"
     -- is not a surprise. Once they cover the lot the cost column says so.
     if (line.bought or 0) > 0 and line.shortfall > 0 then
-        name = name .. " |c" .. ns.COLORS.muted .. ("(%d in mail)"):format(line.bought) .. "|r"
+        name = name .. " |c" .. ns.COLORS.muted .. L.Format("(%d in mail)", line.bought) .. "|r"
     end
     Theme.SetRowName(row.name, name)
     Theme.SetItemIcon(row.icon, line.itemID)
@@ -423,8 +424,8 @@ local function UpdateMaterialRow(row, line)
         row.name:SetTextColor(Theme.Unpack(nameColour))
         row.search:Hide()
     else
-        cells.cost:SetText(line.needsBankTrip and "in bank"
-            or line.needsMailTrip and "in mail" or "")
+        cells.cost:SetText(line.needsBankTrip and L["in bank"]
+            or line.needsMailTrip and L["in mail"] or "")
         cells.cost:SetTextColor(Theme.Unpack("warn"))
 
         row.name:SetTextColor(Theme.Unpack(nameColour))
@@ -437,17 +438,17 @@ end
 function UI.AddPaidLines(line)
     if not line.paid then return end
     GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine(("Paid for %d today"):format(line.paidUnits or 0),
+    GameTooltip:AddDoubleLine(L.Format("Paid for %d today", line.paidUnits or 0),
         Util.FormatMoney(line.paid, { noColor = true }),
         0.7, 0.7, 0.7, 1, 1, 1)
     if line.paidEstimate then
-        GameTooltip:AddDoubleLine("The list had said",
+        GameTooltip:AddDoubleLine(L["The list had said"],
             Util.FormatMoney(line.paidEstimate, { noColor = true }),
             0.7, 0.7, 0.7, 1, 1, 1)
     end
     if line.overpaid then
         local over = math.floor((line.paid / line.paidEstimate - 1) * 100 + 0.5)
-        GameTooltip:AddLine(("%d%% more than expected. The cheap listings may have sold out."):format(over),
+        GameTooltip:AddLine(L.Format("%d%% more than expected. The cheap listings may have sold out.", over),
             0.91, 0.76, 0.35, true)
     end
 end
@@ -460,48 +461,48 @@ local function ShowMaterialTooltip(row, line)
 
     if line.fromVendor then
         GameTooltip:AddLine(line.vendorLimited
-            and "Sold by a vendor (limited stock)" or "Sold by a vendor", 0.78, 0.64, 0.30)
+            and L["Sold by a vendor (limited stock)"] or L["Sold by a vendor"], 0.78, 0.64, 0.30)
     end
 
-    GameTooltip:AddDoubleLine("Required", tostring(line.needed), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("In bags", tostring(line.inBags or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Required"], tostring(line.needed), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["In bags"], tostring(line.inBags or 0), 0.7, 0.7, 0.7, 1, 1, 1)
 
     if (line.inBank or 0) > 0 then
-        GameTooltip:AddDoubleLine("In bank", tostring(line.inBank),
+        GameTooltip:AddDoubleLine(L["In bank"], tostring(line.inBank),
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
     end
 
     if (line.inMail or 0) > 0 then
-        GameTooltip:AddDoubleLine("In mail", tostring(line.inMail),
+        GameTooltip:AddDoubleLine(L["In mail"], tostring(line.inMail),
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
     end
 
     if (line.bought or 0) > 0 then
-        GameTooltip:AddLine(("%d bought on the auction house, waiting in the mail."):format(line.bought),
+        GameTooltip:AddLine(L.Format("%d bought on the auction house, waiting in the mail.", line.bought),
             0.91, 0.76, 0.35)
     end
 
     if line.needsBankTrip then
-        GameTooltip:AddLine("You own enough, but some is in the bank.", 0.91, 0.76, 0.35)
+        GameTooltip:AddLine(L["You own enough, but some is in the bank."], 0.91, 0.76, 0.35)
     elseif line.needsMailTrip then
-        GameTooltip:AddLine("You own enough, but some is in the mailbox.", 0.91, 0.76, 0.35)
+        GameTooltip:AddLine(L["You own enough, but some is in the mailbox."], 0.91, 0.76, 0.35)
     end
 
     if line.have > line.needed then
-        GameTooltip:AddDoubleLine("Surplus", tostring(line.have - line.needed),
+        GameTooltip:AddDoubleLine(L["Surplus"], tostring(line.have - line.needed),
             0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
     end
 
     if line.shortfall > 0 then
-        GameTooltip:AddDoubleLine("Still needed", tostring(line.shortfall),
+        GameTooltip:AddDoubleLine(L["Still needed"], tostring(line.shortfall),
             0.7, 0.7, 0.7, 0.9, 0.38, 0.31)
 
         if line.unitCost then
-            GameTooltip:AddDoubleLine("Cost to buy",
+            GameTooltip:AddDoubleLine(L["Cost to buy"],
                 Util.FormatMoney(line.estimatedCost, { noColor = true }),
                 0.7, 0.7, 0.7, 1, 1, 1)
         else
-            GameTooltip:AddLine("No auction data for this material", 0.9, 0.38, 0.31)
+            GameTooltip:AddLine(L["No auction data for this material"], 0.9, 0.38, 0.31)
         end
     end
 
@@ -510,17 +511,17 @@ local function ShowMaterialTooltip(row, line)
     local offer = line.altCraft
     if offer then
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine(("Cheaper to make on %s"):format(offer.characterName), 0.31, 0.82, 0.55)
-        GameTooltip:AddDoubleLine("Cost to make",
+        GameTooltip:AddLine(L.Format("Cheaper to make on %s", offer.characterName), 0.31, 0.82, 0.55)
+        GameTooltip:AddDoubleLine(L["Cost to make"],
             Util.FormatMoney(offer.unitCost * line.shortfall, { noColor = true }),
             0.7, 0.7, 0.7, 1, 1, 1)
         if offer.saving then
-            GameTooltip:AddDoubleLine("You save",
+            GameTooltip:AddDoubleLine(L["You save"],
                 Util.FormatMoney(offer.saving, { noColor = true }),
                 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
-        GameTooltip:AddLine(("Log in on that character and %d x %s is queued there, with its materials to buy. Mail it across once made.")
-            :format(offer.crafts, offer.recipeName or "it"), 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L.Format("Log in on that character and %d x %s is queued there, with its materials to buy. Mail it across once made.",
+            offer.crafts, offer.recipeName or L["it"]), 0.7, 0.7, 0.7, true)
     end
 
     -- Shared with the alts: how much of this another character's crafts
@@ -530,11 +531,11 @@ local function ShowMaterialTooltip(row, line)
         for characterKey in pairs(line.forOthers) do keys[#keys + 1] = characterKey end
         table.sort(keys)
         for _, characterKey in ipairs(keys) do
-            GameTooltip:AddDoubleLine(("For %s's crafts"):format(ns.Recipes:GetCharacterName(characterKey)),
+            GameTooltip:AddDoubleLine(L.Format("For %s's crafts", ns.Recipes:GetCharacterName(characterKey)),
                 tostring(line.forOthers[characterKey]), 0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
         end
         if (line.othersHold or 0) > 0 then
-            GameTooltip:AddDoubleLine("They already hold", tostring(line.othersHold),
+            GameTooltip:AddDoubleLine(L["They already hold"], tostring(line.othersHold),
                 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
     end
@@ -543,18 +544,18 @@ local function ShowMaterialTooltip(row, line)
     if line.buys then
         GameTooltip:AddLine(" ")
         for _, wanted in ipairs(line.buys) do
-            local label = wanted.forItem == line.itemID and "To buy for your upgrade"
-                or ("For your upgrade, %s"):format(Util.GetItemLabel(wanted.forItem))
+            local label = wanted.forItem == line.itemID and L["To buy for your upgrade"]
+                or L.Format("For your upgrade, %s", Util.GetItemLabel(wanted.forItem))
             GameTooltip:AddDoubleLine(label, tostring(wanted.count), 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
-        GameTooltip:AddLine("The x on the Queue tab takes it off. It goes by itself once you have the upgrade.",
+        GameTooltip:AddLine(L["The x on the Queue tab takes it off. It goes by itself once you have the upgrade."],
             0.7, 0.7, 0.7, true)
     end
 
     -- Alt-held stock is never counted as yours automatically: it is not in
     -- reach of the craft you are about to make.
     if line.onAlts and line.onAlts > 0 then
-        GameTooltip:AddDoubleLine("On other characters", tostring(line.onAlts),
+        GameTooltip:AddDoubleLine(L["On other characters"], tostring(line.onAlts),
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
     end
 
@@ -581,10 +582,10 @@ local function UpdateBankNote()
     local age = ns.Inventory:GetBankAge()
 
     if age then
-        note:SetText(("Bank not checked this session, so using what it held %s.")
-            :format(Util.FormatAgeAgo(age)))
+        note:SetText(L.Format("Bank not checked this session, so using what it held %s.",
+            Util.FormatAgeAgo(age)))
     else
-        note:SetText("Bank never checked, so HAVE counts bags only.")
+        note:SetText(L["Bank never checked, so HAVE counts bags only."])
     end
 end
 
@@ -594,18 +595,18 @@ local function SetCraftButton(button, label)
     button.opensProfession = false
 
     if ns.Crafting:IsBusy() then
-        button:SetText("Stop crafting")
+        button:SetText(L["Stop crafting"])
         button:SetEnabledState(true)
-        button.tooltipText = "Stop after the current craft"
-        label:SetText("crafting...")
+        button.tooltipText = L["Stop after the current craft"]
+        label:SetText(L["crafting..."])
         label:SetTextColor(Theme.Unpack("profit"))
         return
     end
 
     if ns.Queue:Count() == 0 then
-        button:SetText("Craft next")
+        button:SetText(L["Craft next"])
         button:SetEnabledState(false)
-        button.tooltipText = "Nothing is queued"
+        button.tooltipText = L["Nothing is queued"]
         label:SetText("")
         return
     end
@@ -614,14 +615,14 @@ local function SetCraftButton(button, label)
     local entry = ns.Crafting:GetNextReady()
 
     if not entry then
-        button:SetText("Craft next")
+        button:SetText(L["Craft next"])
         button:SetEnabledState(false)
 
         -- Report the first entry's actual obstacle rather than a generic one.
         local _, reason = ns.Crafting:GetReadiness(ns.Queue:GetAll()[1].recipeID)
 
-        button.tooltipText = reason or "Nothing here can be made yet"
-        label:SetText(reason or "nothing ready")
+        button.tooltipText = reason or L["Nothing here can be made yet"]
+        label:SetText(reason or L["nothing ready"])
         label:SetTextColor(Theme.Unpack("warn"))
         return
     end
@@ -637,12 +638,12 @@ local function SetCraftButton(button, label)
         local profession = opener:ProfessionFor(entry.recipeID)
 
         if profession then
-            button:SetText(("Open %s"):format(profession.name))
+            button:SetText(L.Format("Open %s", profession.name))
             button:SetEnabledState(true)
-            button.tooltipText = ("Opens your %s window. Click again to craft %dx %s.")
-                :format(profession.name, canMake, (recipe and recipe.name) or "item")
+            button.tooltipText = L.Format("Opens your %s window. Click again to craft %dx %s.",
+                profession.name, canMake, (recipe and recipe.name) or L["item"])
 
-            label:SetText(("%d of %d ready. Click to open %s"):format(ready, total, profession.name))
+            label:SetText(L.Format("%d of %d ready. Click to open %s", ready, total, profession.name))
             label:SetTextColor(Theme.Unpack("accent"))
 
             button.opensProfession = true
@@ -651,17 +652,17 @@ local function SetCraftButton(button, label)
         end
     end
 
-    button:SetText(("Craft %dx %s"):format(canMake, (recipe and recipe.name) or "item"))
+    button:SetText(L.Format("Craft %dx %s", canMake, (recipe and recipe.name) or L["item"]))
     button:SetEnabledState(true)
-    button.tooltipText = "One click makes every craft in this entry"
+    button.tooltipText = L["One click makes every craft in this entry"]
 
-    label:SetText(("%d of %d ready"):format(ready, total))
+    label:SetText(L.Format("%d of %d ready", ready, total))
     label:SetTextColor(Theme.Unpack("profit"))
 
     -- Crafting works without the window open on some clients and not others;
     -- say so rather than letting a click quietly do nothing.
     if not ns.Crafting.isTradeSkillOpen then
-        label:SetText(("%d of %d ready. Open your profession"):format(ready, total))
+        label:SetText(L.Format("%d of %d ready. Open your profession", ready, total))
         label:SetTextColor(Theme.Unpack("accent"))
     end
 end
@@ -694,11 +695,13 @@ local function AnnounceAltCrafts(lines)
             announcedAltCrafts[key] = true
             found = true
 
-            ns.Print(("Cheaper way found: %s can make %s%s. Log in there and it will be in your queue.")
-                :format(offer.characterName, Util.GetItemLabel(line.itemID),
-                    offer.saving and offer.saving > 0
-                        and (" and save you %s"):format(Util.FormatMoney(offer.saving))
-                        or ""))
+            if offer.saving and offer.saving > 0 then
+                ns.Print(L.Format("Cheaper way found: %s can make %s and save you %s. Log in there and it will be in your queue.",
+                    offer.characterName, Util.GetItemLabel(line.itemID), Util.FormatMoney(offer.saving)))
+            else
+                ns.Print(L.Format("Cheaper way found: %s can make %s. Log in there and it will be in your queue.",
+                    offer.characterName, Util.GetItemLabel(line.itemID)))
+            end
         end
     end
 
@@ -722,11 +725,14 @@ local function UpdateAltNote(lines)
         local offer = line.altCraft
         if offer then
             if #notes < MAX_ALT_NOTES then
-                notes[#notes + 1] = ("Swap to %s to make %s%s"):format(
-                    offer.characterName, Util.GetItemLabel(line.itemID),
-                    offer.saving and offer.saving > 0
-                        and (", saves %s"):format(Util.FormatMoney(offer.saving, { short = true }))
-                        or "")
+                if offer.saving and offer.saving > 0 then
+                    notes[#notes + 1] = L.Format("Swap to %s to make %s, saves %s",
+                        offer.characterName, Util.GetItemLabel(line.itemID),
+                        Util.FormatMoney(offer.saving, { short = true }))
+                else
+                    notes[#notes + 1] = L.Format("Swap to %s to make %s",
+                        offer.characterName, Util.GetItemLabel(line.itemID))
+                end
             else
                 extra = extra + 1
             end
@@ -734,7 +740,7 @@ local function UpdateAltNote(lines)
     end
 
     if extra > 0 then
-        notes[#notes + 1] = ("and %d more, shown in green"):format(extra)
+        notes[#notes + 1] = L.Format("and %d more, shown in green", extra)
     end
 
     note:SetText(table.concat(notes, "\n"))
@@ -781,13 +787,12 @@ local function UpdateDisenchantNext()
     name = name:match("^%[(.*)%]$") or name
 
     button.overlayText = Theme.FitText(button.label, {
-        ("Disenchant next: %s (%d)"):format(name, total),
-        ("Disenchant: %s"):format(name),
-        ("Disenchant next (%d)"):format(total),
+        L.Format("Disenchant next: %s (%d)", name, total),
+        L.Format("Disenchant: %s", name),
+        L.Format("Disenchant next (%d)", total),
     })
-    button.tooltipText = ("Disenchants %s from your bags. Your queue marked %d to disenchant.\n"
-        .. "One click, one disenchant. Never blue or better, anything worn, or anything the queue did not make.")
-        :format(name, total)
+    button.tooltipText = L.Format("Disenchants %s from your bags. Your queue marked %d to disenchant.", name, total)
+        .. "\n" .. L["One click, one disenchant. Never blue or better, anything worn, or anything the queue did not make."]
 
     ns.Disenchanter:Arm(button, itemID, bag, slot)
 end
@@ -824,21 +829,22 @@ local function Refresh()
     if #entries == 0 then
         widgets.summaryLabel:SetText("")
         -- Nothing queued, but gear may still be on the list to buy.
-        widgets.shoppingLabel:SetText(#shopping > 0 and ("To buy: %s%s"):format(
-            Util.FormatMoney(shoppingCost, { short = true }),
-            unknown > 0 and ("  (+%d unpriced)"):format(unknown) or "") or "")
+        widgets.shoppingLabel:SetText(#shopping > 0 and (unknown > 0
+            and L.Format("To buy: %s  (+%d unpriced)", Util.FormatMoney(shoppingCost, { short = true }), unknown)
+            or L.Format("To buy: %s", Util.FormatMoney(shoppingCost, { short = true }))) or "")
         return
     end
 
-    widgets.summaryLabel:SetText(("%d craft%s  ·  materials %s  ·  profit %s%s"):format(
-        totals.crafts, totals.crafts == 1 and "" or "s",
+    widgets.summaryLabel:SetText(L.Format(totals.crafts == 1
+            and L["%d craft  ·  materials %s  ·  profit %s"] or L["%d crafts  ·  materials %s  ·  profit %s"],
+        totals.crafts,
         Util.FormatMoney(totals.cost, { short = true }),
-        Util.FormatMoney(totals.profit, { short = true }),
-        totals.priceable and "" or "  (some unpriced)"))
+        Util.FormatMoney(totals.profit, { short = true }))
+        .. (totals.priceable and "" or L["  (some unpriced)"]))
 
-    widgets.shoppingLabel:SetText(("To buy: %s%s"):format(
-        Util.FormatMoney(shoppingCost, { short = true }),
-        unknown > 0 and ("  (+%d unpriced)"):format(unknown) or ""))
+    widgets.shoppingLabel:SetText(unknown > 0
+        and L.Format("To buy: %s  (+%d unpriced)", Util.FormatMoney(shoppingCost, { short = true }), unknown)
+        or L.Format("To buy: %s", Util.FormatMoney(shoppingCost, { short = true })))
 end
 
 --------------------------------------------------------------------------------
@@ -851,7 +857,7 @@ local function Build(container)
 
     local heading = Theme.CreateLabel(container, "tiny", "accent")
     heading:SetPoint("TOPLEFT", 8, -10)
-    heading:SetText("QUEUED CRAFTS")
+    heading:SetText(L["QUEUED CRAFTS"])
 
     -- A queue can take a while to build, so emptying it takes a second click,
     -- the same as Clear queue on the craft pane.
@@ -860,41 +866,42 @@ local function Build(container)
 
     local function Disarm()
         armedUntil = nil
-        clear:SetText("Clear all")
+        clear:SetText(L["Clear all"])
         clear:SetConfirming(false)
-        clear.tooltipText = "Empty the whole craft queue. Asks you to click again first."
+        clear.tooltipText = L["Empty the whole craft queue. Asks you to click again first."]
     end
 
-    clear = Widgets.CreateButton(container, "Clear all", function()
+    clear = Widgets.CreateButton(container, L["Clear all"], function()
         if armedUntil and GetTime() < armedUntil then
             local count = ns.Queue:Count()
             Disarm()
             ns.Queue:Clear()
-            ns.Print(("Craft queue cleared (%d entr%s)."):format(count, count == 1 and "y" or "ies"))
+            ns.Print(count == 1 and L.Format("Craft queue cleared (%d entry).", count)
+                or L.Format("Craft queue cleared (%d entries).", count))
             return
         end
 
         if ns.Queue:Count() == 0 and not ns.Queue:HasBuys() then return end
 
         armedUntil = GetTime() + 4
-        clear:SetText("Really clear?")
+        clear:SetText(L["Really clear?"])
         clear:SetConfirming(true)
-        clear.tooltipText = "Click again to empty the whole craft queue"
+        clear.tooltipText = L["Click again to empty the whole craft queue"]
 
         C_Timer.After(4, function()
             if armedUntil and GetTime() >= armedUntil then Disarm() end
         end)
     end, { width = 84, height = 18 })
-    clear.tooltipText = "Empty the whole craft queue. Asks you to click again first."
+    clear.tooltipText = L["Empty the whole craft queue. Asks you to click again first."]
     clear:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -8)
     widgets.clearButton = clear
     widgets.queueHeading = heading
 
     -- The secure Disenchant button lies over this one while it is armed; a
     -- click that reaches this one found it not set, so it is set now.
-    local deNext = Widgets.CreateButton(container, "Disenchant next", function()
+    local deNext = Widgets.CreateButton(container, L["Disenchant next"], function()
         UpdateDisenchantNext()
-        ns.Print("Disenchant next was not ready. Click it again.")
+        ns.Print(L["Disenchant next was not ready. Click it again."])
     end, { width = DE_NEXT_WIDTH, height = 18, primary = true })
     deNext:SetPoint("RIGHT", clear, "LEFT", -6, 0)
     deNext.onSecureClick = function(itemID)
@@ -937,7 +944,7 @@ local function Build(container)
 
     -- Crafting needs a hardware event, so this is a real click each time:
     -- one click runs one queue entry to completion.
-    widgets.craftButton = Widgets.CreateButton(container, "Craft next", function()
+    widgets.craftButton = Widgets.CreateButton(container, L["Craft next"], function()
         if ns.Crafting:IsBusy() then
             ns.Crafting:Stop()
         else
@@ -969,7 +976,7 @@ local function Build(container)
     emptyLabel:SetPoint("CENTER", craftList, "CENTER")
     emptyLabel:SetWidth(300)
     emptyLabel:SetWordWrap(true)
-    emptyLabel:SetText("Nothing queued.\nRight-click a craft on the Profit tab to add one.")
+    emptyLabel:SetText(L["Nothing queued.\nRight-click a craft on the Profit tab to add one."])
     widgets.emptyLabel = emptyLabel
 
     local summaryLabel = Theme.CreateLabel(container, "small", "text")
@@ -985,7 +992,7 @@ local function Build(container)
 
     local materialsHeading = Theme.CreateLabel(materials, "tiny", "accent")
     materialsHeading:SetPoint("TOPLEFT", 10, -10)
-    materialsHeading:SetText("MATERIALS NEEDED")
+    materialsHeading:SetText(L["MATERIALS NEEDED"])
     -- The house heading: gold, with the rule running off to the right.
     Theme.StyleHeading(materialsHeading, materials)
 
@@ -997,7 +1004,7 @@ local function Build(container)
 
     local nameHeading = Theme.CreateLabel(columnHeader, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 24, 0)
-    nameHeading:SetText("MATERIAL")
+    nameHeading:SetText(L["MATERIAL"])
 
     local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(MATERIAL_COLUMNS) do
@@ -1090,7 +1097,7 @@ end
 
 UI:RegisterTab({
     key = "queue",
-    text = "Queue",
+    text = L["Queue"],
     order = 2,
     build = Build,
     refresh = Refresh,

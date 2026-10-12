@@ -18,6 +18,7 @@
 -- buying or looting, are not. Recipe IDs are spell IDs.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local CraftTime = ns.NewModule("CraftTime")
 
@@ -123,15 +124,15 @@ function CraftTime.Format(seconds)
     if type(seconds) ~= "number" then return "?" end
     if seconds < 10 then
         local tenths = math.floor(seconds * 10 + 0.5) / 10
-        if tenths == math.floor(tenths) then return ("%ds"):format(tenths) end
-        return ("%.1fs"):format(tenths)
+        if tenths == math.floor(tenths) then return L.Format("%ds", tenths) end
+        return L.Format("%.1fs", tenths)
     end
     seconds = math.floor(seconds + 0.5)
-    if seconds < 60 then return ("%ds"):format(seconds) end
+    if seconds < 60 then return L.Format("%ds", seconds) end
     if seconds < 3600 then
-        return ("%dm %02ds"):format(math.floor(seconds / 60), seconds % 60)
+        return L.Format("%dm %02ds", math.floor(seconds / 60), seconds % 60)
     end
-    return ("%dh %02dm"):format(math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
+    return L.Format("%dh %02dm", math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
 end
 
 --------------------------------------------------------------------------------

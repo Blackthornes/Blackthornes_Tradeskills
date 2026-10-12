@@ -8,6 +8,8 @@
 
 local _, ns = ...
 
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
 local Auctions = ns.NewModule("Auctions")
 
 local Util = ns.Util
@@ -706,9 +708,9 @@ end
 -- Verification of a listing rests entirely on being able to read your own
 -- auctions. If that reading is broken, a successful post looks like a failure,
 -- so it needs to be checkable on its own.
-ns.RegisterCommand("auctions", "show the auctions the game says you have up", function()
+ns.RegisterCommand("auctions", L["show the auctions the game says you have up"], function()
     if not ns.Scanner.isAuctionHouseOpen then
-        ns.Print("the auction house must be open")
+        ns.Print(L["the auction house must be open"])
         return
     end
 

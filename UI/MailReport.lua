@@ -12,6 +12,7 @@
 -- Logic/MailHaul.lua works out what was collected; this only draws it.
 
 local ADDON, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -167,44 +168,46 @@ end
 -- Text
 --------------------------------------------------------------------------------
 
+--- "1 sale" or "7 sales": `one` and `many` are the two wordings, each with
+--- its %d, as L gives them.
 local function Plural(n, one, many)
-    return ("%d %s"):format(n, n == 1 and one or (many or one .. "s"))
+    return L.Format(n == 1 and one or many, n)
 end
 
 --- "from 7 sales, 2 refunded bids and 1 letter"
 function MailReport.Sources(haul)
     local parts = {}
 
-    if (haul.salesCount or 0) > 0 then parts[#parts + 1] = Plural(haul.salesCount, "sale") end
+    if (haul.salesCount or 0) > 0 then parts[#parts + 1] = Plural(haul.salesCount, L["%d sale"], L["%d sales"]) end
 
-    if (haul.gold and haul.gold.outbid or 0) > 0 then parts[#parts + 1] = "refunded bids" end
+    if (haul.gold and haul.gold.outbid or 0) > 0 then parts[#parts + 1] = L["refunded bids"] end
 
-    if (haul.letters or 0) > 0 then parts[#parts + 1] = Plural(haul.letters, "letter") end
+    if (haul.letters or 0) > 0 then parts[#parts + 1] = Plural(haul.letters, L["%d letter"], L["%d letters"]) end
 
     if #parts == 0 then
         if (haul.itemCount or 0) > 0 then
-            return ("%s collected"):format(Plural(haul.itemCount, "item"))
+            return L.Format("%s collected", Plural(haul.itemCount, L["%d item"], L["%d items"]))
         end
         return ""
     end
 
-    if #parts == 1 then return "from " .. parts[1] end
+    if #parts == 1 then return L.Format("from %s", parts[1]) end
     local last = table.remove(parts)
-    return ("from %s and %s"):format(table.concat(parts, ", "), last)
+    return L.Format("from %s and %s", table.concat(parts, ", "), last)
 end
 
 --- An item's name for the report, coloured by rarity where the game knows it.
 local function ItemText(itemID, fallback)
-    if not itemID then return fallback or "an item" end
+    if not itemID then return fallback or L["an item"] end
 
     -- GetItemLabel says "item 1234" for an item the client has not cached,
     -- which a sold item usually is. The name the mail carried reads better.
     local label = Util.GetItemLabel(itemID)
-    if type(label) == "string" and label ~= "" and not (fallback and label == ("item %d"):format(itemID)) then
+    if type(label) == "string" and label ~= "" and not (fallback and label == L.Format("item %d", itemID)) then
         return label
     end
 
-    return fallback or ("item " .. itemID)
+    return fallback or L.Format("item %d", itemID)
 end
 
 --- A sale's name: the item's own where the game knows it, with the stack
@@ -225,7 +228,7 @@ local function ItemsLine(list, shown)
         local entry = list[index]
         parts[#parts + 1] = ("%s x%d"):format(ItemText(entry.itemID), entry.count)
     end
-    if #list > shown then parts[#parts + 1] = ("%d more"):format(#list - shown) end
+    if #list > shown then parts[#parts + 1] = L.Format("%d more", #list - shown) end
     return table.concat(parts, ", ")
 end
 
@@ -246,9 +249,9 @@ function MailReport.Lines(haul)
     local total = math.max(1, haul.total or 0)
 
     local sources = {
-        { "Auction sales", gold.sold or 0, "profit" },
-        { "Refunded bids", gold.outbid or 0, "accent" },
-        { "Other mail", gold.other or 0, "text" },
+        { L["Auction sales"], gold.sold or 0, "profit" },
+        { L["Refunded bids"], gold.outbid or 0, "accent" },
+        { L["Other mail"], gold.other or 0, "text" },
     }
 
     local shown = 0
@@ -257,7 +260,7 @@ function MailReport.Lines(haul)
     end
 
     if shown > 0 then
-        Add({ type = "heading", text = "WHERE IT CAME FROM" })
+        Add({ type = "heading", text = L["WHERE IT CAME FROM"] })
         for _, source in ipairs(sources) do
             if source[2] > 0 then
                 Add({ type = "money", label = source[1], amount = source[2],
@@ -270,12 +273,12 @@ function MailReport.Lines(haul)
     if #sales > 0 then
         -- The record tag sits on the heading, so the best sale's name keeps
         -- the whole row.
-        Add({ type = "heading", text = "BEST SALE", tag = haul.recordSale and "BEST EVER" or nil })
+        Add({ type = "heading", text = L["BEST SALE"], tag = haul.recordSale and L["BEST EVER"] or nil })
         Add({ type = "sale", itemID = sales[1].itemID, name = sales[1].name,
             amount = sales[1].amount, best = true, record = haul.recordSale })
 
         if #sales > 1 then
-            Add({ type = "heading", text = "ALSO SOLD" })
+            Add({ type = "heading", text = L["ALSO SOLD"] })
             for index = 2, math.min(#sales, MAX_SALE_ROWS + 1) do
                 local sale = sales[index]
                 Add({ type = "sale", itemID = sale.itemID, name = sale.name, amount = sale.amount })
@@ -283,17 +286,17 @@ function MailReport.Lines(haul)
 
             local more = (haul.salesCount or #sales) - math.min(#sales, MAX_SALE_ROWS + 1)
             if more > 0 then
-                Add({ type = "items", label = ("and %s"):format(Plural(more, "more sale")), text = "", color = "muted" })
+                Add({ type = "items", label = Plural(more, L["and %d more sale"], L["and %d more sales"]), text = "", color = "muted" })
             end
         end
     end
 
     local items = haul.items or {}
     local kinds = {
-        { "expired", "Came back unsold", "loss" },
-        { "removed", "You cancelled", "muted" },
-        { "won", "Bought", "profit" },
-        { "other", "Items from letters", "text" },
+        { "expired", L["Came back unsold"], "loss" },
+        { "removed", L["You cancelled"], "muted" },
+        { "won", L["Bought"], "profit" },
+        { "other", L["Items from letters"], "text" },
     }
 
     local any = false
@@ -302,7 +305,7 @@ function MailReport.Lines(haul)
     end
 
     if any then
-        Add({ type = "heading", text = "ITEMS COLLECTED" })
+        Add({ type = "heading", text = L["ITEMS COLLECTED"] })
         for _, kind in ipairs(kinds) do
             local list = items[kind[1]]
             if list and #list > 0 then
@@ -312,7 +315,7 @@ function MailReport.Lines(haul)
         end
 
         if (haul.returnedValue or 0) > 0 then
-            Add({ type = "items", label = "Worth relisting",
+            Add({ type = "items", label = L["Worth relisting"],
                 text = Util.FormatMoney(haul.returnedValue, { short = true }), color = "muted" })
         end
     end
@@ -385,11 +388,11 @@ function MailReport:Build()
     pcall(title.SetFont, title, Theme.FONT, Theme.sizes.large, "OUTLINE")
     Bright(title)
     title:SetPoint("LEFT", 14, 0)
-    title:SetText("MAIL COLLECTED")
+    title:SetText(L["MAIL COLLECTED"])
     frame.title = title
 
     local close = Widgets.CreateButton(header, "X", function() frame:Hide() end,
-        { width = 22, height = 20, tooltip = "Close (Escape)" })
+        { width = 22, height = 20, tooltip = L["Close (Escape)"] })
     close:SetPoint("RIGHT", -6, 0)
 
     local who = Theme.CreateLabel(header, "tiny", "muted", "RIGHT")
@@ -455,14 +458,19 @@ function MailReport:Build()
     stats:SetPoint("BOTTOMRIGHT", -PAD, 44)
     frame.stats = stats
 
-    local done = Widgets.CreateButton(frame, "Close", function() frame:Hide() end,
+    local done = Widgets.CreateButton(frame, L["Close"], function() frame:Hide() end,
         { width = 110, height = 24, primary = true })
     done:SetPoint("BOTTOMRIGHT", -PAD, 14)
 
-    local visits = Widgets.CreateButton(frame, "See all visits", function()
+    local visits = Widgets.CreateButton(frame, L["See all visits"], function()
         frame:Hide()
         MailReport:OpenVisits()
-    end, { width = 130, height = 24, tooltip = "Every mailbox visit, on the Sales tab" })
+    end, { width = 130, height = 24, tooltip = L["Every mailbox visit, on the Sales tab"] })
+    -- Grows for a longer wording (German), never ending in "...".
+    local visitsWidth = Theme.TextWidth and visits.label and Theme.TextWidth(visits.label)
+    if type(visitsWidth) == "number" and visitsWidth + 16 > 130 then
+        visits:SetWidth(math.ceil(visitsWidth) + 16)
+    end
     visits:SetPoint("BOTTOMLEFT", PAD, 14)
 
     self.frame = frame
@@ -643,7 +651,7 @@ end
 local function WhoWhen(haul)
     local name = MailReport.WhoName(haul.who)
     local age = haul.t and (time() - haul.t) or 0
-    local when = age < 60 and "just now" or Util.FormatAgeAgo(age)
+    local when = age < 60 and L["just now"] or Util.FormatAgeAgo(age)
     if name == "" then return when end
     return ("%s, %s"):format(name, when)
 end
@@ -655,7 +663,7 @@ function MailReport:Show(haul, opts)
 
     StopAll("report")
 
-    frame.who:SetText(haul.sample and "sample" or WhoWhen(haul))
+    frame.who:SetText(haul.sample and L["sample"] or WhoWhen(haul))
     frame.sources:SetText(MailReport.Sources(haul))
     frame.amount:SetText(Util.FormatMoney(0))
 
@@ -664,12 +672,12 @@ function MailReport:Show(haul, opts)
     -- Reopened from the Sales tab, a record is told as one it was then,
     -- not as news.
     if haul.recordHaul then
-        ribbonText = (opts.replay and "BEST HAUL AT THE TIME!  Old best %s" or "NEW BEST HAUL!  Old best %s"):format(
+        ribbonText = L.Format(opts.replay and L["BEST HAUL AT THE TIME!  Old best %s"] or L["NEW BEST HAUL!  Old best %s"],
             Util.FormatMoney(haul.previousBest or 0, { short = true }))
     elseif haul.recordSale then
-        ribbonText = opts.replay and "BEST SALE AT THE TIME!" or "YOUR BEST SALE EVER!"
+        ribbonText = opts.replay and L["BEST SALE AT THE TIME!"] or L["YOUR BEST SALE EVER!"]
     elseif haul.first then
-        ribbonText = "YOUR FIRST HAUL ON RECORD"
+        ribbonText = L["YOUR FIRST HAUL ON RECORD"]
     end
 
     local y = -(6 + 34 + 4 + 66)
@@ -733,14 +741,14 @@ function MailReport:Show(haul, opts)
     if opts.replay then
         -- nothing: only the best haul below still means something
     elseif (haul.today or 0) > 0 then
-        stats[#stats + 1] = ("Today %s"):format(Util.FormatMoney(haul.today, { short = true }))
+        stats[#stats + 1] = L.Format("Today %s", Util.FormatMoney(haul.today, { short = true }))
     end
     if not opts.replay and (haul.week or 0) > 0 then
-        stats[#stats + 1] = ("Last 7 days %s"):format(Util.FormatMoney(haul.week, { short = true }))
+        stats[#stats + 1] = L.Format("Last 7 days %s", Util.FormatMoney(haul.week, { short = true }))
     end
     local bestHaul = ns.MailHaul and ns.MailHaul:Records() or 0
     if bestHaul > 0 then
-        stats[#stats + 1] = ("Best haul %s"):format(Util.FormatMoney(bestHaul, { short = true }))
+        stats[#stats + 1] = L.Format("Best haul %s", Util.FormatMoney(bestHaul, { short = true }))
     end
     frame.stats:SetText(table.concat(stats, "   ·   "))
 
@@ -864,12 +872,12 @@ function MailReport:BuildTally()
 
     local heading = Theme.CreateLabel(tally, "tiny", "accent")
     heading:SetPoint("TOPLEFT", 12, -6)
-    heading:SetText("COLLECTED THIS VISIT")
+    heading:SetText(L["COLLECTED THIS VISIT"])
 
     -- Asked 2026-09-28: "i see no way to get rid of the message". A close
     -- button, and the tally also goes by itself once the mailbox is gone.
     local close = Widgets.CreateButton(tally, "X", function() MailReport:HideTally() end,
-        { width = 18, height = 16, fontSize = "tiny", tooltip = "Hide this until the next mailbox visit" })
+        { width = 18, height = 16, fontSize = "tiny", tooltip = L["Hide this until the next mailbox visit"] })
     close:SetPoint("TOPRIGHT", -4, -4)
     tally.close = close
 
@@ -1005,7 +1013,7 @@ function MailReport:OnCollected(visit, gained)
     end
 
     local sales = #(visit.sales or {})
-    tally.count:SetText(sales > 0 and Plural(sales, "sale") or "")
+    tally.count:SetText(sales > 0 and Plural(sales, L["%d sale"], L["%d sales"]) or "")
 
     local from = self.tallyShown or 0
     self.tallyShown = visit.total

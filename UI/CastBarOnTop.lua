@@ -12,6 +12,7 @@
 -- secure frame), and nothing here writes to Blizzard's tables.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local CastBar = ns.NewModule("CastBarOnTop")
 
@@ -186,4 +187,4 @@ local function Describe()
     ns.Print(CastBar:IsCrafting() and "Crafting now: yes." or "Crafting now: no.")
 end
 
-ns.RegisterCommand("castbar", "check the cast bar is kept on top while crafting", Describe)
+ns.RegisterCommand("castbar", L["check the cast bar is kept on top while crafting"], Describe)

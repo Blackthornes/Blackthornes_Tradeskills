@@ -17,6 +17,8 @@
 
 local _, ns = ...
 
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
 local AHQueue = ns.NewModule("AHQueue")
 
 local Util = ns.Util
@@ -206,30 +208,30 @@ function AHQueue:SecondsUntilReady(priority)
     end
 
     if now < self.backoffUntil then
-        Consider(self.backoffUntil - now, "the auction house dropped a request")
+        Consider(self.backoffUntil - now, L["the auction house dropped a request"])
     end
 
     if priority > URGENT_LIMIT and now < self.standDownUntil then
-        Consider(self.standDownUntil - now, "your last listing is still going through")
+        Consider(self.standDownUntil - now, L["your last listing is still going through"])
     end
 
-    Consider(MIN_SPACING - (now - self.lastSend), "spacing out requests to the auction house")
+    Consider(MIN_SPACING - (now - self.lastSend), L["spacing out requests to the auction house"])
 
     -- Pruned first, so entry one is the oldest send still inside the window and
     -- the moment it falls out is the moment a slot frees up.
     if self:RecentSendCount() >= BUDGET_MAX and self.sendTimes[1] then
         Consider((self.sendTimes[1] + BUDGET_WINDOW) - now,
-            "leaving the auction house free for you")
+            L["leaving the auction house free for you"])
     end
 
     -- No duration to offer for either of these, so they only set a reason and
     -- only when nothing with a real countdown is already waiting longer.
     if not self:ClientReady() then
-        reason = reason or "the auction house is still busy"
+        reason = reason or L["the auction house is still busy"]
     end
 
     if priority > URGENT_LIMIT and self:PlayerIsSelling() then
-        reason = reason or "Blizzard's Sell tab is open"
+        reason = reason or L["Blizzard's Sell tab is open"]
     end
 
     return seconds, reason

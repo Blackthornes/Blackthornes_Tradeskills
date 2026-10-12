@@ -7,6 +7,7 @@
 -- a table that ranks purely on margin will put exactly those items on top.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Profit = ns.NewModule("Profit")
 
@@ -14,7 +15,7 @@ local Util = ns.Util
 
 -- Shown wherever an unpriceable craft says why: the Profit tab's detail
 -- panel, the craft pane's tooltip and /bts why.
-local SOULBOUND_REASON = "binds on pickup, so it cannot be sold"
+local SOULBOUND_REASON = L["binds on pickup, so it cannot be sold"]
 
 --------------------------------------------------------------------------------
 -- What to list at
@@ -113,8 +114,8 @@ function Profit:DeriveFromMaterials(itemID, knownCost)
     -- database carrying one can, and this is a price the player may post at.
     if not ns.Prices.IsCredible(price) then return nil end
 
-    return price, ("%d%% over the %s its materials are worth")
-        :format(markup, Util.FormatMoney(perUnit, { noColor = true }))
+    return price, L.Format("%d%% over the %s its materials are worth",
+        markup, Util.FormatMoney(perUnit, { noColor = true }))
 end
 
 --- Round a no-competition price for the kind of auction it will be listed as.
@@ -169,17 +170,17 @@ function Profit:ChoosePostPrice(itemID, knownCost)
     local floor = RoundForSale(mine, status ~= false)
 
     if mode == "use" then
-        return floor, "mine", "your own price, set on the Prices tab", status == nil
+        return floor, "mine", L["your own price, set on the Prices tab"], status == nil
     end
 
     local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost)
     if price and price >= floor then return price, basis, why, uncertain end
 
-    return floor, "floor", "the least you set on the Prices tab", status == nil
+    return floor, "floor", L["the least you set on the Prices tab"], status == nil
 end
 
 -- Why a price matches the cheapest rival when Undercut by is set to 0c.
-local MATCH_BY_CHOICE = "your Undercut by is 0c, so it matches the cheapest listing"
+local MATCH_BY_CHOICE = L["your Undercut by is 0c, so it matches the cheapest listing"]
 
 --- ChoosePostPrice from the auction house alone, before the player's own
 --- price is applied. Same returns.
@@ -221,7 +222,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
             if not materials then return nil, nil end
 
             return RoundForSale(materials, isCommodity), "derived",
-                ("no scan has priced this, so it is %s"):format(markup), uncertain
+                L.Format("no scan has priced this, so it is %s", markup), uncertain
         end
 
         market = math.max(1, math.floor(market))
@@ -243,7 +244,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
         -- changes, from "no competition" back to market value.
         if materials and materials > market then
             return RoundForSale(materials, isCommodity), "uncontested",
-                ("nothing else is listed, so it is %s"):format(markup), uncertain
+                L.Format("nothing else is listed, so it is %s", markup), uncertain
         end
 
         if isCommodity then return market, "market", nil, uncertain end
@@ -272,7 +273,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
     -- A rival already sitting at the lowest price the server allows leaves
     -- nothing below it, so matching is the only move.
     if underPrice >= matchPrice then
-        return matchPrice, "match", "the game allows no lower price than the rival's"
+        return matchPrice, "match", L["the game allows no lower price than the rival's"]
     end
 
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
@@ -282,7 +283,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
 
     if not profit then
         return matchPrice, "match",
-            ("the cost to make this is unknown, so dropping %s was not worth the risk"):format(
+            L.Format("the cost to make this is unknown, so dropping %s was not worth the risk",
                 Util.FormatMoney(matchPrice - underPrice, { noColor = true }))
     end
 
@@ -291,7 +292,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
     if profit >= minProfit then return underPrice, "undercut" end
 
     return matchPrice, "match",
-        ("undercutting to %s leaves %s profit, below your %s minimum"):format(
+        L.Format("undercutting to %s leaves %s profit, below your %s minimum",
             Util.FormatMoney(underPrice, { noColor = true }),
             Util.FormatMoney(profit, { noColor = true }),
             Util.FormatMoney(minProfit, { noColor = true }))
@@ -432,13 +433,18 @@ Profit.WAYS = { "vendor", "auction", "disenchant" }
 Profit.METHODS = { "best", "auction", "vendor", "disenchant" }
 
 -- Short names, for the VIA column and the switch.
-Profit.WAY_LABELS = { auction = "AH", vendor = "Vendor", disenchant = "DE" }
+Profit.WAY_LABELS = { auction = L["AH"], vendor = L["Vendor"], disenchant = L["DE"] }
+
+-- How /bts why names where a material's price came from (Cost's sources).
+local SOURCE_NOTES = {
+    buy = L["buy"], vendor = L["vendor"], craft = L["craft"], owned = L["owned"],
+}
 
 -- Why a craft has no profit when the list is ranked by one way only.
 local NO_WAY_REASON = {
-    auction = "no auction price",
-    vendor = "no vendor price",
-    disenchant = "cannot be disenchanted",
+    auction = L["no auction price"],
+    vendor = L["no vendor price"],
+    disenchant = L["cannot be disenchanted"],
 }
 
 --- Can one of your characters disenchant this? Read from what each last
@@ -475,7 +481,7 @@ function Profit:DescribeWays(analysis)
     local ways = analysis and analysis.ways
     if not ways then return lines end
 
-    local labels = { auction = "If sold at AH", vendor = "If vendored", disenchant = "If disenchanted" }
+    local labels = { auction = L["If sold at AH"], vendor = L["If vendored"], disenchant = L["If disenchanted"] }
 
     for _, way in ipairs(self.WAYS) do
         local option = ways[way]
@@ -483,9 +489,9 @@ function Profit:DescribeWays(analysis)
             local note
             if way == "disenchant" then
                 if option.canDisenchant == nil then
-                    note = "no enchanter"
+                    note = L["no enchanter"]
                 elseif option.canDisenchant == false then
-                    note = "skill too low"
+                    note = L["skill too low"]
                 end
             end
             lines[#lines + 1] = { way = way, label = labels[way], profit = option.profit,
@@ -546,7 +552,7 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     if not recipe.outputItemID then
         -- Enchants and similar have no sellable output item.
-        analysis.reason = "makes nothing that can be sold"
+        analysis.reason = L["makes nothing that can be sold"]
         return analysis
     end
 
@@ -684,12 +690,12 @@ function Profit:Analyse(recipeID, characterKey, method)
         -- A craft can land here with priced materials when the estimate is
         -- switched off, and with unpriced ones either way; the reason below
         -- covers both, since the output is what has no price in each.
-        analysis.reason = "output has no price data"
+        analysis.reason = L["output has no price data"]
         return analysis
     end
 
     if not cost or not cost.priceable then
-        analysis.reason = "a reagent has no price data"
+        analysis.reason = L["a reagent has no price data"]
         analysis.unpriced = cost and cost.unpriced or nil
         return analysis
     end
@@ -767,7 +773,7 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     local chosen = via and ways[via]
     if not chosen then
-        analysis.reason = method and NO_WAY_REASON[method] or "output has no price data"
+        analysis.reason = method and NO_WAY_REASON[method] or L["output has no price data"]
         return analysis
     end
 
@@ -992,7 +998,7 @@ function Profit:Resolve(query)
     query = (query or ""):gsub("^%s+", ""):gsub("%s+$", "")
 
     if query == "" then
-        return nil, "type a name, shift-click an item, or give a row number from /bts top"
+        return nil, L["type a name, shift-click an item, or give a row number from /bts top"]
     end
 
     -- Plain small numbers are row numbers from the last listing, which is what
@@ -1005,7 +1011,7 @@ function Profit:Resolve(query)
     local matches = ns.Recipes:Find(query)
 
     if #matches == 0 then
-        return nil, ("none of your recipes match '%s'"):format(query)
+        return nil, L.Format("none of your recipes match '%s'", query)
     end
 
     if #matches > 1 then
@@ -1020,29 +1026,29 @@ function Profit:Resolve(query)
     return matches[1]
 end
 
-ns.RegisterCommand("top", "[count]: most profitable crafts right now", function(args)
+ns.RegisterCommand("top", L["[count]: most profitable crafts right now"], function(args)
     -- At least one: "/bts top 0" printed a heading over an empty list.
     local limit = math.max(1, tonumber(args:match("(%d+)")) or 10)
 
     if ns.Recipes:Count() == 0 then
-        ns.Print("no recipes read yet. Open a profession window once")
+        ns.Print(L["no recipes read yet. Open a profession window once"])
         return
     end
 
     if ns.Prices:Count() == 0 then
-        ns.Print("no price data yet. Run |cffc8a44d/bts scan|r at the auction house")
+        ns.Print(L["no price data yet. Run |cffc8a44d/bts scan|r at the auction house"])
         return
     end
 
     local ranked = ns.Profit:GetRanked({ sortBy = "profit", method = ns.Profit:GetMethod() })
 
     if #ranked == 0 then
-        ns.Print("nothing is profitable with the current price data")
+        ns.Print(L["nothing is profitable with the current price data"])
         return
     end
 
     local shown = math.min(limit, #ranked)
-    ns.Print(("top %d by profit per craft"):format(shown))
+    ns.Print(L.Format("top %d by profit per craft", shown))
 
     wipe(ns.Profit.lastListing)
 
@@ -1051,13 +1057,13 @@ ns.RegisterCommand("top", "[count]: most profitable crafts right now", function(
         ns.Profit.lastListing[i] = ns.Recipes:Get(entry.recipeID)
 
         local flags = {}
-        if entry.stale then flags[#flags + 1] = "stale" end
-        if entry.craftableNow > 0 then flags[#flags + 1] = ("can make %d"):format(entry.craftableNow) end
+        if entry.stale then flags[#flags + 1] = L["stale"] end
+        if entry.craftableNow > 0 then flags[#flags + 1] = L.Format("can make %d", entry.craftableNow) end
         if (entry.confidence or 0) < 0.4 and entry.confidenceReason then
             flags[#flags + 1] = entry.confidenceReason
         end
 
-        ns.PrintRaw(("  |c%s%2d.|r %s  |c%s%s|r  (%d%% margin)  %s"):format(
+        ns.PrintRaw(L.Format("  |c%s%2d.|r %s  |c%s%s|r  (%d%% margin)  %s",
             ns.COLORS.accent, i,
             ns.Recipes:GetDisplayLink(entry.recipeID),
             ProfitColor(entry.profit), Util.FormatMoney(entry.profit, { short = true }),
@@ -1065,15 +1071,15 @@ ns.RegisterCommand("top", "[count]: most profitable crafts right now", function(
             #flags > 0 and ("|c%s[%s]|r"):format(ns.COLORS.muted, table.concat(flags, ", ")) or ""))
     end
 
-    ns.PrintRaw(("|c%sFor detail: |r|c%s/bts why 1|r|c%s, or /bts why <name>, or shift-click an item into the command.|r")
-        :format(ns.COLORS.muted, ns.COLORS.accent, ns.COLORS.muted))
+    ns.PrintRaw(L.Format("|c%sFor detail: |r|c%s/bts why 1|r|c%s, or /bts why <name>, or shift-click an item into the command.|r",
+        ns.COLORS.muted, ns.COLORS.accent, ns.COLORS.muted))
 end)
 
-ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", function(args)
+ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
-        ns.Print(("several recipes match '%s':"):format(args))
+        ns.Print(L.Format("several recipes match '%s':", args))
 
         wipe(ns.Profit.lastListing)
         for i = 1, math.min(#ambiguous, 10) do
@@ -1082,7 +1088,7 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
                 ns.COLORS.accent, i, ns.Recipes:GetDisplayLink(ambiguous[i].recipeID)))
         end
 
-        ns.PrintRaw(("|c%sRun |r|c%s/bts why <number>|r|c%s to pick one.|r"):format(
+        ns.PrintRaw(L.Format("|c%sRun |r|c%s/bts why <number>|r|c%s to pick one.|r",
             ns.COLORS.muted, ns.COLORS.accent, ns.COLORS.muted))
         return
     end
@@ -1094,18 +1100,18 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
 
     local analysis = ns.Profit:Analyse(recipe.recipeID, nil, ns.Profit:GetMethod())
     if not analysis then
-        ns.Print("that recipe is no longer saved")
+        ns.Print(L["that recipe is no longer saved"])
         return
     end
 
     ns.Print(ns.Recipes:GetDisplayLink(recipe.recipeID))
 
     if not analysis.priceable then
-        ns.PrintRaw(("  |c%s%s|r"):format(ns.COLORS.warn, analysis.reason or "cannot be priced"))
+        ns.PrintRaw(("  |c%s%s|r"):format(ns.COLORS.warn, analysis.reason or L["cannot be priced"]))
 
         if analysis.unpriced then
             for _, itemID in ipairs(analysis.unpriced) do
-                ns.PrintRaw(("    |c%sno auction data for|r %s"):format(
+                ns.PrintRaw(L.Format("    |c%sno auction data for|r %s",
                     ns.COLORS.muted, Util.GetItemLabel(itemID)))
             end
         end
@@ -1113,10 +1119,10 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
     end
 
     for _, reagent in ipairs(analysis.cost.reagents) do
-        local note = reagent.crafted and "cheaper to craft"
-            or reagent.source == "mine" and "my price" or reagent.source
+        local note = reagent.crafted and L["cheaper to craft"]
+            or reagent.source == "mine" and L["my price"] or SOURCE_NOTES[reagent.source] or reagent.source
         local shortfall = reagent.shortfall > 0
-            and (" |c%sneed %d more|r"):format(ns.COLORS.warn, reagent.shortfall)
+            and L.Format(" |c%sneed %d more|r", ns.COLORS.warn, reagent.shortfall)
             or ""
 
         ns.PrintRaw(("  %dx %s  @ %s = %s  |c%s%s|r%s"):format(
@@ -1125,77 +1131,77 @@ ns.RegisterCommand("why", "<name, link or row number>: full cost breakdown", fun
             ns.COLORS.muted, note or "", shortfall))
     end
 
-    ns.PrintRaw(("  material cost   %s"):format(Util.FormatMoney(analysis.totalCost)))
+    ns.PrintRaw(L.Format("  material cost   %s", Util.FormatMoney(analysis.totalCost)))
 
     if analysis.priceBasis == "disenchant" then
-        ns.PrintRaw(("  |c%sdisenchanting pays most, so it is valued at its most likely result|r"):format(
+        ns.PrintRaw(L.Format("  |c%sdisenchanting pays most, so it is valued at its most likely result|r",
             ns.COLORS.profit))
-        ns.PrintRaw(("  disenchants to  %s  (makes %.1f)"):format(
+        ns.PrintRaw(L.Format("  disenchants to  %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.priceBasis == "vendor" then
         -- Said before the number: this one is not going to the auction house.
         if analysis.undercut then
-            ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))
+            ns.PrintRaw(L.Format("  cheapest rival  %s", Util.FormatMoney(analysis.competitorPrice)))
         end
-        ns.PrintRaw(("  |c%sa vendor pays more than a listing would, so it is valued at that|r"):format(
+        ns.PrintRaw(L.Format("  |c%sa vendor pays more than a listing would, so it is valued at that|r",
             ns.COLORS.profit))
-        ns.PrintRaw(("  vendor pays     %s  (makes %.1f)"):format(
+        ns.PrintRaw(L.Format("  vendor pays     %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.priceBasis == "mine" or analysis.priceBasis == "floor" then
         ns.PrintRaw(("  |c%s%s|r"):format(ns.COLORS.warn, analysis.priceBasis == "mine"
-            and "priced at your own price, set on the Prices tab"
-            or "raised to the least you set on the Prices tab"))
-        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
+            and L["priced at your own price, set on the Prices tab"]
+            or L["raised to the least you set on the Prices tab"]))
+        ns.PrintRaw(L.Format("  you post at     %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.undercut then
-        ns.PrintRaw(("  cheapest rival  %s"):format(Util.FormatMoney(analysis.competitorPrice)))
-        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
+        ns.PrintRaw(L.Format("  cheapest rival  %s", Util.FormatMoney(analysis.competitorPrice)))
+        ns.PrintRaw(L.Format("  you post at     %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.priceUncontested then
         -- Said before the number: nobody is competing, so this price is your
         -- own materials plus the markup, not what the market is doing.
-        ns.PrintRaw(("  |c%snobody else is listing one, so this is priced off your materials|r"):format(
+        ns.PrintRaw(L.Format("  |c%snobody else is listing one, so this is priced off your materials|r",
             ns.COLORS.profit))
-        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
+        ns.PrintRaw(L.Format("  you post at     %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.youHoldLowest then
-        ns.PrintRaw(("  |c%syou already have the cheapest listing, so staying at market price|r"):format(
+        ns.PrintRaw(L.Format("  |c%syou already have the cheapest listing, so staying at market price|r",
             ns.COLORS.profit))
-        ns.PrintRaw(("  you post at     %s  (makes %.1f)"):format(
+        ns.PrintRaw(L.Format("  you post at     %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     elseif analysis.priceDerived then
         -- Said before the number, not after it: this one is the addon's own
         -- estimate and reading it as a market price is the mistake to avoid.
-        ns.PrintRaw(("  |c%snever scanned, so estimated from material value|r"):format(
+        ns.PrintRaw(L.Format("  |c%snever scanned, so estimated from material value|r",
             ns.COLORS.warn))
-        ns.PrintRaw(("  estimate at     %s  (makes %.1f)"):format(
+        ns.PrintRaw(L.Format("  estimate at     %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     else
-        ns.PrintRaw(("  none listed     posting at market %s  (makes %.1f)"):format(
+        ns.PrintRaw(L.Format("  none listed     posting at market %s  (makes %.1f)",
             Util.FormatMoney(analysis.unitRevenue), analysis.yield))
     end
     if analysis.priceBasis == "vendor" then
-        ns.PrintRaw(("  |c%sno auction cut or deposit on a vendor sale|r"):format(ns.COLORS.muted))
+        ns.PrintRaw(L.Format("  |c%sno auction cut or deposit on a vendor sale|r", ns.COLORS.muted))
     elseif analysis.priceBasis == "disenchant" then
-        ns.PrintRaw(("  cut on the materials -%s"):format(Util.FormatMoney(analysis.cut)))
+        ns.PrintRaw(L.Format("  cut on the materials -%s", Util.FormatMoney(analysis.cut)))
     else
-        ns.PrintRaw(("  auction cut     -%s"):format(Util.FormatMoney(analysis.cut)))
+        ns.PrintRaw(L.Format("  auction cut     -%s", Util.FormatMoney(analysis.cut)))
 
         if analysis.depositKnown then
-            ns.PrintRaw(("  deposit         -%s"):format(Util.FormatMoney(analysis.deposit)))
+            ns.PrintRaw(L.Format("  deposit         -%s", Util.FormatMoney(analysis.deposit)))
         else
-            ns.PrintRaw(("  |c%sdeposit unknown until you visit an auction house|r")
-                :format(ns.COLORS.muted))
+            ns.PrintRaw(L.Format("  |c%sdeposit unknown until you visit an auction house|r",
+                ns.COLORS.muted))
         end
     end
-    ns.PrintRaw(("  |c%sprofit          %s|r  (%.0f%% margin, %.0f%% return on cost)"):format(
+    ns.PrintRaw(L.Format("  |c%sprofit          %s|r  (%.0f%% margin, %.0f%% return on cost)",
         ProfitColor(analysis.profit), Util.FormatMoney(analysis.profit),
         math.floor(analysis.margin * 100), math.floor(analysis.roi * 100)))
     for _, line in ipairs(ns.Profit:DescribeWays(analysis)) do
         ns.PrintRaw(("  |c%s%s|r  %s%s"):format(line.chosen and ns.COLORS.accent or ns.COLORS.muted,
             line.label, Util.FormatMoney(line.profit), line.note and ("  |c%s%s|r"):format(ns.COLORS.muted, line.note) or ""))
     end
-    ns.PrintRaw(("  |c%sconfidence %d%%%s, data read %s|r"):format(
+    ns.PrintRaw(L.Format("  |c%sconfidence %d%%%s, data read %s|r",
         ns.COLORS.muted, math.floor((analysis.confidence or 0) * 100),
         analysis.confidenceReason and (" (" .. analysis.confidenceReason .. ")") or "",
         Util.FormatAgeAgo(analysis.age)))
@@ -1207,7 +1213,7 @@ end)
 -- GetItemInfo. This is how to see that number rather than trust it: how many
 -- outputs read as bound, how many as sellable, how many the client has not
 -- cached yet, and which crafts were taken out.
-ns.RegisterCommand("soulbound", "which crafts are left out of the Profit list for binding on pickup",
+ns.RegisterCommand("soulbound", L["which crafts are left out of the Profit list for binding on pickup"],
 function()
     local bound, free, unknown = {}, 0, 0
     local byType = {}
@@ -1230,8 +1236,8 @@ function()
         end
     end
 
-    ns.Print(("|c%sSoulbound crafts|r"):format(ns.COLORS.accent))
-    ns.PrintRaw(("  %d bind on pickup (left out), %d can be sold, %d not loaded by the game yet"):format(
+    ns.Print(L.Format("|c%sSoulbound crafts|r", ns.COLORS.accent))
+    ns.PrintRaw(L.Format("  %d bind on pickup (left out), %d can be sold, %d not loaded by the game yet",
         #bound, free, unknown))
 
     local types = {}
@@ -1252,6 +1258,6 @@ function()
     end
 
     if #bound > 15 then
-        ns.PrintRaw(("    |c%s...and %d more|r"):format(ns.COLORS.muted, #bound - 15))
+        ns.PrintRaw(L.Format("    |c%s...and %d more|r", ns.COLORS.muted, #bound - 15))
     end
 end)

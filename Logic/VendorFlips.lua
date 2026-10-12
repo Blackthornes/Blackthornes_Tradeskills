@@ -14,6 +14,7 @@
 -- way pushed his bag items out and broke Ready to sell (2026-09-28).
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Util = ns.Util
 
@@ -339,10 +340,17 @@ function VendorFlips:AnnounceDeals()
     local total = 0
     for _, row in ipairs(rows) do total = total + row.gain end
 
-    ns.Print(("Vendor flips: %d item%s on the auction house under what a vendor pays, %s together if you buy one of each. Best: %s for %s, a vendor pays %s. See the Deals tab."):format(
-        #rows, #rows == 1 and "" or "s", Util.FormatMoney(total, { noColor = true }),
-        Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
-        Util.FormatMoney(best.vendor, { noColor = true })))
+    local totalText = Util.FormatMoney(total, { noColor = true })
+    local bestName = Util.GetItemLabel(best.itemID)
+    local buyText = Util.FormatMoney(best.buy, { noColor = true })
+    local vendorText = Util.FormatMoney(best.vendor, { noColor = true })
+    if #rows == 1 then
+        ns.Print(L.Format("Vendor flips: %d item on the auction house under what a vendor pays, %s together if you buy one of each. Best: %s for %s, a vendor pays %s. See the Deals tab.",
+            #rows, totalText, bestName, buyText, vendorText))
+    else
+        ns.Print(L.Format("Vendor flips: %d items on the auction house under what a vendor pays, %s together if you buy one of each. Best: %s for %s, a vendor pays %s. See the Deals tab.",
+            #rows, totalText, bestName, buyText, vendorText))
+    end
 
     -- Settings: Sound when a scan finishes.
     if (not ns.Config or ns.Config:Get("scanSounds") ~= false) and type(PlaySound) == "function" then
@@ -363,7 +371,7 @@ local function Ago(stamp)
     return Util.FormatAgeAgo(math.max(0, time() - stamp))
 end
 
-ns.RegisterCommand("vendordeals", "say why each vendor flip on the Deals tab is there", function()
+ns.RegisterCommand("vendordeals", L["say why each vendor flip on the Deals tab is there"], function()
     local lastScan = (ns.Prices.GetLastScan and ns.Prices:GetLastScan() or (ns.db and ns.db.lastFullScan))
     ns.Print(("vendordeals: last scan %s, price records changed %d time(s) since /reload")
         :format(Ago(lastScan), ns.Prices and ns.Prices.changes or 0))
@@ -400,7 +408,7 @@ end)
 -- /bts sellprice: what each source says a vendor pays for one item
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("sellprice", "say what the item info and the tooltip each say a vendor pays for an item", function(input)
+ns.RegisterCommand("sellprice", L["say what the item info and the tooltip each say a vendor pays for an item"], function(input)
     input = type(input) == "string" and input or ""
     local itemID = tonumber(input) or tonumber(input:match("item:(%d+)"))
     if not itemID then

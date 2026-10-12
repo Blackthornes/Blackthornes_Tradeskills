@@ -24,6 +24,10 @@ local ADDON_NAME, ns = ...
 
 local Note = ns.NewModule("SisterNote")
 
+-- The words through the addon's translation table where it has one (ns.L,
+-- Locale/Locale.lua), else in English, so this file stays the same in all.
+local L = ns.L or setmetatable({}, { __index = function(_, key) return key end })
+
 -- Seconds after login, so the line lands under the game's own login chat
 -- rather than in the middle of it.
 Note.DELAY = 8
@@ -31,15 +35,15 @@ Note.DELAY = 8
 -- Every sister, by folder name, with the words players see.
 Note.ADDONS = {
     { folder = "Blackthornes_Farmer", title = "Blackthornes Farmer",
-      adds = "where to farm any material" },
+      adds = L["where to farm any material"] },
     { folder = "Blackthornes_TS", title = "Blackthornes Tradeskills",
-      adds = "auction prices, crafting profits and a craft queue" },
+      adds = L["auction prices, crafting profits and a craft queue"] },
     { folder = "Blackthornes_Equipment", title = "Blackthornes Equipment",
-      adds = "which gear is an upgrade for you, and where to get it" },
+      adds = L["which gear is an upgrade for you, and where to get it"] },
     { folder = "Blackthornes_Pets", title = "Blackthornes Pets",
-      adds = "feeding and taming for hunter and warlock pets" },
+      adds = L["feeding and taming for hunter and warlock pets"] },
     { folder = "Blackthornes_Butler", title = "Blackthornes Butler",
-      adds = "what to do with every item in your bags" },
+      adds = L["what to do with every item in your bags"] },
 }
 
 local shared = _G.BlackthornesSisterNote
@@ -133,7 +137,7 @@ end
 --- "A", "A and B", "A, B and C".
 local function Join(parts)
     if #parts <= 1 then return parts[1] or "" end
-    return table.concat(parts, ", ", 1, #parts - 1) .. " and " .. parts[#parts]
+    return table.concat(parts, ", ", 1, #parts - 1) .. " " .. L["and"] .. " " .. parts[#parts]
 end
 
 --- The one line, for the addon saying it.
@@ -151,9 +155,10 @@ function Note:Line(list)
         named[i] = ("|c%s%s|r (%s)"):format(accent, entry.title, entry.adds)
     end
 
-    return ("|c%s%s|r has sister addons that share what they know: %s. %s on CurseForge. "
-        .. "|c%sThis note shows once.|r"):format(accent, own, Join(named),
-        #list == 1 and "It's" or "They're", muted)
+    return ("|c%s%s|r %s |c%s%s|r"):format(accent, own,
+        (L["has sister addons that share what they know: %s. %s on CurseForge."]):format(Join(named),
+            #list == 1 and L["It's"] or L["They're"]),
+        muted, L["This note shows once."])
 end
 
 function Note:Check()
@@ -191,12 +196,12 @@ function Note:OnEnable()
     end)
 end
 
-ns.RegisterCommand("sisters", "turn the once-only note about the other Blackthornes addons on or off", function()
+ns.RegisterCommand("sisters", L["turn the once-only note about the other Blackthornes addons on or off"], function()
     local on = not Note:IsOn()
     Note:SetOn(on)
     if on then
-        ns.Print("the note about the other Blackthornes addons is on. It shows once for any you don't have.")
+        ns.Print(L["the note about the other Blackthornes addons is on. It shows once for any you don't have."])
     else
-        ns.Print("the note about the other Blackthornes addons is off, in all of them.")
+        ns.Print(L["the note about the other Blackthornes addons is off, in all of them."])
     end
 end)

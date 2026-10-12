@@ -7,6 +7,7 @@
 -- load time instead of guessing, and everything downstream reads flags.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Compat = ns.NewModule("Compat")
 
@@ -329,8 +330,8 @@ function Compat:OnEnable()
     local caps = self:Detect()
 
     if not self:IsSupported() then
-        ns.Warn("this version of the game has auction or profession functions this addon does not recognise.")
-        ns.Warn("run |cffc8a44d/bts probe|r and report what it says.")
+        ns.Warn(L["this version of the game has auction or profession functions this addon does not recognise."])
+        ns.Warn(L["run |cffc8a44d/bts probe|r and report what it says."])
         return
     end
 

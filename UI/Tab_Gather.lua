@@ -11,6 +11,7 @@
 -- own them, which is the only definition of gathered that cannot go stale.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -25,20 +26,20 @@ local ROW_HEIGHT = 24
 -- Widgets.FitColumns widens it to fit the heading and a full amount.
 local COLUMNS = {
     { key = "action", label = "",       width = 30 },
-    { key = "cost",   label = "COST",   width = 74, money = true },
-    { key = "unit",   label = "EACH",   width = 64, money = true },
-    { key = "source", label = "BUY AT", width = 76, justify = "CENTER" },
-    { key = "have",   label = "HAVE",   width = 42, justify = "CENTER" },
-    { key = "need",   label = "NEED",   width = 42, justify = "CENTER" },
+    { key = "cost",   label = L["COST"],   width = 74, money = true },
+    { key = "unit",   label = L["EACH"],   width = 64, money = true },
+    { key = "source", label = L["BUY AT"], width = 76, justify = "CENTER" },
+    { key = "have",   label = L["HAVE"],   width = 42, justify = "CENTER" },
+    { key = "need",   label = L["NEED"],   width = 42, justify = "CENTER" },
 }
 
 -- Any column with a heading can be hidden (UI/Columns.lua).
-ns.Columns:Register("gather", "Gather", COLUMNS)
+ns.Columns:Register("gather", L["Gather"], COLUMNS)
 
 local SOURCE_LABELS = {
-    vendor  = "Vendor",
-    auction = "Auction",
-    unknown = "no data",
+    vendor  = L["Vendor"],
+    auction = L["Auction"],
+    unknown = L["no data"],
 }
 
 local state = { hideSatisfied = true, sortBy = "source" }
@@ -125,18 +126,18 @@ local function CreateRow(row)
 
     PlaceRow(row)
 
-    row.search = Widgets.CreateButton(row, "AH", function()
+    row.search = Widgets.CreateButton(row, L["AH"], function()
         if row.data then UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall) end
-    end, { width = 26, height = 16, tooltip = "Search the auction house for this" })
+    end, { width = 26, height = 16, tooltip = L["Search the auction house for this"] })
     row.search:SetPoint("RIGHT", -8, 0)
 
     -- With Blackthornes Farmer loaded: turn the shortfall into a Farmer
     -- gathering goal, shown on Farmer's Goals panel.
-    row.goal = Widgets.CreateButton(row, "Set goal", function()
+    row.goal = Widgets.CreateButton(row, L["Set goal"], function()
         local line = row.data
         if line then ns.FarmerGoals:SetGoal(line.itemID, line.needed) end
     end, { width = 52, height = 16,
-        tooltip = "Make a Blackthornes Farmer goal to gather what you need of this" })
+        tooltip = L["Make a Blackthornes Farmer goal to gather what you need of this"] })
     row.goal:SetPoint("RIGHT", -38, 0)
     row.goal:Hide()
 end
@@ -160,7 +161,7 @@ local function UpdateRow(row, line)
     if done then
         row.name:SetTextColor(Theme.Unpack("muted"))
 
-        cells.source:SetText(line.paid and "bought" or "have it")
+        cells.source:SetText(line.paid and L["bought"] or L["have it"])
         cells.source:SetTextColor(Theme.Unpack("dim"))
         cells.unit:SetText("")
         -- Bought: what it cost, amber when well over the estimate.
@@ -199,16 +200,16 @@ local function ShowRowTooltip(row, line)
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", line.itemID, line.label)
     GameTooltip:AddLine(" ")
 
-    GameTooltip:AddDoubleLine("Required", tostring(line.needed), 0.7, 0.7, 0.7, 1, 1, 1)
-    GameTooltip:AddDoubleLine("In bags", tostring(line.inBags or 0), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Required"], tostring(line.needed), 0.7, 0.7, 0.7, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["In bags"], tostring(line.inBags or 0), 0.7, 0.7, 0.7, 1, 1, 1)
 
     if (line.inBank or 0) > 0 then
-        GameTooltip:AddDoubleLine("In bank", tostring(line.inBank),
+        GameTooltip:AddDoubleLine(L["In bank"], tostring(line.inBank),
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
     end
 
     if line.shortfall > 0 then
-        GameTooltip:AddDoubleLine("Still needed", tostring(line.shortfall),
+        GameTooltip:AddDoubleLine(L["Still needed"], tostring(line.shortfall),
             0.7, 0.7, 0.7, 0.9, 0.38, 0.31)
     end
 
@@ -216,43 +217,44 @@ local function ShowRowTooltip(row, line)
 
     -- The whole point of the tab: show both prices, not just the winner.
     if line.vendorUnit then
-        GameTooltip:AddDoubleLine("Vendor, each",
+        GameTooltip:AddDoubleLine(L["Vendor, each"],
             Util.FormatMoney(line.vendorUnit, { noColor = true }),
             0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
     else
-        GameTooltip:AddLine("No vendor known to sell this", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine(L["No vendor known to sell this"], 0.5, 0.5, 0.5)
     end
 
     if line.auctionUnit then
-        GameTooltip:AddDoubleLine("Auction, each",
+        GameTooltip:AddDoubleLine(L["Auction, each"],
             Util.FormatMoney(line.auctionUnit, { noColor = true }),
             0.7, 0.7, 0.7, 1, 1, 1)
     else
-        GameTooltip:AddLine("Not seen on the auction house", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine(L["Not seen on the auction house"], 0.5, 0.5, 0.5)
     end
 
     -- Too few at the cheapest price: the rest cost more, up the listings.
     if line.source == "auction" and line.auctionUnit and line.unitCost
         and line.unitCost > line.auctionUnit and line.shortfall > 0 then
-        GameTooltip:AddDoubleLine(("Buying %d, each on average"):format(line.shortfall),
+        GameTooltip:AddDoubleLine(L.Format("Buying %d, each on average", line.shortfall),
             Util.FormatMoney(line.unitCost, { noColor = true }),
             0.7, 0.7, 0.7, 1, 1, 1)
     end
 
     if line.savingTotal and line.savingTotal > 0 then
         GameTooltip:AddDoubleLine(
-            ("Saved by buying from the %s"):format(
-                line.source == "auction" and "auction house" or line.source),
+            line.source == "auction" and L["Saved by buying from the auction house"]
+                or line.source == "vendor" and L["Saved by buying from the vendor"]
+                or L.Format("Saved by buying from the %s", tostring(line.source)),
             Util.FormatMoney(line.savingTotal, { noColor = true }),
             0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
     end
 
     if line.vendorLimited then
-        GameTooltip:AddLine("Vendor stock is limited", 0.91, 0.76, 0.35)
+        GameTooltip:AddLine(L["Vendor stock is limited"], 0.91, 0.76, 0.35)
     end
 
     if (line.onAlts or 0) > 0 then
-        GameTooltip:AddDoubleLine("On other characters", tostring(line.onAlts),
+        GameTooltip:AddDoubleLine(L["On other characters"], tostring(line.onAlts),
             0.7, 0.7, 0.7, 0.91, 0.76, 0.35)
     end
 
@@ -276,35 +278,35 @@ local function Refresh()
     widgets.emptyLabel:SetShown(#lines == 0)
     if #lines == 0 then
         widgets.emptyLabel:SetText(ns.Queue:Count() == 0
-            and "Nothing queued.\nAdd crafts on the Profit tab and their materials appear here."
-            or "You already have everything the queue needs.")
+            and L["Nothing queued.\nAdd crafts on the Profit tab and their materials appear here."]
+            or L["You already have everything the queue needs."])
     end
 
     -- From the list already built, satisfied lines and all, rather than
     -- building it a second time.
     local summary = ns.Queue:GetGatherSummary(all)
 
-    widgets.progress:SetText(("%d of %d materials still needed"):format(
+    widgets.progress:SetText(L.Format("%d of %d materials still needed",
         summary.outstanding, summary.outstanding + summary.satisfied))
 
     -- Split by destination, because that is how you actually do the errand.
     widgets.vendorTotal:SetText(summary.vendor.count > 0
-        and ("Vendor  %s   (%d item%s)"):format(
+        and L.Format(summary.vendor.count == 1 and L["Vendor  %s   (%d item)"] or L["Vendor  %s   (%d items)"],
             Util.FormatMoney(summary.vendor.cost, { short = true }),
-            summary.vendor.count, summary.vendor.count == 1 and "" or "s")
-        or "Vendor  --")
+            summary.vendor.count)
+        or L["Vendor  --"])
 
     widgets.auctionTotal:SetText(summary.auction.count > 0
-        and ("Auction  %s   (%d item%s)"):format(
+        and L.Format(summary.auction.count == 1 and L["Auction  %s   (%d item)"] or L["Auction  %s   (%d items)"],
             Util.FormatMoney(summary.auction.cost, { short = true }),
-            summary.auction.count, summary.auction.count == 1 and "" or "s")
-        or "Auction  --")
+            summary.auction.count)
+        or L["Auction  --"])
 
-    widgets.grandTotal:SetText(("Total  %s"):format(
+    widgets.grandTotal:SetText(L.Format("Total  %s",
         Util.FormatMoney(summary.total, { short = true })))
 
     if summary.saving > 0 then
-        widgets.savingLabel:SetText(("Buying from the cheaper source saves %s"):format(
+        widgets.savingLabel:SetText(L.Format("Buying from the cheaper source saves %s",
             Util.FormatMoney(summary.saving, { short = true })))
     else
         widgets.savingLabel:SetText("")
@@ -312,8 +314,9 @@ local function Refresh()
 
     -- Unknown prices make the total an understatement, so say so.
     widgets.unknownLabel:SetText(summary.unknown.count > 0
-        and ("%d material%s with no price data, so the real total is higher"):format(
-            summary.unknown.count, summary.unknown.count == 1 and "" or "s")
+        and L.Format(summary.unknown.count == 1 and L["%d material with no price data, so the real total is higher"]
+            or L["%d materials with no price data, so the real total is higher"],
+            summary.unknown.count)
         or "")
 
     -- Vendor prices ship with the addon now (Data/VendorPrices.lua), so there
@@ -340,9 +343,9 @@ local function Build(container)
     -- The menu first, then the tick box, as on every tab. It stays: it
     -- groups the list by where to buy, which a heading cannot.
     local sort = Widgets.CreateDropdown(toolbar, {
-        { text = "Group: Where to buy", value = "source" },
-        { text = "Sort: Cost", value = "cost" },
-        { text = "Sort: Name", value = "name" },
+        { text = L["Group: Where to buy"], value = "source" },
+        { text = L["Sort: Cost"], value = "cost" },
+        { text = L["Sort: Name"], value = "name" },
     }, function(value)
         state.sortBy = value
         Refresh()
@@ -350,7 +353,7 @@ local function Build(container)
     sort:SetPoint("LEFT", 0, 0)
     sort:SetValue("source")
 
-    local hideSatisfied = Widgets.CreateCheckbox(toolbar, "Hide what I have", function(checked)
+    local hideSatisfied = Widgets.CreateCheckbox(toolbar, L["Hide what I have"], function(checked)
         state.hideSatisfied = checked
         Refresh()
     end, true)
@@ -359,14 +362,14 @@ local function Build(container)
     -- With Blackthornes Farmer loaded: every material still needed becomes a
     -- Farmer goal in one click, in the order the list shows them.
     if ns.FarmerGoals:Available() then
-        local setAll = Widgets.CreateButton(toolbar, "Set all goals", function()
+        local setAll = Widgets.CreateButton(toolbar, L["Set all goals"], function()
             local needed = {}
             for _, line in ipairs(BuildList()) do
                 if line.shortfall > 0 then needed[#needed + 1] = line end
             end
             ns.FarmerGoals:SetGoals(needed)
         end, { width = 100, height = 22,
-            tooltip = "Make a Blackthornes Farmer goal for every material you still need" })
+            tooltip = L["Make a Blackthornes Farmer goal for every material you still need"] })
         setAll:SetPoint("RIGHT", 0, 0)
     end
 
@@ -378,7 +381,7 @@ local function Build(container)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 30, 0)
-    nameHeading:SetText("MATERIAL")
+    nameHeading:SetText(L["MATERIAL"])
 
     local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(COLUMNS) do
@@ -469,7 +472,7 @@ end
 
 UI:RegisterTab({
     key = "gather",
-    text = "Gather",
+    text = L["Gather"],
     order = 3,
     build = Build,
     refresh = Refresh,

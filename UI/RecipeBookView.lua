@@ -9,6 +9,7 @@
 -- right says where a picked recipe is learned and what goes into it.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -37,18 +38,18 @@ end
 -- `width` is the least each gets: Widgets.FitColumns widens it to fit the
 -- heading and a full amount.
 local COLUMNS = {
-    { key = "learn",      label = "LEARN FROM", width = 92, justify = "CENTER" },
-    { key = "price",      label = "RECIPE",     width = 66, money = true },
-    { key = "profit",     label = "PROFIT",     width = 70, money = true },
-    { key = "disenchant", label = "DISENCHANT", width = 66, money = true },
-    { key = "sells",      label = "SELLS",      width = 66, money = true },
-    { key = "cost",       label = "COST",       width = 66, money = true },
-    { key = "skill",      label = "SKILL",      width = 36, justify = "CENTER" },
+    { key = "learn",      label = L["LEARN FROM"], width = 92, justify = "CENTER" },
+    { key = "price",      label = L["RECIPE"],     width = 66, money = true },
+    { key = "profit",     label = L["PROFIT"],     width = 70, money = true },
+    { key = "disenchant", label = L["DISENCHANT"], width = 66, money = true },
+    { key = "sells",      label = L["SELLS"],      width = 66, money = true },
+    { key = "cost",       label = L["COST"],       width = 66, money = true },
+    { key = "skill",      label = L["SKILL"],      width = 36, justify = "CENTER" },
 }
 
 -- Any column but the recipe's name can be hidden (UI/Columns.lua). The
 -- Profit and Level Up tabs' copies share the choice.
-ns.Columns:Register("recipes", "Recipes to learn", COLUMNS)
+ns.Columns:Register("recipes", L["Recipes to learn"], COLUMNS)
 
 --- One copy of the view, with its own filters and its own frames. The
 --- Profit tab and the Level Up tab each carry one (asked 2026-10-05: "recipes
@@ -134,7 +135,7 @@ local function NewView(opts)
         SetMoney(cells.cost, entry.cost, "muted")
 
         if not entry.outputItemID then
-            cells.sells:SetText("no item")
+            cells.sells:SetText(L["no item"])
             cells.sells:SetTextColor(Theme.Unpack("dim"))
         else
             SetMoney(cells.sells, entry.auction)
@@ -156,7 +157,7 @@ local function NewView(opts)
 
         SetMoney(cells.price, entry.price, "muted")
 
-        cells.learn:SetText(entry.known and "Known" or entry.learn)
+        cells.learn:SetText(entry.known and L["Known"] or entry.learn)
         cells.learn:SetTextColor(Theme.Unpack(entry.known and "profit" or "muted"))
     end
 
@@ -171,7 +172,7 @@ local function NewView(opts)
         local _, where = ns.RecipeBook:LearnFrom(entry.record)
         if #where > 0 then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Learned from", Theme.Unpack("accent"))
+            GameTooltip:AddLine(L["Learned from"], Theme.Unpack("accent"))
             for _, line in ipairs(where) do
                 GameTooltip:AddLine(line, 1, 1, 1, true)
             end
@@ -179,8 +180,8 @@ local function NewView(opts)
 
         if entry.payback then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(("Pays for itself after %d craft%s"):format(
-                entry.payback, entry.payback == 1 and "" or "s"), Theme.Unpack("profit"))
+            GameTooltip:AddLine(entry.payback == 1 and L["Pays for itself after 1 craft"]
+                or L.Format("Pays for itself after %d crafts", entry.payback), Theme.Unpack("profit"))
         end
 
         GameTooltip:Show()
@@ -228,7 +229,7 @@ local function NewView(opts)
         detail.subtitle:SetPoint("TOPRIGHT", detail.title, "BOTTOMRIGHT", 0, -4)
         detail.subtitle:SetWordWrap(true)
 
-        detail.worthHeading = Theme.CreateHeading(detail, "ONE CRAFT")
+        detail.worthHeading = Theme.CreateHeading(detail, L["ONE CRAFT"])
         detail.worthHeading:SetPoint("TOPLEFT", detail.subtitle, "BOTTOMLEFT", 0, -10)
 
         detail.values = {}
@@ -239,7 +240,7 @@ local function NewView(opts)
             anchor = line
         end
 
-        detail.materialsHeading = Theme.CreateHeading(detail, "MATERIALS")
+        detail.materialsHeading = Theme.CreateHeading(detail, L["MATERIALS"])
         detail.materialsHeading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -8)
 
         detail.materials = {}
@@ -250,7 +251,7 @@ local function NewView(opts)
             anchor = line
         end
 
-        detail.learnHeading = Theme.CreateHeading(detail, "WHERE TO LEARN IT")
+        detail.learnHeading = Theme.CreateHeading(detail, L["WHERE TO LEARN IT"])
         detail.learnHeading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -8)
 
         detail.learn = Theme.CreateLabel(detail, "small", "text")
@@ -281,19 +282,20 @@ local function NewView(opts)
         return Util.FormatMoney(copper, { short = true })
     end
 
-    local PRICE_HOW = { trainer = "at a trainer", vendor = "from a vendor", auction = "on the auction house" }
+    local PRICE_HOW = { trainer = L["Recipe, at a trainer"], vendor = L["Recipe, from a vendor"],
+        auction = L["Recipe, on the auction house"] }
+    local BACK_WAY = { vendor = L["Profit, by vendor"], disenchant = L["Profit, by disenchant"] }
 
     local function ShowNothing(detail)
-        detail.title:SetText("Recipes to learn")
-        detail.subtitle:SetText("Pick a recipe to see what goes into it and where to learn it.")
+        detail.title:SetText(L["Recipes to learn"])
+        detail.subtitle:SetText(L["Pick a recipe to see what goes into it and where to learn it."])
         for _, line in ipairs(detail.values) do line:Hide() end
         for _, line in ipairs(detail.materials) do line:Hide() end
         detail.worthHeading:Hide()
         detail.materialsHeading:Hide()
         detail.learnHeading:Hide()
         detail.learn:SetText("")
-        detail.note:SetText("Values use the prices you have scanned. Recipes come from Classic's data, "
-            .. "corrected by what your profession windows and recipe tooltips show.")
+        detail.note:SetText(L["Values use the prices you have scanned. Recipes come from Classic's data, corrected by what your profession windows and recipe tooltips show."])
     end
 
     local function ShowEntry(detail, entry)
@@ -309,34 +311,34 @@ local function NewView(opts)
                 and ("%s %d"):format(record.profession, record.skill) or record.profession
         end
         local knownBy = ns.RecipeBook:KnownByText(record)
-        parts[#parts + 1] = knownBy and ("known by " .. knownBy) or "nobody on this account knows it"
+        parts[#parts + 1] = knownBy and L.Format("known by %s", knownBy) or L["nobody on this account knows it"]
         detail.subtitle:SetText(table.concat(parts, "  ·  "))
 
         detail.worthHeading:Show()
         local rows = {}
-        rows[#rows + 1] = { "Cost to make", value.cost and Money(value.cost) or "not scanned",
+        rows[#rows + 1] = { L["Cost to make"], value.cost and Money(value.cost) or L["not scanned"],
             value.cost and "text" or "dim" }
         if record.outputItemID then
-            rows[#rows + 1] = { "Sells for, after the cut",
-                returns.auction and Money(returns.auction) or "not scanned", returns.auction and "text" or "dim" }
-            if returns.disenchant then rows[#rows + 1] = { "Disenchants for", Money(returns.disenchant) } end
-            if returns.vendor then rows[#rows + 1] = { "Vendors for", Money(returns.vendor) } end
+            rows[#rows + 1] = { L["Sells for, after the cut"],
+                returns.auction and Money(returns.auction) or L["not scanned"], returns.auction and "text" or "dim" }
+            if returns.disenchant then rows[#rows + 1] = { L["Disenchants for"], Money(returns.disenchant) } end
+            if returns.vendor then rows[#rows + 1] = { L["Vendors for"], Money(returns.vendor) } end
             if value.profit then
                 rows[#rows + 1] = { value.backWay and value.backWay ~= "auction"
-                        and ("Profit, by %s"):format(value.backWay) or "Profit",
+                        and (BACK_WAY[value.backWay] or L["Profit"]) or L["Profit"],
                     Money(value.profit), value.profit >= 0 and "profit" or "loss" }
             end
         else
-            rows[#rows + 1] = { "Makes", "no item to sell", "dim" }
+            rows[#rows + 1] = { L["Makes"], L["no item to sell"], "dim" }
         end
         if value.price then
-            rows[#rows + 1] = { "Recipe, " .. (PRICE_HOW[value.priceHow] or ""), Money(value.price) }
+            rows[#rows + 1] = { PRICE_HOW[value.priceHow] or L["Recipe"], Money(value.price) }
         end
         if value.payback then
-            rows[#rows + 1] = { "Pays for itself after", ("%d craft%s"):format(value.payback,
-                value.payback == 1 and "" or "s"), "profit" }
+            rows[#rows + 1] = { L["Pays for itself after"], value.payback == 1 and L["1 craft"]
+                or L.Format("%d crafts", value.payback), "profit" }
         elseif value.profit and value.profit <= 0 then
-            rows[#rows + 1] = { "Pays for itself", "not at today's prices", "warn" }
+            rows[#rows + 1] = { L["Pays for itself"], L["not at today's prices"], "warn" }
         end
         for index, line in ipairs(detail.values) do
             local row = rows[index]
@@ -350,10 +352,10 @@ local function NewView(opts)
             if reagent then
                 local name = Util.GetItemLabel(reagent.itemID)
                 if index == MATERIAL_LINES and #reagents > MATERIAL_LINES then
-                    SetLine(line, ("and %d more"):format(#reagents - MATERIAL_LINES + 1), "", "dim")
+                    SetLine(line, L.Format("and %d more", #reagents - MATERIAL_LINES + 1), "", "dim")
                 else
                     SetLine(line, ("%dx %s"):format(reagent.quantity, Util.Uncolored(name)),
-                        reagent.lineCost and Money(reagent.lineCost) or "not scanned",
+                        reagent.lineCost and Money(reagent.lineCost) or L["not scanned"],
                         reagent.lineCost and "text" or "dim")
                 end
             else
@@ -366,9 +368,9 @@ local function NewView(opts)
         local shown = {}
         for index = 1, math.min(#where, LEARN_LINES) do shown[index] = where[index] end
         if #where > LEARN_LINES then
-            shown[LEARN_LINES] = ("and %d more places"):format(#where - LEARN_LINES + 1)
+            shown[LEARN_LINES] = L.Format("and %d more places", #where - LEARN_LINES + 1)
         end
-        detail.learn:SetText(#shown > 0 and table.concat(shown, "\n") or "Not known yet.")
+        detail.learn:SetText(#shown > 0 and table.concat(shown, "\n") or L["Not known yet."])
         detail.note:SetText("")
     end
 
@@ -379,7 +381,7 @@ local function NewView(opts)
     --- The professions to offer: those of the character playing first, so the
     --- view opens on one of them, then the rest.
     local function ProfessionOptions()
-        local options = { { value = ALL, text = "All professions" } }
+        local options = { { value = ALL, text = L["All professions"] } }
         local mine, first = {}, nil
 
         if ns.Recipes and ns.Recipes.GetLearnedProfessions then
@@ -401,7 +403,7 @@ local function NewView(opts)
             if not mine[name] then others[#others + 1] = { value = name, text = name } end
         end
         if first and #others > 0 then
-            options[#options + 1] = { text = "Other professions", header = true }
+            options[#options + 1] = { text = L["Other professions"], header = true }
         end
         for _, option in ipairs(others) do options[#options + 1] = option end
 
@@ -439,9 +441,9 @@ local function NewView(opts)
         widgets.empty:SetShown(#rows == 0)
         if #rows == 0 then
             if state.search ~= "" then
-                widgets.empty:SetText(("Nothing matching \"%s\"."):format(state.search))
+                widgets.empty:SetText(L.Format("Nothing matching \"%s\".", state.search))
             else
-                widgets.empty:SetText("You know every recipe of this profession.")
+                widgets.empty:SetText(L["You know every recipe of this profession."])
             end
         end
 
@@ -449,8 +451,9 @@ local function NewView(opts)
         for _, entry in ipairs(rows) do
             if entry.profit and entry.profit > 0 then paying = paying + 1 end
         end
-        widgets.summary:SetText(("%d recipe%s  ·  %d make a profit at today's prices"):format(
-            #rows, #rows == 1 and "" or "s", paying))
+        widgets.summary:SetText(#rows == 1
+            and L.Format("%d recipe  ·  %d make a profit at today's prices", #rows, paying)
+            or L.Format("%d recipes  ·  %d make a profit at today's prices", #rows, paying))
 
         local selected
         if state.selected then
@@ -492,7 +495,7 @@ local function NewView(opts)
         local right = -DETAIL_WIDTH - 16
 
         -- Dropdown, search, tick box: the order every tab uses.
-        local profession = Widgets.CreateDropdown(view, { { value = ALL, text = "All professions" } },
+        local profession = Widgets.CreateDropdown(view, { { value = ALL, text = L["All professions"] } },
             function(value)
                 state.profession = value
                 state.selected = nil
@@ -501,14 +504,14 @@ local function NewView(opts)
         profession:SetPoint("TOPLEFT", 8, -8)
         widgets.profession = profession
 
-        local search = Widgets.CreateSearchBox(view, "Search recipes", function(text)
+        local search = Widgets.CreateSearchBox(view, L["Search recipes"], function(text)
             state.search = text or ""
             instance.Refresh()
         end)
         search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
         search:SetWidth(Widgets.SEARCH_WIDTH)
 
-        local known = Widgets.CreateCheckbox(view, "Show learned too", function(checked)
+        local known = Widgets.CreateCheckbox(view, L["Show learned too"], function(checked)
             state.includeKnown = checked and true or false
             instance.Refresh()
         end, false)
@@ -521,7 +524,7 @@ local function NewView(opts)
 
         local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
         nameHeading:SetPoint("LEFT", 30, 0)
-        nameHeading:SetText("RECIPE")
+        nameHeading:SetText(L["RECIPE"])
 
         headings.cells = {}
         for _, column in ipairs(COLUMNS) do
@@ -541,7 +544,7 @@ local function NewView(opts)
             disenchant = function(entry) return entry.disenchant end,
             profit = function(entry) return entry.profit end,
             price = function(entry) return entry.price end,
-            learn = function(entry) return entry.known and "Known" or entry.learn end,
+            learn = function(entry) return entry.known and L["Known"] or entry.learn end,
         }, function() instance.Refresh() end)
         if widgets.sorter then widgets.sorter:SetText({ "name", "learn" }) end
 
@@ -681,8 +684,8 @@ function RecipeBookView.WithSwitch(spec)
     local function BuildSwitch(container)
         local definitions = {
             { key = spec.mainKey, text = spec.mainText, tip = spec.mainTip },
-            { key = "learn", text = "RECIPES TO LEARN",
-              tip = "Recipes you have not learned, and what each is worth" },
+            { key = "learn", text = L["RECIPES TO LEARN"],
+              tip = L["Recipes you have not learned, and what each is worth"] },
         }
         local built, previous = {}, nil
 

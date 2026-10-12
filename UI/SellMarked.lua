@@ -21,6 +21,7 @@
 -- every marked item (up to 12) instead of one.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local SellMarked = ns.NewModule("SellMarked")
 
@@ -218,33 +219,32 @@ function SellMarked:Update()
 
     local text
     if self.selling then
-        text = "Selling..."
+        text = L["Selling..."]
     elseif room <= 0 then
-        text = "Sold 12 this visit"
+        text = L["Sold 12 this visit"]
     elseif not itemID then
-        text = "Sell marked (none in bags)"
+        text = L["Sell marked (none in bags)"]
     elseif self:CanSellAll() then
-        text = ("Sell marked (%d)"):format(math.min(total, room))
+        text = L.Format("Sell marked (%d)", math.min(total, room))
     else
         local name = Util.Uncolored(Util.GetItemLabel(itemID))
         name = name:match("^%[(.*)%]$") or name
-        text = ("Sell %s"):format(name)
-        if count and count > 1 then text = ("%s x%d"):format(text, count) end
+        text = (count and count > 1) and L.Format("Sell %s x%d", name, count) or L.Format("Sell %s", name)
     end
     button.label:SetText(text)
 
     local width = ns.Theme.TextWidth(button.label) or 0
     button:SetWidth(math.max(BUTTON_WIDTH, math.ceil(width + BUTTON_PAD * 2)))
 
-    local lines = { ("Sells what your craft queue made on Vendor: %d marked."):format(total) }
+    local lines = { L.Format("Sells what your craft queue made on Vendor: %d marked.", total) }
     if room <= 0 then
-        lines[#lines + 1] = "That is 12 this visit, all still in the vendor's buyback. Walk away and back to sell more."
+        lines[#lines + 1] = L["That is 12 this visit, all still in the vendor's buyback. Walk away and back to sell more."]
     elseif self:CanSellAll() then
-        lines[#lines + 1] = ("One click sells up to %d, and every sale can be bought back."):format(room)
+        lines[#lines + 1] = L.Format("One click sells up to %d, and every sale can be bought back.", room)
     else
-        lines[#lines + 1] = "Each click sells one stack, up to 12 a visit, so buyback can still undo any of them."
+        lines[#lines + 1] = L["Each click sells one stack, up to 12 a visit, so buyback can still undo any of them."]
     end
-    lines[#lines + 1] = "Never sells blue or better, anything worn, or anything the queue did not make."
+    lines[#lines + 1] = L["Never sells blue or better, anything worn, or anything the queue did not make."]
     button.tooltipText = table.concat(lines, "\n")
 
     -- Beside the Buy materials button when it is there, else on the vendor
@@ -292,22 +292,22 @@ end
 --- Sell the cheapest grey from addon code and keep whether the game let it.
 function SellMarked:Test()
     if not MerchantOpen() then
-        ns.Print("open a vendor first, then run this again. It sells your cheapest grey item to see whether the game lets the addon sell.")
+        ns.Print(L["open a vendor first, then run this again. It sells your cheapest grey item to see whether the game lets the addon sell."])
         return
     end
     if not Util.HasFunction("C_Container.UseContainerItem") then
-        ns.Print("this version of the game has no C_Container.UseContainerItem.")
+        ns.Print(L["this version of the game has no C_Container.UseContainerItem."])
         return
     end
 
     local grey = CheapestGrey()
     if not grey then
-        ns.Print("no grey item in your bags to test with. Carry one and try again.")
+        ns.Print(L["no grey item in your bags to test with. Carry one and try again."])
         return
     end
 
     local moneyBefore = GetMoney and GetMoney() or 0
-    ns.Print(("trying to sell %s (%s) from addon code..."):format(Util.GetItemLabel(grey.itemID),
+    ns.Print(L.Format("trying to sell %s (%s) from addon code...", Util.GetItemLabel(grey.itemID),
         Util.FormatMoney(grey.worth)))
 
     local called, err = pcall(C_Container.UseContainerItem, grey.bag, grey.slot)
@@ -322,10 +322,10 @@ function SellMarked:Test()
             error = (not called and err) and tostring(err):sub(1, 120) or nil }
 
         if works then
-            ns.Print("|cff4fd18cselling from the addon works|r: Sell marked now sells every marked item in one click (up to 12 a visit).")
+            ns.Print(L["|cff4fd18cselling from the addon works|r: Sell marked now sells every marked item in one click (up to 12 a visit)."])
         else
-            ns.Print(("|cffe6614fselling from the addon is blocked|r (%s). Sell marked stays at one click a stack."):format(
-                not called and "the game refused the call" or not gone and "the item stayed" or "no gold came in"))
+            ns.Print(L.Format("|cffe6614fselling from the addon is blocked|r (%s). Sell marked stays at one click a stack.",
+                not called and L["the game refused the call"] or not gone and L["the item stayed"] or L["no gold came in"]))
         end
         SellMarked:Update()
     end)
@@ -370,5 +370,5 @@ function SellMarked:OnEnable()
     ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function() SellMarked:Update() end)
 end
 
-ns.RegisterCommand("selltest", "at a vendor, sell your cheapest grey item to test whether the addon may sell",
+ns.RegisterCommand("selltest", L["at a vendor, sell your cheapest grey item to test whether the addon may sell"],
     function() SellMarked:Test() end)

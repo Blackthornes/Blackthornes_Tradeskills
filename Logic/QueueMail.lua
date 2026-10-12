@@ -21,6 +21,7 @@
 -- alt makes it, and the record is what says the result still has to go back.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local QueueMail = ns.NewModule("QueueMail")
 
@@ -762,14 +763,14 @@ function QueueMail.PutMoney(copper)
     local cod = _G.SendMailCODButton
     if cod and cod.GetChecked then
         local ok, checked = pcall(cod.GetChecked, cod)
-        if ok and checked then return false, "the mail is set to COD" end
+        if ok and checked then return false, L["the mail is set to COD"] end
     end
     local okMoney, purse = pcall(function() return tonumber(GetMoney()) end)
     if okMoney and purse and purse < copper + QueueMail.POSTAGE then
-        return false, "not enough gold on you"
+        return false, L["not enough gold on you"]
     end
     local frame = _G.SendMailMoney
-    if not frame then return false, "the mail has no gold box" end
+    if not frame then return false, L["the mail has no gold box"] end
     if type(_G.MoneyInputFrame_SetCopper) == "function"
         and pcall(_G.MoneyInputFrame_SetCopper, frame, copper) then
         return true
@@ -777,7 +778,7 @@ function QueueMail.PutMoney(copper)
     local gold = _G.SendMailMoneyGold or frame.gold
     local silver = _G.SendMailMoneySilver or frame.silver
     local bronze = _G.SendMailMoneyCopper or frame.copper
-    if not (gold and silver and bronze) then return false, "the mail has no gold box" end
+    if not (gold and silver and bronze) then return false, L["the mail has no gold box"] end
     Call(gold.SetText, gold, tostring(math.floor(copper / 10000)))
     Call(silver.SetText, silver, tostring(math.floor(copper / 100) % 100))
     Call(bronze.SetText, bronze, tostring(copper % 100))
@@ -802,11 +803,11 @@ end
 -- @param onDone function(attached, leftOver) when the last item is in
 -- @return true when it started, or false and why
 function QueueMail:Fill(delivery, onDone)
-    if self.filling or self.taking then return false, "still filling the last mail" end
-    if InCombatLockdown and InCombatLockdown() then return false, "not in combat" end
+    if self.filling or self.taking then return false, L["still filling the last mail"] end
+    if InCombatLockdown and InCombatLockdown() then return false, L["not in combat"] end
 
     local nameBox = _G.SendMailNameEditBox
-    if not nameBox then return false, "the mailbox is not open" end
+    if not nameBox then return false, L["the mailbox is not open"] end
 
     -- The Send Mail tab. Its own click handler where the client has it.
     if _G.MailFrameTab2 and _G.MailFrameTab_OnClick then
@@ -1042,14 +1043,14 @@ end
 -- @param onDone function(units taken, stacks taken) when it stops
 -- @return true when it started, or false and why
 function QueueMail:TakeBatch(onDone)
-    if self.taking or self.filling then return false, "still busy with the last one" end
-    if not ns.Mail or not ns.Mail.isOpen then return false, "the mailbox is not open" end
+    if self.taking or self.filling then return false, L["still busy with the last one"] end
+    if not ns.Mail or not ns.Mail.isOpen then return false, L["the mailbox is not open"] end
     if type(_G.TakeInboxItem) ~= "function" then
-        return false, "this version of the game does not let addons take mail"
+        return false, L["this version of the game does not let addons take mail"]
     end
 
     local batch = self:GetMailBatch()
-    if not batch or #batch.items == 0 then return false, "nothing to take that fits" end
+    if not batch or #batch.items == 0 then return false, L["nothing to take that fits"] end
 
     local left, wanted = {}, {}
     for _, item in ipairs(batch.items) do

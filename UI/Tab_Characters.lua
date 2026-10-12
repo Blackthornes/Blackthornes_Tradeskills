@@ -7,6 +7,7 @@
 -- the data itself rather than left to be assumed current.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -23,8 +24,8 @@ local widgets = {}
 -- The tab has two views: the characters themselves, and every character's
 -- bank in one list (UI/BankView.lua).
 local VIEWS = {
-    { key = "characters", text = "CHARACTERS" },
-    { key = "bank",       text = "BANK" },
+    { key = "characters", text = L["CHARACTERS"] },
+    { key = "bank",       text = L["BANK"] },
 }
 
 --------------------------------------------------------------------------------
@@ -67,23 +68,23 @@ local function UpdateRow(row, entry)
     for count = #learned, 1, -1 do
         local shown = table.concat(learned, "  ·  ", 1, count)
         texts[#texts + 1] = count < #learned
-            and ("%s  ·  +%d more"):format(shown, #learned - count) or shown
+            and L.Format("%s  ·  +%d more", shown, #learned - count) or shown
     end
 
-    local professions = Theme.FitText(row.professions, #texts > 0 and texts or { "no professions recorded" })
+    local professions = Theme.FitText(row.professions, #texts > 0 and texts or { L["no professions recorded"] })
     row.professionsCut = #learned > 0 and professions ~= texts[1] and learned or nil
 
     row.gold:SetText(entry.gold and Util.FormatMoney(entry.gold, { short = true }) or "--")
 
     if entry.isCurrent then
-        row.freshness:SetText("this character")
+        row.freshness:SetText(L["this character"])
         row.freshness:SetTextColor(Theme.Unpack("profit"))
     else
         local age = entry.inventoryAt and (time() - entry.inventoryAt)
-        local seen = age and ("seen " .. Util.FormatAgeAgo(age)) or "bags never read"
+        local seen = age and L.Format("seen %s", Util.FormatAgeAgo(age)) or L["bags never read"]
         -- Shared from another account of yours (Settings, Sharing).
-        if entry.linkedFrom then seen = "other account  ·  " .. seen end
-        Theme.FitText(row.freshness, { ("%d recipes  ·  %s"):format(entry.recipeCount, seen), seen })
+        if entry.linkedFrom then seen = L.Format("other account  ·  %s", seen) end
+        Theme.FitText(row.freshness, { L.Format("%d recipes  ·  %s", entry.recipeCount, seen), seen })
         row.freshness:SetTextColor(Theme.Unpack("dim"))
     end
 end
@@ -126,7 +127,7 @@ local function BuildDetail(parent)
 
     local heading = Theme.CreateLabel(detail, "tiny", "dim")
     heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -14)
-    heading:SetText("BEST CRAFTS ON THIS CHARACTER")
+    heading:SetText(L["BEST CRAFTS ON THIS CHARACTER"])
     Theme.StyleHeading(heading, detail)
     detail.heading = heading
 
@@ -157,7 +158,7 @@ local function BuildDetail(parent)
     detail.dataAge:SetWordWrap(true)
 
     -- Removing a character is destructive, so it arms first.
-    detail.forget = Widgets.CreateButton(detail, "Forget character", function()
+    detail.forget = Widgets.CreateButton(detail, L["Forget character"], function()
         local button = detail.forget
         if not state.selected then return end
 
@@ -166,7 +167,7 @@ local function BuildDetail(parent)
         if button.armed and button.armed == state.selected.key then
             ns.Recipes:ForgetCharacter(state.selected.key)
             button.armed = false
-            button:SetText("Forget character")
+            button:SetText(L["Forget character"])
             button:SetConfirming(false)
 
             state.selected = nil
@@ -176,26 +177,26 @@ local function BuildDetail(parent)
 
         local armedFor = state.selected.key
         button.armed = armedFor
-        button:SetText("Really forget?")
+        button:SetText(L["Really forget?"])
         -- Red while armed, like the craft pane's Clear queue.
         button:SetConfirming(true)
 
         C_Timer.After(4, function()
             if button.armed == armedFor then
                 button.armed = false
-                button:SetText("Forget character")
+                button:SetText(L["Forget character"])
                 button:SetConfirming(false)
             end
         end)
     end, { width = 140, height = 22,
-           tooltip = "Delete this character's saved recipes and inventory" })
+           tooltip = L["Delete this character's saved recipes and inventory"] })
     detail.forget:SetPoint("BOTTOMLEFT", 12, 14)
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
     empty:SetWidth(260)
     empty:SetWordWrap(true)
-    empty:SetText("Select a character to see what they can make")
+    empty:SetText(L["Select a character to see what they can make"])
     detail.empty = empty
 
     return detail
@@ -217,7 +218,7 @@ local function UpdateDetail(entry)
     -- Showing another character disarms the button.
     if detail.forget.armed and (not entry or detail.forget.armed ~= entry.key) then
         detail.forget.armed = false
-        detail.forget:SetText("Forget character")
+        detail.forget:SetText(L["Forget character"])
         detail.forget:SetConfirming(false)
     end
 
@@ -228,9 +229,9 @@ local function UpdateDetail(entry)
     if not shown then return end
 
     detail.title:SetText(entry.name)
-    detail.subtitle:SetText(("%s  ·  %s  ·  %d recipes"):format(
+    detail.subtitle:SetText(L.Format("%s  ·  %s  ·  %d recipes",
         entry.realm or "?",
-        entry.gold and Util.FormatMoney(entry.gold, { short = true }) or "unknown gold",
+        entry.gold and Util.FormatMoney(entry.gold, { short = true }) or L["unknown gold"],
         entry.recipeCount))
 
     -- Rank this character's own recipes, against their own bags.
@@ -261,8 +262,8 @@ local function UpdateDetail(entry)
         -- A character with no recipes read needs a profession window
         -- opened, not a scan.
         detail.lines[1].name:SetText((entry.recipeCount or 0) == 0
-            and "No recipes read. Open a profession."
-            or "Nothing with a price yet")
+            and L["No recipes read. Open a profession."]
+            or L["Nothing with a price yet"])
         detail.lines[1].name:SetTextColor(Theme.Unpack("dim"))
         detail.lines[1].profit:SetText("")
     else
@@ -282,12 +283,12 @@ local function UpdateDetail(entry)
     end
 
     if entry.isCurrent then
-        detail.dataAge:SetText("Live data for the character you are playing.")
+        detail.dataAge:SetText(L["Live data for the character you are playing."])
     else
         local inventoryAge = entry.inventoryAt and (time() - entry.inventoryAt)
         local bankAge = entry.bankAt and (time() - entry.bankAt)
 
-        detail.dataAge:SetText(("Bags read %s. Bank read %s. Figures are from the last time this character was played."):format(
+        detail.dataAge:SetText(L.Format("Bags read %s. Bank read %s. Figures are from the last time this character was played.",
             Util.FormatAgeAgo(inventoryAge),
             Util.FormatAgeAgo(bankAge)))
     end
@@ -305,7 +306,7 @@ local function RefreshCharacters()
 
     widgets.emptyLabel:SetShown(#characters == 0)
     if #characters == 0 then
-        widgets.emptyLabel:SetText("No characters recorded yet.")
+        widgets.emptyLabel:SetText(L["No characters recorded yet."])
     end
 
     local totalGold, totalRecipes = 0, 0
@@ -314,9 +315,13 @@ local function RefreshCharacters()
         totalRecipes = totalRecipes + entry.recipeCount
     end
 
-    widgets.summary:SetText(("%d character%s  ·  %s recipes known  ·  %s total"):format(
-        #characters, #characters == 1 and "" or "s",
-        Util.Comma(totalRecipes), Util.FormatMoney(totalGold, { short = true })))
+    if #characters == 1 then
+        widgets.summary:SetText(L.Format("%d character  ·  %s recipes known  ·  %s total",
+            #characters, Util.Comma(totalRecipes), Util.FormatMoney(totalGold, { short = true })))
+    else
+        widgets.summary:SetText(L.Format("%d characters  ·  %s recipes known  ·  %s total",
+            #characters, Util.Comma(totalRecipes), Util.FormatMoney(totalGold, { short = true })))
+    end
 
     -- Keep the detail on the same character across refreshes.
     if state.selected then
@@ -493,7 +498,7 @@ end
 
 UI:RegisterTab({
     key = "characters",
-    text = "Characters",
+    text = L["Characters"],
     order = 7,
     build = Build,
     refresh = Refresh,

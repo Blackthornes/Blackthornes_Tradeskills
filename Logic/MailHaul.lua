@@ -28,6 +28,7 @@
 -- gold total follows the purse, so neither counts it as collected.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local MailHaul = ns.NewModule("MailHaul")
 
@@ -770,24 +771,25 @@ end
 
 --- One line in chat, so the haul is on record even with the window off.
 function MailHaul:Announce(haul)
-    local parts = { ("Mail collected: %s"):format(Util.FormatMoney(haul.total)) }
+    local parts = { L.Format("Mail collected: %s", Util.FormatMoney(haul.total)) }
 
     if haul.salesCount > 0 then
-        parts[#parts + 1] = ("%d sale%s"):format(haul.salesCount, haul.salesCount == 1 and "" or "s")
+        parts[#parts + 1] = haul.salesCount == 1 and L.Format("%d sale", haul.salesCount)
+            or L.Format("%d sales", haul.salesCount)
     end
 
     if haul.best then
-        parts[#parts + 1] = ("best was %s for %s"):format(haul.best.name or "an item",
+        parts[#parts + 1] = L.Format("best was %s for %s", haul.best.name or L["an item"],
             Util.FormatMoney(haul.best.amount))
     end
 
     ns.Print(table.concat(parts, ", ") .. ".")
 
     if haul.recordHaul then
-        ns.PrintRaw(("  |c%sNew best haul!|r Your old best was %s."):format(
+        ns.PrintRaw("  " .. L.Format("|c%sNew best haul!|r Your old best was %s.",
             ns.COLORS.accent, Util.FormatMoney(haul.previousBest)))
     elseif haul.recordSale then
-        ns.PrintRaw(("  |c%sYour best sale ever!|r"):format(ns.COLORS.accent))
+        ns.PrintRaw("  " .. L.Format("|c%sYour best sale ever!|r", ns.COLORS.accent))
     end
 end
 
@@ -881,7 +883,7 @@ function MailHaul:Sample()
     }
 end
 
-ns.RegisterCommand("haul", "[test|log]: show the report from your last mailbox visit (test: a made-up one, log: what was counted)", function(args)
+ns.RegisterCommand("haul", L["[test|log]: show the report from your last mailbox visit (test: a made-up one, log: what was counted)"], function(args)
     local word = (args or ""):lower():match("^%s*(%S*)")
 
     if not ns.MailReport then return end
@@ -894,7 +896,7 @@ ns.RegisterCommand("haul", "[test|log]: show the report from your last mailbox v
     if word == "log" then
         local log = (MailHaul.visit and MailHaul.visit.log) or MailHaul.lastLog
         if not log or #log == 0 then
-            ns.Print("no mailbox visit to show yet. Open a mailbox, take some mail, then try again.")
+            ns.Print(L["no mailbox visit to show yet. Open a mailbox, take some mail, then try again."])
             return
         end
         ns.Print(("mailbox visit, reading by reading (%d lines):"):format(#log))
@@ -909,7 +911,7 @@ ns.RegisterCommand("haul", "[test|log]: show the report from your last mailbox v
     end
 
     if not haul then
-        ns.Print("no mailbox visits recorded yet. Collect some mail and the report opens when you walk away. /bts haul test shows a sample.")
+        ns.Print(L["no mailbox visits recorded yet. Collect some mail and the report opens when you walk away. /bts haul test shows a sample."])
         return
     end
 

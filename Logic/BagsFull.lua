@@ -8,6 +8,7 @@
 -- last free slot goes, not while the bags stay full, and never at login.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local BagsFull = ns.NewModule("BagsFull")
 
@@ -44,7 +45,7 @@ function BagsFull:Check()
 end
 
 function BagsFull:Warn()
-    ns.Print("your bags are full")
+    ns.Print(L["your bags are full"])
 
     -- Settings: SOUNDS, Bags are full.
     if ns.Config:Get("bagsFullSound") == false or type(PlaySound) ~= "function" then return end

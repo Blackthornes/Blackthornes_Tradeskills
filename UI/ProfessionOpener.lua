@@ -16,6 +16,7 @@
 -- other rule for secure frames.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Opener = ns.NewModule("ProfessionOpener")
 
@@ -271,7 +272,7 @@ function Opener:Arm(anchor, profession, recipeID)
         end
     end
 
-    overlay.label:SetText(("Open %s"):format(profession.name))
+    overlay.label:SetText(L.Format("Open %s", profession.name))
 
     if overlay:GetAttribute("spell") ~= profession.spell then
         overlay:SetAttribute("type", "spell")
@@ -335,8 +336,8 @@ function Opener:OnClicked()
         end
         Opener.pending = nil
 
-        ns.Warn(("clicked Open %s, but no profession window opened. "
-            .. "Type /bts openprof and send the lines it prints."):format(profession.name))
+        ns.Warn(L.Format("clicked Open %s, but no profession window opened. Type /bts openprof and send the lines it prints.",
+            profession.name))
         Opener:DescribeLastClick()
     end)
 end
@@ -346,8 +347,8 @@ function Opener:OnTradeSkillShow()
     if not pending then return end
     self.pending = nil
 
-    ns.Print(("opened your %s window. Click the button again to craft.")
-        :format(pending.profession.name))
+    ns.Print(L.Format("opened your %s window. Click the button again to craft.",
+        pending.profession.name))
 end
 
 function Opener:OnEnable()
@@ -414,12 +415,11 @@ end
 -- button did not catch it. Say why, as far as we can tell, and put it back.
 function Opener:MissedClick()
     if InCombat() then
-        ns.Print("the Queue cannot open a profession during combat. Open it yourself, or try again after the fight.")
+        ns.Print(L["the Queue cannot open a profession during combat. Open it yourself, or try again after the fight."])
         return
     end
 
-    ns.Warn("that click missed the Open button. Click it again; if it misses twice, "
-        .. "type /bts openprof and send the lines it prints.")
+    ns.Warn(L["that click missed the Open button. Click it again; if it misses twice, type /bts openprof and send the lines it prints."])
     DescribePlacement()
     self:DescribeLastClick()
 
@@ -450,4 +450,4 @@ end
 -- opened nothing for 2945, and the game then reported "Interface action
 -- failed because of an AddOn" (most likely the 165 try). The secure button is the
 -- only way, so this command now only reports on it.
-ns.RegisterCommand("openprof", "check the Queue tab's Open profession button", Describe)
+ns.RegisterCommand("openprof", L["check the Queue tab's Open profession button"], Describe)
