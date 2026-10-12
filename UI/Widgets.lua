@@ -1959,18 +1959,84 @@ function Widgets.RowItemID(data, searchItem)
     end
 end
 
---- Shift held at the auction house: search for the row's item.
--- @return true when the click was taken for a search
+--- Put an item's link in the chat box being typed in, as a shift-click on
+--- the bags does. Nothing when no chat box is open.
+-- @return true when the link went in
+function Widgets.LinkToChat(itemID, link)
+    if type(link) ~= "string" and itemID and ns.Util and ns.Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, _, itemLink = pcall(C_Item.GetItemInfo, itemID)
+        if ok then link = itemLink end
+    end
+    if type(link) ~= "string" then return false end
+
+    local util = _G.ChatFrameUtil
+    local insert = (type(util) == "table" and type(util.InsertLink) == "function" and util.InsertLink)
+        or _G.ChatEdit_InsertLink
+    if type(insert) ~= "function" then return false end
+
+    local ok, inserted = pcall(insert, link)
+    return ok and inserted and true or false
+end
+
+--- One shift-click for every item the addon shows (Trent, 2026-10-12):
+--- with the auction house open it searches the house for the item, else it
+--- puts the item's link in the chat box being typed in, as the bags do.
+-- @return true when the click was taken
+function Widgets.ItemShiftClick(itemID, link)
+    if not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
+    itemID = tonumber(itemID)
+    if not itemID and type(link) == "string" then itemID = tonumber(link:match("item:(%d+)")) end
+    if not itemID then return false end
+
+    if ns.Scanner and ns.Scanner.isAuctionHouseOpen then
+        if not (ns.UI and ns.UI.SearchAuctionHouse) then return false end
+        ns.UI:SearchAuctionHouse(itemID)
+        return true
+    end
+
+    return Widgets.LinkToChat(itemID, link)
+end
+
+--- Shift-click on a list row: search the auction house for its item, or
+--- link it in chat with the house closed.
+-- @return true when the click was taken
 function Widgets.ShiftClickSearch(data, searchItem)
     if not (IsShiftKeyDown and IsShiftKeyDown()) then return false end
-    if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
-    if not (ns.UI and ns.UI.SearchAuctionHouse) then return false end
 
     local itemID = Widgets.RowItemID(data, searchItem)
     if not itemID then return false end
 
-    ns.UI:SearchAuctionHouse(itemID)
-    return true
+    local link = type(data.link) == "string" and data.link or nil
+    return Widgets.ItemShiftClick(itemID, link)
+end
+
+--- A spot over an item icon (and, with `cover`, the line it sits on) that
+--- shows the item's tooltip and takes the shift-click: for the icons in
+--- detail panes and reports, which are not list rows. It reads the item
+--- Theme.SetItemIcon last gave the icon, and shows only with the icon.
+function Widgets.ItemHotspot(icon, cover)
+    if not icon then return nil end
+    local spot = CreateFrame("Button", nil, icon:GetParent())
+    spot:SetPoint("TOPLEFT", icon, "TOPLEFT")
+    spot:SetPoint("BOTTOMRIGHT", cover or icon, "BOTTOMRIGHT")
+    if spot.RegisterForClicks then spot:RegisterForClicks("LeftButtonUp") end
+
+    spot:SetScript("OnEnter", function(self)
+        local itemID, link = Theme.IconItem(icon)
+        if not itemID then return end
+        Widgets.ShowItemTooltip(self, "ANCHOR_RIGHT", itemID, nil, link)
+        if ns.Scanner and ns.Scanner.isAuctionHouseOpen then
+            GameTooltip:AddLine(L["Shift-click to search the auction house"], 0.6, 0.6, 0.6)
+        end
+        GameTooltip:Show()
+    end)
+    spot:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    spot:SetScript("OnClick", function()
+        Widgets.ItemShiftClick(Theme.IconItem(icon))
+    end)
+
+    Theme.SetIconSpot(icon, spot)
+    return spot
 end
 
 function Widgets.CreateScrollList(parent, opts)

@@ -552,6 +552,7 @@ local function BuildDetail(parent)
     local icon = Theme.CreateItemIcon(detail, 30)
     icon:SetPoint("TOPLEFT", 12, -12)
     detail.icon = icon
+    if Widgets.ItemHotspot then Widgets.ItemHotspot(icon) end
 
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 50, -12)
@@ -1073,6 +1074,7 @@ function UpdateDetail(analysis)
 
             local icon = Theme.CreateItemIcon(frame, 14)
             icon:SetPoint("LEFT", 0, 0)
+            if Widgets.ItemHotspot then Widgets.ItemHotspot(icon, frame) end
 
             local name = Theme.CreateLabel(frame, "small", "text")
             name:SetPoint("LEFT", 18, 0)

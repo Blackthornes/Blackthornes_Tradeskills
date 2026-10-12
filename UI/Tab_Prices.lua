@@ -577,6 +577,7 @@ local function BuildDetail(parent)
     local icon = Theme.CreateItemIcon(detail, 30)
     icon:SetPoint("TOPLEFT", 12, -12)
     detail.icon = icon
+    if Widgets.ItemHotspot then Widgets.ItemHotspot(icon) end
 
     -- The same star as the rows', at the pane's top right.
     detail.star = CreateStar(detail, 18, function() return state.selected and state.selected.itemID end)
