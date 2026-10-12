@@ -5,6 +5,14 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.53.0", lines = {
+        "A new What's New window shows what changed after each update.",
+        "Tradeskills now tracks your transmute and other cooldowns on every character.",
+        "The Level Up tab tells you which recipe to learn next and shows you the way to the trainer.",
+        "Recipe levels and materials now match Forever.",
+        "Want to know when someone in Trade needs something you can make? Turn it on in Settings.",
+        "Shift-click any item to search for it on the auction house.",
+    } },
     { version = "0.52.0", lines = {
         "Tradeskills speaks Deutsch now if your game is in German.",
         "Got TradeSkillMaster or Auctionator? Their prices now fill in anything you haven't scanned yet.",
@@ -13,10 +21,5 @@ ns.WHATS_NEW = {
     } },
     { version = "0.51.0", lines = {
         "See how much you made from crafting, flipping, vendoring and disenchanting, all split out on the Sales tab.",
-    } },
-    { version = "0.50.0", lines = {
-        "Sold something? You'll hear an old cash register now. You can pick another sound or turn it off.",
-        "Crate and writ prices go blank when none are for sale.",
-        "Works on German game clients too.",
     } },
 }
