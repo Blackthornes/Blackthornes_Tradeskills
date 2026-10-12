@@ -1550,7 +1550,7 @@ local function Build(outer)
     widgets.guildStatus:SetWidth(COLUMN_WIDTH)
     widgets.guildStatus:SetWordWrap(true)
 
-    CreateSection(pages.sharing, 2, L["TRADESKILLMASTER"])
+    CreateSection(pages.sharing, 2, L["OTHER PRICE ADDONS"])
     local tsmRow = CreateRow(pages.sharing, 2, L["TSM prices"],
         L["When TradeSkillMaster is loaded, its prices fill in items that neither you nor your guildmates have priced. Your own scans always win."])
     widgets.tsmPrices = Widgets.CreateCheckbox(tsmRow, L["Enabled"], function(checked)
@@ -1564,6 +1564,20 @@ local function Build(outer)
     Place(pages.sharing, 2, widgets.tsmStatus, -4)
     widgets.tsmStatus:SetWidth(COLUMN_WIDTH)
     widgets.tsmStatus:SetWordWrap(true)
+
+    local auctionatorRow = CreateRow(pages.sharing, 2, L["Auctionator prices"],
+        L["When Auctionator is loaded, its prices from your own scans fill in items that nothing above has priced. Your own scans always win."])
+    widgets.auctionatorPrices = Widgets.CreateCheckbox(auctionatorRow, L["Enabled"], function(checked)
+        Config:Set("auctionatorPrices", checked)
+        if ns.AuctionatorPrices then ns.AuctionatorPrices:Forget() end
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.auctionatorPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    widgets.auctionatorStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
+    Place(pages.sharing, 2, widgets.auctionatorStatus, -4)
+    widgets.auctionatorStatus:SetWidth(COLUMN_WIDTH)
+    widgets.auctionatorStatus:SetWordWrap(true)
 
     -- Every setting at once, so it arms first like Clear price data.
     local resetButton
@@ -1903,6 +1917,8 @@ local function Refresh()
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")
+    widgets.auctionatorPrices:SetChecked(Config:Get("auctionatorPrices") ~= false)
+    widgets.auctionatorStatus:SetText(ns.AuctionatorPrices and ns.AuctionatorPrices:Describe() or "")
 
     local lastScan, capped = ns.Prices:GetLastScan()
 
