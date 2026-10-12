@@ -71,6 +71,7 @@ Logic\BagsFull.lua
 Logic\AccountLink.lua
 Logic\GuildPrices.lua
 Logic\TSMPrices.lua
+Logic\AuctionatorPrices.lua
 Logic\Butler.lua
 
 UI\Theme.lua
