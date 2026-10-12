@@ -358,6 +358,17 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   theirs is newer. So Farmer's `GetValue` can now answer from a guild
   price unless the player turned it off; still copper or nil.
 
+TradeSkillMaster (a player asked, the owner agreed 2026-10-12 and said TSM
+may be named in public for this, a second exception beside TomTom):
+`Logic/TSMPrices.lua` reads `TSM_API.GetCustomPriceValue("DBMarket" or
+"DBMinBuyout", "i:<itemID>")` inside a pcall, no TOC dependency, kept 60 s
+an item. `Prices:GetValue` asks it only when neither your scans nor guild
+prices have the item ("rival" never). "TSM prices" on the Sharing page
+(`tsmPrices`, on unless unticked, never rename it). So Farmer's, Equipment's
+and Butler's `GetValue` can answer from TSM too; still copper or nil. TSM's
+prices come from its desktop app, which may not cover Forever's realms; then
+it answers nil. Tested in `tools/test_tsmprices.lua`. Not yet seen in game.
+
 Farmer shares its own counts the same way (2026-10-11): its `Core/Comm.lua`
 and `Core/Serialize.lua` are copies of ours (prefix `BFRshare` instead of
 `BTSshare`, no test command, listening only while sharing is on), and it has
