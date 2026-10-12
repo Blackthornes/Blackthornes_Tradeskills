@@ -180,9 +180,14 @@ function RecipeBook:GetAll()
     end
     for _, list in pairs(itemsFor) do table.sort(list) end
 
+    -- Forever's own materials and item made, where its client differs from
+    -- Classic (Data/LearnSpots.lua); a profession window's still win.
+    local spots = ns.LEARN_SPOTS or {}
+    local foreverMaterials, foreverMade = spots.MATERIALS or {}, spots.MADE or {}
+
     for recipeID, row in pairs(book.RECIPES) do
         local reagents = {}
-        local materials = row[6] or {}
+        local materials = foreverMaterials[recipeID] or row[6] or {}
         for i = 1, #materials - 1, 2 do
             reagents[#reagents + 1] = { itemID = materials[i], quantity = materials[i + 1] }
         end
@@ -194,7 +199,7 @@ function RecipeBook:GetAll()
             skillLineID = row[1],
             profession = book.PROFESSIONS[row[1]],
             skill = row[2],
-            outputItemID = (row[3] or 0) ~= 0 and row[3] or nil,
+            outputItemID = foreverMade[recipeID] or ((row[3] or 0) ~= 0 and row[3] or nil),
             quantityMin = row[4] or 1,
             quantityMax = row[5] or row[4] or 1,
             reagents = reagents,

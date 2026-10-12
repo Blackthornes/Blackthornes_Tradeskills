@@ -3,6 +3,7 @@
 -- Learn next (the owner said build it, 2026-10-12). What must hold:
 --   1. Forever's skills are laid over the book (Data/LearnSpots.lua): the
 --      skill to learn, yellow and grey; Classic's is kept as classicSkill.
+--      Forever's materials and item made replace Classic's where they differ.
 --   2. The skill up colour of a recipe not learned comes from its yellow
 --      and grey.
 --   3. The list holds recipes the character playing has not learned that a
@@ -90,6 +91,8 @@ ns.LEARN_SPOTS = {
       { "Expert Ed", "Ironforge", 35, 35, "A", 225 },
     },
   },
+  MATERIALS = { [6] = { THREAD, 2 } },
+  MADE = { [6] = 206 },
   VENDORS = { ["Alli|Wetlands"] = { 25, 25 }, ["Hordey|Orgrimmar"] = { 1, 1 } },
 }
 
@@ -158,6 +161,12 @@ check("Classic's is kept", belt.classicSkill, 120)
 check("yellow", belt.yellow, 110)
 check("grey", belt.grey, 130)
 check("GetSkill answers Forever's", Book:GetSkill(3), 100)
+local cloak = Book:Get(6)
+check("Forever's materials replace Classic's", cloak.reagents[1].itemID, THREAD)
+check("with Forever's count", cloak.reagents[1].quantity, 2)
+check("only Forever's", #cloak.reagents, 1)
+check("Forever's item made", cloak.outputItemID, 206)
+check("a recipe Forever left alone keeps the book's", Book:Get(2).reagents[2].itemID, THREAD)
 check("ClassicLine maps the modern line", Book.ClassicLine(2945), 165)
 
 print("\nskill up colour")
