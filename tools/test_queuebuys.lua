@@ -142,4 +142,19 @@ check("reads as empty", not Queue:HasBuys() and Queue:GetShoppingList() ~= nil)
 worn[GAUNTLETS] = nil
 check("and makes the list when asked", Queue:EnsureBuy(CLOAK, 1, CLOAK) == true and #ns.db.queueBuys == 1)
 
+print("\nmaterials to learn a recipe and skill up (Learn next)")
+
+ns.db.queueBuys = {}
+selfKey = "Ana-Realm"
+bags[GAUNTLETS] = 1
+local learn = { recipeID = GAUNTLETS_RECIPE, name = "Gauntlets" }
+check("go on the list though one is owned", Queue:EnsureBuy(BAR, 40, nil, learn) == true)
+check("and stay on it", Line(BAR) and Line(BAR).needed == 40)
+check("saying the recipe they are for", Line(BAR).buys[1].forRecipe == GAUNTLETS_RECIPE
+    and Line(BAR).buys[1].forRecipeName == "Gauntlets")
+Queue:EnsureBuy(BAR, 40, nil, learn)
+check("a second click buys no more", #ns.db.queueBuys == 1)
+check("never an upgrade to buy", Queue:ForUpgrade(GAUNTLETS) == nil)
+bags[GAUNTLETS] = nil
+
 print(("\n%d checks passed"):format(checks))
