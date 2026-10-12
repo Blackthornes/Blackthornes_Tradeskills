@@ -395,6 +395,8 @@ local DEFAULTS = {
         -- Fill gaps with TradeSkillMaster's prices when it is loaded (asked
         -- 2026-10-12). See Logic/TSMPrices.lua.
         tsmPrices = true,
+        -- Then Auctionator's (asked 2026-10-12). See Logic/AuctionatorPrices.lua.
+        auctionatorPrices = true,
     },
 
     -- realmKey -> itemID -> price record
