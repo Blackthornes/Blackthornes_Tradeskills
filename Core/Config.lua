@@ -665,47 +665,38 @@ local function Repoint(from, to)
     end
 end
 
---- Bring this character's record under its GUID, once a session, the first
---- time the key is known. Nothing is ever deleted:
----
---- * Only an old record: it moves to the GUID, as it always has.
---- * Both (an old record left beside the GUID one; the cause of a player
----   being told to mail Medium Leather to the character they were on, and
----   of Butler filling a mail to itself, 2026-10-11): the old record moves
----   to `formerCharacters[old key]` (never rename it), kept whole and marked
----   `retiredInto = guid`, so every list of characters has this one once.
----   When it was stamped with this GUID, anything the GUID record lacks is
----   filled from it, and the queue's references to the old key follow.
----
---- An old record that is somebody else's (MightBeMine) is left where it is.
-function Config:AdoptLegacyCharacter(guid)
-    local characters = ns.db and ns.db.characters
-    if type(characters) ~= "table" then return end
+local function FoldName(text)
+    if type(text) ~= "string" then return nil end
+    text = text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
+    if text == "" then return nil end
+    return text:lower()
+end
 
-    local legacy = self:GetLegacyCharacterKey()
-    if legacy == guid then return end
-    local old = characters[legacy]
-    if type(old) ~= "table" then return end
+--- Is `old`, saved under `key`, an old record of this character? Records
+--- were once keyed by first name and realm, and some carry the whole name
+--- ("Ana Blackthorne") or sit under a key the legacy one no longer matches,
+--- so the key alone cannot say. A GUID key is a character of its own; a
+--- record already stamped is this one only with this GUID; otherwise the
+--- name it carries (or its key's) must be this character's first name, or
+--- first and last together, and MightBeMine must agree.
+local function OldRecordOfMine(key, old, mine, guid, names, legacy)
+    if key == guid or type(key) ~= "string" or type(old) ~= "table" then return false end
+    if key:find("^Player%-") then return false end
+    if old.guid ~= nil then return old.guid == guid end
+    if old.linkedFrom ~= nil or old.retiredInto ~= nil then return false end
+    local name = FoldName(old.name) or FoldName(key:match("^([^-]+)"))
+    if key ~= legacy and not (name and names[name]) then return false end
+    return MightBeMine(old, mine, guid)
+end
 
-    local mine = characters[guid]
-    if not MightBeMine(old, mine, guid) then return end
-
-    if mine == nil then
-        old.guid = guid
-        characters[guid] = old
-        characters[legacy] = nil
-        Repoint(legacy, guid)
-        self.adoptedFrom = legacy
-        return
-    end
-
-    if type(mine) ~= "table" then return end
+--- Move `old` (saved under `from`) to `formerCharacters`, kept whole.
+local function Retire(from, old, mine, guid)
     if type(ns.db.formerCharacters) ~= "table" then ns.db.formerCharacters = {} end
     local former = ns.db.formerCharacters
-    local slot, n = legacy, 1
+    local slot, n = from, 1
     while former[slot] ~= nil do
         n = n + 1
-        slot = legacy .. "#" .. n
+        slot = from .. "#" .. n
     end
 
     if old.guid == guid then
@@ -716,9 +707,59 @@ function Config:AdoptLegacyCharacter(guid)
     old.retiredInto = guid
     old.retiredAt = type(time) == "function" and time() or nil
     former[slot] = old
-    characters[legacy] = nil
-    Repoint(legacy, guid)
-    self.retiredFrom = legacy
+    ns.db.characters[from] = nil
+    Repoint(from, guid)
+end
+
+--- Bring this character's record under its GUID, the first time the key is
+--- known each session and again once its name is stamped. Nothing is ever
+--- deleted:
+---
+--- * Only an old record under the legacy key: it moves to the GUID, as it
+---   always has.
+--- * An old record beside the GUID one (the cause of a player being told to
+---   mail Medium Leather to the character they were on, and of Butler
+---   filling a mail to itself, 2026-10-11; and of a tooltip counting a
+---   character's old bags as another character's, 2026-10-12): whatever key
+---   it sits under, it moves to `formerCharacters[old key]` (never rename
+---   it), kept whole and marked `retiredInto = guid`, so every list of
+---   characters has this one once. When it was stamped with this GUID,
+---   anything the GUID record lacks is filled from it, and the queue's
+---   references to the old key follow.
+---
+--- An old record that is somebody else's (OldRecordOfMine) is left where it is.
+function Config:AdoptLegacyCharacter(guid)
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" or type(guid) ~= "string" then return end
+
+    local legacy = self:GetLegacyCharacterKey()
+    local mine = characters[guid]
+    local old = legacy ~= guid and characters[legacy] or nil
+    if mine == nil and type(old) == "table" and MightBeMine(old, nil, guid) then
+        old.guid = guid
+        characters[guid] = old
+        characters[legacy] = nil
+        Repoint(legacy, guid)
+        self.adoptedFrom = legacy
+        return
+    end
+    if type(mine) ~= "table" then return end
+
+    local names = {}
+    local first = FoldName(mine.name) or FoldName(SafeUnitName())
+    if first then names[first] = true end
+    local surname = FoldName(mine.surname)
+    if first and surname then names[first .. " " .. surname] = true end
+
+    local found = {}
+    for key, record in pairs(characters) do
+        if OldRecordOfMine(key, record, mine, guid, names, legacy) then found[#found + 1] = key end
+    end
+    table.sort(found)
+    for _, key in ipairs(found) do
+        Retire(key, characters[key], mine, guid)
+        self.retiredFrom = self.retiredFrom and (self.retiredFrom .. ", " .. key) or key
+    end
 end
 
 --- The last name, when the game will say what it is.

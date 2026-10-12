@@ -136,6 +136,29 @@ Check("the key is still the GUID", ns.Config:GetCharacterKey() == ANA.guid, ns.C
 Check("and no old-style record is made", db4.characters[LEGACY] == nil and Count(db4.characters) == 1)
 player.guid = ANA.guid
 
+print("an old record saved under the whole name")
+-- 2026-10-12: "Ana Blackthorne (saved before last names): 2 in bags" was on
+-- the tooltip of the character playing, counted under "On other characters".
+local mine6 = { name = "Ana", surname = "Blackthorne", realm = "Forever PvE", faction = "Horde",
+    class = "Mage", guid = ANA.guid, recipes = {}, inventory = {} }
+local whole = { name = "Ana Blackthorne", realm = "Forever PvE", recipes = {}, inventory = { [929] = 2 } }
+local odd = { name = "Ana", recipes = {}, inventory = { [929] = 5 } }
+local bob = { name = "Bob", realm = "Forever PvE", recipes = {}, inventory = { [929] = 3 } }
+local other = { name = "Ana Stone", realm = "Forever PvE", recipes = {}, inventory = { [929] = 4 } }
+local db6 = { characters = { [ANA.guid] = mine6, ["Ana Blackthorne-Forever PvE"] = whole,
+    ["Ana-Forever"] = odd, ["Bob-Forever PvE"] = bob, ["Ana Stone-Forever PvE"] = other },
+    queue = { { recipeID = 12, crafter = "Ana Blackthorne-Forever PvE" } } }
+ns = Login(db6, ANA)
+Check("is folded away", db6.characters["Ana Blackthorne-Forever PvE"] == nil
+    and db6.formerCharacters["Ana Blackthorne-Forever PvE"] == whole)
+Check("so is one under a key the legacy one no longer matches", db6.characters["Ana-Forever"] == nil
+    and db6.formerCharacters["Ana-Forever"] == odd)
+Check("and the queue follows", db6.queue[1].crafter == ANA.guid, db6.queue[1].crafter)
+Check("Bob stays", db6.characters["Bob-Forever PvE"] == bob)
+Check("another Ana with another last name stays", db6.characters["Ana Stone-Forever PvE"] == other)
+Check("old records read as the character playing", ns.Characters:IsPlaying("Ana Blackthorne-Forever PvE")
+    and ns.Characters:IsPlaying("Ana-Forever"))
+
 print("the one test")
 local db5 = { characters = {
     ["Player-1-00A"] = { name = "Ana", surname = "Blackthorne", realm = "R", faction = "Horde", guid = "Player-1-00A" },
