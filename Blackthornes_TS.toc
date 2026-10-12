@@ -33,6 +33,7 @@ Data\Mail.lua
 Data\Auctions.lua
 Data\VendorPrices.lua
 Data\RecipeBook.lua
+Data\LearnSpots.lua
 Data\Vendor.lua
 Data\WaylaidCrates.lua
 Data\CraftsmansWrits.lua
@@ -45,6 +46,8 @@ Logic\SkillUp.lua
 Logic\Profit.lua
 Logic\LevelUp.lua
 Logic\RecipeBook.lua
+Logic\Waypoints.lua
+Logic\LearnNext.lua
 Logic\Queue.lua
 Logic\QueueActions.lua
 Logic\QueueMail.lua
