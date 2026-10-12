@@ -11,6 +11,9 @@
 # Where tagged releases upload. The packager reads this; the client ignores it.
 ## X-Curse-Project-ID: 1710638
 
+Locale\Locale.lua
+Locale\deDE.lua
+
 Core\Init.lua
 Core\SisterNote.lua
 Core\Util.lua

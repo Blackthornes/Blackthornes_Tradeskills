@@ -22,6 +22,10 @@ ns.Titanforged = Titanforged
 
 local Theme = ns.Theme
 
+-- The words through the addon's translation table where it has one (ns.L,
+-- Locale/Locale.lua), else in English, so this file stays the same in all.
+local L = ns.L or setmetatable({}, { __index = function(_, key) return key end })
+
 local MEDIA = ([[Interface\AddOns\%s\Media\Frame\]]):format(ADDON)
 Titanforged.MEDIA = MEDIA
 
@@ -244,7 +248,7 @@ local function CloseGem(trim, onClick)
         if ns.Motion then ns.Motion:Blend(self, "hover", 1, 0.12, Light) else Light(1) end
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText("Close", 1, 1, 1)
+            GameTooltip:SetText(L["Close"], 1, 1, 1)
             GameTooltip:Show()
         end
     end)

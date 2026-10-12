@@ -31,6 +31,10 @@ jobs:
       - name: Logic tests
         run: python tools/runtests.py
 
+      - name: Translations (warns only, never fails)
+        continue-on-error: true
+        run: python tools/check_locale.py
+
       - name: The release check refuses what it should
         run: python tools/test_check_release.py
 
