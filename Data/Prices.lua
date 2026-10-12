@@ -638,7 +638,7 @@ function Prices:CommitScan(observations, scannedAt)
     local recorded = 0
     for itemID, listings in pairs(observations) do
         local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
-            self:Summarise(listings, self:GetValue(itemID, "market"))
+            self:Summarise(listings, self:GetScanValue(itemID, "market"))
         if marketValue then
             self:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
             recorded = recorded + 1
