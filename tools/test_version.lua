@@ -5,7 +5,7 @@
 -- rewrites that to the tag it builds, which starts with a "v". The addon shows
 -- the version with its own "v" in front, so it must drop the tag's or players
 -- read "vv0.2.0". Straight from the repository the keyword arrives untouched,
--- and that is a dev build, not a version.
+-- and the version shown is the changelog's newest (ns.RELEASED_VERSION).
 
 local failures = 0
 local function check(label, ok, detail)
@@ -52,11 +52,15 @@ ns = LoadWith("0.2.1")
 check("a bare version is kept", ns.VERSION == "0.2.1", ns.VERSION)
 
 ns = LoadWith("@project-version@")
-check("an unpackaged checkout is a dev build", ns.VERSION == "dev", ns.VERSION)
-check("and says so", ns.VersionLabel() == "dev build", ns.VersionLabel())
+check("an unpackaged checkout is the released version",
+    ns.VERSION == ns.RELEASED_VERSION, ns.VERSION)
+check("and is shown as a version",
+    ns.VersionLabel() == "v" .. ns.RELEASED_VERSION, ns.VersionLabel())
+check("which looks like one",
+    ns.RELEASED_VERSION:find("^%d+%.%d+%.%d+") ~= nil, ns.RELEASED_VERSION)
 
 ns = LoadWith(nil)
-check("no version at all", ns.VERSION == "0.0.0", ns.VERSION)
+check("no version at all is the released one", ns.VERSION == ns.RELEASED_VERSION, ns.VERSION)
 
 -- /bts help: the player commands first and short, everything with "all".
 ns = LoadWith("v0.2.0")

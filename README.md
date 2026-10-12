@@ -82,9 +82,11 @@ the newest commit, **Create Tag...**, name it `v0.2.0`, and **Push origin**.
 
 The version is never typed by hand. The TOC says
 `## Version: @project-version@` and the packager fills in the tag. Running
-straight from a clone there is no packager, and the addon calls itself a
-"dev build". The middle number moves for new behaviour, the last for fixes
-alone; a tag like `v0.3.0-beta1` is uploaded as a beta.
+straight from a clone there is no packager, so the addon shows
+`ns.RELEASED_VERSION` from `Core/Init.lua`, the newest version in
+CHANGELOG.md: the release PR changes both, and `tools/check_release.py`
+refuses a tag they disagree with. The middle number moves for new
+behaviour, the last for fixes alone; a tag like `v0.3.0-beta1` is uploaded as a beta.
 
 `.pkgmeta` leaves `tools/`, `docs/`, `deploy.ps1` and this README out of the
 zip. The upload needs the `CF_API_KEY` repository secret; without it the
