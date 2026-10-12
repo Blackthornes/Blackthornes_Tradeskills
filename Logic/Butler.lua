@@ -125,6 +125,7 @@
 -- fields: keep them stable, or change both repos together.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Butler = ns.NewModule("Butler")
 
@@ -418,7 +419,7 @@ end
 function Butler:SetBoughtToDisenchant(itemID, on, count)
     itemID = tonumber(itemID)
     local buys = ns.DisenchantBuys
-    if not itemID or not buys then return false, "Tradeskills can't mark that." end
+    if not itemID or not buys then return false, L["Tradeskills can't mark that."] end
     local ok, err = pcall(function()
         if on then
             buys:Mark(itemID, math.max(1, tonumber(count) or 1))
@@ -575,12 +576,12 @@ end
 --   mail is addressed to, in full
 function Butler:FillMail(name, items, money)
     local mail = ns.QueueMail
-    if not (mail and mail.Fill) then return false, "Tradeskills cannot fill mail here" end
-    if type(name) ~= "string" or name == "" then return false, "nobody to mail" end
+    if not (mail and mail.Fill) then return false, L["Tradeskills cannot fill mail here"] end
+    if type(name) ~= "string" or name == "" then return false, L["nobody to mail"] end
     money = tonumber(money)
     money = money and money >= 1 and math.floor(money) or nil
     if type(items) ~= "table" then items = {} end
-    if #items == 0 and not money then return false, "nothing to mail" end
+    if #items == 0 and not money then return false, L["nothing to mail"] end
 
     local list = {}
     for _, item in ipairs(items) do
@@ -590,9 +591,9 @@ function Butler:FillMail(name, items, money)
             list[#list + 1] = { itemID = itemID, count = math.floor(count) }
         end
     end
-    if #list == 0 and not money then return false, "nothing to mail" end
+    if #list == 0 and not money then return false, L["nothing to mail"] end
 
-    local toSelf = "that's the character you're on"
+    local toSelf = L["that's the character you're on"]
     local recipient
     local ok, started, why = pcall(function()
         local key = CharacterNamed(name) or (mail.FindCharacter and mail:FindCharacter(name))
@@ -603,7 +604,7 @@ function Butler:FillMail(name, items, money)
         return mail:Fill({ recipient = recipient, items = list, money = money,
             subject = #list == 0 and "Gold from Blackthornes Butler" or "From Blackthornes Butler" })
     end)
-    if not ok then return false, "Tradeskills could not fill the mail" end
+    if not ok then return false, L["Tradeskills could not fill the mail"] end
     if started == true then return true, nil, recipient end
     return false, why
 end
@@ -925,7 +926,7 @@ end
 -- @return true and "crafting" or "opened", or false and why
 function Butler:Craft(recipeID)
     recipeID = tonumber(recipeID)
-    if not recipeID then return false, "nothing to craft" end
+    if not recipeID then return false, L["nothing to craft"] end
     local ok, done, why = pcall(function()
         local queue, crafting = ns.Queue, ns.Crafting
         local selfKey = SelfKey()
@@ -937,21 +938,21 @@ function Butler:Craft(recipeID)
                 break
             end
         end
-        if not entry then return false, "it's no longer in your queue" end
+        if not entry then return false, L["it's no longer in your queue"] end
         local ready, reason = crafting:GetReadiness(recipeID)
         if not ready then return false, reason end
-        if crafting:IsBusy() then return false, "already crafting" end
+        if crafting:IsBusy() then return false, L["already crafting"] end
         local opener = ns.ProfessionOpener
         local shows = crafting.isTradeSkillOpen
             and (not (opener and opener.WindowShowsRecipe) or opener:WindowShowsRecipe(recipeID))
         if shows then
             if crafting:Start(recipeID, entry.quantity) then return true, "crafting" end
-            return false, "the game didn't start it"
+            return false, L["the game didn't start it"]
         end
         if queue:ShowQueue() then return true, "opened" end
-        return false, "open your profession first"
+        return false, L["open your profession first"]
     end)
-    if not ok then return false, "Tradeskills could not start the craft" end
+    if not ok then return false, L["Tradeskills could not start the craft"] end
     return done == true, why
 end
 

@@ -42,6 +42,8 @@
 
 local _, ns = ...
 
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
 local BuyQuantity = ns.NewModule("BuyQuantity")
 
 -- The item a list searched for: { itemID, quantity }, or nil.
@@ -379,9 +381,10 @@ end
 function BuyQuantity.WarnText(quantity, warning)
     local money = ns.Util.FormatMoney
     local warn = "|c" .. ns.COLORS.warn
-    return warn .. ("Buying %d costs |r%s%s. The shopping list said |r%s%s: |r%s%s more (%d%% over).|r"):format(
-        quantity, money(warning.live), warn, money(warning.estimate), warn,
-        money(warning.more), warn, warning.percent)
+    -- Each sum is drawn in its own colour, then the warning colour again.
+    local function Sum(copper) return "|r" .. money(copper) .. warn end
+    return warn .. L.Format("Buying %d costs %s. The shopping list said %s: %s more (%d%% over).",
+        quantity, Sum(warning.live), Sum(warning.estimate), Sum(warning.more), warning.percent) .. "|r"
 end
 
 function BuyQuantity:WarnFrame()

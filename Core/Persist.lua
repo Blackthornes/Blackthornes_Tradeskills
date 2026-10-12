@@ -35,6 +35,7 @@
 -- rubbish behind that nothing ever cleans up.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Persist = ns.NewModule("Persist")
 
@@ -364,8 +365,8 @@ function Persist:LoadAll()
         local got, text = pcall(C_CVar.GetCVar, name)
         if not got or type(text) ~= "string" or text == "" then
             -- A missing chunk means the rest cannot be parsed anyway.
-            ns.Warn(("saved data is incomplete (part %d of %d missing); starting fresh.")
-                :format(index, count))
+            ns.Warn(L.Format("saved data is incomplete (part %d of %d missing); starting fresh.",
+                index, count))
             return nil
         end
 
@@ -374,7 +375,7 @@ function Persist:LoadAll()
 
     local decoded, value = ns.Serialize.Decode(table.concat(parts))
     if not decoded or type(value) ~= "table" then
-        ns.Warn("saved data could not be read; starting fresh.")
+        ns.Warn(L["saved data could not be read; starting fresh."])
         return nil
     end
 
@@ -415,9 +416,9 @@ function Persist:SaveLater(delay)
     end)
 end
 
-ns.RegisterCommand("save", "empty the old CVar copy of your data (the game keeps it now)", function()
+ns.RegisterCommand("save", L["empty the old CVar copy of your data (the game keeps it now)"], function()
     ns.Persist:SaveAll()
-    ns.Print("nothing is saved to CVars any more; the game's own saved data keeps everything.")
+    ns.Print(L["nothing is saved to CVars any more; the game's own saved data keeps everything."])
 end)
 
 --------------------------------------------------------------------------------
@@ -512,7 +513,7 @@ function Persist:MeasureCapacity()
     return good
 end
 
-ns.RegisterCommand("cvarsize", "measure how much a CVar can hold", function()
+ns.RegisterCommand("cvarsize", L["measure how much a CVar can hold"], function()
     ns.Print("measuring CVar capacity...")
     ns.Persist:MeasureCapacity()
 end)
@@ -639,7 +640,7 @@ function Persist:StartSoak(bytes, chunks)
         :format(chunks, ns.Util.Comma(bytes)))
 end
 
-ns.RegisterCommand("cvarsoak", "test how much is kept when you quit: /bts cvarsoak [bytes] [parts]", function(args)
+ns.RegisterCommand("cvarsoak", L["test how much is kept when you quit: /bts cvarsoak [bytes] [parts]"], function(args)
     local bytes, chunks = (args or ""):match("^(%d+)%s+(%d+)$")
     if not bytes then bytes = (args or ""):match("^(%d+)$") end
 
@@ -730,7 +731,7 @@ function Persist:Report()
     end
 end
 
-ns.RegisterCommand("persist", "show every step of how your data is kept between sessions", function()
+ns.RegisterCommand("persist", L["show every step of how your data is kept between sessions"], function()
     ns.Persist:Report()
 end)
 

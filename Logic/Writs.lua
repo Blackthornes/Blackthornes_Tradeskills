@@ -23,6 +23,7 @@
 -- Only item IDs, amounts, when, and the character's GUID are kept; no names.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Util = ns.Util
 
@@ -39,10 +40,10 @@ local WRIT_PREFIX = "craftsman's writ:"
 
 --- Reputation goals, by the standing's raw value (Neutral starts at 0).
 Writs.GOALS = {
-    { key = "friendly", text = "Friendly", value = 3000 },
-    { key = "honored",  text = "Honored",  value = 9000 },
-    { key = "revered",  text = "Revered",  value = 21000 },
-    { key = "exalted",  text = "Exalted",  value = 42000 },
+    { key = "friendly", text = L["Friendly"], value = 3000 },
+    { key = "honored",  text = L["Honored"], value = 9000 },
+    { key = "revered",  text = L["Revered"], value = 21000 },
+    { key = "exalted",  text = L["Exalted"], value = 42000 },
 }
 
 Writs.DEFAULT_GOAL = "honored"
@@ -246,7 +247,7 @@ end
 --- The goal reached at this standing, for "you are Friendly".
 function Writs.StandingText(standing)
     if not standing then return nil end
-    local text = standing < 0 and "Unfriendly" or "Neutral"
+    local text = standing < 0 and L["Unfriendly"] or L["Neutral"]
     for _, goal in ipairs(Writs.GOALS) do
         if standing >= goal.value then text = goal.text end
     end

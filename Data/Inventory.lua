@@ -6,6 +6,7 @@
 -- silently folded into "you have enough".
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Inventory = ns.NewModule("Inventory")
 
@@ -525,16 +526,16 @@ end
 -- Diagnostics
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("stock", "<name or link>: how many of an item you have, and where", function(args)
+ns.RegisterCommand("stock", L["<name or link>: how many of an item you have, and where"], function(args)
     local recipe, errorMessage, ambiguous = ns.Profit:Resolve(args)
 
     if ambiguous then
-        ns.Print(("several recipes match '%s'. Try /bts why first"):format(args))
+        ns.Print(L.Format("several recipes match '%s'. Try /bts why first", args))
         return
     end
 
     if not recipe or not recipe.outputItemID then
-        ns.Print(errorMessage or "type an item name, or shift-click an item")
+        ns.Print(errorMessage or L["type an item name, or shift-click an item"])
         return
     end
 

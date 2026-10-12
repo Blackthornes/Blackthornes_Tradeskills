@@ -17,6 +17,7 @@
 -- is deliberately not how this works.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Disenchanter = ns.NewModule("Disenchanter")
 
@@ -98,19 +99,19 @@ end
 --- What the tab's button should do for this item.
 -- @return { ok = true } or { ok = false, why = "..." }
 function Disenchanter:Check(itemID)
-    if not itemID then return { ok = false, why = "Pick an item from your bags." } end
-    if InCombat() then return { ok = false, why = "Not during combat." } end
+    if not itemID then return { ok = false, why = L["Pick an item from your bags."] } end
+    if InCombat() then return { ok = false, why = L["Not during combat."] } end
 
     if self:Knows() == false then
-        return { ok = false, why = "This character does not know Disenchant." }
+        return { ok = false, why = L["This character does not know Disenchant."] }
     end
 
     if not ns.Disenchant:IsDisenchantable(itemID) then
-        return { ok = false, why = "That item cannot be disenchanted." }
+        return { ok = false, why = L["That item cannot be disenchanted."] }
     end
 
     local bag, slot = self:FindSlot(itemID)
-    if not bag then return { ok = false, why = "That item is no longer in your bags." } end
+    if not bag then return { ok = false, why = L["That item is no longer in your bags."] } end
 
     return { ok = true, bag = bag, slot = slot }
 end
@@ -141,7 +142,7 @@ function Disenchanter:CreateOverlay()
     overlay.label:SetPoint("LEFT", 4, 0)
     overlay.label:SetPoint("RIGHT", -4, 0)
     overlay.label:SetWordWrap(false)
-    overlay.label:SetText("Disenchant")
+    overlay.label:SetText(L["Disenchant"])
 
     overlay:SetScript("OnEnter", function(self)
         self.background:SetColorTexture(Theme.Unpack("rowHover"))
@@ -175,7 +176,7 @@ function Disenchanter:CreateOverlay()
         -- the click would run with whatever slot was aimed at last. The
         -- button is emptied as combat starts, so nothing runs here.
         if InCombat() then
-            ns.Print("can't disenchant in combat")
+            ns.Print(L["can't disenchant in combat"])
             return
         end
 
@@ -184,7 +185,7 @@ function Disenchanter:CreateOverlay()
         -- The key binding clicks this button even when no tab has set it.
         if not wanted then
             button:SetAttribute("type", nil)
-            ns.Print("pick an item in your bags on the Disenchanting tab, or a craft you carry on the Profit tab, first")
+            ns.Print(L["pick an item in your bags on the Disenchanting tab, or a craft you carry on the Profit tab, first"])
             return
         end
 
@@ -192,7 +193,7 @@ function Disenchanter:CreateOverlay()
 
         if not bag then
             button:SetAttribute("type", nil)
-            ns.Print("that item is no longer in your bags, so nothing was disenchanted")
+            ns.Print(L["that item is no longer in your bags, so nothing was disenchanted"])
             return
         end
 
@@ -374,4 +375,4 @@ local function Describe()
         or "not clicked yet.")
 end
 
-ns.RegisterCommand("disenchant", "check the Disenchant button", Describe)
+ns.RegisterCommand("disenchant", L["check the Disenchant button"], Describe)

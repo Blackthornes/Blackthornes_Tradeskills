@@ -29,6 +29,7 @@
 -- click on a secure button (UI/Disenchanter.lua, or Butler's).
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local DisenchantBuys = ns.NewModule("DisenchantBuys")
 
@@ -172,7 +173,7 @@ function DisenchantBuys:OnBought(itemID, quantity)
     if not self:Intended(itemID) then return end
 
     self:Add(itemID, quantity)
-    ns.Print(("marked %d %s bought to disenchant. Right-click it on the Disenchanting tab to unmark it."):format(
+    ns.Print(L.Format("marked %d %s bought to disenchant. Right-click it on the Disenchanting tab to unmark it.",
         quantity, Util.GetItemLabel(itemID)))
 end
 

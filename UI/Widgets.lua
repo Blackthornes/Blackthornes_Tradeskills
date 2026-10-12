@@ -7,6 +7,7 @@
 -- thousands of auction items, a frame per row would stutter badly.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Widgets = {}
 ns.Widgets = Widgets
@@ -458,7 +459,7 @@ function Widgets.CreateButton(parent, text, onClick, opts)
         -- A button showing a countdown or "wait" says what it is waiting
         -- for first, since the label alone cannot.
         if self.waitingLabel == true and type(self.waitTip) == "string" then
-            local wait = ("|c%sWaiting: %s.|r"):format(ns.COLORS.warn, self.waitTip)
+            local wait = L.Format("|c%sWaiting: %s.|r", ns.COLORS.warn, self.waitTip)
             text = text and (wait .. "\n\n" .. text) or wait
         end
 
@@ -550,7 +551,7 @@ function Widgets.ShowItemTooltip(owner, anchor, itemID, fallback, link)
 
     local ok, count = pcall(GameTooltip.NumLines, GameTooltip)
     if not shown or not ok or (tonumber(count) or 0) == 0 then
-        GameTooltip:SetText(fallback or "item", 1, 1, 1)
+        GameTooltip:SetText(fallback or L["item"], 1, 1, 1)
         return false
     end
 
@@ -688,7 +689,7 @@ function Widgets.CreateSearchBox(parent, placeholder, onChange)
 
     local hint = Theme.CreateLabel(container, "small", "dim")
     hint:SetPoint("LEFT", 22, 0)
-    hint:SetText(placeholder or "Search")
+    hint:SetText(placeholder or L["Search"])
     container.hint = hint
 
     -- A target bigger than the letter on it, filling the gap the edit box

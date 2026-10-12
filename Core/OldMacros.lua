@@ -12,6 +12,7 @@
 -- DeleteMacro shifts every index above the one it removes.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local OldMacros = ns.NewModule("OldMacros")
 
@@ -79,9 +80,9 @@ function OldMacros:Run()
     end
 
     if remaining > 0 then
-        ns.Warn(("removed %d old storage macro(s) (BTSd...), but %d could not be removed."):format(removed, remaining))
+        ns.Warn(L.Format("removed %d old storage macro(s) (BTSd...), but %d could not be removed.", removed, remaining))
     else
-        ns.Print(("removed %d old storage macro(s) (BTSd...); the game keeps your data now."):format(removed))
+        ns.Print(L.Format("removed %d old storage macro(s) (BTSd...); the game keeps your data now.", removed))
     end
 end
 

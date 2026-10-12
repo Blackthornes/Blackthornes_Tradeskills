@@ -18,6 +18,7 @@
 -- until that window closes.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -52,17 +53,17 @@ local function ItemTexts(items)
 
     local texts = { table.concat(parts, ", ") }
     if #parts > 1 then
-        texts[#texts + 1] = ("%s and %d more"):format(parts[1], #parts - 1)
+        texts[#texts + 1] = L.Format("%s and %d more", parts[1], #parts - 1)
     end
-    texts[#texts + 1] = total == 1 and "1 item" or ("%d items"):format(total)
+    texts[#texts + 1] = total == 1 and L["1 item"] or L.Format("%d items", total)
     return texts
 end
 
 -- Quality words in the game's own rarity colours.
 local QUALITY_WORDS = {
-    [2] = "|cff1eff00green|r",
-    [3] = "|cff0070ddblue|r",
-    [4] = "|cffa335eepurple|r",
+    [2] = L["|cff1eff00green|r"],
+    [3] = L["|cff0070ddblue|r"],
+    [4] = L["|cffa335eepurple|r"],
 }
 
 --- The disenchanter's row: how many of each quality, then just how many.
@@ -82,12 +83,12 @@ local function GearTexts(items)
     end
 
     local joined = #parts > 1
-        and (table.concat(parts, ", ", 1, #parts - 1) .. " and " .. parts[#parts])
+        and L.Format("%s and %s", table.concat(parts, ", ", 1, #parts - 1), parts[#parts])
         or parts[1] or ""
     return {
-        joined .. " to disenchant",
+        L.Format("%s to disenchant", joined),
         joined,
-        total == 1 and "1 piece of gear" or ("%d pieces of gear"):format(total),
+        total == 1 and L["1 piece of gear"] or L.Format("%d pieces of gear", total),
     }
 end
 
@@ -113,14 +114,14 @@ local function CreateRow(panel, index)
     row.items:SetPoint("TOPLEFT", 0, -24)
     row.items:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, -24)
 
-    row.send = Widgets.CreateButton(row, "Send", function()
+    row.send = Widgets.CreateButton(row, L["Send"], function()
         if row.delivery and row.delivery.take then
             QueueMailPanel:TakeFor(row)
         elseif row.delivery then
             QueueMailPanel:FillFor(row)
         end
     end, { width = BUTTON_WIDTH, height = 20, primary = true,
-        tooltip = "Opens Send Mail with the name filled in and these attached. You press Send." })
+        tooltip = L["Opens Send Mail with the name filled in and these attached. You press Send."] })
     row.send:SetPoint("TOPRIGHT", 0, -3)
 
     row.rule = Theme.CreateDivider(row)
@@ -147,24 +148,24 @@ function QueueMailPanel:Build()
 
     local heading = Theme.CreateLabel(panel, "tiny", "accent")
     heading:SetPoint("TOPLEFT", PAD, -8)
-    heading:SetText("SEND FOR THE CRAFT QUEUE")
+    heading:SetText(L["SEND FOR THE CRAFT QUEUE"])
     panel.heading = heading
 
     local close = Widgets.CreateButton(panel, "X", function()
         QueueMailPanel.dismissed = true
         panel:Hide()
-    end, { width = 18, height = 16, fontSize = "tiny", tooltip = "Hide this until the next mailbox visit" })
+    end, { width = 18, height = 16, fontSize = "tiny", tooltip = L["Hide this until the next mailbox visit"] })
     close:SetPoint("TOPRIGHT", -4, -4)
 
     -- Asked 2026-10-04: the words under the heading were too many, and
     -- there was no way from here to the setting that picks the disenchanter.
     -- The Send button's tooltip says what it does; this goes to Settings.
-    local settings = Widgets.CreateButton(panel, "Settings", function()
+    local settings = Widgets.CreateButton(panel, L["Settings"], function()
         if not ns.UI then return end
         ns.UI:Show()
         ns.UI:SelectTab("settings")
     end, { width = 60, height = 16, fontSize = "tiny",
-        tooltip = "Pick your disenchanter and the best quality mailed to them" })
+        tooltip = L["Pick your disenchanter and the best quality mailed to them"] })
     local labelWidth = Theme.TextWidth and Theme.TextWidth(settings.label)
     if type(labelWidth) == "number" and labelWidth + 14 > 60 then
         settings:SetWidth(math.ceil(labelWidth) + 14)
@@ -247,7 +248,7 @@ function QueueMailPanel:GetDeliveries()
 
     local okTake, batch = pcall(ns.QueueMail.GetMailBatch, ns.QueueMail)
     if okTake and batch then
-        deliveries[1] = { take = true, batch = batch, items = batch.items, name = "Next batch from your mail" }
+        deliveries[1] = { take = true, batch = batch, items = batch.items, name = L["Next batch from your mail"] }
     elseif not okTake then
         ns.Debug("mail batch:", batch)
     end
@@ -295,12 +296,12 @@ function QueueMailPanel:Refresh()
         if not delivery.crafts then onlyCrafts = false end
     end
     local headingRoom = WIDTH - PAD - 4 - 18 - 6 - (panel.settings:GetWidth() or 60) - 8
-    Theme.FitText(panel.heading, onlyTake and { "TAKE FOR THE CRAFT QUEUE", "TAKE" }
-        or deliveries[1].take and not hasGear and { "FOR THE CRAFT QUEUE", "QUEUE" }
-        or onlyGear and { "SEND TO YOUR DISENCHANTER", "DISENCHANTER" }
-        or hasGear and { "SEND FROM YOUR BAGS", "SEND" }
-        or onlyCrafts and { "SEND YOUR FINISHED CRAFTS", "FINISHED CRAFTS", "CRAFTS" }
-        or { "SEND FOR THE CRAFT QUEUE", "FOR THE QUEUE" }, headingRoom)
+    Theme.FitText(panel.heading, onlyTake and { L["TAKE FOR THE CRAFT QUEUE"], L["TAKE"] }
+        or deliveries[1].take and not hasGear and { L["FOR THE CRAFT QUEUE"], L["QUEUE"] }
+        or onlyGear and { L["SEND TO YOUR DISENCHANTER"], L["DISENCHANTER"] }
+        or hasGear and { L["SEND FROM YOUR BAGS"], L["SEND"] }
+        or onlyCrafts and { L["SEND YOUR FINISHED CRAFTS"], L["FINISHED CRAFTS"], L["CRAFTS"] }
+        or { L["SEND FOR THE CRAFT QUEUE"], L["FOR THE QUEUE"] }, headingRoom)
     local room = WIDTH - 2 * PAD
     local top = -28
 
@@ -316,25 +317,25 @@ function QueueMailPanel:Refresh()
         row.name:SetTextColor(Theme.Unpack(delivery.crafts and "profit" or "text"))
         if delivery.take then
             local batch = delivery.batch
-            Theme.FitText(row.name, { delivery.name, "Next batch" }, room - BUTTON_WIDTH - 8)
+            Theme.FitText(row.name, { delivery.name, L["Next batch"] }, room - BUTTON_WIDTH - 8)
             if batch.noRoom then
-                Theme.FitText(row.items, { ("No room in your bags (keeping %d slots free)"):format(batch.spare),
-                    "No room in your bags" }, room)
+                Theme.FitText(row.items, { L.Format("No room in your bags (keeping %d slots free)", batch.spare),
+                    L["No room in your bags"] }, room)
             else
                 Theme.FitText(row.items, ItemTexts(delivery.items), room)
             end
-            Theme.FitText(row.send.label, { "Take next batch", "Take" }, BUTTON_WIDTH - 8)
+            Theme.FitText(row.send.label, { L["Take next batch"], L["Take"] }, BUTTON_WIDTH - 8)
             row.send.tooltipText = batch.batches > 1
-                and ("Takes the queue's materials that fit in your bags, keeping %d slots free: about 1 of %d batches. Craft, then take the next."):format(
+                and L.Format("Takes the queue's materials that fit in your bags, keeping %d slots free: about 1 of %d batches. Craft, then take the next.",
                     batch.spare, math.min(batch.batches, 999))
-                or "Takes the queue's materials from your mail. Mail asking for payment (COD) is left alone."
+                or L["Takes the queue's materials from your mail. Mail asking for payment (COD) is left alone."]
             row.send:SetEnabledState(not batch.noRoom and not ns.QueueMail.filling and not ns.QueueMail.taking)
         elseif delivery.disenchant then
-            Theme.FitText(row.name, { delivery.name .. ", disenchanter", short .. ", disenchanter", short },
+            Theme.FitText(row.name, { L.Format("%s, disenchanter", delivery.name), L.Format("%s, disenchanter", short), short },
                 room - BUTTON_WIDTH - 8)
             Theme.FitText(row.items, GearTexts(delivery.items), room)
         elseif delivery.crafts then
-            Theme.FitText(row.name, { "Crafts for " .. delivery.name, "Crafts for " .. short, short },
+            Theme.FitText(row.name, { L.Format("Crafts for %s", delivery.name), L.Format("Crafts for %s", short), short },
                 room - BUTTON_WIDTH - 8)
             Theme.FitText(row.items, ItemTexts(delivery.items), room)
         else
@@ -342,12 +343,12 @@ function QueueMailPanel:Refresh()
             Theme.FitText(row.items, ItemTexts(delivery.items), room)
         end
         if delivery.crafts then
-            Theme.FitText(row.send.label, { "Send crafts to " .. short, "Send to " .. short, "Send" }, BUTTON_WIDTH - 8)
-            row.send.tooltipText = ("Opens Send Mail to %s with the crafts their queue needs attached. You press Send."):format(short)
+            Theme.FitText(row.send.label, { L.Format("Send crafts to %s", short), L.Format("Send to %s", short), L["Send"] }, BUTTON_WIDTH - 8)
+            row.send.tooltipText = L.Format("Opens Send Mail to %s with the crafts their queue needs attached. You press Send.", short)
             row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
         elseif not delivery.take then
-            Theme.FitText(row.send.label, { "Send to " .. short, "Send" }, BUTTON_WIDTH - 8)
-            row.send.tooltipText = "Opens Send Mail with the name filled in and these attached. You press Send."
+            Theme.FitText(row.send.label, { L.Format("Send to %s", short), L["Send"] }, BUTTON_WIDTH - 8)
+            row.send.tooltipText = L["Opens Send Mail with the name filled in and these attached. You press Send."]
             row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
         end
         row:Show()
@@ -364,7 +365,7 @@ function QueueMailPanel:Refresh()
     panel.more:ClearAllPoints()
     if #deliveries > MAX_ROWS then
         panel.more:SetPoint("TOPLEFT", PAD, top - shownRows * ROW_HEIGHT - 4)
-        panel.more:SetText(("and %d more after these are sent"):format(#deliveries - MAX_ROWS))
+        panel.more:SetText(L.Format("and %d more after these are sent", #deliveries - MAX_ROWS))
         panel.more:Show()
         height = height + 16
     else
@@ -393,42 +394,43 @@ function QueueMailPanel:FillFor(row)
         if not panel then return end
 
         local postage = Postage()
-        local cost = postage and postage > 0
-            and (" Postage " .. Util.FormatMoney(postage, { short = true }) .. ".") or ""
+        local cost = postage and postage > 0 and Util.FormatMoney(postage, { short = true }) or nil
 
         local texts
         if attached == 0 and leftOver == 0 then
-            texts = { ("Name filled in. Drag the items in for %s."):format(short), "Drag the items in." }
+            texts = { L.Format("Name filled in. Drag the items in for %s.", short), L["Drag the items in."] }
         elseif leftOver > 0 then
-            texts = { ("%d attached; the rest go in the next mail.%s Press Send."):format(attached, cost),
-                ("%d attached. Press Send."):format(attached) }
+            texts = { cost and L.Format("%d attached; the rest go in the next mail. Postage %s. Press Send.", attached, cost)
+                    or L.Format("%d attached; the rest go in the next mail. Press Send.", attached),
+                L.Format("%d attached. Press Send.", attached) }
         else
-            texts = { ("All attached.%s Press Send."):format(cost), "Press Send." }
+            texts = { cost and L.Format("All attached. Postage %s. Press Send.", cost) or L["All attached. Press Send."],
+                L["Press Send."] }
         end
         -- Part of a stack needs an empty bag slot to be split into first.
         if ns.QueueMail.splitBlocked then
-            texts = { "Free one bag slot to split a stack, then press the button again.",
-                "Free a bag slot, then try again." }
+            texts = { L["Free one bag slot to split a stack, then press the button again."],
+                L["Free a bag slot, then try again."] }
         end
         -- Forever's characters share first names, so the mail needs the
         -- last name too. One not yet on record (that character has not
         -- logged in since last names were read) has to be typed.
         local record = delivery.to and ns.db and ns.db.characters and ns.db.characters[delivery.to]
         if type(record) == "table" and not record.surname then
-            texts = { ("Type %s's last name after the first, then press Send."):format(short),
-                "Add the last name, then Send." }
+            texts = { L.Format("Type %s's last name after the first, then press Send.", short),
+                L["Add the last name, then Send."] }
         end
         Theme.FitText(panel.status, texts, WIDTH - 2 * PAD)
         QueueMailPanel:Refresh()
     end)
 
     if not started then
-        Theme.FitText(panel.status, { "Can't fill the mail: " .. (why or "the mailbox is busy"), why or "" },
+        Theme.FitText(panel.status, { L.Format("Can't fill the mail: %s", why or L["the mailbox is busy"]), why or "" },
             WIDTH - 2 * PAD)
         return
     end
 
-    Theme.FitText(panel.status, { ("Filling a mail for %s..."):format(short), "Filling..." }, WIDTH - 2 * PAD)
+    Theme.FitText(panel.status, { L.Format("Filling a mail for %s...", short), L["Filling..."] }, WIDTH - 2 * PAD)
     for _, other in ipairs(panel.rows) do other.send:SetEnabledState(false) end
 end
 
@@ -439,20 +441,21 @@ function QueueMailPanel:TakeFor(row)
     local started, why = ns.QueueMail:TakeBatch(function(units, stacks)
         if not panel then return end
         local texts = stacks > 0
-            and { ("Took %d (%d stack%s). Craft, then take the next batch."):format(units, stacks, stacks == 1 and "" or "s"),
-                ("Took %d."):format(units) }
-            or { "Took nothing: the bags are full or the mail would not give it.", "Took nothing." }
+            and { stacks == 1 and L.Format("Took %d (%d stack). Craft, then take the next batch.", units, stacks)
+                    or L.Format("Took %d (%d stacks). Craft, then take the next batch.", units, stacks),
+                L.Format("Took %d.", units) }
+            or { L["Took nothing: the bags are full or the mail would not give it."], L["Took nothing."] }
         Theme.FitText(panel.status, texts, WIDTH - 2 * PAD)
         QueueMailPanel:Refresh()
     end)
 
     if not started then
-        Theme.FitText(panel.status, { "Can't take it: " .. (why or "the mailbox is busy"), why or "" },
+        Theme.FitText(panel.status, { L.Format("Can't take it: %s", why or L["the mailbox is busy"]), why or "" },
             WIDTH - 2 * PAD)
         return
     end
 
-    Theme.FitText(panel.status, { "Taking the next batch...", "Taking..." }, WIDTH - 2 * PAD)
+    Theme.FitText(panel.status, { L["Taking the next batch..."], L["Taking..."] }, WIDTH - 2 * PAD)
     for _, other in ipairs(panel.rows) do other.send:SetEnabledState(false) end
 end
 
@@ -462,7 +465,7 @@ function QueueMailPanel:OnSent(toKey)
     if panel then
         local short = ns.Recipes.GetShortCharacterName
             and ns.Recipes:GetShortCharacterName(toKey) or ns.Recipes:GetCharacterName(toKey)
-        Theme.FitText(panel.status, { ("Sent to %s."):format(short), "Sent." }, WIDTH - 2 * PAD)
+        Theme.FitText(panel.status, { L.Format("Sent to %s.", short), L["Sent."] }, WIDTH - 2 * PAD)
     end
     self:Refresh()
 end
@@ -490,7 +493,7 @@ ns.RegisterEvent(QueueMailPanel, "MAIL_SEND_SUCCESS", function()
     local panel, filled = QueueMailPanel.frame, QueueMailPanel.lastFilled
     QueueMailPanel.lastFilled = nil
     if panel and panel:IsShown() and filled and not filled.to then
-        Theme.FitText(panel.status, { ("Sent to %s."):format(ShortName(filled)), "Sent." }, WIDTH - 2 * PAD)
+        Theme.FitText(panel.status, { L.Format("Sent to %s.", ShortName(filled)), L["Sent."] }, WIDTH - 2 * PAD)
         Soon(function() QueueMailPanel:Refresh() end)
     end
 end)

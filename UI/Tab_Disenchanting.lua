@@ -27,6 +27,7 @@
 -- row marks or unmarks it by hand.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -44,27 +45,27 @@ local ICON_GUTTER = 20
 local VIEWS = {
     auction = {
         columns = {
-            { key = "gain",   label = "PROFIT",     width = 66, money = true },
+            { key = "gain",   label = L["PROFIT"],     width = 66, money = true },
             -- The profit an hour of disenchanting casts (asked 2026-10-09).
-            { key = "perHour", label = "GOLD/HR",   width = 70, money = true },
-            { key = "margin", label = "MARGIN",     width = 50, justify = "CENTER" },
-            { key = "value",  label = "DISENCHANT", width = 70, money = true },
-            { key = "buy",    label = "BUY",        width = 66, money = true },
-            { key = "skill",  label = "SKILL",      width = 40, justify = "CENTER" },
-            { key = "age",    label = "AGE",        width = 44, justify = "CENTER" },
+            { key = "perHour", label = L["GOLD/HR"],   width = 70, money = true },
+            { key = "margin", label = L["MARGIN"],     width = 50, justify = "CENTER" },
+            { key = "value",  label = L["DISENCHANT"], width = 70, money = true },
+            { key = "buy",    label = L["BUY"],        width = 66, money = true },
+            { key = "skill",  label = L["SKILL"],      width = 40, justify = "CENTER" },
+            { key = "age",    label = L["AGE"],        width = 44, justify = "CENTER" },
         },
-        hint = "Right-click an item to search the auction house for it",
+        hint = L["Right-click an item to search the auction house for it"],
     },
     bag = {
         columns = {
-            { key = "difference", label = "DIFFERENCE", width = 74, money = true },
+            { key = "difference", label = L["DIFFERENCE"], width = 74, money = true },
             -- What disenchanting these makes an hour, at the DISENCHANT value.
-            { key = "perHour",    label = "GOLD/HR",    width = 70, money = true },
-            { key = "value",      label = "DISENCHANT", width = 70, money = true },
-            { key = "sells",      label = "SELLS",      width = 70, money = true },
-            { key = "count",      label = "HAVE",       width = 40, justify = "CENTER" },
+            { key = "perHour",    label = L["GOLD/HR"],    width = 70, money = true },
+            { key = "value",      label = L["DISENCHANT"], width = 70, money = true },
+            { key = "sells",      label = L["SELLS"],      width = 70, money = true },
+            { key = "count",      label = L["HAVE"],       width = 40, justify = "CENTER" },
         },
-        hint = "Pick an item, then click Disenchant. Right-click to mark it bought to disenchant",
+        hint = L["Pick an item, then click Disenchant. Right-click to mark it bought to disenchant"],
     },
 }
 
@@ -73,8 +74,8 @@ local MAX_COLUMNS = 7
 -- Any column but the item's name can be hidden, each view on its own
 -- (UI/Columns.lua).
 local LIST_IDS = { auction = "disenchant", bag = "disenchantbags" }
-ns.Columns:Register("disenchant", "Disenchanting: auction house", VIEWS.auction.columns)
-ns.Columns:Register("disenchantbags", "Disenchanting: my bags", VIEWS.bag.columns)
+ns.Columns:Register("disenchant", L["Disenchanting: auction house"], VIEWS.auction.columns)
+ns.Columns:Register("disenchantbags", L["Disenchanting: my bags"], VIEWS.bag.columns)
 
 local state = {
     view = "auction",
@@ -110,6 +111,12 @@ local function Money(value)
     return Util.FormatMoney(value, { short = true })
 end
 
+--- The item's rarity in words, as players read it.
+local function QualityWord(name)
+    local words = ns.Disenchant and ns.Disenchant.QUALITY_WORDS
+    return words and name and words[name] or name or ""
+end
+
 local function MarginText(margin)
     return ("%d%%"):format(math.floor((margin or 0) * 100))
 end
@@ -138,7 +145,7 @@ local function PerHour(entry)
 end
 
 -- The tag on a bags row bought to disenchant.
-local BOUGHT_TAG = "  |cffb98cff(bought to DE)|r"
+local BOUGHT_TAG = L["  |cffb98cff(bought to DE)|r"]
 
 --- Mark or unmark a bags row as bought to disenchant (its right-click).
 local function ToggleBought(entry)
@@ -146,10 +153,10 @@ local function ToggleBought(entry)
     if not (buys and entry and entry.itemID) then return end
     if buys:Count(entry.itemID) > 0 then
         buys:Unmark(entry.itemID)
-        ns.Print(("%s is no longer marked bought to disenchant."):format(Util.GetItemLabel(entry.itemID)))
+        ns.Print(L.Format("%s is no longer marked bought to disenchant.", Util.GetItemLabel(entry.itemID)))
     else
         buys:Mark(entry.itemID, entry.count or 1)
-        ns.Print(("marked %d %s bought to disenchant."):format(entry.count or 1, Util.GetItemLabel(entry.itemID)))
+        ns.Print(L.Format("marked %d %s bought to disenchant.", entry.count or 1, Util.GetItemLabel(entry.itemID)))
     end
 end
 
@@ -173,12 +180,12 @@ local function SearchAuctionHouse(entry)
 
     local scanner = ns.Scanner
     if not scanner or not scanner.isAuctionHouseOpen then
-        ns.Print("Open the auction house first, then search again.")
+        ns.Print(L["Open the auction house first, then search again."])
         return
     end
 
     if scanner.isScanning then
-        ns.Print("A scan is running. Search again once it finishes.")
+        ns.Print(L["A scan is running. Search again once it finishes."])
         return
     end
 
@@ -190,7 +197,7 @@ local function SearchAuctionHouse(entry)
     -- What is bought of it now is marked to disenchant.
     if ns.DisenchantBuys then ns.DisenchantBuys:Intend(entry.itemID) end
 
-    ns.Print(("Searching the auction house for %s. Buy it in the auction house window at %s or less, and it is marked to disenchant. If the list there does not change, type the name into its search box."):format(
+    ns.Print(L.Format("Searching the auction house for %s. Buy it in the auction house window at %s or less, and it is marked to disenchant. If the list there does not change, type the name into its search box.",
         Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.buy, { noColor = true })))
 end
 
@@ -266,7 +273,7 @@ local function FillCell(cell, key, entry)
             text = Money(entry.value) .. (entry.partial and "+" or "")
             color = entry.kind == "bag" and entry.beatsSale and "profit" or "text"
         else
-            text, color = "no price", "dim"
+            text, color = L["no price"], "dim"
         end
     elseif key == "difference" then
         -- How much more disenchanting pays than selling, or less.
@@ -280,9 +287,9 @@ local function FillCell(cell, key, entry)
         if entry.sells then
             text = Money(entry.sells)
         elseif entry.soulbound then
-            text, color = "soulbound", "dim"
+            text, color = L["soulbound"], "dim"
         else
-            text, color = "no price", "dim"
+            text, color = L["no price"], "dim"
         end
     elseif key == "count" then
         text = tostring(entry.count or 0)
@@ -306,7 +313,7 @@ end
 local function UpdateRow(row, entry)
     if row.view ~= state.view or row.columnsVersion ~= ns.Columns.version then ApplyRowLayout(row) end
 
-    Theme.SetRowName(row.name, (entry.name or ("item " .. tostring(entry.itemID)))
+    Theme.SetRowName(row.name, (entry.name or L.Format("item %s", tostring(entry.itemID)))
         .. (entry.bought and BOUGHT_TAG or ""))
     -- A bag row carries its link, so the upgrade arrow judges that very copy.
     Theme.SetItemIcon(row.icon, entry.itemID, entry.link)
@@ -331,12 +338,12 @@ local function AddPerHourLine(entry)
     if not CraftTime then return end
     local seconds = CraftTime:GetCast(CraftTime.DISENCHANT_SPELL)
     if not seconds then
-        GameTooltip:AddLine("Disenchant once and its cast time is kept for gold per hour.", 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(L["Disenchant once and its cast time is kept for gold per hour."], 0.5, 0.5, 0.5, true)
         return
     end
     local perHour = PerHour(entry)
     if perHour then
-        GameTooltip:AddLine(("About %s an hour, at %s a disenchant."):format(
+        GameTooltip:AddLine(L.Format("About %s an hour, at %s a disenchant.",
             Util.FormatMoney(perHour, { noColor = true, short = true }), CraftTime.Format(seconds)),
             0.7, 0.7, 0.7, true)
     end
@@ -346,27 +353,27 @@ local function ShowBagTooltip(entry)
     if entry.value and entry.sells then
         GameTooltip:AddLine(" ")
         if entry.beatsSale then
-            GameTooltip:AddLine(("Disenchanting it is worth %s more than selling it."):format(
+            GameTooltip:AddLine(L.Format("Disenchanting it is worth %s more than selling it.",
                 Util.FormatMoney(entry.value - entry.sells, { noColor = true })), 0.35, 0.85, 0.45, true)
         else
-            GameTooltip:AddLine(("Selling it is worth %s more than disenchanting it."):format(
+            GameTooltip:AddLine(L.Format("Selling it is worth %s more than disenchanting it.",
                 Util.FormatMoney(entry.sells - entry.value, { noColor = true })), 0.7, 0.7, 0.7, true)
         end
     end
 
     if entry.sellsAt == "vendor" then
-        GameTooltip:AddLine("Its sale price is what a vendor pays.", 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L["Its sale price is what a vendor pays."], 0.7, 0.7, 0.7, true)
     end
 
     AddPerHourLine(entry)
 
     if entry.bought then
-        GameTooltip:AddLine(("%d bought on the auction house to disenchant."):format(entry.bought),
+        GameTooltip:AddLine(L.Format("%d bought on the auction house to disenchant.", entry.bought),
             0.73, 0.55, 1, true)
     end
 
-    GameTooltip:AddLine("Click to pick it, then click Disenchant.", 0.5, 0.5, 0.5)
-    GameTooltip:AddLine(entry.bought and "Right-click to unmark it." or "Right-click to mark it bought to disenchant.",
+    GameTooltip:AddLine(L["Click to pick it, then click Disenchant."], 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(entry.bought and L["Right-click to unmark it."] or L["Right-click to mark it bought to disenchant."],
         0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
@@ -378,28 +385,28 @@ local function ShowRowTooltip(row, entry)
 
     GameTooltip:AddLine(" ")
     if entry.gain > 0 then
-        GameTooltip:AddLine(("Buy at %s, disenchant, and sell the materials: about %s profit."):format(
+        GameTooltip:AddLine(L.Format("Buy at %s, disenchant, and sell the materials: about %s profit.",
             Util.FormatMoney(entry.buy, { noColor = true }),
             Util.FormatMoney(entry.gain, { noColor = true })), 0.35, 0.85, 0.45, true)
     else
-        GameTooltip:AddLine(("Buying it to disenchant loses about %s."):format(
+        GameTooltip:AddLine(L.Format("Buying it to disenchant loses about %s.",
             Util.FormatMoney(-entry.gain, { noColor = true })), 0.85, 0.35, 0.35, true)
     end
 
     if entry.canDisenchant == false then
-        GameTooltip:AddLine(("Needs Enchanting %d. Your best is %d (%s)."):format(
+        GameTooltip:AddLine(L.Format("Needs Enchanting %d. Your best is %d (%s).",
             entry.needs or 0, entry.enchanterSkill or 0, entry.enchanter or "?"), 0.85, 0.35, 0.35, true)
     elseif entry.canDisenchant == nil then
-        GameTooltip:AddLine("None of your characters has Enchanting.", 0.85, 0.35, 0.35, true)
+        GameTooltip:AddLine(L["None of your characters has Enchanting."], 0.85, 0.35, 0.35, true)
     end
 
     if entry.stale then
-        GameTooltip:AddLine("Scanned a while ago, so it may have sold.", 0.91, 0.76, 0.35, true)
+        GameTooltip:AddLine(L["Scanned a while ago, so it may have sold."], 0.91, 0.76, 0.35, true)
     end
 
     AddPerHourLine(entry)
 
-    GameTooltip:AddLine("Right-click to search the auction house for it. What you buy then is marked to disenchant.",
+    GameTooltip:AddLine(L["Right-click to search the auction house for it. What you buy then is marked to disenchant."],
         0.5, 0.5, 0.5, true)
     GameTooltip:Show()
 end
@@ -430,7 +437,7 @@ local function BuildDetail(parent)
     subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
 
-    local heading = Theme.CreateHeading(detail, "BREAKS INTO")
+    local heading = Theme.CreateHeading(detail, L["BREAKS INTO"])
     heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -38, -12)
     detail.heading = heading
 
@@ -468,24 +475,24 @@ local function BuildDetail(parent)
     note:SetHeight(60)
     detail.note = note
 
-    local searchButton = Widgets.CreateButton(detail, "Search the auction house", function()
+    local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], function()
         SearchAuctionHouse(state.selected)
     end, { width = 180, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
-    searchButton.tooltipText = "Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."
+    searchButton.tooltipText = L["Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
     detail.searchButton = searchButton
 
     -- Disenchant, for an item in the bags. The click itself is taken by the
     -- secure button UI/Disenchanter.lua lays over this one; this handler
     -- only runs when that button is not there, so it says why.
-    local disenchantButton = Widgets.CreateButton(detail, "Disenchant", function()
+    local disenchantButton = Widgets.CreateButton(detail, L["Disenchant"], function()
         local entry = state.selected
         local check = ns.Disenchanter:Check(entry and entry.itemID)
 
         if not check.ok then
             ns.Print(check.why)
         else
-            ns.Warn("that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints.")
+            ns.Warn(L["that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints."])
         end
     end, { width = 120, primary = true, height = 24 })
     disenchantButton:SetPoint("BOTTOMLEFT", 12, 14)
@@ -501,7 +508,7 @@ local function BuildDetail(parent)
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
     empty:SetWordWrap(true)
-    empty:SetText("Pick a row to see what it breaks into")
+    empty:SetText(L["Pick a row to see what it breaks into"])
     detail.empty = empty
 
     return detail
@@ -527,7 +534,7 @@ local function UpdateDisenchantButton(entry)
 
     button:SetEnabledState(check.ok)
     button.tooltipText = check.ok
-        and ("Disenchant one %s from your bags."):format(entry.name or "item") or check.why
+        and L.Format("Disenchant one %s from your bags.", entry.name or L["item"]) or check.why
     detail.disenchantStatus:SetText(check.ok and "" or check.why)
 
     if check.ok then
@@ -589,14 +596,14 @@ local function DrawOutcomes(detail, breakdown)
         -- Only the most likely outcome is the value; the rest are a bonus.
         line.name:SetText(("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
             outcome.name or Util.GetItemLabel(outcome.itemID),
-            outcome.counted == false and "  (bonus)" or ""))
+            outcome.counted == false and L["  (bonus)"] or ""))
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
         if outcome.price then
-            line.value:SetText(Money(outcome.price) .. " each")
+            line.value:SetText(L.Format("%s each", Money(outcome.price)))
             line.value:SetTextColor(Theme.Unpack("muted"))
         else
-            line.value:SetText("no price")
+            line.value:SetText(L["no price"])
             line.value:SetTextColor(Theme.Unpack("dim"))
         end
 
@@ -612,73 +619,73 @@ local function UpdateBagDetail(entry)
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
 
-    detail.subtitle:SetText(("Item level %d %s %s. Needs Enchanting about %d."):format(
-        facts.itemLevel or 0, facts.qualityName or "", facts.isWeapon and "weapon" or "armor",
-        facts.skill or 0))
+    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. Needs Enchanting about %d."]
+            or L["Item level %d %s armor. Needs Enchanting about %d."],
+        facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0))
     detail.subtitle:SetTextColor(Theme.Unpack("muted"))
 
     DrawOutcomes(detail, breakdown)
 
     local lines = detail.lines
     if entry.value then
-        SetLine(lines[1], "Disenchant value",
-            Util.FormatMoney(entry.value) .. (entry.partial and "  or more" or ""),
+        SetLine(lines[1], L["Disenchant value"],
+            entry.partial and L.Format("%s  or more", Util.FormatMoney(entry.value)) or Util.FormatMoney(entry.value),
             entry.beatsSale and "profit" or "text")
     else
-        SetLine(lines[1], "Disenchant value", "materials not scanned", "dim")
+        SetLine(lines[1], L["Disenchant value"], L["materials not scanned"], "dim")
     end
 
     if entry.sells then
-        SetLine(lines[2], entry.sellsAt == "vendor" and "Vendor pays" or "Sells for",
+        SetLine(lines[2], entry.sellsAt == "vendor" and L["Vendor pays"] or L["Sells for"],
             Util.FormatMoney(entry.sells), "muted")
     else
-        SetLine(lines[2], "Sells for", entry.soulbound and "soulbound, no vendor price" or "no price", "dim")
+        SetLine(lines[2], L["Sells for"], entry.soulbound and L["soulbound, no vendor price"] or L["no price"], "dim")
     end
 
     if entry.bought then
-        SetLine(lines[3], "In your bags", ("%d, %d bought to disenchant"):format(entry.count or 0, entry.bought), "muted")
+        SetLine(lines[3], L["In your bags"], L.Format("%d, %d bought to disenchant", entry.count or 0, entry.bought), "muted")
     else
-        SetLine(lines[3], "In your bags", tostring(entry.count or 0), "muted")
+        SetLine(lines[3], L["In your bags"], tostring(entry.count or 0), "muted")
     end
 
     -- A running total that grows with every click.
     local count, worth = Session()
     if count > 0 then
-        SetLine(lines[4], "Disenchanted this session", ("%d, worth %s"):format(count,
+        SetLine(lines[4], L["Disenchanted this session"], L.Format("%d, worth %s", count,
             Util.FormatMoney(worth, { noColor = true, short = true })), "profit")
     else
         SetLine(lines[4], nil)
     end
 
     if entry.bought then
-        detail.verdict:SetText("You bought it to disenchant. Right-click its row to unmark it.")
+        detail.verdict:SetText(L["You bought it to disenchant. Right-click its row to unmark it."])
         detail.verdict:SetTextColor(0.73, 0.55, 1)
     elseif entry.value and entry.sells then
         if entry.beatsSale then
-            detail.verdict:SetText(("Disenchanting pays %s more than selling."):format(
+            detail.verdict:SetText(L.Format("Disenchanting pays %s more than selling.",
                 Util.FormatMoney(entry.value - entry.sells, { noColor = true })))
             detail.verdict:SetTextColor(Theme.Unpack("profit"))
         else
-            detail.verdict:SetText(("Selling pays %s more than disenchanting."):format(
+            detail.verdict:SetText(L.Format("Selling pays %s more than disenchanting.",
                 Util.FormatMoney(entry.sells - entry.value, { noColor = true })))
             detail.verdict:SetTextColor(Theme.Unpack("muted"))
         end
     elseif entry.value then
-        detail.verdict:SetText("Nothing to compare it with: it has no sale price.")
+        detail.verdict:SetText(L["Nothing to compare it with: it has no sale price."])
         detail.verdict:SetTextColor(Theme.Unpack("muted"))
     else
-        detail.verdict:SetText("Scan the auction house to price its materials.")
+        detail.verdict:SetText(L["Scan the auction house to price its materials."])
         detail.verdict:SetTextColor(Theme.Unpack("warn"))
     end
 
     local note
     if facts.source == "yours" then
-        note = ("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts))
+        note = L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts))
     else
-        note = "Chances come from the Classic table built into the addon until you have done enough disenchants of your own."
+        note = L["Chances come from the Classic table built into the addon until you have done enough disenchants of your own."]
     end
     if not entry.soulbound then
-        note = note .. " If it is already bound to you, only a vendor will buy it."
+        note = note .. L[" If it is already bound to you, only a vendor will buy it."]
     end
     detail.note:SetText(note)
 
@@ -709,7 +716,7 @@ local function UpdateDetail(entry)
 
     if not shown then return end
 
-    detail.title:SetText(entry.name or ("item " .. tostring(entry.itemID)))
+    detail.title:SetText(entry.name or L.Format("item %s", tostring(entry.itemID)))
     Theme.SetItemIcon(detail.icon, entry.itemID, entry.link)
 
     if isBag then return UpdateBagDetail(entry) end
@@ -719,46 +726,46 @@ local function UpdateDetail(entry)
 
     local who
     if entry.canDisenchant == nil then
-        who = "None of your characters has Enchanting."
+        who = L["None of your characters has Enchanting."]
     else
-        who = ("Your best is %d (%s)."):format(entry.enchanterSkill or 0, entry.enchanter or "?")
+        who = L.Format("Your best is %d (%s).", entry.enchanterSkill or 0, entry.enchanter or "?")
     end
 
-    detail.subtitle:SetText(("Item level %d %s %s. Needs Enchanting about %d. %s"):format(
-        facts.itemLevel or 0, facts.qualityName or "", facts.isWeapon and "weapon" or "armor",
-        facts.skill or 0, who))
+    detail.subtitle:SetText(L.Format(facts.isWeapon and L["Item level %d %s weapon. Needs Enchanting about %d. %s"]
+            or L["Item level %d %s armor. Needs Enchanting about %d. %s"],
+        facts.itemLevel or 0, QualityWord(facts.qualityName), facts.skill or 0, who))
     detail.subtitle:SetTextColor(Theme.Unpack(entry.canDisenchant == true and "muted" or "loss"))
 
     DrawOutcomes(detail, breakdown)
 
     local lines = detail.lines
-    SetLine(lines[1], entry.loneLow and "Buy for (a lone low listing)" or "Buy for",
+    SetLine(lines[1], entry.loneLow and L["Buy for (a lone low listing)"] or L["Buy for"],
         Util.FormatMoney(entry.buy), "text")
-    SetLine(lines[2], "Disenchant value",
-        Util.FormatMoney(entry.value) .. (entry.partial and "  or more" or ""), "text")
-    SetLine(lines[3], "After the auction house cut", Util.FormatMoney(entry.net), "muted")
-    SetLine(lines[4], "Profit", ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
+    SetLine(lines[2], L["Disenchant value"],
+        entry.partial and L.Format("%s  or more", Util.FormatMoney(entry.value)) or Util.FormatMoney(entry.value), "text")
+    SetLine(lines[3], L["After the auction house cut"], Util.FormatMoney(entry.net), "muted")
+    SetLine(lines[4], L["Profit"], ("%s  (%s)"):format(Util.FormatMoney(entry.gain), MarginText(entry.margin)),
         entry.gain > 0 and "profit" or "loss")
 
     if entry.gain > 0 then
-        detail.verdict:SetText(("Buying one to disenchant makes about %s."):format(
+        detail.verdict:SetText(L.Format("Buying one to disenchant makes about %s.",
             Util.FormatMoney(entry.gain, { noColor = true })))
         detail.verdict:SetTextColor(Theme.Unpack("profit"))
     else
-        detail.verdict:SetText(("Buying one to disenchant loses about %s."):format(
+        detail.verdict:SetText(L.Format("Buying one to disenchant loses about %s.",
             Util.FormatMoney(-entry.gain, { noColor = true })))
         detail.verdict:SetTextColor(Theme.Unpack("loss"))
     end
 
     local note
     if facts.source == "yours" then
-        note = ("Chances come from %s."):format(ns.Disenchant:YoursPhrase(facts))
+        note = L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts))
     else
-        note = "Chances come from the Classic table built into the addon. It is an average: any one disenchant can give more or less."
+        note = L["Chances come from the Classic table built into the addon. It is an average: any one disenchant can give more or less."]
     end
-    note = note .. (" The buy price is the cheapest listing when last scanned (%s)."):format(
-        entry.age and Util.FormatAgeAgo(entry.age) or "never")
-    if entry.stale then note = note .. " That was a while ago, so it may have sold." end
+    note = note .. L.Format(" The buy price is the cheapest listing when last scanned (%s).",
+        entry.age and Util.FormatAgeAgo(entry.age) or L["never"])
+    if entry.stale then note = note .. L[" That was a while ago, so it may have sold."] end
     detail.note:SetText(note)
 end
 
@@ -856,25 +863,26 @@ end
 
 local function EmptyText()
     if state.search ~= "" then
-        return ("Nothing matching \"%s\"."):format(state.search)
+        return L.Format("Nothing matching \"%s\".", state.search)
     end
 
     if state.view == "bag" then
         local count, worth = Session()
         if count > 0 then
-            return ("All done! You disenchanted %d item%s this session, worth about %s."):format(
-                count, count == 1 and "" or "s", Util.FormatMoney(worth, { noColor = true, short = true }))
-                .. (state.beatsOnly and " Untick \"Only where disenchanting pays more\" to see the rest." or "")
+            local money = Util.FormatMoney(worth, { noColor = true, short = true })
+            return (count == 1 and L.Format("All done! You disenchanted %d item this session, worth about %s.", count, money)
+                or L.Format("All done! You disenchanted %d items this session, worth about %s.", count, money))
+                .. (state.beatsOnly and L[" Untick \"Only where disenchanting pays more\" to see the rest."] or "")
         end
 
         if state.beatsOnly then
-            return "Nothing in your bags is worth more disenchanted than sold. Untick \"Only where disenchanting pays more\" to see them all."
+            return L["Nothing in your bags is worth more disenchanted than sold. Untick \"Only where disenchanting pays more\" to see them all."]
         end
-        return "Nothing in your bags can be disenchanted."
+        return L["Nothing in your bags can be disenchanted."]
     end
 
     if (ns.Prices and ns.Prices:Count() or 0) == 0 then
-        return "Scan the auction house to find items worth buying to disenchant."
+        return L["Scan the auction house to find items worth buying to disenchant."]
     end
 
     -- Items were found, and "Only ones I can disenchant" hid all of them.
@@ -882,33 +890,35 @@ local function EmptyText()
     -- that one showed nothing new.
     local found = built.rows and #built.rows or 0
     if state.hideTooHigh and found > 0 then
-        return ("None of your characters can disenchant the %d item%s found yet. Untick \"Only ones I can disenchant\" to see %s."):format(
-            found, found == 1 and "" or "s", found == 1 and "it" or "them")
+        if found == 1 then
+            return L.Format("None of your characters can disenchant the %d item found yet. Untick \"Only ones I can disenchant\" to see it.", found)
+        end
+        return L.Format("None of your characters can disenchant the %d items found yet. Untick \"Only ones I can disenchant\" to see them.", found)
     end
 
     if state.dealsOnly then
-        local text = "Nothing on the auction house is worth buying to disenchant right now."
+        local text = L["Nothing on the auction house is worth buying to disenchant right now."]
 
         if state.hidden > 0 then
-            text = text .. (" %d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin)."):format(
+            text = text .. L.Format(" %d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin).",
                 state.hidden,
                 Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
                 ns.Config:Get("minMarginPercent") or 0)
         end
 
-        return text .. " Untick \"Only deals over my minimums\" to see them all."
+        return text .. L[" Untick \"Only deals over my minimums\" to see them all."]
     end
 
     if state.hideTooHigh then
-        return "Nothing listed that your enchanters can disenchant yet."
+        return L["Nothing listed that your enchanters can disenchant yet."]
     end
 
-    return "No weapons or armor from other sellers in your last scan."
+    return L["No weapons or armor from other sellers in your last scan."]
 end
 
 -- Beside the Disenchant button when the bags list has items but none is worth
 -- more disenchanted than sold, so none was picked.
-local NOTHING_PICKED = "Nothing here is worth more disenchanted than sold. Click one to disenchant it anyway."
+local NOTHING_PICKED = L["Nothing here is worth more disenchanted than sold. Click one to disenchant it anyway."]
 
 --- No item picked in a bags list that has some: the Disenchant button shows
 --- unset, and the line beside it says why.
@@ -933,11 +943,12 @@ local function RefreshBags(rows)
         bought = bought + (row.bought or 0)
     end
 
-    local text = ("%d item%s, %d worth more disenchanted"):format(#rows, #rows == 1 and "" or "s", beats)
-    if bought > 0 then text = text .. ("  ·  %d bought to disenchant"):format(bought) end
+    local text = #rows == 1 and L.Format("%d item, %d worth more disenchanted", #rows, beats)
+        or L.Format("%d items, %d worth more disenchanted", #rows, beats)
+    if bought > 0 then text = text .. L.Format("  ·  %d bought to disenchant", bought) end
     local count, worth = Session()
     if count > 0 then
-        text = text .. ("  ·  %d disenchanted this session, worth %s"):format(count,
+        text = text .. L.Format("  ·  %d disenchanted this session, worth %s", count,
             Util.FormatMoney(worth, { noColor = true, short = true }))
     end
     widgets.countLabel:SetText(text)
@@ -1006,19 +1017,20 @@ local function Refresh()
     end
 
     if deals > 0 then
-        widgets.countLabel:SetText(("%d deal%s, about %s if you buy them all"):format(
-            deals, deals == 1 and "" or "s", Util.FormatMoney(total, { noColor = true, short = true })))
+        local money = Util.FormatMoney(total, { noColor = true, short = true })
+        widgets.countLabel:SetText(deals == 1 and L.Format("%d deal, about %s if you buy them all", deals, money)
+            or L.Format("%d deals, about %s if you buy them all", deals, money))
     else
-        widgets.countLabel:SetText(("%d item%s"):format(#rows, #rows == 1 and "" or "s"))
+        widgets.countLabel:SetText(#rows == 1 and L.Format("%d item", #rows) or L.Format("%d items", #rows))
     end
 
     -- Items not read yet wait for the auction house to close, so reading
     -- them cannot upset Ready to sell. Say so, or the list looks short.
     if (state.pending or 0) > 0 then
         local waiting = ns.Scanner and ns.Scanner.isAuctionHouseOpen
-            and "they are read once the auction house is closed"
-            or "reading them now"
-        widgets.countLabel:SetText(("%s  ·  %d more listed items not checked yet, %s"):format(
+            and L["they are read once the auction house is closed"]
+            or L["reading them now"]
+        widgets.countLabel:SetText(L.Format("%s  ·  %d more listed items not checked yet, %s",
             widgets.countLabel:GetText() or "", state.pending, waiting))
     end
 
@@ -1092,14 +1104,14 @@ local function Build(container)
     -- (2026-10-06). The view stays a tick box rather than a menu (a player's
     -- request, 2026-10-02): one click between the auction house deals and
     -- disenchanting from the bags.
-    local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
+    local search = Widgets.CreateSearchBox(toolbar, L["Search items"], function(text)
         state.search = text or ""
         Refresh()
     end)
     search:SetPoint("LEFT", 0, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
-    local view = Widgets.CreateCheckbox(toolbar, "Items in my bags", function(checked)
+    local view = Widgets.CreateCheckbox(toolbar, L["Items in my bags"], function(checked)
         state.view = checked and "bag" or "auction"
         state.selected = nil
         ApplyView()
@@ -1109,14 +1121,14 @@ local function Build(container)
     view:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.view = view
 
-    local dealsOnly = Widgets.CreateCheckbox(toolbar, "Only deals over my minimums", function(checked)
+    local dealsOnly = Widgets.CreateCheckbox(toolbar, L["Only deals over my minimums"], function(checked)
         state.dealsOnly = checked
         Refresh()
     end, state.dealsOnly)
     dealsOnly:SetPoint("LEFT", view, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
 
-    local hideTooHigh = Widgets.CreateCheckbox(toolbar, "Only ones I can disenchant", function(checked)
+    local hideTooHigh = Widgets.CreateCheckbox(toolbar, L["Only ones I can disenchant"], function(checked)
         state.hideTooHigh = checked
         Refresh()
     end, state.hideTooHigh)
@@ -1125,7 +1137,7 @@ local function Build(container)
 
     -- In the bags list: off by default, so everything that can be broken is
     -- there to break, best first.
-    local beatsOnly = Widgets.CreateCheckbox(toolbar, "Only where disenchanting pays more", function(checked)
+    local beatsOnly = Widgets.CreateCheckbox(toolbar, L["Only where disenchanting pays more"], function(checked)
         state.beatsOnly = checked
         Refresh()
     end, state.beatsOnly)
@@ -1140,7 +1152,7 @@ local function Build(container)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
-    nameHeading:SetText("ITEM")
+    nameHeading:SetText(L["ITEM"])
 
     widgets.headings = {}
     for index = 1, MAX_COLUMNS do
@@ -1275,7 +1287,7 @@ end
 
 UI:RegisterTab({
     key = "disenchanting",
-    text = "Disenchanting",
+    text = L["Disenchanting"],
     order = 1.8,
     build = Build,
     refresh = Refresh,

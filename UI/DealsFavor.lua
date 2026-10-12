@@ -8,6 +8,7 @@
 -- place of its flips when its Show menu says so, and owns the option bar.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -22,15 +23,15 @@ local BUNDLE_LINES = 5
 
 -- Columns, laid out right to left, as on the flips list.
 local COLUMNS = {
-    { key = "perFavor",   label = "PER FAVOR", width = 70, money = true },
-    { key = "total",      label = "TOTAL",     width = 66, money = true },
-    { key = "bundleCost", label = "BUNDLE",    width = 66, money = true },
-    { key = "cratePrice", label = "CRATE",     width = 66, money = true },
-    { key = "favor",      label = "FAVOR",     width = 44, justify = "CENTER" },
+    { key = "perFavor",   label = L["PER FAVOR"], width = 70, money = true },
+    { key = "total",      label = L["TOTAL"], width = 66, money = true },
+    { key = "bundleCost", label = L["BUNDLE"], width = 66, money = true },
+    { key = "cratePrice", label = L["CRATE"], width = 66, money = true },
+    { key = "favor",      label = L["FAVOR"], width = 44, justify = "CENTER" },
 }
 
 -- Any column but the crate's name can be hidden (UI/Columns.lua).
-ns.Columns:Register("favor", "Deals: Merchant's Favor", COLUMNS)
+ns.Columns:Register("favor", L["Deals: Merchant's Favor"], COLUMNS)
 
 local state = {
     search = "",
@@ -66,7 +67,7 @@ local function ItemName(itemID)
             pcall(C_Item.RequestLoadItemDataByID, itemID)
         end
     end
-    return "item " .. tostring(itemID)
+    return L.Format("item %s", tostring(itemID))
 end
 
 local function BundleText(bundle)
@@ -76,12 +77,14 @@ end
 --- Where the reward came from, in a few words.
 local function RewardText(row)
     if row.source == "learned" then
-        local times = row.turnIns == 1 and "one turn-in" or ("%d turn-ins"):format(row.turnIns or 1)
-        return ("%d favor and %s, seen paid on %s."):format(row.favor, Plain(row.money or 0), times)
+        if row.turnIns == 1 then
+            return L.Format("%d favor and %s, seen paid on one turn-in.", row.favor, Plain(row.money or 0))
+        end
+        return L.Format("%d favor and %s, seen paid on %d turn-ins.", row.favor, Plain(row.money or 0), row.turnIns or 1)
     elseif row.source == "reported" then
-        return ("Players report %d favor and %s. Not seen paid here yet."):format(row.favor, Plain(row.money or 0))
+        return L.Format("Players report %d favor and %s. Not seen paid here yet.", row.favor, Plain(row.money or 0))
     end
-    return "Not in the game yet, so nobody knows what it pays."
+    return L["Not in the game yet, so nobody knows what it pays."]
 end
 
 local function SameRow(a, b)
@@ -92,15 +95,19 @@ end
 local function Search(itemID, what)
     local scanner = ns.Scanner
     if not scanner or not scanner.isAuctionHouseOpen then
-        ns.Print("Open the auction house first, then search again.")
+        ns.Print(L["Open the auction house first, then search again."])
         return
     end
     if scanner.isScanning then
-        ns.Print("A scan is running. Search again once it finishes.")
+        ns.Print(L["A scan is running. Search again once it finishes."])
         return
     end
     if not itemID then
-        ns.Print(("The game has not shown this addon %s yet, so type its name into the auction house search box."):format(what))
+        if what == "crate" then
+            ns.Print(L["The game has not shown this addon this crate yet, so type its name into the auction house search box."])
+        else
+            ns.Print(L["The game has not shown this addon this material yet, so type its name into the auction house search box."])
+        end
         return
     end
     ns.UI:SearchAuctionHouse(itemID)
@@ -108,12 +115,12 @@ end
 
 local function SearchCrate(row)
     if not row then return end
-    Search(row.itemID, "this crate")
+    Search(row.itemID, "crate")
 end
 
 local function SearchBundle(row)
     if not row or not row.best then return end
-    Search(row.best.itemID, "this material")
+    Search(row.best.itemID, "material")
 end
 
 --------------------------------------------------------------------------------
@@ -173,23 +180,23 @@ local function ShowRowTooltip(row, entry)
         Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID, entry.name)
     else
         GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-        GameTooltip:AddLine("Waylaid Crate: " .. entry.name)
+        GameTooltip:AddLine(L.Format("Waylaid Crate: %s", entry.name))
     end
 
     GameTooltip:AddLine(" ")
     if entry.total and entry.best then
-        GameTooltip:AddLine(("Crate %s + %s %s - %s back = %s."):format(
+        GameTooltip:AddLine(L.Format("Crate %s + %s %s - %s back = %s.",
             Plain(entry.cratePrice), BundleText(entry.best), Plain(entry.best.cost),
             Plain(entry.money or 0), Plain(entry.total)), 0.85, 0.85, 0.85, true)
     end
     if entry.perFavor then
-        GameTooltip:AddLine(("%s for each favor."):format(Plain(Round(entry.perFavor))), 0.35, 0.85, 0.45, true)
+        GameTooltip:AddLine(L.Format("%s for each favor.", Plain(Round(entry.perFavor))), 0.35, 0.85, 0.45, true)
     end
     GameTooltip:AddLine(RewardText(entry), 0.7, 0.7, 0.7, true)
     if entry.have > 0 then
-        GameTooltip:AddLine(("You carry %d."):format(entry.have), 0.85, 0.85, 0.85)
+        GameTooltip:AddLine(L.Format("You carry %d.", entry.have), 0.85, 0.85, 0.85)
     end
-    GameTooltip:AddLine("Right-click to search the auction house for the crate.", 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Right-click to search the auction house for the crate."], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -249,14 +256,14 @@ local function BuildDetail(parent)
     detail.subtitle:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
     detail.subtitle:SetWordWrap(true)
 
-    detail.bundleHeading = Theme.CreateHeading(detail, "FILL IT WITH ONE OF")
+    detail.bundleHeading = Theme.CreateHeading(detail, L["FILL IT WITH ONE OF"])
     detail.bundleHeading:SetPoint("TOPLEFT", detail.subtitle, "BOTTOMLEFT", -38, -12)
 
     detail.bundles = Lines(detail, BUNDLE_LINES)
     detail.bundles:SetPoint("TOPLEFT", detail.bundleHeading, "BOTTOMLEFT", 0, -8)
     detail.bundles:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 
-    detail.costHeading = Theme.CreateHeading(detail, "ONE FAVOR")
+    detail.costHeading = Theme.CreateHeading(detail, L["ONE FAVOR"])
     detail.costHeading:SetPoint("TOPLEFT", detail.bundles, "BOTTOMLEFT", 0, -12)
 
     detail.sums = Lines(detail, 4)
@@ -269,23 +276,23 @@ local function BuildDetail(parent)
     detail.note:SetWordWrap(true)
     detail.note:SetJustifyV("TOP")
 
-    detail.crateButton = Widgets.CreateButton(detail, "Search crate", function()
+    detail.crateButton = Widgets.CreateButton(detail, L["Search crate"], function()
         SearchCrate(state.selected)
     end, { width = 134, primary = true, height = 24 })
     detail.crateButton:SetPoint("BOTTOMLEFT", 12, 14)
-    detail.crateButton.tooltipText = "Sends a search for this crate, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."
+    detail.crateButton.tooltipText = L["Sends a search for this crate, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
 
-    detail.bundleButton = Widgets.CreateButton(detail, "Search bundle", function()
+    detail.bundleButton = Widgets.CreateButton(detail, L["Search bundle"], function()
         SearchBundle(state.selected)
     end, { width = 134, height = 24 })
     detail.bundleButton:SetPoint("LEFT", detail.crateButton, "RIGHT", 8, 0)
-    detail.bundleButton.tooltipText = "Sends a search for the cheapest bundle's material."
+    detail.bundleButton.tooltipText = L["Sends a search for the cheapest bundle's material."]
 
     detail.empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     detail.empty:SetPoint("CENTER")
     detail.empty:SetWidth(DETAIL_WIDTH - 40)
     detail.empty:SetWordWrap(true)
-    detail.empty:SetText("Pick a crate to see what fills it and what a favor costs")
+    detail.empty:SetText(L["Pick a crate to see what fills it and what a favor costs"])
 
     return detail
 end
@@ -319,38 +326,38 @@ local function UpdateDetail(entry)
             elseif bundle.overStack then
                 labelColor, valueColor = "dim", "dim"
             end
-            if bundle.vendor then label = label .. " (vendor)" end
+            if bundle.vendor then label = L.Format("%s (vendor)", label) end
             if bundle.overStack then
                 label = label .. " *"
                 overStack = true
             end
-            SetLine(line, label, bundle.cost and Plain(bundle.cost) or "not priced", labelColor, valueColor)
+            SetLine(line, label, bundle.cost and Plain(bundle.cost) or L["not priced"], labelColor, valueColor)
         else
             SetLine(line, nil)
         end
     end
 
     local sums = detail.sums.lines
-    SetLine(sums[1], "Crate on the AH", entry.cratePrice and Plain(entry.cratePrice)
-        or (entry.noneListed and "none listed" or "not priced"))
-    SetLine(sums[2], "Cheapest bundle", entry.bundleCost and Plain(entry.bundleCost) or "not priced")
-    SetLine(sums[3], "Silver back", entry.money and Plain(entry.money) or "not known")
-    SetLine(sums[4], entry.favor and ("Each of %d favor"):format(entry.favor) or "Each favor",
-        entry.perFavor and Plain(Round(entry.perFavor)) or "not known", "text", "accent")
+    SetLine(sums[1], L["Crate on the AH"], entry.cratePrice and Plain(entry.cratePrice)
+        or (entry.noneListed and L["none listed"] or L["not priced"]))
+    SetLine(sums[2], L["Cheapest bundle"], entry.bundleCost and Plain(entry.bundleCost) or L["not priced"])
+    SetLine(sums[3], L["Silver back"], entry.money and Plain(entry.money) or L["not known"])
+    SetLine(sums[4], entry.favor and L.Format("Each of %d favor", entry.favor) or L["Each favor"],
+        entry.perFavor and Plain(Round(entry.perFavor)) or L["not known"], "text", "accent")
 
     local parts = {}
     if overStack then
         parts[#parts + 1] = DealsFavor:GetSkipOverStack()
-            and "* Needs more than one stack. Forever could not fill a crate from more than one stack when last reported, so it is left out."
-            or "* Needs more than one stack, which Forever could not fill a crate from when last reported."
+            and L["* Needs more than one stack. Forever could not fill a crate from more than one stack when last reported, so it is left out."]
+            or L["* Needs more than one stack, which Forever could not fill a crate from when last reported."]
     end
     if entry.have > 0 then
-        parts[#parts + 1] = ("You carry %d of these crates."):format(entry.have)
+        parts[#parts + 1] = L.Format("You carry %d of these crates.", entry.have)
     end
     if not entry.itemID then
-        parts[#parts + 1] = "Not seen in the game yet, so it has no auction house price."
+        parts[#parts + 1] = L["Not seen in the game yet, so it has no auction house price."]
     end
-    parts[#parts + 1] = "Prices are the cheapest listings from your last scan, or a vendor's where one sells it."
+    parts[#parts + 1] = L["Prices are the cheapest listings from your last scan, or a vendor's where one sells it."]
     detail.note:SetText(table.concat(parts, " "))
 end
 
@@ -369,17 +376,23 @@ local function CountText(rows)
 
     if not cheapest then
         if (ns.Prices and ns.Prices:Count() or 0) == 0 then
-            return { "Scan the auction house to price the crates and their bundles." }
+            return { L["Scan the auction house to price the crates and their bundles."] }
         end
-        return { "No crate is fully priced yet. Scan again once some are listed." }
+        return { L["No crate is fully priced yet. Scan again once some are listed."] }
     end
 
-    local plural = priced == 1 and "" or "s"
     local money = Util.FormatMoney(Round(cheapest.perFavor), { noColor = true, short = true })
+    if priced == 1 then
+        return {
+            L.Format("%d crate priced, cheapest favor %s each (%s)", priced, money, cheapest.name),
+            L.Format("%d crate priced, cheapest favor %s", priced, money),
+            L.Format("%d crate priced", priced),
+        }
+    end
     return {
-        ("%d crate%s priced, cheapest favor %s each (%s)"):format(priced, plural, money, cheapest.name),
-        ("%d crate%s priced, cheapest favor %s"):format(priced, plural, money),
-        ("%d crate%s priced"):format(priced, plural),
+        L.Format("%d crates priced, cheapest favor %s each (%s)", priced, money, cheapest.name),
+        L.Format("%d crates priced, cheapest favor %s", priced, money),
+        L.Format("%d crates priced", priced),
     }
 end
 
@@ -401,7 +414,7 @@ function DealsFavor:Refresh()
     widgets.list:SetData(rows)
 
     widgets.emptyLabel:SetShown(#rows == 0)
-    if #rows == 0 then widgets.emptyLabel:SetText(("No crate matching \"%s\"."):format(state.search)) end
+    if #rows == 0 then widgets.emptyLabel:SetText(L.Format("No crate matching \"%s\".", state.search)) end
 
     local texts = CountText(rows)
     if Theme.FitText then Theme.FitText(widgets.countLabel, texts) else widgets.countLabel:SetText(texts[1]) end
@@ -448,7 +461,7 @@ function DealsFavor:Build(view, toolbar)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 8 + ICON_GUTTER, 0)
-    nameHeading:SetText("WAYLAID CRATE")
+    nameHeading:SetText(L["WAYLAID CRATE"])
 
     local labels = { name = nameHeading }
     local values = { name = function(row) return row.name end }
@@ -508,7 +521,7 @@ function DealsFavor:Build(view, toolbar)
 
     local hint = Theme.CreateLabel(view, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText("Right-click a row to search for the crate")
+    hint:SetText(L["Right-click a row to search for the crate"])
 
     local countLabel = Theme.CreateLabel(view, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)

@@ -16,6 +16,7 @@
 -- when the body is hidden.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Collapse = {}
 ns.Collapse = Collapse
@@ -106,7 +107,7 @@ local function UpdateButton(button, collapsed)
     else
         button:SetText(collapsed and "+" or "-")
     end
-    button.tooltipText = collapsed and "Expand this window" or "Collapse this window"
+    button.tooltipText = collapsed and L["Expand this window"] or L["Collapse this window"]
 end
 
 --- Put the button at the left of a panel's header.

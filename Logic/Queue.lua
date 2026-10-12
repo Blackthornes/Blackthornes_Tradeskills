@@ -2,6 +2,7 @@
 -- The craft queue and the shopping list derived from it.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Queue = ns.NewModule("Queue")
 
@@ -420,8 +421,8 @@ function Queue:DescribeWho(entry)
     if crafter == viewer then
         if #others > 0 then
             local names = self:JoinNames(others)
-            texts[#texts + 1] = ("you make this for %s"):format(names)
-            texts[#texts + 1] = ("for %s"):format(names)
+            texts[#texts + 1] = L.Format("you make this for %s", names)
+            texts[#texts + 1] = L.Format("for %s", names)
         end
         return texts
     end
@@ -429,14 +430,14 @@ function Queue:DescribeWho(entry)
     local maker = ShortName(crafter)
     if #others > 0 then
         local names = self:JoinNames(others)
-        texts[#texts + 1] = ("%s makes this for %s"):format(maker, names)
-        texts[#texts + 1] = ("%s, for %s"):format(maker, names)
+        texts[#texts + 1] = L.Format("%s makes this for %s", maker, names)
+        texts[#texts + 1] = L.Format("%s, for %s", maker, names)
     elseif #recipients > 0 then
-        texts[#texts + 1] = ("%s makes this for you"):format(maker)
+        texts[#texts + 1] = L.Format("%s makes this for you", maker)
     else
-        texts[#texts + 1] = ("%s's craft"):format(maker)
+        texts[#texts + 1] = L.Format("%s's craft", maker)
     end
-    texts[#texts + 1] = ("on %s"):format(maker)
+    texts[#texts + 1] = L.Format("on %s", maker)
 
     return texts
 end
@@ -595,9 +596,9 @@ function Queue:RebuildDependencies()
         local before = recipe and planned[recipe.outputItemID]
         if before and not before.buyCheaper then
             local name = ns.Recipes.GetDisplayLink and ns.Recipes:GetDisplayLink(entry.recipeID)
-                or recipe.name or "a sub-craft"
-            ns.Print(("buying %s is now cheaper than making it. It stays on the queue; Buy instead on the Queue tab takes it off.")
-                :format(name))
+                or recipe.name or L["a sub-craft"]
+            ns.Print(L.Format("buying %s is now cheaper than making it. It stays on the queue; Buy instead on the Queue tab takes it off.",
+                name))
         end
     end
 end
@@ -655,20 +656,20 @@ function Queue:NeverMake(entry)
     if not (entry and entry.isDependency) then return false end
 
     local recipe = ns.Recipes:GetAny(entry.recipeID)
-    local name = (recipe and recipe.name) or ("recipe " .. tostring(entry.recipeID))
+    local name = (recipe and recipe.name) or L.Format("recipe %s", tostring(entry.recipeID))
     ns.Cost:SetNeverSubCraft(entry.recipeID, true, recipe and recipe.name)
 
-    ns.Print(("%s is no longer made as a sub-craft: the queue buys it instead. Allow puts it back, in Settings, Queue, Never made as sub-crafts.")
-        :format(name))
+    ns.Print(L.Format("%s is no longer made as a sub-craft: the queue buys it instead. Allow puts it back, in Settings, Queue, Never made as sub-crafts.",
+        name))
     return true
 end
 
 --- The hover for the x on a sub-craft's row.
 function Queue:NeverMakeTooltip(entry)
     local recipe = entry and ns.Recipes:GetAny(entry.recipeID)
-    local name = (recipe and recipe.name) or "this"
-    return ("Never make %s as a sub-craft\nBuy it instead, in this queue and from now on. It can still be queued on its own. Settings, Queue lists it with Allow to undo.")
-        :format(name)
+    local name = (recipe and recipe.name) or L["this"]
+    return L.Format("Never make %s as a sub-craft", name) .. "\n"
+        .. L["Buy it instead, in this queue and from now on. It can still be queued on its own. Settings, Queue lists it with Allow to undo."]
 end
 
 --- What one of a sub-craft's items costs to buy and to make, for the note
@@ -728,9 +729,9 @@ function Queue:RefreshForCharacter()
             local recipe = ns.Recipes:GetAny(entry.recipeID)
             local parents = self:GetDependencyParents(entry)
 
-            ns.Print(("queued %d x %s for %s. This character makes it for less than buying it; its materials are on the shopping list.")
-                :format(entry.quantity, (recipe and recipe.name) or "a sub-craft",
-                    #parents > 0 and table.concat(parents, ", ") or "another craft"))
+            ns.Print(L.Format("queued %d x %s for %s. This character makes it for less than buying it; its materials are on the shopping list.",
+                entry.quantity, (recipe and recipe.name) or L["a sub-craft"],
+                    #parents > 0 and table.concat(parents, ", ") or L["another craft"]))
         end
     end
 
@@ -748,21 +749,21 @@ function Queue:AnnounceHelping()
 
     for index, help in ipairs(helping) do
         if index > HELPING_LINES then
-            ns.Print(("and %d more for your other characters. The Queue tab has them all.")
-                :format(#helping - HELPING_LINES))
+            ns.Print(L.Format("and %d more for your other characters. The Queue tab has them all.",
+                #helping - HELPING_LINES))
             break
         end
 
         local entry = help.entry
         local recipe = ns.Recipes:GetAny(entry.recipeID)
-        local name = (recipe and recipe.name) or "a craft"
+        local name = (recipe and recipe.name) or L["a craft"]
         local parents = entry.isDependency and self:GetDependencyParents(entry) or {}
 
         if #parents > 0 then
-            ns.Print(("helping %s: make %d x %s for %s."):format(self:JoinNames(help.recipients),
+            ns.Print(L.Format("helping %s: make %d x %s for %s.", self:JoinNames(help.recipients),
                 entry.quantity, name, table.concat(parents, ", ")))
         else
-            ns.Print(("helping %s: make %d x %s."):format(self:JoinNames(help.recipients),
+            ns.Print(L.Format("helping %s: make %d x %s.", self:JoinNames(help.recipients),
                 entry.quantity, name))
         end
     end
@@ -774,7 +775,7 @@ function Queue:GetDependencyParents(entry)
 
     for parentID in pairs(entry.forRecipes or {}) do
         local parent = ns.Recipes:GetAny(parentID)
-        names[#names + 1] = (parent and parent.name) or "another craft"
+        names[#names + 1] = (parent and parent.name) or L["another craft"]
     end
 
     table.sort(names)
@@ -793,7 +794,7 @@ function Queue:Add(recipeID, quantity, options)
     -- "1e999" typed into a box is a number, an endless one; saved, every
     -- "%d" that showed the queue would raise from then on.
     if quantity ~= quantity or quantity == math.huge or quantity == -math.huge then
-        return nil, "that is not a quantity"
+        return nil, L["that is not a quantity"]
     end
     quantity = math.max(1, math.floor(quantity))
     options = options or {}
@@ -1115,10 +1116,10 @@ end
 function Queue:EnsureBuy(itemID, count, forItem)
     itemID, forItem = tonumber(itemID), tonumber(forItem)
     count = math.floor(tonumber(count) or 1)
-    if not itemID or count < 1 then return nil, "nothing to buy" end
-    if not ns.db then return nil, "Tradeskills has not loaded its saved data yet" end
+    if not itemID or count < 1 then return nil, L["nothing to buy"] end
+    if not ns.db then return nil, L["Tradeskills has not loaded its saved data yet"] end
     forItem = forItem or itemID
-    if OwnsItem(forItem) then return nil, "you already have it" end
+    if OwnsItem(forItem) then return nil, L["you already have it"] end
 
     local selfKey = SelfKey()
     local buys = Buys(true)
@@ -1171,18 +1172,18 @@ end
 function Queue:Ensure(recipeID, quantity)
     recipeID = tonumber(recipeID)
     quantity = math.max(1, math.floor(tonumber(quantity) or 1))
-    if not recipeID then return nil, "no recipe" end
+    if not recipeID then return nil, L["no recipe"] end
     if not ns.Recipes:GetAny(recipeID) then
-        return nil, "Tradeskills has not seen this recipe yet: open the profession window once on the character who knows it"
+        return nil, L["Tradeskills has not seen this recipe yet: open the profession window once on the character who knows it"]
     end
 
     local _, existing = self:Find(recipeID, true)
     if existing then
         if existing.quantity >= quantity then return true end
-        if not self:SetQuantity(recipeID, quantity) then return nil, "the queue would not take it" end
+        if not self:SetQuantity(recipeID, quantity) then return nil, L["the queue would not take it"] end
         return true
     end
-    if not self:Add(recipeID, quantity) then return nil, "the queue would not take it" end
+    if not self:Add(recipeID, quantity) then return nil, L["the queue would not take it"] end
     return true
 end
 

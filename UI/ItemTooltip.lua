@@ -34,6 +34,7 @@
 -- a weak table keyed by the tooltip.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local ItemTooltip = ns.NewModule("ItemTooltip")
 
@@ -286,8 +287,8 @@ function ItemTooltip:LinesFor(itemID, count)
         if self.IsAuctionable(itemID) then
             -- Searched and found empty is not the same as never looked at.
             local record = ns.Prices.Get and ns.Prices:Get(itemID)
-            lines[#lines + 1] = { "Auction value",
-                (record and record.quantity == 0) and "none listed" or "not scanned yet", true }
+            lines[#lines + 1] = { L["Auction value"],
+                (record and record.quantity == 0) and L["none listed"] or L["not scanned yet"], true }
         end
 
         local demand = self:DemandLine(itemID)
@@ -309,18 +310,18 @@ function ItemTooltip:LinesFor(itemID, count)
     if ns.Prices.IsStale and ns.Prices:IsStale(itemID) then
         local age = ns.Prices:GetAge(itemID)
         if age then
-            text = ("%s  (%s)"):format(text, Util.FormatAgeAgo(age))
+            text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(age))
         end
     end
 
-    lines[#lines + 1] = { "Auction value", text }
+    lines[#lines + 1] = { L["Auction value"], text }
 
     local lowest = self:LowestLine(itemID)
     if lowest then lines[#lines + 1] = lowest end
 
     if count and count > 1 then
         lines[#lines + 1] = {
-            ("Stack of %d"):format(count),
+            L.Format("Stack of %d", count),
             Util.FormatMoney(value * count, { short = true }),
             stack = true,
         }
@@ -346,8 +347,8 @@ function ItemTooltip:MyPriceLine(itemID)
     local mine, mode = ns.Prices:GetMine(itemID)
     if not mine then return nil end
 
-    return { "My price", ("%s  (%s)"):format(Util.FormatMoney(mine, { short = true }),
-        mode == "use" and "used instead of AH" or "never below"), color = "warn" }
+    return { L["My price"], L.Format("%s  (%s)", Util.FormatMoney(mine, { short = true }),
+        mode == "use" and L["used instead of AH"] or L["never below"]), color = "warn" }
 end
 
 --- On a recipe item: what it teaches, who knows it, what one craft costs,
@@ -382,7 +383,7 @@ function ItemTooltip:DemandLine(itemID)
     local ok, reading = pcall(ns.Demand.Get, ns.Demand, itemID)
     if not ok or not reading then return nil end
 
-    return { "Demand", ns.Demand:TooltipText(reading), color = ns.Demand:Color(reading) }
+    return { L["Demand"], ns.Demand:TooltipText(reading), color = ns.Demand:Color(reading) }
 end
 
 --- What one of the item is worth disenchanted, for anything that can be.
@@ -395,9 +396,9 @@ function ItemTooltip:DisenchantLine(itemID)
     if not value then return nil end
 
     local text = Util.FormatMoney(value, { short = true })
-    if partial then text = text .. " or more" end
+    if partial then text = L.Format("%s or more", text) end
 
-    return { "Disenchant value", text }
+    return { L["Disenchant value"], text }
 end
 
 --- The cheapest listing the last scan saw, beside the smoothed value
@@ -418,16 +419,16 @@ function ItemTooltip:LowestLine(itemID)
     end
     if not lowest or lowest <= 0 then
         -- Scanned, and nobody had one up: say so rather than leave it out.
-        return { "Lowest posting", "none listed", true }
+        return { L["Lowest posting"], L["none listed"], true }
     end
 
     local text = Util.FormatMoney(lowest, { short = true })
 
     if record.ownMin and record.ownMin <= lowest then
-        text = text .. "  (yours)"
+        text = L.Format("%s  (yours)", text)
     end
 
-    return { "Lowest posting", text }
+    return { L["Lowest posting"], text }
 end
 
 --------------------------------------------------------------------------------
@@ -819,7 +820,7 @@ function ItemTooltip:OnEnable()
     self:InstallHooks()
 
     ns.RegisterCommand("tip",
-        "show what the auction value on item tooltips is doing", function(input)
+        L["show what the auction value on item tooltips is doing"], function(input)
             ItemTooltip:PrintReport((input or ""):gsub("^%s+", ""):gsub("%s+$", ""))
         end)
 end

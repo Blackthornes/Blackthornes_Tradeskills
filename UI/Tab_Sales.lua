@@ -24,6 +24,7 @@
 -- to find them.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -35,13 +36,13 @@ local ROW_HEIGHT = 34
 local DETAIL_WIDTH = 300
 
 local VIEWS = {
-    { text = "Recent sales",   value = "sales" },
-    { text = "Recent, all",    value = "all" },
-    { text = "Still listed",   value = "listed" },
-    { text = "By item",        value = "item" },
-    { text = "Profit by method", value = "methods" },
-    { text = "Mailbox visits", value = "visits" },
-    { text = "Gold in and out", value = "gold" },
+    { text = L["Recent sales"],   value = "sales" },
+    { text = L["Recent, all"],    value = "all" },
+    { text = L["Still listed"],   value = "listed" },
+    { text = L["By item"],        value = "item" },
+    { text = L["Profit by method"], value = "methods" },
+    { text = L["Mailbox visits"], value = "visits" },
+    { text = L["Gold in and out"], value = "gold" },
 }
 
 local state = { view = "sales", search = "", selected = nil, period = "week" }
@@ -64,7 +65,7 @@ local awaitingItemData = false
 -- recipe for is still a sale, so the name is shown rather than the row dropped.
 local function ItemLabel(itemID, name)
     if itemID then return Util.GetItemLabel(itemID) end
-    return name or "unknown item"
+    return name or L["unknown item"]
 end
 
 --- Colour a name by the rarity of the item, where the client knows it.
@@ -168,12 +169,12 @@ local function UpdateEventRow(row, entry)
     if entry.kind == "heard" then
         -- Announced in chat while you were online. Its price arrives with
         -- its mail, and the row gives way to the ledger's entry then.
-        row.amount:SetText("sold")
+        row.amount:SetText(L["sold"])
         row.amount:SetTextColor(Theme.Unpack("profit"))
 
         local who = Util.CharacterName(entry.who)
-        row.detail:SetText(("sold  ·  gold waiting in the mail%s"):format(
-            who ~= "" and ("  ·  " .. who) or ""))
+        row.detail:SetText(who ~= "" and L.Format("sold  ·  gold waiting in the mail  ·  %s", who)
+            or L["sold  ·  gold waiting in the mail"])
         row.detail:SetTextColor(Theme.Unpack("warn"))
     elseif entry.kind == "sold" then
         row.amount:SetText(Util.FormatMoney(entry.net))
@@ -186,9 +187,9 @@ local function UpdateEventRow(row, entry)
         -- and printing "1" for a stack of twenty would be a number this tab
         -- states with confidence and gets wrong.
         if entry.quantity and entry.quantity > 1 then
-            parts[#parts + 1] = ("%d sold"):format(entry.quantity)
+            parts[#parts + 1] = L.Format("%d sold", entry.quantity)
         else
-            parts[#parts + 1] = "sold"
+            parts[#parts + 1] = L["sold"]
         end
 
         local profit, cost, source = EntryProfit(entry)
@@ -196,19 +197,18 @@ local function UpdateEventRow(row, entry)
         -- The cut gives way to the profit, which already takes it off: the
         -- line has room for one or the other, not both.
         if not profit and entry.cut and entry.cut > 0 then
-            parts[#parts + 1] = ("cut %s"):format(
+            parts[#parts + 1] = L.Format("cut %s",
                 Util.FormatMoney(entry.cut, { short = true, noColor = true }))
         end
 
         if entry.estimated then
-            parts[#parts + 1] = "gold still held"
+            parts[#parts + 1] = L["gold still held"]
         end
 
         if profit then
-            parts[#parts + 1] = ("cost %s%s"):format(
-                Util.FormatMoney(cost, { short = true, noColor = true }),
-                source == "est" and " est." or "")
-            parts[#parts + 1] = "profit " .. SignedMoney(profit)
+            local costText = Util.FormatMoney(cost, { short = true, noColor = true })
+            parts[#parts + 1] = source == "est" and L.Format("cost %s est.", costText) or L.Format("cost %s", costText)
+            parts[#parts + 1] = L.Format("profit %s", SignedMoney(profit))
         end
 
         row.detail:SetText(table.concat(parts, "  ·  "))
@@ -220,9 +220,8 @@ local function UpdateEventRow(row, entry)
         row.amount:SetText("")
 
         local quantity = entry.quantity or 1
-        row.detail:SetText(("%s%s"):format(
-            quantity > 1 and ("%dx "):format(quantity) or "",
-            entry.kind == "removed" and "you cancelled it" or "expired, nobody bought it"))
+        local what = entry.kind == "removed" and L["you cancelled it"] or L["expired, nobody bought it"]
+        row.detail:SetText(quantity > 1 and L.Format("%dx %s", quantity, what) or what)
         row.detail:SetTextColor(Theme.Unpack(entry.kind == "removed" and "muted" or "loss"))
     end
 
@@ -244,26 +243,26 @@ local function UpdateItemRow(row, item)
     -- anything -- except that a sale's quantity is usually unknown, so the two
     -- are the same number more often than not and saying "sold" twice would
     -- be noise.
-    parts[#parts + 1] = ("%d sold"):format(item.sold)
+    parts[#parts + 1] = L.Format("%d sold", item.sold)
 
     if item.expired > 0 then
-        parts[#parts + 1] = ("%d expired"):format(item.expired)
+        parts[#parts + 1] = L.Format("%d expired", item.expired)
     end
 
     if item.cancelled > 0 then
-        parts[#parts + 1] = ("%d cancelled"):format(item.cancelled)
+        parts[#parts + 1] = L.Format("%d cancelled", item.cancelled)
     end
 
     if item.costed + item.guessed > 0 then
-        parts[#parts + 1] = "profit " .. SignedMoney(item.profit)
-            .. (item.guessed > 0 and " est." or "")
+        parts[#parts + 1] = item.guessed > 0 and L.Format("profit %s est.", SignedMoney(item.profit))
+            or L.Format("profit %s", SignedMoney(item.profit))
     end
 
     row.detail:SetText(table.concat(parts, "  ·  "))
     row.detail:SetTextColor(Theme.Unpack("muted"))
 
     if item.sellThrough then
-        row.when:SetText(("%d%% sold through"):format(
+        row.when:SetText(L.Format("%d%% sold through",
             math.floor(item.sellThrough * 100 + 0.5)))
         row.when:SetTextColor(Theme.ProfitColor(item.sellThrough >= 0.5 and 1 or -1))
     else
@@ -274,13 +273,13 @@ end
 
 --- How long until a listing ends, or that it has.
 local function EndsText(listing)
-    if listing.ended then return "ended", "warn" end
+    if listing.ended then return L["ended"], "warn" end
     if not listing.ends then return "", "dim" end
 
     local left = listing.ends - time()
     local text = Util.FormatAge(left)
-    if text == "just now" then text = "1m" end
-    return (listing.roughEnd and "ends within %s" or "ends in %s"):format(text), "dim"
+    if text == L["just now"] then text = "1m" end
+    return listing.roughEnd and L.Format("ends within %s", text) or L.Format("ends in %s", text), "dim"
 end
 
 --- One listing from a character's last auction house reading.
@@ -295,13 +294,13 @@ local function UpdateListingRow(row, listing)
         row.amount:SetText("")
     end
 
-    local parts = { ("%d listed"):format(listing.quantity or 1) }
+    local parts = { L.Format("%d listed", listing.quantity or 1) }
     if listing.unit and (listing.quantity or 1) > 1 then
-        parts[#parts + 1] = ("%s each"):format(
+        parts[#parts + 1] = L.Format("%s each",
             Util.FormatMoney(listing.unit, { short = true, noColor = true }))
     end
     if listing.ended then
-        parts[#parts + 1] = "sold or back in the mail"
+        parts[#parts + 1] = L["sold or back in the mail"]
     end
     local who = Util.CharacterName(listing.who)
     if who ~= "" then parts[#parts + 1] = who end
@@ -320,8 +319,8 @@ local function UpdateVisitRow(row, haul)
 
     Theme.SetItemIcon(row.icon, best and best.itemID)
 
-    local head = ("Collected %s"):format(Util.FormatMoney(haul.total, { short = true }))
-    if haul.recordHaul then head = head .. ("  |c%sbest haul|r"):format(ns.COLORS.accent) end
+    local head = L.Format("Collected %s", Util.FormatMoney(haul.total, { short = true }))
+    if haul.recordHaul then head = head .. L.Format("  |c%sbest haul|r", ns.COLORS.accent) end
     row.name:SetText(head)
     row.name:SetTextColor(Theme.Unpack("text"))
 
@@ -330,14 +329,14 @@ local function UpdateVisitRow(row, haul)
 
     local parts = {}
     if (haul.salesCount or 0) > 0 then
-        parts[#parts + 1] = ("%d sale%s"):format(haul.salesCount, haul.salesCount == 1 and "" or "s")
+        parts[#parts + 1] = haul.salesCount == 1 and L.Format("%d sale", haul.salesCount) or L.Format("%d sales", haul.salesCount)
     end
     if best then
-        parts[#parts + 1] = ("best %s %s"):format(best.name or "item",
+        parts[#parts + 1] = L.Format("best %s %s", best.name or L["item"],
             Util.FormatMoney(best.amount, { short = true, noColor = true }))
     end
     if (haul.itemCount or 0) > 0 then
-        parts[#parts + 1] = ("%d item%s"):format(haul.itemCount, haul.itemCount == 1 and "" or "s")
+        parts[#parts + 1] = haul.itemCount == 1 and L.Format("%d item", haul.itemCount) or L.Format("%d items", haul.itemCount)
     end
 
     local who = Util.CharacterName(haul.who)
@@ -353,22 +352,23 @@ end
 --- What a group of sales made, for the line under a name.
 local function MethodDetail(group, unit)
     local parts = {
-        ("%d %s"):format(group.n, unit),
-        "in " .. Util.FormatMoney(group.income, { short = true, noColor = true }),
+        L.Format(unit, group.n),
+        L.Format("in %s", Util.FormatMoney(group.income, { short = true, noColor = true })),
     }
     if group.cost > 0 then
-        parts[#parts + 1] = "cost " .. Util.FormatMoney(group.cost, { short = true, noColor = true })
+        parts[#parts + 1] = L.Format("cost %s", Util.FormatMoney(group.cost, { short = true, noColor = true }))
     end
     if group.unknown > 0 then
-        parts[#parts + 1] = group.unknown == group.n and "cost not known"
-            or ("%d with no cost known"):format(group.unknown)
+        parts[#parts + 1] = group.unknown == group.n and L["cost not known"]
+            or L.Format("%d with no cost known", group.unknown)
     end
     return table.concat(parts, "  ·  ")
 end
 
+-- "%d sold" and the like: how a method's count reads.
 local METHOD_UNITS = {
-    crafted = "sold", flipped = "sold", other = "sold",
-    vendored = "sold to vendors", disenchanted = "disenchanted",
+    crafted = L["%d sold"], flipped = L["%d sold"], other = L["%d sold"],
+    vendored = L["%d sold to vendors"], disenchanted = L["%d disenchanted"],
 }
 
 --- A method's heading: its profit, and what it is made of.
@@ -379,7 +379,7 @@ local function UpdateMethodRow(row, data)
     row.name:SetTextColor(Theme.Unpack("accent"))
 
     row.amount:SetText(SignedMoney(data.group.profit))
-    row.detail:SetText(MethodDetail(data.group, METHOD_UNITS[data.method.key] or "sold"))
+    row.detail:SetText(MethodDetail(data.group, METHOD_UNITS[data.method.key] or L["%d sold"]))
     row.detail:SetTextColor(Theme.Unpack("muted"))
 
     row.when:SetText(data.method.hint)
@@ -390,11 +390,11 @@ end
 local function UpdateMethodItemRow(row, data)
     Theme.SetItemIcon(row.icon, data.itemID)
 
-    row.name:SetText(data.itemID and ItemLabel(data.itemID) or "unknown item")
+    row.name:SetText(data.itemID and ItemLabel(data.itemID) or L["unknown item"])
     ApplyNameColor(row.name, data.itemID)
 
     row.amount:SetText(SignedMoney(data.item.profit))
-    row.detail:SetText(MethodDetail(data.item, METHOD_UNITS[data.key] or "sold"))
+    row.detail:SetText(MethodDetail(data.item, METHOD_UNITS[data.key] or L["%d sold"]))
     row.detail:SetTextColor(Theme.Unpack("muted"))
     row.when:SetText("")
 end
@@ -520,17 +520,17 @@ end
 local function AddProfitLines(Add, subject)
     local counted = subject.costed + subject.guessed
     if counted == 0 then
-        if subject.sold > 0 then Add("Profit", "cost not known", "muted") end
+        if subject.sold > 0 then Add(L["Profit"], L["cost not known"], "muted") end
         return
     end
 
-    Add(subject.guessed > 0 and "Profit (some est.)" or "Profit",
+    Add(subject.guessed > 0 and L["Profit (some est.)"] or L["Profit"],
         SignedMoney(subject.profit), subject.profit < 0 and "loss" or "profit")
 
     if counted < subject.sold then
-        Add("Costed sales", ("%d of %d"):format(counted, subject.sold), "muted")
+        Add(L["Costed sales"], L.Format("%d of %d", counted, subject.sold), "muted")
     elseif counted > 1 then
-        Add("Profit per sale", SignedMoney(subject.profit / counted),
+        Add(L["Profit per sale"], SignedMoney(subject.profit / counted),
             subject.profit < 0 and "loss" or "profit")
     end
 end
@@ -546,97 +546,95 @@ local function UpdateDetail(item, totals)
     if item then
         detail.title:SetText(ItemLabel(item.itemID, item.name))
         detail.subtitle:SetText(item.lastAt
-            and ("last ended %s"):format(Util.FormatAgeAgo(time() - item.lastAt))
-            or "nothing dated")
+            and L.Format("last ended %s", Util.FormatAgeAgo(time() - item.lastAt))
+            or L["nothing dated"])
 
-        Add("Sold", ("%d listing%s"):format(item.sold, item.sold == 1 and "" or "s"))
+        Add(L["Sold"], (item.sold == 1 and L.Format("%d listing", item.sold) or L.Format("%d listings", item.sold)))
 
         if item.soldUnits > item.sold then
-            Add("Units sold", tostring(item.soldUnits))
+            Add(L["Units sold"], tostring(item.soldUnits))
         end
 
-        Add("Expired", ("%d listing%s"):format(item.expired, item.expired == 1 and "" or "s"),
+        Add(L["Expired"], (item.expired == 1 and L.Format("%d listing", item.expired) or L.Format("%d listings", item.expired)),
             item.expired > 0 and "loss" or "muted")
 
         if item.cancelled > 0 then
-            Add("You cancelled", ("%d listing%s"):format(
-                item.cancelled, item.cancelled == 1 and "" or "s"), "muted")
+            Add(L["You cancelled"], (item.cancelled == 1 and L.Format("%d listing", item.cancelled) or L.Format("%d listings", item.cancelled)), "muted")
         end
 
         if item.sellThrough then
-            Add("Sell-through", ("%d%%"):format(math.floor(item.sellThrough * 100 + 0.5)),
+            Add(L["Sell-through"], ("%d%%"):format(math.floor(item.sellThrough * 100 + 0.5)),
                 item.sellThrough >= 0.5 and "profit" or "loss")
         end
 
         if item.sold > 0 then
-            Add("Taken in", Util.FormatMoney(item.net), "profit")
-            Add("Average per sale", Util.FormatMoney(item.net / item.sold))
+            Add(L["Taken in"], Util.FormatMoney(item.net), "profit")
+            Add(L["Average per sale"], Util.FormatMoney(item.net / item.sold))
 
             if item.cut > 0 then
-                Add("Auction cut", Util.FormatMoney(item.cut), "muted")
+                Add(L["Auction cut"], Util.FormatMoney(item.cut), "muted")
             end
 
             AddProfitLines(Add, item)
 
             local estimate = EstimatedUnitRevenue(item.itemID)
             if estimate then
-                Add("Profit tab says", ("%s a unit"):format(
+                Add(L["Profit tab says"], L.Format("%s a unit",
                     Util.FormatMoney(estimate, { short = true })), "muted")
             end
 
             if item.estimated > 0 then
-                Add("Still being paid", ("%d sale%s"):format(
-                    item.estimated, item.estimated == 1 and "" or "s"), "warn")
+                Add(L["Still being paid"], item.estimated == 1 and L.Format("%d sale", item.estimated)
+                    or L.Format("%d sales", item.estimated), "warn")
             end
         end
 
         if item.restored then
-            detail.note:SetText("Some of these figures are from before you last quit the game. Only sales, amounts, expiries and gold are kept when you quit, so the auction cut and cancellations here are for this session only.")
+            detail.note:SetText(L["Some of these figures are from before you last quit the game. Only sales, amounts, expiries and gold are kept when you quit, so the auction cut and cancellations here are for this session only."])
         elseif item.guessed > 0 then
-            detail.note:SetText("A cost marked est. is what the materials cost today: that sale came before Tradeskills kept what each craft cost.")
+            detail.note:SetText(L["A cost marked est. is what the materials cost today: that sale came before Tradeskills kept what each craft cost."])
         elseif item.soldUnits == item.sold and item.sold > 0 then
-            detail.note:SetText("The sale mail does not say how many were in the stack, so a stack of twenty looks the same as a single item. For now, every sale counts as one.")
+            detail.note:SetText(L["The sale mail does not say how many were in the stack, so a stack of twenty looks the same as a single item. For now, every sale counts as one."])
         else
             detail.note:SetText("")
         end
     else
-        detail.title:SetText("Everything")
+        detail.title:SetText(L["Everything"])
         detail.subtitle:SetText(ns.Config:GetRealmKey())
 
-        Add("Items sold", ("%d listing%s"):format(totals.sold, totals.sold == 1 and "" or "s"))
-        Add("Expired", ("%d listing%s"):format(totals.expired, totals.expired == 1 and "" or "s"),
+        Add(L["Items sold"], (totals.sold == 1 and L.Format("%d listing", totals.sold) or L.Format("%d listings", totals.sold)))
+        Add(L["Expired"], (totals.expired == 1 and L.Format("%d listing", totals.expired) or L.Format("%d listings", totals.expired)),
             totals.expired > 0 and "loss" or "muted")
 
         if totals.cancelled > 0 then
-            Add("You cancelled", ("%d listing%s"):format(
-                totals.cancelled, totals.cancelled == 1 and "" or "s"), "muted")
+            Add(L["You cancelled"], (totals.cancelled == 1 and L.Format("%d listing", totals.cancelled) or L.Format("%d listings", totals.cancelled)), "muted")
         end
 
         if totals.sellThrough then
-            Add("Sell-through", ("%d%%"):format(math.floor(totals.sellThrough * 100 + 0.5)),
+            Add(L["Sell-through"], ("%d%%"):format(math.floor(totals.sellThrough * 100 + 0.5)),
                 totals.sellThrough >= 0.5 and "profit" or "loss")
         end
 
         if totals.sold > 0 then
-            Add("Taken in", Util.FormatMoney(totals.net), "profit")
-            Add("Average per sale", Util.FormatMoney(totals.net / totals.sold))
+            Add(L["Taken in"], Util.FormatMoney(totals.net), "profit")
+            Add(L["Average per sale"], Util.FormatMoney(totals.net / totals.sold))
 
             if totals.cut > 0 then
-                Add("Auction cut", Util.FormatMoney(totals.cut), "muted")
+                Add(L["Auction cut"], Util.FormatMoney(totals.cut), "muted")
             end
 
             AddProfitLines(Add, totals)
         end
 
-        Add("Different items", tostring(totals.items), "muted")
+        Add(L["Different items"], tostring(totals.items), "muted")
 
         local age = ns.Mail:GetAge()
-        Add("Mailbox read", Util.FormatAgeAgo(age), "muted")
+        Add(L["Mailbox read"], Util.FormatAgeAgo(age), "muted")
 
         if not ns.Mail:HasReadThisSession() then
-            detail.note:SetText("Sales are only recorded when you open a mailbox. Anything that sold since you last opened one is not here yet.")
+            detail.note:SetText(L["Sales are only recorded when you open a mailbox. Anything that sold since you last opened one is not here yet."])
         else
-            detail.note:SetText("Click an item to see how it has done. Sell-through ignores listings you cancelled, since cancelling says nothing about whether it would have sold.")
+            detail.note:SetText(L["Click an item to see how it has done. Sell-through ignores listings you cancelled, since cancelling says nothing about whether it would have sold."])
         end
     end
 
@@ -732,8 +730,8 @@ end
 -- detail pane's.
 
 local PERIOD_TEXT = {
-    session = "this session", today = "today",
-    week = "the last 7 days", month = "the last 30 days",
+    session = L["this session"], today = L["today"],
+    week = L["the last 7 days"], month = L["the last 30 days"],
 }
 
 --- A day as the date pickers show it: "Oct 06".
@@ -764,7 +762,7 @@ local function PeriodText()
     if state.period == "pick" and state.fromDay and state.toDay then
         local from, to = math.min(state.fromDay, state.toDay), math.max(state.fromDay, state.toDay)
         if from == to then return DayText(from) end
-        return ("%s to %s"):format(DayText(from), DayText(to))
+        return L.Format("%s to %s", DayText(from), DayText(to))
     end
     return PERIOD_TEXT[state.period] or ""
 end
@@ -813,21 +811,21 @@ local function RefreshGold()
     local bins = ns.GoldLog:Bins(state.period, state.fromDay, state.toDay)
     for _, bin in ipairs(bins) do
         if state.period == "session" or state.period == "today" then
-            bin.title = date("%H:%M", bin.from) .. " to " .. date("%H:%M", bin.to)
+            bin.title = L.Format("%s to %s", date("%H:%M", bin.from), date("%H:%M", bin.to))
         elseif bin.to - bin.from > 86400 * 1.5 then
-            bin.title = ("%s to %s"):format(date("%b %d", bin.from), date("%b %d", bin.to - 1))
+            bin.title = L.Format("%s to %s", date("%b %d", bin.from), date("%b %d", bin.to - 1))
         else
             bin.title = date("%A %b %d", bin.from)
         end
     end
 
     ns.GoldChart.SetBins(widgets.chart, bins,
-        "Nothing yet. Gold you make and spend from now on is written down here, with where it came from.")
+        L["Nothing yet. Gold you make and spend from now on is written down here, with where it came from."])
 
     local totals = ns.GoldLog:Totals(bins)
     ns.GoldChart.SetTotals(widgets.legend, totals, PeriodText())
 
-    widgets.summary:SetText(("In %s  ·  out %s  ·  net |c%s%s|r  ·  %s"):format(
+    widgets.summary:SetText(L.Format("In %s  ·  out %s  ·  net |c%s%s|r  ·  %s",
         Util.FormatMoney(totals.income, { short = true }),
         Util.FormatMoney(totals.spending, { short = true }),
         ns.COLORS[totals.net < 0 and "loss" or "profit"], ns.GoldChart.Signed(totals.net),
@@ -860,7 +858,7 @@ local function RefreshMethods()
     widgets.list:SetData(data)
 
     if #data == 0 then
-        widgets.emptyLabel:SetText("Nothing yet for this period. Sales at auction, to vendors and disenchants are written down as they happen, with what each cost you.")
+        widgets.emptyLabel:SetText(L["Nothing yet for this period. Sales at auction, to vendors and disenchants are written down as they happen, with what each cost you."])
         widgets.emptyLabel:Show()
     else
         widgets.emptyLabel:Hide()
@@ -875,19 +873,19 @@ local function RefreshMethods()
                 group.profit < 0 and "loss" or "profit" }
         end
     end
-    lines[#lines + 1] = { "Profit", SignedMoney(total.profit), total.profit < 0 and "loss" or "profit" }
-    lines[#lines + 1] = { "Taken in", Util.FormatMoney(total.income), "profit" }
-    lines[#lines + 1] = { "Cost", Util.FormatMoney(total.cost), total.cost > 0 and "loss" or "muted" }
+    lines[#lines + 1] = { L["Profit"], SignedMoney(total.profit), total.profit < 0 and "loss" or "profit" }
+    lines[#lines + 1] = { L["Taken in"], Util.FormatMoney(total.income), "profit" }
+    lines[#lines + 1] = { L["Cost"], Util.FormatMoney(total.cost), total.cost > 0 and "loss" or "muted" }
 
-    detail.title:SetText("Profit by method")
+    detail.title:SetText(L["Profit by method"])
     detail.subtitle:SetText(PeriodText())
     SetLines(detail, lines)
     detail.note:SetText(total.unknown > 0
-        and ("%d of %d had no cost known (loot, say), so all they brought in counts as profit."):format(
+        and L.Format("%d of %d had no cost known (loot, say), so all they brought in counts as profit.",
             total.unknown, total.n)
-        or "Costs are what crafting or buying on the auction house cost you.")
+        or L["Costs are what crafting or buying on the auction house cost you."])
 
-    widgets.summary:SetText(("Profit %s  ·  in %s  ·  %s"):format(
+    widgets.summary:SetText(L.Format("Profit %s  ·  in %s  ·  %s",
         SignedMoney(total.profit), Util.FormatMoney(total.income, { short = true }), PeriodText()))
 end
 
@@ -1027,22 +1025,22 @@ local function Refresh()
 
         if state.view == "listed" then
             if query ~= "" then
-                widgets.emptyLabel:SetText(("Nothing here matches '%s'."):format(state.search))
+                widgets.emptyLabel:SetText(L.Format("Nothing here matches '%s'.", state.search))
             elseif listedCharacters == 0 then
-                widgets.emptyLabel:SetText("Open the auction house once and what you have listed shows here, even after you log out.")
+                widgets.emptyLabel:SetText(L["Open the auction house once and what you have listed shows here, even after you log out."])
             else
-                widgets.emptyLabel:SetText("Nothing was listed at your last auction house visit.")
+                widgets.emptyLabel:SetText(L["Nothing was listed at your last auction house visit."])
             end
         elseif state.view ~= "visits" and totals.sold == 0 and totals.expired == 0 and totals.cancelled == 0 then
             widgets.emptyLabel:SetText(ns.Mail:HasReadThisSession()
-                and "Nothing recorded yet. Sales and expiries are written down when you open the mailbox they arrive in."
-                or "Nothing recorded yet. Visit a mailbox after a listing has ended and it will appear here.")
+                and L["Nothing recorded yet. Sales and expiries are written down when you open the mailbox they arrive in."]
+                or L["Nothing recorded yet. Visit a mailbox after a listing has ended and it will appear here."])
         elseif query ~= "" then
-            widgets.emptyLabel:SetText(("Nothing here matches '%s'."):format(state.search))
+            widgets.emptyLabel:SetText(L.Format("Nothing here matches '%s'.", state.search))
         elseif state.view == "visits" then
-            widgets.emptyLabel:SetText("No mailbox visits yet. Collect mail and each visit is kept here. Click one to see its report again.")
+            widgets.emptyLabel:SetText(L["No mailbox visits yet. Collect mail and each visit is kept here. Click one to see its report again."])
         else
-            widgets.emptyLabel:SetText("Nothing sold yet. Switch to 'Recent, all' to see what came back.")
+            widgets.emptyLabel:SetText(L["Nothing sold yet. Switch to 'Recent, all' to see what came back."])
         end
     else
         widgets.emptyLabel:Hide()
@@ -1054,8 +1052,9 @@ local function Refresh()
         for _, haul in ipairs(history) do collected = collected + (haul.total or 0) end
         local best = ns.MailHaul and ns.MailHaul:Records() or 0
 
-        widgets.summary:SetText(("%d visit%s  ·  collected %s  ·  best haul %s"):format(
-            #history, #history == 1 and "" or "s",
+        widgets.summary:SetText(L.Format(#history == 1 and L["%d visit  ·  collected %s  ·  best haul %s"]
+                or L["%d visits  ·  collected %s  ·  best haul %s"],
+            #history,
             Util.FormatMoney(collected, { short = true }),
             Util.FormatMoney(best, { short = true })))
         widgets.carried:Hide()
@@ -1064,27 +1063,30 @@ local function Refresh()
 
     if state.view == "listed" then
         local up = #data - endedCount
-        widgets.summary:SetText(("%d still listed%s  ·  as of your last auction house visit"):format(
-            math.max(0, up),
-            endedCount > 0 and ("  ·  %d ended since"):format(endedCount) or ""))
+        widgets.summary:SetText(endedCount > 0
+            and L.Format("%d still listed  ·  %d ended since  ·  as of your last auction house visit", math.max(0, up), endedCount)
+            or L.Format("%d still listed  ·  as of your last auction house visit", math.max(0, up)))
         widgets.carried:Hide()
         return
     end
 
     local counted = totals.costed + totals.guessed
 
-    widgets.summary:SetText(("%d sold  ·  taken in %s%s%s%s"):format(
+    local profitPart = ""
+    if counted > 0 then
+        profitPart = counted < totals.sold
+            and L.Format("  ·  profit %s on %d", SignedMoney(totals.profit), counted)
+            or L.Format("  ·  profit %s", SignedMoney(totals.profit))
+    end
+    widgets.summary:SetText(L.Format("%d sold  ·  taken in %s%s%s%s",
         totals.sold,
         Util.FormatMoney(totals.net, { short = true }),
-        counted > 0
-            and ("  ·  profit %s%s"):format(SignedMoney(totals.profit),
-                counted < totals.sold and (" on %d"):format(counted) or "")
-            or "",
+        profitPart,
         totals.sellThrough
-            and ("  ·  %d%% sell-through"):format(
+            and L.Format("  ·  %d%% sell-through",
                 math.floor(totals.sellThrough * 100 + 0.5))
             or "",
-        #heard > 0 and ("  ·  %d waiting in the mail"):format(#heard) or ""))
+        #heard > 0 and L.Format("  ·  %d waiting in the mail", #heard) or ""))
 
     -- Only in the event views, and only when there is something the list
     -- genuinely cannot show. In the By item view the carried-over figures are
@@ -1093,8 +1095,9 @@ local function Refresh()
 
     widgets.carried:SetShown(carried > 0)
     if carried > 0 then
-        widgets.carried:SetText(("plus %d sale%s from before you last quit the game. See By item"):format(
-            carried, carried == 1 and "" or "s"))
+        widgets.carried:SetText(carried == 1
+            and L.Format("plus %d sale from before you last quit the game. See By item", carried)
+            or L.Format("plus %d sales from before you last quit the game. See By item", carried))
     end
 end
 
@@ -1137,7 +1140,7 @@ local function Build(container)
 
     local toLabel = Theme.CreateLabel(toolbar, "small", "muted")
     toLabel:SetPoint("LEFT", fromDay, "RIGHT", 6, 0)
-    toLabel:SetText("to")
+    toLabel:SetText(L["to"])
     widgets.toLabel = toLabel
 
     local toDay = Widgets.CreateDropdown(toolbar, {}, function(value)
@@ -1147,7 +1150,7 @@ local function Build(container)
     toDay:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
     widgets.toDay = toDay
 
-    local search = Widgets.CreateSearchBox(toolbar, "Search sales", function(text)
+    local search = Widgets.CreateSearchBox(toolbar, L["Search sales"], function(text)
         state.search = text or ""
         Refresh()
     end)
@@ -1174,7 +1177,7 @@ local function Build(container)
             if data.methodRow then return end
             if data.haul then
                 GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Click to see this visit's report again", 1, 1, 1)
+                GameTooltip:SetText(L["Click to see this visit's report again"], 1, 1, 1)
                 GameTooltip:Show()
                 return
             end
@@ -1278,7 +1281,7 @@ ns.SalesTab = {
 
 UI:RegisterTab({
     key = "sales",
-    text = "Sales",
+    text = L["Sales"],
     order = 6,
     build = Build,
     refresh = Refresh,

@@ -364,6 +364,42 @@ and `Core/Serialize.lua` are copies of ours (prefix `BFRshare` instead of
 its own pairing (`shareNames`) rather than reading `linkNames`. A fix to
 `Core/Comm.lua` or `Core/Serialize.lua` here belongs in Farmer's too.
 
+## German translation
+
+The owner said yes (2026-10-12) to German in Tradeskills, after Pets'
+pilot and Farmer. Players are told the language as "Deutsch"; the code
+names stay `deDE` and `Locale/deDE.lua`.
+
+- **English is the key and the fallback.** `Locale/Locale.lua` (in the TOC
+  before `Core/Init.lua`, Pets' file) makes `ns.L`, whose missing keys
+  answer the key itself; `L.Format(key, ...)` is `string.format` on the
+  translation and puts values named by place (`%2$s ... %1$d`) in order.
+  The tests load single files with a stub `ns`, so every file that shows
+  text opens with `local L = ns.L or setmetatable({ Format =
+  string.format }, { __index = function(_, key) return key end })`.
+- **Adding a string:** `L["English text"]` or `L.Format("English %s",
+  value)`, a literal where it is written, one whole sentence a key (never
+  pieces joined with `..`), both forms for a plural; add its line to
+  `Locale/deDE.lua` (informal "du" and the game's words: Auktionshaus,
+  Händler, Entzaubern, Herstellen, Liste for the queue, Gewinn, Stufe) and
+  run `python tools/check_locale.py` (warns only; keep it at 0 missing).
+  `tools/test_locale.lua` loads the locale as a German client.
+- **Text compared with text:** a caller that checks a wrapped string (an
+  age's "just now", a reason like "need materials") compares it with the
+  same `L[...]`, never the English.
+- **Left in English on purpose:** slash command words, saved and internal
+  keys, mail subjects, anything matched against the client (chat
+  patterns, tooltip lines, spell and profession names), data names
+  (items, crates and writs, Forever's own items such as Merchant's Favor,
+  whose German names nobody has seen), debug and verbose scan lines, and
+  the checks players run for a report (`/bts probe`, `perf`, `openprof`,
+  `mail`, `disenchant`, `value` and the like; their help lines are
+  translated).
+- German runs about 30% longer: fixed-width buttons got short German
+  ("Los" for Craft, "Kauf" for Buy) or grow to fit; a new fixed width must
+  wrap or grow, never end in "...". The Columns menu lowers capital
+  umlauts itself, since Lua's `lower()` does not.
+
 ## The house frame (Titanforged)
 
 The owner picked this look for all four addons on 2026-10-04 from two mockups

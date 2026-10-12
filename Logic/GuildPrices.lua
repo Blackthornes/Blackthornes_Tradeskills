@@ -21,6 +21,7 @@
 --   * Kept a week, then dropped.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local GuildPrices = ns.NewModule("GuildPrices")
 
@@ -340,15 +341,16 @@ end
 --------------------------------------------------------------------------------
 
 function GuildPrices:Describe()
-    if not self:IsOn() then return "Guild prices are off." end
-    local parts = { ("%s guild price%s kept."):format(ns.Util and ns.Util.Comma and ns.Util.Comma(self:Count())
-        or tostring(self:Count()), self:Count() == 1 and "" or "s") }
+    if not self:IsOn() then return L["Guild prices are off."] end
+    local shown = ns.Util and ns.Util.Comma and ns.Util.Comma(self:Count()) or tostring(self:Count())
+    local parts = { self:Count() == 1 and L.Format("%s guild price kept.", shown)
+        or L.Format("%s guild prices kept.", shown) }
     local mine = self:LastSent()
     if mine and mine.at and ns.Util and ns.Util.FormatAgeAgo then
-        parts[#parts + 1] = "You last shared " .. ns.Util.FormatAgeAgo(time() - mine.at) .. "."
+        parts[#parts + 1] = L.Format("You last shared %s.", ns.Util.FormatAgeAgo(time() - mine.at))
     end
     if self.lastHeard and ns.Util and ns.Util.FormatAgeAgo then
-        parts[#parts + 1] = ("Last heard from %s %s."):format(
+        parts[#parts + 1] = L.Format("Last heard from %s %s.",
             self.lastHeard.who, ns.Util.FormatAgeAgo(time() - self.lastHeard.at))
     end
     return table.concat(parts, "  ")

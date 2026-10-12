@@ -7,6 +7,7 @@
 -- scans it rests on.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -21,16 +22,16 @@ local DETAIL_WIDTH = 300
 -- centred under its heading. `width` is the least each gets:
 -- Widgets.FitColumns widens it to fit the heading and a full amount.
 local COLUMNS = {
-    { key = "age",       label = "AGE",      width = 44, justify = "CENTER" },
-    { key = "liquidity", label = "MOVES",    width = 52, justify = "CENTER" },
-    { key = "quantity",  label = "LISTED",   width = 52, justify = "CENTER" },
+    { key = "age",       label = L["AGE"], width = 44, justify = "CENTER" },
+    { key = "liquidity", label = L["MOVES"], width = 52, justify = "CENTER" },
+    { key = "quantity",  label = L["LISTED"], width = 52, justify = "CENTER" },
     -- Few columns, so room for two digits of gold.
-    { key = "min",       label = "CHEAPEST", width = 80, money = true, sample = "88g 88s 88c" },
-    { key = "market",    label = "MARKET",   width = 80, money = true, sample = "88g 88s 88c" },
+    { key = "min",       label = L["CHEAPEST"], width = 80, money = true, sample = "88g 88s 88c" },
+    { key = "market",    label = L["MARKET"], width = 80, money = true, sample = "88g 88s 88c" },
 }
 
 -- Any column but the name can be hidden (UI/Columns.lua).
-ns.Columns:Register("prices", "Prices", COLUMNS)
+ns.Columns:Register("prices", L["Prices"], COLUMNS)
 
 local state = {
     search = "",
@@ -299,8 +300,8 @@ local function CreateStar(parent, size, getItemID)
 
     local function ShowTip()
         GameTooltip:SetOwner(star, "ANCHOR_TOP")
-        GameTooltip:SetText(star.on and "Remove from favourites" or "Add to favourites", 1, 1, 1, 1, true)
-        GameTooltip:AddLine("Tick Favourites only to see just your starred items.", 0.9, 0.9, 0.9, true)
+        GameTooltip:SetText(star.on and L["Remove from favourites"] or L["Add to favourites"], 1, 1, 1, 1, true)
+        GameTooltip:AddLine(L["Tick Favourites only to see just your starred items."], 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end
 
@@ -371,7 +372,7 @@ local function UpdateRow(row, entry)
     entry.label = Util.GetItemLabel(entry.itemID)
     -- An item with its own price says so, in gold, beside its name.
     if Mine(entry.itemID) then
-        Theme.SetRowName(row.name, ("%s  |c%smy price|r"):format(entry.label, ns.COLORS.warn))
+        Theme.SetRowName(row.name, L.Format("%s  |c%smy price|r", entry.label, ns.COLORS.warn))
     else
         Theme.SetRowName(row.name, entry.label)
     end
@@ -392,13 +393,13 @@ local function UpdateRow(row, entry)
     if listedMin then
         Theme.SetMoneyText(cells.min, entry.record.min, { short = true })
     else
-        cells.min:SetText("none")
+        cells.min:SetText(L["none"])
     end
     cells.min:SetTextColor(Theme.Unpack(listedMin and "text" or "dim"))
 
     -- Sold out reads as sold out, apart from a thin shelf at a glance.
     local listed = (entry.quantity or 0) > 0
-    cells.quantity:SetText(listed and Util.Comma(entry.quantity) or "none")
+    cells.quantity:SetText(listed and Util.Comma(entry.quantity) or L["none"])
     cells.quantity:SetTextColor(Theme.Unpack(listed and "muted" or "dim"))
 
     if entry.liquidity then
@@ -412,7 +413,7 @@ local function UpdateRow(row, entry)
 
     -- "now" rather than "just now", which is wider than the column.
     local age = Util.FormatAge(entry.record.seen and (time() - entry.record.seen))
-    cells.age:SetText(age == "just now" and "now" or age)
+    cells.age:SetText(age == L["just now"] and L["now"] or age)
     cells.age:SetTextColor(Theme.Unpack(stale and "warn" or "dim"))
 end
 
@@ -426,13 +427,13 @@ end
 -- a price of nothing clears it, and so does Clear.
 
 local MY_MODES = {
-    { text = "Use this price", value = "use" },
-    { text = "Never below", value = "floor" },
+    { text = L["Use this price"], value = "use" },
+    { text = L["Never below"], value = "floor" },
 }
 
 local MY_STATUS = {
-    use = "Used instead of the AH price",
-    floor = "AH price, but never below",
+    use = L["Used instead of the AH price"],
+    floor = L["AH price, but never below"],
 }
 
 local function MyPriceTyped(my)
@@ -459,7 +460,7 @@ BuildMyPrice = function(detail, anchor)
 
     local heading = Theme.CreateLabel(detail, "tiny", "dim")
     heading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
-    heading:SetText("MY PRICE")
+    heading:SetText(L["MY PRICE"])
     Theme.StyleHeading(heading, detail)
     my.heading = heading
 
@@ -496,11 +497,11 @@ BuildMyPrice = function(detail, anchor)
     my.mode:SetValue("use")
     parts[#parts + 1] = my.mode
 
-    my.clear = Widgets.CreateButton(detail, "Clear", function()
+    my.clear = Widgets.CreateButton(detail, L["Clear"], function()
         if not my.itemID then return end
         ns.Prices:SetMine(my.itemID, nil)
         if Refresh then Refresh() end
-    end, { width = 64, height = 22, tooltip = "Take your price off and go back to the AH price" })
+    end, { width = 64, height = 22, tooltip = L["Take your price off and go back to the AH price"] })
     my.clear:SetPoint("TOPRIGHT", my.mode, "BOTTOMRIGHT", 0, -6)
     parts[#parts + 1] = my.clear
 
@@ -517,8 +518,8 @@ BuildMyPrice = function(detail, anchor)
         box.editBox:SetScript("OnEnter", function(self)
             Theme.SetBorderColor(box, "borderLit")
             GameTooltip:SetOwner(box, "ANCHOR_TOP")
-            GameTooltip:SetText("My price", 1, 1, 1)
-            GameTooltip:AddLine("Your own price for this item. Pick whether it is used instead of the AH price, or only as the least it can be.", 0.9, 0.9, 0.9, true)
+            GameTooltip:SetText(L["My price"], 1, 1, 1)
+            GameTooltip:AddLine(L["Your own price for this item. Pick whether it is used instead of the AH price, or only as the least it can be."], 0.9, 0.9, 0.9, true)
             GameTooltip:Show()
         end)
         box.editBox:SetScript("OnLeave", function()
@@ -560,7 +561,7 @@ BuildMyPrice = function(detail, anchor)
             status:SetText(MY_STATUS[mode])
             status:SetTextColor(Theme.Unpack("warn"))
         else
-            status:SetText("Not set, the AH price is used")
+            status:SetText(L["Not set, the AH price is used"])
             status:SetTextColor(Theme.Unpack("dim"))
         end
     end
@@ -616,15 +617,15 @@ local function BuildDetail(parent)
         return value
     end
 
-    AddRow("market", "Market value")
-    AddRow("min", "Cheapest listing")
-    AddRow("rival", "Cheapest rival")
-    AddRow("own", "Your listing")
-    AddRow("quantity", "Listed quantity")
-    AddRow("scans", "Times scanned")
-    AddRow("confidence", "Confidence")
-    AddRow("liquidity", "Stock movement")
-    AddRow("bags", "In your bags")
+    AddRow("market", L["Market value"])
+    AddRow("min", L["Cheapest listing"])
+    AddRow("rival", L["Cheapest rival"])
+    AddRow("own", L["Your listing"])
+    AddRow("quantity", L["Listed quantity"])
+    AddRow("scans", L["Times scanned"])
+    AddRow("confidence", L["Confidence"])
+    AddRow("liquidity", L["Stock movement"])
+    AddRow("bags", L["In your bags"])
 
     BuildMyPrice(detail, rowsAnchor)
 
@@ -632,37 +633,37 @@ local function BuildDetail(parent)
     -- and when in the day it is cheapest and dearest. It runs down to the
     -- buttons, so it gets whatever room the rows above leave.
     if ns.PriceGraph then
-        local graph = ns.PriceGraph.Create(detail, { heading = "PRICE HISTORY" })
+        local graph = ns.PriceGraph.Create(detail, { heading = L["PRICE HISTORY"] })
         graph:SetPoint("TOPLEFT", detail.myPrice.status, "BOTTOMLEFT", 0, -12)
         graph:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -12, 14 + 24 + 8)
         detail.graph = graph
     end
 
     -- Actions
-    detail.deepScan = Widgets.CreateButton(detail, "Deep scan", function()
+    detail.deepScan = Widgets.CreateButton(detail, L["Deep scan"], function()
         if not state.selected then return end
 
         local itemID = state.selected.itemID
-        ns.Print(("scanning %s..."):format(Util.GetItemLabel(itemID)))
+        ns.Print(L.Format("scanning %s...", Util.GetItemLabel(itemID)))
 
         ns.Scanner:ScanItem(itemID, function()
             UI:RefreshActiveTab()
         end)
     end, { width = 110, height = 24, primary = true,
-           tooltip = "Read every listing of this item from the auction house" })
+           tooltip = L["Read every listing of this item from the auction house"] })
     detail.deepScan:SetPoint("BOTTOMLEFT", 12, 14)
 
-    detail.searchAH = Widgets.CreateButton(detail, "Search AH", function()
+    detail.searchAH = Widgets.CreateButton(detail, L["Search AH"], function()
         if not state.selected then return end
         UI:SearchAuctionHouse(state.selected.itemID)
-    end, { width = 110, height = 24, tooltip = "Search the auction house for this item" })
+    end, { width = 110, height = 24, tooltip = L["Search the auction house for this item"] })
     detail.searchAH:SetPoint("LEFT", detail.deepScan, "RIGHT", 8, 0)
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
     empty:SetWidth(240)
     empty:SetWordWrap(true)
-    empty:SetText("Select an item to see its price history")
+    empty:SetText(L["Select an item to see its price history"])
     detail.empty = empty
 
     return detail
@@ -713,7 +714,7 @@ local function UpdateDetail(entry)
         detail.values.min:SetText(Util.FormatMoney(record.min))
         detail.values.min:SetTextColor(Theme.Unpack("text"))
     else
-        detail.values.min:SetText("none listed")
+        detail.values.min:SetText(L["none listed"])
         detail.values.min:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -721,7 +722,7 @@ local function UpdateDetail(entry)
         detail.values.rival:SetText(Util.FormatMoney(record.rivalMin))
         detail.values.rival:SetTextColor(Theme.Unpack("text"))
     else
-        detail.values.rival:SetText("none listed")
+        detail.values.rival:SetText(L["none listed"])
         detail.values.rival:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -730,7 +731,7 @@ local function UpdateDetail(entry)
         detail.values.own:SetTextColor(Theme.Unpack(
             ns.Prices:HoldsLowest(entry.itemID) and "profit" or "loss"))
     else
-        detail.values.own:SetText("none")
+        detail.values.own:SetText(L["none"])
         detail.values.own:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -745,10 +746,10 @@ local function UpdateDetail(entry)
 
     local liquidity = ns.Prices:GetLiquidity(entry.itemID)
     if liquidity then
-        detail.values.liquidity:SetText(("%d%% per scan"):format(math.floor(liquidity * 100)))
+        detail.values.liquidity:SetText(L.Format("%d%% per scan", math.floor(liquidity * 100)))
         detail.values.liquidity:SetTextColor(Theme.Unpack("text"))
     else
-        detail.values.liquidity:SetText("not enough scans")
+        detail.values.liquidity:SetText(L["not enough scans"])
         detail.values.liquidity:SetTextColor(Theme.Unpack("dim"))
     end
 
@@ -756,21 +757,21 @@ local function UpdateDetail(entry)
     -- materials list said.
     local have = ns.Inventory and ns.Inventory.GetBagCount and ns.Inventory:GetBagCount(entry.itemID) or 0
     if have > 0 and record.market then
-        detail.values.bags:SetText(("%d, worth %s"):format(have,
+        detail.values.bags:SetText(L.Format("%d, worth %s", have,
             Util.FormatMoney(record.market * have, { short = true })))
         detail.values.bags:SetTextColor(Theme.Unpack("text"))
     elseif have > 0 then
         detail.values.bags:SetText(tostring(have))
         detail.values.bags:SetTextColor(Theme.Unpack("text"))
     else
-        detail.values.bags:SetText("none")
+        detail.values.bags:SetText(L["none"])
         detail.values.bags:SetTextColor(Theme.Unpack("dim"))
     end
 
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
     detail.deepScan.tooltipText = ns.Scanner.isAuctionHouseOpen
-        and "Read every listing of this item from the auction house"
-        or "The auction house must be open"
+        and L["Read every listing of this item from the auction house"]
+        or L["The auction house must be open"]
 
     if type(graph) == "table" then graph:SetItem(entry.itemID) end
 end
@@ -798,19 +799,20 @@ function Refresh()
 
     if #data == 0 then
         if state.favouritesOnly and starred == 0 then
-            widgets.emptyLabel:SetText("No favourites yet. Click the star beside an item to keep it here.")
+            widgets.emptyLabel:SetText(L["No favourites yet. Click the star beside an item to keep it here."])
         elseif state.mineOnly and not next(ns.Prices.GetAllMine and ns.Prices:GetAllMine() or {}) then
-            widgets.emptyLabel:SetText("No prices of your own yet. Pick an item and type one under My price.")
+            widgets.emptyLabel:SetText(L["No prices of your own yet. Pick an item and type one under My price."])
         else
             widgets.emptyLabel:SetText(ns.Prices:Count() == 0
-                and "No auction data yet. Open the auction house and press Scan."
-                or "Nothing matches these filters.")
+                and L["No auction data yet. Open the auction house and press Scan."]
+                or L["Nothing matches these filters."])
         end
     end
 
-    widgets.countLabel:SetText(("%s item%s priced%s"):format(
-        Util.Comma(#data), #data == 1 and "" or "s",
-        starred > 0 and (", %d starred"):format(starred) or ""))
+    local starredText = starred > 0 and L.Format(", %d starred", starred) or ""
+    widgets.countLabel:SetText(#data == 1
+        and L.Format("%s item priced%s", Util.Comma(#data), starredText)
+        or L.Format("%s items priced%s", Util.Comma(#data), starredText))
 
     UpdateDetail(state.selected)
 end
@@ -837,14 +839,14 @@ local function Build(container)
         if widgets.list then widgets.list:ScrollToTop() end
     end
 
-    local search = Widgets.CreateSearchBox(toolbar, "Search items", function(text)
+    local search = Widgets.CreateSearchBox(toolbar, L["Search items"], function(text)
         state.search = text or ""
         ShowFromTop()
     end)
     search:SetPoint("LEFT", 0, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
-    local reagentsOnly = Widgets.CreateCheckbox(toolbar, "Only what I craft with", function(checked)
+    local reagentsOnly = Widgets.CreateCheckbox(toolbar, L["Only what I craft with"], function(checked)
         state.reagentsOnly = checked
         ShowFromTop()
     end, false)
@@ -853,7 +855,7 @@ local function Build(container)
     -- Only the starred items (2026-10-06). Remembered, so the tab
     -- opens on the watch list for whoever keeps one.
     state.favouritesOnly = ns.Config:Get("pricesFavouritesOnly") == true
-    local favouritesOnly = Widgets.CreateCheckbox(toolbar, "Favourites only", function(checked)
+    local favouritesOnly = Widgets.CreateCheckbox(toolbar, L["Favourites only"], function(checked)
         state.favouritesOnly = checked
         ns.Config:Set("pricesFavouritesOnly", checked)
         ShowFromTop()
@@ -861,7 +863,7 @@ local function Build(container)
     favouritesOnly:SetPoint("LEFT", reagentsOnly, "RIGHT", 12, 0)
 
     -- Only the items given their own price (2026-10-06).
-    local mineOnly = Widgets.CreateCheckbox(toolbar, "My prices only", function(checked)
+    local mineOnly = Widgets.CreateCheckbox(toolbar, L["My prices only"], function(checked)
         state.mineOnly = checked
         ShowFromTop()
     end, false)
@@ -869,7 +871,7 @@ local function Build(container)
 
     -- Every enchanting material, scanned or not: the Enchanting tab's
     -- materials list, which moved here (2026-10-07).
-    local enchantingOnly = Widgets.CreateCheckbox(toolbar, "Enchanting materials", function(checked)
+    local enchantingOnly = Widgets.CreateCheckbox(toolbar, L["Enchanting materials"], function(checked)
         state.enchantingOnly = checked
         ShowFromTop()
     end, false)
@@ -886,7 +888,7 @@ local function Build(container)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 46, 0)
-    nameHeading:SetText("ITEM")
+    nameHeading:SetText(L["ITEM"])
 
     local sortLabels, cells = { name = nameHeading }, {}
     for _, column in ipairs(COLUMNS) do
@@ -963,7 +965,7 @@ end
 
 UI:RegisterTab({
     key = "prices",
-    text = "Prices",
+    text = L["Prices"],
     order = 5,
     build = Build,
     refresh = Refresh,
