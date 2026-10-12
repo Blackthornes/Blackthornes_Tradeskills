@@ -58,3 +58,25 @@ loads. `/bts db` and `/bts persist` show what loaded.
 `docs/FOREVER_API_FINDINGS.md` records what the game actually does, as found
 with `/bts probe` rather than taken from documentation. Read it before changing
 anything to do with the auction house or professions.
+
+## For addon authors
+
+Other addons can read Tradeskills' auction prices through one global. Check
+that it exists, since Tradeskills may not be installed:
+
+```lua
+local api = BlackthornesTS_API
+if api then
+    local copper = api.GetPrice(2589)          -- item ID or item link; copper for one, or nil
+    local age = api.GetPriceAge(2589)          -- seconds since this account's own scan saw it, or nil
+end
+```
+
+- `GetPrice` is the market value Tradeskills itself uses: the player's own
+  scans first, then guild prices and other price sources for items not
+  scanned. It is per realm and faction.
+- `GetPriceAge` is nil when the price did not come from this account's own
+  scans.
+- Neither call raises an error; anything it can't answer is nil.
+- `BlackthornesTS_API.version` is 1. These calls will not be renamed or
+  changed; new ones raise the version.
