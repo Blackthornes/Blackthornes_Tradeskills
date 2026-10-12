@@ -45,7 +45,7 @@ if type(Format) ~= "function" then Format = string.format end
 
 -- Raised when this file changes in a way an older copy cannot draw: the
 -- newest copy loaded builds the window.
-WhatsNew.FILE_VERSION = 1
+WhatsNew.FILE_VERSION = 2
 
 -- Seconds after login, so the window comes up once the game has settled.
 WhatsNew.DELAY = 5
@@ -399,6 +399,15 @@ local function Fade(texture, orientation, key, fromAlpha, toAlpha)
     end
 end
 
+--- A gradient lit to `p` (0 to 1). On Forever a gradient keeps its light
+--- whatever SetAlpha says, so it is drawn again at the faded alphas and
+--- hidden at 0 (the same rule as Theme.LightGradient).
+local function Light(texture, orientation, key, fromAlpha, toAlpha, p)
+    p = math.max(0, math.min(1, tonumber(p) or 0))
+    texture:SetShown(p > 0)
+    if p > 0 then Fade(texture, orientation, key, fromAlpha * p, toAlpha * p) end
+end
+
 --------------------------------------------------------------------------------
 -- Movement
 --------------------------------------------------------------------------------
@@ -434,8 +443,8 @@ local function Pulse(texture)
     local made = pcall(function()
         group:SetLooping("BOUNCE")
         local alpha = group:CreateAnimation("Alpha")
-        alpha:SetFromAlpha(0.15)
-        alpha:SetToAlpha(0.65)
+        alpha:SetFromAlpha(0.2)
+        alpha:SetToAlpha(0.95)
         alpha:SetDuration(1.1)
         alpha:SetSmoothing("IN_OUT")
     end)
@@ -680,8 +689,9 @@ end
 local function CardHover(card, on)
     local target = on and 1 or 0
     local function Apply(p)
-        card.wash:SetAlpha(0.22 * p)
-        card.stripe:SetAlpha(0.55 + 0.45 * p)
+        Light(card.wash, "HORIZONTAL", "accent", 0.18, 0, p)
+        card.stripe:SetAlpha(0.8 + 0.2 * p)
+        card.edge:SetAlpha(0.35 + 0.4 * p)
     end
     if Moving() and ns.Motion.Blend then
         ns.Motion:Blend(card, "hover", target, on and 0.12 or 0.2, Apply)
@@ -711,15 +721,21 @@ function WhatsNew:Card(index)
     -- The gold wash, lit only under the mouse.
     card.wash = card:CreateTexture(nil, "BACKGROUND", nil, 1)
     card.wash:SetAllPoints(card)
-    Fade(card.wash, "HORIZONTAL", "accent", 1, 0)
-    card.wash:SetAlpha(0)
+    Light(card.wash, "HORIZONTAL", "accent", 0.18, 0, 0)
 
     card.stripe = card:CreateTexture(nil, "ARTWORK")
     card.stripe:SetWidth(2)
     card.stripe:SetPoint("TOPLEFT")
     card.stripe:SetPoint("BOTTOMLEFT")
-    Paint(card.stripe, "accent")
-    card.stripe:SetAlpha(0.55)
+    Paint(card.stripe, "accentHi")
+    card.stripe:SetAlpha(0.8)
+    -- The neon edge: a soft gold light spilling in from the stripe.
+    card.edge = card:CreateTexture(nil, "BACKGROUND", nil, 2)
+    card.edge:SetWidth(26)
+    card.edge:SetPoint("TOPLEFT", card, "TOPLEFT", 2, 0)
+    card.edge:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 2, 0)
+    Fade(card.edge, "HORIZONTAL", "accent", 0.16, 0)
+    card.edge:SetAlpha(0.35)
 
     card.rule = card:CreateTexture(nil, "ARTWORK")
     card.rule:SetHeight(1)
@@ -763,6 +779,7 @@ function WhatsNew:Card(index)
 
     -- A light that crosses the card once as it arrives.
     card.sweep = card:CreateTexture(nil, "OVERLAY")
+    card.sweep:SetSize(110, 140)
     card.sweep:SetTexture(Media("Glow"))
     card.sweep:SetVertexColor(Color("accentHi"))
     Additive(card.sweep)
@@ -943,30 +960,32 @@ function WhatsNew:Arrive()
     local base = SavedScale()
     local back = EaseBack()
 
-    Animate(frame, "open", 0.34, function(p)
-        frame:SetAlpha(math.min(1, p * 1.8))
-        pcall(frame.SetScale, frame, base * (0.93 + 0.07 * p))
+    Animate(frame, "open", 0.55, function(p)
+        frame:SetAlpha(math.min(1, p * 1.6))
+        pcall(frame.SetScale, frame, base * (0.8 + 0.2 * p))
     end, { ease = back })
 
     local divider = self.divider
     local half = math.max(0, (WidthOf(frame, self.WIDTH) - 2 * PAD) / 2 - 10)
-    Animate(divider.gem, "draw", 0.6, function(p)
+    Animate(divider.gem, "draw", 0.8, function(p)
         divider.left:SetWidth(math.max(0.1, half * p))
         divider.right:SetWidth(math.max(0.1, half * p))
-        divider.shine:SetAlpha(math.sin(math.pi * p) * 0.8)
-    end, { delay = 0.12 })
+        divider.shine:SetAlpha(math.sin(math.pi * p))
+    end, { delay = 0.25 })
 
     for index = 1, #(self.list or {}) do
         local card = self.cards[index]
-        local delay = 0.2 + (index - 1) * 0.09
+        local delay = 0.45 + (index - 1) * 0.22
         local function Place(offset)
             card:ClearAllPoints()
-            card:SetPoint("TOPLEFT", self.child, "TOPLEFT", 0, card.baseY - offset)
+            card:SetPoint("TOPLEFT", self.child, "TOPLEFT", offset, card.baseY - offset * 0.5)
         end
-        Animate(card, "arrive", 0.45, function(p)
-            card:SetAlpha(p)
-            Place((1 - p) * 18)
+        card:SetAlpha(0)
+        Animate(card, "arrive", 0.6, function(p)
+            card:SetAlpha(math.min(1, p * 1.4))
+            Place((1 - p) * 70)
         end, {
+            ease = back,
             delay = delay,
             done = function()
                 Place(0)
@@ -974,24 +993,24 @@ function WhatsNew:Arrive()
             end,
         })
         Animate(card.icon, "pop", 0.5, function(p)
-            local size = (ICON - 2) * (0.55 + 0.45 * p)
+            local size = (ICON - 2) * (0.2 + 0.8 * p)
             card.icon:SetSize(size, size)
             card.ring:SetSize(size + 2, size + 2)
-            card.halo:SetAlpha(0.35 + 0.5 * math.sin(math.pi * math.min(1, p)))
-        end, { delay = delay + 0.05, ease = back })
+            card.halo:SetAlpha(0.35 + 0.65 * math.sin(math.pi * math.min(1, p)))
+        end, { delay = delay + 0.25, ease = back })
         for n = 1, card.used or 0 do
             local line = card.lines[n]
-            Animate(line.text, "arrive", 0.3, function(p)
+            Animate(line.text, "arrive", 0.4, function(p)
                 line.text:SetAlpha(p)
                 line.dot:SetAlpha(p)
                 line.label:SetAlpha(p)
-            end, { delay = delay + 0.12 + n * 0.05 })
+            end, { delay = delay + 0.35 + n * 0.12 })
         end
     end
 
     local glow, anim = self.doneGlow, self.doneGlowAnim
-    local settle = 0.45 + #(self.list or {}) * 0.09
-    Animate(glow, "glow", 0.4, function(p) glow:SetAlpha(0.4 * p) end, {
+    local settle = 0.9 + #(self.list or {}) * 0.22
+    Animate(glow, "glow", 0.5, function(p) glow:SetAlpha(0.6 * p) end, {
         delay = settle,
         done = function()
             if anim and Moving() and frame:IsShown() then pcall(anim.Play, anim) end
@@ -1007,10 +1026,10 @@ function WhatsNew:Sweep(card)
     end
     local width = WidthOf(card, 0)
     if width <= 0 then return end
-    Animate(card.sweep, "sweep", 0.9, function(p)
+    Animate(card.sweep, "sweep", 1.1, function(p)
         card.sweep:ClearAllPoints()
         card.sweep:SetPoint("CENTER", card, "LEFT", -60 + (width + 120) * p, 0)
-        card.sweep:SetAlpha(math.sin(math.pi * p) * 0.35)
+        card.sweep:SetAlpha(math.sin(math.pi * p) * 0.6)
     end, { ease = false, done = function() card.sweep:SetAlpha(0) end })
 end
 
