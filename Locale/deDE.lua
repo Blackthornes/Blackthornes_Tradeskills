@@ -770,6 +770,13 @@ L["Buying %d costs %s. The shopping list said %s: %s more (%d%% over)."] = "%d z
 -- Prices
 -- ======================================================================
 L["Guild prices are off."] = "Gildenpreise sind aus."
+L["TRADESKILLMASTER"] = "TRADESKILLMASTER"
+L["TSM prices"] = "TSM-Preise"
+L["When TradeSkillMaster is loaded, its prices fill in items that neither you nor your guildmates have priced. Your own scans always win."] = "Wenn TradeSkillMaster geladen ist, füllen seine Preise Gegenstände, die weder du noch deine Gildenmitglieder bepreist habt. Deine eigenen Scans gewinnen immer."
+L["TSM prices are off."] = "TSM-Preise sind aus."
+L["TSM isn't loaded, so nothing changes."] = "TSM ist nicht geladen, also ändert sich nichts."
+L["TSM is loaded. It hasn't filled any gaps yet this session."] = "TSM ist geladen. In dieser Sitzung hat es noch keine Lücken gefüllt."
+L["TSM is loaded and is filling gaps in your prices."] = "TSM ist geladen und füllt Lücken in deinen Preisen."
 L["%s guild price kept."] = "%s Gildenpreis gespeichert."
 L["%s guild prices kept."] = "%s Gildenpreise gespeichert."
 L["You last shared %s."] = "Zuletzt geteilt %s."
