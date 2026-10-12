@@ -741,9 +741,13 @@ function Config:AdoptLegacyCharacter(guid)
         characters[legacy] = nil
         Repoint(legacy, guid)
         self.adoptedFrom = legacy
+        self:FoldOthersOldRecords()
         return
     end
-    if type(mine) ~= "table" then return end
+    if type(mine) ~= "table" then
+        self:FoldOthersOldRecords()
+        return
+    end
 
     local names = {}
     local first = FoldName(mine.name) or FoldName(SafeUnitName())
@@ -759,6 +763,49 @@ function Config:AdoptLegacyCharacter(guid)
     for _, key in ipairs(found) do
         Retire(key, characters[key], mine, guid)
         self.retiredFrom = self.retiredFrom and (self.retiredFrom .. ", " .. key) or key
+    end
+
+    self:FoldOthersOldRecords()
+end
+
+--- An old record saved under a whole name ("Ana Blackthorne") is another
+--- character's, not this one's: until that character logs in, its old bags
+--- would be counted beside its GUID record. When exactly one GUID record
+--- has that first and last name (and no realm, side or class that differs),
+--- the old record is set aside into it as well, kept whole. A first name
+--- alone could be any of several characters, so it waits for its own login.
+function Config:FoldOthersOldRecords()
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" then return end
+
+    local byName = {}
+    for key, record in pairs(characters) do
+        if type(key) == "string" and key:find("^Player%-") and type(record) == "table"
+            and record.linkedFrom == nil then
+            local first, surname = FoldName(record.name), FoldName(record.surname)
+            if first and surname then
+                local whole = first .. " " .. surname
+                byName[whole] = byName[whole] or {}
+                table.insert(byName[whole], key)
+            end
+        end
+    end
+
+    local found = {}
+    for key, old in pairs(characters) do
+        if type(key) == "string" and not key:find("^Player%-") and type(old) == "table"
+            and old.guid == nil and old.linkedFrom == nil then
+            local name = FoldName(old.name)
+            local owners = name and name:find(" ", 1, true) and byName[name]
+            if owners and #owners == 1 and MightBeMine(old, characters[owners[1]], owners[1]) then
+                found[#found + 1] = { key = key, guid = owners[1] }
+            end
+        end
+    end
+    table.sort(found, function(a, b) return a.key < b.key end)
+    for _, it in ipairs(found) do
+        Retire(it.key, characters[it.key], characters[it.guid], it.guid)
+        self.retiredFrom = self.retiredFrom and (self.retiredFrom .. ", " .. it.key) or it.key
     end
 end
 

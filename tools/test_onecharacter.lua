@@ -159,6 +159,23 @@ Check("another Ana with another last name stays", db6.characters["Ana Stone-Fore
 Check("old records read as the character playing", ns.Characters:IsPlaying("Ana Blackthorne-Forever PvE")
     and ns.Characters:IsPlaying("Ana-Forever"))
 
+print("an alt's old record, seen from another character")
+-- The warlock's old "Ana Blackthorne" record counted beside the warlock on
+-- every other character's tooltip until the warlock itself logged in.
+local CY = { name = "Cy", guid = "Player-1-00C", class = "Druid", level = 5 }
+local warlock = { name = "Ana", surname = "Blackthorne", realm = "Forever PvE", faction = "Horde",
+    class = "Warlock", guid = ANA.guid, recipes = {}, inventory = {} }
+local hers = { name = "Ana Blackthorne", realm = "Forever PvE", recipes = {}, inventory = { [929] = 2 } }
+local twinA = { name = "Bob", surname = "Ash", realm = "Forever PvE", guid = "Player-1-0B1", recipes = {} }
+local twinB = { name = "Bob", surname = "Stone", realm = "Forever PvE", guid = "Player-1-0B2", recipes = {} }
+local bobs = { name = "Bob", realm = "Forever PvE", recipes = {} }
+local db7 = { characters = { [ANA.guid] = warlock, ["Ana Blackthorne-Forever PvE"] = hers,
+    ["Player-1-0B1"] = twinA, ["Player-1-0B2"] = twinB, ["Bob-Forever PvE"] = bobs } }
+ns = Login(db7, CY)
+Check("is set aside into its own character", db7.characters["Ana Blackthorne-Forever PvE"] == nil
+    and db7.formerCharacters["Ana Blackthorne-Forever PvE"] == hers and hers.retiredInto == ANA.guid)
+Check("a first name alone that two characters share waits", db7.characters["Bob-Forever PvE"] == bobs)
+
 print("the one test")
 local db5 = { characters = {
     ["Player-1-00A"] = { name = "Ana", surname = "Blackthorne", realm = "R", faction = "Horde", guid = "Player-1-00A" },
