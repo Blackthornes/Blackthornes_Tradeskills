@@ -15,7 +15,7 @@ This file does not ship in the addon.
 ## 0.52.0
 
 - Tradeskills speaks Deutsch now if your game is in German.
-- Got TradeSkillMaster? Its prices now fill in anything you haven't scanned yet.
+- Got TradeSkillMaster or Auctionator? Their prices now fill in anything you haven't scanned yet.
 - The note about overpriced listings after a scan is one short line now.
 - Fixed your items sometimes being counted twice on a character you played before last names.
 
