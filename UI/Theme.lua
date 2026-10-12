@@ -653,6 +653,8 @@ local function ShowArrow(icon)
     local on = state.upgrade and icon:IsShown()
     local arrow = on and UpgradeArrow(icon, state) or state.arrow
     if arrow then arrow:SetShown(on and true or false) end
+    -- A shift-click spot (Widgets.ItemHotspot) is there only with the icon.
+    if state.spot then state.spot:SetShown(icon:IsShown() and state.itemID ~= nil) end
 end
 
 --- An item icon, trimmed of its built-in border the way the bags draw it.
@@ -680,18 +682,39 @@ end
 function Theme.SetItemIcon(icon, itemID, link)
     if not icon then return end
 
+    local state = iconState[icon]
     if not itemID then
-        if iconState[icon] then iconState[icon].upgrade = false end
+        if state then
+            state.upgrade = false
+            state.itemID, state.link = nil, nil
+        end
         icon:Hide()
         return
     end
 
-    if iconState[icon] then
-        iconState[icon].upgrade = ns.Upgrades ~= nil and ns.Upgrades:IsUpgrade(itemID, link)
+    if state then
+        state.upgrade = ns.Upgrades ~= nil and ns.Upgrades:IsUpgrade(itemID, link)
+        state.itemID, state.link = tonumber(itemID), link
     end
     icon:SetTexture((ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(itemID))
         or FALLBACK_ICON)
     icon:Show()
+end
+
+--- The item an icon was last given by Theme.SetItemIcon, and its link.
+function Theme.IconItem(icon)
+    local state = icon and iconState[icon]
+    if not state then return nil end
+    return state.itemID, state.link
+end
+
+--- Give an icon a frame that comes and goes with it (Widgets.ItemHotspot).
+function Theme.SetIconSpot(icon, spot)
+    local state = icon and iconState[icon]
+    if not state then return false end
+    state.spot = spot
+    ShowArrow(icon)
+    return true
 end
 
 --- A thin bar: a dark track with a coloured fill, for a number that is a share

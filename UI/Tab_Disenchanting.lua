@@ -424,6 +424,7 @@ local function BuildDetail(parent)
     local icon = Theme.CreateItemIcon(detail, 30)
     icon:SetPoint("TOPLEFT", 12, -12)
     detail.icon = icon
+    if Widgets.ItemHotspot then Widgets.ItemHotspot(icon) end
 
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 50, -12)
@@ -573,6 +574,7 @@ local function DrawOutcomes(detail, breakdown)
 
             local icon = Theme.CreateItemIcon(frame, 14)
             icon:SetPoint("LEFT", 0, 0)
+            if Widgets.ItemHotspot then Widgets.ItemHotspot(icon, frame) end
 
             -- Its width is set to what the price leaves, see FitOutcomeLine.
             local name = Theme.CreateLabel(frame, "small", "text")

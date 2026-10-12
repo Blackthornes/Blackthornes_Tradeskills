@@ -489,6 +489,7 @@ local function Row(frame, index)
 
     row.icon = Theme.CreateItemIcon(row, 16)
     row.icon:SetPoint("LEFT", 0, 0)
+    if Widgets.ItemHotspot then Widgets.ItemHotspot(row.icon, row) end
 
     row.label = Theme.CreateLabel(row, "small", "text")
     row.value = Theme.CreateLabel(row, "small", "text", "RIGHT")
