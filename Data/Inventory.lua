@@ -393,8 +393,10 @@ function Inventory:GetAltCounts(itemID)
 
     local selfKey = ns.Config:GetCharacterKey()
 
+    -- Never this character under an old record of it: its bags are read live.
+    local characters = ns.Characters
     for characterKey, record in pairs(ns.db.characters) do
-        if characterKey ~= selfKey then
+        if characterKey ~= selfKey and not (characters and characters:IsPlaying(characterKey)) then
             local count = record.inventory and record.inventory[itemID]
             if count and count > 0 then
                 results[characterKey] = count
