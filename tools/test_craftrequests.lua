@@ -110,6 +110,7 @@ check("by enchant link", line and line:find("[7418]", 1, true) ~= nil, true)
 
 print("\nwho and where")
 check("your own line says nothing", (Trade("WTB arcanite bar", "Ana-Realm", "Player-1")), 0)
+check("another player with your first name is heard", (Trade("WTB arcanite bar", "Ana-Otherrealm", "Player-4")), 1)
 check("another channel says nothing", (Trade("WTB arcanite bar", "Ivy-Realm", "Player-7", 1)), 0)
 settings.tradeRequests = false
 check("off says nothing", (Trade("WTB arcanite bar", "Jo-Realm", "Player-6")), 0)

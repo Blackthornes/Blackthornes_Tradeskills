@@ -337,8 +337,14 @@ end
 
 local function IsMe(sender, guid)
     if type(guid) == "string" and type(UnitGUID) == "function" then
-        local ok, mine = pcall(UnitGUID, "player")
-        if ok and mine == guid then return true end
+        -- The GUID says it when both can be read: another player may share
+        -- the first name (Forever allows it), so a different GUID is never me.
+        local ok, same = pcall(function()
+            local mine = UnitGUID("player")
+            if type(mine) ~= "string" or mine == "" or guid == "" then return nil end
+            return mine == guid
+        end)
+        if ok and same ~= nil then return same end
     end
     if type(UnitName) == "function" then
         local ok, name = pcall(UnitName, "player")

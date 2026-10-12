@@ -227,7 +227,9 @@ local function WhatFor(row)
     local item = row.place and row.place.itemID
     local name = item and ns.Util and ns.Util.GetItemLabel and ns.Util.GetItemLabel(item)
     if name and ns.Util.Uncolored then name = ns.Util.Uncolored(name) end
-    if type(name) == "string" and name ~= "" and not name:find("^item ") then return name end
+    -- "item 1234" (in the client's language) is GetItemLabel's stand-in
+    -- while the item has not loaded: the recipe's own name says more.
+    if type(name) == "string" and name ~= "" and name ~= L.Format("item %d", item) then return name end
     return row.name
 end
 
