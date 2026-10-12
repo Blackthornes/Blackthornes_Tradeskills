@@ -1978,7 +1978,7 @@ function Widgets.LinkToChat(itemID, link)
     return ok and inserted and true or false
 end
 
---- One shift-click for every item the addon shows (Trent, 2026-10-12):
+--- One shift-click for every item the addon shows (the owner, 2026-10-12):
 --- with the auction house open it searches the house for the item, else it
 --- puts the item's link in the chat box being typed in, as the bags do.
 -- @return true when the click was taken

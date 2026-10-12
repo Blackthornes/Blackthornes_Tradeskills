@@ -1,4 +1,4 @@
--- Shift-click on any item in the addon's windows (Trent, 2026-10-12).
+-- Shift-click on any item in the addon's windows (the owner, 2026-10-12).
 --
 -- With the auction house open, a shift-click on an item row, a detail
 -- pane's icon or a reagent line searches the house for that item. With it

@@ -15,6 +15,15 @@ the thanks line: `python tools/make_whatsnew.py` writes them into
 Core/WhatsNewText.lua for the in-game What's New window. Run it after
 writing a section; the release check refuses a tag while it is behind.
 
+## 0.53.0
+
+- A new What's New window shows what changed after each update.
+- Tradeskills now tracks your transmute and other cooldowns on every character.
+- The Level Up tab tells you which recipe to learn next and shows you the way to the trainer.
+- Recipe levels and materials now match Forever.
+- Want to know when someone in Trade needs something you can make? Turn it on in Settings.
+- Shift-click any item to search for it on the auction house.
+
 ## 0.52.0
 
 - Tradeskills speaks Deutsch now if your game is in German.

@@ -4,6 +4,41 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.53.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **What's New window:** the first time the game loads after an update,
+  one window shows what changed in every Blackthornes addon that was
+  updated, with dark glass cards and a little motion. "Motion" in Settings
+  turns the movement off, "Show after updates" turns the window off (off
+  in one addon is off in all of them), and the `whatsnew` command or a
+  Settings button opens it any time.
+- **Profession cooldowns:** Tradeskills keeps every character's
+  transmute, Mooncloth and Salt Shaker cooldowns. Chat says once when one
+  is ready, the Characters tab shows how long each has left, and
+  `/bts cooldowns` lists them all. Blackthornes Butler shows a ready one as
+  a job.
+- **Learn next:** the Level Up tab lists the trainer and vendor recipes
+  that would raise the skill now, cheapest first, with where to get each
+  and a Show the way button that pins the trainer or vendor on the map
+  (or uses TomTom when it's installed). A "Learn next" tick box turns it
+  off.
+- **Forever's own recipes:** the recipe book uses Forever's skill levels
+  (about 600 recipes moved) and its materials for 127 recipes, so costs
+  for recipes nobody has learned yet match the game.
+- **Craft requests in Trade:** ticked, chat says when someone in Trade
+  asks for something one of your characters can make. Off by default.
+- **Shift-click to search:** shift-clicking any item anywhere in
+  Tradeskills searches the auction house while it's open, or links the
+  item in chat when it's closed.
+- **MOVES per day:** the Prices tab's MOVES column, its detail line and
+  the profit analysis use the same per-day measure as Demand, so how often
+  you scan no longer changes it.
+- **Flip warning:** the Flip panel on the Deals tab says that flipping is
+  risky and to spend only what you can afford to lose.
+
 ## 0.52.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
