@@ -225,6 +225,7 @@ function PriceEditor:Build()
     local icon = Theme.CreateItemIcon(frame, 16)
     icon:SetPoint("TOPLEFT", INSET, -34)
     self.icon = icon
+    if Widgets.ItemHotspot then Widgets.ItemHotspot(icon) end
 
     local name = Theme.CreateLabel(frame, "normal", "text")
     name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
