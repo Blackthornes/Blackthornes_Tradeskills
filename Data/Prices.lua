@@ -1255,7 +1255,7 @@ ns.RegisterCommand("price", L["<item link or name>: what the auction house says"
     end
 
     local confidence, reason = ns.Prices:GetConfidence(itemID)
-    local liquidity = ns.Prices:GetLiquidity(itemID)
+    local liquidity = ns.Prices:GetSalesPerDay(itemID)
 
     ns.Print(Util.GetItemLabel(itemID))
     ns.PrintRaw(L.Format("  market %s   min %s   qty %d",

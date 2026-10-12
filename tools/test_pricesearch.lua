@@ -16,7 +16,7 @@ local ns = {
             return { [LINEN_BAG] = { market = 100 }, [SILK] = { market = 50 }, [MYSTERY] = { market = 10 } }
         end,
         GetAge = function() return 60 end,
-        GetLiquidity = function() return nil end,
+        GetSalesPerDay = function() return nil end,
     },
     Mail = {
         GetLedger = function()

@@ -78,7 +78,7 @@ ns.Prices = {
     Get = function() return { min = 10000 } end,
     HoldsLowest = function() return false end,
     GetConfidence = function() return 1 end,
-    GetLiquidity = function() return nil end,
+    GetSalesPerDay = function() return nil end,
     IsStale = function() return false end,
     GetAge = function() return 0 end,
 }

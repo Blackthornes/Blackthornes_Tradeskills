@@ -180,7 +180,7 @@ check("cleared: back to undercutting", price, 99)
 ns.Theme, ns.Widgets = {}, {}
 ns.UI = { RegisterTab = function() end }
 Prices.GetAge = function() return 60 end
-Prices.GetLiquidity = function() return nil end
+Prices.GetSalesPerDay = function() return nil end
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/UI/Tab_Prices.lua"))("Blackthornes_TS", ns)
 

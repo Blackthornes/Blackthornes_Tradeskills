@@ -171,7 +171,7 @@ local function BuildList()
             min = record.min or 0,
             quantity = record.quantity or 0,
             age = ns.Prices:GetAge(itemID) or math.huge,
-            liquidity = ns.Prices:GetLiquidity(itemID),
+            liquidity = ns.Prices:GetSalesPerDay(itemID),
             name = wantNames and (PlainName(itemID) or stored[itemID]
                 or ("~item %d"):format(itemID)) or "",
         }
@@ -404,7 +404,7 @@ local function UpdateRow(row, entry)
 
     if entry.liquidity then
         cells.liquidity:SetText(("%d%%"):format(math.floor(entry.liquidity * 100)))
-        cells.liquidity:SetTextColor(Theme.Unpack(entry.liquidity > 0.15 and "profit" or "muted"))
+        cells.liquidity:SetTextColor(Theme.Unpack(entry.liquidity >= 0.30 and "profit" or "muted"))
     else
         -- One scan cannot show movement; say so rather than implying zero sales.
         cells.liquidity:SetText("--")
@@ -745,12 +745,12 @@ local function UpdateDetail(entry)
         reason and ("  (" .. reason .. ")") or ""))
     detail.values.confidence:SetTextColor(Theme.Unpack(confidence > 0.6 and "profit" or "warn"))
 
-    local liquidity = ns.Prices:GetLiquidity(entry.itemID)
+    local liquidity = ns.Prices:GetSalesPerDay(entry.itemID)
     if liquidity then
-        detail.values.liquidity:SetText(L.Format("%d%% per scan", math.floor(liquidity * 100)))
+        detail.values.liquidity:SetText(L.Format("%d%% a day", math.floor(liquidity * 100)))
         detail.values.liquidity:SetTextColor(Theme.Unpack("text"))
     else
-        detail.values.liquidity:SetText(L["not enough scans"])
+        detail.values.liquidity:SetText(L["not enough history"])
         detail.values.liquidity:SetTextColor(Theme.Unpack("dim"))
     end
 

@@ -28,7 +28,7 @@ assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
 
 -- The tab only needs what it reads per row.
 ns.Prices.GetAge = function() return 60 end
-ns.Prices.GetLiquidity = function() return nil end
+ns.Prices.GetSalesPerDay = function() return nil end
 
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 
