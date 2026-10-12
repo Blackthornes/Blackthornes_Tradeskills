@@ -4,6 +4,22 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.52.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **Deutsch:** on a Deutsch (German) client, every Tradeskills window,
+  tab, button, tooltip and chat line is in German. English clients see
+  exactly what they saw before.
+- **Shorter scan line:** listings left out for being priced far too high
+  are now one short line, "2 listings ignored: priced above 214,748g".
+- **Fixes:** an old record of the character you're on, kept from before
+  last names, is now set aside at login whatever it was saved under, so
+  its items are counted once and its bags are read live. Nothing is
+  deleted. A copy played from a checkout shows its real version instead
+  of "dev build".
+
 ## 0.51.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game
