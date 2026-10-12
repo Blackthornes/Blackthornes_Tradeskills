@@ -243,6 +243,11 @@ local DEFAULTS = {
         -- warning it always played). Off is saleAlarm above.
         saleSound = "register",
 
+        -- Say in chat when a profession cooldown (a transmute, Mooncloth,
+        -- the Salt Shaker) comes ready on any character, and give Butler a
+        -- step for it (asked 2026-10-12). See Logic/Cooldowns.lua.
+        cooldownAlerts = true,
+
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
         -- heard sales), so nothing is lost. Off unless the player turns it on.
@@ -407,6 +412,11 @@ local DEFAULTS = {
 
     -- Persisted craft queue.
     queue = {},
+
+    -- characterKey -> "spell:N" or "item:N" -> { name, group, readyAt,
+    -- recipeID or itemID, told }: profession cooldowns. Never rename it.
+    -- See Logic/Cooldowns.lua.
+    professionCooldowns = {},
 
     -- Things to buy rather than make, put on the shopping list by
     -- Blackthornes Equipment's Queue it button: { itemID, count, forItem,

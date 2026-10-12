@@ -152,6 +152,34 @@ local function BuildDetail(parent)
         anchor = line
     end
 
+    -- Profession cooldowns (Logic/Cooldowns.lua): what is ready, and when
+    -- the rest will be. Shown only for a character that has one.
+    local cooldownHeading = Theme.CreateLabel(detail, "tiny", "dim")
+    cooldownHeading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
+    cooldownHeading:SetText(L["COOLDOWNS"])
+    Theme.StyleHeading(cooldownHeading, detail)
+    detail.cooldownHeading = cooldownHeading
+
+    detail.cooldowns = {}
+    anchor = cooldownHeading
+    for index = 1, 3 do
+        local line = CreateFrame("Frame", nil, detail)
+        line:SetHeight(16)
+        line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, index == 1 and -6 or 0)
+        line:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
+
+        line.name = Theme.CreateLabel(line, "small", "text")
+        line.name:SetPoint("LEFT", 0, 0)
+        line.name:SetPoint("RIGHT", -96, 0)
+
+        line.when = Theme.CreateLabel(line, "small", "muted", "RIGHT")
+        line.when:SetPoint("RIGHT", 0, 0)
+        line.when:SetWidth(92)
+
+        detail.cooldowns[index] = line
+        anchor = line
+    end
+
     detail.dataAge = Theme.CreateLabel(detail, "tiny", "dim")
     detail.dataAge:SetPoint("BOTTOMLEFT", 12, 46)
     detail.dataAge:SetPoint("BOTTOMRIGHT", -12, 46)
@@ -225,8 +253,33 @@ local function UpdateDetail(entry)
     for _, line in ipairs(detail.lines) do
         line:Hide()
     end
+    for _, line in ipairs(detail.cooldowns) do
+        line:Hide()
+    end
+    detail.cooldownHeading:Hide()
 
     if not shown then return end
+
+    -- Cooldowns take the place of the last crafts, so the pane never grows
+    -- into the lines at its foot.
+    local cooldowns = ns.Cooldowns and ns.Cooldowns:Groups(entry.key) or {}
+    local craftLines = #detail.lines
+    if #cooldowns > 0 then
+        craftLines = #detail.lines - math.min(#cooldowns, #detail.cooldowns) - 1
+    end
+    detail.cooldownHeading:SetShown(#cooldowns > 0)
+    for index = 1, math.min(#detail.cooldowns, #cooldowns) do
+        local group, line = cooldowns[index], detail.cooldowns[index]
+        line.name:SetText(group.group)
+        if group.ready then
+            line.when:SetText(L["Ready"])
+            line.when:SetTextColor(Theme.Unpack("profit"))
+        else
+            line.when:SetText(ns.Cooldowns.LeftText(group.readyAt - time()))
+            line.when:SetTextColor(Theme.Unpack("muted"))
+        end
+        line:Show()
+    end
 
     detail.title:SetText(entry.name)
     detail.subtitle:SetText(L.Format("%s  ·  %s  ·  %d recipes",
@@ -267,7 +320,7 @@ local function UpdateDetail(entry)
         detail.lines[1].name:SetTextColor(Theme.Unpack("dim"))
         detail.lines[1].profit:SetText("")
     else
-        for index = 1, math.min(#detail.lines, #ranked) do
+        for index = 1, math.min(craftLines, #ranked) do
             local analysis = ranked[index]
             local line = detail.lines[index]
 
@@ -281,6 +334,14 @@ local function UpdateDetail(entry)
             line:Show()
         end
     end
+
+    -- Under the last craft shown.
+    local shownCrafts = 1
+    for index, line in ipairs(detail.lines) do
+        if line:IsShown() then shownCrafts = index end
+    end
+    detail.cooldownHeading:ClearAllPoints()
+    detail.cooldownHeading:SetPoint("TOPLEFT", detail.lines[shownCrafts], "BOTTOMLEFT", 0, -12)
 
     if entry.isCurrent then
         detail.dataAge:SetText(L["Live data for the character you are playing."])
