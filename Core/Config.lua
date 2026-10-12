@@ -248,6 +248,10 @@ local DEFAULTS = {
         -- step for it (asked 2026-10-12). See Logic/Cooldowns.lua.
         cooldownAlerts = true,
 
+        -- Say in chat when someone in Trade asks for something one of the
+        -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
+        tradeRequests = true,
+
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
         -- heard sales), so nothing is lost. Off unless the player turns it on.

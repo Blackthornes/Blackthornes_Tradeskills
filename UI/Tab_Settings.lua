@@ -1218,6 +1218,17 @@ local function Build(outer)
     cooldownList:SetPoint("TOPLEFT", CONTROL_X + 100, -2)
     FitButton(cooldownList)
 
+    -- Logic/CraftRequests.lua (asked 2026-10-12): a line in chat when
+    -- someone in Trade asks for something one of your characters makes.
+    -- The button is /bts requests.
+    local requestsRow = CreateRow(pages.look, 1, L["Craft requests in Trade"],
+        L["Says in chat when someone in the Trade channel asks for something one of your characters can make, with their name to click and whisper. Also /bts requests."])
+
+    widgets.tradeRequests = Widgets.CreateCheckbox(requestsRow, L["Enabled"], function(checked)
+        Config:Set("tradeRequests", checked)
+    end, true)
+    widgets.tradeRequests:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
     -- addons the player does not have. Off here is off in all of them.
     local sistersRow = CreateRow(pages.look, 1, L["Sister addons"],
@@ -1949,6 +1960,7 @@ local function Refresh()
     end
     widgets.saleAlarm:Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
+    widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") ~= false)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local linkBox = widgets.linkNames.editBox
