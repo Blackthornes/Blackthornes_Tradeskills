@@ -266,7 +266,7 @@ ns.Prices = {
         local record = records[itemID]
         return record and record.seen and (NOW - record.seen)
     end,
-    GetLiquidity = function() return nil end,
+    GetSalesPerDay = function() return nil end,
     IsStale = function() return false end,
     Count = function()
         local count = 0
