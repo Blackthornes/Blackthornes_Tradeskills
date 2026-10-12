@@ -70,6 +70,7 @@ Logic\Upgrades.lua
 Logic\BagsFull.lua
 Logic\AccountLink.lua
 Logic\GuildPrices.lua
+Logic\TSMPrices.lua
 Logic\Butler.lua
 
 UI\Theme.lua

@@ -1550,6 +1550,21 @@ local function Build(outer)
     widgets.guildStatus:SetWidth(COLUMN_WIDTH)
     widgets.guildStatus:SetWordWrap(true)
 
+    CreateSection(pages.sharing, 2, L["TRADESKILLMASTER"])
+    local tsmRow = CreateRow(pages.sharing, 2, L["TSM prices"],
+        L["When TradeSkillMaster is loaded, its prices fill in items that neither you nor your guildmates have priced. Your own scans always win."])
+    widgets.tsmPrices = Widgets.CreateCheckbox(tsmRow, L["Enabled"], function(checked)
+        Config:Set("tsmPrices", checked)
+        if ns.TSMPrices then ns.TSMPrices:Forget() end
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.tsmPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    widgets.tsmStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
+    Place(pages.sharing, 2, widgets.tsmStatus, -4)
+    widgets.tsmStatus:SetWidth(COLUMN_WIDTH)
+    widgets.tsmStatus:SetWordWrap(true)
+
     -- Every setting at once, so it arms first like Clear price data.
     local resetButton
     resetButton = Widgets.CreateButton(pages.data.content, L["Reset to defaults"], function()
@@ -1886,6 +1901,8 @@ local function Refresh()
     widgets.linkStatus:SetText(ns.AccountLink and ns.AccountLink:Describe() or "")
     widgets.guildPrices:SetChecked(Config:Get("guildPrices") == true)
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Describe() or "")
+    widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
+    widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")
 
     local lastScan, capped = ns.Prices:GetLastScan()
 
