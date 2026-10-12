@@ -345,6 +345,24 @@ makes a ready cooldown craft once, queued or not. Tested in
 `tools/test_cooldowns.lua` and `tools/test_butlerjobs.lua`. Not yet seen in
 game.
 
+## Craft requests in Trade
+
+The owner said yes (2026-10-12) to a word in chat when someone in Trade
+asks for something the player's characters make. `Logic/CraftRequests.lua`
+listens to `CHAT_MSG_CHANNEL` (Trade by its channel number 2, else a name
+with "Trade" or "Handel"): a line with an asking word (`ASK`: LF, WTB,
+need, anyone, suche...) and no selling word (`SELL`: WTS, LFW, can make,
+tips...) is matched against every character's recipes, by item or enchant
+link, else by name (longest first) or an enchant's effect with its slot or
+"enchant". It prints "NAME in Trade wants ITEM. You and FULL NAME can make
+it." with the asker as a player link to whisper. Reads only, saves
+nothing; one asker and item once per `REPEAT_GAP`; the player's own lines
+skipped; every read in a pcall (chat can be secret). The names are laid
+out again only when the recipe count changes (checked at most every
+`REBUILD_GAP`). "Craft requests in Trade" on the Look page
+(`tradeRequests`, off unless ticked, the owner 2026-10-12; never rename it) and `/bts requests`.
+Tested in `tools/test_craftrequests.lua`. Not yet seen in game.
+
 ## Profit by method
 
 A player asked (2026-10-11, the owner agreeing) for profit split by how it
