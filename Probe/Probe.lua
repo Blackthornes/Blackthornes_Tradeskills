@@ -375,6 +375,8 @@ function Probe:PrintReport()
     Line("craft PROTECTED", Yes(caps.tradeskill.craftRecipeSecure))
     Line("quality functions", Yes(caps.tradeskill.hasQualityFunctions))
     Line("quality tiers in use", Yes(caps.tradeskill.qualityTiersObserved))
+    -- Learn next's Show the way (2026-10-12).
+    if ns.Waypoints then Line("show the way", ns.Waypoints:ProbeText()) end
 
     if self.professionLines then
         for _, entry in ipairs(self.professionLines) do
