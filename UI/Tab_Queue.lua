@@ -543,12 +543,21 @@ local function ShowMaterialTooltip(row, line)
     -- Put here by Blackthornes Equipment's Queue it button.
     if line.buys then
         GameTooltip:AddLine(" ")
+        local forUpgrade = false
         for _, wanted in ipairs(line.buys) do
-            local label = wanted.forItem == line.itemID and L["To buy for your upgrade"]
-                or L.Format("For your upgrade, %s", Util.GetItemLabel(wanted.forItem))
+            local label
+            if wanted.forRecipe then
+                label = L.Format("To learn and skill up, %s", wanted.forRecipeName or L["a recipe"])
+            else
+                forUpgrade = true
+                label = wanted.forItem == line.itemID and L["To buy for your upgrade"]
+                    or L.Format("For your upgrade, %s", Util.GetItemLabel(wanted.forItem))
+            end
             GameTooltip:AddDoubleLine(label, tostring(wanted.count), 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
-        GameTooltip:AddLine(L["The x on the Queue tab takes it off. It goes by itself once you have the upgrade."],
+        GameTooltip:AddLine(forUpgrade
+            and L["The x on the Queue tab takes it off. It goes by itself once you have the upgrade."]
+            or L["The x on the Queue tab takes it off."],
             0.7, 0.7, 0.7, true)
     end
 

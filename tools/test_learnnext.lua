@@ -175,6 +175,21 @@ check("yellow to halfway is yellow", LN.Tier(belt, 115), "medium")
 check("halfway to grey is green", LN.Tier(belt, 125), "easy")
 check("grey", LN.Tier(belt, 130), "trivial")
 check("unknown without yellow", LN.Tier({}, 100), "unknown")
+do
+  local book = ns.RECIPE_BOOK.RECIPES
+  book[10] = { 165, 100, 110, 1, 1, { LEATHER, 1 }, "Unread Wrap", t = 100 }
+  ns.RecipeBook.merged = nil
+  local function Listed(skill)
+    for _, row in ipairs(LN:GetRows({ skills = { [165] = skill } })) do
+      if row.name == "Unread Wrap" then return true end
+    end
+    return false
+  end
+  check("no yellow known: listed near its skill", Listed(110), true)
+  check("and not once far past it", Listed(180), false)
+  book[10] = nil
+  ns.RecipeBook.merged = nil
+end
 
 print("\nthe list at Leatherworking 100")
 local rows = LN:GetRows({ skills = { [165] = 100 } })
@@ -198,6 +213,17 @@ check("at the trainer's price", boots.price, 500)
 check("never the apprentice for a 90 recipe", boots.place.name ~= "Apprentice Al", true)
 zoneHere = "Duskwood"
 check("else in a city of your side", LN:Place(Book:Get(2)).name, "Journey Jo")
+local artisan = LN:Place({ trainerCost = 5000, skillLineID = 165, classicSkill = 240, skill = 240 })
+check("past every trainer placed, an Artisan trainer with no spot",
+  artisan and artisan.kind == "trainer" and artisan.name == "an Artisan trainer" and artisan.zone == nil, true)
+check("a trainer's recipe the side's trainers teach is never that",
+  LN:Place({ trainerCost = 5000, skillLineID = 165, classicSkill = 200, skill = 200 }).name, "Expert Ed")
+zoneHere = "Wald von Elwynn"
+GetLocale = function() return "deDE" end
+C_Map = { GetBestMapForUnit = function() return 1429 end }
+check("a Deutsch client in the zone you are in, by its map", LN:Place(Book:Get(2)).name, "Journey Jen")
+GetLocale = function() return "enUS" end
+C_Map = nil
 zoneHere = "Elwynn Forest"
 local hood = Find(rows, "Expert Hood")
 check("an Expert's recipe goes to an Expert", hood and hood.place.name, "Expert Ed")
@@ -249,10 +275,12 @@ check("probe line", ns.Waypoints:ProbeText():find("map pin NO", 1, true) ~= nil,
 
 print("\nqueue materials")
 local buys = {}
-ns.Queue = { EnsureBuy = function(_, itemID, count, forItem) buys[itemID] = { count, forItem } return true end }
+ns.Queue = { EnsureBuy = function(_, itemID, count, forItem, forRecipe)
+  buys[itemID] = { count, forItem, forRecipe } return true end }
 check("one material", LN:QueueMaterials(Find(rows, "Vendor Belt")), 1)
 check("enough until yellow", buys[LEATHER] and buys[LEATHER][1], 20)
-check("for the belt", buys[LEATHER] and buys[LEATHER][2], 103)
+check("tied to the recipe, not the belt", buys[LEATHER] and buys[LEATHER][2], nil)
+check("the recipe it is for", buys[LEATHER] and buys[LEATHER][3] and buys[LEATHER][3].name, "Vendor Belt")
 buys = {}
 LN:QueueMaterials(boots)
 check("one craft once already yellow", buys[LEATHER] and buys[LEATHER][1], 4)

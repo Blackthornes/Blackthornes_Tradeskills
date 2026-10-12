@@ -1112,20 +1112,29 @@ end
 -- @param itemID   what to buy
 -- @param count    how many
 -- @param forItem  the gear it is for (the item itself when buying the gear)
+-- @param forRecipe  optional { recipeID, name }: materials for a recipe to
+--   learn and skill up with (Level Up's Learn next). Such a line is not tied
+--   to owning an item, which the first craft would, so it stays until its x
+--   or Clear all.
 -- @return true, or nil and why
-function Queue:EnsureBuy(itemID, count, forItem)
+function Queue:EnsureBuy(itemID, count, forItem, forRecipe)
     itemID, forItem = tonumber(itemID), tonumber(forItem)
     count = math.floor(tonumber(count) or 1)
     if not itemID or count < 1 then return nil, L["nothing to buy"] end
     if not ns.db then return nil, L["Tradeskills has not loaded its saved data yet"] end
-    forItem = forItem or itemID
-    if OwnsItem(forItem) then return nil, L["you already have it"] end
+    local recipeID = type(forRecipe) == "table" and tonumber(forRecipe.recipeID) or nil
+    if recipeID then
+        forItem = nil
+    else
+        forItem = forItem or itemID
+        if OwnsItem(forItem) then return nil, L["you already have it"] end
+    end
 
     local selfKey = SelfKey()
     local buys = Buys(true)
     for _, line in ipairs(buys) do
         if type(line) == "table" and line.itemID == itemID and line.forItem == forItem
-            and MineToSee(line, selfKey) then
+            and line.forRecipe == recipeID and MineToSee(line, selfKey) then
             if line.count == count then return true end
             line.count = count
             self:Notify()
@@ -1135,6 +1144,7 @@ function Queue:EnsureBuy(itemID, count, forItem)
 
     buys[#buys + 1] = {
         itemID = itemID, count = count, forItem = forItem,
+        forRecipe = recipeID, forRecipeName = recipeID and forRecipe.name or nil,
         owner = selfKey, addedAt = time(),
     }
     self:Notify()
@@ -1480,7 +1490,8 @@ function Queue:BuildShoppingList()
     for _, line in ipairs(self:GetBuys()) do
         required[line.itemID] = (required[line.itemID] or 0) + line.count
         local forItems = wanted[line.itemID] or {}
-        forItems[#forItems + 1] = { forItem = line.forItem, count = line.count }
+        forItems[#forItems + 1] = { forItem = line.forItem, count = line.count,
+            forRecipe = line.forRecipe, forRecipeName = line.forRecipeName }
         wanted[line.itemID] = forItems
     end
 
