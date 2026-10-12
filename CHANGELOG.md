@@ -4,6 +4,30 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.53.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Transmute cooldowns:** any transmute of a ready cooldown can be made,
+  and the one Butler names is the one you have the materials for. A
+  character you removed keeps its cooldowns quietly instead of being named
+  as "Player", and a fight right after login only delays the first check.
+- **Learn next:** the materials Queue materials puts on the list stay
+  there until you remove them, also when you already carry or bank some.
+  On a Deutsch (German) client it finds the trainer in your own zone.
+  Artisan recipes (Enchanting 230 and up, Engineering 260) are listed as
+  taught by an Artisan trainer, and recipes with no skill data drop off
+  once you're well past them. Show the way names the recipe in chat on a
+  Deutsch client, even before the item has loaded.
+- **Craft requests in Trade:** a player who shares your first name is
+  heard; only your own lines are skipped.
+- **Prices:** a scan records what the auction house shows, never a
+  TradeSkillMaster or hand-set price, and the price API for other addons
+  can't raise an error.
+- **What's New:** closing the window while holding its scroll bar lets go
+  of it.
+
 ## 0.53.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game

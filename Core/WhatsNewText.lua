@@ -5,6 +5,11 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.53.1", lines = {
+        "Transmute cooldowns pick the one you can actually make.",
+        "Learn next keeps its shopping list and finds your zone's trainer in Deutsch.",
+        "Trade chat requests from someone with your first name show up now.",
+    } },
     { version = "0.53.0", lines = {
         "A new What's New window shows what changed after each update.",
         "Tradeskills now tracks your transmute and other cooldowns on every character.",
@@ -18,8 +23,5 @@ ns.WHATS_NEW = {
         "Got TradeSkillMaster or Auctionator? Their prices now fill in anything you haven't scanned yet.",
         "The note about overpriced listings after a scan is one short line now.",
         "Fixed your items sometimes being counted twice on a character you played before last names.",
-    } },
-    { version = "0.51.0", lines = {
-        "See how much you made from crafting, flipping, vendoring and disenchanting, all split out on the Sales tab.",
     } },
 }
