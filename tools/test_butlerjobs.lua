@@ -226,6 +226,33 @@ check("the queued amount", started and started[2], 1)
 ok, why = Butler:Craft(10)
 check("not this character's craft", ok, false)
 check("says why", why, "it's no longer in your queue")
+
+print("\nprofession cooldowns")
+ns.Cooldowns = {
+  ReadyList = function() return { { key = WITHER, group = "Mooncloth", name = "Mooncloth", recipeID = 18560 },
+    { key = CY, group = "Transmute", name = "Transmute: Arcanite", recipeID = 17187 } } end,
+  ReadyHere = function(_, recipeID) return recipeID == 12 end,
+}
+jobs = Butler:Jobs()
+local alt
+for _, job in ipairs(jobs) do if job.key == WITHER then alt = job end end
+local cooldown = alt and alt.steps[#alt.steps]
+check("a ready cooldown is the alt's step", cooldown and cooldown.kind, "cooldown")
+check("named by its group", cooldown and cooldown.name, "Mooncloth")
+check("with its recipe", cooldown and cooldown.recipeID, 18560)
+local horde = false
+for _, job in ipairs(jobs) do if job.key == CY then horde = true end end
+check("never for a character this one can't mail", horde, false)
+ns.Crafting.GetReadiness = function() return true end
+started = nil
+ok, why = Butler:Craft(12)
+check("a ready cooldown crafts unqueued", why, "crafting")
+check("one of it", started and started[2], 1)
+ns.Crafting.isTradeSkillOpen = false
+ok, why = Butler:Craft(12)
+check("with the profession closed it says to open it", why, "open your profession first")
+ns.Cooldowns = nil
+
 ns.Crafting.GetReadiness = function() error("boom") end
 check("never raises", (Butler:Craft(11)), false)
 ns.Queue.GetAll = function() error("boom") end

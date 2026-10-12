@@ -801,6 +801,13 @@ function Recipes:Harvest()
             -- Profit tab can say so at the auction house, where no profession
             -- window is open to ask.
             local skillUp = existing and existing.skillUp or nil
+
+            -- A craft that can only be made every so often (a transmute,
+            -- Mooncloth): Logic/Cooldowns.lua keeps when it is ready.
+            if ns.Cooldowns and ns.Cooldowns.NoteRecipe then
+                pcall(ns.Cooldowns.NoteRecipe, ns.Cooldowns, recipeID, info)
+            end
+
             if ns.SkillUp then
                 skillUp = ns.SkillUp:Capture(recipeID, info, skillLineID, skillUp)
             end
