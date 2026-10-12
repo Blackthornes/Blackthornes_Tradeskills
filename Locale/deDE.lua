@@ -1512,6 +1512,7 @@ L["New: first seen in the latest scan."] = "Neu: zum ersten Mal im letzten Scan 
 L["First seen %s."] = "Zuerst gesehen %s."
 L["THE FLIP"] = "DAS SCHNÄPPCHEN"
 L["Pick a row to see the deal"] = "Wähl eine Zeile, um das Schnäppchen zu sehen"
+L["Flipping is risky. Prices can drop before you sell, so use your best judgement and only spend what you can afford to lose."] = "Weiterverkaufen ist riskant. Preise können fallen, bevor du verkaufst. Entscheide also mit Bedacht und gib nur aus, was du verlieren kannst."
 L["%d listed. Only the cheapest is sure to be at this price."] = "%d im Angebot. Nur das günstigste hat sicher diesen Preis."
 L["One listed."] = "Eins im Angebot."
 L["Buy for (lone low)"] = "Kaufen für (einzeln billig)"
