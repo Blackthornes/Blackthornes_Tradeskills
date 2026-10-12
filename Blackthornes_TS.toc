@@ -73,6 +73,7 @@ Logic\GuildPrices.lua
 Logic\TSMPrices.lua
 Logic\AuctionatorPrices.lua
 Logic\Butler.lua
+Logic\PublicAPI.lua
 
 UI\Theme.lua
 UI\BlizzardLook.lua

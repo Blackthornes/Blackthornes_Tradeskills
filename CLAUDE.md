@@ -341,6 +341,17 @@ the first look of a visit is the baseline) and disenchants from
 the panel says how many. Tested in `tools/test_methodprofit.lua`. Not yet
 seen in game.
 
+## The public price API
+
+The owner said yes (2026-10-12) to a documented price call for other
+authors' addons. `Logic/PublicAPI.lua` sets `_G.BlackthornesTS_API` with
+`version` (1), `GetPrice(item)` (`Prices:GetValue(id, "market")`, copper or
+nil) and `GetPriceAge(item)` (`Prices:GetAge`, seconds or nil); `item` is
+an ID or a link, and neither ever raises. The README's "For addon authors"
+section documents it. Other people's addons read it, so never rename or
+change these; a new call raises `version`. Tested in
+`tools/test_publicapi.lua`.
+
 ## Sharing between accounts and with a guild
 
 Asked 2026-10-07 (on Discord, the owner agreeing). Over addon

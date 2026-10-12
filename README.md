@@ -91,3 +91,25 @@ behaviour, the last for fixes alone; a tag like `v0.3.0-beta1` is uploaded as a 
 `.pkgmeta` leaves `tools/`, `docs/`, `deploy.ps1` and this README out of the
 zip. The upload needs the `CF_API_KEY` repository secret; without it the
 workflow still builds and checks the zip but uploads nothing to CurseForge.
+
+## For addon authors
+
+Other addons can read Tradeskills' auction prices through one global. Check
+that it exists, since Tradeskills may not be installed:
+
+```lua
+local api = BlackthornesTS_API
+if api then
+    local copper = api.GetPrice(2589)          -- item ID or item link; copper for one, or nil
+    local age = api.GetPriceAge(2589)          -- seconds since this account's own scan saw it, or nil
+end
+```
+
+- `GetPrice` is the market value Tradeskills itself uses: the player's own
+  scans first, then guild prices and other price sources for items not
+  scanned. It is per realm and faction.
+- `GetPriceAge` is nil when the price did not come from this account's own
+  scans.
+- Neither call raises an error; anything it can't answer is nil.
+- `BlackthornesTS_API.version` is 1. These calls will not be renamed or
+  changed; new ones raise the version.
