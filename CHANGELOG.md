@@ -12,12 +12,19 @@ fully after updating (`/reload` is not enough).
 - **Deutsch:** on a Deutsch (German) client, every Tradeskills window,
   tab, button, tooltip and chat line is in German. English clients see
   exactly what they saw before.
-- **TradeSkillMaster prices:** with TradeSkillMaster installed, its prices
-  fill in items that neither you nor your guild have scanned, so Farmer,
-  Equipment and Butler price them too. Your own scans and guild prices
-  always come first. "TSM prices" on Settings > Sharing turns it off and
-  says whether TSM is filling anything. TSM's prices may not cover Forever
+- **Prices from TradeSkillMaster and Auctionator:** with either installed,
+  its prices fill in items that neither you nor your guild have scanned,
+  so Farmer, Equipment and Butler price them too. Your own scans and guild
+  prices always come first, then TradeSkillMaster, then Auctionator (from
+  your own Auctionator scans). "TSM prices" and "Auctionator prices" under
+  Other price addons on Settings > Sharing turn each off; the TSM row says
+  whether it is filling anything. TSM's prices may not cover Forever
   realms; when they don't, nothing changes.
+- **For addon authors:** `BlackthornesTS_API.GetPrice(item)` gives the
+  price the Blackthornes addons use, in copper, and
+  `BlackthornesTS_API.GetPriceAge(item)` how old this account's own scan
+  of it is. Both take an item ID or a link and never raise. The README's
+  "For addon authors" section has the details.
 - **Shorter scan line:** listings left out for being priced far too high
   are now one short line, "2 listings ignored: priced above 214,748g".
 - **Fixes:** an old record of the character you're on, kept from before
