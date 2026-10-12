@@ -370,6 +370,15 @@ local function BuildDetail(parent)
     flip.note:SetJustifyV("TOP")
     detail.flip = flip
 
+    -- Always on show, a row picked or not: a flip is never a sure thing.
+    -- It wraps, and UpdateDetail hangs it under whatever the panel shows.
+    local risk = Theme.CreateLabel(detail, "tiny", "warn")
+    risk:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    risk:SetWordWrap(true)
+    risk:SetJustifyV("TOP")
+    risk:SetText(L["Flipping is risky. Prices can drop before you sell, so use your best judgement and only spend what you can afford to lose."])
+    detail.risk = risk
+
     local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], function()
         SearchAuctionHouse(state.selected)
     end, { width = 200, primary = true, height = 24 })
@@ -493,6 +502,15 @@ local function UpdateDetail(entry)
     local flip = detail.flip
 
     detail.empty:SetShown(not shown)
+
+    local risk = detail.risk
+    risk:ClearAllPoints()
+    risk:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    if shown then
+        risk:SetPoint("TOPLEFT", flip.note, "BOTTOMLEFT", 0, -10)
+    else
+        risk:SetPoint("TOPLEFT", detail.empty, "BOTTOMLEFT", 0, -12)
+    end
 
     for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.heading,
             detail.searchButton, flip, flip.verdict, flip.note }) do
