@@ -37,6 +37,13 @@ local DEPOSIT_CACHE_SECONDS = 30
 -- than the request's own wait in the queue plus the reads that follow it.
 local VERIFY_GIVE_UP = 15
 
+-- How many different items may be waiting to be confirmed at once. Each is
+-- told apart by its item ID, so they need not wait for each other (the owner,
+-- 2026-10-13: the five seconds between listings); this only keeps a burst of
+-- clicks from piling up more checks than the auction house can answer.
+local MAX_CONFIRMING = 4
+Posting.MAX_CONFIRMING = MAX_CONFIRMING
+
 -- Confirmed against Blizzard's own Sell tab on Forever, which offers 2, 8 and
 -- 24 hours: this is a Classic auction house, not retail's 12/24/48. The choice
 -- is the length every listing goes up for, and sets its deposit.
@@ -113,7 +120,11 @@ function Posting:CanPost(itemID)
     -- them one at a time, just like the Blizzard AH UI does", not five seconds
     -- apart). Its listing joins the one being confirmed and both are counted
     -- together, so nothing has to be told apart.
-    if self.pending and not (itemID and self.pending.itemID == itemID) then
+    --
+    -- And a different item no longer waits either (2026-10-13): each listing
+    -- is confirmed by its own item ID, so several can be checked at once. Only
+    -- a pile of them waits, so the checks never outrun the auction house.
+    if self:ConfirmingFull(itemID) then
         return false, L["still confirming the last listing"]
     end
 
@@ -146,37 +157,12 @@ function Posting:SecondsUntilPostable(itemID)
     local seconds, reason =
         ns.AHQueue:SecondsUntilReady(ns.AHQueue.PRIORITY.urgent)
 
-    -- The wait that actually dominates a run of posts, and the one the queue
-    -- knows nothing about: each listing is confirmed against the server before
-    -- the next may start. Measured in game, the queue sat idle at 1 send of 8
-    -- allowed while posting still felt slow, because posting never got as far
-    -- as asking it for anything.
-    local pending = self.pending
-    if pending and itemID and pending.itemID == itemID then pending = nil end
-
-    if pending then
-        -- The confirming read is itself a request to the auction house, and
-        -- the next post has to wait the usual spacing after it. Counting only
-        -- the delay before that read made the button count 3, 2, 1, say
-        -- "wait", then count 2, 1 again for the spacing. One countdown, then,
-        -- from the post to the earliest moment the next one can go.
-        local spacing = ns.AHQueue.MIN_SPACING or 0
-
-        if pending.verifying then
-            -- The read is out; the spacing after it is already in `seconds`,
-            -- and it is the same clock the countdown above was running on.
-            -- Past that it settles when the server answers, which is not a
-            -- length that can honestly be named.
-            reason = L["still confirming the last listing"]
-        else
-            local left = (pending.startedAt or 0) + POST_VERIFY_DELAY + spacing - GetTime()
-
-            if left > seconds then
-                seconds, reason = left, L["still confirming the last listing"]
-            elseif left > 0 then
-                reason = reason or L["still confirming the last listing"]
-            end
-        end
+    -- Listings still being confirmed no longer hold the next one back (each
+    -- is told apart by its item), so the wait is the auction house's own
+    -- spacing above. Only a pile of them waits, until the oldest settles,
+    -- which is not a length that can honestly be named.
+    if self:ConfirmingFull(itemID) then
+        reason = L["still confirming the last listing"]
     end
 
     -- CanPost gates on this separately, so a countdown that ignored it would
@@ -186,6 +172,71 @@ function Posting:SecondsUntilPostable(itemID)
     end
 
     return seconds, reason
+end
+
+--- The listing of this item still being confirmed, if any.
+--
+-- `pending` is the newest listing; older ones of other items wait in
+-- `others`, by item ID, until their own check settles them.
+function Posting:PendingFor(itemID)
+    if itemID == nil then return nil end
+    if self.pending and self.pending.itemID == itemID then return self.pending end
+    local others = rawget(self, "others")
+    return type(others) == "table" and others[itemID] or nil
+end
+
+--- Every listing still being confirmed, newest last.
+function Posting:AllPending()
+    local list = {}
+    local others = rawget(self, "others")
+    if type(others) == "table" then
+        for _, pending in pairs(others) do
+            if pending ~= self.pending then list[#list + 1] = pending end
+        end
+        table.sort(list, function(a, b) return (a.startedAt or 0) < (b.startedAt or 0) end)
+    end
+    if self.pending then list[#list + 1] = self.pending end
+    return list
+end
+
+--- Is this listing still one being confirmed (not settled, not joined)?
+function Posting:IsPending(pending)
+    if not pending then return false end
+    if self.pending == pending then return true end
+    local others = rawget(self, "others")
+    return type(others) == "table" and others[pending.itemID] == pending
+end
+
+--- Settle one listing: it is no longer waited on. The newest of the others
+--- takes its place as `pending`, so whatever reads that still sees one.
+function Posting:DropPending(pending)
+    if not pending then return end
+    local others = rawget(self, "others")
+    if type(others) == "table" and others[pending.itemID] == pending then
+        others[pending.itemID] = nil
+    end
+    if self.pending == pending then
+        self.pending = nil
+        if type(others) == "table" then
+            local newest
+            for _, other in pairs(others) do
+                if not newest or (other.startedAt or 0) > (newest.startedAt or 0) then newest = other end
+            end
+            if newest then
+                others[newest.itemID] = nil
+                self.pending = newest
+            end
+        end
+    end
+end
+
+--- Are so many other items being confirmed that this one should wait?
+function Posting:ConfirmingFull(itemID)
+    local count = 0
+    for _, pending in ipairs(self:AllPending()) do
+        if not (itemID and pending.itemID == itemID) then count = count + 1 end
+    end
+    return count >= MAX_CONFIRMING
 end
 
 --- Is the auction house still catching up?
@@ -1180,12 +1231,9 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     end
 
     -- Another copy of an item still being confirmed: this listing joins it,
-    -- and the check counts both (see CanPost).
-    local previous = self.pending
-    if previous and previous.itemID ~= itemID then
-        ns.Print(L["a listing is already going through"])
-        return false
-    end
+    -- and the check counts both (see CanPost). Other items being confirmed
+    -- carry on beside it.
+    local previous = self:PendingFor(itemID)
 
     local sellable, available = self:GetSellInfo(itemID)
     if not sellable then
@@ -1281,6 +1329,22 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
 
     local duration = ns.Config:Get("postDuration") or 2
 
+    -- Put back as they were if the game refuses the listing.
+    local savedPending = self.pending
+    local savedOthers = {}
+    if type(rawget(self, "others")) == "table" then
+        for key, value in pairs(self.others) do savedOthers[key] = value end
+    end
+
+    -- The newest listing is `pending`; the one it takes over from (another
+    -- item) waits in `others`, and this item's earlier copy is replaced by
+    -- the joined listing below.
+    if type(rawget(self, "others")) ~= "table" then self.others = {} end
+    if previous then self.others[itemID] = nil end
+    if self.pending and self.pending ~= previous then
+        self.others[self.pending.itemID] = self.pending
+    end
+
     self.pending = {
         itemID = itemID,
         quantity = quantity,
@@ -1297,7 +1361,9 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     -- Joining a listing still being confirmed: measured from before the
     -- first of them, and checked once for all of them, a few seconds after
     -- the last click. A check already out was asked before this listing
-    -- existed, so its answer is dropped and a fresh one asked for.
+    -- existed, so it no longer settles anything: the joined listing is a new
+    -- one, not yet being checked, and gets a fresh check of its own. Checks
+    -- out for other items carry on.
     if previous then
         local joined = self.pending
         joined.quantity = (previous.quantity or 1) + quantity
@@ -1305,10 +1371,6 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         joined.idsBefore = previous.idsBefore
         joined.many = many or previous.many
         joined.joined = true
-
-        if previous.verifying then
-            ns.Auctions.confirmToken = (ns.Auctions.confirmToken or 0) + 1
-        end
     end
 
     local ok, err
@@ -1325,9 +1387,14 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
             nil, unitPrice)
     end
 
+    -- The listing went down the auction house's throttled channel like any
+    -- other request, so our own requests space themselves out after it.
+    if ns.AHQueue.NoteSend then ns.AHQueue:NoteSend() end
+
     if not ok then
         -- The earlier copies are still up and still to be confirmed.
-        self.pending = previous
+        self.pending = savedPending
+        self.others = savedOthers
 
         if tostring(err):lower():find("addon") then
             self:MarkBlocked()
@@ -1353,7 +1420,8 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
 
     -- The auction house is throttled and can take several seconds to reply, so
     -- wait, then ask the server what is actually listed.
-    C_Timer.After(POST_VERIFY_DELAY, function() Posting:VerifyPending() end)
+    local listing = self.pending
+    C_Timer.After(POST_VERIFY_DELAY, function() Posting:VerifyPending(listing) end)
     return true
 end
 
@@ -1882,32 +1950,36 @@ end
 --------------------------------------------------------------------------------
 
 --- Ask what we actually own, rather than guessing from the absence of an event.
-function Posting:VerifyPending()
-    if not self.pending or self.pending.verifying then return end
+-- @param target the listing whose timer ran; the newest when not given.
+function Posting:VerifyPending(target)
+    target = target or self.pending
+    if not target or target.verifying then return end
 
-    -- Another copy was listed since this timer was set, and that listing's
-    -- own timer checks them both.
-    if GetTime() - (self.pending.startedAt or 0) < POST_VERIFY_DELAY - 0.05 then return end
+    -- Another copy was listed since this timer was set: it replaced this one,
+    -- and that listing's own timer checks them both.
+    if not self:IsPending(target) then return end
+    if GetTime() - (target.startedAt or 0) < POST_VERIFY_DELAY - 0.05 then return end
 
     -- An attempt older than this has already given up; leaving it in place lets
     -- an unrelated auction be mistaken for it.
-    if (GetTime() - (self.pending.startedAt or 0)) > 60 then
-        self.pending = nil
+    if (GetTime() - (target.startedAt or 0)) > 60 then
+        self:DropPending(target)
         return
     end
 
-    self.pending.verifying = true
+    target.verifying = true
 
-    -- Stop any read-back still running from the last listing: its readings
-    -- come from a query sent before this listing existed, and its final one
-    -- would report this listing as missing.
-    ns.Auctions.confirmToken = (ns.Auctions.confirmToken or 0) + 1
+    -- Readings from a query sent before this listing existed must not settle
+    -- it: a read-back still running from another item's check would report
+    -- this one as missing. It waits for the next query to go out
+    -- (Auctions:ScheduleConfirm clears this), and other items' checks run on.
+    target.awaiting = true
 
     ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
 
-    -- This listing's own give-up: a later listing being verified when the
+    -- This listing's own give-up: another listing being verified when the
     -- timer runs is not this one, and must not be settled by it.
-    local token = self.pending
+    local token = target
 
     -- Refresh reads the answer back itself once the query goes out, so this is
     -- no longer the thing that settles a listing: it is the backstop for a query
@@ -1915,8 +1987,8 @@ function Posting:VerifyPending()
     -- is the honest answer. It has to outlast the queue's own wait, or a slow
     -- send gets reported as a failure while the reading is still on its way.
     C_Timer.After(VERIFY_GIVE_UP, function()
-        if Posting.pending == token and token.verifying then
-            Posting:ResolvePending(nil)
+        if Posting:IsPending(token) and token.verifying then
+            Posting:ResolvePending(nil, nil, token)
         end
     end)
 end
@@ -1924,11 +1996,12 @@ end
 --- Called once the owned-auction list has been re-read.
 -- @param posted number now listed, or nil if that could not be determined
 -- @param appeared true when a listing of the item not there before was seen
-function Posting:ResolvePending(posted, appeared)
-    local pending = self.pending
+-- @param target the listing settled; the newest when not given
+function Posting:ResolvePending(posted, appeared, target)
+    local pending = target or self.pending
     if not pending then return end
 
-    self.pending = nil
+    self:DropPending(pending)
 
     -- Several auctions in one go, from one click (CanPostMany) or copies
     -- listed back to back: how many went up. One of several from one click

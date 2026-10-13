@@ -594,32 +594,44 @@ function Auctions:ReadOwned(opts)
     end
 
     -- A listing waiting to be verified is settled by what we actually hold,
-    -- which is authoritative in a way that event timing is not.
-    local pending = ns.Posting and ns.Posting.pending
-    if pending and pending.verifying then
-        local posted = items[pending.itemID] or 0
+    -- which is authoritative in a way that event timing is not. Several items
+    -- can be waiting at once, each settled by its own item ID.
+    local Posting = ns.Posting
+    local waiting
+    if Posting and Posting.AllPending then
+        waiting = Posting:AllPending()
+    else
+        waiting = { Posting and Posting.pending }
+    end
 
-        -- A listing of this item that was not there before is the new one.
-        -- The count alone can miss it: one of yours selling since the last
-        -- read leaves the count where it was.
-        local appeared = false
-        if pending.idsBefore then
-            for auctionID in pairs(ids[pending.itemID] or {}) do
-                if not pending.idsBefore[auctionID] then appeared = true break end
+    for _, pending in ipairs(waiting) do
+        -- Still waiting for a query sent after it was listed: a reading from
+        -- before would say it is missing.
+        if pending.verifying and not pending.awaiting then
+            local posted = items[pending.itemID] or 0
+
+            -- A listing of this item that was not there before is the new one.
+            -- The count alone can miss it: one of yours selling since the last
+            -- read leaves the count where it was.
+            local appeared = false
+            if pending.idsBefore then
+                for auctionID in pairs(ids[pending.itemID] or {}) do
+                    if not pending.idsBefore[auctionID] then appeared = true break end
+                end
             end
-        end
 
-        -- Several auctions (copies listed back to back, or many from one
-        -- click) are settled once all of them show, or on the last reading,
-        -- so the first to appear does not report the rest as missing.
-        local wanted = 1
-        if (pending.quantity or 1) > 1 and not pending.isCommodity then
-            wanted = pending.quantity
-        end
-        local gained = posted - (pending.postedBefore or 0)
+            -- Several auctions (copies listed back to back, or many from one
+            -- click) are settled once all of them show, or on the last reading,
+            -- so the first to appear does not report the rest as missing.
+            local wanted = 1
+            if (pending.quantity or 1) > 1 and not pending.isCommodity then
+                wanted = pending.quantity
+            end
+            local gained = posted - (pending.postedBefore or 0)
 
-        if opts.final or gained >= wanted or (wanted == 1 and appeared) then
-            ns.Posting:ResolvePending(posted, appeared)
+            if opts.final or gained >= wanted or (wanted == 1 and appeared) then
+                Posting:ResolvePending(posted, appeared, pending)
+            end
         end
     end
 
@@ -648,6 +660,13 @@ end
 function Auctions:ScheduleConfirm()
     local token = (self.confirmToken or 0) + 1
     self.confirmToken = token
+
+    -- This query went out after every listing waiting on one, so its readings
+    -- may settle them (Posting:VerifyPending).
+    local Posting = ns.Posting
+    if Posting and Posting.AllPending then
+        for _, pending in ipairs(Posting:AllPending()) do pending.awaiting = nil end
+    end
 
     for i = 1, #CONFIRM_DELAYS do
         local isLast = (i == #CONFIRM_DELAYS)
