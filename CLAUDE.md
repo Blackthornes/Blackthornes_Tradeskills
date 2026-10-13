@@ -172,6 +172,10 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
   the deposit (`Profit:NetFromListing` on `Prices:GetValue(itemID,
   "market")`), never below 0. nil for greys (vendor only), gear that binds
   when picked up, and items never priced.
+- `auctionNow`: the same, at the cheapest listing that is not the
+  player's own (`Prices:GetScanValue(itemID, "rival")`), only while the
+  scan is fresh (`Prices:IsStale`); nil without `auction`. Butler holds
+  an item back when it is well below `auction` (2026-10-13).
 - `fast`: `Demand:Get` "high" is true, "low" false, "some" or no reading nil.
 - `disenchant`: `Disenchant:GetValue`, copper for one; nil when it cannot
   be broken or its material has no price.
