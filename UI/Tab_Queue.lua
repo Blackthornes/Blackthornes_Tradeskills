@@ -643,6 +643,21 @@ local function SetCraftButton(button, label)
     -- the one open, this click opens it instead: the game lets a player's
     -- click cast the profession, which addon code alone may not do.
     local opener = ns.ProfessionOpener
+
+    -- In travel form or the like, the first click leaves it (a secure
+    -- button, since addon code may not); the next opens or crafts.
+    local leave = opener and opener.LeaveFormStep and opener:LeaveFormStep()
+    if leave then
+        button:SetText(L["Leave form"])
+        button:SetEnabledState(true)
+        button.tooltipText = L["You can't craft in this form. Click to leave it, then again to craft. Not in combat."]
+        label:SetText(L.Format("%d of %d ready. Leave your form first", ready, total))
+        label:SetTextColor(Theme.Unpack("accent"))
+        button.opensProfession = true
+        opener:Arm(button, leave, entry.recipeID)
+        return true
+    end
+
     if opener and not opener:WindowShowsRecipe(entry.recipeID) then
         local profession = opener:ProfessionFor(entry.recipeID)
 
