@@ -119,7 +119,12 @@
 -- (`forCraft`), so it can be done before the craft. A profession cooldown
 -- that is up (Logic/Cooldowns.lua, 2026-10-12) is a step too, { kind =
 -- "cooldown", name (its group: "Transmute"), craft (the craft's name),
--- recipeID, or itemID for an item such as the Salt Shaker }; a Butler that
+-- recipeID, or itemID for an item such as the Salt Shaker }. Mail waiting
+-- for a character (2026-10-13) is one step first on its line, { kind =
+-- "pickup", items = { { itemID, count } }, forCraft }: materials its
+-- crafts count on that sit in its mailbox or are on their way
+-- (`forCraft`), and anything else mailed to it not yet seen arrive
+-- (QueueMail:InFlightItems). A Butler that
 -- does not know the kind leaves it out. Only characters this one can mail (same realm and
 -- side), never another account's. Craft makes the character playing's
 -- queued craft of that recipe, from Butler's click: started when its
@@ -785,8 +790,10 @@ local function Jobs()
                     end
                 end
                 local missing = {}
+                job.wants = job.wants or {}
                 for _, reagent in ipairs(recipe.reagents or {}) do
                     local want = (reagent.quantity or 0) * crafts
+                    job.wants[reagent.itemID] = (job.wants[reagent.itemID] or 0) + want
                     local held = queue:HeldBy(job.key, reagent.itemID) or 0
                     if want > held then
                         missing[#missing + 1] = { itemID = reagent.itemID, count = want - held }
@@ -913,6 +920,60 @@ local function Jobs()
             end
         end
     end
+
+    -- Mail waiting for a character (the owner, 2026-10-13: "if a character
+    -- needs to visit the mail for something sent to it, butler should move
+    -- that up the priority list"): materials its crafts count on that sit
+    -- in its mailbox or are still on their way, and anything else mailed
+    -- to it and not yet seen arrive. One "pickup" step, first on its line.
+    local waiting = {}
+    local function Wait(job, itemID, count, forCraft)
+        local pickup = waiting[job]
+        if not pickup then
+            pickup = { kind = "pickup", items = {}, byID = {}, forCraft = false }
+            waiting[job] = pickup
+        end
+        local item = pickup.byID[itemID]
+        if not item then
+            item = { itemID = itemID, count = 0 }
+            pickup.byID[itemID] = item
+            pickup.items[#pickup.items + 1] = item
+        end
+        item.count = math.max(item.count, count)
+        pickup.forCraft = pickup.forCraft or forCraft
+    end
+    local listed = {}
+    for _, job in pairs(byKey) do
+        if not listed[job] then
+            listed[job] = true
+            local key = job.isCurrent and selfKey or job.key
+            for itemID, want in pairs(queue.InMailFor and job.wants or {}) do
+                local inMail = queue:InMailFor(key, itemID) or 0
+                if inMail > 0 then
+                    local inHand = math.max(0, (queue:HeldBy(key, itemID) or 0) - inMail)
+                    local fromMail = math.min(inMail, want - inHand)
+                    if fromMail > 0 then Wait(job, itemID, fromMail, true) end
+                end
+            end
+        end
+    end
+    if mail and mail.InFlightItems then
+        local keys = {}
+        for characterKey in pairs(records) do keys[#keys + 1] = characterKey end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        for _, toKey in ipairs(keys) do
+            for itemID, count in pairs(mail:InFlightItems(toKey)) do
+                local job = count > 0 and Job(toKey)
+                if job then Wait(job, itemID, count, false) end
+            end
+        end
+    end
+    for job, pickup in pairs(waiting) do
+        pickup.byID = nil
+        table.sort(pickup.items, function(a, b) return a.itemID < b.itemID end)
+        table.insert(job.steps, 1, pickup)
+    end
+    for _, job in pairs(byKey) do job.wants = nil end
 
     -- A profession cooldown that is up (a transmute, Mooncloth): a step on
     -- that character's line, so Butler can send the player there
