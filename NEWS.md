@@ -15,37 +15,52 @@ the thanks line: `python tools/make_whatsnew.py` writes them into
 Core/WhatsNewText.lua for the in-game What's New window. Run it after
 writing a section; the release check refuses a tag while it is behind.
 
+The window shows new features only. Write a section's features first, then
+a "Fixes and changes:" line with the fixes and other changes under it: those
+go to Discord but stay out of the window, and a section of only fixes puts
+nothing in it. Say what each feature does in a few plain words, the way you'd
+tell a friend: no hype, no questions to the reader, no exclamation marks
+outside the thanks line, no dashes as punctuation, no "now you can". The
+tool prints a note for a shipped line that reads like an advert.
+
 ## 0.54.0
 
-- The Deals tab is now Favors and Writs.
-- A new QTY column shows how many are listed at the deal price.
-- At the auction house, everything sits in one drawer beside the window, with a List all button.
-- Listing different items is much faster now.
-- Craft buttons help you leave travel form first.
+- At the auction house, your sell list and Scan sit in one drawer beside the window, with a List all button.
+- Favors and Writs has a QTY column: how many others listed at that price.
+- In travel form or another shapeshift, the Craft button reads Leave form. One click leaves the form, the next one crafts.
+
+Fixes and changes:
+
+- The Deals tab is called Favors and Writs.
+- Listing different items is much faster.
 - Fixes for Tailoring, the Level Up columns and the Profit graphs.
 
 Thanks Ezmode, Voldar and Draffon for the ideas and reports!
 
 ## 0.53.1
 
+Fixes and changes:
+
 - Transmute cooldowns pick the one you can actually make.
 - Learn next keeps its shopping list and finds your zone's trainer in Deutsch.
-- Trade chat requests from someone with your first name show up now.
+- Trade chat requests from someone with your first name show up.
 
 ## 0.53.0
 
-- A new What's New window shows what changed after each update.
-- Tradeskills now tracks your transmute and other cooldowns on every character.
-- The Level Up tab tells you which recipe to learn next and shows you the way to the trainer.
-- Recipe levels and materials now match Forever.
-- Want to know when someone in Trade needs something you can make? Turn it on in Settings.
-- Shift-click any item to search for it on the auction house.
+- Tradeskills tracks transmutes and other profession cooldowns on all your characters, and tells you when one is ready.
+- The Level Up tab lists which recipe to learn next and where. Show the way puts the trainer on your map.
+- Recipe levels and materials match Forever.
+- Shift-click any item to search for it at the auction house.
+- If you turn it on in Settings, chat tells you when someone in Trade asks for something you can make.
 
 ## 0.52.0
 
-- Tradeskills speaks Deutsch now if your game is in German.
-- Got TradeSkillMaster or Auctionator? Their prices now fill in anything you haven't scanned yet.
-- The note about overpriced listings after a scan is one short line now.
+- Tradeskills is in Deutsch on a German client.
+- With TradeSkillMaster or Auctionator installed, their prices fill in items you haven't scanned.
+
+Fixes and changes:
+
+- The note about overpriced listings after a scan is one short line.
 - Fixed your items sometimes being counted twice on a character you played before last names.
 
 ## 0.51.0
