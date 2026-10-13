@@ -4,8 +4,8 @@
 -- The owner asked (2026-10-13): when every copy of a craft you listed sells
 -- within the auction's time (8 hours by default), Keep in stock for that
 -- item goes up by 1. It only ever goes up, once a window, and only while
--- "Raise it when it sells out" is ticked (raiseStockOnSellOut, on unless
--- unticked).
+-- "Raise it when it sells out" is ticked (raiseStockOnSellOut, off unless
+-- ticked).
 --
 -- A window opens when a listing of a craft is confirmed (Posting calls
 -- NotePosted) and ends when the longest listing in it would run out; a
@@ -47,7 +47,7 @@ SellOut.FORGET_AFTER = 30 * 86400
 local function Now() return time() end
 
 function SellOut:IsOn()
-    return ns.Config:Get("raiseStockOnSellOut") ~= false
+    return ns.Config:Get("raiseStockOnSellOut") == true
 end
 
 local function Watch(who, create)
