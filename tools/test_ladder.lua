@@ -265,6 +265,15 @@ do
     check("a week on they are dropped", #AHBuys:GetPaidList(false), 0)
 end
 
+print("\nhow many at the deal's price (the Deals tab's QTY)")
+local book = { ladder = { 10, 3, 14, 5, 20, 2 } }
+check("one step at the price", Prices.CountAtOrBelow(book, 10), 3)
+check("every step at or under it", Prices.CountAtOrBelow(book, 14), 8)
+check("between steps, the cheaper ones", Prices.CountAtOrBelow(book, 19), 8)
+check("a lone cheap listing", Prices.CountAtOrBelow({ ladder = { 5, 1, 30, 40 } }, 5), 1)
+check("no book read, no count", Prices.CountAtOrBelow({ quantity = 12 }, 10), nil)
+check("no price, no count", Prices.CountAtOrBelow(book, nil), nil)
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print(("\n%d passed, %d failed"):format(passed, failed))
