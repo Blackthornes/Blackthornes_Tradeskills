@@ -198,6 +198,12 @@ local DEFAULTS = {
         -- tooltip exactly as the client writes it.
         showValueOnItemTooltips = true,
 
+        -- The sales lines under Demand on an item's tooltip (sold a day,
+        -- listed now, the last seven days, what you sold this week) show
+        -- only while Shift is held. Off shows them always. See
+        -- UI/ItemTooltip.lua.
+        tooltipSalesShift = false,
+
         -- On a recipe item's tooltip (a Pattern, Plans, Formula...): what it
         -- teaches, what one craft costs, sells and disenchants for, and how
         -- many crafts pay the recipe back. See Logic/RecipeBook.lua.

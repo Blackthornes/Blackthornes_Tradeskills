@@ -291,8 +291,7 @@ function ItemTooltip:LinesFor(itemID, count)
                 (record and record.quantity == 0) and L["none listed"] or L["not scanned yet"], true }
         end
 
-        local demand = self:DemandLine(itemID)
-        if demand then lines[#lines + 1] = demand end
+        self:AddDemandLines(lines, itemID)
 
         local disenchant = self:DisenchantLine(itemID)
         if disenchant then lines[#lines + 1] = disenchant end
@@ -327,8 +326,7 @@ function ItemTooltip:LinesFor(itemID, count)
         }
     end
 
-    local demand = self:DemandLine(itemID)
-    if demand then lines[#lines + 1] = demand end
+    self:AddDemandLines(lines, itemID)
 
     local disenchant = self:DisenchantLine(itemID)
     if disenchant then lines[#lines + 1] = disenchant end
@@ -376,14 +374,168 @@ function ItemTooltip:AddCraftedLines(lines, itemID)
 end
 
 --- How well it sells (Logic/Demand.lua), coloured by level. Nothing when
---- there is no reading yet.
-function ItemTooltip:DemandLine(itemID)
+--- there is no reading yet. `short` leaves out the market's share of stock,
+--- which the sales lines below it say in numbers.
+function ItemTooltip:DemandLine(itemID, short)
     if not (ns.Demand and ns.Demand.Get) then return nil end
 
     local ok, reading = pcall(ns.Demand.Get, ns.Demand, itemID)
     if not ok or not reading then return nil end
 
-    return { L["Demand"], ns.Demand:TooltipText(reading), color = ns.Demand:Color(reading) }
+    local text = ns.Demand:TooltipText(reading)
+    if short and reading.source == "market" then text = ns.Demand:Label(reading) end
+
+    return { L["Demand"], text, color = ns.Demand:Color(reading) }
+end
+
+--------------------------------------------------------------------------------
+-- Sales details under Demand
+--------------------------------------------------------------------------------
+
+-- A player asked (2026-10-13), the owner agreeing: under Demand, about how
+-- many sell a day, how many are listed now, the last seven days and what
+-- you sold this week. Shown always, or only while Shift is held when
+-- "Sales details only with Shift" (`tooltipSalesShift`, off unless ticked,
+-- never rename it) is on. The game never says what sold, so "Sold a day"
+-- and the seven days are worked out from your own scans and say so.
+
+-- The tallest bar, in pixels, and each bar's width.
+ItemTooltip.BAR_HEIGHT = 12
+ItemTooltip.BAR_WIDTH = 5
+
+-- Under this change between the older and newer days, the trend is steady.
+ItemTooltip.STEADY_TREND = 0.10
+
+-- Complete days with a scan the trend needs (today is left out: it is not over).
+ItemTooltip.TREND_DAYS = 4
+
+local BAR_TEXTURE = "Interface\\Buttons\\WHITE8X8"
+local BAR_DAY   = { 110, 150, 130 }
+local BAR_TODAY = { 79, 209, 139 }
+local BAR_NONE  = { 122, 128, 137 }
+
+-- The sales lines sit under Demand, a step in.
+local INDENT = "   "
+
+--- Whether the sales lines go on the tooltip now.
+function ItemTooltip:ShowsSalesDetails()
+    if not (ns.Config and ns.Config:Get("tooltipSalesShift") == true) then return true end
+    local ok, down = pcall(function() return IsShiftKeyDown and IsShiftKeyDown() end)
+    return ok and down == true
+end
+
+--- One inline bar, its foot on the line's foot.
+local function Bar(height, color)
+    local full = ItemTooltip.BAR_HEIGHT
+    local offset = -math.floor((full - height) / 2 + 0.5)
+    return ("|T%s:%d:%d:0:%d:8:8:0:8:0:8:%d:%d:%d|t"):format(
+        BAR_TEXTURE, height, ItemTooltip.BAR_WIDTH, offset, color[1], color[2], color[3])
+end
+
+--- The seven days as bars, today last and brightest. A day nothing scanned
+--- it is a flat grey mark.
+function ItemTooltip.Bars(days)
+    local most = 0
+    for _, sold in ipairs(days) do
+        if sold and sold > most then most = sold end
+    end
+
+    local parts = {}
+    for index, sold in ipairs(days) do
+        if sold == false then
+            parts[#parts + 1] = Bar(1, BAR_NONE)
+        else
+            local height = most > 0 and math.max(1, math.floor(ItemTooltip.BAR_HEIGHT * sold / most + 0.5)) or 1
+            parts[#parts + 1] = Bar(height, index == #days and BAR_TODAY or BAR_DAY)
+        end
+    end
+    return table.concat(parts, " ")
+end
+
+--- Up, down or steady: the newer half of the complete days scanned against
+--- the older half. nil when too few days were scanned to say.
+-- @return a fraction (0.18 for up 18%), or nil
+function ItemTooltip.Trend(days)
+    local scanned = {}
+    for index = 1, #days - 1 do
+        if days[index] ~= false then scanned[#scanned + 1] = days[index] end
+    end
+    if #scanned < ItemTooltip.TREND_DAYS then return nil end
+
+    local half = math.floor(#scanned / 2)
+    local older, newer = 0, 0
+    for index = 1, half do older = older + scanned[index] end
+    for index = #scanned - half + 1, #scanned do newer = newer + scanned[index] end
+
+    if older == 0 then return nil end
+    return (newer - older) / older
+end
+
+--- "about 34", "less than 1": the estimate in plain words.
+local function AboutText(perDay)
+    if perDay < 1 then return L["less than 1"] end
+    return L.Format("about %d", math.floor(perDay + 0.5))
+end
+
+--- Demand, then (when shown) the four sales lines under it.
+function ItemTooltip:AddDemandLines(lines, itemID)
+    local details = self:ShowsSalesDetails()
+
+    local demand = self:DemandLine(itemID, details)
+    if demand then lines[#lines + 1] = demand end
+
+    if not details then return end
+
+    local prices = ns.Prices
+
+    if prices and type(prices.GetUnitsSoldPerDay) == "function" then
+        local ok, perDay = pcall(prices.GetUnitsSoldPerDay, prices, itemID)
+        if ok and type(perDay) == "number" then
+            lines[#lines + 1] = { INDENT .. L["Sold a day"], L.Format("%s (from your scans)", AboutText(perDay)) }
+        end
+    end
+
+    local record = prices and type(prices.Get) == "function" and prices:Get(itemID)
+    if type(record) == "table" and type(record.quantity) == "number" and record.seen then
+        local age = prices.GetAge and prices:GetAge(itemID)
+        local count = tostring(record.quantity)
+        if age then
+            lines[#lines + 1] = { INDENT .. L["Listed now"], L.Format("%s  (scanned %s)", count, Util.FormatAgeAgo(age)) }
+        else
+            lines[#lines + 1] = { INDENT .. L["Listed now"], count }
+        end
+    end
+
+    if prices and type(prices.GetDailySales) == "function" then
+        local ok, days = pcall(prices.GetDailySales, prices, itemID)
+        if ok and type(days) == "table" then
+            local trend = ItemTooltip.Trend(days)
+            local text, color = self.Bars(days), nil
+            if trend and trend >= self.STEADY_TREND then
+                text = L.Format("%s  up %d%%", text, math.floor(trend * 100 + 0.5))
+                color = "profit"
+            elseif trend and trend <= -self.STEADY_TREND then
+                text = L.Format("%s  down %d%%", text, math.floor(-trend * 100 + 0.5))
+                color = "warn"
+            elseif trend then
+                text = L.Format("%s  steady", text)
+            end
+            lines[#lines + 1] = { INDENT .. L["Last 7 days"], text, color = color }
+        end
+    end
+
+    if ns.Demand and type(ns.Demand.Week) == "function" then
+        local ok, week = pcall(ns.Demand.Week, ns.Demand, itemID)
+        if ok and type(week) == "table" and (week.sold > 0 or week.expired > 0) then
+            local text
+            if week.expired > 0 then
+                text = L.Format("%d this week, %d expired", week.sold, week.expired)
+            else
+                text = L.Format("%d this week", week.sold)
+            end
+            lines[#lines + 1] = { INDENT .. L["You sold"], text }
+        end
+    end
 end
 
 --- What one of the item is worth disenchanted, for anything that can be.

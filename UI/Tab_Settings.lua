@@ -1181,6 +1181,15 @@ local function Build(outer)
     end, true)
     widgets.tooltipValue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Asked 2026-10-13: the sales lines under Demand, kept for Shift.
+    local salesShiftRow = CreateRow(pages.look, 1, L["Sales details only with Shift"],
+        L["Shows how many sell a day, how many are listed, the last 7 days and your own sales under Demand only while you hold Shift. Unticked, they always show."])
+
+    widgets.tooltipSalesShift = Widgets.CreateCheckbox(salesShiftRow, L["Enabled"], function(checked)
+        Config:Set("tooltipSalesShift", checked)
+    end, true)
+    widgets.tooltipSalesShift:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Asked 2026-10-05: is a recipe worth buying, at a glance. The button
     -- is /bts recipes.
     local recipeTipRow = CreateRow(pages.look, 1, L["Recipe value on tooltips"],
@@ -1947,6 +1956,7 @@ local function Refresh()
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
+    widgets.tooltipSalesShift:SetChecked(Config:Get("tooltipSalesShift") == true)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.sisters:SetChecked(ns.SisterNote:IsOn())
     if ns.WhatsNew then

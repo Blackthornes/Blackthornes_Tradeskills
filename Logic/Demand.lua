@@ -44,6 +44,7 @@ local LEVELS = {
 --------------------------------------------------------------------------------
 
 local ownCache, ownKey
+local weekCache, weekKey
 
 --- The ledger folded per item, worked out again only when the ledger changes.
 -- The Profit tab asks once per row, and each fold walks the whole ledger.
@@ -72,6 +73,57 @@ end
 --- Forget the cached fold. Tests call it; the cache key catches real changes.
 function Demand:Forget()
     ownCache, ownKey = nil, nil
+    weekCache, weekKey = nil, nil
+end
+
+--------------------------------------------------------------------------------
+-- Your own sales this week
+--------------------------------------------------------------------------------
+
+local WEEK = 7 * 86400
+
+--- Each item's sales (units) and expiries over the last seven days, from the
+-- ledger. Worked out again when the ledger or the hour changes.
+local function WeekByItem()
+    if not (ns.Mail and ns.Mail.GetLedger) then return {} end
+
+    local entries = ns.Mail:GetLedger().entries
+    local last = entries[#entries]
+    local now = time()
+    local key = ("%d:%s:%d"):format(#entries, tostring(last and last.t), math.floor(now / 3600))
+    if weekCache and weekKey == key then return weekCache end
+
+    local names = ns.Mail.NameIndex and ns.Mail:NameIndex() or {}
+    local byItem = {}
+    local since = now - WEEK
+
+    for _, entry in ipairs(entries) do
+        local itemID = entry.itemID or names[entry.name]
+        if itemID and type(entry.t) == "number" and entry.t >= since
+            and not (ns.Mail.IsRolledUp and ns.Mail:IsRolledUp(entry)) then
+            local week = byItem[itemID]
+            if not week then
+                week = { sold = 0, expired = 0 }
+                byItem[itemID] = week
+            end
+            if entry.kind == "sold" then
+                week.sold = week.sold + (entry.quantity or 1)
+            elseif entry.kind ~= "removed" then
+                week.expired = week.expired + 1
+            end
+        end
+    end
+
+    weekCache, weekKey = byItem, key
+    return byItem
+end
+
+--- How many you sold of an item in the last seven days, and how many
+--- listings of it expired. nil when neither happened.
+-- @return { sold = units, expired = listings } or nil
+function Demand:Week(itemID)
+    if not itemID then return nil end
+    return WeekByItem()[itemID]
 end
 
 --------------------------------------------------------------------------------

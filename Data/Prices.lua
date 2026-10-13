@@ -370,6 +370,7 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     record.quantity = quantity
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
+    Prices.NoteDaily(record, scannedAt, quantity)
 
     local history = record.history
     history[#history + 1] = { t = scannedAt, m = record.market, q = quantity }
@@ -424,6 +425,7 @@ function Prices:RecordEmpty(itemID, scannedAt)
     record.quantity = 0
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
+    Prices.NoteDaily(record, scannedAt, 0)
 
     record.history = record.history or {}
 
@@ -964,8 +966,9 @@ Prices.SALES_MIN_SPAN = SALES_MIN_SPAN
 -- nothing is answered for under SALES_MIN_SPAN of readings. Like GetLiquidity
 -- it under-reports, because a restock hides sales.
 -- @return nil when there is not enough time or stock to go on
-function Prices:GetSalesPerDay(itemID)
-    local record = self:GetTable()[itemID]
+--- The stock's movement over the kept readings: listings gone, the average
+-- stock, and the days the readings span. nil when there is too little to go on.
+local function StockMovement(record)
     if not record or type(record.history) ~= "table" then return nil end
 
     local kept = {}
@@ -993,8 +996,103 @@ function Prices:GetSalesPerDay(itemID)
 
     if stock == 0 then return nil end
 
-    local average = stock / (#kept - 1)
-    return Util.Clamp(drops / average / (span / 86400), 0, 1)
+    return drops, stock / (#kept - 1), span / 86400
+end
+
+function Prices:GetSalesPerDay(itemID)
+    local drops, average, days = StockMovement(self:GetTable()[itemID])
+    if not drops then return nil end
+    return Util.Clamp(drops / average / days, 0, 1)
+end
+
+--- About how many leave the auction house a day, from the same readings as
+-- GetSalesPerDay. An estimate: the game never says what sold, so listings
+-- that expire or are taken down count too, and a restock hides sales.
+-- @return nil when there is not enough time or stock to go on
+function Prices:GetUnitsSoldPerDay(itemID)
+    local drops, _, days = StockMovement(self:GetTable()[itemID])
+    if not drops then return nil end
+    return drops / days
+end
+
+--------------------------------------------------------------------------------
+-- The last seven days, a day at a time
+--------------------------------------------------------------------------------
+
+-- A player asked (2026-10-13) for the tooltip to show sales over the last
+-- seven days. The twelve kept readings rarely reach back a week, so each
+-- record also keeps `daily` (never rename it): `days`, flat day, count pairs
+-- for up to DAILY_KEEP days (day = time() / 86400, rounded down; a pair for
+-- every day a scan saw it, 0 when nothing went), and `t`, `q`, the reading
+-- the next drop is measured from. Readings closer than SALES_GAP count once,
+-- as in GetSalesPerDay, and a drop across more than a day is not put on any
+-- one day, since nobody can say which day it went.
+local DAY = 86400
+local DAILY_KEEP = 7
+Prices.DAILY_KEEP = DAILY_KEEP
+
+function Prices.NoteDaily(record, at, quantity)
+    if type(record) ~= "table" or type(at) ~= "number" then return end
+
+    local daily = record.daily
+    if type(daily) ~= "table" or type(daily.days) ~= "table" then
+        daily = { days = {} }
+        record.daily = daily
+    end
+
+    local days = daily.days
+    local today = math.floor(at / DAY)
+    local count = #days
+
+    if count >= 2 and days[count - 1] > today then return end
+    if count < 2 or days[count - 1] ~= today then
+        days[count + 1] = today
+        days[count + 2] = 0
+        count = count + 2
+    end
+
+    -- An empty book says nothing about whether the stock sold or expired.
+    if type(quantity) == "number" and quantity > 0 then
+        if type(daily.t) ~= "number" or type(daily.q) ~= "number" then
+            daily.t, daily.q = at, quantity
+        elseif at - daily.t >= SALES_GAP then
+            if at - daily.t <= DAY and quantity < daily.q then
+                days[count] = days[count] + (daily.q - quantity)
+            end
+            daily.t, daily.q = at, quantity
+        end
+    end
+
+    -- Keep only the last DAILY_KEEP days.
+    local oldest = today - DAILY_KEEP + 1
+    while days[1] and days[1] < oldest do
+        table.remove(days, 1)
+        table.remove(days, 1)
+    end
+end
+
+--- The last seven days, oldest first, today last: how many left the auction
+--- house each day by your scans, or false for a day nothing scanned it.
+--- nil when the item has no daily record.
+function Prices:GetDailySales(itemID, now)
+    local record = self:GetTable()[itemID]
+    local daily = record and record.daily
+    if type(daily) ~= "table" or type(daily.days) ~= "table" or #daily.days < 2 then return nil end
+
+    local today = math.floor((now or time()) / DAY)
+    local byDay = {}
+    for index = 1, #daily.days - 1, 2 do
+        local day, sold = daily.days[index], daily.days[index + 1]
+        if type(day) == "number" and type(sold) == "number" then byDay[day] = sold end
+    end
+
+    local out, any = {}, false
+    for day = today - DAILY_KEEP + 1, today do
+        local sold = byDay[day]
+        out[#out + 1] = sold ~= nil and sold or false
+        if sold ~= nil then any = true end
+    end
+    return any and out or nil
 end
 
 --- How much to trust this item's price: scan count, recency and depth.
