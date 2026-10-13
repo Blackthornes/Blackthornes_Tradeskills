@@ -160,6 +160,8 @@ function VendorFlips:GetAuctionRows(opts)
                 buy = buy,
                 loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
                 listed = record.quantity,
+                -- How many at the deal's price or less (the Deals tab's QTY).
+                qty = ns.Prices.CountAtOrBelow and ns.Prices.CountAtOrBelow(record, buy) or nil,
                 vendor = vendor,
                 -- "sold" when a sale of yours set the price, "reported" from
                 -- the shipped list, nil from the game's item data.
@@ -297,6 +299,7 @@ function VendorFlips:GetResaleRows(opts)
                     buy = buy,
                     loneLow = record.ignoredLow ~= nil and buy == record.ignoredLow or nil,
                     listed = record.quantity,
+                    qty = ns.Prices.CountAtOrBelow and ns.Prices.CountAtOrBelow(record, buy) or nil,
                     usual = usual,
                     scans = scans + 1,
                     resell = resell,
