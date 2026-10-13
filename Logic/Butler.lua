@@ -13,6 +13,13 @@
 --                  and the deposit (Profit:NetFromListing on the smoothed
 --                  market price). nil for greys (vendor only), gear that
 --                  binds when picked up, and items never priced.
+--   auctionNow     copper for one sold at today's cheapest listing that is
+--                  not the player's own, after the cut and the deposit, from
+--                  the player's own scan while it is fresh (Prices:IsStale).
+--                  nil when there is no auction value, nobody else is
+--                  listing it, or the scan is old. Butler compares it with
+--                  `auction` to hold back items selling below their usual
+--                  price (2026-10-13).
 --   fast           true when it sells well (Demand "high"), false when it
 --                  rarely sells ("low"), nil in between or with no data.
 --   disenchant     copper a disenchant of one is likely to give
@@ -335,6 +342,19 @@ local function Auction(itemID, quality)
     return math.max(0, math.floor(net + 0.5))
 end
 
+--- What one fetches at the cheapest listing that is not the player's, after
+--- the cut and the deposit, only while the scan is fresh.
+local function AuctionNow(itemID, auction)
+    if not auction then return nil end
+    local prices = ns.Prices
+    if not (prices and prices.GetScanValue and prices.IsStale) then return nil end
+    if prices:IsStale(itemID) then return nil end
+    local rival = prices:GetScanValue(itemID, "rival")
+    if not rival or rival <= 0 then return nil end
+    local net = ns.Profit:NetFromListing(itemID, rival)
+    return math.max(0, math.floor(net + 0.5))
+end
+
 local function Fast(itemID)
     local reading = ns.Demand and ns.Demand:Get(itemID)
     if not reading then return nil end
@@ -398,8 +418,10 @@ local function Answer(itemID)
     local disenchant, canDisenchant, enchanter = Breaking(itemID, kept, quality)
     local mail = kept.mail[itemID]
 
+    local auction = Auction(itemID, quality)
     return {
-        auction = Auction(itemID, quality),
+        auction = auction,
+        auctionNow = AuctionNow(itemID, auction),
         fast = Fast(itemID),
         disenchant = disenchant,
         canDisenchant = canDisenchant,
