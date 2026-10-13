@@ -410,7 +410,8 @@ function UI:OnScanComplete(result)
         if ns.Disenchant and C_Timer and C_Timer.After then
             C_Timer.After(1.5, function() ns.Disenchant:AnnounceDeals() end)
         end
-        if ns.VendorFlips and C_Timer and C_Timer.After then
+        -- Not while the flips are put away (UI/Tab_Deals.lua).
+        if UI.DEALS_SHOW_FLIPS and ns.VendorFlips and C_Timer and C_Timer.After then
             C_Timer.After(3, function() ns.VendorFlips:AnnounceDeals() end)
         end
     end

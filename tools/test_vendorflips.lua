@@ -408,6 +408,7 @@ ns.UI = Stub({
 
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 
+ns.DEALS_FLIPS = true  -- the flips, put away for now, are still tested
 assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 
 local tab = tabs.deals
