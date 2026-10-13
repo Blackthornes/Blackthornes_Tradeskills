@@ -5,6 +5,14 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.54.0", lines = {
+        "The Deals tab is now Favors and Writs.",
+        "A new QTY column shows how many are listed at the deal price.",
+        "At the auction house, everything sits in one drawer beside the window, with a List all button.",
+        "Listing different items is much faster now.",
+        "Craft buttons help you leave travel form first.",
+        "Fixes for Tailoring, the Level Up columns and the Profit graphs.",
+    } },
     { version = "0.53.1", lines = {
         "Transmute cooldowns pick the one you can actually make.",
         "Learn next keeps its shopping list and finds your zone's trainer in Deutsch.",
@@ -17,11 +25,5 @@ ns.WHATS_NEW = {
         "Recipe levels and materials now match Forever.",
         "Want to know when someone in Trade needs something you can make? Turn it on in Settings.",
         "Shift-click any item to search for it on the auction house.",
-    } },
-    { version = "0.52.0", lines = {
-        "Tradeskills speaks Deutsch now if your game is in German.",
-        "Got TradeSkillMaster or Auctionator? Their prices now fill in anything you haven't scanned yet.",
-        "The note about overpriced listings after a scan is one short line now.",
-        "Fixed your items sometimes being counted twice on a character you played before last names.",
     } },
 }
