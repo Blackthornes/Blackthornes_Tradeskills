@@ -175,7 +175,7 @@ local function CreateRow(row)
         if rawget(self, "haloTextures") then Theme.SetHalo(self, 0.25) end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(L["Set your own price"], 1, 1, 1)
-        GameTooltip:AddLine(L["Click to change the price each, or type a total and have it split over the stack. Handy for selling under market value."], 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(L["Click to change the price each, or type a total and have it split over the stack."], 0.9, 0.9, 0.9, true)
         if row.data and row.data.priceBasis == "chosen" and row.data.suggestedPrice then
             GameTooltip:AddDoubleLine(L["Suggested"],
                 Util.FormatMoney(row.data.suggestedPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)

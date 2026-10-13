@@ -244,7 +244,7 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
         end
 
         ns.Print(L.Format("%s %s now uses your own results: %s. Values for these follow what you get from now on.",
-            Colour("accent", L["Learned!"]), kind, table.concat(odds, ", ")))
+            Colour("accent", L["Learned:"]), kind, table.concat(odds, ", ")))
         Flash(L.Format("Learned: %s", kind))
         big = true
     end
@@ -264,13 +264,13 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
         end
 
         ns.Print(L.Format("%s %s does not break the way the table says for %s, so it now uses your own results: %s.",
-            Colour("accent", L["Learned!"]), Util.GetItemLabel(itemID), kind, table.concat(odds, ", ")))
+            Colour("accent", L["Learned:"]), Util.GetItemLabel(itemID), kind, table.concat(odds, ", ")))
         Flash(L.Format("Learned: %s", Util.GetItemLabel(itemID)))
         big = true
     end
 
     for _, materialID in ipairs(newFinds or {}) do
-        ns.Print(L.Format("%s %s can come from %s.", Colour("accent", L["New find!"]),
+        ns.Print(L.Format("%s %s can come from %s.", Colour("accent", L["New find:"]),
             MaterialLabel(materialID), kind))
         Flash(L.Format("New find: %s", MaterialLabel(materialID)))
     end
@@ -278,7 +278,7 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
     local lucky = worth and usual and usual > 0 and worth >= usual * LUCKY
     if lucky then
         ns.Print(L.Format("%s That one was worth %s; about %s is usual.",
-            Colour("accent", L["Lucky!"]), Util.FormatMoney(worth), Util.FormatMoney(usual)))
+            Colour("accent", L["Lucky:"]), Util.FormatMoney(worth), Util.FormatMoney(usual)))
         if #(newFinds or {}) == 0 then
             Flash(L.Format("Lucky disenchant: %s", Util.FormatMoney(worth, { noColor = true })))
         end
