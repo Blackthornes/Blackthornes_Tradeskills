@@ -52,6 +52,8 @@ local PAGES = {
       tip = L["Your other account and guild prices"] },
     { key = "data", text = L["DATA"],
       tip = L["What is saved, clearing old prices, debug output and Reset to defaults"] },
+    { key = "about", text = L["ABOUT"],
+      tip = L["How these addons are made, the version, the Discord and the other Blackthornes addons"] },
 }
 local DEFAULT_PAGE = "pricing"
 
@@ -1706,6 +1708,17 @@ local function Build(outer)
     Searchable(pages.sharing, syncButton, L["Sync now Contact your other account now and swap anything that changed"])
     Searchable(pages.sharing, testButton, L["Test messages Whisper yourself a few addon messages"])
     Searchable(pages.sharing, widgets.forgetLinked, L["Forget their characters Remove the copies of your other account's characters"])
+
+    -- About (UI/About.lua): the note on how the addons are made, then the
+    -- version, the Discord and the other Blackthornes addons.
+    if ns.About then
+        CreateSection(pages.about, 1, L["HOW THESE ADDONS ARE MADE"])
+        local note = Place(pages.about, 1, ns.About:Note(pages.about.content, COLUMN_WIDTH))
+        Searchable(pages.about, note, note.words)
+        CreateSection(pages.about, 2, L["ABOUT"])
+        local info = Place(pages.about, 2, ns.About:Info(pages.about.content, COLUMN_WIDTH))
+        Searchable(pages.about, info, info.words)
+    end
 
     widgets.describe:SetChecked(Config:Get("settingsDescriptions") == true)
     ShowPage(CurrentPage())

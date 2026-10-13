@@ -11,6 +11,8 @@
 --   6. One timer, no ticker; the newest copy of the file draws the window.
 --   7. Motion off lands everything at once, with no tween started.
 --   8. Every line of text wraps; nothing is cut to "...".
+--   9. The note (UI/About.lua) heads the window once per account, alone
+--      when nothing is new, and never again in any sister.
 
 local suite = { checks = 0 }
 local function check(label, ok, detail)
@@ -128,6 +130,7 @@ local function Addon(folder, db, news, opts)
         end,
     }
     ns.WHATS_NEW = news
+    if opts.note then ns.About = { NOTE = { "First paragraph.", "Second paragraph." } } end
     local chunk = assert(loadfile(lfs_cwd .. "/UI/WhatsNew.lua"))
     chunk(folder, ns)
     if opts.fileVersion then ns.WhatsNew.FILE_VERSION = opts.fileVersion end
@@ -301,6 +304,55 @@ farmer = Addon("Blackthornes_Farmer", nil, "nonsense")
 Login({ farmer })
 Fire()
 check("nonsense shows nothing", not Window())
+
+--------------------------------------------------------------------------------
+-- The note: once per account, at the top
+--------------------------------------------------------------------------------
+
+Client()
+farmerDB, tsDB = {}, {}
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true })
+check("the note is due", farmer.WhatsNew:NoteDue())
+Login({ farmer, ts })
+Fire()
+list = Shown(farmer)
+check("the note heads the window", list and list[1].note and #list == 3, list and #list)
+check("with its paragraphs", list[1].paragraphs and #list[1].paragraphs == 2)
+check("kept as seen in every sister", farmerDB.aboutNoteSeen == true and tsDB.aboutNoteSeen == true)
+
+Client()
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true })
+Login({ farmer, ts })
+Fire()
+check("never again", not Window())
+
+-- Nothing new, but the note never shown: it comes up alone.
+Client()
+local quietDB = { whatsNewSeen = "0.30.0" }
+farmer = Addon("Blackthornes_Farmer", quietDB, FARMER_NEWS, { note = true })
+Login({ farmer })
+Fire()
+list = Shown(farmer)
+check("the note alone", list and #list == 1 and list[1].note, list and #list)
+
+-- Seen in one sister is seen in all.
+Client()
+farmer = Addon("Blackthornes_Farmer", { whatsNewSeen = "0.30.0" }, FARMER_NEWS, { note = true })
+ts = Addon("Blackthornes_TS", { whatsNewSeen = "0.52.0", aboutNoteSeen = true }, TS_NEWS, { note = true })
+Login({ farmer, ts })
+Fire()
+check("seen in one, seen in all", not Window())
+
+-- With the window turned off the note waits, kept unseen.
+Client()
+local offDB = { whatsNewSeen = "0.30.0", whatsNewPopup = false }
+farmer = Addon("Blackthornes_Farmer", offDB, FARMER_NEWS, { note = true })
+Login({ farmer })
+Fire()
+check("off: no window", not Window())
+check("and the note is not kept as seen", offDB.aboutNoteSeen == nil)
 
 for key, value in pairs(saved) do _G[key] = value end
 _G.BlackthornesWhatsNewFrame = nil
