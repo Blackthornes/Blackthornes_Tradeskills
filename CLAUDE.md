@@ -656,7 +656,12 @@ with the highest `FILE_VERSION` draws the window (first in
 The words are NEWS.md's: it never ships, so `tools/make_whatsnew.py` writes
 its newest three sections, bullets only (the thanks line names players and
 never ships), into `Core/WhatsNewText.lua` (`ns.WHATS_NEW`; never edit it by
-hand). **Every release PR that writes a NEWS.md section runs
+hand). The window shows new features only (the owner,
+2026-10-13): a section's
+fixes and other changes go under a "Fixes and changes:" line, which go to
+Discord but not the window, and every line is plain words with no hype,
+no questions to the reader, no exclamation marks and no dashes as
+punctuation (the tool notes one that trips `STYLE`). **Every release PR that writes a NEWS.md section runs
 `python tools/make_whatsnew.py` too**; `check_release.py` refuses a tag
 while the file is behind, and `tools/test_make_whatsnew.py` fails on every
 push. The bullets stay in English, also on a German client.

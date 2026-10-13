@@ -917,7 +917,7 @@ local function Build(outer)
     CreateSection(pages.pricing, 2, L["WHAT COUNTS AS PROFIT"])
 
     local profitRow = CreateRow(pages.pricing, 2, L["Minimum profit"],
-        L["Crafts that make less than this are hidden from the Profit tab. For gear and bags, which are priced in whole silver, it also decides whether to undercut by a silver or just match the cheapest rival."])
+        L["Crafts that make less than this are hidden from the Profit tab. For gear and bags, which are priced in whole silver, it also decides whether to undercut by a silver or match the cheapest rival."])
 
     widgets.minProfit = Widgets.CreateNumberBox(profitRow, {
         width = 70, min = 0, max = 1000000,
@@ -1555,7 +1555,7 @@ local function Build(outer)
         if ns.AccountLink then ns.AccountLink:Check() end
         ns.Print(L["asked your other account for anything new"])
         C_Timer.After(3, function() UI:RefreshActiveTab() end)
-    end, { width = 110, height = 22, tooltip = L["Say hello to your other account now and swap anything that changed"] })
+    end, { width = 110, height = 22, tooltip = L["Contact your other account now and swap anything that changed"] })
     Place(pages.sharing, 1, syncButton, -10)
     FitButton(syncButton)
 
@@ -1703,7 +1703,7 @@ local function Build(outer)
     Searchable(pages.data, resetButton, L["Reset to defaults Put every setting back to how it started"])
     Searchable(pages.queue, exportButton, L["Export queue Copy your queue, settings and stock limits to a code"])
     Searchable(pages.queue, importButton, L["Import Restore from a code"])
-    Searchable(pages.sharing, syncButton, L["Sync now Say hello to your other account now and swap anything that changed"])
+    Searchable(pages.sharing, syncButton, L["Sync now Contact your other account now and swap anything that changed"])
     Searchable(pages.sharing, testButton, L["Test messages Whisper yourself a few addon messages"])
     Searchable(pages.sharing, widgets.forgetLinked, L["Forget their characters Remove the copies of your other account's characters"])
 
@@ -2012,7 +2012,7 @@ local function Refresh()
     if ns.Config:IsFirstRun() then
         widgets.loadWarning:SetTextColor(Theme.Unpack("text"))
         widgets.loadWarning:SetText(
-            L["Welcome! This is the first time the addon has run here, so there is no saved data yet."])
+            L["This is the first time the addon has run here, so there is no saved data yet."])
     elseif diagnostics.restoredFromCVars then
         widgets.loadWarning:SetText(
             L["The game did not load your saved data at login, so it was recovered from the backup in CVars."])

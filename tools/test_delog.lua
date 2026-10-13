@@ -227,10 +227,10 @@ for index = 1, 6 do
 end
 
 check("a material not seen before from that kind of item is a new find",
-    Said("New find!.-Small Glimmering Shard can come from green armor", before) ~= nil)
-check("a disenchant worth well over the usual is lucky", Said("Lucky!", before) ~= nil)
+    Said("New find:.-Small Glimmering Shard can come from green armor", before) ~= nil)
+check("a disenchant worth well over the usual is lucky", Said("Lucky:", before) ~= nil)
 check("reaching ten says it was learnt, with the odds",
-    Said("Learned!.-green armor, item level 21 to 25 now uses your own results: Strange Dust 100%%, Small Glimmering Shard 10%%", before) ~= nil)
+    Said("Learned:.-green armor, item level 21 to 25 now uses your own results: Strange Dust 100%%, Small Glimmering Shard 10%%", before) ~= nil)
 check("each of those shows on screen too", #flashed == 2
     and flashed[1]:find("New find") and flashed[2]:find("Learned"))
 check("with a soft sound for the find and the fanfare for learning",
@@ -278,10 +278,10 @@ check("Lesser Astral Essence every time", outcomes[1].itemID == LESSER_ASTRAL
 check("with the counts it gave", outcomes[1].min == 1 and outcomes[1].max == 2)
 check("the value follows it", Disenchant:GetValue(1004) == math.floor(1000 * 4 / 3 + 0.5)
     or math.abs(Disenchant:GetValue(1004) - 1000 * 4 / 3) < 1)
-check("chat says it was learnt and why", Said("Learned!.-item1004 does not break the way the table says", before) ~= nil)
+check("chat says it was learnt and why", Said("Learned:.-item1004 does not break the way the table says", before) ~= nil)
 local learnedLines = 0
 for index = before, #printed do
-    if printed[index]:find("Learned!.-item1004") then learnedLines = learnedLines + 1 end
+    if printed[index]:find("Learned:.-item1004") then learnedLines = learnedLines + 1 end
 end
 check("and says it once", learnedLines == 1)
 check("the notes name this item", Disenchant:YoursPhrase(facts) == "your own 3 disenchants of this item")

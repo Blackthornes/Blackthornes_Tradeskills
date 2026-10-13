@@ -395,7 +395,7 @@ local function BuildDetail(parent)
     risk:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
     risk:SetWordWrap(true)
     risk:SetJustifyV("TOP")
-    risk:SetText(L["Flipping is risky. Prices can drop before you sell, so use your best judgement and only spend what you can afford to lose."])
+    risk:SetText(L["Flipping is risky: prices can drop before you sell. Only spend what you can afford to lose."])
     detail.risk = risk
 
     local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], function()
@@ -681,7 +681,7 @@ local function EmptyText()
     local text = L["Nothing on the auction house is worth buying right now."]
 
     if state.dealsOnly and state.hidden > 0 then
-        return text .. " " .. L.Format("%d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin). Untick \"Only deals over my minimums\" to see them.",
+        return text .. " " .. L.Format("%d more would make a profit, but less than your minimums in Settings (%s profit, %d%% margin). Untick \"Only deals over my minimums\" to see them.",
             state.hidden,
             Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
             ns.Config:Get("minMarginPercent") or 0)

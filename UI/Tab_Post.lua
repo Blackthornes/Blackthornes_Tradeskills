@@ -383,7 +383,7 @@ local function ShowRowTooltip(row, line)
     end
 
     if not line.isCrafted then
-        GameTooltip:AddLine(L["Not something your recipes make, just something in your bags."],
+        GameTooltip:AddLine(L["None of your recipes make this. It's from your bags."],
             0.5, 0.5, 0.5)
     end
 
