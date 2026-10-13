@@ -371,6 +371,8 @@ L["At a vendor: sells your cheapest grey item from the addon, to see whether the
 L["BUYING AND POSTING"] = "KAUFEN UND EINSTELLEN"
 L["Fill in how many to buy"] = "Kaufmenge eintragen"
 L["Search from the Buy list, the Queue tab or the Gather tab, pick the item in the auction house's results, and its quantity box shows how many the queue still needs. You still click Buy Now."] = "Such von der Kaufliste, dem Reiter Liste oder dem Reiter Sammeln aus, wähl den Gegenstand in den Ergebnissen des Auktionshauses, und sein Mengenfeld zeigt, wie viele die Liste noch braucht. Jetzt kaufen klickst du selbst."
+L["Auction house for vendor items"] = "Auktionshaus für Händlerwaren"
+L["Thread, dye and other materials a vendor always has in stock are bought from the vendor. Tick this to have the shopping list send you to the auction house for them when they are listed for less."] = "Faden, Farbe und andere Materialien, die ein Händler immer vorrätig hat, kaufst du beim Händler. Hak das an, damit dich die Einkaufsliste für sie ins Auktionshaus schickt, wenn sie dort günstiger sind."
 L["Warn when buying costs more"] = "Warnen, wenn der Kauf mehr kostet"
 L["On the auction house's buy window, a line under Buy Now when that many of a queue material costs this many percent more than the shopping list said, with both amounts and the difference. 0 turns it off."] = "Im Kauffenster des Auktionshauses eine Zeile unter Jetzt kaufen, wenn so viele eines Listenmaterials so viel Prozent mehr kosten, als die Einkaufsliste sagte, mit beiden Beträgen und dem Unterschied. 0 schaltet es aus."
 L["% over"] = "% mehr"

@@ -318,6 +318,10 @@ local DEFAULTS = {
         -- house's quantity box with what the queue still needs (2026-10-06).
         -- See UI/BuyQuantity.lua.
         fillBuyQuantity = true,
+        -- Offer the auction house for a material a vendor sells without a
+        -- stock limit when it is listed for less (2026-10-13). Off: the
+        -- shopping list sends you to the vendor. See Vendor:KeepsInStock.
+        vendorItemsOnAuction = false,
         -- A warning line on the auction house's buy window when buying a
         -- queue material costs this many percent more than the shopping list
         -- said (2026-10-11). 0 turns it off. See UI/BuyQuantity.lua.
