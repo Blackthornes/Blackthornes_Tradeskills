@@ -72,7 +72,23 @@ local function EncodeLimits()
         parts[#parts + 1] = itemID .. FIELD_SEP .. limit
     end
 
+    -- Keep in stock by profession (2026-10-13), "P" and the English name
+    -- with its spaces taken out, since the import strips every space. An
+    -- older Tradeskills reads only number:number, so it skips these.
+    for profession, limit in pairs(ns.db.professionStockLimits or {}) do
+        parts[#parts + 1] = "P" .. profession:gsub("%s", "") .. FIELD_SEP .. limit
+    end
+
     return table.concat(parts, RECORD_SEP)
+end
+
+--- The English profession name a code's "P" record means, or nil.
+local function ProfessionFromCode(squashed)
+    local lines = ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS or {}
+    for _, english in pairs(lines) do
+        if english:gsub("%s", "") == squashed then return english end
+    end
+    return nil
 end
 
 --- A copy-paste code carrying the queue, changed settings and posted limits.
@@ -94,6 +110,7 @@ function Transfer:Describe()
     end
 
     for _ in pairs(ns.db.postLimits or {}) do limits = limits + 1 end
+    for _ in pairs(ns.db.professionStockLimits or {}) do limits = limits + 1 end
 
     -- Counted the way the code writes them: only switches and numbers
     -- travel, so a changed text setting is not promised.
@@ -184,6 +201,13 @@ function Transfer:Import(code)
                 if itemID then
                     ns.Auctions:SetLimit(tonumber(itemID), tonumber(limit))
                     limitsApplied = limitsApplied + 1
+                else
+                    local squashed, number = record:match("^P(%a+)" .. FIELD_SEP .. "(%d+)$")
+                    local profession = squashed and ProfessionFromCode(squashed)
+                    if profession and ns.Auctions.SetProfessionLimit then
+                        ns.Auctions:SetProfessionLimit(profession, tonumber(number))
+                        limitsApplied = limitsApplied + 1
+                    end
                 end
             end
         end

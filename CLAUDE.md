@@ -383,6 +383,22 @@ out again only when the recipe count changes (checked at most every
 (`tradeRequests`, off unless ticked, the owner 2026-10-12; never rename it) and `/bts requests`.
 Tested in `tools/test_craftrequests.lua`. Not yet seen in game.
 
+## Keep in stock by profession
+
+A player asked (2026-10-13, the owner agreeing) for Keep in stock per
+profession, and the owner for per item too. `Auctions:GetLimit(itemID)`
+answers in three steps and says which: the item's own number
+(`postLimits`, set in the Profit tab's detail pane, an x puts it back),
+else its profession's (`professionStockLimits[English name]`, account wide,
+never rename it; `Auctions:ProfessionOf` from every character's saved
+recipes, laid out again when a `recipesCachedAt` moves), else
+`maxPostedPerItem`. A profession's 0 is no limit; an empty box is the usual
+number. Settings > Queue has a KEEP IN STOCK BY PROFESSION list
+(`Auctions:StockProfessions`, `Widgets.CreateNumberBox` with `allowEmpty`);
+the Profit tab greys an inherited number and says where it comes from. The
+export code carries them as `P<name>:<n>` in its limits section. Tested in
+`tools/test_professionstock.lua`. Not yet seen in game.
+
 ## Learn next
 
 The owner said build it (2026-10-12), from a mockup he picked

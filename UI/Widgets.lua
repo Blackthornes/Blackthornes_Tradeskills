@@ -817,7 +817,40 @@ function Widgets.CreateNumberBox(parent, opts)
         if self.value then self:SetValue(self.value, true) end
     end
 
+    -- With opts.allowEmpty the box may be left empty, which means "no
+    -- number of its own": its value is nil and opts.placeholder shows,
+    -- greyed (Keep in stock by profession, 2026-10-13).
+    local placeholder
+    if opts.allowEmpty then
+        placeholder = container:CreateFontString(nil, "OVERLAY")
+        placeholder:SetFont(Theme.FONT, Theme.sizes.small, "")
+        placeholder:SetTextColor(Theme.Unpack("dim"))
+        placeholder:SetPoint("TOPLEFT", 5, 0)
+        placeholder:SetPoint("BOTTOMRIGHT", -5, 0)
+        placeholder:SetJustifyH(opts.justify or "RIGHT")
+        placeholder:SetText(opts.placeholder or "")
+    end
+
+    local function ShowPlaceholder()
+        if not placeholder then return end
+        local focused = editBox.HasFocus and editBox:HasFocus()
+        placeholder:SetShown(not focused and (editBox:GetText() or "") == "")
+    end
+
+    function container:SetPlaceholder(text)
+        if placeholder then placeholder:SetText(text or "") end
+    end
+
     function container:SetValue(value, silent)
+        if opts.allowEmpty and tonumber(value) == nil then
+            local changed = self.value ~= nil
+            self.value = nil
+            editBox:SetText("")
+            ShowPlaceholder()
+            if changed and not silent and opts.onChange then opts.onChange(nil) end
+            return
+        end
+
         value = tonumber(value) or self.min or 0
 
         -- A whole-number box stores a whole number. Typing 5.5 used to show
@@ -831,6 +864,7 @@ function Widgets.CreateNumberBox(parent, opts)
         local changed = value ~= self.value
         self.value = value
         editBox:SetText(Format(value))
+        ShowPlaceholder()
 
         -- Only a change is reported. Clicking into a box and away again is
         -- not a decision, and a per-item box that reported its unchanged
@@ -848,8 +882,13 @@ function Widgets.CreateNumberBox(parent, opts)
 
         -- Reverting to the last good value beats leaving unparsable text on
         -- screen that looks like it was accepted.
-        container:SetValue(container:GetValue() or container.value or 0)
+        if opts.allowEmpty and (editBox:GetText() or ""):match("^%s*$") then
+            container:SetValue(nil)
+        else
+            container:SetValue(container:GetValue() or container.value or 0)
+        end
         editBox:ClearFocus()
+        ShowPlaceholder()
 
         container.committing = false
     end
@@ -859,7 +898,11 @@ function Widgets.CreateNumberBox(parent, opts)
     editBox:SetScript("OnEscapePressed", function(self)
         container:SetValue(container.value, true)
         self:ClearFocus()
+        ShowPlaceholder()
     end)
+    if placeholder then
+        editBox:SetScript("OnEditFocusGained", function() placeholder:Hide() end)
+    end
 
     container:SetScript("OnEnter", function(self) Theme.SetBorderColor(self, "borderLit") end)
     container:SetScript("OnLeave", function(self) Theme.SetBorderColor(self, "border") end)
