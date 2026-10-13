@@ -525,6 +525,23 @@ under each, `glassHover` and the gold wash only under the mouse,
 `Theme.LightGradient`, which hides it at 0; faded with SetAlpha alone it
 stayed lit on Forever. Equipment's gear window and finder have the same.
 
+## The auction house drawer
+
+The owner picked it from a mockup (2026-10-13), after trying and reverting a
+Tradeskills tab under the auction house (#616, reverted in #618; don't
+re-offer the tab). `UI/PostPanel.lua` is one drawer beside the auction
+window, its full height: the Titanforged plate reads "Tradeskills", its
+close gem puts it away until the next visit (`CloseForVisit`), and its
+header is `UI/Main.lua`'s auction bar (`UI:GetAuctionBar`, made inside the
+drawer, placed by `PostPanel:PlaceBar`): the fold button, "Ready to sell" and
+its worth, the scan's status and progress, and Post Crafted and Scan as
+quiet metal buttons. Folded, the drawer is that header
+(`PostPanel.FOLDED_HEIGHT`), so Scan stays in reach. Rows are dark glass,
+names whole (`Theme.SetRowName`), List quiet metal; the one gold button is
+List all at the foot (`PostPanel:ListNext`, one listing a click, most
+valuable first of what Sell shows). Tested in `tools/test_postdrawer.lua`.
+Not yet seen in game.
+
 ## The Blizzard window style
 
 The owner asked (2026-10-10) for a choice of the game's own look beside
