@@ -5,6 +5,14 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.55.0", lines = {
+        "This is the largest AddOn update so far across the whole suite of Blackthornes addons.",
+        "You can set how many of an item to keep in stock for a whole profession, not just one item at a time.",
+        "When all of a craft you listed sells out, Tradeskills adds one to how many it keeps in stock.",
+        "Item tooltips show more about sales: how many sell a day, how many are listed, and how you did this week.",
+        "For a part you craft, you can pick Vendor, Make or Buy on the Level Up tab.",
+        "Settings has an About page with the Discord invite and how to report a bug.",
+    } },
     { version = "0.54.0", lines = {
         "At the auction house, your sell list and Scan sit in one drawer beside the window, with a List all button.",
         "Favors and Writs has a QTY column: how many others listed at that price.",
@@ -16,9 +24,5 @@ ns.WHATS_NEW = {
         "Recipe levels and materials match Forever.",
         "Shift-click any item to search for it at the auction house.",
         "If you turn it on in Settings, chat tells you when someone in Trade asks for something you can make.",
-    } },
-    { version = "0.52.0", lines = {
-        "Tradeskills is in Deutsch on a German client.",
-        "With TradeSkillMaster or Auctionator installed, their prices fill in items you haven't scanned.",
     } },
 }

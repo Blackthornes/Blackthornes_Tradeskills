@@ -4,6 +4,46 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.55.0
+
+For WoW: Forever (interface 16001). Files were added, so restart fully
+after updating.
+
+- **Keep in stock by profession:** Settings > Queue has a list of your
+  professions, each with its own Keep in stock number. An item's own number
+  still wins, then its profession's, then the usual one. The Profit tab
+  greys a number that comes from the profession or the usual setting and
+  says where it comes from, and an x puts an item back to that.
+- **Raise it when it sells out:** when every copy of a craft you listed
+  sells before its listings would have run out, its Keep in stock number
+  goes up by 1, once, at your next full look at the mailbox. A gold chat
+  line and a sound say so. It never lowers a number and leaves items with
+  no limit alone. "Raise it when it sells out" on the Queue page turns it
+  off.
+- **Sales details on item tooltips:** under the Demand line: Sold a day,
+  Listed now with the age of the scan, Last 7 days as small bars with a
+  trend, and what you sold this week. "Sales details only with Shift" on the
+  Look page shows them while Shift is held.
+- **Vendor, Make or Buy:** on Level Up, a sub-craft's button picks how its
+  item is got when another craft needs it. Buy prices it off the auction
+  house instead of a vendor that only sells a few at a time, and Make
+  always crafts it.
+- **Vendor materials:** a material a vendor sells without a stock limit
+  (thread, dyes) goes to the vendor on the shopping list, the Gather and
+  Queue tabs and the vendor's Buy button, even when it is listed for less.
+  A new Auction house setting, off by default, offers the auction house for
+  them again.
+- **About page:** Settings has an About page with the version, the Discord
+  invite, how to report a bug and your other Blackthornes addons. What's New
+  can also show one-time cards from an addon, and shows new features only.
+- **Butler:** its job list puts a mailbox visit first when mail is waiting,
+  names which missing materials a vendor sells, shows what the trainers'
+  recipes cost to learn, holds back an item when the auction house pays well
+  under what it costs to make, and marks greens worth breaking to level your
+  Enchanting.
+- **Rows:** a long craft name that wraps onto three lines gets a taller row
+  instead of covering the names above and below it.
+
 ## 0.54.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
