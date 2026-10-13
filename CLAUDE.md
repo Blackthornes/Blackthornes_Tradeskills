@@ -609,7 +609,7 @@ section: the bullets, then one line of thanks. After the upload
 posts it through the `DISCORD_GENERAL_WEBHOOK_URL` secret, which the owner
 sets himself, under a line with the addon's name and version (so each
 addon's bullets are their own group) and "(full list of changes in
-#announcements)", so the thanks comes last. It carries no CurseForge link and no card (link previews
+#announcements)". It carries no CurseForge link and no card (link previews
 are turned off). No section or no secret means no post.
 A player's name never goes in a report (the owner, 2026-10-09): no
 CHANGELOG, #announcements post, commit or PR text names a player, and
@@ -618,7 +618,16 @@ CHANGELOG, #announcements post, commit or PR text names a player, and
 exception: its last line thanks, by their Discord name, everyone who asked
 for or reported the changes, each name once ("Thanks Ana and Bob for the
 ideas and reports!"); leave it out when nobody asked. Find who asked from
-the project's threads. This tool is also the same in all four repos.
+the project's threads.
+The thanks line no longer goes out with the webhook post (the owner,
+2026-10-13: thank each player with a real @mention, so they get a
+notification): `post_general.py` leaves out the paragraph that starts
+"Thanks" (`without_thanks`), and the owner's bot, on his PC, posts it under
+the release post with the mentions once he approves the wording, looking
+the Discord names up there. Discord IDs never go in a repo. NEWS.md keeps
+the thanks line, by Discord name, as before; ask the owner for any name
+that isn't known.
+This tool is also the same in all four repos.
 Changes to the Discord bots, the digest or the release posting tools
 (like this one) never go in a CHANGELOG, #announcements or #general
 section (the owner, 2026-10-10): they are not changes to the addon.

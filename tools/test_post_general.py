@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from announce_discord import section  # noqa: E402
-from post_general import main, message, names_a_player, not_clear  # noqa: E402
+from post_general import main, message, names_a_player, not_clear, without_thanks  # noqa: E402
 
 NEWS = ("# News\n\n## 0.2.0\n\n- The map shows\n  herbs again.\n- Goals sort by name.\n\n"
         "Thanks @everyone for the reports!\n\n## 0.1.0\n\nFirst.\n")
@@ -29,7 +29,12 @@ expect("opens with the addon and version, pointing to #announcements",
        lines[0] == "**Blackthornes Farmer 0.2.0** (full list of changes in #announcements)")
 expect("the bullets follow, wrapped lines joined",
        lines[1] == "- The map shows herbs again." and lines[2] == "- Goals sort by name.")
-expect("the thanks comes last", lines[-1] == "Thanks @everyone for the reports!")
+expect("the thanks line is left out (the bot posts it with @mentions)",
+       lines[-1] == "- Goals sort by name." and "Thanks" not in body["content"])
+expect("a named thanks is left out too",
+       "Ana" not in message("Blackthornes Farmer", "0.2.0", "- Fixed.\n\nThanks Ana and Bob for the reports!")["content"])
+expect("a bullet that says thanks stays",
+       "- Thanks to a fix" in message("x", "0.2.0", "- Thanks to a fix, it loads.")["content"])
 expect("no CurseForge link", "curseforge" not in body["content"].lower())
 expect("no link previews or cards", body["flags"] == 4)
 expect("nothing in it can ping", body["allowed_mentions"] == {"parse": []})
@@ -38,6 +43,7 @@ expect("no title, still the version", message(None, "0.2.0", "- Hi.")["content"]
 long_post = "\n\n".join("Paragraph %d of a very long post about the update." % i for i in range(200))
 expect("a long post fits in one message", len(message("Blackthornes Farmer", "0.2.0", long_post)["content"]) <= 2000)
 
+expect("only the thanks paragraph goes", without_thanks(post) == "- The map shows\n  herbs again.\n- Goals sort by name.")
 expect("a plain post is clear to post", not_clear(post) == [])
 expect("a Windows path is caught", "a Windows path" in not_clear("See D:\\Games\\WoW for it."))
 expect("an email address is caught", "an email address" in not_clear("Mail me at someone@example.com"))
