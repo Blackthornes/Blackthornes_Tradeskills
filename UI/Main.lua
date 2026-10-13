@@ -1144,35 +1144,7 @@ function UI:AttachToAuctionHouse()
     -- the wrong place now either way.
     self:RestorePosition("auctionWindowPosition")
 
-    -- Our own tab under the auction house (UI/AuctionTab.lua), unless
-    -- Settings says to keep the sell list beside it. The tab opens with the
-    -- game's own page showing; the bar and the list wait for its click.
-    if ns.AuctionTab and ns.AuctionTab.On() and auctionFrame then
-        ns.AuctionTab:Attach(auctionFrame)
-        return
-    end
-    if ns.AuctionTab then ns.AuctionTab:Detach() end
-
     if ns.PostPanel then ns.PostPanel:Attach() end
-end
-
---- The bar inside the Tradeskills tab's page, along its foot, with Scan and
---- Post Crafted at its right end (UI/AuctionTab.lua).
-function UI:PlaceAuctionBarIn(page)
-    local bar = self:GetAuctionBar()
-
-    bar:ClearAllPoints()
-    bar:SetWidth(AUCTION_BAR_WIDTH)
-    local ok, width = pcall(page.GetWidth, page)
-    if ok and type(width) == "number" and width > 0 and width - 28 < AUCTION_BAR_WIDTH then
-        bar:SetWidth(math.max(360, width - 28))
-    end
-    bar:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", -14, 12)
-    bar:Show()
-
-    -- Measures the status line against the bar's new width.
-    self:AttachPostButton()
-    self:UpdateAuctionButton()
 end
 
 --- A Post button beside the Scan button on the auction house window.
@@ -1932,10 +1904,6 @@ function UI:SearchAuctionHouse(itemID, quantity)
         end,
     })
 
-    -- The answer shows on the game's own page, so the Tradeskills tab's page
-    -- steps aside for it.
-    if ns.AuctionTab then ns.AuctionTab:Close() end
-
     return true
 end
 
@@ -2079,7 +2047,6 @@ function UI:OnEnable()
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
         UI:CloseWithShop("auction")
         UI:UpdateHeader()
-        if ns.AuctionTab then ns.AuctionTab:Detach() end
         if UI.auctionBar then UI.auctionBar:Hide() end
         if ns.PostPanel then ns.PostPanel:Hide() end
 
