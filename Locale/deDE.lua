@@ -2472,11 +2472,3 @@ L["you can't leave a form from here during combat. Leave it yourself, or try aga
 L["You can't craft in this form. Click to leave it, then again to craft. Not in combat."] = "In dieser Gestalt kannst du nicht herstellen. Klick, um sie zu verlassen, dann noch einmal zum Herstellen. Nicht im Kampf."
 L["%d of %d ready. Leave your form first"] = "%d von %d bereit. Verlass zuerst deine Gestalt"
 L["leave your form first"] = "verlass zuerst deine Gestalt"
-
--- The Tradeskills tab under the auction house (UI/AuctionTab.lua)
-L["Tradeskills"] = "Tradeskills"
-L["Your sell list and shopping list, with Scan and Post Crafted. Click Buy, Sell or Auctions to go back."] = "Deine Verkaufsliste und Einkaufsliste, mit Scannen und Waren einstellen. Klick auf Kaufen, Verkaufen oder Auktionen, um zurückzugehen."
-L["At the auction house"] = "Im Auktionshaus"
-L["Tab puts Tradeskills on its own tab under the auction house, beside Buy, Sell and Auctions, and its page opens inside the window. Beside it docks the sell list and the Scan bar next to the auction house, as before."] = "Reiter legt Tradeskills auf einen eigenen Reiter unter dem Auktionshaus, neben Kaufen, Verkaufen und Auktionen, und seine Seite öffnet sich im Fenster. Daneben setzt die Verkaufsliste und die Scan-Leiste wie bisher neben das Auktionshaus."
-L["Tab"] = "Reiter"
-L["Beside it"] = "Daneben"
