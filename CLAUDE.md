@@ -344,6 +344,19 @@ _G.BlackthornesTS.Butler:Mailbox(covered)   -- true: the mail panel steps aside;
 Butler's Always mail list names characters from `Holdings()` (same realm
 and faction). Keep `Mailbox` stable; Butler's `Logic/Errands.lua` calls it.
 
+Butler's gold goals (the owner said build it, 2026-10-13) ask what the
+trainers' recipes the character playing could learn now would cost:
+
+```lua
+_G.BlackthornesTS.Butler:LearnCost()   -- { [Classic skill line] = { skill, count, cost } }, or nil
+```
+
+Recipes with a trainer's price in the book, reached by the skill, not
+learned and not grey (`LearnNext.Tier`), by profession; a profession
+whose recipes were never read is left out. Kept 30 s, or until the
+character's `recipesCachedAt` moves. Tested in `tools/test_learnnext.lua`.
+Keep it stable; Butler's `Logic/GoldGoals.lua` reads it.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
