@@ -328,6 +328,21 @@ _G.BlackthornesTS.Butler:Mailbox(covered)   -- true: the mail panel steps aside;
 Butler's Always mail list names characters from `Holdings()` (same realm
 and faction). Keep `Mailbox` stable; Butler's `Logic/Errands.lua` calls it.
 
+## The auction house tab
+
+The owner asked (2026-10-13) for Tradeskills not to sit off to the side of
+the auction house. `UI/AuctionTab.lua`: a hanging "Tradeskills" tab placed
+past the game's last auction tab (`AuctionHouseFrame.Tabs`, else the tab
+globals), our own button, never added to their tab list. Its click lays the
+sell list (`PostPanel:ShowInPage`, `LeavePage`) over the auction window's
+page, inset under its title bar and over its frames, with the Scan bar at
+its foot (`UI:PlaceAuctionBarIn`); a click on any game tab (`HookScript`
+OnClick), a search (`UI:SearchAuctionHouse`) or the auction house closing
+puts the game's page back. "At the auction house" on the Auction page
+(`auctionLayout`, `tab` by default or `side`, the docked panel and bar as
+before; never rename it) switches at once. Tested in
+`tools/test_auctiontab.lua`. Not yet seen in game.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
