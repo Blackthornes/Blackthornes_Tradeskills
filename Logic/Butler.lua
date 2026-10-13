@@ -145,6 +145,18 @@
 -- profession window shows it, else the Queue tab opens on its Open button.
 -- A ready cooldown craft is made once, queued or not, with the window open.
 --
+-- Butler's gold goals (the owner said build it, 2026-10-13) ask what the
+-- trainers' recipes cost that the character playing could learn now:
+--
+--   _G.BlackthornesTS.Butler:LearnCost()   -- a table, or nil; reads only
+--
+-- { [Classic skill line] = { skill, count, cost } } for each profession the
+-- character has, counting the recipes a trainer teaches (a price in the
+-- data) that the skill reaches, that are not learned, and that still give
+-- skill (not grey). A profession whose recipes were never read (its window
+-- never opened) is left out, since every recipe would look unlearned. Kept
+-- LEARN_COST_SECONDS, or until the recipes are read again.
+--
 -- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
 
@@ -1125,4 +1137,79 @@ function Butler:Mailbox(covered)
             panel:Refresh()
         end
     end)
+end
+
+--------------------------------------------------------------------------------
+-- Trainer recipes to learn, for Butler's gold goals
+--------------------------------------------------------------------------------
+
+local LEARN_COST_SECONDS = 30
+local learnCost, learnCostKey, learnCostAt
+
+--- The character playing's recipes stamp: moves when they are read again.
+local function RecipesStamp()
+    local record = Characters()[SelfKey() or ""]
+    return type(record) == "table" and tostring(record.recipesCachedAt or 0) or "0"
+end
+
+local function LearnCost()
+    local book, skillUp = ns.RecipeBook, ns.SkillUp
+    if not (book and skillUp and book.GetAll and skillUp.ReadSkillLevels) then return nil end
+    local key = (SelfKey() or "?") .. ":" .. RecipesStamp()
+    if learnCost and learnCostKey == key and Now() - (learnCostAt or 0) < LEARN_COST_SECONDS then
+        return learnCost
+    end
+
+    local classic = book.ClassicLine or function(id) return id end
+    local skills = {}
+    for line, level in pairs(skillUp:ReadSkillLevels() or {}) do
+        skills[classic(line)] = math.max(skills[classic(line)] or 0, tonumber(level) or 0)
+    end
+
+    local answer, knowsSome = {}, {}
+    local records = book:GetAll() or {}
+    for _, record in pairs(records) do
+        local line = classic(record.skillLineID)
+        if skills[line] and book:KnowsIt(record) then knowsSome[line] = true end
+    end
+    local LearnNext = ns.LearnNext
+    for _, record in pairs(records) do
+        local line = classic(record.skillLineID)
+        local skill, needs = skills[line], record.skill
+        if skill and knowsSome[line] and needs and needs <= skill and record.trainerCost
+            and not record.starter and not book:KnowsIt(record) then
+            local tier = LearnNext and LearnNext.Tier and LearnNext.Tier(record, skill) or "unknown"
+            if tier == "unknown" and LearnNext and skill >= needs + (LearnNext.UNKNOWN_GREY or 75) then
+                tier = "trivial"
+            end
+            if tier ~= "trivial" then
+                local entry = answer[line]
+                if not entry then
+                    entry = { skill = skill, count = 0, cost = 0 }
+                    answer[line] = entry
+                end
+                entry.count = entry.count + 1
+                entry.cost = entry.cost + (tonumber(record.trainerCost) or 0)
+            end
+        end
+    end
+    for line in pairs(knowsSome) do
+        if not answer[line] then answer[line] = { skill = skills[line], count = 0, cost = 0 } end
+    end
+
+    learnCost, learnCostKey, learnCostAt = answer, key, Now()
+    return answer
+end
+
+--- The trainers' recipes the character playing could learn now, by
+--- profession, for Butler's gold goals. Never raises, writes nothing; nil
+--- on any error. A fresh table each time.
+function Butler:LearnCost()
+    local ok, answer = pcall(LearnCost)
+    if not (ok and type(answer) == "table") then return nil end
+    local copy = {}
+    for line, entry in pairs(answer) do
+        copy[line] = { skill = entry.skill, count = entry.count, cost = entry.cost }
+    end
+    return copy
 end
