@@ -21,7 +21,7 @@ ns.Print = function(line) printed[#printed + 1] = line end
 local sounds = 0
 PlaySound = function() sounds = sounds + 1 end
 
-local settings = { postDuration = 2 }
+local settings = { postDuration = 2, raiseStockOnSellOut = true }
 local who = "Player-1"
 ns.Config = {
     Get = function(_, key) return settings[key] end,
@@ -153,6 +153,9 @@ local off = now
 S:NotePosted(POTION, 1, 1)
 check("unticked: nothing is watched", ns.db.sellOutWatch["Realm-A"][who][POTION] == nil)
 settings.raiseStockOnSellOut = nil
+S:NotePosted(POTION, 1, 1)
+check("off by default: nothing is watched", ns.db.sellOutWatch["Realm-A"][who][POTION] == nil)
+settings.raiseStockOnSellOut = true
 
 -- Never lowers: a raise is always the number plus 1.
 ns.db.postLimits[SWORD] = 7
