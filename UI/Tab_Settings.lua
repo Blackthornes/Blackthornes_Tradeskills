@@ -584,7 +584,7 @@ local function Build(outer)
 
     CreateSection(pages.queue, 1, L["WHAT GETS QUEUED"])
     local postedRow = CreateRow(pages.queue, 1, L["Keep in stock per item"],
-        L["The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week. Equipped gear is not counted. A profession can have its own number (Keep in stock by profession), and an item its own in the Profit tab."])
+        L["The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week (Stock from your sales). Equipped gear is not counted. A profession can have its own number (Keep in stock by profession), and an item its own in the Profit tab."])
 
     widgets.maxPosted = Widgets.CreateNumberBox(postedRow, {
         width = 70, min = 0, max = 999,
@@ -614,6 +614,15 @@ local function Build(outer)
         Config:Set("raiseStockOnSellOut", checked)
     end, true)
     widgets.raiseOnSellOut:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local learnRow = CreateRow(pages.queue, 1, L["Stock from your sales"],
+        L["With Keep in stock at 0, Queue All and Restock what sells keep about two days of what sold for you this week. The Profit tab shows that number in its STOCK column. Off: a craft with no number set is never queued by them."])
+
+    widgets.learnStock = Widgets.CreateCheckbox(learnRow, L["On"], function(checked)
+        Config:Set("learnStockFromSales", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.learnStock:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local lowRow = CreateRow(pages.queue, 1, L["Wait until it runs low"],
         L["On: a craft is only suggested again once what you hold drops to the number below, then it is made back up to Keep in stock. Off: it is topped up whenever you hold fewer than Keep in stock."])
@@ -2061,6 +2070,7 @@ local function Refresh()
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
     widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
     widgets.raiseOnSellOut:SetChecked(Config:Get("raiseStockOnSellOut") ~= false)
+    widgets.learnStock:SetChecked(Config:Get("learnStockFromSales") ~= false)
     Put(widgets.restockAt, Config:Get("restockAt") or 0)
     widgets.fastSellerBoost:SetChecked(Config:Get("fastSellerBoost") == true)
     local extra = Config:Get("fastSellerExtra")
