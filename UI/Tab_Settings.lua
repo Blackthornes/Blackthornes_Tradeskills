@@ -1271,6 +1271,19 @@ local function Build(outer)
     end, false)
     widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Asked 2026-10-13: Tradeskills on its own tab under the auction house
+    -- rather than beside it. "Beside it" is the way back (UI/AuctionTab.lua).
+    local layoutRow = CreateRow(pages.auction, 1, L["At the auction house"],
+        L["Tab puts Tradeskills on its own tab under the auction house, beside Buy, Sell and Auctions, and its page opens inside the window. Beside it docks the sell list and the Scan bar next to the auction house, as before."])
+
+    widgets.auctionLayout = Widgets.CreateDropdown(layoutRow, {
+        { text = L["Tab"], value = "tab" },
+        { text = L["Beside it"], value = "side" },
+    }, function(value)
+        if ns.AuctionTab then ns.AuctionTab:SetLayout(value) else Config:Set("auctionLayout", value) end
+    end, { width = 110 })
+    widgets.auctionLayout:SetPoint("TOPLEFT", CONTROL_X, 0)
+
     -- A player's request (2026-10-07): the window was too big on a 4K
     -- screen. The grip below its bottom right corner does the same, to any
     -- size; one dragged to shows in the box as its percent.
@@ -1930,6 +1943,7 @@ local function Refresh()
     end
     widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
+    widgets.auctionLayout:SetValue(Config:Get("auctionLayout") == "side" and "side" or "tab", true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
     widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)
