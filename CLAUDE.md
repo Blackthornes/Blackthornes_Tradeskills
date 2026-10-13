@@ -315,7 +315,10 @@ its item's `bank` saying how many to take out of the bank first, and the
 same item in its deliveries joins that mail rather than making a second
 (a player logged in on the holder and the mail step was gone,
 2026-10-11). An old name-realm record of the
-crafter (`SameCharacter`) counts as the crafter's own. Records of one
+crafter (`SameCharacter`) counts as the crafter's own. Each missing
+material carries `vendor`, the copper for one when a vendor sells it
+(`Vendor:GetUnitPrice`), so Butler lists it under Buy from a vendor and
+the rest under Buy or gather (the owner, 2026-10-13). Records of one
 character (its GUID one and an old name-realm one) are one entry, named
 by the GUID record, and no step mails a character to itself under any
 of its records (a player was told to log out for the character they were
