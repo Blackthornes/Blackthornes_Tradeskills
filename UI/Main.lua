@@ -39,16 +39,37 @@ local EDGE_PAD = 11
 local TAB_HANG = 28
 local TAB_INSET = 34
 
--- The bar of controls that rides on the auction window. Tall enough that the
--- 28px buttons inside it keep their bevel clear of its own edge.
+-- The strip of controls at the top of the sell list (UI/PostPanel.lua):
+-- what is ready to sell, the scan's status, Post Crafted and Scan. As wide as
+-- the inside of the sell list, which sets it in place.
 local AUCTION_BAR_HEIGHT = 44
 local AUCTION_BAR_PAD = 10
-local AUCTION_BAR_WIDTH = 460
+local AUCTION_BAR_WIDTH = 350
 
--- Blizzard's auction window has its portrait sticking up out of the top left
--- corner. The bar keeps at least this far in from the window's left edge so
--- it never sits on top of it.
-local AUCTION_BAR_CLEAR_LEFT = 80
+-- The sell list's fold button sits at the strip's left end, and the words
+-- start past it.
+local AUCTION_BAR_TEXT_LEFT = 32
+
+-- The two buttons on the strip: quiet metal, one line high, as wide as
+-- their words. The one solid gold button is List all, at the list's foot.
+local AUCTION_BAR_BUTTON_HEIGHT = 22
+local AUCTION_BAR_GAP = 6
+
+UI.AUCTION_BAR_HEIGHT = AUCTION_BAR_HEIGHT
+UI.AUCTION_BAR_WIDTH = AUCTION_BAR_WIDTH
+
+--- A button as wide as the longest of its words, plus room for the bevel.
+local function FitButtonWidth(words, least)
+    local width = least
+    local measure = Theme and Theme.MeasureText
+    if type(measure) == "function" then
+        for _, word in ipairs(words) do
+            local ok, w = pcall(measure, "small", word)
+            if ok and type(w) == "number" then width = math.max(width, w + 20) end
+        end
+    end
+    return width
+end
 
 -- How big the window can be drawn, as a share of its normal size: dragged
 -- by the grip below its bottom right corner, picked on the Settings tab or
@@ -860,44 +881,51 @@ function UI:FindAuctionFrame()
     end
 end
 
---- The strip of addon controls that rides on Blizzard's auction window.
+--- The strip of addon controls at the top of the sell list.
 --
--- Scan and Post Crafted each used to anchor themselves to the auction frame
--- separately, which left buttons hanging in the game world above it with
--- nothing visibly tying them to the window they act on. They share one bar
--- instead, sitting on the auction window's top edge at its right end.
---
--- It used to run the full width of the auction window, and its left end
--- covered Blizzard's portrait. Now it is only as wide as what is on it:
--- the addon's name, a status line with the scan's progress under it, and the
--- two buttons.
---
--- Still parented to UIParent rather than to the auction frame, so Blizzard's
--- own layering can never clip or bury it, and so it survives the auction UI
--- being loaded on demand.
+-- Scan and Post Crafted used to sit on a bar of their own on the auction
+-- window's top edge, a second loose piece beside the sell list. The owner's
+-- mockup (2026-10-13) put them in the sell list's header instead, so the
+-- auction house has one Tradeskills drawer beside it: this strip is that
+-- header, with what is ready to sell and the scan's status on the left and
+-- the two buttons on the right. The sell list places it (PostPanel:PlaceBar).
 function UI:GetAuctionBar()
     if self.auctionBar then return self.auctionBar end
 
-    local bar = CreateFrame("Frame", "BlackthornesTSAuctionBar", UIParent)
-    bar:SetSize(AUCTION_BAR_WIDTH, AUCTION_BAR_HEIGHT)
-    bar:SetFrameStrata("FULLSCREEN_DIALOG")
-    bar:SetFrameLevel(90)
+    -- Inside the sell list, so it shows, hides, folds and layers with it.
+    local parent = UIParent
+    local panel = ns.PostPanel
+    if panel and type(panel.Build) == "function" then
+        local ok, frame = pcall(panel.Build, panel)
+        if ok and frame then parent = frame end
+    end
 
-    -- Opaque and mouse-catching: a click meant for a button should never fall
-    -- through the gaps onto whatever is behind the bar.
+    local bar = CreateFrame("Frame", "BlackthornesTSAuctionBar", parent)
+    bar:SetSize(AUCTION_BAR_WIDTH, AUCTION_BAR_HEIGHT)
+
+    -- Mouse-catching: a click meant for a button should never fall through
+    -- the gaps onto whatever is behind the bar.
     bar:EnableMouse(true)
     bar:Hide()
 
+    -- Drawn as the house title strip (UI/Collapse.lua's), so the sell list
+    -- reads as one window with one header.
     Theme.Fill(bar, "header")
     Theme.TopSheen(bar, 0.07)
     Theme.AccentStripe(bar, 3)
-    Theme.AddGameOutline(bar, { style = "tooltip", color = "natural", edgeSize = 12 })
+    local rule = Theme.CreateDivider(bar, "borderLit")
+    rule:SetPoint("BOTTOMLEFT")
+    rule:SetPoint("BOTTOMRIGHT")
 
-    local left = AUCTION_BAR_PAD + 4
+    local left = AUCTION_BAR_TEXT_LEFT
 
+    -- What is ready to sell and what it is worth (PostPanel:Refresh).
     local title = Theme.CreateLabel(bar, "small", "accent")
     title:SetPoint("TOPLEFT", bar, "TOPLEFT", left, -8)
-    title:SetText("Blackthornes Tradeskills")
+    title:SetWidth(AUCTION_BAR_WIDTH - left - AUCTION_BAR_PAD)
+    title:SetWordWrap(false)
+    title:SetText(L["Ready to sell"])
+    bar.title = title
 
     -- One line under the name: when the last scan was, or what the running
     -- scan is doing. As wide as the bar until the buttons arrive and take
@@ -1062,40 +1090,21 @@ function UI:CelebrateScan(result)
     end
 end
 
---- A scan button docked to Blizzard's auction house window.
+--- The auction house opened: the sell list docks beside it, with Scan and
+--- Post Crafted in its header.
 --
 -- Scanning only works while the auction house is open, so the control belongs
 -- where the player already is rather than only inside our own window.
---
--- Falls back to a fixed screen position if the auction frame cannot be found
--- at all. A scan button that quietly fails to appear is worse than one in a
--- slightly odd place.
 function UI:AttachToAuctionHouse()
     local auctionFrame, frameName = self:FindAuctionFrame()
     local bar = self:GetAuctionBar()
 
-    bar:ClearAllPoints()
-
-    bar:SetWidth(AUCTION_BAR_WIDTH)
-
+    -- Placed in the sell list's header by the sell list itself
+    -- (PostPanel:PlaceBar), which docks beside the auction window.
     if auctionFrame then
-        -- On the right end of the auction window's top edge, overlapping it by
-        -- two pixels so the two read as one piece of furniture rather than a
-        -- bar floating above it. Anchored by one corner only, so the bar keeps
-        -- its own width instead of stretching to the window's.
-        bar:SetPoint("BOTTOMRIGHT", auctionFrame, "TOPRIGHT", 0, -2)
-
-        -- A narrow auction window still keeps its portrait clear.
-        local frameWidth = auctionFrame:GetWidth() or 0
-        if frameWidth > 0 and frameWidth - AUCTION_BAR_CLEAR_LEFT < AUCTION_BAR_WIDTH then
-            bar:SetWidth(math.max(360, frameWidth - AUCTION_BAR_CLEAR_LEFT))
-        end
-
-        ns.Debug("docked auction bar to", frameName)
+        ns.Debug("auction house found:", frameName)
     else
-        -- Nothing to dock to: put it somewhere it cannot be missed.
-        bar:SetPoint("TOP", UIParent, "TOP", 0, -140)
-        ns.Debug("no auction frame found; using fallback position")
+        ns.Debug("no auction frame found; the sell list uses its fallback position")
     end
 
     bar:Show()
@@ -1107,26 +1116,10 @@ function UI:AttachToAuctionHouse()
             UI:TriggerScan()
             UI:UpdateAuctionButton()
         end, {
-            -- Tall enough that the bevel does not crowd the label.
-            width = 84,
-            height = 28,
-            -- Solid gold, the house main action, and fully opaque, so
-            -- nothing behind the button shows through.
-            primary = true,
+            -- Wide enough for Cancel too, which it reads while a scan runs.
+            width = FitButtonWidth({ L["Scan"], L["Cancel"] }, 56),
+            height = AUCTION_BAR_BUTTON_HEIGHT,
         })
-
-        -- This button lives out in the game world, where a flat one-pixel
-        -- border vanishes against Blizzard's art. Give it the familiar
-        -- bevelled frame edge so it always reads as a control.
-        -- A lighter bevel, pushed slightly outward so it frames the button
-        -- rather than closing in on the text.
-        Theme.AddGameOutline(button, {
-            style = "tooltip",
-            color = "natural",
-            edgeSize = 12,
-            expand = 4,
-        })
-        button:ApplyBaseColor()
 
         self.auctionButton = button
     end
@@ -1219,17 +1212,11 @@ function UI:AttachPostButton()
 
             UI:UpdatePostButton()
         end, {
-            width = 116,
-            height = 28,
-            primary = true,
+            width = FitButtonWidth({ L["Post Crafted"] }, 84),
+            height = AUCTION_BAR_BUTTON_HEIGHT,
         })
 
         button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-
-        Theme.AddGameOutline(button, {
-            style = "tooltip", color = "natural", edgeSize = 12, expand = 4,
-        })
-        button:ApplyBaseColor()
 
         self.postButton = button
     end
@@ -1237,7 +1224,7 @@ function UI:AttachPostButton()
     button:ClearAllPoints()
 
     if self.auctionButton then
-        button:SetPoint("RIGHT", self.auctionButton, "LEFT", -12, 0)
+        button:SetPoint("RIGHT", self.auctionButton, "LEFT", -AUCTION_BAR_GAP, 0)
     else
         button:SetPoint("RIGHT", bar, "RIGHT", -AUCTION_BAR_PAD, 0)
     end
@@ -1249,18 +1236,18 @@ function UI:AttachPostButton()
     -- centre on the other axis, and the client drops one of two points that
     -- disagree.
     if bar.progress then
-        local left = AUCTION_BAR_PAD + 4
-        local gap = 12
+        local left = AUCTION_BAR_TEXT_LEFT
+        local gap = 10
+        local buttons = (self.auctionButton and self.auctionButton:GetWidth() + AUCTION_BAR_GAP or 0)
+            + button:GetWidth() + gap
 
         bar.progress:ClearAllPoints()
         bar.progress:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", left, 7)
-        bar.progress:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT",
-            -(AUCTION_BAR_PAD + (self.auctionButton and self.auctionButton:GetWidth() + 12 or 0)
-                + button:GetWidth() + gap), 7)
+        bar.progress:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -(AUCTION_BAR_PAD + buttons), 7)
 
-        bar.status:SetWidth(math.max(40, bar:GetWidth() - left - AUCTION_BAR_PAD
-            - (self.auctionButton and self.auctionButton:GetWidth() + 12 or 0)
-            - button:GetWidth() - gap))
+        local room = math.max(40, bar:GetWidth() - left - AUCTION_BAR_PAD - buttons)
+        bar.status:SetWidth(room)
+        if bar.title then bar.title:SetWidth(room) end
     end
 
     self:UpdatePostButton()
