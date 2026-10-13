@@ -589,7 +589,6 @@ L["open the auction house for deposits and live prices"] = "öffne das Auktionsh
 L["watch Ready to sell for 15 seconds and say why items come and go"] = "beobachtet Bereit zum Verkauf 15 Sekunden lang und sagt, warum Gegenstände kommen und gehen"
 L["the auction house closed, so %s was not listed."] = "das Auktionshaus wurde geschlossen, also wurde %s nicht eingestellt."
 L["check whether the game lets this addon post and craft for you"] = "prüft, ob das Spiel dieses Addon für dich einstellen und herstellen lässt"
-L["a listing is already going through"] = "ein Angebot wird gerade schon eingestellt"
 L["%s cannot be auctioned"] = "%s kann nicht versteigert werden"
 L["could not find that item in your bags"] = "dieser Gegenstand wurde in deinen Taschen nicht gefunden"
 L["you have none of that to list"] = "davon hast du nichts zum Einstellen"

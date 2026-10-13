@@ -7,13 +7,14 @@
 -- asking it for anything: only one listing may be in flight at a time, and the
 -- next post waits for the previous one to be confirmed against the server.
 --
--- Two things are asserted:
+-- Since 2026-10-13 (the owner asked whether the five seconds were still
+-- needed) a listing being confirmed no longer holds the next back: each is
+-- told apart by its item, so what is asserted is
 --
---   1. CanPost refuses while a listing is still being confirmed. It used to be
---      checked in Post alone, the very last step, so a click spent a live price
---      check and raised a confirmation dialog before anything mentioned it.
---   2. SecondsUntilPostable counts that wait down, so the button shows it. The
---      queue cannot report it, because the queue does not know about it.
+--   1. CanPost and SecondsUntilPostable no longer wait on one listing being
+--      confirmed, only on the queue's own spacing.
+--   2. A pile of them (MAX_CONFIRMING items) does wait, and says so, and CanPost
+--      refuses up front rather than at the last step.
 
 local ns = {}
 
@@ -73,6 +74,7 @@ end
 
 local function Reset()
     Posting.pending = nil
+    Posting.others = nil
     Posting.blocked = nil
     queueSeconds, queueReason = 0, nil
     clientReady = true
@@ -98,64 +100,59 @@ Check("no reason", reason, nil)
 print("\na listing is still being confirmed")
 --------------------------------------------------------------------------------
 
--- Posted one second ago. The confirming read goes out three seconds after
--- the post, and the next post must wait the usual 1.2s after that read, so
--- 3.2 seconds are left and they are one real, countable wait: the button
--- used to count 3, 2, 1, say "wait", then count 2, 1 again.
+-- Since 2026-10-13 the next listing no longer waits for the last one to be
+-- confirmed: each is told apart by its item. What is left is the auction
+-- house's own spacing, which the queue counts.
 Reset()
-Posting.pending = { startedAt = clock - 1 }
+Posting.pending = { itemID = 1, startedAt = clock - 1 }
 
-allowed, reason = Posting:CanPost()
-Check("posting is refused", allowed, false)
+allowed, reason = Posting:CanPost(2)
+Check("another item may be listed", allowed, true)
+
+seconds, reason = Posting:SecondsUntilPostable(2)
+Check("with nothing of its own to count down", seconds, 0)
+Check("and nothing to say", reason, nil)
+
+Reset()
+queueSeconds, queueReason = 1.1, "spacing out requests to the auction house"
+Posting.pending = { itemID = 1, startedAt = clock - 0.1 }
+
+seconds, reason = Posting:SecondsUntilPostable(2)
+CheckAbout("only the spacing after the listing is counted", seconds, 1.1)
+Check("and named", reason, "spacing out requests to the auction house")
+
+--------------------------------------------------------------------------------
+print("\na pile of listings being confirmed")
+--------------------------------------------------------------------------------
+
+-- A burst of clicks may not pile up more checks than the auction house can
+-- answer: past MAX_CONFIRMING items, a new one waits for the oldest.
+Reset()
+Posting.others = {}
+for item = 1, Posting.MAX_CONFIRMING - 1 do
+    Posting.others[item] = { itemID = item, startedAt = clock - 2 + item * 0.1 }
+end
+Posting.pending = { itemID = Posting.MAX_CONFIRMING, startedAt = clock }
+
+allowed, reason = Posting:CanPost(99)
+Check("a new item waits", allowed, false)
 Check("and says why", reason, "still confirming the last listing")
 
-seconds, reason = Posting:SecondsUntilPostable()
-CheckAbout("counts the remaining 3.2s down as one wait", seconds, 3.2)
-Check("naming the listing being confirmed", reason, "still confirming the last listing")
+seconds, reason = Posting:SecondsUntilPostable(99)
+Check("with no seconds invented", seconds, 0)
+Check("but the reason shows", reason, "still confirming the last listing")
 
---------------------------------------------------------------------------------
-print("\nthe read has gone out and we are waiting on the server")
---------------------------------------------------------------------------------
+allowed = Posting:CanPost(1)
+Check("another copy of one being confirmed still goes", allowed, true)
 
--- The spacing after the read is the queue's to count, and it carries on the
--- same countdown; past it there is no honest number, it clears when the
--- server answers.
-Reset()
-queueSeconds, queueReason = 0.9, "spacing out requests to the auction house"
-Posting.pending = { startedAt = clock - 3.3, verifying = true }
+Posting:DropPending(Posting.others[1])
+allowed = Posting:CanPost(99)
+Check("once the oldest settles, the new one may go", allowed, true)
 
-seconds, reason = Posting:SecondsUntilPostable()
-CheckAbout("the spacing after the read carries the count on", seconds, 0.9)
-Check("still named as the listing being confirmed", reason, "still confirming the last listing")
-
-Reset()
-Posting.pending = { startedAt = clock - 4.5, verifying = true }
-
-seconds, reason = Posting:SecondsUntilPostable()
-Check("no seconds invented once that has passed", seconds, 0)
-Check("but the reason still shows", reason, "still confirming the last listing")
-
---------------------------------------------------------------------------------
-print("\nthe longer of the two waits wins")
---------------------------------------------------------------------------------
-
--- The queue and the in-flight listing are independent. Whichever runs longer
--- is the one the player actually serves.
-Reset()
-queueSeconds, queueReason = 9, "leaving the auction house free for you"
-Posting.pending = { startedAt = clock - 1 }
-
-seconds, reason = Posting:SecondsUntilPostable()
-CheckAbout("the 9s queue wait beats the 3.2s confirmation", seconds, 9)
-Check("and it is what gets named", reason, "leaving the auction house free for you")
-
-Reset()
-queueSeconds, queueReason = 0.5, "spacing out requests to the auction house"
-Posting.pending = { startedAt = clock - 1 }
-
-seconds, reason = Posting:SecondsUntilPostable()
-CheckAbout("the 3.2s confirmation beats the 0.5s pacing gap", seconds, 3.2)
-Check("and it is what gets named", reason, "still confirming the last listing")
+Posting:DropPending(Posting.pending)
+Check("the newest left takes the place of the one settled",
+    Posting.pending and Posting.pending.itemID, Posting.MAX_CONFIRMING - 1)
+Posting.others = nil
 
 --------------------------------------------------------------------------------
 print("\nrefusals that are not waits stay silent")
@@ -175,4 +172,4 @@ print("")
 if failures > 0 then
     error(string.format("FAIL -- %d check(s) failed", failures), 0)
 end
-print("PASS -- the wait between posts is the listing being confirmed, and it is reported")
+print("PASS -- the wait between posts is the auction house's spacing, and a pile of checks waits")
