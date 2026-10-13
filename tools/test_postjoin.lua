@@ -6,8 +6,8 @@
 -- seconds between each". Each listing used to be confirmed against the server
 -- before the next could start. Another copy of the same item now joins the
 -- listing being confirmed, and one check a few seconds after the last click
--- counts them all. A different item still waits, because its listing could
--- not be told apart from the first.
+-- counts them all. A different item no longer waits either (2026-10-13):
+-- it is told apart by its item ID (tools/test_postmany_items.lua).
 
 local ns = {}
 ns.COLORS = setmetatable({}, {__index = function() return "ffffffff" end})
@@ -223,16 +223,15 @@ Reset()
 check("the first oil is listed", Posting:Post(OIL, 1, 30000), true)
 check("another oil may follow straight away", (Posting:CanPost(OIL)), true)
 check("with nothing to count down", (Posting:SecondsUntilPostable(OIL)), 0)
-check("a different item still waits for the check", (Posting:CanPost(POTION)), false)
-check("and so does a button that names no item", (Posting:CanPost()), false)
-check("the different item counts the wait down", Posting:SecondsUntilPostable(POTION) > 0, true)
+check("a different item need not wait for the check", (Posting:CanPost(POTION)), true)
+check("nor a button that names no item", (Posting:CanPost()), true)
+check("the different item has nothing to count down", (Posting:SecondsUntilPostable(POTION)), 0)
 
 Advance(1)
 check("the second oil is listed a second later", Posting:Post(OIL, 1, 30000), true)
 check("both went to the auction house", #sent, 2)
 check("one check for both", Posting.pending.quantity, 2)
 check("measured from before the first", Posting.pending.postedBefore, 4)
-check("a different item is still refused at the last step", Posting:Post(POTION, 1, 1000), false)
 
 Advance(2.1)
 check("the first oil's timer does not check early", Posting.pending.verifying, nil)
@@ -246,8 +245,9 @@ print("")
 print("a copy listed while the check is out")
 
 Advance(0.5)
+local checking = Posting.pending
 check("a third oil while the check is out", Posting:Post(OIL, 1, 30000), true)
-check("the reading already out is dropped", ns.Auctions.confirmToken, 2)
+check("the reading already out settles nothing now", Posting:IsPending(checking), false)
 check("and a fresh check waits for the third", Posting.pending.verifying, nil)
 check("all three counted", Posting.pending.quantity, 3)
 
