@@ -23,6 +23,21 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.55.0
+
+- This is the largest AddOn update so far across the whole suite of Blackthornes addons.
+- You can set how many of an item to keep in stock for a whole profession, not just one item at a time.
+- When all of a craft you listed sells out, Tradeskills adds one to how many it keeps in stock.
+- Item tooltips show more about sales: how many sell a day, how many are listed, and how you did this week.
+- For a part you craft, you can pick Vendor, Make or Buy on the Level Up tab.
+- Settings has an About page with the Discord invite and how to report a bug.
+
+Fixes and changes:
+
+- Materials a vendor sells go to the vendor, not the auction house.
+- Butler's job list puts the mailbox first when mail is waiting.
+- Long craft names no longer cover the rows around them.
+
 ## 0.54.0
 
 - At the auction house, your sell list and Scan sit in one drawer beside the window, with a List all button.
