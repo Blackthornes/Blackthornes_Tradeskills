@@ -85,6 +85,11 @@ local DEFAULTS = {
         -- run out, Keep in stock for it goes up by 1 (the owner,
         -- 2026-10-13, Logic/SellOut.lua). Never lowered. Never rename it.
         raiseStockOnSellOut = true,
+        -- With Keep in stock at 0, Queue All and Restock what sells keep
+        -- about two days of what sold for you this week
+        -- (Auctions:GetLearnedLimit). Off, a craft with no number set is
+        -- never queued by them. Never rename it.
+        learnStockFromSales = true,
 
         -- Fast sellers keep more: an item your own sales show selling well
         -- (Logic/Demand.lua, "High" from your record) may be held this many
