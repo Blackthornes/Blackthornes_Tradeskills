@@ -1246,7 +1246,12 @@ local function Build(container)
     -- Laid out again when the list's width is known or changes (the
     -- scrollbar taking its room), so the columns that fit are worked out
     -- for the room there really is.
-    headings:SetScript("OnSizeChanged", function()
+    local placedWidth
+    headings:SetScript("OnSizeChanged", function(_, width)
+        -- Only a new width moves anything; the game can say so more than
+        -- once for the same one while it settles.
+        if width ~= nil and width == placedWidth then return end
+        placedWidth = width
         PlaceHeadings()
         if widgets.list then widgets.list:Refresh() end
     end)
