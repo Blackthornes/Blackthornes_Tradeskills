@@ -228,4 +228,50 @@ end
 check(Opener:ProfessionFor(7) == nil, "a gathering skill in German has no window")
 C_TradeSkillUI.GetProfessionInfoBySkillLineID = englishInfo
 
+-- Leaving a form first (the owner said yes, 2026-10-13) ---------------------
+
+local class, form = "WARRIOR", 1
+UnitClass = function() return "Bob", class end
+GetShapeshiftForm = function() return form end
+check(Opener:LeaveFormStep() == nil, "a warrior's stance is no form to leave")
+class = "DRUID"
+local leave = Opener:LeaveFormStep()
+check(leave and leave.leaveForm, "a druid in a form leaves it first")
+form = 0
+check(Opener:LeaveFormStep() == nil, "out of form, nothing to leave")
+form = 3
+
+local formButton = NewFrame()
+formButton.shown = true
+check(Opener:Arm(formButton, leave, 1), "arm Leave form out of combat")
+local secure = Opener.overlay
+check(secure.attrs.type == "macro" and secure.attrs.macrotext == "/cancelform",
+  "Leave form runs /cancelform, got " .. tostring(secure.attrs.type))
+check(secure.attrs.spell == nil, "and casts nothing else in the same click")
+check(secure.shown, "the secure button covers the craft button")
+
+local refreshed = 0
+ns.UI = { RefreshActiveTab = function() refreshed = refreshed + 1 end }
+events.UPDATE_SHAPESHIFT_FORM()
+form = 0
+events.UPDATE_SHAPESHIFT_FORM()
+check(refreshed == 2, "leaving the form redraws the button")
+events.UPDATE_SHAPESHIFT_FORM()
+check(refreshed == 2, "a form event with nothing changed redraws nothing")
+
+check(Opener:Arm(formButton, Opener:ProfessionFor(1), 1), "the next click opens the profession")
+check(secure.attrs.type == "spell" and secure.attrs.spell == "Tailoring" and secure.attrs.macrotext == nil,
+  "set back to casting the profession")
+
+form = 3
+inCombat = true
+local said = #printed
+Opener:MissedClick()
+check(#printed == said + 1 and printed[#printed]:find("combat"), "in combat, it says a form cannot be left from here")
+inCombat = false
+form, class = 0, "WARRIOR"
+UnitClass, GetShapeshiftForm = nil, nil
+check(Opener:InBlockingForm() == false, "a client without the calls is never in a form")
+ns.UI = nil
+
 print("profession opener: all checks passed")
