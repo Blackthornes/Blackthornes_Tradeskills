@@ -176,6 +176,12 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
   player's own (`Prices:GetScanValue(itemID, "rival")`), only while the
   scan is fresh (`Prices:IsStale`); nil without `auction`. Butler holds
   an item back when it is well below `auction` (2026-10-13).
+- `belowCost`: copper one costs to make, when the Sell list's price for it
+  (`Posting:GetChosenPrice`, else `GetPostPrice`) is under that and
+  Posting would refuse it (`Posting:BelowCost`, or `BelowCraftedCost` with
+  "Never below what I paid" on); nil for anything not crafted, a price that
+  covers it, or "Recommend selling at a loss" ticked. Butler holds such an
+  item back instead of saying Auction (2026-10-13).
 - `fast`: `Demand:Get` "high" is true, "low" false, "some" or no reading nil.
 - `disenchant`: `Disenchant:GetValue`, copper for one; nil when it cannot
   be broken or its material has no price.

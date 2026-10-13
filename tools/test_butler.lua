@@ -128,6 +128,40 @@ check("nobody else listing it", Butler:Advise(5).auctionNow, nil)
 check("no auction value, no price today", Butler:Advise(2).auctionNow, nil)
 check("not an item gives nil", Butler:Advise(nil), nil)
 
+print("\nlisting under what it costs to make")
+check("no Posting module: nothing said", a.belowCost, nil)
+local allowLoss, chosen, paidFor = false, {}, {}
+local craftCost = { [1] = 12000, [3] = 1000 }
+ns.Cost = { FindAnyRecipeForItem = function(_, itemID) return craftCost[itemID] and itemID end }
+ns.CraftedCost = { Get = function(_, itemID) return paidFor[itemID] and { cost = paidFor[itemID] } end }
+ns.Posting = {
+  GetPostPrice = function(_, itemID) return rivals[itemID] or prices[itemID] end,
+  GetChosenPrice = function(_, itemID) return chosen[itemID] end,
+  BelowCost = function(_, itemID, price)
+    if allowLoss then return nil end
+    local unit = craftCost[itemID]
+    if unit and price < unit then return unit end
+  end,
+  BelowCraftedCost = function(_, itemID, price)
+    if paidFor[itemID] and price < paidFor[itemID] then return paidFor[itemID] end
+  end,
+}
+check("a craft listed under its materials: the cost", Butler:Advise(1).belowCost, 12000)
+check("a craft whose price covers it", Butler:Advise(3).belowCost, nil)
+check("not a craft", Butler:Advise(5).belowCost, nil)
+check("no auction value says nothing", Butler:Advise(2).belowCost, nil)
+chosen[1] = 15000
+check("a price the player chose covers it", Butler:Advise(1).belowCost, nil)
+chosen[1] = nil
+allowLoss = true
+check("selling at a loss allowed", Butler:Advise(1).belowCost, nil)
+paidFor[1] = 7000
+check("under what the last craft cost, with that guard on", Butler:Advise(1).belowCost, 7000)
+allowLoss, paidFor[1] = false, nil
+ns.Posting.GetPostPrice = function() error("boom") end
+check("a price that raises gives nil", Butler:Advise(1), nil)
+ns.Posting, ns.Cost, ns.CraftedCost = nil, nil, nil
+
 print("\ndisenchanting")
 check("value", a.disenchant, 3000)
 check("cannot without the spell", a.canDisenchant, false)
