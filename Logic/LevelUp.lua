@@ -388,6 +388,20 @@ function LevelUp:CraftAction(recipeID, wanted)
     local count = math.max(1, math.min(tonumber(wanted) or 1, craftable))
 
     local opener = ns.ProfessionOpener
+
+    -- In travel form or the like, the first click leaves it (the secure
+    -- button, as for opening a window); the next opens or crafts.
+    local leave = opener and opener.LeaveFormStep and opener:LeaveFormStep()
+    if leave then
+        return {
+            kind = "open",
+            text = L["Leave form"],
+            status = L["You can't craft in this form. Click to leave it, then again to craft. Not in combat."],
+            count = count,
+            profession = leave,
+        }
+    end
+
     if opener and not opener:WindowShowsRecipe(recipeID) then
         local profession = opener:ProfessionFor(recipeID)
 
