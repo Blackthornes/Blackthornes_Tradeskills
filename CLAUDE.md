@@ -678,6 +678,22 @@ slides up with its icon popping and a light crossing it, and the Got it
 button glows (one looping animation the game plays, only while it shows);
 Motion off lands it all at once. Not yet seen in game.
 
+## The About page and the note
+
+The owner asked (2026-10-13) for a note on how the addons are made, once at
+the top of What's New and kept on an About page in every addon's Settings.
+`UI/About.lua` is the same file in all five (a fix to it belongs in all
+five): `About.NOTE` is the owner's wording, a paragraph a key; change it
+only when he asks, in all five, with each `Locale/deDE.lua`. `About:Note`
+and `About:Info` build the page's two columns (the version, the Discord in
+a box to copy, how to report a bug, a thank-you that names no player, a
+What's New button and the other Blackthornes addons from
+`SisterNote.ADDONS`); each addon's Settings places them on its "about"
+page. `UI/WhatsNew.lua` (FILE_VERSION 3) puts the note at the top of the
+next window that comes up by itself, alone when nothing is new, then sets
+`aboutNoteSeen` in every sister's account save (never rename it); with the
+window turned off it waits. Tested in `tools/test_whatsnew.lua`.
+
 ## The sister note
 
 The owner asked (2026-10-11) for the addons to say, once, which of the
