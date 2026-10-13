@@ -39,7 +39,13 @@ ns.Config = {
 local quality = { [1] = 2, [2] = 0, [3] = 2, [4] = 3, [5] = 2 }
 local prices = { [1] = 10000, [2] = 500, [3] = 2000, [5] = 4000 }
 local deposits = { [1] = 100 }
-ns.Prices = { GetValue = function(_, itemID) return prices[itemID] end }
+local rivals = { [1] = 6000, [3] = 2000 }
+local stale = { [3] = true }
+ns.Prices = {
+  GetValue = function(_, itemID) return prices[itemID] end,
+  GetScanValue = function(_, itemID, which) if which == "rival" then return rivals[itemID] end end,
+  IsStale = function(_, itemID) return stale[itemID] == true end,
+}
 ns.Profit = {
   NetFromListing = function(_, itemID, unit) return unit * 0.95 - (deposits[itemID] or 0) end,
 }
@@ -116,6 +122,10 @@ check("some demand is unknown", Butler:Advise(5).fast, nil)
 check("low demand is slow", Butler:Advise(3).fast, false)
 check("never priced has no auction value", Butler:Advise(4).auction, nil)
 check("an ID as text is read", Butler:Advise("1").auction, 9400)
+check("today's cheapest rival, after the cut and the deposit", a.auctionNow, 5600)
+check("an old scan says nothing about today", Butler:Advise(3).auctionNow, nil)
+check("nobody else listing it", Butler:Advise(5).auctionNow, nil)
+check("no auction value, no price today", Butler:Advise(2).auctionNow, nil)
 check("not an item gives nil", Butler:Advise(nil), nil)
 
 print("\ndisenchanting")
