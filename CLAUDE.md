@@ -263,7 +263,11 @@ count }`, subject "From Blackthornes Butler"; `money`, optional copper,
 goes in the gold boxes through `QueueMail.PutMoney`, gold alone being a
 mail of its own, never with COD ticked and never more than the purse less
 postage); the player presses Send and
-QueueMail's own SendMail hook writes down what went. It never fills a mail
+QueueMail's own SendMail hook writes down what went. What did not fit
+or could not be split goes in chat (`Butler.FillDone`), since Butler's
+window covers the mail panel that says it; a split goes in the stack's own
+bag first, then an ordinary bag, then a profession bag made for the item
+(2026-10-13, herbs in a herb bag were left out). It never fills a mail
 to the character playing, under any record of it (`QueueMail:IsPlaying`:
 its key, a record carrying its GUID, or the old name-realm record left
 beside the GUID one; a player found Butler filling one, 2026-10-11), and

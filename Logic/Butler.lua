@@ -607,11 +607,24 @@ function Butler:FillMail(name, items, money)
         recipient = key and mail.MailName and mail.MailName(Characters()[key]) or name
         if mail.IsPlayingName and mail:IsPlayingName(recipient) then return false, toSelf end
         return mail:Fill({ recipient = recipient, items = list, money = money,
-            subject = #list == 0 and "Gold from Blackthornes Butler" or "From Blackthornes Butler" })
+            subject = #list == 0 and "Gold from Blackthornes Butler" or "From Blackthornes Butler" },
+            Butler.FillDone)
     end)
     if not ok then return false, L["Tradeskills could not fill the mail"] end
     if started == true then return true, nil, recipient end
     return false, why
+end
+
+--- What a mail Butler filled left out, said in chat: Butler's window
+--- covers the mail panel that would say it (two herbs went missing from a
+--- mail with nothing said, 2026-10-13).
+function Butler.FillDone(attached, leftOver)
+    if not (leftOver and leftOver > 0) then return end
+    if ns.QueueMail and ns.QueueMail.splitBlocked then
+        ns.Print(L["Free one bag slot to split a stack, then press the button again."])
+    else
+        ns.Print(L.Format("%d attached; the rest go in the next mail. Press Send.", attached or 0))
+    end
 end
 
 local function FromBank()
