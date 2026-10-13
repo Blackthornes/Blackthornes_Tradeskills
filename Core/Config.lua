@@ -81,6 +81,10 @@ local DEFAULTS = {
         -- room under Keep in stock, or what your sales taught (asked
         -- 2026-10-11, Queue:RestockSold).
         restockOnSale = true,
+        -- When every copy of a craft you listed sells before its listings
+        -- run out, Keep in stock for it goes up by 1 (the owner,
+        -- 2026-10-13, Logic/SellOut.lua). Never lowered. Never rename it.
+        raiseStockOnSellOut = true,
 
         -- Fast sellers keep more: an item your own sales show selling well
         -- (Logic/Demand.lua, "High" from your record) may be held this many

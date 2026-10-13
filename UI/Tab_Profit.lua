@@ -1328,7 +1328,12 @@ function UpdateDetail(analysis)
         professionName = professionName or profession
         local own = source == "item"
         box.editBox:SetTextColor(Theme.Unpack(own and "text" or "dim"))
-        if own then
+        local raised = own and ns.SellOut and ns.SellOut.GetRaised
+            and ns.SellOut:GetRaised(analysis.outputItemID)
+        if raised and ns.db.postLimits and raised.to == ns.db.postLimits[analysis.outputItemID] then
+            box.sourceTip = L.Format("Raised from %d to %d because every copy you listed sold. The x goes back to its profession's number, or the usual one.",
+                raised.from or 0, raised.to or 0)
+        elseif own then
             box.sourceTip = L["Set for this item only. The x goes back to its profession's number, or the usual one."]
         elseif source == "profession" then
             box.sourceTip = L.Format("From %s in Settings. Type a number to set it for this item only.", professionName)
