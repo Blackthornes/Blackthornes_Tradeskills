@@ -192,6 +192,28 @@ function Queue:HeldBy(characterKey, itemID)
     return held
 end
 
+--- How much of what HeldBy counts is mail: in the character's mailbox, or
+--- sent to it and not yet seen arrive. Counted the same way HeldBy counts
+--- it, so HeldBy less this is what its bags and bank hold. Butler's jobs
+--- put a mailbox visit first when a craft counts on it (2026-10-13).
+function Queue:InMailFor(characterKey, itemID)
+    local inMail = 0
+    if not characterKey or characterKey == SelfKey() then
+        if ns.Inventory and ns.Inventory.GetMailCount then
+            inMail = ns.Inventory:GetMailCount(itemID) or 0
+        end
+    else
+        local record = CharacterRecord(characterKey)
+        if record and ns.Config:Get("countMailAsStock") ~= false then
+            inMail = (record.mail and record.mail[itemID]) or 0
+        end
+    end
+    if ns.QueueMail and ns.QueueMail.InFlight then
+        inMail = inMail + ns.QueueMail:InFlight(characterKey or SelfKey(), itemID)
+    end
+    return inMail
+end
+
 --- Every recipe every character knows, by the item it makes.
 local function MakersByOutput()
     local byOutput = {}

@@ -99,6 +99,23 @@ function QueueMail:InFlight(characterKey, itemID)
     return total
 end
 
+--- Everything mailed to a character and not yet seen arrive, by item:
+--- { [itemID] = count }. Read only (Butler's jobs: a mailbox to visit).
+function QueueMail:InFlightItems(characterKey)
+    local store = Store()
+    local list = store and store.sent[characterKey]
+    local items = {}
+    if type(list) ~= "table" then return items end
+
+    local record = CharacterRecord(characterKey)
+    for _, sent in ipairs(list) do
+        if type(sent) == "table" and sent.itemID and StillComing(sent, record) then
+            items[sent.itemID] = (items[sent.itemID] or 0) + (sent.count or 0)
+        end
+    end
+    return items
+end
+
 --- Forget what has arrived or is too old to matter.
 function QueueMail:Prune()
     local store = Store()

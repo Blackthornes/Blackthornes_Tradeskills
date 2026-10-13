@@ -312,8 +312,14 @@ of its records (a player was told to log out for the character they were
 on, 2026-10-11). `Craft`
 runs the playing character's queued craft of that recipe from Butler's
 click: `Crafting:Start` when the profession window shows it, else
-`Queue:ShowQueue()` so the Open button opens the profession. Tested in
-`tools/test_butlerjobs.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
+`Queue:ShowQueue()` so the Open button opens the profession. Mail
+waiting for a character (the owner, 2026-10-13: "if a character needs to
+visit the mail for something sent to it, butler should move that up the
+priority list") is a `pickup` step put first on its line (`items`,
+`forCraft`): materials its crafts count on (`Queue:HeldBy`) that are not in
+its bags or bank, so sit in its mailbox or are on their way, and anything
+else mailed to it and not yet seen arrive (`QueueMail:InFlightItems`).
+Tested in `tools/test_butlerjobs.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
 
 Butler takes over the mailbox (the owner picked it, 2026-10-11): its
