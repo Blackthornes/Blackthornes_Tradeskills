@@ -11,6 +11,11 @@
 --   6. One timer, no ticker; the newest copy of the file draws the window.
 --   7. Motion off lands everything at once, with no tween started.
 --   8. Every line of text wraps; nothing is cut to "...".
+--   9. The note (UI/About.lua) heads the window once per account, alone
+--      when nothing is new, and never again in any sister.
+--  10. A one-time card (ns.WHATS_NEW_TIPS) shows once, after the note, only
+--      when due; it is kept as seen either way, waits while the window is
+--      off, and its button runs it and closes the window.
 
 local suite = { checks = 0 }
 local function check(label, ok, detail)
@@ -128,6 +133,8 @@ local function Addon(folder, db, news, opts)
         end,
     }
     ns.WHATS_NEW = news
+    if opts.note then ns.About = { NOTE = { "First paragraph.", "Second paragraph." } } end
+    ns.WHATS_NEW_TIPS = opts.tips
     local chunk = assert(loadfile(lfs_cwd .. "/UI/WhatsNew.lua"))
     chunk(folder, ns)
     if opts.fileVersion then ns.WhatsNew.FILE_VERSION = opts.fileVersion end
@@ -301,6 +308,136 @@ farmer = Addon("Blackthornes_Farmer", nil, "nonsense")
 Login({ farmer })
 Fire()
 check("nonsense shows nothing", not Window())
+
+--------------------------------------------------------------------------------
+-- The note: once per account, at the top
+--------------------------------------------------------------------------------
+
+Client()
+farmerDB, tsDB = {}, {}
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true })
+check("the note is due", farmer.WhatsNew:NoteDue())
+Login({ farmer, ts })
+Fire()
+list = Shown(farmer)
+check("the note heads the window", list and list[1].note and #list == 3, list and #list)
+check("with its paragraphs", list[1].paragraphs and #list[1].paragraphs == 2)
+check("kept as seen in every sister", farmerDB.aboutNoteSeen == true and tsDB.aboutNoteSeen == true)
+
+Client()
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true })
+Login({ farmer, ts })
+Fire()
+check("never again", not Window())
+
+-- Nothing new, but the note never shown: it comes up alone.
+Client()
+local quietDB = { whatsNewSeen = "0.30.0" }
+farmer = Addon("Blackthornes_Farmer", quietDB, FARMER_NEWS, { note = true })
+Login({ farmer })
+Fire()
+list = Shown(farmer)
+check("the note alone", list and #list == 1 and list[1].note, list and #list)
+
+-- Seen in one sister is seen in all.
+Client()
+farmer = Addon("Blackthornes_Farmer", { whatsNewSeen = "0.30.0" }, FARMER_NEWS, { note = true })
+ts = Addon("Blackthornes_TS", { whatsNewSeen = "0.52.0", aboutNoteSeen = true }, TS_NEWS, { note = true })
+Login({ farmer, ts })
+Fire()
+check("seen in one, seen in all", not Window())
+
+-- With the window turned off the note waits, kept unseen.
+Client()
+local offDB = { whatsNewSeen = "0.30.0", whatsNewPopup = false }
+farmer = Addon("Blackthornes_Farmer", offDB, FARMER_NEWS, { note = true })
+Login({ farmer })
+Fire()
+check("off: no window", not Window())
+check("and the note is not kept as seen", offDB.aboutNoteSeen == nil)
+
+--------------------------------------------------------------------------------
+-- One-time cards: once, after the note, only when due
+--------------------------------------------------------------------------------
+
+local ran, due = 0, true
+local function Tips()
+    return {
+        { key = "trial", title = "Trial", paragraphs = { "It can do this for you." },
+          hint = "Also in Settings.", button = "Turn it on",
+          due = function() return due end, run = function() ran = ran + 1 end },
+    }
+end
+
+Client()
+local tipDB = { whatsNewSeen = "0.30.0" }
+farmer = Addon("Blackthornes_Farmer", tipDB, FARMER_NEWS, { note = true, tips = Tips() })
+Login({ farmer })
+Fire()
+list = Shown(farmer)
+check("note, then the card", list and #list == 2 and list[1].note and list[2].note
+    and list[2].addon.title == "Trial", list and #list)
+check("kept as seen", tipDB.whatsNewTipsSeen and tipDB.whatsNewTipsSeen.trial == true)
+owner = farmer.WhatsNew.Owner()
+local actions, hint = rawget(owner.cards[2], "actions"), rawget(owner.cards[2], "hint")
+local button = actions and actions["Turn it on"]
+check("the card has its button", button and button:IsShown())
+check("and its hint", hint and hint:IsShown() and hint:GetText() == "Also in Settings.")
+check("the note's card has no button", not rawget(owner.cards[1], "actions"))
+button:GetScript("OnClick")(button)
+check("the button runs it", ran == 1, ran)
+check("and closes the window", not Window():IsShown())
+
+Client()
+farmer = Addon("Blackthornes_Farmer", tipDB, FARMER_NEWS, { note = true, tips = Tips() })
+Login({ farmer })
+Fire()
+check("the card never comes back", not Window())
+
+-- Alone when nothing else is new.
+Client()
+local aloneDB = { whatsNewSeen = "0.30.0", aboutNoteSeen = true }
+farmer = Addon("Blackthornes_Farmer", aloneDB, FARMER_NEWS, { tips = Tips() })
+Login({ farmer })
+Fire()
+list = Shown(farmer)
+check("the card alone", list and #list == 1 and list[1].addon.title == "Trial", list and #list)
+
+-- Not due: never shown, and kept as seen so it never turns up later.
+Client()
+due = false
+local notDueDB = { whatsNewSeen = "0.30.0", aboutNoteSeen = true }
+farmer = Addon("Blackthornes_Farmer", notDueDB, FARMER_NEWS, { tips = Tips() })
+Login({ farmer })
+Fire()
+check("not due: no window", not Window())
+check("but kept as seen", notDueDB.whatsNewTipsSeen and notDueDB.whatsNewTipsSeen.trial == true)
+due = true
+Client()
+farmer = Addon("Blackthornes_Farmer", notDueDB, FARMER_NEWS, { tips = Tips() })
+Login({ farmer })
+Fire()
+check("and not shown once it is due later", not Window())
+
+-- With the window turned off it waits, kept unseen.
+Client()
+local tipOffDB = { whatsNewSeen = "0.30.0", aboutNoteSeen = true, whatsNewPopup = false }
+farmer = Addon("Blackthornes_Farmer", tipOffDB, FARMER_NEWS, { tips = Tips() })
+Login({ farmer })
+Fire()
+check("off: no card", not Window())
+check("and not kept as seen", tipOffDB.whatsNewTipsSeen == nil)
+
+-- A due check that raises counts as not due.
+Client()
+local badDB = { whatsNewSeen = "0.30.0", aboutNoteSeen = true }
+farmer = Addon("Blackthornes_Farmer", badDB, FARMER_NEWS,
+    { tips = { { key = "bad", paragraphs = { "x" }, due = function() error("boom") end } } })
+Login({ farmer })
+Fire()
+check("a raising check shows nothing", not Window())
 
 for key, value in pairs(saved) do _G[key] = value end
 _G.BlackthornesWhatsNewFrame = nil

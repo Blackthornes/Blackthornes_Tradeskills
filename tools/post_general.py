@@ -9,9 +9,15 @@ The text is the version's section of NEWS.md: a few short bullets in plain
 words for players, written with the CHANGELOG section in each release PR,
 ending with the thanks. The post opens with the addon's name and version, so
 each addon's bullets read as their own group, and that line points players to
-#announcements for the full list, leaving the thanks last. No CurseForge link and no link preview, so
+#announcements for the full list. No CurseForge link and no link preview, so
 the post stays small (the owner, 2026-10-10). A version with no NEWS.md
 section posts nothing.
+
+The thanks line is left out of this post (the owner, 2026-10-13): he wants
+each player thanked with a real @mention, so they get a notification, and a
+mention needs their Discord ID, which never goes in a public repo. His bot,
+on his PC, posts the thanks under this post once he approves the wording, and
+looks the names up there.
 
 It posts through a channel webhook kept in the DISCORD_GENERAL_WEBHOOK_URL
 repository secret, which the owner makes in Discord (#general > Edit Channel >
@@ -19,9 +25,10 @@ Integrations > Webhooks) and pastes into GitHub himself. Without the secret it
 does nothing. NEWS.md does not ship in the package, so before posting the
 text gets the same clear-to-post scan the package gets (check_package.py's
 PRIVATE list), and anything it finds stops the post. This post is the one
-place a player is named: it thanks, by their Discord name, whoever asked
-for or reported each change (the owner, 2026-10-09). Mentions are switched
-off, so nothing in it can ping the server.
+place a player is named: NEWS.md's thanks line names, by their Discord
+name, whoever asked for or reported each change (the owner, 2026-10-09), and
+the bot reads it from there. Mentions are switched off, so nothing in this
+post can ping the server.
 """
 
 import glob
@@ -71,10 +78,20 @@ def not_clear(text):
     return [label for label, pattern in PRIVATE if pattern.search(text)]
 
 
+THANKS = re.compile(r"^\s*(?:thanks|thank you|shout[- ]?out)\b", re.I)
+
+
+def without_thanks(post):
+    """The post with its thanks paragraph left out: the bot on the owner's PC
+    posts the thanks with real @mentions instead."""
+    paragraphs = re.split(r"\n\s*\n", (post or "").strip())
+    return "\n\n".join(p for p in paragraphs if not THANKS.match(p)).strip()
+
+
 def message(title, version, post):
     """The webhook body: the addon and version with the pointer to
     #announcements, then the post as written. No link and no card."""
-    text = unwrap(post)
+    text = unwrap(without_thanks(post))
     if len(text) > LIMIT:
         cut = text.rfind("\n", 0, LIMIT)
         text = text[:cut if cut > 0 else LIMIT].rstrip() + "\n..."

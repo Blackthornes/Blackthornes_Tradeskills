@@ -192,6 +192,28 @@ function Queue:HeldBy(characterKey, itemID)
     return held
 end
 
+--- How much of what HeldBy counts is mail: in the character's mailbox, or
+--- sent to it and not yet seen arrive. Counted the same way HeldBy counts
+--- it, so HeldBy less this is what its bags and bank hold. Butler's jobs
+--- put a mailbox visit first when a craft counts on it (2026-10-13).
+function Queue:InMailFor(characterKey, itemID)
+    local inMail = 0
+    if not characterKey or characterKey == SelfKey() then
+        if ns.Inventory and ns.Inventory.GetMailCount then
+            inMail = ns.Inventory:GetMailCount(itemID) or 0
+        end
+    else
+        local record = CharacterRecord(characterKey)
+        if record and ns.Config:Get("countMailAsStock") ~= false then
+            inMail = (record.mail and record.mail[itemID]) or 0
+        end
+    end
+    if ns.QueueMail and ns.QueueMail.InFlight then
+        inMail = inMail + ns.QueueMail:InFlight(characterKey or SelfKey(), itemID)
+    end
+    return inMail
+end
+
 --- Every recipe every character knows, by the item it makes.
 local function MakersByOutput()
     local byOutput = {}
@@ -1112,20 +1134,29 @@ end
 -- @param itemID   what to buy
 -- @param count    how many
 -- @param forItem  the gear it is for (the item itself when buying the gear)
+-- @param forRecipe  optional { recipeID, name }: materials for a recipe to
+--   learn and skill up with (Level Up's Learn next). Such a line is not tied
+--   to owning an item, which the first craft would, so it stays until its x
+--   or Clear all.
 -- @return true, or nil and why
-function Queue:EnsureBuy(itemID, count, forItem)
+function Queue:EnsureBuy(itemID, count, forItem, forRecipe)
     itemID, forItem = tonumber(itemID), tonumber(forItem)
     count = math.floor(tonumber(count) or 1)
     if not itemID or count < 1 then return nil, L["nothing to buy"] end
     if not ns.db then return nil, L["Tradeskills has not loaded its saved data yet"] end
-    forItem = forItem or itemID
-    if OwnsItem(forItem) then return nil, L["you already have it"] end
+    local recipeID = type(forRecipe) == "table" and tonumber(forRecipe.recipeID) or nil
+    if recipeID then
+        forItem = nil
+    else
+        forItem = forItem or itemID
+        if OwnsItem(forItem) then return nil, L["you already have it"] end
+    end
 
     local selfKey = SelfKey()
     local buys = Buys(true)
     for _, line in ipairs(buys) do
         if type(line) == "table" and line.itemID == itemID and line.forItem == forItem
-            and MineToSee(line, selfKey) then
+            and line.forRecipe == recipeID and MineToSee(line, selfKey) then
             if line.count == count then return true end
             line.count = count
             self:Notify()
@@ -1135,6 +1166,7 @@ function Queue:EnsureBuy(itemID, count, forItem)
 
     buys[#buys + 1] = {
         itemID = itemID, count = count, forItem = forItem,
+        forRecipe = recipeID, forRecipeName = recipeID and forRecipe.name or nil,
         owner = selfKey, addedAt = time(),
     }
     self:Notify()
@@ -1480,7 +1512,8 @@ function Queue:BuildShoppingList()
     for _, line in ipairs(self:GetBuys()) do
         required[line.itemID] = (required[line.itemID] or 0) + line.count
         local forItems = wanted[line.itemID] or {}
-        forItems[#forItems + 1] = { forItem = line.forItem, count = line.count }
+        forItems[#forItems + 1] = { forItem = line.forItem, count = line.count,
+            forRecipe = line.forRecipe, forRecipeName = line.forRecipeName }
         wanted[line.itemID] = forItems
     end
 
@@ -1546,7 +1579,10 @@ function Queue:BuildShoppingList()
 
             -- Cheaper from a vendor means the shopping list should send you to
             -- one, not to the auction house.
-            local fromVendor = vendor ~= nil and (not auctionEach or vendor <= auctionEach)
+            -- A vendor that never runs out always wins, unless the player
+            -- asked for the auction house to be offered too (2026-10-13).
+            local fromVendor = vendor ~= nil and (not auctionEach or vendor <= auctionEach
+                or ns.Vendor:KeepsInStock(itemID))
             local unitCost = fromVendor and vendor or auctionEach
             local estimatedCost
             if fromVendor then
@@ -1573,9 +1609,12 @@ function Queue:BuildShoppingList()
                 source = "auction"
             end
 
+            -- Only when the place picked is the cheaper one: a vendor kept
+            -- for an item it never runs out of saves nothing when the
+            -- auction house lists it for less.
             local savingPerUnit
             if vendor and auction then
-                savingPerUnit = math.abs(auction - vendor)
+                savingPerUnit = math.max(0, fromVendor and (auction - vendor) or (vendor - auction))
             end
 
             list[#list + 1] = {

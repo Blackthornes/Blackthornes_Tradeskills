@@ -1,0 +1,336 @@
+-- Blackthornes Tradeskills -- Logic/LearnNext.lua
+-- Learn next (the owner said build it, 2026-10-12): the recipes the
+-- character playing has not learned that would raise their skill now, with
+-- where to learn each, so the Level Up tab keeps going past what they know.
+--
+-- Only recipes a trainer or a vendor teaches: a drop or a quest cannot be
+-- shown the way to. The skill each needs and when it turns yellow and grey
+-- are Forever's (Data/LearnSpots.lua, laid over the book in
+-- Logic/RecipeBook.lua); a recipe still a few points out of reach is listed
+-- after the rest, "At 120". The trainer or vendor picked is on the player's
+-- side, in the zone they are in when one is, else in a city of theirs.
+-- Show the way puts the game's own map pin on them, or TomTom's arrow when
+-- TomTom is installed (Logic/Waypoints.lua).
+
+local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
+local LearnNext = ns.NewModule("LearnNext")
+
+-- How many points out of reach a recipe is still listed, greyed.
+LearnNext.REACH = 15
+
+-- How far past a recipe's skill one with no yellow and grey known stops
+-- being listed.
+LearnNext.UNKNOWN_GREY = 75
+
+-- A city of each side, where a trainer is likeliest to be found by a player
+-- who is out in a zone that has none.
+local CITIES = {
+    A = { ["Stormwind City"] = true, ["Ironforge"] = true, ["Darnassus"] = true },
+    H = { ["Orgrimmar"] = true, ["Thunder Bluff"] = true, ["Undercity"] = true },
+}
+
+local function Spots()
+    return ns.LEARN_SPOTS or {}
+end
+
+local function Plain(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(function(...)
+        local v = fn(...)
+        if type(v) == "string" and v ~= "" then return v .. "" end
+    end, ...)
+    return ok and value or nil
+end
+
+local function Side()
+    local faction = Plain(rawget(_G, "UnitFactionGroup"), "player")
+    if faction == "Alliance" then return "A" end
+    if faction == "Horde" then return "H" end
+    return nil
+end
+
+local function OnSide(fac, side)
+    return not side or not fac or fac == "" or fac:find(side, 1, true) ~= nil
+end
+
+--- The zone the character is in, in the data's English name where the
+--- client names it so, else as the client names it.
+local function HereZone()
+    local name = Plain(rawget(_G, "GetRealZoneText")) or Plain(rawget(_G, "GetZoneText"))
+    -- A client in another language names the zone in its own words ("Wald
+    -- von Elwynn"); the map the character is on says which of the data's
+    -- English zones that is.
+    local Waypoints = ns.Waypoints
+    if Waypoints and Waypoints.English and not Waypoints.English() and Waypoints.ZONE_MAPS then
+        local map = rawget(_G, "C_Map")
+        local ok, mapID = pcall(function()
+            local id = map and map.GetBestMapForUnit and map.GetBestMapForUnit("player")
+            if type(id) == "number" then return id + 0 end
+        end)
+        if ok and mapID then
+            for zone, id in pairs(Waypoints.ZONE_MAPS) do
+                if id == mapID then return zone end
+            end
+        end
+    end
+    return name
+end
+
+--- The best of a list of places { zone, ... }: the zone the character is in,
+--- then one of their side's cities, then the first.
+local function Nearest(places, side)
+    local here = HereZone()
+    local cities = side and CITIES[side] or {}
+    local city
+    for _, place in ipairs(places) do
+        if here and place.zone == here then return place end
+        if not city and cities[place.zone] then city = place end
+    end
+    return city or places[1]
+end
+
+--- Where a recipe is learned: the trainer or vendor to go to.
+--
+-- @return { kind = "trainer" | "vendor", name, zone, x, y, price, itemID }
+--   or nil when neither teaches it on the player's side
+function LearnNext:Place(record)
+    if not record then return nil end
+    local side = Side()
+    local spots = Spots()
+
+    local trainers, sideTop = {}, nil
+    if record.trainerCost then
+        local line = ns.RecipeBook.ClassicLine and ns.RecipeBook.ClassicLine(record.skillLineID)
+            or record.skillLineID
+        local needs = record.classicSkill or record.skill or 0
+        for _, row in ipairs((spots.TRAINERS or {})[line] or {}) do
+            if OnSide(row[5], side) then sideTop = math.max(sideTop or 0, row[6] or 0) end
+            if OnSide(row[5], side) and (row[6] or 0) >= needs then
+                trainers[#trainers + 1] = {
+                    kind = "trainer", name = row[1], zone = row[2], x = row[3], y = row[4],
+                    price = record.trainerCost,
+                }
+            end
+        end
+    end
+
+    local vendors = {}
+    for _, itemID in ipairs(record.recipeItems or {}) do
+        local book = ns.RECIPE_BOOK and ns.RECIPE_BOOK.ITEMS and ns.RECIPE_BOOK.ITEMS[itemID]
+        local list = book and book.v
+        for i = 1, list and #list - 2 or 0, 3 do
+            if OnSide(list[i + 2], side) then
+                local where = (spots.VENDORS or {})[list[i] .. "|" .. (list[i + 1] or "")]
+                vendors[#vendors + 1] = {
+                    kind = "vendor", name = list[i], zone = list[i + 1] ~= "" and list[i + 1] or nil,
+                    x = where and where[1], y = where and where[2],
+                    price = book[2], itemID = itemID,
+                }
+            end
+        end
+    end
+
+    -- A trainer first: it is how most recipes are learned, and the cheaper.
+    local place = Nearest(trainers, side) or Nearest(vendors, side)
+    if place then return place end
+
+    -- A trainer teaches it (it has a trainer's price) but none the data
+    -- places teaches that high: Classic's Artisan trainers stand in places
+    -- the data has no spot for. Still listed, with no spot to pin, rather
+    -- than left out of the list.
+    if record.trainerCost and sideTop and (record.classicSkill or record.skill or 0) > sideTop then
+        return { kind = "trainer", name = L["an Artisan trainer"], price = record.trainerCost }
+    end
+    return nil
+end
+
+--- The skill up colour an unlearned recipe gives at a skill, from Forever's
+--- yellow and grey; "unknown" when they are not known.
+function LearnNext.Tier(record, skill)
+    local yellow, grey = record.yellow, record.grey
+    if not (yellow and grey and skill) then return "unknown" end
+    if skill >= grey then return "trivial" end
+    if skill < yellow then return "optimal" end
+    if skill < math.floor((yellow + grey) / 2) then return "medium" end
+    return "easy"
+end
+
+--- How many the bags make, by the recipe's materials.
+local function Makes(record)
+    local reagents = record.reagents
+    if not reagents or #reagents == 0 then return 0 end
+    local me = ns.Config and ns.Config:GetCharacterKey()
+    local possible = math.huge
+    for _, reagent in ipairs(reagents) do
+        local ok, have = pcall(ns.Inventory.GetCharacterBagCount, ns.Inventory, me, reagent.itemID)
+        local can = math.floor(((ok and tonumber(have)) or 0) / math.max(1, reagent.quantity or 1))
+        if can < possible then possible = can end
+        if possible == 0 then break end
+    end
+    return possible == math.huge and 0 or possible
+end
+
+--- One row, in the Level Up list's shape, plus where to learn it.
+function LearnNext:BuildRow(record, skill)
+    local place = self:Place(record)
+    if not place then return nil end
+
+    local value = ns.RecipeBook:Value(record) or {}
+    local tier = LearnNext.Tier(record, skill)
+    local needs = record.skill or 0
+
+    return {
+        recipeID = record.recipeID,
+        record = record,
+        name = record.name or L.Format("recipe %s", record.recipeID),
+        outputItemID = record.outputItemID,
+        skillLineID = record.skillLineID,
+        tier = tier,
+        cost = value.cost,
+        costDetail = value.costDetail,
+        returns = value.returns,
+        back = value.back,
+        backWay = value.backWay,
+        realCost = value.cost and value.back and (value.cost - value.back) or nil,
+        craftableNow = Makes(record),
+        learnNext = true,
+        locked = needs > skill,
+        needs = needs,
+        place = place,
+        price = place.price,
+        skill = skill,
+    }
+end
+
+--- The recipes to learn next, cheapest way up first, those still out of
+--- reach last.
+--
+-- @param opts.skills  { [Classic skill line] = the character's skill }
+-- @param opts.search  part of a name, any case
+-- @return rows (BuildRow's)
+function LearnNext:GetRows(opts)
+    opts = opts or {}
+    local skills = opts.skills or {}
+    if not next(skills) or not ns.RecipeBook then return {} end
+    local needle = opts.search and opts.search ~= "" and opts.search:lower() or nil
+    local classic = ns.RecipeBook.ClassicLine or function(id) return id end
+
+    local open, locked = {}, {}
+    for _, record in pairs((ns.RecipeBook:GetAll())) do
+        local skill = skills[classic(record.skillLineID)]
+        local needs = record.skill
+        if skill and needs and not record.starter
+            and (record.trainerCost or record.recipeItems)
+            and needs <= skill + LearnNext.REACH
+            and (not needle or (record.name or ""):lower():find(needle, 1, true))
+            and not ns.RecipeBook:KnowsIt(record) then
+            local tier = LearnNext.Tier(record, math.max(skill, needs))
+            -- With no yellow and grey known, a recipe this far below the
+            -- skill is grey all the same: Classic's go grey within this.
+            if tier == "unknown" and skill >= needs + LearnNext.UNKNOWN_GREY then tier = "trivial" end
+            if tier ~= "trivial" then
+                local row = self:BuildRow(record, skill)
+                if row then
+                    if row.locked then locked[#locked + 1] = row else open[#open + 1] = row end
+                end
+            end
+        end
+    end
+
+    local compare = ns.LevelUp and ns.LevelUp.Compare
+    if compare then table.sort(open, compare) end
+    table.sort(locked, function(a, b)
+        if a.needs ~= b.needs then return a.needs < b.needs end
+        if compare then return compare(a, b) end
+        return a.name < b.name
+    end)
+    for _, row in ipairs(locked) do open[#open + 1] = row end
+    return open
+end
+
+--- The words for where: "Trainer" or "Vendor", and the zone beside a vendor.
+function LearnNext.WhereText(place)
+    if not place then return "", nil end
+    if place.kind == "trainer" then return L["Trainer"], nil end
+    return L["Vendor"], place.zone
+end
+
+--- What to pin the map for: the recipe item's name or the recipe's.
+local function WhatFor(row)
+    local item = row.place and row.place.itemID
+    local name = item and ns.Util and ns.Util.GetItemLabel and ns.Util.GetItemLabel(item)
+    if name and ns.Util.Uncolored then name = ns.Util.Uncolored(name) end
+    -- "item 1234" (in the client's language) is GetItemLabel's stand-in
+    -- while the item has not loaded: the recipe's own name says more.
+    if type(name) == "string" and name ~= "" and name ~= L.Format("item %d", item) then return name end
+    return row.name
+end
+
+local WHY = {
+    nospot = L["no exact spot is known for them"],
+    noclient = L["this client cannot put a pin on the map"],
+    nomap = L["the map for that zone could not be found"],
+}
+
+--- Show the way: the map pin (or TomTom's arrow) on the trainer or vendor,
+--- and a line in chat that says where.
+-- @return true when a pin or waypoint was set
+function LearnNext:ShowTheWay(row)
+    local place = row and row.place
+    if not place then return false end
+    local what = WhatFor(row)
+    local who = place.name or L["them"]
+
+    local ok, why
+    local Waypoints = ns.Waypoints
+    if Waypoints and Waypoints:HasTomTom() then
+        ok, why = Waypoints:TomTom(place, ("%s (%s)"):format(who, what))
+    end
+    if not ok and Waypoints then
+        ok, why = Waypoints:Pin(place)
+    end
+
+    if ok then
+        ns.Print(L.Format("Pinned %s (%s) on your map, %s %s, %s.", who, what,
+            place.zone, place.x, place.y))
+    elseif place.zone then
+        ns.Print(L.Format("Can't pin %s (%s): %s. They are in %s.", who, what,
+            WHY[why] or L["no exact spot is known for them"], place.zone))
+    else
+        ns.Print(L.Format("Can't pin %s (%s): %s.", who, what,
+            WHY[why] or L["no exact spot is known for them"]))
+    end
+    return ok == true
+end
+
+--- Queue materials: the materials for the crafts that give a skill point
+--- for sure (until the recipe turns yellow, at least one), on the list to
+--- buy. Set, not added, so a second click changes nothing.
+-- @return how many lines were put on the list
+function LearnNext:QueueMaterials(row)
+    if not (row and row.record and ns.Queue and ns.Queue.EnsureBuy) then return 0 end
+    local record = row.record
+    local crafts = 1
+    if record.yellow and row.skill and record.yellow > math.max(row.skill, row.needs or 0) then
+        crafts = record.yellow - math.max(row.skill, row.needs or 0)
+    end
+    -- Tied to the recipe, not to its item: the first craft makes the item,
+    -- and a line for owned gear lets itself go.
+    local forRecipe = { recipeID = record.recipeID, name = row.name }
+    local added = 0
+    for _, reagent in ipairs(record.reagents or {}) do
+        local ok, done = pcall(ns.Queue.EnsureBuy, ns.Queue, reagent.itemID,
+            (reagent.quantity or 1) * crafts, nil, forRecipe)
+        if ok and done then added = added + 1 end
+    end
+    if added > 0 then
+        ns.Print(crafts == 1
+            and L.Format("Put the materials for one %s on your list to buy.", row.name)
+            or L.Format("Put the materials for %d %s on your list to buy, enough until it turns yellow.", crafts, row.name))
+    else
+        ns.Print(L.Format("Nothing for %s went on your list to buy.", row.name))
+    end
+    return added
+end

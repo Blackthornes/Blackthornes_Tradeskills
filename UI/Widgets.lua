@@ -2021,7 +2021,7 @@ function Widgets.LinkToChat(itemID, link)
     return ok and inserted and true or false
 end
 
---- One shift-click for every item the addon shows (Trent, 2026-10-12):
+--- One shift-click for every item the addon shows (the owner, 2026-10-12):
 --- with the auction house open it searches the house for the item, else it
 --- puts the item's link in the chat box being typed in, as the bags do.
 -- @return true when the click was taken
@@ -2111,15 +2111,82 @@ function Widgets.CreateScrollList(parent, opts)
 
     list.scrollbar = scrollbar
 
-    -- Whole rows only. This used to round up, so the last row was drawn with
-    -- its bottom hanging past the list's edge: the list is a plain frame that
-    -- clips nothing, and that overhang is what sat on top of the footer line
-    -- under the Prices and Profit tabs. Rounding down also matches how far
-    -- the scrollbar lets the list go, which was already counted in whole rows.
-    local function VisibleRowCount()
-        local height = list:GetHeight()
-        if not height or height <= 0 then return 0 end
-        return math.floor(height / rowHeight)
+    -- Whole rows only: a row that would hang past the list's bottom is not
+    -- drawn. The list is a plain frame that clips nothing, and an overhanging
+    -- last row once sat on top of the footer line under the Prices and
+    -- Profit tabs.
+    --
+    -- A row is `rowHeight` tall unless a name on it wraps onto more lines
+    -- than that holds (Theme.SetRowName keeps how tall in `rowNeed`); then
+    -- that row alone grows to fit, so a long name never spills over its
+    -- neighbours (the Profit tab, 2026-10-13). How tall each entry was drawn
+    -- is kept, so the scrollbar can reach the end of a list with tall rows;
+    -- an entry not drawn yet counts as `rowHeight`.
+    local heights = setmetatable({}, { __mode = "k" })
+
+    local function LabelNeed(label)
+        if type(label) ~= "table" then return nil end
+        local need = rawget(label, "rowNeed")
+        if type(need) ~= "number" then return nil end
+        -- A label whose text has since been changed some other way (a cell
+        -- blanked when its column is off) no longer needs the room.
+        local ok, text = pcall(label.GetText, label)
+        if ok and text ~= rawget(label, "rowNeedText") then return nil end
+        return need
+    end
+
+    local function RowNeed(row)
+        local need = rowHeight
+        local function Take(label)
+            local want = LabelNeed(label)
+            if want and want + 4 > need then need = want + 4 end
+        end
+        Take(rawget(row, "name"))
+        local cells = rawget(row, "cells")
+        if type(cells) == "table" then
+            for _, cell in pairs(cells) do Take(cell) end
+        end
+        return math.ceil(need)
+    end
+
+    -- An entry not measured yet counts as tall as the ones measured are on
+    -- average, so a list of long names scrolls to its end at the first try.
+    local measuredSum, measuredCount = 0, 0
+
+    local function KeepHeight(entry, need)
+        if type(entry) ~= "table" then return end
+        local old = heights[entry]
+        if old then
+            measuredSum = measuredSum - old
+        else
+            measuredCount = measuredCount + 1
+        end
+        measuredSum = measuredSum + need
+        heights[entry] = need
+    end
+
+    local function ForgetHeights()
+        heights = setmetatable({}, { __mode = "k" })
+        measuredSum, measuredCount = 0, 0
+    end
+
+    local function HeightOf(entry)
+        local known = type(entry) == "table" and heights[entry]
+        if known then return known end
+        if measuredCount > 0 then return math.max(rowHeight, measuredSum / measuredCount) end
+        return rowHeight
+    end
+
+    --- The furthest the list can scroll: as many entries from the end as fit.
+    local function MaxOffset(self, height)
+        local used, index = 0, #self.data
+        while index >= 1 do
+            local h = HeightOf(self.data[index])
+            if used + h > height then break end
+            used = used + h
+            index = index - 1
+        end
+        return math.max(0, index)
     end
 
     local function AcquireRow(index)
@@ -2215,12 +2282,116 @@ function Widgets.CreateScrollList(parent, opts)
         return row
     end
 
-    function list:Refresh()
-        local total = #self.data
-        local visible = VisibleRowCount()
+    --- Lay the rows out from the scroll offset down, each as tall as it
+    --- needs. Returns how many were drawn and whether every entry from the
+    --- offset to the end was.
+    local function Layout(self, height, maxOffset)
+        local right = maxOffset > 0 and -10 or 0
+        local y, index, drawn = 0, 0, 0
+        local full = false
 
-        local maxOffset = math.max(0, total - math.floor(self:GetHeight() / rowHeight))
+        -- No row is shorter than `rowHeight`, so none is made that could
+        -- not fit.
+        while y + rowHeight <= height do
+            index = index + 1
+            local dataIndex = index + self.offset
+            local entry = self.data[dataIndex]
+            if not entry then
+                full = true
+                break
+            end
+
+            local row = AcquireRow(index)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -y)
+            row:SetPoint("TOPRIGHT", right, -y)
+            row.data = entry
+            row.dataIndex = dataIndex
+
+            -- Alternating bands make a dense table far easier to track
+            -- across, and must follow the data row, not the frame.
+            row.selected = opts.isSelected and opts.isSelected(entry) or false
+
+            if row.selected then
+                row.background:SetColorTexture(Theme.Unpack("glassActive"))
+            else
+                row.background:SetColorTexture(Theme.Unpack(
+                    dataIndex % 2 == 0 and "glassAlt" or "glass"))
+            end
+
+            row.hoverEdge:SetShown(row.selected or row:IsMouseOver())
+            local band = rawget(row, "glowBand")
+            if band then band:SetShown(row.selected) end
+
+            if opts.updateRow then
+                opts.updateRow(row, entry, dataIndex)
+            end
+
+            local need = RowNeed(row)
+            KeepHeight(entry, need)
+
+            if y + need > height then
+                row.data = nil
+                row:Hide()
+                break
+            end
+
+            row:SetHeight(need)
+            row:Show()
+            y = y + need
+            drawn = index
+        end
+
+        for spare = drawn + 1, #self.rows do
+            local row = self.rows[spare]
+            row.data = nil
+            row:Hide()
+        end
+
+        return drawn, full
+    end
+
+    local function Draw(self)
+        local total = #self.data
+        local height = self:GetHeight()
+        if type(height) ~= "number" or height < 0 then height = 0 end
+
+        local maxOffset = MaxOffset(self, height)
         if self.offset > maxOffset then self.offset = maxOffset end
+
+        -- Rows give up 10px to the scrollbar while it shows. A table whose
+        -- column headings sit outside the list is told, so its headings can
+        -- move in step; otherwise every right-aligned value sat 10px left of
+        -- its heading whenever the list scrolled.
+        local function Scrollbar(hasScrollbar)
+            if opts.onScrollbarShown and self.hadScrollbar ~= hasScrollbar then
+                self.hadScrollbar = hasScrollbar
+                opts.onScrollbarShown(hasScrollbar)
+            end
+        end
+        Scrollbar(maxOffset > 0)
+
+        local drawn, full = Layout(self, height, maxOffset)
+
+        -- Drawing measured the rows on screen. When one grew, the list may
+        -- reach further than it thought (or need a scrollbar it had not got);
+        -- lay it out once more with what is now known. Scrolled as far as it
+        -- goes with the last entries still out of sight (taller than they
+        -- were counted), it lets the reader go on until they show.
+        local measured = MaxOffset(self, height)
+        if not full and self.offset >= measured then
+            measured = math.max(measured, total - math.max(1, drawn))
+        end
+        if measured ~= maxOffset then
+            local hadBar = maxOffset > 0
+            maxOffset = measured
+            local moved = self.offset > maxOffset
+            if moved then self.offset = maxOffset end
+            if moved or hadBar ~= (maxOffset > 0) then
+                Scrollbar(maxOffset > 0)
+                drawn = Layout(self, height, maxOffset)
+            end
+        end
 
         scrollbar:SetMinMaxValues(0, maxOffset)
         scrollbar:SetShown(maxOffset > 0)
@@ -2228,72 +2399,19 @@ function Widgets.CreateScrollList(parent, opts)
         -- The thumb is as long as the share of the list on screen, as the
         -- scroll frame's is, so it says how much more there is rather than
         -- only that there is more.
-        if maxOffset > 0 and visible > 0 then
-            thumb:SetHeight(math.max(20, math.floor(self:GetHeight() * visible / total)))
+        if maxOffset > 0 and drawn > 0 and total > 0 then
+            thumb:SetHeight(math.max(20, math.floor(height * drawn / total)))
         end
 
-        -- Rows give up 10px to the scrollbar while it shows. A table whose
-        -- column headings sit outside the list is told, so its headings can
-        -- move in step; otherwise every right-aligned value sat 10px left of
-        -- its heading whenever the list scrolled.
-        local hasScrollbar = maxOffset > 0
-        if opts.onScrollbarShown and self.hadScrollbar ~= hasScrollbar then
-            self.hadScrollbar = hasScrollbar
-            opts.onScrollbarShown(hasScrollbar)
-        end
         if scrollbar:GetValue() ~= self.offset then
             scrollbar:SetValue(self.offset)
-        end
-
-        for index = 1, math.max(visible, #self.rows) do
-            local row = self.rows[index]
-
-            if index <= visible then
-                row = AcquireRow(index)
-                row:SetPoint("TOPLEFT", 0, -((index - 1) * rowHeight))
-                row:SetPoint("TOPRIGHT", maxOffset > 0 and -10 or 0, -((index - 1) * rowHeight))
-
-                local dataIndex = index + self.offset
-                local entry = self.data[dataIndex]
-
-                if entry then
-                    row.data = entry
-                    row.dataIndex = dataIndex
-
-                    -- Alternating bands make a dense table far easier to track
-                    -- across, and must follow the data row, not the frame.
-                    row.selected = opts.isSelected and opts.isSelected(entry) or false
-
-                    if row.selected then
-                        row.background:SetColorTexture(Theme.Unpack("glassActive"))
-                    else
-                        row.background:SetColorTexture(Theme.Unpack(
-                            dataIndex % 2 == 0 and "glassAlt" or "glass"))
-                    end
-
-                    row.hoverEdge:SetShown(row.selected or row:IsMouseOver())
-                    local band = rawget(row, "glowBand")
-                    if band then band:SetShown(row.selected) end
-
-                    if opts.updateRow then
-                        opts.updateRow(row, entry, dataIndex)
-                    end
-                    row:Show()
-                else
-                    row.data = nil
-                    row:Hide()
-                end
-            elseif row then
-                row.data = nil
-                row:Hide()
-            end
         end
 
         -- The row under the mouse may be showing a different entry now (the
         -- list scrolled, or was rebuilt under the cursor). Its tooltip is
         -- drawn again for that entry rather than left describing the last.
         if opts.onEnter then
-            for index = 1, visible do
+            for index = 1, #self.rows do
                 local row = self.rows[index]
                 local tipFor = row and rawget(row, "tipFor")
                 if tipFor ~= nil and row.data and TipIdentity(row.data) ~= tipFor
@@ -2303,6 +2421,35 @@ function Widgets.CreateScrollList(parent, opts)
                 end
             end
         end
+    end
+
+    --- Draw the rows. Never inside itself: reading the list's height
+    --- settles the game's layout, which can run OnSizeChanged (and with it
+    --- Refresh) right there, and once a row's columns were laid out again
+    --- mid-draw each pass set off the next until the stack ran out (Level
+    --- Up, 2026-10-13). A call that comes while drawing asks for one more
+    --- pass once this one is done, a few at most.
+    local REDRAW_PASSES = 3
+    local drawing, drawAgain = false, false
+    function list:Refresh()
+        if drawing then
+            drawAgain = true
+            return
+        end
+        drawing = true
+        local passes, ok, err = 0, true, nil
+        repeat
+            drawAgain = false
+            passes = passes + 1
+            ok, err = pcall(Draw, self)
+        until not ok or not drawAgain or passes >= REDRAW_PASSES
+        drawing, drawAgain = false, false
+        if not ok then error(err, 0) end
+    end
+
+    --- True while the rows are being drawn (for the tests).
+    function list:IsDrawing()
+        return drawing
     end
 
     --- Replace the rows, keeping the reader where they were.
@@ -2347,7 +2494,14 @@ function Widgets.CreateScrollList(parent, opts)
         end
     end)
 
-    list:SetScript("OnSizeChanged", function(self)
+    -- Only a real change of size draws again; the game can say so more
+    -- than once for the same size while it settles.
+    local sizedWidth, sizedHeight
+    list:SetScript("OnSizeChanged", function(self, width, height)
+        if width ~= nil and width == sizedWidth and height == sizedHeight then return end
+        -- A new width wraps names differently, so the heights kept go.
+        if width ~= sizedWidth then ForgetHeights() end
+        sizedWidth, sizedHeight = width, height
         self:Refresh()
     end)
 

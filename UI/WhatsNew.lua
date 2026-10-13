@@ -21,7 +21,21 @@
 -- install, or an update from before this window) shows its newest only.
 -- Nothing waits for a fight to end any longer than the fight.
 --
--- Saved, account wide, never renamed: whatsNewSeen (per addon),
+-- The note (2026-10-13): once per account, a card at the top of the window
+-- with the words of UI/About.lua (About.NOTE), the same note the About page
+-- in Settings keeps. Shown with the next window that comes up by itself, or
+-- alone when nothing is new; then aboutNoteSeen is set in every sister's
+-- account save, so no sister shows it again.
+--
+-- One-time cards (2026-10-13): an addon can offer cards of its own in
+-- ns.WHATS_NEW_TIPS, each { key, title, icon, paragraphs, hint, button, run,
+-- due }, such as Equipment's word about its Upgrade quest. Each is looked
+-- at once per account, with the next window that comes up by itself, and
+-- shown only while due() says so; then it is kept in that addon's
+-- whatsNewTipsSeen[key] and never shown again. Its button calls run().
+--
+-- Saved, account wide, never renamed: whatsNewSeen (per addon), aboutNoteSeen,
+-- whatsNewTipsSeen (per addon),
 -- whatsNewPopup (on unless unticked) and whatsNewMotion (on unless
 -- unticked), which are off in all when off in any, as sisterNote is, and
 -- whatsNewScale (the size grip, where the addon has one). The `whatsnew`
@@ -45,7 +59,7 @@ if type(Format) ~= "function" then Format = string.format end
 
 -- Raised when this file changes in a way an older copy cannot draw: the
 -- newest copy loaded builds the window.
-WhatsNew.FILE_VERSION = 2
+WhatsNew.FILE_VERSION = 4
 
 -- Seconds after login, so the window comes up once the game has settled.
 WhatsNew.DELAY = 5
@@ -89,6 +103,11 @@ shared.members[ADDON_NAME] = {
     news = function()
         local news = ns.WHATS_NEW
         if type(news) == "table" then return news end
+        return nil
+    end,
+    tips = function()
+        local tips = ns.WHATS_NEW_TIPS
+        if type(tips) == "table" then return tips end
         return nil
     end,
 }
@@ -210,6 +229,63 @@ function WhatsNew:MarkSeen()
     end
 end
 
+--- Whether the note at the top is still to be shown: seen in no sister.
+function WhatsNew:NoteDue()
+    local About = ns.About
+    if not (About and type(About.NOTE) == "table" and #About.NOTE > 0) then return false end
+    for _, db in ipairs(self:Stores()) do
+        if db.aboutNoteSeen then return false end
+    end
+    return true
+end
+
+--- The note as a card for the list.
+function WhatsNew:NoteEntry()
+    return {
+        note = true,
+        addon = { title = L["How these addons are made"], icon = [[Interface\Icons\INV_Misc_Note_01]] },
+        paragraphs = ns.About.NOTE,
+    }
+end
+
+--- The one-time cards still to show, as cards for the list. Each tip is
+--- looked at once: kept as seen in its addon's save whether due or not, so
+--- one a player had no need of never turns up later.
+function WhatsNew:TakeTips()
+    local list = {}
+    for _, addon in ipairs(self.ADDONS) do
+        local member = shared.members[addon.folder]
+        local tips = member and member.tips and Read(member, "tips")
+        local db = member and Read(member, "store")
+        if tips and db then
+            for _, tip in ipairs(tips) do
+                local seen = type(db.whatsNewTipsSeen) == "table" and db.whatsNewTipsSeen
+                if type(tip) == "table" and type(tip.key) == "string" and type(tip.paragraphs) == "table"
+                    and not (seen and seen[tip.key]) then
+                    local due = true
+                    if type(tip.due) == "function" then
+                        local ok, answer = pcall(tip.due)
+                        due = ok and answer and true or false
+                    end
+                    if type(db.whatsNewTipsSeen) ~= "table" then db.whatsNewTipsSeen = {} end
+                    db.whatsNewTipsSeen[tip.key] = true
+                    if due then
+                        list[#list + 1] = {
+                            note = true,
+                            addon = { title = tip.title or addon.title, icon = tip.icon or addon.icon },
+                            paragraphs = tip.paragraphs,
+                            hint = tip.hint,
+                            button = tip.button,
+                            run = tip.run,
+                        }
+                    end
+                end
+            end
+        end
+    end
+    return list
+end
+
 --- The copy that draws the window: the newest file, then ADDONS order.
 function WhatsNew.Owner()
     local best
@@ -252,7 +328,17 @@ function WhatsNew:Check()
     -- Kept as shown even with the window turned off, so turning it back on
     -- never brings up a pile of old news.
     self:MarkSeen()
-    if #list == 0 or not self:IsOn() then return end
+    if not self:IsOn() then return end
+    if self:NoteDue() then
+        table.insert(list, 1, self:NoteEntry())
+        for _, db in ipairs(self:Stores()) do db.aboutNoteSeen = true end
+    end
+    local at = (list[1] and list[1].note) and 2 or 1
+    for _, tip in ipairs(self:TakeTips()) do
+        table.insert(list, at, tip)
+        at = at + 1
+    end
+    if #list == 0 then return end
     WhatsNew.Owner():Open(list, true)
 end
 
@@ -673,6 +759,11 @@ function WhatsNew:Build()
     end
 
     frame:SetScript("OnHide", function()
+        -- Closed with the scroll thumb held: it never hears the mouse come up.
+        if WhatsNew.thumb then
+            WhatsNew.thumb.dragging = nil
+            WhatsNew.thumb:SetScript("OnUpdate", nil)
+        end
         if WhatsNew.doneGlowAnim then pcall(WhatsNew.doneGlowAnim.Stop, WhatsNew.doneGlowAnim) end
         WhatsNew.closing = nil
         pcall(frame.SetAlpha, frame, 1)
@@ -824,9 +915,15 @@ local function Fill(card, entry, width, index)
     local column = left + ICON + 14
     local room = width - column - 14
 
-    card.pill.text:SetText("v" .. tostring(entry.sections[1].version))
-    local pillWidth = math.ceil(Wide(card.pill.text)) + 14
-    card.pill:SetSize(pillWidth, Size("small") + 7)
+    local pillWidth = 0
+    if entry.note then
+        card.pill:Hide()
+    else
+        card.pill:Show()
+        card.pill.text:SetText("v" .. tostring(entry.sections[1].version))
+        pillWidth = math.ceil(Wide(card.pill.text)) + 14
+        card.pill:SetSize(pillWidth, Size("small") + 7)
+    end
 
     -- The name, wrapping before it would run into the version.
     card.title:SetText(entry.addon.title)
@@ -839,7 +936,62 @@ local function Fill(card, entry, width, index)
 
     local y = -(15 + Tall(card.title, titleWidth) + 10)
     local used = 0
-    for s, section in ipairs(entry.sections) do
+    -- The note: its paragraphs, no dots.
+    for _, words in ipairs(entry.note and entry.paragraphs or {}) do
+        used = used + 1
+        local line = Line(card, used)
+        line.label:Hide()
+        line.dot:Hide()
+        line.text:SetText(words)
+        line.text:SetWidth(room)
+        line.text:ClearAllPoints()
+        line.text:SetPoint("TOPLEFT", card, "TOPLEFT", column, y)
+        line.text:Show()
+        line.y = y
+        y = y - Tall(line.text, room) - 9
+    end
+    -- A one-time card's button, with a word beside it.
+    -- rawget: a card's own fields only, never anything a frame answers.
+    local actions, hint = rawget(card, "actions"), rawget(card, "hint")
+    for _, button in pairs(actions or {}) do button:Hide() end
+    if hint then hint:Hide() end
+    if entry.button and type(entry.run) == "function" then
+        local Widgets = ns.Widgets
+        if not actions then actions = {} card.actions = actions end
+        local button = actions[entry.button]
+        if not button and Widgets and Widgets.CreateButton then
+            local measure = Text(card, "normal", "text")
+            measure:SetText(entry.button)
+            local wide = math.max(110, math.ceil(Wide(measure)) + 32)
+            measure:Hide()
+            button = Widgets.CreateButton(card, entry.button, function() end,
+                { primary = true, width = wide, height = 24 })
+            actions[entry.button] = button
+        end
+        if button then
+            button:SetScript("OnClick", function()
+                local ok, err = pcall(entry.run)
+                if not ok and ns.Debug then ns.Debug("what's new:", tostring(err)) end
+                WhatsNew.Owner():Close()
+            end)
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", card, "TOPLEFT", column, y - 1)
+            button:Show()
+            local tall = 26
+            if entry.hint then
+                if not hint then hint = Text(card, "small", "muted") card.hint = hint end
+                local wide = math.max(80, room - WidthOf(button, 110) - 12)
+                hint:SetText(entry.hint)
+                hint:SetWidth(wide)
+                hint:ClearAllPoints()
+                hint:SetPoint("TOPLEFT", button, "TOPRIGHT", 12, -1)
+                hint:Show()
+                tall = math.max(tall, Tall(hint, wide) + 4)
+            end
+            y = y - tall - 8
+        end
+    end
+    for s, section in ipairs(entry.sections or {}) do
         for n, words in ipairs(section.lines) do
             used = used + 1
             local line = Line(card, used)
@@ -907,7 +1059,12 @@ function WhatsNew:Open(list, auto)
     if ns.Motion and ns.Motion.Stop then pcall(ns.Motion.Stop, ns.Motion, frame) end
     self.closing = nil
 
-    self.lede:SetText(auto and L["Here's what changed since you last played."]
+    local onlyNote = #list > 0
+    for _, entry in ipairs(list) do
+        if not entry.note then onlyNote = false end
+    end
+    self.lede:SetText(onlyNote and L["A note from Blackthornes."]
+        or auto and L["Here's what changed since you last played."]
         or L["The newest changes in each of your Blackthornes addons."])
     local width = WidthOf(frame, self.WIDTH)
     self.lede:SetWidth(width - 2 * PAD)

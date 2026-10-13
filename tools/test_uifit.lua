@@ -729,7 +729,7 @@ print("")
 print("the auction house bar")
 
 local bar = UI:GetAuctionBar()
-check("its status line has a width before the buttons come", bar.status.width, 460 - 14 - 10)
+check("its status line has a width before the buttons come", bar.status.width, 350 - 32 - 10)
 
 bar.status:SetWidth(150)
 lastScan, capped = NOW - 3 * 3600, true
@@ -1145,6 +1145,39 @@ itemArrived()
 check("and colours it when it does", late.name.textColor[1], 0.64)
 
 ns.Util.GetItemQualityColor, ns.RegisterEvent, C_Timer.After = savedQuality, savedRegister, savedAfter
+
+--------------------------------------------------------------------------------
+
+print("")
+print("the price graph")
+
+-- The Profit tab's graph is laid out before the tab first shows. Drawn then,
+-- at no width, its times sat bunched at the left until something redrew it.
+local savedHistory = ns.PriceHistory
+ns.PriceHistory = ns.PriceHistory or { HourText = function(hour) return tostring(hour) end }
+local graphParent = Region(UIParent)
+local graph = ns.PriceGraph.Create(graphParent, { picker = true, ticks = true })
+graph:Hide()
+graph:SetItems({})
+check("drawn before it has a size, it knows to draw again", graph:OutOfSize(), true)
+graph.plot.width, graph.plot.height = 300, 120
+graph.plot.scripts.OnSizeChanged(graph.plot)
+check("a size arriving while hidden waits", graph.drawnWidth, 0)
+graph:Show()
+check("and is drawn at its size on show", graph.drawnWidth, 300)
+local _, _, _, tickX = graph.ticks[2]:GetPoint(1)
+check("the times spread across the plot", near(tickX, 6 + 300 / 3), true)
+check("nothing left to catch up", graph:OutOfSize(), false)
+local drawn = 0
+local realRefresh = graph.Refresh
+graph.Refresh = function(self) drawn = drawn + 1; return realRefresh(self) end
+graph:Hide()
+graph:Show()
+check("shown again at the same size, nothing is redrawn", drawn, 0)
+graph.plot.width = 360
+graph.plot.scripts.OnSizeChanged(graph.plot)
+check("a new size while showing is drawn at once", graph.drawnWidth, 360)
+ns.PriceHistory = savedHistory
 
 --------------------------------------------------------------------------------
 

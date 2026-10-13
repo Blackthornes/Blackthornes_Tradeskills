@@ -56,6 +56,10 @@ local COLUMNS = {
     { key = "margin", label = L["MARGIN"], width = 50, justify = "CENTER" },
     { key = "gets",   label = L["GETS"], width = 70, money = true },
     { key = "buy",    label = L["BUY"], width = 66, money = true },
+    -- How many were listed at the buy price or less in the last scan (the
+    -- owner said yes, 2026-10-13), so one lonely cheap item reads apart
+    -- from a real deal.
+    { key = "qty",    label = L["QTY"], width = 36, justify = "CENTER" },
     { key = "age",    label = L["AGE"], width = 44, justify = "CENTER" },
     { key = "via",    label = L["VIA"], width = 44, justify = "CENTER" },
 }
@@ -63,8 +67,15 @@ local COLUMNS = {
 -- Any column but the name can be hidden (UI/Columns.lua).
 ns.Columns:Register("deals", L["Deals"], COLUMNS)
 
+-- The flips are put away for now (the owner, 2026-10-13: "get rid of Flips
+-- under Deals for now"), so the tab is Favors and Writs. Their code, lists
+-- and saved settings all stay; setting ns.DEALS_FLIPS before this file
+-- loads brings them back as the first view (the tests do).
+local SHOW_FLIPS = ns.DEALS_FLIPS == true
+UI.DEALS_SHOW_FLIPS = SHOW_FLIPS
+
 local state = {
-    view = "flips",
+    view = SHOW_FLIPS and "flips" or "favor",
     routes = { auction = true, vendor = true },
     search = "",
     dealsOnly = true,
@@ -217,6 +228,10 @@ local function FillCell(cell, key, entry)
         color = "text"
     elseif key == "buy" then
         text = Money(entry.buy)
+    elseif key == "qty" then
+        -- One alone in amber: likely a single cheap listing, not a market.
+        text = entry.qty and tostring(entry.qty) or "--"
+        color = entry.qty == 1 and "warn" or (entry.qty and "text" or "dim")
     elseif key == "age" then
         -- Read now, as the list itself can be kept for a while. "now"
         -- rather than "just now", which is wider than the column.
@@ -274,6 +289,10 @@ local function ShowRowTooltip(row, entry)
 
     if entry.listed then
         GameTooltip:AddLine(L.Format("%d listed.", entry.listed), 0.85, 0.85, 0.85, true)
+    end
+    if entry.qty then
+        GameTooltip:AddLine(entry.qty == 1 and L["Only one listed at this price."]
+            or L.Format("%d listed at this price or less.", entry.qty), 0.85, 0.85, 0.85, true)
     end
 
     local others = OthersText(entry)
@@ -376,7 +395,7 @@ local function BuildDetail(parent)
     risk:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
     risk:SetWordWrap(true)
     risk:SetJustifyV("TOP")
-    risk:SetText(L["Flipping is risky. Prices can drop before you sell, so use your best judgement and only spend what you can afford to lose."])
+    risk:SetText(L["Flipping is risky: prices can drop before you sell. Only spend what you can afford to lose."])
     detail.risk = risk
 
     local searchButton = Widgets.CreateButton(detail, L["Search the auction house"], function()
@@ -662,7 +681,7 @@ local function EmptyText()
     local text = L["Nothing on the auction house is worth buying right now."]
 
     if state.dealsOnly and state.hidden > 0 then
-        return text .. " " .. L.Format("%d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin). Untick \"Only deals over my minimums\" to see them.",
+        return text .. " " .. L.Format("%d more would make a profit, but less than your minimums in Settings (%s profit, %d%% margin). Untick \"Only deals over my minimums\" to see them.",
             state.hidden,
             Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
             ns.Config:Get("minMarginPercent") or 0)
@@ -835,16 +854,21 @@ local function Build(container)
     widgets.sellTo = sellTo
 
     -- Made after Sell to but placed first: what the tab shows.
-    local show = Widgets.CreateDropdown(toolbar, {
-        { text = L["Show: Flips"], value = "flips" },
+    local showOptions = {
         { text = L["Show: Merchant's Favor"], value = "favor" },
         { text = L["Show: Craftsman's Writs"], value = "writs" },
-    }, function(value)
+    }
+    if SHOW_FLIPS then
+        table.insert(showOptions, 1, { text = L["Show: Flips"], value = "flips" })
+    end
+    local show = Widgets.CreateDropdown(toolbar, showOptions, function(value)
         UI.DealsSetView(value)
     end, { width = 160 })
     show:SetPoint("LEFT", 0, 0)
     show:SetValue(state.view)
-    show.tooltipText = L["Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
+    show.tooltipText = SHOW_FLIPS
+        and L["Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
+        or L["Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
     widgets.show = show
     sellTo:SetPoint("LEFT", show, "RIGHT", 8, 0)
 
@@ -1025,6 +1049,9 @@ local function Build(container)
             if widgets.list:IsVisible() then Refresh() end
         end)
     end)
+
+    -- With the flips put away the tab opens on Merchant's Favor.
+    if state.view ~= "flips" then UI.DealsSetView(state.view) end
 end
 
 -- The views the Show menu swaps in, each built the first time it is shown.
@@ -1036,6 +1063,7 @@ local VIEWS = {
 --- Show the flips, the Merchant's Favor view or the Craftsman's Writs view.
 function UI.DealsSetView(view)
     if not (VIEWS[view] and ns[VIEWS[view]]) then view = "flips" end
+    if view == "flips" and not SHOW_FLIPS then view = "favor" end
     state.view = view
     state.selected = nil
     if not widgets.toolbar then return end
@@ -1068,7 +1096,7 @@ end
 
 UI:RegisterTab({
     key = "deals",
-    text = L["Deals"],
+    text = SHOW_FLIPS and L["Deals"] or L["Favors and Writs"],
     order = 1.9,
     build = Build,
     refresh = Refresh,

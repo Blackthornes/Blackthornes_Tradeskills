@@ -119,4 +119,19 @@ ns.RegisterEvent = function() return false end
 check("a client without the event is fine", pcall(Recipes.OnEnable, Recipes))
 C_Timer = savedTimer
 
+print("\nonly one of Tailoring's two IDs carries the levels")
+-- A player found Tailoring missing from the profession menus while
+-- Enchanting showed: its crafts sat under the ID reading level 0.
+levels[197], levels[2942], levels[186], levels[2950] = 0, 150, 150, 150
+Recipes:RefreshProfessions()
+check("a craft under the levelless ID is not hidden", not Recipes:IsDropped(robe))
+check("both IDs are saved as learned",
+    ns.db.characters[SELF].professionLines[197] == true and ns.db.characters[SELF].professionLines[2942] == true)
+
+print("\na record saved before the two IDs were joined")
+ns.db.characters[SELF].professionLines = { [197] = false, [2948] = true, [186] = true }
+check("the other ID being learned keeps the crafts", not Recipes:IsDropped(robe))
+ns.db.characters[SELF].professionLines = { [197] = false, [2948] = false, [186] = true }
+check("both unlearned still hides them", Recipes:IsDropped(robe))
+
 print(("\n%d check(s) passed\n"):format(checks))

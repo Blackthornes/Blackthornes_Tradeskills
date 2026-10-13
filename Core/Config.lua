@@ -253,6 +253,10 @@ local DEFAULTS = {
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
         tradeRequests = false,
 
+        -- Learn next on the Level Up tab (2026-10-12): recipes not learned
+        -- yet that raise the skill now, under the ones known.
+        levelUpLearnNext = true,
+
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
         -- heard sales), so nothing is lost. Off unless the player turns it on.
@@ -315,6 +319,10 @@ local DEFAULTS = {
         -- house's quantity box with what the queue still needs (2026-10-06).
         -- See UI/BuyQuantity.lua.
         fillBuyQuantity = true,
+        -- Offer the auction house for a material a vendor sells without a
+        -- stock limit when it is listed for less (2026-10-13). Off: the
+        -- shopping list sends you to the vendor. See Vendor:KeepsInStock.
+        vendorItemsOnAuction = false,
         -- A warning line on the auction house's buy window when buying a
         -- queue material costs this many percent more than the shopping list
         -- said (2026-10-11). 0 turns it off. See UI/BuyQuantity.lua.
@@ -1049,7 +1057,7 @@ end
 --- A first run has no saved data because there never was any, which is not
 --- something to warn about.
 function Config:Welcome()
-    ns.Print(L.Format("welcome! Type |c%s/bts|r to open the window, or |c%s/bts help|r for the commands.",
+    ns.Print(L.Format("type |c%s/bts|r to open the window, or |c%s/bts help|r for the commands.",
         ns.COLORS.accent, ns.COLORS.accent))
     ns.Print(L["Open each profession once and visit the auction house to fill in recipes and prices."])
 end

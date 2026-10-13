@@ -4,6 +4,102 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.54.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Favors and Writs:** the Deals tab is now Favors and Writs (Gunst und
+  Aufträge on a Deutsch client) and opens on Merchant's Favor. Its Show
+  menu has Merchant's Favor and Craftsman's Writs, and a scan no longer
+  prints the vendor flips line. The flips are put away for now, with their
+  settings kept.
+- **QTY column:** beside AGE, how many other sellers listed at the buy
+  price or less in the last scan. One alone shows in amber. It sorts like
+  the other headings.
+- **Auction house drawer:** the sell list and the Scan bar are now one
+  drawer beside the auction house, the window's full height, with Scan,
+  Post Crafted and the scan status in its header and a close gem that
+  hides it until your next visit. Rows are dark glass with a quiet List
+  button, names are never cut short, and one **List all** button at the
+  foot lists the most valuable stack each click.
+- **Faster listing:** a different item can go up about a second after the
+  last one instead of waiting about five seconds. Up to four listings are
+  checked at once, each still confirmed on its own.
+- **Leave form:** in a travel or shapeshift form (any druid form or Ghost
+  Wolf), Craft next on the Queue tab and Level Up's Craft button read
+  Leave form. The first click leaves the form, the next one crafts. It
+  can't be done in combat, and the button says so.
+- **Tailoring:** shows in the Level Up and Profit menus again, with its
+  crafts, even when the game gave its skill under its other ID.
+- **Level Up:** with Learn next ticked, the least needed columns step
+  aside while the list is too narrow, so recipe names always have room.
+  Your column choices are kept. Opening Level Up no longer throws a "C
+  stack overflow" error.
+- **Profit graphs:** drawn at their real size from the first look.
+- **Mail:** part of a stack is split into its own bag first, so herbs in a
+  herb bag can go in a mail when your other bags are full, and a chat line
+  says when a mail Butler filled left something out.
+
+## 0.53.1
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Transmute cooldowns:** any transmute of a ready cooldown can be made,
+  and the one Butler names is the one you have the materials for. A
+  character you removed keeps its cooldowns quietly instead of being named
+  as "Player", and a fight right after login only delays the first check.
+- **Learn next:** the materials Queue materials puts on the list stay
+  there until you remove them, also when you already carry or bank some.
+  On a Deutsch (German) client it finds the trainer in your own zone.
+  Artisan recipes (Enchanting 230 and up, Engineering 260) are listed as
+  taught by an Artisan trainer, and recipes with no skill data drop off
+  once you're well past them. Show the way names the recipe in chat on a
+  Deutsch client, even before the item has loaded.
+- **Craft requests in Trade:** a player who shares your first name is
+  heard; only your own lines are skipped.
+- **Prices:** a scan records what the auction house shows, never a
+  TradeSkillMaster or hand-set price, and the price API for other addons
+  can't raise an error.
+- **What's New:** closing the window while holding its scroll bar lets go
+  of it.
+
+## 0.53.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game
+fully after updating (`/reload` is not enough).
+
+- **What's New window:** the first time the game loads after an update,
+  one window shows what changed in every Blackthornes addon that was
+  updated, with dark glass cards and a little motion. "Motion" in Settings
+  turns the movement off, "Show after updates" turns the window off (off
+  in one addon is off in all of them), and the `whatsnew` command or a
+  Settings button opens it any time.
+- **Profession cooldowns:** Tradeskills keeps every character's
+  transmute, Mooncloth and Salt Shaker cooldowns. Chat says once when one
+  is ready, the Characters tab shows how long each has left, and
+  `/bts cooldowns` lists them all. Blackthornes Butler shows a ready one as
+  a job.
+- **Learn next:** the Level Up tab lists the trainer and vendor recipes
+  that would raise the skill now, cheapest first, with where to get each
+  and a Show the way button that pins the trainer or vendor on the map
+  (or uses TomTom when it's installed). A "Learn next" tick box turns it
+  off.
+- **Forever's own recipes:** the recipe book uses Forever's skill levels
+  (about 600 recipes moved) and its materials for 127 recipes, so costs
+  for recipes nobody has learned yet match the game.
+- **Craft requests in Trade:** ticked, chat says when someone in Trade
+  asks for something one of your characters can make. Off by default.
+- **Shift-click to search:** shift-clicking any item anywhere in
+  Tradeskills searches the auction house while it's open, or links the
+  item in chat when it's closed.
+- **MOVES per day:** the Prices tab's MOVES column, its detail line and
+  the profit analysis use the same per-day measure as Demand, so how often
+  you scan no longer changes it.
+- **Flip warning:** the Flip panel on the Deals tab says that flipping is
+  risky and to spend only what you can afford to lose.
+
 ## 0.52.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game

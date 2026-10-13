@@ -13,6 +13,20 @@
 --                  and the deposit (Profit:NetFromListing on the smoothed
 --                  market price). nil for greys (vendor only), gear that
 --                  binds when picked up, and items never priced.
+--   auctionNow     copper for one sold at today's cheapest listing that is
+--                  not the player's own, after the cut and the deposit, from
+--                  the player's own scan while it is fresh (Prices:IsStale).
+--                  nil when there is no auction value, nobody else is
+--                  listing it, or the scan is old. Butler compares it with
+--                  `auction` to hold back items selling below their usual
+--                  price (2026-10-13).
+--   belowCost      copper one costs to make, when the price the Sell list
+--                  would list it at is under that and Tradeskills would not
+--                  list it (Posting:BelowCost, or "Never below what I paid"
+--                  with Posting:BelowCraftedCost). nil when it is no craft,
+--                  the price covers the cost, or "Recommend selling at a
+--                  loss" is on. Butler then holds it back rather than say
+--                  Auction (2026-10-13).
 --   fast           true when it sells well (Demand "high"), false when it
 --                  rarely sells ("low"), nil in between or with no data.
 --   disenchant     copper a disenchant of one is likely to give
@@ -119,7 +133,12 @@
 -- (`forCraft`), so it can be done before the craft. A profession cooldown
 -- that is up (Logic/Cooldowns.lua, 2026-10-12) is a step too, { kind =
 -- "cooldown", name (its group: "Transmute"), craft (the craft's name),
--- recipeID, or itemID for an item such as the Salt Shaker }; a Butler that
+-- recipeID, or itemID for an item such as the Salt Shaker }. Mail waiting
+-- for a character (2026-10-13) is one step first on its line, { kind =
+-- "pickup", items = { { itemID, count } }, forCraft }: materials its
+-- crafts count on that sit in its mailbox or are on their way
+-- (`forCraft`), and anything else mailed to it not yet seen arrive
+-- (QueueMail:InFlightItems). A Butler that
 -- does not know the kind leaves it out. Only characters this one can mail (same realm and
 -- side), never another account's. Craft makes the character playing's
 -- queued craft of that recipe, from Butler's click: started when its
@@ -330,6 +349,41 @@ local function Auction(itemID, quality)
     return math.max(0, math.floor(net + 0.5))
 end
 
+--- What one fetches at the cheapest listing that is not the player's, after
+--- the cut and the deposit, only while the scan is fresh.
+local function AuctionNow(itemID, auction)
+    if not auction then return nil end
+    local prices = ns.Prices
+    if not (prices and prices.GetScanValue and prices.IsStale) then return nil end
+    if prices:IsStale(itemID) then return nil end
+    local rival = prices:GetScanValue(itemID, "rival")
+    if not rival or rival <= 0 then return nil end
+    local net = ns.Profit:NetFromListing(itemID, rival)
+    return math.max(0, math.floor(net + 0.5))
+end
+
+--- What one costs to make, when the Sell list's price for it is under that
+--- and Posting would refuse the listing. Only crafts are priced here, so the
+--- other bag items cost one table read.
+local function BelowCost(itemID, auction)
+    if not auction then return nil end
+    local posting, cost, made = ns.Posting, ns.Cost, ns.CraftedCost
+    if not (posting and posting.BelowCost and posting.GetPostPrice) then return nil end
+    local craft = cost and cost.FindAnyRecipeForItem and cost:FindAnyRecipeForItem(itemID)
+    if not craft and not (made and made.Get and made:Get(itemID)) then return nil end
+
+    local price = posting.GetChosenPrice and posting:GetChosenPrice(itemID)
+    if not price then price = posting:GetPostPrice(itemID) end
+    if type(price) ~= "number" or price <= 0 then return nil end
+
+    local unitCost = posting:BelowCost(itemID, price)
+    if not unitCost and posting.BelowCraftedCost then
+        unitCost = posting:BelowCraftedCost(itemID, price)
+    end
+    if type(unitCost) ~= "number" then return nil end
+    return math.floor(unitCost + 0.5)
+end
+
 local function Fast(itemID)
     local reading = ns.Demand and ns.Demand:Get(itemID)
     if not reading then return nil end
@@ -393,8 +447,11 @@ local function Answer(itemID)
     local disenchant, canDisenchant, enchanter = Breaking(itemID, kept, quality)
     local mail = kept.mail[itemID]
 
+    local auction = Auction(itemID, quality)
     return {
-        auction = Auction(itemID, quality),
+        auction = auction,
+        auctionNow = AuctionNow(itemID, auction),
+        belowCost = BelowCost(itemID, auction),
         fast = Fast(itemID),
         disenchant = disenchant,
         canDisenchant = canDisenchant,
@@ -607,11 +664,24 @@ function Butler:FillMail(name, items, money)
         recipient = key and mail.MailName and mail.MailName(Characters()[key]) or name
         if mail.IsPlayingName and mail:IsPlayingName(recipient) then return false, toSelf end
         return mail:Fill({ recipient = recipient, items = list, money = money,
-            subject = #list == 0 and "Gold from Blackthornes Butler" or "From Blackthornes Butler" })
+            subject = #list == 0 and "Gold from Blackthornes Butler" or "From Blackthornes Butler" },
+            Butler.FillDone)
     end)
     if not ok then return false, L["Tradeskills could not fill the mail"] end
     if started == true then return true, nil, recipient end
     return false, why
+end
+
+--- What a mail Butler filled left out, said in chat: Butler's window
+--- covers the mail panel that would say it (two herbs went missing from a
+--- mail with nothing said, 2026-10-13).
+function Butler.FillDone(attached, leftOver)
+    if not (leftOver and leftOver > 0) then return end
+    if ns.QueueMail and ns.QueueMail.splitBlocked then
+        ns.Print(L["Free one bag slot to split a stack, then press the button again."])
+    else
+        ns.Print(L.Format("%d attached; the rest go in the next mail. Press Send.", attached or 0))
+    end
 end
 
 local function FromBank()
@@ -772,8 +842,10 @@ local function Jobs()
                     end
                 end
                 local missing = {}
+                job.wants = job.wants or {}
                 for _, reagent in ipairs(recipe.reagents or {}) do
                     local want = (reagent.quantity or 0) * crafts
+                    job.wants[reagent.itemID] = (job.wants[reagent.itemID] or 0) + want
                     local held = queue:HeldBy(job.key, reagent.itemID) or 0
                     if want > held then
                         missing[#missing + 1] = { itemID = reagent.itemID, count = want - held }
@@ -901,6 +973,60 @@ local function Jobs()
         end
     end
 
+    -- Mail waiting for a character (the owner, 2026-10-13: "if a character
+    -- needs to visit the mail for something sent to it, butler should move
+    -- that up the priority list"): materials its crafts count on that sit
+    -- in its mailbox or are still on their way, and anything else mailed
+    -- to it and not yet seen arrive. One "pickup" step, first on its line.
+    local waiting = {}
+    local function Wait(job, itemID, count, forCraft)
+        local pickup = waiting[job]
+        if not pickup then
+            pickup = { kind = "pickup", items = {}, byID = {}, forCraft = false }
+            waiting[job] = pickup
+        end
+        local item = pickup.byID[itemID]
+        if not item then
+            item = { itemID = itemID, count = 0 }
+            pickup.byID[itemID] = item
+            pickup.items[#pickup.items + 1] = item
+        end
+        item.count = math.max(item.count, count)
+        pickup.forCraft = pickup.forCraft or forCraft
+    end
+    local listed = {}
+    for _, job in pairs(byKey) do
+        if not listed[job] then
+            listed[job] = true
+            local key = job.isCurrent and selfKey or job.key
+            for itemID, want in pairs(queue.InMailFor and job.wants or {}) do
+                local inMail = queue:InMailFor(key, itemID) or 0
+                if inMail > 0 then
+                    local inHand = math.max(0, (queue:HeldBy(key, itemID) or 0) - inMail)
+                    local fromMail = math.min(inMail, want - inHand)
+                    if fromMail > 0 then Wait(job, itemID, fromMail, true) end
+                end
+            end
+        end
+    end
+    if mail and mail.InFlightItems then
+        local keys = {}
+        for characterKey in pairs(records) do keys[#keys + 1] = characterKey end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        for _, toKey in ipairs(keys) do
+            for itemID, count in pairs(mail:InFlightItems(toKey)) do
+                local job = count > 0 and Job(toKey)
+                if job then Wait(job, itemID, count, false) end
+            end
+        end
+    end
+    for job, pickup in pairs(waiting) do
+        pickup.byID = nil
+        table.sort(pickup.items, function(a, b) return a.itemID < b.itemID end)
+        table.insert(job.steps, 1, pickup)
+    end
+    for _, job in pairs(byKey) do job.wants = nil end
+
     -- A profession cooldown that is up (a transmute, Mooncloth): a step on
     -- that character's line, so Butler can send the player there
     -- (Logic/Cooldowns.lua; the owner asked 2026-10-12).
@@ -967,6 +1093,9 @@ function Butler:Craft(recipeID)
         if not ready then return false, reason end
         if crafting:IsBusy() then return false, L["already crafting"] end
         local opener = ns.ProfessionOpener
+        if opener and opener.InBlockingForm and opener:InBlockingForm() then
+            return false, L["leave your form first"]
+        end
         local shows = crafting.isTradeSkillOpen
             and (not (opener and opener.WindowShowsRecipe) or opener:WindowShowsRecipe(recipeID))
         if shows then

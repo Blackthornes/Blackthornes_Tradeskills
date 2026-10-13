@@ -72,7 +72,7 @@ C_Item = {
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
 
 local records = {
-    [3001] = { rivalMin = 200, quantity = 12 },
+    [3001] = { rivalMin = 200, quantity = 12, ladder = { 200, 4, 260, 8 } },
     [3002] = { ownMin = 100, quantity = 1 },
     [3003] = { rivalMin = 900, ignoredLow = 100, quantity = 2 },
     [3004] = { rivalMin = 80, quantity = 5 },
@@ -92,6 +92,15 @@ ns.Prices = {
     GetAge = function() return 600 end,
     IsStale = function(_, itemID) return itemID == 3003 end,
     Count = function() return 6 end,
+    -- As Data/Prices.lua counts it: the book's steps at the price or less.
+    CountAtOrBelow = function(record, price)
+        if type(record.ladder) ~= "table" then return nil end
+        local count = 0
+        for i = 1, #record.ladder, 2 do
+            if record.ladder[i] <= price then count = count + record.ladder[i + 1] end
+        end
+        return count
+    end,
 }
 ns.Recipes = {
     GetCharacterName = function(_, key) return (key:match("^([^-]+)")) end,
@@ -128,12 +137,14 @@ check("a vendor pays 500", first.vendor == 500)
 check("profit is 500 - 200 = 300, no auction cut", first.gain == 300)
 check("margin is profit over the buy price", math.abs(first.margin - 1.5) < 1e-9)
 check("it says how many are listed", first.listed == 12)
+check("and how many at the price it is bought at", first.qty == 4)
 
 check("his own listing is not a flip", Find(rows, 3002) == nil)
 
 local lone = Find(rows, 3003)
 check("a lone low listing is the one to buy", lone and lone.buy == 100 and lone.loneLow and lone.gain == 900)
 check("and an old scan is marked stale", lone.stale == true)
+check("with no book read, no count", lone.qty == nil)
 
 check("an item over vendor price is left out", Find(rows, 3004) == nil)
 check("an item a vendor will not buy is left out", Find(rows, 3005) == nil)
@@ -397,6 +408,7 @@ ns.UI = Stub({
 
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 
+ns.DEALS_FLIPS = true  -- the flips, put away for now, are still tested
 assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 
 local tab = tabs.deals
@@ -423,11 +435,16 @@ local row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 3001))
 
--- Right to left: PROFIT, MARGIN, GETS, BUY, AGE, VIA.
+-- Right to left: PROFIT, MARGIN, GETS, BUY, QTY, AGE, VIA.
 check("PROFIT shows the gain in green", row.cells[1].text ~= "" and row.cells[1].color == "profit")
 check("MARGIN shows 150%", row.cells[2].text == "150%")
 check("GETS and BUY show prices", row.cells[3].text ~= "" and row.cells[4].text ~= "")
-check("VIA says Vendor", row.cells[6].text == "Vendor")
+check("QTY says how many at the buy price", row.cells[5].text == "4" and row.cells[5].color == "text")
+check("VIA says Vendor", row.cells[7].text == "Vendor")
+local loneRow = Stub()
+list.opts.createRow(loneRow)
+list.opts.updateRow(loneRow, Find(list.data, 3003))
+check("QTY with no book read is a dash", loneRow.cells[5].text == "--")
 
 list.opts.onClick(Find(list.data, 3001), 1, "LeftButton")
 check("picking a row fills the profit bar", bars[1] and math.abs(bars[1].value - 0.6) < 1e-9)
@@ -616,7 +633,7 @@ row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 4001))
 check("GETS shows the price it lists again at", row.cells[3].text ~= "")
-check("VIA says AH", row.cells[6].text == "AH")
+check("VIA says AH", row.cells[7].text == "AH")
 
 list.opts.onClick(Find(list.data, 4002), 1, "LeftButton")
 check("the detail says what it usually sells for", Showing("Usually sells for"))

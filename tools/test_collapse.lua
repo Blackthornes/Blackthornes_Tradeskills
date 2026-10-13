@@ -109,11 +109,11 @@ settings.postPanelCollapsed = false
 check("sell list open: auction window's height", PostPanel:TargetHeight(), 1091 - 551)
 
 settings.postPanelCollapsed = true
-check("sell list folded: title strip", PostPanel:TargetHeight(), Collapse.HEIGHT)
+check("sell list folded: its header, with Scan", PostPanel:TargetHeight(), PostPanel.FOLDED_HEIGHT)
 
 ns.UI.FindAuctionFrame = function() return nil end
 check("sell list folded, no auction window: still the strip",
-  PostPanel:TargetHeight(true), Collapse.HEIGHT)
+  PostPanel:TargetHeight(true), PostPanel.FOLDED_HEIGHT)
 check("no auction window, not asked for a fallback: leave it alone",
   PostPanel:TargetHeight(false), nil)
 

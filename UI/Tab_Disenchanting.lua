@@ -872,8 +872,8 @@ local function EmptyText()
         local count, worth = Session()
         if count > 0 then
             local money = Util.FormatMoney(worth, { noColor = true, short = true })
-            return (count == 1 and L.Format("All done! You disenchanted %d item this session, worth about %s.", count, money)
-                or L.Format("All done! You disenchanted %d items this session, worth about %s.", count, money))
+            return (count == 1 and L.Format("Done. You disenchanted %d item this session, worth about %s.", count, money)
+                or L.Format("Done. You disenchanted %d items this session, worth about %s.", count, money))
                 .. (state.beatsOnly and L[" Untick \"Only where disenchanting pays more\" to see the rest."] or "")
         end
 
@@ -902,7 +902,7 @@ local function EmptyText()
         local text = L["Nothing on the auction house is worth buying to disenchant right now."]
 
         if state.hidden > 0 then
-            text = text .. L.Format(" %d more would make a little, but not enough for your minimums in Settings (%s profit, %d%% margin).",
+            text = text .. L.Format(" %d more would make a profit, but less than your minimums in Settings (%s profit, %d%% margin).",
                 state.hidden,
                 Util.FormatMoney(ns.Config:Get("minProfit") or 0, { noColor = true, short = true }),
                 ns.Config:Get("minMarginPercent") or 0)

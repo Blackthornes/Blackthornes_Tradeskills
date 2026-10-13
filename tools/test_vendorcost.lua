@@ -129,6 +129,44 @@ do
     settings.valueOwnedMaterials = false
 end
 
+print("")
+print("the shopping list never sends a stocked vendor item to the auction house")
+
+do
+    -- Coarse Thread: the shop's 10c, listed at 3c. A vial: 4c at the shop,
+    -- 50c listed. Red Dye's case (the owner, 2026-10-13).
+    ns.db.vendorPrices = {}
+    bags = {}
+    ns.db.queue = { { recipeID = POTION_RECIPE, quantity = 3 } }
+    check("thread from the table is kept at the vendor", Vendor:KeepsInStock(THREAD), true)
+    check("cloth no vendor sells is not", Vendor:KeepsInStock(CLOTH), false)
+
+    local function Line(id)
+        for _, line in ipairs(Queue:BuildShoppingList()) do
+            if line.itemID == id then return line end
+        end
+    end
+    RECIPES[POTION_RECIPE].reagents = { { itemID = THREAD, quantity = 1 } }
+
+    local line = Line(THREAD)
+    check("thread listed for less still goes to the vendor", line and line.source, "vendor")
+    check("and claims no saving for it", line and (line.savingTotal or 0), 0)
+
+    Vendor:GetTable()[THREAD] = { price = 10, limited = true }
+    check("a shop seen with limited stock is not kept", Vendor:KeepsInStock(THREAD), false)
+    line = Line(THREAD)
+    check("so the cheaper listing wins there", line and line.source, "auction")
+    ns.db.vendorPrices = {}
+
+    settings.vendorItemsOnAuction = true
+    check("ticked, the auction house is offered again", Vendor:KeepsInStock(THREAD), false)
+    line = Line(THREAD)
+    check("and the cheaper listing wins", line and line.source, "auction")
+    settings.vendorItemsOnAuction = nil
+
+    RECIPES[POTION_RECIPE].reagents = { { itemID = VIAL, quantity = 1 } }
+end
+
 ns.db.queue = {}
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

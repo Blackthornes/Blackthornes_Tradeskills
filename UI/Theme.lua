@@ -251,10 +251,18 @@ end
 --- the label's own size when it fits, else in the smaller size, wrapped onto
 --- as many lines as it takes (a player's screenshot, 2026-10-07: "Deviate
 --- S..."). The label is laid out by both its ends, so its width is the room.
+---
+--- A wrapped name keeps how tall it is in `label.rowNeed` (with the text it
+--- was worked out for in `label.rowNeedText`), and the scroll list makes that
+--- row taller to hold it. Without that a name of three lines spilled over the
+--- rows above and below it (the Profit tab, 2026-10-13: "Woolen Reagent Bag
+--- Red" over "Swashbuckler's Shirt").
 function Theme.SetRowName(label, text, size)
     size = Theme.sizes[size or "small"] or Theme.sizes.small
     pcall(label.SetFont, label, FONT, size, "")
     pcall(label.SetWordWrap, label, false)
+    pcall(label.SetHeight, label, 0)
+    label.rowNeed, label.rowNeedText = nil, nil
     label:SetText(text)
 
     local ok, room = pcall(label.GetWidth, label)
@@ -262,9 +270,21 @@ function Theme.SetRowName(label, text, size)
     local width = Theme.TextWidth(label)
     if type(width) ~= "number" or width <= room then return end
 
-    pcall(label.SetFont, label, FONT, math.min(size, Theme.sizes.tiny), "")
+    local small = math.min(size, Theme.sizes.tiny)
+    pcall(label.SetFont, label, FONT, small, "")
     pcall(label.SetWordWrap, label, true)
     label:SetText(text)
+
+    -- How tall the wrapped name stands: what the game says, and never less
+    -- than a line for each time the name's width goes into the room.
+    local lineHeight = small + 2
+    local smallWidth = Theme.TextWidth(label) or width
+    local need = math.max(2, math.ceil(smallWidth / room)) * lineHeight
+    local okHeight, height = pcall(label.GetStringHeight, label)
+    if okHeight and type(height) == "number" and height > need then need = height end
+    need = math.ceil(need)
+    pcall(label.SetHeight, label, need)
+    label.rowNeed, label.rowNeedText = need, text
 end
 
 --- Put a money amount on a label in as much detail as fits its width: every

@@ -543,12 +543,21 @@ local function ShowMaterialTooltip(row, line)
     -- Put here by Blackthornes Equipment's Queue it button.
     if line.buys then
         GameTooltip:AddLine(" ")
+        local forUpgrade = false
         for _, wanted in ipairs(line.buys) do
-            local label = wanted.forItem == line.itemID and L["To buy for your upgrade"]
-                or L.Format("For your upgrade, %s", Util.GetItemLabel(wanted.forItem))
+            local label
+            if wanted.forRecipe then
+                label = L.Format("To learn and skill up, %s", wanted.forRecipeName or L["a recipe"])
+            else
+                forUpgrade = true
+                label = wanted.forItem == line.itemID and L["To buy for your upgrade"]
+                    or L.Format("For your upgrade, %s", Util.GetItemLabel(wanted.forItem))
+            end
             GameTooltip:AddDoubleLine(label, tostring(wanted.count), 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
-        GameTooltip:AddLine(L["The x on the Queue tab takes it off. It goes by itself once you have the upgrade."],
+        GameTooltip:AddLine(forUpgrade
+            and L["The x on the Queue tab takes it off. It's removed once you have the upgrade."]
+            or L["The x on the Queue tab takes it off."],
             0.7, 0.7, 0.7, true)
     end
 
@@ -634,6 +643,21 @@ local function SetCraftButton(button, label)
     -- the one open, this click opens it instead: the game lets a player's
     -- click cast the profession, which addon code alone may not do.
     local opener = ns.ProfessionOpener
+
+    -- In travel form or the like, the first click leaves it (a secure
+    -- button, since addon code may not); the next opens or crafts.
+    local leave = opener and opener.LeaveFormStep and opener:LeaveFormStep()
+    if leave then
+        button:SetText(L["Leave form"])
+        button:SetEnabledState(true)
+        button.tooltipText = L["You can't craft in this form. Click to leave it, then again to craft. Not in combat."]
+        label:SetText(L.Format("%d of %d ready. Leave your form first", ready, total))
+        label:SetTextColor(Theme.Unpack("accent"))
+        button.opensProfession = true
+        opener:Arm(button, leave, entry.recipeID)
+        return true
+    end
+
     if opener and not opener:WindowShowsRecipe(entry.recipeID) then
         local profession = opener:ProfessionFor(entry.recipeID)
 

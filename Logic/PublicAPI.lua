@@ -21,7 +21,7 @@ local API = { version = 1 }
 
 local MAX_ITEM_ID = 10000000
 
-local function ItemID(item)
+local function ReadItemID(item)
     if type(item) == "number" then
         if item >= 1 and item < MAX_ITEM_ID and item == math.floor(item) then return item end
         return nil
@@ -30,6 +30,14 @@ local function ItemID(item)
         local id = tonumber(item:match("item:(%d+)") or item:match("^%s*(%d+)%s*$"))
         if id and id >= 1 and id < MAX_ITEM_ID then return id end
     end
+    return nil
+end
+
+-- A link or ID read from the client inside an instance can be secret, and
+-- comparing one raises; the whole read is in a pcall so a caller never sees it.
+local function ItemID(item)
+    local ok, id = pcall(ReadItemID, item)
+    if ok then return id end
     return nil
 end
 

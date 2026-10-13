@@ -125,6 +125,74 @@ check("only the rows with data show",              shown, 2)
 check("and there is nothing to scroll",            select(2, list.scrollbar:GetMinMaxValues()), 0)
 
 print("")
+print("a long name that wraps onto three lines (the Profit tab, 2026-10-13)")
+
+-- Theme.SetRowName keeps how tall a wrapped name is in `rowNeed`; here the
+-- rows' name labels are given it by hand, for the entries marked tall.
+local function NameLabel()
+    local label = { text = "" }
+    label.SetText = function(self, t) self.text = t end
+    label.GetText = function(self) return self.text end
+    return label
+end
+
+list = Widgets.CreateScrollList(Frame(), {
+    rowHeight = ROW,
+    createRow = function(row) row.name = NameLabel() end,
+    updateRow = function(row, entry)
+        row.name:SetText(entry.name)
+        if entry.tall then
+            row.name.rowNeed, row.name.rowNeedText = 36, entry.name
+        else
+            row.name.rowNeed, row.name.rowNeedText = nil, nil
+        end
+    end,
+})
+list:SetHeight(100)
+local data = Data(6)
+data[2].tall = true
+list:SetData(data)
+
+local function Spans(list)
+    local spans = {}
+    for _, row in ipairs(list.rows) do
+        if row.shown then
+            local top = -(row.points.TOPLEFT and row.points.TOPLEFT.y or 0)
+            spans[#spans + 1] = { top = top, bottom = top + row.height }
+        end
+    end
+    return spans
+end
+
+local spans = Spans(list)
+check("the tall row grows to hold its name",       list.rows[2].height, 40)
+check("the row under it starts below it",          spans[3] and spans[3].top, spans[2] and spans[2].bottom)
+local lowestBottom = 0
+for _, span in ipairs(spans) do if span.bottom > lowestBottom then lowestBottom = span.bottom end end
+check("and nothing hangs below the list",          lowestBottom <= 100, true)
+check("three rows fit beside the tall one",        #spans, 3)
+
+-- A name set some other way since leaves its row the usual height.
+list.rows[2].name:SetText("changed")
+check("a name changed some other way needs no room", (function()
+    data[2].tall = false
+    list:Refresh()
+    return list.rows[2].height
+end)(), ROW)
+
+-- Every entry tall: the scrollbar must still reach the last one.
+data = Data(6)
+for _, entry in ipairs(data) do entry.tall = true end
+list:SetData(data)
+local max = select(2, list.scrollbar:GetMinMaxValues())
+list.scrollbar:SetValue(max)
+max = select(2, list.scrollbar:GetMinMaxValues())
+list.scrollbar:SetValue(max)
+local last
+for _, row in ipairs(list.rows) do if row.shown and row.data then last = row.data end end
+check("scrolled to the end, the last tall row shows", last and last.name, "row 6")
+
+print("")
 if failed > 0 then
     error(("%d scroll list check(s) failed"):format(failed))
 end

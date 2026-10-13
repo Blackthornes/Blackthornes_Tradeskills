@@ -100,6 +100,11 @@ local skillReadThisSession = {}
 -- Professions
 --------------------------------------------------------------------------------
 
+--- The Classic skill line for either of Forever's two.
+function RecipeBook.ClassicLine(skillLineID)
+    return MODERN_SKILL_LINES[skillLineID] or skillLineID
+end
+
 --- A profession's name from a skill line, either of Forever's two.
 function RecipeBook:ProfessionName(skillLineID)
     if type(skillLineID) ~= "number" then return nil end
@@ -175,20 +180,26 @@ function RecipeBook:GetAll()
     end
     for _, list in pairs(itemsFor) do table.sort(list) end
 
+    -- Forever's own materials and item made, where its client differs from
+    -- Classic (Data/LearnSpots.lua); a profession window's still win.
+    local spots = ns.LEARN_SPOTS or {}
+    local foreverMaterials, foreverMade = spots.MATERIALS or {}, spots.MADE or {}
+
     for recipeID, row in pairs(book.RECIPES) do
         local reagents = {}
-        local materials = row[6] or {}
+        local materials = foreverMaterials[recipeID] or row[6] or {}
         for i = 1, #materials - 1, 2 do
             reagents[#reagents + 1] = { itemID = materials[i], quantity = materials[i + 1] }
         end
 
         local record = {
             recipeID = recipeID,
+            bookID = recipeID,
             name = row[7],
             skillLineID = row[1],
             profession = book.PROFESSIONS[row[1]],
             skill = row[2],
-            outputItemID = (row[3] or 0) ~= 0 and row[3] or nil,
+            outputItemID = foreverMade[recipeID] or ((row[3] or 0) ~= 0 and row[3] or nil),
             quantityMin = row[4] or 1,
             quantityMax = row[5] or row[4] or 1,
             reagents = reagents,
@@ -234,8 +245,20 @@ function RecipeBook:GetAll()
         end
     end
 
-    -- The skill each recipe needs on Forever: players' reports, then what
-    -- the game's own recipe item tooltips say, which beats everything.
+    -- The skill each recipe needs on Forever: the Forever client's own
+    -- yellow and grey (Data/LearnSpots.lua, the skill to learn moved by as
+    -- much as the yellow moved), then players' reports, then what the game's
+    -- own recipe item tooltips say, which beats everything. Classic's skill
+    -- is kept as classicSkill: which trainer teaches it goes by that.
+    local foreverSkills = ns.LEARN_SPOTS and ns.LEARN_SPOTS.SKILLS or {}
+    for _, record in pairs(merged) do
+        record.classicSkill = record.skill
+        local forever = foreverSkills[record.bookID or record.recipeID]
+        if type(forever) == "table" then
+            record.skill = forever[1] or record.skill
+            record.yellow, record.grey = forever[2], forever[3]
+        end
+    end
     for _, record in pairs(merged) do
         local fixed = record.name and FOREVER_SKILLS[record.name:lower()]
         if fixed then

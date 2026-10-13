@@ -237,6 +237,15 @@ function AHQueue:SecondsUntilReady(priority)
     return seconds, reason
 end
 
+--- A listing went down the throttled channel from a click, outside the queue.
+--
+-- Our own requests space themselves out after it as after any send. It is not
+-- counted against the budget, which is the room we leave for the player's own
+-- listings, and this is one of them.
+function AHQueue:NoteSend()
+    self.lastSend = GetTime()
+end
+
 --- Stand down for a while: the player needs the channel more than we do.
 --
 -- Background work waits; anything the player clicked still goes, paced and

@@ -5,18 +5,20 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.54.0", lines = {
+        "At the auction house, your sell list and Scan sit in one drawer beside the window, with a List all button.",
+        "Favors and Writs has a QTY column: how many others listed at that price.",
+        "In travel form or another shapeshift, the Craft button reads Leave form. One click leaves the form, the next one crafts.",
+    } },
+    { version = "0.53.0", lines = {
+        "Tradeskills tracks transmutes and other profession cooldowns on all your characters, and tells you when one is ready.",
+        "The Level Up tab lists which recipe to learn next and where. Show the way puts the trainer on your map.",
+        "Recipe levels and materials match Forever.",
+        "Shift-click any item to search for it at the auction house.",
+        "If you turn it on in Settings, chat tells you when someone in Trade asks for something you can make.",
+    } },
     { version = "0.52.0", lines = {
-        "Tradeskills speaks Deutsch now if your game is in German.",
-        "Got TradeSkillMaster or Auctionator? Their prices now fill in anything you haven't scanned yet.",
-        "The note about overpriced listings after a scan is one short line now.",
-        "Fixed your items sometimes being counted twice on a character you played before last names.",
-    } },
-    { version = "0.51.0", lines = {
-        "See how much you made from crafting, flipping, vendoring and disenchanting, all split out on the Sales tab.",
-    } },
-    { version = "0.50.0", lines = {
-        "Sold something? You'll hear an old cash register now. You can pick another sound or turn it off.",
-        "Crate and writ prices go blank when none are for sale.",
-        "Works on German game clients too.",
+        "Tradeskills is in Deutsch on a German client.",
+        "With TradeSkillMaster or Auctionator installed, their prices fill in items you haven't scanned.",
     } },
 }

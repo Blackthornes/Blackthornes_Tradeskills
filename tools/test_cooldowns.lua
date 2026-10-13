@@ -179,6 +179,25 @@ check("dropped once it is gone", ns.db.professionCooldowns[ANA]["item:15846"], n
 print("\nReadyHere and the group's time")
 check("transmute ready here", Cooldowns:ReadyHere(17187), true)
 check("the Forever craft is not", Cooldowns:ReadyHere(90001), false)
+check("every transmute of a ready group is ready here", Cooldowns:ReadyHere(11479), true)
+do
+  local named = {}
+  for _ = 1, 5 do
+    for _, group in ipairs(Cooldowns:Groups(ANA)) do
+      if group.group == "Transmute" then named[group.recipeID] = true end
+    end
+  end
+  local count = 0
+  for _ in pairs(named) do count = count + 1 end
+  check("the group names the same transmute every time", count, 1)
+  ns.Profit = { GetCraftableCount = function(_, recipeID) return recipeID == 17187 and 2 or 0 end }
+  local picked
+  for _, group in ipairs(Cooldowns:Groups(ANA)) do
+    if group.group == "Transmute" then picked = group.recipeID end
+  end
+  check("the one with materials is named", picked, 17187)
+  ns.Profit = nil
+end
 check("Cooldowns.Group without a colon", Cooldowns.Group("Mooncloth"), "Mooncloth")
 check("left text in days", Cooldowns.LeftText(2 * 86400 + 4 * 3600 + 5), "2d 4h")
 check("left text in hours", Cooldowns.LeftText(3 * 3600 + 12 * 60), "3h 12m")
@@ -194,6 +213,24 @@ Cooldowns:Read()
 Cooldowns:Announce()
 check("said again once ready again", printed[#printed]:find("Transmute here") ~= nil, true)
 check("one more line", #printed, before + 1)
+
+print("\na forgotten character")
+ns.db.professionCooldowns["Player-9"] = { ["spell:18560"] = { name = "Mooncloth", recipeID = 18560, readyAt = now - 5 } }
+local listed = false
+for _, character in ipairs(Cooldowns:All()) do
+  if character.key == "Player-9" then listed = true end
+end
+check("is not listed or said", listed, false)
+check("its saved cooldowns are kept", ns.db.professionCooldowns["Player-9"] ~= nil, true)
+
+print("\nin a fight at login")
+InCombatLockdown = function() return true end
+timers = {}
+Cooldowns.readAfterCombat = false
+Cooldowns:OnEnable()
+RunTimers()
+check("reads once the fight ends", Cooldowns.readAfterCombat, true)
+InCombatLockdown = function() return false end
 
 print("")
 if failures > 0 then

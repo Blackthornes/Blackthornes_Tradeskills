@@ -22,6 +22,12 @@ local DETAIL_WIDTH = 300
 -- under its heading. `width` is the least each gets: Widgets.FitColumns
 -- widens it to fit the heading and a full amount.
 local COLUMNS = {
+    -- Learn next (2026-10-12): where an unlearned recipe is learned, what
+    -- it costs, and a Show the way button, all lined up at the far right.
+    -- Shown only while Learn next is ticked.
+    { key = "way",    label = "", menuText = L["Show the way"], width = 84, button = "way", learnOnly = true },
+    { key = "where",  label = L["WHERE"], width = 120, justify = "LEFT", learnOnly = true },
+    { key = "learn",  label = L["LEARN"], width = 50, money = true, learnOnly = true },
     { key = "make",   label = L["MAKE"], width = 40, justify = "CENTER" },
     { key = "real",   label = L["REAL COST"], width = 74, money = true },
     { key = "via",    label = L["VIA"], width = 44, justify = "CENTER" },
@@ -55,8 +61,14 @@ local state = {
     craftableOnly = false,
     includeTrivial = false,
     subCraftsOnly = false,
+    learnNext = true,
     selected = nil,
 }
+
+--- Are the Learn next rows and columns showing?
+local function LearnShown()
+    return state.learnNext and not state.subCraftsOnly
+end
 
 local widgets = {}
 
@@ -144,16 +156,57 @@ local function SubCraftTooltip(entry)
     return text
 end
 
+-- Columns set aside while the list is too narrow for them all, so the
+-- recipe's name keeps NAME_MIN. Learn next's three columns took all the
+-- name's room on the window's own width (more with German or a larger
+-- text size), and the columns ran over the names and into each other.
+-- The least needed go first; the saved column choice is left alone, and
+-- they come back as soon as there is room (Learn next unticked).
+local NAME_MIN = 160
+local SQUEEZE_ORDER = { "via", "back", "make", "sub", "real" }
+local squeezed = {}
+local layoutVersion = 0
+
 --- The shown columns from the right edge; the name has the rest. The
 --- SUB-CRAFT button sits centred in its column, or stays hidden with it.
+local function ColumnVisible(column)
+    if squeezed[column.key] then return false end
+    return not column.learnOnly or LearnShown()
+end
+
+--- Work out which columns fit the list's width; with the width not known
+--- yet (not laid out), nothing is set aside.
+local function Squeeze(room)
+    layoutVersion = layoutVersion + 1
+    wipe(squeezed)
+    local learnOk = function(column) return not column.learnOnly or LearnShown() end
+    for key in pairs(ns.Columns:Squeeze("levelup", COLUMNS, room, {
+        order = SQUEEZE_ORDER, nameMin = NAME_MIN, left = 28 + 4, visible = learnOk })) do
+        squeezed[key] = true
+    end
+end
+
+--- Lay the headings out for the list's width; the rows follow on their
+--- next draw (layoutVersion).
+local function PlaceHeadings()
+    local headings = widgets.headings
+    local ok, room = pcall(function() return headings and headings:GetWidth() end)
+    Squeeze(ok and room or nil)
+    if widgets.headingCells then
+        ns.Columns:Place("levelup", COLUMNS, widgets.headingCells, { visible = ColumnVisible })
+    end
+end
+
 local function PlaceRow(row)
     local offset = ns.Columns:Place("levelup", COLUMNS, row.cells, {
+        visible = ColumnVisible,
         place = function(column, offset, shown)
-            local button = column.button and row.subButton
+            local button = column.button == "way" and row.wayButton
+                or column.button and row.subButton
             if not button then return end
-            row.subHidden = not shown
+            if column.button == "way" then row.wayHidden = not shown else row.subHidden = not shown end
             if shown then
-                local width = math.min(column.width, 48)
+                local width = math.min(column.width, column.button == "way" and column.width or 48)
                 button:ClearAllPoints()
                 button:SetPoint("RIGHT", row, "RIGHT", offset - (column.width - width) / 2, 0)
             else
@@ -163,6 +216,8 @@ local function PlaceRow(row)
     })
     row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
     row.columnsVersion = ns.Columns.version
+    row.learnShown = LearnShown()
+    row.layoutVersion = layoutVersion
 end
 
 local function CreateRow(row)
@@ -175,7 +230,12 @@ local function CreateRow(row)
 
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
-        if column.button then
+        if column.button == "way" then
+            row.wayButton = Widgets.CreateButton(row, L["Show the way"], function()
+                if row.data and row.data.learnNext then ns.LearnNext:ShowTheWay(row.data) end
+            end, { width = column.width, height = 16,
+                   tooltip = L["Put a pin on your map where this recipe is learned"] })
+        elseif column.button then
             row.subButton = Widgets.CreateButton(row, L["Make"], function()
                 ToggleSubCraft(row.data)
             end, { width = math.min(column.width, 48), height = 16 })
@@ -183,14 +243,85 @@ local function CreateRow(row)
             row.cells[column.key] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
         end
     end
+    -- A zone's name wraps under "Vendor" rather than ending in "...".
+    row.cells.where:SetWordWrap(true)
+
+    -- The LEARN NEXT heading, drawn on a row of its own between the
+    -- recipes known and those to learn.
+    row.heading = Theme.CreateLabel(row, "tiny", "accent")
+    row.heading:SetPoint("LEFT", 8, 0)
+    row.heading:SetText(L["LEARN NEXT"])
+    row.headingNote = Theme.CreateLabel(row, "tiny", "muted")
+    row.headingNote:SetPoint("LEFT", row.heading, "RIGHT", 12, 0)
+    row.headingNote:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row.headingNote:SetWordWrap(true)
+    row.headingNote:SetText(L["recipes you don't know yet that raise your skill now, cheapest way up first"])
+    row.heading:Hide()
+    row.headingNote:Hide()
 
     PlaceRow(row)
 end
 
+--- The LEARN NEXT heading row: everything else on it hidden.
+local function ShowHeadingRow(row, heading)
+    row.heading:SetShown(heading)
+    row.headingNote:SetShown(heading)
+    row.icon:SetShown(not heading)
+    row.name:SetShown(not heading)
+    if heading then
+        for _, cell in pairs(row.cells) do cell:Hide() end
+    elseif row.wasHeading then
+        -- Back to a recipe: the columns shown come back as they were.
+        PlaceRow(row)
+    end
+    row.wasHeading = heading
+end
+
+--- A recipe to learn: its colour, where it is learned and what it costs.
+local function UpdateLearnCells(row, entry)
+    local cells = row.cells
+    if entry.price then
+        Theme.SetMoneyText(cells.learn, entry.price, { short = true })
+        cells.learn:SetTextColor(Theme.Unpack("text"))
+    else
+        cells.learn:SetText("--")
+        cells.learn:SetTextColor(Theme.Unpack("dim"))
+    end
+
+    local kind, zone = ns.LearnNext.WhereText(entry.place)
+    if zone then
+        cells.where:SetText(("%s |cff7a8089%s|r"):format(kind, zone))
+    else
+        cells.where:SetText(kind)
+    end
+    cells.where:SetTextColor(Theme.Unpack(entry.locked and "dim" or "text"))
+
+    if entry.locked then
+        row.name:SetTextColor(Theme.Unpack("dim"))
+        cells.chance:SetText(L.Format("At %d", entry.needs))
+        cells.chance:SetTextColor(Theme.Unpack("dim"))
+        cells.make:SetText("--")
+        cells.make:SetTextColor(Theme.Unpack("dim"))
+    end
+end
+
 local function UpdateRow(row, entry)
-    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+    if row.columnsVersion ~= ns.Columns.version or row.learnShown ~= LearnShown()
+        or row.layoutVersion ~= layoutVersion then PlaceRow(row) end
+    row.data = entry
+
+    ShowHeadingRow(row, entry.heading == true)
+    if entry.heading then
+        if row.subButton then row.subButton:Hide() end
+        if row.wayButton then row.wayButton:Hide() end
+        return
+    end
 
     local cells = row.cells
+    if not entry.learnNext then
+        cells.learn:SetText("")
+        cells.where:SetText("")
+    end
 
     -- Coloured the way the profession window colours it, so the list reads
     -- the same as the game without being told what orange means.
@@ -251,14 +382,19 @@ local function UpdateRow(row, entry)
     -- could not be marked.
     local button = row.subButton
     if button then
-        row.data = entry
-        local shown = entry.outputItemID ~= nil
+        local shown = entry.outputItemID ~= nil and not entry.learnNext
         button:SetShown(shown == true and not row.subHidden)
         if shown then
             button:SetText(entry.neverSubCraft and L["Buy"] or L["Make"])
             button.tooltipText = SubCraftTooltip(entry)
         end
     end
+
+    if row.wayButton then
+        row.wayButton:SetShown(entry.learnNext == true and not entry.locked and not row.wayHidden)
+    end
+
+    if entry.learnNext then UpdateLearnCells(row, entry) end
 end
 
 --- A reading taken at a lower skill may have changed colour since. Said out
@@ -270,7 +406,32 @@ local function StaleNote(skillUp)
         skillUp.skill or 0, skillUp.currentSkill or 0)
 end
 
+--- How a recipe to learn is got, as { label, value } pairs: the recipe
+--- item or the trainer and its price, who, where and the skill it needs.
+local function LearnLines(entry)
+    local place, lines = entry.place, {}
+    if not place then return lines end
+    local price = entry.price and Util.FormatMoney(entry.price, { noColor = true }) or "--"
+    if place.kind == "trainer" then
+        lines[#lines + 1] = { L["Trainer"], price }
+        lines[#lines + 1] = { L["Taught by"], place.name or "" }
+    else
+        local item = place.itemID and Util.GetItemLabel(place.itemID)
+        item = item and Util.Uncolored and Util.Uncolored(item) or item
+        lines[#lines + 1] = { item or L["Recipe"], price }
+        lines[#lines + 1] = { L["Sold by"], place.name or "" }
+    end
+    if place.zone then
+        lines[#lines + 1] = { L["Where"], place.x and ("%s (%s, %s)"):format(place.zone, place.x, place.y)
+            or place.zone }
+    end
+    local profession = nameBySkillLine[entry.skillLineID] or (entry.record and entry.record.profession) or ""
+    lines[#lines + 1] = { L["Needs"], ("%s %d"):format(profession, entry.needs or 0) }
+    return lines
+end
+
 local function ShowRowTooltip(row, entry)
+    if entry.heading then return end
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.outputItemID, entry.name or L["craft"])
     GameTooltip:AddLine(" ")
 
@@ -323,6 +484,18 @@ local function ShowRowTooltip(row, entry)
         GameTooltip:AddLine(L["Never made as a sub-craft: crafts that use it buy it instead."], 0.91, 0.76, 0.35, true)
     end
 
+    if entry.learnNext then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(entry.locked and L.Format("You can learn this at %d.", entry.needs)
+            or L["You can learn this now."], Theme.Unpack(entry.locked and "warn" or "accent"))
+        for _, line in ipairs(LearnLines(entry)) do
+            GameTooltip:AddDoubleLine(line[1], line[2], 0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        GameTooltip:AddLine(L["Right-click to show the way. Shift-click to search the auction house."], 0.5, 0.5, 0.5)
+        GameTooltip:Show()
+        return
+    end
+
     GameTooltip:AddLine(L["Right-click to queue one. Shift-click to search the auction house."], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
@@ -362,6 +535,18 @@ UpdateCraftButton = function()
         -- Only our own button: the Queue tab may be holding the secure
         -- button over its Craft button.
         opener:Disarm()
+    end
+end
+
+--- Widen a fixed-width button to its label when the label is longer (a
+--- German one is): never narrower than it was made, never "...".
+local function GrowToFit(button)
+    local label = rawget(button, "label")
+    if type(label) ~= "table" or not Theme.TextWidth then return end
+    local text = Theme.TextWidth(label)
+    local ok, width = pcall(button.GetWidth, button)
+    if type(text) == "number" and ok and type(width) == "number" and text + 12 > width then
+        button:SetWidth(math.ceil(text + 12))
     end
 end
 
@@ -509,6 +694,66 @@ local function BuildDetail(parent)
     maxButton:SetPoint("BOTTOMLEFT", addButton, "BOTTOMRIGHT", 6, 0)
     detail.maxButton = maxButton
 
+    -- A recipe to learn (Learn next) has its own pane: how to get it, what
+    -- one craft takes, Show the way and Queue materials.
+    local learn = CreateFrame("Frame", nil, detail)
+    learn:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -38, -12)
+    learn:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -12, 12)
+    learn:Hide()
+    detail.learnPane = learn
+
+    local function PaneLine(anchor, gap)
+        local frame = CreateFrame("Frame", nil, learn)
+        frame:SetHeight(16)
+        frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, gap or 0)
+        frame:SetPoint("RIGHT", learn, "RIGHT", 0, 0)
+        local value = Theme.CreateLabel(frame, "small", "text", "RIGHT")
+        value:SetPoint("RIGHT", 0, 0)
+        local label = Theme.CreateLabel(frame, "small", "muted")
+        label:SetPoint("LEFT", 0, 0)
+        label:SetPoint("RIGHT", value, "LEFT", -8, 0)
+        frame.label, frame.value = label, value
+        return frame
+    end
+
+    local howHeading = Theme.CreateLabel(learn, "tiny", "dim")
+    howHeading:SetPoint("TOPLEFT", 0, 0)
+    howHeading:SetText(L["HOW TO GET IT"])
+    Theme.StyleHeading(howHeading, learn)
+
+    learn.how = {}
+    local anchor = howHeading
+    for index = 1, 4 do
+        learn.how[index] = PaneLine(anchor, index == 1 and -6 or 0)
+        anchor = learn.how[index]
+    end
+
+    local makeHeading = Theme.CreateLabel(learn, "tiny", "dim")
+    makeHeading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
+    makeHeading:SetText(L["TO MAKE ONE"])
+    Theme.StyleHeading(makeHeading, learn)
+
+    learn.materials = {}
+    anchor = makeHeading
+    for index = 1, 6 do
+        learn.materials[index] = PaneLine(anchor, index == 1 and -6 or 0)
+        anchor = learn.materials[index]
+    end
+
+    learn.wayButton = Widgets.CreateButton(learn, L["Show the way"], function()
+        if state.selected and state.selected.learnNext then ns.LearnNext:ShowTheWay(state.selected) end
+    end, { width = 120, height = 24, primary = true,
+           tooltip = L["Put a pin on your map where this recipe is learned"] })
+    learn.wayButton:SetPoint("BOTTOMLEFT", 0, 2)
+
+    learn.queueButton = Widgets.CreateButton(learn, L["Queue materials"], function()
+        if state.selected and state.selected.learnNext then ns.LearnNext:QueueMaterials(state.selected) end
+    end, { width = 130, height = 24,
+           tooltip = L["Put the materials on your list to buy: enough to craft it until it turns yellow"] })
+    learn.queueButton:SetPoint("BOTTOMLEFT", learn.wayButton, "BOTTOMRIGHT", 8, 0)
+    GrowToFit(learn.wayButton)
+    GrowToFit(learn.queueButton)
+
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
@@ -517,6 +762,58 @@ local function BuildDetail(parent)
     detail.empty = empty
 
     return detail
+end
+
+--- The detail pane for a recipe to learn.
+local function UpdateLearnDetail(detail, entry)
+    detail.title:SetText(entry.name or L.Format("recipe %s", entry.recipeID))
+    Theme.SetItemIcon(detail.icon, entry.outputItemID or (entry.place and entry.place.itemID))
+
+    if entry.locked then
+        detail.subtitle:SetText(L.Format("You can learn this at %d", entry.needs or 0))
+        detail.subtitle:SetTextColor(Theme.Unpack("warn"))
+    else
+        local tier = entry.tier ~= "unknown" and ns.SkillUp:GetTierLabel(entry.tier) or L["skill up not known"]
+        detail.subtitle:SetText(L.Format("You can learn this · %s at %d", tier, entry.skill or 0))
+        detail.subtitle:SetTextColor(TierColor(entry.tier))
+    end
+    detail.note:SetText("")
+
+    local learn = detail.learnPane
+    local lines = LearnLines(entry)
+    for index, line in ipairs(learn.how) do
+        local row = lines[index]
+        line:SetShown(row ~= nil)
+        if row then
+            line.label:SetText(row[1])
+            line.value:SetText(row[2])
+        end
+    end
+
+    local reagents = (entry.costDetail and entry.costDetail.reagents) or {}
+    if #reagents == 0 and entry.record then reagents = entry.record.reagents or {} end
+    for index, line in ipairs(learn.materials) do
+        local reagent = reagents[index]
+        line:SetShown(reagent ~= nil)
+        if reagent then
+            if index == #learn.materials and #reagents > index then
+                line.label:SetText(L.Format("and %d more", #reagents - index + 1))
+                line.value:SetText("")
+            else
+                line.label:SetText(("%dx %s"):format(reagent.quantity or 1,
+                    Util.Uncolored(Util.GetItemLabel(reagent.itemID))))
+                if reagent.lineCost then
+                    line.value:SetText(Util.FormatMoney(reagent.lineCost, { short = true }))
+                    line.value:SetTextColor(Theme.Unpack("muted"))
+                else
+                    line.value:SetText(L["no price"])
+                    line.value:SetTextColor(Theme.Unpack("dim"))
+                end
+            end
+        end
+    end
+
+    learn.wayButton:SetEnabledState(entry.place ~= nil)
 end
 
 local function UpdateDetail(entry)
@@ -531,10 +828,22 @@ local function UpdateDetail(entry)
 
     detail.icon:SetShown(shown)
 
-    for _, part in ipairs({ detail.title, detail.subtitle, detail.note, detail.reagentHeading,
-                            detail.summary, detail.quantityBox, detail.addButton,
-                            detail.maxButton, detail.craftButton }) do
+    local learning = shown and entry.learnNext == true
+    for _, part in ipairs({ detail.title, detail.subtitle, detail.note }) do
         part:SetShown(shown)
+    end
+    for _, part in ipairs({ detail.reagentHeading, detail.summary, detail.quantityBox,
+                            detail.addButton, detail.maxButton, detail.craftButton }) do
+        part:SetShown(shown and not learning)
+    end
+    detail.learnPane:SetShown(learning)
+
+    if learning then
+        detail.shownRecipeID = nil
+        detail.craftStatus:SetText("")
+        UpdateCraftButton()
+        UpdateLearnDetail(detail, entry)
+        return
     end
 
     if not shown then
@@ -688,19 +997,72 @@ local function UpdateSkillLabel()
     label:SetText("")
 end
 
+--- The character's skill in each profession shown, by Classic skill line,
+--- for Learn next: the one picked, or every one they have.
+local function LearnSkills()
+    local skills = {}
+    local sets = {}
+    if state.profession then
+        sets[1] = skillLinesByName[state.profession]
+    else
+        for _, set in pairs(skillLinesByName) do sets[#sets + 1] = set end
+    end
+    local classic = ns.RecipeBook and ns.RecipeBook.ClassicLine or function(id) return id end
+    for _, set in ipairs(sets) do
+        for skillLineID in pairs(set or {}) do
+            local info = ProfessionInfo(skillLineID)
+            if info and (info.maxSkillLevel or 0) > 0 then
+                skills[classic(skillLineID)] = info.skillLevel or 0
+            end
+        end
+    end
+    return skills
+end
+
+--- Learn next's rows (2026-10-12), under the recipes known.
+local function LearnRows()
+    if not (LearnShown() and ns.LearnNext) then return {} end
+    local ok, rows = pcall(ns.LearnNext.GetRows, ns.LearnNext, {
+        skills = LearnSkills(), search = state.search,
+    })
+    if not ok then
+        ns.Debug("Learn next:", tostring(rows))
+        return {}
+    end
+    if state.craftableOnly then
+        local kept = {}
+        for _, row in ipairs(rows) do
+            if (row.craftableNow or 0) > 0 and not row.locked then kept[#kept + 1] = row end
+        end
+        rows = kept
+    end
+    return rows
+end
+
 local function Refresh()
     if not widgets.list then return end
 
-    local rows = ns.LevelUp:GetRanked({
+    local known = ns.LevelUp:GetRanked({
         skillLines = state.profession and skillLinesByName[state.profession] or nil,
         includeTrivial = state.includeTrivial,
         craftableOnly = state.craftableOnly,
         subCraftsOnly = state.subCraftsOnly,
         search = state.search,
     })
+    local learnRows = LearnRows()
 
-    widgets.list:SetData(rows)
+    local shown = {}
+    for _, row in ipairs(known) do shown[#shown + 1] = row end
+    if #learnRows > 0 then
+        shown[#shown + 1] = { heading = true }
+        for _, row in ipairs(learnRows) do shown[#shown + 1] = row end
+    end
+
+    widgets.list:SetData(shown)
     UpdateSkillLabel()
+
+    -- The colours count the recipes known; Learn next has its own count.
+    local rows = known
 
     -- How many of each colour, so the footer says at a glance how much
     -- levelling is left in what you know.
@@ -724,11 +1086,15 @@ local function Refresh()
                 FOOTER_WORDS[tier] or ns.LevelUp.CHANCE_LABEL[tier]:lower())
         end
     end
+    if #learnRows > 0 then
+        parts[#parts + 1] = ("%s%s|r"):format(ColorCode(Theme.Unpack("accent")),
+            #learnRows == 1 and L["1 to learn"] or L.Format("%d to learn", #learnRows))
+    end
     widgets.countLabel:SetText(table.concat(parts, "   "))
 
-    widgets.emptyLabel:SetShown(#rows == 0)
+    widgets.emptyLabel:SetShown(#shown == 0)
 
-    if #rows == 0 then
+    if #shown == 0 then
         if ns.Recipes:Count() == 0 then
             widgets.emptyLabel:SetText(L["Open a profession window once so your recipes can be read."])
         elseif state.search ~= "" then
@@ -751,7 +1117,14 @@ local function Refresh()
     FitHint()
 
     -- Keep the detail panel in step with the fresh numbers.
-    if state.selected then
+    if state.selected and state.selected.learnNext then
+        local fresh
+        for _, row in ipairs(learnRows) do
+            if row.recipeID == state.selected.recipeID then fresh = row break end
+        end
+        state.selected = fresh
+        UpdateDetail(fresh)
+    elseif state.selected then
         local fresh = ns.LevelUp:BuildRow(state.selected.recipeID)
         state.selected = fresh
         UpdateDetail(fresh)
@@ -765,7 +1138,10 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
-    -- Before any row or heading is laid out: they read these widths.
+    -- Before any row or heading is laid out: they read these widths. The
+    -- Show the way column is as wide as its button's words.
+    local wayWidth = Theme.MeasureText and Theme.MeasureText("small", L["Show the way"])
+    if type(wayWidth) == "number" then COLUMNS[1].width = math.max(COLUMNS[1].width, math.ceil(wayWidth + 16)) end
     if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
     local toolbar = CreateFrame("Frame", nil, container)
@@ -809,6 +1185,8 @@ local function Build(container)
         state.selected = nil
         -- Other characters' professions join the menu, or leave it.
         OnShow()
+        -- Learn next stands aside while only sub-crafts show.
+        PlaceHeadings()
         widgets.list:ScrollToTop()
         Refresh()
     end, false)
@@ -820,6 +1198,26 @@ local function Build(container)
         GameTooltip:Show()
     end)
     subCrafts:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Learn next (the owner said build it, 2026-10-12): recipes not learned
+    -- yet that raise the skill now, under the ones known. Kept between
+    -- sessions.
+    state.learnNext = ns.Config:Get("levelUpLearnNext") ~= false
+    local learnNext = Widgets.CreateCheckbox(toolbar, L["Learn next"], function(checked)
+        state.learnNext = checked
+        ns.Config:Set("levelUpLearnNext", checked)
+        if state.selected and state.selected.learnNext then state.selected = nil end
+        PlaceHeadings()
+        Refresh()
+    end, state.learnNext)
+    learnNext:SetPoint("LEFT", subCrafts, "RIGHT", 12, 0)
+    learnNext:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(L["Learn next"], 1, 1, 1)
+        GameTooltip:AddLine(L["Recipes you have not learned that raise your skill now, under the ones you know, with the trainer or vendor that teaches each. Show the way pins them on your map."], 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    learnNext:HookScript("OnLeave", function() GameTooltip:Hide() end)
 
     local skillLabel = Theme.CreateLabel(toolbar, "normal", "accent", "RIGHT")
     skillLabel:SetPoint("RIGHT", 0, 0)
@@ -841,12 +1239,27 @@ local function Build(container)
         heading:SetText(column.label)
         cells[column.key] = heading
     end
-    ns.Columns:Place("levelup", COLUMNS, cells)
+    widgets.headingCells = cells
+    widgets.headings = headings
+    PlaceHeadings()
+
+    -- Laid out again when the list's width is known or changes (the
+    -- scrollbar taking its room), so the columns that fit are worked out
+    -- for the room there really is.
+    local placedWidth
+    headings:SetScript("OnSizeChanged", function(_, width)
+        -- Only a new width moves anything; the game can say so more than
+        -- once for the same one while it settles.
+        if width ~= nil and width == placedWidth then return end
+        placedWidth = width
+        PlaceHeadings()
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     -- Right-click the headings to choose the columns.
     ns.Columns:Attach(headings, "levelup")
     ns.Columns:OnChange("levelup", function()
-        ns.Columns:Place("levelup", COLUMNS, cells)
+        PlaceHeadings()
         if widgets.list then widgets.list:Refresh() end
     end)
 
@@ -869,9 +1282,15 @@ local function Build(container)
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
             return state.selected ~= nil and entry.recipeID == state.selected.recipeID
+                and (entry.learnNext == true) == (state.selected.learnNext == true)
         end,
 
         onClick = function(entry, _, mouseButton)
+            if entry.heading then return end
+            if entry.learnNext and mouseButton == "RightButton" then
+                ns.LearnNext:ShowTheWay(entry)
+                return
+            end
             if mouseButton == "RightButton" then
                 ns.Queue:Add(entry.recipeID, 1)
                 ns.Print(L.Format("queued %dx %s", 1, entry.name or L["craft"]))

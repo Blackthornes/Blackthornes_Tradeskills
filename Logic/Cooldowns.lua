@@ -334,12 +334,42 @@ function Cooldowns:Groups(characterKey)
             group.ids[#group.ids + 1] = id
         end
     end
-    for _, group in ipairs(list) do group.ready = group.readyAt <= now end
+    for _, group in ipairs(list) do
+        group.ready = group.readyAt <= now
+        if #group.ids > 1 then Cooldowns.PickCraft(characterKey, group, entries) end
+    end
     table.sort(list, function(a, b)
         if a.readyAt ~= b.readyAt then return a.readyAt < b.readyAt end
         return a.group < b.group
     end)
     return list
+end
+
+local function Makeable(characterKey, recipeID)
+    if not (recipeID and ns.Profit and ns.Profit.GetCraftableCount) then return 0 end
+    local ok, count = pcall(ns.Profit.GetCraftableCount, ns.Profit, recipeID, characterKey)
+    return ok and type(count) == "number" and count or 0
+end
+
+--- Which craft a group that shares one cooldown names (every transmute is
+--- "Transmute"): the one the character has the materials for, most crafts
+--- first, else the lowest ID, so the same one is named every time rather
+--- than whichever the saved table gave first.
+function Cooldowns.PickCraft(characterKey, group, entries)
+    local best, bestCount, bestID
+    for _, id in ipairs(group.ids) do
+        local entry = entries[id]
+        local recipeID = entry.recipeID
+        local count = Makeable(characterKey, recipeID)
+        local sortID = tonumber(recipeID or entry.itemID) or math.huge
+        if not best or count > bestCount or (count == bestCount and sortID < bestID) then
+            best, bestCount, bestID = entry, count, sortID
+        end
+    end
+    if best then
+        group.name = best.name or group.name
+        group.recipeID, group.itemID = best.recipeID, best.itemID
+    end
 end
 
 local function Name(characterKey)
@@ -361,7 +391,9 @@ function Cooldowns:All()
     for characterKey in pairs(store or {}) do
         local key = ns.Characters and ns.Characters:Canonical(characterKey) or characterKey
         local record = characters[key]
-        if not seen[key] and not (type(record) == "table" and record.linkedFrom) then
+        -- A character forgotten on the Characters tab keeps its saved
+        -- cooldowns (nothing is deleted) but is no longer named or said.
+        if not seen[key] and type(record) == "table" and not record.linkedFrom then
             seen[key] = true
             local groups = self:Groups(key)
             if #groups > 0 then
@@ -397,8 +429,14 @@ end
 function Cooldowns:ReadyHere(recipeID)
     local key = SelfKey()
     if not key then return false end
+    local id = "spell:" .. tostring(recipeID)
     for _, group in ipairs(self:Groups(key)) do
-        if group.ready and group.recipeID == recipeID then return true end
+        if group.ready then
+            -- Any craft of a group that is up: they share the one cooldown.
+            for _, member in ipairs(group.ids) do
+                if member == id then return true end
+            end
+        end
     end
     return false
 end
@@ -507,7 +545,14 @@ function Cooldowns:OnEnable()
     end)
     if C_Timer and C_Timer.After then
         C_Timer.After(Cooldowns.LOGIN_DELAY, function()
-            if not InCombat() then Cooldowns:Read() end
+            if InCombat() then
+                -- Read once the fight ends; until then the saved times still
+                -- set the timer for the next to come ready.
+                Cooldowns.readAfterCombat = true
+                Cooldowns:Schedule()
+            else
+                Cooldowns:Read()
+            end
             Cooldowns:Announce()
         end)
     end
