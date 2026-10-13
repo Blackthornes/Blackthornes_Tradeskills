@@ -20,6 +20,13 @@
 --                  listing it, or the scan is old. Butler compares it with
 --                  `auction` to hold back items selling below their usual
 --                  price (2026-10-13).
+--   belowCost      copper one costs to make, when the price the Sell list
+--                  would list it at is under that and Tradeskills would not
+--                  list it (Posting:BelowCost, or "Never below what I paid"
+--                  with Posting:BelowCraftedCost). nil when it is no craft,
+--                  the price covers the cost, or "Recommend selling at a
+--                  loss" is on. Butler then holds it back rather than say
+--                  Auction (2026-10-13).
 --   fast           true when it sells well (Demand "high"), false when it
 --                  rarely sells ("low"), nil in between or with no data.
 --   disenchant     copper a disenchant of one is likely to give
@@ -355,6 +362,28 @@ local function AuctionNow(itemID, auction)
     return math.max(0, math.floor(net + 0.5))
 end
 
+--- What one costs to make, when the Sell list's price for it is under that
+--- and Posting would refuse the listing. Only crafts are priced here, so the
+--- other bag items cost one table read.
+local function BelowCost(itemID, auction)
+    if not auction then return nil end
+    local posting, cost, made = ns.Posting, ns.Cost, ns.CraftedCost
+    if not (posting and posting.BelowCost and posting.GetPostPrice) then return nil end
+    local craft = cost and cost.FindAnyRecipeForItem and cost:FindAnyRecipeForItem(itemID)
+    if not craft and not (made and made.Get and made:Get(itemID)) then return nil end
+
+    local price = posting.GetChosenPrice and posting:GetChosenPrice(itemID)
+    if not price then price = posting:GetPostPrice(itemID) end
+    if type(price) ~= "number" or price <= 0 then return nil end
+
+    local unitCost = posting:BelowCost(itemID, price)
+    if not unitCost and posting.BelowCraftedCost then
+        unitCost = posting:BelowCraftedCost(itemID, price)
+    end
+    if type(unitCost) ~= "number" then return nil end
+    return math.floor(unitCost + 0.5)
+end
+
 local function Fast(itemID)
     local reading = ns.Demand and ns.Demand:Get(itemID)
     if not reading then return nil end
@@ -422,6 +451,7 @@ local function Answer(itemID)
     return {
         auction = auction,
         auctionNow = AuctionNow(itemID, auction),
+        belowCost = BelowCost(itemID, auction),
         fast = Fast(itemID),
         disenchant = disenchant,
         canDisenchant = canDisenchant,
