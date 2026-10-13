@@ -2172,7 +2172,7 @@ function Widgets.CreateScrollList(parent, opts)
         return row
     end
 
-    function list:Refresh()
+    local function Draw(self)
         local total = #self.data
         local visible = VisibleRowCount()
 
@@ -2262,6 +2262,35 @@ function Widgets.CreateScrollList(parent, opts)
         end
     end
 
+    --- Draw the rows. Never inside itself: reading the list's height
+    --- settles the game's layout, which can run OnSizeChanged (and with it
+    --- Refresh) right there, and once a row's columns were laid out again
+    --- mid-draw each pass set off the next until the stack ran out (Level
+    --- Up, 2026-10-13). A call that comes while drawing asks for one more
+    --- pass once this one is done, a few at most.
+    local REDRAW_PASSES = 3
+    local drawing, drawAgain = false, false
+    function list:Refresh()
+        if drawing then
+            drawAgain = true
+            return
+        end
+        drawing = true
+        local passes, ok, err = 0, true, nil
+        repeat
+            drawAgain = false
+            passes = passes + 1
+            ok, err = pcall(Draw, self)
+        until not ok or not drawAgain or passes >= REDRAW_PASSES
+        drawing, drawAgain = false, false
+        if not ok then error(err, 0) end
+    end
+
+    --- True while the rows are being drawn (for the tests).
+    function list:IsDrawing()
+        return drawing
+    end
+
     --- Replace the rows, keeping the reader where they were.
     --
     -- The scroll position used to reset here. Nothing noticed while the lists
@@ -2304,7 +2333,12 @@ function Widgets.CreateScrollList(parent, opts)
         end
     end)
 
-    list:SetScript("OnSizeChanged", function(self)
+    -- Only a real change of size draws again; the game can say so more
+    -- than once for the same size while it settles.
+    local sizedWidth, sizedHeight
+    list:SetScript("OnSizeChanged", function(self, width, height)
+        if width ~= nil and width == sizedWidth and height == sizedHeight then return end
+        sizedWidth, sizedHeight = width, height
         self:Refresh()
     end)
 
