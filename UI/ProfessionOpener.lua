@@ -108,6 +108,37 @@ function Opener:WindowShowsRecipe(recipeID)
 end
 
 --------------------------------------------------------------------------------
+-- Leaving a form first
+--------------------------------------------------------------------------------
+
+-- A craft will not start in travel form, cat form and the like (the owner
+-- said yes, 2026-10-13). Leaving one is protected, so it takes the player's
+-- own click on the same secure button, set to /cancelform: the first click
+-- leaves the form, the next opens or crafts. Never both in one click. Only a
+-- druid's forms and a shaman's Ghost Wolf count: a warrior's stance is a
+-- "form" to the client too, and crafting works in it.
+local FORM_CLASSES = { DRUID = true, SHAMAN = true }
+
+--- Is the character in a form that stops a craft?
+function Opener:InBlockingForm()
+    local ok, inForm = pcall(function()
+        if type(UnitClass) ~= "function" or type(GetShapeshiftForm) ~= "function" then return false end
+        local _, class = UnitClass("player")
+        if not FORM_CLASSES[class] then return false end
+        local form = GetShapeshiftForm()
+        return type(form) == "number" and form > 0
+    end)
+    return ok and inForm == true
+end
+
+--- What a craft button arms instead while in a form: leave it.
+-- @return a stand-in for a profession, for Arm, or nil when not in one
+function Opener:LeaveFormStep()
+    if not self:InBlockingForm() then return nil end
+    return { name = L["form"], leaveForm = true }
+end
+
+--------------------------------------------------------------------------------
 -- The secure button
 --------------------------------------------------------------------------------
 
@@ -272,11 +303,20 @@ function Opener:Arm(anchor, profession, recipeID)
         end
     end
 
-    overlay.label:SetText(L.Format("Open %s", profession.name))
-
-    if overlay:GetAttribute("spell") ~= profession.spell then
-        overlay:SetAttribute("type", "spell")
-        overlay:SetAttribute("spell", profession.spell)
+    if profession.leaveForm then
+        overlay.label:SetText(L["Leave form"])
+        if overlay:GetAttribute("type") ~= "macro" then
+            overlay:SetAttribute("type", "macro")
+            overlay:SetAttribute("spell", nil)
+            overlay:SetAttribute("macrotext", "/cancelform")
+        end
+    else
+        overlay.label:SetText(L.Format("Open %s", profession.name))
+        if overlay:GetAttribute("type") ~= "spell" or overlay:GetAttribute("spell") ~= profession.spell then
+            overlay:SetAttribute("type", "spell")
+            overlay:SetAttribute("macrotext", nil)
+            overlay:SetAttribute("spell", profession.spell)
+        end
     end
 
     if self.direction ~= CLICK_DIRECTION then
@@ -319,6 +359,17 @@ end
 function Opener:OnClicked()
     local profession = self.armed
     if not profession then return end
+
+    -- Leaving a form: the form change redraws the button (OnEnable), so
+    -- only a click that left the form unchanged is worth a word.
+    if profession.leaveForm then
+        C_Timer.After(OPEN_TIMEOUT, function()
+            if Opener:InBlockingForm() and not InCombat() and Opener.armed and Opener.armed.leaveForm then
+                ns.Warn(L["clicked Leave form, but you are still in it. Click it again, or leave the form yourself."])
+            end
+        end)
+        return
+    end
 
     local token = {}
     local recipeID = self.armedRecipeID
@@ -365,6 +416,15 @@ function Opener:OnEnable()
 
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", function()
         Opener:OnTradeSkillShow()
+    end)
+
+    -- Into or out of a form: the craft buttons say Leave form or craft.
+    -- Only the tab showing redraws, and only on the change itself.
+    ns.RegisterEvent(self, "UPDATE_SHAPESHIFT_FORM", function()
+        local inForm = Opener:InBlockingForm()
+        if inForm == Opener.lastInForm then return end
+        Opener.lastInForm = inForm
+        if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
     end)
 end
 
@@ -414,6 +474,10 @@ end
 --- A click reached the craft button while it read "Open ...", so the secure
 -- button did not catch it. Say why, as far as we can tell, and put it back.
 function Opener:MissedClick()
+    if InCombat() and self:InBlockingForm() then
+        ns.Print(L["you can't leave a form from here during combat. Leave it yourself, or try again after the fight."])
+        return
+    end
     if InCombat() then
         ns.Print(L["the Queue cannot open a profession during combat. Open it yourself, or try again after the fight."])
         return

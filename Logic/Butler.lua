@@ -967,6 +967,9 @@ function Butler:Craft(recipeID)
         if not ready then return false, reason end
         if crafting:IsBusy() then return false, L["already crafting"] end
         local opener = ns.ProfessionOpener
+        if opener and opener.InBlockingForm and opener:InBlockingForm() then
+            return false, L["leave your form first"]
+        end
         local shows = crafting.isTradeSkillOpen
             and (not (opener and opener.WindowShowsRecipe) or opener:WindowShowsRecipe(recipeID))
         if shows then
