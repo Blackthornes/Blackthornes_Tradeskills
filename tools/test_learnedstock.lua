@@ -154,4 +154,22 @@ check("waiting for it to run low: no restock", Queue:RestockSold(BOOTS) == nil)
 config.restockWhenLow = false
 check("not waiting: one more of the 3", Queue:RestockSold(BOOTS) == 1 and queued(1) == 1)
 
+-- "Stock from your sales" off: nothing learned, so Queue All and a sale
+-- leave a craft with no number alone (a player found Queue All adding
+-- crafts the STOCK column showed no number for).
+ns.db.queue = {}
+ns.db.postLimits[BOOTS] = nil
+bags[BOOTS], bags[SHIRT] = 0, 0
+config.learnStockFromSales = false
+check("off, nothing is learned", Auctions:GetLearnedLimit(BOOTS) == nil)
+local offCrafts, _, offNoLimit = Queue:AddUpToLimit(rows)
+check("off, Queue All skips crafts with no number", offCrafts == 0 and offNoLimit == 3, offCrafts)
+check("off, a sale queues nothing without a number", Queue:RestockSold(SHIRT) == nil and queued(2) == 0)
+ns.db.postLimits[BOOTS] = 2
+Queue:AddUpToLimit(rows)
+check("off, a typed number still works", queued(1) == 2, queued(1))
+config.learnStockFromSales = nil
+ns.db.postLimits[BOOTS] = nil
+check("on again, it learns", Auctions:GetLearnedLimit(BOOTS) == 2)
+
 print(("%d checks passed"):format(checks))
