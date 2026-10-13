@@ -900,6 +900,12 @@ function UI:GetAuctionBar()
         if ok and frame then parent = frame end
     end
 
+    -- Building the sell list asks for this bar for its header, so the bar
+    -- may have been made just now, inside that call. That one is the
+    -- header: a second would carry Scan and Post Crafted where nothing
+    -- shows them.
+    if self.auctionBar then return self.auctionBar end
+
     local bar = CreateFrame("Frame", "BlackthornesTSAuctionBar", parent)
     bar:SetSize(AUCTION_BAR_WIDTH, AUCTION_BAR_HEIGHT)
 
