@@ -185,6 +185,33 @@ Fill({ { itemID = BOLT, count = 3 } })
 check("nothing goes in the herb bag", bags[1][1] == nil)
 check("and nothing is mailed", Mailed(BOLT) == 0)
 
+print("\nherbs in a herb bag split there when the other bags are full")
+
+-- A herbalist's mail left two herbs out (2026-10-13): the split could only
+-- go to an ordinary bag, and those were full.
+local HERB = 2452
+Reset({ ["0:1"] = { BOLT, 20 }, ["0:2"] = { WOOL, 1 }, ["0:3"] = { WOOL, 1 }, ["0:4"] = { WOOL, 1 },
+    ["1:1"] = { HERB, 20 } })
+families[1] = 32
+started, result = Fill({ { itemID = HERB, count = 6 } })
+check("six herbs in the mail", Mailed(HERB) == 6)
+check("split into the herb bag itself", bags[1][2] and bags[1][2].count == 6)
+check("nothing left over", result.leftOver == 0 and not QueueMail.splitBlocked)
+
+print("\na herb from an ordinary bag may split into the herb bag")
+
+C_Item = { GetItemFamily = function(itemID) return itemID == HERB and 32 or 0 end }
+Reset({ ["0:1"] = { HERB, 20 }, ["0:2"] = { WOOL, 1 }, ["0:3"] = { WOOL, 1 }, ["0:4"] = { WOOL, 1 } })
+families[1] = 32
+Fill({ { itemID = HERB, count = 6 } })
+check("six herbs in the mail", Mailed(HERB) == 6)
+check("split into the herb bag, which takes herbs", bags[1][1] and bags[1][1].count == 6)
+Reset({ ["0:1"] = { BOLT, 20 }, ["0:2"] = { WOOL, 1 }, ["0:3"] = { WOOL, 1 }, ["0:4"] = { WOOL, 1 } })
+families[1] = 32
+Fill({ { itemID = BOLT, count = 3 } })
+check("cloth still never goes in the herb bag", bags[1][1] == nil and Mailed(BOLT) == 0)
+C_Item = nil
+
 print("\nan attachment bigger than asked for is taken back")
 
 -- A stack that grew between planning and attaching (the player looted more).

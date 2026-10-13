@@ -674,19 +674,64 @@ end
 
 --- An empty slot in an ordinary bag (not a herb or mining bag, which would
 --- refuse most things), skipping those in `reserved`.
-local function EmptyBagSlot(reserved)
+--- Do two bag family masks share a bit? (A herb bag is 32, a herb's own
+--- family 32 too.) Written out, since the tests' Lua has no bit library.
+local function SharesFamily(a, b)
+    a, b = tonumber(a) or 0, tonumber(b) or 0
+    while a > 0 and b > 0 do
+        if a % 2 == 1 and b % 2 == 1 then return true end
+        a, b = math.floor(a / 2), math.floor(b / 2)
+    end
+    return false
+end
+
+--- An item's bag family (herbs, ore, leather...), 0 when it has none or
+--- the client will not say.
+local function ItemFamily(itemID)
+    local get = (C_Item and C_Item.GetItemFamily) or _G.GetItemFamily
+    if not (itemID and get) then return 0 end
+    local ok, family = pcall(get, itemID)
+    return ok and tonumber(family) or 0
+end
+
+--- An empty bag slot to split part of a stack into, kept in `reserved`.
+--- The stack's own bag first, since it already holds the item (herbs in a
+--- herb bag, reagents in the reagent bag), then any ordinary bag, then a
+--- profession bag made for the item. A herbalist's herbs were left out of
+--- Butler's mail with the ordinary bags full and room in the herb bag
+--- (2026-10-13).
+local function EmptyBagSlot(reserved, from)
     local bags = ns.Inventory.GetCarriedBags and ns.Inventory:GetCarriedBags() or {}
-    for _, bag in ipairs(bags) do
+    local itemFamily = from and ItemFamily(from.itemID) or 0
+    local function FreeIn(bag)
+        local okSlots, slots = Call(C_Container.GetContainerNumSlots, bag)
+        for slot = 1, (okSlots and tonumber(slots)) or 0 do
+            local key = bag .. ":" .. slot
+            local okInfo, info = Call(C_Container.GetContainerItemInfo, bag, slot)
+            if okInfo and info == nil and not reserved[key] then
+                reserved[key] = true
+                return bag, slot
+            end
+        end
+    end
+    local function Takes(bag, sameBag)
         local okFree, free, family = Call(C_Container.GetContainerNumFreeSlots, bag)
-        if okFree and (tonumber(free) or 0) > 0 and (tonumber(family) or 0) == 0 then
-            local okSlots, slots = Call(C_Container.GetContainerNumSlots, bag)
-            for slot = 1, (okSlots and tonumber(slots)) or 0 do
-                local key = bag .. ":" .. slot
-                local okInfo, info = Call(C_Container.GetContainerItemInfo, bag, slot)
-                if okInfo and info == nil and not reserved[key] then
-                    reserved[key] = true
-                    return bag, slot
-                end
+        if not (okFree and (tonumber(free) or 0) > 0) then return false end
+        family = tonumber(family) or 0
+        return sameBag or family == 0 or SharesFamily(family, itemFamily)
+    end
+
+    if from and from.bag ~= nil and Takes(from.bag, true) then
+        local bag, slot = FreeIn(from.bag)
+        if bag then return bag, slot end
+    end
+    for pass = 1, 2 do
+        for _, bag in ipairs(bags) do
+            local okFree, _, family = Call(C_Container.GetContainerNumFreeSlots, bag)
+            local plain = okFree and (tonumber(family) or 0) == 0
+            if bag ~= (from and from.bag) and (pass == 1) == plain and Takes(bag) then
+                local found, slot = FreeIn(bag)
+                if found then return found, slot end
             end
         end
     end
@@ -907,7 +952,7 @@ function QueueMail:Fill(delivery, onDone)
     --- Split part of a stack into an empty bag slot, wait for the game to
     --- show it there, then attach it as a stack of its own.
     local function SplitThenAttach(step)
-        local toBag, toSlot = EmptyBagSlot(reserved)
+        local toBag, toSlot = EmptyBagSlot(reserved, step)
         if not toBag then
             QueueMail.splitBlocked = true
             leftOver = leftOver + 1
