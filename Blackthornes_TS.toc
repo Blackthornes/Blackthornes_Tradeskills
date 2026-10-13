@@ -59,6 +59,7 @@ Logic\DisenchantBuys.lua
 Logic\Crafting.lua
 Logic\Posting.lua
 Logic\CraftedCost.lua
+Logic\SellOut.lua
 Logic\GoldLog.lua
 Logic\MethodProfit.lua
 Logic\Transfer.lua

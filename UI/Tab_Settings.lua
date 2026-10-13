@@ -607,6 +607,14 @@ local function Build(outer)
     end, true)
     widgets.restockOnSale:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    local sellOutRow = CreateRow(pages.queue, 1, L["Raise it when it sells out"],
+        L["When every copy of a craft you listed sells before its listings run out, Keep in stock for that item goes up by 1. It is checked when you next read your mail. It never goes down by itself, and an item with no limit is left alone."])
+
+    widgets.raiseOnSellOut = Widgets.CreateCheckbox(sellOutRow, L["On"], function(checked)
+        Config:Set("raiseStockOnSellOut", checked)
+    end, true)
+    widgets.raiseOnSellOut:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local lowRow = CreateRow(pages.queue, 1, L["Wait until it runs low"],
         L["On: a craft is only suggested again once what you hold drops to the number below, then it is made back up to Keep in stock. Off: it is topped up whenever you hold fewer than Keep in stock."])
 
@@ -2030,6 +2038,7 @@ local function Refresh()
 
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
     widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
+    widgets.raiseOnSellOut:SetChecked(Config:Get("raiseStockOnSellOut") ~= false)
     Put(widgets.restockAt, Config:Get("restockAt") or 0)
     widgets.fastSellerBoost:SetChecked(Config:Get("fastSellerBoost") == true)
     local extra = Config:Get("fastSellerExtra")

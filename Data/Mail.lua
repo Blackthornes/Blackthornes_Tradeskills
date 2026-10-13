@@ -280,6 +280,10 @@ function Mail:Read()
 
     self:Reconcile(mails, complete)
 
+    -- A craft whose listings have all run out can now be judged: back in
+    -- the mail, or sold (Logic/SellOut.lua).
+    if ns.SellOut then pcall(ns.SellOut.MailRead, ns.SellOut, complete and not more) end
+
     -- Auction purchases taken out of the mail stop counting as on their way.
     if ns.AHBuys then pcall(ns.AHBuys.Reconcile, ns.AHBuys, mails, complete, more) end
 

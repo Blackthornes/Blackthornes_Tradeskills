@@ -412,6 +412,23 @@ the Profit tab greys an inherited number and says where it comes from. The
 export code carries them as `P<name>:<n>` in its limits section. Tested in
 `tools/test_professionstock.lua`. Not yet seen in game.
 
+## Raise Keep in stock when a craft sells out
+
+The owner asked (2026-10-13): when every copy of a craft listed sells
+before its listings run out, Keep in stock for that item goes up by 1.
+`Logic/SellOut.lua`: a confirmed listing (`Posting:ResolvePending` calls
+`SellOut:NotePosted`) opens or joins a window per character and item,
+ending when its longest listing would; the poster's next full mailbox
+read after that (`Mail:Read` calls `SellOut:MailRead`) settles it: anything
+back expired or cancelled since it opened, nothing changes; nothing back
+and a sale seen (ledger or heard), `Auctions:SetLimit(item, limit + 1)`,
+once a window, with a gold chat line and a sound; no sale seen yet, it
+waits. Never lowers, and an item with no limit is left alone. "Raise it
+when it sells out" on the Queue page (`raiseStockOnSellOut`, on unless
+unticked). Saved, never renamed: `sellOutWatch[realm][character][itemID]`
+and `sellOutRaised[itemID]` (the Profit tab's tooltip on the number).
+Tested in `tools/test_sellout.lua`. Not yet seen in game.
+
 ## Learn next
 
 The owner said build it (2026-10-12), from a mockup he picked
