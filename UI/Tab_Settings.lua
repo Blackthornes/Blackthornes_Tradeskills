@@ -1010,7 +1010,7 @@ local function Build(outer)
     neverHint:SetPoint("TOPLEFT", never, "BOTTOMLEFT", 0, ROW_GAP)
     neverHint:SetWidth(COLUMN_WIDTH)
     neverHint:SetWordWrap(true)
-    neverHint:SetText(L["Bought instead of made whenever another craft needs them, in costs, the queue and the shopping list, on every character. They can still be queued on their own. Allow makes one again when that is cheaper."])
+    neverHint:SetText(L["Bought instead of made whenever another craft needs them, in costs, the queue and the shopping list, on every character. They can still be queued on their own. Those set to Make on the Level Up tab are listed too. Allow puts one back to the usual."])
     widgets.neverHint = neverHint
 
     widgets.neverEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
@@ -1857,6 +1857,18 @@ local function NeverLine(entry)
         Util.FormatMoney(buy, { noColor = true, short = true }))
 end
 
+--- One always-made sub-craft's line: its name in its item's colour, then
+--- that it is always made.
+local function AlwaysLine(entry)
+    local name = entry.name
+    local r, g, b = Util.GetItemQualityColor(entry.outputItemID)
+    if r then
+        name = ("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5),
+            math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)
+    end
+    return L.Format("%s |cff7a8089· always made|r", name)
+end
+
 local function RefreshNeverSubCrafts()
     if not widgets.neverHint or not (ns.Cost and ns.Cost.GetNeverSubCrafts) then return end
 
@@ -1864,9 +1876,19 @@ local function RefreshNeverSubCrafts()
     for _, entry in ipairs(ns.Cost:GetNeverSubCrafts()) do
         list[#list + 1] = { key = entry.recipeID, name = NeverLine(entry) }
     end
+    -- Those set to Make on the Level Up tab follow (2026-10-13), and Allow
+    -- puts them back to the usual too.
+    if ns.Cost.GetAlwaysSubCrafts then
+        for _, entry in ipairs(ns.Cost:GetAlwaysSubCrafts()) do
+            list[#list + 1] = { key = entry.recipeID, name = AlwaysLine(entry) }
+        end
+    end
 
     local last = FillIgnored(list, widgets.neverRows, widgets.neverHint, widgets.neverEmpty,
-        function(recipeID) ns.Cost:SetNeverSubCraft(recipeID, false) end,
+        function(recipeID)
+            if ns.Cost.SetSubCraftChoice then ns.Cost:SetSubCraftChoice(recipeID, nil)
+            else ns.Cost:SetNeverSubCraft(recipeID, false) end
+        end,
         L["Make it as a sub-craft again whenever that is cheaper than buying it"],
         nil, L["Allow"])
 

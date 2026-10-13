@@ -469,6 +469,11 @@ local DEFAULTS = {
     -- the name kept for Settings. See Cost:SetNeverSubCraft.
     neverSubCrafts = {},
 
+    -- recipeID -> the craft's name: crafts always made to go into another
+    -- craft, whatever buying costs (2026-10-13, Make on the Level Up tab).
+    -- Account wide. See Cost:SetSubCraftChoice.
+    alwaysSubCrafts = {},
+
     -- itemID -> the item's name: items the player told Ready to sell to stop
     -- offering. Account wide; the name is kept so Settings can list one the
     -- client has not loaded. See Posting:SetIgnored.

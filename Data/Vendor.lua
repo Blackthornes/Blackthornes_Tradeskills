@@ -63,6 +63,10 @@ function Vendor:KeepsInStock(itemID)
     if ns.Config and ns.Config.Get and ns.Config:Get("vendorItemsOnAuction") == true then
         return false
     end
+    -- Nor one the player set to Buy on the Level Up tab.
+    if ns.Cost and ns.Cost.SkipsVendor and ns.Cost:SkipsVendor(itemID) then
+        return false
+    end
     return self:GetUnitPrice(itemID) ~= nil and not self:IsLimited(itemID)
 end
 
