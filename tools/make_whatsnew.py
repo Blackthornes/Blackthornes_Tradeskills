@@ -4,9 +4,18 @@ window shows, from NEWS.md (the #general post, which does not ship).
     python tools/make_whatsnew.py            rewrite the file
     python tools/make_whatsnew.py --check    exit 1 when it is out of date
 
-The newest MOST sections of NEWS.md go in, newest first, each a list of its
-bullets. The thanks line is left out: it names players, and a player's name
-never ships in the addon. Every release PR that writes a NEWS.md section runs
+The window shows new features only. In a NEWS.md section, bullets after a
+line that starts with "Fixes" and ends with a colon ("Fixes and changes:")
+are fixes and other changes: they go to Discord but never into the window,
+and a section with nothing above that line is left out of the window. The
+newest MOST sections that have features go in, newest first, each a list of
+its feature bullets. The thanks line is left out: it names players, and a
+player's name never ships in the addon.
+
+How a bullet should read: what the feature does, in a few plain words, the
+way a person would say it to a friend. No hype, no questions to the reader,
+no exclamation marks, no dashes as punctuation, no "now you can". The tool
+prints a note (it never refuses) for a shipped bullet that trips STYLE. Every release PR that writes a NEWS.md section runs
 this in the same breath; tools/check_release.py refuses a tag whose file is
 out of date, and tools/test_make_whatsnew.py fails while it is.
 
@@ -26,6 +35,24 @@ MOST = 3
 
 HEADING = re.compile(r"^##\s+v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\s*(?:-.*)?$")
 BULLET = re.compile(r"^\s*[-*+]\s+(.*)$")
+# The line that starts a section's fixes and other changes, which stay out
+# of the window: "Fixes:", "Fixes and changes:", "Fixed:".
+FIXES = re.compile(r"^\s*\**(?:fixes|fixed)\b[^:]*:\**\s*$", re.IGNORECASE)
+
+# Wording that reads like an advert, noted for shipped bullets.
+STYLE = [
+    (re.compile("[\u2014\u2013]"), "a dash as punctuation"),
+    (re.compile(r"!"), "an exclamation mark"),
+    # A question mark closing a quote ("You rang?") is the quote's own.
+    (re.compile(r"\?(?![\"'])"), "a question to the reader"),
+    (re.compile(r"\b(seamless(ly)?|effortless(ly)?|simply|magic(al)?|"
+                r"supercharge|elevate|unlock|level up your|game.changer)\b",
+                re.IGNORECASE), "an advert word"),
+    (re.compile(r"\b(now you can|you can now|we've|we have)\b", re.IGNORECASE),
+     "a sales phrase"),
+    (re.compile(r"\b(a new what's new|what's new window)\b", re.IGNORECASE),
+     "the window describing itself"),
+]
 
 
 def plain(text):
@@ -45,17 +72,21 @@ def sections(news):
     found = []
     current = None
     bullet = None
+    fixes = False
     for line in (news or "").splitlines():
         heading = HEADING.match(line)
         if heading:
             current = (heading.group(1), [])
             found.append(current)
-            bullet = None
+            bullet, fixes = None, False
             continue
         if line.startswith("#"):
             current, bullet = None, None
             continue
-        if current is None:
+        if current is None or fixes:
+            continue
+        if FIXES.match(line):
+            fixes, bullet = True, None
             continue
         match = BULLET.match(line)
         if match:
@@ -67,6 +98,17 @@ def sections(news):
             bullet = None
     return [(version, [plain(b) for b in bullets if plain(b)])
             for version, bullets in found if bullets]
+
+
+def style_notes(news):
+    """["1.2.0: <bullet>: <what reads wrong>", ...] for the bullets that ship."""
+    notes = []
+    for version, bullets in sections(news)[:MOST]:
+        for bullet in bullets:
+            for pattern, what in STYLE:
+                if pattern.search(bullet):
+                    notes.append("%s: %s: %s" % (version, bullet, what))
+    return notes
 
 
 def lua_string(text):
@@ -131,6 +173,8 @@ def main(argv):
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write(render(news))
     print("Wrote Core/WhatsNewText.lua (%d sections)." % len(sections(news)[:MOST]))
+    for note in style_notes(news):
+        print("Note, reads like an advert: " + note)
     return 0
 
 

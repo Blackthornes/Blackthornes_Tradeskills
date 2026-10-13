@@ -151,7 +151,7 @@ local fresh, freshPrinted = Boot(nil, nil)
 Check("a fresh install is a first run", fresh.Config:IsFirstRun() == true)
 Check("and does not warn about lost data", fresh.Config.accountDataLost == nil)
 fresh.Config:Welcome()
-Check("the welcome is friendly", freshPrinted[1] ~= nil and freshPrinted[1]:find("welcome", 1, true) ~= nil
+Check("the welcome says how to open it", freshPrinted[1] ~= nil and freshPrinted[1]:find("to open the window", 1, true) ~= nil
     and not freshPrinted[1]:find("did not load", 1, true), freshPrinted[1])
 
 local lost = Boot(nil, { accountLoads = 40 })
