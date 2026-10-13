@@ -156,10 +156,45 @@ local function SubCraftTooltip(entry)
     return text
 end
 
+-- Columns set aside while the list is too narrow for them all, so the
+-- recipe's name keeps NAME_MIN. Learn next's three columns took all the
+-- name's room on the window's own width (more with German or a larger
+-- text size), and the columns ran over the names and into each other.
+-- The least needed go first; the saved column choice is left alone, and
+-- they come back as soon as there is room (Learn next unticked).
+local NAME_MIN = 160
+local SQUEEZE_ORDER = { "via", "back", "make", "sub", "real" }
+local squeezed = {}
+local layoutVersion = 0
+
 --- The shown columns from the right edge; the name has the rest. The
 --- SUB-CRAFT button sits centred in its column, or stays hidden with it.
 local function ColumnVisible(column)
+    if squeezed[column.key] then return false end
     return not column.learnOnly or LearnShown()
+end
+
+--- Work out which columns fit the list's width; with the width not known
+--- yet (not laid out), nothing is set aside.
+local function Squeeze(room)
+    layoutVersion = layoutVersion + 1
+    wipe(squeezed)
+    local learnOk = function(column) return not column.learnOnly or LearnShown() end
+    for key in pairs(ns.Columns:Squeeze("levelup", COLUMNS, room, {
+        order = SQUEEZE_ORDER, nameMin = NAME_MIN, left = 28 + 4, visible = learnOk })) do
+        squeezed[key] = true
+    end
+end
+
+--- Lay the headings out for the list's width; the rows follow on their
+--- next draw (layoutVersion).
+local function PlaceHeadings()
+    local headings = widgets.headings
+    local ok, room = pcall(function() return headings and headings:GetWidth() end)
+    Squeeze(ok and room or nil)
+    if widgets.headingCells then
+        ns.Columns:Place("levelup", COLUMNS, widgets.headingCells, { visible = ColumnVisible })
+    end
 end
 
 local function PlaceRow(row)
@@ -182,6 +217,7 @@ local function PlaceRow(row)
     row.name:SetPoint("RIGHT", row, "RIGHT", offset - 4, 0)
     row.columnsVersion = ns.Columns.version
     row.learnShown = LearnShown()
+    row.layoutVersion = layoutVersion
 end
 
 local function CreateRow(row)
@@ -270,7 +306,8 @@ local function UpdateLearnCells(row, entry)
 end
 
 local function UpdateRow(row, entry)
-    if row.columnsVersion ~= ns.Columns.version or row.learnShown ~= LearnShown() then PlaceRow(row) end
+    if row.columnsVersion ~= ns.Columns.version or row.learnShown ~= LearnShown()
+        or row.layoutVersion ~= layoutVersion then PlaceRow(row) end
     row.data = entry
 
     ShowHeadingRow(row, entry.heading == true)
@@ -1149,7 +1186,7 @@ local function Build(container)
         -- Other characters' professions join the menu, or leave it.
         OnShow()
         -- Learn next stands aside while only sub-crafts show.
-        ns.Columns:Place("levelup", COLUMNS, widgets.headingCells, { visible = ColumnVisible })
+        PlaceHeadings()
         widgets.list:ScrollToTop()
         Refresh()
     end, false)
@@ -1170,7 +1207,7 @@ local function Build(container)
         state.learnNext = checked
         ns.Config:Set("levelUpLearnNext", checked)
         if state.selected and state.selected.learnNext then state.selected = nil end
-        ns.Columns:Place("levelup", COLUMNS, widgets.headingCells, { visible = ColumnVisible })
+        PlaceHeadings()
         Refresh()
     end, state.learnNext)
     learnNext:SetPoint("LEFT", subCrafts, "RIGHT", 12, 0)
@@ -1203,12 +1240,21 @@ local function Build(container)
         cells[column.key] = heading
     end
     widgets.headingCells = cells
-    ns.Columns:Place("levelup", COLUMNS, cells, { visible = ColumnVisible })
+    widgets.headings = headings
+    PlaceHeadings()
+
+    -- Laid out again when the list's width is known or changes (the
+    -- scrollbar taking its room), so the columns that fit are worked out
+    -- for the room there really is.
+    headings:SetScript("OnSizeChanged", function()
+        PlaceHeadings()
+        if widgets.list then widgets.list:Refresh() end
+    end)
 
     -- Right-click the headings to choose the columns.
     ns.Columns:Attach(headings, "levelup")
     ns.Columns:OnChange("levelup", function()
-        ns.Columns:Place("levelup", COLUMNS, cells, { visible = ColumnVisible })
+        PlaceHeadings()
         if widgets.list then widgets.list:Refresh() end
     end)
 
