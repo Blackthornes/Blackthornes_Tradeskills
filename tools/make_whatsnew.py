@@ -39,7 +39,7 @@ BULLET = re.compile(r"^\s*[-*+]\s+(.*)$")
 # of the window: "Fixes:", "Fixes and changes:", "Fixed:".
 FIXES = re.compile(r"^\s*\**(?:fixes|fixed)\b[^:]*:\**\s*$", re.IGNORECASE)
 
-# Wording that reads like an advert or a chatbot, noted for shipped bullets.
+# Wording that reads like an advert, noted for shipped bullets.
 STYLE = [
     (re.compile("[\u2014\u2013]"), "a dash as punctuation"),
     (re.compile(r"!"), "an exclamation mark"),

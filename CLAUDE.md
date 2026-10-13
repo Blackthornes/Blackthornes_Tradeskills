@@ -622,10 +622,6 @@ the project's threads. This tool is also the same in all four repos.
 Changes to the Discord bots, the digest or the release posting tools
 (like this one) never go in a CHANGELOG, #announcements or #general
 section (the owner, 2026-10-10): they are not changes to the addon.
-The same goes for rewording (the owner, 2026-10-13, after the plain-words
-pass on What's New, tooltips and chat lines): never say in a CHANGELOG,
-#announcements or #general section that the addon's words were made
-plainer or less like AI writing.
 
 The language is "Deutsch" in every post (the owner, 2026-10-11): a
 CHANGELOG.md or NEWS.md section about the German translation or German
@@ -651,8 +647,8 @@ with the highest `FILE_VERSION` draws the window (first in
 The words are NEWS.md's: it never ships, so `tools/make_whatsnew.py` writes
 its newest three sections, bullets only (the thanks line names players and
 never ships), into `Core/WhatsNewText.lua` (`ns.WHATS_NEW`; never edit it by
-hand). The window shows new features only (the owner, 2026-10-13: "only
-show new features", and "far less like it's AI" written): a section's
+hand). The window shows new features only (the owner,
+2026-10-13): a section's
 fixes and other changes go under a "Fixes and changes:" line, which go to
 Discord but not the window, and every line is plain words with no hype,
 no questions to the reader, no exclamation marks and no dashes as
