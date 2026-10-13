@@ -56,6 +56,10 @@ local COLUMNS = {
     { key = "margin", label = L["MARGIN"], width = 50, justify = "CENTER" },
     { key = "gets",   label = L["GETS"], width = 70, money = true },
     { key = "buy",    label = L["BUY"], width = 66, money = true },
+    -- How many were listed at the buy price or less in the last scan (the
+    -- owner said yes, 2026-10-13), so one lonely cheap item reads apart
+    -- from a real deal.
+    { key = "qty",    label = L["QTY"], width = 36, justify = "CENTER" },
     { key = "age",    label = L["AGE"], width = 44, justify = "CENTER" },
     { key = "via",    label = L["VIA"], width = 44, justify = "CENTER" },
 }
@@ -217,6 +221,10 @@ local function FillCell(cell, key, entry)
         color = "text"
     elseif key == "buy" then
         text = Money(entry.buy)
+    elseif key == "qty" then
+        -- One alone in amber: likely a single cheap listing, not a market.
+        text = entry.qty and tostring(entry.qty) or "--"
+        color = entry.qty == 1 and "warn" or (entry.qty and "text" or "dim")
     elseif key == "age" then
         -- Read now, as the list itself can be kept for a while. "now"
         -- rather than "just now", which is wider than the column.
@@ -274,6 +282,10 @@ local function ShowRowTooltip(row, entry)
 
     if entry.listed then
         GameTooltip:AddLine(L.Format("%d listed.", entry.listed), 0.85, 0.85, 0.85, true)
+    end
+    if entry.qty then
+        GameTooltip:AddLine(entry.qty == 1 and L["Only one listed at this price."]
+            or L.Format("%d listed at this price or less.", entry.qty), 0.85, 0.85, 0.85, true)
     end
 
     local others = OthersText(entry)
