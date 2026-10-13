@@ -169,11 +169,6 @@ local DEFAULTS = {
         -- (UI/PostPanel.lua, "Hide losses"). Off until ticked.
         postHideLosses = false,
 
-        -- The auction house: "tab" puts Tradeskills on its own tab under the
-        -- auction window (UI/AuctionTab.lua, asked 2026-10-13); "side" docks
-        -- the sell list and the Scan bar beside it, as before. Never rename.
-        auctionLayout = "tab",
-
         -- Deals, Craftsman's Writs: the reputation goal the panel works
         -- towards (UI/DealsWrits.lua).
         writGoal = "honored",

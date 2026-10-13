@@ -88,7 +88,6 @@ UI\Collapse.lua
 UI\PriceGraph.lua
 UI\Main.lua
 UI\PostPanel.lua
-UI\AuctionTab.lua
 UI\PriceEditor.lua
 UI\BuyQuantity.lua
 UI\CraftPanel.lua

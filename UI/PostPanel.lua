@@ -515,7 +515,6 @@ function PostPanel:Build()
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
     self.list = list
-    self.divider = divider
 
     local shopping = Widgets.CreateScrollList(body, {
         rowHeight = SHOPPING_ROW_HEIGHT,
@@ -766,7 +765,7 @@ end
 -- the panel back after the character window closes if no event does.
 function PostPanel:Redock()
     local frame = self.frame
-    if not (frame and self.attached) or self.inPage then return end
+    if not (frame and self.attached) then return end
 
     local auctionFrame = ns.UI:FindAuctionFrame()
     if not auctionFrame then return end
@@ -899,7 +898,7 @@ end
 
 --- Set the height outright, after attaching or folding.
 function PostPanel:ApplyHeight(fallback)
-    if not self.frame or self.inPage then return end
+    if not self.frame then return end
 
     local height = self:TargetHeight(fallback ~= false)
     if height then self.frame:SetHeight(height) end
@@ -907,7 +906,7 @@ end
 
 --- Re-measure after the main window is opened, closed or dragged.
 function PostPanel:Reflow()
-    if not self.frame or not self.frame:IsShown() or self.inPage then return end
+    if not self.frame or not self.frame:IsShown() then return end
 
     local height = self:TargetHeight(false)
 
@@ -1175,7 +1174,6 @@ end
 
 function PostPanel:Hide()
     -- The auction house closed: nothing should bring the panel back now.
-    if self.inPage then self:LeavePage() end
     self.attached = false
     self.dockedTo, self.dockedLeft = nil, nil
 
@@ -1183,89 +1181,6 @@ function PostPanel:Hide()
 
     -- A price being set for a listing goes with it: nothing can be listed
     -- away from the auction house.
-    if ns.PriceEditor and ns.PriceEditor.IsShown and ns.PriceEditor:IsShown() then ns.PriceEditor:Hide() end
-end
-
---------------------------------------------------------------------------------
--- The Tradeskills tab's page (UI/AuctionTab.lua)
---------------------------------------------------------------------------------
-
--- Room left at the page's foot for the auction bar (UI/Main.lua, 44 tall)
--- and the gaps round it.
-local PAGE_FOOT = 12 + 44 + 10
-
---- Lay the panel over the auction window's own page, the same size, rather
---- than beside it: the Tradeskills tab's page. Our frame only, anchored to
---- theirs; nothing of the auction window's is moved or hidden.
---
--- @param inset  { left, right, top, bottom } in from the auction window
--- @param above  how many frame levels over the auction window to sit
--- @return the panel's frame, for the bar to sit in
-function PostPanel:ShowInPage(auctionFrame, inset, above)
-    local frame = self:Build()
-    inset = inset or { left = 4, right = 4, top = 24, bottom = 4 }
-
-    self.inPage = true
-    self.attached = false
-    self.dockedTo, self.dockedLeft = nil, nil
-
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", auctionFrame, "TOPLEFT", inset.left, -inset.top)
-    frame:SetPoint("BOTTOMRIGHT", auctionFrame, "BOTTOMRIGHT", -inset.right, inset.bottom)
-
-    -- In the auction window's layer and over its frames.
-    local okStrata, strata = pcall(auctionFrame.GetFrameStrata, auctionFrame)
-    if okStrata and type(strata) == "string" then frame:SetFrameStrata(strata) end
-    local okLevel, level = pcall(auctionFrame.GetFrameLevel, auctionFrame)
-    if okLevel and type(level) == "number" then
-        frame:SetFrameLevel(math.min(level + (above or 100), 9000))
-    end
-
-    -- A page does not fold: the tab is what opens and closes it.
-    if frame.collapse then
-        frame.collapse.button:Hide()
-        frame.collapse.body:Show()
-        self.title:ClearAllPoints()
-        self.title:SetPoint("LEFT", frame.collapse.button:GetParent(), "LEFT", 10, 0)
-    end
-
-    -- The bar takes the foot.
-    for _, list in ipairs({ self.list, self.shoppingList }) do
-        list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, PAGE_FOOT)
-    end
-
-    local opening = not frame:IsShown()
-    frame:Show()
-    self:Refresh()
-    if opening and ns.Motion then ns.Motion:Open(frame, 0) end
-
-    return frame
-end
-
---- Back to the panel that docks beside the auction house, hidden until it
---- is attached there again.
-function PostPanel:LeavePage()
-    if not self.inPage then return end
-    self.inPage = false
-
-    local frame = self.frame
-    if not frame then return end
-
-    frame:Hide()
-    frame:SetFrameStrata("HIGH")
-
-    if frame.collapse then
-        local button = frame.collapse.button
-        button:Show()
-        self.title:ClearAllPoints()
-        self.title:SetPoint("LEFT", button, "RIGHT", 7, 0)
-        ns.Collapse.Apply(frame)
-    end
-
-    for _, list in ipairs({ self.list, self.shoppingList }) do
-        list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
-    end
-
     if ns.PriceEditor and ns.PriceEditor.IsShown and ns.PriceEditor:IsShown() then ns.PriceEditor:Hide() end
 end
 
