@@ -123,7 +123,8 @@
 -- character playing first, then by name: { key, name (full), isCurrent,
 -- steps }. Each step is a craft, { kind = "craft", recipeID, itemID, name,
 -- count (items it makes), crafts, forNames (full names it is for, other
--- than the crafter), ready, missing = { { itemID, count, from } } }, or a
+-- than the crafter), ready, missing = { { itemID, count, from, vendor } } }
+-- (`vendor`: copper for one when a vendor sells it), or a
 -- mail, { kind = "mail", to (full name), items = { { itemID, count } },
 -- crafts, forCraft }: what the character playing can send now
 -- (QueueMail:GetDeliveries), and for the others what they made for someone
@@ -799,6 +800,16 @@ local function Holder(records, crafterKey, itemID, Playing, selfKey)
     return nil
 end
 
+--- Copper for one from a vendor, or nil when no vendor is known to sell it.
+local function VendorPrice(itemID)
+    local vendor = ns.Vendor
+    if not (vendor and vendor.GetUnitPrice) then return nil end
+    local ok, price = pcall(vendor.GetUnitPrice, vendor, itemID)
+    price = ok and tonumber(price) or nil
+    if price and price > 0 then return price end
+    return nil
+end
+
 local function Jobs()
     local list = {}
     local queue, mail = ns.Queue, ns.QueueMail
@@ -860,7 +871,11 @@ local function Jobs()
                     job.wants[reagent.itemID] = (job.wants[reagent.itemID] or 0) + want
                     local held = queue:HeldBy(job.key, reagent.itemID) or 0
                     if want > held then
-                        missing[#missing + 1] = { itemID = reagent.itemID, count = want - held }
+                        -- `vendor`: copper for one when a vendor sells it, so
+                        -- Butler lists it under Buy from a vendor (the owner,
+                        -- 2026-10-13).
+                        missing[#missing + 1] = { itemID = reagent.itemID, count = want - held,
+                            vendor = VendorPrice(reagent.itemID) }
                     end
                 end
                 job.steps[#job.steps + 1] = {
