@@ -2017,6 +2017,17 @@ function Posting:ResolvePending(posted, appeared, target)
         refused = true
     end
 
+    -- What went up, for Keep in stock's sell-out raise (Logic/SellOut.lua).
+    local went
+    if several and posted and gained >= pending.quantity then went = pending.quantity
+    elseif several and posted and gained > 0 then went = gained
+    elseif not several and posted and (appeared or posted > (pending.postedBefore or 0)) then
+        went = pending.quantity or 1
+    end
+    if went and ns.SellOut then
+        pcall(ns.SellOut.NotePosted, ns.SellOut, pending.itemID, went, ns.Config:Get("postDuration") or 2)
+    end
+
     if several and posted and gained >= pending.quantity then
         ns.Print(L.Format("listed %d x %s", pending.quantity, Util.GetItemLabel(pending.itemID)))
 
