@@ -285,6 +285,24 @@ buys = {}
 LN:QueueMaterials(boots)
 check("one craft once already yellow", buys[LEATHER] and buys[LEATHER][1], 4)
 
+print("\nwhat Butler's gold goals read")
+ns.SkillUp = { ReadSkillLevels = function() return { [2945] = 100, [165] = 100 } end }
+ns.db.characters = { me = { recipesCachedAt = 5 } }
+assert(loadfile(lfs_cwd .. "/Logic/Butler.lua"))("Blackthornes_TS", ns)
+local cost = ns.Butler:LearnCost()
+local lw = cost and cost[165]
+check("by Classic skill line", lw ~= nil, true)
+check("trainer recipes the skill reaches, not learned, not grey", lw and lw.count, 2)
+check("what they cost", lw and lw.cost, 3500)
+check("the skill", lw and lw.skill, 100)
+ns.Recipes.GetAccountWide = function() return {} end
+Book.known = nil
+ns.db.characters.me.recipesCachedAt = 6
+local unread = ns.Butler:LearnCost()
+check("a profession never read is left out", unread and unread[165], nil)
+ns.SkillUp = nil
+check("never raises", ns.Butler:LearnCost() ~= false, true)
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")
