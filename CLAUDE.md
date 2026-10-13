@@ -213,6 +213,16 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
   to, full name, and how many.
 - `bought`: how many the account bought on the auction house to
   disenchant (`DisenchantBuys:Count`), nil for none.
+- `forEnchanting` (the owner asked 2026-10-13): a green the character
+  playing can disenchant, not crafted (`RecipeBook:IsCrafted`), whose
+  likely material (chance at least `Butler.LIKELY_OUTCOME`, 0.15) its own
+  Enchanting still lacks for the crafts that give a point every time:
+  `{ recipe, material, materialName, short, yield }`. The orange recipes
+  it knows (the profession window's reading at this skill, else up to the
+  book's `yellow`) are taken cheapest first, each for the points the ones
+  before do not reach, and what it owns (bags, bank, mailbox) comes off,
+  so it stops once there is enough. Kept in the lookup. Butler then says
+  Disenchant. Tested in `tools/test_butlerenchanting.lua`.
 
 Bought to disenchant (the owner asked 2026-10-11): `Logic/DisenchantBuys.lua`
 marks an auction house buy that follows a search sent from the
