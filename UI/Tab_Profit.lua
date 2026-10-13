@@ -709,13 +709,37 @@ local function BuildDetail(parent)
         width = 46, min = 0, max = 999,
         onChange = function(value)
             if not state.selected or not state.selected.outputItemID then return end
-            -- Zero means "use the account-wide default", which is what
-            -- clearing the override does.
+            -- Zero means "use the profession's number, or the usual one",
+            -- which is what clearing the override does.
             ns.Auctions:SetLimit(state.selected.outputItemID,
                 value > 0 and value or nil)
         end,
     })
     detail.limitBox:SetPoint("BOTTOMLEFT", 92, 42)
+
+    -- What the box shows when this item has no number of its own: its
+    -- profession's or the usual one, greyed, with where it comes from
+    -- under the mouse (2026-10-13). The x puts an item's own number back.
+    detail.limitBox:SetScript("OnEnter", function(self)
+        Theme.SetBorderColor(self, "borderLit")
+        if not (GameTooltip and self.sourceTip) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(L["Keep in stock"], Theme.Unpack("accent"))
+        GameTooltip:AddLine(self.sourceTip, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    detail.limitBox:SetScript("OnLeave", function(self)
+        Theme.SetBorderColor(self, "border")
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
+    detail.limitClear = Widgets.CreateButton(detail, "x", function()
+        if not state.selected or not state.selected.outputItemID then return end
+        ns.Auctions:SetLimit(state.selected.outputItemID, nil)
+    end, { width = 20, height = 20,
+           tooltip = L["Use the profession's number, or the usual one, again"] })
+    detail.limitClear:SetPoint("LEFT", detail.limitBox, "RIGHT", 4, 0)
+    detail.limitClear:Hide()
 
     detail.limitHint = Theme.CreateLabel(detail, "tiny", "dim")
     detail.limitHint:SetPoint("LEFT", detail.limitBox, "RIGHT", 6, 0)
@@ -1018,6 +1042,7 @@ function UpdateDetail(analysis)
     detail.limitLabel:SetShown(hasSelection)
     detail.limitBox:SetShown(hasSelection)
     detail.limitHint:SetShown(hasSelection)
+    if not hasSelection then detail.limitClear:Hide() end
     detail.quantity:GetParent():SetShown(hasSelection)
 
     UpdateDisenchantButton(detail, analysis)
@@ -1290,6 +1315,31 @@ function UpdateDetail(analysis)
             box.editBox:ClearFocus()
         end
 
+        -- Whose number it is: the item's own in white with its x, else
+        -- greyed, its profession's or the usual one.
+        local source, profession, professionName
+        if ns.Auctions.GetLimit then
+            local ok, _, from, name = pcall(ns.Auctions.GetLimit, ns.Auctions, analysis.outputItemID)
+            if ok then source, profession = from, name end
+        end
+        if profession and ns.Auctions.ProfessionLabel then
+            professionName = ns.Auctions:ProfessionLabel(profession)
+        end
+        professionName = professionName or profession
+        local own = source == "item"
+        box.editBox:SetTextColor(Theme.Unpack(own and "text" or "dim"))
+        if own then
+            box.sourceTip = L["Set for this item only. The x goes back to its profession's number, or the usual one."]
+        elseif source == "profession" then
+            box.sourceTip = L.Format("From %s in Settings. Type a number to set it for this item only.", professionName)
+        else
+            box.sourceTip = L["The usual amount from Settings. Type a number to set it for this item only."]
+        end
+        detail.limitClear:SetShown(own)
+        detail.limitHint:ClearAllPoints()
+        detail.limitHint:SetPoint("LEFT", own and detail.limitClear or box, "RIGHT", 6, 0)
+        detail.limitHint:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+
         -- Spell out where the stock is, so a hidden craft is explicable.
         local parts = {}
         if (analysis.posted or 0) > 0 then
@@ -1308,6 +1358,9 @@ function UpdateDetail(analysis)
         end
 
         local where = #parts > 0 and table.concat(parts, ", ") or L["none yet"]
+        if source == "profession" then
+            where = L.Format("From %s. %s", professionName, where)
+        end
         -- A fast seller's limit is the box's number plus the extra; said
         -- here, since the box shows only the number set.
         if (analysis.fastSellerExtra or 0) > 0 then
@@ -1339,12 +1392,13 @@ function UpdateDetail(analysis)
             detail.limitHint:SetText(where)
             detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         else
-            detail.limitHint:SetText(L["none on hand"])
+            detail.limitHint:SetText(source == "profession" and where or L["none on hand"])
             detail.limitHint:SetTextColor(Theme.Unpack("dim"))
         end
     else
         detail.limitLabel:Hide()
         detail.limitBox:Hide()
+        detail.limitClear:Hide()
         detail.limitHint:Hide()
     end
 

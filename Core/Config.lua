@@ -67,7 +67,8 @@ local DEFAULTS = {
         priceUnscannedCrafts = true,
 
         -- Stop recommending an item once this many are already listed.
-        -- Zero means no limit. Per-item overrides live in db.postLimits.
+        -- Zero means no limit. Per-item overrides live in db.postLimits,
+        -- per-profession ones in db.professionStockLimits.
         maxPostedPerItem = 0,
 
         -- Wait until it runs low (asked 2026-10-10): off, a craft is
@@ -434,6 +435,11 @@ local DEFAULTS = {
     -- Per-item posted caps, and what is currently listed per realm.
     postLimits = {},
     postedAuctions = {},
+
+    -- [a profession's English name] = Keep in stock for its crafts, between
+    -- an item's own number and maxPostedPerItem (2026-10-13). Account wide;
+    -- never rename it. See Auctions:GetLimit.
+    professionStockLimits = {},
 
     -- recipeID -> the craft's name: crafts the player told the Profit tab to
     -- stop recommending. Account wide; the name is kept so Settings can list
