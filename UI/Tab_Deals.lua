@@ -67,8 +67,15 @@ local COLUMNS = {
 -- Any column but the name can be hidden (UI/Columns.lua).
 ns.Columns:Register("deals", L["Deals"], COLUMNS)
 
+-- The flips are put away for now (the owner, 2026-10-13: "get rid of Flips
+-- under Deals for now"), so the tab is Favors and Writs. Their code, lists
+-- and saved settings all stay; setting ns.DEALS_FLIPS before this file
+-- loads brings them back as the first view (the tests do).
+local SHOW_FLIPS = ns.DEALS_FLIPS == true
+UI.DEALS_SHOW_FLIPS = SHOW_FLIPS
+
 local state = {
-    view = "flips",
+    view = SHOW_FLIPS and "flips" or "favor",
     routes = { auction = true, vendor = true },
     search = "",
     dealsOnly = true,
@@ -847,16 +854,21 @@ local function Build(container)
     widgets.sellTo = sellTo
 
     -- Made after Sell to but placed first: what the tab shows.
-    local show = Widgets.CreateDropdown(toolbar, {
-        { text = L["Show: Flips"], value = "flips" },
+    local showOptions = {
         { text = L["Show: Merchant's Favor"], value = "favor" },
         { text = L["Show: Craftsman's Writs"], value = "writs" },
-    }, function(value)
+    }
+    if SHOW_FLIPS then
+        table.insert(showOptions, 1, { text = L["Show: Flips"], value = "flips" })
+    end
+    local show = Widgets.CreateDropdown(toolbar, showOptions, function(value)
         UI.DealsSetView(value)
     end, { width = 160 })
     show:SetPoint("LEFT", 0, 0)
     show:SetValue(state.view)
-    show.tooltipText = L["Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
+    show.tooltipText = SHOW_FLIPS
+        and L["Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
+        or L["Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
     widgets.show = show
     sellTo:SetPoint("LEFT", show, "RIGHT", 8, 0)
 
@@ -1037,6 +1049,9 @@ local function Build(container)
             if widgets.list:IsVisible() then Refresh() end
         end)
     end)
+
+    -- With the flips put away the tab opens on Merchant's Favor.
+    if state.view ~= "flips" then UI.DealsSetView(state.view) end
 end
 
 -- The views the Show menu swaps in, each built the first time it is shown.
@@ -1048,6 +1063,7 @@ local VIEWS = {
 --- Show the flips, the Merchant's Favor view or the Craftsman's Writs view.
 function UI.DealsSetView(view)
     if not (VIEWS[view] and ns[VIEWS[view]]) then view = "flips" end
+    if view == "flips" and not SHOW_FLIPS then view = "favor" end
     state.view = view
     state.selected = nil
     if not widgets.toolbar then return end
@@ -1080,7 +1096,7 @@ end
 
 UI:RegisterTab({
     key = "deals",
-    text = L["Deals"],
+    text = SHOW_FLIPS and L["Deals"] or L["Favors and Writs"],
     order = 1.9,
     build = Build,
     refresh = Refresh,

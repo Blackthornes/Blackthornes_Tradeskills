@@ -1562,6 +1562,8 @@ L["Tick the ways you will sell what you buy. Each item shows on the one that pay
 L["Show: Flips"] = "Zeige: Schnäppchen"
 L["Show: Merchant's Favor"] = "Zeige: Merchant's Favor"
 L["Show: Craftsman's Writs"] = "Zeige: Craftsman's Writs"
+L["Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."] = "Merchant's Favor: Waylaid Crates danach, was eine Gunst kostet. Craftsman's Writs: Aufträge danach, was Ruf kostet, und was dein Ziel noch kostet."
+L["Favors and Writs"] = "Gunst und Aufträge"
 L["Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."] = "Schnäppchen: Gegenstände zum Kaufen und Weiterverkaufen. Merchant's Favor: Waylaid Crates danach, was eine Gunst kostet. Craftsman's Writs: Aufträge danach, was Ruf kostet, und was dein Ziel noch kostet."
 L["Goal: %s"] = "Ziel: %s"
 L["The standing with your side's trade camp to work towards. The panel on the right says how many writs it still takes and what they cost."] = "Der Ruf beim Handelslager deiner Fraktion, auf den du hinarbeitest. Die Leiste rechts sagt, wie viele Aufträge es noch braucht und was sie kosten."
