@@ -386,6 +386,11 @@ local function UpdateRow(row, analysis)
     if analysis.postLimit and analysis.postLimit > 0 then
         cells.posted:SetText(("%d/%d"):format(stock, analysis.postLimit))
         cells.posted:SetTextColor(Theme.Unpack(analysis.atPostLimit and "warn" or "muted"))
+    elseif analysis.learnedLimit then
+        -- No number set, but Queue All keeps what your sales taught, so
+        -- the column says how many, in a quieter colour than a typed one.
+        cells.posted:SetText(("%d/%d"):format(stock, analysis.learnedLimit))
+        cells.posted:SetTextColor(Theme.Unpack("dim"))
     elseif stock > 0 then
         cells.posted:SetText(tostring(stock))
         cells.posted:SetTextColor(Theme.Unpack("muted"))
@@ -1905,6 +1910,8 @@ local function BuildCrafts(container)
                 (learned or 0) > 0 and L[", topping up what sells for you"] or ""))
         elseif #rows == 0 then
             ns.Print(L["nothing listed to queue"])
+        elseif noLimit == #rows and not ns.Auctions:LearnsFromSales() then
+            ns.Print(L["nothing queued: none of these has a Keep in stock number, so set one per item in Settings"])
         elseif noLimit == #rows then
             ns.Print(L["nothing queued: none of these has sold for you this week, so set Keep in stock per item in Settings"])
         else

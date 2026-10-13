@@ -384,8 +384,12 @@ local function LearnedUnits()
     return units
 end
 
+function Auctions:LearnsFromSales()
+    return ns.Config:Get("learnStockFromSales") ~= false
+end
+
 function Auctions:GetLearnedLimit(itemID)
-    if not itemID then return nil end
+    if not itemID or not self:LearnsFromSales() then return nil end
     local ok, units = pcall(LearnedUnits)
     local sold = ok and units[itemID] or nil
     if not sold or sold <= 0 then return nil end
