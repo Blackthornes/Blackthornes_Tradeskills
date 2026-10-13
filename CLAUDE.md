@@ -429,6 +429,20 @@ the book (keeping Classic's as `classicSkill`); players' reports and a
 recipe item's tooltip still win. Never name where the data came from in
 the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 
+## Sales details on the item tooltip
+
+A player asked (2026-10-13, the owner agreeing, from a mockup) for more
+under the tooltip's Demand line. `ItemTooltip:AddDemandLines` adds "Sold
+a day" (`Prices:GetUnitsSoldPerDay`, listings gone per day from the kept
+readings, an estimate and said so), "Listed now" (the last scan's count
+and its age), "Last 7 days" (inline bars from `Prices:GetDailySales` and a
+trend once four whole days were scanned) and "You sold" (`Demand:Week`,
+this week's sales and expiries from the ledger). Each price record keeps
+`daily` for it (`Prices.NoteDaily`; never rename it). "Sales details only
+with Shift" on the Look page (`tooltipSalesShift`, off unless ticked,
+never rename it). Tested in `tools/test_tooltipsales.lua`. Not yet seen in
+game; the bars are the game's inline texture escape.
+
 ## Profit by method
 
 A player asked (2026-10-11, the owner agreeing) for profit split by how it
