@@ -704,6 +704,17 @@ next window that comes up by itself, alone when nothing is new, then sets
 `aboutNoteSeen` in every sister's account save (never rename it); with the
 window turned off it waits. Tested in `tools/test_whatsnew.lua`.
 
+One-time cards (the owner, 2026-10-13): an addon can put cards in
+`ns.WHATS_NEW_TIPS`, each `{ key, title, icon, paragraphs, hint, button,
+run, due }`. The next window that comes up by itself shows each one after
+the note, only when `due()` says so (in a pcall), with a button that calls
+`run()` and closes the window. Looked at once either way: the key goes in
+that addon's account save as `whatsNewTipsSeen[key]` (never rename it), so
+a card never comes back; with the window turned off it waits.
+`UI/WhatsNew.lua` is at FILE_VERSION 4 for it. Equipment's
+`Logic/UpgradeQuest.lua` has the first, for the upgrade quest, due while
+it is off.
+
 ## The sister note
 
 The owner asked (2026-10-11) for the addons to say, once, which of the
