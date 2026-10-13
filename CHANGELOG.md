@@ -4,6 +4,43 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.54.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Favors and Writs:** the Deals tab is now Favors and Writs (Gunst und
+  Aufträge on a Deutsch client) and opens on Merchant's Favor. Its Show
+  menu has Merchant's Favor and Craftsman's Writs, and a scan no longer
+  prints the vendor flips line. The flips are put away for now, with their
+  settings kept.
+- **QTY column:** beside AGE, how many other sellers listed at the buy
+  price or less in the last scan. One alone shows in amber. It sorts like
+  the other headings.
+- **Auction house drawer:** the sell list and the Scan bar are now one
+  drawer beside the auction house, the window's full height, with Scan,
+  Post Crafted and the scan status in its header and a close gem that
+  hides it until your next visit. Rows are dark glass with a quiet List
+  button, names are never cut short, and one **List all** button at the
+  foot lists the most valuable stack each click.
+- **Faster listing:** a different item can go up about a second after the
+  last one instead of waiting about five seconds. Up to four listings are
+  checked at once, each still confirmed on its own.
+- **Leave form:** in a travel or shapeshift form (any druid form or Ghost
+  Wolf), Craft next on the Queue tab and Level Up's Craft button read
+  Leave form. The first click leaves the form, the next one crafts. It
+  can't be done in combat, and the button says so.
+- **Tailoring:** shows in the Level Up and Profit menus again, with its
+  crafts, even when the game gave its skill under its other ID.
+- **Level Up:** with Learn next ticked, the least needed columns step
+  aside while the list is too narrow, so recipe names always have room.
+  Your column choices are kept. Opening Level Up no longer throws a "C
+  stack overflow" error.
+- **Profit graphs:** drawn at their real size from the first look.
+- **Mail:** part of a stack is split into its own bag first, so herbs in a
+  herb bag can go in a mail when your other bags are full, and a chat line
+  says when a mail Butler filled left something out.
+
 ## 0.53.1
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
