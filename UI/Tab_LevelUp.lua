@@ -131,25 +131,86 @@ end
 -- Rows
 --------------------------------------------------------------------------------
 
---- Never make this craft as a sub-craft, or make it again (the row's
---- SUB-CRAFT button). Cost:SetNeverSubCraft redraws everything.
+--- The row's SUB-CRAFT button: Vendor, Make or Buy for an item a vendor
+--- sells (2026-10-13), Make or Buy for the rest. Make on an item no vendor
+--- sells is the usual (made when cheaper), so it needs no third state.
+local function SubCraftState(entry)
+    if entry.subChoice == "buy" or (entry.subChoice == nil and entry.neverSubCraft) then return "buy" end
+    if entry.vendorSells then return entry.subChoice == "make" and "make" or "vendor" end
+    return "make"
+end
+
+local SUB_LABEL = { vendor = L["Vendor"], make = L["Make"], buy = L["Buy"] }
+
+--- Size the SUB-CRAFT button, and its column, to the widest of its three
+--- words, so "Vendor" (or a longer German word) never ends in "...".
+local function FitSubButton(button, column)
+    local label = rawget(button, "label")
+    if type(label) ~= "table" or not Theme.TextWidth then return end
+    local widest = 0
+    for _, text in pairs(SUB_LABEL) do
+        label:SetText(text)
+        local width = Theme.TextWidth(label)
+        if type(width) == "number" and width > widest then widest = width end
+    end
+    label:SetText(L["Make"])
+    local need = math.ceil(widest + 12)
+    local ok, width = pcall(button.GetWidth, button)
+    if ok and type(width) == "number" and need > width then
+        button:SetWidth(need)
+        if need + 2 > column.width then column.width = need + 2 end
+    end
+end
+
+--- One click moves the button on: Vendor, Make, Buy, then Vendor again; on
+--- an item no vendor sells, Make and Buy. Cost:SetSubCraftChoice redraws
+--- everything.
 local function ToggleSubCraft(entry)
     if not entry then return end
-    local never = not ns.Cost:IsNeverSubCraft(entry.recipeID)
-    ns.Cost:SetNeverSubCraft(entry.recipeID, never, entry.name)
+    local name = entry.name or L["that craft"]
+    local state = SubCraftState(entry)
+
+    if entry.vendorSells then
+        if state == "vendor" then
+            ns.Cost:SetSubCraftChoice(entry.recipeID, "make", entry.name)
+            ns.Print(L.Format("%s is always made when another craft needs it, whatever buying it costs.", name))
+        elseif state == "make" then
+            ns.Cost:SetSubCraftChoice(entry.recipeID, "buy", entry.name)
+            ns.Print(L.Format("%s is never made and is priced at the auction house, not the vendor, when another craft needs it.", name))
+        else
+            ns.Cost:SetSubCraftChoice(entry.recipeID, nil, entry.name)
+            ns.Print(L.Format("%s is priced at the vendor again when another craft needs it.", name))
+        end
+        return
+    end
+
+    local never = state ~= "buy"
+    ns.Cost:SetSubCraftChoice(entry.recipeID, never and "buy" or nil, entry.name)
     if never then
-        ns.Print(L.Format("%s is no longer made as a sub-craft: crafts that use it buy it instead.", entry.name or L["that craft"]))
+        ns.Print(L.Format("%s is no longer made as a sub-craft: crafts that use it buy it instead.", name))
     else
-        ns.Print(L.Format("%s is made as a sub-craft again when that is cheaper than buying it.", entry.name or L["that craft"]))
+        ns.Print(L.Format("%s is made as a sub-craft again when that is cheaper than buying it.", name))
     end
 end
 
 local function SubCraftTooltip(entry)
     local name = entry.name or L["this"]
-    if entry.neverSubCraft then
-        return L.Format("Buy: %s is never made to go into another craft. It is bought instead, in costs, the queue and the shopping list.\nClick to make it again when that is cheaper.", name)
+    local state = SubCraftState(entry)
+    local text
+
+    if entry.vendorSells then
+        if state == "vendor" then
+            text = L.Format("Vendor: %s is sold by a vendor, so crafts that use it count the vendor's price. It is made instead only when that is cheaper.\nClick for Make: always make it.", name)
+        elseif state == "make" then
+            text = L.Format("Make: %s is always made to go into other crafts, whatever buying it costs.\nClick for Buy: never make it, and price it at the auction house instead of the vendor.", name)
+        else
+            text = L.Format("Buy: %s is never made to go into another craft. It is priced at the auction house, not the vendor, in costs, the queue and the shopping list.\nClick for Vendor: the vendor's price again.", name)
+        end
+    elseif state == "buy" then
+        text = L.Format("Buy: %s is never made to go into another craft. It is bought instead, in costs, the queue and the shopping list.\nClick to make it again when that is cheaper.", name)
+    else
+        text = L.Format("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those.", name)
     end
-    local text = L.Format("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those.", name)
     if not entry.isMaterial then
         text = text .. "\n" .. L["No craft your characters know uses it yet."]
     end
@@ -239,6 +300,7 @@ local function CreateRow(row)
             row.subButton = Widgets.CreateButton(row, L["Make"], function()
                 ToggleSubCraft(row.data)
             end, { width = math.min(column.width, 48), height = 16 })
+            FitSubButton(row.subButton, column)
         else
             row.cells[column.key] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
         end
@@ -385,7 +447,7 @@ local function UpdateRow(row, entry)
         local shown = entry.outputItemID ~= nil and not entry.learnNext
         button:SetShown(shown == true and not row.subHidden)
         if shown then
-            button:SetText(entry.neverSubCraft and L["Buy"] or L["Make"])
+            button:SetText(SUB_LABEL[SubCraftState(entry)])
             button.tooltipText = SubCraftTooltip(entry)
         end
     end
@@ -482,6 +544,8 @@ local function ShowRowTooltip(row, entry)
 
     if entry.neverSubCraft then
         GameTooltip:AddLine(L["Never made as a sub-craft: crafts that use it buy it instead."], 0.91, 0.76, 0.35, true)
+    elseif entry.subChoice == "make" then
+        GameTooltip:AddLine(L["Always made as a sub-craft, whatever buying it costs."], 0.91, 0.76, 0.35, true)
     end
 
     if entry.learnNext then

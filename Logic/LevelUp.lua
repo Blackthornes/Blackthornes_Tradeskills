@@ -292,6 +292,11 @@ function LevelUp:BuildRow(recipeID, recipe, materials)
         missing = missing,
         isMaterial = recipe.outputItemID ~= nil and materials[recipe.outputItemID] == true,
         neverSubCraft = ns.Cost.IsNeverSubCraft and ns.Cost:IsNeverSubCraft(recipeID) or false,
+        -- "make", "buy" or nil, and whether a vendor sells it, for the
+        -- SUB-CRAFT button's Vendor, Make and Buy.
+        subChoice = ns.Cost.SubCraftChoice and ns.Cost:SubCraftChoice(recipeID) or nil,
+        vendorSells = recipe.outputItemID ~= nil and ns.Vendor.GetUnitPrice ~= nil
+            and ns.Vendor:GetUnitPrice(recipe.outputItemID) ~= nil or false,
     }
 end
 

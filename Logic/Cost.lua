@@ -44,6 +44,12 @@ function Cost:GetReagentUnitCost(itemID)
     local auction = ns.Prices:GetValue(itemID, "lowest")
     local vendor = ns.Vendor:GetUnitPrice(itemID)
 
+    -- A sub-craft set to Buy on the Level Up tab is priced off the auction
+    -- house, not the vendor (2026-10-13): a shop that sells two at a time
+    -- cannot supply a run of crafts. The vendor stays the fallback while
+    -- nothing is listed, so it is never left unpriced.
+    if vendor and auction and self:SkipsVendor(itemID) then vendor = nil end
+
     -- Anything a vendor sells costs the vendor price (2026-10-02).
     -- People list vendor-sold thread and vials on the auction house for many
     -- times the shop price, and paying that is a choice, not a cost. The one
@@ -149,6 +155,7 @@ end
 
 function Cost:InvalidateIndex()
     self.recipeIndexStale = true
+    self.choiceByItem = nil
 end
 
 --------------------------------------------------------------------------------
@@ -181,10 +188,97 @@ function Cost:SetNeverSubCraft(recipeID, never, name)
         local known = ns.Recipes and ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)
         ns.db.neverSubCrafts[recipeID] = name or (known and known.name)
             or ("recipe " .. tostring(recipeID))
+        -- Buy and Make are one choice: never both.
+        if ns.db.alwaysSubCrafts then ns.db.alwaysSubCrafts[recipeID] = nil end
     else
         ns.db.neverSubCrafts[recipeID] = nil
     end
 
+    self:Changed()
+end
+
+--------------------------------------------------------------------------------
+-- Vendor, Make or Buy
+--------------------------------------------------------------------------------
+
+-- On Discord (2026-10-13): Lesser Mana Potion is sold by a vendor two at a
+-- time, so pricing every craft that uses it off the vendor was no help for
+-- a run of them. A sub-craft's button on the Level Up tab picks how its
+-- item is got when another craft needs it:
+--   Vendor (nil)  the usual: the vendor's price for what a vendor sells,
+--                 else the cheaper of buying and making it
+--   "make"        always made, whatever buying costs
+--   "buy"         never made (neverSubCrafts), and priced off the auction
+--                 house rather than a vendor while anything is listed
+-- Make is saved account wide in `alwaysSubCrafts`, recipeID -> the craft's
+-- name, beside `neverSubCrafts`, which keeps Buy as it always has.
+
+function Cost:IsAlwaysSubCraft(recipeID)
+    local marked = recipeID ~= nil and ns.db ~= nil and ns.db.alwaysSubCrafts
+    return marked and marked[recipeID] ~= nil or false
+end
+
+--- "make", "buy" or nil (the usual) for a craft.
+function Cost:SubCraftChoice(recipeID)
+    if self:IsNeverSubCraft(recipeID) then return "buy" end
+    if self:IsAlwaysSubCraft(recipeID) then return "make" end
+    return nil
+end
+
+--- Set a craft's choice: "make", "buy", or nil for the usual.
+function Cost:SetSubCraftChoice(recipeID, choice, name)
+    if not ns.db or not recipeID then return end
+    if choice == "buy" then
+        return self:SetNeverSubCraft(recipeID, true, name)
+    end
+
+    ns.db.neverSubCrafts = ns.db.neverSubCrafts or {}
+    ns.db.alwaysSubCrafts = ns.db.alwaysSubCrafts or {}
+    ns.db.neverSubCrafts[recipeID] = nil
+    if choice == "make" then
+        local known = ns.Recipes and ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)
+        ns.db.alwaysSubCrafts[recipeID] = name or (known and known.name)
+            or ("recipe " .. tostring(recipeID))
+    else
+        ns.db.alwaysSubCrafts[recipeID] = nil
+    end
+
+    self:Changed()
+end
+
+--- "make", "buy" or nil for an item, from the choice on any craft that
+--- makes it. Looked up for every material priced, so laid out once and
+--- kept until a choice or the recipes change.
+function Cost:ItemChoice(itemID)
+    if not itemID or not ns.db then return nil end
+    if self.recipeIndexStale then self.choiceByItem = nil end
+
+    local byItem = self.choiceByItem
+    if not byItem then
+        byItem = {}
+        local getAny = ns.Recipes and ns.Recipes.GetAny
+        for _, pair in ipairs({ { ns.db.alwaysSubCrafts, "make" }, { ns.db.neverSubCrafts, "buy" } }) do
+            for recipeID in pairs(pair[1] or {}) do
+                local recipe = getAny and ns.Recipes:GetAny(recipeID)
+                if recipe and recipe.outputItemID then
+                    -- Buy is laid out last, so it wins a clash.
+                    byItem[recipe.outputItemID] = pair[2]
+                end
+            end
+        end
+        self.choiceByItem = byItem
+    end
+    return byItem[itemID]
+end
+
+--- True when the vendor's price is not to be used for this item.
+function Cost:SkipsVendor(itemID)
+    return self:ItemChoice(itemID) == "buy"
+end
+
+--- A choice moved: everything worked out from sub-crafts is worked out
+--- again at once, the queue's sub-crafts, its costs and every tab showing them.
+function Cost:Changed()
     self:InvalidateIndex()
 
     if ns.Queue and ns.Queue.RebuildDependencies then
@@ -198,8 +292,17 @@ end
 --- { { recipeID, name, outputItemID }, ... }. outputItemID is nil for a
 --- craft no character on record knows any more.
 function Cost:GetNeverSubCrafts()
+    return self:ListMarked(ns.db and ns.db.neverSubCrafts)
+end
+
+--- The crafts set to Make (always made as sub-crafts), as GetNeverSubCrafts.
+function Cost:GetAlwaysSubCrafts()
+    return self:ListMarked(ns.db and ns.db.alwaysSubCrafts)
+end
+
+function Cost:ListMarked(marked)
     local list = {}
-    for recipeID, name in pairs(ns.db and ns.db.neverSubCrafts or {}) do
+    for recipeID, name in pairs(marked or {}) do
         local known = ns.Recipes and ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)
         list[#list + 1] = {
             recipeID = recipeID,
@@ -303,7 +406,9 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
                 local subResult = self:GetCraftCost(subRecipeID, depth + 1, visited, opts)
 
                 if subResult and subResult.priceable and subResult.perUnit then
-                    if not unitCost or made or subResult.perUnit < unitCost then
+                    -- Set to Make on the Level Up tab: made whatever buying costs.
+                    local always = self:ItemChoice(itemID) == "make"
+                    if not unitCost or made or always or subResult.perUnit < unitCost then
                         unitCost = subResult.perUnit
                         source = "craft"
                         crafted = true
