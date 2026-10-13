@@ -54,6 +54,13 @@
 --   bought         how many the account bought on the auction house to
 --                  disenchant (DisenchantBuys:Count, 2026-10-11), nil when
 --                  none.
+--   forEnchanting  a green this character can disenchant, not crafted,
+--                  whose likely material (Butler.LIKELY_OUTCOME) its own
+--                  Enchanting still lacks for the crafts that give a point
+--                  every time (2026-10-13): { recipe (the craft's name),
+--                  material (item ID), materialName, short (how many it
+--                  lacks, after bags, bank and mailbox), yield (about how
+--                  many one disenchant gives) }. nil otherwise.
 --
 -- Butler's right-click menu marks or unmarks one (2026-10-11):
 --
@@ -306,12 +313,141 @@ local function KnowsDisenchant()
     return nil
 end
 
+--------------------------------------------------------------------------------
+-- Levelling Enchanting with your own greens (the owner, 2026-10-13)
+--------------------------------------------------------------------------------
+
+-- An outcome this likely is one a disenchant can be counted on for: a
+-- green's dust (75%) or essence (15 to 20%), never its rare shard (5%).
+Butler.LIKELY_OUTCOME = 0.15
+
+local function IsEnchantingRecipe(recipe)
+    if type(recipe) ~= "table" then return false end
+    local lines = ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
+    if type(lines) == "table" and lines[recipe.skillLineID] == "Enchanting" then return true end
+    return recipe.profession == "Enchanting"
+end
+
+--- How many more crafts of a known recipe give a point every time at
+--- `skill`. The profession window's own reading wins when it was taken at
+--- this skill; otherwise up to the recipe's yellow, when the book knows it.
+local function OrangeLeft(recipeID, recipe, skill)
+    local book = ns.RecipeBook and ns.RecipeBook.Get and ns.RecipeBook:Get(recipeID)
+    local yellow = book and tonumber(book.yellow)
+    local read = type(recipe.skillUp) == "table" and recipe.skillUp or nil
+    if read and read.tier and tonumber(read.skill) == skill then
+        if read.tier ~= "optimal" then return 0 end
+        return yellow and math.max(1, yellow - skill) or 1
+    end
+    if yellow then return math.max(0, yellow - skill) end
+    if read and read.tier == "optimal" and read.skill == nil then return 1 end
+    return 0
+end
+
+--- What one craft of a recipe costs, or nil when it can't be priced.
+local function CraftCost(recipeID)
+    local cost = ns.Cost
+    if not (cost and cost.GetCraftCost) then return nil end
+    local ok, detail = pcall(cost.GetCraftCost, cost, recipeID)
+    if ok and type(detail) == "table" and detail.priceable then return tonumber(detail.total) end
+    return nil
+end
+
+--- The disenchant materials the character playing still lacks for the
+--- Enchanting crafts that give a point every time:
+--- { [materialID] = { short, recipe } }.
+-- The orange recipes are taken cheapest first, each for the points the ones
+-- before it do not reach, so the stretch from the skill up is counted once.
+-- What the character owns (bags, bank and mailbox) comes off, so it stops
+-- once there is enough.
+local function EnchantingShort(skill)
+    local short = {}
+    local recipes, disenchant = ns.Recipes, ns.Disenchant
+    if not (skill and skill > 0 and recipes and recipes.GetAll
+            and disenchant and disenchant.IsMaterial) then
+        return short
+    end
+
+    local orange = {}
+    for recipeID, recipe in pairs(recipes:GetAll() or {}) do
+        if IsEnchantingRecipe(recipe)
+            and not (recipes.IsDropped and recipes:IsDropped(recipe)) then
+            local left = OrangeLeft(recipeID, recipe, skill)
+            if left > 0 then
+                orange[#orange + 1] = { recipeID = recipeID, recipe = recipe, top = skill + left,
+                    cost = CraftCost(recipeID) }
+            end
+        end
+    end
+    table.sort(orange, function(a, b)
+        if (a.cost ~= nil) ~= (b.cost ~= nil) then return a.cost ~= nil end
+        if a.cost and a.cost ~= b.cost then return a.cost < b.cost end
+        return a.recipeID < b.recipeID
+    end)
+
+    local covered, want, why = skill, {}, {}
+    for _, craft in ipairs(orange) do
+        if craft.top > covered then
+            local crafts = craft.top - covered
+            covered = craft.top
+            for _, reagent in ipairs(type(craft.recipe.reagents) == "table" and craft.recipe.reagents or {}) do
+                local id = type(reagent) == "table" and tonumber(reagent.itemID)
+                if id and disenchant:IsMaterial(id) then
+                    want[id] = (want[id] or 0) + crafts * (tonumber(reagent.quantity) or 1)
+                    why[id] = why[id] or craft.recipe.name
+                end
+            end
+        end
+    end
+
+    local inventory = ns.Inventory
+    for id, wanted in pairs(want) do
+        local have = inventory and inventory.GetOwnedCount and inventory:GetOwnedCount(id) or 0
+        if wanted > have then short[id] = { short = wanted - have, recipe = why[id] } end
+    end
+    return short
+end
+
+--- A green this character can break that gives a material its Enchanting
+--- still lacks for a sure point: { recipe, material, materialName, short,
+--- yield }, or nil. Never crafted gear.
+local function ForEnchanting(itemID, kept, quality, canDisenchant)
+    if quality ~= 2 or canDisenchant ~= true or next(kept.enchanting) == nil then return nil end
+    local book = ns.RecipeBook
+    if book and book.IsCrafted and book:IsCrafted(itemID) then return nil end
+    local disenchant = ns.Disenchant
+    local outcomes = disenchant and disenchant.GetOutcomes and disenchant:GetOutcomes(itemID)
+    if type(outcomes) ~= "table" then return nil end
+
+    local best
+    for _, outcome in ipairs(outcomes) do
+        local wanted = kept.enchanting[outcome.itemID]
+        if wanted and (outcome.chance or 0) >= Butler.LIKELY_OUTCOME
+            and (not best or outcome.chance > best.chance) then
+            best = outcome
+        end
+    end
+    if not best then return nil end
+
+    local wanted = kept.enchanting[best.itemID]
+    local average = best.average or ((best.min or 1) + (best.max or best.min or 1)) / 2
+    return {
+        recipe = wanted.recipe,
+        material = best.itemID,
+        materialName = disenchant.MaterialName and disenchant:MaterialName(best.itemID) or nil,
+        short = wanted.short,
+        yield = best.chance * average,
+    }
+end
+
 local function Build()
     local selfKey = SelfKey()
+    local selfSkill = EnchantingSkill(Characters()[selfKey])
     return {
         need = OwnNeeds(selfKey),
         mail = MailTargets(),
-        selfSkill = EnchantingSkill(Characters()[selfKey]),
+        selfSkill = selfSkill,
+        enchanting = EnchantingShort(selfSkill),
         knows = KnowsDisenchant(),
         enchanters = Enchanters(selfKey),
         chosen = Chosen(),
@@ -474,6 +610,7 @@ local function Answer(itemID)
         mailTo = mail and mail.name or nil,
         mailCount = mail and mail.count or nil,
         bought = Bought(itemID),
+        forEnchanting = ForEnchanting(itemID, kept, quality, canDisenchant),
     }
 end
 
