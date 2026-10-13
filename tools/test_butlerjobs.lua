@@ -207,6 +207,36 @@ selfKey = ANA
 ns.Inventory = nil
 held[WITHER][2318] = 80
 
+print("\nmail waiting comes first")
+-- The alt's leather is in its mailbox, and Ana has gloves on their way.
+local inMail = { [WITHER] = { [2318] = 50 } }
+ns.Queue.InMailFor = function(_, key, itemID) return (inMail[key] or {})[itemID] or 0 end
+ns.QueueMail.InFlightItems = function(_, key) if key == ANA then return { [7001] = 1 } end return {} end
+jobs = Butler:Jobs()
+local wither, ana
+for _, job in ipairs(jobs) do
+  if job.key == WITHER then wither = job end
+  if job.key == ANA then ana = job end
+end
+local pickup = wither and wither.steps[1]
+check("the alt's first step is its mailbox", pickup and pickup.kind, "pickup")
+check("for the craft's leather", pickup and pickup.forCraft, true)
+check("only what its bags and bank lack", pickup and pickup.items[1].count, 50)
+check("then its craft", wither and wither.steps[2].kind, "craft")
+local gloves = ana and ana.steps[1]
+check("mail on its way is a pickup too", gloves and gloves.kind, "pickup")
+check("not for a craft", gloves and gloves.forCraft, false)
+check("the gloves", gloves and gloves.items[1].itemID, 7001)
+inMail[WITHER][2318] = 0
+ns.QueueMail.InFlightItems = nil
+jobs = Butler:Jobs()
+local none = true
+for _, job in ipairs(jobs) do
+  for _, step in ipairs(job.steps) do if step.kind == "pickup" then none = false end end
+end
+check("nothing waiting, no pickup", none, true)
+ns.Queue.InMailFor = nil
+
 print("\ncraft")
 local started, shown = nil, 0
 ns.Crafting = {
