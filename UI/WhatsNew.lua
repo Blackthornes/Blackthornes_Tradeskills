@@ -21,7 +21,13 @@
 -- install, or an update from before this window) shows its newest only.
 -- Nothing waits for a fight to end any longer than the fight.
 --
--- Saved, account wide, never renamed: whatsNewSeen (per addon),
+-- The note (2026-10-13): once per account, a card at the top of the window
+-- with the words of UI/About.lua (About.NOTE), the same note the About page
+-- in Settings keeps. Shown with the next window that comes up by itself, or
+-- alone when nothing is new; then aboutNoteSeen is set in every sister's
+-- account save, so no sister shows it again.
+--
+-- Saved, account wide, never renamed: whatsNewSeen (per addon), aboutNoteSeen,
 -- whatsNewPopup (on unless unticked) and whatsNewMotion (on unless
 -- unticked), which are off in all when off in any, as sisterNote is, and
 -- whatsNewScale (the size grip, where the addon has one). The `whatsnew`
@@ -45,7 +51,7 @@ if type(Format) ~= "function" then Format = string.format end
 
 -- Raised when this file changes in a way an older copy cannot draw: the
 -- newest copy loaded builds the window.
-WhatsNew.FILE_VERSION = 2
+WhatsNew.FILE_VERSION = 3
 
 -- Seconds after login, so the window comes up once the game has settled.
 WhatsNew.DELAY = 5
@@ -210,6 +216,25 @@ function WhatsNew:MarkSeen()
     end
 end
 
+--- Whether the note at the top is still to be shown: seen in no sister.
+function WhatsNew:NoteDue()
+    local About = ns.About
+    if not (About and type(About.NOTE) == "table" and #About.NOTE > 0) then return false end
+    for _, db in ipairs(self:Stores()) do
+        if db.aboutNoteSeen then return false end
+    end
+    return true
+end
+
+--- The note as a card for the list.
+function WhatsNew:NoteEntry()
+    return {
+        note = true,
+        addon = { title = L["How these addons are made"], icon = [[Interface\Icons\INV_Misc_Note_01]] },
+        paragraphs = ns.About.NOTE,
+    }
+end
+
 --- The copy that draws the window: the newest file, then ADDONS order.
 function WhatsNew.Owner()
     local best
@@ -252,7 +277,12 @@ function WhatsNew:Check()
     -- Kept as shown even with the window turned off, so turning it back on
     -- never brings up a pile of old news.
     self:MarkSeen()
-    if #list == 0 or not self:IsOn() then return end
+    if not self:IsOn() then return end
+    if self:NoteDue() then
+        table.insert(list, 1, self:NoteEntry())
+        for _, db in ipairs(self:Stores()) do db.aboutNoteSeen = true end
+    end
+    if #list == 0 then return end
     WhatsNew.Owner():Open(list, true)
 end
 
@@ -829,9 +859,15 @@ local function Fill(card, entry, width, index)
     local column = left + ICON + 14
     local room = width - column - 14
 
-    card.pill.text:SetText("v" .. tostring(entry.sections[1].version))
-    local pillWidth = math.ceil(Wide(card.pill.text)) + 14
-    card.pill:SetSize(pillWidth, Size("small") + 7)
+    local pillWidth = 0
+    if entry.note then
+        card.pill:Hide()
+    else
+        card.pill:Show()
+        card.pill.text:SetText("v" .. tostring(entry.sections[1].version))
+        pillWidth = math.ceil(Wide(card.pill.text)) + 14
+        card.pill:SetSize(pillWidth, Size("small") + 7)
+    end
 
     -- The name, wrapping before it would run into the version.
     card.title:SetText(entry.addon.title)
@@ -844,7 +880,21 @@ local function Fill(card, entry, width, index)
 
     local y = -(15 + Tall(card.title, titleWidth) + 10)
     local used = 0
-    for s, section in ipairs(entry.sections) do
+    -- The note: its paragraphs, no dots.
+    for _, words in ipairs(entry.note and entry.paragraphs or {}) do
+        used = used + 1
+        local line = Line(card, used)
+        line.label:Hide()
+        line.dot:Hide()
+        line.text:SetText(words)
+        line.text:SetWidth(room)
+        line.text:ClearAllPoints()
+        line.text:SetPoint("TOPLEFT", card, "TOPLEFT", column, y)
+        line.text:Show()
+        line.y = y
+        y = y - Tall(line.text, room) - 9
+    end
+    for s, section in ipairs(entry.sections or {}) do
         for n, words in ipairs(section.lines) do
             used = used + 1
             local line = Line(card, used)
@@ -912,7 +962,9 @@ function WhatsNew:Open(list, auto)
     if ns.Motion and ns.Motion.Stop then pcall(ns.Motion.Stop, ns.Motion, frame) end
     self.closing = nil
 
-    self.lede:SetText(auto and L["Here's what changed since you last played."]
+    local onlyNote = #list == 1 and list[1].note
+    self.lede:SetText(onlyNote and L["A note from Blackthornes."]
+        or auto and L["Here's what changed since you last played."]
         or L["The newest changes in each of your Blackthornes addons."])
     local width = WidthOf(frame, self.WIDTH)
     self.lede:SetWidth(width - 2 * PAD)
