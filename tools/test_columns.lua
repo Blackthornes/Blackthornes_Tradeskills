@@ -127,6 +127,34 @@ check("a reset or reload reads the setting again", Columns:Shown("prices", PRICE
 Columns:ShowAll()
 check("Show all for every list", settings.hiddenColumns, "")
 
+print("")
+print("too narrow for every column")
+
+-- Level Up's Learn next columns ran over the names on the window's own
+-- width: columns that do not fit are set aside, least needed first, so
+-- the name keeps its room. The saved choice is not touched.
+local WIDE = {
+    { key = "a", label = "A", width = 100 },
+    { key = "b", label = "B", width = 100 },
+    { key = "c", label = "C", width = 100 },
+    { key = "d", label = "D", width = 100, extra = true },
+}
+local function Keys(set)
+    local keys = {}
+    for key in pairs(set) do keys[#keys + 1] = key end
+    table.sort(keys)
+    return table.concat(keys, ",")
+end
+local opts = { order = { "b", "c" }, nameMin = 150, left = 32 }
+-- 8 + 32 + 150 = 190 before the columns, 106 each with its gap.
+check("all fit, none set aside", Keys(Columns:Squeeze("wide", WIDE, 190 + 4 * 106, opts)), "")
+check("one short, the first in the order goes", Keys(Columns:Squeeze("wide", WIDE, 190 + 4 * 106 - 1, opts)), "b")
+check("two short, the next goes too", Keys(Columns:Squeeze("wide", WIDE, 190 + 2 * 106, opts)), "b,c")
+check("never more than the order names", Keys(Columns:Squeeze("wide", WIDE, 100, opts)), "b,c")
+check("a width not known yet sets nothing aside", Keys(Columns:Squeeze("wide", WIDE, 0, opts)), "")
+opts.visible = function(column) return not column.extra end
+check("a column the list hides takes no room", Keys(Columns:Squeeze("wide", WIDE, 190 + 3 * 106, opts)), "")
+
 CreateFrame, UIParent, GameTooltip = saved.CreateFrame, saved.UIParent, saved.GameTooltip
 
 print(string.format("\n%d passed, %d failed", passed, failed))

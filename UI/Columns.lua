@@ -212,6 +212,35 @@ function Columns:Place(id, columns, regions, opts)
     return offset
 end
 
+--- Which columns to set aside so the rest fit `room` with `nameMin` left
+--- for the name. `order` lists the keys to drop, least needed first; only
+--- shown ones count, and the saved choice is not touched.
+-- @param opts { order, nameMin, left (before the name), start, gap, visible }
+-- @return { [key] = true }, empty when everything fits or room is unknown
+function Columns:Squeeze(id, columns, room, opts)
+    local squeezed = {}
+    if type(room) ~= "number" or room <= 0 then return squeezed end
+    opts = opts or {}
+    local gap = opts.gap or 6
+
+    local function Used()
+        local used = -(opts.start or -8) + (opts.left or 0) + (opts.nameMin or 0)
+        for _, column in ipairs(columns) do
+            if not squeezed[column.key] and self:Shown(id, column)
+                and (not opts.visible or opts.visible(column)) then
+                used = used + column.width + gap
+            end
+        end
+        return used
+    end
+
+    for _, key in ipairs(opts.order or {}) do
+        if Used() <= room then break end
+        squeezed[key] = true
+    end
+    return squeezed
+end
+
 --------------------------------------------------------------------------------
 -- The tick list
 --------------------------------------------------------------------------------

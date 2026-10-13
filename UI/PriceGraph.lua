@@ -506,9 +506,32 @@ function PriceGraph.Create(parent, opts)
         graph.guides[#graph.guides + 1] = guide
     end
 
-    -- Redrawn at its real size once laid out, and again if it changes.
-    graph:SetScript("OnSizeChanged", function(self)
-        if self:IsVisible() then self:Refresh() end
+    -- Redrawn at its real size once laid out, and again if it changes. The
+    -- drawing is measured on the plot, so its size is the one watched, and a
+    -- change while hidden (the Profit tab is laid out before it first shows)
+    -- is caught up on show: drawn before that, the line, guides and times
+    -- sat bunched at the left until something else redrew it.
+    local function Resized()
+        if graph:IsVisible() then graph:Refresh() else graph.stale = true end
+    end
+    graph:SetScript("OnSizeChanged", Resized)
+    plot:SetScript("OnSizeChanged", Resized)
+
+    --- Drawn at a size other than the plot's now (or at none)?
+    function graph:OutOfSize()
+        local width, height = self.plot:GetWidth(), self.plot:GetHeight()
+        return self.stale or width ~= self.drawnWidth or height ~= self.drawnHeight
+    end
+
+    graph:SetScript("OnShow", function(self)
+        if self:OutOfSize() then self:Refresh() end
+        -- The size can settle only after the frame it shows on is drawn;
+        -- one look on the next frame, and only a redraw if it moved.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if self:IsVisible() and self:OutOfSize() then self:Refresh() end
+            end)
+        end
     end)
 
     graph.hover = plot:CreateTexture(nil, "OVERLAY", nil, 2)
@@ -603,6 +626,9 @@ function PriceGraph.Create(parent, opts)
         local height = self.plot:GetHeight()
         if type(width) ~= "number" then width = 0 end
         if type(height) ~= "number" then height = 0 end
+        -- Not laid out yet: drawn again once it has a size.
+        self.drawnWidth, self.drawnHeight = width, height
+        self.stale = width <= 0 or height <= 0
 
         -- Times under the graph, the same whatever is drawn.
         for index, tick in ipairs(self.ticks) do
