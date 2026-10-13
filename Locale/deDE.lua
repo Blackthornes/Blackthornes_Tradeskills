@@ -2474,3 +2474,14 @@ L["you can't leave a form from here during combat. Leave it yourself, or try aga
 L["You can't craft in this form. Click to leave it, then again to craft. Not in combat."] = "In dieser Gestalt kannst du nicht herstellen. Klick, um sie zu verlassen, dann noch einmal zum Herstellen. Nicht im Kampf."
 L["%d of %d ready. Leave your form first"] = "%d von %d bereit. Verlass zuerst deine Gestalt"
 L["leave your form first"] = "verlass zuerst deine Gestalt"
+
+-- The auction house drawer (UI/PostPanel.lua, 2026-10-13)
+L["Tradeskills"] = "Tradeskills"
+L["List all"] = "Alle einstellen"
+L["List all %d"] = "Alle %d einstellen"
+L["Lists at your price or the market's."] = "Stellt zu deinem Preis oder dem Marktpreis ein."
+L["Lists the most valuable stack on the list. Click again for the next one: the game takes a click for every listing."] = "Stellt den wertvollsten Stapel der Liste ein. Klick noch mal für den nächsten: Das Spiel braucht einen Klick pro Auktion."
+L["Nothing on the list can be listed right now."] = "Gerade kann nichts von der Liste eingestellt werden."
+L["Click a row to search the auction house for it."] = "Klick auf eine Zeile, um im Auktionshaus danach zu suchen."
+L["Ready to sell (%d) · %s"] = "Bereit zum Verkauf (%d) · %s"
+L["Ready to sell · %s"] = "Bereit zum Verkauf · %s"
