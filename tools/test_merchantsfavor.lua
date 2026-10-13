@@ -395,6 +395,7 @@ ns.Demand = { TooltipText = function() return nil end }
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 
 assert(loadfile(lfs_cwd .. "/UI/DealsFavor.lua"))("Blackthornes_TS", ns)
+ns.DEALS_FLIPS = true  -- the flips, put away for now, are still tested
 assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 
 local tab = tabs.deals
@@ -458,6 +459,23 @@ searched("")
 
 show.onSelect("flips")
 check("back to the flips, the favor list is left alone", #lists == 2)
+
+print("\nwith the flips put away (the owner, 2026-10-13)")
+ns.DEALS_FLIPS = nil
+for key in pairs(dropdowns) do dropdowns[key] = nil end
+for key in pairs(lists) do lists[key] = nil end
+assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
+tab = tabs.deals
+check("the tab is Favors and Writs", tab.text == "Favors and Writs")
+tab.build(Stub())
+show = dropdowns[2]
+check("the Show menu has no Flips", #show.options == 2 and show.options[1].value == "favor"
+    and show.options[2].value == "writs")
+check("it opens on Merchant's Favor", #lists == 2
+    and lists[2].data and #lists[2].data == #ns.WAYLAID_CRATES)
+check("the flips' menus stay hidden", dropdowns[1].shown == false)
+ns.UI.DealsSetView("flips")
+check("asking for the flips still shows the favor", dropdowns[1].shown == false and #lists == 2)
 
 for _, key in ipairs({ "C_Item", "GetTime", "CreateFrame", "GameTooltip", "C_Timer", "C_CurrencyInfo", "GetMoney" }) do
     _G[key] = saved[key]
