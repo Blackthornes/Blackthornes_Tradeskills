@@ -1557,7 +1557,10 @@ function Queue:BuildShoppingList()
 
             -- Cheaper from a vendor means the shopping list should send you to
             -- one, not to the auction house.
-            local fromVendor = vendor ~= nil and (not auctionEach or vendor <= auctionEach)
+            -- A vendor that never runs out always wins, unless the player
+            -- asked for the auction house to be offered too (2026-10-13).
+            local fromVendor = vendor ~= nil and (not auctionEach or vendor <= auctionEach
+                or ns.Vendor:KeepsInStock(itemID))
             local unitCost = fromVendor and vendor or auctionEach
             local estimatedCost
             if fromVendor then
@@ -1584,9 +1587,12 @@ function Queue:BuildShoppingList()
                 source = "auction"
             end
 
+            -- Only when the place picked is the cheaper one: a vendor kept
+            -- for an item it never runs out of saves nothing when the
+            -- auction house lists it for less.
             local savingPerUnit
             if vendor and auction then
-                savingPerUnit = math.abs(auction - vendor)
+                savingPerUnit = math.max(0, fromVendor and (auction - vendor) or (vendor - auction))
             end
 
             list[#list + 1] = {

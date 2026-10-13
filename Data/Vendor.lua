@@ -52,6 +52,20 @@ function Vendor:IsLimited(itemID)
     return record ~= nil and record.limited == true
 end
 
+--- True when a vendor sells this for gold without a stock limit, so it is
+--- never worth sending the player to the auction house for it (the owner,
+--- 2026-10-13: Red Dye was offered there). Only what the addon knows: a
+--- price seen at a merchant, or the shipped table, which holds only items
+--- most vendors sell without a limit. "Offer the auction house for vendor
+--- items" (`vendorItemsOnAuction`, off unless ticked) turns this off, and
+--- the cheaper of the two wins again.
+function Vendor:KeepsInStock(itemID)
+    if ns.Config and ns.Config.Get and ns.Config:Get("vendorItemsOnAuction") == true then
+        return false
+    end
+    return self:GetUnitPrice(itemID) ~= nil and not self:IsLimited(itemID)
+end
+
 function Vendor:Count()
     return Util.Count(self:GetTable())
 end
@@ -303,6 +317,11 @@ end
 -- Counted, his own auction was "the cheaper one" and the vendor buy was
 -- skipped when nobody else had any cheaper.
 local function CheaperAtAuction(itemID, stock, shortfall)
+    -- A shop that never runs out is where it is bought, whatever is listed.
+    if stock.numAvailable < 0 and not stock.extendedCost and Vendor:KeepsInStock(itemID) then
+        return false
+    end
+
     local Prices = ns.Prices
     if not Prices or not Prices.Get then return false end
 

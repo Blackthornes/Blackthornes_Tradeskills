@@ -822,6 +822,17 @@ local function Build(outer)
     end, true)
     widgets.fillBuy:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The owner, 2026-10-13: Red Dye was sent to the auction house.
+    local vendorAuctionRow = CreateRow(pages.auction, 1, L["Auction house for vendor items"],
+        L["Thread, dye and other materials a vendor always has in stock are bought from the vendor. Tick this to have the shopping list send you to the auction house for them when they are listed for less."])
+
+    widgets.vendorAuction = Widgets.CreateCheckbox(vendorAuctionRow, L["Enabled"], function(checked)
+        Config:Set("vendorItemsOnAuction", checked)
+        if ns.Queue and ns.Queue.Notify then ns.Queue:Notify() end
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.vendorAuction:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Asked 2026-10-11: the real cost of many could run far past the estimate.
     local buyWarnRow = CreateRow(pages.auction, 1, L["Warn when buying costs more"],
         L["On the auction house's buy window, a line under Buy Now when that many of a queue material costs this many percent more than the shopping list said, with both amounts and the difference. 0 turns it off."])
@@ -1905,6 +1916,7 @@ local function Refresh()
     widgets.deNext:SetChecked(Config:Get("queueDisenchantNext") == true)
     widgets.sellMarked:SetChecked(Config:Get("sellMarkedButton") ~= false)
     widgets.fillBuy:SetChecked(Config:Get("fillBuyQuantity") ~= false)
+    widgets.vendorAuction:SetChecked(Config:Get("vendorItemsOnAuction") == true)
     local buyWarn = Config:Get("buyWarnPercent")
     Put(widgets.buyWarn, type(buyWarn) == "number" and buyWarn or 25)
     local disenchanterBox = widgets.disenchanter.editBox
