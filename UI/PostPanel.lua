@@ -1,5 +1,8 @@
 -- Blackthornes Tradeskills -- UI/PostPanel.lua
--- The sell list, docked beside Blizzard's auction house.
+-- The sell list, docked beside Blizzard's auction house: the one Tradeskills
+-- drawer there (the owner's mockup, 2026-10-13), the full height of the
+-- auction window, with Scan and Post Crafted in its header and List all at
+-- its foot.
 --
 -- Listing can work through a whole bag, so what is about to be sold needs to
 -- be visible before the first click rather than discovered one confirmation
@@ -22,8 +25,23 @@ local Util = ns.Util
 
 -- Wider than it needs to be for the text alone: the amount to list sits beside
 -- the button, and squeezing it in would have cost the item names their width.
-local PANEL_WIDTH = 348
-local ROW_HEIGHT = 30
+local PANEL_WIDTH = 372
+local ROW_HEIGHT = 32
+
+-- Inside the gold rim: the header strip starts below the plate across the
+-- top edge, and everything else below the header (UI/Main.lua's auction bar,
+-- which carries the fold button, the scan's status and the two buttons).
+local EDGE_PAD = 11
+local HEADER_TOP = 18
+local HEADER_HEIGHT = (ns.UI and ns.UI.AUCTION_BAR_HEIGHT) or 44
+local CONTENT_TOP = -(HEADER_TOP + HEADER_HEIGHT + 7)
+
+-- Folded, the drawer is its header, so Scan stays in reach.
+PostPanel.FOLDED_HEIGHT = HEADER_TOP + HEADER_HEIGHT + EDGE_PAD
+
+-- The band at the foot with List all, the drawer's one gold button.
+local FOOT_HEIGHT = 34
+local LIST_BOTTOM = EDGE_PAD + FOOT_HEIGHT + 4
 
 local BUTTON_WIDTH = 46
 
@@ -135,8 +153,8 @@ local function CreateRow(row)
     row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
 
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
-    row.detail:SetPoint("TOPLEFT", 8, -17)
-    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -17)
+    row.detail:SetPoint("TOPLEFT", 8, -18)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -18)
 
     -- The price line is a field: click it to set your own price each, or a
     -- total (UI/PriceEditor.lua, asked 2026-10-08 to sell a bad buy under
@@ -180,7 +198,7 @@ local function CreateRow(row)
         if not row.data then return end
 
         ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
-    end, { width = BUTTON_WIDTH, height = 18, primary = true })
+    end, { width = BUTTON_WIDTH, height = 18 })
     row.post:SetPoint("RIGHT", -(6 + IGNORE_WIDTH + 6), 0)
 
     -- How many to list, beside the button that lists them. Empty-handed this
@@ -212,7 +230,7 @@ local function CreateRow(row)
         ns.Posting:SetIgnored(line.itemID, true)
         ns.Print(L.Format("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.",
             line.label or L["that item"]))
-    end, { width = IGNORE_WIDTH, height = 18, danger = true,
+    end, { width = IGNORE_WIDTH, height = 18,
            tooltip = L["Ignore this item: it stops showing on Ready to sell. Settings lists ignored items, each with a Restore button."] })
     row.ignore:SetPoint("RIGHT", -6, 0)
 end
@@ -268,7 +286,8 @@ local function LossText(line)
 end
 
 function UpdateRow(row, line)
-    row.name:SetText(line.label)
+    -- Whole, never cut to "...": smaller, then wrapped, when it is long.
+    if Theme.SetRowName then Theme.SetRowName(row.name, line.label) else row.name:SetText(line.label) end
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local maxQuantity = line.maxQuantity or line.count or 1
@@ -432,23 +451,39 @@ function PostPanel:Build()
     frame:Hide()
 
     Theme.Fill(frame, "window")
-    -- The house frame (UI/Titanforged.lua): the gold rim and corner gems.
+    -- The house frame (UI/Titanforged.lua): the gold rim and corner gems,
+    -- the name on its plate, and the close gem, which puts the drawer away
+    -- until the next visit to the auction house.
     if ns.Titanforged then
-        ns.Titanforged:Dress(frame)
+        ns.Titanforged:Dress(frame, {
+            title = L["Tradeskills"],
+            close = function() PostPanel:CloseForVisit() end,
+        })
     else
         Theme.AddGameOutline(frame, { style = "dialog", color = "natural" })
     end
     -- The house glow round its edge, flaring as it opens.
     Theme.Halo(frame, 8, 0.08)
 
-    local header, title = ns.Collapse.CreateHeader(frame, L["Ready to sell"])
-    self.title = title
+    -- Kept before the header is made: the header is UI/Main.lua's auction
+    -- bar, which asks for this frame to live in.
+    self.frame = frame
 
-    -- What everything listed here would fetch, in gold on the header, so it
-    -- is still there to see with the panel folded away.
-    local worth = Theme.CreateLabel(header, "small", "accent", "RIGHT")
-    worth:SetPoint("RIGHT", header, "RIGHT", -10, 0)
-    self.worth = worth
+    local header, title
+    local UI = ns.UI
+    if UI and type(UI.GetAuctionBar) == "function" then
+        header = UI:GetAuctionBar()
+        title = header.title
+    end
+    if not (header and title) then
+        header, title = ns.Collapse.CreateHeader(frame, L["Ready to sell"])
+    end
+    header:ClearAllPoints()
+    header:SetPoint("TOPLEFT", frame, "TOPLEFT", EDGE_PAD, -HEADER_TOP)
+    header:SetWidth(PANEL_WIDTH - 2 * EDGE_PAD)
+    header:SetHeight(HEADER_HEIGHT)
+    self.header = header
+    self.title = title
 
     -- Everything under the title, so the collapse button can fold it away in
     -- one go and leave the title strip showing.
@@ -456,7 +491,7 @@ function PostPanel:Build()
     body:SetAllPoints(frame)
     self.body = body
 
-    ns.Collapse.Attach(frame, {
+    local fold = ns.Collapse.Attach(frame, {
         key = COLLAPSE_KEY,
         header = header,
         title = title,
@@ -467,6 +502,15 @@ function PostPanel:Build()
         end,
     })
 
+    -- On the header's first line, beside the title, rather than centred on
+    -- the strip: the scan's status line sits under the title.
+    if fold and fold.ClearAllPoints then
+        fold:ClearAllPoints()
+        fold:SetPoint("TOPLEFT", header, "TOPLEFT", 8, -7)
+        title:ClearAllPoints()
+        title:SetPoint("TOPLEFT", header, "TOPLEFT", (ns.UI and ns.UI.AUCTION_BAR_TEXT_LEFT) or 32, -8)
+    end
+
     local half = math.floor((PANEL_WIDTH - 28) / 2)
     local switch = Widgets.CreateTabStrip(body, {
         { key = "sell", text = L["Sell"], width = half },
@@ -474,7 +518,7 @@ function PostPanel:Build()
     }, function(key)
         PostPanel:SetView(key)
     end)
-    switch:SetPoint("TOPLEFT", 14, ns.Collapse.CONTENT_TOP)
+    switch:SetPoint("TOPLEFT", 14, CONTENT_TOP)
     switch:Select(self.view)
     self.switch = switch
 
@@ -485,7 +529,7 @@ function PostPanel:Build()
         ns.Config:Set("postHideLosses", checked and true or false)
         PostPanel:Refresh()
     end, PostPanel:HidingLosses())
-    hideLosses:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, ns.Collapse.CONTENT_TOP - 28 - 3)
+    hideLosses:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3)
     hideLosses:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(L["Hide losses"])
@@ -513,7 +557,7 @@ function PostPanel:Build()
         onLeave = function() GameTooltip:Hide() end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
-    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, LIST_BOTTOM)
     self.list = list
 
     local shopping = Widgets.CreateScrollList(body, {
@@ -527,7 +571,7 @@ function PostPanel:Build()
         end,
     })
     shopping:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
-    shopping:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    shopping:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, LIST_BOTTOM)
     shopping:Hide()
     self.shoppingList = shopping
 
@@ -537,8 +581,92 @@ function PostPanel:Build()
     empty:SetWordWrap(true)
     self.empty = empty
 
-    self.frame = frame
+    -- The foot: what List all does, and List all itself, the drawer's one
+    -- solid gold button. One listing a click, most valuable first, since
+    -- the game takes a click for every listing.
+    if ns.Collapse.CreateFooter then ns.Collapse.CreateFooter(body, FOOT_HEIGHT) end
+
+    local listAll = Widgets.CreateButton(body, L["List all"], function()
+        PostPanel:ListNext()
+    end, { width = 110, height = 22, primary = true })
+    listAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(EDGE_PAD + 6), EDGE_PAD + 6)
+    self.listAll = listAll
+
+    local footNote = Theme.CreateLabel(body, "tiny", "muted")
+    footNote:SetPoint("LEFT", frame, "BOTTOMLEFT", EDGE_PAD + 8, EDGE_PAD + FOOT_HEIGHT / 2)
+    footNote:SetPoint("RIGHT", listAll, "LEFT", -8, 0)
+    footNote:SetWordWrap(true)
+    self.footNote = footNote
+
     return frame
+end
+
+--- Put the Scan strip in the header. The strip is UI/Main.lua's (it carries
+--- the scan's status and the two buttons); this is where it goes.
+function PostPanel:PlaceBar()
+    local bar = self.header
+    if not (bar and self.frame) then return end
+    bar:ClearAllPoints()
+    bar:SetPoint("TOPLEFT", self.frame, "TOPLEFT", EDGE_PAD, -HEADER_TOP)
+    bar:SetWidth(PANEL_WIDTH - 2 * EDGE_PAD)
+    bar:Show()
+end
+
+--- The close gem: put the drawer away until the auction house is opened
+--- again. Nothing is lost; the next visit brings it back.
+function PostPanel:CloseForVisit()
+    self.closedThisVisit = true
+    if self.frame then self.frame:Hide() end
+    if ns.PriceEditor and ns.PriceEditor.IsShown and ns.PriceEditor:IsShown() then ns.PriceEditor:Hide() end
+end
+
+--- The lines Sell shows now, Hide losses applied.
+function PostPanel:ShownLines()
+    local lines = ns.Posting:GetPostable({ includeAll = true })
+    local hidden = 0
+    if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
+    return lines, hidden
+end
+
+--- List all: list the most valuable stack still on the list. Each click
+--- lists one, as the game asks for a click a listing.
+function PostPanel:ListNext()
+    CommitTyping(self.list)
+
+    local line = ns.Posting:GetNextPostable(nil, self.shownLines or self:ShownLines())
+    if not line then
+        ns.Print(L["nothing in your bags worth listing right now"])
+        return
+    end
+
+    local allowed, reason = ns.Posting:CanPost(line.itemID)
+    if not allowed then
+        ns.Print(reason or L["cannot post right now"])
+        return
+    end
+
+    ns.Posting:Request(line.itemID, line.postQuantity, line.unitPrice)
+end
+
+--- List all's label and tooltip, from the lines Sell shows.
+function PostPanel:UpdateListAll(lines)
+    local button = self.listAll
+    if not button then return end
+
+    local count = 0
+    if lines then count = ns.Posting:GetSummary(nil, lines) or 0 end
+    self.listAllCount = count
+    self.listAllLabel = count > 0 and L.Format("List all %d", count) or L["List all"]
+
+    if button.waitingLabel ~= true then button:SetText(self.listAllLabel) end
+
+    local width = Theme.MeasureText and Theme.MeasureText("small", self.listAllLabel)
+    button:SetWidth(math.max(110, (width or 0) + 24))
+
+    button:SetEnabledState(count > 0)
+    button.tooltipText = count > 0
+        and L["Lists the most valuable stack on the list. Click again for the next one: the game takes a click for every listing."]
+        or L["Nothing on the list can be listed right now."]
 end
 
 --- How tall the panel can be without running into the main window.
@@ -767,6 +895,9 @@ function PostPanel:Redock()
     local frame = self.frame
     if not (frame and self.attached) then return end
 
+    -- Put away with the close gem: it stays away until the next visit.
+    if self.closedThisVisit then return end
+
     local auctionFrame = ns.UI:FindAuctionFrame()
     if not auctionFrame then return end
 
@@ -865,6 +996,12 @@ function PostPanel:Attach()
 
     self.attached = true
     self:WatchSideFrames()
+    self:PlaceBar()
+
+    if self.closedThisVisit then
+        frame:Hide()
+        return
+    end
 
     self:ApplyHeight(true)
 
@@ -889,7 +1026,8 @@ function PostPanel:TargetHeight(fallback)
     if not full and fallback then full = PANEL_FALLBACK_HEIGHT end
     if not full then return nil end
 
-    return ns.Collapse.Height(COLLAPSE_KEY, full)
+    if self:IsCollapsed() then return PostPanel.FOLDED_HEIGHT end
+    return full
 end
 
 function PostPanel:IsCollapsed()
@@ -1084,28 +1222,22 @@ function PostPanel:Refresh()
     end
 
     if self.view == "buy" then
-        self.worth:SetText("")
+        if self.listAll then self.listAll:Hide() end
+        if self.footNote then self.footNote:SetText(L["Click a row to search the auction house for it."]) end
         self:RefreshShopping()
         return
     end
 
     self.shoppingList:Hide()
     self.list:Show()
+    if self.listAll then self.listAll:Show() end
+    if self.footNote then self.footNote:SetText(L["Lists at your price or the market's."]) end
 
     if TypingInList(self.list) then return end
 
-    local lines = ns.Posting:GetPostable({ includeAll = true })
-    local hidden = 0
-    if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
-
-    -- Folded away, the title is all there is to read, so it carries the count.
-    if self:IsCollapsed() then
-        self.title:SetText(#lines > 0
-            and L.Format("Ready to sell (%d)", #lines)
-            or L["Ready to sell"])
-    else
-        self.title:SetText(L["Ready to sell"])
-    end
+    local lines, hidden = self:ShownLines()
+    self.shownLines = lines
+    self:UpdateListAll(lines)
 
     self.list:SetData(lines)
     self.empty:SetShown(#lines == 0)
@@ -1117,7 +1249,7 @@ function PostPanel:Refresh()
                 or L.Format("Everything here would sell at a loss (%d items).\n\nUntick Hide losses to see them.", hidden))
             or L["Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for."])
         self.summary:SetText("")
-        self.worth:SetText("")
+        self:SetTitle(L["Ready to sell"])
         return
     end
 
@@ -1127,7 +1259,16 @@ function PostPanel:Refresh()
         if line.atALoss then losses = losses + 1 end
     end
 
-    self.worth:SetText(Util.FormatMoney(total, { noColor = true, short = true }))
+    -- What it would all fetch, in gold beside the title, so it is still
+    -- there to see with the drawer folded away; folded, the count too.
+    local worth = ("|c%s%s|r"):format(ns.COLORS.accent,
+        Util.FormatMoney(total, { noColor = true, short = true }))
+    if self:IsCollapsed() then
+        self:SetTitle(L.Format("Ready to sell (%d) · %s", #lines, worth),
+            L.Format("Ready to sell (%d)", #lines))
+    else
+        self:SetTitle(L.Format("Ready to sell · %s", worth), L["Ready to sell"])
+    end
 
     local about = ("|c%s%s|r"):format(ns.COLORS.accent,
         Util.FormatMoney(total, { noColor = true, short = true }))
@@ -1136,6 +1277,13 @@ function PostPanel:Refresh()
             or L.Format("%d items, about %s", #lines, about))
         .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))
             or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or ""))
+end
+
+--- The header's title, the first wording that fits beside the buttons.
+function PostPanel:SetTitle(...)
+    local title = self.title
+    if not title then return end
+    if Theme.FitText then Theme.FitText(title, { ... }) else title:SetText((...)) end
 end
 
 --- Put the current wait on every visible List button.
@@ -1153,6 +1301,11 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
 
     local Apply = ns.UI and ns.UI.ApplyWaitLabel
     if not Apply then return end
+
+    -- List all waits with the rest, back to its count once the wait is over.
+    if self.listAll and self.listAll:IsShown() and (self.listAllCount or 0) > 0 then
+        Apply(self.listAll, self.listAllLabel or L["List all"], seconds, reason)
+    end
 
     for i = 1, #self.list.rows do
         local row = self.list.rows[i]
@@ -1175,6 +1328,7 @@ end
 function PostPanel:Hide()
     -- The auction house closed: nothing should bring the panel back now.
     self.attached = false
+    self.closedThisVisit = false
     self.dockedTo, self.dockedLeft = nil, nil
 
     if self.frame then self.frame:Hide() end
