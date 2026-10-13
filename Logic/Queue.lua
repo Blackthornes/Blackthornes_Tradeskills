@@ -267,6 +267,8 @@ function Queue:PickMaker(itemID, need, makers, keep)
     local bound = ns.Util and ns.Util.IsBoundOnPickup
         and ns.Util.IsBoundOnPickup(itemID) == true
     local buyUnit = ns.Cost:GetReagentUnitCost(itemID)
+    -- Set to Make on the Level Up tab: made whatever buying costs.
+    if ns.Cost.ItemChoice and ns.Cost:ItemChoice(itemID) == "make" then buyUnit = nil end
 
     local best, kept
     for _, candidate in ipairs(candidates) do
@@ -1581,8 +1583,11 @@ function Queue:BuildShoppingList()
             -- one, not to the auction house.
             -- A vendor that never runs out always wins, unless the player
             -- asked for the auction house to be offered too (2026-10-13).
-            local fromVendor = vendor ~= nil and (not auctionEach or vendor <= auctionEach
-                or ns.Vendor:KeepsInStock(itemID))
+            -- Not one set to Buy on the Level Up tab, while it is listed.
+            local skipVendor = auctionEach ~= nil and ns.Cost.SkipsVendor
+                and ns.Cost:SkipsVendor(itemID)
+            local fromVendor = vendor ~= nil and not skipVendor and (not auctionEach
+                or vendor <= auctionEach or ns.Vendor:KeepsInStock(itemID))
             local unitCost = fromVendor and vendor or auctionEach
             local estimatedCost
             if fromVendor then
