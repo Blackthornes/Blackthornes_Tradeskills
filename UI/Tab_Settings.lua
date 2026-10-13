@@ -584,7 +584,7 @@ local function Build(outer)
 
     CreateSection(pages.queue, 1, L["WHAT GETS QUEUED"])
     local postedRow = CreateRow(pages.queue, 1, L["Keep in stock per item"],
-        L["The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week. Equipped gear is not counted."])
+        L["The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week. Equipped gear is not counted. A profession can have its own number (Keep in stock by profession), and an item its own in the Profit tab."])
 
     widgets.maxPosted = Widgets.CreateNumberBox(postedRow, {
         width = 70, min = 0, max = 999,
@@ -964,10 +964,36 @@ local function Build(outer)
     end, { width = 110 })
     widgets.stale:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Keep in stock by profession (a player asked, the owner agreeing
+    -- 2026-10-13): one box per profession your characters craft with,
+    -- empty for the usual number. Rows made in Refresh, as the lists
+    -- below are.
+    widgets.ignoredParent = pages.queue.content
+    local stockSection = CreateSection(pages.queue, 2, L["KEEP IN STOCK BY PROFESSION"])
+    Searchable(pages.queue, stockSection, L["Keep in stock by profession per profession alchemy blacksmithing tailoring leatherworking stock limit"])
+
+    local stockHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
+    stockHint:SetPoint("TOPLEFT", stockSection, "BOTTOMLEFT", 0, ROW_GAP)
+    stockHint:SetWidth(COLUMN_WIDTH)
+    stockHint:SetWordWrap(true)
+    stockHint:SetText(L["Leave a box empty to use Keep in stock per item. A number set on an item in the Profit tab still wins."])
+    widgets.stockHint = stockHint
+
+    widgets.stockEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
+    widgets.stockEmpty:SetWidth(COLUMN_WIDTH)
+    widgets.stockEmpty:SetWordWrap(true)
+    widgets.stockEmpty:SetText(L["None yet. Open a profession window on each character once, and its professions show here."])
+    widgets.stockRows = {}
+
+    local stockEnd = CreateFrame("Frame", nil, pages.queue.content)
+    stockEnd:SetSize(COLUMN_WIDTH, 1)
+    stockEnd:SetPoint("TOPLEFT", widgets.stockEmpty, "BOTTOMLEFT", 0, 0)
+    widgets.stockEnd = stockEnd
+    pages.queue.last[2] = stockEnd
+
     -- Crafts never made to go into another craft (2026-10-07),
     -- marked from the Level Up tab or the x on a queued sub-craft. Laid out
     -- as Ignored crafts below is, rows made in Refresh.
-    widgets.ignoredParent = pages.queue.content
     local never = CreateSection(pages.queue, 2, L["NEVER MADE AS SUB-CRAFTS"])
     widgets.neverSection = never
     Searchable(pages.queue, never, L["Never made as sub-crafts bought instead intermediates allow light leather"])
@@ -1831,7 +1857,92 @@ local function RefreshNeverSubCrafts()
     widgets.neverEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
 end
 
+local STOCK_ROW_HEIGHT = 26
+
+--- One profession's line: dark glass by place, its name, its number box
+--- (empty for the usual number) and an x while it has one of its own.
+local function StockRow(index)
+    local row = widgets.stockRows[index]
+    if row then return row end
+
+    row = CreateFrame("Frame", nil, widgets.ignoredParent)
+    row:SetSize(COLUMN_WIDTH, STOCK_ROW_HEIGHT)
+    row:SetPoint("TOPLEFT", widgets.stockHint, "BOTTOMLEFT", 0,
+        -6 - (index - 1) * STOCK_ROW_HEIGHT)
+
+    row.band = row:CreateTexture(nil, "BACKGROUND")
+    row.band:SetAllPoints(row)
+    row.band:SetColorTexture(Theme.Unpack(index % 2 == 1 and "glass" or "glassAlt"))
+
+    row.line = row:CreateTexture(nil, "BORDER")
+    row.line:SetPoint("BOTTOMLEFT", 0, 0)
+    row.line:SetPoint("BOTTOMRIGHT", 0, 0)
+    row.line:SetHeight(1)
+    row.line:SetColorTexture(Theme.Unpack("border"))
+    row.line:SetAlpha(0.6)
+
+    row.label = Theme.CreateLabel(row, "small", "text")
+    row.label:SetPoint("LEFT", 8, 0)
+    row.label:SetPoint("RIGHT", row, "LEFT", CONTROL_X - 8, 0)
+    row.label:SetWordWrap(false)
+
+    row.box = Widgets.CreateNumberBox(row, {
+        width = 56, min = 0, max = 999, allowEmpty = true,
+        onChange = function(value)
+            if row.profession then ns.Auctions:SetProfessionLimit(row.profession, value) end
+        end,
+    })
+    row.box:SetPoint("LEFT", row, "LEFT", CONTROL_X, 0)
+
+    row.usual = Theme.CreateLabel(row, "tiny", "dim")
+    row.usual:SetPoint("LEFT", row.box, "RIGHT", 6, 0)
+    row.usual:SetText(L["usual"])
+
+    row.clear = Widgets.CreateButton(row, "x", function()
+        if row.profession then ns.Auctions:SetProfessionLimit(row.profession, nil) end
+    end, { width = 20, height = 20, tooltip = L["Use Keep in stock per item for this profession again"] })
+    row.clear:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+
+    widgets.stockRows[index] = row
+    return row
+end
+
+local function RefreshStockProfessions()
+    if not widgets.stockHint or not (ns.Auctions and ns.Auctions.StockProfessions) then return end
+
+    local professions = ns.Auctions:StockProfessions()
+    local usual = ns.Config:Get("maxPostedPerItem") or 0
+    local usualText = usual > 0 and tostring(usual) or "0"
+
+    for index, profession in ipairs(professions) do
+        local row = StockRow(index)
+        row.profession = profession
+        row.label:SetText(ns.Auctions:ProfessionLabel(profession))
+
+        local own = ns.Auctions:GetProfessionLimit(profession)
+        row.box:SetPlaceholder(usualText)
+        local typing = row.box.editBox.HasFocus and row.box.editBox:HasFocus()
+        if not typing then row.box:SetValue(own, true) end
+        row.usual:SetShown(own == nil)
+        row.clear:SetShown(own ~= nil)
+        row:Show()
+    end
+    for index = #professions + 1, #widgets.stockRows do
+        widgets.stockRows[index].profession = nil
+        widgets.stockRows[index]:Hide()
+    end
+
+    widgets.stockEmpty:ClearAllPoints()
+    widgets.stockEmpty:SetPoint("TOPLEFT", widgets.stockHint, "BOTTOMLEFT", 0, -6)
+    widgets.stockEmpty:SetShown(#professions == 0)
+
+    local last = #professions > 0 and widgets.stockRows[#professions] or widgets.stockEmpty
+    widgets.stockEnd:ClearAllPoints()
+    widgets.stockEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+end
+
 local function RefreshIgnored()
+    RefreshStockProfessions()
     RefreshNeverSubCrafts()
     if not widgets.ignoredHint or not ns.Profit.GetIgnored then return end
 

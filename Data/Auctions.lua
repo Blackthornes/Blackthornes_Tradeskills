@@ -204,17 +204,136 @@ end
 -- Limits
 --------------------------------------------------------------------------------
 
---- The cap for one item: its own override, else the account-wide default.
--- Zero means no limit.
+--- The cap for one item: its own number, else its profession's, else the
+--- account-wide default (a player asked for one number per profession,
+--- the owner agreeing 2026-10-13). Zero means no limit.
+-- @return the limit, then where it came from: "item", "profession" (with
+--         the profession's English name) or "default"
 function Auctions:GetLimit(itemID)
-    if not ns.db then return 0 end
+    if not ns.db then return 0, "default" end
 
     ns.db.postLimits = ns.db.postLimits or {}
 
     local override = ns.db.postLimits[itemID]
-    if override ~= nil then return override end
+    if override ~= nil then return override, "item" end
 
-    return ns.Config:Get("maxPostedPerItem") or 0
+    -- Only looked up while a profession has a number, so the Profit tab's
+    -- one question a row costs nothing more for everyone else.
+    local byProfession = ns.db.professionStockLimits
+    if byProfession and next(byProfession) ~= nil then
+        local profession = self:ProfessionOf(itemID)
+        local limit = profession and tonumber(byProfession[profession])
+        if limit then return limit, "profession", profession end
+    end
+
+    return ns.Config:Get("maxPostedPerItem") or 0, "default"
+end
+
+-- [itemID] = the English name of the profession that makes it, from every
+-- character's saved recipes. Laid out once and again only when a
+-- character's recipes are read again (their recipesCachedAt) or a
+-- character comes or goes.
+local professionIndex, professionIndexKey
+
+local function ProfessionIndexKey()
+    local count, stamp = 0, 0
+    for _, record in pairs(ns.db.characters or {}) do
+        count = count + 1
+        stamp = stamp + (tonumber(record.recipesCachedAt) or 0)
+    end
+    return count .. ":" .. stamp
+end
+
+local function ProfessionIndex()
+    if not ns.db then return {} end
+    local key = ProfessionIndexKey()
+    if professionIndex and professionIndexKey == key then return professionIndex end
+
+    local english = ns.Recipes and ns.Recipes.EnglishProfessionName
+    local index = {}
+    for _, record in pairs(ns.db.characters or {}) do
+        for _, recipe in pairs(record.recipes or {}) do
+            local itemID = recipe.outputItemID
+            if itemID and not index[itemID] and recipe.skillLineID and english then
+                local ok, name = pcall(english, { skillLineID = recipe.skillLineID })
+                if ok and name then index[itemID] = name end
+            end
+        end
+    end
+
+    professionIndex, professionIndexKey = index, key
+    return index
+end
+
+--- The English name of the profession that makes an item, or nil.
+function Auctions:ProfessionOf(itemID)
+    if not itemID then return nil end
+    return ProfessionIndex()[itemID]
+end
+
+--- The professions any of your characters make things with, by English
+--- name, sorted: the ones Settings offers a number for.
+function Auctions:StockProfessions()
+    local seen, list = {}, {}
+    for _, name in pairs(ProfessionIndex()) do
+        if not seen[name] then
+            seen[name] = true
+            list[#list + 1] = name
+        end
+    end
+    -- One already given a number stays listed, even with its recipes gone.
+    for name in pairs(ns.db and ns.db.professionStockLimits or {}) do
+        if not seen[name] then
+            seen[name] = true
+            list[#list + 1] = name
+        end
+    end
+    table.sort(list)
+    return list
+end
+
+--- A profession's name as the client shows it (German on a German
+--- client), from its English name; the English name when the client
+--- will not say.
+function Auctions:ProfessionLabel(profession)
+    local lines = ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
+    local get = C_TradeSkillUI and C_TradeSkillUI.GetProfessionInfoBySkillLineID
+    if type(lines) == "table" and type(get) == "function" then
+        for skillLineID, english in pairs(lines) do
+            if english == profession then
+                local ok, name = pcall(function()
+                    local info = get(skillLineID)
+                    local value = type(info) == "table" and info.professionName
+                    if type(value) == "string" and value ~= "" then return value .. "" end
+                end)
+                if ok and name then return name end
+            end
+        end
+    end
+    return L[profession] or profession
+end
+
+--- A profession's own number, or nil when it uses the default.
+function Auctions:GetProfessionLimit(profession)
+    local limits = ns.db and ns.db.professionStockLimits
+    return limits and tonumber(limits[profession]) or nil
+end
+
+--- Set a profession's number. nil clears it back to the default; 0 is no
+--- limit for that profession.
+function Auctions:SetProfessionLimit(profession, limit)
+    if not ns.db or type(profession) ~= "string" or profession == "" then return end
+
+    ns.db.professionStockLimits = ns.db.professionStockLimits or {}
+    ns.db.professionStockLimits[profession] = tonumber(limit)
+        and math.max(0, math.floor(tonumber(limit))) or nil
+
+    if ns.UI then ns.UI:RefreshActiveTab() end
+end
+
+--- Forget the profession index. Tests call it; the key catches real changes.
+function Auctions:ForgetProfessions()
+    professionIndex, professionIndexKey = nil, nil
 end
 
 --- How many to keep in stock when no number is set, learned from your own
@@ -807,6 +926,12 @@ ns.RegisterCommand("auctions", L["show the auctions the game says you have up"],
 
         ns.PrintRaw(("  keep in stock:        %d per item"):format(cap))
         ns.PrintRaw(("  crafts at that limit: %d, not suggested"):format(atLimit))
+    end
+    for _, profession in ipairs(Auctions:StockProfessions()) do
+        local own = Auctions:GetProfessionLimit(profession)
+        if own then
+            ns.PrintRaw(("  keep in stock:        %d for %s"):format(own, profession))
+        end
     end
 
     -- Re-query, then report again: the count above may predate any reply.
