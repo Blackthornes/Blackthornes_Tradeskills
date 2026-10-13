@@ -556,7 +556,7 @@ local function ShowMaterialTooltip(row, line)
             GameTooltip:AddDoubleLine(label, tostring(wanted.count), 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
         GameTooltip:AddLine(forUpgrade
-            and L["The x on the Queue tab takes it off. It goes by itself once you have the upgrade."]
+            and L["The x on the Queue tab takes it off. It's removed once you have the upgrade."]
             or L["The x on the Queue tab takes it off."],
             0.7, 0.7, 0.7, true)
     end

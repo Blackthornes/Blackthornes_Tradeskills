@@ -1047,7 +1047,7 @@ end
 --- A first run has no saved data because there never was any, which is not
 --- something to warn about.
 function Config:Welcome()
-    ns.Print(L.Format("welcome! Type |c%s/bts|r to open the window, or |c%s/bts help|r for the commands.",
+    ns.Print(L.Format("type |c%s/bts|r to open the window, or |c%s/bts help|r for the commands.",
         ns.COLORS.accent, ns.COLORS.accent))
     ns.Print(L["Open each profession once and visit the auction house to fill in recipes and prices."])
 end

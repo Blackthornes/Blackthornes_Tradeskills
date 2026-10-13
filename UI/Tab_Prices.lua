@@ -301,7 +301,7 @@ local function CreateStar(parent, size, getItemID)
     local function ShowTip()
         GameTooltip:SetOwner(star, "ANCHOR_TOP")
         GameTooltip:SetText(star.on and L["Remove from favourites"] or L["Add to favourites"], 1, 1, 1, 1, true)
-        GameTooltip:AddLine(L["Tick Favourites only to see just your starred items."], 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(L["Tick Favourites only to hide everything you haven't starred."], 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end
 

@@ -270,7 +270,7 @@ print("\nall done")
 bagRows = {}
 tab.refresh()
 check("an empty bag list is not an error", list.data and #list.data == 0)
-check("it cheers the finish", Showing("All done! You disenchanted 1 item this session, worth about 250") ~= nil)
+check("it cheers the finish", Showing("Done. You disenchanted 1 item this session, worth about 250") ~= nil)
 check("no button without an item", not disenchant.shown)
 
 print("\nback to the auction house")
