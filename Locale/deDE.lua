@@ -1001,6 +1001,7 @@ L["The recipes you know, cheapest way up first"] = "Die Rezepte, die du kennst, 
 
 -- Tab_Prices
 L["AGE"] = "ALTER"
+L["QTY"] = "ANZ."
 L["MOVES"] = "UMSCHLAG"
 L["LISTED"] = "ANGEBOTEN"
 L["CHEAPEST"] = "GÜNSTIGSTES"
@@ -1515,6 +1516,8 @@ L["Pick a row to see the deal"] = "Wähl eine Zeile, um das Schnäppchen zu sehe
 L["Flipping is risky. Prices can drop before you sell, so use your best judgement and only spend what you can afford to lose."] = "Weiterverkaufen ist riskant. Preise können fallen, bevor du verkaufst. Entscheide also mit Bedacht und gib nur aus, was du verlieren kannst."
 L["%d listed. Only the cheapest is sure to be at this price."] = "%d im Angebot. Nur das günstigste hat sicher diesen Preis."
 L["One listed."] = "Eins im Angebot."
+L["Only one listed at this price."] = "Nur eins zu diesem Preis im Angebot."
+L["%d listed at this price or less."] = "%d zu diesem Preis oder günstiger im Angebot."
 L["Buy for (lone low)"] = "Kaufen für (einzeln billig)"
 L["Usually sells for"] = "Verkauft sich meist für"
 L["List again at (next listing)"] = "Neu einstellen für (nächstes Angebot)"

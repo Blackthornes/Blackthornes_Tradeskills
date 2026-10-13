@@ -292,6 +292,22 @@ end
 
 Prices.ValidLadder = ValidLadder
 
+--- How many others had listed at `price` or less in the last look at the
+--- book (your own listings are never in it), so a real deal stands apart
+--- from one lonely cheap item. nil when the book was not read (a browse
+--- row, a guildmate's price) or no price is given.
+function Prices.CountAtOrBelow(record, price)
+    if type(record) ~= "table" or type(price) ~= "number" then return nil end
+    local ladder = record.ladder
+    if not ValidLadder(ladder) then return nil end
+    local count = 0
+    for i = 1, #ladder, 2 do
+        if ladder[i] > price then break end
+        count = count + ladder[i + 1]
+    end
+    return count
+end
+
 --- Fold one item's scan result into the database.
 -- @param ladder the book's first price steps (Summarise), when this reading
 --   saw the listings. nil from a reading that saw only the cheapest price (a
