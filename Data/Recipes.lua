@@ -166,16 +166,47 @@ local function ReadProfessionLines()
     local ok, skillLines = pcall(C_TradeSkillUI.GetAllProfessionTradeSkillLines)
     if not ok or type(skillLines) ~= "table" then return lines, false end
 
+    -- Forever lists each profession under two IDs and only one of them may
+    -- carry the levels, so a line counts as learned when any line of the
+    -- same profession is. Read alone, Tailoring's other ID said "not
+    -- learned" and its crafts were hidden as a dropped profession.
+    local nameOf, learnedName = {}, {}
     for _, skillLineID in ipairs(skillLines) do
-        local infoOk, info = pcall(C_TradeSkillUI.GetProfessionInfoBySkillLineID, skillLineID)
-        if infoOk and info and type(skillLineID) == "number" then
-            local learned = (info.maxSkillLevel or 0) > 0
+        local infoOk, learned, name = pcall(function()
+            local info = C_TradeSkillUI.GetProfessionInfoBySkillLineID(skillLineID)
+            if type(info) ~= "table" then return nil end
+            local value = info.professionName
+            return (info.maxSkillLevel or 0) > 0,
+                type(value) == "string" and value ~= "" and value .. "" or nil
+        end)
+        if infoOk and learned ~= nil and type(skillLineID) == "number" then
             lines[skillLineID] = learned
-            if learned then anyLearned = true end
+            name = Recipes.SKILL_LINE_PROFESSIONS[skillLineID] or name
+            nameOf[skillLineID] = name
+            if learned then
+                anyLearned = true
+                if name then learnedName[name] = true end
+            end
         end
     end
 
+    for skillLineID, name in pairs(nameOf) do
+        if learnedName[name] then lines[skillLineID] = true end
+    end
+
     return lines, anyLearned
+end
+
+--- Does a saved line list say this skill line's profession is learned
+--- under its other ID? Records saved before ReadProfessionLines joined the
+--- two IDs can hold false for one beside true for the other.
+local function SiblingLearned(lines, skillLineID)
+    local name = Recipes.SKILL_LINE_PROFESSIONS[skillLineID]
+    if not name then return false end
+    for otherID, other in pairs(Recipes.SKILL_LINE_PROFESSIONS) do
+        if other == name and otherID ~= skillLineID and lines[otherID] == true then return true end
+    end
+    return false
 end
 
 --- Is this cached recipe from a profession the character has since dropped?
@@ -193,7 +224,7 @@ function Recipes:IsDropped(recipe, characterKey)
     local lines = type(record) == "table" and record.professionLines
     if type(lines) ~= "table" then return false end
 
-    return lines[recipe.skillLineID] == false
+    return lines[recipe.skillLineID] == false and not SiblingLearned(lines, recipe.skillLineID)
 end
 
 --- This character's professions, with their levels.
