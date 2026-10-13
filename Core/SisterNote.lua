@@ -156,7 +156,7 @@ function Note:Line(list)
     end
 
     return ("|c%s%s|r %s |c%s%s|r"):format(accent, own,
-        (L["has sister addons that share what they know: %s. %s on CurseForge."]):format(Join(named),
+        (L["works with other Blackthornes addons you don't have yet: %s. %s on CurseForge."]):format(Join(named),
             #list == 1 and L["It's"] or L["They're"]),
         muted, L["This note shows once."])
 end

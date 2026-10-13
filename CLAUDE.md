@@ -622,6 +622,10 @@ the project's threads. This tool is also the same in all four repos.
 Changes to the Discord bots, the digest or the release posting tools
 (like this one) never go in a CHANGELOG, #announcements or #general
 section (the owner, 2026-10-10): they are not changes to the addon.
+The same goes for rewording (the owner, 2026-10-13, after the plain-words
+pass on What's New, tooltips and chat lines): never say in a CHANGELOG,
+#announcements or #general section that the addon's words were made
+plainer or less like AI writing.
 
 The language is "Deutsch" in every post (the owner, 2026-10-11): a
 CHANGELOG.md or NEWS.md section about the German translation or German
