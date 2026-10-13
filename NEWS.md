@@ -15,6 +15,17 @@ the thanks line: `python tools/make_whatsnew.py` writes them into
 Core/WhatsNewText.lua for the in-game What's New window. Run it after
 writing a section; the release check refuses a tag while it is behind.
 
+## 0.54.0
+
+- The Deals tab is now Favors and Writs.
+- A new QTY column shows how many are listed at the deal price.
+- At the auction house, everything sits in one drawer beside the window, with a List all button.
+- Listing different items is much faster now.
+- Craft buttons help you leave travel form first.
+- Fixes for Tailoring, the Level Up columns and the Profit graphs.
+
+Thanks Ezmode, Voldar and Draffon for the ideas and reports!
+
 ## 0.53.1
 
 - Transmute cooldowns pick the one you can actually make.
