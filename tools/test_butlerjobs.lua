@@ -72,6 +72,8 @@ ns.QueueMail = {
   GetOwedBy = function(_, from) return owed[from] or {} end,
 }
 
+local vendorPrices = {}
+ns.Vendor = { GetUnitPrice = function(_, itemID) return vendorPrices[itemID] end }
 assert(loadfile(lfs_cwd .. "/Core/Characters.lua"))("Blackthornes_TS", ns)
 local chunk = assert(loadfile(lfs_cwd .. "/Logic/Butler.lua"))
 chunk("Blackthornes_TS", ns)
@@ -101,6 +103,10 @@ check("one of them", bag.count, 1)
 check("short of linen", bag.ready, false)
 check("by two", bag.missing[1] and bag.missing[1].count, 2)
 check("for nobody else", #bag.forNames, 0)
+check("no vendor sells linen", bag.missing[1] and bag.missing[1].vendor, nil)
+vendorPrices[2996] = 10
+check("a vendor material says what one costs", Butler:Jobs()[1].steps[1].missing[1].vendor, 10)
+vendorPrices[2996] = nil
 local send = jobs[1].steps[2]
 check("then mails the leather over", send.kind, "mail")
 check("to the alt, by full name", send.to, "Blackthornes Wither")
