@@ -407,7 +407,7 @@ local DEFAULTS = {
         pricesFavouritesOnly = false,
 
         -- The price graph (2026-10-06): "day" for the last 24
-        -- hours, "week" for 7 days. And whether the Profit tab's craft pane
+        -- hours, "week" for 7 days, "fortnight" for 14 (2026-10-14). And whether the Profit tab's craft pane
         -- shows the graph where the materials list goes.
         priceGraphWindow = "day",
         profitShowsGraph = false,
@@ -502,13 +502,13 @@ local DEFAULTS = {
     myPrices = {},
 
     -- realmKey -> itemID -> { hour, copper, hour, copper, ... }: the cheapest
-    -- price each hour a scan saw it, for seven days, for what the account
+    -- price each hour a scan saw it, for fourteen days, for what the account
     -- crafts, its materials and starred items. Drawn as the price graph.
     -- See Data/PriceHistory.lua.
     priceHistory = {},
 
     -- realmKey -> itemID -> { hour, count, ... }: how many were listed each
-    -- hour a scan saw it, same items and seven days as priceHistory. Drawn
+    -- hour a scan saw it, same items and fourteen days as priceHistory. Drawn
     -- as the volume bars under the price line.
     priceListed = {},
 

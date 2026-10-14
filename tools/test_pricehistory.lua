@@ -3,7 +3,7 @@
 -- What must hold:
 --   1. Only what the account crafts, its materials and starred items are
 --      kept; a star counts from the next scan.
---   2. One price an hour (the newest), nothing older than seven days, never
+--   2. One price an hour (the newest), nothing older than fourteen days, never
 --      out of order.
 --   3. Prices:Record keeps the cheapest posting, leaving out a lone low one.
 --   4. The best times are only said once the scans cover 8 hours on 5 days;
@@ -86,7 +86,7 @@ check("a starred item is kept at once", H:IsTracked(SILK), true)
 H:Note(OTHER, 50, now)
 check("an item not kept writes nothing", ns.db.priceHistory == nil, true)
 
-print("one an hour, seven days")
+print("one an hour, fourteen days")
 H:Note(WOOL, 40, now)
 H:Note(WOOL, 35, now + 600)
 local list = ns.db.priceHistory[realm][WOOL]
@@ -102,8 +102,10 @@ H:Note(WOOL, -5, now + 2 * HOUR)
 check("no price is not a price", #list, 4)
 
 H:Note(WOOL, 41, now + 8 * 24 * HOUR)
-check("after eight days only the new pair is left", #list, 2)
-check("and it is the new price", list[2], 41)
+check("after eight days the first week is still kept", #list, 6)
+H:Note(WOOL, 42, now + 15 * 24 * HOUR)
+check("after fifteen days only the newest pairs are left", #list, 4)
+check("and the last is the new price", list[4], 42)
 
 print("the price Record keeps")
 ns.db.priceHistory = nil
@@ -163,6 +165,11 @@ best = Week(function(day, _) return math.floor(1000 * (0.9 ^ day)) end,
     { 2, 4, 8, 11, 14, 17, 20, 23 }, 6)
 check("a falling week is not a time of day pattern", best.steady, true)
 
+best = Week(cheapAt4, { 2, 4, 8, 11, 14, 17, 20, 23 }, 6)
+clock = base + 14 * 24 * HOUR
+check("the prices are kept for two weeks", #H:GetPoints(WOOL) > 0, true)
+check("but best times look at the last week only", H:GetBestTimes(WOOL).ready, false)
+
 check("hour words", H.HourText(0) .. " " .. H.HourText(12) .. " " .. H.HourText(15), "12am 12pm 3pm")
 
 print("upkeep and old saves")
@@ -209,6 +216,9 @@ series, kind = G.Series(WOOL, "day", now)
 check("a kept item with no prices draws nothing yet", kind, nil)
 check("the window is 24 hours by default", G.GetWindow(), "day")
 check("ticks say now at the right", G.TickText("day", now, true), "now")
+check("there is a 14 day view", G.WINDOWS.fortnight and G.WINDOWS.fortnight.seconds, 14 * 24 * HOUR)
+check("a 14 day tick names the day of the month",
+    G.TickText("fortnight", base, false):match("%d+$"), tostring(tonumber(os.date("%d", base))))
 
 print("listed each hour")
 clock = now
