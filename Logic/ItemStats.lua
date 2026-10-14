@@ -37,21 +37,44 @@ end
 -- The parts
 --------------------------------------------------------------------------------
 
---- What it was worth about a week ago: the price graph's cheapest prices
---- from 5 to 7 days back (it keeps seven), averaged; else the oldest of the price table's
---- readings, when that is at least five days old.
+--- What it was worth about a week ago, and what it should be set against
+--- now, so the two are the same kind of price. First the market value
+--- from 5 to 7 days back (the price table's day by day trend), set against
+--- the market value now; else the oldest of the price table's readings, when
+--- at least five days old, also a market value; else the price graph's
+--- cheapest prices from 5 to 7 days back, set against the cheapest listed now.
+-- @return before, now (copper), or nil
 local function WorthBefore(itemID, record, now)
+    local isRecord = type(record) == "table"
+    local market = isRecord and Number(record.market) or nil
+
+    if market and type(record.trend) == "table" then
+        local today = math.floor(now / DAY)
+        local sum, count = 0, 0
+        for index = 1, #record.trend - 1, 2 do
+            local day, value = record.trend[index], record.trend[index + 1]
+            if Number(day) and Number(value) and value > 0 and day >= today - 7 and day <= today - 5 then
+                sum, count = sum + value, count + 1
+            end
+        end
+        if count > 0 then return math.floor(sum / count + 0.5), market end
+    end
+
+    local oldest = isRecord and type(record.history) == "table" and record.history[1]
+    if market and type(oldest) == "table" and Number(oldest.t) and now - oldest.t >= 5 * DAY
+        and Number(oldest.m) then
+        return oldest.m, market
+    end
+
+    local lowest = isRecord and ns.Prices and ns.Prices.LowestListed
+        and Number(ns.Prices.LowestListed(record)) or nil
+    if not lowest then return nil end
     local points = Ask(ns.PriceHistory, "GetPoints", itemID, 2 * DAY, now - 5 * DAY) or {}
     local sum, count = 0, 0
     for _, point in ipairs(points) do
         if Number(point.p) then sum, count = sum + point.p, count + 1 end
     end
-    if count > 0 then return math.floor(sum / count + 0.5) end
-
-    local oldest = type(record) == "table" and type(record.history) == "table" and record.history[1]
-    if type(oldest) == "table" and Number(oldest.t) and now - oldest.t >= 5 * DAY then
-        return Number(oldest.m)
-    end
+    if count > 0 then return math.floor(sum / count + 0.5), lowest end
     return nil
 end
 
@@ -256,9 +279,10 @@ function ItemStats:Build(itemID, now)
     stats.record = type(record) == "table" and record or nil
 
     stats.worth = Ask(ns.Prices, "GetValue", itemID, "market")
-    stats.worthBefore = WorthBefore(itemID, stats.record, now)
-    if stats.worth and stats.worthBefore and stats.worthBefore > 0 then
-        stats.change = (stats.worth - stats.worthBefore) / stats.worthBefore
+    local against
+    stats.worthBefore, against = WorthBefore(itemID, stats.record, now)
+    if against and stats.worthBefore and stats.worthBefore > 0 then
+        stats.change = (against - stats.worthBefore) / stats.worthBefore
     end
 
     stats.craft = Craft(itemID)
@@ -286,6 +310,18 @@ function ItemStats:Build(itemID, now)
     return stats
 end
 
+--- When any character's recipes were last read, added up, so learning one
+--- moves the key.
+local function RecipesStamp()
+    local stamp = 0
+    for _, record in pairs(ns.db and type(ns.db.characters) == "table" and ns.db.characters or {}) do
+        if type(record) == "table" and type(record.recipesCachedAt) == "number" then
+            stamp = stamp + record.recipesCachedAt
+        end
+    end
+    return stamp
+end
+
 --- A key that moves whenever anything Build reads may have moved, so the
 --- tab builds again only then.
 function ItemStats:Key(itemID)
@@ -299,7 +335,7 @@ function ItemStats:Key(itemID)
         tostring(ns.PriceHistory and ns.PriceHistory.changes or 0),
         tostring(ns.StatsLog and ns.StatsLog.version or 0),
         tostring(#entries), tostring(type(last) == "table" and last.t or 0),
-        tostring(ns.Recipes and ns.Recipes.version or 0),
+        tostring(RecipesStamp()),
         -- And the hour, so "this week" and "a week ago" move on.
         tostring(math.floor(time() / 3600)),
     }, ":")

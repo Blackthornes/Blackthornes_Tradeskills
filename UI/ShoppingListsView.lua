@@ -27,6 +27,7 @@ local ROW_HEIGHT = 30
 -- At most this often the rows are worked out again while nothing moved; a
 -- change to a list (ShoppingLists.version) or a click redraws at once.
 local REFRESH_SECONDS = 2
+local RESTATE_SECONDS = 30
 -- How long Delete waits for its second click.
 local ARM_SECONDS = 4
 -- Names are looked up this long after the last key, not on every key.
@@ -139,6 +140,11 @@ local function Armed(key)
     return armed and armed.key == key and GetTime() - armed.at <= ARM_SECONDS
 end
 
+--- Which list and item a row's want box is for.
+local function WantKey(data)
+    return tostring(data.key) .. ":" .. tostring(data.itemID)
+end
+
 local function CreateRow(row)
     row.chevron = Theme.CreateLabel(row, "small", "accent", "CENTER")
     row.chevron:SetPoint("LEFT", 4, 0)
@@ -177,6 +183,9 @@ local function CreateRow(row)
     row.want = Widgets.CreateNumberBox(row, { width = 46, height = 18, min = 1, max = Lists().MAX_WANT,
         onChange = function(value)
             local data = row.data
+            -- Only for the item the number was typed for: a scroll can hand
+            -- the row another item while the box has focus.
+            if data and row.wantFor ~= WantKey(data) then return end
             if data and data.kind == "item" and not data.auto and value then
                 Lists():SetWant(data.key, data.itemID, value)
                 View:Refresh(true)
@@ -298,7 +307,12 @@ local function UpdateRow(row, entry)
     else
         price = L["no price"]
     end
-    row.sub:SetText(have .. "  ·  " .. price)
+    -- The price goes before anything is cut.
+    if Theme.FitText then
+        Theme.FitText(row.sub, { have .. "  ·  " .. price, have })
+    else
+        row.sub:SetText(have .. "  ·  " .. price)
+    end
     row.sub:SetTextColor(Theme.Unpack(line.need > 0 and "muted" or "profit"))
     row.sub:Show()
 
@@ -307,8 +321,17 @@ local function UpdateRow(row, entry)
         row.want:SetValue(line.want, true)
         row.want:Hide()
     else
-        if not (row.want.editBox.HasFocus and row.want.editBox:HasFocus()) then
+        local key = WantKey(entry)
+        local focused = row.want.editBox.HasFocus and row.want.editBox:HasFocus()
+        if focused and row.wantFor ~= key then
+            -- Another item now: what was typed is dropped, not saved on it.
+            row.wantFor = nil
+            row.want.editBox:ClearFocus()
+            focused = false
+        end
+        if not focused then
             row.want:SetValue(line.want, true)
+            row.wantFor = key
         end
         row.want:Show()
         row.remove:Show()
@@ -690,7 +713,15 @@ function View:Build(body, frame, topAnchor, opts)
     newList:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
     self.newList = newList
 
-    local save = Widgets.CreateButton(body, L["Save"], function() View:Submit() end, { width = 50, height = 22 })
+    -- Wide enough for either word it shows (German runs longer).
+    local saveWidth = 50
+    if Theme.MeasureText then
+        for _, word in ipairs({ L["Save"], L["Add"] }) do
+            local ok, width = pcall(Theme.MeasureText, "small", word)
+            if ok and type(width) == "number" then saveWidth = math.max(saveWidth, math.ceil(width) + 20) end
+        end
+    end
+    local save = Widgets.CreateButton(body, L["Save"], function() View:Submit() end, { width = saveWidth, height = 22 })
     save:SetPoint("RIGHT", newList, "LEFT", -6, 0)
     self.save = save
 
@@ -785,9 +816,18 @@ end
 function View:Refresh(force)
     if not (self.list and self.shown) then return end
     local now = GetTime()
-    local version = Lists().version
-    if not force and self.drawnVersion == version and self.drawnAt and now - self.drawnAt < REFRESH_SECONDS then
-        return
+    -- Laid out again only when the lists, the bags, a price or the queue
+    -- moved, and at least every RESTATE_SECONDS for anything else (mail,
+    -- another character's bags): every list's lines are worked out each time.
+    local version = table.concat({ tostring(Lists().version),
+        tostring(ns.Inventory and ns.Inventory.changes or 0),
+        tostring(ns.Prices and ns.Prices.changes or 0),
+        tostring(ns.Queue and ns.Queue.version or 0),
+        tostring(ns.Vendor and ns.Vendor.isMerchantOpen or false) }, ":")
+    if not force and self.drawnAt then
+        local since = now - self.drawnAt
+        if since < REFRESH_SECONDS then return end
+        if self.drawnVersion == version and since < RESTATE_SECONDS then return end
     end
     -- Never under a box being typed in: rows are reused, and the number would
     -- land on another item.

@@ -202,6 +202,20 @@ ns.Profit = { Analyse = function() error("boom") end }
 local stats = ns.ItemStats:Build(BOLT, now)
 check("worth now from the price table", stats.worth ~= nil, true)
 check("a week ago from the graph's oldest days", stats.worthBefore ~= nil, true)
+check("set against the cheapest listed now, not the market value",
+    stats.change, (ns.Prices.LowestListed(ns.Prices:Get(BOLT)) - stats.worthBefore) / stats.worthBefore)
+do
+    -- With market values from a week back, those are what it is set against.
+    local record = ns.Prices:Get(BOLT)
+    local savedTrend, savedMarket = record.trend, record.market
+    local today = math.floor(now / DAY)
+    record.market = 500
+    record.trend = { today - 6, 400, today - 1, 450 }
+    local weekly = ns.ItemStats:Build(BOLT, now)
+    check("a week ago from the market values kept day by day", weekly.worthBefore, 400)
+    check("set against the market value now", weekly.change, 0.25)
+    record.trend, record.market = savedTrend, savedMarket
+end
 check("a raising profit engine leaves the craft bare", stats.craft and stats.craft.recipeID, 2963)
 check("and no profit", stats.craft.profitEach, nil)
 check("the heat saw 12 prices", stats.heat.count, 12)

@@ -69,6 +69,43 @@ function MyAuctions:Judge(itemID, unit)
     return "cheapest", rival
 end
 
+--- Your other characters' listings as last read (never raises).
+function MyAuctions:Listings()
+    local Auctions = ns.Auctions
+    if not (Auctions and Auctions.GetListings) then return {} end
+    local ok, listings = pcall(Auctions.GetListings, Auctions)
+    return ok and type(listings) == "table" and listings or {}
+end
+
+--- itemID -> the prices each of every auction of yours up, on any character.
+function MyAuctions:OwnUnits(listings)
+    local own = {}
+    local function Note(itemID, unit)
+        if itemID and type(unit) == "number" then
+            own[itemID] = own[itemID] or {}
+            own[itemID][#own[itemID] + 1] = unit
+        end
+    end
+    for _, auction in ipairs((ns.Auctions and ns.Auctions.live) or {}) do Note(auction.itemID, auction.unit) end
+    for _, listing in ipairs(listings or self:Listings()) do
+        if not listing.ended then Note(listing.itemID, listing.unit) end
+    end
+    return own
+end
+
+--- Judge, but the scan's "not yours" leaves out only the character that
+--- scanned: a cheaper auction of your own on another character is not
+--- someone undercutting you.
+function MyAuctions:JudgeOwn(itemID, unit, ownUnits)
+    local state, rival, gap = self:Judge(itemID, unit)
+    if state == "undercut" and rival and ownUnits then
+        for _, own in ipairs(ownUnits[itemID] or {}) do
+            if own < unit and math.abs(own - rival) <= 1 then return "cheapest", rival end
+        end
+    end
+    return state, rival, gap
+end
+
 --- About what listing it again would cost: the client's own cancel cost when
 --- it has one, else the deposit Tradeskills remembers for that item.
 -- @return copper or nil, and whether it is only an estimate
@@ -107,13 +144,17 @@ function MyAuctions:Rows()
     local now = time()
     local cancelling = self.cancelling or {}
 
+    local listings = self:Listings()
+    local ownUnits = self:OwnUnits(listings)
+    local function JudgeRow(row) return self:JudgeOwn(row.itemID, row.unit, ownUnits) end
+
     if Auctions.live then
         summary.read = true
         for _, auction in ipairs(Auctions.live) do
             local row = {}
             for k, v in pairs(auction) do row[k] = v end
             row.mine = true
-            row.state, row.rival, row.gap = self:Judge(row.itemID, row.unit)
+            row.state, row.rival, row.gap = JudgeRow(row)
             row.cancelling = cancelling[row.auctionID] ~= nil
             rows[#rows + 1] = row
             summary.up = summary.up + 1
@@ -123,17 +164,14 @@ function MyAuctions:Rows()
     end
 
     -- Other characters, as last read: never this one, which is read live.
-    if Auctions.GetListings then
-        local ok, listings = pcall(Auctions.GetListings, Auctions)
-        for _, listing in ipairs(ok and listings or {}) do
-            if not listing.ended and not IsPlaying(listing.who) then
-                local row = {}
-                for k, v in pairs(listing) do row[k] = v end
-                row.alt = true
-                row.state, row.rival, row.gap = self:Judge(row.itemID, row.unit)
-                rows[#rows + 1] = row
-                summary.alts = summary.alts + 1
-            end
+    for _, listing in ipairs(listings) do
+        if not listing.ended and not IsPlaying(listing.who) then
+            local row = {}
+            for k, v in pairs(listing) do row[k] = v end
+            row.alt = true
+            row.state, row.rival, row.gap = JudgeRow(row)
+            rows[#rows + 1] = row
+            summary.alts = summary.alts + 1
         end
     end
 
@@ -222,8 +260,17 @@ end
 --- The undercut auction the foot button cancels next: the most money under.
 function MyAuctions:NextUndercut(rows)
     rows = rows or self:Rows()
+    local AH = _G.C_AuctionHouse
     for _, row in ipairs(rows) do
-        if row.mine and row.state == "undercut" and not row.cancelling then return row end
+        if row.mine and row.state == "undercut" and not row.cancelling then
+            -- One the game won't cancel would be picked on every click.
+            local refused = false
+            if row.auctionID and type(AH) == "table" and type(AH.CanCancelAuction) == "function" then
+                local ok, can = pcall(AH.CanCancelAuction, row.auctionID)
+                refused = ok and can == false
+            end
+            if not refused then return row end
+        end
     end
 end
 
@@ -240,7 +287,7 @@ function MyAuctions:CancelNext()
 end
 
 --- A read of your auctions: settle what was being cancelled.
-function MyAuctions:OnRead(live, final)
+function MyAuctions:OnRead(live, final, sold)
     local cancelling = self.cancelling
     self.version = self.version + 1
     if not cancelling or next(cancelling) == nil then return end
@@ -251,7 +298,10 @@ function MyAuctions:OnRead(live, final)
     local now = GetTime()
     for auctionID, pending in pairs(cancelling) do
         local label = Util.GetItemLabel(pending.itemID) or L["that item"]
-        if not up[auctionID] then
+        if sold and sold[auctionID] then
+            cancelling[auctionID] = nil
+            ns.Print(L.Format("%s sold before the cancel went through.", label))
+        elseif not up[auctionID] then
             cancelling[auctionID] = nil
             self.cancelledCount = (self.cancelledCount or 0) + 1
             ns.Print(L.Format("Cancelled %s. It comes back to you in the mail.", label))

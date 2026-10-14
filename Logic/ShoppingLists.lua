@@ -13,7 +13,7 @@
 -- in the order the player made them. Nothing else from the save goes in, and
 -- a list is only ever removed by the player (Delete).
 --
--- Copy and paste: Export gives one line, "BTSlist1:<name>:<id>*<want>,...",
+-- Copy and paste: Export gives one line, "BTSlist1:<name>:<id>x<want>,...",
 -- items only, and Import makes a new list from one. The line is read as data:
 -- numbers and a name, nothing run.
 
@@ -78,7 +78,14 @@ end
 function ShoppingLists.CleanName(name)
     if type(name) ~= "string" then return nil end
     name = name:gsub("[\r\n\t:,|]", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-    if #name > ShoppingLists.MAX_NAME then name = name:sub(1, ShoppingLists.MAX_NAME):gsub("%s+$", "") end
+    if #name > ShoppingLists.MAX_NAME then
+        -- Cut between letters, never inside one (an ä or ß is two bytes).
+        local cut = ShoppingLists.MAX_NAME
+        while cut > 0 and name:byte(cut + 1) and name:byte(cut + 1) >= 128 and name:byte(cut + 1) < 192 do
+            cut = cut - 1
+        end
+        name = name:sub(1, cut):gsub("%s+$", "")
+    end
     if name == "" then return nil end
     return name
 end
@@ -95,7 +102,10 @@ end
 local function FreeName(name, except)
     if not NameTaken(name, except) then return name end
     for n = 2, ShoppingLists.MAX_LISTS + 1 do
-        local tried = ShoppingLists.CleanName(("%s %d"):format(name, n))
+        -- Room for the number, so a long name is not cut back to itself.
+        local suffix = (" %d"):format(n)
+        local base = ShoppingLists.CleanName(name:sub(1, ShoppingLists.MAX_NAME - #suffix)) or name
+        local tried = ShoppingLists.CleanName(base .. suffix)
         if tried and not NameTaken(tried, except) then return tried end
     end
     return name
@@ -492,7 +502,7 @@ function ShoppingLists:Export(index)
     local parts = {}
     for _, item in ipairs(Items(list)) do
         local id = type(item) == "table" and tonumber(item.id)
-        if id then parts[#parts + 1] = ("%d*%d"):format(id, CleanWant(item.want)) end
+        if id then parts[#parts + 1] = ("%dx%d"):format(id, CleanWant(item.want)) end
     end
     return ("%s:%s:%s"):format(self.PREFIX, self.CleanName(list.name) or "", table.concat(parts, ","))
 end
@@ -501,11 +511,11 @@ end
 -- @return its index, or nil and why
 function ShoppingLists:Import(text)
     if type(text) ~= "string" then return nil, L["That is not a copied list."] end
-    local name, body = text:match("^%s*" .. self.PREFIX .. ":([^:]*):([%d%*,]*)%s*$")
+    local name, body = text:match("^%s*" .. self.PREFIX .. ":([^:]*):([%d%*xX,]*)%s*$")
     if not name then return nil, L["That is not a copied list."] end
 
     local items = {}
-    for id, want in body:gmatch("(%d+)%*(%d+)") do
+    for id, want in body:gmatch("(%d+)[%*xX](%d+)") do
         if #items >= self.MAX_ITEMS then break end
         items[#items + 1] = { tonumber(id), tonumber(want) }
     end
