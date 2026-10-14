@@ -226,6 +226,11 @@ local DEFAULTS = {
         -- many crafts pay the recipe back. See Logic/RecipeBook.lua.
         showRecipeValueOnTooltips = true,
 
+        -- On an enchant's tooltip (asked 2026-10-14): what its materials
+        -- cost, each one, what you're short and who knows it. See
+        -- UI/EnchantTooltip.lua. Never rename it.
+        tooltipEnchantCosts = true,
+
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does
         -- nothing without Equipment. See Logic/Upgrades.lua.

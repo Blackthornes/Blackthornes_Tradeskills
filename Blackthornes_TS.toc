@@ -106,6 +106,7 @@ UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
 UI\ItemTooltip.lua
+UI\EnchantTooltip.lua
 UI\MailReport.lua
 UI\QueueMailPanel.lua
 UI\RecipeBookView.lua
