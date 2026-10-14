@@ -370,6 +370,21 @@ whose recipes were never read is left out. Kept 30 s, or until the
 character's `recipesCachedAt` moves. Tested in `tools/test_learnnext.lua`.
 Keep it stable; Butler's `Logic/GoldGoals.lua` reads it.
 
+Butler's Buy from a vendor row (the owner asked 2026-10-14 for the Buy
+materials button in Butler too) has the same button, calling, inside a
+pcall:
+
+```lua
+_G.BlackthornesTS.Butler:VendorOffer()     -- { count, cost, items, cheaperElsewhere, buying }, or nil
+_G.BlackthornesTS.Butler:BuyFromVendor()   -- true, or false and why; never raises
+```
+
+`VendorOffer` is `Vendor:GetNeeded`'s answer (nil while no vendor is open
+or its list is not read), `BuyFromVendor` the button's own click
+(`Vendor:BuyNeeded`, then `UI:UpdateMerchantButton`). Tested in
+`tools/test_butlervendor.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
+reads them.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every

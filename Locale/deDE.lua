@@ -1841,6 +1841,7 @@ L["already crafting"] = "stellt schon her"
 L["the game didn't start it"] = "das Spiel hat es nicht gestartet"
 L["open your profession first"] = "öffne zuerst deinen Beruf"
 L["Tradeskills could not start the craft"] = "Tradeskills konnte die Herstellung nicht starten"
+L["Tradeskills could not buy from this vendor"] = "Tradeskills konnte bei diesem Händler nichts kaufen"
 
 -- Crafting
 L["the game will not let addons start crafts; use Blizzard's own profession window."] = "das Spiel lässt Addons keine Herstellung starten; nutze das Berufsfenster des Spiels."
