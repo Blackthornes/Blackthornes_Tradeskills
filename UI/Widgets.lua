@@ -1317,6 +1317,221 @@ function Widgets.CreateProgressBar(parent)
 end
 
 --------------------------------------------------------------------------------
+-- Sizzle
+--
+-- A crackle of light along a thin line, as if it were a lit fuse: short
+-- bright dashes flicker on and off along it and jump a pixel or two off it,
+-- the line's glow wavers, and a few sparks spit from its far end and fall
+-- away. Drawn from plain colour, with no art. A test on the scan line
+-- (2026-10-14); UI/Main.lua's SCAN_LINE_SIZZLES puts the old glint back.
+--
+-- It runs on a frame of its own that is shown only while it has something to
+-- draw, so the game stops its OnUpdate whenever the line is out of sight. A
+-- few textures are moved about thirty times a second, nothing more.
+--------------------------------------------------------------------------------
+
+local SIZZLE_BITS = 7       -- dashes flickering along the line
+local SIZZLE_SPARKS = 5     -- sparks spitting from its far end
+local SIZZLE_TICK = 1 / 30  -- the most often it is drawn again
+local SIZZLE_HOT = { 1, 0.95, 0.75 }
+
+--- Put a sizzle on `track` (a progress bar from CreateProgressBar, or any
+--- thin frame). Nothing shows until :Set gives it some strength.
+function Widgets.AddSizzle(track)
+    local holder = CreateFrame("Frame", nil, track)
+    holder:SetAllPoints(track)
+    local ok, level = pcall(track.GetFrameLevel, track)
+    if ok and type(level) == "number" then pcall(holder.SetFrameLevel, holder, level + 2) end
+    pcall(holder.EnableMouse, holder, false)
+    holder:Hide()
+
+    local ar, ag, ab = Theme.Unpack("accent")
+    local random = math.random
+
+    local function Hot(texture)
+        pcall(texture.SetBlendMode, texture, "ADD")
+        return texture
+    end
+
+    -- The glow along the line, wavering as it crackles.
+    local glow = Hot(holder:CreateTexture(nil, "OVERLAY"))
+    glow:SetPoint("LEFT", track, "LEFT", 1, 0)
+    glow:SetHeight(6)
+    glow:SetColorTexture(ar, ag, ab, 1)
+    glow:SetAlpha(0)
+
+    local bits, sparks = {}, {}
+    for index = 1, SIZZLE_BITS do
+        local texture = Hot(holder:CreateTexture(nil, "OVERLAY", nil, 2))
+        texture:Hide()
+        bits[index] = { texture = texture, life = 0 }
+    end
+    for index = 1, SIZZLE_SPARKS do
+        local texture = Hot(holder:CreateTexture(nil, "OVERLAY", nil, 3))
+        texture:Hide()
+        sparks[index] = { texture = texture, life = 0 }
+    end
+
+    local sizzle = { frame = holder, bits = bits, sparks = sparks, glow = glow }
+    local strength, whole, fadeLeft, fadeFor = 0, false, nil, nil
+    local wait = 0
+
+    -- How far along the line it runs: the bar's lit part, or all of it.
+    local function Span()
+        local width = track:GetWidth() or 0
+        if not whole and track.fill and track.fill.GetWidth then
+            width = math.min(width - 2, track.fill:GetWidth() or 0)
+        else
+            width = width - 2
+        end
+        return math.max(0, width)
+    end
+
+    local function Colour(texture, alpha)
+        -- Somewhere between white hot and the house gold.
+        local mix = random()
+        texture:SetColorTexture(
+            SIZZLE_HOT[1] + (ar - SIZZLE_HOT[1]) * mix,
+            SIZZLE_HOT[2] + (ag - SIZZLE_HOT[2]) * mix,
+            SIZZLE_HOT[3] + (ab - SIZZLE_HOT[3]) * mix, 1)
+        texture:SetAlpha(alpha)
+    end
+
+    local function Dash(bit, span, power)
+        local texture = bit.texture
+        bit.life = 0.04 + random() * 0.1
+        bit.full = bit.life
+        bit.alpha = (0.45 + random() * 0.55) * power
+        local width = math.min(span, 2 + random() * 10)
+        texture:SetSize(math.max(1, width), random() < 0.2 and 2 or 1)
+        texture:ClearAllPoints()
+        -- Most stay on the line; some arc a pixel or two off it.
+        local lift = random() < 0.35 and (random(-2, 2)) or 0
+        texture:SetPoint("LEFT", track, "LEFT", 1 + random() * math.max(0, span - width), lift)
+        Colour(texture, bit.alpha)
+        texture:Show()
+    end
+
+    local function Spit(spark, span, power)
+        local texture = spark.texture
+        spark.life = 0.18 + random() * 0.22
+        spark.full = spark.life
+        spark.alpha = (0.6 + random() * 0.4) * power
+        spark.x = 1 + span - random() * math.min(span, 6)
+        spark.y = 0
+        spark.vx = -25 + random() * 45
+        spark.vy = (random() < 0.5 and -1 or 1) * (25 + random() * 45)
+        local size = random() < 0.3 and 2 or 1
+        texture:SetSize(size, size)
+        Colour(texture, spark.alpha)
+        texture:Show()
+    end
+
+    local function Clear()
+        glow:SetAlpha(0)
+        for _, bit in ipairs(bits) do bit.life = 0; bit.texture:Hide() end
+        for _, spark in ipairs(sparks) do spark.life = 0; spark.texture:Hide() end
+    end
+
+    --- One step of the crackle, `elapsed` seconds on.
+    function sizzle:Step(elapsed)
+        local power = strength
+        if fadeLeft then
+            fadeLeft = math.max(0, fadeLeft - elapsed)
+            power = strength * (fadeLeft / fadeFor)
+            if fadeLeft <= 0 then
+                sizzle:Set(0)
+                return
+            end
+        end
+
+        local span = Span()
+        if span < 2 or power <= 0 then
+            Clear()
+            return
+        end
+
+        local level = Motion.Level()
+
+        -- The glow wavers rather than pulses: a new brightness each step.
+        glow:SetWidth(span)
+        glow:SetAlpha((0.12 + random() * 0.3) * power)
+
+        for index, bit in ipairs(bits) do
+            bit.life = bit.life - elapsed
+            if bit.life <= 0 then
+                -- Subtle effects keep fewer dashes; every one is a gap
+                -- for a moment before it lights again, so it crackles.
+                if (level ~= "subtle" or index <= 3) and random() < 0.6 * power + 0.15 then
+                    Dash(bit, span, power)
+                else
+                    bit.life = 0.02 + random() * 0.06
+                    bit.texture:Hide()
+                end
+            elseif bit.texture:IsShown() then
+                -- Flicker as it burns out.
+                bit.texture:SetAlpha(bit.alpha * (bit.life / bit.full) * (0.6 + random() * 0.4))
+            end
+        end
+
+        for _, spark in ipairs(sparks) do
+            if spark.life > 0 then
+                spark.life = spark.life - elapsed
+                if spark.life <= 0 then
+                    spark.texture:Hide()
+                else
+                    spark.x = spark.x + spark.vx * elapsed
+                    spark.vy = spark.vy - 160 * elapsed
+                    spark.y = spark.y + spark.vy * elapsed
+                    spark.texture:ClearAllPoints()
+                    spark.texture:SetPoint("CENTER", track, "LEFT", spark.x, spark.y)
+                    spark.texture:SetAlpha(spark.alpha * (spark.life / spark.full))
+                end
+            elseif level == "full" and random() < 0.12 * power then
+                Spit(spark, span, power)
+            end
+        end
+    end
+
+    holder:SetScript("OnUpdate", function(_, elapsed)
+        wait = wait + elapsed
+        if wait < SIZZLE_TICK then return end
+        local step = math.min(wait, 0.1)
+        wait = 0
+        sizzle:Step(step)
+    end)
+    holder:SetScript("OnHide", Clear)
+
+    --- How hot it burns, 0 (out) to 1. `wholeLine` runs it along the whole
+    --- line rather than the bar's lit part; `fadeOver` lets it die away over
+    --- that many seconds. Cheap enough to call on every status refresh.
+    function sizzle:Set(power, wholeLine, fadeOver)
+        power = math.max(0, math.min(1, tonumber(power) or 0))
+        if power <= 0 or Motion.Level() == "off" then
+            strength, fadeLeft, fadeFor = 0, nil, nil
+            holder:Hide()
+            Clear()
+            return
+        end
+
+        whole = wholeLine and true or false
+        if fadeOver and fadeOver > 0 then
+            fadeLeft, fadeFor = fadeOver, fadeOver
+        else
+            fadeLeft, fadeFor = nil, nil
+        end
+        strength = power
+        holder:Show()
+    end
+
+    function sizzle:IsLit()
+        return strength > 0 and holder:IsShown()
+    end
+
+    return sizzle
+end
+
+--------------------------------------------------------------------------------
 -- Tab strip
 --------------------------------------------------------------------------------
 
