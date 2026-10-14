@@ -30,6 +30,14 @@ PriceGraph.all = {}
 PriceGraph.WINDOWS = {
     day = { seconds = 24 * 3600, text = L["24 Hours"] },
     week = { seconds = 7 * 24 * 3600, text = L["7 Day"] },
+    fortnight = { seconds = 14 * 24 * 3600, text = L["14 Day"] },
+}
+
+-- What each toggle's tooltip says, and what the empty graph says.
+local TOGGLE_TIPS = {
+    day = L["The last 24 hours"],
+    week = L["The last seven days"],
+    fortnight = L["The last fourteen days"],
 }
 
 local HEADER_HEIGHT = 16
@@ -44,7 +52,7 @@ local TICKS = 4
 -- Which view
 --------------------------------------------------------------------------------
 
---- "day" or "week", kept in settings so every graph opens on the last one
+--- "day", "week" or "fortnight", kept in settings so every graph opens on the last one
 --- picked.
 function PriceGraph.GetWindow()
     local key = ns.Config and ns.Config.Get and ns.Config:Get("priceGraphWindow")
@@ -118,6 +126,7 @@ end
 function PriceGraph.TickText(windowKey, t, isLast)
     if isLast then return L["now"] end
     if windowKey == "week" then return date("%a", t) end
+    if windowKey == "fortnight" then return date("%a ", t) .. tonumber(date("%d", t)) end
     return ns.PriceHistory.HourText(date("*t", t).hour)
 end
 
@@ -385,7 +394,7 @@ local function CreateToggle(graph, key)
         PriceGraph.SetWindow(key)
         PriceGraph.RefreshAll()
     end, { width = 50, height = TOGGLE_HEIGHT, fontSize = "tiny",
-           tooltip = key == "week" and L["The last seven days"] or L["The last 24 hours"] })
+           tooltip = TOGGLE_TIPS[key] })
 
     -- Fit the label: a client font wider than the test's must not cut it.
     local width = Theme.TextWidth(button.label)
@@ -459,9 +468,11 @@ function PriceGraph.Create(parent, opts)
         top = HEADER_HEIGHT + 4
     end
 
+    local fortnight = CreateToggle(graph, "fortnight")
     local week = CreateToggle(graph, "week")
     local day = CreateToggle(graph, "day")
-    week:SetPoint("TOPRIGHT", 0, opts.heading and 0 or -1)
+    fortnight:SetPoint("TOPRIGHT", 0, opts.heading and 0 or -1)
+    week:SetPoint("RIGHT", fortnight, "LEFT", -4, 0)
     day:SetPoint("RIGHT", week, "LEFT", -4, 0)
 
     -- The heading's rule stops short of the toggles.
@@ -671,7 +682,9 @@ function PriceGraph.Create(parent, opts)
             if tracked then
                 self.empty:SetText(#points == 1
                     and L["One price so far. Scan again later to draw the line."]
-                    or (windowKey == "week"
+                    or (windowKey == "fortnight"
+                        and L["No scans in the last 14 days. Scan the auction house to start the line."]
+                        or windowKey == "week"
                         and L["No scans in the last 7 days. Scan the auction house to start the line."]
                         or L["No scans in the last 24 hours. Scan the auction house to start the line."]))
             else
