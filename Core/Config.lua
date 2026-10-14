@@ -264,6 +264,8 @@ local DEFAULTS = {
         -- the Salt Shaker) comes ready on any character, and give Butler a
         -- step for it (asked 2026-10-12). See Logic/Cooldowns.lua.
         cooldownAlerts = true,
+        -- The Stats tab cheers an item's best week of sales, once (UI/Tab_Stats.lua).
+        statsCheer = true,
 
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
