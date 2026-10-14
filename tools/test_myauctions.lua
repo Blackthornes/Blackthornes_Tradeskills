@@ -99,6 +99,23 @@ check("the most money under comes first", rows[1].itemID == 1 and rows[2].itemID
 check("then the cheapest, then unknown", rows[3].state == "cheapest" and rows[4].state == "unknown")
 check("the alt's comes last", rows[5].alt and rows[5].who == "Alt-2")
 
+-- Your alt's cheaper auction is not someone undercutting you.
+rivals[5] = 320
+ns.Auctions.live[#ns.Auctions.live + 1] = { auctionID = 15, itemID = 5, quantity = 1, unit = 400 }
+do
+    local altRows, altSummary = MyAuctions:Rows()
+    local mine
+    for _, row in ipairs(altRows) do if row.auctionID == 15 then mine = row end end
+    check("someone else cheaper than your alt is still an undercut", mine and mine.state == "undercut")
+    rivals[5] = 350
+    altRows, altSummary = MyAuctions:Rows()
+    for _, row in ipairs(altRows) do if row.auctionID == 15 then mine = row end end
+    check("the alt's listing as the cheapest: yours is not undercut by you", mine and mine.state == "cheapest")
+    check("and the count leaves it out", altSummary.undercut == 2)
+end
+table.remove(ns.Auctions.live)
+rivals[5] = 300
+
 -- 4
 local deposit, rough = MyAuctions:Deposit(rows[1])
 check("the remembered deposit is an estimate", deposit == 12 and rough == true)

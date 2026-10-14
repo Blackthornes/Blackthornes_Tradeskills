@@ -634,6 +634,8 @@ function Auctions:ReadOwned(opts)
     -- This session only, with each auction's ID and link: what the drawer's
     -- Auctions view lists and cancels (Logic/MyAuctions.lua).
     local live = {}
+    -- Auctions marked sold, so a cancel that lost the race to a buyer says so.
+    local sold = {}
     local readAt = time()
 
     for index = 1, count do
@@ -654,6 +656,8 @@ function Auctions:ReadOwned(opts)
                 ids[itemID] = ids[itemID] or {}
                 ids[itemID][info.auctionID] = true
             end
+
+            if info.auctionID and not active then sold[info.auctionID] = true end
 
             if itemID and active then
                 local quantity = info.quantity or 1
@@ -731,7 +735,7 @@ function Auctions:ReadOwned(opts)
     -- This session only: auction IDs are for telling a new listing apart.
     self.ownedIDs = ids
     self.live, self.liveAt = live, readAt
-    if ns.MyAuctions and ns.MyAuctions.OnRead then ns.MyAuctions:OnRead(live, opts.final) end
+    if ns.MyAuctions and ns.MyAuctions.OnRead then ns.MyAuctions:OnRead(live, opts.final, sold) end
     record.updatedAt = time()
     record.auctionCount = count
 

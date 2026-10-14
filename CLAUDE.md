@@ -728,7 +728,7 @@ box come from `ShoppingLists:Suggest` over `BuildNames` (prices, recipes and
 their materials, bags, stars, the ledger; only names the client has loaded,
 built a slice a frame, kept 60 s), dark glass rows, Up/Down, Tab and Enter;
 it also names a new list, renames, shows a list's
-copy line (`BTSlist1:<name>:<id>*<want>,...`) or takes a pasted one. Delete
+copy line (`BTSlist1:<name>:<id>x<want>,...`) or takes a pasted one. Delete
 takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
 `shoppingLists = { { name, items = { { id, want } } } }` (never rename it).
 Tested in `tools/test_shoppinglists.lua` and

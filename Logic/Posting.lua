@@ -2028,7 +2028,8 @@ function Posting:ResolvePending(posted, appeared, target)
         pcall(ns.SellOut.NotePosted, ns.SellOut, pending.itemID, went, ns.Config:Get("postDuration") or 2)
     end
     if went and ns.StatsLog then
-        pcall(ns.StatsLog.NotePosted, ns.StatsLog, pending.itemID, went)
+        -- A commodity goes up as one auction, however many units it holds.
+        pcall(ns.StatsLog.NotePosted, ns.StatsLog, pending.itemID, pending.isCommodity and 1 or went)
     end
 
     if several and posted and gained >= pending.quantity then

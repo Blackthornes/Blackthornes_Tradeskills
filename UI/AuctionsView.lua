@@ -89,7 +89,7 @@ function AuctionsView.DetailTexts(row)
         Add(who, each)
     else
         local age = ns.Prices and ns.Prices.GetAge and ns.Prices:GetAge(row.itemID)
-        local scanned = age and L.Format("scanned %s ago", Util.FormatAge(age)) or L["never scanned"]
+        local scanned = age and L.Format("scanned %s", Util.FormatAgeAgo(age)) or L["never scanned"]
         Add(who, each, scanned, ends)
         Add(who, each, scanned)
         Add(who, each)
@@ -194,15 +194,6 @@ local function UpdateRow(row, entry)
         return
     end
 
-    local label = (entry.link and entry.link:match("%[(.-)%]")) or Util.GetItemLabel(entry.itemID)
-        or L["that item"]
-    if Theme.SetRowName then Theme.SetRowName(row.name, label) else row.name:SetText(label) end
-    Theme.SetItemIcon(row.icon, entry.itemID)
-    local r, g, b = Util.GetItemQualityColor(entry.itemID)
-    if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
-
-    Theme.FitText(row.detail, AuctionsView.DetailTexts(entry))
-
     local undercut = entry.state == "undercut" and entry.mine and not entry.cancelling
     row.redEdge:SetShown(entry.state == "undercut")
     row.cancel:SetShown(undercut)
@@ -226,6 +217,45 @@ local function UpdateRow(row, entry)
         row.badge:SetText(badge)
         row.badge:SetTextColor(Theme.Unpack(color or "muted"))
     end
+
+    -- The name and the line under it stop short of what sits at the right:
+    -- the badge stands across both, the deposit beside the line under.
+    local nameInset, detailInset = RIGHT_INSET, RIGHT_INSET
+    if badge then
+        local width = Theme.TextWidth(row.badge)
+        if width then nameInset = math.max(nameInset, math.ceil(width) + 16) end
+        detailInset = nameInset
+    end
+    if deposit then
+        local width = Theme.TextWidth(row.deposit)
+        if width then detailInset = math.max(detailInset, math.ceil(width) + 16) end
+    end
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -nameInset, -4)
+
+    local label = (entry.link and entry.link:match("%[(.-)%]")) or Util.GetItemLabel(entry.itemID)
+        or L["that item"]
+    if Theme.SetRowName then Theme.SetRowName(row.name, label) else row.name:SetText(label) end
+    Theme.SetItemIcon(row.icon, entry.itemID)
+    local r, g, b = Util.GetItemQualityColor(entry.itemID)
+    if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
+
+    -- A name that wraps pushes the line under it down, and the row grows
+    -- by that line too.
+    local wrapped = type(rawget(row.name, "rowNeed")) == "number"
+    row.detail:ClearAllPoints()
+    if wrapped then
+        row.detail:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
+        row.detail:SetPoint("TOPRIGHT", row.name, "BOTTOMRIGHT", nameInset - detailInset, -2)
+        row.name.rowNeed = row.name.rowNeed + 14
+    else
+        row.detail:SetPoint("TOPLEFT", row, "TOPLEFT", 8 + ICON_SIZE + 8, -20)
+        row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -detailInset, -20)
+    end
+
+    local okWidth, rowWidth = pcall(row.GetWidth, row)
+    local room = okWidth and type(rowWidth) == "number" and rowWidth > 0
+        and rowWidth - (8 + ICON_SIZE + 8) - detailInset or nil
+    Theme.FitText(row.detail, AuctionsView.DetailTexts(entry), room)
 end
 
 local function ShowTooltip(row, entry)
@@ -345,7 +375,8 @@ function AuctionsView:Refresh(force)
     if not (self.list and self.shown) then return end
 
     local MyAuctions = ns.MyAuctions
-    local key = ("%d:%d"):format(MyAuctions.version or 0, math.floor(time() / 60))
+    local key = ("%d:%d:%d"):format(MyAuctions.version or 0, math.floor(time() / 60),
+        ns.Prices and ns.Prices.changes or 0)
     if not force and key == self.key then return end
     self.key = key
 
@@ -394,9 +425,11 @@ function AuctionsView:UndercutCount()
     local MyAuctions = ns.MyAuctions
     if not MyAuctions then return 0 end
     local count = 0
+    local ownUnits
     for _, auction in ipairs((ns.Auctions and ns.Auctions.live) or {}) do
         local cancelling = MyAuctions.cancelling and MyAuctions.cancelling[auction.auctionID]
-        if not cancelling and MyAuctions:Judge(auction.itemID, auction.unit) == "undercut" then
+        ownUnits = ownUnits or MyAuctions:OwnUnits()
+        if not cancelling and MyAuctions:JudgeOwn(auction.itemID, auction.unit, ownUnits) == "undercut" then
             count = count + 1
         end
     end
