@@ -2771,3 +2771,10 @@ L["Ignored crafts"] = "Ignorierte Herstellungen"
 L["Crafts you ignored are not suggested here. Type one's name in the search to find it, or restore it under Settings, Queue, Ignored crafts."] = "Ignorierte Herstellungen werden hier nicht vorgeschlagen. Gib den Namen in die Suche ein, um eine zu finden, oder hol sie unter Einstellungen, Liste, Ignorierte Herstellungen zurück."
 L["Every recipe here is ignored.\n\nRestore them under Settings, Queue, Ignored crafts."] = "Jedes Rezept hier ist ignoriert.\n\nHol sie unter Einstellungen, Liste, Ignorierte Herstellungen zurück."
 L["%d ignored"] = "%d ignoriert"
+
+-- UI/EnchantTooltip.lua
+L["You're short"] = "Dir fehlen"
+L["all of it"] = "alles"
+L["%d %s"] = "%d %s"
+L["Enchant costs on tooltips"] = "Verzauberungskosten im Tooltip"
+L["On an enchant, in the Enchanting window or linked in chat: what its materials cost, each one, what you're short and who knows it."] = "Bei einer Verzauberung, im Verzauberkunst-Fenster oder im Chat verlinkt: was die Materialien kosten, jedes einzeln, was dir fehlt und wer sie kennt."

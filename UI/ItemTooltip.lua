@@ -977,6 +977,12 @@ function ItemTooltip:PrintReport(input)
             ns.COLORS.muted))
     end
 
+    if ns.EnchantTooltip and ns.EnchantTooltip.ReportLines then
+        for _, line in ipairs(ns.EnchantTooltip:ReportLines()) do
+            ns.PrintRaw(("  |c%s%s|r  %s"):format(ns.COLORS.muted, line[1], line[2]))
+        end
+    end
+
     ns.PrintRaw(("  |c%s/bts tip <item link> says what one item would show.|r"):format(
         ns.COLORS.muted))
 end

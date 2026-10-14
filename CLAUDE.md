@@ -577,6 +577,22 @@ when the mail ledger writes the sale) and `statsCheered`. `/bts stats
 [item]`, a Settings row on the Look page and a Stats button on the
 Prices tab's detail pane open it. Tested in `tools/test_itemstats.lua`.
 
+## Enchant costs on tooltips
+
+A player asked (2026-10-14, the owner agreeing) for an enchant's material
+cost on its tooltip. `UI/EnchantTooltip.lua` hooks spell tooltips
+(`TooltipDataProcessor` for Spell and RecipeRankInfo, `OnTooltipSetSpell`,
+and ItemRefTooltip's `SetHyperlink` for a linked enchant; the other
+setters only when neither hook took). A recipe's ID is its spell ID, so an
+Enchanting recipe that makes no item (`EnchantTooltip:RecipeFor`: a known
+recipe first, else the book's, read only once `RecipeBook.merged` is built)
+gets Materials with its total, each material's cost (`Cost:GetCraftCost`
+with `valueOwned`, so the usual price order), You're short (bags and bank)
+and Known by. Lines are kept per spell until `Inventory.changes` moves or
+`KEEP_FOR` passes. "Enchant costs on tooltips" on the Look page
+(`tooltipEnchantCosts`, on unless unticked, never rename it); `/bts tip`
+counts them. Tested in `tools/test_enchanttooltip.lua`.
+
 ## Profit by method
 
 A player asked (2026-10-11, the owner agreeing) for profit split by how it
