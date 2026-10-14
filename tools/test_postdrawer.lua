@@ -8,6 +8,9 @@
 --   2. The close gem puts it away until the auction house is opened again.
 --   3. List all lists the most valuable stack Sell shows, one a click, and
 --      says how many are left to list.
+--   4. Search all on Buy (2026-10-14) looks up every line the auction house
+--      sells at once, with each shortfall, or one a click where the game
+--      takes one a search; vendor materials are left out.
 
 local ns = {}
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
@@ -124,5 +127,42 @@ requested = nil
 PostPanel.shownLines = {}
 PostPanel:ListNext()
 check("a click with nothing to list lists nothing", requested == nil and said ~= nil)
+
+-- 4
+local shopping = {
+    { itemID = 20, shortfall = 6 },
+    { itemID = 21, shortfall = 0 },
+    { itemID = 22, shortfall = 4, fromVendor = true },
+    { itemID = 23, shortfall = 9, fromVendor = true, vendorLimited = true },
+    { itemID = 24, shortfall = 2 },
+}
+PostPanel.ShoppingLines = function() return shopping end
+local search = Stub({ SetText = function(self, text) self.text = text end,
+    SetEnabledState = function(self, on) self.enabled = on end })
+PostPanel.searchAll = search
+PostPanel:UpdateSearchAll()
+check("Search all counts what the auction house can sell", search.text == "Search all 3" and search.enabled == true)
+
+local many, single = nil, {}
+ns.ShoppingLists = { SearchMany = function(_, ids, counts) many = { ids = ids, counts = counts }; return true end }
+ns.UI.SearchAuctionHouse = function(_, id, count) single[#single + 1] = { id, count }; return true end
+PostPanel:SearchAll()
+check("all at once, vendor-only left out", many and #many.ids == 3 and many.ids[1] == 20
+    and many.ids[2] == 23 and many.ids[3] == 24 and #single == 0)
+check("each with its shortfall", many.counts[20] == 6 and many.counts[23] == 9 and many.counts[24] == 2)
+
+ns.ShoppingLists.SearchMany = function() return false, "single" end
+PostPanel:SearchAll()
+check("one a search: the first, then Next", single[1][1] == 20 and single[1][2] == 6 and search.text == "Next 2/3")
+PostPanel:SearchAll()
+PostPanel:SearchAll()
+check("Next walks the rest and ends", #single == 3 and single[3][1] == 24 and search.text == "Search all 3")
+
+shopping = {}
+said = nil
+PostPanel:SearchAll()
+check("nothing to look for: says so", said ~= nil and #single == 3)
+PostPanel:UpdateSearchAll()
+check("and greyed", search.text == "Search all" and search.enabled == false)
 
 print(("\n%d check(s) passed\n"):format(checks))
