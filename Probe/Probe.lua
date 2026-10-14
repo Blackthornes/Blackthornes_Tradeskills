@@ -346,6 +346,8 @@ function Probe:PrintReport()
     Line("post item PROTECTED", Yes(caps.auction.postItemSecure))
     Line("item locations", Yes(caps.auction.hasItemLocation))
     if ns.BuyQuantity then Line("fill buy quantity", ns.BuyQuantity:ProbeText()) end
+    -- The drawer's Auctions view (2026-10-14): whether cancelling works here.
+    if ns.MyAuctions then Line("cancel auctions", ns.MyAuctions:ProbeText()) end
 
     Heading("Vendors")
     Line("merchant item info", Yes(Util.HasFunction("C_MerchantFrame.GetItemInfo")))
