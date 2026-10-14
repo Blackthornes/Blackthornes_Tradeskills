@@ -1114,9 +1114,12 @@ function PostPanel:SetView(view)
 end
 
 --- A row worth searching the auction house for: still short, and not a
---- vendor material, which is a mistake to buy there.
+--- vendor material, which is a mistake to buy there. A vendor with limited
+--- stock is the exception (Healing Potion, 2026-10-14): it may run out
+--- before the queue has enough, so the auction house stays on offer.
 function PostPanel:CanSearch(line)
-    return type(line) == "table" and (line.shortfall or 0) > 0 and not line.fromVendor
+    return type(line) == "table" and (line.shortfall or 0) > 0
+        and (not line.fromVendor or line.vendorLimited == true)
 end
 
 -- Clicking the row searched already, but nothing said so. Asked for: "a button
