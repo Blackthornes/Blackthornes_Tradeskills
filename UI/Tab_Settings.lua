@@ -688,6 +688,16 @@ local function Build(outer)
     end, true)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    local freeSpaceRow = CreateRow(pages.queue, 1, L["Craft what frees bag space first"],
+        L["Craft next makes the ready craft that frees the most bag slots, after any part it needs. Off: it follows the queue's order."])
+
+    widgets.freeSpaceFirst = Widgets.CreateCheckbox(freeSpaceRow, L["Free space first"], function(checked)
+        Config:Set("craftFreesSpaceFirst", checked)
+        UI:RefreshActiveTab()
+        if ns.CraftPanel and ns.CraftPanel.UpdateCraftButton then ns.CraftPanel:UpdateCraftButton() end
+    end, true)
+    widgets.freeSpaceFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local altCraftRow = CreateRow(pages.queue, 1, L["Suggest other characters"],
         L["Point out materials one of your other characters can make for less than buying them."])
 
@@ -2080,6 +2090,7 @@ local function Refresh()
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
+    widgets.freeSpaceFirst:SetChecked(Config:Get("craftFreesSpaceFirst") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
     widgets.followGoals:SetChecked(Config:Get("farmerGoalsFollowQueue") ~= false)
     widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)

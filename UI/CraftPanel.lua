@@ -1290,6 +1290,7 @@ end
 function CraftPanel:GetNextReadyHere()
     local open = self:GetOpenRecipeIDs()
     local readyElsewhere = 0
+    local ready = {}
 
     for _, entry in ipairs(ns.Queue:GetAll()) do
         if ns.Crafting:GetReadiness(entry.recipeID) then
@@ -1297,14 +1298,28 @@ function CraftPanel:GetNextReadyHere()
             -- showing. Offering the craft is then the best available guess,
             -- and matches what the Queue tab does.
             if not open or open[entry.recipeID] then
-                return entry, readyElsewhere
+                ready[#ready + 1] = entry
+            else
+                readyElsewhere = readyElsewhere + 1
             end
-
-            readyElsewhere = readyElsewhere + 1
         end
     end
 
-    return nil, readyElsewhere
+    -- Of those, the one that frees the most bag space (Crafting:PickNext).
+    if not ns.Crafting.PickNext then return ready[1], readyElsewhere end
+    local entry, slots = ns.Crafting:PickNext(ready)
+    return entry, readyElsewhere, slots
+end
+
+--- The Craft button's tooltip, saying the bag space it frees when that
+--- picked it (Crafting:PickNext).
+local function CraftTooltip(slots)
+    if slots and slots > 0 then
+        return slots == 1
+            and L["One click makes every craft in this entry. It frees 1 bag slot, the most of what is ready."]
+            or L.Format("One click makes every craft in this entry. It frees %d bag slots, the most of what is ready.", slots)
+    end
+    return L["One click makes every craft in this entry"]
 end
 
 --- Keep the Craft next button honest about what it will do, and why it cannot.
@@ -1326,7 +1341,7 @@ function CraftPanel:UpdateCraftButton()
         return
     end
 
-    local entry, readyElsewhere = self:GetNextReadyHere()
+    local entry, readyElsewhere, slots = self:GetNextReadyHere()
 
     if not entry then
         button:SetText(L["Craft next"])
@@ -1353,7 +1368,7 @@ function CraftPanel:UpdateCraftButton()
 
     button:SetText(L.Format("Craft %dx %s", canMake, (recipe and recipe.name) or L["item"]))
     button:SetEnabledState(true)
-    button.tooltipText = L["One click makes every craft in this entry"]
+    button.tooltipText = CraftTooltip(slots)
 end
 
 --- The part of a refresh that comes before the rows: the frame laid out, the
