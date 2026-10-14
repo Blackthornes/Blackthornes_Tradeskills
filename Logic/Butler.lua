@@ -179,6 +179,17 @@
 -- button's click (Vendor:BuyNeeded): the same checks, the same one stack a
 -- step, and it says in chat why when it buys nothing.
 --
+-- Butler's "For your quests" line (2026-10-14, a player asked to buy what
+-- open quests need) has a Search button at the auction house:
+--
+--   _G.BlackthornesTS.Butler:SearchAuctions(items)   -- true and how, or false and why
+--
+-- items is { { itemID, count } }. Several are looked up in one search
+-- (ShoppingLists:SearchMany, the Lists view's own) and it answers true,
+-- "all"; where the game takes one a search, the first is searched with its
+-- count for the buy box (UI:SearchAuctionHouse) and it answers true, "one",
+-- so Butler's next click sends the rest. Never raises.
+--
 -- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
 
@@ -1423,4 +1434,37 @@ function Butler:BuyFromVendor()
     end)
     if not ok then return false, L["Tradeskills could not buy from this vendor"] end
     return started == true, why
+end
+
+--- Look up items on the auction house, from Butler's Search click. Every
+--- item at once where the game allows it, else the first with its count.
+-- @return true and "all" or "one", or false and why
+function Butler:SearchAuctions(items)
+    local ok, done, how = pcall(function()
+        local ids, counts = {}, {}
+        for _, item in ipairs(type(items) == "table" and items or {}) do
+            local itemID = type(item) == "table" and tonumber(item.itemID)
+            if itemID and itemID > 0 and not counts[itemID] then
+                ids[#ids + 1] = math.floor(itemID)
+                counts[math.floor(itemID)] = math.max(1, math.floor(tonumber(item.count) or 1))
+            end
+        end
+        if #ids == 0 then return false, L["Nothing on this list to look for on the auction house."] end
+        local scanner = ns.Scanner
+        if not (scanner and scanner.isAuctionHouseOpen) then return false, L["open the auction house first"] end
+        if scanner.isScanning then return false, L["a scan is running; search again once it finishes"] end
+        local lists = ns.ShoppingLists
+        if #ids > 1 and lists and lists.SearchMany then
+            local sent, why = lists:SearchMany(ids)
+            if sent then return true, "all" end
+            if why ~= "single" then return false, why end
+        end
+        -- UI:SearchAuctionHouse says in chat why when it can't.
+        if ns.UI and ns.UI.SearchAuctionHouse and ns.UI:SearchAuctionHouse(ids[1], counts[ids[1]]) then
+            return true, #ids > 1 and "one" or "all"
+        end
+        return false, nil
+    end)
+    if not ok then return false, L["Tradeskills could not search the auction house"] end
+    return done == true, how
 end
