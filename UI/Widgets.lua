@@ -2038,6 +2038,10 @@ function Widgets.ItemShiftClick(itemID, link)
     if not itemID and type(link) == "string" then itemID = tonumber(link:match("item:(%d+)")) end
     if not itemID then return false end
 
+    -- The drawer's Lists view is adding to a list: the item goes on it.
+    local lists = ns.ShoppingListsView
+    if lists and lists.TakeItem and lists:TakeItem(itemID) then return true end
+
     if ns.Scanner and ns.Scanner.isAuctionHouseOpen then
         if not (ns.UI and ns.UI.SearchAuctionHouse) then return false end
         ns.UI:SearchAuctionHouse(itemID)
