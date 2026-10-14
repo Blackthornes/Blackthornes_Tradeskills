@@ -542,7 +542,7 @@ game; the bars are the game's inline texture escape.
 ## The Stats tab
 
 The owner asked (2026-10-14, from a mockup) for a tab like Farmer's
-Stats tab, one item at a time. `UI/Tab_Stats.lua` (order 6, after
+Stats tab, one item at a time. `UI/Tab_Stats.lua` (order 9, after
 Prices) lists what you craft, star and sell (sold most in 30 days first;
 a search finds any priced item by its saved name) and draws the picked
 item: four numbers (worth now against a week ago, profit each, sold a
