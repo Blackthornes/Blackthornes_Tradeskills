@@ -90,13 +90,121 @@ function Crafting:GetQueueReadiness()
     return ready, total
 end
 
---- The first queued craft you could make right now.
-function Crafting:GetNextReady()
-    for _, entry in ipairs(ns.Queue:GetAll()) do
-        if self:GetReadiness(entry.recipeID) then
-            return entry
+--------------------------------------------------------------------------------
+-- What to craft next
+--------------------------------------------------------------------------------
+
+-- A player asked (2026-10-14, the owner agreeing) for Craft next to make
+-- whatever frees the most bag space first. Only the pick changes: the queue
+-- keeps its order, and a craft never goes before a sub-craft of its own that
+-- is ready to make.
+
+-- Bag slots worked out per recipe, kept until the bags or the queue move.
+local freedCache, freedKey = {}, nil
+
+local function Slots(count, stack)
+    if count <= 0 then return 0 end
+    return math.ceil(count / stack)
+end
+
+--- Bag slots making all you can of an entry now frees: the slots its
+--- materials stop taking, less the new slots what it makes takes. Counted
+--- as stacks from the bags' totals, so it can be negative.
+-- @return slots, crafts
+function Crafting:SlotsFreed(entry)
+    local key = tostring(ns.Inventory and ns.Inventory.changes) .. ":" .. tostring(ns.Queue.version)
+    if key ~= freedKey then freedCache, freedKey = {}, key end
+
+    local kept = freedCache[entry.recipeID]
+    if kept and kept.quantity == entry.quantity then return kept.slots, kept.crafts end
+
+    local slots, crafts = 0, 0
+    local recipe = ns.Recipes:GetAny(entry.recipeID)
+    if recipe and recipe.reagents then
+        crafts = math.min(entry.quantity or 0, ns.Profit:GetCraftableCount(entry.recipeID))
+    end
+
+    if crafts > 0 then
+        local maxStack = (ns.BagsFull and ns.BagsFull.MaxStack) or function() return 1 end
+
+        for _, reagent in ipairs(recipe.reagents) do
+            local have = ns.Inventory:GetBagCount(reagent.itemID)
+            local used = math.min(have, (reagent.quantity or 1) * crafts)
+            local stack = maxStack(reagent.itemID)
+            slots = slots + Slots(have, stack) - Slots(have - used, stack)
+        end
+
+        if recipe.outputItemID then
+            local held = ns.Inventory:GetBagCount(recipe.outputItemID)
+            local made = crafts * math.max(1, recipe.quantityMin or 1)
+            local stack = maxStack(recipe.outputItemID)
+            slots = slots - (Slots(held + made, stack) - Slots(held, stack))
         end
     end
+
+    freedCache[entry.recipeID] = { quantity = entry.quantity, slots = slots, crafts = crafts }
+    return slots, crafts
+end
+
+--- Is "Craft what frees bag space first" ticked? On unless unticked.
+function Crafting:FreesSpaceFirst()
+    return ns.Config:Get("craftFreesSpaceFirst") ~= false
+end
+
+--- Pick from ready entries, given in queue order.
+--
+-- With the setting off, or one entry, the first. Otherwise the one freeing
+-- the most bag slots, ties going to the earlier, and never an entry while a
+-- sub-craft of its own (or of one of its sub-crafts) is among the ready ones.
+-- @return entry, slots -- slots is nil when bag space did not decide
+function Crafting:PickNext(ready)
+    if #ready == 0 then return nil end
+    if #ready == 1 or not self:FreesSpaceFirst() then return ready[1] end
+
+    local byRecipe = {}
+    for _, entry in ipairs(ns.Queue:GetAll()) do
+        byRecipe[entry.recipeID] = entry
+    end
+
+    -- Everything a ready sub-craft feeds, up the chain, waits for it.
+    local waits = {}
+    for _, entry in ipairs(ready) do
+        local seen, stack = {}, { entry }
+        while #stack > 0 do
+            local current = table.remove(stack)
+            for parentID in pairs(current.forRecipes or {}) do
+                if not seen[parentID] then
+                    seen[parentID] = true
+                    waits[parentID] = true
+                    if byRecipe[parentID] then stack[#stack + 1] = byRecipe[parentID] end
+                end
+            end
+        end
+    end
+
+    local best, bestSlots
+    for _, entry in ipairs(ready) do
+        if not waits[entry.recipeID] then
+            local slots = self:SlotsFreed(entry)
+            if not best or slots > bestSlots then best, bestSlots = entry, slots end
+        end
+    end
+
+    -- A loop in the sub-crafts would leave nothing; fall back to queue order.
+    if not best then return ready[1] end
+    return best, bestSlots
+end
+
+--- The queued craft you could make right now that Craft next makes.
+-- @return entry, slots -- see PickNext
+function Crafting:GetNextReady()
+    local ready = {}
+    for _, entry in ipairs(ns.Queue:GetAll()) do
+        if self:GetReadiness(entry.recipeID) then
+            ready[#ready + 1] = entry
+        end
+    end
+    return self:PickNext(ready)
 end
 
 --------------------------------------------------------------------------------
