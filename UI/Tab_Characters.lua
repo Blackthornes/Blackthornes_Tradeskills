@@ -560,7 +560,7 @@ end
 UI:RegisterTab({
     key = "characters",
     text = L["Characters"],
-    order = 7,
+    order = 11,
     build = Build,
     refresh = Refresh,
 })

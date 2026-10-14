@@ -1474,7 +1474,7 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
 UI:RegisterTab({
     key = "levelup",
     text = L["Level Up"],
-    order = 1.5,
+    order = 8,
     build = switch and switch.Build or Build,
     refresh = switch and switch.Refresh or Refresh,
     onShow = OnShow,
