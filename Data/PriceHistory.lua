@@ -8,7 +8,8 @@
 --
 -- What is kept, per realm and faction, in `priceHistory[realm][itemID]`: a
 -- flat list of hour, price pairs (hour = time() / 3600, rounded down), one
--- pair for each hour a scan saw the item, for seven days. Only items a
+-- pair for each hour a scan saw the item, for fourteen days (seven until
+-- 2026-10-14, when players asked for a longer graph). Only items a
 -- character on the account crafts or uses as a material, and starred items,
 -- so a full scan of the whole auction house does not fill the saved file.
 -- Never rename it. Nothing else reads or writes it, and losing it costs only
@@ -23,7 +24,11 @@ local _, ns = ...
 local PriceHistory = ns.NewModule("PriceHistory")
 
 local DAY = 24 * 3600
-local KEEP_SECONDS = 7 * DAY
+local KEEP_SECONDS = 14 * DAY
+-- The best times look at the last week only: an hour's pattern from two
+-- weeks back says little about this week's market.
+local BEST_SECONDS = 7 * DAY
+PriceHistory.KEEP_SECONDS = KEEP_SECONDS
 
 -- What the best times need before they are said: scans in this many
 -- different hours of the day, on this many different days, and at least
@@ -120,7 +125,7 @@ end
 -- Recording
 --------------------------------------------------------------------------------
 
---- Drop pairs older than seven days from the front of a list.
+--- Drop pairs older than fourteen days from the front of a list.
 local function Trim(list, now)
     local oldest = math.floor((now - KEEP_SECONDS) / 3600)
     local drop = 0
@@ -220,7 +225,7 @@ end
 --------------------------------------------------------------------------------
 
 --- The kept prices for an item, oldest first, as { t = time(), p = copper },
---- from `since` seconds ago until now (all seven days when not given).
+--- from `since` seconds ago until now (all fourteen days when not given).
 function PriceHistory:GetPoints(itemID, since, now)
     now = now or time()
     local realm = RealmTable(false)
@@ -303,7 +308,7 @@ end
 --                         day's average it runs (0.08 = 8%)
 --   sellHour, sellAbove   dearest hour, and how far over
 function PriceHistory:GetBestTimes(itemID, now)
-    local points = self:GetPoints(itemID, KEEP_SECONDS, now)
+    local points = self:GetPoints(itemID, BEST_SECONDS, now)
 
     -- Group by the day on the player's clock.
     local byDay = {}
@@ -412,7 +417,7 @@ end
 -- Upkeep
 --------------------------------------------------------------------------------
 
---- Drop items with nothing left in the last seven days.
+--- Drop items with nothing left in the last fourteen days.
 function PriceHistory:Prune(now)
     now = now or time()
     local removed = 0
