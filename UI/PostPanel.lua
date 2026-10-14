@@ -682,10 +682,32 @@ end
 function PostPanel:ListNext()
     CommitTyping(self.list)
 
-    local line = ns.Posting:GetNextPostable(nil, self.shownLines or self:ShownLines())
+    local Posting = ns.Posting
+    local lines = self.shownLines or self:ShownLines()
+    local fast = Posting.FastListing ~= nil and Posting:FastListing()
+
+    -- Fast listing passes over an item still being confirmed: before the
+    -- bags catch up, the same stack would come up again.
+    local line, settling = Posting:GetNextPostable(fast and { skipSettling = true } or nil, lines)
     if not line then
-        ns.Print(L["nothing in your bags worth listing right now"])
+        if settling then
+            ns.Print(L["waiting for your last listing to go through"])
+        else
+            ns.Print(L["nothing in your bags worth listing right now"])
+        end
         return
+    end
+
+    -- Its price not checked lately: one search checks every price on the
+    -- list, and the clicks after it list straight away. One the search
+    -- could not price is searched for alone, as before.
+    if fast and not Posting:IsFresh(line.itemID) and not Posting:BulkTried(line.itemID)
+            and ns.Config:Get("verifyPriceBeforePosting") ~= false then
+        local started, count = Posting:CheckAll(lines)
+        if started then
+            ns.Print(L.Format("checking the prices of %d items on your Sell list...", count))
+            return
+        end
     end
 
     local allowed, reason = ns.Posting:CanPost(line.itemID)
