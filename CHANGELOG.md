@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.56.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Duration in the auction house drawer:** a box at the foot of the Sell
+  view picks how long your listings stay up (2, 8 or 24 hours). It is the
+  same choice as on the Post tab, so a pick in either shows in both.
+
 ## 0.55.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
