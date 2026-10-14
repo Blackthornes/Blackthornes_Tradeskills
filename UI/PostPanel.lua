@@ -511,10 +511,13 @@ function PostPanel:Build()
         title:SetPoint("TOPLEFT", header, "TOPLEFT", (ns.UI and ns.UI.AUCTION_BAR_TEXT_LEFT) or 32, -8)
     end
 
-    local half = math.floor((PANEL_WIDTH - 28) / 2)
+    -- Lists (a player asked, 2026-10-14): the player's own named shopping
+    -- lists, UI/ShoppingListsView.lua.
+    local third = math.floor((PANEL_WIDTH - 28) / 3)
     local switch = Widgets.CreateTabStrip(body, {
-        { key = "sell", text = L["Sell"], width = half },
-        { key = "buy", text = L["Buy"], width = half },
+        { key = "sell", text = L["Sell"], width = third },
+        { key = "buy", text = L["Buy"], width = third },
+        { key = "lists", text = L["Lists"], width = third },
     }, function(key)
         PostPanel:SetView(key)
     end)
@@ -574,6 +577,12 @@ function PostPanel:Build()
     shopping:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, LIST_BOTTOM)
     shopping:Hide()
     self.shoppingList = shopping
+
+    local View = ns.ShoppingListsView
+    if View then
+        View:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
+        if View.paste then View.paste:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3) end
+    end
 
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
     empty:SetPoint("CENTER", list, "CENTER")
@@ -1107,7 +1116,7 @@ end
 
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
-    self.view = view == "buy" and "buy" or "sell"
+    self.view = (view == "buy" or view == "lists") and view or "sell"
     if self.switch then self.switch:Select(self.view) end
     self.shoppingAt = nil
     self:Refresh()
@@ -1232,26 +1241,31 @@ function PostPanel:Refresh()
     self:Reflow()
 
     if self.hideLosses then
-        local showBox = self.view ~= "buy"
+        local showBox = self.view == "sell"
         self.hideLosses:SetShown(showBox)
-        if self.summaryBeside ~= showBox then
-            -- On Buy the box is gone, so the summary has the whole width
-            -- rather than wrapping to two lines beside an empty space.
+        -- What sits at the summary line's right end: Hide losses on Sell,
+        -- Paste a list on Lists, nothing on Buy, where the summary has the
+        -- whole width rather than wrapping beside an empty space.
+        local beside = showBox and "box" or self.view == "lists" and "paste" or "none"
+        if self.summaryBeside ~= beside then
             if self.summary and self.frame then
+                local View = ns.ShoppingListsView
                 self.summary:ClearAllPoints()
                 self.summary:SetPoint("TOPLEFT", self.switch, "BOTTOMLEFT", 0, -6)
-                if showBox then
+                if beside == "box" then
                     self.summary:SetPoint("RIGHT", self.hideLosses, "LEFT", -8, 0)
+                elseif beside == "paste" and View and View.paste then
+                    self.summary:SetPoint("RIGHT", View.paste, "LEFT", -8, 0)
                 else
                     self.summary:SetPoint("RIGHT", self.frame, "RIGHT", -14, 0)
                 end
             end
-            self.summaryBeside = showBox
+            self.summaryBeside = beside
         end
     end
 
     if self.duration then
-        local selling = self.view ~= "buy"
+        local selling = self.view == "sell"
         self.duration:SetShown(selling)
         if selling then self.duration:SetValue(ns.Config:Get("postDuration") or 2) end
         -- On Buy the box is gone, so the note starts at the edge.
@@ -1265,6 +1279,23 @@ function PostPanel:Refresh()
             self.footNote:SetPoint("RIGHT", self.listAll, "LEFT", -8, 0)
             self.noteBeside = selling
         end
+    end
+
+    local View = ns.ShoppingListsView
+    if View and View.list then View:SetShown(self.view == "lists") end
+    if self.footNote then self.footNote:SetShown(self.view ~= "lists") end
+
+    if self.view == "lists" then
+        if self.listAll then self.listAll:Hide() end
+        self.list:Hide()
+        self.shoppingList:Hide()
+        self.empty:Hide()
+        self:SetTitle(L["Shopping lists"])
+        if View then
+            self.summary:SetText(View:Summary())
+            View:Refresh()
+        end
+        return
     end
 
     if self.view == "buy" then
