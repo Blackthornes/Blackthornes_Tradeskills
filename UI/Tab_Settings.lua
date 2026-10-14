@@ -2243,7 +2243,7 @@ end
 UI:RegisterTab({
     key = "settings",
     text = L["Settings"],
-    order = 8,
+    order = 12,
     build = Build,
     refresh = Refresh,
     onShow = Refresh,
