@@ -91,6 +91,11 @@ local GRIP_SIZE = 20
 -- How long "Scan complete" stays on the bar before it goes back to idle.
 local SCAN_DONE_HOLD = 5
 
+-- A test (2026-10-14): the scan line sizzles like a lit fuse
+-- (Widgets.AddSizzle) instead of the glint running along it. False puts the
+-- glint back as it was.
+local SCAN_LINE_SIZZLES = true
+
 -- How far the window sits off the screen corner while the auction house is
 -- open. Small: the three panels together are wider than the screen, so every
 -- unit of margin is a unit of overlap somewhere else.
@@ -980,6 +985,10 @@ function UI:GetAuctionBar()
     glint:Hide()
     bar.glint = glint
 
+    if SCAN_LINE_SIZZLES and Widgets.AddSizzle then
+        bar.sizzle = Widgets.AddSizzle(progress)
+    end
+
     -- A gold wash over the whole bar that fades out when a scan finishes.
     local flash = bar:CreateTexture(nil, "OVERLAY")
     flash:SetAllPoints()
@@ -1038,7 +1047,13 @@ function UI:RefreshAuctionStatus()
         bar.status:SetTextColor(Theme.Unpack("text"))
         bar.progress:Show()
         bar.progress:SetProgress(scan.fraction or 0)
-        bar.glint:SetShown(scan.fraction == nil)
+        if bar.sizzle then
+            -- Measuring: it burns along what is done. Waiting its turn: a
+            -- lower crackle along the whole line.
+            bar.sizzle:Set(scan.fraction and 1 or 0.45, scan.fraction == nil)
+        else
+            bar.glint:SetShown(scan.fraction == nil)
+        end
         return
     end
 
@@ -1048,6 +1063,7 @@ function UI:RefreshAuctionStatus()
     if bar.doneUntil and GetTime() < bar.doneUntil then return end
     bar.doneUntil = nil
 
+    if bar.sizzle then bar.sizzle:Set(0) end
     bar.progress:Hide()
     bar.status:SetTextColor(Theme.Unpack("muted"))
 
@@ -1076,6 +1092,8 @@ function UI:CelebrateScan(result)
     bar.glint:Hide()
     bar.progress:Show()
     bar.progress:SetProgress(1)
+    -- The full line flares and dies down while the result shows.
+    if bar.sizzle then bar.sizzle:Set(1, true, SCAN_DONE_HOLD) end
 
     local prices = Util.Comma(result.items or 0)
     local texts
