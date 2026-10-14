@@ -37,8 +37,8 @@ restart the game fully after updating (`/reload` is not enough).
   Settings > Queue > Ignored crafts restores it.
 - **Butler:** it can buy the queue's materials at a vendor and search the
   auction house for the items open quests need.
-- **Fixes:** shopping lists, the Auctions view and the Stats tab; sort
-  headings keep their words while they sort.
+- **Bug fixes:** several fixes for shopping lists, the Auctions view, the Stats
+  tab and sort headings.
 
 ## 0.56.0
 
