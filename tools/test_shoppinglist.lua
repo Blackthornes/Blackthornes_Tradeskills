@@ -130,6 +130,8 @@ do
     PostPanel:CanSearch({ shortfall = 2 }), true)
   check("a vendor material is never searched for",
     PostPanel:CanSearch({ shortfall = 2, fromVendor = true }), false)
+  check("a vendor with limited stock can still be searched for",
+    PostPanel:CanSearch({ shortfall = 2, fromVendor = true, vendorLimited = true }), true)
   check("nor one you already have",
     PostPanel:CanSearch({ shortfall = 0 }), false)
 

@@ -413,8 +413,8 @@ local function UpdateMaterialRow(row, line)
         row.name:SetTextColor(Theme.Unpack(nameColour or "text"))
 
         -- Buying a vendor reagent off the auction house is a mistake, so do
-        -- not offer the search for it.
-        row.search:SetShown(not line.fromVendor)
+        -- not offer the search for it, unless the vendor's stock is limited.
+        row.search:SetShown(not line.fromVendor or line.vendorLimited == true)
     elseif line.paid and not line.needsBankTrip then
         -- Bought: what it cost stands where the estimate stood, amber when
         -- it came to well over it.
