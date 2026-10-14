@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.58.0
+
+For WoW: Forever (interface 16001). A file was added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Enchant costs on tooltips:** an Enchanting recipe's tooltip shows its
+  materials with the total cost, what you are short and which of your
+  characters know it. "Enchant costs on tooltips" on the Look page.
+- **Auction house drawer:** the Buy view has a Search all button that looks
+  up everything on the list at once. Where the game takes one search at a
+  time it steps through them with "Next 2/5". A search of a whole list
+  fills in the buy quantity the way the Buy tab does.
+
 ## 0.57.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
