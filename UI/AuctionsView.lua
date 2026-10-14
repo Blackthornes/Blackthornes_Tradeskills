@@ -1,0 +1,404 @@
+-- Blackthornes Tradeskills -- UI/AuctionsView.lua
+-- The auction house drawer's Auctions view (a player asked, the owner
+-- agreeing 2026-10-14, from a mockup): every auction you have up, the
+-- undercut ones first with a red edge and a Cancel button each, then the
+-- ones nobody is under, then those no recent scan can judge, then your other
+-- characters' as last seen. Logic/MyAuctions.lua works it out; this draws it
+-- inside UI/PostPanel.lua's drawer.
+--
+-- Cancelling is one auction a click, as the game asks: each row's Cancel, or
+-- Cancel next at the foot for the undercut auction with the most money under.
+
+local _, ns = ...
+
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
+local View = ns.NewModule("AuctionsView")
+
+local Theme = ns.Theme
+local Widgets = ns.Widgets
+local Util = ns.Util
+
+local ROW_HEIGHT = 36
+local ICON_SIZE = 24
+
+-- The Cancel button, wide enough for its word in either language.
+local CANCEL_WIDTH = 58
+do
+    local measure = Theme and Theme.MeasureText
+    if type(measure) == "function" then
+        for _, word in ipairs({ L["Cancel"], L["Cancelling"] }) do
+            local ok, width = pcall(measure, "small", word)
+            if ok and type(width) == "number" then CANCEL_WIDTH = math.max(CANCEL_WIDTH, width + 12) end
+        end
+    end
+end
+local RIGHT_INSET = 8 + CANCEL_WIDTH + 8
+
+local function Money(copper)
+    return Util.FormatMoney(copper or 0, { noColor = true, short = true })
+end
+
+local function Colored(color, text)
+    local hex = ns.COLORS and ns.COLORS[color]
+    if not hex then return text end
+    return ("|c%s%s|r"):format(hex, text)
+end
+
+local function CharacterName(who)
+    local Recipes = ns.Recipes
+    if Recipes and Recipes.GetCharacterName then
+        local ok, name = pcall(Recipes.GetCharacterName, Recipes, who)
+        if ok and name then return name end
+    end
+    return tostring(who or "?")
+end
+
+--------------------------------------------------------------------------------
+-- What each row says
+--------------------------------------------------------------------------------
+
+--- The detail line under the name, longest first: the row keeps the first
+--- that fits, so nothing ends in "...".
+function View.DetailTexts(row)
+    local each = L.Format("%d @ %s", row.quantity or 1, Money(row.unit))
+    local ends = row.left and L.Format("ends in %s", Util.FormatAge(row.left)) or nil
+    local texts = {}
+
+    local function Add(...)
+        local parts = {}
+        for i = 1, select("#", ...) do
+            local part = select(i, ...)
+            if part and part ~= "" then parts[#parts + 1] = part end
+        end
+        texts[#texts + 1] = table.concat(parts, "  ·  ")
+    end
+
+    local who = row.alt and CharacterName(row.who) or nil
+
+    if row.state == "undercut" then
+        local cheapest = L.Format("cheapest %s", Colored("loss", Money(row.rival)))
+        local under = Colored("loss", L.Format("%s under", Money(row.gap)))
+        Add(who, each, cheapest, under, ends)
+        Add(who, each, cheapest, under)
+        Add(who, each, under)
+    elseif row.state == "cheapest" then
+        local next_ = row.rival and L.Format("next %s", Money(row.rival)) or L["only yours listed"]
+        Add(who, each, next_, ends)
+        Add(who, each, next_)
+        Add(who, each)
+    else
+        local age = ns.Prices and ns.Prices.GetAge and ns.Prices:GetAge(row.itemID)
+        local scanned = age and L.Format("scanned %s ago", Util.FormatAge(age)) or L["never scanned"]
+        Add(who, each, scanned, ends)
+        Add(who, each, scanned)
+        Add(who, each)
+    end
+    if who then Add(each) end
+    return texts
+end
+
+--- What sits at the row's right end when there is no Cancel button.
+function View.BadgeText(row)
+    if row.alt then return L["Log in to cancel"], "dim" end
+    if row.cancelling then return L["Cancelling"], "warn" end
+    if row.state == "cheapest" then return L["Cheapest"], "profit" end
+    if row.state == "unknown" then return L["Unknown"], "muted" end
+    return nil
+end
+
+--- The deposit line under Cancel.
+function View.DepositText(row)
+    local deposit, rough = ns.MyAuctions:Deposit(row)
+    if not deposit then return nil end
+    return rough and L.Format("deposit about %s", Money(deposit)) or L.Format("deposit %s", Money(deposit))
+end
+
+--------------------------------------------------------------------------------
+-- Rows
+--------------------------------------------------------------------------------
+
+local function CreateRow(row)
+    row.icon = Theme.CreateItemIcon(row, ICON_SIZE)
+    row.icon:SetPoint("LEFT", 8, 0)
+
+    row.name = Theme.CreateLabel(row, "small", "text")
+    row.name:SetPoint("TOPLEFT", 8 + ICON_SIZE + 8, -4)
+    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -RIGHT_INSET, -4)
+
+    row.detail = Theme.CreateLabel(row, "tiny", "muted")
+    row.detail:SetPoint("TOPLEFT", 8 + ICON_SIZE + 8, -20)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -RIGHT_INSET, -20)
+    row.detail:SetWordWrap(false)
+
+    -- A red edge on an undercut auction, so they read at a glance.
+    row.redEdge = Theme.AccentStripe(row, 3)
+    row.redEdge:SetColorTexture(Theme.Unpack("loss"))
+    row.redEdge:Hide()
+
+    row.cancel = Widgets.CreateButton(row, L["Cancel"], function()
+        local data = row.data
+        if not data then return end
+        local ok, reason = ns.MyAuctions:Cancel(data)
+        if not ok and reason then ns.Print(reason) end
+        if ns.PostPanel then ns.PostPanel:Refresh() end
+    end, { width = CANCEL_WIDTH, height = 18 })
+    row.cancel:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -4)
+    row.cancel:HookScript("OnEnter", function(self)
+        local data = row.data
+        if not data then return end
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText(L["Cancel this auction"])
+        GameTooltip:AddLine(L["It comes back to you in the mail."], 1, 1, 1, true)
+        if row.cancelReason then GameTooltip:AddLine(row.cancelReason, Theme.Unpack("loss")) end
+        local deposit = ns.MyAuctions:Deposit(data)
+        if deposit then
+            GameTooltip:AddLine(L.Format("The deposit is not returned, so listing it again costs about %s.",
+                Util.FormatMoney(deposit, { noColor = true })), 0.7, 0.7, 0.7, true)
+        end
+        if ns.MyAuctions:GapSmallerThanDeposit(data) then
+            GameTooltip:AddLine(L["The new deposit costs more than the gap you would close."], Theme.Unpack("warn"))
+        end
+        GameTooltip:Show()
+    end)
+    row.cancel:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
+    row.deposit = Theme.CreateLabel(row, "tiny", "dim", "RIGHT")
+    row.deposit:SetPoint("TOPRIGHT", row.cancel, "BOTTOMRIGHT", 0, -1)
+
+    row.badge = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
+    row.badge:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+
+    -- A heading row: the group's name in gold and a note at its right.
+    row.heading = Theme.CreateLabel(row, "tiny", "accent")
+    row.heading:SetPoint("BOTTOMLEFT", 8, 5)
+    row.headingNote = Theme.CreateLabel(row, "tiny", "dim", "RIGHT")
+    row.headingNote:SetPoint("BOTTOMRIGHT", -8, 5)
+end
+
+local function UpdateRow(row, entry)
+    local isHeading = entry.heading ~= nil
+    row.heading:SetShown(isHeading)
+    row.headingNote:SetShown(isHeading)
+    row.icon:SetShown(not isHeading)
+    row.name:SetShown(not isHeading)
+    row.detail:SetShown(not isHeading)
+
+    if isHeading then
+        row.heading:SetText(entry.heading)
+        row.headingNote:SetText(entry.note or "")
+        row.redEdge:Hide()
+        row.cancel:Hide()
+        row.deposit:Hide()
+        row.badge:Hide()
+        return
+    end
+
+    local label = (entry.link and entry.link:match("%[(.-)%]")) or Util.GetItemLabel(entry.itemID)
+        or L["that item"]
+    if Theme.SetRowName then Theme.SetRowName(row.name, label) else row.name:SetText(label) end
+    Theme.SetItemIcon(row.icon, entry.itemID)
+    local r, g, b = Util.GetItemQualityColor(entry.itemID)
+    if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
+
+    Theme.FitText(row.detail, View.DetailTexts(entry))
+
+    local undercut = entry.state == "undercut" and entry.mine and not entry.cancelling
+    row.redEdge:SetShown(entry.state == "undercut")
+    row.cancel:SetShown(undercut)
+    if undercut then
+        local allowed, reason = ns.MyAuctions:CanCancel(entry)
+        row.cancel:SetEnabledState(allowed)
+        row.cancelReason = (not allowed) and reason or nil
+    end
+
+    local deposit = undercut and View.DepositText(entry) or nil
+    row.deposit:SetShown(deposit ~= nil)
+    row.deposit:SetText(deposit or "")
+    if deposit then
+        row.deposit:SetTextColor(Theme.Unpack(ns.MyAuctions:GapSmallerThanDeposit(entry) and "warn" or "dim"))
+    end
+
+    local badge, color = nil, nil
+    if not undercut then badge, color = View.BadgeText(entry) end
+    row.badge:SetShown(badge ~= nil)
+    if badge then
+        row.badge:SetText(badge)
+        row.badge:SetTextColor(Theme.Unpack(color or "muted"))
+    end
+end
+
+local function ShowTooltip(row, entry)
+    if entry.heading then return end
+    Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddDoubleLine(L["Your price each"], Util.FormatMoney(entry.unit or 0, { noColor = true }),
+        0.7, 0.7, 0.7, 1, 1, 1)
+    if entry.rival then
+        GameTooltip:AddDoubleLine(L["Cheapest not yours"], Util.FormatMoney(entry.rival, { noColor = true }),
+            0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    if entry.state == "undercut" and entry.gap then
+        GameTooltip:AddDoubleLine(L["Under you by"], Util.FormatMoney(entry.gap, { noColor = true }),
+            0.7, 0.7, 0.7, Theme.Unpack("loss"))
+    end
+    if entry.left then
+        GameTooltip:AddDoubleLine(L["Ends in"], Util.FormatAge(entry.left), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    if entry.state == "unknown" then
+        GameTooltip:AddLine(L["No recent scan of this item. Scan to see whether you were undercut."], 0.7, 0.7, 0.7, true)
+    end
+    if entry.alt then
+        GameTooltip:AddLine(L.Format("On %s, as last seen. Log in there to cancel it.", CharacterName(entry.who)),
+            0.7, 0.7, 0.7, true)
+    end
+    GameTooltip:Show()
+end
+
+--------------------------------------------------------------------------------
+-- The list
+--------------------------------------------------------------------------------
+
+--- The rows with their group headings, ready to draw.
+function View.Lay(rows)
+    local out = {}
+    local heads = {
+        undercut = { L["UNDERCUT"], nil },
+        cheapest = { L["CHEAPEST"], L["nobody under you"] },
+        unknown = { L["NOT SCANNED LATELY"], L["scan to check"] },
+    }
+    local last
+    for _, row in ipairs(rows) do
+        local group = row.alt and "alt" or row.state
+        if group ~= last then
+            if group == "alt" then
+                out[#out + 1] = { heading = L["ON YOUR OTHER CHARACTERS"], note = L["as last seen"] }
+            else
+                local head = heads[group] or heads.unknown
+                out[#out + 1] = { heading = head[1], note = head[2] }
+            end
+            last = group
+        end
+        out[#out + 1] = row
+    end
+    return out
+end
+
+function View:Build(body, frame, topAnchor, opts)
+    if self.list then return end
+    opts = opts or {}
+
+    local list = Widgets.CreateScrollList(body, {
+        rowHeight = ROW_HEIGHT,
+        createRow = CreateRow,
+        updateRow = UpdateRow,
+        onEnter = ShowTooltip,
+        onLeave = function() GameTooltip:Hide() end,
+    })
+    list:SetPoint("TOPLEFT", topAnchor, "BOTTOMLEFT", 0, -4)
+    list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, opts.bottom or 49)
+    self.list = list
+
+    local pad = opts.edge or 11
+    local footMiddle = pad + (opts.footHeight or 34) / 2
+
+    local nextWidth = 120
+    if Theme.MeasureText then
+        local ok, width = pcall(Theme.MeasureText, "small", L.Format("Cancel next (%d)", 88))
+        if ok and type(width) == "number" then nextWidth = math.max(nextWidth, width + 20) end
+    end
+    local cancelNext = Widgets.CreateButton(body, L["Cancel next"], function()
+        ns.MyAuctions:CancelNext()
+        View:Refresh(true)
+    end, { width = nextWidth, height = 22, primary = true,
+           tooltip = L["Cancels the undercut auction with the most money under, one a click. It comes back in the mail."] })
+    cancelNext:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
+    self.cancelNext = cancelNext
+
+    local note = Theme.CreateLabel(body, "tiny", "muted")
+    note:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
+    note:SetPoint("RIGHT", cancelNext, "LEFT", -8, 0)
+    note:SetWordWrap(true)
+    note:SetText(L["One cancel a click. Items come back in the mail."])
+    self.note = note
+
+    local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
+    empty:SetPoint("CENTER", list, "CENTER")
+    empty:SetWidth(300)
+    empty:SetWordWrap(true)
+    self.empty = empty
+
+    self.parts = { list, cancelNext, note }
+    self:SetShown(false)
+end
+
+function View:SetShown(on)
+    self.shown = on and true or false
+    for _, part in ipairs(self.parts or {}) do part:SetShown(self.shown) end
+    if self.empty and not self.shown then self.empty:Hide() end
+    if self.shown then self.key = nil end
+end
+
+--- Built again only when a read, a cancel or a scan moved, or a minute
+--- passed (the time left on each row): the drawer refreshes every second.
+function View:Refresh(force)
+    if not (self.list and self.shown) then return end
+
+    local MyAuctions = ns.MyAuctions
+    local key = ("%d:%d"):format(MyAuctions.version or 0, math.floor(time() / 60))
+    if not force and key == self.key then return end
+    self.key = key
+
+    local rows, summary = MyAuctions:Rows()
+    self.rows, self.summaryData = rows, summary
+    self.list:SetData(View.Lay(rows))
+
+    self.empty:SetShown(#rows == 0)
+    if #rows == 0 then
+        self.empty:SetText(summary.read and L["You have no auctions up."]
+            or L["Reading your auctions..."])
+    end
+
+    local next_ = 0
+    for _, row in ipairs(rows) do
+        if row.mine and row.state == "undercut" and not row.cancelling then next_ = next_ + 1 end
+    end
+    self.cancelNext:SetText(next_ > 0 and L.Format("Cancel next (%d)", next_) or L["Cancel next"])
+    self.cancelNext:SetEnabledState(next_ > 0)
+end
+
+--- The drawer's summary line.
+function View:Summary()
+    local summary = self.summaryData
+    if not summary then return "" end
+    local parts = { L.Format("%d up", summary.up) }
+    if summary.undercut > 0 then parts[#parts + 1] = Colored("loss", L.Format("%d undercut", summary.undercut)) end
+    if summary.worth > 0 then
+        parts[#parts + 1] = L.Format("worth %s", Colored("accent", Money(summary.worth)))
+    end
+    if summary.alts > 0 then parts[#parts + 1] = L.Format("%d on other characters", summary.alts) end
+    return table.concat(parts, "  ·  ")
+end
+
+--- The drawer's header title.
+function View:Title()
+    local summary = self.summaryData
+    if summary and summary.undercut > 0 then
+        return L.Format("Your auctions (%d undercut)", summary.undercut), L["Your auctions"]
+    end
+    return L["Your auctions"]
+end
+
+--- How many are undercut, for the count on the switch.
+function View:UndercutCount()
+    local MyAuctions = ns.MyAuctions
+    if not MyAuctions then return 0 end
+    local count = 0
+    for _, auction in ipairs((ns.Auctions and ns.Auctions.live) or {}) do
+        local cancelling = MyAuctions.cancelling and MyAuctions.cancelling[auction.auctionID]
+        if not cancelling and MyAuctions:Judge(auction.itemID, auction.unit) == "undercut" then
+            count = count + 1
+        end
+    end
+    return count
+end

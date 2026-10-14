@@ -631,6 +631,9 @@ function Auctions:ReadOwned(opts)
     local prices = {}
     local ids = {}
     local listings = {}
+    -- This session only, with each auction's ID and link: what the drawer's
+    -- Auctions view lists and cancels (Logic/MyAuctions.lua).
+    local live = {}
     local readAt = time()
 
     for index = 1, count do
@@ -689,6 +692,25 @@ function Auctions:ReadOwned(opts)
                     if bandOk and band then listing.band = band end
                 end
                 listings[#listings + 1] = listing
+
+                if info.auctionID then
+                    local linkOk, link = pcall(function()
+                        return type(info.itemLink) == "string" and info.itemLink or nil
+                    end)
+                    local bidOk, hasBid = pcall(function()
+                        return (tonumber(info.bidAmount) or 0) > 0 and info.bidder ~= nil
+                    end)
+                    live[#live + 1] = {
+                        auctionID = info.auctionID,
+                        itemID = itemID,
+                        link = linkOk and link or nil,
+                        quantity = quantity,
+                        unit = listing.unit,
+                        ends = listing.ends,
+                        band = listing.band,
+                        hasBid = bidOk and hasBid or false,
+                    }
+                end
             end
         end
     end
@@ -708,6 +730,8 @@ function Auctions:ReadOwned(opts)
     record.byCharacter[CharacterKey()] = { items = items, updatedAt = time(), listings = listings }
     -- This session only: auction IDs are for telling a new listing apart.
     self.ownedIDs = ids
+    self.live, self.liveAt = live, readAt
+    if ns.MyAuctions and ns.MyAuctions.OnRead then ns.MyAuctions:OnRead(live, opts.final) end
     record.updatedAt = time()
     record.auctionCount = count
 

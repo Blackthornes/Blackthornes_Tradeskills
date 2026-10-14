@@ -511,11 +511,13 @@ function PostPanel:Build()
         title:SetPoint("TOPLEFT", header, "TOPLEFT", (ns.UI and ns.UI.AUCTION_BAR_TEXT_LEFT) or 32, -8)
     end
 
-    local half = math.floor((PANEL_WIDTH - 28) / 2)
-    local switch = Widgets.CreateTabStrip(body, {
-        { key = "sell", text = L["Sell"], width = half },
-        { key = "buy", text = L["Buy"], width = half },
-    }, function(key)
+    -- Auctions (a player asked, 2026-10-14): your auctions, the undercut
+    -- ones first with a Cancel each, UI/AuctionsView.lua.
+    local views = { { "sell", L["Sell"] }, { "buy", L["Buy"] }, { "auctions", L["Auctions"] } }
+    local share = math.floor((PANEL_WIDTH - 28) / #views)
+    local tabs = {}
+    for _, view in ipairs(views) do tabs[#tabs + 1] = { key = view[1], text = view[2], width = share } end
+    local switch = Widgets.CreateTabStrip(body, tabs, function(key)
         PostPanel:SetView(key)
     end)
     switch:SetPoint("TOPLEFT", 14, CONTENT_TOP)
@@ -574,6 +576,10 @@ function PostPanel:Build()
     shopping:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, LIST_BOTTOM)
     shopping:Hide()
     self.shoppingList = shopping
+
+    if ns.AuctionsView then
+        ns.AuctionsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
+    end
 
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
     empty:SetPoint("CENTER", list, "CENTER")
@@ -1107,7 +1113,7 @@ end
 
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
-    self.view = view == "buy" and "buy" or "sell"
+    self.view = (view == "buy" or view == "auctions") and view or "sell"
     if self.switch then self.switch:Select(self.view) end
     self.shoppingAt = nil
     self:Refresh()
@@ -1232,7 +1238,7 @@ function PostPanel:Refresh()
     self:Reflow()
 
     if self.hideLosses then
-        local showBox = self.view ~= "buy"
+        local showBox = self.view == "sell"
         self.hideLosses:SetShown(showBox)
         if self.summaryBeside ~= showBox then
             -- On Buy the box is gone, so the summary has the whole width
@@ -1251,7 +1257,7 @@ function PostPanel:Refresh()
     end
 
     if self.duration then
-        local selling = self.view ~= "buy"
+        local selling = self.view == "sell"
         self.duration:SetShown(selling)
         if selling then self.duration:SetValue(ns.Config:Get("postDuration") or 2) end
         -- On Buy the box is gone, so the note starts at the edge.
@@ -1265,6 +1271,24 @@ function PostPanel:Refresh()
             self.footNote:SetPoint("RIGHT", self.listAll, "LEFT", -8, 0)
             self.noteBeside = selling
         end
+    end
+
+    self:UpdateAuctionsTab()
+    local Auctions = ns.AuctionsView
+    if Auctions and Auctions.list then Auctions:SetShown(self.view == "auctions") end
+    if self.footNote then self.footNote:SetShown(self.view ~= "auctions") end
+
+    if self.view == "auctions" then
+        if self.listAll then self.listAll:Hide() end
+        self.list:Hide()
+        self.shoppingList:Hide()
+        self.empty:Hide()
+        if Auctions then
+            Auctions:Refresh()
+            self.summary:SetText(Auctions:Summary())
+            self:SetTitle(Auctions:Title())
+        end
+        return
     end
 
     if self.view == "buy" then
@@ -1323,6 +1347,23 @@ function PostPanel:Refresh()
             or L.Format("%d items, about %s", #lines, about))
         .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))
             or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or ""))
+end
+
+--- The Auctions switch says how many of yours are undercut, in red, so it
+--- shows from Sell and Buy too. Set only when the count moves.
+function PostPanel:UpdateAuctionsTab()
+    local Auctions = ns.AuctionsView
+    if not (self.switch and self.switch.tabs and Auctions and Auctions.UndercutCount) then return end
+    local count = Auctions:UndercutCount()
+    if count == self.undercutShown then return end
+    self.undercutShown = count
+    for _, tab in ipairs(self.switch.tabs) do
+        if tab.key == "auctions" and tab.label then
+            tab.label:SetText(count > 0
+                and ("%s |c%s%d|r"):format(L["Auctions"], ns.COLORS.loss or "ffe5604f", count)
+                or L["Auctions"])
+        end
+    end
 end
 
 --- The header's title, the first wording that fits beside the buttons.
