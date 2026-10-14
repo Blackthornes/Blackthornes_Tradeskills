@@ -167,10 +167,10 @@ local function SearchAuctionHouse(entry)
     local label = Util.GetItemLabel(entry.itemID)
 
     if entry.route == "auction" then
-        ns.Print(L.Format("Searching the auction house for %s. Anything under %s each pays to list again at %s. If the list there does not change, type the name into its search box.",
+        ns.Print(L.Format("Searching the auction house for %s. Anything under %s each is worth buying to list again at %s. If the list there doesn't change, type the name into its search box.",
             label, Plain(math.floor(entry.net)), Plain(entry.resell)))
     else
-        ns.Print(L.Format("Searching the auction house for %s. Anything at %s each or less is a vendor flip. If the list there does not change, type the name into its search box.",
+        ns.Print(L.Format("Searching the auction house for %s. Anything at %s each or less is a vendor flip. If the list there doesn't change, type the name into its search box.",
             label, Plain(entry.vendor - 1)))
     end
 end
@@ -502,7 +502,7 @@ local function UpdateVendorDetail(detail, entry)
     -- kept for hours, and the age it was built with went on saying "2m ago".
     local age = ns.Prices:GetAge(entry.itemID) or entry.age
     local parts = { OthersText(entry) }
-    parts[#parts + 1] = L.Format("The buy price is the cheapest listing from another seller when last scanned (%s). Prices are per item, so a stack pays the same on every one in it.",
+    parts[#parts + 1] = L.Format("The buy price is the cheapest listing from another seller at your last scan (%s). Prices are per item, so every item in a stack earns the same.",
         age and Util.FormatAgeAgo(age) or L["never"])
     if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = L["That was a while ago, so it may have sold."] end
     if entry.vendorFrom == "sold" then
@@ -688,7 +688,7 @@ local function EmptyText()
     end
 
     if state.routes.auction and (state.thin or 0) > 0 then
-        text = text .. " " .. L.Format("%d more are cheap, but have fewer than %d scans, little demand, or are grey. Scan again over the next days to build up their history.",
+        text = text .. " " .. L.Format("%d more are cheap, but have fewer than %d scans, little demand, or are grey. Scan again over the next few days to build up their history.",
             state.thin, ns.VendorFlips.MIN_RESALE_SCANS)
     end
 
@@ -733,7 +733,7 @@ local function SetDealsCount(rows)
         local closed = not (ns.Scanner and ns.Scanner.isAuctionHouseOpen)
         waiting = {
             closed and L.Format("%d more listed items not checked yet, reading them now", state.pending)
-                or L.Format("%d more listed items not checked yet, read once the auction house is closed", state.pending),
+                or L.Format("%d more listed items not checked yet, checked once the auction house is closed", state.pending),
             L.Format("%d not checked yet", state.pending),
         }
     elseif state.routes.auction and (state.thin or 0) > 0 then
@@ -850,7 +850,7 @@ local function Build(container)
         ShowFromTop()
     end, { width = 140, multi = true, summary = SellToSummary })
     sellTo:SetValue(state.routes)
-    sellTo.tooltipText = L["Tick the ways you will sell what you buy. Each item shows on the one that pays most."]
+    sellTo.tooltipText = L["Tick the ways you'll sell what you buy. Each item shows under whichever pays most."]
     widgets.sellTo = sellTo
 
     -- Made after Sell to but placed first: what the tab shows.
@@ -918,7 +918,7 @@ local function Build(container)
         ShowFromTop()
     end, not ns.DealsFavor or ns.DealsFavor:GetSkipOverStack())
     skipOverStack:SetPoint("LEFT", search, "RIGHT", 12, 0)
-    skipOverStack.tooltipText = L["Forever could not fill a crate from more than one stack of a material when last reported, so a bundle of 40 Linen Cloth is left out of the cheapest."]
+    skipOverStack.tooltipText = L["Last we heard, Forever couldn't fill a crate from more than one stack of a material, so a bundle of 40 Linen Cloth isn't counted when finding the cheapest."]
     skipOverStack:Hide()
     widgets.skipOverStack = skipOverStack
 

@@ -643,7 +643,7 @@ ns.Scanner.isAuctionHouseOpen = true
 printed = {}
 list.opts.onClick(Find(list.data, 4001), 1, "RightButton")
 check("right-click still searches for it", sent[#sent] == "item4001")
-check("and says what is worth buying to list again", printed[1] and printed[1]:find("pays to list again", 1, true))
+check("and says what is worth buying to list again", printed[1] and printed[1]:find("worth buying to list again", 1, true))
 ns.Scanner.isAuctionHouseOpen = false
 
 sellTo.onSelect({ vendor = true })

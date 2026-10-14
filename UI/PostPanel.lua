@@ -231,7 +231,7 @@ local function CreateRow(row)
         ns.Print(L.Format("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.",
             line.label or L["that item"]))
     end, { width = IGNORE_WIDTH, height = 18,
-           tooltip = L["Ignore this item: it stops showing on Ready to sell. Settings lists ignored items, each with a Restore button."] })
+           tooltip = L["Ignore this item so it stops showing on Ready to sell. Settings lists ignored items, each with a Restore button."] })
     row.ignore:SetPoint("RIGHT", -6, 0)
 end
 
@@ -736,7 +736,7 @@ function PostPanel:UpdateListAll(lines)
 
     button:SetEnabledState(count > 0)
     button.tooltipText = count > 0
-        and L["Lists the most valuable stack on the list. Click again for the next one: the game takes a click for every listing."]
+        and L["Lists the most valuable stack on the list. Click again for the next one, since the game needs a click for every listing."]
         or L["Nothing on the list can be listed right now."]
 end
 

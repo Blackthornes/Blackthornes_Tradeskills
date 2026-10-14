@@ -307,7 +307,7 @@ function MyAuctions:OnRead(live, final, sold)
             ns.Print(L.Format("Cancelled %s. It comes back to you in the mail.", label))
         elseif final and now - pending.at >= self.CANCEL_WAIT then
             cancelling[auctionID] = nil
-            ns.Print(L.Format("%s is still up: the cancel did not go through.", label))
+            ns.Print(L.Format("%s is still up. The cancel didn't go through.", label))
         end
     end
 end

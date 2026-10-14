@@ -556,7 +556,7 @@ local function QueueMore(line, quantity)
 
         if quantity > room then
             quantity = room
-            ns.Print(L.Format("%s: queued %d, your limit of %d has room for no more.",
+            ns.Print(L.Format("%s: queued %d. That fills your limit of %d.",
                 line.name, quantity, line.postLimit or 0))
         end
     end
@@ -589,7 +589,7 @@ function CraftPanel:SetQueued(line, wanted)
         ns.Queue:SetQuantity(line.recipeID, wanted)
         if line.roomInCrafts then line.roomInCrafts = line.roomInCrafts + (current - wanted) end
     elseif not entry and wanted == 0 and ns.Queue:Find(line.recipeID) then
-        ns.Print(L.Format("%s is only queued as a material for another craft. Lower that craft to need fewer.", line.name))
+        ns.Print(L.Format("%s is only queued as a material for another craft. Queue fewer of that craft to need fewer.", line.name))
     end
 end
 
@@ -907,7 +907,7 @@ local function ShowRowTooltip(row, line)
     end
 
     GameTooltip:AddLine(L["Left-click to queue, right-click to remove, Shift-click to search the auction house."], 0.5, 0.5, 0.5, true)
-    GameTooltip:AddLine(L["Ctrl-right-click to ignore it: it stops being suggested here and on the Profit tab."], 0.5, 0.5, 0.5, true)
+    GameTooltip:AddLine(L["Ctrl-right-click to ignore it, so it's no longer suggested here or on the Profit tab."], 0.5, 0.5, 0.5, true)
     GameTooltip:Show()
 end
 
@@ -1080,7 +1080,7 @@ function CraftPanel:Build()
     ignoreLimit:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
         GameTooltip:SetText(L["Ignore max on hand"], 1, 1, 1)
-        GameTooltip:AddLine(L["Ticked: every craft is listed, even ones you already hold your Keep in stock amount of, and the boxes queue the full number you type. Your setting is not changed."], 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["When ticked, every craft is listed, even ones where you already have your Keep in stock amount, and the boxes queue the full number you type. Your setting stays as it is."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1102,7 +1102,7 @@ function CraftPanel:Build()
         if not ignoredLabel:IsShown() then return end
         GameTooltip:SetOwner(hover, "ANCHOR_TOP")
         GameTooltip:SetText(L["Ignored crafts"], 1, 1, 1)
-        GameTooltip:AddLine(L["Crafts you ignored are not suggested here. Type one's name in the search to find it, or restore it under Settings, Queue, Ignored crafts."], 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["Crafts you ignored aren't suggested here. Search for one by name to find it, or restore it under Settings, Queue, Ignored crafts."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     ignoredHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1360,8 +1360,8 @@ end
 local function CraftTooltip(slots)
     if slots and slots > 0 then
         return slots == 1
-            and L["One click makes every craft in this entry. It frees 1 bag slot, the most of what is ready."]
-            or L.Format("One click makes every craft in this entry. It frees %d bag slots, the most of what is ready.", slots)
+            and L["One click makes every craft in this entry. It frees 1 bag slot, more than anything else that's ready."]
+            or L.Format("One click makes every craft in this entry. It frees %d bag slots, more than anything else that's ready.", slots)
     end
     return L["One click makes every craft in this entry"]
 end
@@ -1469,7 +1469,7 @@ function CraftPanel:ApplyRows(rows, opts)
                 and L["Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."]
             or (self.hiddenIgnored or 0) > 0
                 and L["Every recipe here is ignored.\n\nRestore them under Settings, Queue, Ignored crafts."]
-            or L["No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment."])
+            or L["No recipes read for this profession yet.\n\nThey're read when the window opens, so give it a moment."])
     end
 
     self:UpdateIgnoredLabel()

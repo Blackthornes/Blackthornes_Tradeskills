@@ -78,11 +78,11 @@ end
 local function RewardText(row)
     if row.source == "learned" then
         if row.turnIns == 1 then
-            return L.Format("%d favor and %s, seen paid on one turn-in.", row.favor, Plain(row.money or 0))
+            return L.Format("Pays %d favor and %s, seen on one turn-in.", row.favor, Plain(row.money or 0))
         end
-        return L.Format("%d favor and %s, seen paid on %d turn-ins.", row.favor, Plain(row.money or 0), row.turnIns or 1)
+        return L.Format("Pays %d favor and %s, seen on %d turn-ins.", row.favor, Plain(row.money or 0), row.turnIns or 1)
     elseif row.source == "reported" then
-        return L.Format("Players report %d favor and %s. Not seen paid here yet.", row.favor, Plain(row.money or 0))
+        return L.Format("Players report %d favor and %s. Not seen on a turn-in here yet.", row.favor, Plain(row.money or 0))
     end
     return L["Not in the game yet, so nobody knows what it pays."]
 end
@@ -104,9 +104,9 @@ local function Search(itemID, what)
     end
     if not itemID then
         if what == "crate" then
-            ns.Print(L["The game has not shown this addon this crate yet, so type its name into the auction house search box."])
+            ns.Print(L["The game hasn't shown this crate to the addon yet, so type its name into the auction house search box."])
         else
-            ns.Print(L["The game has not shown this addon this material yet, so type its name into the auction house search box."])
+            ns.Print(L["The game hasn't shown this material to the addon yet, so type its name into the auction house search box."])
         end
         return
     end
@@ -349,8 +349,8 @@ local function UpdateDetail(entry)
     local parts = {}
     if overStack then
         parts[#parts + 1] = DealsFavor:GetSkipOverStack()
-            and L["* Needs more than one stack. Forever could not fill a crate from more than one stack when last reported, so it is left out."]
-            or L["* Needs more than one stack, which Forever could not fill a crate from when last reported."]
+            and L["* Needs more than one stack. Last we heard, Forever couldn't fill a crate from more than one stack, so it's left out."]
+            or L["* Needs more than one stack. Last we heard, Forever couldn't fill a crate that way."]
     end
     if entry.have > 0 then
         parts[#parts + 1] = L.Format("You carry %d of these crates.", entry.have)

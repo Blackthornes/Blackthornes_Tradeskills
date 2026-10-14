@@ -2053,7 +2053,7 @@ function Posting:OnCheckResults()
 
     if not check.told and (check.found or 0) > 0 then
         check.told = true
-        ns.Print(L.Format("checked the prices of %d items. Each List all click now lists one.", check.found))
+        ns.Print(L.Format("checked the prices of %d items. Each click on List all now lists one.", check.found))
     end
 
     return found

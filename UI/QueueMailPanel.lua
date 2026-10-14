@@ -326,7 +326,7 @@ function QueueMailPanel:Refresh()
             end
             Theme.FitText(row.send.label, { L["Take next batch"], L["Take"] }, BUTTON_WIDTH - 8)
             row.send.tooltipText = batch.batches > 1
-                and L.Format("Takes the queue's materials that fit in your bags, keeping %d slots free: about 1 of %d batches. Craft, then take the next.",
+                and L.Format("Takes as many of the queue's materials as fit in your bags, keeping %d slots free. That's about 1 of %d batches. Craft, then take the next.",
                     batch.spare, math.min(batch.batches, 999))
                 or L["Takes the queue's materials from your mail. Mail asking for payment (COD) is left alone."]
             row.send:SetEnabledState(not batch.noRoom and not ns.QueueMail.filling and not ns.QueueMail.taking)
@@ -444,7 +444,7 @@ function QueueMailPanel:TakeFor(row)
             and { stacks == 1 and L.Format("Took %d (%d stack). Craft, then take the next batch.", units, stacks)
                     or L.Format("Took %d (%d stacks). Craft, then take the next batch.", units, stacks),
                 L.Format("Took %d.", units) }
-            or { L["Took nothing: the bags are full or the mail would not give it."], L["Took nothing."] }
+            or { L["Took nothing. Your bags are full, or the mail wouldn't give it up."], L["Took nothing."] }
         Theme.FitText(panel.status, texts, WIDTH - 2 * PAD)
         QueueMailPanel:Refresh()
     end)

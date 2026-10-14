@@ -279,8 +279,8 @@ function UpdateRow(row, line)
             row.post.tooltipText = (line.lossReason == "vendor"
                 and L["This would sell for less than a vendor pays, so it will not be listed. Sell it to a vendor instead."]
                 or line.lossReason == "crafted"
-                and L["After the auction house's cut, this brings in less than you paid to make it. Blocked while 'Never below what I paid' is on in Settings."]
-                or L["This would sell below its material cost. Blocked unless you allow it in Settings."])
+                and L["After the auction house's cut, this brings in less than you paid to make it. It won't be listed while 'Never below what I paid' is on in Settings."]
+                or L["This would sell below its material cost. It won't be listed unless you allow it in Settings."])
         else
             row.post.tooltipText = L.Format("List %d of %d at %s each",
                 line.postQuantity, line.maxQuantity or line.count,

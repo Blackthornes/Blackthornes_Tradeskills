@@ -187,7 +187,7 @@ local function ToggleSubCraft(entry)
     local never = state ~= "buy"
     ns.Cost:SetSubCraftChoice(entry.recipeID, never and "buy" or nil, entry.name)
     if never then
-        ns.Print(L.Format("%s is no longer made as a sub-craft: crafts that use it buy it instead.", name))
+        ns.Print(L.Format("%s is no longer made as a sub-craft. Crafts that use it buy it instead.", name))
     else
         ns.Print(L.Format("%s is made as a sub-craft again when that is cheaper than buying it.", name))
     end
@@ -204,12 +204,12 @@ local function SubCraftTooltip(entry)
         elseif state == "make" then
             text = L.Format("Make: %s is always made to go into other crafts, whatever buying it costs.\nClick for Buy: never make it, and price it at the auction house instead of the vendor.", name)
         else
-            text = L.Format("Buy: %s is never made to go into another craft. It is priced at the auction house, not the vendor, in costs, the queue and the shopping list.\nClick for Vendor: the vendor's price again.", name)
+            text = L.Format("Buy: %s is never made to go into another craft. It is priced at the auction house, not the vendor, in costs, the queue and the shopping list.\nClick for Vendor to use the vendor's price again.", name)
         end
     elseif state == "buy" then
         text = L.Format("Buy: %s is never made to go into another craft. It is bought instead, in costs, the queue and the shopping list.\nClick to make it again when that is cheaper.", name)
     else
-        text = L.Format("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Settings, Queue lists those.", name)
+        text = L.Format("Make: %s is made to go into other crafts when that is cheaper than buying it.\nClick to never make it as a sub-craft and buy it instead. Those are listed under Settings, Queue.", name)
     end
     if not entry.isMaterial then
         text = text .. "\n" .. L["No craft your characters know uses it yet."]
@@ -464,7 +464,7 @@ end
 local function StaleNote(skillUp)
     if not skillUp or not skillUp.stale then return nil end
 
-    return L.Format("Colour read at skill %d and you are %d now, so it may have changed. Open the profession to update it.",
+    return L.Format("The colour was read at skill %d and you're %d now, so it may have changed. Open the profession to update it.",
         skillUp.skill or 0, skillUp.currentSkill or 0)
 end
 
@@ -531,19 +531,19 @@ local function ShowRowTooltip(row, entry)
         if returns.method and returns.method ~= "best" then
             local label = WAY_WORD[returns.method] or returns.method
             local text = returns.best
-                and L.Format("Only the %s counts: the Profit tab is set to it.", label)
+                and L.Format("Only the %s counts, because the Profit tab is set to it.", label)
                 or L.Format("Only the %s counts (the Profit tab is set to it), and it pays nothing for this.", label)
             GameTooltip:AddLine(text, 0.7, 0.7, 0.7, true)
         end
     elseif entry.outputItemID then
-        GameTooltip:AddLine(L["Nothing to sell it back for yet: no vendor, auction or disenchant price."], 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L["Nothing to sell it back for yet. It has no vendor, auction or disenchant price."], 0.7, 0.7, 0.7, true)
     end
 
     local note = StaleNote(entry.skillUp)
     if note then GameTooltip:AddLine(note, 0.91, 0.76, 0.35, true) end
 
     if entry.neverSubCraft then
-        GameTooltip:AddLine(L["Never made as a sub-craft: crafts that use it buy it instead."], 0.91, 0.76, 0.35, true)
+        GameTooltip:AddLine(L["Never made as a sub-craft. Crafts that use it buy it instead."], 0.91, 0.76, 0.35, true)
     elseif entry.subChoice == "make" then
         GameTooltip:AddLine(L["Always made as a sub-craft, whatever buying it costs."], 0.91, 0.76, 0.35, true)
     end
@@ -813,7 +813,7 @@ local function BuildDetail(parent)
     learn.queueButton = Widgets.CreateButton(learn, L["Queue materials"], function()
         if state.selected and state.selected.learnNext then ns.LearnNext:QueueMaterials(state.selected) end
     end, { width = 130, height = 24,
-           tooltip = L["Put the materials on your list to buy: enough to craft it until it turns yellow"] })
+           tooltip = L["Put enough materials on your list to buy to craft it until it turns yellow"] })
     learn.queueButton:SetPoint("BOTTOMLEFT", learn.wayButton, "BOTTOMRIGHT", 8, 0)
     GrowToFit(learn.wayButton)
     GrowToFit(learn.queueButton)
@@ -1258,7 +1258,7 @@ local function Build(container)
     subCrafts:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
         GameTooltip:SetText(L["Sub-crafts only"], 1, 1, 1)
-        GameTooltip:AddLine(L["Only crafts whose item goes into another craft, grey ones too, on all your characters. Their SUB-CRAFT button picks Make or Buy."], 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["Only crafts whose item goes into another craft, grey ones included, on all your characters. Use the SUB-CRAFT button to pick Make or Buy."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     subCrafts:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1278,7 +1278,7 @@ local function Build(container)
     learnNext:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
         GameTooltip:SetText(L["Learn next"], 1, 1, 1)
-        GameTooltip:AddLine(L["Recipes you have not learned that raise your skill now, under the ones you know, with the trainer or vendor that teaches each. Show the way pins them on your map."], 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["Shows recipes you haven't learned that would raise your skill now, below the ones you know, with the trainer or vendor that teaches each. Show the way pins them on your map."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     learnNext:HookScript("OnLeave", function() GameTooltip:Hide() end)

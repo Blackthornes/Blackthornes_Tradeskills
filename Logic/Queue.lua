@@ -621,7 +621,7 @@ function Queue:RebuildDependencies()
         if before and not before.buyCheaper then
             local name = ns.Recipes.GetDisplayLink and ns.Recipes:GetDisplayLink(entry.recipeID)
                 or recipe.name or L["a sub-craft"]
-            ns.Print(L.Format("buying %s is now cheaper than making it. It stays on the queue; Buy instead on the Queue tab takes it off.",
+            ns.Print(L.Format("buying %s is now cheaper than making it. It stays on the queue. Click Buy instead on the Queue tab to take it off.",
                 name))
         end
     end
@@ -683,7 +683,7 @@ function Queue:NeverMake(entry)
     local name = (recipe and recipe.name) or L.Format("recipe %s", tostring(entry.recipeID))
     ns.Cost:SetNeverSubCraft(entry.recipeID, true, recipe and recipe.name)
 
-    ns.Print(L.Format("%s is no longer made as a sub-craft: the queue buys it instead. Allow puts it back, in Settings, Queue, Never made as sub-crafts.",
+    ns.Print(L.Format("%s is no longer made as a sub-craft. The queue buys it instead. To undo it, click Allow under Settings, Queue, Never made as sub-crafts.",
         name))
     return true
 end
@@ -693,7 +693,7 @@ function Queue:NeverMakeTooltip(entry)
     local recipe = entry and ns.Recipes:GetAny(entry.recipeID)
     local name = (recipe and recipe.name) or L["this"]
     return L.Format("Never make %s as a sub-craft", name) .. "\n"
-        .. L["Buy it instead, in this queue and from now on. It can still be queued on its own. Settings, Queue lists it with Allow to undo."]
+        .. L["Buy it instead, in this queue and from now on. You can still queue it on its own. To undo it, click Allow under Settings, Queue."]
 end
 
 --- What one of a sub-craft's items costs to buy and to make, for the note
@@ -753,7 +753,7 @@ function Queue:RefreshForCharacter()
             local recipe = ns.Recipes:GetAny(entry.recipeID)
             local parents = self:GetDependencyParents(entry)
 
-            ns.Print(L.Format("queued %d x %s for %s. This character makes it for less than buying it; its materials are on the shopping list.",
+            ns.Print(L.Format("queued %d x %s for %s. This character can make it for less than it costs to buy, so its materials are on the shopping list.",
                 entry.quantity, (recipe and recipe.name) or L["a sub-craft"],
                     #parents > 0 and table.concat(parents, ", ") or L["another craft"]))
         end
