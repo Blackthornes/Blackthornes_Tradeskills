@@ -2069,7 +2069,7 @@ local function Refresh()
 
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
     widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
-    widgets.raiseOnSellOut:SetChecked(Config:Get("raiseStockOnSellOut") ~= false)
+    widgets.raiseOnSellOut:SetChecked(Config:Get("raiseStockOnSellOut") == true)
     widgets.learnStock:SetChecked(Config:Get("learnStockFromSales") ~= false)
     Put(widgets.restockAt, Config:Get("restockAt") or 0)
     widgets.fastSellerBoost:SetChecked(Config:Get("fastSellerBoost") == true)
