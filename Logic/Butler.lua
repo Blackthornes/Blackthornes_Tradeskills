@@ -1468,3 +1468,35 @@ function Butler:SearchAuctions(items)
     if not ok then return false, L["Tradeskills could not search the auction house"] end
     return done == true, how
 end
+
+--------------------------------------------------------------------------------
+-- The player's shopping lists, for Butler's bank alt
+--------------------------------------------------------------------------------
+
+--- The lists the player made on the auction house drawer's Lists view
+--- (ShoppingLists), so Butler can mail everything on one to a bank alt (a
+--- player asked, the owner said build it, 2026-10-14). The craft queue's
+--- list is not one of them. Never raises, writes nothing; nil on any error.
+-- @return { { name, items = { [itemID] = want } } ... } in the player's
+--   order, fresh tables each time, and ShoppingLists.version
+function Butler:Lists()
+    local ok, lists, version = pcall(function()
+        local shopping = ns.ShoppingLists
+        if not (shopping and shopping.Readable) then return nil end
+        local out = {}
+        for _, readable in ipairs(shopping:Readable()) do
+            local list = readable.list
+            local items = {}
+            for _, item in ipairs(type(list.items) == "table" and list.items or {}) do
+                local itemID = type(item) == "table" and tonumber(item.id)
+                if itemID and itemID > 0 then
+                    items[math.floor(itemID)] = math.max(0, math.floor(tonumber(item.want) or 0))
+                end
+            end
+            out[#out + 1] = { name = list.name, items = items }
+        end
+        return out, tonumber(shopping.version) or 0
+    end)
+    if ok and type(lists) == "table" then return lists, version end
+    return nil
+end
