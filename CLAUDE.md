@@ -385,6 +385,20 @@ or its list is not read), `BuyFromVendor` the button's own click
 `tools/test_butlervendor.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
 
+Butler's "For your quests" line (a player asked 2026-10-14, the owner said
+build it: buy what open quests need) has a Search button at the auction
+house, calling, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:SearchAuctions(items)   -- { { itemID, count } }: true and "all" or "one", or false and why
+```
+
+Several items go in one `ShoppingLists:SearchMany` ("all"); where the game
+takes one a search, the first goes through `UI:SearchAuctionHouse` with its
+count for the buy box ("one"), and Butler sends the rest on the next click.
+Tested in `tools/test_butlersearch.lua`. Keep it stable; Butler's
+`Logic/Quests.lua` calls it.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
