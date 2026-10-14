@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.56.0", lines = {
+        "The auction house panel has a box to pick how long your listings stay up.",
+    } },
     { version = "0.55.0", lines = {
         "This is the largest AddOn update so far across the whole suite of Blackthornes addons.",
         "You can set how many of an item to keep in stock for a whole profession, not just one item at a time.",
@@ -17,12 +20,5 @@ ns.WHATS_NEW = {
         "At the auction house, your sell list and Scan sit in one drawer beside the window, with a List all button.",
         "Favors and Writs has a QTY column: how many others listed at that price.",
         "In travel form or another shapeshift, the Craft button reads Leave form. One click leaves the form, the next one crafts.",
-    } },
-    { version = "0.53.0", lines = {
-        "Tradeskills tracks transmutes and other profession cooldowns on all your characters, and tells you when one is ready.",
-        "The Level Up tab lists which recipe to learn next and where. Show the way puts the trainer on your map.",
-        "Recipe levels and materials match Forever.",
-        "Shift-click any item to search for it at the auction house.",
-        "If you turn it on in Settings, chat tells you when someone in Trade asks for something you can make.",
     } },
 }
