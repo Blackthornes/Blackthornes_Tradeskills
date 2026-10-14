@@ -165,6 +165,20 @@
 -- never opened) is left out, since every recipe would look unlearned. Kept
 -- LEARN_COST_SECONDS, or until the recipes are read again.
 --
+-- At a vendor (2026-10-14, the owner asked for the Buy materials button in
+-- Butler too), Butler's Buy from a vendor row asks two more:
+--
+--   _G.BlackthornesTS.Butler:VendorOffer()     -- a table, or nil; reads only
+--   _G.BlackthornesTS.Butler:BuyFromVendor()   -- true, or false and why
+--
+-- VendorOffer is what the Buy materials button over the vendor window would
+-- buy (Vendor:GetNeeded): { count (materials), cost (copper in all), items =
+-- { { itemID, amount, cost, short } }, cheaperElsewhere (materials left
+-- for the auction house), buying (a run is going or settling) }. nil while
+-- no vendor is open or its list is not read yet. BuyFromVendor is that
+-- button's click (Vendor:BuyNeeded): the same checks, the same one stack a
+-- step, and it says in chat why when it buys nothing.
+--
 -- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
 
@@ -1364,4 +1378,49 @@ function Butler:LearnCost()
         copy[line] = { skill = entry.skill, count = entry.count, cost = entry.cost }
     end
     return copy
+end
+
+--------------------------------------------------------------------------------
+-- The queue's materials at the open vendor, for Butler's Buy from a vendor row
+--------------------------------------------------------------------------------
+
+--- What the Buy materials button over the vendor window would buy. nil
+--- while no vendor is open or its list is not read yet. Never raises,
+--- writes nothing; a fresh table each time.
+function Butler:VendorOffer()
+    local ok, offer = pcall(function()
+        local vendor = ns.Vendor
+        if not (vendor and vendor.isMerchantOpen and vendor.merchantItems) then return nil end
+        if vendor:IsBuying() then
+            return { count = 0, cost = 0, items = {}, cheaperElsewhere = 0, buying = true }
+        end
+        local lines, total, cheaper = vendor:GetNeeded()
+        local items = {}
+        for _, line in ipairs(lines) do
+            items[#items + 1] = { itemID = line.itemID, amount = line.amount, cost = line.cost,
+                short = line.short and true or nil }
+        end
+        return { count = #items, cost = tonumber(total) or 0, items = items,
+            cheaperElsewhere = tonumber(cheaper) or 0, buying = false }
+    end)
+    if ok and type(offer) == "table" then return offer end
+    return nil
+end
+
+--- Buy what the queue needs from the open vendor, from Butler's click: the
+--- Buy materials button's own click, so the same checks and the same run.
+--- Chat says why when nothing is bought. Never raises.
+-- @return true when a run started, or false and why
+function Butler:BuyFromVendor()
+    local ok, started, why = pcall(function()
+        local vendor = ns.Vendor
+        if not vendor then return false, L["no vendor is open"] end
+        local allowed, reason = vendor:CanBuy()
+        if not allowed then return false, reason end
+        local began = vendor:BuyNeeded()
+        if ns.UI and ns.UI.UpdateMerchantButton then pcall(ns.UI.UpdateMerchantButton, ns.UI) end
+        return began == true
+    end)
+    if not ok then return false, L["Tradeskills could not buy from this vendor"] end
+    return started == true, why
 end
