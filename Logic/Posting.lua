@@ -40,9 +40,36 @@ local VERIFY_GIVE_UP = 15
 -- How many different items may be waiting to be confirmed at once. Each is
 -- told apart by its item ID, so they need not wait for each other (the owner,
 -- 2026-10-13: the five seconds between listings); this only keeps a burst of
--- clicks from piling up more checks than the auction house can answer.
-local MAX_CONFIRMING = 4
+-- clicks from piling up more checks than the auction house can answer. Six
+-- since fast listing (2026-10-14): listings close together share one read
+-- back (VERIFY_SHARE), so more of them cost no more requests.
+local MAX_CONFIRMING = 6
 Posting.MAX_CONFIRMING = MAX_CONFIRMING
+
+-- A listing's read back waits for a newer listing's when that one is due
+-- this soon, so a run of quick listings is confirmed by one read rather than
+-- one each. Never later than VERIFY_SHARE_MOST past its own time, so a long
+-- run still gets read.
+local VERIFY_SHARE = 1.6
+local VERIFY_SHARE_MOST = 3
+
+-- Fast listing (the owner, 2026-10-14: players asked for posting quicker
+-- than five seconds a listing). A price checked this recently lists on the
+-- click itself, with no Yes/No box: the click is the real one the game
+-- wants. Older, it is checked again first.
+local FRESH_FOR = 120
+Posting.FRESH_FOR = FRESH_FOR
+
+-- One search for the whole Sell list asks about this many items at most.
+local CHECK_ALL_MOST = 50
+
+-- How long the answer to that search is waited for.
+local CHECK_ALL_WAIT = 8
+
+-- A cheapest listing under this share of market value may be a lone one far
+-- below the rest, which only a search for that one item can tell (it reads
+-- the whole book). Such an item is left to that search.
+local CHECK_ALL_FAR_UNDER = 0.5
 
 -- Confirmed against Blizzard's own Sell tab on Forever, which offers 2, 8 and
 -- 24 hours: this is a Classic auction house, not retail's 12/24/48. The choice
@@ -156,6 +183,14 @@ function Posting:SecondsUntilPostable(itemID)
 
     local seconds, reason =
         ns.AHQueue:SecondsUntilReady(ns.AHQueue.PRIORITY.urgent)
+
+    -- A fresh price lists on the click with no search, so the spacing kept
+    -- between our own requests is not a wait this click serves. Counting it
+    -- down after each listing read as "wait" on a button that would list.
+    if self:FastListing() and (itemID == nil or self:IsFresh(itemID))
+            and not (ns.AHQueue.backoffUntil and GetTime() < ns.AHQueue.backoffUntil) then
+        seconds, reason = 0, nil
+    end
 
     -- Listings still being confirmed no longer hold the next one back (each
     -- is told apart by its item), so the wait is the auction house's own
@@ -1123,15 +1158,26 @@ end
 -- that would sell below material cost unless losses are explicitly allowed.
 
 -- @param lines  a GetPostable list already made, to save making it again
+-- @param opts.skipSettling  pass over items with a listing still being
+--   confirmed (fast listing: a second click on it before the bags catch up
+--   must not list it twice). The second return says whether any were.
 function Posting:GetNextPostable(opts, lines)
     local allowLoss = ns.Config:Get("allowPostingAtALoss") == true
+    local skipSettling = type(opts) == "table" and opts.skipSettling
+    local settling = false
 
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and not line.belowCrafted
             and not self:IsUnderFloor(line) then
-            return line
+            if skipSettling and self:PendingFor(line.itemID) then
+                settling = true
+            else
+                return line
+            end
         end
     end
+
+    return nil, settling
 end
 
 --- Count and total value of everything worth listing.
@@ -1174,6 +1220,9 @@ function Posting:OnEnable()
     -- its Yes could list later, back at the auction house, at a price
     -- checked minutes before.
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
+        -- Prices move while away: the next visit checks them again.
+        Posting:ForgetChecks()
+
         local data = Posting.confirming
         Posting.confirming = nil
 
@@ -1814,6 +1863,219 @@ function Posting:RefusesEarly(itemID, price, byHand)
     return false
 end
 
+--------------------------------------------------------------------------------
+-- Fast listing
+--------------------------------------------------------------------------------
+--
+-- Asked 2026-10-14: "can we speed up the posting speed on the AH instead of
+-- waiting 5 seconds". The wait was ours: every click searched for its one
+-- item, waited for the answer, then asked Yes or No, and the Yes was the
+-- click that listed. Now one search checks every price on the Sell list,
+-- and while an item's price is fresh (FRESH_FOR) its click lists it at once.
+-- Every guard Post has still runs, and each listing is still read back.
+
+--- Is fast listing on? On unless unticked.
+function Posting:FastListing()
+    return ns.Config:Get("fastListing") ~= false
+end
+
+--- The auction house has just told us what this item sells for.
+-- @param itemKey optional: the key searched. A search for one random suffix
+--   ("of the Monkey") is not the price of the plain item, so it is not kept.
+function Posting:NoteChecked(itemID, itemKey)
+    if not itemID then return end
+    if type(itemKey) == "table" and (tonumber(itemKey.itemSuffix) or 0) ~= 0 then return end
+    if type(rawget(self, "checkedAt")) ~= "table" then self.checkedAt = {} end
+    self.checkedAt[itemID] = GetTime()
+end
+
+--- Was this item's price checked recently enough to list on the click?
+function Posting:IsFresh(itemID)
+    local checked = rawget(self, "checkedAt")
+    local at = type(checked) == "table" and itemID and checked[itemID]
+    return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+end
+
+--- Forget every check: the auction house closed, and prices move while away.
+function Posting:ForgetChecks()
+    self.checkedAt = {}
+    self.bulkTried = {}
+    self.checkAll = nil
+end
+
+--- Was this item in a search of the whole list lately? Then one that came
+--- back without its price is searched for alone, not asked about again.
+function Posting:BulkTried(itemID)
+    local tried = rawget(self, "bulkTried")
+    local at = type(tried) == "table" and itemID and tried[itemID]
+    return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+end
+
+--- The cheapest price from someone else in one browse row, or nil when the
+--- row cannot say. A row holding one of yours at its lowest price may be
+--- yours alone; only your own listings being dearer settles it.
+function Posting.RivalFromRow(itemID, price, ownerFlag)
+    if type(price) ~= "number" or price <= 0 then return nil end
+    if ownerFlag ~= true then return price end
+
+    local own = ns.Auctions and ns.Auctions.GetOwnMinPrice and ns.Auctions:GetOwnMinPrice(itemID) or nil
+    if type(own) == "number" and own > price then return price end
+    return nil
+end
+
+--- Check every price on a list in one search.
+--
+-- The game's search for several items at once (SearchForItemKeys) answers
+-- with the cheapest listing of each, the way Search all does on the Buy
+-- view. One request instead of one a listing, and the clicks after it list
+-- straight away. Items with a random suffix are left out: one copy's price
+-- is not another's.
+-- @return true and how many were asked about, or false and why
+function Posting:CheckAll(lines)
+    local scanner = ns.Scanner
+    if not (scanner and scanner.isAuctionHouseOpen) then
+        return false, L["the auction house must be open"]
+    end
+    if scanner.isScanning then return false, L["wait for the scan to finish"] end
+    if not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
+            and Util.HasFunction("C_AuctionHouse.MakeItemKey")) then
+        return false
+    end
+
+    local keys, wanted = {}, {}
+    for _, line in ipairs(lines or {}) do
+        local itemID = line.itemID
+        if itemID and not line.link and not wanted[itemID] and not self:IsFresh(itemID) then
+            local ok, key = pcall(C_AuctionHouse.MakeItemKey, itemID)
+            if ok and type(key) == "table" then
+                keys[#keys + 1] = key
+                wanted[itemID] = true
+            end
+            if #keys >= CHECK_ALL_MOST then break end
+        end
+    end
+    if #keys == 0 then return false end
+
+    local check = { wanted = wanted, count = #keys, found = 0 }
+    self.checkAll = check
+
+    if type(rawget(self, "bulkTried")) ~= "table" then self.bulkTried = {} end
+    local now = GetTime()
+    for itemID in pairs(wanted) do self.bulkTried[itemID] = now end
+
+    ns.AHQueue:Request({
+        name = ("price check for %d items"):format(#keys),
+        key = "price-check-all",
+        priority = ns.AHQueue.PRIORITY.urgent,
+        expires = 8,
+        send = function()
+            if rawget(Posting, "checkAll") ~= check then return true end
+            if not pcall(C_AuctionHouse.SearchForItemKeys, keys, {}) then
+                Posting.checkAll = nil
+                ns.Warn(L["the game refused the search"])
+                return false
+            end
+            check.sentAt = GetTime()
+            return true
+        end,
+        onGiveUp = function()
+            if rawget(Posting, "checkAll") == check then Posting.checkAll = nil end
+        end,
+    })
+
+    return true, #keys
+end
+
+--- Browse results came in that the scanner did not ask for: read the ones
+--- a CheckAll is waiting on. Called from Scanner:OnBrowseResults.
+-- @return how many items it found a fresh price for
+function Posting:OnCheckResults()
+    local check = rawget(self, "checkAll")
+    if type(check) ~= "table" or not check.sentAt then return 0 end
+    if GetTime() - check.sentAt > CHECK_ALL_WAIT then
+        self.checkAll = nil
+        return 0
+    end
+    if not Util.HasFunction("C_AuctionHouse.GetBrowseResults") then return 0 end
+
+    local ok, results = pcall(C_AuctionHouse.GetBrowseResults)
+    if not ok or type(results) ~= "table" then return 0 end
+
+    -- An item's rows taken together: the cheapest of them, and whether the
+    -- game marked that cheapest as holding one of yours.
+    local byItem = {}
+    for _, row in ipairs(results) do
+        local key = type(row) == "table" and row.itemKey
+        local itemID = type(key) == "table" and key.itemID
+        local price = row and row.minPrice
+        if itemID and check.wanted[itemID] and (tonumber(key.itemSuffix) or 0) == 0
+                and type(price) == "number" and price > 0 then
+            local item = byItem[itemID]
+            if not item then
+                item = { price = price, owner = row.containsOwnerItem, quantity = 0 }
+                byItem[itemID] = item
+            elseif price < item.price then
+                item.price, item.owner = price, row.containsOwnerItem
+            end
+            item.quantity = item.quantity + (tonumber(row.totalQuantity) or 0)
+        end
+    end
+
+    local found = 0
+    for itemID, item in pairs(byItem) do
+        local rival = self.RivalFromRow(itemID, item.price, item.owner)
+        local market = ns.Prices.GetScanValue and ns.Prices:GetScanValue(itemID, "market")
+            or ns.Prices:GetValue(itemID, "market")
+        local credible = not ns.Prices.IsCredible or ns.Prices.IsCredible(item.price)
+
+        -- Only a price a single search would not read differently: someone
+        -- else's, not far under the usual (a lone low one is that search's
+        -- to judge), and the item seen before, so there is a usual at all.
+        if rival and credible and type(market) == "number" and market > 0
+                and rival >= market * CHECK_ALL_FAR_UNDER then
+            local own = item.owner == true and ns.Auctions and ns.Auctions.GetOwnMinPrice
+                and ns.Auctions:GetOwnMinPrice(itemID) or nil
+            -- Recorded as a search the player made would be; the same
+            -- reading again (passive capture got there first) is kept once.
+            ns.Scanner:RecordPassive(itemID, item.price, item.price, item.quantity, rival, own)
+            self:NoteChecked(itemID)
+            check.wanted[itemID] = nil
+            found = found + 1
+        end
+    end
+
+    if found > 0 then
+        check.found = (check.found or 0) + found
+        if ns.Persist and ns.Persist.SaveLater then ns.Persist:SaveLater() end
+        if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+        if ns.PostPanel and ns.PostPanel.Refresh then pcall(ns.PostPanel.Refresh, ns.PostPanel) end
+    end
+
+    if not check.told and (check.found or 0) > 0 then
+        check.told = true
+        ns.Print(L.Format("checked the prices of %d items. Each List all click now lists one.", check.found))
+    end
+
+    return found
+end
+
+--- List this item on this click, without the Yes/No box? Only while its
+--- price is fresh, it is not a copy with a random suffix, and the box would
+--- not have warned about anything (a listing under what it cost to make).
+function Posting:CanListOnClick(itemID, price)
+    if not self:FastListing() then return false end
+    if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
+    if not self:IsFresh(itemID) then return false end
+    if self:GetSearchKey(itemID) then return false end
+
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
+    local analysis = recipeID and ns.Profit:Analyse(recipeID)
+    local unitCost = analysis and analysis.costPerUnit
+    if unitCost and price and price < unitCost then return false end
+
+    return true
+end
+
 --- Check the current price, then ask, then post. This is what the buttons call.
 --
 -- The price check is a real auction house search for this one item, not a
@@ -1840,6 +2102,16 @@ function Posting:Request(itemID, quantity, unitPrice)
         unitPrice = self:NormalisePrice(chosen, ns.Scanner:IsCommodity(itemID))
     end
     unitPrice = unitPrice or self:GetPostPrice(itemID) or 0
+
+    -- Fast listing: the price was checked moments ago, so this click lists
+    -- it, read back from the check rather than the number the row was drawn
+    -- with. Post refuses anything the box would have (CanPost, the floors,
+    -- the costs), and says why.
+    local fastPrice = chosen and unitPrice or self:GetPostPrice(itemID) or unitPrice
+    if self:CanListOnClick(itemID, fastPrice) then
+        if self:RefusesEarly(itemID, fastPrice, chosen ~= nil) then return false end
+        return self:Post(itemID, quantity, fastPrice, chosen ~= nil) and true or false
+    end
 
     local verify = ns.Config:Get("verifyPriceBeforePosting") ~= false
 
@@ -1960,6 +2232,15 @@ function Posting:VerifyPending(target)
     if not self:IsPending(target) then return end
     if GetTime() - (target.startedAt or 0) < POST_VERIFY_DELAY - 0.05 then return end
 
+    -- A newer listing whose own read back is moments away reads this one
+    -- too (a read settles every listing made before it went out), so a run
+    -- of quick listings costs one request, not one each.
+    local share = self:ShareVerify(target)
+    if share then
+        C_Timer.After(share, function() Posting:VerifyPending(target) end)
+        return
+    end
+
     -- An attempt older than this has already given up; leaving it in place lets
     -- an unrelated auction be mistaken for it.
     if (GetTime() - (target.startedAt or 0)) > 60 then
@@ -1975,7 +2256,15 @@ function Posting:VerifyPending(target)
     -- (Auctions:ScheduleConfirm clears this), and other items' checks run on.
     target.awaiting = true
 
-    ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
+    -- A newer listing's read is already asked for: it goes out after this
+    -- listing was made, so it settles this one too, and no second read is
+    -- spent. Out already, it is good for this one as it stands.
+    local riding = self:NewerVerifying(target)
+    if riding then
+        target.awaiting = riding.awaiting
+    else
+        ns.Auctions:Refresh({ priority = ns.AHQueue.PRIORITY.urgent, force = true })
+    end
 
     -- This listing's own give-up: another listing being verified when the
     -- timer runs is not this one, and must not be settled by it.
@@ -1991,6 +2280,37 @@ function Posting:VerifyPending(target)
             Posting:ResolvePending(nil, nil, token)
         end
     end)
+end
+
+--- How long this listing's read back should wait for a newer listing's,
+--- or nil to read now.
+function Posting:ShareVerify(target)
+    local now = GetTime()
+    local latest = (target.startedAt or 0) + POST_VERIFY_DELAY + VERIFY_SHARE_MOST
+    if now >= latest then return nil end
+
+    local due
+    for _, other in ipairs(self:AllPending()) do
+        if other ~= target and not other.verifying
+                and (other.startedAt or 0) > (target.startedAt or 0) then
+            local at = (other.startedAt or 0) + POST_VERIFY_DELAY
+            if at > now and at - now <= VERIFY_SHARE and (not due or at > due) then due = at end
+        end
+    end
+    if not due then return nil end
+
+    -- Just after the newer one's, so its read is the one queued.
+    return math.min(due, latest) - now + 0.05
+end
+
+--- A listing made after this one whose read back is already asked for.
+function Posting:NewerVerifying(target)
+    for _, other in ipairs(self:AllPending()) do
+        if other ~= target and other.verifying
+                and (other.startedAt or 0) > (target.startedAt or 0) then
+            return other
+        end
+    end
 end
 
 --- Called once the owned-auction list has been re-read.

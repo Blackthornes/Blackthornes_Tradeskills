@@ -553,6 +553,11 @@ function Scanner:OnBrowseResults()
         local learned = self:CapturePassiveBrowse()
         pcall(self.SettleNameSearch, self)
 
+        -- Or fast listing's one search for the whole Sell list.
+        if ns.Posting and ns.Posting.OnCheckResults then
+            pcall(ns.Posting.OnCheckResults, ns.Posting)
+        end
+
         self:Report(("picked up %d price(s) from a search the addon did not start")
             :format(learned))
         return
@@ -1959,6 +1964,11 @@ function Scanner:FinishItemScan(itemID, listings, isCommodity)
         -- cannot undercut a seller who has already sold out or expired.
         status = "empty"
         ns.Prices:RecordEmpty(itemID)
+    end
+
+    -- A price just checked: fast listing lists it on the next click.
+    if ns.Posting and ns.Posting.NoteChecked then
+        pcall(ns.Posting.NoteChecked, ns.Posting, itemID, pending and pending.itemKey)
     end
 
     if pending and pending.callback then
