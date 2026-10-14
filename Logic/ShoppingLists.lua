@@ -327,6 +327,162 @@ function ShoppingLists.ResolveItem(text)
 end
 
 --------------------------------------------------------------------------------
+-- Names to pick from
+--------------------------------------------------------------------------------
+
+-- The add box suggests items as the player types part of a name, in any
+-- case. The names come from what the addon already knows: every item it has
+-- a price for, every character's recipes and their materials, the bags,
+-- starred items, the mail ledger and the lists themselves. A name the game
+-- has not loaded is skipped rather than asked for (thousands of requests at
+-- once), so it is found next time. The index is built a slice a frame and
+-- kept for NAMES_KEEP seconds.
+ShoppingLists.NAMES_SLICE = 300
+ShoppingLists.NAMES_KEEP = 60
+ShoppingLists.SUGGEST_MOST = 6
+
+ShoppingLists.names = nil        -- { { id, name, lower }, ... }, the last built
+ShoppingLists.namesAt = nil
+ShoppingLists.namesVersion = 0   -- moves when a new index is in
+local building = nil
+
+local function CachedName(itemID)
+    if not (Util.HasFunction("C_Item.IsItemDataCachedByID") and Util.HasFunction("C_Item.GetItemInfo")) then
+        return nil
+    end
+    local ok, cached = pcall(C_Item.IsItemDataCachedByID, itemID)
+    if not ok or cached ~= true then return nil end
+    local okName, name = pcall(C_Item.GetItemInfo, itemID)
+    if okName and type(name) == "string" and name ~= "" then return name end
+end
+
+--- Every item ID worth suggesting, with a name where one is saved.
+function ShoppingLists:NameCandidates()
+    local ids, known = {}, {}
+    local function Note(id, name)
+        id = tonumber(id)
+        if not id or id <= 0 then return end
+        ids[id] = true
+        if type(name) == "string" and name ~= "" and not known[id] then known[id] = name end
+    end
+
+    local function Try(fn) pcall(fn) end
+    Try(function()
+        for id in pairs(ns.Prices:GetTable()) do Note(id) end
+    end)
+    Try(function()
+        for id, name in pairs(ns.Prices:GetFavourites()) do Note(id, name) end
+    end)
+    Try(function()
+        for _, record in pairs(ns.db.characters) do
+            for _, recipe in pairs(type(record) == "table" and type(record.recipes) == "table" and record.recipes or {}) do
+                if type(recipe) == "table" then
+                    Note(recipe.outputItemID, recipe.name)
+                    for _, reagent in ipairs(type(recipe.reagents) == "table" and recipe.reagents or {}) do
+                        if type(reagent) == "table" then Note(reagent.itemID) end
+                    end
+                end
+            end
+        end
+    end)
+    Try(function()
+        for id in pairs(ns.Inventory:GetBagCounts()) do Note(id) end
+    end)
+    Try(function()
+        for _, entry in ipairs(ns.Mail:GetLedger().entries) do
+            if type(entry) == "table" then Note(entry.itemID, entry.name) end
+        end
+    end)
+    for _, list in ipairs(self:All()) do
+        if IsList(list) then
+            for _, item in ipairs(Items(list)) do
+                if type(item) == "table" then Note(item.id) end
+            end
+        end
+    end
+    return ids, known
+end
+
+--- Start building the name index, unless a fresh one is kept or one is on
+--- its way. done() is called once it is in.
+function ShoppingLists:BuildNames(done, force)
+    if building then
+        building.done = done or building.done
+        return
+    end
+    if not force and self.names and self.namesAt and GetTime() - self.namesAt < self.NAMES_KEEP then
+        return
+    end
+
+    local ids, known = self:NameCandidates()
+    local order = {}
+    for id in pairs(ids) do order[#order + 1] = id end
+    building = { order = order, known = known, pos = 1, out = {}, seen = {}, done = done }
+
+    local function Step()
+        local job = building
+        if not job then return end
+        local last = math.min(#job.order, job.pos + self.NAMES_SLICE - 1)
+        for i = job.pos, last do
+            local id = job.order[i]
+            local name = CachedName(id) or job.known[id]
+            if name then
+                local lower = name:lower()
+                job.out[#job.out + 1] = { id = id, name = name, lower = lower }
+            end
+        end
+        job.pos = last + 1
+        if job.pos <= #job.order and C_Timer and C_Timer.After then
+            C_Timer.After(0, Step)
+            return
+        end
+        if job.pos <= #job.order then return Step() end
+        building = nil
+        self.names, self.namesAt = job.out, GetTime()
+        self.namesVersion = self.namesVersion + 1
+        if job.done then pcall(job.done) end
+    end
+    Step()
+end
+
+--- The items whose name holds what was typed, best first: the name itself,
+--- then names that start with it, then a word that does, then anywhere.
+--- Shorter names first within each, so "linen" gives Linen Cloth before
+--- Bolt of Linen Cloth.
+function ShoppingLists:Suggest(text, most)
+    most = most or self.SUGGEST_MOST
+    if type(text) ~= "string" then return {} end
+    local wanted = text:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    if wanted == "" or not self.names then return {} end
+
+    local found = {}
+    for _, entry in ipairs(self.names) do
+        local at = entry.lower:find(wanted, 1, true)
+        if at then
+            local rank
+            if entry.lower == wanted then
+                rank = 1
+            elseif at == 1 then
+                rank = 2
+            elseif entry.lower:sub(at - 1, at - 1):match("[%s%-%(]") then
+                rank = 3
+            else
+                rank = 4
+            end
+            found[#found + 1] = { id = entry.id, name = entry.name, rank = rank, lower = entry.lower }
+        end
+    end
+    table.sort(found, function(a, b)
+        if a.rank ~= b.rank then return a.rank < b.rank end
+        if #a.name ~= #b.name then return #a.name < #b.name end
+        if a.lower ~= b.lower then return a.lower < b.lower end
+        return a.id < b.id
+    end)
+    for i = #found, most + 1, -1 do found[i] = nil end
+    return found
+end
+
+--------------------------------------------------------------------------------
 -- Copy and paste
 --------------------------------------------------------------------------------
 

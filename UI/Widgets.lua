@@ -2040,7 +2040,7 @@ function Widgets.ItemShiftClick(itemID, link)
 
     -- The drawer's Lists view is adding to a list: the item goes on it.
     local lists = ns.ShoppingListsView
-    if lists and lists.TakeItem and lists:TakeItem(itemID) then return true end
+    if lists and lists.TakeItem and lists:TakeItem(itemID, true) then return true end
 
     if ns.Scanner and ns.Scanner.isAuctionHouseOpen then
         if not (ns.UI and ns.UI.SearchAuctionHouse) then return false end
