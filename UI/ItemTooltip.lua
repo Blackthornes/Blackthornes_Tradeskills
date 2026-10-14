@@ -313,6 +313,9 @@ function ItemTooltip:LinesFor(itemID, count)
     local lowest = self:LowestLine(itemID)
     if lowest then lines[#lines + 1] = lowest end
 
+    local trend = self:TrendLine(itemID)
+    if trend then lines[#lines + 1] = trend end
+
     if count and count > 1 then
         lines[#lines + 1] = {
             L.Format("Stack of %d", count),
@@ -330,6 +333,24 @@ function ItemTooltip:LinesFor(itemID, count)
     self:AddRecipeLines(lines, itemID)
 
     return lines
+end
+
+--- The market value now against its average over the picked period
+--- (2026-10-14), green up and red down, as the Prices tab's TREND column.
+--- nil while too few days were scanned, or with the line turned off.
+function ItemTooltip:TrendLine(itemID)
+    if ns.Config and ns.Config:Get("tooltipTrend") == false then return nil end
+    local prices = ns.Prices
+    if not (prices and type(prices.GetTrend) == "function" and prices.TrendText) then return nil end
+
+    local days = prices:TrendDays()
+    local ok, trend = pcall(prices.GetTrend, prices, itemID, days)
+    if not ok then return nil end
+    local text, color = prices.TrendText(trend)
+    if not text then return nil end
+
+    local label = days == 14 and L["Trend (14 days)"] or L["Trend (7 days)"]
+    return { label, text, color = color }
 end
 
 --- The price the player set on the Prices tab, in gold so it stands out
