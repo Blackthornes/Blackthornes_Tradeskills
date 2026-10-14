@@ -348,6 +348,11 @@ local DEFAULTS = {
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
 
+        -- Craft next makes the ready craft that frees the most bag slots
+        -- first, sub-crafts still before what they go into (2026-10-14).
+        -- See Crafting:PickNext.
+        craftFreesSpaceFirst = true,
+
         -- Point out a material another of your characters can make for less
         -- than it costs to buy. Only a suggestion; the queue still buys it, so
         -- it is on by default. Named anew when the default changed, so a false
