@@ -512,13 +512,13 @@ function PostPanel:Build()
     end
 
     -- Lists (a player asked, 2026-10-14): the player's own named shopping
-    -- lists, UI/ShoppingListsView.lua.
-    local third = math.floor((PANEL_WIDTH - 28) / 3)
-    local switch = Widgets.CreateTabStrip(body, {
-        { key = "sell", text = L["Sell"], width = third },
-        { key = "buy", text = L["Buy"], width = third },
-        { key = "lists", text = L["Lists"], width = third },
-    }, function(key)
+    -- lists, UI/ShoppingListsView.lua. Auctions (asked the same day): your
+    -- auctions, the undercut ones first with a Cancel each, UI/AuctionsView.lua.
+    local views = { { "sell", L["Sell"] }, { "buy", L["Buy"] }, { "lists", L["Lists"] }, { "auctions", L["Auctions"] } }
+    local share = math.floor((PANEL_WIDTH - 28) / #views)
+    local tabs = {}
+    for _, view in ipairs(views) do tabs[#tabs + 1] = { key = view[1], text = view[2], width = share } end
+    local switch = Widgets.CreateTabStrip(body, tabs, function(key)
         PostPanel:SetView(key)
     end)
     switch:SetPoint("TOPLEFT", 14, CONTENT_TOP)
@@ -582,6 +582,10 @@ function PostPanel:Build()
     if View then
         View:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
         if View.paste then View.paste:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3) end
+    end
+
+    if ns.AuctionsView then
+        ns.AuctionsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
     end
 
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
@@ -1116,7 +1120,7 @@ end
 
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
-    self.view = (view == "buy" or view == "lists") and view or "sell"
+    self.view = (view == "buy" or view == "lists" or view == "auctions") and view or "sell"
     if self.switch then self.switch:Select(self.view) end
     self.shoppingAt = nil
     self:Refresh()
@@ -1281,9 +1285,25 @@ function PostPanel:Refresh()
         end
     end
 
+    self:UpdateAuctionsTab()
     local View = ns.ShoppingListsView
     if View and View.list then View:SetShown(self.view == "lists") end
-    if self.footNote then self.footNote:SetShown(self.view ~= "lists") end
+    local Auctions = ns.AuctionsView
+    if Auctions and Auctions.list then Auctions:SetShown(self.view == "auctions") end
+    if self.footNote then self.footNote:SetShown(self.view ~= "lists" and self.view ~= "auctions") end
+
+    if self.view == "auctions" then
+        if self.listAll then self.listAll:Hide() end
+        self.list:Hide()
+        self.shoppingList:Hide()
+        self.empty:Hide()
+        if Auctions then
+            Auctions:Refresh()
+            self.summary:SetText(Auctions:Summary())
+            self:SetTitle(Auctions:Title())
+        end
+        return
+    end
 
     if self.view == "lists" then
         if self.listAll then self.listAll:Hide() end
@@ -1354,6 +1374,23 @@ function PostPanel:Refresh()
             or L.Format("%d items, about %s", #lines, about))
         .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))
             or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or ""))
+end
+
+--- The Auctions switch says how many of yours are undercut, in red, so it
+--- shows from Sell and Buy too. Set only when the count moves.
+function PostPanel:UpdateAuctionsTab()
+    local Auctions = ns.AuctionsView
+    if not (self.switch and self.switch.tabs and Auctions and Auctions.UndercutCount) then return end
+    local count = Auctions:UndercutCount()
+    if count == self.undercutShown then return end
+    self.undercutShown = count
+    for _, tab in ipairs(self.switch.tabs) do
+        if tab.key == "auctions" and tab.label then
+            tab.label:SetText(count > 0
+                and ("%s |c%s%d|r"):format(L["Auctions"], ns.COLORS.loss or "ffe5604f", count)
+                or L["Auctions"])
+        end
+    end
 end
 
 --- The header's title, the first wording that fits beside the buttons.

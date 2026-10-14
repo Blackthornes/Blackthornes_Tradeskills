@@ -58,6 +58,7 @@ Logic\QueueMail.lua
 Logic\ShoppingLists.lua
 Logic\AHBuys.lua
 Logic\DisenchantBuys.lua
+Logic\MyAuctions.lua
 Logic\Crafting.lua
 Logic\Posting.lua
 Logic\CraftedCost.lua
@@ -99,6 +100,7 @@ UI\ShoppingListsView.lua
 UI\PostPanel.lua
 UI\PriceEditor.lua
 UI\BuyQuantity.lua
+UI\AuctionsView.lua
 UI\CraftPanel.lua
 UI\ProfessionOpener.lua
 UI\Disenchanter.lua
