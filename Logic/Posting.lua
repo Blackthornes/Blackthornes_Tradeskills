@@ -2027,6 +2027,9 @@ function Posting:ResolvePending(posted, appeared, target)
     if went and ns.SellOut then
         pcall(ns.SellOut.NotePosted, ns.SellOut, pending.itemID, went, ns.Config:Get("postDuration") or 2)
     end
+    if went and ns.StatsLog then
+        pcall(ns.StatsLog.NotePosted, ns.StatsLog, pending.itemID, went)
+    end
 
     if several and posted and gained >= pending.quantity then
         ns.Print(L.Format("listed %d x %s", pending.quantity, Util.GetItemLabel(pending.itemID)))
