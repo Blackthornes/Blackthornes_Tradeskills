@@ -28,6 +28,13 @@
 -- so the list keeps it too and its redraws say the same number.
 
 --
+-- Fixed 2026-10-14: a search of a whole list at once (the Lists view's
+-- Search, "From your craft queue" among them, and Butler's quest items)
+-- went through ShoppingLists:SearchMany, which remembered nothing, so
+-- picking an item in the results left the box at 1. Now it remembers every
+-- item it searched for with its count (WantMany), and the box fills for
+-- whichever one the player picks, the same number the Buy tab gives.
+--
 -- Added 2026-10-11: a warning line under the Buy Now button. Buying a
 -- queue material can cost far more than the shopping list said, when the
 -- cheap listings went since the last scan or the amount reaches up into
@@ -48,6 +55,8 @@ local BuyQuantity = ns.NewModule("BuyQuantity")
 
 -- The item a list searched for: { itemID, quantity }, or nil.
 BuyQuantity.want = nil
+-- The items a whole-list search looked for: [itemID] = quantity, or nil.
+BuyQuantity.wants = nil
 -- What the last fill did, for the probe: "filled 12", "no quantity box", ...
 BuyQuantity.lastResult = nil
 
@@ -151,12 +160,41 @@ end
 --- Remember what a list searched for. A quantity under 1, or none, forgets:
 --- any other search is not the list's, and fills nothing.
 function BuyQuantity:Want(itemID, quantity)
+    self.wants = nil
     quantity = tonumber(quantity)
     if type(itemID) ~= "number" or not quantity or quantity < 1 then
         self.want = nil
         return
     end
     self.want = { itemID = itemID, quantity = math.floor(quantity) }
+end
+
+--- Remember every item a whole-list search looked for: counts is
+--- [itemID] = quantity. Items with no count, or under 1, are left out, and
+--- nothing left (or no table) forgets, as Want does.
+function BuyQuantity:WantMany(counts)
+    self.want = nil
+    self.wants = nil
+    if type(counts) ~= "table" then return end
+    local wants
+    for itemID, quantity in pairs(counts) do
+        quantity = tonumber(quantity)
+        if type(itemID) == "number" and quantity and quantity >= 1 then
+            wants = wants or {}
+            wants[itemID] = math.floor(quantity)
+        end
+    end
+    self.wants = wants
+end
+
+--- What a search remembered for this item: { itemID, quantity }, or nil.
+function BuyQuantity:WantFor(itemID)
+    local want = self.want
+    if want and (itemID == nil or itemID == want.itemID) then return want end
+    local wants = self.wants
+    if wants and itemID ~= nil and wants[itemID] then
+        return { itemID = itemID, quantity = wants[itemID] }
+    end
 end
 
 --- How many of the item the queue is still short of right now.
@@ -184,12 +222,12 @@ end
 -- @param itemID the item the buy window was just set to, when known
 -- @return true when the box was filled
 function BuyQuantity:Fill(itemID)
-    local want = self.want
-    if not want then return false end
+    if not (self.want or self.wants) then return false end
     if ns.Config and ns.Config:Get("fillBuyQuantity") == false then return false end
 
     itemID = itemID or self:ShownItemID()
-    if itemID ~= want.itemID then return false end
+    local want = self:WantFor(itemID)
+    if not want or itemID ~= want.itemID then return false end
 
     local needed = self:StillNeeded(want.itemID, want.quantity)
     if not needed or needed < 1 then
@@ -499,6 +537,7 @@ function BuyQuantity:OnEnable()
     -- A want is for this visit only.
     ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function()
         BuyQuantity.want = nil
+        BuyQuantity.wants = nil
         BuyQuantity.quoted = nil
         BuyQuantity:HideWarning()
     end)

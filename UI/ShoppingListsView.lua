@@ -106,7 +106,9 @@ function View:SearchList(entry)
         ns.Print(L["Nothing on this list to look for on the auction house."])
         return
     end
-    local ok, why = Lists():SearchMany(ids)
+    local counts = {}
+    for _, id in ipairs(ids) do counts[id] = NeedOf(entry.lines, id) end
+    local ok, why = Lists():SearchMany(ids, counts)
     if ok then
         self.step = nil
     elseif why == "single" then

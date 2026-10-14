@@ -1455,7 +1455,7 @@ function Butler:SearchAuctions(items)
         if scanner.isScanning then return false, L["a scan is running; search again once it finishes"] end
         local lists = ns.ShoppingLists
         if #ids > 1 and lists and lists.SearchMany then
-            local sent, why = lists:SearchMany(ids)
+            local sent, why = lists:SearchMany(ids, counts)
             if sent then return true, "all" end
             if why ~= "single" then return false, why end
         end
