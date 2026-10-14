@@ -348,10 +348,10 @@ function VendorFlips:AnnounceDeals()
     local buyText = Util.FormatMoney(best.buy, { noColor = true })
     local vendorText = Util.FormatMoney(best.vendor, { noColor = true })
     if #rows == 1 then
-        ns.Print(L.Format("Vendor flips: %d item on the auction house under what a vendor pays, %s together if you buy one of each. Best: %s for %s, a vendor pays %s. See the Deals tab.",
+        ns.Print(L.Format("Vendor flips: %d item on the auction house costs less than a vendor pays for it, %s together if you buy one of each. The best is %s for %s, and a vendor pays %s. See the Deals tab.",
             #rows, totalText, bestName, buyText, vendorText))
     else
-        ns.Print(L.Format("Vendor flips: %d items on the auction house under what a vendor pays, %s together if you buy one of each. Best: %s for %s, a vendor pays %s. See the Deals tab.",
+        ns.Print(L.Format("Vendor flips: %d items on the auction house cost less than a vendor pays for them, %s together if you buy one of each. The best is %s for %s, and a vendor pays %s. See the Deals tab.",
             #rows, totalText, bestName, buyText, vendorText))
     end
 

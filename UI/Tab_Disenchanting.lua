@@ -197,7 +197,7 @@ local function SearchAuctionHouse(entry)
     -- What is bought of it now is marked to disenchant.
     if ns.DisenchantBuys then ns.DisenchantBuys:Intend(entry.itemID) end
 
-    ns.Print(L.Format("Searching the auction house for %s. Buy it in the auction house window at %s or less, and it is marked to disenchant. If the list there does not change, type the name into its search box.",
+    ns.Print(L.Format("Searching the auction house for %s. Buy it in the auction house window at %s or less and it's marked to disenchant. If the list there doesn't change, type the name into its search box.",
         Util.GetItemLabel(entry.itemID), Util.FormatMoney(entry.buy, { noColor = true })))
 end
 
@@ -338,7 +338,7 @@ local function AddPerHourLine(entry)
     if not CraftTime then return end
     local seconds = CraftTime:GetCast(CraftTime.DISENCHANT_SPELL)
     if not seconds then
-        GameTooltip:AddLine(L["Disenchant once and its cast time is kept for gold per hour."], 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(L["Disenchant once so its cast time can be used for gold per hour."], 0.5, 0.5, 0.5, true)
         return
     end
     local perHour = PerHour(entry)
@@ -493,7 +493,7 @@ local function BuildDetail(parent)
         if not check.ok then
             ns.Print(check.why)
         else
-            ns.Warn(L["that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints."])
+            ns.Warn(L["that click missed the Disenchant button. Click it again, and if it misses twice, type /bts disenchant and send the lines it prints."])
         end
     end, { width = 120, primary = true, height = 24 })
     disenchantButton:SetPoint("BOTTOMLEFT", 12, 14)
@@ -673,7 +673,7 @@ local function UpdateBagDetail(entry)
             detail.verdict:SetTextColor(Theme.Unpack("muted"))
         end
     elseif entry.value then
-        detail.verdict:SetText(L["Nothing to compare it with: it has no sale price."])
+        detail.verdict:SetText(L["Nothing to compare it with, since it has no sale price."])
         detail.verdict:SetTextColor(Theme.Unpack("muted"))
     else
         detail.verdict:SetText(L["Scan the auction house to price its materials."])
@@ -763,7 +763,7 @@ local function UpdateDetail(entry)
     if facts.source == "yours" then
         note = L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts))
     else
-        note = L["Chances come from the Classic table built into the addon. It is an average: any one disenchant can give more or less."]
+        note = L["Chances come from the Classic table built into the addon. It's an average, so any one disenchant can give more or less."]
     end
     note = note .. L.Format(" The buy price is the cheapest listing when last scanned (%s).",
         entry.age and Util.FormatAgeAgo(entry.age) or L["never"])
@@ -1030,7 +1030,7 @@ local function Refresh()
     -- them cannot upset Ready to sell. Say so, or the list looks short.
     if (state.pending or 0) > 0 then
         local waiting = ns.Scanner and ns.Scanner.isAuctionHouseOpen
-            and L["they are read once the auction house is closed"]
+            and L["they're checked once the auction house is closed"]
             or L["reading them now"]
         widgets.countLabel:SetText(L.Format("%s  ·  %d more listed items not checked yet, %s",
             widgets.countLabel:GetText() or "", state.pending, waiting))

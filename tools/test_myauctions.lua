@@ -160,7 +160,7 @@ check("one still up waits out the read-back", MyAuctions.cancelling[14] ~= nil)
 clock = clock + MyAuctions.CANCEL_WAIT + 1
 MyAuctions:OnRead(ns.Auctions.live, true)
 check("still up after the wait: it did not go through", MyAuctions.cancelling[14] == nil
-    and said[#said]:find("did not go through") ~= nil)
+    and said[#said]:find("didn't go through") ~= nil)
 check("the probe counts them", MyAuctions:ProbeText():find("tried 2, went 1") ~= nil)
 
 -- The view lays headings over the groups.

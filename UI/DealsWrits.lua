@@ -71,11 +71,11 @@ end
 local function RewardText(row)
     if row.source == "learned" then
         if row.turnIns == 1 then
-            return L.Format("%d reputation, seen paid on one turn-in.", row.rep)
+            return L.Format("Pays %d reputation, seen on one turn-in.", row.rep)
         end
-        return L.Format("%d reputation, seen paid on %d turn-ins.", row.rep, row.turnIns or 1)
+        return L.Format("Pays %d reputation, seen on %d turn-ins.", row.rep, row.turnIns or 1)
     elseif row.source == "reported" then
-        return L.Format("Guides report %d reputation. Not seen paid here yet.", row.rep)
+        return L.Format("Guides report %d reputation. Not seen on a turn-in here yet.", row.rep)
     end
     return L["Nobody knows what it pays yet."]
 end
@@ -92,9 +92,9 @@ local function Search(itemID, what)
     end
     if not itemID then
         if what == "writ" then
-            ns.Print(L["The game has not shown this addon this writ yet, so type its name into the auction house search box."])
+            ns.Print(L["The game hasn't shown this writ to the addon yet, so type its name into the auction house search box."])
         else
-            ns.Print(L["The game has not shown this addon this item yet, so type its name into the auction house search box."])
+            ns.Print(L["The game hasn't shown this item to the addon yet, so type its name into the auction house search box."])
         end
         return
     end
@@ -354,7 +354,7 @@ local function UpdateWrit(entry)
 
     if not entry then
         detail.writHeading:SetText(L["PICK A WRIT"])
-        SetLine(lines[1], L["Click a row for its sums."], "")
+        SetLine(lines[1], L["Click a row to see how it adds up."], "")
         for index = 2, 4 do SetLine(lines[index], nil) end
     else
         detail.writHeading:SetText(("%s %s"):format(TierName(entry.tier), entry.prof):upper())
@@ -381,7 +381,7 @@ local function UpdateWrit(entry)
             parts[#parts + 1] = L["This writ has not been seen in the game yet, so it has no auction house price."]
         end
     else
-        parts[#parts + 1] = L["* As the guides report it, until a turn-in is seen here."]
+        parts[#parts + 1] = L["* What the guides report, until a turn-in is seen here."]
     end
     parts[#parts + 1] = L["Each order can be done once a day. The coin pouch a turn-in gives is not counted."]
     detail.note:SetText(table.concat(parts, " "))

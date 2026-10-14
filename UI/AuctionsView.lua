@@ -341,7 +341,7 @@ function AuctionsView:Build(body, frame, topAnchor, opts)
         ns.MyAuctions:CancelNext()
         AuctionsView:Refresh(true)
     end, { width = nextWidth, height = 22, primary = true,
-           tooltip = L["Cancels the undercut auction with the most money under, one a click. It comes back in the mail."] })
+           tooltip = L["Cancels the undercut auction that's furthest under, one per click. It comes back in the mail."] })
     cancelNext:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
     self.cancelNext = cancelNext
 
@@ -349,7 +349,7 @@ function AuctionsView:Build(body, frame, topAnchor, opts)
     note:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
     note:SetPoint("RIGHT", cancelNext, "LEFT", -8, 0)
     note:SetWordWrap(true)
-    note:SetText(L["One cancel a click. Items come back in the mail."])
+    note:SetText(L["One cancel per click. Items come back in the mail."])
     self.note = note
 
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")

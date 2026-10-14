@@ -243,7 +243,7 @@ function DisenchantLog:Announce(itemID, results, key, band, usual, newFinds, ite
             odds[index] = ("%s %d%%"):format(odd.name, math.floor(odd.chance * 100 + 0.5))
         end
 
-        ns.Print(L.Format("%s %s now uses your own results: %s. Values for these follow what you get from now on.",
+        ns.Print(L.Format("%s %s now uses your own results: %s. From now on, its value follows what you actually get.",
             Colour("accent", L["Learned:"]), kind, table.concat(odds, ", ")))
         Flash(L.Format("Learned: %s", kind))
         big = true
@@ -548,7 +548,7 @@ local function Report(input)
     if (input or ""):lower() == "reset" then
         ns.db.disenchantLog = nil
         DisenchantLog.version = (DisenchantLog.version or 0) + 1
-        ns.Print(L["your recorded disenchants are cleared; values use the built-in table again"])
+        ns.Print(L["your recorded disenchants are cleared, so values come from the built-in table again"])
         if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
         return
     end

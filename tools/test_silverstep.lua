@@ -215,7 +215,7 @@ do
 
     local _, _, why = Profit:ChoosePostPrice(BAG)
     check("no legal price below: says so",
-        why and why:find("no lower price") ~= nil, true)
+        why and why:find("won't allow a price below") ~= nil, true)
 end
 
 --------------------------------------------------------------------------------

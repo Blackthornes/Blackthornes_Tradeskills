@@ -237,7 +237,7 @@ function Scanner:GetCommodityStatus(itemID, location)
     if not ok then
         if not self.warnedCommodityStatus then
             self.warnedCommodityStatus = true
-            ns.Warn(L["the game would not say whether this item is a commodity; posting it may go wrong."])
+            ns.Warn(L["the game wouldn't say whether this item is a commodity, so posting it may go wrong."])
         end
         return nil
     end

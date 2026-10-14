@@ -292,7 +292,7 @@ check("the cloak too (its cheapest is someone else's)", Posting:IsFresh(CLOAK), 
 check("not the oil (the cheapest may be yours)", Posting:IsFresh(OIL), false)
 check("not the ring (far under the usual)", Posting:IsFresh(RING), false)
 check("nothing not asked about", recorded[4242], nil)
-check("it says the clicks list now", Said("Each List all click now lists one"), true)
+check("it says the clicks list now", Said("Each click on List all now lists one"), true)
 
 print("")
 print("List all")

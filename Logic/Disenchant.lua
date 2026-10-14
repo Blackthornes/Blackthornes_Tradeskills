@@ -1261,7 +1261,7 @@ function Disenchant:AnnounceDeals()
     local total = 0
     for _, row in ipairs(rows) do total = total + row.gain end
 
-    ns.Print(L.Format("Disenchant deals: %d on the auction house worth %s together. Best: %s for %s, makes %s. See the Disenchanting tab.",
+    ns.Print(L.Format("Disenchant deals: %d on the auction house, worth %s together. The best is %s for %s, which makes %s. See the Disenchanting tab.",
         #rows, Util.FormatMoney(total, { noColor = true }),
         Util.GetItemLabel(best.itemID), Util.FormatMoney(best.buy, { noColor = true }),
         Util.FormatMoney(best.gain, { noColor = true })))
@@ -1291,7 +1291,7 @@ local function Report(input)
     local disenchantable = Disenchant:IsDisenchantable(itemID)
 
     if disenchantable == nil then
-        ns.Print(L.Format("%s is not cached yet, try again in a moment", Util.GetItemLabel(itemID)))
+        ns.Print(L.Format("the game hasn't loaded %s yet, try again in a moment", Util.GetItemLabel(itemID)))
         return
     elseif not disenchantable then
         ns.Print(L.Format("%s cannot be disenchanted", Util.GetItemLabel(itemID)))
@@ -1309,7 +1309,7 @@ local function Report(input)
     if facts.source == "yours" then
         ns.Print(L.Format("  from %s", Disenchant:YoursPhrase(facts)))
     else
-        ns.Print(L.Format("  from the built-in table (%d of yours recorded, yours are used from %d)",
+        ns.Print(L.Format("  from the built-in table (you've done %d, and your own results take over at %d)",
             facts.casts or 0, Disenchant.LEARN_AFTER))
     end
 
@@ -1327,7 +1327,7 @@ local function Report(input)
         ns.Print(L.Format(partial and L["disenchant value %s (some materials have no price yet)"] or L["disenchant value %s"],
             Util.FormatMoney(value, { noColor = true })))
     else
-        ns.Print(L["disenchant value unknown: the most likely material has not been scanned"])
+        ns.Print(L["disenchant value unknown, since the most likely material hasn't been scanned yet"])
     end
 end
 

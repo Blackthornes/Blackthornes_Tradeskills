@@ -683,7 +683,7 @@ function Prices:ClearMissingIfWhole(seen, startedAt, scannedAt)
         local agrees = refused and math.abs(count - refused) <= refused * 0.1
         if not agrees then
             db.sweepRefusedByRealm[key] = count
-            return 0, L.Format("the scan saw %d items against %d last time", count, last)
+            return 0, L.Format("the scan saw %d items, compared with %d last time", count, last)
         end
     end
 
@@ -1440,7 +1440,7 @@ function Prices:Scrub()
     end
 
     if dropped > 0 or cleared > 0 then
-        ns.Warn(L.Format("removed %d price(s) and %d figure(s) above %s, which nobody could pay",
+        ns.Warn(L.Format("removed %d price(s) and %d figure(s) above %s, more than anyone could pay",
             dropped, cleared, Util.FormatMoney(MAX_CREDIBLE_COPPER, { noColor = true, short = true })))
     end
 

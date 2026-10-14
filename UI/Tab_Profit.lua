@@ -265,7 +265,7 @@ local function AddTimeLines(analysis)
 
     local r, g, b = 0.7, 0.7, 0.7
     if not seconds then
-        GameTooltip:AddLine(L["Craft time not known yet: make one and it is kept."], r, g, b, true)
+        GameTooltip:AddLine(L["Craft time not known yet. Make one and it'll be saved."], r, g, b, true)
         GameTooltip:Show()
         return
     end
@@ -485,7 +485,7 @@ local function ShowMarkTooltip(row, analysis)
     -- Skill only rises, so a reading taken lower down may have gone green
     -- since. Better said than quietly trusted.
     if skillUp.stale then
-        GameTooltip:AddLine(L.Format("Read at skill %d, you are %d now. Open your profession to refresh.",
+        GameTooltip:AddLine(L.Format("Read at skill %d, and you're %d now. Open your profession to refresh it.",
             skillUp.skill or 0, skillUp.currentSkill or 0), 0.91, 0.76, 0.35, true)
     end
 
@@ -615,7 +615,7 @@ local function BuildDetail(parent)
         if not check.ok then
             ns.Print(check.why)
         else
-            ns.Warn(L["that click missed the Disenchant button. Click it again; if it misses twice, type /bts disenchant and send the lines it prints."])
+            ns.Warn(L["that click missed the Disenchant button. Click it again, and if it misses twice, type /bts disenchant and send the lines it prints."])
         end
     end, { width = 76, height = 16, fontSize = "tiny", primary = true })
     GrowToFit(disenchantButton)
@@ -818,7 +818,7 @@ local function BuildDetail(parent)
             ns.Print(L.Format("no more %s yet: Wait until it runs low is on, so more are made once you are down to %d",
                 state.selected.name or L["of that craft"], state.selected.restockAt or 0))
         elseif most == 0 then
-            ns.Print(L.Format("no room for more %s: you already hold your Max on hand (Keep in stock in Settings)",
+            ns.Print(L.Format("no room for more %s: you already have your Max on hand (Keep in stock in Settings)",
                 state.selected.name or L["of that craft"]))
         end
 
@@ -1336,10 +1336,10 @@ function UpdateDetail(analysis)
         local raised = own and ns.SellOut and ns.SellOut.GetRaised
             and ns.SellOut:GetRaised(analysis.outputItemID)
         if raised and ns.db.postLimits and raised.to == ns.db.postLimits[analysis.outputItemID] then
-            box.sourceTip = L.Format("Raised from %d to %d because every copy you listed sold. The x goes back to its profession's number, or the usual one.",
+            box.sourceTip = L.Format("Raised from %d to %d because every copy you listed sold. Click the x to go back to its profession's number, or the usual one.",
                 raised.from or 0, raised.to or 0)
         elseif own then
-            box.sourceTip = L["Set for this item only. The x goes back to its profession's number, or the usual one."]
+            box.sourceTip = L["Set for this item only. Click the x to go back to its profession's number, or the usual one."]
         elseif source == "profession" then
             box.sourceTip = L.Format("From %s in Settings. Type a number to set it for this item only.", professionName)
         else

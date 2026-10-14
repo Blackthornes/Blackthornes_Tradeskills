@@ -493,7 +493,7 @@ local function Build(outer)
     CreateSection(pages.pricing, 1, L["AUCTION PRICES"])
 
     local undercutRow = CreateRow(pages.pricing, 1, L["Undercut by"],
-        L["Your posting price is the cheapest rival listing minus this. Set it to 0 to stop undercutting and match the cheapest listing instead. Stackable goods only: gear and bags can only be priced in whole silver, so those match the cheapest rival unless dropping a full silver still leaves the minimum profit below."])
+        L["Your posting price is the cheapest rival listing minus this. Set it to 0 to stop undercutting and match the cheapest listing instead. This is for stackable goods only. Gear and bags can only be priced in whole silver, so they match the cheapest rival unless dropping a full silver still leaves the minimum profit set below."])
 
     widgets.undercut = Widgets.CreateNumberBox(undercutRow, {
         width = 70, min = 0, max = 1000000,
@@ -510,7 +510,7 @@ local function Build(outer)
     -- Off is the same setting at 0c; on puts back what it was before this
     -- session, or 1c, so no second saved switch can disagree with the number.
     local undercutSwitchRow = CreateRow(pages.pricing, 1, L["Undercutting"],
-        L["Off lists at the cheapest rival's own price instead of going under it. It is the same as Undercut by 0c, and turning it back on puts back what you had."])
+        L["When off, you list at the cheapest rival's price instead of going under it. That's the same as Undercut by 0c, and turning it back on restores what you had."])
 
     local lastUndercut
     widgets.undercutSwitch = Widgets.CreateButton(undercutSwitchRow, L["Turn undercut off"], function()
@@ -532,7 +532,7 @@ local function Build(outer)
         self:SetText(off and L.Format("Turn on, %s", Util.FormatMoney(lastUndercut or 1, { noColor = true }))
             or L["Turn undercut off"])
         self.tooltipText = off
-            and L["Undercutting is off: you list at the cheapest rival's price. Click to undercut it again."]
+            and L["Undercutting is off, so you list at the cheapest rival's price. Click to undercut it again."]
             or L["Match the cheapest rival's price instead of going under it (sets Undercut by to 0c)."]
         FitButton(self)
     end
@@ -565,7 +565,7 @@ local function Build(outer)
     AddUnit(unscannedRow, widgets.unscannedMarkup, L["% markup"])
 
     local unscannedOnRow = CreateRow(pages.pricing, 1, L["Use that markup"],
-        L["Off: crafts with no scanned price have no price at all, and your own listings hold at market value."])
+        L["When off, crafts with no scanned price have no price at all, and your own listings stay at market value."])
 
     widgets.priceUnscanned = Widgets.CreateCheckbox(unscannedOnRow, L["Enabled"], function(checked)
         Config:Set("priceUnscannedCrafts", checked)
@@ -574,7 +574,7 @@ local function Build(outer)
     widgets.priceUnscanned:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local ownedRow = CreateRow(pages.pricing, 1, L["Materials you already own"],
-        L["On: they still cost market price. Off: they count as free."])
+        L["When on, they still cost market price. When off, they count as free."])
 
     widgets.valueOwned = Widgets.CreateCheckbox(ownedRow, L["Charge market price"], function(checked)
         Config:Set("valueOwnedMaterials", checked)
@@ -584,7 +584,7 @@ local function Build(outer)
 
     CreateSection(pages.queue, 1, L["WHAT GETS QUEUED"])
     local postedRow = CreateRow(pages.queue, 1, L["Keep in stock per item"],
-        L["The most to hold of each craft. Counts listings, bags, bank, mail and the queue together. 0 = no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week (Stock from your sales). Equipped gear is not counted. A profession can have its own number (Keep in stock by profession), and an item its own in the Profit tab."])
+        L["The most of each craft to keep on hand. Listings, bags, bank, mail and the queue all count. 0 means no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week (Stock from your sales). Gear you're wearing doesn't count. A profession can have its own number (Keep in stock by profession), and so can an item, in the Profit tab."])
 
     widgets.maxPosted = Widgets.CreateNumberBox(postedRow, {
         width = 70, min = 0, max = 999,
@@ -608,7 +608,7 @@ local function Build(outer)
     widgets.restockOnSale:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local sellOutRow = CreateRow(pages.queue, 1, L["Raise it when it sells out"],
-        L["When every copy of a craft you listed sells before its listings run out, Keep in stock for that item goes up by 1. It is checked when you next read your mail. It never goes down by itself, and an item with no limit is left alone."])
+        L["When every copy of a craft you listed sells before its listings run out, Keep in stock for that item goes up by 1. It's checked the next time you open your mail. It never goes down by itself, and an item with no limit is left alone."])
 
     widgets.raiseOnSellOut = Widgets.CreateCheckbox(sellOutRow, L["On"], function(checked)
         Config:Set("raiseStockOnSellOut", checked)
@@ -616,7 +616,7 @@ local function Build(outer)
     widgets.raiseOnSellOut:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local learnRow = CreateRow(pages.queue, 1, L["Stock from your sales"],
-        L["With Keep in stock at 0, Queue All and Restock what sells keep about two days of what sold for you this week. The Profit tab shows that number in its STOCK column. Off: a craft with no number set is never queued by them."])
+        L["With Keep in stock at 0, Queue All and Restock what sells keep about two days of what sold for you this week. The Profit tab shows that number in its STOCK column. When off, they never queue a craft that has no number set."])
 
     widgets.learnStock = Widgets.CreateCheckbox(learnRow, L["On"], function(checked)
         Config:Set("learnStockFromSales", checked)
@@ -625,7 +625,7 @@ local function Build(outer)
     widgets.learnStock:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local lowRow = CreateRow(pages.queue, 1, L["Wait until it runs low"],
-        L["On: a craft is only suggested again once what you hold drops to the number below, then it is made back up to Keep in stock. Off: it is topped up whenever you hold fewer than Keep in stock."])
+        L["When on, a craft is only suggested again once you're down to the number below, and then it's made back up to Keep in stock. When off, it's topped up whenever you have fewer than Keep in stock."])
 
     widgets.restockWhenLow = Widgets.CreateCheckbox(lowRow, L["Wait for it"], function(checked)
         Config:Set("restockWhenLow", checked)
@@ -634,7 +634,7 @@ local function Build(outer)
     widgets.restockWhenLow:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local restockRow = CreateRow(pages.queue, 1, L["Restock when down to"],
-        L["Used with Wait until it runs low. 0 = only when you have none left. Queued crafts count as held."])
+        L["Goes with Wait until it runs low. 0 means only when you have none left. Queued crafts count as ones you have."])
 
     widgets.restockAt = Widgets.CreateNumberBox(restockRow, {
         width = 70, min = 0, max = 999,
@@ -646,7 +646,7 @@ local function Build(outer)
     widgets.restockAt:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     local fastRow = CreateRow(pages.queue, 1, L["Fast sellers keep more"],
-        L["Lets items that sell well for you go past Keep in stock by the number below. Sells well means at least 3 of your own listings have ended and 6 in 10 of them sold (High demand from your Sales tab). The market alone never counts."])
+        L["Lets items that sell well for you go past Keep in stock by the number below. Selling well means at least 3 of your own listings have ended and 6 in 10 of them sold (High demand on your Sales tab). How the market does on its own never counts."])
 
     widgets.fastSellerBoost = Widgets.CreateCheckbox(fastRow, L["Keep more"], function(checked)
         Config:Set("fastSellerBoost", checked)
@@ -655,7 +655,7 @@ local function Build(outer)
     widgets.fastSellerBoost:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local extraRow = CreateRow(pages.queue, 1, L["Extra for fast sellers"],
-        L["How many more a fast seller may be held, on top of Keep in stock."])
+        L["How many more of a fast seller you can keep, on top of Keep in stock."])
 
     widgets.fastSellerExtra = Widgets.CreateNumberBox(extraRow, {
         width = 70, min = 0, max = 999,
@@ -667,7 +667,7 @@ local function Build(outer)
     widgets.fastSellerExtra:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     local hideMaxedRow = CreateRow(pages.queue, 1, L["Hide maxed crafts"],
-        L["Off: they still appear, marked as at their limit."])
+        L["When off, they still show, marked as at their limit."])
 
     widgets.hideMaxed = Widgets.CreateCheckbox(hideMaxedRow, L["Hide them"], function(checked)
         Config:Set("hideAtPostLimit", checked)
@@ -689,7 +689,7 @@ local function Build(outer)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local freeSpaceRow = CreateRow(pages.queue, 1, L["Craft what frees bag space first"],
-        L["Craft next makes the ready craft that frees the most bag slots, after any part it needs. Off: it follows the queue's order."])
+        L["Craft next makes the ready craft that frees the most bag slots, after any part it needs. When off, it follows the queue's order."])
 
     widgets.freeSpaceFirst = Widgets.CreateCheckbox(freeSpaceRow, L["Free space first"], function(checked)
         Config:Set("craftFreesSpaceFirst", checked)
@@ -708,7 +708,7 @@ local function Build(outer)
     widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local followRow = CreateRow(pages.queue, 1, L["Goals follow the queue"],
-        L["With Blackthornes Farmer: a goal made with Set goal on the Gather tab changes when the queue does, and goes when nothing queued needs it. A goal you change yourself in Farmer is left alone."])
+        L["With Blackthornes Farmer, a goal made with Set goal on the Gather tab changes when the queue does, and goes away when nothing queued needs it. A goal you change yourself in Farmer is left alone."])
 
     widgets.followGoals = Widgets.CreateCheckbox(followRow, L["Follow it"], function(checked)
         Config:Set("farmerGoalsFollowQueue", checked)
@@ -717,7 +717,7 @@ local function Build(outer)
     widgets.followGoals:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local shareRow = CreateRow(pages.queue, 1, L["Let alts make sub-crafts"],
-        L["Off: the shopping list only recommends making it on the other character. On: it goes on that character's queue, marked who it is for, and the mailbox lists what to send."])
+        L["When off, the shopping list only suggests making it on the other character. When on, it goes on that character's queue, marked with who it's for, and the mailbox lists what to send."])
 
     widgets.shareQueue = Widgets.CreateCheckbox(shareRow, L["Hand them over"], function(checked)
         Config:Set("queueAltCrafting", checked)
@@ -740,7 +740,7 @@ local function Build(outer)
     -- Asked 2026-10-04: a character to mail gear to for disenchanting.
     -- Typed rather than picked, so one on another account works too.
     local disenchanterRow = CreateRow(pages.mail, 1, L["Disenchanter"],
-        L["At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. Never soulbound gear, crafted gear or an upgrade for you. Left empty, your alt with the most Enchanting is picked for you."])
+        L["At the mailbox, lists gear in your bags to mail this character for disenchanting, with a button that fills in the mail. It never sends soulbound gear, crafted gear or an upgrade for you. Leave it empty and your alt with the most Enchanting is picked for you."])
     widgets.disenchanterRow = disenchanterRow
     widgets.disenchanterTip = disenchanterRow.description
 
@@ -764,7 +764,7 @@ local function Build(outer)
 
     -- Asked 2026-10-11 (the owner: the addons should do the work).
     local guessRow = CreateRow(pages.mail, 1, L["Pick one for me"],
-        L["While the Disenchanter box is empty, your alt with more Enchanting than the character you're on gets the gear. Untick for nobody."])
+        L["While the Disenchanter box is empty, your alt with more Enchanting than the character you're on gets the gear. Untick it to send to nobody."])
 
     widgets.disenchanterGuess = Widgets.CreateCheckbox(guessRow, L["Pick"], function(checked)
         Config:Set("disenchanterGuess", checked)
@@ -788,7 +788,7 @@ local function Build(outer)
 
     -- Asked 2026-10-05: big shuffles taken from the mail a bagful at a time.
     local spareRow = CreateRow(pages.mail, 1, L["Bag slots kept free"],
-        L["Left empty by each Take next batch at the mailbox, for what you craft and anything you pick up."])
+        L["Take next batch at the mailbox leaves this many slots empty, for what you craft and anything you pick up."])
 
     widgets.bagSpare = Widgets.CreateNumberBox(spareRow, {
         width = 70, min = 0, max = 50,
@@ -800,7 +800,7 @@ local function Build(outer)
     widgets.bagSpare:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     local mailBatchRow = CreateRow(pages.mail, 1, L["Take queue mail in batches"],
-        L["At the mailbox, a Take next batch button takes the queue's materials from your mail, as much as fits in your bags. Never mail asking for payment (COD)."])
+        L["At the mailbox, a Take next batch button takes the queue's materials from your mail, as much as fits in your bags. It never takes mail asking for payment (COD)."])
 
     widgets.mailBatch = Widgets.CreateCheckbox(mailBatchRow, L["Show it"], function(checked)
         Config:Set("mailBatchTake", checked)
@@ -811,7 +811,7 @@ local function Build(outer)
     -- Asked 2026-10-07: each queue row says AH, DE or Vendor, and what the
     -- queue made on DE or Vendor can be disenchanted or sold from here.
     local deNextRow = CreateRow(pages.queue, 1, L["Disenchant next on the Queue tab"],
-        L["A button that disenchants the next item your queue made on DE, one click each. Never blue or better, anything worn, or anything the queue did not make."])
+        L["A button that disenchants the next item your queue made on DE, one click each. It never touches blue or better, anything worn, or anything the queue didn't make."])
 
     widgets.deNext = Widgets.CreateCheckbox(deNextRow, L["Show it"], function(checked)
         Config:Set("queueDisenchantNext", checked)
@@ -832,12 +832,12 @@ local function Build(outer)
     -- Buttons beside a tick box ran past the column's edge (2026-10-09), so
     -- each has its own row now.
     local sellTestRow = CreateRow(pages.mail, 2, L["Test vendor selling"],
-        L["At a vendor: sells your cheapest grey item from the addon, to see whether one click can sell what is marked. Also /bts selltest."])
+        L["At a vendor, sells your cheapest grey item from the addon to see whether one click can sell what's marked. Also /bts selltest."])
 
     local sellTest = Widgets.CreateButton(sellTestRow, L["Test selling"], function()
         if ns.SellMarked then ns.SellMarked:Test() end
     end, { width = 96, height = 20,
-        tooltip = L["At a vendor: sells your cheapest grey item from the addon, to see whether the game allows it (/bts selltest)"] })
+        tooltip = L["At a vendor, sells your cheapest grey item from the addon to see whether the game allows it (/bts selltest)"] })
     sellTest:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(sellTest)
 
@@ -864,7 +864,7 @@ local function Build(outer)
 
     -- Asked 2026-10-11: the real cost of many could run far past the estimate.
     local buyWarnRow = CreateRow(pages.auction, 1, L["Warn when buying costs more"],
-        L["On the auction house's buy window, a line under Buy Now when that many of a queue material costs this many percent more than the shopping list said, with both amounts and the difference. 0 turns it off."])
+        L["Adds a line under Buy Now on the auction house's buy window when buying that many of a queue material costs this many percent more than the shopping list expected, with both amounts and the difference. 0 turns it off."])
 
     widgets.buyWarn = Widgets.CreateNumberBox(buyWarnRow, {
         width = 70, min = 0, max = 500,
@@ -880,7 +880,7 @@ local function Build(outer)
 
     CreateSection(pages.pricing, 1, L["WHEN TO SELL"])
     local lossRow = CreateRow(pages.pricing, 1, L["Recommend selling at a loss"],
-        L["Off: the Post tab shows them in red but will not list them."])
+        L["When off, the Post tab shows them in red but won't list them."])
 
     widgets.allowLoss = Widgets.CreateCheckbox(lossRow, L["Recommend anyway"], function(checked)
         Config:Set("allowPostingAtALoss", checked)
@@ -1039,7 +1039,7 @@ local function Build(outer)
     neverHint:SetPoint("TOPLEFT", never, "BOTTOMLEFT", 0, ROW_GAP)
     neverHint:SetWidth(COLUMN_WIDTH)
     neverHint:SetWordWrap(true)
-    neverHint:SetText(L["Bought instead of made whenever another craft needs them, in costs, the queue and the shopping list, on every character. They can still be queued on their own. Those set to Make on the Level Up tab are listed too. Allow puts one back to the usual."])
+    neverHint:SetText(L["These are bought instead of made whenever another craft needs them, in costs, the queue and the shopping list, on every character. You can still queue them on their own. Ones set to Make on the Level Up tab are listed too. Click Allow to put one back to normal."])
     widgets.neverHint = neverHint
 
     widgets.neverEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
@@ -1064,7 +1064,7 @@ local function Build(outer)
     ignoredHint:SetPoint("TOPLEFT", ignored, "BOTTOMLEFT", 0, ROW_GAP)
     ignoredHint:SetWidth(COLUMN_WIDTH)
     ignoredHint:SetWordWrap(true)
-    ignoredHint:SetText(L["Never shown on the Profit tab, on any character. Restore puts one back."])
+    ignoredHint:SetText(L["These never show on the Profit tab, on any character. Click Restore to bring one back."])
     widgets.ignoredHint = ignoredHint
 
     widgets.ignoredEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
@@ -1091,7 +1091,7 @@ local function Build(outer)
     ignoredItemsHint:SetPoint("TOPLEFT", ignoredItems, "BOTTOMLEFT", 0, ROW_GAP)
     ignoredItemsHint:SetWidth(COLUMN_WIDTH)
     ignoredItemsHint:SetWordWrap(true)
-    ignoredItemsHint:SetText(L["Never offered for sale on Ready to sell or the Post tab, on any character. Restore puts one back."])
+    ignoredItemsHint:SetText(L["These are never offered for sale on Ready to sell or the Post tab, on any character. Click Restore to bring one back."])
     widgets.ignoredItemsHint = ignoredItemsHint
 
     widgets.ignoredItemsEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
@@ -1246,7 +1246,7 @@ local function Build(outer)
 
     -- Asked 2026-10-13: the sales lines under Demand, kept for Shift.
     local salesShiftRow = CreateRow(pages.look, 1, L["Sales details only with Shift"],
-        L["Shows how many sell a day, how many are listed, the last 7 days and your own sales under Demand only while you hold Shift. Unticked, they always show."])
+        L["Shows how many sell a day, how many are listed, the last 7 days and your own sales under Demand only while you hold Shift. Otherwise they always show."])
 
     widgets.tooltipSalesShift = Widgets.CreateCheckbox(salesShiftRow, L["Enabled"], function(checked)
         Config:Set("tooltipSalesShift", checked)
@@ -1255,7 +1255,7 @@ local function Build(outer)
 
     -- Asked 2026-10-14: the Prices tab's trend on the tooltip too.
     local trendRow = CreateRow(pages.look, 1, L["Price trend on tooltips"],
-        L["Shows how far an item's market value now is from its average over the last 7 or 14 days, the same as the Prices tab's TREND column. The Prices tab picks the days."])
+        L["Shows how far an item's market value has moved from its average over the last 7 or 14 days, the same as the TREND column on the Prices tab. You pick the days there."])
 
     widgets.tooltipTrend = Widgets.CreateCheckbox(trendRow, L["Enabled"], function(checked)
         Config:Set("tooltipTrend", checked)
@@ -1265,7 +1265,7 @@ local function Build(outer)
     -- Asked 2026-10-05: is a recipe worth buying, at a glance. The button
     -- is /bts recipes.
     local recipeTipRow = CreateRow(pages.look, 1, L["Recipe value on tooltips"],
-        L["On a Pattern, Plans, Formula or Recipe: what it teaches, the cost to make, what it sells and disenchants for, and how many crafts pay it back."])
+        L["On a Pattern, Plans, Formula or Recipe, shows what it teaches, what it costs to make, what it sells and disenchants for, and how many crafts it takes to pay for itself."])
 
     widgets.recipeTooltips = Widgets.CreateCheckbox(recipeTipRow, L["Enabled"], function(checked)
         Config:Set("showRecipeValueOnTooltips", checked)
@@ -1274,7 +1274,7 @@ local function Build(outer)
 
     -- Asked 2026-10-14: what an enchant's materials cost, on its tooltip.
     local enchantTipRow = CreateRow(pages.look, 1, L["Enchant costs on tooltips"],
-        L["On an enchant, in the Enchanting window or linked in chat: what its materials cost, each one, what you're short and who knows it."])
+        L["On an enchant, in the Enchanting window or linked in chat, shows what each material costs, what you're short and who knows it."])
 
     widgets.enchantTooltips = Widgets.CreateCheckbox(enchantTipRow, L["Enabled"], function(checked)
         Config:Set("tooltipEnchantCosts", checked)
@@ -1285,17 +1285,17 @@ local function Build(outer)
     -- Its own row (a player's report, 2026-10-09): beside the tick box it
     -- started 340 pixels in and ran past the column into the next one.
     local recipeListRow = CreateRow(pages.look, 1, L["Recipes to learn"],
-        L["Every recipe of your professions you have not learned, with what each is worth. Also /bts recipes."])
+        L["Every recipe in your professions that you haven't learned yet, with what each is worth. Also /bts recipes."])
 
     local recipeList = Widgets.CreateButton(recipeListRow, L["Show list"], function()
         if ns.ProfitTab and ns.ProfitTab.ShowRecipesToLearn then ns.ProfitTab.ShowRecipesToLearn() end
     end, { width = 110, height = 20,
-           tooltip = L["Every recipe of your professions you have not learned, with what each is worth"] })
+           tooltip = L["Every recipe in your professions that you haven't learned yet, with what each is worth"] })
     recipeList:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(recipeList)
 
     local upgradeRow = CreateRow(pages.look, 1, L["Upgrade arrows on gear"],
-        L["A green arrow on the icon of gear that is an upgrade for you. Needs Blackthornes Equipment."])
+        L["Puts a green arrow on gear that's an upgrade for you. Needs Blackthornes Equipment."])
 
     widgets.upgradeArrows = Widgets.CreateCheckbox(upgradeRow, L["Enabled"], function(checked)
         Config:Set("showUpgradeArrows", checked)
@@ -1380,7 +1380,7 @@ local function Build(outer)
     -- size; one dragged to shows in the box as its percent.
     CreateSection(pages.look, 1, L["THIS WINDOW"])
     local sizeRow = CreateRow(pages.look, 1, L["Window size"],
-        L["How big this window is drawn. Drag the gold corner below its bottom right for any size, or right-click it for Normal. Also /bts size."])
+        L["How big this window is. Drag the gold corner below its bottom right to any size, or right-click it for Normal. Also /bts size."])
 
     widgets.windowSize = Widgets.CreateDropdown(sizeRow, {}, function(value)
         UI:SetWindowScale(value)
@@ -1390,7 +1390,7 @@ local function Build(outer)
     -- Asked 2026-10-07 ("I'm getting old"): bigger letters in the same
     -- window. Every size is read as text is drawn, so it waits for /reload.
     local textRow = CreateRow(pages.look, 1, L["Text size"],
-        L["Large and Larger add a point or two to all of this addon's text, in a window the same size. Works with Window size. Takes effect after /reload."])
+        L["Large and Larger make all of this addon's text a point or two bigger without changing the window size. Works alongside Window size. Takes effect after /reload."])
 
     widgets.textSize = Widgets.CreateDropdown(textRow, {
         { text = L["Normal"], value = "normal" },
@@ -1436,7 +1436,7 @@ local function Build(outer)
     widgets.styleReload:Hide()
 
     local effectsRow = CreateRow(pages.look, 1, L["Window effects"],
-        L["Full: windows fade up and glow as they open, and buttons ease into their colours. Subtle: shorter, and nothing rises. Off: no movement at all."])
+        L["With Full, windows fade up and glow as they open, and buttons ease into their colours. Subtle is shorter, and nothing rises. Off has no movement at all."])
 
     widgets.effects = Widgets.CreateDropdown(effectsRow, {
         { text = L["Full"], value = "full" },
@@ -1467,7 +1467,7 @@ local function Build(outer)
     if listOptions[1] then widgets.columnsList:SetValue(listOptions[1].value) end
 
     local showAllRow = CreateRow(pages.look, 1, L["Hidden columns"],
-        L["How many columns are hidden across every list. Show all puts every one back."])
+        L["How many columns are hidden across every list. Show all brings them all back."])
     widgets.columnsHidden = Theme.CreateLabel(showAllRow, "small", "muted")
     widgets.columnsHidden:SetPoint("TOPLEFT", CONTROL_X, -4)
 
@@ -1499,7 +1499,7 @@ local function Build(outer)
     -- The probe as a button (asked 2026-10-10); what it finds is also kept
     -- in the saved data for Claude to read after a /reload.
     local probeRow = CreateRow(pages.data, 1, L["Client check"],
-        L["Lists in chat what this version of the game supports and whether your data is kept. It only reads. Same as /bts probe."])
+        L["Lists in chat what this version of the game supports and whether your data is being saved. It doesn't change anything. Same as /bts probe."])
 
     widgets.probe = Widgets.CreateButton(probeRow, L["Check"], function()
         local command = ns.commands and ns.commands.probe
@@ -1554,7 +1554,7 @@ local function Build(outer)
     -- raid warning too much and asked for an old cash register). Off is the
     -- saleAlarm switch; the sound is saleSound. Picking one plays it.
     local saleRow = CreateRow(pages.look, 2, L["An auction sells"],
-        L["A sound as soon as one of your auctions sells, wherever you are: an old cash register, coins, or the raid warning. Press Play to hear it."])
+        L["Plays a sound as soon as one of your auctions sells, wherever you are. Pick an old cash register, coins, or the raid warning, and press Play to hear it."])
 
     local function SaleSound()
         if Config:Get("saleAlarm") == false then return "off" end
