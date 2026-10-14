@@ -281,10 +281,23 @@ local function CreateCard(parent, heading, height)
         label:SetJustifyH(justify or "LEFT")
         label:ClearAllPoints()
         label:SetPoint("TOPLEFT", self, "TOPLEFT", left, -top)
-        if width then label:SetWidth(width) end
+        -- A pooled label keeps an earlier width unless told otherwise.
+        label:SetWidth(width or 0)
         label:SetText(text or "")
         label:Show()
         return label
+    end
+
+    --- Draw a column of labels down the left and say where the bars can
+    --- start: past the widest of them (German runs longer), never under
+    --- `least` and never past half the card, so no label ends in "...".
+    function card:LabelColumn(texts, top, step, least, width)
+        local widest = 0
+        for index, text in ipairs(texts) do
+            local label = self:Text(text, "small", "muted", PAD, top + (index - 1) * step)
+            widest = math.max(widest, Theme.TextWidth(label) or 0)
+        end
+        return PAD + math.min(math.max(least, math.ceil(widest) + 8), math.floor(width / 2))
     end
 
     function card:Empty(text)
@@ -444,12 +457,11 @@ function Draw.listings(card, stats, width)
         { L["Taken down"], listings.cancelled, "dim" },
     }
     local most = math.max(listings.sold, listings.expired, listings.cancelled, 1)
-    local barLeft = PAD + 80
+    local barLeft = card:LabelColumn({ lines[1][1], lines[2][1], lines[3][1] }, HEADING_ROOM + 6, 18, 80, width)
     local barRoom = width - barLeft - PAD - 90
     local y = HEADING_ROOM + 6
 
     for _, line in ipairs(lines) do
-        card:Text(line[1], "small", "muted", PAD, y)
         local r, g, b = Theme.Unpack(line[3])
         card:Row(barLeft, y + 1, math.max(1, line[2] / most * barRoom), 10, r, g, b, 0.85)
         card:Text(Count(line[2]), "small", "text", barLeft + barRoom + 6, y)
@@ -568,13 +580,13 @@ function Draw.sources(card, stats, width)
     local most = 1
     for _, source in ipairs(sources) do most = math.max(most, source.value) end
 
-    local labelWidth = 120
-    local barLeft = PAD + labelWidth
+    local words = {}
+    for index, source in ipairs(sources) do words[index] = SOURCE_WORDS[source.key] or source.key end
+    local barLeft = card:LabelColumn(words, HEADING_ROOM + 6, 17, 120, width)
     local barRoom = width - barLeft - PAD - 84
     local y = HEADING_ROOM + 6
     for _, source in ipairs(sources) do
         local vendor = source.key == "vendorPays" or source.key == "vendorSells"
-        card:Text(SOURCE_WORDS[source.key] or source.key, "small", "muted", PAD, y, labelWidth - 4)
         local r, g, b = Theme.Unpack(vendor and "border" or (source.key == "scans" and "accent" or "metal"))
         card:Row(barLeft, y + 2, math.max(1, source.value / most * barRoom), 9, r, g, b, 0.9)
         card:Text(Money(source.value), "small", "text", barLeft + barRoom + 4, y, 80, "RIGHT")
@@ -640,15 +652,14 @@ function Draw.sellers(card, stats, width, height)
     card:Text(last.sellers == 1 and L["seller at the last full scan"] or L["sellers at the last full scan"],
         "tiny", "muted", PAD + 34, HEADING_ROOM + 6, width - PAD * 2 - 34)
 
-    local barLeft = PAD + 130
-    local barRoom = width - barLeft - PAD - 40
     local y = HEADING_ROOM + 30
     local lines = {
         { L["Biggest seller has"], last.top, "loss" },
         { L["You have"], last.yours, "profit" },
     }
+    local barLeft = card:LabelColumn({ lines[1][1], lines[2][1] }, y, 17, 130, width)
+    local barRoom = width - barLeft - PAD - 40
     for _, line in ipairs(lines) do
-        card:Text(line[1], "small", "muted", PAD, y)
         local r, g, b = Theme.Unpack(line[3])
         local track = card:Box(barLeft, y + 2, barRoom, 9, Theme.Unpack("glassAlt"))
         track:SetDrawLayer("BORDER")
@@ -684,12 +695,13 @@ function Draw.speed(card, stats, width)
     local most, total = 1, 0
     for _, count in ipairs(times) do most, total = math.max(most, count), total + count end
 
-    local barLeft = PAD + 100
+    local words = {}
+    for index in ipairs(times) do words[index] = SPEED_WORDS[index] end
+    local barLeft = card:LabelColumn(words, HEADING_ROOM + 6, 17, 100, width)
     local barRoom = width - barLeft - PAD - 40
     local y = HEADING_ROOM + 6
     local colours = { "profit", "accent", "warn", "loss" }
     for index, count in ipairs(times) do
-        card:Text(SPEED_WORDS[index], "small", "muted", PAD, y)
         local r, g, b = Theme.Unpack(colours[index])
         card:Row(barLeft, y + 2, math.max(1, count / most * barRoom), 9, r, g, b, 0.9)
         card:Text(Count(count), "small", "text", barLeft + barRoom + 4, y, 36, "RIGHT")
@@ -1036,8 +1048,33 @@ local function BuildPanel(container)
     return panel
 end
 
+--- What the list is built from, so a refresh that moved none of it (a
+--- craft, a post) keeps the rows it has: the search, the ledger, the
+--- prices, the stars and every character's recipes.
+local function ListKey()
+    local ledger = ns.Mail and ns.Mail.GetLedger and select(2, pcall(ns.Mail.GetLedger, ns.Mail))
+    local entries = type(ledger) == "table" and type(ledger.entries) == "table" and ledger.entries or {}
+    local last = entries[#entries]
+    local stars = 0
+    local favourites = ns.Prices and ns.Prices.GetFavourites and ns.Prices:GetFavourites() or {}
+    for _ in pairs(favourites) do stars = stars + 1 end
+    local recipes = 0
+    for _, record in pairs(ns.db and type(ns.db.characters) == "table" and ns.db.characters or {}) do
+        if type(record) == "table" and type(record.recipesCachedAt) == "number" then
+            recipes = recipes + record.recipesCachedAt
+        end
+    end
+    return table.concat({ state.search or "", #entries, type(last) == "table" and tostring(last.t) or "",
+        tostring(ns.Prices and ns.Prices.changes or 0), stars, recipes,
+        -- And the day, so "the last 30 days" moves on.
+        math.floor(time() / DAY) }, "\1")
+end
+
 local function RefreshList()
     if not widgets.list then return end
+    local key = ListKey()
+    if key == widgets.listKey then return end
+    widgets.listKey = key
     local rows = BuildList(state.search)
     widgets.list:SetData(rows)
     widgets.emptyLabel:SetShown(#rows == 0)

@@ -68,6 +68,11 @@ local dupe = Lists:Make("potion herbs")
 check("a name in use gets a number", Lists:Get(dupe).name == "potion herbs 2")
 check("the copy line's marks are taken out", Lists:Rename(dupe, "Ore: bars, all|r") and Lists:Get(dupe).name == "Ore bars all r")
 check("a long name is cut", #Lists.CleanName(("x"):rep(80)) == Lists.MAX_NAME)
+do
+    -- An a with dots is two bytes: the cut never splits it.
+    local cut = Lists.CleanName(("x"):rep(Lists.MAX_NAME - 1) .. "\195\164" .. "yyy")
+    check("a long name is cut between letters", cut == ("x"):rep(Lists.MAX_NAME - 1))
+end
 local version = Lists.version
 check("delete removes it", Lists:Delete(dupe) and Lists:Get(dupe) == nil and #ns.db.shoppingLists == 1)
 check("a change moves the version", Lists.version > version)
@@ -123,10 +128,15 @@ Lists:Delete(saved)
 
 -- 5. Copy and paste
 local line = Lists:Export(herbs)
-check("the copy line", line == "BTSlist1:Potion herbs:2447*40,765*40,3371*40")
+check("the copy line", line == "BTSlist1:Potion herbs:2447x40,765x40,3371x40")
 local pasted = Lists:Import(line)
 check("pasting gives the same list back", pasted and Lists:Get(pasted).name == "Potion herbs 2"
     and #Lists:Get(pasted).items == 3 and Lists:Get(pasted).items[2].want == 40)
+Lists:Delete(pasted)
+-- A line copied before, with * between ID and count, still pastes.
+pasted = Lists:Import("BTSlist1:Potion herbs:2447*40,765*40,3371*40")
+check("an older copy line pastes too", pasted and #Lists:Get(pasted).items == 3
+    and Lists:Get(pasted).items[3].want == 40)
 for _, bad in ipairs({ "hello", "BTSlist1:x:", "BTSlist1:x:abc", "BTSlist1:x:1*2;os.exit()", 7 }) do
     check("refused: " .. tostring(bad), Lists:Import(bad) == nil)
 end

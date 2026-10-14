@@ -737,7 +737,8 @@ function PriceGraph.Create(parent, opts)
         local room = self:GetWidth()
         if type(room) ~= "number" or room <= 0 then room = 276 end
         if not self.opts.heading then
-            room = room - self.toggles.day:GetWidth() - self.toggles.week:GetWidth() - 12
+            room = room - self.toggles.day:GetWidth() - self.toggles.week:GetWidth()
+                - self.toggles.fortnight:GetWidth() - 16
         end
         local fits = math.max(1, math.floor((room + 6) / (PICKER_ICON + 6)))
 
