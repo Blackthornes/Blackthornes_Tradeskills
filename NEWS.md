@@ -23,6 +23,21 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.57.0
+
+- A new Stats tab shows one item at a time in charts: price, sales, cheapest times and who else sells it.
+- The auction house drawer has shopping Lists and an Auctions view that shows which of your auctions were undercut.
+- The Prices tab has a trend column, and item tooltips show how the price has moved.
+- Craft next can make what frees the most bag space first.
+
+Fixes and changes:
+
+- The tabs are in a new order.
+- A 14 day price graph.
+- Ctrl-right-click a craft in the profession pane to ignore it.
+- Vendor materials with limited stock can still be searched on the auction house.
+- Butler can buy the queue's materials at a vendor.
+
 ## 0.56.0
 
 - The auction house panel has a box to pick how long your listings stay up.
