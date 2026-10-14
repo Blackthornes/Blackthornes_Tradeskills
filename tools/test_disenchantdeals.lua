@@ -452,7 +452,7 @@ assert(loadfile(lfs_cwd .. "/UI/Tab_Disenchanting.lua"))("Blackthornes_TS", ns)
 
 local tab = tabs.disenchanting
 check("the tab registers as Disenchanting", tab and tab.text == "Disenchanting")
-check("it sits after Stats and before Level Up", tab.order > 6 and tab.order < 8)
+check("it sits after Post and before Level Up", tab.order > 4 and tab.order < 6)
 
 tab.build(Stub())
 tab.refresh()

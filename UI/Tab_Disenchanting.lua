@@ -1290,7 +1290,7 @@ end
 UI:RegisterTab({
     key = "disenchanting",
     text = L["Disenchanting"],
-    order = 7,
+    order = 5,
     build = Build,
     refresh = Refresh,
 })

@@ -1179,7 +1179,7 @@ end)
 UI:RegisterTab({
     key = "stats",
     text = L["Stats"],
-    order = 6,
+    order = 9,
     build = Build,
     refresh = Refresh,
     onShow = function()
