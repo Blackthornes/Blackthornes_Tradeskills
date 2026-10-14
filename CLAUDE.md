@@ -235,6 +235,14 @@ _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
   before do not reach, and what it owns (bags, bank, mailbox) comes off,
   so it stops once there is enough. Kept in the lookup. Butler then says
   Disenchant. Tested in `tools/test_butlerenchanting.lua`.
+- `youDisenchant` (the owner asked 2026-10-14): true when the character
+  playing is the disenchanter (`QueueMail:IsDisenchanterPlaying`: the name
+  typed on the Mail page, else, with the box empty and "Pick one for me"
+  on, this character when it has Enchanting and no character it can mail
+  has more), nil otherwise; kept in the lookup. `crafted`: true for a
+  green some recipe makes, asked only then. Butler's "Disenchant greens
+  here" (off unless ticked) reads both. Tested in
+  `tools/test_butlerenchanting.lua` and `tools/test_disenchantmail.lua`.
 
 Bought to disenchant (the owner asked 2026-10-11): `Logic/DisenchantBuys.lua`
 marks an auction house buy that follows a search sent from the

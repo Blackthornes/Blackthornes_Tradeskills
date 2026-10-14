@@ -249,6 +249,26 @@ settings.disenchanterName = ""
 settings.disenchanterGuess = false
 check("Pick one for me unticked: nobody", QueueMail:GetDisenchanter(), nil)
 settings.disenchanterGuess = nil
+
+print("")
+print("is the character playing the disenchanter?")
+
+-- For Butler's "Disenchant greens here" (the owner asked 2026-10-14).
+settings.disenchanterName = "Bob"
+check("typed as the character playing: yes", QueueMail:IsDisenchanterPlaying(), true)
+settings.disenchanterName = "Dusty"
+check("typed as someone else: no", QueueMail:IsDisenchanterPlaying(), false)
+settings.disenchanterName = ""
+check("box empty, an alt out-enchants you: no", QueueMail:IsDisenchanterPlaying(), false)
+ns.db.characters["Player-BOB"].professions = Enchanting(250)
+check("box empty, you out-enchant them all: yes", QueueMail:IsDisenchanterPlaying(), true)
+settings.disenchanterGuess = false
+check("but not with Pick one for me unticked", QueueMail:IsDisenchanterPlaying(), false)
+settings.disenchanterGuess = nil
+ns.db.characters["Player-BOB"].professions = nil
+ns.db.characters["Player-DUSTY"].professions, ns.db.characters["Player-ENZO"] = nil, nil
+check("nobody with Enchanting: no", QueueMail:IsDisenchanterPlaying(), false)
+
 ns.db.characters["Player-DUSTY"].professions, ns.db.characters["Player-DUSTY"].surname = nil, nil
 ns.db.characters["Player-ENZO"] = nil
 

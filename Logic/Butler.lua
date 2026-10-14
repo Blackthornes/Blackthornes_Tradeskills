@@ -61,6 +61,13 @@
 --                  material (item ID), materialName, short (how many it
 --                  lacks, after bags, bank and mailbox), yield (about how
 --                  many one disenchant gives) }. nil otherwise.
+--   youDisenchant  true when the character playing is the disenchanter
+--                  (QueueMail:IsDisenchanterPlaying: the name typed in
+--                  Settings, else the one "Pick one for me" would pick),
+--                  nil otherwise. For Butler's "Disenchant greens here",
+--                  which is off unless ticked there (the owner, 2026-10-14).
+--   crafted        true for a green some recipe makes, asked only while
+--                  `youDisenchant` is true; nil otherwise.
 --
 -- Butler's right-click menu marks or unmarks one (2026-10-11):
 --
@@ -465,6 +472,14 @@ local function ForEnchanting(itemID, kept, quality, canDisenchant)
     }
 end
 
+--- Is the character playing the disenchanter? true or nil.
+local function DisenchanterHere()
+    local mail = ns.QueueMail
+    if not (mail and mail.IsDisenchanterPlaying) then return nil end
+    local ok, here = pcall(mail.IsDisenchanterPlaying, mail)
+    return (ok and here == true) or nil
+end
+
 local function Build()
     local selfKey = SelfKey()
     local selfSkill = EnchantingSkill(Characters()[selfKey])
@@ -476,6 +491,7 @@ local function Build()
         knows = KnowsDisenchant(),
         enchanters = Enchanters(selfKey),
         chosen = Chosen(),
+        youDisenchant = DisenchanterHere(),
     }
 end
 
@@ -615,6 +631,14 @@ local function Disenchanter(itemID, kept, quality)
     return nil
 end
 
+--- Made by a profession? true or nil.
+local function Crafted(itemID)
+    local book = ns.RecipeBook
+    if not (book and book.IsCrafted) then return nil end
+    local ok, made = pcall(book.IsCrafted, book, itemID)
+    return (ok and made == true) or nil
+end
+
 local function Answer(itemID)
     local kept = Lookup()
     local quality = Quality(itemID)
@@ -636,6 +660,8 @@ local function Answer(itemID)
         mailCount = mail and mail.count or nil,
         bought = Bought(itemID),
         forEnchanting = ForEnchanting(itemID, kept, quality, canDisenchant),
+        youDisenchant = kept.youDisenchant,
+        crafted = kept.youDisenchant and quality == 2 and Crafted(itemID) or nil,
     }
 end
 

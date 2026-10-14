@@ -161,6 +161,23 @@ ns.Disenchanter.Knows = function() return false end
 Butler:Forget()
 check("can't disenchant: nothing", For(1), nil)
 
+print("\nthe disenchanter playing (for Butler's Disenchant greens here)")
+local here = false
+ns.QueueMail.IsDisenchanterPlaying = function() return here end
+Butler:Forget()
+check("not the disenchanter: no youDisenchant", Butler:Advise(1).youDisenchant, nil)
+check("and no crafted asked", Butler:Advise(4).crafted, nil)
+here = true
+Butler:Forget()
+check("the disenchanter: youDisenchant", Butler:Advise(1).youDisenchant, true)
+check("a crafted green says so", Butler:Advise(4).crafted, true)
+check("a found green does not", Butler:Advise(1).crafted, nil)
+check("a blue is not asked", Butler:Advise(3).crafted, nil)
+ns.QueueMail.IsDisenchanterPlaying = function() error("broken") end
+Butler:Forget()
+check("one that raises: nil", Butler:Advise(1).youDisenchant, nil)
+ns.QueueMail.IsDisenchanterPlaying = nil
+
 print("")
 if failures > 0 then
   error(string.format("%d forEnchanting check(s) failed", failures))
