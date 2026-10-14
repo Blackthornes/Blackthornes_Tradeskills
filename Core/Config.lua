@@ -264,6 +264,8 @@ local DEFAULTS = {
         -- the Salt Shaker) comes ready on any character, and give Butler a
         -- step for it (asked 2026-10-12). See Logic/Cooldowns.lua.
         cooldownAlerts = true,
+        -- The Stats tab cheers an item's best week of sales, once (UI/Tab_Stats.lua).
+        statsCheer = true,
 
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
@@ -347,6 +349,11 @@ local DEFAULTS = {
         -- When a reagent is cheaper to craft than to buy, queue that craft
         -- too rather than only saying so.
         autoQueueSubCrafts = true,
+
+        -- Craft next makes the ready craft that frees the most bag slots
+        -- first, sub-crafts still before what they go into (2026-10-14).
+        -- See Crafting:PickNext.
+        craftFreesSpaceFirst = true,
 
         -- Point out a material another of your characters can make for less
         -- than it costs to buy. Only a suggestion; the queue still buys it, so

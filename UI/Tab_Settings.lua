@@ -688,6 +688,16 @@ local function Build(outer)
     end, true)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    local freeSpaceRow = CreateRow(pages.queue, 1, L["Craft what frees bag space first"],
+        L["Craft next makes the ready craft that frees the most bag slots, after any part it needs. Off: it follows the queue's order."])
+
+    widgets.freeSpaceFirst = Widgets.CreateCheckbox(freeSpaceRow, L["Free space first"], function(checked)
+        Config:Set("craftFreesSpaceFirst", checked)
+        UI:RefreshActiveTab()
+        if ns.CraftPanel and ns.CraftPanel.UpdateCraftButton then ns.CraftPanel:UpdateCraftButton() end
+    end, true)
+    widgets.freeSpaceFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local altCraftRow = CreateRow(pages.queue, 1, L["Suggest other characters"],
         L["Point out materials one of your other characters can make for less than buying them."])
 
@@ -1560,6 +1570,22 @@ local function Build(outer)
         L["A coin when another of your characters can make a material for less."])
     SoundRow("goalSound", L["Farmer goal set"],
         L["A cheer when Set goal on the Gather tab makes a Farmer goal."])
+    SoundRow("statsCheer", L["Best week of sales"],
+        L["A cheer on the Stats tab when an item has its best week of sales yet, once a week."],
+        function()
+            local kit = type(SOUNDKIT) == "table" and SOUNDKIT.IG_QUEST_LIST_COMPLETE or 878
+            pcall(PlaySound, kit)
+        end)
+
+    -- UI/Tab_Stats.lua (asked 2026-10-14): one item at a time, in charts.
+    -- The button is /bts stats.
+    local statsRow = CreateRow(pages.look, 2, L["Stats tab"],
+        L["Charts for one item at a time: its price through the week, where each sale's gold goes, how fast it sells and who else sells it. Also /bts stats, with an item's name or link."])
+    local statsOpen = Widgets.CreateButton(statsRow, L["Open"], function()
+        if ns.StatsUI then ns.StatsUI:ShowItem(nil) end
+    end, { width = 60, height = 20, tooltip = L["Open the Stats tab"] })
+    statsOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(statsOpen)
 
     -- Sharing (asked 2026-10-07): your characters on another account of
     -- yours, and prices within your guild. Logic/AccountLink.lua and
@@ -2080,6 +2106,7 @@ local function Refresh()
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
+    widgets.freeSpaceFirst:SetChecked(Config:Get("craftFreesSpaceFirst") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
     widgets.followGoals:SetChecked(Config:Get("farmerGoalsFollowQueue") ~= false)
     widgets.shareQueue:SetChecked(Config:Get("queueAltCrafting") == true)
@@ -2216,7 +2243,7 @@ end
 UI:RegisterTab({
     key = "settings",
     text = L["Settings"],
-    order = 8,
+    order = 12,
     build = Build,
     refresh = Refresh,
     onShow = Refresh,

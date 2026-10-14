@@ -583,9 +583,15 @@ local function BuildDetail(parent)
     detail.star = CreateStar(detail, 18, function() return state.selected and state.selected.itemID end)
     detail.star:SetPoint("TOPRIGHT", -8, -10)
 
+    -- The item's charts on the Stats tab (UI/Tab_Stats.lua), beside the star.
+    detail.stats = Widgets.CreateButton(detail, L["Stats"], function()
+        if state.selected and ns.StatsUI then ns.StatsUI:ShowItem(state.selected.itemID) end
+    end, { width = 50, height = 20, tooltip = L["See this item's charts on the Stats tab"] })
+    detail.stats:SetPoint("TOPRIGHT", -32, -9)
+
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 50, -12)
-    title:SetPoint("TOPRIGHT", -36, -12)
+    title:SetPoint("TOPRIGHT", detail.stats, "TOPLEFT", -6, -3)
     title:SetWordWrap(true)
     detail.title = title
 
@@ -681,6 +687,7 @@ local function UpdateDetail(entry)
     if type(graph) == "table" then graph:SetShown(shown) end
     detail.deepScan:SetShown(shown)
     detail.searchAH:SetShown(shown)
+    if detail.stats then detail.stats:SetShown(shown) end
     detail.star:SetShown(shown)
 
     for _, value in pairs(detail.values) do
