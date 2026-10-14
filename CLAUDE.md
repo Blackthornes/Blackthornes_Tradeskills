@@ -457,6 +457,29 @@ ticked, the owner 2026-10-13). Saved, never renamed: `sellOutWatch[realm][charac
 and `sellOutRaised[itemID]` (the Profit tab's tooltip on the number).
 Tested in `tools/test_sellout.lua`. Not yet seen in game.
 
+## Your auctions and undercuts
+
+A player asked (2026-10-14, the owner said build it, from a mockup) for an
+Auctions switch in the auction house drawer beside Sell and Buy:
+`UI/AuctionsView.lua` draws it inside `UI/PostPanel.lua`, and
+`Logic/MyAuctions.lua` works it out. It lists the auctions you have up
+(`Auctions.live`, kept for the session by `Auctions:ReadOwned` with each
+auction's ID; nothing new is saved), then other characters' as last read
+(`Auctions:GetListings`, dimmed, never cancellable here). Undercut means
+your price for one is above the cheapest listing not yours
+(`Prices:GetScanValue(id, "rival")`) from a scan no older than
+`MyAuctions.FRESH` (an hour); older says Unknown. Undercut ones come first
+with a red edge and a Cancel button; the switch shows their count in red.
+`MyAuctions:Cancel` calls `C_AuctionHouse.CancelAuction` straight from a
+click, one auction a click (the game wants a click each; never queue or
+loop it), refuses at a busy or closed auction house, and is read back:
+gone means cancelled ("comes back in the mail"), still up after
+`CANCEL_WAIT` means it did not go through. Each row says about what
+listing it again costs (`GetCancelCost`, else the remembered deposit) and
+warns when that is more than the gap. Cancel next at the foot takes the
+one with the most money under. `/bts probe` has a "cancel auctions" line.
+Tested in `tools/test_myauctions.lua`. Not yet seen in game.
+
 ## Learn next
 
 The owner said build it (2026-10-12), from a mockup he picked

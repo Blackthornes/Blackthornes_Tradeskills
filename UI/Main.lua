@@ -421,6 +421,9 @@ end
 --- @param result nil when the scan was cancelled or gave up; on a finished
 --- scan, { items = how many prices it recorded }.
 function UI:OnScanComplete(result)
+    -- Fresh prices: the drawer's Auctions view judges undercuts again.
+    if ns.MyAuctions then ns.MyAuctions.version = (ns.MyAuctions.version or 0) + 1 end
+
     if self.progressBar then self.progressBar:Hide() end
     if self.scanHint then self.scanHint:SetText("") end
 
