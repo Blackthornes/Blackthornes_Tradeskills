@@ -1097,7 +1097,7 @@ end
 UI:RegisterTab({
     key = "deals",
     text = SHOW_FLIPS and L["Deals"] or L["Favors and Writs"],
-    order = 9,
+    order = 7,
     build = Build,
     refresh = Refresh,
 })

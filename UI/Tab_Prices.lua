@@ -996,7 +996,7 @@ end
 UI:RegisterTab({
     key = "prices",
     text = L["Prices"],
-    order = 5,
+    order = 8,
     build = Build,
     refresh = Refresh,
 })
