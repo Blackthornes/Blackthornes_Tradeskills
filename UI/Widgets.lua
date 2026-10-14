@@ -1637,6 +1637,12 @@ local SORT_ARROW = [[Interface\Buttons\UI-SortArrow]]
 -- the words.
 Widgets.SORT_ARROW_ROOM = 10
 
+-- A heading's words are given this much more than they measure. Laid out
+-- to the exact pixel, the game can find them a hair too wide and draw
+-- nothing at all (the Prices tab's TREND heading went blank while it
+-- sorted, 2026-10-14).
+Widgets.HEADING_SLACK = 2
+
 -- The widest amount a money column is made to hold whole, every coin shown.
 -- One digit of gold: at level 30 most amounts are under 10g, and every
 -- pixel more goes from the item names. A larger amount is measured down to
@@ -1668,7 +1674,7 @@ function Widgets.FitColumns(columns, texts)
 
         local headings = texts and texts(column) or column.label
         if type(headings) ~= "table" then headings = { headings } end
-        local room = Widgets.SORT_ARROW_ROOM
+        local room = Widgets.SORT_ARROW_ROOM + Widgets.HEADING_SLACK
         for _, text in ipairs(headings) do
             local width = measure("tiny", text)
             if type(width) == "number" then need = math.max(need, width + room) end
@@ -1722,7 +1728,11 @@ function Widgets.SortableHeadings(labels, values, onChange)
         if button.narrowed ~= current then button.fullWidth = current end
 
         if active then
-            button.narrowed = math.max(1, button.fullWidth - Widgets.SORT_ARROW_ROOM)
+            -- Never narrower than its words, or they vanish.
+            local words = Theme.TextWidth and Theme.TextWidth(label) or nil
+            local least = type(words) == "number" and math.ceil(words) + Widgets.HEADING_SLACK or 1
+            button.narrowed = math.min(button.fullWidth,
+                math.max(least, button.fullWidth - Widgets.SORT_ARROW_ROOM))
             label:SetWidth(button.narrowed)
         else
             label:SetWidth(button.fullWidth)
