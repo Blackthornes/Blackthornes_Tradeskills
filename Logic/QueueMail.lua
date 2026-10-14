@@ -517,6 +517,25 @@ function QueueMail:GetDisenchanter()
     return nil
 end
 
+--- Is the character playing the disenchanter? The name typed in Settings
+--- when there is one; with the box empty and "Pick one for me" on, the
+--- character with the most Enchanting, which is this one when it has some
+--- and no other character it can mail has more. For Butler's "Disenchant
+--- greens here" (the owner asked 2026-10-14). Never raises.
+function QueueMail:IsDisenchanterPlaying()
+    local typed = ns.Config:Get("disenchanterName")
+    if type(typed) == "string" then
+        typed = typed:gsub("^%s+", ""):gsub("%s+$", "")
+        if typed ~= "" then return IsCharacterPlaying(typed) == true end
+    end
+    if ns.Config:Get("disenchanterGuess") == false then return false end
+    local characters = ns.db and ns.db.characters
+    if type(characters) ~= "table" then return false end
+    local own = EnchantingSkill(characters[SelfKey()])
+    if not own or own <= 0 then return false end
+    return self:GuessDisenchanter() == nil
+end
+
 --- The best quality mailed to the disenchanter: 2 to 4.
 function QueueMail:GetDisenchantQuality()
     local quality = tonumber(ns.Config:Get("disenchanterQuality")) or GREEN
