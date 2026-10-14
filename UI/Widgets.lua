@@ -964,8 +964,15 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
 
     local menu = Theme.CreatePanel(parent, "panel", "borderLit")
     menu:SetFrameStrata("DIALOG")
-    menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
-    menu:SetPoint("TOPRIGHT", dropdown, "BOTTOMRIGHT", 0, -2)
+    -- A box at the foot of a window opens upward (opts.up), so its menu
+    -- stays over the window rather than hanging below it.
+    if opts.up then
+        menu:SetPoint("BOTTOMLEFT", dropdown, "TOPLEFT", 0, 2)
+        menu:SetPoint("BOTTOMRIGHT", dropdown, "TOPRIGHT", 0, 2)
+    else
+        menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+        menu:SetPoint("TOPRIGHT", dropdown, "BOTTOMRIGHT", 0, -2)
+    end
     menu:Hide()
 
     -- The first option a long menu is showing, and a slim bar down its right
