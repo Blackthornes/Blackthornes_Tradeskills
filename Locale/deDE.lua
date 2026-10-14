@@ -2762,3 +2762,11 @@ L["Trend (14 days)"] = "Trend (14 Tage)"
 L["Price trend on tooltips"] = "Preistrend in Tooltips"
 L["Shows how far an item's market value now is from its average over the last 7 or 14 days, the same as the Prices tab's TREND column. The Prices tab picks the days."] = "Zeigt, wie weit der Marktwert eines Gegenstands jetzt von seinem Durchschnitt der letzten 7 oder 14 Tage abweicht, wie die Spalte TREND im Reiter Preise. Die Tage wählst du im Reiter Preise."
 L["%s sold before the cancel went through."] = "%s wurde verkauft, bevor das Abbrechen durchging."
+
+-- Ignoring crafts in the pane beside the profession window
+L["Ctrl-right-click to ignore it: it stops being suggested here and on the Profit tab."] = "Strg-Rechtsklick ignoriert sie: Sie wird hier und im Reiter Gewinn nicht mehr vorgeschlagen."
+L["ignored %s: it is no longer suggested here or on the Profit tab. Restore it under Ignored crafts in Settings."] = "%s ignoriert: Wird hier und im Reiter Gewinn nicht mehr vorgeschlagen. Unter Einstellungen, Ignorierte Herstellungen kannst du sie zurückholen."
+L["Ignored crafts"] = "Ignorierte Herstellungen"
+L["Crafts you ignored are not suggested here. Type one's name in the search to find it, or restore it under Settings, Queue, Ignored crafts."] = "Ignorierte Herstellungen werden hier nicht vorgeschlagen. Gib den Namen in die Suche ein, um eine zu finden, oder hol sie unter Einstellungen, Liste, Ignorierte Herstellungen zurück."
+L["Every recipe here is ignored.\n\nRestore them under Settings, Queue, Ignored crafts."] = "Jedes Rezept hier ist ignoriert.\n\nHol sie unter Einstellungen, Liste, Ignorierte Herstellungen zurück."
+L["%d ignored"] = "%d ignoriert"

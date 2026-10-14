@@ -53,8 +53,12 @@ local function RankValue(analysis, field)
   return value
 end
 
+-- Crafts the player ignored, here or on the Profit tab: one list.
+local IGNORED = {}
+
 ns.Profit = {
   Analyse = function(_, recipeID) return ANALYSIS[recipeID] end,
+  IsIgnored = function(_, recipeID) return IGNORED[recipeID] ~= nil end,
   GetCraftableCount = function(_, recipeID) return CRAFTABLE[recipeID] or 0 end,
   _RankValue = RankValue,
 }
@@ -157,6 +161,27 @@ check("a hyphen in the search is a hyphen, not a pattern",
   names(CraftPanel:GetRows({ search = "gold-plated" })), "Gold-Plated Buckler")
 
 RECIPES[104], ANALYSIS[104] = nil, nil
+
+--------------------------------------------------------------------------------
+-- Ignored crafts
+--------------------------------------------------------------------------------
+
+-- A player asked (2026-10-14) to ignore crafts from this pane. It reads the
+-- Profit tab's own list, so a craft ignored in either place is gone here,
+-- counted for the "N ignored" line, and a search still finds it.
+IGNORED[102] = "Rough Sharpening Stone"
+check("an ignored craft is not suggested",
+  names(CraftPanel:GetRows({ sortBy = "name" })), "Brown Linen Shirt, Copper Chain Belt")
+check("and is counted as ignored", CraftPanel.hiddenIgnored, 1)
+check("a search still finds it",
+  names(CraftPanel:GetRows({ search = "sharpening" })), "Rough Sharpening Stone")
+IGNORED[101], IGNORED[103] = "Copper Chain Belt", "Brown Linen Shirt"
+check("every craft ignored leaves the pane empty",
+  #CraftPanel:GetRows({}), 0)
+check("and says how many", CraftPanel.hiddenIgnored, 3)
+IGNORED[101], IGNORED[102], IGNORED[103] = nil, nil, nil
+check("restored crafts come back", #CraftPanel:GetRows({}), 3)
+check("and none are counted", CraftPanel.hiddenIgnored, 0)
 
 --------------------------------------------------------------------------------
 -- Order
