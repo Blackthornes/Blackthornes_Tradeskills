@@ -628,7 +628,8 @@ quiet metal buttons. Folded, the drawer is that header
 (`PostPanel.FOLDED_HEIGHT`), so Scan stays in reach. Rows are dark glass,
 names whole (`Theme.SetRowName`), List quiet metal; the one gold button is
 List all at the foot (`PostPanel:ListNext`, one listing a click, most
-valuable first of what Sell shows). Tested in `tools/test_postdrawer.lua`.
+valuable first of what Sell shows). Beside it on Sell, a Duration box (2, 8 or 24
+hours, opening upward) sets the same `postDuration` as the Post tab's. Tested in `tools/test_postdrawer.lua`.
 Not yet seen in game.
 
 ## The Blizzard window style

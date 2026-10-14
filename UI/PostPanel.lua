@@ -592,8 +592,34 @@ function PostPanel:Build()
     listAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(EDGE_PAD + 6), EDGE_PAD + 6)
     self.listAll = listAll
 
+    -- How long listings stay up (a player asked, 2026-10-14): the same
+    -- account wide postDuration as the Post tab's, so a pick in either shows
+    -- in both. Forever's auction house offers 2, 8 and 24 hours.
+    local durationWidth = 70
+    if Theme.MeasureText then
+        for _, option in ipairs(ns.Posting.DURATIONS) do
+            local ok, width = pcall(Theme.MeasureText, "small", option.text)
+            if ok and type(width) == "number" then durationWidth = math.max(durationWidth, width + 28) end
+        end
+    end
+    local duration = Widgets.CreateDropdown(body, ns.Posting.DURATIONS, function(value)
+        ns.Config:Set("postDuration", value)
+        if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+        PostPanel:Refresh()
+    end, { width = durationWidth, up = true })
+    duration:SetPoint("LEFT", frame, "BOTTOMLEFT", EDGE_PAD + 8, EDGE_PAD + FOOT_HEIGHT / 2)
+    duration:SetValue(ns.Config:Get("postDuration") or 2)
+    duration:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(L["Duration"])
+        GameTooltip:AddLine(L["How long each listing stays up. A longer one costs a bigger deposit."], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    duration:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    self.duration = duration
+
     local footNote = Theme.CreateLabel(body, "tiny", "muted")
-    footNote:SetPoint("LEFT", frame, "BOTTOMLEFT", EDGE_PAD + 8, EDGE_PAD + FOOT_HEIGHT / 2)
+    footNote:SetPoint("LEFT", duration, "RIGHT", 8, 0)
     footNote:SetPoint("RIGHT", listAll, "LEFT", -8, 0)
     footNote:SetWordWrap(true)
     self.footNote = footNote
@@ -1218,6 +1244,23 @@ function PostPanel:Refresh()
                 end
             end
             self.summaryBeside = showBox
+        end
+    end
+
+    if self.duration then
+        local selling = self.view ~= "buy"
+        self.duration:SetShown(selling)
+        if selling then self.duration:SetValue(ns.Config:Get("postDuration") or 2) end
+        -- On Buy the box is gone, so the note starts at the edge.
+        if self.footNote and self.noteBeside ~= selling then
+            self.footNote:ClearAllPoints()
+            if selling then
+                self.footNote:SetPoint("LEFT", self.duration, "RIGHT", 8, 0)
+            else
+                self.footNote:SetPoint("LEFT", self.frame, "BOTTOMLEFT", EDGE_PAD + 8, EDGE_PAD + FOOT_HEIGHT / 2)
+            end
+            self.footNote:SetPoint("RIGHT", self.listAll, "LEFT", -8, 0)
+            self.noteBeside = selling
         end
     end
 
