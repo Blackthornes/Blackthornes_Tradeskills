@@ -370,7 +370,7 @@ local function ShowHover(graph)
             0.8, 0.8, 0.8, 0.75, 0.75, 0.75)
     end
     if graph.kind == "market" then
-        GameTooltip:AddLine(L["Star this item to keep its cheapest price every hour."], 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine(L["Star this item to save its cheapest price every hour."], 0.6, 0.6, 0.6, true)
     end
     GameTooltip:Show()
 end
@@ -688,7 +688,7 @@ function PriceGraph.Create(parent, opts)
                         and L["No scans in the last 7 days. Scan the auction house to start the line."]
                         or L["No scans in the last 24 hours. Scan the auction house to start the line."]))
             else
-                self.empty:SetText(L["Prices are kept every hour for what you craft and its materials. Star this item to keep its prices too."])
+                self.empty:SetText(L["Prices are saved every hour for what you craft and its materials. Star this item to save its prices too."])
             end
             self.empty:Show()
         else

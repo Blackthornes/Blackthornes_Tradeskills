@@ -349,7 +349,7 @@ local function UpdateDetail(entry)
         local inventoryAge = entry.inventoryAt and (time() - entry.inventoryAt)
         local bankAge = entry.bankAt and (time() - entry.bankAt)
 
-        detail.dataAge:SetText(L.Format("Bags read %s. Bank read %s. Figures are from the last time this character was played.",
+        detail.dataAge:SetText(L.Format("Bags checked %s, bank checked %s. These numbers are from the last time you played this character.",
             Util.FormatAgeAgo(inventoryAge),
             Util.FormatAgeAgo(bankAge)))
     end

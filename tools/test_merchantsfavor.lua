@@ -437,7 +437,7 @@ check("and lists the bundles, the over-stack one marked", Showing("^40 Linen Clo
 check("and says why it is left out", Showing("Needs more than one stack") ~= nil)
 
 list.opts.onClick(Row(list.data, "apprentice-herbs"), 1, "LeftButton")
-check("a learned reward says how often it was seen", Showing("seen paid on 2 turn%-ins") ~= nil)
+check("a learned reward says how often it was seen", Showing("seen on 2 turn%-ins") ~= nil)
 
 buttons["Search bundle"].onClick()
 check("the bundle button searches for its material", sent[#sent] == SILVERLEAF)

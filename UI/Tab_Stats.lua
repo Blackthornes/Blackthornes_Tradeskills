@@ -598,7 +598,7 @@ end
 function Draw.long(card, stats, width, height)
     local days = stats.days or {}
     if #days == 0 then
-        card:Empty(L["Kept from today on. Each day you scan adds a day here, up to ninety."])
+        card:Empty(L["Starts from today. Each day you scan adds a day here, up to ninety."])
         return
     end
 
@@ -635,7 +635,7 @@ function Draw.long(card, stats, width, height)
     card:Text(L.Format("Cheapest each day, highest %s. Green below is what sold.", Money(most)), "tiny", "muted",
         PAD, HEADING_ROOM, width - PAD * 2)
     if #days < 7 then
-        card:Text(L.Format("%d of 90 days kept so far", #days), "tiny", "dim", PAD, height - 12, width - PAD * 2, "RIGHT")
+        card:Text(L.Format("%d of 90 days saved so far", #days), "tiny", "dim", PAD, height - 12, width - PAD * 2, "RIGHT")
     end
 end
 
@@ -785,8 +785,8 @@ local function FillTiles(stats)
     if stats.change then
         local up = stats.change >= 0
         local change = Percent(math.abs(stats.change))
-        tiles[1].note:SetText(up and L.Format("up %s on a week ago", change)
-            or L.Format("down %s on a week ago", change))
+        tiles[1].note:SetText(up and L.Format("up %s from a week ago", change)
+            or L.Format("down %s from a week ago", change))
         tiles[1].note:SetTextColor(Theme.Unpack(up and "profit" or "loss"))
     else
         tiles[1].note:SetText(L["no price from a week ago yet"])

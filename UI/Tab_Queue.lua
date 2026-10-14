@@ -175,7 +175,7 @@ local function UpdateActionButton(row, entry)
         lines[#lines + 1] = L["Made items are marked for Sell marked at a vendor."]
     end
     lines[#lines + 1] = #choices > 1 and L["Click to change. Right-click for whichever pays most."]
-        or L["Nothing else is open to this item."]
+        or L["There's no other way to sell this item."]
     row.action.tooltipText = table.concat(lines, "\n")
 end
 
@@ -520,7 +520,7 @@ local function ShowMaterialTooltip(row, line)
                 Util.FormatMoney(offer.saving, { noColor = true }),
                 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
-        GameTooltip:AddLine(L.Format("Log in on that character and %d x %s is queued there, with its materials to buy. Mail it across once made.",
+        GameTooltip:AddLine(L.Format("Log in on that character and %d x %s will be queued there, with its materials to buy. Mail it over once it's made.",
             offer.crafts, offer.recipeName or L["it"]), 0.7, 0.7, 0.7, true)
     end
 
@@ -603,8 +603,8 @@ end
 local function CraftTooltip(slots)
     if slots and slots > 0 then
         return slots == 1
-            and L["One click makes every craft in this entry. It frees 1 bag slot, the most of what is ready."]
-            or L.Format("One click makes every craft in this entry. It frees %d bag slots, the most of what is ready.", slots)
+            and L["One click makes every craft in this entry. It frees 1 bag slot, more than anything else that's ready."]
+            or L.Format("One click makes every craft in this entry. It frees %d bag slots, more than anything else that's ready.", slots)
     end
     return L["One click makes every craft in this entry"]
 end
@@ -661,7 +661,7 @@ local function SetCraftButton(button, label)
     if leave then
         button:SetText(L["Leave form"])
         button:SetEnabledState(true)
-        button.tooltipText = L["You can't craft in this form. Click to leave it, then again to craft. Not in combat."]
+        button.tooltipText = L["You can't craft in this form. Click to leave it, then click again to craft. This doesn't work in combat."]
         label:SetText(L.Format("%d of %d ready. Leave your form first", ready, total))
         label:SetTextColor(Theme.Unpack("accent"))
         button.opensProfession = true

@@ -720,7 +720,7 @@ function RecipeBook:LearnFrom(record)
     end
 
     if not short and record.seenInGame and not record.recipeItems then
-        lines[#lines + 1] = L["Seen in a profession window; where it is learned is not known yet"]
+        lines[#lines + 1] = L["Seen in a profession window, but where it's learned isn't known yet"]
     end
 
     return short or L["Unknown"], lines

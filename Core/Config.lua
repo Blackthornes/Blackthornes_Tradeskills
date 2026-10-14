@@ -1199,7 +1199,7 @@ function Config:Migrate(db)
     end
 
     if from > Config.SCHEMA_VERSION then
-        ns.Warn(L.Format("your saved data is from a newer version of the addon (format %d, this version reads %d); leaving it alone",
+        ns.Warn(L.Format("your saved data is from a newer version of the addon (format %d, this version reads %d), so it's being left alone",
             from, Config.SCHEMA_VERSION))
         return
     end
@@ -1342,7 +1342,7 @@ ns.RegisterCommand("db", L["show what saved data loaded (/bts db fresh: stop the
             charDb.accountFreshAt = ns.db.probe.freshAt
         end
         ns.Config.accountDataLost = nil
-        ns.Print(L["starting fresh: the missing saved data warning will not show again."])
+        ns.Print(L["starting fresh, so the missing saved data warning won't show again."])
         return
     end
 

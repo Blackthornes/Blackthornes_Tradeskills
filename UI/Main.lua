@@ -771,8 +771,8 @@ function UI:BuildSizeGrip()
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(UI.ScaleText(window:GetScale()), Theme.Unpack("accentHi"))
         GameTooltip:AddLine(L["Drag to make the window bigger or smaller."], 1, 1, 1, true)
-        GameTooltip:AddLine(L["Right-click: back to the normal size."], 1, 1, 1, true)
-        GameTooltip:AddLine(L["Also on the Settings tab, and /bts size."], Theme.Unpack("accent"))
+        GameTooltip:AddLine(L["Right-click to go back to the normal size."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["You can also change it on the Settings tab, or with /bts size."], Theme.Unpack("accent"))
         GameTooltip:Show()
     end)
     grip:SetScript("OnLeave", function(self)
@@ -804,7 +804,7 @@ if ns.RegisterCommand then
     ns.RegisterCommand("size", L["how big the window is: /bts size [small|normal|large|50-150%]"], function(args)
         local scale = UI.ParseSize(args)
         if not scale then
-            ns.Print(L.Format("the window is at %s. /bts size small, normal, large or a percent from %d%% to %d%% changes it, or drag the corner below its bottom right.",
+            ns.Print(L.Format("the window is at %s. Change it with /bts size small, normal, large or a percent from %d%% to %d%%, or drag the corner below its bottom right.",
                 UI.ScaleText(UI:GetWindowScale()), math.floor(SCALE_MIN * 100 + 0.5), math.floor(SCALE_MAX * 100 + 0.5)))
             return
         end
@@ -1557,7 +1557,7 @@ function UI:ShowTransferDialog(mode)
         dialog.close:SetPoint("BOTTOMRIGHT", -20, 18)
     else
         dialog.title:SetText(L["Import"])
-        dialog.hint:SetText(L["Paste a code with Ctrl+V, then press Import. Crafts are added to your queue; settings and stock limits in the code replace yours."])
+        dialog.hint:SetText(L["Paste a code with Ctrl+V, then press Import. Crafts are added to your queue, and the code's settings and stock limits replace yours."])
 
         dialog.editBox:SetText("")
         dialog.action:Show()
