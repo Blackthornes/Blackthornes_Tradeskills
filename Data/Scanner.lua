@@ -1038,6 +1038,8 @@ function Scanner:ReadReplicateResults(numItems)
                 unitPrice = unitPrice,
                 quantity = quantity,
                 isOwn = self:IsOwnAuction(owner, ownerFullName),
+                -- Only counted, for the Stats tab's sellers (Data/StatsLog.lua).
+                seller = type(owner) == "string" and owner or nil,
             }
         end,
 

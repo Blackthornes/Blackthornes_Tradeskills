@@ -29,6 +29,7 @@ Core\OldMacros.lua
 
 Data\Prices.lua
 Data\PriceHistory.lua
+Data\StatsLog.lua
 Data\Scanner.lua
 Data\Recipes.lua
 Data\Inventory.lua
@@ -81,6 +82,7 @@ Logic\Cooldowns.lua
 Logic\CraftRequests.lua
 Logic\Butler.lua
 Logic\PublicAPI.lua
+Logic\ItemStats.lua
 
 UI\Theme.lua
 UI\BlizzardLook.lua
@@ -118,6 +120,7 @@ UI\Tab_Post.lua
 UI\Tab_Prices.lua
 UI\GoldChart.lua
 UI\Tab_Sales.lua
+UI\Tab_Stats.lua
 UI\BankView.lua
 UI\Tab_Characters.lua
 UI\Tab_Settings.lua
