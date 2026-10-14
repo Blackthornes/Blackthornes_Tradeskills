@@ -504,7 +504,7 @@ function Cooldowns:Report()
     self:Read()
     local all = self:All()
     if #all == 0 then
-        ns.Print(L["no profession cooldowns kept yet. Open each profession once on the character that has one."])
+        ns.Print(L["no profession cooldowns saved yet. Open each profession once on the character that has one."])
         return
     end
     for _, character in ipairs(all) do

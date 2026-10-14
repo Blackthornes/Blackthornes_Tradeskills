@@ -421,7 +421,7 @@ function BuyQuantity.WarnText(quantity, warning)
     local warn = "|c" .. ns.COLORS.warn
     -- Each sum is drawn in its own colour, then the warning colour again.
     local function Sum(copper) return "|r" .. money(copper) .. warn end
-    return warn .. L.Format("Buying %d costs %s. The shopping list said %s: %s more (%d%% over).",
+    return warn .. L.Format("Buying %d costs %s. The shopping list expected %s, so that's %s more (%d%% over).",
         quantity, Sum(warning.live), Sum(warning.estimate), Sum(warning.more), warning.percent) .. "|r"
 end
 

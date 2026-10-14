@@ -590,9 +590,9 @@ local function UpdateDetail(item, totals)
         end
 
         if item.restored then
-            detail.note:SetText(L["Some of these figures are from before you last quit the game. Only sales, amounts, expiries and gold are kept when you quit, so the auction cut and cancellations here are for this session only."])
+            detail.note:SetText(L["Some of these numbers are from before you last quit the game. Only sales, amounts, expiries and gold are saved when you quit, so the auction cut and cancellations here are for this session only."])
         elseif item.guessed > 0 then
-            detail.note:SetText(L["A cost marked est. is what the materials cost today: that sale came before Tradeskills kept what each craft cost."])
+            detail.note:SetText(L["A cost marked est. is what the materials cost today, because that sale happened before Tradeskills started saving what each craft cost."])
         elseif item.soldUnits == item.sold and item.sold > 0 then
             detail.note:SetText(L["The sale mail does not say how many were in the stack, so a stack of twenty looks the same as a single item. For now, every sale counts as one."])
         else
@@ -881,7 +881,7 @@ local function RefreshMethods()
     detail.subtitle:SetText(PeriodText())
     SetLines(detail, lines)
     detail.note:SetText(total.unknown > 0
-        and L.Format("%d of %d had no cost known (loot, say), so all they brought in counts as profit.",
+        and L.Format("%d of %d had no known cost (loot, for example), so everything they brought in counts as profit.",
             total.unknown, total.n)
         or L["Costs are what crafting or buying on the auction house cost you."])
 
@@ -1038,7 +1038,7 @@ local function Refresh()
         elseif query ~= "" then
             widgets.emptyLabel:SetText(L.Format("Nothing here matches '%s'.", state.search))
         elseif state.view == "visits" then
-            widgets.emptyLabel:SetText(L["No mailbox visits yet. Collect mail and each visit is kept here. Click one to see its report again."])
+            widgets.emptyLabel:SetText(L["No mailbox visits yet. Collect mail and each visit shows up here. Click one to see its report again."])
         else
             widgets.emptyLabel:SetText(L["Nothing sold yet. Switch to 'Recent, all' to see what came back."])
         end

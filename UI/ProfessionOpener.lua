@@ -483,7 +483,7 @@ function Opener:MissedClick()
         return
     end
 
-    ns.Warn(L["that click missed the Open button. Click it again; if it misses twice, type /bts openprof and send the lines it prints."])
+    ns.Warn(L["that click missed the Open button. Click it again, and if it misses twice, type /bts openprof and send the lines it prints."])
     DescribePlacement()
     self:DescribeLastClick()
 

@@ -180,7 +180,7 @@ function Profit:ChoosePostPrice(itemID, knownCost)
 end
 
 -- Why a price matches the cheapest rival when Undercut by is set to 0c.
-local MATCH_BY_CHOICE = L["your Undercut by is 0c, so it matches the cheapest listing"]
+local MATCH_BY_CHOICE = L["your Undercut by is set to 0c, so it matches the cheapest listing"]
 
 --- ChoosePostPrice from the auction house alone, before the player's own
 --- price is applied. Same returns.
@@ -273,7 +273,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
     -- A rival already sitting at the lowest price the server allows leaves
     -- nothing below it, so matching is the only move.
     if underPrice >= matchPrice then
-        return matchPrice, "match", L["the game allows no lower price than the rival's"]
+        return matchPrice, "match", L["the game won't allow a price below the rival's"]
     end
 
     local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)

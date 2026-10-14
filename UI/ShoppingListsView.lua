@@ -217,7 +217,7 @@ local function CreateRow(row)
     row.rename = Tool(L["Rename"], 70, function() View:SetMode("rename", row.data.key) end)
     row.rename:SetPoint("LEFT", row, "LEFT", 22, 0)
     row.copy = Tool(L["Copy"], 60, function() View:SetMode("copy", row.data.key) end,
-        { tooltip = L["Gives a line of text to paste in chat or Discord. Paste a list makes a list from one."] })
+        { tooltip = L["Gives you a line of text to paste in chat or Discord. Paste a list turns it back into a list."] })
     row.copy:SetPoint("LEFT", row.rename, "RIGHT", 6, 0)
     row.delete = Tool(L["Delete"], 70, function()
         local key = row.data.key
@@ -241,7 +241,7 @@ local function CreateRow(row)
             ns.Print(why)
         end
         View:Refresh(true)
-    end, { tooltip = L["Keeps a copy of what the queue needs now, as a list you can change."] })
+    end, { tooltip = L["Saves a copy of what the queue needs now as a list you can change."] })
     row.saveQueue:SetPoint("LEFT", row, "LEFT", 22, 0)
 end
 

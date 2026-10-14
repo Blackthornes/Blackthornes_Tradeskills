@@ -1043,6 +1043,21 @@ Equipment. The rule, in every addon:
   `tools/test_alts.lua`. This rule is in every addon's notes; keep them the
   same.
 
+## Writing for players
+
+Every word a player reads (labels, buttons, tooltips, Settings rows and
+their descriptions, empty lists, chat lines, slash command help) reads the
+way a friend who plays would say it: plain, warm and human. Short
+sentences in everyday words, contractions welcome. Say what the player
+sees or does, not how the addon works inside. No hype or sales words
+("seamlessly", "effortlessly", "now you can", "powerful"), no filler, no
+em-dashes, and no questions to the reader. The German in
+`Locale/deDE.lua` changes with the English, in the same informal "du"
+voice. Farmer's play cheers keep their "!" (drop-quality cheers, goal
+marks, streaks, "Up to #N!", "Goal done: X!"), and `About.NOTE` is the
+owner's own wording. This rule is in every addon's notes; keep them the
+same.
+
 ## The owner's standing rules (both addons)
 
 - **Every list is dark glass** (the owner, 2026-10-12: "keep this as the

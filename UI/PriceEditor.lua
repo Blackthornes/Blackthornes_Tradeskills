@@ -107,7 +107,7 @@ function PriceEditor.Notes(line, price, quantity)
     end
 
     if IsCommodity(line) == false then
-        notes[#notes + 1] = { L["Gear lists at whole silver."], "muted" }
+        notes[#notes + 1] = { L["Gear is listed in whole silver."], "muted" }
     end
 
     if not refused and ns.Profit and ns.Profit.NetFromListing then
@@ -250,7 +250,7 @@ function PriceEditor:Build()
     local each = RowLabel(frame, L["Each"], suggested, -16)
     self.each = MoneyBoxes(frame, function(copper) PriceEditor:SetPrice(copper) end)
     self.each:SetPoint("LEFT", each, "RIGHT", 0, 0)
-    self.each:Hover(L["Price each"], L["What one sells for. The total follows."])
+    self.each:Hover(L["Price each"], L["What one sells for. The total updates to match."])
 
     local count = RowLabel(frame, L["How many"], each, -16)
     self.quantity = Widgets.CreateNumberBox(frame, {
@@ -264,7 +264,7 @@ function PriceEditor:Build()
     local total = RowLabel(frame, L["Total"], count, -16)
     self.total = MoneyBoxes(frame, function(copper) PriceEditor:SetTotal(copper) end)
     self.total:SetPoint("LEFT", total, "RIGHT", 0, 0)
-    self.total:Hover(L["Total"], L["What the lot sells for. It is split over how many you list, rounded down."])
+    self.total:Hover(L["Total"], L["What they all sell for together. It's split across how many you list, rounded down."])
 
     local divider = Theme.CreateDivider(frame)
     divider:SetPoint("TOPLEFT", total, "BOTTOMLEFT", 0, -12)
@@ -283,7 +283,7 @@ function PriceEditor:Build()
     self.keep:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
         GameTooltip:SetText(L["Keep as my price"], 1, 1, 1)
-        GameTooltip:AddLine(L["Ticked, this price is saved on the Prices tab as \"Use this price\" and used from now on. Unticked, it lasts until you log out or /reload."], 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(L["When ticked, this price is saved on the Prices tab as \"Use this price\" and used from now on. Otherwise it lasts until you log out or /reload."], 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
     self.keep:HookScript("OnLeave", function() GameTooltip:Hide() end)
