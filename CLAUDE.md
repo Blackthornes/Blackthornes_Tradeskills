@@ -437,8 +437,8 @@ back expired or cancelled since it opened, nothing changes; nothing back
 and a sale seen (ledger or heard), `Auctions:SetLimit(item, limit + 1)`,
 once a window, with a gold chat line and a sound; no sale seen yet, it
 waits. Never lowers, and an item with no limit is left alone. "Raise it
-when it sells out" on the Queue page (`raiseStockOnSellOut`, on unless
-unticked). Saved, never renamed: `sellOutWatch[realm][character][itemID]`
+when it sells out" on the Queue page (`raiseStockOnSellOut`, off unless
+ticked, the owner 2026-10-13). Saved, never renamed: `sellOutWatch[realm][character][itemID]`
 and `sellOutRaised[itemID]` (the Profit tab's tooltip on the number).
 Tested in `tools/test_sellout.lua`. Not yet seen in game.
 
