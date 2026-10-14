@@ -135,7 +135,7 @@ print("columns fit their headings (a player's request, 2026-10-07)")
 
 -- 6 pixels a letter, as the stub frames measure.
 ns.Theme.MeasureText = function(_, text) return #text * 6 end
-local room = Widgets.SORT_ARROW_ROOM
+local room = Widgets.SORT_ARROW_ROOM + Widgets.HEADING_SLACK
 
 local columns = {
     { key = "value", label = "DISENCHANT", width = 62 },
@@ -189,14 +189,34 @@ centred.SetWidth = function(self, width) self.width = width end
 local narrowing = Widgets.SortableHeadings({ age = centred }, { age = function(row) return row.age end })
 local button = narrowing.buttons.age
 button.scripts.OnClick(button)
-check("sorting by a centred heading narrows it", centred.width, 50 - room)
+check("sorting by a centred heading narrows it", centred.width, 50 - Widgets.SORT_ARROW_ROOM)
 button.scripts.OnLeave(button)
-check("and it stays narrowed while it sorts", centred.width, 50 - room)
+check("and it stays narrowed while it sorts", centred.width, 50 - Widgets.SORT_ARROW_ROOM)
 centred.width = 60
 narrowing:Sync()
-check("laid out again, it narrows from its new width", centred.width, 60 - room)
+check("laid out again, it narrows from its new width", centred.width, 60 - Widgets.SORT_ARROW_ROOM)
 narrowing:Reset()
 check("no longer sorting, it has its width back", centred.width, 60)
+
+-- A heading fitted to its words (TREND, 2026-10-14) keeps room for every
+-- letter while it sorts, or the game draws none of them.
+local tight = NewFrame(parent)
+tight:SetText("TREND")
+tight.GetJustifyH = function() return "CENTER" end
+tight.width = 30 + Widgets.SORT_ARROW_ROOM
+tight.GetWidth = function(self) return self.width end
+tight.SetWidth = function(self, width) self.width = width end
+local tightSorter = Widgets.SortableHeadings({ trend = tight }, { trend = function(row) return row.trend end })
+tightSorter.buttons.trend.scripts.OnClick(tightSorter.buttons.trend)
+check("a heading fitted to its words never narrows below them", tight.width >= 30 + Widgets.HEADING_SLACK, true)
+check("nor grows past its column", tight.width <= 30 + Widgets.SORT_ARROW_ROOM, true)
+
+local trendColumn = { key = "trend", label = "TREND", width = 20, justify = "CENTER" }
+Widgets.FitColumns({ trendColumn })
+tight.width = trendColumn.width
+tightSorter:Reset()
+tightSorter.buttons.trend.scripts.OnClick(tightSorter.buttons.trend)
+check("a fitted column sorting keeps its words whole", tight.width, 30 + Widgets.HEADING_SLACK)
 
 for key, value in pairs(saved) do _G[key] = value end
 
