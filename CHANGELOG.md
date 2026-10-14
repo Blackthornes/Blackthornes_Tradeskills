@@ -4,6 +4,42 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.57.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Stats tab:** a new tab for one item at a time. The left lists what you
+  craft, star and sell, sold most in 30 days first, and a search finds any
+  priced item. The right shows the item you pick: worth now against a week
+  ago, profit each, sold a day, sold this week, the price graph, and cards for
+  the cheapest times by day and hour, where each sale goes, your listings,
+  sales by week, listings at each scan, price by source, the last 90 days,
+  who else sells it, how fast yours sell and money by method. `/bts stats
+  [item]`.
+- **Auction house drawer:** its switch has two new choices. Lists keeps named
+  shopping lists, with a Search for everything still needed, per-item owned
+  counts and prices, and an add box that takes names, "Peacebloom 40", item
+  IDs and Shift-clicks. Auctions lists your auctions with the undercut ones
+  first, a Cancel button on each and a Cancel next button.
+- **Price trend:** the Prices tab has a sortable TREND column against the
+  last 7 or 14 days, and item tooltips show it; "Price trend on tooltips"
+  on the Look page turns that off. The price graph has a 14 Day view.
+- **Tabs:** the main window's tabs read Profit, Queue, Gather, Post,
+  Disenchanting, Level Up, Favors and Writs, Prices, Stats, Sales,
+  Characters, Settings.
+- **Craft next:** it makes the ready craft that frees the most bag slots
+  first. "Craft what frees bag space first" on the Queue page turns it off.
+- **Limited-stock vendor materials:** they keep their Search button on the
+  Buy list and the Queue tab so they can be bought at the auction house too.
+- **Ignore crafts from the pane:** Ctrl-right-click a craft in the pane
+  beside the profession window to ignore it there and on the Profit tab;
+  Settings > Queue > Ignored crafts restores it.
+- **Butler:** it can buy the queue's materials at a vendor and search the
+  auction house for the items open quests need.
+- **Fixes:** shopping lists, the Auctions view and the Stats tab; sort
+  headings keep their words while they sort.
+
 ## 0.56.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
