@@ -605,6 +605,16 @@ function PostPanel:Build()
     listAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(EDGE_PAD + 6), EDGE_PAD + 6)
     self.listAll = listAll
 
+    -- Search all (asked 2026-10-14): on Buy, the same place holds one
+    -- button that looks up everything the auction house can sell you at
+    -- once, as the Lists view's Search does. Shown only on Buy.
+    local searchAll = Widgets.CreateButton(body, L["Search all"], function()
+        PostPanel:SearchAll()
+    end, { width = 110, height = 22, primary = true })
+    searchAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(EDGE_PAD + 6), EDGE_PAD + 6)
+    searchAll:Hide()
+    self.searchAll = searchAll
+
     -- How long listings stay up (a player asked, 2026-10-14): the same
     -- account wide postDuration as the Post tab's, so a pick in either shows
     -- in both. Forever's auction house offers 2, 8 and 24 hours.
@@ -1121,6 +1131,7 @@ end
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
     self.view = (view == "buy" or view == "lists" or view == "auctions") and view or "sell"
+    self.searchStep = nil
     if self.switch then self.switch:Select(self.view) end
     self.shoppingAt = nil
     self:Refresh()
@@ -1133,6 +1144,78 @@ end
 function PostPanel:CanSearch(line)
     return type(line) == "table" and (line.shortfall or 0) > 0
         and (not line.fromVendor or line.vendorLimited == true)
+end
+
+--- The items Search all looks up: every line CanSearch passes, in list
+--- order, with how many each is short of.
+-- @return { itemID, ... }, { [itemID] = shortfall }
+function PostPanel.SearchableIDs(lines)
+    local ids, counts = {}, {}
+    for _, line in ipairs(lines or {}) do
+        if PostPanel:CanSearch(line) and type(line.itemID) == "number" and not counts[line.itemID] then
+            ids[#ids + 1] = line.itemID
+            counts[line.itemID] = line.shortfall
+        end
+    end
+    return ids, counts
+end
+
+-- Search all, one at a time on a client that takes one item a search:
+-- { ids, counts, pos }, the button reading "Next 2/5" until the last.
+PostPanel.searchStep = nil
+
+--- Search the auction house for everything on the Buy list it sells: all at
+--- once where the game allows it (ShoppingLists:SearchMany, with each
+--- count, so picking one fills the buy box), else one a click.
+function PostPanel:SearchAll()
+    local step = self.searchStep
+    if step and step.pos <= #step.ids then
+        local id = step.ids[step.pos]
+        if ns.UI:SearchAuctionHouse(id, step.counts[id]) then step.pos = step.pos + 1 end
+        if step.pos > #step.ids then self.searchStep = nil end
+        self:UpdateSearchAll()
+        return
+    end
+    self.searchStep = nil
+
+    local ids, counts = PostPanel.SearchableIDs(self:ShoppingLines())
+    if #ids == 0 then
+        ns.Print(L["Nothing on this list to look for on the auction house."])
+        return
+    end
+
+    local lists = ns.ShoppingLists
+    local ok, why = false, "single"
+    if #ids > 1 and lists and lists.SearchMany then ok, why = lists:SearchMany(ids, counts) end
+    if not ok and why == "single" then
+        if ns.UI:SearchAuctionHouse(ids[1], counts[ids[1]]) and #ids > 1 then
+            self.searchStep = { ids = ids, counts = counts, pos = 2 }
+        end
+    elseif not ok and why then
+        ns.Print(why)
+    end
+    self:UpdateSearchAll()
+end
+
+--- Search all's words and state: "Next 2/5" mid-way, greyed with nothing to
+--- look for.
+function PostPanel:UpdateSearchAll(lines)
+    local button = self.searchAll
+    if not button then return end
+    local step = self.searchStep
+    local label
+    if step and step.pos <= #step.ids then
+        label = L.Format("Next %d/%d", step.pos, #step.ids)
+        button:SetEnabledState(true)
+    else
+        local ids = PostPanel.SearchableIDs(lines or self:ShoppingLines())
+        label = #ids > 0 and L.Format("Search all %d", #ids) or L["Search all"]
+        button:SetEnabledState(#ids > 0)
+    end
+    button:SetText(label)
+    local width = Theme.MeasureText and Theme.MeasureText("small", label)
+    button:SetWidth(math.max(110, (width or 0) + 24))
+    button.tooltipText = L["Searches the auction house for everything on this list it sells, all at once. Pick one in the results and the quantity is filled in with how many you still need."]
 end
 
 -- Clicking the row searched already, but nothing said so. Asked for: "a button
@@ -1280,10 +1363,12 @@ function PostPanel:Refresh()
             else
                 self.footNote:SetPoint("LEFT", self.frame, "BOTTOMLEFT", EDGE_PAD + 8, EDGE_PAD + FOOT_HEIGHT / 2)
             end
-            self.footNote:SetPoint("RIGHT", self.listAll, "LEFT", -8, 0)
+            self.footNote:SetPoint("RIGHT", (selling or not self.searchAll) and self.listAll or self.searchAll, "LEFT", -8, 0)
             self.noteBeside = selling
         end
     end
+
+    if self.searchAll then self.searchAll:SetShown(self.view == "buy") end
 
     self:UpdateAuctionsTab()
     local View = ns.ShoppingListsView
@@ -1322,6 +1407,7 @@ function PostPanel:Refresh()
         if self.listAll then self.listAll:Hide() end
         if self.footNote then self.footNote:SetText(L["Click a row to search the auction house for it."]) end
         self:RefreshShopping()
+        self:UpdateSearchAll()
         return
     end
 
