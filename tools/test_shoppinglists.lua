@@ -11,7 +11,10 @@
 --   5. A copied line gives the same list back, and anything else is refused.
 --   6. Typed text finds an item with how many: a link, an ID, "Name 40".
 --   7. A list's Search asks for every item at once where the game allows.
---   8. A Shift-click goes on the open list only while its box is typing.
+--   8. A Shift-click goes on the open list while it is open, unless a chat
+--      box is being typed in; one click reaching two hooks adds once.
+--   9. Part of a name, in any case, finds items by the names the addon
+--      knows, the best first, and Enter takes the best.
 
 local function noop() end
 
@@ -163,15 +166,58 @@ ns.Scanner.isScanning = true
 check("never over a scan", Lists:SearchMany({ PEACE, SILVER }) == false)
 
 -- 8. Shift-click
-local focus = false
+local clock = 100
+GetTime = function() return clock end
+local focus, chat = false, nil
+ChatEdit_GetActiveWindow = function() return chat end
 View.mode, View.modeKey = "add", herbs
 View.box = { IsShown = function() return true end, edit = { HasFocus = function() return focus end } }
 View.list, View.shown = nil, false
-check("not taken without the keyboard", View:TakeItem(DYE) == false)
-focus = true
-check("taken while the box types", View:TakeItem(DYE) == true and Lists:Lines(herbs)[4].itemID == DYE)
+chat = {}
+check("not taken while chat is typed in", View:TakeItem(DYE) == false)
+chat = nil
+check("taken with the list open", View:TakeItem(DYE) == true and Lists:Lines(herbs)[4].itemID == DYE)
+check("the second hook of the same click adds nothing", View:TakeItem(DYE) == true
+    and Lists:Lines(herbs)[4].want == 1)
+clock = clock + 1
+check("the addon's own row of an item on the list is left alone", View:TakeItem(DYE, true) == false)
+focus, chat = true, {}
+check("taken while the box types, chat or not", View:TakeItem(DYE) == true and Lists:Lines(herbs)[4].want == 2)
+focus, chat = false, nil
+clock = clock + 1
 View.mode = "rename"
 check("not taken while renaming", View:TakeItem(DYE) == false)
+View.mode = "add"
+local gone = View.modeKey
+View.modeKey = 999
+check("not taken with no list", View:TakeItem(DYE) == false)
+View.modeKey = gone
+
+-- 9. Part of a name
+local cached = { [2589] = "Linen Cloth", [2996] = "Bolt of Linen Cloth", [2592] = "Wool Cloth",
+    [PEACE] = "Peacebloom", [4306] = "Silk Cloth" }
+functions["C_Item.IsItemDataCachedByID"], functions["C_Item.GetItemInfo"] = true, true
+C_Item.IsItemDataCachedByID = function(id) return cached[id] ~= nil end
+C_Item.GetItemInfo = function(id) return cached[id] end
+ns.Prices.GetTable = function() return { [2589] = {}, [2996] = {}, [2592] = {}, [77777] = {} } end
+ns.Prices.GetFavourites = function() return { [4306] = "Silk Cloth" } end
+ns.db.characters = { guid = { recipes = { [1] = { outputItemID = 2996, reagents = { { itemID = 2589 } } } } } }
+Lists:BuildNames(nil, true)
+check("names known to the addon are in", #Lists.names == 5)
+local found = Lists:Suggest("linen")
+check("any case, shortest first", #found == 2 and found[1].name == "Linen Cloth" and found[2].name == "Bolt of Linen Cloth")
+found = Lists:Suggest("CLOTH")
+check("a name starting with it beats one holding it", found[1].name == "Linen Cloth" or found[1].name == "Wool Cloth"
+    or found[1].name == "Silk Cloth")
+check("an item never loaded is left out", #Lists:Suggest("7777") == 0)
+check("nothing typed, nothing found", #Lists:Suggest("  ") == 0)
+check("at most SUGGEST_MOST", #Lists:Suggest("o", 2) == 2)
+id, count = View.ParseAdd("linen")
+check("part of a name takes the best", id == 2589 and count == 1)
+id, count = View.ParseAdd("bolt of lin 20")
+check("part of a name with how many", id == 2996 and count == 20)
+id, count = View.ParseAdd("5 wool")
+check("how many first, part of a name", id == 2592 and count == 5)
 
 C_Item, C_AuctionHouse = nil, nil
 print(("\n%d check(s) passed\n"):format(checks))

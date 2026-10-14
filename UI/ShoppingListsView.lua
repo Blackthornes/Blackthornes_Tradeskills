@@ -10,9 +10,9 @@
 -- Buy view's list and only offers Save as a list.
 --
 -- The foot holds one box that does what the moment needs: add an item to the
--- open list (type a name, or Shift-click an item anywhere while the box has
--- the keyboard), name a new list, rename one, show a list's copy line or take
--- a pasted one. Enter saves.
+-- open list (type part of a name and pick it from the names above the box, or
+-- Shift-click an item anywhere while a list is open), name a new list, rename
+-- one, show a list's copy line or take a pasted one. Enter saves.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -29,6 +29,12 @@ local ROW_HEIGHT = 30
 local REFRESH_SECONDS = 2
 -- How long Delete waits for its second click.
 local ARM_SECONDS = 4
+-- Names are looked up this long after the last key, not on every key.
+local SUGGEST_DELAY = 0.15
+local SUGGEST_ROW = 20
+-- One shift-click reaches both of the game's calls this addon listens to;
+-- the second within this long is the same click.
+local SAME_CLICK = 0.3
 local QUEUE_KEY = "queue"
 
 View.open = nil       -- the key of the open list: an index, or QUEUE_KEY
@@ -339,7 +345,7 @@ end
 --------------------------------------------------------------------------------
 
 local HINTS = {
-    add = L["Add an item: type its name or Shift-click it"],
+    add = L["Add an item: type part of its name or Shift-click it"],
     new = L["Name the new list"],
     rename = L["A new name for the list"],
     copy = L["Press Ctrl+C to copy, then Escape"],
@@ -352,6 +358,7 @@ function View:SetMode(mode, key)
     local box = self.box
     if not box then return end
     box.edit:SetText("")
+    self:ClearSuggestions()
     if mode == "rename" then
         local list = Lists():Get(key)
         box.edit:SetText(list and list.name or "")
@@ -386,23 +393,33 @@ function View:UpdateFoot()
         or L["Click a list to open it."])
 end
 
+--- The name part and how many of what was typed: "Peacebloom 40" and
+--- "40 Peacebloom" both give "Peacebloom", 40; anything else is all name.
+function View.SplitCount(text)
+    if type(text) ~= "string" then return "", 1 end
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    local name, count = text:match("^(.-)%s+[xX%*]?(%d+)$")
+    if name and name ~= "" then return name, tonumber(count) end
+    count, name = text:match("^(%d+)%s*[xX%*]?%s+(.+)$")
+    if name then return name, tonumber(count) end
+    return text, 1
+end
+
 --- An item from the text typed, with how many: "Peacebloom 40", "40
---- Peacebloom", a link or an item ID.
+--- Peacebloom", a link, an item ID, or part of a name in any case ("linen
+--- 20"), which takes the best of the names the box suggests.
 function View.ParseAdd(text)
     if type(text) ~= "string" then return nil end
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     local id = Lists().ResolveItem(text)
     if id then return id, 1 end
-    local name, count = text:match("^(.-)%s+[xX%*]?(%d+)$")
-    if name then
+    local name, count = View.SplitCount(text)
+    if name ~= text then
         id = Lists().ResolveItem(name)
-        if id then return id, tonumber(count) end
+        if id then return id, count end
     end
-    count, name = text:match("^(%d+)%s*[xX%*]?%s+(.+)$")
-    if name then
-        id = Lists().ResolveItem(name)
-        if id then return id, tonumber(count) end
-    end
+    local best = Lists():Suggest(name, 1)[1]
+    if best then return best.id, count end
     return nil
 end
 
@@ -413,13 +430,21 @@ function View:Submit()
     local ok, why
 
     if mode == "add" then
-        local id, count = View.ParseAdd(text)
+        local id, count
+        local picked = self.suggestions and self.suggestions[self.pick or 0]
+        if picked then
+            id = picked.id
+            count = select(2, View.SplitCount(text))
+        else
+            id, count = View.ParseAdd(text)
+        end
         if not id then
-            ns.Print(L["The game does not know that item. Shift-click it, or hover over it once and try again."])
+            ns.Print(L["No item by that name yet. Shift-click it, or hover over it once and try again."])
             return
         end
         ok, why = Lists():Add(key, id, count)
         if ok then self.box.edit:SetText("") end
+        self:ClearSuggestions()
     elseif mode == "new" then
         local index
         index, why = Lists():Make(text)
@@ -446,32 +471,184 @@ function View:Submit()
     self:Refresh(true)
 end
 
---- A Shift-click on an item while the box is adding to a list puts the item
---- on it. Called from the game's own modified click and from every item the
---- addon shows (Widgets.ItemShiftClick).
--- @return true when the item was taken
-function View:TakeItem(itemID)
+--- True while the player is typing in a chat box, where a Shift-click
+--- links the item in chat and must stay that way.
+local function ChatOpen()
+    local util = _G.ChatFrameUtil
+    local get = (type(util) == "table" and type(util.GetActiveWindow) == "function" and util.GetActiveWindow)
+        or _G.ChatEdit_GetActiveWindow
+    if type(get) ~= "function" then return false end
+    local ok, box = pcall(get)
+    return ok and box ~= nil and box ~= false
+end
+
+--- True while the Lists view is on screen with a list open to add to.
+function View:Adding()
     if self.mode ~= "add" or not self.box or not self.box:IsShown() then return false end
-    local edit = self.box.edit
-    if not (edit.HasFocus and edit:HasFocus()) then return false end
+    if self.list and self.list.IsVisible and not self.list:IsVisible() then return false end
+    return Lists():Get(self.modeKey) ~= nil
+end
+
+--- A Shift-click on an item while a list is open puts it on that list: from
+--- the bags, a chat link, the auction house's own list or any item the addon
+--- shows (Widgets.ItemShiftClick). Not while a chat box is being typed in,
+--- unless the list's box has the keyboard. From the addon's own rows
+--- (`fromAddon`) an item already on the list is left to its usual click, so a
+--- Shift-click on the list's own rows still searches.
+-- @return true when the item was taken
+function View:TakeItem(itemID, fromAddon)
+    if not self:Adding() then return false end
     itemID = tonumber(itemID)
     if not itemID then return false end
+    local edit = self.box.edit
+    local typing = edit.HasFocus and edit:HasFocus()
+    if not typing then
+        if ChatOpen() then return false end
+        if fromAddon then
+            for _, line in ipairs(Lists():Lines(self.modeKey)) do
+                if line.itemID == itemID then return false end
+            end
+        end
+    end
+
+    local now = GetTime()
+    local last = self.lastTaken
+    if last and last.id == itemID and now - last.at < SAME_CLICK then return true end
+    self.lastTaken = { id = itemID, at = now }
+
     local ok, why = Lists():Add(self.modeKey, itemID, 1)
-    if not ok and why then ns.Print(why) end
+    if ok then
+        local list = Lists():Get(self.modeKey)
+        ns.Print(L.Format("Added %s to %s.", Util.GetItemLabel(itemID), list and list.name or ""))
+    elseif why then
+        ns.Print(why)
+    end
     self:Refresh(true)
     return true
 end
 
+local function TakeLink(link)
+    if not (IsShiftKeyDown and IsShiftKeyDown()) then return end
+    local ok, id = pcall(function() return tonumber(link:match("item:(%d+)")) end)
+    if ok and id then View:TakeItem(id) end
+end
+
+--- Listens after the game's own Shift-click handling, never instead of it:
+--- the bags and chat links go through HandleModifiedItemClick, and some of
+--- the game's lists put a link straight into chat.
 function View:HookShiftClick()
-    if self.hooked or type(hooksecurefunc) ~= "function" or type(_G.HandleModifiedItemClick) ~= "function" then
-        return
-    end
+    if self.hooked or type(hooksecurefunc) ~= "function" then return end
     self.hooked = true
-    hooksecurefunc("HandleModifiedItemClick", function(link)
-        if not (IsShiftKeyDown and IsShiftKeyDown()) then return end
-        local ok, id = pcall(function() return tonumber(link:match("item:(%d+)")) end)
-        if ok and id then View:TakeItem(id) end
-    end)
+    if type(_G.HandleModifiedItemClick) == "function" then
+        hooksecurefunc("HandleModifiedItemClick", TakeLink)
+    end
+    if type(_G.ChatEdit_InsertLink) == "function" then
+        hooksecurefunc("ChatEdit_InsertLink", TakeLink)
+    end
+    local util = _G.ChatFrameUtil
+    if type(util) == "table" and type(util.InsertLink) == "function" then
+        hooksecurefunc(util, "InsertLink", TakeLink)
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Names under the fingers
+--------------------------------------------------------------------------------
+
+--- Look the typed words up a moment after the last key.
+function View:SuggestSoon()
+    self.suggestToken = (self.suggestToken or 0) + 1
+    local token = self.suggestToken
+    local function Run()
+        if token == View.suggestToken then View:UpdateSuggestions() end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(SUGGEST_DELAY, Run) else Run() end
+end
+
+function View:ClearSuggestions()
+    self.suggestions, self.pick = nil, nil
+    if self.suggest then self.suggest:Hide() end
+end
+
+function View:UpdateSuggestions()
+    if not (self.box and self.mode == "add" and self.box:IsShown()) then return self:ClearSuggestions() end
+    local text = self.box.edit:GetText() or ""
+    local name = View.SplitCount(text)
+    if name == "" or name:find("|H", 1, true) or name:match("^%d+$") then return self:ClearSuggestions() end
+
+    -- The index may still be on its way: look again when it is in.
+    Lists():BuildNames(function() View:UpdateSuggestions() end)
+    local found = Lists():Suggest(name)
+    if #found == 0 then return self:ClearSuggestions() end
+
+    self.suggestions, self.pick = found, nil
+    self:DrawSuggestions()
+end
+
+function View:DrawSuggestions()
+    local pop = self.suggest
+    if not pop then return end
+    local found = self.suggestions or {}
+    pop:SetHeight(#found * SUGGEST_ROW + 4)
+    pop.list:SetData(found)
+    pop:Show()
+end
+
+--- Up and Down walk the names; nothing picked means Enter takes the best.
+function View:MovePick(step)
+    local found = self.suggestions
+    if not found or #found == 0 then return end
+    local pick = (self.pick or 0) + step
+    if pick < 1 then pick = #found elseif pick > #found then pick = 1 end
+    self.pick = pick
+    self:DrawSuggestions()
+end
+
+--- Put a suggestion on the open list, keeping a count typed with the name.
+function View:TakeSuggestion(entry)
+    if not (entry and self:Adding()) then return end
+    local _, count = View.SplitCount(self.box.edit:GetText() or "")
+    local ok, why = Lists():Add(self.modeKey, entry.id, count)
+    if ok then self.box.edit:SetText("") elseif why then ns.Print(why) end
+    self:ClearSuggestions()
+    self:Refresh(true)
+end
+
+local function BuildSuggest(body, box)
+    local pop = Theme.CreatePanel(body, "glass", "accent")
+    pop:SetPoint("BOTTOMLEFT", box, "TOPLEFT", 0, 2)
+    pop:SetPoint("BOTTOMRIGHT", box, "TOPRIGHT", 0, 2)
+    pop:SetHeight(SUGGEST_ROW)
+    if pop.SetFrameLevel and body.GetFrameLevel then pop:SetFrameLevel((body:GetFrameLevel() or 0) + 30) end
+    pop:Hide()
+
+    local list = Widgets.CreateScrollList(pop, {
+        rowHeight = SUGGEST_ROW,
+        createRow = function(row)
+            row.icon = Theme.CreateItemIcon(row, 14)
+            row.icon:SetPoint("LEFT", 6, 0)
+            row.name = Theme.CreateLabel(row, "small", "text")
+            row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+            row.name:SetPoint("RIGHT", -6, 0)
+            row.name:SetWordWrap(false)
+        end,
+        updateRow = function(row, entry)
+            Theme.SetItemIcon(row.icon, entry.id)
+            row.name:SetText(entry.name)
+        end,
+        isSelected = function(entry)
+            local picked = View.suggestions and View.suggestions[View.pick or 0]
+            return picked == entry
+        end,
+        searchItem = function() return nil end,
+        onEnter = function(row, entry) Widgets.ShowItemTooltip(row, "ANCHOR_RIGHT", entry.id) end,
+        onLeave = function() GameTooltip:Hide() end,
+        onClick = function(entry) View:TakeSuggestion(entry) end,
+    })
+    list:SetPoint("TOPLEFT", 2, -2)
+    list:SetPoint("BOTTOMRIGHT", -2, 2)
+    pop.list = list
+    return pop
 end
 
 --------------------------------------------------------------------------------
@@ -534,16 +711,44 @@ function View:Build(body, frame, topAnchor, opts)
     hint:SetPoint("RIGHT", -6, 0)
     hint:SetWordWrap(false)
     box.edit, box.hint = edit, hint
-    edit:SetScript("OnTextChanged", function(self)
+    edit:SetScript("OnTextChanged", function(self, userInput)
         hint:SetShown(View.mode ~= nil and (self:GetText() or "") == "")
+        if View.mode == "add" then
+            if userInput then View.pick = nil end
+            View:SuggestSoon()
+        end
+    end)
+    edit:SetScript("OnEditFocusGained", function()
+        if View.mode == "add" then Lists():BuildNames() end
+    end)
+    edit:SetScript("OnEditFocusLost", function()
+        -- A click on a name lands after the box lets go of the keyboard.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.2, function()
+                if not (edit.HasFocus and edit:HasFocus()) then View:ClearSuggestions() end
+            end)
+        end
+    end)
+    edit:SetScript("OnArrowPressed", function(_, key)
+        if key == "UP" then View:MovePick(-1) elseif key == "DOWN" then View:MovePick(1) end
+    end)
+    edit:SetScript("OnTabPressed", function()
+        local best = View.suggestions and (View.suggestions[View.pick or 0] or View.suggestions[1])
+        if best then
+            local _, count = View.SplitCount(edit:GetText() or "")
+            edit:SetText(count > 1 and ("%s %d"):format(best.name, count) or best.name)
+            edit:SetCursorPosition(#(edit:GetText() or ""))
+        end
     end)
     edit:SetScript("OnEnterPressed", function() View:Submit() end)
     edit:SetScript("OnEscapePressed", function(self)
+        if View.suggestions then return View:ClearSuggestions() end
         self:ClearFocus()
         View:SetMode(View:RestingMode())
     end)
     box:Hide()
     self.box = box
+    self.suggest = BuildSuggest(body, box)
 
     local note = Theme.CreateLabel(body, "tiny", "muted")
     note:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
@@ -556,7 +761,7 @@ function View:Build(body, frame, topAnchor, opts)
     end, { width = 90, height = 20, tooltip = L["Makes a new list from a line someone copied with Copy."] })
     self.paste = paste
 
-    self.parts = { list, newList, save, box, note, paste }
+    self.parts = { list, newList, save, box, note, paste, self.suggest }
     self:HookShiftClick()
     self:SetShown(false)
 end
@@ -565,6 +770,8 @@ function View:SetShown(on)
     for _, part in ipairs(self.parts or {}) do
         if part == self.box or part == self.save or part == self.note then
             if not on then part:Hide() end
+        elseif part == self.suggest then
+            if not on then self:ClearSuggestions() end
         else
             part:SetShown(on)
         end
