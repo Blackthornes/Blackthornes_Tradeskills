@@ -128,6 +128,29 @@ frame:SetItemIDAndPrice(2589, 100)
 assert(display.quantity == 1)
 assert(BQ.want == nil)
 
+-- A whole list searched at once (2026-10-14, the craft queue list's
+-- Search): whichever item is picked fills with its own number.
+BQ:WantMany({ [2589] = 20, [4306] = 15, [2770] = 0 })
+assert(BQ.want == nil)
+frame:SetItemIDAndPrice(4306, 100)
+assert(display.quantity == 15, "the list's count, got " .. tostring(display.quantity))
+frame:SetItemIDAndPrice(2589, 100)
+assert(display.quantity == 20, "the live shortfall, got " .. tostring(display.quantity))
+frame:SetItemIDAndPrice(2770, 50)
+assert(display.quantity == 1, "a count under 1 fills nothing")
+frame:SetItemIDAndPrice(2771, 50)
+assert(display.quantity == 1, "an item not searched for fills nothing")
+-- A single search after it forgets the list's.
+BQ:Want(2589, 20)
+assert(BQ.wants == nil)
+frame:SetItemIDAndPrice(4306, 100)
+assert(display.quantity == 1)
+-- No counts at all forgets too.
+BQ:WantMany(nil)
+assert(BQ.want == nil and BQ.wants == nil)
+frame:SetItemIDAndPrice(2589, 100)
+assert(display.quantity == 1)
+
 -- Turned off in Settings: nothing filled.
 settings.fillBuyQuantity = false
 BQ:Want(2589, 20)
