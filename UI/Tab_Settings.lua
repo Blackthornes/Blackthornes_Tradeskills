@@ -912,6 +912,16 @@ local function Build(outer)
     end, true)
     widgets.verifyPrice:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Fast listing (the owner, 2026-10-14): a fresh price lists on the
+    -- click, with no Yes/No box. Unticked, every listing asks first.
+    local fastRow = CreateRow(pages.auction, 1, L["Fast listing"],
+        L["List all checks every price on your Sell list in one search, then each click lists one straight away, with no Yes or No. A price older than two minutes is checked again first. Untick it to answer Yes or No for every listing."])
+
+    widgets.fastListing = Widgets.CreateCheckbox(fastRow, L["List on the click"], function(checked)
+        Config:Set("fastListing", checked)
+    end, true)
+    widgets.fastListing:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- The sale alarm and the scan chime moved down to SOUNDS, with a switch
     -- for every other sound (2026-10-02).
     CreateSection(pages.mail, 2, L["AFTER A SALE"])
@@ -2124,6 +2134,7 @@ local function Refresh()
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
+    widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.freeSpaceFirst:SetChecked(Config:Get("craftFreesSpaceFirst") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
