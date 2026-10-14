@@ -190,9 +190,11 @@ local function UpdateRow(row, line)
         and Util.FormatMoney(line.estimatedCost, { short = true }) or "?")
     cells.cost:SetTextColor(Theme.Unpack(line.overpaid and "warn" or "text"))
 
-    -- No auction search for something a vendor sells cheaper: following it
-    -- would be acting against the recommendation the row just made.
-    row.search:SetShown(line.source == "auction")
+    -- The Queue tab's rule: an auction search for anything still short,
+    -- unless a vendor that never runs out sells it. A vendor with limited
+    -- stock may run dry, and an item never priced may still be listed
+    -- (a player found no AH button on Mageroyal, 2026-10-14).
+    row.search:SetShown(not line.fromVendor or line.vendorLimited == true)
     row.goal:SetShown(ns.FarmerGoals:Available())
 end
 
