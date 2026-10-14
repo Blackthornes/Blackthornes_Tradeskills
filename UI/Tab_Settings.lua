@@ -1262,6 +1262,16 @@ local function Build(outer)
     end, true)
     widgets.recipeTooltips:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Asked 2026-10-14: what an enchant's materials cost, on its tooltip.
+    local enchantTipRow = CreateRow(pages.look, 1, L["Enchant costs on tooltips"],
+        L["On an enchant, in the Enchanting window or linked in chat: what its materials cost, each one, what you're short and who knows it."])
+
+    widgets.enchantTooltips = Widgets.CreateCheckbox(enchantTipRow, L["Enabled"], function(checked)
+        Config:Set("tooltipEnchantCosts", checked)
+        if ns.EnchantTooltip and ns.EnchantTooltip.Forget then ns.EnchantTooltip:Forget() end
+    end, true)
+    widgets.enchantTooltips:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Its own row (a player's report, 2026-10-09): beside the tick box it
     -- started 340 pixels in and ran past the column into the next one.
     local recipeListRow = CreateRow(pages.look, 1, L["Recipes to learn"],
@@ -2153,6 +2163,7 @@ local function Refresh()
         widgets.whatsNewMotion:SetChecked(ns.WhatsNew:IsMotionOn())
     end
     widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
+    widgets.enchantTooltips:SetChecked(Config:Get("tooltipEnchantCosts") ~= false)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
