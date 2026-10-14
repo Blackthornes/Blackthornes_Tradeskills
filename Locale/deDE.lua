@@ -2752,3 +2752,12 @@ L["The game would not cancel it."] = "Das Spiel hat sie nicht abgebrochen."
 L["None of your auctions are undercut."] = "Keine deiner Auktionen ist unterboten."
 L["Cancelled %s. It comes back to you in the mail."] = "%s abgebrochen. Es kommt per Post zu dir zurück."
 L["%s is still up: the cancel did not go through."] = "%s ist noch eingestellt: der Abbruch hat nicht geklappt."
+
+-- The price trend (2026-10-14)
+L["TREND"] = "TREND"
+L["Trend: 7 days"] = "Trend: 7 Tage"
+L["Trend: 14 days"] = "Trend: 14 Tage"
+L["Trend (7 days)"] = "Trend (7 Tage)"
+L["Trend (14 days)"] = "Trend (14 Tage)"
+L["Price trend on tooltips"] = "Preistrend in Tooltips"
+L["Shows how far an item's market value now is from its average over the last 7 or 14 days, the same as the Prices tab's TREND column. The Prices tab picks the days."] = "Zeigt, wie weit der Marktwert eines Gegenstands jetzt von seinem Durchschnitt der letzten 7 oder 14 Tage abweicht, wie die Spalte TREND im Reiter Preise. Die Tage wählst du im Reiter Preise."

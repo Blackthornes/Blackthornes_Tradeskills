@@ -1243,6 +1243,15 @@ local function Build(outer)
     end, true)
     widgets.tooltipSalesShift:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Asked 2026-10-14: the Prices tab's trend on the tooltip too.
+    local trendRow = CreateRow(pages.look, 1, L["Price trend on tooltips"],
+        L["Shows how far an item's market value now is from its average over the last 7 or 14 days, the same as the Prices tab's TREND column. The Prices tab picks the days."])
+
+    widgets.tooltipTrend = Widgets.CreateCheckbox(trendRow, L["Enabled"], function(checked)
+        Config:Set("tooltipTrend", checked)
+    end, true)
+    widgets.tooltipTrend:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Asked 2026-10-05: is a recipe worth buying, at a glance. The button
     -- is /bts recipes.
     local recipeTipRow = CreateRow(pages.look, 1, L["Recipe value on tooltips"],
@@ -2136,6 +2145,7 @@ local function Refresh()
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
     widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
     widgets.tooltipSalesShift:SetChecked(Config:Get("tooltipSalesShift") == true)
+    widgets.tooltipTrend:SetChecked(Config:Get("tooltipTrend") ~= false)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.sisters:SetChecked(ns.SisterNote:IsOn())
     if ns.WhatsNew then
