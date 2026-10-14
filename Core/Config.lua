@@ -112,6 +112,8 @@ local DEFAULTS = {
         -- it. A full scan is a snapshot and goes stale; undercutting a price
         -- that moved ten minutes ago is how you end up listed above a rival.
         verifyPriceBeforePosting = true,
+        -- A fresh price lists on the click, no Yes/No box (2026-10-14).
+        fastListing = true,
 
         -- Nothing reads this any more, and Settings no longer offers it: every
         -- listing is confirmed, as the confirmation's Yes is the click that

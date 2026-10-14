@@ -9,7 +9,8 @@
 --
 -- What must hold:
 --   1. A second item can be listed while the first is still being checked.
---   2. One reading settles both, each by its own item ID.
+--   2. One reading settles both, each by its own item ID, and listings
+--      made close together share that reading.
 --   3. A reading from a query sent before a listing existed never settles it
 --      (it would report the new listing as missing).
 --   4. The cap holds, and a post keeps the auction house's request spacing.
@@ -186,7 +187,7 @@ local function Said(pattern)
     return false
 end
 
-local OIL, POTION, CLOTH, ORE, HERB, GEM = 20748, 929, 2589, 2770, 765, 774
+local OIL, POTION, CLOTH, ORE, HERB, GEM, BOLT, VIAL = 20748, 929, 2589, 2770, 765, 774, 2996, 3371
 
 local function Reset()
     clock, timers, listed, sent, said, queries, noted = 100, {}, {}, {}, {}, 0, 0
@@ -196,7 +197,7 @@ local function Reset()
     Auctions.confirmToken, Auctions.lastRefresh = 0, nil
     ns.db.postedAuctions = nil
     bags = { [0] = {} }
-    for _, id in ipairs({ OIL, POTION, CLOTH, ORE, HERB, GEM }) do
+    for _, id in ipairs({ OIL, POTION, CLOTH, ORE, HERB, GEM, BOLT, VIAL }) do
         maxStacks[id] = 1
         table.insert(bags[0], { itemID = id, stackCount = 1 })
     end
@@ -220,14 +221,14 @@ check("both are being confirmed", #Posting:AllPending(), 2)
 Show(OIL)
 Show(POTION)
 
+-- The potion's check is due 1.2 seconds after the oil's, so the oil's
+-- waits for it and one reading settles both (fast listing, 2026-10-14).
 RunUntil(103.5)
-check("the oil's check has gone out", queries, 1)
-RunUntil(104.0)
-check("the oil settled from that reading", Posting:PendingFor(OIL), nil)
-check("the potion, not yet checked, is still waiting", Posting:PendingFor(POTION) ~= nil, true)
-
+check("the oil's check waits for the potion's", queries, 0)
 RunUntil(110)
-check("the potion settled from its own check", Posting:PendingFor(POTION), nil)
+check("one reading went out for both", queries, 1)
+check("the oil settled from it", Posting:PendingFor(OIL), nil)
+check("and the potion", Posting:PendingFor(POTION), nil)
 check("nothing left waiting", #Posting:AllPending(), 0)
 check("the oil was reported listed", Said("^listed item" .. OIL), true)
 check("the potion was reported listed", Said("^listed item" .. POTION), true)
@@ -298,14 +299,15 @@ print("")
 print("how many may be confirmed at once")
 
 Reset()
-for _, id in ipairs({ OIL, POTION, CLOTH, ORE }) do Posting:Post(id, 1, 1000) end
-check("four items are being confirmed", #Posting:AllPending(), Posting.MAX_CONFIRMING)
-check("a fifth waits", (Posting:CanPost(HERB)), false)
+local FIRST = { OIL, POTION, CLOTH, ORE, GEM, BOLT }
+for _, id in ipairs(FIRST) do Posting:Post(id, 1, 1000) end
+check("six items are being confirmed", #Posting:AllPending(), Posting.MAX_CONFIRMING)
+check("a seventh waits", (Posting:CanPost(HERB)), false)
 check("another oil still joins its check", (Posting:CanPost(OIL)), true)
-Show(OIL) Show(POTION) Show(CLOTH) Show(ORE)
+for _, id in ipairs(FIRST) do Show(id) end
 RunUntil(120)
-check("all four settled", #Posting:AllPending(), 0)
-check("so the fifth may go", (Posting:CanPost(HERB)), true)
+check("all six settled", #Posting:AllPending(), 0)
+check("so the seventh may go", (Posting:CanPost(HERB)), true)
 
 Posting.pending, Posting.others = nil, nil
 C_AuctionHouse, C_Timer, C_Item, C_Container, ItemLocation, maxStacks = nil, nil, nil, nil, nil, nil

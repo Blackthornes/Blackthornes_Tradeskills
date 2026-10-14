@@ -772,6 +772,31 @@ valuable first of what Sell shows). Beside it on Sell, a Duration box (2, 8 or 2
 hours, opening upward) sets the same `postDuration` as the Post tab's. Tested in `tools/test_postdrawer.lua`.
 Not yet seen in game.
 
+## Fast listing
+
+Players kept asking (the owner said build it, 2026-10-14) for posting
+faster than about five seconds a listing. The wait was ours, not the
+game's: every click searched for its one item, then asked Yes or No, and
+each search and read back counted against `AHQueue`'s budget. The game
+only asks for a real click per listing. Now (`Logic/Posting.lua`, "Fast
+listing"): List all's first click checks every price on Sell in one
+search (`Posting:CheckAll`, `C_AuctionHouse.SearchForItemKeys`, at most
+`CHECK_ALL_MOST`), read back by `Posting:OnCheckResults` from the
+scanner's browse handler. An item counts as checked (`NoteChecked`,
+`IsFresh`, for `FRESH_FOR` seconds; also after any one-item search) only
+when the cheapest is someone else's (`Posting.RivalFromRow`) and not under
+`CHECK_ALL_FAR_UNDER` of market (a lone low one is the one-item search's to
+judge); a copy with a random suffix is never fast. While fresh, a click
+(List all, a row's List, Post Crafted, the price editor) calls `Post`
+straight away with no Yes/No box (`CanListOnClick`; a listing under what
+it cost to make still asks), and `Post`'s guards all still run. List all
+passes over an item still being confirmed (`GetNextPostable`'s
+`skipSettling`), so nothing goes up twice. Listings close together share
+one read back (`ShareVerify`, `NewerVerifying`), and `MAX_CONFIRMING` is
+6. Leaving the auction house forgets every check. "Fast listing" on the
+auction page (`fastListing`, on unless unticked, never rename it). Tested
+in `tools/test_fastlisting.lua`. Not yet seen in game.
+
 ## Shopping lists
 
 A player asked (2026-10-14, the owner said build it) for named shopping
