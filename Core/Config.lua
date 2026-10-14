@@ -215,6 +215,12 @@ local DEFAULTS = {
         -- UI/ItemTooltip.lua.
         tooltipSalesShift = false,
 
+        -- The price trend (asked 2026-10-14): market value now against its
+        -- average over the last 7 or 14 days, as the Prices tab's TREND
+        -- column and a line on the item tooltip. Never rename either.
+        priceTrendDays = 7,
+        tooltipTrend = true,
+
         -- On a recipe item's tooltip (a Pattern, Plans, Formula...): what it
         -- teaches, what one craft costs, sells and disenchants for, and how
         -- many crafts pay the recipe back. See Logic/RecipeBook.lua.
