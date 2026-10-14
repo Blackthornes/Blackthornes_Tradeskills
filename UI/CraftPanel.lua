@@ -342,9 +342,17 @@ local function RowSources(self, opts)
 end
 
 --- One recipe's row, or nil when it is left out. `tally` counts what the
---- Keep in stock limit hid.
+--- Keep in stock limit and the ignored crafts hid.
 local function RowFor(recipeID, recipe, opts, search, tally)
     local name = recipe.name or L.Format("recipe %s", tostring(recipeID))
+
+    -- A craft the player ignored (here or on the Profit tab, one list) is
+    -- not suggested. A search still finds it, as it finds a craft at its
+    -- Keep in stock limit: someone typing its name wants that one.
+    if search == "" and ns.Profit.IsIgnored and ns.Profit:IsIgnored(recipeID) then
+        tally.ignored = (tally.ignored or 0) + 1
+        return nil
+    end
 
     -- Plain substring, not a pattern: a recipe name with a hyphen in
     -- it would otherwise be a malformed pattern and match nothing.
@@ -443,12 +451,13 @@ function CraftPanel:GetRows(opts)
     local rows = {}
     -- How many were left out for being at the Keep in stock limit, so an
     -- empty pane can say that rather than blame the recipes not being read.
-    local tally = { hiddenAtLimit = 0 }
+    local tally = { hiddenAtLimit = 0, ignored = 0 }
 
     for _, item in ipairs(list) do
         rows[#rows + 1] = RowFor(item.recipeID, item.recipe, opts, search, tally)
     end
     self.hiddenAtLimit = tally.hiddenAtLimit
+    self.hiddenIgnored = tally.ignored
 
     return SortRows(rows, opts)
 end
@@ -897,16 +906,30 @@ local function ShowRowTooltip(row, line)
             0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
     end
 
-    GameTooltip:AddLine(L["Left-click to queue, right-click to remove, Shift-click to search the auction house."], 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L["Left-click to queue, right-click to remove, Shift-click to search the auction house."], 0.5, 0.5, 0.5, true)
+    GameTooltip:AddLine(L["Ctrl-right-click to ignore it: it stops being suggested here and on the Profit tab."], 0.5, 0.5, 0.5, true)
     GameTooltip:Show()
 end
 
---- Left-click queues, right-click takes it back off.
+--- Left-click queues, right-click takes it back off, Ctrl-right-click
+--- ignores the craft.
 --
 -- The + button is the discoverable way in; this is for working down a list
 -- quickly, where reaching for the same small button every time is the slow part.
 local function OnRowClick(line, _, mouseButton, row)
     if mouseButton == "RightButton" then
+        -- Ignoring is the Profit tab's own list (a player asked, 2026-10-14),
+        -- so a craft ignored in either place is gone from both and Settings
+        -- restores it. What is already queued stays queued.
+        if IsControlKeyDown and IsControlKeyDown() then
+            GameTooltip:Hide()
+            ns.Profit:SetIgnored(line.recipeID, true, line.name)
+            ns.Print(L.Format("ignored %s: it is no longer suggested here or on the Profit tab. Restore it under Ignored crafts in Settings.",
+                line.name))
+            CraftPanel:Refresh()
+            return
+        end
+
         ns.Queue:Remove(line.recipeID)
         return
     end
@@ -1062,6 +1085,27 @@ function CraftPanel:Build()
     end)
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
     self.ignoreLimitBox = ignoreLimit
+
+    -- How many crafts here are ignored, on the line of the box above, so
+    -- an ignored craft is never simply lost. Shown only when there are some.
+    local ignoredLabel = Theme.CreateLabel(body, "tiny", "muted")
+    ignoredLabel:SetPoint("LEFT", ignoreLimit, "RIGHT", 10, 0)
+    ignoredLabel:SetWidth(math.max(40, PANEL_WIDTH - 28 - (ignoreLimit:GetWidth() or 0) - 10))
+    ignoredLabel:SetJustifyH("RIGHT")
+    ignoredLabel:Hide()
+    self.ignoredLabel = ignoredLabel
+
+    local ignoredHover = CreateFrame("Frame", nil, body)
+    ignoredHover:SetAllPoints(ignoredLabel)
+    ignoredHover:EnableMouse(true)
+    ignoredHover:SetScript("OnEnter", function(hover)
+        if not ignoredLabel:IsShown() then return end
+        GameTooltip:SetOwner(hover, "ANCHOR_TOP")
+        GameTooltip:SetText(L["Ignored crafts"], 1, 1, 1)
+        GameTooltip:AddLine(L["Crafts you ignored are not suggested here. Type one's name in the search to find it, or restore it under Settings, Queue, Ignored crafts."], 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    ignoredHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Room left of the two buttons at the bottom right.
     local summaryWidth = PANEL_WIDTH - 28 - QUEUE_TAB_WIDTH - CLEAR_WIDTH - 12
@@ -1423,8 +1467,12 @@ function CraftPanel:ApplyRows(rows, opts)
             and L["Nothing here matches that."]
             or (self.hiddenAtLimit or 0) > 0
                 and L["Every recipe here is at its Keep in stock limit.\n\nTick Ignore max on hand to see them."]
+            or (self.hiddenIgnored or 0) > 0
+                and L["Every recipe here is ignored.\n\nRestore them under Settings, Queue, Ignored crafts."]
             or L["No recipes read for this profession yet.\n\nThey are read as the window opens; give it a moment."])
     end
+
+    self:UpdateIgnoredLabel()
 
     self:UpdateCraftButton()
     self:UpdateClearButton()
@@ -1465,7 +1513,7 @@ function CraftPanel:RefreshInSlices()
     if not opts then return end
 
     local list, search = RowSources(self, opts)
-    local rows, tally = {}, { hiddenAtLimit = 0 }
+    local rows, tally = {}, { hiddenAtLimit = 0, ignored = 0 }
 
     local worker = Util.NewWorker({
         budgetMs = SLICE_MS,
@@ -1478,6 +1526,7 @@ function CraftPanel:RefreshInSlices()
 
             if CraftPanel:IsShown() and not CraftPanel:IsCollapsed() then
                 CraftPanel.hiddenAtLimit = tally.hiddenAtLimit
+                CraftPanel.hiddenIgnored = tally.ignored
                 CraftPanel:ApplyRows(SortRows(rows, opts), opts)
             end
 
@@ -1497,6 +1546,20 @@ function CraftPanel:StopSlicedRefresh()
     local worker = self.slicing
     self.slicing, self.sliceAgain = nil, nil
     if worker then worker:Cancel() end
+end
+
+--- "N ignored" beside the Ignore max on hand box, hidden at none.
+function CraftPanel:UpdateIgnoredLabel()
+    local label = self.ignoredLabel
+    if not label then return end
+
+    local count = self.hiddenIgnored or 0
+    if count > 0 then
+        label:SetText(L.Format("%d ignored", count))
+        label:Show()
+    else
+        label:Hide()
+    end
 end
 
 --- The queue total along the bottom of the pane.

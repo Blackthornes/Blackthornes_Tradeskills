@@ -864,6 +864,8 @@ function Profit:SetIgnored(recipeID, ignored, name)
     end
 
     if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+    -- The pane beside the profession window leaves ignored crafts out too.
+    if ns.CraftPanel and ns.CraftPanel.RequestRefresh then ns.CraftPanel:RequestRefresh() end
 end
 
 --- The ignored crafts, A to Z: { { recipeID, name }, ... }.
