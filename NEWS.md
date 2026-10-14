@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.58.0
+
+- Enchanting recipes show what their materials cost when you hover them.
+- The auction house Buy view has a Search all button for everything on your list.
+
 ## 0.57.0
 
 - A new Stats tab shows one item at a time in charts: price, sales, cheapest times and who else sells it.
