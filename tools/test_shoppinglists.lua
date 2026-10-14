@@ -171,7 +171,11 @@ C_AuctionHouse = {
     MakeItemKey = function(itemID) return { itemID = itemID } end,
     SearchForItemKeys = function(k) keys = k end,
 }
-check("every item at once", Lists:SearchMany({ PEACE, SILVER }) == true and sent and sent.send() and #keys == 2)
+local wanted
+ns.BuyQuantity = { WantMany = function(_, counts) wanted = counts end }
+check("every item at once", Lists:SearchMany({ PEACE, SILVER }, { [PEACE] = 4, [SILVER] = 9 }) == true and sent and sent.send() and #keys == 2)
+check("the counts go to the buy box", wanted and wanted[PEACE] == 4 and wanted[SILVER] == 9)
+ns.BuyQuantity = nil
 ns.Scanner.isScanning = true
 check("never over a scan", Lists:SearchMany({ PEACE, SILVER }) == false)
 

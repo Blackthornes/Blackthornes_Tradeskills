@@ -166,6 +166,20 @@ check("first search, then Next", searched[1] == PEACE and View:SearchLabel(entry
 View:SearchList(entry)
 check("Next looks for the second and ends", searched[2] == SILVER and View:SearchLabel(entry) == "Search")
 
+-- All at once, where the game allows it: each item's need goes with it, so
+-- the buy box fills (the craft queue list's Search left it at 1, 2026-10-14).
+do
+    local savedMany, gotIDs, gotCounts = Lists.SearchMany, nil, nil
+    Lists.SearchMany = function(_, ids, counts) gotIDs, gotCounts = ids, counts; return true end
+    View:SearchList(entry)
+    local needs = {}
+    for _, line in ipairs(entry.lines) do needs[line.itemID] = line.need end
+    check("all at once carries every need", gotIDs and #gotIDs == 2 and gotCounts
+        and gotCounts[PEACE] == needs[PEACE] and gotCounts[SILVER] == needs[SILVER]
+        and (needs[PEACE] or 0) > 0)
+    Lists.SearchMany = savedMany
+end
+
 -- Opening a list by its row
 View.list.opts.onClick(View.list.data[2])
 check("a click opens it", View.open == 1 and View.mode == "add")
