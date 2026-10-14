@@ -409,6 +409,21 @@ out again only when the recipe count changes (checked at most every
 (`tradeRequests`, off unless ticked, the owner 2026-10-12; never rename it) and `/bts requests`.
 Tested in `tools/test_craftrequests.lua`. Not yet seen in game.
 
+## Craft next frees bag space first
+
+A player asked (2026-10-14, the owner agreeing) for the queue to craft
+what frees the most bag slots first. Only Craft next's pick changes, on the
+Queue tab and in the profession window (`Crafting:PickNext`, called by
+`GetNextReady` and `CraftPanel:GetNextReadyHere`): of the ready crafts,
+the one whose materials stop taking the most stacks, less the new stacks
+what it makes takes (`Crafting:SlotsFreed`, from the bags' counts and
+`BagsFull.MaxStack`, kept until `Inventory.changes` or `Queue.version`
+moves). Ties keep queue order, and a craft waits while a ready sub-craft
+of its own (up its `forRecipes` chain) is ready. The stored queue never
+moves. The button's tooltip says how many slots it frees. "Craft what frees
+bag space first" on the Queue page (`craftFreesSpaceFirst`, on unless
+unticked, never rename it). Tested in `tools/test_freespacefirst.lua`.
+
 ## Keep in stock by profession
 
 A player asked (2026-10-13, the owner agreeing) for Keep in stock per

@@ -598,6 +598,17 @@ local function UpdateBankNote()
     end
 end
 
+--- The Craft button's tooltip, saying the bag space it frees when that
+--- picked it (Crafting:PickNext).
+local function CraftTooltip(slots)
+    if slots and slots > 0 then
+        return slots == 1
+            and L["One click makes every craft in this entry. It frees 1 bag slot, the most of what is ready."]
+            or L.Format("One click makes every craft in this entry. It frees %d bag slots, the most of what is ready.", slots)
+    end
+    return L["One click makes every craft in this entry"]
+end
+
 --- Keep the Craft button honest about what it will do, and why it cannot.
 -- @return true when the button was set to open a profession window
 local function SetCraftButton(button, label)
@@ -621,7 +632,7 @@ local function SetCraftButton(button, label)
     end
 
     local ready, total = ns.Crafting:GetQueueReadiness()
-    local entry = ns.Crafting:GetNextReady()
+    local entry, slots = ns.Crafting:GetNextReady()
 
     if not entry then
         button:SetText(L["Craft next"])
@@ -678,7 +689,7 @@ local function SetCraftButton(button, label)
 
     button:SetText(L.Format("Craft %dx %s", canMake, (recipe and recipe.name) or L["item"]))
     button:SetEnabledState(true)
-    button.tooltipText = L["One click makes every craft in this entry"]
+    button.tooltipText = CraftTooltip(slots)
 
     label:SetText(L.Format("%d of %d ready", ready, total))
     label:SetTextColor(Theme.Unpack("profit"))
