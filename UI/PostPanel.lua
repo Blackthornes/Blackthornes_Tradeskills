@@ -511,9 +511,10 @@ function PostPanel:Build()
         title:SetPoint("TOPLEFT", header, "TOPLEFT", (ns.UI and ns.UI.AUCTION_BAR_TEXT_LEFT) or 32, -8)
     end
 
-    -- Auctions (a player asked, 2026-10-14): your auctions, the undercut
-    -- ones first with a Cancel each, UI/AuctionsView.lua.
-    local views = { { "sell", L["Sell"] }, { "buy", L["Buy"] }, { "auctions", L["Auctions"] } }
+    -- Lists (a player asked, 2026-10-14): the player's own named shopping
+    -- lists, UI/ShoppingListsView.lua. Auctions (asked the same day): your
+    -- auctions, the undercut ones first with a Cancel each, UI/AuctionsView.lua.
+    local views = { { "sell", L["Sell"] }, { "buy", L["Buy"] }, { "lists", L["Lists"] }, { "auctions", L["Auctions"] } }
     local share = math.floor((PANEL_WIDTH - 28) / #views)
     local tabs = {}
     for _, view in ipairs(views) do tabs[#tabs + 1] = { key = view[1], text = view[2], width = share } end
@@ -576,6 +577,12 @@ function PostPanel:Build()
     shopping:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, LIST_BOTTOM)
     shopping:Hide()
     self.shoppingList = shopping
+
+    local View = ns.ShoppingListsView
+    if View then
+        View:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
+        if View.paste then View.paste:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3) end
+    end
 
     if ns.AuctionsView then
         ns.AuctionsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
@@ -1113,7 +1120,7 @@ end
 
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
-    self.view = (view == "buy" or view == "auctions") and view or "sell"
+    self.view = (view == "buy" or view == "lists" or view == "auctions") and view or "sell"
     if self.switch then self.switch:Select(self.view) end
     self.shoppingAt = nil
     self:Refresh()
@@ -1240,19 +1247,24 @@ function PostPanel:Refresh()
     if self.hideLosses then
         local showBox = self.view == "sell"
         self.hideLosses:SetShown(showBox)
-        if self.summaryBeside ~= showBox then
-            -- On Buy the box is gone, so the summary has the whole width
-            -- rather than wrapping to two lines beside an empty space.
+        -- What sits at the summary line's right end: Hide losses on Sell,
+        -- Paste a list on Lists, nothing on Buy, where the summary has the
+        -- whole width rather than wrapping beside an empty space.
+        local beside = showBox and "box" or self.view == "lists" and "paste" or "none"
+        if self.summaryBeside ~= beside then
             if self.summary and self.frame then
+                local View = ns.ShoppingListsView
                 self.summary:ClearAllPoints()
                 self.summary:SetPoint("TOPLEFT", self.switch, "BOTTOMLEFT", 0, -6)
-                if showBox then
+                if beside == "box" then
                     self.summary:SetPoint("RIGHT", self.hideLosses, "LEFT", -8, 0)
+                elseif beside == "paste" and View and View.paste then
+                    self.summary:SetPoint("RIGHT", View.paste, "LEFT", -8, 0)
                 else
                     self.summary:SetPoint("RIGHT", self.frame, "RIGHT", -14, 0)
                 end
             end
-            self.summaryBeside = showBox
+            self.summaryBeside = beside
         end
     end
 
@@ -1274,9 +1286,11 @@ function PostPanel:Refresh()
     end
 
     self:UpdateAuctionsTab()
+    local View = ns.ShoppingListsView
+    if View and View.list then View:SetShown(self.view == "lists") end
     local Auctions = ns.AuctionsView
     if Auctions and Auctions.list then Auctions:SetShown(self.view == "auctions") end
-    if self.footNote then self.footNote:SetShown(self.view ~= "auctions") end
+    if self.footNote then self.footNote:SetShown(self.view ~= "lists" and self.view ~= "auctions") end
 
     if self.view == "auctions" then
         if self.listAll then self.listAll:Hide() end
@@ -1287,6 +1301,19 @@ function PostPanel:Refresh()
             Auctions:Refresh()
             self.summary:SetText(Auctions:Summary())
             self:SetTitle(Auctions:Title())
+        end
+        return
+    end
+
+    if self.view == "lists" then
+        if self.listAll then self.listAll:Hide() end
+        self.list:Hide()
+        self.shoppingList:Hide()
+        self.empty:Hide()
+        self:SetTitle(L["Shopping lists"])
+        if View then
+            self.summary:SetText(View:Summary())
+            View:Refresh()
         end
         return
     end

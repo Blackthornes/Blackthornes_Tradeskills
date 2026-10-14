@@ -13,7 +13,7 @@ local _, ns = ...
 
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
-local View = ns.NewModule("AuctionsView")
+local AuctionsView = ns.NewModule("AuctionsView")
 
 local Theme = ns.Theme
 local Widgets = ns.Widgets
@@ -60,7 +60,7 @@ end
 
 --- The detail line under the name, longest first: the row keeps the first
 --- that fits, so nothing ends in "...".
-function View.DetailTexts(row)
+function AuctionsView.DetailTexts(row)
     local each = L.Format("%d @ %s", row.quantity or 1, Money(row.unit))
     local ends = row.left and L.Format("ends in %s", Util.FormatAge(row.left)) or nil
     local texts = {}
@@ -99,7 +99,7 @@ function View.DetailTexts(row)
 end
 
 --- What sits at the row's right end when there is no Cancel button.
-function View.BadgeText(row)
+function AuctionsView.BadgeText(row)
     if row.alt then return L["Log in to cancel"], "dim" end
     if row.cancelling then return L["Cancelling"], "warn" end
     if row.state == "cheapest" then return L["Cheapest"], "profit" end
@@ -108,7 +108,7 @@ function View.BadgeText(row)
 end
 
 --- The deposit line under Cancel.
-function View.DepositText(row)
+function AuctionsView.DepositText(row)
     local deposit, rough = ns.MyAuctions:Deposit(row)
     if not deposit then return nil end
     return rough and L.Format("deposit about %s", Money(deposit)) or L.Format("deposit %s", Money(deposit))
@@ -201,7 +201,7 @@ local function UpdateRow(row, entry)
     local r, g, b = Util.GetItemQualityColor(entry.itemID)
     if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
 
-    Theme.FitText(row.detail, View.DetailTexts(entry))
+    Theme.FitText(row.detail, AuctionsView.DetailTexts(entry))
 
     local undercut = entry.state == "undercut" and entry.mine and not entry.cancelling
     row.redEdge:SetShown(entry.state == "undercut")
@@ -212,7 +212,7 @@ local function UpdateRow(row, entry)
         row.cancelReason = (not allowed) and reason or nil
     end
 
-    local deposit = undercut and View.DepositText(entry) or nil
+    local deposit = undercut and AuctionsView.DepositText(entry) or nil
     row.deposit:SetShown(deposit ~= nil)
     row.deposit:SetText(deposit or "")
     if deposit then
@@ -220,7 +220,7 @@ local function UpdateRow(row, entry)
     end
 
     local badge, color = nil, nil
-    if not undercut then badge, color = View.BadgeText(entry) end
+    if not undercut then badge, color = AuctionsView.BadgeText(entry) end
     row.badge:SetShown(badge ~= nil)
     if badge then
         row.badge:SetText(badge)
@@ -260,7 +260,7 @@ end
 --------------------------------------------------------------------------------
 
 --- The rows with their group headings, ready to draw.
-function View.Lay(rows)
+function AuctionsView.Lay(rows)
     local out = {}
     local heads = {
         undercut = { L["UNDERCUT"], nil },
@@ -284,7 +284,7 @@ function View.Lay(rows)
     return out
 end
 
-function View:Build(body, frame, topAnchor, opts)
+function AuctionsView:Build(body, frame, topAnchor, opts)
     if self.list then return end
     opts = opts or {}
 
@@ -309,7 +309,7 @@ function View:Build(body, frame, topAnchor, opts)
     end
     local cancelNext = Widgets.CreateButton(body, L["Cancel next"], function()
         ns.MyAuctions:CancelNext()
-        View:Refresh(true)
+        AuctionsView:Refresh(true)
     end, { width = nextWidth, height = 22, primary = true,
            tooltip = L["Cancels the undercut auction with the most money under, one a click. It comes back in the mail."] })
     cancelNext:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
@@ -332,7 +332,7 @@ function View:Build(body, frame, topAnchor, opts)
     self:SetShown(false)
 end
 
-function View:SetShown(on)
+function AuctionsView:SetShown(on)
     self.shown = on and true or false
     for _, part in ipairs(self.parts or {}) do part:SetShown(self.shown) end
     if self.empty and not self.shown then self.empty:Hide() end
@@ -341,7 +341,7 @@ end
 
 --- Built again only when a read, a cancel or a scan moved, or a minute
 --- passed (the time left on each row): the drawer refreshes every second.
-function View:Refresh(force)
+function AuctionsView:Refresh(force)
     if not (self.list and self.shown) then return end
 
     local MyAuctions = ns.MyAuctions
@@ -351,7 +351,7 @@ function View:Refresh(force)
 
     local rows, summary = MyAuctions:Rows()
     self.rows, self.summaryData = rows, summary
-    self.list:SetData(View.Lay(rows))
+    self.list:SetData(AuctionsView.Lay(rows))
 
     self.empty:SetShown(#rows == 0)
     if #rows == 0 then
@@ -368,7 +368,7 @@ function View:Refresh(force)
 end
 
 --- The drawer's summary line.
-function View:Summary()
+function AuctionsView:Summary()
     local summary = self.summaryData
     if not summary then return "" end
     local parts = { L.Format("%d up", summary.up) }
@@ -381,7 +381,7 @@ function View:Summary()
 end
 
 --- The drawer's header title.
-function View:Title()
+function AuctionsView:Title()
     local summary = self.summaryData
     if summary and summary.undercut > 0 then
         return L.Format("Your auctions (%d undercut)", summary.undercut), L["Your auctions"]
@@ -390,7 +390,7 @@ function View:Title()
 end
 
 --- How many are undercut, for the count on the switch.
-function View:UndercutCount()
+function AuctionsView:UndercutCount()
     local MyAuctions = ns.MyAuctions
     if not MyAuctions then return 0 end
     local count = 0
