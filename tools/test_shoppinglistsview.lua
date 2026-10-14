@@ -136,7 +136,7 @@ check("Enter renames it", Lists:Get(1).name == "Herbs" and View.mode == "add")
 
 View:SetMode("copy", 1)
 local line = View.box.edit.text
-check("copy shows the line to copy", line == "BTSlist1:Herbs:2447*40,765*1" and not View.save.shown)
+check("copy shows the line to copy", line == "BTSlist1:Herbs:2447x40,765x1" and not View.save.shown)
 View:SetMode("paste")
 Type(line)
 check("paste makes a new list and opens it", Lists:Get(2) and Lists:Get(2).name == "Herbs 2" and View.open == 2)
