@@ -54,6 +54,7 @@ Logic\LearnNext.lua
 Logic\Queue.lua
 Logic\QueueActions.lua
 Logic\QueueMail.lua
+Logic\ShoppingLists.lua
 Logic\AHBuys.lua
 Logic\DisenchantBuys.lua
 Logic\Crafting.lua
@@ -92,6 +93,7 @@ UI\WhatsNew.lua
 UI\Collapse.lua
 UI\PriceGraph.lua
 UI\Main.lua
+UI\ShoppingListsView.lua
 UI\PostPanel.lua
 UI\PriceEditor.lua
 UI\BuyQuantity.lua

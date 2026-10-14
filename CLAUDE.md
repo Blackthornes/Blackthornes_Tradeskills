@@ -632,6 +632,25 @@ valuable first of what Sell shows). Beside it on Sell, a Duration box (2, 8 or 2
 hours, opening upward) sets the same `postDuration` as the Post tab's. Tested in `tools/test_postdrawer.lua`.
 Not yet seen in game.
 
+## Shopping lists
+
+A player asked (2026-10-14, the owner said build it) for named shopping
+lists. The auction house drawer's switch is Sell, Buy and Lists
+(`UI/ShoppingListsView.lua`): "From your craft queue" first (the Buy view's
+items, never saved, Save as a list keeps a copy), then the player's own
+lists, each with a gold Search that looks up every item still needed (one
+`C_AuctionHouse.SearchForItemKeys` through `AHQueue` where the client has
+it, else one at a time with a "Next 2/5" button), and per item how many are
+owned, the price, a box for how many are wanted, its own Search and an x.
+The foot box adds an item (a typed name, "Name 40", an ID, or a Shift-click
+anywhere while it types: `View:TakeItem`, from `HandleModifiedItemClick`
+and `Widgets.ItemShiftClick`), names a new list, renames, shows a list's
+copy line (`BTSlist1:<name>:<id>*<want>,...`) or takes a pasted one. Delete
+takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
+`shoppingLists = { { name, items = { { id, want } } } }` (never rename it).
+Tested in `tools/test_shoppinglists.lua` and
+`tools/test_shoppinglistsview.lua`.
+
 ## The Blizzard window style
 
 The owner asked (2026-10-10) for a choice of the game's own look beside
