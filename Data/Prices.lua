@@ -371,6 +371,7 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
     Prices.NoteDaily(record, scannedAt, quantity)
+    Prices.NoteTrend(record, scannedAt)
 
     local history = record.history
     history[#history + 1] = { t = scannedAt, m = record.market, q = quantity }
@@ -1104,6 +1105,91 @@ function Prices:GetDailySales(itemID, now)
         if sold ~= nil then any = true end
     end
     return any and out or nil
+end
+
+--------------------------------------------------------------------------------
+-- The trend: market value now against its average over a week or two
+--------------------------------------------------------------------------------
+
+-- A player asked (2026-10-14, the owner agreeing) for a sortable trend on
+-- the Prices tab and the tooltip: how far an item's market value now sits
+-- above or below its average over the last 7 or 14 days. The twelve kept
+-- readings rarely reach back that far, so each record also keeps `trend`
+-- (never rename it): flat day, copper pairs (day = time() / 86400, rounded
+-- down), the market value as the last scan of that day left it, for up to
+-- TREND_KEEP days. One pair a day, so it stays small for every item.
+Prices.TREND_KEEP = 14
+-- Fewer days scanned than this in the period says nothing yet.
+Prices.TREND_MIN_DAYS = 3
+-- The periods a player can pick, in days.
+Prices.TREND_PERIODS = { 7, 14 }
+
+function Prices.NoteTrend(record, at)
+    if type(record) ~= "table" or type(at) ~= "number" or type(record.market) ~= "number" then return end
+
+    local list = record.trend
+    if type(list) ~= "table" then
+        list = {}
+        record.trend = list
+    end
+
+    local today = math.floor(at / DAY)
+    local count = #list
+    if count >= 2 and type(list[count - 1]) == "number" and list[count - 1] > today then return end
+    if count >= 2 and list[count - 1] == today then
+        list[count] = record.market
+    else
+        list[count + 1] = today
+        list[count + 2] = record.market
+    end
+
+    local oldest = today - Prices.TREND_KEEP + 1
+    while type(list[1]) == "number" and list[1] < oldest do
+        table.remove(list, 1)
+        table.remove(list, 1)
+    end
+end
+
+--- The period the trend reads, in days: 7 unless 14 was picked.
+function Prices:TrendDays()
+    local days = ns.Config and ns.Config.Get and ns.Config:Get("priceTrendDays")
+    return days == 14 and 14 or 7
+end
+
+--- How far the market value now sits from its average over the last `days`
+--- days (the picked period when not given), as a fraction: 0.24 is 24% above.
+--- nil when fewer than TREND_MIN_DAYS days in the period were scanned.
+-- @return fraction or nil, days scanned in the period
+function Prices:GetTrend(itemID, days, now)
+    local record = itemID and self:GetTable()[itemID]
+    if type(record) ~= "table" or type(record.market) ~= "number" or record.market <= 0 then return nil, 0 end
+    local list = record.trend
+    if type(list) ~= "table" then return nil, 0 end
+
+    days = days or self:TrendDays()
+    local from = math.floor((now or time()) / DAY) - days + 1
+    local sum, count = 0, 0
+    for index = 1, #list - 1, 2 do
+        local day, value = list[index], list[index + 1]
+        if type(day) == "number" and type(value) == "number" and day >= from and value > 0 then
+            sum = sum + value
+            count = count + 1
+        end
+    end
+
+    if count < self.TREND_MIN_DAYS then return nil, count end
+    local average = sum / count
+    return (record.market - average) / average, count
+end
+
+--- "+24%", "-12%", "0%": the trend as the lists and tooltip show it, and
+--- the colour it is drawn in.
+function Prices.TrendText(trend)
+    if type(trend) ~= "number" then return nil end
+    local percent = trend >= 0 and math.floor(trend * 100 + 0.5) or -math.floor(-trend * 100 + 0.5)
+    if percent > 0 then return ("+%d%%"):format(percent), "profit" end
+    if percent < 0 then return ("%d%%"):format(percent), "loss" end
+    return "0%", "muted"
 end
 
 --- How much to trust this item's price: scan count, recency and depth.

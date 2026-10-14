@@ -22,6 +22,9 @@ local DETAIL_WIDTH = 300
 -- centred under its heading. `width` is the least each gets:
 -- Widgets.FitColumns widens it to fit the heading and a full amount.
 local COLUMNS = {
+    -- Market value now against its average over the picked period
+    -- (2026-10-14): green up, red down.
+    { key = "trend",     label = L["TREND"], width = 48, justify = "CENTER" },
     { key = "age",       label = L["AGE"], width = 44, justify = "CENTER" },
     { key = "liquidity", label = L["MOVES"], width = 52, justify = "CENTER" },
     { key = "quantity",  label = L["LISTED"], width = 52, justify = "CENTER" },
@@ -144,6 +147,7 @@ local function BuildList()
     local stored = wantNames and StoredNames() or {}
 
     local prices = ns.Prices:GetTable()
+    local trendDays = ns.Prices.TrendDays and ns.Prices:TrendDays() or 7
 
     -- The Enchanting tab's materials list lives here now
     -- (2026-10-07): every enchanting material, priced or not.
@@ -172,6 +176,7 @@ local function BuildList()
             quantity = record.quantity or 0,
             age = ns.Prices:GetAge(itemID) or math.huge,
             liquidity = ns.Prices:GetSalesPerDay(itemID),
+            trend = ns.Prices.GetTrend and (ns.Prices:GetTrend(itemID, trendDays)) or nil,
             name = wantNames and (PlainName(itemID) or stored[itemID]
                 or ("~item %d"):format(itemID)) or "",
         }
@@ -410,6 +415,11 @@ local function UpdateRow(row, entry)
         cells.liquidity:SetText("--")
         cells.liquidity:SetTextColor(Theme.Unpack("dim"))
     end
+
+    -- Up in green, down in red; "--" until a few days were scanned.
+    local trendText, trendColor = ns.Prices.TrendText and ns.Prices.TrendText(entry.trend)
+    cells.trend:SetText(trendText or "--")
+    cells.trend:SetTextColor(Theme.Unpack(trendColor or "dim"))
 
     -- "now" rather than "just now", which is wider than the column.
     local age = Util.FormatAge(entry.record.seen and (time() - entry.record.seen))
@@ -847,11 +857,23 @@ local function Build(container)
         if widgets.list then widgets.list:ScrollToTop() end
     end
 
+    -- The trend's period (2026-10-14), shared with the tooltip line.
+    local trendPeriod = Widgets.CreateDropdown(toolbar, {
+        { text = L["Trend: 7 days"], value = 7 },
+        { text = L["Trend: 14 days"], value = 14 },
+    }, function(value)
+        ns.Config:Set("priceTrendDays", value == 14 and 14 or 7)
+        Refresh()
+    end, { width = 120 })
+    trendPeriod:SetPoint("LEFT", 0, 0)
+    trendPeriod:SetValue(ns.Prices.TrendDays and ns.Prices:TrendDays() or 7)
+    widgets.trendPeriod = trendPeriod
+
     local search = Widgets.CreateSearchBox(toolbar, L["Search items"], function(text)
         state.search = text or ""
         ShowFromTop()
     end)
-    search:SetPoint("LEFT", 0, 0)
+    search:SetPoint("LEFT", trendPeriod, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
     local reagentsOnly = Widgets.CreateCheckbox(toolbar, L["Only what I craft with"], function(checked)
@@ -912,7 +934,7 @@ local function Build(container)
     local function Field(key) return function(row) return row[key] end end
     widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
         name = Field("name"), market = Field("market"), min = Field("min"),
-        quantity = Field("quantity"), liquidity = Field("liquidity"),
+        quantity = Field("quantity"), liquidity = Field("liquidity"), trend = Field("trend"),
         age = function(row) return row.age ~= math.huge and row.age or nil end,
     }, function() ShowFromTop() end)
     if widgets.sorter then widgets.sorter:SetText({ "name" }) end
