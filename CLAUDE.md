@@ -704,9 +704,15 @@ lists, each with a gold Search that looks up every item still needed (one
 `C_AuctionHouse.SearchForItemKeys` through `AHQueue` where the client has
 it, else one at a time with a "Next 2/5" button), and per item how many are
 owned, the price, a box for how many are wanted, its own Search and an x.
-The foot box adds an item (a typed name, "Name 40", an ID, or a Shift-click
-anywhere while it types: `View:TakeItem`, from `HandleModifiedItemClick`
-and `Widgets.ItemShiftClick`), names a new list, renames, shows a list's
+The foot box adds an item (part of a name in any case, "linen 20", an ID,
+or a Shift-click anywhere while a list is open and no chat box is typed in:
+`View:TakeItem`, hooked after `HandleModifiedItemClick`, `ChatEdit_InsertLink`
+and `ChatFrameUtil.InsertLink`, and from `Widgets.ItemShiftClick`; a player
+found Shift-click and part names did nothing, 2026-10-14). Names above the
+box come from `ShoppingLists:Suggest` over `BuildNames` (prices, recipes and
+their materials, bags, stars, the ledger; only names the client has loaded,
+built a slice a frame, kept 60 s), dark glass rows, Up/Down, Tab and Enter;
+it also names a new list, renames, shows a list's
 copy line (`BTSlist1:<name>:<id>*<want>,...`) or takes a pasted one. Delete
 takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
 `shoppingLists = { { name, items = { { id, want } } } }` (never rename it).
