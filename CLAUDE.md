@@ -409,6 +409,21 @@ out again only when the recipe count changes (checked at most every
 (`tradeRequests`, off unless ticked, the owner 2026-10-12; never rename it) and `/bts requests`.
 Tested in `tools/test_craftrequests.lua`. Not yet seen in game.
 
+## Craft next frees bag space first
+
+A player asked (2026-10-14, the owner agreeing) for the queue to craft
+what frees the most bag slots first. Only Craft next's pick changes, on the
+Queue tab and in the profession window (`Crafting:PickNext`, called by
+`GetNextReady` and `CraftPanel:GetNextReadyHere`): of the ready crafts,
+the one whose materials stop taking the most stacks, less the new stacks
+what it makes takes (`Crafting:SlotsFreed`, from the bags' counts and
+`BagsFull.MaxStack`, kept until `Inventory.changes` or `Queue.version`
+moves). Ties keep queue order, and a craft waits while a ready sub-craft
+of its own (up its `forRecipes` chain) is ready. The stored queue never
+moves. The button's tooltip says how many slots it frees. "Craft what frees
+bag space first" on the Queue page (`craftFreesSpaceFirst`, on unless
+unticked, never rename it). Tested in `tools/test_freespacefirst.lua`.
+
 ## Keep in stock by profession
 
 A player asked (2026-10-13, the owner agreeing) for Keep in stock per
@@ -485,6 +500,30 @@ this week's sales and expiries from the ledger). Each price record keeps
 with Shift" on the Look page (`tooltipSalesShift`, off unless ticked,
 never rename it). Tested in `tools/test_tooltipsales.lua`. Not yet seen in
 game; the bars are the game's inline texture escape.
+
+## The Stats tab
+
+The owner asked (2026-10-14, from a mockup) for a tab like Farmer's
+Stats tab, one item at a time. `UI/Tab_Stats.lua` (order 6, after
+Prices) lists what you craft, star and sell (sold most in 30 days first;
+a search finds any priced item by its saved name) and draws the picked
+item: four numbers (worth now against a week ago, profit each, sold a
+day, you sold this week), the price graph, then cards: cheapest times
+by day and hour, where each sale goes, your listings, sales by week
+(the best week lit, cheered once a week with a sound, "Best week of
+sales", `statsCheer`, on unless unticked), listed at each scan, price by
+source, the last 90 days, who else sells it, how fast yours sell and
+the last 30 days by method. `Logic/ItemStats.lua` builds it (each part
+in a pcall), only while the tab shows and again only when
+`ItemStats:Key` moves, a moment after. `Data/StatsLog.lua` keeps what
+nothing else did, for tracked items only (`PriceHistory:IsTracked`),
+per realm, never renamed: `statsDays` (day, cheapest, sold; 90 days,
+from `Prices:Record`), `statsSellers` (how many sell it and the shares,
+from `CommitScan` with the full scan's `seller`; never a name),
+`statsPosts` and `statsSellTimes` (your postings from `Posting`, timed
+when the mail ledger writes the sale) and `statsCheered`. `/bts stats
+[item]`, a Settings row on the Look page and a Stats button on the
+Prices tab's detail pane open it. Tested in `tools/test_itemstats.lua`.
 
 ## Profit by method
 

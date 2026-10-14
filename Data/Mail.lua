@@ -944,9 +944,11 @@ function Mail:Reconcile(mails, complete)
                     ns.Debug("mail written down before:", tostring(mail.subject))
 
                 elseif kind then
-                    ledger.entries[#ledger.entries + 1] =
-                        Describe(mail, kind, itemName, invoice)
+                    local entry = Describe(mail, kind, itemName, invoice)
+                    ledger.entries[#ledger.entries + 1] = entry
                     self.unresolvedFor = nil
+                    -- How long your listings take to sell (Data/StatsLog.lua).
+                    if ns.StatsLog then pcall(ns.StatsLog.NoteLedger, ns.StatsLog, entry, mail) end
 
                 else
                     -- Ordinary mail from a person. Counted as stock above, and

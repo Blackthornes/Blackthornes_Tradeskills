@@ -384,6 +384,14 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
         ns.PriceHistory:NoteListed(itemID, quantity, scannedAt)
     end
 
+    -- The Stats tab's ninety days: the cheapest of each day, and its sales.
+    if ns.StatsLog then
+        local days = type(record.daily) == "table" and record.daily.days
+        local count = type(days) == "table" and #days or 0
+        local sold = count >= 2 and days[count - 1] == math.floor(scannedAt / 86400) and days[count] or nil
+        pcall(ns.StatsLog.NoteDay, ns.StatsLog, itemID, Prices.LowestListed(record), sold, scannedAt)
+    end
+
     return record
 end
 
@@ -655,6 +663,9 @@ function Prices:CommitScan(observations, scannedAt)
 
     local recorded = 0
     for itemID, listings in pairs(observations) do
+        -- How many sell it, for the Stats tab; the names go no further.
+        if ns.StatsLog then pcall(ns.StatsLog.NoteSellers, ns.StatsLog, itemID, listings, scannedAt) end
+
         local marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder =
             self:Summarise(listings, self:GetScanValue(itemID, "market"))
         if marketValue then
