@@ -534,8 +534,10 @@ end
 --- Look up several items at once in the game's own results, where the
 --- client offers it; through the same throttled queue as every other search,
 --- so it never costs the player a listing.
+-- @param counts optional [itemID] = how many are still needed: picking one
+--   in the results fills the buy window's quantity box (UI/BuyQuantity.lua)
 -- @return true when the search was queued, or false and why
-function ShoppingLists:SearchMany(itemIDs)
+function ShoppingLists:SearchMany(itemIDs, counts)
     if type(itemIDs) ~= "table" or #itemIDs == 0 then
         return false, L["Nothing on this list to look for on the auction house."]
     end
@@ -559,6 +561,8 @@ function ShoppingLists:SearchMany(itemIDs)
         if ok and key then keys[#keys + 1] = key end
     end
     if #keys == 0 then return false, "single" end
+
+    if ns.BuyQuantity then ns.BuyQuantity:WantMany(counts) end
 
     ns.AHQueue:Request({
         name = ("search the auction house for %d items"):format(#keys),
