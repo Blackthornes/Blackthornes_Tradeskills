@@ -1282,7 +1282,7 @@ ns.SalesTab = {
 UI:RegisterTab({
     key = "sales",
     text = L["Sales"],
-    order = 6,
+    order = 10,
     build = Build,
     refresh = Refresh,
 })
