@@ -430,6 +430,9 @@ function UI:OnScanComplete(result)
     if result then
         self:CelebrateScan(result)
 
+        -- Other addons that asked to hear about it (Prices:WatchScans).
+        if ns.Prices and ns.Prices.ScanFinished then ns.Prices:ScanFinished(result) end
+
         -- A moment later, so its chime does not land on the scan's own.
         if ns.Disenchant and C_Timer and C_Timer.After then
             C_Timer.After(1.5, function() ns.Disenchant:AnnounceDeals() end)

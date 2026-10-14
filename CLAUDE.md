@@ -54,6 +54,18 @@ to the smoothed market value (`Data/Prices.lua`). If one has to change, change
 Farmer's `Logic/Value.lua` in the same breath and tell the owner both need
 updating.
 
+Farmer's top farm alert (2026-10-14) also asks to hear when a scan
+finishes, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Prices:WatchScans(fn)   -- fn({ items, at }) after each scan that wrote prices
+```
+
+`Prices:ScanFinished(result)` (from `UI:OnScanComplete`, only for a scan
+that recorded prices) calls each watcher in a pcall and moves
+`Prices.scanCount`. Keep `WatchScans` stable; if it changes, change
+Farmer's `Logic/TopFarm.lua` too. Tested in `tools/test_scanwatch.lua`.
+
 ## How Tradeskills uses Farmer
 
 The Gather tab's **Set goal** button (`Logic/FarmerGoals.lua`) turns a

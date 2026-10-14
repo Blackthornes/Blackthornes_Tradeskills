@@ -610,6 +610,41 @@ function Prices:SetLastFullScan(at)
     end
 end
 
+--------------------------------------------------------------------------------
+-- Telling other addons a scan finished
+--------------------------------------------------------------------------------
+
+-- Farmer asks to hear when a scan has written its prices (2026-10-14), so it
+-- can look at its board again with them. Nothing else here waits on it.
+Prices.scanWatchers = Prices.scanWatchers or {}
+Prices.scanCount = Prices.scanCount or 0
+
+--- Call `fn(info)` each time a scan finishes and has written prices:
+--- info = { items = how many it recorded, at = time() }. Each watcher runs
+--- in a pcall, so one that raises never stops the scan or the others.
+--- Returns true when it is watching.
+function Prices:WatchScans(fn)
+    if type(fn) ~= "function" then return false end
+    for _, watcher in ipairs(self.scanWatchers) do
+        if watcher == fn then return true end
+    end
+    self.scanWatchers[#self.scanWatchers + 1] = fn
+    return true
+end
+
+--- A scan finished with `result` (UI:OnScanComplete's): tell the watchers.
+--- A cancelled scan, or one that recorded nothing, says nothing.
+function Prices:ScanFinished(result)
+    if type(result) ~= "table" or (tonumber(result.items) or 0) <= 0 then return end
+    self.scanCount = self.scanCount + 1
+
+    local info = { items = tonumber(result.items), at = time() }
+    for _, watcher in ipairs(self.scanWatchers) do
+        local ok, err = pcall(watcher, info)
+        if not ok and ns.Debug then ns.Debug("scan watcher:", tostring(err)) end
+    end
+end
+
 --- ClearMissing, for a scan that believes it read the whole auction house.
 --
 -- The last line of defence for the player's prices. A scan that saw far
