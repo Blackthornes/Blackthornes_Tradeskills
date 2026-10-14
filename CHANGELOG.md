@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.55.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Stock from your sales:** with Keep in stock at 0, Queue All and Restock
+  what sells keep about two days of what sold for you this week. The Profit
+  tab's STOCK column now shows that number, dimmed, as held and kept, and
+  "Stock from your sales" on the Queue page turns it off.
+- **Raise it when it sells out:** it now starts unticked. Tick it on the
+  Queue page to have Keep in stock go up by itself.
+
 ## 0.55.0
 
 For WoW: Forever (interface 16001). Files were added, so restart fully

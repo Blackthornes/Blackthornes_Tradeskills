@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.55.1
+
+Fixes and changes:
+
+- The Profit tab shows how many of a craft Queue All plans to keep, based on what you sold this week, and you can turn that off.
+- Adding one to your stock when a craft sells out is off until you turn it on.
+
+Thanks Voldar for the report!
+
 ## 0.55.0
 
 - This is the largest AddOn update so far across the whole suite of Blackthornes addons.
