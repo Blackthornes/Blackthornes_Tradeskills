@@ -399,6 +399,19 @@ count for the buy box ("one"), and Butler sends the rest on the next click.
 Tested in `tools/test_butlersearch.lua`. Keep it stable; Butler's
 `Logic/Quests.lua` calls it.
 
+Butler's bank alt (a player asked, the owner said build it, 2026-10-14)
+can take everything on one of the player's shopping lists, so it reads
+them, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:Lists()   -- { { name, items = { [itemID] = want } } }, ShoppingLists.version; or nil
+```
+
+The player's own lists only (`ShoppingLists:Readable`), never the craft
+queue's, fresh tables each time; nothing is written. Tested in
+`tools/test_butlerlists.lua`. Keep it stable; Butler's `Logic/BankAlt.lua`
+reads it.
+
 ## Profession cooldowns
 
 The owner said yes (2026-10-12) to keeping profession cooldowns for every
