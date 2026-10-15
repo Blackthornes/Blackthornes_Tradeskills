@@ -132,6 +132,7 @@
 --
 --   _G.BlackthornesTS.Butler:Jobs()             -- a list, or nil; reads only
 --   _G.BlackthornesTS.Butler:Craft(recipeID)    -- true, or false and why
+--   _G.BlackthornesTS.Butler:Profession(recipeID)  -- { name, spell, open }, or nil
 --
 -- Jobs is one entry per character with something to do in the queue, the
 -- character playing first, then by name: { key, name (full), isCurrent,
@@ -1323,6 +1324,29 @@ function Butler:Craft(recipeID)
     end)
     if not ok then return false, L["Tradeskills could not start the craft"] end
     return done == true, why
+end
+
+--- The profession a recipe is made in, for Butler's Craft button (the owner
+--- asked 2026-10-15 for it to open the profession, as the Queue tab's craft
+--- button does): `name` as the client gives it, `spell` the spell that opens
+--- its window (Smelting for Mining), `open` true while the profession window
+--- shows the recipe, so a click crafts. Opening it is a cast, so Butler lays
+--- a secure button of its own set to `spell` over its Craft button. nil for
+--- a recipe with no window to open or one not known. Never raises.
+function Butler:Profession(recipeID)
+    recipeID = tonumber(recipeID)
+    if not recipeID then return nil end
+    local ok, result = pcall(function()
+        local opener = ns.ProfessionOpener
+        if not (opener and opener.ProfessionFor) then return nil end
+        local profession = opener:ProfessionFor(recipeID)
+        if type(profession) ~= "table" or type(profession.spell) ~= "string" then return nil end
+        local open = ns.Crafting and ns.Crafting.isTradeSkillOpen
+            and (not opener.WindowShowsRecipe or opener:WindowShowsRecipe(recipeID))
+        return { name = profession.name, spell = profession.spell, open = open and true or false }
+    end)
+    if ok and type(result) == "table" then return result end
+    return nil
 end
 
 --- Butler takes over the mailbox (the owner picked it, 2026-10-11): while

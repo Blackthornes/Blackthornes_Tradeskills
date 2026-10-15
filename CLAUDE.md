@@ -326,6 +326,7 @@ two more, inside a pcall:
 ```lua
 _G.BlackthornesTS.Butler:Jobs()            -- a list, or nil; never raises; reads only
 _G.BlackthornesTS.Butler:Craft(recipeID)   -- true and "crafting" or "opened", or false and why
+_G.BlackthornesTS.Butler:Profession(recipeID)  -- { name, spell, open }, or nil
 ```
 
 `Jobs` is one entry per character with something to do in the queue (the
@@ -362,8 +363,12 @@ priority list") is a `pickup` step put first on its line (`items`,
 `forCraft`): materials its crafts count on (`Queue:HeldBy`) that are not in
 its bags or bank, so sit in its mailbox or are on their way, and anything
 else mailed to it and not yet seen arrive (`QueueMail:InFlightItems`).
-Tested in `tools/test_butlerjobs.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
-reads them.
+`Profession` (2026-10-15) names the profession a recipe is made in and the
+spell that opens its window (`ProfessionOpener:ProfessionFor`), with `open`
+while the window shows the recipe, so Butler's Craft button can open the
+profession through a secure button of its own and craft on the next click.
+Tested in `tools/test_butlerjobs.lua`. Keep all three stable; Butler's
+`Logic/Jobs.lua` reads them.
 
 Butler takes over the mailbox (the owner picked it, 2026-10-11): its
 window comes up at every mailbox, and while it is up there it calls
