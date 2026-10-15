@@ -693,7 +693,7 @@ function Queue:NeverMakeTooltip(entry)
     local recipe = entry and ns.Recipes:GetAny(entry.recipeID)
     local name = (recipe and recipe.name) or L["this"]
     return L.Format("Never make %s as a sub-craft", name) .. "\n"
-        .. L["Buy it instead, in this queue and from now on. You can still queue it on its own. To undo it, click Allow under Settings, Queue."]
+        .. L["Buys it instead from now on. You can still queue it on its own. Undo it with Allow in Settings, Queue."]
 end
 
 --- What one of a sub-craft's items costs to buy and to make, for the note

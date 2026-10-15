@@ -159,11 +159,11 @@ local function CreateRow(row)
         if row.cancelReason then GameTooltip:AddLine(row.cancelReason, Theme.Unpack("loss")) end
         local deposit = ns.MyAuctions:Deposit(data)
         if deposit then
-            GameTooltip:AddLine(L.Format("The deposit is not returned, so listing it again costs about %s.",
+            GameTooltip:AddLine(L.Format("You lose the deposit, so listing it again costs about %s.",
                 Util.FormatMoney(deposit, { noColor = true })), 0.7, 0.7, 0.7, true)
         end
         if ns.MyAuctions:GapSmallerThanDeposit(data) then
-            GameTooltip:AddLine(L["The new deposit costs more than the gap you would close."], Theme.Unpack("warn"))
+            GameTooltip:AddLine(L["Listing it again costs more than you'd gain."], Theme.Unpack("warn"))
         end
         GameTooltip:Show()
     end)
@@ -282,10 +282,10 @@ local function ShowTooltip(row, entry)
         GameTooltip:AddDoubleLine(L["Ends in"], Util.FormatAge(entry.left), 0.7, 0.7, 0.7, 1, 1, 1)
     end
     if entry.state == "overcut" then
-        GameTooltip:AddLine(L["Overcutting put this just under the big stack. The cheaper ones should sell first."], 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L["Posted just under the big stack. The cheaper ones should sell first."], 0.7, 0.7, 0.7, true)
     end
     if entry.state == "unknown" then
-        GameTooltip:AddLine(L["No recent scan of this item. Scan to see whether you were undercut."], 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(L["No recent scan. Scan to see if you were undercut."], 0.7, 0.7, 0.7, true)
     end
     if entry.alt then
         GameTooltip:AddLine(L.Format("On %s, as last seen. Log in there to cancel it.", CharacterName(entry.who)),
@@ -350,7 +350,7 @@ function AuctionsView:Build(body, frame, topAnchor, opts)
         ns.MyAuctions:CancelNext()
         AuctionsView:Refresh(true)
     end, { width = nextWidth, height = 22, primary = true,
-           tooltip = L["Cancels the undercut auction that's furthest under, one per click. It comes back in the mail."] })
+           tooltip = L["Cancels the auction undercut the most. It comes back in the mail."] })
     cancelNext:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
     self.cancelNext = cancelNext
 

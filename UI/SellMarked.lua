@@ -238,11 +238,11 @@ function SellMarked:Update()
 
     local lines = { L.Format("Sells what your craft queue made on Vendor: %d marked.", total) }
     if room <= 0 then
-        lines[#lines + 1] = L["That's 12 this visit, and they're all still in the vendor's buyback. Walk away and come back to sell more."]
+        lines[#lines + 1] = L["That's 12 this visit, all still in buyback. Come back later to sell more."]
     elseif self:CanSellAll() then
         lines[#lines + 1] = L.Format("One click sells up to %d, and every sale can be bought back.", room)
     else
-        lines[#lines + 1] = L["Each click sells one stack, up to 12 a visit, so buyback can still undo any of them."]
+        lines[#lines + 1] = L["Each click sells one stack, up to 12 a visit. You can buy any of them back."]
     end
     lines[#lines + 1] = L["Never sells blue or better, anything worn, or anything the queue did not make."]
     button.tooltipText = table.concat(lines, "\n")

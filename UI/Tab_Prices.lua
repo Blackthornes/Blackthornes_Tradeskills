@@ -511,7 +511,7 @@ BuildMyPrice = function(detail, anchor)
         if not my.itemID then return end
         ns.Prices:SetMine(my.itemID, nil)
         if Refresh then Refresh() end
-    end, { width = 64, height = 22, tooltip = L["Take your price off and go back to the AH price"] })
+    end, { width = 64, height = 22, tooltip = L["Back to the auction house price"] })
     my.clear:SetPoint("TOPRIGHT", my.mode, "BOTTOMRIGHT", 0, -6)
     parts[#parts + 1] = my.clear
 
@@ -529,7 +529,7 @@ BuildMyPrice = function(detail, anchor)
             Theme.SetBorderColor(box, "borderLit")
             GameTooltip:SetOwner(box, "ANCHOR_TOP")
             GameTooltip:SetText(L["My price"], 1, 1, 1)
-            GameTooltip:AddLine(L["Your own price for this item. Pick whether it replaces the AH price, or only sets the lowest it can go."], 0.9, 0.9, 0.9, true)
+            GameTooltip:AddLine(L["Your own price. Pick whether it replaces the auction house price or is the lowest it can go."], 0.9, 0.9, 0.9, true)
             GameTooltip:Show()
         end)
         box.editBox:SetScript("OnLeave", function()
@@ -688,7 +688,7 @@ local function BuildDetail(parent)
             UI:RefreshActiveTab()
         end)
     end, { width = 110, height = 24, primary = true,
-           tooltip = L["Read every listing of this item from the auction house"] })
+           tooltip = L["Looks up every listing of this item."] })
     detail.deepScan:SetPoint("BOTTOMLEFT", 12, 14)
 
     detail.searchAH = Widgets.CreateButton(detail, L["Search AH"], function()
@@ -827,7 +827,7 @@ local function UpdateDetail(entry)
 
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
     detail.deepScan.tooltipText = ns.Scanner.isAuctionHouseOpen
-        and L["Read every listing of this item from the auction house"]
+        and L["Looks up every listing of this item."]
         or L["The auction house must be open"]
 
     if type(graph) == "table" then graph:SetItem(entry.itemID) end

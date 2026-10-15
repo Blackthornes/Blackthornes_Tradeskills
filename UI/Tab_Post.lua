@@ -296,7 +296,7 @@ function UpdateRow(row, line)
         row.post:SetEnabledState(canPrice)
 
         row.post.tooltipText = canPrice
-            and L["No scan has priced this yet.\nSearch the auction house for it now."]
+            and L["Not priced yet. Click to search the auction house for it."]
             or (priceReason or L["open the auction house to check a price"])
     end
 end
@@ -326,12 +326,12 @@ local function ShowRowTooltip(row, line)
         if line.priceBasis == "undercut" then
             why = L["Undercutting the cheapest listing that is not yours"]
         elseif line.priceBasis == "overcut" then
-            why = L["Overcutting: just under the big stack, since the few cheaper ones should sell first"]
+            why = L["Just under the big stack. The few cheaper ones should sell first"]
         elseif line.priceBasis == "derived" then
             -- Neither of these two is a market observation at all.
-            why = L["No scan has priced this, so it is estimated from what its materials are worth"]
+            why = L["Not scanned yet, so priced from its materials"]
         elseif line.priceBasis == "uncontested" then
-            why = L["Nobody else is listing one, so it is priced at your materials plus the markup"]
+            why = L["Nobody else sells it, so it's your materials plus your markup"]
         elseif line.priceBasis == "mine" then
             why = L["Your own price, set on the Prices tab"]
         elseif line.priceBasis == "floor" then
@@ -343,7 +343,7 @@ local function ShowRowTooltip(row, line)
             -- stopped undercutting when in fact no smaller step exists.
             why = L["Matching the cheapest listing, since an undercut here costs a whole silver"]
             if (ns.Config:Get("undercutCopper") or 1) <= 0 then
-                why = L["Matching the cheapest listing, since Undercut by is 0c in Settings"]
+                why = L["Matching the cheapest listing, since Undercut By is 0c in Settings"]
             end
         end
 
@@ -385,7 +385,7 @@ local function ShowRowTooltip(row, line)
     end
 
     if not line.isCrafted then
-        GameTooltip:AddLine(L["None of your recipes make this. It's from your bags."],
+        GameTooltip:AddLine(L["None of your recipes make this."],
             0.5, 0.5, 0.5)
     end
 
@@ -393,10 +393,10 @@ local function ShowRowTooltip(row, line)
     -- item that does not stack (one auction each); other gear goes up one at
     -- a time.
     local together = line.isCommodity
-        and L.Format("Commodity: all %d can go up together", line.count)
+        and L.Format("All %d can go up together", line.count)
         or ((line.maxQuantity or 1) > 1
             and L.Format("All %d go up in one click, one auction each", line.maxQuantity)
-            or L["Item auction: one listing at a time"])
+            or L["One listing at a time"])
     GameTooltip:AddLine(together, 0.5, 0.5, 0.5)
 
     GameTooltip:AddLine(L["Type into the LIST box to sell fewer than that."], 0.5, 0.5, 0.5)

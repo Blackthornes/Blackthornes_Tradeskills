@@ -121,7 +121,7 @@ local function CreateRow(panel, index)
             QueueMailPanel:FillFor(row)
         end
     end, { width = BUTTON_WIDTH, height = 20, primary = true,
-        tooltip = L["Opens Send Mail with the name filled in and these attached. You press Send."] })
+        tooltip = L["Fills in the mail. You press Send."] })
     row.send:SetPoint("TOPRIGHT", 0, -3)
 
     row.rule = Theme.CreateDivider(row)
@@ -326,9 +326,9 @@ function QueueMailPanel:Refresh()
             end
             Theme.FitText(row.send.label, { L["Take next batch"], L["Take"] }, BUTTON_WIDTH - 8)
             row.send.tooltipText = batch.batches > 1
-                and L.Format("Takes as many of the queue's materials as fit in your bags, keeping %d slots free. That's about 1 of %d batches. Craft, then take the next.",
+                and L.Format("Takes as much as fits, keeping %d slots free. About 1 of %d batches. Craft, then take the next.",
                     batch.spare, math.min(batch.batches, 999))
-                or L["Takes the queue's materials from your mail. Mail asking for payment (COD) is left alone."]
+                or L["Takes the queue's materials from your mail. Never COD mail."]
             row.send:SetEnabledState(not batch.noRoom and not ns.QueueMail.filling and not ns.QueueMail.taking)
         elseif delivery.disenchant then
             Theme.FitText(row.name, { L.Format("%s, disenchanter", delivery.name), L.Format("%s, disenchanter", short), short },
@@ -344,11 +344,11 @@ function QueueMailPanel:Refresh()
         end
         if delivery.crafts then
             Theme.FitText(row.send.label, { L.Format("Send crafts to %s", short), L.Format("Send to %s", short), L["Send"] }, BUTTON_WIDTH - 8)
-            row.send.tooltipText = L.Format("Opens Send Mail to %s with the crafts their queue needs attached. You press Send.", short)
+            row.send.tooltipText = L.Format("Fills in a mail to %s with the crafts their queue needs. You press Send.", short)
             row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
         elseif not delivery.take then
             Theme.FitText(row.send.label, { L.Format("Send to %s", short), L["Send"] }, BUTTON_WIDTH - 8)
-            row.send.tooltipText = L["Opens Send Mail with the name filled in and these attached. You press Send."]
+            row.send.tooltipText = L["Fills in the mail. You press Send."]
             row.send:SetEnabledState(not ns.QueueMail.filling and not ns.QueueMail.taking)
         end
         row:Show()

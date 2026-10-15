@@ -401,7 +401,7 @@ function LevelUp:CraftAction(recipeID, wanted)
         return {
             kind = "open",
             text = L["Leave form"],
-            status = L["You can't craft in this form. Click to leave it, then click again to craft. This doesn't work in combat."],
+            status = L["Click to leave your form, then click again to craft. Not in combat."],
             count = count,
             profession = leave,
         }

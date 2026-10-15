@@ -237,7 +237,7 @@ local function CreateRow(row)
             ns.UI:SearchAuctionHouse(data.itemID, data.line.need)
         end
     end, { width = 50, height = 18,
-        tooltip = L["Search the auction house for this. Pick it in the results and the quantity fills in with how many you still need."] })
+        tooltip = L["Searches the auction house. Pick it and how many you need fills in."] })
     row.itemSearch:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
 
     row.want = Widgets.CreateNumberBox(row, { width = 46, height = 18, min = 1, max = Lists().MAX_WANT,
