@@ -493,7 +493,7 @@ local function Build(outer)
     CreateSection(pages.pricing, 1, L["AUCTION PRICES"])
 
     local undercutRow = CreateRow(pages.pricing, 1, L["Undercut by"],
-        L["Your posting price is the cheapest rival listing minus this. Set it to 0 to stop undercutting and match the cheapest listing instead. This is for stackable goods only. Gear and bags can only be priced in whole silver, so they match the cheapest rival unless dropping a full silver still leaves the minimum profit set below."])
+        L["Your price is the cheapest listing from someone else, minus this much. Set it to 0 to match the cheapest price instead. Gear and bags can only drop by a whole silver, so they usually match the cheapest price."])
 
     widgets.undercut = Widgets.CreateNumberBox(undercutRow, {
         width = 70, min = 0, max = 1000000,
@@ -584,7 +584,7 @@ local function Build(outer)
 
     CreateSection(pages.queue, 1, L["WHAT GETS QUEUED"])
     local postedRow = CreateRow(pages.queue, 1, L["Keep in stock per item"],
-        L["The most of each craft to keep on hand. Listings, bags, bank, mail and the queue all count. 0 means no limit, though Queue All and Restock what sells then keep about two days of what sold for you this week (Stock from your sales). Gear you're wearing doesn't count. A profession can have its own number (Keep in stock by profession), and so can an item, in the Profit tab."])
+        L["The most of each craft to keep on hand. Your listings, bags, bank, mail and queue all count, but gear you're wearing doesn't. At 0, the queue keeps about two days of what you sold this week. You can also set a number for a whole profession, or for one item on the Profit tab."])
 
     widgets.maxPosted = Widgets.CreateNumberBox(postedRow, {
         width = 70, min = 0, max = 999,
@@ -1336,7 +1336,7 @@ local function Build(outer)
     -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
     -- addons the player does not have. Off here is off in all of them.
     local sistersRow = CreateRow(pages.look, 1, L["Sister addons"],
-        L["Once, a few seconds after login, says in chat which Blackthornes addons you don't have and what each adds. Turning it off here turns it off in all of them. Also /bts sisters."])
+        L["A few seconds after you log in, chat lists the Blackthornes addons you don't have yet and what each one does. It only happens once. Turning it off here turns it off in all of them. Also /bts sisters."])
 
     widgets.sisters = Widgets.CreateCheckbox(sistersRow, L["Mention them"], function(checked)
         ns.SisterNote:SetOn(checked)
@@ -1416,7 +1416,7 @@ local function Build(outer)
     -- the windows matched the rest of their screen. Read at login, so it
     -- waits for /reload as Text size does. See UI/BlizzardLook.lua.
     local styleRow = CreateRow(pages.look, 1, L["Window style"],
-        L["Titanforged is the house look, with a gold rim and glowing edges. Blizzard uses the game's own frames, red buttons, tabs and tick boxes. Takes effect after /reload."])
+        L["Titanforged has a gold rim and glowing edges. Blizzard looks like the game's own windows. Type /reload to see the change."])
 
     widgets.windowStyle = Widgets.CreateDropdown(styleRow, {
         { text = "Titanforged", value = "titanforged" },

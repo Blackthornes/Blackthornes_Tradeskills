@@ -1125,7 +1125,7 @@ Equipment. The rule, in every addon:
 
 Every word a player reads (labels, buttons, tooltips, Settings rows and
 their descriptions, empty lists, chat lines, slash command help) reads the
-way a friend who plays would say it: plain, warm and human. Short
+way a friend who plays would say it: plain, warm and human. Write it at a sixth grade reading level. Short
 sentences in everyday words, contractions welcome. Say what the player
 sees or does, not how the addon works inside. No hype or sales words
 ("seamlessly", "effortlessly", "now you can", "powerful"), no filler, no
