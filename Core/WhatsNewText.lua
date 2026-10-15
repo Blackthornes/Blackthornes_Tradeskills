@@ -5,17 +5,15 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.60.0", lines = {
+        "The Profit tab has a Your time view. It compares farming the materials, selling them as they are, and buying them, in gold an hour.",
+        "Gear with a random suffix gets a price for each suffix.",
+    } },
     { version = "0.59.0", lines = {
         "Listing on the auction house is faster.",
     } },
     { version = "0.58.0", lines = {
         "Enchanting recipes show what their materials cost when you hover them.",
         "The auction house Buy view has a Search all button for everything on your list.",
-    } },
-    { version = "0.57.0", lines = {
-        "A new Stats tab shows one item at a time in charts: price, sales, cheapest times and who else sells it.",
-        "The auction house drawer has shopping Lists and an Auctions view that shows which of your auctions were undercut.",
-        "The Prices tab has a trend column, and item tooltips show how the price has moved.",
-        "Craft next can make what frees the most bag space first.",
     } },
 }
