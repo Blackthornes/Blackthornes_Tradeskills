@@ -544,8 +544,52 @@ end
 -- auctions impose is applied.
 --
 -- @return price, basis  -- basis is "undercut", "match", "market" or nil
-function Posting:GetPostPrice(itemID)
-    return ns.Profit:ChoosePostPrice(itemID)
+--
+-- A random suffix ("of the Monkey") is priced as the copy that would be
+-- listed, the first unlocked one in the bags, when its suffix has a price.
+-- `link` false says the caller already knows the copy has none.
+function Posting:GetPostPrice(itemID, link)
+    if link == nil then link = self:ListedCopy(itemID) end
+    return ns.Profit:ChoosePostPrice(itemID, nil, link or nil)
+end
+
+-- The link of the copy each item would be listed from, when it names a random
+-- suffix, kept until the bags change (Inventory.changes). The Sell list asks
+-- for every line, three times a second at the auction house, so only gear
+-- that can have a suffix is looked for, and once per change of the bags.
+Posting.copyLinks = { key = nil, links = {} }
+
+function Posting:ListedCopy(itemID)
+    if not itemID then return nil end
+    local key = ns.Inventory and ns.Inventory.changes
+    local kept = self.copyLinks
+    if kept.key ~= key or key == nil then
+        kept.key, kept.links = key, {}
+    end
+    local link = kept.links[itemID]
+    if link ~= nil then return link or nil end
+
+    link = false
+    local quality
+    local api = _G.C_Item
+    if type(api) == "table" and type(api.GetItemQualityByID) == "function" then
+        local ok, value = pcall(api.GetItemQualityByID, itemID)
+        quality = ok and tonumber(value) or nil
+    end
+    local Scanner = ns.Scanner
+    local may = quality == nil or (Scanner and Scanner.MayHaveSuffix and Scanner.MayHaveSuffix(itemID, quality))
+    if may and C_Container and C_Container.GetContainerItemLink then
+        local bag, slot = FindInBags(itemID)
+        if bag then
+            local ok, held = pcall(function()
+                local text = C_Container.GetContainerItemLink(bag, slot)
+                return type(text) == "string" and text .. "" or nil
+            end)
+            if ok and held and Util.LinkSuffix(held) then link = held end
+        end
+    end
+    kept.links[itemID] = link
+    return link or nil
 end
 
 --------------------------------------------------------------------------------
@@ -960,7 +1004,8 @@ function Posting:GetPostable(opts)
             local held = slots[itemID]
 
             local sellable, count = self:GetSellInfo(itemID, held)
-            local price, basis = self:GetPostPrice(itemID)
+            local copy = held and held.link and Util.LinkSuffix(held.link) and held.link or nil
+            local price, basis = self:GetPostPrice(itemID, copy or false)
 
             -- A price the player set this session wins, with the suggested
             -- one kept beside it for the editor's reset.
@@ -1592,8 +1637,12 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
         return Util.FormatMoney(copper, { noColor = true })
     end
 
-    -- The auction house's own figure, beside the price the player set.
-    local market = ns.Prices.GetScanValue and ns.Prices:GetScanValue(itemID, "market")
+    -- The auction house's own figure, beside the price the player set. A
+    -- random suffix reads its own, when one is kept.
+    local copy = self:ListedCopy(itemID)
+    local suffixMarket = copy and ns.Prices.GetSuffixValue
+        and ns.Prices:GetSuffixValue(itemID, Util.LinkSuffix(copy), "market")
+    local market = suffixMarket or (ns.Prices.GetScanValue and ns.Prices:GetScanValue(itemID, "market"))
         or ns.Prices:GetValue(itemID, "market")
     local NONE = L["none"]
     local marketText = (market and market > 0) and Money(market) or NONE
@@ -1601,7 +1650,12 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
     -- Someone else's cheapest, never the player's own: the price being
     -- competed with. The check has just rewritten it, and an empty auction
     -- house has just cleared it, so nil here really does mean nobody.
-    local lowest = ns.Prices:GetValue(itemID, "rival")
+    local lowest
+    if copy and ns.Prices.GetLinkValue then
+        lowest = ns.Prices:GetLinkValue(copy, "rival")
+    else
+        lowest = ns.Prices:GetValue(itemID, "rival")
+    end
     local lowestText = (lowest and lowest > 0) and Money(lowest) or NONE
 
     -- Only the player's own listings are up: say so, rather than "none"

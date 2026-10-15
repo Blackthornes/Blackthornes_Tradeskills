@@ -497,7 +497,18 @@ weapons and armour, `Scanner.MayHaveSuffix`), browse rows (the key's
 `GetValue`'s, with the player's own price still winning. The tooltip adds
 "This one" for a copy whose suffix has a price, and Butler's `Advise` takes
 the bag link. `GetValue(itemID)` is unchanged, so Farmer and Equipment read
-as before. Tested in `tools/test_suffixprices.lua`. Not yet seen in game.
+as before. The screens that follow a copy's suffix (the owner, 2026-10-15:
+"people want Tradeskills to respect suffixes on greens"): Post's suggested
+price, worth and confirm box (`Posting:ListedCopy`, the bag copy's link,
+kept until `Inventory.changes` moves; `Profit:ChoosePostPrice` takes it),
+Your auctions' undercut (`MyAuctions:Judge` by the auction's link), the
+Disenchanting tab's bag rows, and a "Random suffixes" row on the Prices
+tab (`Prices:SuffixRows`, each on hover). For a suffixed copy whose item has
+suffix readings, `GetLinkValue(link, "rival")` is that suffix's rival or
+nil, never the item's mixed one. Sales, Profit and auction house search
+rows stay by item: sales are money received, a craft can't pick its roll,
+and the game already lists searches by suffix. Tested in
+`tools/test_suffixprices.lua`. Not yet seen in game.
 
 ## Profession cooldowns
 
