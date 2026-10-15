@@ -767,7 +767,6 @@ function UI:BuildSizeGrip()
         GameTooltip:SetText(UI.ScaleText(window:GetScale()), Theme.Unpack("accentHi"))
         GameTooltip:AddLine(L["Drag to make the window bigger or smaller."], 1, 1, 1, true)
         GameTooltip:AddLine(L["Right-click to go back to the normal size."], 1, 1, 1, true)
-        GameTooltip:AddLine(L["You can also change it on the Settings tab, or with /bts size."], Theme.Unpack("accent"))
         GameTooltip:Show()
     end)
     grip:SetScript("OnLeave", function(self)
@@ -1185,7 +1184,7 @@ function UI:UpdateAuctionButton()
 
     button.tooltipText = allowed
         and (cooldown
-            and L.Format("Scan the auction house page by page.\nThe faster full scan can be used again in %s.",
+            and L.Format("Scans page by page for now. The quick scan is back in %s.",
                 Util.FormatAge(cooldown))
             or L["Scan the whole auction house in one go"])
         or reason

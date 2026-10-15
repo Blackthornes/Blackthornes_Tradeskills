@@ -402,7 +402,7 @@ local function BuildDetail(parent)
         SearchAuctionHouse(state.selected)
     end, { width = 200, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
-    searchButton.tooltipText = L["Searches the auction house for this item. You still click the game's Buy button to buy it."]
+    searchButton.tooltipText = L["Finds this item on the auction house. You click Buy yourself."]
     detail.searchButton = searchButton
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
@@ -867,8 +867,8 @@ local function Build(container)
     show:SetPoint("LEFT", 0, 0)
     show:SetValue(state.view)
     show.tooltipText = SHOW_FLIPS
-        and L["Flips: items to buy and sell on. Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
-        or L["Merchant's Favor: Waylaid Crates by what a favor costs to buy. Craftsman's Writs: writs by what reputation costs to buy, and what your goal still costs."]
+        and L["Flips: items to buy and sell again. Merchant's Favor: crates by what each favor costs. Craftsman's Writs: writs by what your reputation goal costs."]
+        or L["Merchant's Favor: crates by what each favor costs. Craftsman's Writs: writs by what your reputation goal costs."]
     widgets.show = show
     sellTo:SetPoint("LEFT", show, "RIGHT", 8, 0)
 
@@ -884,7 +884,7 @@ local function Build(container)
     end, { width = 130 })
     goal:SetPoint("LEFT", show, "RIGHT", 8, 0)
     if ns.DealsWrits then goal:SetValue(ns.DealsWrits:GetGoal()) end
-    goal.tooltipText = L["The standing you want with your side's trade camp. The panel on the right shows how many writs that still takes and what they cost."]
+    goal.tooltipText = L["The standing you want with your trade camp. The right side shows the writs it takes and their cost."]
     goal:Hide()
     widgets.goal = goal
 
@@ -918,7 +918,7 @@ local function Build(container)
         ShowFromTop()
     end, not ns.DealsFavor or ns.DealsFavor:GetSkipOverStack())
     skipOverStack:SetPoint("LEFT", search, "RIGHT", 12, 0)
-    skipOverStack.tooltipText = L["Last we heard, Forever couldn't fill a crate from more than one stack of a material, so a bundle of 40 Linen Cloth isn't counted when finding the cheapest."]
+    skipOverStack.tooltipText = L["Leaves out bundles bigger than one stack, like 40 Linen Cloth."]
     skipOverStack:Hide()
     widgets.skipOverStack = skipOverStack
 

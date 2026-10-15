@@ -241,8 +241,7 @@ function PriceEditor:Build()
 
     self.reset = Widgets.CreateButton(frame, L["Use suggested"], function()
         PriceEditor:SetPrice(nil)
-    end, { width = 100, height = 20,
-           tooltip = L["Go back to the price Ready to sell suggested."] })
+    end, { width = 100, height = 20 })
     self.reset:SetPoint("RIGHT", frame, "RIGHT", -INSET, 0)
     self.reset:SetPoint("TOP", suggested, "TOP", 0, 4)
 
@@ -264,7 +263,7 @@ function PriceEditor:Build()
     local total = RowLabel(frame, L["Total"], count, -16)
     self.total = MoneyBoxes(frame, function(copper) PriceEditor:SetTotal(copper) end)
     self.total:SetPoint("LEFT", total, "RIGHT", 0, 0)
-    self.total:Hover(L["Total"], L["What they all sell for together. It's split across how many you list, rounded down."])
+    self.total:Hover(L["Total"], L["What they all sell for together, split over how many you list."])
 
     local divider = Theme.CreateDivider(frame)
     divider:SetPoint("TOPLEFT", total, "BOTTOMLEFT", 0, -12)
@@ -282,8 +281,7 @@ function PriceEditor:Build()
     self.keep:SetPoint("TOPLEFT", notes, "BOTTOMLEFT", 0, -10)
     self.keep:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
-        GameTooltip:SetText(L["Keep as my price"], 1, 1, 1)
-        GameTooltip:AddLine(L["When ticked, this price is saved on the Prices tab as \"Use this price\" and used from now on. Otherwise it lasts until you log out or /reload."], 0.9, 0.9, 0.9, true)
+        GameTooltip:SetText(L["Saves this price on the Prices tab and uses it from now on. Unticked, it lasts until you log out."], 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     self.keep:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -294,7 +292,7 @@ function PriceEditor:Build()
 
     self.done = Widgets.CreateButton(frame, L["Done"], function() PriceEditor:Done() end,
         { width = 80, height = 24,
-          tooltip = L["Keep this price on Ready to sell and close. Nothing is listed."] })
+          tooltip = L["Keeps this price and closes. Nothing is listed."] })
     self.done:SetPoint("RIGHT", self.list, "LEFT", -8, 0)
 
     self.frame = frame
@@ -462,7 +460,7 @@ function PriceEditor:Draw()
     self.list:SetText(L.Format("List %d", quantity))
     self.list:SetEnabledState(price ~= nil and not refused)
     self.list.tooltipText = refused
-        and L["This price would be refused. The note above says why."]
+        and L["This price won't be listed. The note above says why."]
         or (price and L.Format("List %d at %s each, %s in all.", quantity,
             Util.FormatMoney(price, { noColor = true }),
             Util.FormatMoney(price * quantity, { noColor = true })))

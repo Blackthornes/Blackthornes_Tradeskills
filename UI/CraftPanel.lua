@@ -764,7 +764,7 @@ local function UpdateRow(row, line)
         row.craft:SetText(busy and L["Stop"] or L["Craft"])
         row.craft:SetEnabledState(busy or (ready and here) or false)
         row.craft.tooltipText = busy and L["Stop crafting"]
-            or not here and L["Open the profession that makes this to craft it"]
+            or not here and L["Open its profession to craft it"]
             or not ready and (reason or L["Nothing to make it with yet"])
             or L.Format("Craft the %d queued, as many as your materials make", line.queued)
     end
@@ -839,16 +839,16 @@ local function UpdateRow(row, line)
     end
 
     if limitApplies and line.waitingForLow then
-        row.add.tooltipText = L.Format("You have %d %s. Restock When Down To is on, so more are queued once you are down to %d. Tick Ignore max on hand to queue more now.",
+        row.add.tooltipText = L.Format("You have %d %s. More are queued once you're down to %d. Tick Ignore max on hand to queue more now.",
             (line.stock or 0) + (line.queuedElsewhere or 0), line.name, line.restockAt or 0)
     elseif limitApplies then
         row.add.tooltipText = ((line.queuedElsewhere or 0) > 0
-            and L.Format("You have %d %s and %d queued, which fills your limit. Tick Ignore max on hand, or raise it in Settings, to queue more.",
+            and L.Format("You have %d %s and %d queued, which is your limit. Tick Ignore max on hand to queue more.",
                 line.stock or 0, line.name, line.queuedElsewhere)
-            or L.Format("You already have %d %s, which is your limit. Tick Ignore max on hand, or raise it in Settings, to queue more.",
+            or L.Format("You have %d %s, which is your limit. Tick Ignore max on hand to queue more.",
                 line.stock or 0, line.name))
     else
-        row.add.tooltipText = L.Format("Queue one more %s. Or type how many you want in the box.", line.name)
+        row.add.tooltipText = L.Format("Queue one more %s, or type how many in the box.", line.name)
     end
 
     -- Greyed out with nothing of this recipe's own in the queue, so the
@@ -907,7 +907,7 @@ local function ShowRowTooltip(row, line)
     end
 
     GameTooltip:AddLine(L["Left-click to queue, right-click to remove, Shift-click to search the auction house."], 0.5, 0.5, 0.5, true)
-    GameTooltip:AddLine(L["Ctrl-right-click to ignore it, so it's no longer suggested here or on the Profit tab."], 0.5, 0.5, 0.5, true)
+    GameTooltip:AddLine(L["Ctrl-right-click to stop suggesting it."], 0.5, 0.5, 0.5, true)
     GameTooltip:Show()
 end
 
@@ -1079,8 +1079,7 @@ function CraftPanel:Build()
     ignoreLimit:SetPoint("BOTTOMLEFT", 14, 70)
     ignoreLimit:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
-        GameTooltip:SetText(L["Ignore max on hand"], 1, 1, 1)
-        GameTooltip:AddLine(L["When ticked, every craft shows, even ones you already have enough of, and the boxes queue the full number you type. Your Keep in stock setting doesn't change."], 0.8, 0.8, 0.8, true)
+        GameTooltip:SetText(L["Shows every craft, even ones you have enough of, and queues the full number you type."], 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1102,7 +1101,7 @@ function CraftPanel:Build()
         if not ignoredLabel:IsShown() then return end
         GameTooltip:SetOwner(hover, "ANCHOR_TOP")
         GameTooltip:SetText(L["Ignored crafts"], 1, 1, 1)
-        GameTooltip:AddLine(L["Crafts you ignored aren't suggested here. Search for one by name to find it, or restore it under Settings, Queue, Ignored crafts."], 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["Ignored crafts aren't suggested here. Search by name to find one, or restore it in Settings."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     ignoredHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1195,7 +1194,7 @@ function CraftPanel:UpdateClearButton()
 
     button.tooltipText = empty and L["The queue is empty"]
         or armed and L["Click again to empty the whole craft queue"]
-        or L["Empty the whole craft queue. Asks you to click again first."]
+        or L["Empties the whole craft queue. Click twice to clear."]
 end
 
 function CraftPanel:UpdateSortButton()
@@ -1204,7 +1203,7 @@ function CraftPanel:UpdateSortButton()
     self.sortButton:SetText(L.Format("Sort by: %s", SORT_LABEL[self.sortBy] or L["Profit"]))
     self.sortButton.tooltipText = ({
         profit = L["Best-paying crafts first. Click to sort by Level Up."],
-        levelup = L["Best skill up chance first (orange, then yellow, then green), and cheapest first within each colour. Click to sort by name."],
+        levelup = L["Best skill up chance first, then cheapest. Click to sort by name."],
         name = L["Sorted by name. Click to sort by profit."],
     })[self.sortBy]
 end
@@ -1360,10 +1359,10 @@ end
 local function CraftTooltip(slots)
     if slots and slots > 0 then
         return slots == 1
-            and L["One click makes every craft in this entry. It frees 1 bag slot, more than anything else that's ready."]
-            or L.Format("One click makes every craft in this entry. It frees %d bag slots, more than anything else that's ready.", slots)
+            and L["Makes every craft in this entry. It frees 1 bag slot, more than anything else ready."]
+            or L.Format("Makes every craft in this entry. It frees %d bag slots, more than anything else ready.", slots)
     end
-    return L["One click makes every craft in this entry"]
+    return L["Makes every craft in this entry"]
 end
 
 --- Keep the Craft next button honest about what it will do, and why it cannot.
@@ -1396,8 +1395,8 @@ function CraftPanel:UpdateCraftButton()
             -- first entry's obstacle: "need materials" would be a lie about a
             -- craft whose materials are sitting in the bags.
             button.tooltipText = readyElsewhere == 1
-                and L.Format("%d queued craft is ready, but for another profession. Open that profession to make it.", readyElsewhere)
-                or L.Format("%d queued crafts are ready, but for another profession. Open that profession to make them.", readyElsewhere)
+                and L.Format("%d queued craft is ready for another profession. Open that one to make it.", readyElsewhere)
+                or L.Format("%d queued crafts are ready for another profession. Open that one to make them.", readyElsewhere)
             return
         end
 
@@ -2077,8 +2076,8 @@ function CraftPanel:RefreshQueued()
     self.shoppingColumns:SetShown(shown)
     self.shoppingList:SetShown(shown)
     self.shoppingToggle:SetText(shown and L["Hide list"] or L["Shopping"])
-    self.shoppingToggle.tooltipText = shown and L["Hide the materials list"]
-        or L["Show what the queue still needs, minus what you have"]
+    self.shoppingToggle.tooltipText = not shown
+        and L["Show what the queue still needs, minus what you have"] or nil
     self.shoppingTotal:SetText(self:ShoppingTotalText(lines))
 
     self.queuedList:SetData(entries)

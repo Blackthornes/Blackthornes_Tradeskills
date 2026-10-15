@@ -520,7 +520,7 @@ local function ShowMaterialTooltip(row, line)
                 Util.FormatMoney(offer.saving, { noColor = true }),
                 0.7, 0.7, 0.7, 0.31, 0.82, 0.55)
         end
-        GameTooltip:AddLine(L.Format("Log in on that character and %d x %s will be queued there, with its materials to buy. Mail it over once it's made.",
+        GameTooltip:AddLine(L.Format("Log in on that character to queue %d x %s there. Mail it over once it's made.",
             offer.crafts, offer.recipeName or L["it"]), 0.7, 0.7, 0.7, true)
     end
 
@@ -603,10 +603,10 @@ end
 local function CraftTooltip(slots)
     if slots and slots > 0 then
         return slots == 1
-            and L["One click makes every craft in this entry. It frees 1 bag slot, more than anything else that's ready."]
-            or L.Format("One click makes every craft in this entry. It frees %d bag slots, more than anything else that's ready.", slots)
+            and L["Makes every craft in this entry. It frees 1 bag slot, more than anything else ready."]
+            or L.Format("Makes every craft in this entry. It frees %d bag slots, more than anything else ready.", slots)
     end
-    return L["One click makes every craft in this entry"]
+    return L["Makes every craft in this entry"]
 end
 
 --- Keep the Craft button honest about what it will do, and why it cannot.
@@ -661,7 +661,7 @@ local function SetCraftButton(button, label)
     if leave then
         button:SetText(L["Leave form"])
         button:SetEnabledState(true)
-        button.tooltipText = L["You can't craft in this form. Click to leave it, then click again to craft. This doesn't work in combat."]
+        button.tooltipText = L["Click to leave your form, then click again to craft. Not in combat."]
         label:SetText(L.Format("%d of %d ready. Leave your form first", ready, total))
         label:SetTextColor(Theme.Unpack("accent"))
         button.opensProfession = true
@@ -827,7 +827,7 @@ local function UpdateDisenchantNext()
         L.Format("Disenchant next (%d)", total),
     })
     button.tooltipText = L.Format("Disenchants %s from your bags. Your queue marked %d to disenchant.", name, total)
-        .. "\n" .. L["One click, one disenchant. Never blue or better, anything worn, or anything the queue did not make."]
+        .. "\n" .. L["Never blue or better, anything worn, or anything the queue didn't make."]
 
     ns.Disenchanter:Arm(button, itemID, bag, slot)
 end
@@ -903,7 +903,7 @@ local function Build(container)
         armedUntil = nil
         clear:SetText(L["Clear all"])
         clear:SetConfirming(false)
-        clear.tooltipText = L["Empty the whole craft queue. Asks you to click again first."]
+        clear.tooltipText = L["Empties the whole craft queue. Click twice to clear."]
     end
 
     clear = Widgets.CreateButton(container, L["Clear all"], function()
@@ -927,7 +927,7 @@ local function Build(container)
             if armedUntil and GetTime() >= armedUntil then Disarm() end
         end)
     end, { width = 84, height = 18 })
-    clear.tooltipText = L["Empty the whole craft queue. Asks you to click again first."]
+    clear.tooltipText = L["Empties the whole craft queue. Click twice to clear."]
     clear:SetPoint("TOPRIGHT", container, "TOPRIGHT", -MATERIALS_WIDTH - 16, -8)
     widgets.clearButton = clear
     widgets.queueHeading = heading

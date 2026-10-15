@@ -1426,7 +1426,7 @@ local function Build(outer)
     -- The probe as a button (asked 2026-10-10); what it finds is also kept
     -- in the saved data for Claude to read after a /reload.
     local probeRow = CreateRow(pages.data, 1, L["Client Check:"],
-        L["Lists in chat what this version of the game supports and whether your data is being saved. It doesn't change anything."])
+        L["Lists in chat what the game supports and whether your data is saved."])
 
     widgets.probe = Widgets.CreateButton(probeRow, L["Check"], function()
         local command = ns.commands and ns.commands.probe

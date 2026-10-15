@@ -281,13 +281,13 @@ local function BuildDetail(parent)
         SearchCrate(state.selected)
     end, { width = 134, primary = true, height = 24 })
     detail.crateButton:SetPoint("BOTTOMLEFT", 12, 14)
-    detail.crateButton.tooltipText = L["Searches the auction house for this crate. You still click the game's Buy button to buy it."]
+    detail.crateButton.tooltipText = L["Finds this crate on the auction house. You click Buy yourself."]
 
     detail.bundleButton = Widgets.CreateButton(detail, L["Search bundle"], function()
         SearchBundle(state.selected)
     end, { width = 134, height = 24 })
     detail.bundleButton:SetPoint("LEFT", detail.crateButton, "RIGHT", 8, 0)
-    detail.bundleButton.tooltipText = L["Sends a search for the cheapest bundle's material."]
+    detail.bundleButton.tooltipText = L["Finds the cheapest bundle's material on the auction house."]
 
     detail.empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     detail.empty:SetPoint("CENTER")

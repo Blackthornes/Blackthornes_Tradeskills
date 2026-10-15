@@ -175,7 +175,7 @@ local function CreateRow(row)
         if rawget(self, "haloTextures") then Theme.SetHalo(self, 0.25) end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:SetText(L["Set your own price"], 1, 1, 1)
-        GameTooltip:AddLine(L["Click to change the price each, or type a total and have it split over the stack."], 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(L["Click to set a price each, or a total for the stack."], 0.9, 0.9, 0.9, true)
         if row.data and row.data.priceBasis == "chosen" and row.data.suggestedPrice then
             GameTooltip:AddDoubleLine(L["Suggested"],
                 Util.FormatMoney(row.data.suggestedPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
@@ -231,7 +231,7 @@ local function CreateRow(row)
         ns.Print(L.Format("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.",
             line.label or L["that item"]))
     end, { width = IGNORE_WIDTH, height = 18,
-           tooltip = L["Stop showing this item on Ready to sell. You can bring it back with Restore in Settings."] })
+           tooltip = L["Hides this from Ready to sell. Restore it in Settings."] })
     row.ignore:SetPoint("RIGHT", -6, 0)
 end
 
@@ -431,8 +431,8 @@ local function ShowRowTooltip(row, line)
     end
 
     GameTooltip:AddLine(line.isCommodity
-        and L["Commodity: sells from every bag at once"]
-        or L["Item auction: one stack at a time"], 0.5, 0.5, 0.5)
+        and L["Sells from all your bags at once"]
+        or L["Lists one stack at a time"], 0.5, 0.5, 0.5)
 
     if line.priceBasis == "chosen" then
         GameTooltip:AddDoubleLine(L["Your price"],
@@ -553,8 +553,7 @@ function PostPanel:Build()
     hideLosses:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, CONTENT_TOP - 28 - 3)
     hideLosses:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L["Hide losses"])
-        GameTooltip:AddLine(L["Hides items that would sell at a loss: for less than the materials, less than you paid to make them after the cut, or less than a vendor pays."], 1, 1, 1, true)
+        GameTooltip:SetText(L["Hides items that would sell for less than they cost, or less than a vendor pays."], 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     hideLosses:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -570,8 +569,7 @@ function PostPanel:Build()
     overcut:SetPoint("TOPRIGHT", hideLosses, "TOPLEFT", -10, 0)
     overcut:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(L["Overcutting"])
-        GameTooltip:AddLine(ns.Profit.OVERCUT_HELP, 1, 1, 1, true)
+        GameTooltip:SetText(ns.Profit.OVERCUT_HELP, 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     overcut:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1272,7 +1270,7 @@ function PostPanel:UpdateSearchAll(lines)
     button:SetText(label)
     local width = Theme.MeasureText and Theme.MeasureText("small", label)
     button:SetWidth(math.max(110, (width or 0) + 24))
-    button.tooltipText = L["Searches the auction house for everything on this list at once. Pick one in the results and the quantity fills in with how many you still need."]
+    button.tooltipText = L["Searches the auction house for everything on this list. Pick one and how many you need fills in."]
 end
 
 -- Clicking the row searched already, but nothing said so. Asked for: "a button
@@ -1288,7 +1286,7 @@ function PostPanel.CreateShoppingRow(row)
         if PostPanel:CanSearch(row.data) then
             ns.UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall)
         end
-    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = L["Search the auction house for this. Pick it in the results and the quantity fills in with how many you still need."] })
+    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = L["Searches the auction house. Pick it and how many you need fills in."] })
     row.search:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 
     local inset = -(8 + SEARCH_WIDTH + 6)
