@@ -207,6 +207,11 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 
 local Butler = ns.NewModule("Butler")
 
+-- Advise takes a bag copy's link as well as an item ID (2026-10-15), so a
+-- random suffix is priced as it sells. Butler passes the link only when
+-- this says so; an older Tradeskills is asked by item ID.
+Butler.TAKES_LINK = true
+
 -- How long a lookup is trusted when nothing says it changed: mail sent, a
 -- bank visit or an alt's record are not counted by any version.
 local LOOKUP_SECONDS = 2
