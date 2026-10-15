@@ -94,6 +94,41 @@ belong to the character that set them, so `Find` and `Set` act on the
 character playing. Farmer's `CLAUDE.md` asks its side to keep these stable;
 if one changes, change `Logic/FarmerGoals.lua` in the same breath.
 
+## Craft or farm (the Your time view)
+
+The owner said yes (2026-10-15, from a mockup): the Profit tab's switch
+reads MY CRAFTS, YOUR TIME, RECIPES TO LEARN (`RecipeBookView.WithSwitch`
+takes `extras`). `Logic/CraftOrFarm.lua` works out, for each craft the
+character playing knows, three ways: farm the materials and craft (gold an
+hour), farm them and sell them as they are (gold an hour), and buy them
+and craft (the Profit tab's profit for one craft, never an hour, since a
+craft takes seconds). Farming time is the player's own, from Farmer,
+inside a pcall, read only:
+
+```lua
+_G.BlackthornesFarmer.Pace:ForItem(itemID)
+  -- { seconds, kind, source, zone, samples, perAction }, or nil and { samples }
+```
+
+Crafting time is `CraftTime:GetCast` for every cast in the tree. A
+material a vendor keeps in stock is bought on every way; one a craft of
+the player's makes, with no pace of its own, is followed down to what it
+is made from (`DEPTH`). Without Farmer, or with under 20 of the player's
+own kills or gathers behind a material, the farm ways stay "--", never
+guessed from drop tables. Walking and selling are not counted. Built a few
+crafts a frame (`BUDGET`), kept `KEEP` seconds, nothing saved.
+`UI/YourTimeView.lua` draws it (columns `yourtime`; right-click or Queue 1
+queues one). Farmer's material tooltip asks:
+
+```lua
+_G.BlackthornesTS.CraftOrFarm:ForMaterial(itemID)
+  -- { name, recipeID, perHour, rawPerHour } when crafting beats selling, or nil
+```
+
+Keep both calls stable; if one changes, change Farmer's `Logic/Pace.lua`
+or `UI/ItemTooltip.lua` too. Tested in `tools/test_craftorfarm.lua` and
+`tools/test_yourtimeview.lua`. Not yet seen in game.
+
 ## How Tradeskills uses Equipment
 
 Gear that **Blackthornes_Equipment** (`Blackthornes/Blackthornes_Equipment`)

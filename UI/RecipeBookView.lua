@@ -650,14 +650,29 @@ local SWITCH_HEIGHT = 22
 --   redraws its own view
 -- @param spec.learn  the copy of Recipes to learn to show (a NewView), or
 --   the Profit tab's when nil
+-- @param spec.extras  optional views shown between the two, each
+--   { key, text, tip, build(view), refresh() }
 -- @return { Build(container), Refresh(), ShowView(key) }
 function RecipeBookView.WithSwitch(spec)
     local learn = spec.learn or main
+    local extras = spec.extras or {}
     local tab = { view = spec.mainKey }
     local views, parts
 
+    local function Extra(key)
+        for _, extra in ipairs(extras) do
+            if extra.key == key then return extra end
+        end
+    end
+
     local function RefreshView()
-        if tab.view == "learn" then learn.Refresh() else spec.refreshMain() end
+        if tab.view == "learn" then
+            learn.Refresh()
+        elseif Extra(tab.view) then
+            Extra(tab.view).refresh()
+        else
+            spec.refreshMain()
+        end
     end
 
     function tab.ShowView(key)
@@ -684,9 +699,12 @@ function RecipeBookView.WithSwitch(spec)
     local function BuildSwitch(container)
         local definitions = {
             { key = spec.mainKey, text = spec.mainText, tip = spec.mainTip },
-            { key = "learn", text = L["RECIPES TO LEARN"],
-              tip = L["Recipes you have not learned, and what each is worth"] },
         }
+        for _, extra in ipairs(extras) do
+            definitions[#definitions + 1] = { key = extra.key, text = extra.text, tip = extra.tip }
+        end
+        definitions[#definitions + 1] = { key = "learn", text = L["RECIPES TO LEARN"],
+            tip = L["Recipes you have not learned, and what each is worth"] }
         local built, previous = {}, nil
 
         for _, definition in ipairs(definitions) do
@@ -754,7 +772,11 @@ function RecipeBookView.WithSwitch(spec)
     function tab.Build(container)
         local made = {}
 
-        for _, key in ipairs({ spec.mainKey, "learn" }) do
+        local keys = { spec.mainKey }
+        for _, extra in ipairs(extras) do keys[#keys + 1] = extra.key end
+        keys[#keys + 1] = "learn"
+
+        for _, key in ipairs(keys) do
             local view = CreateFrame("Frame", nil, container)
             view:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -SWITCH_HEIGHT)
             view:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
@@ -763,6 +785,7 @@ function RecipeBookView.WithSwitch(spec)
         end
 
         spec.buildMain(made[spec.mainKey])
+        for _, extra in ipairs(extras) do extra.build(made[extra.key]) end
         learn.Build(made.learn)
 
         views = made

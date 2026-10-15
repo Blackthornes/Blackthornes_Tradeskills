@@ -48,6 +48,7 @@ Logic\Disenchant.lua
 Logic\DisenchantLog.lua
 Logic\SkillUp.lua
 Logic\Profit.lua
+Logic\CraftOrFarm.lua
 Logic\LevelUp.lua
 Logic\RecipeBook.lua
 Logic\Waypoints.lua
@@ -113,6 +114,7 @@ UI\EnchantTooltip.lua
 UI\MailReport.lua
 UI\QueueMailPanel.lua
 UI\RecipeBookView.lua
+UI\YourTimeView.lua
 UI\Tab_Profit.lua
 UI\Tab_LevelUp.lua
 UI\Tab_Disenchanting.lua
