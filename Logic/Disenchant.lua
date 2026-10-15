@@ -916,13 +916,29 @@ function Disenchant:GetBagRows(opts)
     local rows = {}
     local counts = ns.Inventory and ns.Inventory:GetBagCounts() or {}
 
+    -- One link per item, the copy carried: the row's icon is judged as it,
+    -- and a random suffix ("of the Monkey") is priced as that suffix sells.
+    local wanted = {}
+    for itemID in pairs(counts) do
+        if self:IsDisenchantable(itemID) then wanted[itemID] = true end
+    end
+    local links = BagLinks(wanted)
+
     for itemID, count in pairs(counts) do
-        if self:IsDisenchantable(itemID) then
+        if wanted[itemID] then
             local value, partial, breakdown = self:GetValue(itemID)
 
             local vendor = Util.GetVendorSellPrice(itemID)
             local bound = Util.IsBoundOnPickup(itemID) == true
-            local auction = not bound and ns.Prices:GetValue(itemID, "market") or nil
+            local link = links[itemID]
+            local auction
+            if not bound then
+                if link and ns.Prices.GetLinkValue then
+                    auction = ns.Prices:GetLinkValue(link, "market")
+                else
+                    auction = ns.Prices:GetValue(itemID, "market")
+                end
+            end
             if auction and auction <= 0 then auction = nil end
 
             local sells, sellsAt = auction, "auction"
@@ -943,6 +959,7 @@ function Disenchant:GetBagRows(opts)
                 soulbound = bound,
                 gain = (value and sells) and (value - sells) or value,
                 beatsSale = Beats(value, sells),
+                link = link,
             }
 
             -- Bought on the auction house to disenchant: no more than carried.
@@ -955,12 +972,6 @@ function Disenchant:GetBagRows(opts)
             end
         end
     end
-
-    -- One link per row, so the row's icon is judged as the copy carried.
-    local wanted = {}
-    for _, row in ipairs(rows) do wanted[row.itemID] = true end
-    local links = BagLinks(wanted)
-    for _, row in ipairs(rows) do row.link = links[row.itemID] end
 
     -- What was bought to disenchant comes first, then the best.
     table.sort(rows, function(a, b)

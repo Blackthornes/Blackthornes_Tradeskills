@@ -174,6 +174,12 @@ L["ITEM"] = "GEGENSTAND"
 
 -- UI/ItemTooltip.lua
 L["Auction value"] = "Auktionswert"
+L["This one"] = "Dieses hier"
+L["Random suffixes"] = "Zufällige Zusätze"
+L["Price for each suffix"] = "Preis für jeden Zusatz"
+L["Suffix %d"] = "Zusatz %d"
+L["1, %s"] = "1, %s"
+L["%d, %s to %s"] = "%d, %s bis %s"
 L["none listed"] = "keine Angebote"
 L["not scanned yet"] = "noch nicht gescannt"
 L["%s  (%s)"] = "%s  (%s)"
