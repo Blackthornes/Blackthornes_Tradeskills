@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.59.0", lines = {
+        "Listing on the auction house is faster.",
+    } },
     { version = "0.58.0", lines = {
         "Enchanting recipes show what their materials cost when you hover them.",
         "The auction house Buy view has a Search all button for everything on your list.",
@@ -14,8 +17,5 @@ ns.WHATS_NEW = {
         "The auction house drawer has shopping Lists and an Auctions view that shows which of your auctions were undercut.",
         "The Prices tab has a trend column, and item tooltips show how the price has moved.",
         "Craft next can make what frees the most bag space first.",
-    } },
-    { version = "0.56.0", lines = {
-        "The auction house panel has a box to pick how long your listings stay up.",
     } },
 }
