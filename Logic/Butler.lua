@@ -138,7 +138,8 @@
 -- character playing first, then by name: { key, name (full), isCurrent,
 -- steps }. Each step is a craft, { kind = "craft", recipeID, itemID, name,
 -- count (items it makes), crafts, forNames (full names it is for, other
--- than the crafter), ready, missing = { { itemID, count, from, vendor } } }
+-- than the crafter), slots (bag slots making it frees; the character
+-- playing only, nil when the setting is off), ready, missing = { { itemID, count, from, vendor } } }
 -- (`vendor`: copper for one when a vendor sells it), or a
 -- mail, { kind = "mail", to (full name), items = { { itemID, count } },
 -- crafts, forCraft }: what the character playing can send now
@@ -1067,8 +1068,17 @@ local function Jobs()
                             vendor = VendorPrice(reagent.itemID) }
                     end
                 end
+                -- Bag slots making it frees, for the character playing only
+                -- (the bags are read live), while "Craft what frees bag
+                -- space first" is on.
+                local slots
+                if job.isCurrent and ns.Crafting and ns.Crafting.FreesSpaceFirst and ns.Crafting:FreesSpaceFirst() then
+                    local okSlots, freed = pcall(ns.Crafting.SlotsFreed, ns.Crafting, entry)
+                    if okSlots and type(freed) == "number" then slots = freed end
+                end
                 job.steps[#job.steps + 1] = {
                     kind = "craft",
+                    slots = slots,
                     recipeID = entry.recipeID,
                     itemID = recipe.outputItemID,
                     name = recipe.name,

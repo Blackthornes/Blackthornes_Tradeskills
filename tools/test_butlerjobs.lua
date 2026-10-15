@@ -308,6 +308,22 @@ ok, why = Butler:Craft(12)
 check("with the profession closed it says to open it", why, "open your profession first")
 ns.Cooldowns = nil
 
+print("\nslots freed")
+local setting = true
+ns.Crafting.FreesSpaceFirst = function() return setting end
+ns.Crafting.SlotsFreed = function(_, entry) return entry.recipeID == 11 and 3 or 0 end
+jobs = Butler:Jobs()
+local function craftOf(job, recipeID)
+  for _, step in ipairs(job.steps) do
+    if step.kind == "craft" and step.recipeID == recipeID then return step end
+  end
+end
+check("the character playing gets the slots", craftOf(jobs[1], 11).slots, 3)
+check("another character's craft has none", craftOf(jobs[2], 10).slots, nil)
+setting = false
+jobs = Butler:Jobs()
+check("none with the setting off", craftOf(jobs[1], 11).slots, nil)
+
 ns.Crafting.GetReadiness = function() error("boom") end
 check("never raises", (Butler:Craft(11)), false)
 ns.Queue.GetAll = function() error("boom") end
