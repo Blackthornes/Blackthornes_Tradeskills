@@ -122,6 +122,24 @@ Prices:Scrub()
 check("the junk one went", priceTable[BAND].suffixes[999] == nil)
 check("the rest stayed", priceTable[BAND].suffixes[MONKEY] ~= nil)
 
+print("\nthe cheapest by someone else, by suffix")
+
+check("Monkey's rival from its own listings", Prices:GetLinkValue(MONKEY_LINK, "rival") == 8000)
+check("Spirit all yours: no rival, never the item's", Prices:GetLinkValue(SPIRIT_LINK, "rival") == nil)
+check("a suffix never seen has no rival", Prices:GetLinkValue(OTHER_LINK, "rival") == nil)
+check("a plain copy keeps the item's rival", Prices:GetLinkValue(PLAIN_LINK, "rival") == Prices:GetValue(BAND, "rival"))
+check("the raw entry is there", Prices:GetSuffixEntry(BAND, MONKEY) ~= nil and Prices:GetSuffixEntry(BAND, 700) == nil)
+
+local rows = Prices:SuffixRows(BAND)
+check("each suffix listed", #rows == 2)
+check("dearest first", rows[1] and rows[1].suffix == MONKEY and rows[2].suffix == SPIRIT)
+check("an item with none lists none", #Prices:SuffixRows(2589) == 0)
+
+local before = now
+now = now + 49 * 3600
+check("an old rival is not used", Prices:GetLinkValue(MONKEY_LINK, "rival") == nil)
+now = before
+
 print("\nbrowse rows and which rows are asked for a link")
 
 ns.Scanner = nil

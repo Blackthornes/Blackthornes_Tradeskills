@@ -55,9 +55,26 @@ end
 --- What the scans say about one of your auctions.
 -- @return state ("undercut", "cheapest" or "unknown"), the cheapest price
 --         not yours (nil when none), and how far under you it is
-function MyAuctions:Judge(itemID, unit)
+--
+-- A random suffix ("of the Monkey") is judged against its own suffix's
+-- listings when the scans keep them: another suffix's cheaper copy is not
+-- undercutting yours.
+function MyAuctions:Judge(itemID, unit, link)
     local Prices = ns.Prices
     if not (Prices and itemID) then return "unknown" end
+
+    local suffix = link and ns.Util and ns.Util.LinkSuffix and ns.Util.LinkSuffix(link)
+    local record = suffix and Prices.GetTable and Prices:GetTable()[itemID]
+    if suffix and type(record) == "table" and type(record.suffixes) == "table" and Prices.GetSuffixEntry then
+        if not unit then return "unknown" end
+        local entry = Prices:GetSuffixEntry(itemID, suffix)
+        local seen = entry and tonumber(entry.seen)
+        if not seen or time() - seen > self.FRESH then return "unknown" end
+        local rival = tonumber(entry.rival)
+        if not rival or rival <= 0 then return "cheapest", nil end
+        if unit > rival then return "undercut", rival, unit - rival end
+        return "cheapest", rival
+    end
 
     local age = Prices.GetAge and Prices:GetAge(itemID)
     if not age or age > self.FRESH then return "unknown" end
@@ -96,8 +113,8 @@ end
 --- Judge, but the scan's "not yours" leaves out only the character that
 --- scanned: a cheaper auction of your own on another character is not
 --- someone undercutting you.
-function MyAuctions:JudgeOwn(itemID, unit, ownUnits)
-    local state, rival, gap = self:Judge(itemID, unit)
+function MyAuctions:JudgeOwn(itemID, unit, ownUnits, link)
+    local state, rival, gap = self:Judge(itemID, unit, link)
     if state == "undercut" and rival and ownUnits then
         for _, own in ipairs(ownUnits[itemID] or {}) do
             if own < unit and math.abs(own - rival) <= 1 then return "cheapest", rival end
@@ -146,7 +163,7 @@ function MyAuctions:Rows()
 
     local listings = self:Listings()
     local ownUnits = self:OwnUnits(listings)
-    local function JudgeRow(row) return self:JudgeOwn(row.itemID, row.unit, ownUnits) end
+    local function JudgeRow(row) return self:JudgeOwn(row.itemID, row.unit, ownUnits, row.link) end
 
     if Auctions.live then
         summary.read = true
