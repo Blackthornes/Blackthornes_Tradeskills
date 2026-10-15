@@ -26,7 +26,8 @@ local function Label()
     SetShown = function(self, v) self.shown = v and true or false end,
     Show = function(self) self.shown = true end,
     Hide = function(self) self.shown = false end,
-    GetWidth = function() return 66 end })
+    SetTextColor = function(self, r, g, b) self.color = table.concat({ r, g, b }, ",") end,
+  GetWidth = function() return 66 end })
 end
 
 local function Frame()
@@ -74,6 +75,8 @@ ns.Util = {
   FormatMoney = function(c) return tostring(c) .. "c" end,
   GetItemLabel = function(id) return "item" .. id end,
   Uncolored = function(t) return t end,
+  -- Item 12 is green; the others the client has not sent yet.
+  GetItemQualityColor = function(id) if id == 12 then return 0.1, 1, 0 end end,
 }
 ns.RegisterEvent = function() end
 ns.Print = function() end
@@ -132,11 +135,13 @@ local function Draw(entry)
   return row
 end
 local potion = Draw(rows[2])
+check("the name in its rarity colour", potion.name.color, "0.1,1,0")
 check("farm + craft", potion.cells.farmCraft.text, "9000c")
 check("farm + sell", potion.cells.farmSell.text, "12000c")
 check("buy + craft", potion.cells.buyCraft.text, "20c")
 check("best says sell the mats", potion.cells.best.text, "Sell the mats")
 local boots = Draw(rows[3])
+check("no rarity known yet, plain text", boots.name.color, "1,1,1")
 check("not timed shows --", boots.cells.farmCraft.text, "--")
 check("and says not enough yet", boots.cells.best.text, "Not enough yet")
 check("the footer counts", View._widgets.summary.text, "3 crafts  ·  2 timed from your farming")
