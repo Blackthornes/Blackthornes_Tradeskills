@@ -25,7 +25,8 @@
 --   8. Settings: pages along the top, descriptions as tooltips until Show
 --      descriptions is ticked, and a search that finds a setting on any page.
 --      A redraw leaves a number being typed alone; Clear price data
---      clears the page-limit stamp; Reset puts the side panels right.
+--      (typed now) clears the page-limit stamp; Reset puts the side panels
+--      right.
 --   9. Prices: a new search, filter or sort starts at the top, and a redraw
 --      keeps the place. "now" for an age under a minute.
 --  10. Characters: crafts of a dropped profession are left out; professions
@@ -337,7 +338,7 @@ local Theme, Widgets, Motion, UI = ns.Theme, ns.Widgets, ns.Motion, ns.UI
 
 -- The tabs keep their controls to themselves; these keep a copy of each one
 -- made, in the order made, and the buttons by their words.
-local made, buttons = {}, {}
+local made, buttons, allButtons = {}, {}, {}
 for _, name in ipairs({ "CreateScrollList", "CreateSearchBox", "CreateCheckbox", "CreateDropdown",
                          "CreateNumberBox", "SortableHeadings" }) do
     local real = Widgets[name]
@@ -353,6 +354,7 @@ do
     Widgets.CreateButton = function(parent, text, ...)
         local button = real(parent, text, ...)
         buttons[text] = button
+        allButtons[#allButtons + 1] = button
         return button
     end
 end
@@ -821,7 +823,7 @@ local function NumberBox(text)
 end
 
 UI:SelectTab("settings")
-local undercut = NumberBox("Undercut by")
+local undercut = NumberBox("Undercut By:")
 settings.undercutCopper = 3
 UI.tabs.settings.refresh()
 check("a box shows the stored value", undercut.editBox.text, "3")
@@ -855,7 +857,7 @@ local undercutRow = undercut:GetParent()
 local disenchanterBox
 for _, box in ipairs(made.CreateSearchBox) do
     local label = box:GetParent().strings[1]
-    if label and label.text == "Disenchanter" then disenchanterBox = box end
+    if label and label.text == "Disenchanter:" then disenchanterBox = box end
 end
 
 check("Settings opens on Pricing", Holder(undercut).shown, true)
@@ -866,7 +868,7 @@ check("so a row is one line high", undercutRow.height, 24)
 undercutRow.mouseOver = true
 undercutRow.scripts.OnEnter(undercutRow)
 check("hovering a row lights it", undercutRow.hover.shown, true)
-check("and its tooltip names it", GameTooltip.lines[1], "Undercut by")
+check("and its tooltip names it", GameTooltip.lines[1], "Undercut By:")
 check("then says what it does", (GameTooltip.lines[2] or ""):find("cheapest listing", 1, true) ~= nil, true)
 undercutRow.mouseOver = false
 undercutRow.scripts.OnUpdate(undercutRow)
@@ -926,20 +928,36 @@ for text, button in pairs(buttons) do
 end
 table.sort(spills)
 check("no settings button runs past its column", table.concat(spills, ", "), "")
-check("Recipes to learn has its own row", buttons["Show list"]:GetParent().strings[1].text, "Recipes to learn")
+local recipesButton
+for _, button in ipairs(allButtons) do
+    local label = button:GetParent() and button:GetParent().strings and button:GetParent().strings[1]
+    if label and label.text == "Recipes to Learn:" then recipesButton = button end
+end
+check("Recipes to learn has its own row", recipesButton ~= nil, true)
 
 -- The confirmation's Yes is the click that lists, so there is no switch
 -- to turn it off: one was offered and never did anything.
 check("no switch that does nothing: every listing is confirmed", Offered("Confirm before each listing"), nil)
-check("the price check is still offered", Offered("Check price before listing") ~= nil, true)
+check("the price check is still offered", Offered("Check Price First:") ~= nil, true)
+
+-- The owner (2026-10-15): no Undercutting button, and nothing in Settings
+-- deletes data; those are typed commands now.
+check("no Undercutting button", Offered("Undercutting") == nil and buttons["Turn undercut off"] == nil, true)
+check("no Clear price data button", buttons["Clear price data"], nil)
+check("no Reset to defaults button", buttons["Reset to defaults"], nil)
+check("no Forget their characters button", buttons["Forget their characters"], nil)
+settings.undercutCopper = 0
+UI.tabs.settings.refresh()
+check("Undercut By 0 shows 0", undercut.editBox.text, "0")
+undercut.editBox:SetFocus()
+undercut.editBox:SetText("4")
+undercut.editBox.scripts.OnEnterPressed(undercut.editBox)
+check("and takes a new amount", settings.undercutCopper, 4)
 
 ns.db.prices = { Forever = { [1] = {} }, Elsewhere = { [2] = {} } }
 ns.db.lastCappedScanByRealm = { Forever = 900, Elsewhere = 800 }
-local clear = buttons["Clear price data"]
-clear.scripts.OnClick(clear, "LeftButton")
-check("Clear price data asks first", ns.db.lastCappedScanByRealm.Forever, 900)
-clear.scripts.OnClick(clear, "LeftButton")
-check("then clears this realm's page-limit stamp", ns.db.lastCappedScanByRealm.Forever, nil)
+UI:ClearPriceData()
+check("Clear price data clears this realm's page-limit stamp", ns.db.lastCappedScanByRealm.Forever, nil)
 check("and keeps another realm's", ns.db.lastCappedScanByRealm.Elsewhere, 800)
 
 -- A sell list folded down to its header.
@@ -956,11 +974,8 @@ ns.PostPanel = {
 }
 check("the sell list starts folded", sellBody.shown, false)
 
-local reset = buttons["Reset to defaults"]
-reset.scripts.OnClick(reset, "LeftButton")
-check("Reset to defaults asks first", settings.postPanelCollapsed, true)
-reset.scripts.OnClick(reset, "LeftButton")
-check("then opens the folded sell list", sellBody.shown, true)
+UI:ResetSettings()
+check("Reset to defaults opens the folded sell list", sellBody.shown, true)
 check("whose button turns back to a minus", sellButton.glyph.stem.shown, false)
 check("measures it again", calls.height, 1)
 check("and redraws it", calls.panel, 1)

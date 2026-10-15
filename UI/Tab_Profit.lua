@@ -281,7 +281,7 @@ local function AddTimeLines(analysis)
 
     local r, g, b = 0.7, 0.7, 0.7
     if not seconds then
-        GameTooltip:AddLine(L["Craft time not known yet. Make one and it'll be saved."], r, g, b, true)
+        GameTooltip:AddLine(L["Make one to learn how long it takes."], r, g, b, true)
         GameTooltip:Show()
         return
     end
@@ -547,7 +547,7 @@ local function ShowBreaksInto(owner, analysis)
     if facts.source == "yours" then
         GameTooltip:AddLine(L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts)), 0.5, 0.5, 0.5, true)
     else
-        GameTooltip:AddLine(L["These chances come from Classic's numbers until you've done enough disenchants of your own."], 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(L["Rough chances for now. They get better as you disenchant."], 0.5, 0.5, 0.5, true)
     end
     GameTooltip:Show()
 end
@@ -758,7 +758,7 @@ local function BuildDetail(parent)
         if not state.selected or not state.selected.outputItemID then return end
         ns.Auctions:SetLimit(state.selected.outputItemID, nil)
     end, { width = 20, height = 20,
-           tooltip = L["Use the profession's number, or the usual one, again"] })
+           tooltip = L["Use the usual number again"] })
     detail.limitClear:SetPoint("LEFT", detail.limitBox, "RIGHT", 4, 0)
     detail.limitClear:Hide()
 
@@ -831,7 +831,7 @@ local function BuildDetail(parent)
         local most = ns.Profit.MaxCrafts(state.selected.craftableNow,
             state.selected.roomInCrafts)
         if most == 0 and state.selected.waitingForLow then
-            ns.Print(L.Format("no more %s yet: Wait until it runs low is on, so more are made once you are down to %d",
+            ns.Print(L.Format("no more %s yet: Restock When Down To is on, so more are made once you are down to %d",
                 state.selected.name or L["of that craft"], state.selected.restockAt or 0))
         elseif most == 0 then
             ns.Print(L.Format("no room for more %s: you already have your Max on hand (Keep in stock in Settings)",
@@ -858,7 +858,7 @@ local function BuildDetail(parent)
         ns.Print(L.Format("ignored %s: it no longer shows on the Profit tab. Restore it under Ignored crafts in Settings.",
             analysis.name or L["that craft"]))
     end, { width = 60, height = 24,
-           tooltip = L["Stop suggesting this craft. You can bring it back with Restore in Settings."] })
+           tooltip = L["Stops suggesting this craft. Restore it in Settings."] })
     GrowToFit(ignoreButton)
     ignoreButton:SetPoint("BOTTOMLEFT", maxButton, "BOTTOMRIGHT", 8, 0)
     detail.ignoreButton = ignoreButton
@@ -964,9 +964,8 @@ local function UpdateGraph(detail, analysis)
     detail.graphButton:SetShown(analysis ~= nil)
     detail.graphButton:SetText(showGraph and L["Materials"] or L["Price graph"])
     GrowToFit(detail.graphButton)
-    detail.graphButton.tooltipText = showGraph
-        and L["Show the materials list again"]
-        or L["The cheapest price hour by hour for this craft and its materials, and the time of day each is cheapest and most expensive"]
+    detail.graphButton.tooltipText = not showGraph
+        and L["The cheapest price hour by hour, and the best times to buy and sell"] or nil
     detail.reagentHeading:SetText(showGraph and L["PRICE HISTORY"] or L["MATERIALS"])
     detail.graph:SetShown(showGraph)
     if not showGraph then return false end
@@ -1352,10 +1351,10 @@ function UpdateDetail(analysis)
         local raised = own and ns.SellOut and ns.SellOut.GetRaised
             and ns.SellOut:GetRaised(analysis.outputItemID)
         if raised and ns.db.postLimits and raised.to == ns.db.postLimits[analysis.outputItemID] then
-            box.sourceTip = L.Format("Raised from %d to %d because every copy you listed sold. Click the x to go back to its profession's number, or the usual one.",
+            box.sourceTip = L.Format("Raised from %d to %d because every copy you listed sold. Click x to use the usual number again.",
                 raised.from or 0, raised.to or 0)
         elseif own then
-            box.sourceTip = L["Set for this item only. Click the x to go back to its profession's number, or the usual one."]
+            box.sourceTip = L["Set for this item only. Click x to use the usual number again."]
         elseif source == "profession" then
             box.sourceTip = L.Format("From %s in Settings. Type a number to set it for this item only.", professionName)
         else
@@ -1962,7 +1961,7 @@ local function BuildCrafts(container)
         elseif noLimit == #rows and not ns.Auctions:LearnsFromSales() then
             ns.Print(L["nothing queued: none of these has a Keep in stock number, so set one per item in Settings"])
         elseif noLimit == #rows then
-            ns.Print(L["nothing queued: none of these has sold for you this week, so set Keep in stock per item in Settings"])
+            ns.Print(L["nothing queued: none of these has sold for you this week, so set Keep in Stock in Settings"])
         else
             local waiting = false
             for _, row in ipairs(rows) do
@@ -1975,7 +1974,7 @@ local function BuildCrafts(container)
             end
         end
     end, { width = 90, height = 20,
-           tooltip = L["Queue every craft in this list up to your Max on hand, less what you have or have queued. Max on hand is Keep in stock per item in Settings, or about two days of what you sold this week when that is 0."] })
+           tooltip = L["Queues every craft in this list up to Keep in Stock, less what you have or have queued."] })
     GrowToFit(queueAll)
     queueAll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 2)
     widgets.queueAll = queueAll
