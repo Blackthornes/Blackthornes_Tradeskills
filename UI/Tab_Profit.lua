@@ -831,7 +831,7 @@ local function BuildDetail(parent)
         local most = ns.Profit.MaxCrafts(state.selected.craftableNow,
             state.selected.roomInCrafts)
         if most == 0 and state.selected.waitingForLow then
-            ns.Print(L.Format("no more %s yet: Wait until it runs low is on, so more are made once you are down to %d",
+            ns.Print(L.Format("no more %s yet: Restock When Down To is on, so more are made once you are down to %d",
                 state.selected.name or L["of that craft"], state.selected.restockAt or 0))
         elseif most == 0 then
             ns.Print(L.Format("no room for more %s: you already have your Max on hand (Keep in stock in Settings)",
@@ -1962,7 +1962,7 @@ local function BuildCrafts(container)
         elseif noLimit == #rows and not ns.Auctions:LearnsFromSales() then
             ns.Print(L["nothing queued: none of these has a Keep in stock number, so set one per item in Settings"])
         elseif noLimit == #rows then
-            ns.Print(L["nothing queued: none of these has sold for you this week, so set Keep in stock per item in Settings"])
+            ns.Print(L["nothing queued: none of these has sold for you this week, so set Keep in Stock in Settings"])
         else
             local waiting = false
             for _, row in ipairs(rows) do
@@ -1975,7 +1975,7 @@ local function BuildCrafts(container)
             end
         end
     end, { width = 90, height = 20,
-           tooltip = L["Queue every craft in this list up to your Max on hand, less what you have or have queued. Max on hand is Keep in stock per item in Settings, or about two days of what you sold this week when that is 0."] })
+           tooltip = L["Queue every craft in this list up to your Max on hand, less what you have or have queued. Max on hand is Keep in Stock in Settings, or about two days of what you sold this week when that is 0."] })
     GrowToFit(queueAll)
     queueAll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 2)
     widgets.queueAll = queueAll

@@ -542,7 +542,7 @@ local function QueueMore(line, quantity)
     if room then
         if room <= 0 then
             if line.waitingForLow then
-                ns.Warn(L.Format("%s: you have %d (%d queued). Wait until it runs low is on, so more are made once you are down to %d.",
+                ns.Warn(L.Format("%s: you have %d (%d queued). Restock When Down To is on, so more are made once you are down to %d.",
                     line.name, (line.stock or 0) + queuedNow, queuedNow, line.restockAt or 0))
             elseif queuedNow > 0 then
                 ns.Warn(L.Format("%s: you have %d and %d queued, which fills your limit of %d, so none were queued.",
@@ -839,7 +839,7 @@ local function UpdateRow(row, line)
     end
 
     if limitApplies and line.waitingForLow then
-        row.add.tooltipText = L.Format("You have %d %s. Wait until it runs low is on, so more are queued once you are down to %d. Tick Ignore max on hand to queue more now.",
+        row.add.tooltipText = L.Format("You have %d %s. Restock When Down To is on, so more are queued once you are down to %d. Tick Ignore max on hand to queue more now.",
             (line.stock or 0) + (line.queuedElsewhere or 0), line.name, line.restockAt or 0)
     elseif limitApplies then
         row.add.tooltipText = ((line.queuedElsewhere or 0) > 0

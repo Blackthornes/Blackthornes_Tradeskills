@@ -577,3 +577,20 @@ ns.RegisterCommand("share", L["share with your other account and guild: with <na
             if ns.GuildPrices then ns.PrintRaw("  " .. ns.GuildPrices:Describe()) end
         end
     end)
+
+-- Settings had a Forget their characters button; it is typed now (the
+-- owner, 2026-10-15), since Settings never deletes data.
+ns.RegisterCommand("forgetlinked", L["remove the copies of your other account's characters (add confirm)"],
+    function(args)
+        if not (args or ""):lower():match("^%s*confirm%s*$") then
+            ns.Print(L["This removes the copies of your other account's characters. Your own stay. Type /bts forgetlinked confirm to do it."])
+            return
+        end
+        local count = AccountLink:Forget() or 0
+        if count == 1 then
+            ns.Print(L.Format("forgot %d character from your other account", count))
+        else
+            ns.Print(L.Format("forgot %d characters from your other account", count))
+        end
+        if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+    end)
