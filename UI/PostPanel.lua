@@ -736,7 +736,7 @@ function PostPanel:UpdateListAll(lines)
 
     button:SetEnabledState(count > 0)
     button.tooltipText = count > 0
-        and L["Lists the most valuable stack on the list. Click again for the next one, since the game needs a click for every listing."]
+        and L["Lists the most valuable stack. Click again for the next one."]
         or L["Nothing on the list can be listed right now."]
 end
 
