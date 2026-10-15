@@ -23,6 +23,17 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.60.0
+
+- The Profit tab has a Your time view. It compares farming the materials, selling them as they are, and buying them, in gold an hour.
+- Gear with a random suffix gets a price for each suffix.
+
+Fixes and changes:
+
+- The Profit tab sets the least needed columns aside when it's crowded.
+- A shopping list search runs again after you buy.
+- Various fixes to Tradeskills.
+
 ## 0.59.0
 
 - Listing on the auction house is faster.

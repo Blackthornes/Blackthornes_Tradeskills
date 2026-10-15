@@ -4,6 +4,23 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.60.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Your time view:** on the Profit tab, each craft you know shows gold an
+  hour for farming the materials and crafting, and for farming them and
+  selling them as they are, plus the profit for buying them and crafting.
+  Farming time comes from Farmer, from your own kills and gathers. Right-click
+  a row or use Queue 1 to queue a craft.
+- **Random suffix prices:** each suffix seen at the auction house keeps a price
+  of its own. It shows on tooltips ("This one"), Post, Your auctions,
+  Disenchanting and a Random suffixes row on the Prices tab.
+- **Profit tab:** the least needed columns step aside when they don't fit.
+- **Shopping lists:** a search runs again after you buy.
+- **Bug fixes:** various fixes to Tradeskills.
+
 ## 0.59.0
 
 For WoW: Forever (interface 16001). No files were added, so `/reload` is
