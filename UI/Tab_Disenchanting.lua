@@ -46,8 +46,6 @@ local VIEWS = {
     auction = {
         columns = {
             { key = "gain",   label = L["PROFIT"],     width = 66, money = true },
-            -- The profit an hour of disenchanting casts (asked 2026-10-09).
-            { key = "perHour", label = L["GOLD/HR"],   width = 70, money = true },
             { key = "margin", label = L["MARGIN"],     width = 50, justify = "CENTER" },
             { key = "value",  label = L["DISENCHANT"], width = 70, money = true },
             { key = "buy",    label = L["BUY"],        width = 66, money = true },
@@ -59,8 +57,6 @@ local VIEWS = {
     bag = {
         columns = {
             { key = "difference", label = L["DIFFERENCE"], width = 74, money = true },
-            -- What disenchanting these makes an hour, at the DISENCHANT value.
-            { key = "perHour",    label = L["GOLD/HR"],    width = 70, money = true },
             { key = "value",      label = L["DISENCHANT"], width = 70, money = true },
             { key = "sells",      label = L["SELLS"],      width = 70, money = true },
             { key = "count",      label = L["HAVE"],       width = 40, justify = "CENTER" },
@@ -69,7 +65,7 @@ local VIEWS = {
     },
 }
 
-local MAX_COLUMNS = 7
+local MAX_COLUMNS = 6
 
 -- Any column but the item's name can be hidden, each view on its own
 -- (UI/Columns.lua).
@@ -132,16 +128,6 @@ local function KnownQuality(entry)
     if facts and facts.quality then return facts.quality end
     local known = ns.Disenchant and ns.Disenchant.GetItemFacts and ns.Disenchant:GetItemFacts(entry.itemID)
     return known and known.quality
-end
-
---- Gold an hour of disenchanting casts: a bought item's profit, or what a
---- carried one breaks into. Nil until a Disenchant cast's length is known.
-local function PerHour(entry)
-    local CraftTime = ns.CraftTime
-    if not CraftTime then return nil end
-    local seconds = CraftTime:GetCast(CraftTime.DISENCHANT_SPELL)
-    local amount = entry.kind == "bag" and entry.value or entry.gain
-    return CraftTime.PerHour(amount, seconds)
 end
 
 -- The tag on a bags row bought to disenchant.
@@ -254,16 +240,6 @@ local function FillCell(cell, key, entry)
         cell:SetText(Money(entry.gain))
         cell:SetTextColor(Theme.ProfitColor(entry.gain))
         return
-    elseif key == "perHour" then
-        local perHour = PerHour(entry)
-        if perHour then
-            cell:SetText(Money(perHour))
-            cell:SetTextColor(Theme.ProfitColor(perHour))
-        else
-            cell:SetText(entry.kind == "bag" and not entry.value and "" or "?")
-            cell:SetTextColor(Theme.Unpack("dim"))
-        end
-        return
     elseif key == "margin" then
         cell:SetText(MarginText(entry.margin))
         cell:SetTextColor(Theme.ProfitColor(entry.gain))
@@ -332,23 +308,6 @@ local function UpdateRow(row, entry)
     end
 end
 
---- How long a disenchant takes and what that makes an hour.
-local function AddPerHourLine(entry)
-    local CraftTime = ns.CraftTime
-    if not CraftTime then return end
-    local seconds = CraftTime:GetCast(CraftTime.DISENCHANT_SPELL)
-    if not seconds then
-        GameTooltip:AddLine(L["Disenchant once so its cast time can be used for gold per hour."], 0.5, 0.5, 0.5, true)
-        return
-    end
-    local perHour = PerHour(entry)
-    if perHour then
-        GameTooltip:AddLine(L.Format("About %s an hour, at %s a disenchant.",
-            Util.FormatMoney(perHour, { noColor = true, short = true }), CraftTime.Format(seconds)),
-            0.7, 0.7, 0.7, true)
-    end
-end
-
 local function ShowBagTooltip(entry)
     if entry.value and entry.sells then
         GameTooltip:AddLine(" ")
@@ -364,8 +323,6 @@ local function ShowBagTooltip(entry)
     if entry.sellsAt == "vendor" then
         GameTooltip:AddLine(L["Its sale price is what a vendor pays."], 0.7, 0.7, 0.7, true)
     end
-
-    AddPerHourLine(entry)
 
     if entry.bought then
         GameTooltip:AddLine(L.Format("%d bought on the auction house to disenchant.", entry.bought),
@@ -403,8 +360,6 @@ local function ShowRowTooltip(row, entry)
     if entry.stale then
         GameTooltip:AddLine(L["Scanned a while ago, so it may have sold."], 0.91, 0.76, 0.35, true)
     end
-
-    AddPerHourLine(entry)
 
     GameTooltip:AddLine(L["Right-click to search the auction house for it. What you buy then is marked to disenchant."],
         0.5, 0.5, 0.5, true)
@@ -1166,7 +1121,6 @@ local function Build(container)
     local FIELDS = {
         difference = function(row) return row.value and row.sells and (row.value - row.sells) or nil end,
         skill = function(row) return row.needs end,
-        perHour = PerHour,
     }
     local sortLabels, values = { name = nameHeading }, {
         name = function(row) return row.name end,
