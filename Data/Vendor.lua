@@ -439,9 +439,9 @@ function Vendor:BuyNeeded()
     local lines, total, cheaperElsewhere = self:GetNeeded()
     if #lines == 0 then
         if cheaperElsewhere > 0 then
-            ns.Print(L["the auction house is cheaper for everything this vendor has that the queue needs"])
+            ns.Print(L["the auction house has it all for less."])
         else
-            ns.Print(L["this vendor has nothing the queue needs"])
+            ns.Print(L["this vendor has nothing your queue needs."])
         end
         return false
     end
@@ -487,7 +487,7 @@ function Vendor:BuyStep()
 
     self.buySteps = self.buySteps + 1
     if self.buySteps > MAX_BUY_STEPS then
-        ns.Warn(L["stopped buying after a lot of purchases in a row; click again if you still need more"])
+        ns.Warn(L["stopped after a lot of buys. Click again for more."])
         self:FinishBuying()
         return
     end
