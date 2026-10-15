@@ -2599,6 +2599,7 @@ L["Makes a new list from a line someone copied with Copy."] = "Macht eine neue L
 L["New list"] = "Neue Liste"
 L["Next %d/%d"] = "Weiter %d/%d"
 L["Nothing on this list to look for on the auction house."] = "Auf dieser Liste ist nichts, das du im Auktionshaus suchen musst."
+L["That's everything on the list."] = "Damit hast du alles von der Liste."
 L["Paste a list"] = "Liste einfügen"
 L["Pasted list"] = "Eingefügte Liste"
 L["Save as a list"] = "Als Liste speichern"
