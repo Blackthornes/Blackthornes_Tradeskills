@@ -281,7 +281,7 @@ local function BuildDetail(parent)
         SearchCrate(state.selected)
     end, { width = 134, primary = true, height = 24 })
     detail.crateButton:SetPoint("BOTTOMLEFT", 12, 14)
-    detail.crateButton.tooltipText = L["Sends a search for this crate, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
+    detail.crateButton.tooltipText = L["Searches the auction house for this crate. You still click the game's Buy button to buy it."]
 
     detail.bundleButton = Widgets.CreateButton(detail, L["Search bundle"], function()
         SearchBundle(state.selected)

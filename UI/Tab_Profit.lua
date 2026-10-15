@@ -547,7 +547,7 @@ local function ShowBreaksInto(owner, analysis)
     if facts.source == "yours" then
         GameTooltip:AddLine(L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts)), 0.5, 0.5, 0.5, true)
     else
-        GameTooltip:AddLine(L["Chances come from the Classic table built into the addon until you have done enough disenchants of your own."], 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(L["These chances come from Classic's numbers until you've done enough disenchants of your own."], 0.5, 0.5, 0.5, true)
     end
     GameTooltip:Show()
 end
@@ -858,7 +858,7 @@ local function BuildDetail(parent)
         ns.Print(L.Format("ignored %s: it no longer shows on the Profit tab. Restore it under Ignored crafts in Settings.",
             analysis.name or L["that craft"]))
     end, { width = 60, height = 24,
-           tooltip = L["Stop recommending this craft. Settings lists ignored crafts, each with a Restore button."] })
+           tooltip = L["Stop suggesting this craft. You can bring it back with Restore in Settings."] })
     GrowToFit(ignoreButton)
     ignoreButton:SetPoint("BOTTOMLEFT", maxButton, "BOTTOMRIGHT", 8, 0)
     detail.ignoreButton = ignoreButton
@@ -966,7 +966,7 @@ local function UpdateGraph(detail, analysis)
     GrowToFit(detail.graphButton)
     detail.graphButton.tooltipText = showGraph
         and L["Show the materials list again"]
-        or L["The cheapest price hour by hour, for this craft and its materials, and when in the day each is cheapest and dearest"]
+        or L["The cheapest price hour by hour for this craft and its materials, and the time of day each is cheapest and most expensive"]
     detail.reagentHeading:SetText(showGraph and L["PRICE HISTORY"] or L["MATERIALS"])
     detail.graph:SetShown(showGraph)
     if not showGraph then return false end
@@ -1975,7 +1975,7 @@ local function BuildCrafts(container)
             end
         end
     end, { width = 90, height = 20,
-           tooltip = L["Queue every craft in this list up to your Max on hand (Keep in stock per item in Settings, or about two days of what sold for you this week when that is 0), less what you already have or have queued"] })
+           tooltip = L["Queue every craft in this list up to your Max on hand, less what you have or have queued. Max on hand is Keep in stock per item in Settings, or about two days of what you sold this week when that is 0."] })
     GrowToFit(queueAll)
     queueAll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 2)
     widgets.queueAll = queueAll
