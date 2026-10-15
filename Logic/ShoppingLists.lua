@@ -536,8 +536,10 @@ end
 --- so it never costs the player a listing.
 -- @param counts optional [itemID] = how many are still needed: picking one
 --   in the results fills the buy window's quantity box (UI/BuyQuantity.lua)
+-- @param owner optional: the list the search is for (UI/ShoppingListsView.lua
+--   searches it again after a buy). An owner may search for one item too.
 -- @return true when the search was queued, or false and why
-function ShoppingLists:SearchMany(itemIDs, counts)
+function ShoppingLists:SearchMany(itemIDs, counts, owner)
     if type(itemIDs) ~= "table" or #itemIDs == 0 then
         return false, L["Nothing on this list to look for on the auction house."]
     end
@@ -550,7 +552,7 @@ function ShoppingLists:SearchMany(itemIDs, counts)
     end
 
     -- One item: the ordinary search, which also fills the quantity.
-    if #itemIDs == 1 or not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
+    if (#itemIDs == 1 and owner == nil) or not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
             and Util.HasFunction("C_AuctionHouse.MakeItemKey")) then
         return false, "single"
     end
@@ -570,6 +572,14 @@ function ShoppingLists:SearchMany(itemIDs, counts)
         priority = ns.AHQueue.PRIORITY.urgent,
         expires = 8,
         send = function()
+            ShoppingLists:WatchSearches()
+            -- Set first: the hook below sees these keys and keeps it.
+            -- Buys from the same list's last search stay counted.
+            local prev = ShoppingLists.lastSearch
+            ShoppingLists.lastSearch = owner ~= nil and {
+                owner = owner, keys = keys, ids = itemIDs,
+                bought = prev and prev.owner == owner and prev.bought or {},
+            } or nil
             local ok = pcall(C_AuctionHouse.SearchForItemKeys, keys, {})
             if not ok then
                 ns.Warn(L["the game refused that search"])
@@ -584,4 +594,26 @@ function ShoppingLists:SearchMany(itemIDs, counts)
         end,
     })
     return true
+end
+
+-- The list whose search the results show: { owner, keys, ids, bought },
+-- until any other search fills the results (the player's own, a scan, a
+-- check) or the auction house closes.
+ShoppingLists.lastSearch = nil
+
+--- Watch every search that fills the browse results, once. hooksecurefunc
+--- runs after the game's own call and changes nothing.
+function ShoppingLists:WatchSearches()
+    if self.watching then return end
+    self.watching = true
+    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() ShoppingLists.lastSearch = nil end)
+    if type(hooksecurefunc) ~= "function" or type(C_AuctionHouse) ~= "table" then return end
+    for _, name in ipairs({ "SendBrowseQuery", "SearchForFavorites", "SearchForItemKeys" }) do
+        if type(C_AuctionHouse[name]) == "function" then
+            pcall(hooksecurefunc, C_AuctionHouse, name, function(query)
+                local last = ShoppingLists.lastSearch
+                if last and query ~= last.keys then ShoppingLists.lastSearch = nil end
+            end)
+        end
+    end
 end

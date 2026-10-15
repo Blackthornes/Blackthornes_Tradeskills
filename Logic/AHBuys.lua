@@ -332,6 +332,9 @@ function AHBuys:Confirm(auctionID)
     -- Bought after a search from the Disenchanting tab: marked to disenchant.
     local buys = ns.DisenchantBuys
     if buys and buys.OnBought then pcall(buys.OnBought, buys, wait.itemID, wait.quantity) end
+    -- Bought from a shopping list's search: its results look again.
+    local lists = ns.ShoppingListsView
+    if lists and lists.OnBought then pcall(lists.OnBought, lists, wait.itemID, wait.quantity) end
 end
 
 function AHBuys:Fail()
