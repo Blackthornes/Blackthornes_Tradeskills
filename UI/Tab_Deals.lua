@@ -402,7 +402,7 @@ local function BuildDetail(parent)
         SearchAuctionHouse(state.selected)
     end, { width = 200, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
-    searchButton.tooltipText = L["Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
+    searchButton.tooltipText = L["Searches the auction house for this item. You still click the game's Buy button to buy it."]
     detail.searchButton = searchButton
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
@@ -510,7 +510,7 @@ local function UpdateVendorDetail(detail, entry)
     elseif entry.vendorFrom == "reported" then
         parts[#parts + 1] = L["The vendor price is what vendors on Forever were seen paying."]
     else
-        parts[#parts + 1] = L["The vendor price comes from the game's item data, which Forever has changed for some items. Sell one and what a vendor really pays is used from then on."]
+        parts[#parts + 1] = L["The vendor price comes from the game's item data, and Forever changed it for some items. Sell one to a vendor and the real price is used from then on."]
     end
     block.note:SetText(table.concat(parts, " "))
 end
@@ -884,7 +884,7 @@ local function Build(container)
     end, { width = 130 })
     goal:SetPoint("LEFT", show, "RIGHT", 8, 0)
     if ns.DealsWrits then goal:SetValue(ns.DealsWrits:GetGoal()) end
-    goal.tooltipText = L["The standing with your side's trade camp to work towards. The panel on the right says how many writs it still takes and what they cost."]
+    goal.tooltipText = L["The standing you want with your side's trade camp. The panel on the right shows how many writs that still takes and what they cost."]
     goal:Hide()
     widgets.goal = goal
 

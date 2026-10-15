@@ -231,7 +231,7 @@ local function CreateRow(row)
         ns.Print(L.Format("ignored %s: it no longer shows on Ready to sell. Restore it under Ignored items in Settings.",
             line.label or L["that item"]))
     end, { width = IGNORE_WIDTH, height = 18,
-           tooltip = L["Ignore this item so it stops showing on Ready to sell. Settings lists ignored items, each with a Restore button."] })
+           tooltip = L["Stop showing this item on Ready to sell. You can bring it back with Restore in Settings."] })
     row.ignore:SetPoint("RIGHT", -6, 0)
 end
 
@@ -536,7 +536,7 @@ function PostPanel:Build()
     hideLosses:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(L["Hide losses"])
-        GameTooltip:AddLine(L["Hides items the auction house would sell for less than they cost you: less than the materials, less than you paid to make them after the cut, or less than a vendor pays."], 1, 1, 1, true)
+        GameTooltip:AddLine(L["Hides items that would sell at a loss: for less than the materials, less than you paid to make them after the cut, or less than a vendor pays."], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     hideLosses:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1237,7 +1237,7 @@ function PostPanel:UpdateSearchAll(lines)
     button:SetText(label)
     local width = Theme.MeasureText and Theme.MeasureText("small", label)
     button:SetWidth(math.max(110, (width or 0) + 24))
-    button.tooltipText = L["Searches the auction house for everything on this list it sells, all at once. Pick one in the results and the quantity is filled in with how many you still need."]
+    button.tooltipText = L["Searches the auction house for everything on this list at once. Pick one in the results and the quantity fills in with how many you still need."]
 end
 
 -- Clicking the row searched already, but nothing said so. Asked for: "a button
@@ -1253,7 +1253,7 @@ function PostPanel.CreateShoppingRow(row)
         if PostPanel:CanSearch(row.data) then
             ns.UI:SearchAuctionHouse(row.data.itemID, row.data.shortfall)
         end
-    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = L["Search the auction house for this. Pick it in the results and the quantity is filled in with how many you still need."] })
+    end, { width = SEARCH_WIDTH, height = 18, primary = true, tooltip = L["Search the auction house for this. Pick it in the results and the quantity fills in with how many you still need."] })
     row.search:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 
     local inset = -(8 + SEARCH_WIDTH + 6)
