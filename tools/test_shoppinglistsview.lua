@@ -8,6 +8,8 @@
 --   3. Delete takes a second click, and nothing else deletes.
 --   4. A list's Search steps through its items when the game can only look
 --      for one at a time.
+--   5. After a buy from a list's search, the results look again for only
+--      what is still needed, and stop once another search took them over.
 
 local function noop() end
 
@@ -185,5 +187,80 @@ View.list.opts.onClick(View.list.data[2])
 check("a click opens it", View.open == 1 and View.mode == "add")
 View.list.opts.onClick(View.list.data[2])
 check("a second click closes it", View.open == nil and View.mode == nil)
+
+-- 5. After a buy, the craft queue's search looks again for what is left
+do
+    functions["C_AuctionHouse.SearchForItemKeys"] = true
+    functions["C_AuctionHouse.MakeItemKey"] = true
+    local sent = {}
+    C_AuctionHouse = {
+        MakeItemKey = function(id) return { itemID = id } end,
+        SearchForItemKeys = function(keys) sent[#sent + 1] = keys end,
+        SendBrowseQuery = noop, SearchForFavorites = noop,
+    }
+    hooksecurefunc = function(t, name, post)
+        local real = t[name]
+        t[name] = function(...) real(...); post(...) end
+    end
+    ns.AHQueue = { PRIORITY = { urgent = 1 }, Request = function(_, job) job.send() end }
+    local timer
+    C_Timer = { NewTimer = function(_, fn) timer = { fn = fn, Cancel = function() timer = nil end }; return timer end }
+    local wants
+    ns.BuyQuantity = { WantMany = function(_, counts) wants = counts end }
+
+    local need = { [PEACE] = 10, [SILVER] = 4 }
+    ns.Queue.GetShoppingList = function()
+        local out = {}
+        for _, id in ipairs({ PEACE, SILVER }) do
+            out[#out + 1] = { itemID = id, needed = need[id], shortfall = need[id], have = 0 }
+        end
+        return out
+    end
+    View:Refresh(true)
+    local queue = View.list.data[1]
+    View:SearchList(queue)
+    check("the queue's search goes out with both items", #sent == 1 and #sent[1] == 2
+        and Lists.lastSearch and Lists.lastSearch.owner == "queue")
+
+    need[PEACE] = 6
+    View:OnBought(PEACE, 4)
+    check("a buy waits a moment before looking again", timer ~= nil and #sent == 1)
+    timer.fn()
+    check("part of one bought: no new search, the buy box counts move", #sent == 1 and wants[PEACE] == 6)
+
+    need[PEACE] = 0
+    View:OnBought(PEACE, 6)
+    timer.fn()
+    check("all of one bought: the search goes again without it", #sent == 2 and #sent[2] == 1
+        and sent[2][1].itemID == SILVER)
+
+    C_AuctionHouse.SendBrowseQuery({ searchString = "linen" })
+    check("the player's own search takes the results over", Lists.lastSearch == nil)
+    timer = nil
+    View:OnBought(SILVER, 4)
+    check("so a buy then searches nothing", timer == nil and #sent == 2)
+
+    View:SearchList(View.list.data[1])
+    need[SILVER] = 0
+    printed = {}
+    View:OnBought(SILVER, 4)
+    timer.fn()
+    check("the last one bought says so and searches nothing", #sent == 3 and Lists.lastSearch == nil
+        and printed[#printed] == "That's everything on the list.")
+
+    -- A list of the player's own only counts a buy once the mail is read,
+    -- so the buys since its search count instead.
+    View:Refresh(true)
+    local own = View.list.data[2]
+    View:SearchList(own)
+    local before = #sent
+    check("a list of your own searches its items", #sent[before] == 2 and Lists.lastSearch.owner == own.key)
+    local peaceNeed
+    for _, l in ipairs(own.lines) do if l.itemID == PEACE then peaceNeed = l.need end end
+    View:OnBought(PEACE, peaceNeed)
+    timer.fn()
+    check("its bought item drops out though the mail is unread", #sent == before + 1 and #sent[#sent] == 1
+        and sent[#sent][1].itemID == SILVER)
+end
 
 print(("\n%d check(s) passed\n"):format(checks))
