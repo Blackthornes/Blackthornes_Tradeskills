@@ -435,7 +435,7 @@ local function BuildDetail(parent)
         SearchAuctionHouse(state.selected)
     end, { width = 180, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
-    searchButton.tooltipText = L["Searches the auction house for this item. You still click the game's Buy button to buy it."]
+    searchButton.tooltipText = L["Finds this item on the auction house. You click Buy yourself."]
     detail.searchButton = searchButton
 
     -- Disenchant, for an item in the bags. The click itself is taken by the
@@ -639,7 +639,7 @@ local function UpdateBagDetail(entry)
     if facts.source == "yours" then
         note = L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts))
     else
-        note = L["These chances come from Classic's numbers until you've done enough disenchants of your own."]
+        note = L["Rough chances for now. They get better as you disenchant."]
     end
     if not entry.soulbound then
         note = note .. L[" If it is already bound to you, only a vendor will buy it."]
