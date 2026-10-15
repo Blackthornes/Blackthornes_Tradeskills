@@ -263,6 +263,25 @@ ok, why = Butler:Craft(10)
 check("not this character's craft", ok, false)
 check("says why", why, "it's no longer in your queue")
 
+print("\nprofession for the Craft button")
+ns.ProfessionOpener = {
+  ProfessionFor = function(_, id) if id == 11 then return { name = "Tailoring", spell = "Tailoring", skillLineID = 197 } end end,
+  WindowShowsRecipe = function(_, id) return id == 11 end,
+}
+local profession = Butler:Profession(11)
+check("names the profession", profession and profession.name, "Tailoring")
+check("and the spell that opens it", profession and profession.spell, "Tailoring")
+check("open while the window shows it", profession and profession.open, true)
+ns.Crafting.isTradeSkillOpen = false
+profession = Butler:Profession(11)
+check("closed window says so", profession and profession.open, false)
+check("no window to open is nil", Butler:Profession(99), nil)
+check("no recipe is nil", Butler:Profession(nil), nil)
+ns.ProfessionOpener.ProfessionFor = function() error("boom") end
+check("never raises", Butler:Profession(11), nil)
+ns.ProfessionOpener = nil
+ns.Crafting.isTradeSkillOpen = true
+
 print("\nprofession cooldowns")
 ns.Cooldowns = {
   ReadyList = function() return { { key = WITHER, group = "Mooncloth", name = "Mooncloth", recipeID = 18560 },
