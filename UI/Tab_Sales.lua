@@ -590,11 +590,11 @@ local function UpdateDetail(item, totals)
         end
 
         if item.restored then
-            detail.note:SetText(L["Some of these numbers are from before you last quit the game. Only sales, amounts, expiries and gold are saved when you quit, so the auction cut and cancellations here are for this session only."])
+            detail.note:SetText(L["The auction cut and cancellations here are from this session only."])
         elseif item.guessed > 0 then
-            detail.note:SetText(L["A cost marked est. is what the materials cost today, because that sale happened before Tradeskills started saving what each craft cost."])
+            detail.note:SetText(L["A cost marked est. is what the materials cost today."])
         elseif item.soldUnits == item.sold and item.sold > 0 then
-            detail.note:SetText(L["The sale mail does not say how many were in the stack, so a stack of twenty looks the same as a single item. For now, every sale counts as one."])
+            detail.note:SetText(L["Each sale counts as one, even a whole stack."])
         else
             detail.note:SetText("")
         end
@@ -632,9 +632,9 @@ local function UpdateDetail(item, totals)
         Add(L["Mailbox read"], Util.FormatAgeAgo(age), "muted")
 
         if not ns.Mail:HasReadThisSession() then
-            detail.note:SetText(L["Sales are only recorded when you open a mailbox. Anything that sold since you last opened one is not here yet."])
+            detail.note:SetText(L["Open a mailbox to bring in your newest sales."])
         else
-            detail.note:SetText(L["Click an item to see how it has done. Sell-through ignores listings you cancelled, since cancelling says nothing about whether it would have sold."])
+            detail.note:SetText(L["Click an item to see how it has done. Sell-through leaves out listings you cancelled."])
         end
     end
 

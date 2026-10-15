@@ -297,7 +297,7 @@ function Vendor:CanBuy()
         return false, L["no vendor is open"]
     end
     if not Util.HasFunction("BuyMerchantItem") then
-        return false, L["this version of the game does not let addons buy from vendors"]
+        return false, L["Buying doesn't work here."]
     end
     return true
 end

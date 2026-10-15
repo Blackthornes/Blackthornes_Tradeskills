@@ -290,7 +290,7 @@ function Scanner:CanFullScan()
 
     local caps = ns.Compat:Get().auction
     if not caps.hasReplicate and not caps.hasBrowseQuery then
-        return false, L["this version of the game does not let addons scan the auction house"]
+        return false, L["Scanning doesn't work here."]
     end
 
     return true
