@@ -112,7 +112,7 @@ local lines = {
     { itemID = 9, unitPrice = 400, postQuantity = 2 },
 }
 PostPanel:UpdateListAll(lines)
-check("List all counts what it can list", button.text == "List all 2")
+check("List all counts what it can list", button.text == "List Next - 2 remaining")
 check("and can be clicked", button.enabled == true)
 
 PostPanel.shownLines = lines
@@ -120,7 +120,7 @@ PostPanel:ListNext()
 check("a click lists the most valuable stack it can", requested and requested[1] == 8 and requested[2] == 3)
 
 PostPanel:UpdateListAll({})
-check("nothing to list: no count", button.text == "List all")
+check("nothing to list: no count", button.text == "List Next")
 check("and greyed", button.enabled == false)
 
 requested = nil
