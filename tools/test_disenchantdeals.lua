@@ -465,21 +465,11 @@ local row = Stub()
 list.opts.createRow(row)
 list.opts.updateRow(row, Find(list.data, 2001))
 
--- Right to left: PROFIT, GOLD/HR, MARGIN, DISENCHANT, BUY, SKILL, AGE.
+-- Right to left: PROFIT, MARGIN, DISENCHANT, BUY, SKILL, AGE.
 check("PROFIT shows 260 in green", row.cells[1].text:find("60", 1, true) and row.cells[1].color == "profit")
-check("GOLD/HR waits for a Disenchant cast's length", row.cells[2].text == "?" and row.cells[2].color == "dim")
-check("MARGIN shows 52%", row.cells[3].text == "52%")
-check("BUY shows the price", row.cells[5].text ~= "")
-check("SKILL shows what it needs", row.cells[6].text == "25" and row.cells[6].color == "dim")
-
--- With a disenchant seen to take 3 seconds: 260 a cast is 312000 an hour.
-assert(loadfile(lfs_cwd .. "/Logic/CraftTime.lua"))("Blackthornes_TS", ns)
-ns.CraftTime:NoteCast(13262, 3)
-list.opts.updateRow(row, Find(list.data, 2001))
-check("GOLD/HR is the profit for an hour of casts", row.cells[2].color == "profit"
-    and row.cells[2].text:find("31", 1, true) ~= nil)
-ns.CraftTime = nil
-ns.db.castTimes = nil
+check("MARGIN shows 52%", row.cells[2].text == "52%")
+check("BUY shows the price", row.cells[4].text ~= "")
+check("SKILL shows what it needs", row.cells[5].text == "25" and row.cells[5].color == "dim")
 
 -- Reported 2026-10-08: the names drew white. Most rows are items read in an
 -- earlier session that the client's cache no longer holds, so the name's
@@ -502,7 +492,7 @@ check("unticking shows the loss too", Find(list.data, 2006) ~= nil)
 Enchanter(10)
 tab.refresh()
 list.opts.updateRow(row, Find(list.data, 2001))
-check("too high for his enchanters: SKILL in red", row.cells[6].color == "loss")
+check("too high for his enchanters: SKILL in red", row.cells[5].color == "loss")
 
 checkboxes["Only ones I can disenchant"].onToggle(true)
 check("and hidden when asked", Find(list.data, 2001) == nil and Find(list.data, 2007) ~= nil)
