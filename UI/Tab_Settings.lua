@@ -1337,7 +1337,7 @@ local function Build(outer)
     -- ReloadUI is allowed from a click, and saves everything first.
     widgets.textReload = Widgets.CreateButton(textRow, L["Reload now"], function()
         if ReloadUI then ReloadUI() end
-    end, { width = 90, height = 20, tooltip = L["Reload the interface so the new text size shows (/reload)"] })
+    end, { width = 90, height = 20 })
     FitButton(widgets.textReload)
     ReloadUnder(textRow, widgets.textSize, widgets.textReload)
     widgets.textReload:Hide()
@@ -1359,7 +1359,7 @@ local function Build(outer)
 
     widgets.styleReload = Widgets.CreateButton(styleRow, L["Reload now"], function()
         if ReloadUI then ReloadUI() end
-    end, { width = 90, height = 20, tooltip = L["Reload the interface so the new window style shows (/reload)"] })
+    end, { width = 90, height = 20 })
     FitButton(widgets.styleReload)
     ReloadUnder(styleRow, widgets.windowStyle, widgets.styleReload)
     widgets.styleReload:Hide()

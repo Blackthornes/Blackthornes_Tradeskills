@@ -462,11 +462,11 @@ local function UpdateResaleDetail(detail, entry)
     block.verdict:SetTextColor(Theme.Unpack("profit"))
 
     local parts = { OthersText(entry) }
-    parts[#parts + 1] = L.Format("The usual price is the middle of the %d scans before the last one, so the cheap listing does not drag it down.", entry.scans - 1)
+    parts[#parts + 1] = L.Format("The usual price comes from your %d scans before the last one.", entry.scans - 1)
     local demand = ns.Demand:TooltipText(entry.demand)
     if demand then parts[#parts + 1] = L.Format("Demand: %s.", demand) end
     if not entry.depositKnown then
-        parts[#parts + 1] = L["The deposit is not known until you have listed one, so it is not counted yet."]
+        parts[#parts + 1] = L["The deposit isn't counted until you've listed one."]
     end
     parts[#parts + 1] = L["Your gold is tied up until it sells."]
     local age = ns.Prices:GetAge(entry.itemID) or entry.age
@@ -502,15 +502,13 @@ local function UpdateVendorDetail(detail, entry)
     -- kept for hours, and the age it was built with went on saying "2m ago".
     local age = ns.Prices:GetAge(entry.itemID) or entry.age
     local parts = { OthersText(entry) }
-    parts[#parts + 1] = L.Format("The buy price is the cheapest listing from another seller at your last scan (%s). Prices are per item, so every item in a stack earns the same.",
+    parts[#parts + 1] = L.Format("The buy price is the cheapest listing at your last scan (%s). Every item in a stack earns the same.",
         age and Util.FormatAgeAgo(age) or L["never"])
     if ns.Prices:IsStale(entry.itemID) then parts[#parts + 1] = L["That was a while ago, so it may have sold."] end
     if entry.vendorFrom == "sold" then
         parts[#parts + 1] = L["The vendor price is what a vendor paid you when you last sold one."]
-    elseif entry.vendorFrom == "reported" then
-        parts[#parts + 1] = L["The vendor price is what vendors on Forever were seen paying."]
-    else
-        parts[#parts + 1] = L["The vendor price comes from the game's item data, and Forever changed it for some items. Sell one to a vendor and the real price is used from then on."]
+    elseif entry.vendorFrom ~= "reported" then
+        parts[#parts + 1] = L["The vendor price may be off. Sell one to a vendor to get the real price."]
     end
     block.note:SetText(table.concat(parts, " "))
 end

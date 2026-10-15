@@ -341,7 +341,7 @@ local function ShowRowTooltip(row, line)
         elseif line.priceBasis == "match" then
             -- Worth spelling out, because "match" looks like the addon has
             -- stopped undercutting when in fact no smaller step exists.
-            why = L["Matching the cheapest listing, since an undercut here costs a whole silver"]
+            why = L["Matching the cheapest listing. Going lower costs a whole silver."]
             if (ns.Config:Get("undercutCopper") or 1) <= 0 then
                 why = L["Matching the cheapest listing, since Undercut By is 0c in Settings"]
             end
