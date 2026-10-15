@@ -176,6 +176,21 @@ function ItemTooltip:ItemForTooltip(tooltip, data)
     return nil
 end
 
+--- The link of the copy a tooltip shows, or nil. Only asked for its random
+--- suffix ("of the Monkey"), so a copy is priced as the copy it is.
+function ItemTooltip:LinkForTooltip(tooltip, data)
+    local fromData = Field(data, "hyperlink")
+    if type(fromData) == "string" then return fromData end
+
+    for _, getter in ipairs({ Field(_G.TooltipUtil, "GetDisplayedItem"), Field(tooltip, "GetItem") }) do
+        if type(getter) == "function" then
+            local ok, _, link = pcall(getter, tooltip)
+            if ok and type(link) == "string" then return link end
+        end
+    end
+    return nil
+end
+
 --------------------------------------------------------------------------------
 -- How many of it
 --------------------------------------------------------------------------------
@@ -249,7 +264,7 @@ end
 -- listing. "What is this worth" is the question a tooltip is asked; what it
 -- would cost to buy one right now is a question asked at the auction house,
 -- where the Prices tab answers it with the whole book.
-function ItemTooltip:LinesFor(itemID, count)
+function ItemTooltip:LinesFor(itemID, count, link)
     local lines = {}
 
     if not itemID or not ns.Prices then return lines end
@@ -309,6 +324,14 @@ function ItemTooltip:LinesFor(itemID, count)
     end
 
     lines[#lines + 1] = { L["Auction value"], text }
+
+    -- A random suffix with a price of its own ("of the Monkey" can sell for
+    -- far more than "of the Spirit"): what this one goes for.
+    local roll = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link)
+    local rollValue = roll and ns.Prices:GetSuffixValue(itemID, roll, "market")
+    if rollValue and rollValue > 0 then
+        lines[#lines + 1] = { L["This one"], Util.FormatMoney(rollValue, { short = true }) }
+    end
 
     local lowest = self:LowestLine(itemID)
     if lowest then lines[#lines + 1] = lowest end
@@ -668,7 +691,7 @@ function ItemTooltip:Decorate(tooltip, data, count)
 
     if self:AlreadyOn(tooltip, itemID) then return "duplicate" end
 
-    local lines = self:LinesFor(itemID, count)
+    local lines = self:LinesFor(itemID, count, self:LinkForTooltip(tooltip, data))
     if #lines == 0 then return "quiet" end
 
     if type(Field(tooltip, "AddDoubleLine")) ~= "function" then return "noitem" end

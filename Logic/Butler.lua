@@ -5,7 +5,7 @@
 -- sell it, post it, disenchant it, mail it to an alt. It asks this, inside a
 -- pcall and read only:
 --
---   _G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil
+--   _G.BlackthornesTS.Butler:Advise(item)   -- item ID or link; a table, or nil
 --
 -- Every field may be nil when it is not known:
 --
@@ -529,12 +529,22 @@ local function Quality(itemID)
     return nil
 end
 
-local function Auction(itemID, quality)
+--- The price of one, by the copy's link when Butler gave one: a random
+--- suffix ("of the Monkey") with a price of its own is worth that.
+local function PriceOf(itemID, link, which)
+    local prices = ns.Prices
+    if not prices then return nil end
+    if link and prices.GetLinkValue then return (prices:GetLinkValue(link, which)) end
+    if which == "rival" then return prices:GetScanValue(itemID, "rival") end
+    return prices:GetValue(itemID, which)
+end
+
+local function Auction(itemID, quality, link)
     if quality == nil or quality == GREY then return nil end
     local util = ns.Util
     if util and util.IsBoundOnPickup and util.IsBoundOnPickup(itemID) == true then return nil end
 
-    local price = ns.Prices and ns.Prices:GetValue(itemID, "market")
+    local price = PriceOf(itemID, link, "market")
     if not price or price <= 0 then return nil end
 
     local net = ns.Profit:NetFromListing(itemID, price)
@@ -543,12 +553,12 @@ end
 
 --- What one fetches at the cheapest listing that is not the player's, after
 --- the cut and the deposit, only while the scan is fresh.
-local function AuctionNow(itemID, auction)
+local function AuctionNow(itemID, auction, link)
     if not auction then return nil end
     local prices = ns.Prices
     if not (prices and prices.GetScanValue and prices.IsStale) then return nil end
     if prices:IsStale(itemID) then return nil end
-    local rival = prices:GetScanValue(itemID, "rival")
+    local rival = PriceOf(itemID, link, "rival")
     if not rival or rival <= 0 then return nil end
     local net = ns.Profit:NetFromListing(itemID, rival)
     return math.max(0, math.floor(net + 0.5))
@@ -641,16 +651,16 @@ local function Crafted(itemID)
     return (ok and made == true) or nil
 end
 
-local function Answer(itemID)
+local function Answer(itemID, link)
     local kept = Lookup()
     local quality = Quality(itemID)
     local disenchant, canDisenchant, enchanter = Breaking(itemID, kept, quality)
     local mail = kept.mail[itemID]
 
-    local auction = Auction(itemID, quality)
+    local auction = Auction(itemID, quality, link)
     return {
         auction = auction,
-        auctionNow = AuctionNow(itemID, auction),
+        auctionNow = AuctionNow(itemID, auction, link),
         belowCost = BelowCost(itemID, auction),
         fast = Fast(itemID),
         disenchant = disenchant,
@@ -670,10 +680,16 @@ end
 --- Everything Tradeskills can say about one item, for Butler.
 -- Never raises, writes nothing; nil when the item ID is not one or anything
 -- goes wrong. A fresh table each time, so Butler may keep or change it.
-function Butler:Advise(itemID)
-    itemID = tonumber(itemID)
+-- `item` is an item ID or the bag copy's link: a link prices a random suffix
+-- ("of the Monkey") as that suffix sells, when its price is known.
+function Butler:Advise(item)
+    local itemID, link = tonumber(item), nil
+    if not itemID and type(item) == "string" then
+        local okID, fromLink = pcall(function() return tonumber(item:match("item:(%d+)")) end)
+        if okID and fromLink then itemID, link = fromLink, item end
+    end
     if not itemID then return nil end
-    local ok, answer = pcall(Answer, itemID)
+    local ok, answer = pcall(Answer, itemID, link)
     if ok then return answer end
     return nil
 end

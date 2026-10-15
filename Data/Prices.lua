@@ -837,6 +837,129 @@ function Prices:GetScanValue(itemID, which)
 end
 
 --------------------------------------------------------------------------------
+-- Random suffixes
+--------------------------------------------------------------------------------
+
+-- Gear with a random suffix ("Lead Band of the Monkey", "... of the Spirit")
+-- shares one item ID, and the item's price is every suffix's together. A
+-- player asked (2026-10-15) for the good rolls to be worth what they sell
+-- for, so each suffix seen at the auction house keeps a price of its own
+-- beside the item's: `record.suffixes[suffix] = { market, min, rival,
+-- quantity, seen }` (never rename it). The item's own price is unchanged.
+
+-- The most suffixes kept for one item. Classic gear has at most about forty,
+-- and the oldest seen goes first.
+Prices.SUFFIX_MOST = 40
+
+-- A suffix price older than this is not used; the item's price stands in.
+Prices.SUFFIX_KEEP = 14 * 24 * 3600
+
+--- The suffix a link names, or nil for none.
+function Prices.SuffixOf(link)
+    return Util.LinkSuffix(link)
+end
+
+--- Keep one suffix's reading. Only beside a price the item already has.
+-- `rival` is the cheapest listing not yours, nil when every one is yours.
+function Prices:RecordSuffix(itemID, suffix, marketValue, minBuyout, rival, quantity, scannedAt)
+    suffix = tonumber(suffix)
+    if not (itemID and suffix and suffix ~= 0) then return nil end
+    if type(marketValue) ~= "number" or marketValue <= 0 or not Prices.IsCredible(marketValue) then return nil end
+
+    local record = self:GetTable()[itemID]
+    if type(record) ~= "table" then return nil end
+
+    if not Prices.IsCredible(minBuyout) then minBuyout = nil end
+    if not Prices.IsCredible(rival) then rival = nil end
+
+    local suffixes = record.suffixes
+    if type(suffixes) ~= "table" then
+        suffixes = {}
+        record.suffixes = suffixes
+    end
+
+    local entry = suffixes[suffix]
+    if type(entry) ~= "table" then
+        -- Room for a new one: the oldest seen goes.
+        local count, oldest, oldestAt = 0, nil, nil
+        for key, other in pairs(suffixes) do
+            count = count + 1
+            local at = type(other) == "table" and tonumber(other.seen) or 0
+            if not oldestAt or at < oldestAt then oldest, oldestAt = key, at end
+        end
+        if count >= Prices.SUFFIX_MOST and oldest ~= nil then suffixes[oldest] = nil end
+
+        entry = {}
+        suffixes[suffix] = entry
+    end
+
+    if entry.market then
+        entry.market = math.floor(entry.market * (1 - EMA_ALPHA) + marketValue * EMA_ALPHA + 0.5)
+    else
+        entry.market = marketValue
+    end
+    entry.min = minBuyout
+    entry.rival = rival
+    entry.quantity = quantity
+    entry.seen = scannedAt or time()
+
+    Prices:Touch(itemID)
+    return entry
+end
+
+--- Keep a reading for each suffix among `bySuffix` ({ [suffix] = listings },
+--- listings as CommitScan takes them), beside the item's own price.
+function Prices:CommitSuffixes(itemID, bySuffix, scannedAt)
+    if type(bySuffix) ~= "table" then return 0 end
+    local kept = 0
+    for suffix, listings in pairs(bySuffix) do
+        local reference = self:GetSuffixValue(itemID, suffix, "market")
+        local marketValue, minBuyout, quantity, rivalMin = self:Summarise(listings, reference)
+        if marketValue and self:RecordSuffix(itemID, suffix, marketValue, minBuyout, rivalMin, quantity, scannedAt) then
+            kept = kept + 1
+        end
+    end
+    return kept
+end
+
+--- One suffix's price, or nil when it has none recent enough. Same `which`
+--- as GetScanValue ("lowest" reads as "min").
+function Prices:GetSuffixValue(itemID, suffix, which)
+    suffix = tonumber(suffix)
+    if not (itemID and suffix and suffix ~= 0) then return nil end
+    local record = self:GetTable()[itemID]
+    local suffixes = type(record) == "table" and record.suffixes
+    local entry = type(suffixes) == "table" and suffixes[suffix]
+    if type(entry) ~= "table" then return nil end
+    if (tonumber(entry.seen) or 0) < time() - Prices.SUFFIX_KEEP then return nil end
+
+    if which == "rival" then return entry.rival end
+    if which == "min" or which == "lowest" then return entry.min or entry.market end
+    return entry.market or entry.min
+end
+
+--- What one copy is worth, by its link: its suffix's own price when one is
+--- kept, else the item's (GetValue). Second: true when the suffix's price
+--- answered. A price the player set on the Prices tab still wins.
+function Prices:GetLinkValue(link, which)
+    local itemID = type(link) == "string" and tonumber(link:match("item:(%d+)")) or tonumber(link)
+    if not itemID then return nil end
+
+    local suffix = type(link) == "string" and Prices.SuffixOf(link) or nil
+    if suffix then
+        local own = self:GetSuffixValue(itemID, suffix, which)
+        if own then
+            if which == "rival" then return own, true end
+            local mine, mode = self:GetMine(itemID)
+            if mine and (mode == "use" or own < mine) then return mine, false end
+            return own, true
+        end
+    end
+
+    return self:GetValue(itemID, which), false
+end
+
+--------------------------------------------------------------------------------
 -- Buying many
 --------------------------------------------------------------------------------
 
@@ -1434,6 +1557,14 @@ function Prices:Scrub()
                 if not Prices.IsCredible(record[field]) then
                     record[field] = nil
                     cleared = cleared + 1
+                end
+            end
+            if type(record.suffixes) == "table" then
+                for suffix, entry in pairs(record.suffixes) do
+                    if type(entry) ~= "table" or not Prices.IsCredible(entry.market) then
+                        record.suffixes[suffix] = nil
+                        cleared = cleared + 1
+                    end
                 end
             end
         end

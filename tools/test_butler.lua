@@ -128,6 +128,19 @@ check("nobody else listing it", Butler:Advise(5).auctionNow, nil)
 check("no auction value, no price today", Butler:Advise(2).auctionNow, nil)
 check("not an item gives nil", Butler:Advise(nil), nil)
 
+-- A copy's link prices its random suffix ("of the Monkey") as it sells.
+local MONKEY = "|cff1eff00|Hitem:1::::::612:1:60|h[Band of the Monkey]|h|r"
+ns.Prices.GetLinkValue = function(_, link, which)
+  if link == MONKEY then return which == "rival" and 18000 or 20000, true end
+end
+local m = Butler:Advise(MONKEY)
+check("a link prices its suffix", m and m.auction, 18900)
+check("and today's cheapest of that suffix", m and m.auctionNow, 17000)
+check("a link is still the item: its demand", m and m.fast, true)
+check("a plain ID is unchanged", Butler:Advise(1).auction, 9400)
+check("a link with no item gives nil", Butler:Advise("[Band]"), nil)
+ns.Prices.GetLinkValue = nil
+
 print("\nlisting under what it costs to make")
 check("no Posting module: nothing said", a.belowCost, nil)
 local allowLoss, chosen, paidFor = false, {}, {}
