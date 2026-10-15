@@ -213,7 +213,7 @@ inside a pcall, read only, with no TOC dependency:
 _G.BlackthornesTS.Butler:Advise(item)   -- item ID or the bag copy's link; a table, or nil; never raises
 ```
 
-A link (2026-10-15) prices a random suffix ("of the Monkey") as that
+A link (2026-10-15; `Butler.TAKES_LINK` says it can) prices a random suffix ("of the Monkey") as that
 suffix sells: `auction` and `auctionNow` read `Prices:GetLinkValue`, which
 answers the suffix's own price when one is recent, else the item's.
 
