@@ -1977,6 +1977,13 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     mainTip = L["The crafts you know, by profit"],
     buildMain = BuildCrafts,
     refreshMain = Refresh,
+    -- Your time (UI/YourTimeView.lua, the owner said build it 2026-10-15):
+    -- farming a craft's materials against selling them and buying them.
+    extras = ns.YourTimeView and {
+        { key = "time", text = L["YOUR TIME"],
+          tip = L["Farm it, sell the mats, or buy them: which pays best for your time"],
+          build = ns.YourTimeView.Build, refresh = ns.YourTimeView.Refresh },
+    } or nil,
 })
 
 local Build = switch and switch.Build or BuildCrafts
