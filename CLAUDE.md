@@ -875,6 +875,25 @@ one read back (`ShareVerify`, `NewerVerifying`), and `MAX_CONFIRMING` is
 auction page (`fastListing`, on unless unticked, never rename it). Tested
 in `tools/test_fastlisting.lua`. Not yet seen in game.
 
+## Overcutting
+
+The owner said build it (2026-10-15, from a mockup, and picked the name):
+an option to post just under the big stack instead of 1c under a few cheap
+listings that sell first. `Profit:Overcut` (asked by `ChooseMarketPostPrice`
+for stackable goods only, `status == true`, never a random suffix) walks the
+scan's price steps (`record.ladder`, now `Prices.LADDER_STEPS` 10, with
+`record.ladderAt` when they were read): the first step after the cheapest
+with at least `OVERCUT.WALL_MIN` and `WALL_RATIO` times everything cheaper is
+the big stack, and it posts 1c under it (Undercut by) only while the
+cheaper ones add up to no more than `Prices:GetUnitsSoldPerDay`, the steps
+are under `FRESH` old and still start at the cheapest rival, Demand is not
+low and the price is within `CAP` of the scanned market value. Basis
+"overcut"; Your auctions calls such an auction "overcut", not undercut
+(`MyAuctions:Judge`). "Overcutting" on the Pricing page and beside Hide
+losses on Sell (`overcutting`, off unless ticked, never rename it). The
+setting's tooltip is `Profit.OVERCUT_HELP`. Tested in
+`tools/test_overcutting.lua`. Not yet seen in game.
+
 ## Shopping lists
 
 A player asked (2026-10-14, the owner said build it) for named shopping

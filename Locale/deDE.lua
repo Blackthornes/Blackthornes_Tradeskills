@@ -2830,3 +2830,18 @@ L["None of your crafts uses materials you can farm."] = "Keine deiner Herstellun
 L["Turn on Blackthornes Farmer to see your farming time."] = "Schalte Blackthornes Farmer ein, um deine Farmzeit zu sehen."
 L["%d craft  ·  %d timed from your farming"] = "%d Herstellung  ·  %d nach deinem Farmen gemessen"
 L["%d crafts  ·  %d timed from your farming"] = "%d Herstellungen  ·  %d nach deinem Farmen gemessen"
+
+-- Overcutting (2026-10-15)
+L["Overcutting"] = "Overcutting"
+L["Overcut"] = "Overcut"
+L["Most of the time you post 1c under the cheapest listing. With this on, when a few cheap ones sit below a big stack, you post just under the big stack instead. It only does this when those cheaper ones should sell within a day. It works on things that stack, like cloth, herbs and potions. Gear is priced the usual way."] = "Meist stellst du 1c unter das billigste Angebot ein. Ist das hier an und liegen ein paar billige Angebote unter einem großen Stapel, stellst du knapp unter den großen Stapel ein. Das passiert nur, wenn die billigeren wohl innerhalb eines Tages verkauft werden. Es gilt für Sachen, die sich stapeln, wie Stoff, Kräuter und Tränke. Ausrüstung wird wie immer bepreist."
+L["1 cheaper one should sell first, then yours"] = "1 billigeres sollte zuerst verkauft werden, dann deins"
+L["%d cheaper ones should sell first, then yours"] = "%d billigere sollten zuerst verkauft werden, dann deins"
+L["Overcutting: just under the big stack, since the few cheaper ones should sell first"] = "Overcutting: knapp unter dem großen Stapel, weil die paar billigeren zuerst verkauft werden sollten"
+L["Overcutting put this just under the big stack. The cheaper ones should sell first."] = "Overcutting hat das knapp unter den großen Stapel gesetzt. Die billigeren sollten zuerst verkauft werden."
+L["big stack %s"] = "großer Stapel %s"
+L["Cheapest now"] = "Jetzt am billigsten"
+L["Big stack"] = "Großer Stapel"
+L["%d at %s"] = "%d zu %s"
+L["Cheaper ones ahead of you"] = "Billigere vor dir"
+L["Those should sell first, then yours."] = "Die sollten zuerst verkauft werden, dann deins."
