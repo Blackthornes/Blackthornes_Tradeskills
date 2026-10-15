@@ -108,7 +108,7 @@ function View:SearchList(entry)
     end
     local counts = {}
     for _, id in ipairs(ids) do counts[id] = NeedOf(entry.lines, id) end
-    local ok, why = Lists():SearchMany(ids, counts)
+    local ok, why = Lists():SearchMany(ids, counts, entry.key)
     if ok then
         self.step = nil
     elseif why == "single" then
@@ -117,6 +117,64 @@ function View:SearchList(entry)
         end
     elseif why then
         ns.Print(why)
+    end
+    self:Refresh(true)
+end
+
+-- After a buy from a list's search, its results are searched again this long
+-- later, once for a run of buys, so they show only what is still needed.
+local AFTER_BUY = 1.5
+
+--- Something was bought on the auction house. When the results shown are a
+--- list's search, look again soon for what that list still needs.
+function View:OnBought(itemID, quantity)
+    local last = Lists().lastSearch
+    if not last then return end
+    -- A list's own counts only see a buy once the mail is read; the craft
+    -- queue's already count it.
+    if last.owner ~= QUEUE_KEY and itemID and quantity then
+        last.bought[itemID] = (last.bought[itemID] or 0) + quantity
+    end
+    if self.afterBuy then self.afterBuy:Cancel() end
+    self.afterBuy = C_Timer.NewTimer(AFTER_BUY, function()
+        self.afterBuy = nil
+        self:SearchAgain()
+    end)
+end
+
+--- Search the list the results show again, without what was just bought.
+--- Nothing is sent when the same items are still needed: only the counts
+--- for the buy box change.
+function View:SearchAgain()
+    local lists = Lists()
+    local last = lists.lastSearch
+    if not last then return end
+    if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then lists.lastSearch = nil; return end
+    if type(last.owner) == "number" and not lists:Get(last.owner) then lists.lastSearch = nil; return end
+
+    local ids, counts = {}, {}
+    for _, line in ipairs(LinesFor(last.owner)) do
+        local need = (line.need or 0) - (last.bought[line.itemID] or 0)
+        if need > 0 and Lists().CanSearch(line) then
+            ids[#ids + 1] = line.itemID
+            counts[line.itemID] = need
+        end
+    end
+
+    if #ids == 0 then
+        lists.lastSearch = nil
+        ns.Print(L["That's everything on the list."])
+        self:Refresh(true)
+        return
+    end
+    local same = #ids == #(last.ids or {})
+    for _, id in ipairs(same and last.ids or {}) do
+        if not counts[id] then same = false; break end
+    end
+    if same then
+        if ns.BuyQuantity then ns.BuyQuantity:WantMany(counts) end
+    else
+        lists:SearchMany(ids, counts, last.owner)
     end
     self:Refresh(true)
 end
