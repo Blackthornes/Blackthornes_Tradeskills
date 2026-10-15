@@ -114,6 +114,15 @@ local function UpdateRow(row, entry)
     end
     Theme.SetRowName(row.name, entry.name)
 
+    -- The name in the item's rarity colour, as on My crafts; plain until
+    -- the client has the item, then the redraw above colours it.
+    local ok, r, g, b = pcall(Util.GetItemQualityColor, entry.outputItemID)
+    if ok and r then
+        row.name:SetTextColor(r, g, b)
+    else
+        row.name:SetTextColor(Theme.Unpack("text"))
+    end
+
     local cells = row.cells
     SetHour(cells.farmCraft, entry.farmCraft, entry.best == "craft")
     SetHour(cells.farmSell, entry.farmSell, entry.best == "raw")
