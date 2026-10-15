@@ -325,6 +325,8 @@ local function ShowRowTooltip(row, line)
 
         if line.priceBasis == "undercut" then
             why = L["Undercutting the cheapest listing that is not yours"]
+        elseif line.priceBasis == "overcut" then
+            why = L["Overcutting: just under the big stack, since the few cheaper ones should sell first"]
         elseif line.priceBasis == "derived" then
             -- Neither of these two is a market observation at all.
             why = L["No scan has priced this, so it is estimated from what its materials are worth"]

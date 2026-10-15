@@ -527,6 +527,17 @@ local function Build(outer)
     end, { width = 140, height = 20 })
     widgets.undercutSwitch:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Overcutting (the owner, 2026-10-15): post just under the big stack
+    -- when a few cheap ones below it should sell first. Off unless ticked.
+    local overcutRow = CreateRow(pages.pricing, 1, L["Overcutting"], ns.Profit.OVERCUT_HELP)
+
+    widgets.overcutting = Widgets.CreateCheckbox(overcutRow, L["Enabled"], function(checked)
+        Config:Set("overcutting", checked)
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.overcutting:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     function widgets.undercutSwitch:Update()
         local off = (Config:Get("undercutCopper") or 1) <= 0
         self:SetText(off and L.Format("Turn on, %s", Util.FormatMoney(lastUndercut or 1, { noColor = true }))
@@ -2135,6 +2146,7 @@ local function Refresh()
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
+    widgets.overcutting:SetChecked(Config:Get("overcutting") == true)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.freeSpaceFirst:SetChecked(Config:Get("craftFreesSpaceFirst") ~= false)
     widgets.altCrafts:SetChecked(Config:Get("suggestOtherCharacters") ~= false)
