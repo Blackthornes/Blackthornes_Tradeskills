@@ -1080,7 +1080,7 @@ function CraftPanel:Build()
     ignoreLimit:HookScript("OnEnter", function(box)
         GameTooltip:SetOwner(box, "ANCHOR_TOP")
         GameTooltip:SetText(L["Ignore max on hand"], 1, 1, 1)
-        GameTooltip:AddLine(L["When ticked, every craft is listed, even ones where you already have your Keep in stock amount, and the boxes queue the full number you type. Your setting stays as it is."], 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["When ticked, every craft shows, even ones you already have enough of, and the boxes queue the full number you type. Your Keep in stock setting doesn't change."], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     ignoreLimit:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1204,7 +1204,7 @@ function CraftPanel:UpdateSortButton()
     self.sortButton:SetText(L.Format("Sort by: %s", SORT_LABEL[self.sortBy] or L["Profit"]))
     self.sortButton.tooltipText = ({
         profit = L["Best-paying crafts first. Click to sort by Level Up."],
-        levelup = L["Best chance of a skill up first (orange, yellow, green), cheapest materials first within each colour. Click to sort by name."],
+        levelup = L["Best skill up chance first (orange, then yellow, then green), and cheapest first within each colour. Click to sort by name."],
         name = L["Sorted by name. Click to sort by profit."],
     })[self.sortBy]
 end
