@@ -354,6 +354,11 @@ carries, no more than its bank holds, plus the `bank` count of its Jobs
 mail for another character's craft (so Butler opens at the bank and
 takes it out; 2026-10-11). Keep both stable too.
 
+A craft step for the character playing also carries `slots` (the bag slots
+making it frees, `Crafting:SlotsFreed`; nil with "Craft what frees bag space
+first" off), which Butler's `Jobs.Order` sorts its plain crafts by (the
+owner, 2026-10-15). Keep it stable.
+
 Butler's step list for jobs on other characters (the owner asked
 2026-10-11: "craft Medium Leather on another, then send it back") calls
 two more, inside a pcall:
