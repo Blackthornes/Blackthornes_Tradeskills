@@ -182,7 +182,7 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
 end
 
 -- Why a price matches the cheapest rival when Undercut by is set to 0c.
-local MATCH_BY_CHOICE = L["your Undercut by is set to 0c, so it matches the cheapest listing"]
+local MATCH_BY_CHOICE = L["your Undercut By is set to 0c, so it matches the cheapest listing"]
 
 --- ChoosePostPrice from the auction house alone, before the player's own
 --- price is applied. Same returns.
@@ -331,7 +331,7 @@ end
 Profit.OVERCUT = { WALL_MIN = 5, WALL_RATIO = 2, FRESH = 3600, CAP = 1.25 }
 
 -- What the switch does, in Settings and on the auction house drawer.
-Profit.OVERCUT_HELP = L["Most of the time you post 1c under the cheapest listing. With this on, when a few cheap ones sit below a big stack, you post just under the big stack instead. It only does this when those cheaper ones should sell within a day. It works on things that stack, like cloth, herbs and potions. Gear is priced the usual way."]
+Profit.OVERCUT_HELP = L["Posts just under the big stack when a few cheaper ones should sell within a day. Only for things that stack."]
 
 function Profit:Overcutting()
     return ns.Config:Get("overcutting") == true
