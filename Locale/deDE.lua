@@ -2515,11 +2515,11 @@ L["leave your form first"] = "verlass zuerst deine Gestalt"
 
 -- The auction house drawer (UI/PostPanel.lua, 2026-10-13)
 L["Tradeskills"] = "Tradeskills"
-L["List all"] = "Alle einstellen"
+L["List Next"] = "Nächste einstellen"
 L["Search all"] = "Alle suchen"
 L["Search all %d"] = "Alle %d suchen"
 L["Searches the auction house for everything on this list at once. Pick one in the results and the quantity fills in with how many you still need."] = "Sucht im Auktionshaus auf einmal nach allem auf dieser Liste. Wähl eins in den Ergebnissen, und die Menge wird mit dem ausgefüllt, was dir noch fehlt."
-L["List all %d"] = "Alle %d einstellen"
+L["List Next - %d remaining"] = "Nächste einstellen - noch %d"
 L["Lists at your price or the market's."] = "Stellt zu deinem Preis oder dem Marktpreis ein."
 L["Lists the most valuable stack on the list. Click again for the next one, since the game needs a click for every listing."] = "Stellt den wertvollsten Stapel der Liste ein. Klick noch mal für den nächsten, denn das Spiel braucht einen Klick pro Auktion."
 L["Nothing on the list can be listed right now."] = "Gerade kann nichts von der Liste eingestellt werden."
