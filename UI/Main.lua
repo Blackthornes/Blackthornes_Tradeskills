@@ -1668,9 +1668,9 @@ function UI:UpdateMerchantButton()
     -- reads as though the vendor did not have them.
     local cheaperNote
     if cheaperElsewhere == 1 then
-        cheaperNote = L["1 material this vendor has is cheaper on the auction house, so it is not bought here"]
+        cheaperNote = L["1 material is cheaper at the auction house."]
     elseif cheaperElsewhere > 1 then
-        cheaperNote = L.Format("%d materials this vendor has are cheaper on the auction house, so they are not bought here",
+        cheaperNote = L.Format("%d materials are cheaper at the auction house.",
             cheaperElsewhere)
     end
 
@@ -1682,7 +1682,7 @@ function UI:UpdateMerchantButton()
         button.tooltipText = ns.Queue:Count() == 0
             and L["Your craft queue is empty"]
             or cheaperNote
-            or L["This vendor sells none of the materials your queue needs"]
+            or L["This vendor has nothing your queue needs."]
         return
     end
 
@@ -1693,15 +1693,15 @@ function UI:UpdateMerchantButton()
 
     -- Spell out exactly what will be bought before any gold moves.
     local totalText = Util.FormatMoney(total, { noColor = true, short = true })
-    local parts = { #lines == 1 and L.Format("Buys %d material for your queue, %s in all:", #lines, totalText)
-        or L.Format("Buys %d materials for your queue, %s in all:", #lines, totalText) }
+    local parts = { #lines == 1 and L.Format("Buy %d material for %s:", #lines, totalText)
+        or L.Format("Buy %d materials for %s:", #lines, totalText) }
 
     for index = 1, math.min(#lines, 10) do
         local line = lines[index]
         parts[#parts + 1] = ("  %dx %s  (%s)%s"):format(
             line.amount, Util.GetItemLabel(line.itemID),
             Util.FormatMoney(line.cost, { noColor = true, short = true }),
-            line.short and ("  " .. L["(vendor stock limited)"]) or "")
+            line.short and ("  " .. L["(limited stock)"]) or "")
     end
 
     if #lines > 10 then
