@@ -53,8 +53,9 @@ local function AuctionHouseOpen()
 end
 
 --- What the scans say about one of your auctions.
--- @return state ("undercut", "cheapest" or "unknown"), the cheapest price
---         not yours (nil when none), and how far under you it is
+-- @return state ("undercut", "cheapest", "overcut" or "unknown"), the cheapest
+--         price not yours (nil when none), and how far under you it is (for
+--         "overcut", the big stack's price)
 --
 -- A random suffix ("of the Monkey") is judged against its own suffix's
 -- listings when the scans keep them: another suffix's cheaper copy is not
@@ -82,7 +83,17 @@ function MyAuctions:Judge(itemID, unit, link)
     if not unit then return "unknown" end
     local rival = Prices:GetScanValue(itemID, "rival")
     if not rival or rival <= 0 then return "cheapest", rival end
-    if unit > rival then return "undercut", rival, unit - rival end
+    if unit > rival then
+        -- Overcutting (2026-10-15): an auction posted just under the big
+        -- stack is where it was meant to be, while the book still says so.
+        local Profit = ns.Profit
+        if Profit and Profit.Overcut then
+            local ok, over, _, wall = pcall(Profit.Overcut, Profit, itemID, rival,
+                ns.Config and ns.Config:Get("undercutCopper") or 1)
+            if ok and over and wall and unit <= wall then return "overcut", rival, wall end
+        end
+        return "undercut", rival, unit - rival
+    end
     return "cheapest", rival
 end
 
@@ -192,7 +203,7 @@ function MyAuctions:Rows()
         end
     end
 
-    local order = { undercut = 1, cheapest = 2, unknown = 3 }
+    local order = { undercut = 1, cheapest = 2, overcut = 2, unknown = 3 }
     table.sort(rows, function(a, b)
         if (a.alt or false) ~= (b.alt or false) then return not a.alt end
         local oa, ob = order[a.state] or 9, order[b.state] or 9

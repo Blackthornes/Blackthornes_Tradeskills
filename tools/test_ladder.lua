@@ -125,11 +125,13 @@ do
     local _, _, _, _, _, _, ladder = Prices:Summarise({
         Listing(10, 2), Listing(10, 1), Listing(12, 4, true), Listing(14, 30),
         Listing(15, 1), Listing(16, 1), Listing(17, 1), Listing(18, 1),
+        Listing(19, 1), Listing(20, 1), Listing(21, 1), Listing(22, 1),
+        Listing(23, 1), Listing(24, 1),
     })
     check("the same price is one step", ladder[2], 3)
     check("your own listing is left out", ladder[3], 14)
-    check("five steps at most", #ladder, 10)
-    check("the fifth is the last kept", ladder[9], 17)
+    check("ten steps at most", #ladder, Prices.LADDER_STEPS * 2)
+    check("the tenth is the last kept", ladder[19], 22)
 
     local _, _, _, _, _, ignoredLow, lone = Prices:Summarise({
         Listing(1, 1), Listing(10, 5), Listing(11, 5), Listing(12, 5),

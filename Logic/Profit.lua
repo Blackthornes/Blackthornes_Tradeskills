@@ -142,7 +142,7 @@ end
 -- the unknown case is the one where giving gold away is least defensible.
 --
 -- @return price, basis, why, uncertain  -- basis is "undercut", "match",
---   "market", "derived", "uncontested", "mine" or "floor", and nil price when there is
+--   "market", "derived", "uncontested", "mine", "floor" or "overcut", and nil price when there is
 --   nothing to go on. "derived" (never scanned) and "uncontested" (scanned,
 --   but every listing is yours) are both the material-value figure from
 --   DeriveFromMaterials above, and are the two bases that are not evidence
@@ -263,6 +263,13 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
 
     local undercut = ns.Config:Get("undercutCopper") or 1
 
+    -- Overcutting (the owner, 2026-10-15): post just under the big stack
+    -- rather than under a few cheap ones that will sell first anyway.
+    if status == true and not (link and Util.LinkSuffix and Util.LinkSuffix(link)) then
+        local over, why = self:Overcut(itemID, rival, undercut)
+        if over then return over, "overcut", why, uncertain end
+    end
+
     -- Undercut by 0c is the player turning undercutting off (asked on
     -- Discord, 2026-10-09): list at the cheapest rival's own price, for
     -- commodities and item auctions alike, and say that is why.
@@ -305,6 +312,79 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
             Util.FormatMoney(underPrice, { noColor = true }),
             Util.FormatMoney(profit, { noColor = true }),
             Util.FormatMoney(minProfit, { noColor = true }))
+end
+
+--------------------------------------------------------------------------------
+-- Overcutting
+--------------------------------------------------------------------------------
+
+-- The owner asked (2026-10-15): optionally post a little up the book, just
+-- under the price where the big stacks sit, when the few cheaper listings
+-- below it should sell within a day. Off unless ticked (`overcutting`,
+-- never rename it). Stackable goods only: gear is listed a piece at a time.
+--
+-- A step is the big stack when it holds at least WALL_MIN and at least
+-- WALL_RATIO times everything cheaper. The cheaper ones must add up to no
+-- more than a day of sales (Prices:GetUnitsSoldPerDay), the steps must be
+-- read within FRESH seconds and still start at the cheapest rival, and the
+-- price may sit at most CAP over the scanned market value.
+Profit.OVERCUT = { WALL_MIN = 5, WALL_RATIO = 2, FRESH = 3600, CAP = 1.25 }
+
+-- What the switch does, in Settings and on the auction house drawer.
+Profit.OVERCUT_HELP = L["Most of the time you post 1c under the cheapest listing. With this on, when a few cheap ones sit below a big stack, you post just under the big stack instead. It only does this when those cheaper ones should sell within a day. It works on things that stack, like cloth, herbs and potions. Gear is priced the usual way."]
+
+function Profit:Overcutting()
+    return ns.Config:Get("overcutting") == true
+end
+
+--- The overcut price for one, or nil when Overcutting is off or the book
+--- does not call for it.
+-- @return price, why, wall (the big stack's price), count (how many there),
+--   ahead (how many cheaper ones sell first)
+function Profit:Overcut(itemID, rival, undercut)
+    if not self:Overcutting() or not itemID or not rival then return nil end
+    local rules = Profit.OVERCUT
+
+    local record = ns.Prices.GetTable and ns.Prices:GetTable()[itemID]
+    if type(record) ~= "table" then return nil end
+    local ladder = record.ladder
+    if not (ns.Prices.ValidLadder and ns.Prices.ValidLadder(ladder)) then return nil end
+    if ladder[1] ~= rival then return nil end
+    if type(record.ladderAt) ~= "number" or time() - record.ladderAt > rules.FRESH then return nil end
+
+    if ns.Demand and ns.Demand.Get then
+        local ok, demand = pcall(ns.Demand.Get, ns.Demand, itemID)
+        if ok and type(demand) == "table" and demand.level == "low" then return nil end
+    end
+
+    local perDay
+    if ns.Prices.GetUnitsSoldPerDay then
+        local ok, value = pcall(ns.Prices.GetUnitsSoldPerDay, ns.Prices, itemID)
+        perDay = ok and tonumber(value) or nil
+    end
+    if not perDay or perDay <= 0 then return nil end
+
+    local ahead, wall, count = 0, nil, nil
+    for i = 1, #ladder, 2 do
+        local price, units = ladder[i], ladder[i + 1]
+        if i > 1 and units >= rules.WALL_MIN and units >= ahead * rules.WALL_RATIO then
+            wall, count = price, units
+            break
+        end
+        ahead = ahead + units
+        if ahead > perDay then return nil end
+    end
+    if not wall then return nil end
+
+    local price = math.max(1, math.floor(wall - math.max(0, undercut or 1)))
+    if price <= rival then return nil end
+
+    local market = ns.Prices.GetScanValue and ns.Prices:GetScanValue(itemID, "market")
+    if market and price > market * rules.CAP then return nil end
+
+    local why = ahead == 1 and L["1 cheaper one should sell first, then yours"]
+        or L.Format("%d cheaper ones should sell first, then yours", ahead)
+    return price, why, wall, count, ahead
 end
 
 --------------------------------------------------------------------------------
