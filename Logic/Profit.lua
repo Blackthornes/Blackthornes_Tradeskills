@@ -152,14 +152,16 @@ end
 --   not known, see below.
 -- @param knownCost  optional, passed straight to DeriveFromMaterials; see
 --   there for when it is used and when it is ignored.
-function Profit:ChoosePostPrice(itemID, knownCost)
+-- @param link optional: the copy to be listed. A random suffix ("of the
+--   Monkey") is priced as that suffix sells, when a recent price is kept.
+function Profit:ChoosePostPrice(itemID, knownCost, link)
     if not itemID then return nil, nil end
 
     -- A price the player set on the Prices tab (2026-10-06): "use"
     -- lists at it, "floor" undercuts as usual but never goes below it.
     local mine, mode
     if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
-    if not mine then return self:ChooseMarketPostPrice(itemID, knownCost) end
+    if not mine then return self:ChooseMarketPostPrice(itemID, knownCost, link) end
 
     local status
     if ns.Scanner.GetCommodityStatus then
@@ -173,7 +175,7 @@ function Profit:ChoosePostPrice(itemID, knownCost)
         return floor, "mine", L["your own price, set on the Prices tab"], status == nil
     end
 
-    local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost)
+    local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost, link)
     if price and price >= floor then return price, basis, why, uncertain end
 
     return floor, "floor", L["the least you set on the Prices tab"], status == nil
@@ -184,12 +186,19 @@ local MATCH_BY_CHOICE = L["your Undercut by is set to 0c, so it matches the chea
 
 --- ChoosePostPrice from the auction house alone, before the player's own
 --- price is applied. Same returns.
-function Profit:ChooseMarketPostPrice(itemID, knownCost)
+function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
     if not itemID then return nil, nil end
+
+    -- The copy's own suffix price when the link names one with a recent
+    -- price, else the item's.
+    local function Read(which)
+        if link and ns.Prices.GetLinkValue then return (ns.Prices:GetLinkValue(link, which)) end
+        return ns.Prices:GetValue(itemID, which)
+    end
 
     -- "rival" excludes your own auctions, so listing a second one does not
     -- undercut the first.
-    local rival = ns.Prices:GetValue(itemID, "rival")
+    local rival = Read("rival")
 
     -- true, false or nil. Nil is something never held and never searched
     -- for, which is most crafts not yet made, and it is priced WITHOUT the
@@ -211,7 +220,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost)
     -- competition charges. What the materials are worth plus the markup is
     -- the answer in both the cases below.
     if not rival then
-        local market = ns.Prices:GetValue(itemID, "market")
+        local market = Read("market")
         local materials, markup = self:DeriveFromMaterials(itemID, knownCost)
 
         -- Nothing scanned, ever. Not the same as an empty auction house: an

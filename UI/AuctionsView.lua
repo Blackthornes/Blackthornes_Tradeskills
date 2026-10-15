@@ -429,7 +429,7 @@ function AuctionsView:UndercutCount()
     for _, auction in ipairs((ns.Auctions and ns.Auctions.live) or {}) do
         local cancelling = MyAuctions.cancelling and MyAuctions.cancelling[auction.auctionID]
         ownUnits = ownUnits or MyAuctions:OwnUnits()
-        if not cancelling and MyAuctions:JudgeOwn(auction.itemID, auction.unit, ownUnits) == "undercut" then
+        if not cancelling and MyAuctions:JudgeOwn(auction.itemID, auction.unit, ownUnits, auction.link) == "undercut" then
             count = count + 1
         end
     end

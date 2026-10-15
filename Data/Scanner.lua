@@ -13,6 +13,12 @@ local Scanner = ns.NewModule("Scanner")
 
 local Util = ns.Util
 
+-- The random suffix a link names, or nil (Util.LinkSuffix, when there).
+local function LinkSuffix(link)
+    if type(link) ~= "string" or type(Util.LinkSuffix) ~= "function" then return nil end
+    return Util.LinkSuffix(link)
+end
+
 -- Blizzard rate-limits the bulk snapshot hard. Asking more often than this just
 -- returns the same cached data and wastes the allowance.
 local REPLICATE_COOLDOWN = 15 * 60
@@ -721,6 +727,44 @@ end
 
 Scanner.SplitBrowseRow = SplitBrowseRow
 
+--- Keep the price of each random suffix a combined browse row saw.
+function Scanner.RecordRowSuffixes(item, now)
+    if type(item.suffixes) ~= "table" or not (ns.Prices and ns.Prices.RecordSuffix) then return end
+    for suffix, own in pairs(item.suffixes) do
+        ns.Prices:RecordSuffix(item.itemID, suffix, own.price, own.price, own.rival, own.quantity, now)
+    end
+end
+
+-- Gear that can carry a random suffix: weapons and armour (classes 2 and 4)
+-- of green quality or better. Only these rows of a full scan are asked for
+-- their link, so a scan of the whole auction house asks for few.
+local SUFFIX_CLASSES = { [2] = true, [4] = true }
+
+function Scanner.MayHaveSuffix(itemID, quality, memo)
+    if type(quality) ~= "number" or quality < 2 then return false end
+    if memo and memo[itemID] ~= nil then return memo[itemID] end
+
+    local classID
+    local api = _G.C_Item
+    local instant = type(api) == "table" and api.GetItemInfoInstant or _G.GetItemInfoInstant
+    if type(instant) == "function" then
+        local ok, _, _, _, _, _, class = pcall(instant, itemID)
+        if ok then classID = tonumber(class) end
+    end
+
+    local may = classID ~= nil and SUFFIX_CLASSES[classID] == true
+    if memo then memo[itemID] = may end
+    return may
+end
+
+--- The suffix of a full scan's row, or nil. Read inside a pcall.
+function Scanner.ReplicateSuffix(index)
+    if not Util.HasFunction("C_AuctionHouse.GetReplicateItemLink") then return nil end
+    local ok, link = pcall(C_AuctionHouse.GetReplicateItemLink, index)
+    if not ok or type(link) ~= "string" then return nil end
+    return LinkSuffix(link)
+end
+
 --- Browse rows put together into one reading per item.
 --
 -- An item can come back as several rows, one per item key: gear with a
@@ -766,6 +810,21 @@ local function CombineBrowseRows(results, seen)
 
             item.price = math.min(item.price, price)
             item.quantity = item.quantity + (result.totalQuantity or 0)
+
+            -- A row for one random suffix also keeps that suffix's own price
+            -- (Prices:RecordSuffix), beside the item's.
+            local suffix = tonumber(result.itemKey.itemSuffix) or 0
+            if suffix ~= 0 then
+                item.suffixes = item.suffixes or {}
+                local own = item.suffixes[suffix]
+                if not own then
+                    own = { price = price, quantity = 0 }
+                    item.suffixes[suffix] = own
+                end
+                own.price = math.min(own.price, price)
+                own.quantity = own.quantity + (result.totalQuantity or 0)
+                if rivalMin and (not own.rival or rivalMin < own.rival) then own.rival = rivalMin end
+            end
             if rivalMin and (not item.rivalMin or rivalMin < item.rivalMin) then item.rivalMin = rivalMin end
             if ownMin and (not item.ownMin or ownMin < item.ownMin) then item.ownMin = ownMin end
             item.ask = item.ask or ask
@@ -812,6 +871,7 @@ function Scanner:CommitBrowseResults(results, opts)
         -- the same figure here: the item's cheapest row.
         ns.Prices:Record(item.itemID, item.price, item.price, item.quantity, now,
             item.rivalMin, item.ownMin)
+        Scanner.RecordRowSuffixes(item, now)
 
         if item.ask then unsettled[#unsettled + 1] = item.itemID end
 
@@ -951,6 +1011,10 @@ function Scanner:ReadReplicateResults(numItems)
     local unreadable = 0
     -- Commodities read in this scan; see the one-off reset in onDone.
     local commodities = {}
+    -- Each random suffix's listings, { [itemID] = { [suffix] = listings } },
+    -- and which items can have one at all (Scanner.MayHaveSuffix).
+    local suffixObservations = {}
+    local suffixGear = {}
 
     -- GetReplicateItemInfo is 0-based.
     local indices = {}
@@ -966,7 +1030,7 @@ function Scanner:ReadReplicateResults(numItems)
             -- qualityID, usable, level, levelColHeader, minBid, minIncrement,
             -- buyoutPrice, bidAmount, highBidder, bidderFullName, owner,
             -- ownerFullName, saleStatus, itemID, hasAllInfo.
-            local ok, _, _, count, _, _, _, _, _, _, buyoutPrice,
+            local ok, _, _, count, quality, _, _, _, _, _, buyoutPrice,
                   _, _, _, owner, ownerFullName, saleStatus, itemID =
                       pcall(C_AuctionHouse.GetReplicateItemInfo, index)
 
@@ -1039,13 +1103,32 @@ function Scanner:ReadReplicateResults(numItems)
                 observations[itemID] = listings
             end
 
-            listings[#listings + 1] = {
+            local listing = {
                 unitPrice = unitPrice,
                 quantity = quantity,
                 isOwn = self:IsOwnAuction(owner, ownerFullName),
                 -- Only counted, for the Stats tab's sellers (Data/StatsLog.lua).
                 seller = type(owner) == "string" and owner or nil,
             }
+            listings[#listings + 1] = listing
+
+            -- The same listing under its random suffix too, when it has one.
+            if not commodities[itemID] and Scanner.MayHaveSuffix(itemID, quality, suffixGear) then
+                local suffix = Scanner.ReplicateSuffix(index)
+                if suffix then
+                    local bySuffix = suffixObservations[itemID]
+                    if not bySuffix then
+                        bySuffix = {}
+                        suffixObservations[itemID] = bySuffix
+                    end
+                    local own = bySuffix[suffix]
+                    if not own then
+                        own = {}
+                        bySuffix[suffix] = own
+                    end
+                    own[#own + 1] = listing
+                end
+            end
         end,
 
         onProgress = function(fraction)
@@ -1076,6 +1159,13 @@ function Scanner:ReadReplicateResults(numItems)
             end
 
             local recorded = ns.Prices:CommitScan(observations, now)
+
+            -- Each random suffix beside its item, now the item has a price.
+            if ns.Prices.CommitSuffixes then
+                for itemID, bySuffix in pairs(suffixObservations) do
+                    ns.Prices:CommitSuffixes(itemID, bySuffix, now)
+                end
+            end
 
             -- After the commit, so a commodity priced for the first time in
             -- this scan is marked too and never starts afresh later.
@@ -1545,6 +1635,7 @@ function Scanner:CapturePassiveBrowse()
             item.rivalMin, item.ownMin) then
             learned = learned + 1
         end
+        Scanner.RecordRowSuffixes(item, time())
     end
 
     if learned > 0 and ns.Persist then ns.Persist:SaveLater() end
@@ -1886,6 +1977,7 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
 
     local listings = {}
     local raw = {}
+    local bySuffix = {}
 
     local ok, count = pcall(C_AuctionHouse.GetNumItemSearchResults, key)
 
@@ -1917,11 +2009,21 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
                 -- Junk prices stay out of the book for the same reason as on
                 -- the commodity path, and stay in raw for the same reason too.
                 if ns.Prices.IsCredible(unitPrice) then
-                    listings[#listings + 1] = {
+                    local listing = {
                         unitPrice = unitPrice,
                         quantity = quantity,
                         isOwn = info.containsOwnerItem == true,
                     }
+                    listings[#listings + 1] = listing
+
+                    -- Under its random suffix too: the key's own, or the
+                    -- listing's link when the search was for every suffix.
+                    local suffix = tonumber(key.itemSuffix) or 0
+                    if suffix == 0 then suffix = LinkSuffix(info.itemLink) or 0 end
+                    if suffix ~= 0 then
+                        bySuffix[suffix] = bySuffix[suffix] or {}
+                        table.insert(bySuffix[suffix], listing)
+                    end
                 end
             end
         end
@@ -1934,11 +2036,15 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     if #raw > 0 then self:LearnCommodity(itemID, false) end
 
     if not ours then
-        self:CapturePassiveListings(itemID, listings)
+        if self:CapturePassiveListings(itemID, listings) and next(bySuffix) and ns.Prices.CommitSuffixes then
+            ns.Prices:CommitSuffixes(itemID, bySuffix, time())
+        end
         return
     end
 
     self:FinishItemScan(itemID, listings, false)
+    -- After the item's own price, so the suffixes have one to sit beside.
+    if next(bySuffix) and ns.Prices.CommitSuffixes then ns.Prices:CommitSuffixes(itemID, bySuffix, time()) end
 end
 
 function Scanner:FinishItemScan(itemID, listings, isCommodity)

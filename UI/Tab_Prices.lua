@@ -643,6 +643,27 @@ local function BuildDetail(parent)
     AddRow("confidence", L["Confidence"])
     AddRow("liquidity", L["Stock movement"])
     AddRow("bags", L["In your bags"])
+    AddRow("suffixes", L["Random suffixes"])
+
+    -- Each suffix's own price ("of the Monkey"), listed on hover.
+    local suffixHover = CreateFrame("Frame", nil, detail)
+    suffixHover:SetPoint("TOPLEFT", detail.labels.suffixes, "TOPLEFT", 0, 2)
+    suffixHover:SetPoint("BOTTOMRIGHT", detail.values.suffixes, "BOTTOMRIGHT", 0, -2)
+    suffixHover:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    suffixHover:EnableMouse(true)
+    suffixHover:SetScript("OnEnter", function(self)
+        local rows = detail.suffixRows
+        if not rows or #rows == 0 then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["Price for each suffix"])
+        for _, row in ipairs(rows) do
+            GameTooltip:AddDoubleLine(row.name or L.Format("Suffix %d", row.suffix),
+                Util.FormatMoney(row.market), 1, 1, 1, 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    suffixHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.suffixHover = suffixHover
 
     BuildMyPrice(detail, rowsAnchor)
 
@@ -710,6 +731,7 @@ local function UpdateDetail(entry)
         label:SetShown(shown)
     end
     detail.myPrice:SetShown(shown)
+    if not shown then detail.suffixRows = nil end
 
     if not shown then
         return
@@ -784,6 +806,23 @@ local function UpdateDetail(entry)
     else
         detail.values.bags:SetText(L["none"])
         detail.values.bags:SetTextColor(Theme.Unpack("dim"))
+    end
+
+    -- Random suffixes: how many have a price of their own, and the spread.
+    local suffixRows = ns.Prices.SuffixRows and ns.Prices:SuffixRows(entry.itemID) or {}
+    detail.suffixRows = suffixRows
+    if #suffixRows > 0 then
+        local high, low = suffixRows[1].market, suffixRows[#suffixRows].market
+        if #suffixRows == 1 then
+            detail.values.suffixes:SetText(L.Format("1, %s", Util.FormatMoney(high, { short = true })))
+        else
+            detail.values.suffixes:SetText(L.Format("%d, %s to %s", #suffixRows,
+                Util.FormatMoney(low, { short = true }), Util.FormatMoney(high, { short = true })))
+        end
+        detail.values.suffixes:SetTextColor(Theme.Unpack("text"))
+    else
+        detail.values.suffixes:SetText(L["none"])
+        detail.values.suffixes:SetTextColor(Theme.Unpack("dim"))
     end
 
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
