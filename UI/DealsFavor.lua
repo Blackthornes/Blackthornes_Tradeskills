@@ -84,7 +84,7 @@ local function RewardText(row)
     elseif row.source == "reported" then
         return L.Format("Players report %d favor and %s. Not seen on a turn-in here yet.", row.favor, Plain(row.money or 0))
     end
-    return L["Not in the game yet, so nobody knows what it pays."]
+    return L["Nobody knows what this crate pays yet."]
 end
 
 local function SameRow(a, b)
@@ -349,14 +349,14 @@ local function UpdateDetail(entry)
     local parts = {}
     if overStack then
         parts[#parts + 1] = DealsFavor:GetSkipOverStack()
-            and L["* Needs more than one stack. Last we heard, Forever couldn't fill a crate from more than one stack, so it's left out."]
-            or L["* Needs more than one stack. Last we heard, Forever couldn't fill a crate that way."]
+            and L["* Needs more than one stack, so it's left out."]
+            or L["* Needs more than one stack. That may not work."]
     end
     if entry.have > 0 then
         parts[#parts + 1] = L.Format("You carry %d of these crates.", entry.have)
     end
     if not entry.itemID then
-        parts[#parts + 1] = L["Not seen in the game yet, so it has no auction house price."]
+        parts[#parts + 1] = L["No auction house price yet."]
     end
     parts[#parts + 1] = L["Prices are the cheapest listings from your last scan, or a vendor's where one sells it."]
     detail.note:SetText(table.concat(parts, " "))

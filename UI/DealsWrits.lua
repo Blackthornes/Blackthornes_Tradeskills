@@ -306,7 +306,7 @@ local function UpdateGoal(plan)
     if plan.standing then
         SetLine(lines[1], L.Format("Now (%s)", ns.Writs.StandingText(plan.standing)), tostring(plan.standing))
     else
-        SetLine(lines[1], L["The game did not say your standing"], "?", "warn", "warn")
+        SetLine(lines[1], L["Your standing isn't known yet"], "?", "warn", "warn")
     end
 
     if plan.need == 0 then
@@ -381,7 +381,7 @@ local function UpdateWrit(entry)
             parts[#parts + 1] = L["This writ has not been seen in the game yet, so it has no auction house price."]
         end
     else
-        parts[#parts + 1] = L["* What the guides report, until a turn-in is seen here."]
+        parts[#parts + 1] = L["* From guides, until you turn one in."]
     end
     parts[#parts + 1] = L["Each order can be done once a day. The coin pouch a turn-in gives is not counted."]
     detail.note:SetText(table.concat(parts, " "))

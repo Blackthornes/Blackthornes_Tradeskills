@@ -51,7 +51,7 @@ end
 -- @return ready, reason
 function Crafting:GetReadiness(recipeID)
     if self:IsBlocked() then
-        return false, L["blocked by the game"]
+        return false, L["Craft from the game's own profession window."]
     end
 
     local recipe, owner = ns.Recipes:GetAny(recipeID)
