@@ -205,7 +205,7 @@ check("so the button is wider than 170", button:GetWidth() > 170, true)
 check("with room for the label inside its insets", button:GetWidth() - 8 >= label:GetStringWidth(), true)
 check("hung by its right corner, so it grows to the left", button.points[1] and button.points[1][1], "BOTTOMRIGHT")
 check("the tooltip opens with the total",
-    (button.tooltipText or ""):match("^[^\n]*"), "Buys 1 material for your queue, 1g 50s 50c in all:")
+    (button.tooltipText or ""):match("^[^\n]*"), "Buy 1 material for 1g 50s 50c:")
 
 shortfall = 0
 UI:UpdateMerchantButton()
