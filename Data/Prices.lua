@@ -63,8 +63,9 @@ end
 -- that needs 20 of something cannot all be bought at the cheapest listing
 -- when only 3 are listed there (a player asked, the owner agreeing 2026-10-11),
 -- so the cost of N walks up these steps. A handful covers a run of crafts;
--- past the last step, what is left is priced at it.
-local LADDER_STEPS = 5
+-- past the last step, what is left is priced at it. Ten since Overcutting
+-- (2026-10-15), which looks for the big stack a few steps up the book.
+local LADDER_STEPS = 10
 
 Prices.LADDER_STEPS = LADDER_STEPS
 
@@ -357,8 +358,12 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
 
     if ladder ~= nil then
         record.ladder = ValidLadder(ladder) and ladder or nil
+        -- When the steps were read, so Overcutting trusts only a fresh book.
+        -- A browse row that keeps the ladder below leaves this as it was.
+        record.ladderAt = record.ladder and scannedAt or nil
     elseif record.ladder and not (rivalMin and record.ladder[1] == rivalMin) then
         record.ladder = nil
+        record.ladderAt = nil
     end
 
     record.min = minBuyout

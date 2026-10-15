@@ -82,6 +82,11 @@ function AuctionsView.DetailTexts(row)
         Add(who, each, cheapest, under, ends)
         Add(who, each, cheapest, under)
         Add(who, each, under)
+    elseif row.state == "overcut" then
+        local big = row.gap and L.Format("big stack %s", Money(row.gap)) or nil
+        Add(who, each, big, ends)
+        Add(who, each, big)
+        Add(who, each)
     elseif row.state == "cheapest" then
         local next_ = row.rival and L.Format("next %s", Money(row.rival)) or L["only yours listed"]
         Add(who, each, next_, ends)
@@ -103,6 +108,7 @@ function AuctionsView.BadgeText(row)
     if row.alt then return L["Log in to cancel"], "dim" end
     if row.cancelling then return L["Cancelling"], "warn" end
     if row.state == "cheapest" then return L["Cheapest"], "profit" end
+    if row.state == "overcut" then return L["Overcut"], "profit" end
     if row.state == "unknown" then return L["Unknown"], "muted" end
     return nil
 end
@@ -274,6 +280,9 @@ local function ShowTooltip(row, entry)
     end
     if entry.left then
         GameTooltip:AddDoubleLine(L["Ends in"], Util.FormatAge(entry.left), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    if entry.state == "overcut" then
+        GameTooltip:AddLine(L["Overcutting put this just under the big stack. The cheaper ones should sell first."], 0.7, 0.7, 0.7, true)
     end
     if entry.state == "unknown" then
         GameTooltip:AddLine(L["No recent scan of this item. Scan to see whether you were undercut."], 0.7, 0.7, 0.7, true)

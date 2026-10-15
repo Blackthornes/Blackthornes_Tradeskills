@@ -412,6 +412,24 @@ local function ShowRowTooltip(row, line)
         end
     end
 
+    -- Overcutting (2026-10-15): why the price sits above the cheapest.
+    if line.priceBasis == "overcut" and ns.Profit and ns.Profit.Overcut then
+        local rival = ns.Prices:GetScanValue(line.itemID, "rival")
+        local ok, over, _, wall, count, ahead = pcall(ns.Profit.Overcut, ns.Profit, line.itemID, rival,
+            ns.Config:Get("undercutCopper") or 1)
+        if ok and over then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(L["Overcutting"], Theme.Unpack("accent"))
+            GameTooltip:AddDoubleLine(L["Cheapest now"], Util.FormatMoney(rival, { noColor = true }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+            GameTooltip:AddDoubleLine(L["Big stack"], L.Format("%d at %s", count,
+                Util.FormatMoney(wall, { noColor = true })), 0.7, 0.7, 0.7, 1, 1, 1)
+            GameTooltip:AddDoubleLine(L["Cheaper ones ahead of you"], tostring(ahead),
+                0.7, 0.7, 0.7, 1, 1, 1)
+            GameTooltip:AddLine(L["Those should sell first, then yours."], 0.5, 0.5, 0.5, true)
+        end
+    end
+
     GameTooltip:AddLine(line.isCommodity
         and L["Commodity: sells from every bag at once"]
         or L["Item auction: one stack at a time"], 0.5, 0.5, 0.5)
@@ -542,9 +560,26 @@ function PostPanel:Build()
     hideLosses:HookScript("OnLeave", function() GameTooltip:Hide() end)
     self.hideLosses = hideLosses
 
+    -- Overcutting (the owner, 2026-10-15): the same switch as Settings,
+    -- beside Hide losses on Sell. Off unless ticked.
+    local overcut = Widgets.CreateCheckbox(body, L["Overcutting"], function(checked)
+        ns.Config:Set("overcutting", checked and true or false)
+        PostPanel:Refresh()
+        if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+    end, ns.Config:Get("overcutting") == true)
+    overcut:SetPoint("TOPRIGHT", hideLosses, "TOPLEFT", -10, 0)
+    overcut:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["Overcutting"])
+        GameTooltip:AddLine(ns.Profit.OVERCUT_HELP, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    overcut:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    self.overcutBox = overcut
+
     local summary = Theme.CreateLabel(body, "tiny", "muted")
     summary:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -6)
-    summary:SetPoint("RIGHT", hideLosses, "LEFT", -8, 0)
+    summary:SetPoint("RIGHT", overcut, "LEFT", -8, 0)
     summary:SetWordWrap(true)
     self.summary = summary
 
@@ -1352,6 +1387,10 @@ function PostPanel:Refresh()
     if self.hideLosses then
         local showBox = self.view == "sell"
         self.hideLosses:SetShown(showBox)
+        if self.overcutBox then
+            self.overcutBox:SetShown(showBox)
+            self.overcutBox:SetChecked(ns.Config:Get("overcutting") == true)
+        end
         -- What sits at the summary line's right end: Hide losses on Sell,
         -- Paste a list on Lists, nothing on Buy, where the summary has the
         -- whole width rather than wrapping beside an empty space.
@@ -1362,7 +1401,7 @@ function PostPanel:Refresh()
                 self.summary:ClearAllPoints()
                 self.summary:SetPoint("TOPLEFT", self.switch, "BOTTOMLEFT", 0, -6)
                 if beside == "box" then
-                    self.summary:SetPoint("RIGHT", self.hideLosses, "LEFT", -8, 0)
+                    self.summary:SetPoint("RIGHT", self.overcutBox or self.hideLosses, "LEFT", -8, 0)
                 elseif beside == "paste" and View and View.paste then
                     self.summary:SetPoint("RIGHT", View.paste, "LEFT", -8, 0)
                 else

@@ -114,6 +114,9 @@ local DEFAULTS = {
         verifyPriceBeforePosting = true,
         -- A fresh price lists on the click, no Yes/No box (2026-10-14).
         fastListing = true,
+        -- Post just under the big stack rather than under a few cheap ones
+        -- that sell first (2026-10-15). Off unless ticked; never rename it.
+        overcutting = false,
 
         -- Nothing reads this any more, and Settings no longer offers it: every
         -- listing is confirmed, as the confirmation's Yes is the click that
