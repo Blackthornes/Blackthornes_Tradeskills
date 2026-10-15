@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.59.0
+
+For WoW: Forever (interface 16001). No files were added, so `/reload` is
+enough after updating.
+
+- **Fast listing:** List all checks every price on your Sell list with one
+  search. After that each click lists the next item straight away, with no
+  Yes or No box, while its price is fresh. Items that look risky still ask.
+  "Fast listing" on the auction page of Settings, on unless unticked.
+- Various fixes to Tradeskills.
+
 ## 0.58.0
 
 For WoW: Forever (interface 16001). A file was added and the TOC changed, so
