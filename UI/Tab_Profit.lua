@@ -112,13 +112,29 @@ local function Method()
     return ns.Profit.GetMethod and ns.Profit:GetMethod() or nil
 end
 
-local function IsColumnVisible(column)
-    if not ns.Columns:Shown("profit", column) then return false end
+-- With every column on (Per hour ticked, All characters, disenchants) the
+-- columns can take more room than the list has and run over the craft names
+-- and each other. Then the ones read least are set aside for as long as it
+-- lasts, least needed first, so the name keeps NAME_MIN. Nothing saved: they
+-- come back once there is room. COST, SELLS, PROFIT, TIME and GOLD/HR stay.
+local NAME_MIN = 160
+local SQUEEZE_ORDER = { "age", "via", "make", "posted", "demand", "margin", "disenchant", "who" }
+local squeezed = {}
+local squeezedKey = ""
+
+--- The list's own rules for a column, before any is set aside for room.
+local function ColumnWanted(column)
     if column.accountWideOnly then return state.accountWide end
     if column.bestOnly then return Method() == "best" end
     if column.disenchantOnly then return state.showDisenchant end
     if column.perHourOnly then return ns.Config:Get("profitShowsPerHour") == true end
     return true
+end
+
+local function IsColumnVisible(column)
+    if not ns.Columns:Shown("profit", column) then return false end
+    if squeezed[column.key] then return false end
+    return ColumnWanted(column)
 end
 
 --- Position the numeric columns and give the craft name whatever is left.
@@ -1441,8 +1457,32 @@ end
 --------------------------------------------------------------------------------
 
 --- Mirror the row layout onto the column headings.
+--- Work out which columns fit the headings' width (the list's); a width
+--- not known yet sets nothing aside. A change moves layoutVersion, so the
+--- rows lay themselves out again on their next draw.
+local function Squeeze()
+    local frame = widgets.headingFrame
+    local ok, room = pcall(function() return frame and frame:GetWidth() end)
+    squeezed = {}
+    for key in pairs(ns.Columns:Squeeze("profit", COLUMNS, ok and room or nil, {
+        order = SQUEEZE_ORDER, nameMin = NAME_MIN,
+        left = 8 + MARK_GUTTER + ICON_GUTTER + 4, visible = ColumnWanted })) do
+        squeezed[key] = true
+    end
+    local keys = {}
+    for _, key in ipairs(SQUEEZE_ORDER) do
+        if squeezed[key] then keys[#keys + 1] = key end
+    end
+    local key = table.concat(keys, ",")
+    if key ~= squeezedKey then
+        squeezedKey = key
+        layoutVersion = layoutVersion + 1
+    end
+end
+
 ApplyHeadingLayout = function()
     if not widgets.headings then return end
+    Squeeze()
 
     local offset = -8
     for _, column in ipairs(COLUMNS) do
@@ -1779,6 +1819,15 @@ local function BuildCrafts(container)
     headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
     headings:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -DETAIL_WIDTH - 8, -8)
     headings:SetHeight(16)
+    widgets.headingFrame = headings
+
+    -- The width is known only once the window is laid out, and Text size
+    -- or a scale change can move it: fit the columns again then.
+    headings:SetScript("OnSizeChanged", function()
+        local before = squeezedKey
+        ApplyHeadingLayout()
+        if squeezedKey ~= before and widgets.list then widgets.list:Refresh() end
+    end)
 
     local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
     nameHeading:SetPoint("LEFT", 8 + MARK_GUTTER + ICON_GUTTER, 0)
