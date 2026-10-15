@@ -634,7 +634,7 @@ function PostPanel:Build()
     -- the game takes a click for every listing.
     if ns.Collapse.CreateFooter then ns.Collapse.CreateFooter(body, FOOT_HEIGHT) end
 
-    local listAll = Widgets.CreateButton(body, L["List all"], function()
+    local listAll = Widgets.CreateButton(body, L["List Next"], function()
         PostPanel:ListNext()
     end, { width = 110, height = 22, primary = true })
     listAll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(EDGE_PAD + 6), EDGE_PAD + 6)
@@ -762,7 +762,7 @@ function PostPanel:UpdateListAll(lines)
     local count = 0
     if lines then count = ns.Posting:GetSummary(nil, lines) or 0 end
     self.listAllCount = count
-    self.listAllLabel = count > 0 and L.Format("List all %d", count) or L["List all"]
+    self.listAllLabel = count > 0 and L.Format("List Next - %d remaining", count) or L["List Next"]
 
     if button.waitingLabel ~= true then button:SetText(self.listAllLabel) end
 
@@ -771,7 +771,7 @@ function PostPanel:UpdateListAll(lines)
 
     button:SetEnabledState(count > 0)
     button.tooltipText = count > 0
-        and L["Lists the most valuable stack on the list. Click again for the next one, since the game needs a click for every listing."]
+        and L["Lists the most valuable stack. Click again for the next one."]
         or L["Nothing on the list can be listed right now."]
 end
 
@@ -1565,7 +1565,7 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
 
     -- List all waits with the rest, back to its count once the wait is over.
     if self.listAll and self.listAll:IsShown() and (self.listAllCount or 0) > 0 then
-        Apply(self.listAll, self.listAllLabel or L["List all"], seconds, reason)
+        Apply(self.listAll, self.listAllLabel or L["List Next"], seconds, reason)
     end
 
     for i = 1, #self.list.rows do
