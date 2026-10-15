@@ -867,7 +867,7 @@ undercutRow.mouseOver = true
 undercutRow.scripts.OnEnter(undercutRow)
 check("hovering a row lights it", undercutRow.hover.shown, true)
 check("and its tooltip names it", GameTooltip.lines[1], "Undercut by")
-check("then says what it does", (GameTooltip.lines[2] or ""):find("cheapest rival", 1, true) ~= nil, true)
+check("then says what it does", (GameTooltip.lines[2] or ""):find("cheapest listing", 1, true) ~= nil, true)
 undercutRow.mouseOver = false
 undercutRow.scripts.OnUpdate(undercutRow)
 check("leaving it lets go", undercutRow.hover.shown, false)
