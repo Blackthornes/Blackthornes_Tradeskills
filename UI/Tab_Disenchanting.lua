@@ -435,7 +435,7 @@ local function BuildDetail(parent)
         SearchAuctionHouse(state.selected)
     end, { width = 180, primary = true, height = 24 })
     searchButton:SetPoint("BOTTOMLEFT", 12, 14)
-    searchButton.tooltipText = L["Sends a search for this item, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
+    searchButton.tooltipText = L["Searches the auction house for this item. You still click the game's Buy button to buy it."]
     detail.searchButton = searchButton
 
     -- Disenchant, for an item in the bags. The click itself is taken by the
@@ -639,7 +639,7 @@ local function UpdateBagDetail(entry)
     if facts.source == "yours" then
         note = L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts))
     else
-        note = L["Chances come from the Classic table built into the addon until you have done enough disenchants of your own."]
+        note = L["These chances come from Classic's numbers until you've done enough disenchants of your own."]
     end
     if not entry.soulbound then
         note = note .. L[" If it is already bound to you, only a vendor will buy it."]
@@ -718,7 +718,7 @@ local function UpdateDetail(entry)
     if facts.source == "yours" then
         note = L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts))
     else
-        note = L["Chances come from the Classic table built into the addon. It's an average, so any one disenchant can give more or less."]
+        note = L["These chances come from Classic's numbers. It's an average, so one disenchant can give more or less."]
     end
     note = note .. L.Format(" The buy price is the cheapest listing when last scanned (%s).",
         entry.age and Util.FormatAgeAgo(entry.age) or L["never"])

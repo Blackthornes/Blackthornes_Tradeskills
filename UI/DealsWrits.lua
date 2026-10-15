@@ -278,7 +278,7 @@ local function BuildDetail(parent)
         SearchWrit(state.selected)
     end, { width = 134, primary = true, height = 24 })
     detail.writButton:SetPoint("BOTTOMLEFT", 12, 14)
-    detail.writButton.tooltipText = L["Sends a search for this writ, so it shows in the auction house list. Buying still takes your own click on the game's Buy button."]
+    detail.writButton.tooltipText = L["Searches the auction house for this writ. You still click the game's Buy button to buy it."]
 
     detail.itemButton = Widgets.CreateButton(detail, L["Search item"], function()
         SearchItem(state.selected)
