@@ -174,6 +174,7 @@ L["ITEM"] = "GEGENSTAND"
 
 -- UI/ItemTooltip.lua
 L["Auction value"] = "Auktionswert"
+L["This one"] = "Dieses hier"
 L["none listed"] = "keine Angebote"
 L["not scanned yet"] = "noch nicht gescannt"
 L["%s  (%s)"] = "%s  (%s)"

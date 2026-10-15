@@ -210,8 +210,12 @@ bags. It asks Tradeskills one thing, through its `Logic/Sisters.lua`,
 inside a pcall, read only, with no TOC dependency:
 
 ```lua
-_G.BlackthornesTS.Butler:Advise(itemID)   -- a table, or nil; never raises
+_G.BlackthornesTS.Butler:Advise(item)   -- item ID or the bag copy's link; a table, or nil; never raises
 ```
+
+A link (2026-10-15) prices a random suffix ("of the Monkey") as that
+suffix sells: `auction` and `auctionNow` read `Prices:GetLinkValue`, which
+answers the suffix's own price when one is recent, else the item's.
 
 `Logic/Butler.lua` answers with a fresh table, any field nil when unknown:
 
@@ -476,6 +480,24 @@ The player's own lists only (`ShoppingLists:Readable`), never the craft
 queue's, fresh tables each time; nothing is written. Tested in
 `tools/test_butlerlists.lua`. Keep it stable; Butler's `Logic/BankAlt.lua`
 reads it.
+
+## Random suffix prices
+
+A player asked (2026-10-15, the owner said build it): gear "of the Monkey"
+and "of the Spirit" share one item ID, and its one price mixed every
+suffix. Each suffix seen at the auction house now keeps a price of its own
+beside the item's, in the item's price record as `record.suffixes[suffix]
+= { market, min, rival, quantity, seen }` (never rename it; at most
+`Prices.SUFFIX_MOST`, the oldest seen going first; used for
+`Prices.SUFFIX_KEEP`). The item's own price is unchanged. Read from full
+scans (`C_AuctionHouse.GetReplicateItemLink`, asked only for green or better
+weapons and armour, `Scanner.MayHaveSuffix`), browse rows (the key's
+`itemSuffix`) and item searches (each listing's `itemLink`).
+`Prices:GetLinkValue(link, which)` is a copy's price: its suffix's, else
+`GetValue`'s, with the player's own price still winning. The tooltip adds
+"This one" for a copy whose suffix has a price, and Butler's `Advise` takes
+the bag link. `GetValue(itemID)` is unchanged, so Farmer and Equipment read
+as before. Tested in `tools/test_suffixprices.lua`. Not yet seen in game.
 
 ## Profession cooldowns
 
