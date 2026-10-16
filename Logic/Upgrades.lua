@@ -17,10 +17,12 @@
 -- could change: new gear on, a level, talents, or an item's details arriving.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Upgrades = ns.NewModule("Upgrades")
 
 local known = {}
+local enchants = {}
 
 --- Equipment's Compare module, or nil when Equipment is not loaded (or too
 --- old to answer).
@@ -73,11 +75,55 @@ function Upgrades:IsUpgrade(itemID, link)
     return answer
 end
 
+--- What an enchanting recipe would do for the character playing, from
+--- Equipment's Enchants:ForRecipe: `{ slot, slotID, gain, current, best }`,
+--- or nil when it beats nothing worn, or Equipment is not there (or too old
+--- to say). Kept per recipe, like the item answers, so a list's redraw asks
+--- once. Never raises.
+function Upgrades:EnchantFor(recipeID)
+    recipeID = tonumber(recipeID)
+    if not recipeID or not self:IsEnabled() then return nil end
+
+    local kept = enchants[recipeID]
+    if kept ~= nil then return kept or nil end
+
+    local answer = false
+    local equipment = rawget(_G, "BlackthornesEquipment")
+    local module = type(equipment) == "table" and equipment.Enchants
+    if type(module) == "table" and type(module.ForRecipe) == "function" then
+        local ok, result = pcall(module.ForRecipe, module, recipeID)
+        if ok and type(result) == "table" and type(result.slot) == "string" then
+            answer = {
+                slot = result.slot,
+                gain = tonumber(result.gain),
+                current = type(result.current) == "string" and result.current or nil,
+                best = result.best == true,
+            }
+        end
+    end
+    enchants[recipeID] = answer
+    return answer or nil
+end
+
+--- "For you: Chest +3%", or nil when the enchant beats nothing worn.
+--- With `short`, only "Chest +3%".
+function Upgrades:EnchantText(recipeID, short)
+    local answer = self:EnchantFor(recipeID)
+    if not answer then return nil end
+    local gain = answer.gain and answer.gain > 0 and answer.gain or nil
+    if short then
+        return gain and L.Format("%s +%d%%", answer.slot, gain) or answer.slot
+    end
+    if gain then return L.Format("For you: %s +%d%%", answer.slot, gain) end
+    return L.Format("For you: %s", answer.slot)
+end
+
 --- Forget every answer, so the next draw asks again.
 function Upgrades:Forget()
     -- Items arrive from the server all the time (chat links, the auction
     -- house); a new table each time is garbage when nothing was kept.
     if next(known) then known = {} end
+    if next(enchants) then enchants = {} end
 end
 
 --- Forget, and redraw the open tab, the craft pane and the sell list once

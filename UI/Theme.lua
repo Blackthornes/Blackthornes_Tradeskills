@@ -721,6 +721,36 @@ function Theme.SetItemIcon(icon, itemID, link)
     icon:Show()
 end
 
+--- Show a spell's icon (an enchant, which makes no item), with the green
+--- arrow when `upgrade` is true. Hidden when the client gives no icon.
+function Theme.SetSpellIcon(icon, spellID, upgrade)
+    if not icon then return end
+
+    local texture
+    if spellID then
+        if type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
+            local ok, found = pcall(C_Spell.GetSpellTexture, spellID)
+            if ok then texture = found end
+        end
+        if not texture and type(GetSpellTexture) == "function" then
+            local ok, found = pcall(GetSpellTexture, spellID)
+            if ok then texture = found end
+        end
+    end
+
+    local state = iconState[icon]
+    if state then
+        state.upgrade = texture ~= nil and upgrade == true
+        state.itemID, state.link = nil, nil
+    end
+    if not texture then
+        icon:Hide()
+        return
+    end
+    icon:SetTexture(texture)
+    icon:Show()
+end
+
 --- The item an icon was last given by Theme.SetItemIcon, and its link.
 function Theme.IconItem(icon)
     local state = icon and iconState[icon]
