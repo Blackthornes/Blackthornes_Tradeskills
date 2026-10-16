@@ -316,8 +316,10 @@ do
         PostPanel.shownLines = shown
         PostPanel.list = nil
 
+        check("before it, the button says it checks prices", Posting:WouldCheckAll(shown[1], shown), true)
         PostPanel:ListNext()
         check("the first click checks the list", #queued, 1)
+        check("once asked, it says List Next again", Posting:WouldCheckAll(shown[1], shown), false)
         check("and lists nothing", #posted, 0)
         SendQueued()
         browseRows = {
@@ -338,9 +340,14 @@ do
         check("both settling: nothing listed twice", #posted, 2)
         check("and it says it is waiting", Said("waiting for your last listing"), true)
 
+        settings.fastListing = false
+        check("fast listing unticked: never Check Prices", Posting:WouldCheckAll({ itemID = 4243 }, { { itemID = 4243 } }), false)
+        settings.fastListing = nil
+
         ns.Scanner.isAuctionHouseOpen = false
         Fire("AUCTION_HOUSE_CLOSED")
         check("leaving forgets the checks", Posting:IsFresh(POTION), false)
+        check("away from the auction house: never Check Prices", Posting:WouldCheckAll(shown[1], shown), false)
     else
         check("the drawer loads for this test", ok, true)
     end
