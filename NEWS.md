@@ -37,6 +37,8 @@ Fixes and changes:
 - Merchant's Favor rewards and the Artisan crates are corrected.
 - Various fixes to Tradeskills.
 
+Thanks Ezmode, Voldar, DarkGarf and MagnusBabbage for the ideas and feedback!
+
 ## 0.60.0
 
 - The Profit tab has a Your time view. It compares farming the materials, selling them as they are, and buying them, in gold an hour.
