@@ -38,6 +38,12 @@ function SisterKeeps:IsOn()
     return not (ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsSisterKeeps") == false)
 end
 
+--- Gear another character could wear is held back only while "Keep
+--- Upgrades for Alts" is ticked (off unless ticked, the owner 2026-10-16).
+function SisterKeeps:HoldsAltUpgrades()
+    return ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsAltUpgrades") == true or false
+end
+
 function SisterKeeps:Forget()
     kept = {}
     keptAt, keptChanges = nil, nil
@@ -97,7 +103,7 @@ local function GearReason(itemID, link, bag, slot)
         return L["An upgrade for you"]
     end
 
-    if type(advice.alt) == "table" then
+    if type(advice.alt) == "table" and SisterKeeps:HoldsAltUpgrades() then
         local name = CharacterName(advice.alt.key)
         local altGain = Gain(advice.alt)
         if name and altGain then return L.Format("An upgrade for %s, +%d%%", name, altGain) end
