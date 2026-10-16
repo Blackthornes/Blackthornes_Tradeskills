@@ -193,6 +193,26 @@ local function Listings(itemID)
     return listings
 end
 
+--- What the auction house wants, from your scans only (a player asked,
+--- 2026-10-16, for numbers rather than High, Some or Low): the share of
+--- the stock gone each day, about how many go a day, how many are up now
+--- and about how many days those would take to go. nil with no share yet.
+local function Market(itemID, record, perDay)
+    local share = Number(Ask(ns.Prices, "GetSalesPerDay", itemID))
+    if not share then return nil end
+
+    local market = { share = share, perDay = Number(perDay) }
+    if record and Number(record.quantity) then
+        market.listed = Number(record.quantity)
+        market.seen = Number(record.seen)
+    end
+    if market.listed and market.perDay and market.perDay > 0 then
+        market.daysToSell = market.listed / market.perDay
+    end
+    if ns.Demand and ns.Demand.MarketLevel then market.level = ns.Demand.MarketLevel(share) end
+    return market
+end
+
 --- Sales by week, from the mail ledger: weeks[1] is the week ending now,
 --- weeks[2] the one before, back ItemStats.WEEKS. Each { units, net }.
 local function Weeks(itemID, now)
@@ -287,6 +307,7 @@ function ItemStats:Build(itemID, now)
 
     stats.craft = Craft(itemID)
     stats.soldPerDay = Ask(ns.Prices, "GetUnitsSoldPerDay", itemID)
+    stats.market = Market(itemID, stats.record, stats.soldPerDay)
     stats.demand = Ask(ns.Demand, "Get", itemID)
     stats.week = Ask(ns.Demand, "Week", itemID)
     stats.heat = Heat(itemID, now)
