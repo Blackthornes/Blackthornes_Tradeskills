@@ -286,7 +286,7 @@ local function Row(text)
         if label.text == text then return label end
     end
 end
-local cut, deposit, profit, perHour = Row("Auction cut"), Row("Deposit"), Row("Profit"), Row("Per hour")
+local cut, deposit, profit, perHour = Row("Auction cut"), Row("Deposit"), Row("Profit"), Row("A day")
 check("the rows are there to start with", cut and deposit and profit and perHour and cut.shown and deposit.shown)
 
 settings.profitShowsGraph = true
@@ -296,7 +296,7 @@ check("the graph shows", graphFrame.shown)
 check("the auction cut steps aside", not cut.shown)
 check("and the deposit", not deposit.shown)
 check("profit stays", profit.shown)
-check("and so does per hour", perHour.shown)
+check("and so does a day", perHour.shown)
 
 settings.profitShowsGraph = false
 analyses[1] = setmetatable({ recipeID = 4 }, { __index = analyses[1] })
