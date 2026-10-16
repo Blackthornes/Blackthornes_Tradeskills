@@ -56,6 +56,7 @@ Logic\QueueMail.lua
 Logic\ShoppingLists.lua
 Logic\AHBuys.lua
 Logic\DisenchantBuys.lua
+Logic\MaterialFinder.lua
 Logic\MyAuctions.lua
 Logic\Crafting.lua
 Logic\Posting.lua

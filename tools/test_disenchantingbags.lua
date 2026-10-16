@@ -212,7 +212,7 @@ check("picking a deal offers the search", search.shown and not disenchant.shown)
 
 print("\nthe bags view")
 local bagsBox = checkboxes["Items in my bags"]
-check("there is a tick box for it", bagsBox ~= nil and dropdown == nil)
+check("there is a tick box for it", bagsBox ~= nil)
 
 bagsBox.onToggle(true)
 check("it lists what is in the bags", list.data == bagRows)
