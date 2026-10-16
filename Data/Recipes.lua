@@ -427,6 +427,39 @@ local function Distinguish(record)
     if not record.guid then return L["saved before last names"] end
 end
 
+local function Text(value)
+    return type(value) == "string" and value ~= "" and value or nil
+end
+
+--- What the Characters tab shows beside the recipes: side, race, class,
+--- XP, rest, zone, played time, when last seen and mail waiting. Every field
+--- is nil when the record does not have it (one saved before these notes,
+--- or shared from another account without them).
+function Recipes:AddNotes(entry, record)
+    local Notes = ns.CharacterNotes
+    entry.faction = Text(record.faction)
+    entry.class = Text(record.class)
+    entry.classFile = Text(record.classFile)
+    entry.race = Text(record.race)
+    entry.level = type(record.level) == "number" and record.level or nil
+    entry.zone = Text(record.zone)
+    entry.seenAt = tonumber(record.seenAt) or tonumber(record.inventoryAt)
+    if Notes then
+        entry.levelShare = Notes.LevelShare(record)
+        entry.rested, entry.restedGuess = Notes.Rested(record, entry.isCurrent)
+        entry.played = Notes.Played(record, entry.isCurrent)
+    end
+
+    -- Mail waiting, as last read at a mailbox.
+    if type(record.mail) == "table" then
+        local count = 0
+        for _, n in pairs(record.mail) do
+            if type(n) == "number" and n > 0 then count = count + n end
+        end
+        entry.mailCount = count
+    end
+end
+
 --- Every known character, newest data first.
 function Recipes:GetCharacters()
     local characters = {}
@@ -449,6 +482,7 @@ function Recipes:GetCharacters()
             -- the name of the character it came through.
             linkedFrom = type(record.linkedFrom) == "string" and record.linkedFrom or nil,
         }
+        self:AddNotes(characters[#characters], record)
     end
 
     -- Two characters showing the same name get told apart by level and class.

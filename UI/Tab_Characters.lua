@@ -1,10 +1,17 @@
 -- Blackthornes Tradeskills -- UI/Tab_Characters.lua
--- The account-wide rollup: who knows what, who is holding what, and how stale
--- each of those answers is.
+-- Every character on one table, split by side: Horde, then Alliance, each
+-- under its own heading with how many there are, their gold and their time
+-- played (asked 2026-10-16, from a mockup).
 --
--- Every figure here except the logged-in character's is a snapshot from the
--- last time that character was played, so the age of the data is shown next to
--- the data itself rather than left to be assumed current.
+-- A row says the character's level and how far into it, rested XP, gold,
+-- professions, mail waiting, the zone, time played and when last seen. A
+-- click opens a line under it with the best crafts, cooldowns and how old
+-- its bags and bank are; Forget character sits there too, for an alt.
+--
+-- Every figure but the logged-in character's is from the last time that
+-- character was played (Logic/CharacterNotes.lua keeps them), so the table
+-- says when that was. Nothing new is saved here: which side shows, the
+-- search, the sort and the open line last the session.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -15,10 +22,17 @@ local Util = ns.Util
 
 local UI = ns.UI
 
-local ROW_HEIGHT = 40
-local DETAIL_WIDTH = 300
+local ROW_HEIGHT = 26
+-- A character's row: the name with race and class under it, and the bars.
+local CHARACTER_NEED = 34
+-- The open line under a character.
+local CARD_NEED = 74
+local CARD_CRAFTS = 3
+local CARD_COOLDOWNS = 3
+-- How long the open line keeps its best crafts before working them out again.
+local CRAFTS_KEEP = 30
 
-local state = { selected = nil, view = "characters" }
+local state = { view = "characters", show = "both", search = "", open = nil, folded = {} }
 local widgets = {}
 
 -- The tab has two views: the characters themselves, and every character's
@@ -28,375 +42,637 @@ local VIEWS = {
     { key = "bank",       text = L["BANK"] },
 }
 
+-- Right to left, as every list lays them out; the name has the rest.
+local COLUMNS = {
+    { key = "seen",        label = L["LAST SEEN"],   width = 76, justify = "RIGHT" },
+    { key = "played",      label = L["PLAYED"],      width = 64, justify = "RIGHT" },
+    { key = "zone",        label = L["ZONE"],        width = 120, justify = "LEFT" },
+    { key = "mail",        label = L["MAIL"],        width = 40, justify = "CENTER" },
+    { key = "professions", label = L["PROFESSIONS"], width = 150, justify = "LEFT" },
+    { key = "gold",        label = L["GOLD"],        width = 96, money = true, justify = "RIGHT" },
+    { key = "rested",      label = L["RESTED"],      width = 56, justify = "CENTER" },
+    { key = "level",       label = L["LEVEL"],       width = 52, justify = "CENTER" },
+}
+
+ns.Columns:Register("characters", L["Characters"], COLUMNS)
+
+-- The two sides, in the order shown, and anything else (a character saved
+-- before its side was kept) after them.
+local SIDES = {
+    Horde    = { title = L["HORDE"],    color = "horde",
+                 crest = [[Interface\TargetingFrame\UI-PVP-Horde]] },
+    Alliance = { title = L["ALLIANCE"], color = "alliance",
+                 crest = [[Interface\TargetingFrame\UI-PVP-Alliance]] },
+    Other    = { title = L["OTHER"],    color = "muted" },
+}
+
+local SHOW = {
+    { key = "both",     text = L["Both"] },
+    { key = "Horde",    text = L["Horde"],    color = "horde" },
+    { key = "Alliance", text = L["Alliance"], color = "alliance" },
+}
+
+-- The game's class colours, for a client that has no table of its own.
+local CLASS_COLORS = {
+    WARRIOR = { 0.78, 0.61, 0.43 }, PALADIN = { 0.96, 0.55, 0.73 }, HUNTER = { 0.67, 0.83, 0.45 },
+    ROGUE = { 1.00, 0.96, 0.41 }, PRIEST = { 1.00, 1.00, 1.00 }, SHAMAN = { 0.00, 0.44, 0.87 },
+    MAGE = { 0.25, 0.78, 0.92 }, WARLOCK = { 0.53, 0.53, 0.93 }, DRUID = { 1.00, 0.49, 0.04 },
+}
+
 --------------------------------------------------------------------------------
--- Rows
+-- Words
 --------------------------------------------------------------------------------
 
-local function CreateRow(row)
-    row.name = Theme.CreateLabel(row, "normal", "text")
-    row.name:SetPoint("TOPLEFT", 10, -6)
-
-    -- The two lines under the name share the row: professions on the left,
-    -- how fresh the figures are on the right, each fitted to its own width.
-    row.professions = Theme.CreateLabel(row, "tiny", "muted")
-    row.professions:SetPoint("TOPLEFT", 10, -22)
-    row.professions:SetWidth(420)
-
-    row.gold = Theme.CreateLabel(row, "small", "text", "RIGHT")
-    row.gold:SetPoint("TOPRIGHT", -12, -6)
-    row.gold:SetWidth(120)
-
-    row.freshness = Theme.CreateLabel(row, "tiny", "dim", "RIGHT")
-    row.freshness:SetPoint("TOPRIGHT", -12, -23)
-    row.freshness:SetWidth(220)
+local function Money(copper)
+    if not copper then return "--" end
+    return Util.FormatMoney(copper, { short = true })
 end
 
-local function UpdateRow(row, entry)
-    row.name:SetText(entry.name)
-    row.name:SetTextColor(Theme.Unpack(entry.isCurrent and "accent" or "text"))
+--- Time played: "12d 4h", "5h 20m", "40m".
+local function PlayedText(seconds)
+    if type(seconds) ~= "number" then return "--" end
+    seconds = math.max(0, math.floor(seconds))
+    local days, hours = math.floor(seconds / 86400), math.floor(seconds % 86400 / 3600)
+    local minutes = math.floor(seconds % 3600 / 60)
+    if days > 0 then return L.Format("%dd %dh", days, hours) end
+    if hours > 0 then return L.Format("%dh %dm", hours, minutes) end
+    return L.Format("%dm", minutes)
+end
 
+local function SeenText(entry)
+    if entry.isCurrent then return L["Here now"] end
+    if not entry.seenAt then return "--" end
+    return Util.FormatAgeAgo(time() - entry.seenAt)
+end
+
+--- The class colour, or nil for the usual text colour.
+local function ClassColor(classFile)
+    if type(classFile) ~= "string" then return nil end
+    local ok, color = pcall(function()
+        local colors = rawget(_G, "RAID_CLASS_COLORS")
+        local c = type(colors) == "table" and colors[classFile]
+        if type(c) == "table" and type(c.r) == "number" then return { c.r, c.g, c.b } end
+    end)
+    return ok and color or CLASS_COLORS[classFile]
+end
+
+--- Learned professions, highest skill first.
+local function Learned(entry)
     local learned = {}
     for _, profession in ipairs(entry.professions or {}) do
-        if profession.learned then
-            learned[#learned + 1] = ("%s %d"):format(profession.name, profession.skillLevel or 0)
+        if type(profession) == "table" and profession.learned and profession.name then
+            learned[#learned + 1] = profession
         end
     end
-
-    -- Every profession when they fit, else the first few and how many more
-    -- (the row's tooltip lists them all), rather than a line cut off.
-    local texts = {}
-    for count = #learned, 1, -1 do
-        local shown = table.concat(learned, "  ·  ", 1, count)
-        texts[#texts + 1] = count < #learned
-            and L.Format("%s  ·  +%d more", shown, #learned - count) or shown
-    end
-
-    local professions = Theme.FitText(row.professions, #texts > 0 and texts or { L["no professions recorded"] })
-    row.professionsCut = #learned > 0 and professions ~= texts[1] and learned or nil
-
-    row.gold:SetText(entry.gold and Util.FormatMoney(entry.gold, { short = true }) or "--")
-
-    if entry.isCurrent then
-        row.freshness:SetText(L["this character"])
-        row.freshness:SetTextColor(Theme.Unpack("profit"))
-    else
-        local age = entry.inventoryAt and (time() - entry.inventoryAt)
-        local seen = age and L.Format("seen %s", Util.FormatAgeAgo(age)) or L["bags never read"]
-        -- Shared from another account of yours (Settings, Sharing).
-        if entry.linkedFrom then seen = L.Format("other account  ·  %s", seen) end
-        Theme.FitText(row.freshness, { L.Format("%d recipes  ·  %s", entry.recipeCount, seen), seen })
-        row.freshness:SetTextColor(Theme.Unpack("dim"))
-    end
+    table.sort(learned, function(a, b)
+        if (a.skillLevel or 0) ~= (b.skillLevel or 0) then return (a.skillLevel or 0) > (b.skillLevel or 0) end
+        return a.name < b.name
+    end)
+    return learned
 end
 
---- A row whose professions did not all fit lists every one of them.
-local function ShowRowTooltip(row, entry)
-    local learned = rawget(row, "professionsCut")
-    if not learned then return end
+local function ProfessionLine(profession)
+    return ("%s %d"):format(profession.name, profession.skillLevel or 0)
+end
 
-    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-    GameTooltip:SetText(entry.name or "", 1, 1, 1)
-    for _, line in ipairs(learned) do
-        GameTooltip:AddLine(line, 0.7, 0.7, 0.7)
-    end
-    GameTooltip:Show()
+-- Rested XP tops out at a level and a half.
+local function RestMost()
+    return ns.CharacterNotes and ns.CharacterNotes.REST_MOST or 150
+end
+
+local function SideOf(entry)
+    if entry.faction == "Horde" or entry.faction == "Alliance" then return entry.faction end
+    return "Other"
 end
 
 --------------------------------------------------------------------------------
--- Detail
+-- The open line: best crafts, cooldowns, bags and bank
 --------------------------------------------------------------------------------
 
-local function BuildDetail(parent)
-    local detail = Theme.CreatePanel(parent, "window")
-    -- The gold edge every other detail pane has.
-    Theme.AccentStripe(detail, 2, 0.6)
-    detail:SetWidth(DETAIL_WIDTH)
+local craftsKept = { key = nil, at = 0, list = nil }
 
-    local title = Theme.CreateLabel(detail, "large", "accent")
-    title:SetPoint("TOPLEFT", 12, -12)
-    title:SetPoint("TOPRIGHT", -12, -12)
-    detail.title = title
-
-    -- Realm, gold and recipes can be wider than the pane; it wraps to a
-    -- second line rather than being cut off, and the list below moves down.
-    local subtitle = Theme.CreateLabel(detail, "small", "muted")
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    subtitle:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -4)
-    subtitle:SetWordWrap(true)
-    detail.subtitle = subtitle
-
-    local heading = Theme.CreateLabel(detail, "tiny", "dim")
-    heading:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -14)
-    heading:SetText(L["BEST CRAFTS ON THIS CHARACTER"])
-    Theme.StyleHeading(heading, detail)
-    detail.heading = heading
-
-    detail.lines = {}
-    local anchor = heading
-
-    for index = 1, 8 do
-        local line = CreateFrame("Frame", nil, detail)
-        line:SetHeight(16)
-        line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, index == 1 and -6 or 0)
-        line:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
-
-        line.name = Theme.CreateLabel(line, "small", "text")
-        line.name:SetPoint("LEFT", 0, 0)
-        line.name:SetPoint("RIGHT", -74, 0)
-
-        line.profit = Theme.CreateLabel(line, "small", "profit", "RIGHT")
-        line.profit:SetPoint("RIGHT", 0, 0)
-        line.profit:SetWidth(70)
-
-        detail.lines[index] = line
-        anchor = line
+--- This character's crafts that pay most, against its own bags. Crafts of
+--- a profession it dropped are left out, as the Profit tab leaves them out.
+local function BestCrafts(key)
+    if craftsKept.key == key and craftsKept.list and time() - craftsKept.at < CRAFTS_KEEP then
+        return craftsKept.list
     end
 
-    -- Profession cooldowns (Logic/Cooldowns.lua): what is ready, and when
-    -- the rest will be. Shown only for a character that has one.
-    local cooldownHeading = Theme.CreateLabel(detail, "tiny", "dim")
-    cooldownHeading:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
-    cooldownHeading:SetText(L["COOLDOWNS"])
-    Theme.StyleHeading(cooldownHeading, detail)
-    detail.cooldownHeading = cooldownHeading
-
-    detail.cooldowns = {}
-    anchor = cooldownHeading
-    for index = 1, 3 do
-        local line = CreateFrame("Frame", nil, detail)
-        line:SetHeight(16)
-        line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, index == 1 and -6 or 0)
-        line:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
-
-        line.name = Theme.CreateLabel(line, "small", "text")
-        line.name:SetPoint("LEFT", 0, 0)
-        line.name:SetPoint("RIGHT", -96, 0)
-
-        line.when = Theme.CreateLabel(line, "small", "muted", "RIGHT")
-        line.when:SetPoint("RIGHT", 0, 0)
-        line.when:SetWidth(92)
-
-        detail.cooldowns[index] = line
-        anchor = line
-    end
-
-    detail.dataAge = Theme.CreateLabel(detail, "tiny", "dim")
-    detail.dataAge:SetPoint("BOTTOMLEFT", 12, 46)
-    detail.dataAge:SetPoint("BOTTOMRIGHT", -12, 46)
-    detail.dataAge:SetWordWrap(true)
-
-    -- Removing a character is destructive, so it arms first.
-    detail.forget = Widgets.CreateButton(detail, L["Forget character"], function()
-        local button = detail.forget
-        if not state.selected then return end
-
-        -- Armed for one character only: arming on one alt and clicking again
-        -- after selecting another must ask again, not delete the second.
-        if button.armed and button.armed == state.selected.key then
-            ns.Recipes:ForgetCharacter(state.selected.key)
-            button.armed = false
-            button:SetText(L["Forget character"])
-            button:SetConfirming(false)
-
-            state.selected = nil
-            UI:RefreshActiveTab()
-            return
-        end
-
-        local armedFor = state.selected.key
-        button.armed = armedFor
-        button:SetText(L["Really forget?"])
-        -- Red while armed, like the craft pane's Clear queue.
-        button:SetConfirming(true)
-
-        C_Timer.After(4, function()
-            if button.armed == armedFor then
-                button.armed = false
-                button:SetText(L["Forget character"])
-                button:SetConfirming(false)
-            end
-        end)
-    end, { width = 140, height = 22,
-           tooltip = L["Delete this character's saved recipes and inventory"] })
-    detail.forget:SetPoint("BOTTOMLEFT", 12, 14)
-
-    local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
-    empty:SetPoint("CENTER")
-    empty:SetWidth(260)
-    empty:SetWordWrap(true)
-    empty:SetText(L["Select a character to see what they can make"])
-    detail.empty = empty
-
-    return detail
-end
-
-local function UpdateDetail(entry)
-    local detail = widgets.detail
-    local shown = entry ~= nil
-
-    detail.empty:SetShown(not shown)
-    detail.title:SetShown(shown)
-    detail.subtitle:SetShown(shown)
-    detail.heading:SetShown(shown)
-    detail.dataAge:SetShown(shown)
-
-    -- Only an alt can be forgotten; you cannot discard the character you are on.
-    detail.forget:SetShown(shown and not entry.isCurrent)
-
-    -- Showing another character disarms the button.
-    if detail.forget.armed and (not entry or detail.forget.armed ~= entry.key) then
-        detail.forget.armed = false
-        detail.forget:SetText(L["Forget character"])
-        detail.forget:SetConfirming(false)
-    end
-
-    for _, line in ipairs(detail.lines) do
-        line:Hide()
-    end
-    for _, line in ipairs(detail.cooldowns) do
-        line:Hide()
-    end
-    detail.cooldownHeading:Hide()
-
-    if not shown then return end
-
-    -- Cooldowns take the place of the last crafts, so the pane never grows
-    -- into the lines at its foot.
-    local cooldowns = ns.Cooldowns and ns.Cooldowns:Groups(entry.key) or {}
-    local craftLines = #detail.lines
-    if #cooldowns > 0 then
-        craftLines = #detail.lines - math.min(#cooldowns, #detail.cooldowns) - 1
-    end
-    detail.cooldownHeading:SetShown(#cooldowns > 0)
-    for index = 1, math.min(#detail.cooldowns, #cooldowns) do
-        local group, line = cooldowns[index], detail.cooldowns[index]
-        line.name:SetText(group.group)
-        if group.ready then
-            line.when:SetText(L["Ready"])
-            line.when:SetTextColor(Theme.Unpack("profit"))
-        else
-            line.when:SetText(ns.Cooldowns.LeftText(group.readyAt - time()))
-            line.when:SetTextColor(Theme.Unpack("muted"))
-        end
-        line:Show()
-    end
-
-    detail.title:SetText(entry.name)
-    detail.subtitle:SetText(L.Format("%s  ·  %s  ·  %d recipes",
-        entry.realm or "?",
-        entry.gold and Util.FormatMoney(entry.gold, { short = true }) or L["unknown gold"],
-        entry.recipeCount))
-
-    -- Rank this character's own recipes, against their own bags.
-    local record = ns.db.characters[entry.key]
+    local record = ns.db and ns.db.characters and ns.db.characters[key]
     local ranked = {}
-
-    -- Crafts of a profession the character dropped are left out, as the
-    -- Profit tab leaves them out: kept in the saved data, but not makeable.
     for recipeID, recipe in pairs((record and record.recipes) or {}) do
-        if not ns.Recipes:IsDropped(recipe, entry.key) then
-            local analysis = ns.Profit:Analyse(recipeID, entry.key)
-            if analysis and analysis.priceable then
+        if not ns.Recipes:IsDropped(recipe, key) then
+            local ok, analysis = pcall(ns.Profit.Analyse, ns.Profit, recipeID, key)
+            if ok and analysis and analysis.priceable then
                 ranked[#ranked + 1] = analysis
             end
         end
     end
 
-    -- Ties settled by name, then recipe: crafts with equal profit swapped
-    -- places on every redraw.
+    -- Ties settled by name, then recipe, so equal crafts keep their places.
     table.sort(ranked, function(a, b)
         if a.profit ~= b.profit then return a.profit > b.profit end
         if (a.name or "") ~= (b.name or "") then return (a.name or "") < (b.name or "") end
         return (a.recipeID or 0) < (b.recipeID or 0)
     end)
 
-    if #ranked == 0 then
-        detail.lines[1]:Show()
-        -- A character with no recipes read needs a profession window
-        -- opened, not a scan.
-        detail.lines[1].name:SetText((entry.recipeCount or 0) == 0
-            and L["No recipes read. Open a profession."]
-            or L["Nothing with a price yet"])
-        detail.lines[1].name:SetTextColor(Theme.Unpack("dim"))
-        detail.lines[1].profit:SetText("")
-    else
-        for index = 1, math.min(craftLines, #ranked) do
-            local analysis = ranked[index]
-            local line = detail.lines[index]
+    craftsKept.key, craftsKept.at, craftsKept.list = key, time(), ranked
+    return ranked
+end
 
+local function Disarm(button)
+    button.armed = false
+    button:SetText(L["Forget character"])
+    button:SetConfirming(false)
+end
+
+local function BuildCard(row)
+    local card = CreateFrame("Frame", nil, row)
+    card:SetPoint("TOPLEFT", 14, -6)
+    card:SetPoint("BOTTOMRIGHT", -12, 6)
+    card:Hide()
+
+    local function Column(left, width, title)
+        local heading = Theme.CreateLabel(card, "tiny", "dim")
+        heading:SetPoint("TOPLEFT", left, 0)
+        heading:SetText(title)
+
+        local lines = {}
+        local count = title == L["BEST CRAFTS"] and CARD_CRAFTS or CARD_COOLDOWNS
+        for index = 1, count do
+            local line = {}
+            line.name = Theme.CreateLabel(card, "small", "text")
+            line.name:SetPoint("TOPLEFT", left, -14 - (index - 1) * 15)
+            line.name:SetWidth(width - 96)
+            line.value = Theme.CreateLabel(card, "small", "muted", "RIGHT")
+            line.value:SetPoint("TOPLEFT", left + width - 92, -14 - (index - 1) * 15)
+            line.value:SetWidth(92)
+            lines[index] = line
+        end
+        return lines
+    end
+
+    card.crafts = Column(0, 340, L["BEST CRAFTS"])
+    card.cooldowns = Column(370, 250, L["COOLDOWNS"])
+
+    local heading = Theme.CreateLabel(card, "tiny", "dim")
+    heading:SetPoint("TOPLEFT", 650, 0)
+    heading:SetText(L["BAGS AND BANK"])
+
+    card.bags = Theme.CreateLabel(card, "small", "muted")
+    card.bags:SetPoint("TOPLEFT", 650, -14)
+    card.bags:SetPoint("RIGHT", card, "RIGHT", 0, 0)
+    card.bags:SetWordWrap(true)
+
+    -- Removing a character is destructive, so it arms first, for that
+    -- character only.
+    card.forget = Widgets.CreateButton(card, L["Forget character"], function()
+        local button = card.forget
+        local key = card.key
+        if not key then return end
+
+        if button.armed and button.armed == key then
+            ns.Recipes:ForgetCharacter(key)
+            Disarm(button)
+            state.open = nil
+            UI:RefreshActiveTab()
+            return
+        end
+
+        button.armed = key
+        button:SetText(L["Really forget?"])
+        -- Red while armed, like the craft pane's Clear queue.
+        button:SetConfirming(true)
+        C_Timer.After(4, function()
+            if button.armed == key then Disarm(button) end
+        end)
+    end, { width = 140, height = 20,
+           tooltip = L["Delete this character's saved recipes and inventory"] })
+    card.forget:SetPoint("BOTTOMRIGHT", 0, 0)
+
+    row.card = card
+end
+
+local function FillCard(card, entry)
+    card.key = entry.key
+
+    local crafts = BestCrafts(entry.key)
+    for index, line in ipairs(card.crafts) do
+        local analysis = crafts[index]
+        if analysis then
             line.name:SetText(analysis.name or "?")
-            line.name:SetTextColor(Theme.Unpack(
-                analysis.craftableNow > 0 and "text" or "muted"))
-
-            -- Measured into its narrow column, which "4g 12s 38c" overran.
-            Theme.SetMoneyText(line.profit, analysis.profit, { short = true })
-            line.profit:SetTextColor(Theme.ProfitColor(analysis.profit))
-            line:Show()
+            line.name:SetTextColor(Theme.Unpack((analysis.craftableNow or 0) > 0 and "text" or "muted"))
+            Theme.SetMoneyText(line.value, analysis.profit, { short = true })
+            line.value:SetTextColor(Theme.ProfitColor(analysis.profit))
+        elseif index == 1 then
+            -- A character with no recipes read needs a profession window
+            -- opened, not a scan.
+            line.name:SetText((entry.recipeCount or 0) == 0
+                and L["No recipes read. Open a profession."] or L["Nothing with a price yet"])
+            line.name:SetTextColor(Theme.Unpack("dim"))
+            line.value:SetText("")
+        else
+            line.name:SetText("")
+            line.value:SetText("")
         end
     end
 
-    -- Under the last craft shown.
-    local shownCrafts = 1
-    for index, line in ipairs(detail.lines) do
-        if line:IsShown() then shownCrafts = index end
+    local cooldowns = ns.Cooldowns and ns.Cooldowns:Groups(entry.key) or {}
+    for index, line in ipairs(card.cooldowns) do
+        local group = cooldowns[index]
+        if group then
+            line.name:SetText(group.group)
+            line.name:SetTextColor(Theme.Unpack("text"))
+            if group.ready then
+                line.value:SetText(L["Ready"])
+                line.value:SetTextColor(Theme.Unpack("profit"))
+            else
+                line.value:SetText(ns.Cooldowns.LeftText(group.readyAt - time()))
+                line.value:SetTextColor(Theme.Unpack("muted"))
+            end
+        elseif index == 1 then
+            line.name:SetText(L["None"])
+            line.name:SetTextColor(Theme.Unpack("dim"))
+            line.value:SetText("")
+        else
+            line.name:SetText("")
+            line.value:SetText("")
+        end
     end
-    detail.cooldownHeading:ClearAllPoints()
-    detail.cooldownHeading:SetPoint("TOPLEFT", detail.lines[shownCrafts], "BOTTOMLEFT", 0, -12)
 
     if entry.isCurrent then
-        detail.dataAge:SetText(L["Live data for the character you are playing."])
+        card.bags:SetText(L["Live for the character you're playing."])
     else
-        local inventoryAge = entry.inventoryAt and (time() - entry.inventoryAt)
-        local bankAge = entry.bankAt and (time() - entry.bankAt)
-
-        detail.dataAge:SetText(L.Format("Bags checked %s, bank checked %s. These numbers are from the last time you played this character.",
-            Util.FormatAgeAgo(inventoryAge),
-            Util.FormatAgeAgo(bankAge)))
+        local bags = entry.inventoryAt and Util.FormatAgeAgo(time() - entry.inventoryAt) or L["never"]
+        local bank = entry.bankAt and Util.FormatAgeAgo(time() - entry.bankAt) or L["never"]
+        card.bags:SetText(L.Format("Bags read %s. Bank read %s.", bags, bank))
     end
+
+    -- Only an alt can be forgotten; never the character you're on.
+    card.forget:SetShown(not entry.isCurrent)
+    if card.forget.armed and card.forget.armed ~= entry.key then Disarm(card.forget) end
+end
+
+--------------------------------------------------------------------------------
+-- Rows
+--------------------------------------------------------------------------------
+
+--- The shown columns from the right edge; the name has the rest.
+local function PlaceRow(row)
+    row.offsets = {}
+    row.nameRight = ns.Columns:Place("characters", COLUMNS, row.cells, {
+        gap = 8,
+        place = function(column, offset, shown)
+            row.offsets[column.key] = shown and offset or nil
+            local bar = column.key == "level" and row.levelBar or column.key == "rested" and row.restBar
+            if bar then
+                bar.width = column.width - 10
+                bar.track:SetWidth(bar.width)
+                bar:SetPoint("TOP", row, "RIGHT", offset - column.width / 2, -6)
+            end
+        end,
+    })
+    row.columnsVersion = ns.Columns.version
+end
+
+local function CreateRow(row)
+    -- A side's heading: its colour down the left edge, washing across.
+    row.stripe = row:CreateTexture(nil, "ARTWORK")
+    row.stripe:SetPoint("TOPLEFT")
+    row.stripe:SetPoint("BOTTOMLEFT")
+    row.stripe:SetWidth(3)
+
+    row.wash = row:CreateTexture(nil, "BACKGROUND", nil, 3)
+    row.wash:SetAllPoints(row)
+
+    row.crest = row:CreateTexture(nil, "ARTWORK")
+    row.crest:SetSize(20, 20)
+    row.crest:SetPoint("LEFT", 10, 0)
+
+    row.fold = row:CreateTexture(nil, "ARTWORK")
+    row.fold:SetSize(12, 12)
+
+    row.name = Theme.CreateLabel(row, "normal", "text")
+    row.sub = Theme.CreateLabel(row, "tiny", "muted")
+    row.count = Theme.CreateLabel(row, "small", "muted")
+
+    row.cells = {}
+    for _, column in ipairs(COLUMNS) do
+        local cell = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
+        cell:SetWordWrap(false)
+        row.cells[column.key] = cell
+    end
+    row.cells.professions:SetWordWrap(true)
+    row.cells.zone:SetWordWrap(true)
+
+    row.levelBar = Theme.CreateBar(row, 40, 3)
+    row.restBar = Theme.CreateBar(row, 40, 3)
+
+    BuildCard(row)
+    PlaceRow(row)
+end
+
+--- A cell back on its column, raised a little on a row with bars.
+local function Seat(row, key, raise)
+    local offset = row.offsets[key]
+    if not offset then return end
+    local cell = row.cells[key]
+    cell:ClearAllPoints()
+    cell:SetPoint("RIGHT", row, "RIGHT", offset, raise or 0)
+end
+
+local function ShowParts(row, kind)
+    local heading, character, card = kind == "heading", kind == "char", kind == "card"
+    row.stripe:SetShown(heading)
+    row.wash:SetShown(heading)
+    row.crest:SetShown(false)
+    row.fold:SetShown(heading)
+    row.count:SetShown(heading)
+    row.name:SetShown(not card)
+    row.sub:SetShown(character)
+    row.card:SetShown(card)
+    for _, column in ipairs(COLUMNS) do
+        local cell = row.cells[column.key]
+        cell:SetShown(not card and row.offsets[column.key] ~= nil)
+        if heading then cell:SetText("") end
+    end
+    if not character then
+        row.levelBar:Set(nil)
+        row.restBar:Set(nil)
+    end
+end
+
+local function UpdateHeading(row, entry)
+    local side = SIDES[entry.side]
+    local r, g, b = Theme.Unpack(side.color)
+    row.stripe:SetColorTexture(r, g, b, 1)
+    if Theme.SetGradientAlpha then Theme.SetGradientAlpha(row.wash, "HORIZONTAL", side.color, 0.22, 0) end
+
+    local left = 10
+    if side.crest then
+        local ok = pcall(row.crest.SetTexture, row.crest, side.crest)
+        if ok then
+            pcall(row.crest.SetTexCoord, row.crest, 0.06, 0.62, 0.04, 0.6)
+            row.crest:Show()
+            left = 34
+        end
+    end
+
+    pcall(row.fold.SetTexture, row.fold, state.folded[entry.side]
+        and [[Interface\Buttons\UI-PlusButton-Up]] or [[Interface\Buttons\UI-MinusButton-Up]])
+
+    pcall(row.name.SetFont, row.name, Theme.FONT, Theme.sizes.normal, "")
+    pcall(row.name.SetWordWrap, row.name, false)
+    pcall(row.name.SetHeight, row.name, 0)
+    row.name.rowNeed, row.name.rowNeedText = nil, nil
+    row.name:ClearAllPoints()
+    row.name:SetPoint("LEFT", left, 0)
+    row.name:SetWidth(0)
+    row.name:SetText(side.title)
+    row.name:SetTextColor(r, g, b)
+
+    row.count:ClearAllPoints()
+    row.count:SetPoint("LEFT", row.name, "RIGHT", 10, 0)
+    row.count:SetText(entry.count == 1 and L["1 character"] or L.Format("%d characters", entry.count))
+
+    row.fold:ClearAllPoints()
+    row.fold:SetPoint("LEFT", row.count, "RIGHT", 8, 0)
+
+    Seat(row, "gold")
+    Seat(row, "played")
+    Theme.SetMoneyText(row.cells.gold, entry.gold, { short = true })
+    row.cells.played:SetText(entry.played and PlayedText(entry.played) or "")
+    row.cells.played:SetTextColor(Theme.Unpack("muted"))
+end
+
+local function UpdateCharacter(row, entry)
+    -- The name, whole, with race and class under it.
+    row.name:ClearAllPoints()
+    row.name:SetPoint("TOPLEFT", 14, -5)
+    row.name:SetPoint("RIGHT", row, "RIGHT", row.nameRight - 8, 0)
+    Theme.SetRowName(row.name, entry.name, "normal")
+    local color = ClassColor(entry.classFile)
+    if color then row.name:SetTextColor(color[1], color[2], color[3]) else row.name:SetTextColor(Theme.Unpack("text")) end
+    local nameNeed = rawget(row.name, "rowNeed") or 14
+    row.name.rowNeed, row.name.rowNeedText = math.max(CHARACTER_NEED, nameNeed + 18), entry.name
+
+    local about = {}
+    if entry.race then about[#about + 1] = entry.race end
+    if entry.class then about[#about + 1] = entry.class end
+    local sub = table.concat(about, " ")
+    if entry.linkedFrom then
+        sub = sub ~= "" and L.Format("%s, other account", sub) or L["Other account"]
+    end
+    row.sub:ClearAllPoints()
+    row.sub:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
+    row.sub:SetPoint("RIGHT", row, "RIGHT", row.nameRight - 8, 0)
+    row.sub:SetText(sub)
+
+    local cells = row.cells
+
+    Seat(row, "level", entry.levelShare and 4 or 0)
+    cells.level:SetText(entry.level and tostring(entry.level) or "--")
+    cells.level:SetTextColor(Theme.Unpack(entry.level and "text" or "dim"))
+    row.levelBar:Set(row.offsets.level and entry.levelShare or nil, "xp")
+
+    Seat(row, "rested", entry.rested and 4 or 0)
+    if entry.rested then
+        cells.rested:SetText(entry.rested >= RestMost() and L["Full"] or ("%d%%"):format(entry.rested))
+        cells.rested:SetTextColor(Theme.Unpack("rested"))
+        row.restBar:Set(row.offsets.rested and entry.rested / RestMost() or nil, "rested")
+    else
+        cells.rested:SetText("--")
+        cells.rested:SetTextColor(Theme.Unpack("dim"))
+        row.restBar:Set(nil)
+    end
+
+    Seat(row, "gold")
+    if entry.gold then
+        Theme.SetMoneyText(cells.gold, entry.gold, { short = true })
+    else
+        cells.gold:SetText("--")
+    end
+
+    -- Two professions, each on its line; any more are counted on the second
+    -- and listed in the row's tooltip.
+    Seat(row, "professions")
+    local learned = Learned(entry)
+    local lines = {}
+    for index = 1, math.min(2, #learned) do lines[index] = ProfessionLine(learned[index]) end
+    if #learned > 2 then lines[2] = L.Format("%s  +%d", lines[2], #learned - 2) end
+    pcall(cells.professions.SetFont, cells.professions, Theme.FONT, Theme.sizes.tiny, "")
+    cells.professions:SetText(#lines > 0 and table.concat(lines, "\n") or L["No professions"])
+    cells.professions:SetTextColor(Theme.Unpack(#lines > 0 and "muted" or "dim"))
+
+    Seat(row, "mail")
+    if entry.mailCount and entry.mailCount > 0 then
+        cells.mail:SetText(Util.Comma(entry.mailCount))
+        cells.mail:SetTextColor(Theme.Unpack("accent"))
+    else
+        cells.mail:SetText("--")
+        cells.mail:SetTextColor(Theme.Unpack("dim"))
+    end
+
+    Seat(row, "zone")
+    pcall(cells.zone.SetFont, cells.zone, Theme.FONT, Theme.sizes.tiny, "")
+    cells.zone:SetText(entry.zone or "--")
+    cells.zone:SetTextColor(Theme.Unpack(entry.zone and "muted" or "dim"))
+
+    Seat(row, "played")
+    cells.played:SetText(PlayedText(entry.played))
+    cells.played:SetTextColor(Theme.Unpack(entry.played and "text" or "dim"))
+
+    Seat(row, "seen")
+    cells.seen:SetText(SeenText(entry))
+    cells.seen:SetTextColor(Theme.Unpack(entry.isCurrent and "profit" or entry.seenAt and "muted" or "dim"))
+end
+
+local function UpdateRow(row, entry)
+    if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+    ShowParts(row, entry.kind)
+
+    if entry.kind == "heading" then
+        UpdateHeading(row, entry)
+    elseif entry.kind == "card" then
+        -- The open line's height rides on the hidden name.
+        row.name:SetText("card")
+        row.name.rowNeed, row.name.rowNeedText = CARD_NEED, "card"
+        FillCard(row.card, entry.of)
+    else
+        UpdateCharacter(row, entry.of)
+    end
+end
+
+--- Everything the row can only say in part: every profession, and how
+--- sure the rested number is.
+local function ShowRowTooltip(row, entry)
+    if entry.kind ~= "char" then return end
+    local character = entry.of
+
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:SetText(character.name or "", 1, 1, 1)
+
+    local about = {}
+    if character.level then about[#about + 1] = L.Format("Level %d", character.level) end
+    if character.race then about[#about + 1] = character.race end
+    if character.class then about[#about + 1] = character.class end
+    if #about > 0 then GameTooltip:AddLine(table.concat(about, " "), 0.7, 0.7, 0.7) end
+    if character.realm then GameTooltip:AddLine(character.realm, 0.7, 0.7, 0.7) end
+
+    local learned = Learned(character)
+    if #learned > 0 then
+        GameTooltip:AddLine(" ")
+        for _, profession in ipairs(learned) do
+            GameTooltip:AddLine(ProfessionLine(profession), 0.9, 0.9, 0.9)
+        end
+    end
+
+    if character.rested and character.restedGuess then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(L["Rested has grown since you last played them."], 0.44, 0.66, 1)
+    end
+    if character.mailCount and character.mailCount > 0 then
+        GameTooltip:AddLine(L.Format("%s items waiting in the mail", Util.Comma(character.mailCount)), 0.78, 0.64, 0.3)
+    end
+
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(state.open == character.key and L["Click to close"] or L["Click for best crafts and cooldowns"],
+        0.55, 0.57, 0.61)
+    GameTooltip:Show()
 end
 
 --------------------------------------------------------------------------------
 -- Refresh
 --------------------------------------------------------------------------------
 
+local function Matches(entry, search)
+    if search == "" then return true end
+    local function Has(text) return type(text) == "string" and text:lower():find(search, 1, true) ~= nil end
+    if Has(entry.name) or Has(entry.zone) or Has(entry.class) or Has(entry.race) then return true end
+    for _, profession in ipairs(entry.professions or {}) do
+        if type(profession) == "table" and profession.learned and Has(profession.name) then return true end
+    end
+    return false
+end
+
+--- The rows to draw: each side's heading, then its characters in the
+--- clicked heading's order, with the open line under the one clicked.
+local function BuildRows(characters)
+    local groups, order = {}, {}
+    local current
+    for _, entry in ipairs(characters) do
+        if entry.isCurrent then current = SideOf(entry) end
+    end
+    -- The side you're playing comes first.
+    for _, side in ipairs(current == "Alliance" and { "Alliance", "Horde", "Other" } or { "Horde", "Alliance", "Other" }) do
+        groups[side] = { members = {} }
+        order[#order + 1] = side
+    end
+
+    local search = (state.search or ""):lower()
+    for _, entry in ipairs(characters) do
+        local side = SideOf(entry)
+        if (state.show == "both" or state.show == side) and Matches(entry, search) then
+            local members = groups[side].members
+            members[#members + 1] = entry
+        end
+    end
+
+    local rows, shown = {}, 0
+    local totals = { gold = 0, played = 0, count = 0 }
+    for _, side in ipairs(order) do
+        local members = groups[side].members
+        if #members > 0 then
+            if widgets.sorter then members = widgets.sorter:Sort(members) end
+
+            local gold, played = 0, 0
+            for _, entry in ipairs(members) do
+                gold = gold + (entry.gold or 0)
+                played = played + (entry.played or 0)
+            end
+            totals.gold, totals.played = totals.gold + gold, totals.played + played
+            totals.count = totals.count + #members
+
+            rows[#rows + 1] = { kind = "heading", side = side, count = #members, gold = gold,
+                played = played > 0 and played or nil }
+            if not state.folded[side] then
+                for _, entry in ipairs(members) do
+                    rows[#rows + 1] = { kind = "char", of = entry, key = entry.key }
+                    shown = shown + 1
+                    if state.open == entry.key then
+                        rows[#rows + 1] = { kind = "card", of = entry, key = entry.key }
+                    end
+                end
+            end
+        end
+    end
+    return rows, totals
+end
+
 local function RefreshCharacters()
     if not widgets.list then return end
 
     local characters = ns.Recipes:GetCharacters()
-    widgets.list:SetData(characters)
+    local open
+    for _, entry in ipairs(characters) do
+        if entry.key == state.open then open = entry end
+    end
+    if not open then state.open = nil end
 
-    widgets.emptyLabel:SetShown(#characters == 0)
+    local rows, totals = BuildRows(characters)
+    widgets.list:SetData(rows)
+
+    widgets.emptyLabel:SetShown(#rows == 0)
     if #characters == 0 then
         widgets.emptyLabel:SetText(L["No characters recorded yet."])
+    elseif #rows == 0 then
+        widgets.emptyLabel:SetText(L["No character matches."])
     end
 
-    local totalGold, totalRecipes = 0, 0
-    for _, entry in ipairs(characters) do
-        totalGold = totalGold + (entry.gold or 0)
-        totalRecipes = totalRecipes + entry.recipeCount
-    end
-
-    if #characters == 1 then
-        widgets.summary:SetText(L.Format("%d character  ·  %s recipes known  ·  %s total",
-            #characters, Util.Comma(totalRecipes), Util.FormatMoney(totalGold, { short = true })))
-    else
-        widgets.summary:SetText(L.Format("%d characters  ·  %s recipes known  ·  %s total",
-            #characters, Util.Comma(totalRecipes), Util.FormatMoney(totalGold, { short = true })))
-    end
-
-    -- Keep the detail on the same character across refreshes.
-    if state.selected then
-        for _, entry in ipairs(characters) do
-            if entry.key == state.selected.key then
-                state.selected = entry
-                UpdateDetail(entry)
-                return
-            end
-        end
-        state.selected = nil
-    end
-
-    UpdateDetail(nil)
+    local count = totals.count == 1 and L["1 character"] or L.Format("%d characters", totals.count)
+    local parts = { count, L.Format("All: %s", Money(totals.gold)) }
+    if totals.played > 0 then parts[#parts + 1] = PlayedText(totals.played) end
+    widgets.summary:SetText(table.concat(parts, "  ·  "))
 end
 
 --------------------------------------------------------------------------------
@@ -486,56 +762,177 @@ local function BuildSwitch(container)
     rule:SetColorTexture(Theme.Unpack("border"))
     rule:SetHeight(1)
     rule:SetPoint("LEFT", previous, "RIGHT", 6, 0)
-    -- Across the top like every tab's option bar, over the detail panel.
     rule:SetPoint("RIGHT", container, "RIGHT", -8, 0)
 
     return buttons
 end
 
-local function BuildCharacters(container)
-    local divider = Theme.CreateDivider(container)
-    divider:SetPoint("TOPLEFT", 8, -26)
-    divider:SetPoint("TOPRIGHT", container, "TOPRIGHT", -DETAIL_WIDTH - 16, -26)
-    -- Kept as the list's anchor; the view switch carries the house rule.
-    divider:Hide()
+--- Show: Both, Horde, Alliance. The one picked is lit gold.
+local function BuildChips(view)
+    local lead = Theme.CreateLabel(view, "small", "muted")
+    lead:SetPoint("TOPLEFT", 8, -36)
+    lead:SetText(L["Show:"])
 
-    local list = Widgets.CreateScrollList(container, {
+    local chips, previous = {}, lead
+    local function Paint()
+        for _, chip in ipairs(chips) do
+            local active = chip.key == state.show
+            chip.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
+            Theme.SetBorderColor(chip, active and "accent" or "border")
+            chip.background:SetColorTexture(Theme.Unpack(active and "glassActive" or "glass"))
+        end
+    end
+
+    for _, definition in ipairs(SHOW) do
+        local chip = CreateFrame("Button", nil, view)
+        chip:SetHeight(20)
+        chip.background = Theme.Fill(chip, "glass")
+        Theme.Border(chip, "border")
+        chip.key = definition.key
+
+        local left = 10
+        if definition.color then
+            local dot = chip:CreateTexture(nil, "ARTWORK")
+            dot:SetSize(6, 6)
+            dot:SetPoint("LEFT", 8, 0)
+            dot:SetColorTexture(Theme.Unpack(definition.color))
+            left = 18
+        end
+
+        chip.label = Theme.CreateLabel(chip, "small", "muted")
+        chip.label:SetPoint("LEFT", left, 0)
+        chip.label:SetText(definition.text)
+        local width = Theme.TextWidth and Theme.TextWidth(chip.label)
+        chip:SetWidth(math.ceil(type(width) == "number" and width or 40) + left + 10)
+        chip:SetPoint("LEFT", previous, "RIGHT", previous == lead and 8 or 6, 0)
+
+        chip:SetScript("OnClick", function(self)
+            state.show = self.key
+            Paint()
+            RefreshCharacters()
+        end)
+        chip:SetScript("OnEnter", function(self)
+            if self.key ~= state.show then self.label:SetTextColor(Theme.Unpack("text")) end
+        end)
+        chip:SetScript("OnLeave", Paint)
+
+        chips[#chips + 1] = chip
+        previous = chip
+    end
+
+    Paint()
+    widgets.chips = chips
+    return previous
+end
+
+local function BuildCharacters(view)
+    -- Before any row or heading is laid out: they read these widths.
+    if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
+
+    local lastChip = BuildChips(view)
+
+    local search = Widgets.CreateSearchBox(view, L["Find a character or profession"], function(text)
+        state.search = text or ""
+        RefreshCharacters()
+    end)
+    search:SetPoint("LEFT", lastChip, "RIGHT", 14, 0)
+    search:SetWidth((Widgets.SEARCH_WIDTH or 170) + 40)
+    widgets.search = search
+
+    -- Column headings over the list, lined up with the row cells.
+    local headings = CreateFrame("Frame", nil, view)
+    headings:SetHeight(14)
+    headings:SetPoint("TOPLEFT", 8, -62)
+    headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8, -62)
+
+    local nameHeading = Theme.CreateLabel(headings, "tiny", "dim")
+    nameHeading:SetPoint("LEFT", 14, 0)
+    nameHeading:SetText(L["CHARACTER"])
+
+    headings.cells = {}
+    for _, column in ipairs(COLUMNS) do
+        local cell = Theme.CreateLabel(headings, "tiny", "dim", column.justify or "RIGHT")
+        cell:SetText(column.label)
+        headings.cells[column.key] = cell
+    end
+    ns.Columns:Place("characters", COLUMNS, headings.cells, { gap = 8 })
+    widgets.headings = headings
+
+    -- Click a heading to sort each side by it.
+    local labels = { name = nameHeading }
+    for key, cell in pairs(headings.cells) do labels[key] = cell end
+    widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(labels, {
+        name = function(entry) return entry.name end,
+        level = function(entry)
+            if not entry.level then return nil end
+            return entry.level + (entry.levelShare or 0) * 0.99
+        end,
+        rested = function(entry) return entry.rested end,
+        gold = function(entry) return entry.gold end,
+        professions = function(entry)
+            local best = Learned(entry)[1]
+            return best and best.skillLevel or nil
+        end,
+        mail = function(entry) return entry.mailCount end,
+        zone = function(entry) return entry.zone end,
+        played = function(entry) return entry.played end,
+        seen = function(entry) return entry.isCurrent and math.huge or entry.seenAt end,
+    }, function() RefreshCharacters() end)
+    if widgets.sorter then widgets.sorter:SetText({ "name", "zone" }) end
+
+    -- Right-click the headings to choose the columns.
+    ns.Columns:Attach(headings, "characters", widgets.sorter)
+    ns.Columns:OnChange("characters", function()
+        ns.Columns:Place("characters", COLUMNS, headings.cells, { gap = 8 })
+        if widgets.sorter then widgets.sorter:Sync() end
+        if widgets.list then widgets.list:Refresh() end
+    end)
+
+    local list = Widgets.CreateScrollList(view, {
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
-        -- The row the detail pane is showing stays lit.
+        -- The character whose line is open stays lit, and so does its line.
         isSelected = function(entry)
-            return state.selected ~= nil and entry.key == state.selected.key
+            return entry.kind ~= "heading" and state.open ~= nil and entry.key == state.open
         end,
 
         onClick = function(entry)
-            state.selected = entry
-            UpdateDetail(entry)
+            if entry.kind == "heading" then
+                state.folded[entry.side] = not state.folded[entry.side] or nil
+            elseif entry.kind == "char" then
+                state.open = state.open ~= entry.key and entry.key or nil
+            else
+                return
+            end
+            RefreshCharacters()
         end,
 
         onEnter = ShowRowTooltip,
         onLeave = function() GameTooltip:Hide() end,
+
+        -- Headings step left with the rows while the scrollbar shows.
+        onScrollbarShown = function(shown)
+            headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8 - (shown and 10 or 0), -62)
+        end,
     })
-    list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
-    list:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 28)
+    list:SetPoint("TOPLEFT", 8, -78)
+    list:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -8, 28)
     widgets.list = list
 
-    local emptyLabel = Theme.CreateLabel(container, "small", "dim", "CENTER")
+    local emptyLabel = Theme.CreateLabel(view, "small", "dim", "CENTER")
     emptyLabel:SetPoint("CENTER", list, "CENTER")
-    emptyLabel:SetWidth(320)
+    emptyLabel:SetWidth(360)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
 
-    local summary = Theme.CreateLabel(container, "small", "text")
+    local summary = Theme.CreateLabel(view, "small", "text")
     summary:SetPoint("BOTTOMLEFT", 8, 10)
     widgets.summary = summary
 
-    local detail = BuildDetail(container)
-    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
-    detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
-    widgets.detail = detail
-
-    UpdateDetail(nil)
+    local hint = Theme.CreateLabel(view, "tiny", "dim", "RIGHT")
+    hint:SetPoint("BOTTOMRIGHT", -8, 10)
+    hint:SetText(L["Click a heading to sort"])
 end
 
 local function Build(container)
@@ -564,3 +961,8 @@ UI:RegisterTab({
     build = Build,
     refresh = Refresh,
 })
+
+--- For the tests: what the tab drew and its state.
+ns.CharactersTab._state = state
+ns.CharactersTab._widgets = widgets
+ns.CharactersTab.PlayedText = PlayedText

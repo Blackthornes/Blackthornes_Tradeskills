@@ -30,7 +30,11 @@ local AccountLink = ns.NewModule("AccountLink")
 local Comm = ns.Comm
 
 -- What a character always carries, and what each Share setting adds.
-local IDENTITY = { "name", "realm", "faction", "class", "level", "surname" }
+-- The Characters tab's notes (Logic/CharacterNotes.lua) go with the
+-- identity, so the other account's characters show their XP, rest, zone
+-- and played time too.
+local IDENTITY = { "name", "realm", "faction", "class", "level", "surname",
+                   "race", "classFile", "xp", "xpMax", "restXP", "resting", "zone", "played", "seenAt" }
 AccountLink.SECTIONS = {
     { setting = "linkShareRecipes", fields = { "professions", "professionLines", "recipes", "recipesCachedAt" } },
     { setting = "linkShareBags", fields = { "inventory", "inventoryAt", "bank", "bankAt", "mail", "mailAt" } },
@@ -266,6 +270,9 @@ local CLEANERS = {
     recipes = CleanRecipes, professions = CleanProfessions, professionLines = CleanLines,
     inventory = CleanCounts, bank = CleanCounts, mail = CleanCounts,
     recipesCachedAt = CleanNumber, inventoryAt = CleanNumber, bankAt = CleanNumber, mailAt = CleanNumber,
+    race = CleanString, classFile = CleanString, zone = CleanString,
+    xp = CleanNumber, xpMax = CleanNumber, restXP = CleanNumber, played = CleanNumber, seenAt = CleanNumber,
+    resting = function(value) if type(value) == "boolean" then return value end end,
 }
 
 --- One auction reading: { items = counts, updatedAt, listings }.

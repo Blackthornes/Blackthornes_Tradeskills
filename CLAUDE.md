@@ -768,6 +768,34 @@ _G.BlackthornesFarmer.DisenchantFarm:Show(mob)          -- opens its loot table
 Without Farmer the farm heading and "Looted" are left out. Tested in
 `tools/test_materialfinder.lua`. Not yet seen in game.
 
+## The Characters tab by side
+
+The owner asked (2026-10-16, from a mockup) for the Characters tab to split
+Horde from Alliance and show more about each character. `UI/Tab_Characters.lua`
+is one full-width table: a heading row per side (the side playing first,
+then the other, then OTHER for a record saved before its side was kept)
+with how many, their gold and time played; a click folds it. Columns
+CHARACTER (class colour, race and class under it), LEVEL (purple XP bar),
+RESTED (blue bar, Full at 150%), GOLD, PROFESSIONS (two, then "+N"), MAIL
+(items waiting), ZONE, PLAYED and LAST SEEN, each sortable within its side
+and hideable (`ns.Columns` list "characters"). Show: Both, Horde, Alliance
+and the search (name, profession, zone) last the session. A click on a
+character opens a line under it with its best crafts, cooldowns, bags and
+bank age, and Forget character (arms first, never the one playing). The
+Bank view is unchanged.
+
+`Logic/CharacterNotes.lua` keeps what it shows on the character's own
+record in `characters[guid]`, only once the GUID is known: `race`,
+`classFile`, `xp`, `xpMax`, `restXP`, `resting`, `zone`, `played` and
+`seenAt` (never rename them). Played time is asked of the game
+(`RequestTimePlayed`, which prints in chat) once, for a character never
+read, and counted on from there. Rested for a character not playing grows
+by Classic's rule from when it was last seen (`CharacterNotes.Rested`,
+marked a guess in the row's tooltip). `Recipes:AddNotes` gives them to
+`GetCharacters`, and AccountLink carries them for the other account's
+characters. Tested in `tools/test_characternotes.lua` and
+`tools/test_uifit.lua`. Not yet seen in game.
+
 ## Profit by method
 
 A player asked (2026-10-11, the owner agreeing) for profit split by how it
