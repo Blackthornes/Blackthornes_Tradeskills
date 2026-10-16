@@ -307,6 +307,9 @@ function VendorFlips:GetResaleRows(opts)
                     sell = resell,
                     net = net,
                     depositKnown = ns.Posting:GetCachedUnitDeposit(itemID) ~= nil,
+                    -- A sale hands the deposit back, so it only costs a flip
+                    -- that is expected to run out first.
+                    depositCounts = ns.Profit.LostListings ~= nil and ns.Profit.LostListings() > 0,
                     gain = gain,
                     margin = gain / buy,
                     demand = demand,
