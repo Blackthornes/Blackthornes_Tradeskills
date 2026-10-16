@@ -80,6 +80,7 @@ Logic\GuildPrices.lua
 Logic\TSMPrices.lua
 Logic\AuctionatorPrices.lua
 Logic\Cooldowns.lua
+Logic\CharacterNotes.lua
 Logic\CraftRequests.lua
 Logic\Butler.lua
 Logic\PublicAPI.lua

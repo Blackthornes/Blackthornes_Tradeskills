@@ -29,8 +29,9 @@
 --      right.
 --   9. Prices: a new search, filter or sort starts at the top, and a redraw
 --      keeps the place. "now" for an age under a minute.
---  10. Characters: crafts of a dropped profession are left out; professions
---      that do not fit end in "+N more", and the tooltip lists them all.
+--  10. Characters: each side under its heading, the side playing first;
+--      two professions and how many more, the tooltip lists them all; a
+--      click opens the best crafts, leaving out a dropped profession's.
 
 -- Tests share one Lua state, so every global replaced here is put back,
 -- including the ones that were not set at all.
@@ -1046,11 +1047,14 @@ ns.db.characters = {
     A = { recipes = { [101] = { skillLineID = 197 }, [102] = { skillLineID = 171 } } },
 }
 characters = {
-    { key = "A", name = "Aldra", realm = "Forever", gold = 1234567, recipeCount = 120,
-      inventoryAt = NOW - 3600, professions = {
+    { key = "A", name = "Aldra Stormvale", realm = "Forever", gold = 1234567, recipeCount = 120,
+      faction = "Horde", race = "Orc", class = "Mage", classFile = "MAGE", level = 25, levelShare = 0.4,
+      rested = 80, restedGuess = true, zone = "Durotar", played = 90000, seenAt = NOW - 3600,
+      mailCount = 5, inventoryAt = NOW - 3600, professions = {
         Profession("Tailoring", 300), Profession("Enchanting", 300), Profession("Alchemy", 300),
         Profession("Cooking", 300), Profession("First Aid", 300), Profession("Fishing", 300) } },
-    { key = "B", name = "Brannoc", realm = "Forever", gold = 500, recipeCount = 3, isCurrent = true,
+    { key = "B", name = "Brannoc Ironhill", realm = "Forever", gold = 500, recipeCount = 3, isCurrent = true,
+      faction = "Alliance", level = 30, rested = 150,
       professions = { Profession("Mining", 75), Profession("Herbalism", 80) } },
 }
 
@@ -1058,23 +1062,56 @@ local charactersList = made.CreateScrollList[2]
 charactersList.height = 400
 UI:SelectTab("characters")
 
-local first, second = charactersList.rows[1], charactersList.rows[2]
-check("professions that do not fit end in how many more",
-    first.professions.text:match("%+%d more$"), "+2 more")
-check("the ones shown are whole", first.professions.text:find("Cooking 300", 1, true) ~= nil, true)
-check("how fresh the figures are, in full", first.freshness.text, "120 recipes  ·  seen 1h ago")
-first.mouseOver = true
-first.scripts.OnEnter(first)
-check("hovering the row lists every profession", GameTooltip.owner == first and #GameTooltip.lines, 7)
-first.scripts.OnLeave(first)
-first.mouseOver = false
-second.scripts.OnEnter(second)
-check("a row whose professions fit needs no tooltip", GameTooltip.owner == second, false)
-check("and shows them all", second.professions.text, "Mining 75  ·  Herbalism 80")
-second.scripts.OnLeave(second)
+local function Rows()
+    local out = {}
+    for index, row in ipairs(charactersList.rows) do
+        if row.data then out[index] = row end
+    end
+    return out
+end
 
-first.scripts.OnClick(first, "LeftButton")
+local rows = Rows()
+check("the side you're playing comes first", rows[1].name.text, "ALLIANCE")
+check("with how many are on it", rows[1].count.text, "1 character")
+check("its character under it", rows[2].name.text, "Brannoc Ironhill")
+check("the character playing is here now", rows[2].cells.seen.text, "Here now")
+check("rested to the top says Full", rows[2].cells.rested.text, "Full")
+check("then the other side", rows[3].name.text, "HORDE")
+local aldra = rows[4]
+check("race and class under the name", aldra.sub.text, "Orc Mage")
+check("two professions, then how many more",
+    aldra.cells.professions.text, "Alchemy 300\nCooking 300  +4")
+check("rested as a share of a level", aldra.cells.rested.text, "80%")
+check("mail waiting", aldra.cells.mail.text, "5")
+check("time played", aldra.cells.played.text, "1d 1h")
+check("when last seen", aldra.cells.seen.text, "1h ago")
+
+aldra.mouseOver = true
+aldra.scripts.OnEnter(aldra)
+local listed = 0
+for _, line in ipairs(GameTooltip.lines) do
+    if tostring(line):find(" 300$") then listed = listed + 1 end
+end
+check("hovering the row lists every profession", GameTooltip.owner == aldra and listed, 6)
+aldra.scripts.OnLeave(aldra)
+aldra.mouseOver = false
+
+aldra.scripts.OnClick(aldra, "LeftButton")
+rows = Rows()
+check("a click opens a line under the character", rows[5] and rows[5].data.kind, "card")
 check("a dropped profession's crafts are left out of the best crafts", table.concat(analysed, ","), "102")
+check("the open line names the best craft", rows[5].card.crafts[1].name.text, "Craft 102")
+
+rows[3].scripts.OnClick(rows[3], "LeftButton")
+rows = Rows()
+check("a click on a side's heading folds it", rows[4], nil)
+rows[3].scripts.OnClick(rows[3], "LeftButton")
+
+local chips = ns.CharactersTab._widgets.chips
+chips[2].scripts.OnClick(chips[2])
+rows = Rows()
+check("Show: Horde leaves only the Horde", rows[1].name.text, "HORDE")
+chips[1].scripts.OnClick(chips[1])
 
 --------------------------------------------------------------------------------
 print("")
