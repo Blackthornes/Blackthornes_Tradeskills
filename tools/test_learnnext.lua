@@ -267,6 +267,18 @@ check("its title", added and added.title, "Journey Jen (Trained Boots)")
 check("no game pin then", pinned, nil)
 TomTom = nil
 
+print("\nwhere for Equipment, by recipe ID")
+local where = LN:WhereFor(3)
+check("a vendor's place", where and where.kind .. " " .. where.name, "vendor Alli")
+check("with its zone and spot", where and ("%s %s,%s"):format(where.zone, where.x, where.y), "Wetlands 25,25")
+check("a fresh table each time", LN:WhereFor(3) ~= where, true)
+check("nothing teaches a starter recipe", LN:WhereFor(1), nil)
+check("an unknown recipe has no place", LN:WhereFor(99999), nil)
+pinned = nil
+check("Show the way by recipe ID", LN:ShowTheWayFor(3), true)
+check("pins the same spot", pinned and pinned.map, 1437)
+check("an unknown recipe pins nothing", LN:ShowTheWayFor(99999), false)
+
 C_Map, UiMapPoint = nil, nil
 check("no pin on a client without one", LN:ShowTheWay(boots), false)
 check("and says why", printed[#printed],
