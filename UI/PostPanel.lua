@@ -487,6 +487,9 @@ function PostPanel:Build()
     -- bar, which asks for this frame to live in.
     self.frame = frame
 
+    -- The mouse wheel lists and cancels while the drawer shows, if ticked.
+    if ns.AuctionWheel then ns.AuctionWheel:Watch(frame) end
+
     local header, title
     local UI = ns.UI
     if UI and type(UI.GetAuctionBar) == "function" then
