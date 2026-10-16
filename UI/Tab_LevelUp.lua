@@ -392,9 +392,20 @@ local function UpdateRow(row, entry)
     if entry.knownBy and ns.Recipes.GetShortCharacterName then
         name = ("%s |cff7a8089(%s)|r"):format(name, ns.Recipes:GetShortCharacterName(entry.knownBy))
     end
+    -- An enchant makes no item, so it shows its spell's icon, with the green
+    -- arrow and where it goes when Equipment says it beats what is on your
+    -- gear now (see Logic/Upgrades.lua).
+    local forYou = not entry.outputItemID and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
+    if forYou then
+        name = ("%s  |c%s%s|r"):format(name, ns.COLORS.profit or "ff4fd17a", forYou)
+    end
     Theme.SetRowName(row.name, name)
     row.name:SetTextColor(TierColor(entry.tier))
-    Theme.SetItemIcon(row.icon, entry.outputItemID)
+    if entry.outputItemID then
+        Theme.SetItemIcon(row.icon, entry.outputItemID)
+    else
+        Theme.SetSpellIcon(row.icon, entry.recipeID, forYou ~= nil)
+    end
 
     cells.chance:SetText(ns.LevelUp.CHANCE_LABEL[entry.tier] or "")
     cells.chance:SetTextColor(TierColor(entry.tier))
@@ -489,6 +500,8 @@ local function LearnLines(entry)
     end
     local profession = nameBySkillLine[entry.skillLineID] or (entry.record and entry.record.profession) or ""
     lines[#lines + 1] = { L["Needs"], ("%s %d"):format(profession, entry.needs or 0) }
+    local forYou = ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID, true)
+    if forYou then lines[#lines + 1] = { L["Best for you"], forYou } end
     return lines
 end
 
@@ -541,6 +554,9 @@ local function ShowRowTooltip(row, entry)
 
     local note = StaleNote(entry.skillUp)
     if note then GameTooltip:AddLine(note, 0.91, 0.76, 0.35, true) end
+
+    local forYou = not entry.learnNext and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
+    if forYou then GameTooltip:AddLine(forYou, Theme.Unpack("profit")) end
 
     if entry.neverSubCraft then
         GameTooltip:AddLine(L["Never made as a sub-craft. Crafts that use it buy it instead."], 0.91, 0.76, 0.35, true)
@@ -787,7 +803,7 @@ local function BuildDetail(parent)
 
     learn.how = {}
     local anchor = howHeading
-    for index = 1, 4 do
+    for index = 1, 5 do
         learn.how[index] = PaneLine(anchor, index == 1 and -6 or 0)
         anchor = learn.how[index]
     end
@@ -831,7 +847,12 @@ end
 --- The detail pane for a recipe to learn.
 local function UpdateLearnDetail(detail, entry)
     detail.title:SetText(entry.name or L.Format("recipe %s", entry.recipeID))
-    Theme.SetItemIcon(detail.icon, entry.outputItemID or (entry.place and entry.place.itemID))
+    local iconItem = entry.outputItemID or (entry.place and entry.place.itemID)
+    if iconItem then
+        Theme.SetItemIcon(detail.icon, iconItem)
+    else
+        Theme.SetSpellIcon(detail.icon, entry.recipeID, ns.Upgrades and ns.Upgrades:EnchantFor(entry.recipeID) ~= nil)
+    end
 
     if entry.locked then
         detail.subtitle:SetText(L.Format("You can learn this at %d", entry.needs or 0))
@@ -920,7 +941,11 @@ local function UpdateDetail(entry)
     end
 
     detail.title:SetText(entry.name or L.Format("recipe %s", entry.recipeID))
-    Theme.SetItemIcon(detail.icon, entry.outputItemID)
+    if entry.outputItemID then
+        Theme.SetItemIcon(detail.icon, entry.outputItemID)
+    else
+        Theme.SetSpellIcon(detail.icon, entry.recipeID, ns.Upgrades and ns.Upgrades:EnchantFor(entry.recipeID) ~= nil)
+    end
 
     local r, g, b = TierColor(entry.tier)
     if entry.tier == "unknown" then
@@ -931,7 +956,10 @@ local function UpdateDetail(entry)
     end
     detail.subtitle:SetTextColor(r, g, b)
 
-    detail.note:SetText(StaleNote(entry.skillUp) or "")
+    local stale = StaleNote(entry.skillUp)
+    local forYou = not stale and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
+    detail.note:SetText(stale or forYou or "")
+    detail.note:SetTextColor(Theme.Unpack(forYou and "profit" or "warn"))
 
     local anchor = detail.reagentHeading
     local reagents = (entry.costDetail and entry.costDetail.reagents) or {}
