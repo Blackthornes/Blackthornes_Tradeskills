@@ -618,6 +618,27 @@ end
 --   vendor), the house rule), "best" for whichever of auction, vendor and
 --   disenchanting pays most, or one of those alone. analysis.ways holds
 --   all three either way, and analysis.via names the one the profit is for.
+--- What a craft makes a day on the auction house: its profit each times
+--- about how many sell a day (Prices:GetUnitsSoldPerDay, the Stats tab's
+--- number), no more than Keep in stock lists at once. The Profit tab's
+--- A DAY, in place of gold an hour, which said nothing of whether it sells
+--- (the owner, 2026-10-16). Only for a craft sold on the auction house.
+-- @return copper a day, how many that counts, and true when Keep in stock
+--         cut the count; nil while there is no sales estimate
+function Profit:PerDay(analysis, itemID)
+    if analysis.via ~= "auction" or type(analysis.profitPerUnit) ~= "number" then return nil end
+    local ok, sells = pcall(ns.Prices.GetUnitsSoldPerDay, ns.Prices, itemID)
+    if not ok or type(sells) ~= "number" or sells <= 0 then return nil end
+
+    local capped = false
+    if ns.Auctions and ns.Auctions.GetLimit then
+        local fine, limit = pcall(ns.Auctions.GetLimit, ns.Auctions, itemID)
+        limit = fine and tonumber(limit) or 0
+        if limit > 0 and sells > limit then sells, capped = limit, true end
+    end
+    return analysis.profitPerUnit * sells, sells, capped
+end
+
 function Profit:Analyse(recipeID, characterKey, method)
     local recipe, owner = ns.Recipes:GetAny(recipeID)
     if not recipe then return nil end
@@ -919,6 +940,7 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     analysis.confidence, analysis.confidenceReason = ns.Prices:GetConfidence(recipe.outputItemID)
     analysis.liquidity = ns.Prices:GetSalesPerDay(recipe.outputItemID)
+    analysis.perDay, analysis.perDaySells, analysis.perDayCapped = self:PerDay(analysis, recipe.outputItemID)
     -- The age of the price the profit is for (Discord, 2026-10-08):
     -- a disenchant is valued at its material, so that scan's age is the one
     -- that says how far to trust it. A vendor's price does not age; the

@@ -1,7 +1,7 @@
 -- The Profit tab with every column on (Per hour ticked) at a narrow width:
 -- the columns ran over the craft names and each other (a player's
 -- screenshot, 2026-10-15). The least needed are set aside until there is
--- room, and COST, SELLS, PROFIT, TIME and GOLD/HR always stay.
+-- room, and COST, SELLS, PROFIT, TIME and A DAY always stay.
 
 -- Tests share one Lua state, so every global replaced here is put back,
 -- including the ones that were not set at all.
@@ -191,20 +191,20 @@ print("columns at the list's width")
 Resize(2000)
 check("wide: AGE shows", Shown("AGE"), true)
 check("wide: VIA shows", Shown("VIA"), true)
-check("wide: GOLD/HR shows", Shown("GOLD/HR"), true)
+check("wide: A DAY shows", Shown("A DAY"), true)
 
 Resize(800)
 check("narrow: AGE is set aside", Shown("AGE"), false)
 check("narrow: VIA is set aside", Shown("VIA"), false)
 check("narrow: MAKE stays, it fits now", Shown("MAKE"), true)
 check("narrow: TIME stays", Shown("TIME"), true)
-check("narrow: GOLD/HR stays", Shown("GOLD/HR"), true)
+check("narrow: A DAY stays", Shown("A DAY"), true)
 check("narrow: COST stays", Shown("COST"), true)
 check("narrow: PROFIT stays", Shown("PROFIT"), true)
 
 Resize(300)
 check("very narrow: COST still stays", Shown("COST"), true)
-check("very narrow: GOLD/HR still stays", Shown("GOLD/HR"), true)
+check("very narrow: A DAY still stays", Shown("A DAY"), true)
 check("very narrow: MARGIN goes", Shown("MARGIN"), false)
 
 settings.profitShowsPerHour = false

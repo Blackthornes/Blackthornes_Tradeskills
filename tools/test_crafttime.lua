@@ -239,6 +239,46 @@ check("and has no gold an hour", a.goldPerHour, nil)
 ns.Recipes.IsDropped = function() return false end
 
 print("")
+print("a day (2026-10-16, in place of gold an hour on the Profit tab)")
+
+local realSold = ns.Prices.GetUnitsSoldPerDay
+ns.Prices.GetUnitsSoldPerDay = function() return nil end
+a = Profit:Analyse(BELT_RECIPE, nil, "auction")
+check("no sales estimate: nothing a day", a.perDay, nil)
+
+ns.Prices.GetUnitsSoldPerDay = function(_, id) return id == BELT and 4 or nil end
+a = Profit:Analyse(BELT_RECIPE, nil, "auction")
+check("a day is the profit each times how many sell", a.perDay, a.profitPerUnit * 4)
+check("and counts 4", a.perDaySells, 4)
+check("not cut by Keep in stock", a.perDayCapped, false)
+
+ns.Auctions.GetLimit = function() return 2, "item" end
+a = Profit:Analyse(BELT_RECIPE, nil, "auction")
+check("Keep in stock 2 caps it at 2 a day", a.perDay, a.profitPerUnit * 2)
+check("and says so", a.perDayCapped, true)
+ns.Auctions.GetLimit = function() return 0, "default" end
+a = Profit:Analyse(BELT_RECIPE, nil, "auction")
+check("no limit leaves it alone", a.perDaySells, 4)
+ns.Auctions.GetLimit = nil
+
+ns.Prices.GetUnitsSoldPerDay = function() error("boom") end
+a = Profit:Analyse(BELT_RECIPE, nil, "auction")
+check("a failing estimate is nothing a day, not an error", a.perDay, nil)
+
+ns.Prices.GetUnitsSoldPerDay = function() return 4 end
+ns.db.castTimes[DE] = 3
+ns.Disenchant = {
+    IsDisenchantable = function() return true end,
+    GetValue = function() return 400, nil, { outcomes = {} } end,
+    GetBestEnchanter = function() return 100, "Ana" end,
+    GetItemFacts = function() return { skill = 1 } end,
+}
+a = Profit:Analyse(BELT_RECIPE, nil, "disenchant")
+check("disenchanted, nothing is sold: nothing a day", a.perDay, nil)
+ns.Disenchant = nil
+ns.Prices.GetUnitsSoldPerDay = realSold
+
+print("")
 print("written short")
 
 check("3 seconds", CraftTime.Format(3), "3s")
