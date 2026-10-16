@@ -140,8 +140,10 @@ local DEFAULTS = {
 
         -- Leave on the Sell list, dimmed, what Blackthornes Farmer, Equipment,
         -- Pets and Butler want kept, so List all never posts it
-        -- (Logic/SisterKeeps.lua, 2026-10-16). On unless unticked.
-        sellHoldsSisterKeeps = true,
+        -- (Logic/SisterKeeps.lua, 2026-10-16). Off unless ticked (the owner,
+        -- the same day); Config:SisterKeepsOffOnce turns off the true the
+        -- first default wrote.
+        sellHoldsSisterKeeps = false,
 
         -- Of those, gear Equipment says another character could wear is
         -- held back only while this is ticked (the owner, 2026-10-16: off
@@ -1091,6 +1093,22 @@ function Config:Bootstrap()
     if ns.Persist then
         ns.Persist:RestoreSettings()
         ns.Persist:CheckSoak()
+    end
+
+    self:SisterKeepsOffOnce(db)
+end
+
+--- "Keep What Other Addons Need" was on by default for a day (2026-10-16)
+--- before the owner asked for it off unless ticked. The default was copied
+--- into the save, so it is turned off once, and the save says so
+--- (`sisterKeepsOffOnce`, never rename it). A player who ticks it again
+--- keeps it.
+function Config:SisterKeepsOffOnce(db)
+    if type(db) ~= "table" or db.sisterKeepsOffOnce then return end
+    db.sisterKeepsOffOnce = true
+    if type(db.settings) == "table" and db.settings.sellHoldsSisterKeeps ~= false then
+        ns.db = ns.db or db
+        self:Set("sellHoldsSisterKeeps", false)
     end
 end
 

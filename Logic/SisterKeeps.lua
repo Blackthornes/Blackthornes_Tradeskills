@@ -35,7 +35,7 @@ local function Now()
 end
 
 function SisterKeeps:IsOn()
-    return not (ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsSisterKeeps") == false)
+    return ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsSisterKeeps") == true or false
 end
 
 --- Gear another character could wear is held back only while "Keep
