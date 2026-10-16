@@ -74,6 +74,12 @@ ns.Theme = {
     CreateHeading = function() return Label() end,
     StyleHeading = function(label) label.rule = Stub(); return label end,
     ProfitColor = function() return "profit" end,
+    -- What the Characters view next door draws with.
+    Fill = function() return Stub() end,
+    Border = function() return {} end,
+    SetBorderColor = function() end,
+    SetMoneyText = function(label, copper) label:SetText(tostring(copper)) end,
+    SetGradientAlpha = function() end,
 }
 
 local lists = {}

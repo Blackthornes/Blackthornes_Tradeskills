@@ -43,6 +43,13 @@ Theme.colors = {
     loss      = { 0.898, 0.376, 0.310 },   -- #E5604F
     warn      = { 0.910, 0.757, 0.353 },
 
+    -- The Characters tab (2026-10-16): each side's colour on its heading,
+    -- rested XP's blue and the XP bar's purple, as the game draws them.
+    horde     = { 0.784, 0.208, 0.169 },
+    alliance  = { 0.239, 0.490, 0.878 },
+    rested    = { 0.435, 0.659, 1.000 },
+    xp        = { 0.541, 0.361, 0.839 },
+
     text      = { 0.902, 0.910, 0.925 },   -- #E6E8EC
     -- Secondary text, a step brighter than Farmer's so the small print in
     -- the dense tables (ages, column headings, hints) is readable.
