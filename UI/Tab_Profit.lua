@@ -958,6 +958,14 @@ local function LayoutSummary(detail)
     end
 end
 
+-- The summary rows put away while the price graph shows: the cheapest
+-- rival, your listing, the auction cut, the deposit and what each way
+-- makes. "always" marks the rows that show for every craft.
+local GRAPH_HIDES = {
+    [2] = "always", [3] = "sometimes", [5] = "always", [6] = "always",
+    [8] = "sometimes", [9] = "sometimes", [10] = "sometimes",
+}
+
 --- Show the price graph or the materials list, and fit the graph above the
 --- summary rows that are shown.
 local function UpdateGraph(detail, analysis)
@@ -972,7 +980,34 @@ local function UpdateGraph(detail, analysis)
         and L["The cheapest price hour by hour, and the best times to buy and sell"] or nil
     detail.reagentHeading:SetText(showGraph and L["PRICE HISTORY"] or L["MATERIALS"])
     detail.graph:SetShown(showGraph)
-    if not showGraph then return false end
+
+    -- With the graph up, only the summary's main rows show, so the graph
+    -- has room to be read; the rest are back with the materials. Rows that
+    -- are always there come back here; the others were set again just now.
+    for index in pairs(GRAPH_HIDES) do
+        local row = detail.summaryRows[index]
+        if row and row.graphHidden then
+            row.graphHidden = nil
+            if GRAPH_HIDES[index] == "always" then
+                row.label:Show()
+                row.value:Show()
+            end
+        end
+    end
+    if not showGraph then
+        LayoutSummary(detail)
+        return false
+    end
+    for index in pairs(GRAPH_HIDES) do
+        local row = detail.summaryRows[index]
+        if row and row.label:IsShown() then
+            row.graphHidden = true
+            row.label:Hide()
+            row.value:Hide()
+        end
+    end
+    if type(rawget(detail, "breaksInto")) == "table" then detail.breaksInto:Hide() end
+    LayoutSummary(detail)
 
     -- Hidden summary rows leave their room at the top of the block.
     local skipped = 0
