@@ -1191,7 +1191,7 @@ function UI:UpdateAuctionButton()
 end
 
 --- Whether the Post Crafted button shows beside Scan. Taken off for now
---- (Trent, 2026-10-16); the code stays, so true brings it back.
+--- (2026-10-16); the code stays, so true brings it back.
 UI.POST_CRAFTED_BUTTON = false
 
 --- The progress bar and status line run up to the buttons and no further.
