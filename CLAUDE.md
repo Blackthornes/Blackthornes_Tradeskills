@@ -981,6 +981,20 @@ deposit, market, vendor, disenchant, cost to make, then what comes after. "Fast 
 auction page (`fastListing`, on unless unticked, never rename it). Tested
 in `tools/test_fastlisting.lua`. Not yet seen in game.
 
+## The mouse wheel at the auction house
+
+A player asked (2026-10-16, the owner said build it, off by default): with
+"Mouse Wheel" ticked on the Auction house page (`mouseWheelListing`, off
+unless ticked, never rename it), while the drawer shows, wheel up does List
+Next (`PostPanel:ListNext`) and wheel down Cancel next
+(`MyAuctions:CancelNext`). `UI/AuctionWheel.lua` binds the wheel with
+override bindings to two named buttons (`BlackthornesTSWheelList`,
+`BlackthornesTSWheelCancel`), so each notch is the click the game asks
+for; they go when the drawer hides, wait out a fight, and a flick does one
+thing (`AuctionWheel.GAP`). A list under the mouse still scrolls; the
+camera does not zoom while it is bound. Tested in
+`tools/test_auctionwheel.lua`. Not yet seen in game.
+
 ## Overcutting
 
 The owner said build it (2026-10-15, from a mockup, and picked the name):
