@@ -721,7 +721,12 @@ from `CommitScan` with the full scan's `seller`; never a name),
 `statsPosts` and `statsSellTimes` (your postings from `Posting`, timed
 when the mail ledger writes the sale) and `statsCheered`. `/bts stats
 [item]`, a Settings row on the Look page and a Stats button on the
-Prices tab's detail pane open it. Tested in `tools/test_itemstats.lua`.
+Prices tab's detail pane open it. The Sold a day tile shows demand as the
+market's numbers, not High, Some or Low (a player asked, 2026-10-16):
+"18% of stock sells a day" with a bar coloured by `Demand.MarketLevel`, and
+a hover (`StatsUI.MarketLines`) with sells a day, up for sale now, time to
+sell what's up and your own listings, all from `stats.market`
+(`ItemStats` `Market`). Tested in `tools/test_itemstats.lua`.
 
 ## Enchant costs on tooltips
 
