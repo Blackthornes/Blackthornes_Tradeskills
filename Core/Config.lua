@@ -118,6 +118,10 @@ local DEFAULTS = {
         -- Post just under the big stack rather than under a few cheap ones
         -- that sell first (2026-10-15). Off unless ticked; never rename it.
         overcutting = false,
+        -- At the auction house, wheel up lists the next stack and wheel
+        -- down cancels the next undercut auction (2026-10-16). Off unless
+        -- ticked; never rename it.
+        mouseWheelListing = false,
 
         -- Nothing reads this any more, and Settings no longer offers it: every
         -- listing is confirmed, as the confirmation's Yes is the click that
