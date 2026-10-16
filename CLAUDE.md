@@ -842,7 +842,9 @@ close gem puts it away until the next visit (`CloseForVisit`), and its
 header is `UI/Main.lua`'s auction bar (`UI:GetAuctionBar`, made inside the
 drawer, placed by `PostPanel:PlaceBar`): the fold button, "Ready to sell" and
 its worth, the scan's status and progress, and Post Crafted and Scan as
-quiet metal buttons. Folded, the drawer is that header
+quiet metal buttons. Post Crafted is off the header for now (the owner,
+2026-10-16): its code stays, and `UI.POST_CRAFTED_BUTTON = true` in
+`UI/Main.lua` brings it back. Folded, the drawer is that header
 (`PostPanel.FOLDED_HEIGHT`), so Scan stays in reach. Rows are dark glass,
 names whole (`Theme.SetRowName`), List quiet metal; the one gold button is
 List all at the foot (`PostPanel:ListNext`, one listing a click, most
