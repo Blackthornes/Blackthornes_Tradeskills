@@ -6,7 +6,10 @@
 --   3. Nothing back and no sale seen yet: it waits for the next reading.
 --   4. Before the listings run out, nothing is judged.
 --   5. No limit stays no limit; an item none of your recipes make is ignored.
---   6. Unticked, nothing is watched or raised. It never lowers a number.
+--   6. Unticked, nothing is watched or raised.
+--   9. Three unsold rounds in a row take back one raise, never below where
+--      it started; a sell out starts the count again; a number typed by
+--      hand is left alone. Changed lists what it changed, Reset puts it back.
 --   7. A part-read mailbox judges nothing.
 --   8. Another character's listings wait for that character's mailbox.
 
@@ -157,13 +160,70 @@ S:NotePosted(POTION, 1, 1)
 check("off by default: nothing is watched", ns.db.sellOutWatch["Realm-A"][who][POTION] == nil)
 settings.raiseStockOnSellOut = true
 
--- Never lowers: a raise is always the number plus 1.
+-- A number typed by hand starts again from there.
 ns.db.postLimits[SWORD] = 7
 local high = now
 S:NotePosted(SWORD, 1, 1)
 now = high + 2 * 3600 + 300
 sold(SWORD)
 S:MailRead(true)
-check("it only ever goes up", ns.db.postLimits[SWORD] == 8)
+check("a typed number is raised from there", ns.db.postLimits[SWORD] == 8
+    and S:GetRaised(SWORD).base == 7)
+
+-- 9. Unsold rounds.
+local function unsold(itemID)
+    local from = now
+    S:NotePosted(itemID, 1, 1)
+    now = from + 2 * 3600 + 300
+    back(itemID, from + 2 * 3600)
+    S:MailRead(true)
+end
+local function sellout(itemID)
+    local from = now
+    S:NotePosted(itemID, 1, 1)
+    now = from + 600
+    sold(itemID)
+    now = from + 2 * 3600 + 300
+    S:MailRead(true)
+end
+local before = #printed
+unsold(SWORD) unsold(SWORD)
+check("two unsold rounds change nothing", ns.db.postLimits[SWORD] == 8 and ns.db.sellOutUnsold[SWORD] == 2)
+sellout(SWORD)
+check("a sell out starts the count again", ns.db.postLimits[SWORD] == 9 and ns.db.sellOutUnsold[SWORD] == nil)
+unsold(SWORD) unsold(SWORD) unsold(SWORD)
+check("three unsold rounds in a row: 9 becomes 8", ns.db.postLimits[SWORD] == 8)
+check("the player is told", printed[#printed]:find("unsold 3 times", 1, true) ~= nil)
+check("the Profit tab can say it was lowered", S:GetRaised(SWORD).lowered == true
+    and S:GetRaised(SWORD).from == 9 and S:GetRaised(SWORD).to == 8)
+unsold(SWORD) unsold(SWORD) unsold(SWORD)
+check("never below where it started: stays 7", ns.db.postLimits[SWORD] == 7)
+unsold(SWORD) unsold(SWORD) unsold(SWORD)
+check("and stays there", ns.db.postLimits[SWORD] == 7 and ns.db.sellOutUnsold[SWORD] == nil)
+check("only two lowerings were told", #printed == before + 1 + 2)
+
+-- A number typed by hand after a raise is left alone.
+sellout(SWORD)
+check("raised again to 8", ns.db.postLimits[SWORD] == 8)
+ns.db.postLimits[SWORD] = 20
+unsold(SWORD) unsold(SWORD) unsold(SWORD)
+check("a typed number is never lowered", ns.db.postLimits[SWORD] == 20)
+
+-- Changed and Reset.
+sellout(SWORD)
+local list = S:Changed()
+local found
+for _, entry in ipairs(list) do if entry.itemID == SWORD then found = entry end end
+check("Changed lists the item with where it started", found and found.base == 20 and found.limit == 21)
+check("Reset puts a typed number back", S:Reset(SWORD) and ns.db.postLimits[SWORD] == 20
+    and S:GetRaised(SWORD) == nil)
+
+-- POTION started from the usual 3 (not its own number): Reset clears it.
+check("Changed lists the potion", (function()
+    for _, entry in ipairs(S:Changed()) do if entry.itemID == POTION then return entry.base == 3 end end
+end)())
+S:Reset(POTION)
+check("Reset of a raised usual number goes back to the usual", ns.db.postLimits[POTION] == nil)
+check("nothing left changed", #S:Changed() == 0)
 
 print(("test_sellout: %d checks passed"):format(checks))

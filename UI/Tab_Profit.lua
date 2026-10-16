@@ -1356,7 +1356,10 @@ function UpdateDetail(analysis)
         box.editBox:SetTextColor(Theme.Unpack(own and "text" or "dim"))
         local raised = own and ns.SellOut and ns.SellOut.GetRaised
             and ns.SellOut:GetRaised(analysis.outputItemID)
-        if raised and ns.db.postLimits and raised.to == ns.db.postLimits[analysis.outputItemID] then
+        if raised and raised.lowered and ns.db.postLimits and raised.to == ns.db.postLimits[analysis.outputItemID] then
+            box.sourceTip = L.Format("Lowered from %d to %d because it came back unsold 3 times in a row. Click x to use the usual number again.",
+                raised.from or 0, raised.to or 0)
+        elseif raised and ns.db.postLimits and raised.to == ns.db.postLimits[analysis.outputItemID] then
             box.sourceTip = L.Format("Raised from %d to %d because every copy you listed sold. Click x to use the usual number again.",
                 raised.from or 0, raised.to or 0)
         elseif own then
