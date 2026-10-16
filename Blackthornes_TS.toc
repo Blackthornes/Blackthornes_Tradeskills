@@ -100,6 +100,7 @@ UI\Collapse.lua
 UI\PriceGraph.lua
 UI\Main.lua
 UI\ShoppingListsView.lua
+UI\AuctionWheel.lua
 UI\PostPanel.lua
 UI\PriceEditor.lua
 UI\BuyQuantity.lua

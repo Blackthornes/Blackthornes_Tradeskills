@@ -902,6 +902,17 @@ local function Build(outer)
     end, true)
     widgets.fastListing:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The mouse wheel (a player asked, the owner said build it, 2026-10-16):
+    -- off unless ticked, and only while the auction house is open.
+    local wheelRow = CreateRow(pages.auction, 1, L["Mouse Wheel:"],
+        L["At the auction house, wheel up lists the next stack and wheel down cancels the next undercut auction."])
+
+    widgets.mouseWheel = Widgets.CreateCheckbox(wheelRow, L["On"], function(checked)
+        Config:Set("mouseWheelListing", checked)
+        if ns.AuctionWheel then ns.AuctionWheel:Update() end
+    end, false)
+    widgets.mouseWheel:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- The sale alarm and the scan chime moved down to SOUNDS, with a switch
     -- for every other sound (2026-10-02).
     CreateSection(pages.mail, 2, L["AFTER A SALE"])
@@ -2020,6 +2031,7 @@ local function Refresh()
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
+    widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
     widgets.overcutting:SetChecked(Config:Get("overcutting") == true)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.freeSpaceFirst:SetChecked(Config:Get("craftFreesSpaceFirst") ~= false)
