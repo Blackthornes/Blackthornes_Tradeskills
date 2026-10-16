@@ -883,15 +883,28 @@ local function Build(outer)
     -- Logic/SisterKeeps.lua (2026-10-16): what the other Blackthornes
     -- addons want kept stays off List all.
     local sisterKeepsRow = CreateRow(pages.pricing, 1, L["Keep What Other Addons Need:"],
-        L["Goal items, upgrades, pet food, quest items and Butler's keeps stay off List all."])
+        L["Goal items, your upgrades, pet food, quest items and Butler's keeps stay off List all."])
 
     widgets.sisterKeeps = Widgets.CreateCheckbox(sisterKeepsRow, L["On"], function(checked)
         Config:Set("sellHoldsSisterKeeps", checked)
         if ns.SisterKeeps then ns.SisterKeeps:Forget() end
         UI:RefreshActiveTab()
         if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
-    end, true)
+    end, false)
     widgets.sisterKeeps:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    -- Off unless ticked (the owner, 2026-10-16): gear for another
+    -- character goes up with everything else.
+    local altKeepsRow = CreateRow(pages.pricing, 1, L["Keep Upgrades for Alts:"],
+        L["Gear your other characters could wear stays off List all."])
+
+    widgets.altKeeps = Widgets.CreateCheckbox(altKeepsRow, L["On"], function(checked)
+        Config:Set("sellHoldsAltUpgrades", checked)
+        if ns.SisterKeeps then ns.SisterKeeps:Forget() end
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.altKeeps:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- No "Confirm before each listing" switch: the confirmation's Yes is the
     -- click that lists. Posting needs a real click, and after the price
@@ -2042,7 +2055,8 @@ local function Refresh()
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
-    widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") ~= false)
+    widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") == true)
+    widgets.altKeeps:SetChecked(Config:Get("sellHoldsAltUpgrades") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
     widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
