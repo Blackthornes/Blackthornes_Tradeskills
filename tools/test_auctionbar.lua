@@ -76,6 +76,36 @@ check("the drawer was built", ns.PostPanel.frame ~= nil, true)
 check("the bar the buttons go on is the drawer's header", bar == ns.PostPanel.header, true)
 check("asked again, the same bar", UI:GetAuctionBar() == bar, true)
 
+-- Post Crafted is taken off the header for now (2026-10-16), with its
+-- code kept behind UI.POST_CRAFTED_BUTTON. Scan keeps its place, and the
+-- status line runs up to Scan alone.
+print("")
+print("the header without Post Crafted")
+
+local made = 0
+ns.Widgets.CreateButton = function()
+    made = made + 1
+    local button = NewFrame()
+    button.GetWidth = function() return 56 end
+    return button
+end
+bar.GetWidth = function() return 350 end
+local statusWidth
+if bar.status then bar.status.SetWidth = function(_, width) statusWidth = width end end
+
+check("the button is off", UI.POST_CRAFTED_BUTTON, false)
+UI.auctionButton = ns.Widgets.CreateButton()
+made = 0
+UI:AttachPostButton()
+check("no Post Crafted button is made", UI.postButton, nil)
+check("no button made at all", made, 0)
+if bar.status then
+    check("the status runs up to Scan", statusWidth, 350 - 32 - 10 - 56 - 10)
+end
+UI:UpdatePostButton()
+check("updating it does nothing and raises nothing", UI.postButton, nil)
+UI.auctionButton = nil
+
 for key, value in pairs(saved) do _G[key] = value end
 
 print("")

@@ -1190,6 +1190,28 @@ function UI:UpdateAuctionButton()
         or reason
 end
 
+--- Whether the Post Crafted button shows beside Scan. Taken off for now
+--- (Trent, 2026-10-16); the code stays, so true brings it back.
+UI.POST_CRAFTED_BUTTON = false
+
+--- The progress bar and status line run up to the buttons and no further.
+-- Corner to corner, never a bare RIGHT or BOTTOM point: those also fix the
+-- centre on the other axis, and the client drops one of two points that
+-- disagree.
+local function FitBarText(bar, buttons)
+    if not bar.progress then return end
+
+    local left = AUCTION_BAR_TEXT_LEFT
+
+    bar.progress:ClearAllPoints()
+    bar.progress:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", left, 7)
+    bar.progress:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -(AUCTION_BAR_PAD + buttons), 7)
+
+    local room = math.max(40, bar:GetWidth() - left - AUCTION_BAR_PAD - buttons)
+    bar.status:SetWidth(room)
+    if bar.title then bar.title:SetWidth(room) end
+end
+
 --- A Post button beside the Scan button on the auction house window.
 --
 -- Left-click lists the most valuable stack; posting needs a hardware event
@@ -1198,6 +1220,14 @@ end
 function UI:AttachPostButton()
     local bar = self:GetAuctionBar()
     local button = self.postButton
+    local gap = 10
+    local scanWidth = self.auctionButton and self.auctionButton:GetWidth() or 0
+
+    if not UI.POST_CRAFTED_BUTTON then
+        if button then button:Hide() end
+        FitBarText(bar, scanWidth + gap)
+        return
+    end
 
     if not button then
         button = Widgets.CreateButton(bar, L["Post Crafted"], function(_, mouseButton)
@@ -1242,24 +1272,8 @@ function UI:AttachPostButton()
 
     button:Show()
 
-    -- The progress bar and status line run up to the buttons and no further.
-    -- Corner to corner, never a bare RIGHT or BOTTOM point: those also fix the
-    -- centre on the other axis, and the client drops one of two points that
-    -- disagree.
-    if bar.progress then
-        local left = AUCTION_BAR_TEXT_LEFT
-        local gap = 10
-        local buttons = (self.auctionButton and self.auctionButton:GetWidth() + AUCTION_BAR_GAP or 0)
-            + button:GetWidth() + gap
-
-        bar.progress:ClearAllPoints()
-        bar.progress:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", left, 7)
-        bar.progress:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -(AUCTION_BAR_PAD + buttons), 7)
-
-        local room = math.max(40, bar:GetWidth() - left - AUCTION_BAR_PAD - buttons)
-        bar.status:SetWidth(room)
-        if bar.title then bar.title:SetWidth(room) end
-    end
+    FitBarText(bar, (self.auctionButton and scanWidth + AUCTION_BAR_GAP or 0)
+        + button:GetWidth() + gap)
 
     self:UpdatePostButton()
 end
