@@ -34,7 +34,7 @@ end }
 local recipe = { recipeID = RECIPE, name = "Linen Belt", outputItemID = BELT,
     quantityMin = 1, quantityMax = 1, reagents = { { itemID = LINEN, quantity = 7 } } }
 
-local settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 1, minProfit = 0,
+local settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 2, minProfit = 0,
     staleAfterSeconds = 48 * 3600, valueOwnedMaterials = true, unscannedMarkupPercent = 50,
     priceUnscannedCrafts = true }
 
