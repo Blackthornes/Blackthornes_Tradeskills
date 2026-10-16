@@ -165,6 +165,19 @@ check("every crate has its item ID", (function()
     return true
 end)())
 
+local function Takes(key, itemID, count)
+    for _, bundle in ipairs(Crate(key).bundles) do
+        if bundle[1] == itemID then return bundle[2] == count end
+    end
+    return false
+end
+check("Artisan Ore takes Truesilver Ore", Takes("artisan-ore", 7911, 10))
+check("Artisan Earthly Herbs takes Sungrass", Takes("artisan-earthly", 8838, 20))
+check("Artisan Textiles takes Thick Leather", Takes("artisan-textiles", 4304, 20))
+check("Artisan Ingots takes Truesilver Bar", Takes("artisan-ingots", 6037, 10))
+check("Artisan Parts takes Truesilver Transformer", Takes("artisan-parts", 18631, 5))
+check("Artisan Parts takes 2 Thorium Tube", Takes("artisan-parts", 16000, 2))
+
 -- The checks below find crates by name, as for a crate the game names
 -- under another ID, so these start without a typed one.
 Crate("apprentice-herbs").id = nil

@@ -137,7 +137,7 @@ ns.WAYLAID_CRATES = {
       -- Dream Dust, Greater Nether Essence, Small and Large Brilliant Shard
     { key = "artisan-earthly", tier = 4, label = "Artisan Earthly Herbs", id = 248695,
       words = { "artisan", "earthly" },
-      bundles = { { 8839, 10 }, { 8845, 10 }, { 8846, 10 }, { 13464, 10 } } },
+      bundles = { { 13464, 10 }, { 8838, 20 }, { 8839, 10 }, { 8845, 10 }, { 8846, 10 } } },
       -- Blindweed, Ghost Mushroom, Gromsblood, Golden Sansam
     { key = "artisan-flowering", tier = 4, label = "Artisan Flowering Herbs", id = 248696,
       words = { "artisan", "flowering" },
@@ -145,11 +145,11 @@ ns.WAYLAID_CRATES = {
       -- Mountain Silversage, Plaguebloom, Icecap, Dreamfoil
     { key = "artisan-ore", tier = 4, label = "Artisan Ore", id = 248697,
       words = { "artisan", "ore" },
-      bundles = { { 10620, 20 }, { 11370, 20 } } },
+      bundles = { { 7911, 10 }, { 10620, 20 }, { 11370, 20 } } },
       -- Thorium Ore, Dark Iron Ore
     { key = "artisan-textiles", tier = 4, label = "Artisan Textiles", id = 248698,
       words = { "artisan", "textiles" },
-      bundles = { { 14047, 40 }, { 8170, 20 } } },
+      bundles = { { 14047, 40 }, { 4304, 20 }, { 8170, 20 } } },
       -- Runecloth, Rugged Leather
     { key = "artisan-fabrics", tier = 4, label = "Artisan Fabrics", id = 248711,
       words = { "artisan", "fabrics" },
@@ -157,11 +157,11 @@ ns.WAYLAID_CRATES = {
       -- Bolt of Runecloth, Cured Thick Hide
     { key = "artisan-ingots", tier = 4, label = "Artisan Ingots", id = 248712,
       words = { "artisan", "ingots" },
-      bundles = { { 12359, 20 }, { 11371, 2 } } },
+      bundles = { { 11371, 2 }, { 6037, 10 }, { 12359, 20 } } },
       -- Thorium Bar, Dark Iron Bar
     { key = "artisan-parts", tier = 4, label = "Artisan Parts", id = 248713,
       words = { "artisan", "parts" },
-      bundles = { { 15994, 5 }, { 16000, 5 } } },
+      bundles = { { 15994, 5 }, { 18631, 5 }, { 16000, 2 } } },
       -- Thorium Widget, Thorium Tube
 }
 
