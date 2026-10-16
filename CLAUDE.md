@@ -591,10 +591,19 @@ read after that (`Mail:Read` calls `SellOut:MailRead`) settles it: anything
 back expired or cancelled since it opened, nothing changes; nothing back
 and a sale seen (ledger or heard), `Auctions:SetLimit(item, limit + 1)`,
 once a window, with a gold chat line and a sound; no sale seen yet, it
-waits. Never lowers, and an item with no limit is left alone. "Raise it
+waits. An item with no limit is left alone. Back down (the owner,
+2026-10-16, part of the same tick box): every window that comes back
+unsold counts (`sellOutUnsold[itemID]`, never rename it), and after
+`SellOut.UNSOLD_ROUNDS` (3) in a row the number comes down by 1, never
+below where it started (`sellOutRaised[itemID].base`, `own` when that
+was the item's own number), and only while it is still the number this
+set; a sell out starts the count again. Settings > Queue lists what it
+changed under CHANGED WHEN SOLD OUT (`SellOut:Changed`), each with Reset
+(`SellOut:Reset`: the item's own number back, or the usual one). "Raise it
 when it sells out" on the Queue page (`raiseStockOnSellOut`, off unless
-ticked, the owner 2026-10-13). Saved, never renamed: `sellOutWatch[realm][character][itemID]`
-and `sellOutRaised[itemID]` (the Profit tab's tooltip on the number).
+ticked, the owner 2026-10-13). Saved, never renamed: `sellOutWatch[realm][character][itemID]`,
+`sellOutRaised[itemID]` (the Profit tab's tooltip on the number) and
+`sellOutUnsold[itemID]`.
 Tested in `tools/test_sellout.lua`. Not yet seen in game.
 
 ## Your auctions and undercuts

@@ -83,8 +83,9 @@ local DEFAULTS = {
         restockOnSale = true,
         -- When every copy of a craft you listed sells before its listings
         -- run out, Keep in stock for it goes up by 1 (the owner,
-        -- 2026-10-13, Logic/SellOut.lua). Never lowered. Off unless
-        -- ticked (the owner, 2026-10-13). Never rename it.
+        -- 2026-10-13, Logic/SellOut.lua). After 3 unsold rounds in a row it
+        -- comes back down by 1, never below where it started (2026-10-16).
+        -- Off unless ticked (the owner, 2026-10-13). Never rename it.
         raiseStockOnSellOut = false,
         -- With Keep in stock at 0, Queue All and Restock what sells keep
         -- about two days of what sold for you this week
