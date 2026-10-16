@@ -2908,3 +2908,39 @@ L["RESTED"] = "ERHOLT"
 L["Rested has grown since you last played them."] = "Erholung ist gewachsen, seit du ihn zuletzt gespielt hast."
 L["Show:"] = "Zeigen:"
 L["ZONE"] = "GEBIET"
+
+-- What the other Blackthornes addons want kept (Logic/SisterKeeps.lua)
+L["%d kept back: %s"] = "%d zurückbehalten: %s"
+L["%d kept for your other addons"] = "%d für deine anderen Addons behalten"
+L["%s. A click still lists it."] = "%s. Ein Klick stellt es trotzdem ein."
+L["A tool you use"] = "Ein Werkzeug, das du benutzt"
+L["An upgrade for %s"] = "Eine Verbesserung für %s"
+L["An upgrade for %s, +%d%%"] = "Eine Verbesserung für %s, +%d%%"
+L["An upgrade for one of your characters"] = "Eine Verbesserung für einen deiner Charaktere"
+L["An upgrade for you"] = "Eine Verbesserung für dich"
+L["An upgrade for you, +%d%%"] = "Eine Verbesserung für dich, +%d%%"
+L["For your goal"] = "Für dein Ziel"
+L["Goal items, upgrades, pet food, quest items and Butler's keeps stay off List all."] = "Zielgegenstände, Verbesserungen, Begleiterfutter, Questgegenstände und was Butler behält, bleiben aus „Alle einstellen“ draußen."
+L["In your %s equipment set"] = "In deinem Ausrüstungsset %s"
+L["Keep What Other Addons Need:"] = "Behalten, was andere Addons brauchen:"
+L["List all leaves it. Its List button still lists it."] = "„Alle einstellen“ lässt es liegen. Sein eigener Knopf stellt es trotzdem ein."
+L["On your Always bank list"] = "Auf deiner Liste Immer zur Bank"
+L["On your Always keep list"] = "Auf deiner Liste Immer behalten"
+L["On your Always mail list"] = "Auf deiner Liste Immer verschicken"
+L["Worth more opened (%s)"] = "Geöffnet mehr wert (%s)"
+L["Your goal needs %d more"] = "Dein Ziel braucht noch %d"
+L["Your pet eats this"] = "Dein Begleiter frisst das"
+
+-- Farming pace on the Gather tab
+L["About %s"] = "Etwa %s"
+L["Farming it"] = "Selbst farmen"
+L["The %d you still need"] = "Die %d, die dir noch fehlen"
+
+-- Crafted gear for your other characters (Logic/Upgrades.lua)
+L["Upgrade for %s"] = "Verbesserung für %s"
+L["Upgrade for %s at level %d"] = "Verbesserung für %s ab Stufe %d"
+L["Upgrade for %s, +%d%%"] = "Verbesserung für %s, +%d%%"
+
+-- Profit by method
+L["Farmed"] = "Gefarmt"
+L["sold at auction, looted or gathered by you"] = "im Auktionshaus verkauft, selbst erbeutet oder gesammelt"

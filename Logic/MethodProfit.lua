@@ -10,7 +10,9 @@
 --   Flipped       auction sales of things you bought on the auction house
 --   Vendored      things a vendor bought from you
 --   Disenchanted  what the materials are worth, against what the item cost
---   Other         auction sales of things with no cost known (loot, say)
+--   Farmed        auction sales of things you looted, gathered or fished
+--                 (Blackthornes Farmer's records say so; no cost, all profit)
+--   Other         auction sales of things with no cost known
 --
 -- Auction sales are read from the Sales tab's mail ledger, as they stand.
 -- Vendor sales and disenchants have no ledger, so each is written down as it
@@ -38,8 +40,27 @@ MethodProfit.METHODS = {
     { key = "flipped",      text = L["Flipped"],      hint = L["bought at auction, sold again"] },
     { key = "vendored",     text = L["Vendored"],     hint = L["sold to a vendor"] },
     { key = "disenchanted", text = L["Disenchanted"], hint = L["broken down for materials"] },
+    { key = "farmed",       text = L["Farmed"],       hint = L["sold at auction, looted or gathered by you"] },
     { key = "other",        text = L["Other sales"],  hint = L["sold at auction, cost not known"] },
 }
+
+--- Did you loot, gather or fish this yourself? Asked of Blackthornes
+--- Farmer (`Looted:Has`, 2026-10-16), inside a pcall, read only; false
+--- without Farmer. `cache` keeps the answers for one Summary.
+function MethodProfit:Farmed(itemID, cache)
+    if not itemID then return false end
+    if cache and cache[itemID] ~= nil then return cache[itemID] end
+
+    local answer = false
+    local farmer = rawget(_G, "BlackthornesFarmer")
+    local looted = type(farmer) == "table" and farmer.Looted
+    if type(looted) == "table" and type(looted.Has) == "function" then
+        local ok, has = pcall(looted.Has, looted, itemID)
+        answer = ok and has == true
+    end
+    if cache then cache[itemID] = answer end
+    return answer
+end
 
 local DAY = 86400
 
@@ -263,6 +284,7 @@ function MethodProfit:Summary(from, to)
     if mail and mail.GetLedger then
         local names = mail.NameIndex and mail:NameIndex() or {}
         local costs = ns.CraftedCost and ns.CraftedCost:NewSaleCache()
+        local farmed = {}
 
         for _, entry in ipairs(mail:GetLedger().entries) do
             local t = tonumber(entry.t) or 0
@@ -285,6 +307,9 @@ function MethodProfit:Summary(from, to)
                         if paid then key, each = "flipped", paid end
                     end
                 end
+
+                -- No cost known, but you got it yourself: Farmed.
+                if key == "other" and self:Farmed(itemID, farmed) then key = "farmed" end
 
                 Add(methods[key], itemID, units, income, each and each * units or nil)
             end

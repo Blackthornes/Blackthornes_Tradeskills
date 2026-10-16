@@ -262,6 +262,23 @@ local function ShowRowTooltip(row, line)
 
     if UI.AddPaidLines then UI.AddPaidLines(line) end
 
+    -- How fast you farm it, from Blackthornes Farmer (your own kills and
+    -- gathers only, the Your time view's call; 2026-10-16).
+    local CraftOrFarm, YourTime = ns.CraftOrFarm, ns.YourTimeView
+    if CraftOrFarm and CraftOrFarm:HasFarmer() and YourTime and YourTime.PaceText then
+        local pace, samples = CraftOrFarm:PaceOf(line.itemID)
+        if pace or (samples or 0) > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddDoubleLine(L["Farming it"], YourTime.PaceText({ pace = pace, samples = samples }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+            if pace and line.shortfall > 0 then
+                GameTooltip:AddDoubleLine(L.Format("The %d you still need", line.shortfall),
+                    L.Format("About %s", YourTime.Duration(pace.seconds * line.shortfall)),
+                    0.7, 0.7, 0.7, 0.78, 0.64, 0.30)
+            end
+        end
+    end
+
     GameTooltip:Show()
 end
 
