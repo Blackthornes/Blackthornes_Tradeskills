@@ -4,6 +4,33 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.62.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Characters:** the tab splits Horde and Alliance under their own headings,
+  with level, rested XP, zone, time played and when each was last seen.
+- **Mouse Wheel:** at the auction house, wheel up lists the next stack and
+  wheel down cancels the next undercut auction. Off until you tick it on the
+  Auction house page.
+- **Keep What Other Addons Need:** the Sell list holds back what Farmer,
+  Equipment, Pets and Butler say you still need. "Keep Upgrades for Alts:"
+  adds gear for your other characters. Both off until ticked on the Pricing
+  page.
+- **Farm pace:** with Farmer, the Gather tab's tooltip shows how fast you
+  farm a material.
+- **Farmed:** with Farmer, items you looted, gathered or fished yourself show
+  under Farmed in Profit by method.
+- **Alt upgrades:** with Equipment, crafted gear that helps another of your
+  characters says so on the Profit, Level Up and Queue tabs.
+- **Profit:** A DAY replaces GOLD/HR. It is profit each times about how many
+  sell a day, up to your Keep in stock.
+- **Stats:** the Sold a day tile shows how much of the stock sells each day,
+  with a bar.
+- **Price graph:** the Profit tab's graph has room to read.
+- **Bug fixes:** various fixes to Tradeskills.
+
 ## 0.61.0
 
 For WoW: Forever (interface 16001). A file was added and the TOC changed, so

@@ -23,6 +23,23 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.62.0
+
+- The Characters tab splits Horde and Alliance, and shows level, rested XP, zone and time played.
+- The mouse wheel can list and cancel at the auction house. It's off until you turn it on.
+- The Sell list can hold back what your other Blackthornes addons need. It's off until you turn it on.
+- With Farmer, the Gather tab shows how fast you farm a material, and Profit by method has a Farmed line.
+- With Equipment, crafted gear that helps another of your characters says so.
+- Profit shows gold a day in place of gold an hour.
+
+Fixes and changes:
+
+- The Stats tab shows how much of the stock sells each day.
+- The price graph has room to read.
+- Various fixes to Tradeskills.
+
+Thanks Codosbuya for the idea!
+
 ## 0.61.0
 
 - The Disenchanting tab has a Find a material view. Pick an enchanting material to see what gave it to you before and the best ways to get more.
