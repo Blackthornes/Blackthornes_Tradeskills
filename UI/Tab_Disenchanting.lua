@@ -63,15 +63,25 @@ local VIEWS = {
         },
         hint = L["Pick an item, then click Disenchant. Right-click to mark it bought to disenchant"],
     },
+    -- Find a material (2026-10-16): where to get one enchanting material.
+    material = {
+        columns = {
+            { key = "each",  label = L["COST EACH"], width = 70, money = true },
+            { key = "odds",  label = L["ODDS"],      width = 84, justify = "CENTER" },
+            { key = "where", label = L["WHERE"],     width = 150, justify = "LEFT" },
+        },
+        hint = L["Pick a row to see more"],
+    },
 }
 
 local MAX_COLUMNS = 6
 
 -- Any column but the item's name can be hidden, each view on its own
 -- (UI/Columns.lua).
-local LIST_IDS = { auction = "disenchant", bag = "disenchantbags" }
+local LIST_IDS = { auction = "disenchant", bag = "disenchantbags", material = "disenchantmaterial" }
 ns.Columns:Register("disenchant", L["Disenchanting: auction house"], VIEWS.auction.columns)
 ns.Columns:Register("disenchantbags", L["Disenchanting: my bags"], VIEWS.bag.columns)
+ns.Columns:Register("disenchantmaterial", L["Disenchanting: find a material"], VIEWS.material.columns)
 
 local state = {
     view = "auction",
@@ -81,6 +91,8 @@ local state = {
     beatsOnly = false,
     selected = nil,
     hidden = 0,
+    -- The material Find a material shows, picked the first time it opens.
+    material = nil,
 }
 
 local widgets = {}
@@ -147,7 +159,8 @@ local function ToggleBought(entry)
 end
 
 local function SameRow(a, b)
-    return a and b and a.kind == b.kind and a.itemID == b.itemID
+    return a and b and a.kind == b.kind and a.itemID == b.itemID and a.mob == b.mob
+        and a.recipeID == b.recipeID
 end
 
 --- How many disenchants this session and what they gave, or 0 before the first.
@@ -232,7 +245,60 @@ local function CreateRow(row)
     ApplyRowLayout(row)
 end
 
+--- "Looted, Felpaw Ravager", "You made it" or "Broken by you", for a row of
+--- what you've gotten the material from.
+local function HowText(entry)
+    if entry.how == "made" then return L["You made it"] end
+    if entry.how == "looted" and entry.mob then return L.Format("Looted, %s", entry.mob) end
+    return L["Broken by you"]
+end
+
+--- A cell of the Find a material view.
+local function FillMaterialCell(cell, key, entry)
+    local Finder = ns.MaterialFinder
+    local color, text = "muted", ""
+
+    if entry.kind == "section" then
+        text = ""
+    elseif key == "each" then
+        if entry.costEach then
+            cell:SetText(Money(entry.costEach))
+            cell:SetTextColor(Theme.Unpack("text"))
+            return
+        elseif entry.kind == "farm" and entry.perHour then
+            text, color = L.Format("about %s an hour", tostring(math.floor(entry.perHour * 10 + 0.5) / 10)), "dim"
+        elseif entry.kind == "bag" then
+            text, color = L.Format("you have %d", entry.count or 0), "dim"
+        end
+    elseif key == "odds" then
+        if entry.kind == "had" then
+            text, color = L.Format("%d of %d", entry.times or 0, entry.casts or 0), "text"
+        elseif entry.kind == "farm" then
+            text, color = Finder.KillText(entry.perKill), "text"
+        else
+            text, color = Finder.OddsText(entry.chance), "text"
+        end
+    elseif key == "where" then
+        if entry.kind == "had" then
+            text = HowText(entry)
+        elseif entry.kind == "bag" then
+            text = L.Format("In your bags (%d)", entry.count or 0)
+        elseif entry.kind == "auction" then
+            text = L["Auction house"]
+        elseif entry.kind == "craft" then
+            text = L["Your craft"]
+        elseif entry.kind == "farm" then
+            text = entry.shownZone or entry.zone or ""
+        end
+    end
+
+    cell:SetText(text or "")
+    cell:SetTextColor(Theme.Unpack(color))
+end
+
 local function FillCell(cell, key, entry)
+    if state.view == "material" then return FillMaterialCell(cell, key, entry) end
+
     local color = "muted"
     local text
 
@@ -289,6 +355,27 @@ end
 local function UpdateRow(row, entry)
     if row.view ~= state.view or row.columnsVersion ~= ns.Columns.version then ApplyRowLayout(row) end
 
+    -- A section's heading in the Find a material view: gold words, no icon.
+    if entry.kind == "section" then
+        Theme.SetItemIcon(row.icon, nil)
+        Theme.SetRowName(row.name, entry.name)
+        row.name:SetTextColor(Theme.Unpack("accent"))
+        for index in ipairs(ViewColumns()) do row.cells[index]:SetText("") end
+        return
+    end
+
+    -- A mob to farm wears the icon of its best drop.
+    if entry.kind == "farm" then
+        Theme.SetRowName(row.name, entry.name or "")
+        local best = entry.items and entry.items[1]
+        Theme.SetItemIcon(row.icon, best and best.id)
+        row.name:SetTextColor(Theme.Unpack("text"))
+        for index, column in ipairs(ViewColumns()) do
+            FillCell(row.cells[index], column.key, entry)
+        end
+        return
+    end
+
     Theme.SetRowName(row.name, (entry.name or L.Format("item %s", tostring(entry.itemID)))
         .. (entry.bought and BOUGHT_TAG or ""))
     -- A bag row carries its link, so the upgrade arrow judges that very copy.
@@ -335,7 +422,58 @@ local function ShowBagTooltip(entry)
     GameTooltip:Show()
 end
 
+--- The material's name, as the client gives it.
+local function MaterialName()
+    return state.material and ns.Disenchant:ItemName(state.material) or L["it"]
+end
+
+--- The tooltip of a row in the Find a material view.
+local function ShowMaterialTooltip(row, entry)
+    if entry.kind == "farm" then
+        GameTooltip:SetOwner(row, "ANCHOR_LEFT")
+        GameTooltip:SetText(entry.name or "", 1, 1, 1)
+        if entry.zone then GameTooltip:AddLine(entry.shownZone or entry.zone, 0.7, 0.7, 0.7) end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(L.Format("You've killed %d. From their drops, about %s.", entry.kills or 0,
+            ns.MaterialFinder.KillText(entry.perKill)), 0.9, 0.9, 0.9, true)
+        if entry.perHour then
+            GameTooltip:AddLine(L.Format("At your pace, about %s an hour.",
+                tostring(math.floor(entry.perHour * 10 + 0.5) / 10)), 0.35, 0.85, 0.45, true)
+        end
+        for _, item in ipairs(entry.items or {}) do
+            GameTooltip:AddLine(L.Format("Drops %s (%d times)", item.name or "?", item.corpses or 0), 0.7, 0.7, 0.7)
+        end
+        GameTooltip:AddLine(L["Click to see more."], 0.5, 0.5, 0.5)
+        GameTooltip:Show()
+        return
+    end
+
+    Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID, entry.name)
+    GameTooltip:AddLine(" ")
+
+    if entry.kind == "had" then
+        GameTooltip:AddLine(L.Format("You broke %d. %d of them gave %s.", entry.casts or 0, entry.times or 0,
+            MaterialName()), 0.9, 0.9, 0.9, true)
+    else
+        if (entry.chance or 0) >= 0.995 then
+            GameTooltip:AddLine(L.Format("Breaking one gives %s every time.", MaterialName()), 0.9, 0.9, 0.9, true)
+        else
+            GameTooltip:AddLine(L.Format("Breaking one gives %s about 1 in %d times.", MaterialName(),
+                math.max(2, math.floor(1 / math.max(entry.chance or 0, 0.0001) + 0.5))), 0.9, 0.9, 0.9, true)
+        end
+        if entry.costEach then
+            GameTooltip:AddLine(L.Format("That's about %s for each one you get.",
+                Util.FormatMoney(entry.costEach, { noColor = true })), 0.35, 0.85, 0.45, true)
+        end
+    end
+    GameTooltip:AddLine(L["Click to see more."], 0.5, 0.5, 0.5)
+    GameTooltip:Show()
+end
+
 local function ShowRowTooltip(row, entry)
+    if entry.kind == "section" then return end
+    if state.view == "material" then return ShowMaterialTooltip(row, entry) end
+
     Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.itemID, entry.name)
 
     if entry.kind == "bag" then return ShowBagTooltip(entry) end
@@ -453,6 +591,29 @@ local function BuildDetail(parent)
     end, { width = 120, primary = true, height = 24 })
     disenchantButton:SetPoint("BOTTOMLEFT", 12, 14)
     detail.disenchantButton = disenchantButton
+
+    -- Find a material: Queue one for a craft, Show for a mob to farm.
+    local actionButton = Widgets.CreateButton(detail, L["Queue one"], function()
+        local entry = state.selected
+        if not entry then return end
+        if entry.kind == "craft" and entry.recipeID then
+            local ok, why = ns.Queue:Add(entry.recipeID, 1)
+            if ok then
+                ns.Print(L.Format("Queued one %s to make and break.", entry.name or L["item"]))
+            else
+                ns.Print(why or L["That craft can't be queued right now."])
+            end
+        elseif entry.kind == "farm" then
+            local farm = _G.BlackthornesFarmer and _G.BlackthornesFarmer.DisenchantFarm
+            local ok, shown = pcall(function() return farm:Show(entry.mob) end)
+            if not (ok and shown) then
+                ns.Print(L.Format("Couldn't open %s in Farmer.", entry.mob or L["it"]))
+            end
+        end
+    end, { width = 140, primary = true, height = 24 })
+    actionButton:SetPoint("BOTTOMLEFT", 12, 14)
+    actionButton:Hide()
+    detail.actionButton = actionButton
 
     local disenchantStatus = Theme.CreateLabel(detail, "tiny", "warn")
     disenchantStatus:SetPoint("LEFT", disenchantButton, "RIGHT", 8, 0)
@@ -649,9 +810,93 @@ local function UpdateBagDetail(entry)
     UpdateDisenchantButton(entry)
 end
 
+-- Rows of the Find a material view with a detail of their own; its bag and
+-- auction rows show their item as the other views do.
+local OWN_DETAIL = { had = true, craft = true, farm = true }
+
+--- Give the action button its words and the width they need.
+local function SetAction(text)
+    local button = widgets.detail.actionButton
+    button:SetText(text)
+    local label = rawget(button, "label")
+    local ok, width = false, nil
+    if label then ok, width = pcall(label.GetStringWidth, label) end
+    button:SetWidth(math.max(140, (ok and type(width) == "number" and math.ceil(width) or 0) + 28))
+    button:Show()
+end
+
+--- The detail panel for a row of the Find a material view that is not an
+--- item to break now or buy.
+local function UpdateMaterialDetail(entry)
+    local detail = widgets.detail
+    local lines = detail.lines
+    local material = MaterialName()
+    local Finder = ns.MaterialFinder
+
+    detail.subtitle:SetTextColor(Theme.Unpack("muted"))
+
+    if entry.kind == "had" then
+        detail.heading:Hide()
+        detail.subtitle:SetText(L.Format("You've broken this before, and it gave %s.", material))
+        SetLine(lines[1], L["You broke"], tostring(entry.casts or 0), "text")
+        SetLine(lines[2], L["Times it gave one"], tostring(entry.times or 0), "profit")
+        SetLine(lines[3], L["How many in all"], tostring(entry.total or 0), "text")
+        SetLine(lines[4], L["How you got it"], HowText(entry), "muted")
+        detail.verdict:SetText(L.Format("%d of your %d gave %s.", entry.times or 0, entry.casts or 0, material))
+        detail.verdict:SetTextColor(Theme.Unpack("profit"))
+        detail.note:SetText(L["From your own disenchants."])
+        return
+    end
+
+    if entry.kind == "craft" then
+        detail.subtitle:SetText(L.Format("You can make this. %d ready to make now.", entry.craftableNow or 0))
+        DrawOutcomes(detail, entry.breakdown or {})
+        SetLine(lines[1], L["Materials cost"], entry.cost and Util.FormatMoney(entry.cost) or L["no price"],
+            entry.cost and "text" or "dim")
+        SetLine(lines[2], L["Odds"], Finder.OddsText(entry.chance), "text")
+        SetLine(lines[3], L.Format("Cost for each %s", material),
+            entry.costEach and Util.FormatMoney(entry.costEach) or L["no price"], entry.costEach and "text" or "dim")
+        SetLine(lines[4], nil)
+        detail.verdict:SetText(L["Make it, then break it."])
+        detail.verdict:SetTextColor(Theme.Unpack("profit"))
+        local facts = entry.breakdown and entry.breakdown.facts or {}
+        detail.note:SetText(facts.source == "yours"
+            and L.Format("Chances come from %s.", ns.Disenchant:YoursPhrase(facts))
+            or L["Rough chances for now. They get better as you disenchant."])
+        SetAction(L["Queue one"])
+        return
+    end
+
+    -- A mob to farm.
+    detail.heading:Hide()
+    local best = entry.items and entry.items[1]
+    Theme.SetItemIcon(detail.icon, best and best.id)
+    detail.subtitle:SetText(entry.shownZone or entry.zone or "")
+    SetLine(lines[1], L["Your kills"], tostring(entry.kills or 0), "text")
+    SetLine(lines[2], L["Odds"], Finder.KillText(entry.perKill), "text")
+    SetLine(lines[3], L["An hour"], entry.perHour
+        and L.Format("about %s", tostring(math.floor(entry.perHour * 10 + 0.5) / 10)) or L["not timed yet"],
+        entry.perHour and "profit" or "dim")
+    SetLine(lines[4], nil)
+
+    local names = {}
+    for _, item in ipairs(entry.items or {}) do names[#names + 1] = item.name end
+    detail.verdict:SetText(#names > 0 and L.Format("Break what it drops: %s.", table.concat(names, ", ")) or "")
+    detail.verdict:SetTextColor(Theme.Unpack("profit"))
+    detail.note:SetText(L["From your own kills."])
+    SetAction(L["Show in Farmer"])
+end
+
 local function UpdateDetail(entry)
+    -- A bag or auction row of Find a material shows its item as the other
+    -- views do.
+    if entry and entry.source and (entry.kind == "bag" or entry.kind == "auction") then
+        entry = entry.source
+    end
+
     local detail = widgets.detail
     local shown = entry ~= nil
+    local own = shown and OWN_DETAIL[entry.kind] or false
     local isBag = shown and entry.kind == "bag"
 
     detail.empty:SetShown(not shown)
@@ -665,7 +910,8 @@ local function UpdateDetail(entry)
         part:SetShown(shown)
     end
 
-    detail.searchButton:SetShown(shown and not isBag)
+    detail.searchButton:SetShown(shown and not isBag and not own)
+    detail.actionButton:Hide()
 
     -- Hiding the button takes the secure button away with it.
     detail.disenchantButton:SetShown(isBag)
@@ -677,6 +923,7 @@ local function UpdateDetail(entry)
     Theme.SetItemIcon(detail.icon, entry.itemID, entry.link)
 
     if isBag then return UpdateBagDetail(entry) end
+    if own then return UpdateMaterialDetail(entry) end
 
     local breakdown = entry.breakdown or {}
     local facts = breakdown.facts or {}
@@ -775,8 +1022,48 @@ local function BuildBagRows()
     return filtered
 end
 
+--- The Find a material view: a heading for each way, then its rows. A way
+--- with nothing to show, or nothing matching the search, is left out.
+local function BuildMaterialRows()
+    local Finder = ns.MaterialFinder
+    local materialID = state.material
+    if not (Finder and materialID) then return {} end
+
+    local needle = state.search:lower()
+    local function Matches(row)
+        if needle == "" then return true end
+        for _, text in ipairs({ row.name or "", row.zone or "", row.shownZone or "", row.mob or "" }) do
+            if text:lower():find(needle, 1, true) then return true end
+        end
+        return false
+    end
+
+    local rows = {}
+    local function Section(title, list)
+        local headed = false
+        for _, row in ipairs(list or {}) do
+            if Matches(row) then
+                if not headed then
+                    rows[#rows + 1] = { kind = "section", name = title }
+                    headed = true
+                end
+                rows[#rows + 1] = row
+            end
+        end
+    end
+
+    Section(L["YOU'VE GOTTEN IT FROM"], Finder:Had(materialID))
+    local ways = Finder:Ways(materialID)
+    Section(L["BREAK WHAT YOU HAVE"], ways.bag)
+    Section(L["BUY AND BREAK"], ways.auction)
+    Section(L["MAKE AND BREAK"], ways.craft)
+    Section(L["FARM AND BREAK"], ways.farm)
+    return rows
+end
+
 local function BuildRows()
     if state.view == "bag" then return BuildBagRows() end
+    if state.view == "material" then return BuildMaterialRows() end
 
     local key = BuildKey()
     local changes = ns.Prices and ns.Prices.changes or 0
@@ -821,6 +1108,11 @@ end
 local function EmptyText()
     if state.search ~= "" then
         return L.Format("Nothing matching \"%s\".", state.search)
+    end
+
+    if state.view == "material" then
+        return L.Format("No ways to get %s yet. Scan the auction house, or break a few items, and they show up here.",
+            MaterialName())
     end
 
     if state.view == "bag" then
@@ -952,18 +1244,46 @@ local function RefreshBags(rows)
     if fresh and not SameRow(fresh, before) then widgets.list:Refresh() end
 end
 
+--- The count line and the picked row, for Find a material.
+local function RefreshMaterial(rows)
+    local materialID = state.material
+    local have = 0
+    if materialID and ns.Inventory and ns.Inventory.GetBagCounts then
+        local ok, counts = pcall(ns.Inventory.GetBagCounts, ns.Inventory)
+        have = ok and type(counts) == "table" and counts[materialID] or 0
+    end
+    local price = materialID and ns.Prices and ns.Prices:GetValue(materialID)
+    local text = L.Format("You have %d", have)
+    if price and price > 0 then
+        text = text .. L.Format("  ·  Sells for %s", Util.FormatMoney(price, { noColor = true, short = true }))
+    end
+    widgets.countLabel:SetText(text)
+
+    local fresh
+    for _, row in ipairs(rows) do
+        if row.kind ~= "section" and SameRow(row, state.selected) then
+            fresh = row
+            break
+        end
+    end
+    state.selected = fresh
+    UpdateDetail(fresh)
+end
+
 local function Refresh()
     if not widgets.list then return end
 
     local rows = BuildRows()
-    -- A clicked heading's order over the list's own.
-    if widgets.sorter then rows = widgets.sorter:Sort(rows) end
+    -- A clicked heading's order over the list's own. Find a material keeps
+    -- its ways under their headings.
+    if widgets.sorter and state.view ~= "material" then rows = widgets.sorter:Sort(rows) end
     widgets.list:SetData(rows)
 
     widgets.emptyLabel:SetShown(#rows == 0)
     if #rows == 0 then widgets.emptyLabel:SetText(EmptyText()) end
 
     if state.view == "bag" then return RefreshBags(rows) end
+    if state.view == "material" then return RefreshMaterial(rows) end
 
     local deals, total = 0, 0
     for _, row in ipairs(rows) do
@@ -1039,11 +1359,22 @@ local function ApplyView()
         widgets.sorter:Sync()
     end
 
-    local isBag = state.view == "bag"
-    widgets.dealsOnly:SetShown(not isBag)
-    widgets.hideTooHigh:SetShown(not isBag)
+    local isBag, isMaterial = state.view == "bag", state.view == "material"
+    widgets.dealsOnly:SetShown(state.view == "auction")
+    widgets.hideTooHigh:SetShown(state.view == "auction")
     widgets.beatsOnly:SetShown(isBag)
     widgets.hint:SetText(view.hint)
+
+    -- The material picker, its names as the client gives them.
+    if isMaterial then
+        local options = {}
+        for _, material in ipairs(ns.Disenchant.MATERIALS) do
+            options[#options + 1] = { value = material.itemID, text = ns.Disenchant:ItemName(material.itemID) or material.name }
+        end
+        widgets.material:SetOptions(options)
+        widgets.material:SetValue(state.material)
+    end
+    widgets.material:SetShown(isMaterial)
 end
 
 local function Build(container)
@@ -1068,15 +1399,43 @@ local function Build(container)
     search:SetPoint("LEFT", 0, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
-    local view = Widgets.CreateCheckbox(toolbar, L["Items in my bags"], function(checked)
-        state.view = checked and "bag" or "auction"
+    local function SwitchTo(name)
+        state.view = name
         state.selected = nil
+        widgets.view:SetChecked(name == "bag")
+        widgets.find:SetChecked(name == "material")
         ApplyView()
         widgets.list:ScrollToTop()
         Refresh()
+    end
+
+    local view = Widgets.CreateCheckbox(toolbar, L["Items in my bags"], function(checked)
+        SwitchTo(checked and "bag" or "auction")
     end, state.view == "bag")
     view:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.view = view
+
+    -- Find a material (2026-10-16): pick a material and see every way to get
+    -- one. At the toolbar's right end, so the other tick boxes keep their
+    -- places.
+    local find = Widgets.CreateCheckbox(toolbar, L["Find a material"], function(checked)
+        if checked and not state.material and ns.MaterialFinder then
+            state.material = ns.MaterialFinder:FirstPick()
+        end
+        SwitchTo(checked and "material" or "auction")
+    end, state.view == "material")
+    find:SetPoint("RIGHT", toolbar, "RIGHT", 0, 0)
+    widgets.find = find
+
+    local material = Widgets.CreateDropdown(toolbar, {}, function(value)
+        state.material = value
+        state.selected = nil
+        widgets.list:ScrollToTop()
+        Refresh()
+    end, { width = 200 })
+    material:SetPoint("LEFT", view, "RIGHT", 12, 0)
+    material:Hide()
+    widgets.material = material
 
     local dealsOnly = Widgets.CreateCheckbox(toolbar, L["Only deals over my minimums"], function(checked)
         state.dealsOnly = checked
@@ -1148,6 +1507,7 @@ local function Build(container)
     end
     ns.Columns:OnChange("disenchant", ColumnsChanged)
     ns.Columns:OnChange("disenchantbags", ColumnsChanged)
+    ns.Columns:OnChange("disenchantmaterial", ColumnsChanged)
 
     local divider = Theme.CreateDivider(container, "borderLit")
     divider:SetPoint("TOPLEFT", headings, "BOTTOMLEFT", 0, -2)
@@ -1170,11 +1530,16 @@ local function Build(container)
         end,
 
         onClick = function(entry, _, mouseButton)
+            if entry.kind == "section" then return end
             state.selected = entry
             UpdateDetail(entry)
 
             if mouseButton == "RightButton" then
-                if entry.kind == "bag" then ToggleBought(entry) else SearchAuctionHouse(entry) end
+                if entry.kind == "bag" then
+                    ToggleBought(entry)
+                elseif entry.kind == "auction" then
+                    SearchAuctionHouse(entry)
+                end
             end
         end,
     })
