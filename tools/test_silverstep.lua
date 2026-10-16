@@ -82,7 +82,7 @@ assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 local Util, Profit = ns.Util, ns.Profit
 
 local function Reset()
-    settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 1, minProfit = 0 }
+    settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 2, minProfit = 0 }
     prices = {}
     recipeByOutput = {}
     craftCost = {}
