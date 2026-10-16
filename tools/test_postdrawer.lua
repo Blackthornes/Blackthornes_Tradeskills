@@ -137,6 +137,28 @@ check("how many at what price", Has("3 at 900 each"))
 check("its total", Has("Total=2700"))
 check("and what comes after", Has("Then: Item 9 x2"))
 
+-- Still hovered after a click: the hover is drawn again for the next stack,
+-- once, and never for a tooltip that belongs to something else.
+local entered = 0
+button.IsMouseOver = function() return true end
+button.GetScript = function(_, name)
+    if name == "OnEnter" then return function() entered = entered + 1 end end
+end
+local owner = button
+GameTooltip = { IsOwned = function(_, frame) return frame == owner end }
+PostPanel:UpdateListAll(lines)
+check("an unchanged next stack leaves the hover alone", entered == 0)
+local listed = table.remove(lines, 2)
+PostPanel:UpdateListAll(lines)
+check("a new next stack draws the hover again", entered == 1)
+PostPanel:UpdateListAll(lines)
+check("but only once", entered == 1)
+owner = nil
+table.insert(lines, 2, listed)
+PostPanel:UpdateListAll(lines)
+check("someone else's tooltip is left alone", entered == 1)
+GameTooltip, button.IsMouseOver, button.GetScript = nil, nil, nil
+
 ns.Posting.WouldCheckAll = function() return true end
 PostPanel:UpdateListAll(lines)
 check("a click that checks prices says so", button.text == "Check Prices - 2 to list")
