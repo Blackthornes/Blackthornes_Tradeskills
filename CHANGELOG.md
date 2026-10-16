@@ -4,6 +4,32 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.61.0
+
+For WoW: Forever (interface 16001). A file was added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Find a material:** the Disenchanting tab can show what gave you an
+  enchanting material before, and the ways to get more: break what you
+  carry, buy and break, make and break, or farm and break with Farmer's
+  record of your own kills. Each shows its odds and cost for each one.
+- **Overcutting:** post just under a big stack when a few cheap listings
+  sell first. Off until you tick it on the Pricing page.
+- **List Next:** the button says what its next click does, and its hover
+  shows the next stack.
+- **Raise When Sold Out:** Keep in stock also comes back down by 1 after 3
+  unsold rounds in a row, never below where it started. Settings > Queue
+  lists what it changed, each with Reset.
+- **Enchants for your gear:** with Blackthornes Equipment, the Level Up tab
+  shows a green arrow and "For you" on an enchanting recipe that beats what
+  you wear.
+- **Profit:** the auction house deposit is no longer taken off, since it
+  comes back when the item sells.
+- **Favors and Writs:** Merchant's Favor rewards and the Artisan crates are
+  corrected.
+- **Auction house drawer:** the Post Crafted button is off for now.
+- **Bug fixes:** various fixes to Tradeskills.
+
 ## 0.60.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so

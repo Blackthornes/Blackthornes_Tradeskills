@@ -23,6 +23,20 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.61.0
+
+- The Disenchanting tab has a Find a material view. Pick an enchanting material to see what gave it to you before and the best ways to get more.
+- Overcutting posts just under a big stack when a few cheap ones sell first. It's off until you turn it on.
+- The List Next button says what its next click does and shows the next stack when you hover it.
+- Keep in stock also comes back down after 3 unsold rounds in a row. Settings lists what it changed, with a Reset.
+- With Equipment, enchanting recipes get a green arrow when they beat what you wear.
+
+Fixes and changes:
+
+- Profit no longer takes off the auction house deposit, since it comes back when the item sells.
+- Merchant's Favor rewards and the Artisan crates are corrected.
+- Various fixes to Tradeskills.
+
 ## 0.60.0
 
 - The Profit tab has a Your time view. It compares farming the materials, selling them as they are, and buying them, in gold an hour.
