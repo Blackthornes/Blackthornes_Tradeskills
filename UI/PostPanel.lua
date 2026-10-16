@@ -335,6 +335,10 @@ function UpdateRow(row, line)
         if DetailTooWide(row) then row.detail:SetText(each) end
     end
 
+    -- Another Blackthornes addon wants it kept: why, in place of the price
+    -- (the price is on the tooltip and the List button).
+    if line.held then row.detail:SetText(line.held) end
+
     -- The field round the price line, as wide as its words.
     if row.priceField then
         local width = Theme.TextWidth(row.detail)
@@ -343,7 +347,10 @@ function UpdateRow(row, line)
         row.priceField:SetWidth(math.max(40, (width or 60) + 8))
     end
 
-    if line.atALoss then
+    if line.held then
+        row.name:SetTextColor(Theme.Unpack("muted"))
+        row.detail:SetTextColor(Theme.Unpack("accent"))
+    elseif line.atALoss then
         row.name:SetTextColor(Theme.Unpack("loss"))
         row.detail:SetTextColor(Theme.Unpack("loss"))
     else
@@ -363,7 +370,9 @@ function UpdateRow(row, line)
 
     row.post:SetEnabledState(line.unitPrice ~= nil)
 
-    row.post.tooltipText = line.atALoss
+    row.post.tooltipText = line.held
+        and L.Format("%s. A click still lists it.", line.held)
+        or line.atALoss
         and LossText(line)
         or L.Format("List %d of %d at %s each.",
             line.postQuantity, maxQuantity,
@@ -383,6 +392,16 @@ end
 local function ShowRowTooltip(row, line)
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID, line.label)
     GameTooltip:AddLine(" ")
+
+    -- Another Blackthornes addon wants it kept (Logic/SisterKeeps.lua).
+    if line.held then
+        GameTooltip:AddLine(line.held, Theme.Unpack("accent"))
+        GameTooltip:AddLine(L["List all leaves it. Its List button still lists it."], 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(" ")
+    elseif line.kept and line.keptWhy then
+        GameTooltip:AddLine(L.Format("%d kept back: %s", line.kept, line.keptWhy), Theme.Unpack("accent"))
+        GameTooltip:AddLine(" ")
+    end
 
     GameTooltip:AddDoubleLine(L["In bags"], tostring(line.count), 0.7, 0.7, 0.7, 1, 1, 1)
     GameTooltip:AddDoubleLine(L["Listing"], L.Format("%d of %d",
@@ -707,7 +726,7 @@ end
 
 --- The lines Sell shows now, Hide losses applied.
 function PostPanel:ShownLines()
-    local lines = ns.Posting:GetPostable({ includeAll = true })
+    local lines = ns.Posting:GetPostable({ includeAll = true, showHeld = true })
     local hidden = 0
     if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
     return lines, hidden
@@ -1657,10 +1676,14 @@ function PostPanel:Refresh()
         return
     end
 
-    local total, losses = 0, 0
+    local total, losses, keptBack = 0, 0, 0
     for _, line in ipairs(lines) do
-        total = total + (line.postTotal or 0)
-        if line.atALoss then losses = losses + 1 end
+        if line.held then
+            keptBack = keptBack + 1
+        else
+            total = total + (line.postTotal or 0)
+            if line.atALoss then losses = losses + 1 end
+        end
     end
 
     -- What it would all fetch, in gold beside the title, so it is still
@@ -1680,7 +1703,8 @@ function PostPanel:Refresh()
             and L.Format("%d item, about %s", #lines, about)
             or L.Format("%d items, about %s", #lines, about))
         .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))
-            or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or ""))
+            or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or "")
+        .. (keptBack > 0 and ("  ·  " .. L.Format("%d kept for your other addons", keptBack)) or ""))
 end
 
 --- The Auctions switch says how many of yours are undercut, in red, so it

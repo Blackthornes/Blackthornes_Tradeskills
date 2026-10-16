@@ -138,6 +138,11 @@ local DEFAULTS = {
         -- by default. See Logic/CraftedCost.lua.
         neverBelowCraftedCost = false,
 
+        -- Leave on the Sell list, dimmed, what Blackthornes Farmer, Equipment,
+        -- Pets and Butler want kept, so List all never posts it
+        -- (Logic/SisterKeeps.lua, 2026-10-16). On unless unticked.
+        sellHoldsSisterKeeps = true,
+
         -- Hide crafts that have hit their posted limit rather than showing
         -- them greyed out.
         hideAtPostLimit = true,

@@ -86,6 +86,22 @@ check("an expiry sold nothing", s.total.n, 5)
 check("old sales are outside the period", s.methods.crafted.items[BOLT].n, 1)
 check("items sort best first", s.methods.crafted.list[1].itemID, SWORD)
 
+print("\nfarmed, from Blackthornes Farmer")
+check("without Farmer there is no Farmed", s.methods.farmed.n, 0)
+local asked = 0
+BlackthornesFarmer = { Looted = { Has = function(_, id) asked = asked + 1; return id == LOOT end } }
+s = MP:Summary(now - 3600, now + 1)
+check("looted by you: Farmed", s.methods.farmed.n, 1)
+check("and all profit", s.methods.farmed.profit, 700)
+check("no longer under Other", s.methods.other.n, 0)
+check("a flip you also looted stays a flip", s.methods.flipped.n, 2)
+check("Farmer is asked once an item", asked, 1)
+BlackthornesFarmer = { Looted = { Has = function() error("boom") end } }
+s = MP:Summary(now - 3600, now + 1)
+check("a Farmer that raises: back to Other", s.methods.other.n, 1)
+BlackthornesFarmer = nil
+s = MP:Summary(now - 3600, now + 1)
+
 print("\nvendor buyback")
 local list = { { itemID = LOOT, quantity = 2, price = 40 } }
 MP:NoteBuyback(list)

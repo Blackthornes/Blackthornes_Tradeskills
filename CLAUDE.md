@@ -818,6 +818,54 @@ the first look of a visit is the baseline) and disenchants from
 the panel says how many. Tested in `tools/test_methodprofit.lua`. Not yet
 seen in game.
 
+Farmed (the owner said build it, 2026-10-16): an auction sale with no cost
+known goes under Farmed, not Other sales, when Blackthornes Farmer says
+you looted, gathered or fished it yourself (`MethodProfit:Farmed`, asked
+once an item per Summary, inside a pcall, read only):
+
+```lua
+_G.BlackthornesFarmer.Looted:Has(itemID)   -- true or false; its own records only
+```
+
+Without Farmer it stays Other sales. If Farmer changes the call, change
+`MethodProfit:Farmed` too.
+
+## What the other addons want kept (the Sell list)
+
+The owner said build it (2026-10-16): the auction house drawer's Sell list
+and List all used to offer the whole bag, holding back only what the craft
+queue needs. `Logic/SisterKeeps.lua` asks the sisters what they would keep,
+through the calls they already make for Butler, inside a pcall, read only:
+
+```lua
+_G.BlackthornesFarmer.Butler:Advise(itemID)             -- a goal: up to its target
+_G.BlackthornesFarmer.Value:Contents(name)              -- a clam worth more opened
+_G.BlackthornesEquipment.Butler:Advise(link, bag, slot) -- upgrade, alt, tool
+_G.BlackthornesPets.Butler:Advise(itemID)               -- eats (not buff food)
+_G.BlackthornesButler.Verdicts:Choice(itemID)           -- keep, bank, mail
+_G.BlackthornesButler.Verdicts:InSet(itemID)            -- an equipment set
+_G.BlackthornesButler.Quests:Reason(itemID)             -- an open quest
+```
+
+`Posting:GetPostable` takes off what is held (`line.kept`, `keptWhy`); one
+held whole is left out, or with `showHeld` (the drawer) kept as a dimmed
+row whose detail is why (`line.held`), its own List button still working.
+`GetNextPostable` and `GetSummary` never pick a held line, so List all and
+Post Crafted never post one; the drawer's summary counts them. Answers are
+kept per bag copy until `Inventory.changes` moves or `KEEP` seconds pass.
+"Keep What Other Addons Need" on the Pricing page (`sellHoldsSisterKeeps`,
+on unless unticked, never rename it). Tested in
+`tools/test_sisterkeeps.lua`. If a sister changes a call, change this file
+too. Not yet seen in game.
+
+Also from the sisters (2026-10-16): the Gather tab's tooltip says how fast
+you farm a material and how long the rest would take (`CraftOrFarm:PaceOf`,
+the Your time view's Farmer call), and crafted gear that's an upgrade for
+another of your characters says so after its name on the Profit, Level Up
+and Queue tabs (`Upgrades:AltFor`, `AltText`, `WithAltText`, from
+Equipment's `Butler:Advise` `alt`; off with the upgrade arrows; tested in
+`tools/test_altupgradecrafts.lua`).
+
 ## The public price API
 
 The owner said yes (2026-10-12) to a documented price call for other

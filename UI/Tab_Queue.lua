@@ -216,6 +216,10 @@ local function UpdateCraftRow(row, entry)
 
     local plain = (recipe and recipe.name) or L.Format("recipe %s", tostring(entry.recipeID))
     local label = plain
+    -- Gear another of your characters would wear (Logic/Upgrades.lua).
+    if recipe and ns.Upgrades and ns.Upgrades.WithAltText then
+        label = ns.Upgrades:WithAltText(plain, recipe.outputItemID)
+    end
     Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
 
     -- Marked so a craft the player did not add directly is explicable.

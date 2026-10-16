@@ -994,6 +994,9 @@ end
 --   of this account's recipes makes. The number of each reagent a queued
 --   craft is waiting on is still held back, because listing those costs
 --   real work to undo.
+-- @param opts.showHeld  keep rows another addon wants all of kept (line.held,
+--   the reason), so the Sell list can show them dimmed; nothing that picks
+--   what to list ever takes one.
 -- @param opts.includeUnpriced  keep items no scan has ever priced, which only
 --   the Post tab wants; every caller that picks something to list on the
 --   player's behalf must not see them.
@@ -1070,8 +1073,29 @@ function Posting:GetPostable(opts)
                 count = count - (type(keep) == "number" and keep or count)
             end
 
+            -- What the other Blackthornes addons want kept (a Farmer goal,
+            -- an upgrade, pet food, Butler's lists, a quest, a clam worth
+            -- more opened): only that many held back. All of it held, the
+            -- row still shows dimmed with why when the caller asks
+            -- (showHeld), so the player can list it by hand, but List all
+            -- and Post Crafted never pick it (GetNextPostable).
+            local heldAll, kept, keptWhy
+            if count and count > 0 and ns.SisterKeeps then
+                local ok, hold, why = pcall(ns.SisterKeeps.Hold, ns.SisterKeeps, itemID, held, count, price)
+                hold = ok and tonumber(hold) or 0
+                if hold > 0 and type(why) == "string" then
+                    if hold >= count then
+                        heldAll = why
+                    else
+                        count, kept, keptWhy = count - hold, hold, why
+                    end
+                end
+            end
+
             if keep and count and count <= 0 then
                 skipped[itemID] = "kept for a queued craft"
+            elseif heldAll and not opts.showHeld then
+                skipped[itemID] = "kept for another addon: " .. heldAll
             elseif not sellable then
                 skipped[itemID] = "the auction house says it cannot be sold"
             elseif not count or count <= 0 then
@@ -1115,7 +1139,8 @@ function Posting:GetPostable(opts)
             -- that claims to show their bags.
             local needsPrice = opts.includeAll and not opts.includeUnpriced
 
-            if sellable and count > 0 and (price or not needsPrice) then
+            if sellable and count > 0 and (price or not needsPrice)
+                    and (opts.showHeld or not heldAll) then
                 lines[#lines + 1] = {
                     itemID = itemID,
                     recipeID = outputs[itemID],
@@ -1144,6 +1169,11 @@ function Posting:GetPostable(opts)
                     -- Whether one of this account's recipes makes it, so the
                     -- tab can tell crafted stock from the rest of the bag.
                     isCrafted = outputs[itemID] ~= nil,
+                    -- Why another addon wants it all kept, or how many it
+                    -- kept back and why (SisterKeeps).
+                    held = heldAll,
+                    kept = kept,
+                    keptWhy = keptWhy,
                     -- The copy itself when it has a random suffix: the item
                     -- ID alone names only "Lead Band".
                     link = held and Util.LinkSuffix(held.link) and held.link or nil,
@@ -1263,7 +1293,7 @@ function Posting:GetNextPostable(opts, lines)
 
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and not line.belowCrafted
-            and not self:IsUnderFloor(line) then
+            and not line.held and not self:IsUnderFloor(line) then
             if skipSettling and self:PendingFor(line.itemID) then
                 settling = true
             else
@@ -1282,7 +1312,7 @@ function Posting:GetSummary(opts, lines)
     local count, total = 0, 0
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and not line.belowCrafted
-            and not self:IsUnderFloor(line) then
+            and not line.held and not self:IsUnderFloor(line) then
             count = count + 1
             total = total + (line.total or 0)
         end
