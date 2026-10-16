@@ -890,7 +890,7 @@ local function Build(outer)
         if ns.SisterKeeps then ns.SisterKeeps:Forget() end
         UI:RefreshActiveTab()
         if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
-    end, true)
+    end, false)
     widgets.sisterKeeps:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- Off unless ticked (the owner, 2026-10-16): gear for another
@@ -2055,7 +2055,7 @@ local function Refresh()
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
-    widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") ~= false)
+    widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") == true)
     widgets.altKeeps:SetChecked(Config:Get("sellHoldsAltUpgrades") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
