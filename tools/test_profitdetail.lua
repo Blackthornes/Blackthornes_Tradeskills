@@ -86,6 +86,11 @@ local labels = {}
 local function Label()
     local label = Stub({
         text = "",
+        shown = true,
+        Show = function(self) self.shown = true end,
+        Hide = function(self) self.shown = false end,
+        SetShown = function(self, v) self.shown = v and true or false end,
+        IsShown = function(self) return self.shown end,
         SetText = function(self, value) self.text = tostring(value) end,
         SetTextColor = function() end,
     })
@@ -185,7 +190,18 @@ ns.Recipes = { Count = function() return 1 end, GetAll = function() return {} en
                GetAccountWide = function() return {} end, IsDropped = function() return false end }
 ns.Prices = { Count = function() return 1 end }
 ns.Auctions = { SetLimit = function() end }
-ns.Config = { Get = function() return 0 end }
+local settings = {}
+ns.Config = { Get = function(_, key)
+    if settings[key] ~= nil then return settings[key] end
+    return 0
+end, Set = function(_, key, value) settings[key] = value end }
+-- The price graph, drawn where the materials go.
+local graphFrame
+ns.PriceGraph = { Create = function()
+    graphFrame = Frame()
+    graphFrame.SetItems = function(self, items) self.items = items end
+    return graphFrame
+end }
 ns.Queue = { Add = function() end }
 
 local lists = {}
@@ -260,5 +276,33 @@ for _, line in ipairs(tooltip) do
     if tostring(line):find("Bob Ashenmoor", 1, true) then named = true end
 end
 check("the row's tooltip has the full name", named)
+
+print("\nthe price graph has room")
+
+-- With the graph up, the summary keeps only its main rows, so the graph is
+-- tall enough to read. The rest come back with the materials.
+local function Row(text)
+    for _, label in ipairs(labels) do
+        if label.text == text then return label end
+    end
+end
+local cut, deposit, profit, perHour = Row("Auction cut"), Row("Deposit"), Row("Profit"), Row("Per hour")
+check("the rows are there to start with", cut and deposit and profit and perHour and cut.shown and deposit.shown)
+
+settings.profitShowsGraph = true
+analyses[1] = setmetatable({ recipeID = 3 }, { __index = analyses[1] })
+list.opts.onClick(analyses[1], 1, "LeftButton")
+check("the graph shows", graphFrame.shown)
+check("the auction cut steps aside", not cut.shown)
+check("and the deposit", not deposit.shown)
+check("profit stays", profit.shown)
+check("and so does per hour", perHour.shown)
+
+settings.profitShowsGraph = false
+analyses[1] = setmetatable({ recipeID = 4 }, { __index = analyses[1] })
+list.opts.onClick(analyses[1], 1, "LeftButton")
+check("back to the materials, the graph goes", not graphFrame.shown)
+check("and the cut comes back", cut.shown)
+check("with the deposit", deposit.shown)
 
 print(("\n%d check(s) passed\n"):format(checks))

@@ -243,8 +243,9 @@ local function DrawAverage(graph, average, low, high, width, height)
     end
 
     graph.averageLabel:ClearAllPoints()
-    -- Above the line, or under it when the line runs along the top.
-    if y > height - 10 then
+    -- Above the line, or under it when the line runs along the top, and
+    -- never past the plot's edge, where the times sit.
+    if y > height - 10 and y >= 12 then
         graph.averageLabel:SetPoint("TOPRIGHT", graph.plot, "BOTTOMRIGHT", 0, y - 2)
     else
         graph.averageLabel:SetPoint("BOTTOMRIGHT", graph.plot, "BOTTOMRIGHT", 0, y + 2)
