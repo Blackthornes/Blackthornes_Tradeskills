@@ -136,6 +136,41 @@ local function Row(rows, key)
     end
 end
 
+local function Crate(key)
+    for _, crate in ipairs(ns.WAYLAID_CRATES) do
+        if crate.key == key then return crate end
+    end
+end
+
+--------------------------------------------------------------------------------
+print("\nthe typed rewards")
+
+check("Journeyman Textiles pays 10 favor and 5s", Crate("journeyman-textiles").favor == 10
+    and Crate("journeyman-textiles").silver == 500)
+check("plain goods pay 5, 10 or 15 by tier, crafted goods 10, 20 or 30", (function()
+    local plain = { curiosities = true, herbs = true, earthly = true, flowering = true, ore = true, textiles = true }
+    for _, crate in ipairs(ns.WAYLAID_CRATES) do
+        if crate.favor then
+            local kind = crate.key:match("%-(%a+)$")
+            local want = (plain[kind] and 5 or 10) * crate.tier
+            if crate.favor ~= want or crate.silver ~= crate.favor * 50 then return false end
+        end
+    end
+    return true
+end)())
+check("every crate has its item ID", (function()
+    for _, crate in ipairs(ns.WAYLAID_CRATES) do
+        if type(crate.id) ~= "number" then return false end
+    end
+    return true
+end)())
+
+-- The checks below find crates by name, as for a crate the game names
+-- under another ID, so these start without a typed one.
+Crate("apprentice-herbs").id = nil
+Crate("expert-ore").id = nil
+Crate("artisan-ore").id = nil
+
 --------------------------------------------------------------------------------
 print("\nreading crate names")
 
