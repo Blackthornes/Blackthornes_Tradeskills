@@ -777,6 +777,7 @@ function PostPanel:UpdateListAll(lines)
 
     button.tooltipFunc = PostPanel.ListNextTooltip
     self:RefreshListAllLabel()
+    self:RefreshListAllTip()
 
     button:SetEnabledState(count > 0)
     button.tooltipText = count > 0
@@ -810,6 +811,39 @@ function PostPanel:RefreshListAllLabel()
 
     local width = Theme.MeasureText and Theme.MeasureText("small", label)
     button:SetWidth(math.max(110, (width or 0) + 24))
+end
+
+--- What List Next's hover shows, as one string, so it is drawn again only
+--- when that changes.
+local function ListTipKey(self, button)
+    local function LineKey(line)
+        if not line then return "" end
+        return table.concat({ tostring(line.itemID), tostring(line.link or ""),
+            tostring(line.postQuantity or 1), tostring(line.unitPrice or 0) }, ":")
+    end
+    return table.concat({ LineKey(self.nextLine), LineKey(self.afterLine),
+        tostring(self.listAllCount or 0), tostring(self.checksFirst),
+        tostring(button.waitingLabel == true and button.waitTip or "") }, "|")
+end
+
+--- After a click lists a stack the mouse is still on List Next, so its hover
+--- would keep showing the stack just listed. Draw it again for the next one,
+--- only while it is ours and only when what it shows moved.
+function PostPanel:RefreshListAllTip()
+    local button = self.listAll
+    if not button then return end
+
+    local key = ListTipKey(self, button)
+    if key == button.tipKey then return end
+    button.tipKey = key
+
+    if type(GameTooltip) ~= "table" or type(GameTooltip.IsOwned) ~= "function" then return end
+    local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, button)
+    if not (ok and owned == true) then return end
+    if button.IsMouseOver and not button:IsMouseOver() then return end
+
+    local onEnter = button.GetScript and button:GetScript("OnEnter")
+    if onEnter then pcall(onEnter, button) end
 end
 
 local function Money(copper)
@@ -1690,6 +1724,7 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
     if self.listAll and self.listAll:IsShown() and (self.listAllCount or 0) > 0 then
         self:RefreshListAllLabel()
         Apply(self.listAll, self.listAllLabel or L["List Next"], seconds, reason)
+        self:RefreshListAllTip()
     end
 
     for i = 1, #self.list.rows do
