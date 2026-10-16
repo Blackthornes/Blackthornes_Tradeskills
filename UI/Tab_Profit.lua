@@ -43,10 +43,12 @@ local COLUMNS = {
     -- Which way the profit is for (AH, Vendor, DE), when the list is
     -- ranked by whichever pays most. Ranked by one way, it says nothing.
     { key = "via",    label = L["VIA"],    width = 44, justify = "CENTER", bestOnly = true },
-    -- How long one takes, sub-crafts included, and the profit that makes
-    -- an hour (asked 2026-10-09). Shown with the "Per hour" tick box.
+    -- How long one takes, sub-crafts included (asked 2026-10-09), and what
+    -- it makes a day at the rate it sells (A DAY, 2026-10-16, in place of
+    -- GOLD/HR). Shown with the "Per day" tick box. The key stays "perHour"
+    -- so the saved column choices still find it.
     { key = "time",    label = L["TIME"],    width = 44, justify = "CENTER", perHourOnly = true },
-    { key = "perHour", label = L["GOLD/HR"], width = 74, money = true, perHourOnly = true },
+    { key = "perHour", label = L["A DAY"],   width = 74, money = true, perHourOnly = true },
     { key = "profit", label = L["PROFIT"], width = 74, money = true },
     -- Beside SELLS so the two read against each other. Only shown when
     -- something in the list can be disenchanted.
@@ -112,11 +114,11 @@ local function Method()
     return ns.Profit.GetMethod and ns.Profit:GetMethod() or nil
 end
 
--- With every column on (Per hour ticked, All characters, disenchants) the
+-- With every column on (Per day ticked, All characters, disenchants) the
 -- columns can take more room than the list has and run over the craft names
 -- and each other. Then the ones read least are set aside for as long as it
 -- lasts, least needed first, so the name keeps NAME_MIN. Nothing saved: they
--- come back once there is room. COST, SELLS, PROFIT, TIME and GOLD/HR stay.
+-- come back once there is room. COST, SELLS, PROFIT, TIME and A DAY stay.
 local NAME_MIN = 160
 local SQUEEZE_ORDER = { "age", "via", "make", "posted", "demand", "margin", "disenchant", "who" }
 local squeezed = {}
@@ -237,36 +239,46 @@ local function UpdateDisenchantCell(cells, analysis)
     end
 end
 
---- How long the craft takes and what that makes an hour. "?" until a cast
---- of every craft in it has been seen or the game says how long it is, and
---- "--" for a recipe the character playing does not know.
+--- How many a day A DAY counts on, in words: "About 4 sell a day.", or
+--- "You keep 2 listed, so it counts 2." when Keep in stock caps it.
+local function PerDayNote(analysis)
+    local sells = analysis.perDaySells or 0
+    local count = sells >= 10 and ("%d"):format(math.floor(sells + 0.5))
+        or ("%.1f"):format(sells):gsub("%.0$", "")
+    if analysis.perDayCapped then
+        return L.Format("You keep %s listed, so it counts %s a day.", count, count)
+    end
+    return L.Format("About %s sell a day.", count)
+end
+
+--- How long the craft takes, and what it makes a day at the rate it sells.
+--- The time is "?" until a cast of every craft in it has been seen or the
+--- game says how long it is, and "--" for a recipe the character playing
+--- does not know. A day is "--" without a sales estimate.
 function UpdateTimeCells(cells, analysis)
+    if analysis.perDay then
+        Theme.SetMoneyText(cells.perHour, analysis.perDay, { short = true })
+        cells.perHour:SetTextColor(Theme.ProfitColor(analysis.perDay))
+    else
+        cells.perHour:SetText("--")
+        cells.perHour:SetTextColor(Theme.Unpack("dim"))
+    end
+
     local CraftTime = ns.CraftTime
     if not CraftTime then
         cells.time:SetText("")
-        cells.perHour:SetText("")
         return
     end
 
     if analysis.knownByMe == false then
         cells.time:SetText("--")
         cells.time:SetTextColor(Theme.Unpack("dim"))
-        cells.perHour:SetText("--")
-        cells.perHour:SetTextColor(Theme.Unpack("dim"))
         return
     end
 
     local seconds = analysis.timeSeconds or analysis.craftSeconds
     cells.time:SetText(CraftTime.Format(seconds))
     cells.time:SetTextColor(Theme.Unpack(seconds and "muted" or "dim"))
-
-    if analysis.goldPerHour then
-        Theme.SetMoneyText(cells.perHour, analysis.goldPerHour, { short = true })
-        cells.perHour:SetTextColor(Theme.ProfitColor(analysis.goldPerHour))
-    else
-        cells.perHour:SetText(analysis.priceable and "?" or "--")
-        cells.perHour:SetTextColor(Theme.Unpack("dim"))
-    end
 end
 
 --- The time line on a row's tooltip: how long it takes, what is in that
@@ -292,11 +304,18 @@ local function AddTimeLines(analysis)
     local note = #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or ""
 
     GameTooltip:AddDoubleLine(L["Craft time"] .. note, CraftTime.Format(seconds), r, g, b, 1, 1, 1)
-    if analysis.goldPerHour then
-        local vr, vg, vb = Theme.Unpack(analysis.goldPerHour >= 0 and "profit" or "loss")
-        GameTooltip:AddDoubleLine(L["Per hour of casting"],
-            Util.FormatMoney(analysis.goldPerHour, { noColor = true, short = true }), r, g, b, vr, vg, vb)
-    end
+    GameTooltip:Show()
+end
+
+--- The A DAY line on a row's tooltip: what it makes a day and how many
+--- that counts on selling.
+local function AddPerDayLine(analysis)
+    if not analysis.perDay or not GameTooltip:IsShown() then return end
+    local r, g, b = 0.7, 0.7, 0.7
+    local vr, vg, vb = Theme.Unpack(analysis.perDay >= 0 and "profit" or "loss")
+    GameTooltip:AddDoubleLine(L["Profit a day"],
+        Util.FormatMoney(analysis.perDay, { noColor = true, short = true }), r, g, b, vr, vg, vb)
+    GameTooltip:AddLine(PerDayNote(analysis), r, g, b, true)
     GameTooltip:Show()
 end
 
@@ -711,7 +730,7 @@ local function BuildDetail(parent)
     }
     -- How long one takes, sub-crafts included, and the profit an hour.
     detail.timeValue = SummaryRow(11, L["Craft time"])
-    detail.perHourValue = SummaryRow(12, L["Per hour"])
+    detail.perHourValue = SummaryRow(12, L["A day"])
 
     -- What the craft breaks into, with each chance, under the mouse on the
     -- "If disenchanted" line (from the Enchanting tab, 2026-10-07).
@@ -898,15 +917,22 @@ end
 --- nothing listed left a blank line between the prices; now a hidden row's
 --- space goes to the top of the block, and the rows shown stay together just
 --- above the queue controls, in their order.
---- The craft pane's time rows: how long one takes and the profit an hour.
+--- The craft pane's time rows: how long one takes and the profit a day.
 local function UpdateTimeRows(detail, analysis)
     if type(rawget(detail, "timeValue")) ~= "table" then return end
     local CraftTime = ns.CraftTime
     local seconds = analysis.timeSeconds or analysis.craftSeconds
 
+    if analysis.perDay then
+        detail.perHourValue:SetText(Util.FormatMoney(analysis.perDay))
+        detail.perHourValue:SetTextColor(Theme.ProfitColor(analysis.perDay))
+    else
+        detail.perHourValue:SetText("--")
+        detail.perHourValue:SetTextColor(Theme.Unpack("dim"))
+    end
+
     if not CraftTime then
         detail.timeValue:SetText("--")
-        detail.perHourValue:SetText("--")
         return
     end
 
@@ -914,8 +940,6 @@ local function UpdateTimeRows(detail, analysis)
     if analysis.knownByMe == false then
         detail.timeValue:SetText("--")
         detail.timeValue:SetTextColor(Theme.Unpack("dim"))
-        detail.perHourValue:SetText("--")
-        detail.perHourValue:SetTextColor(Theme.Unpack("dim"))
         return
     end
 
@@ -931,14 +955,6 @@ local function UpdateTimeRows(detail, analysis)
     else
         detail.timeValue:SetText(L["make one to learn it"])
         detail.timeValue:SetTextColor(Theme.Unpack("dim"))
-    end
-
-    if analysis.goldPerHour then
-        detail.perHourValue:SetText(Util.FormatMoney(analysis.goldPerHour))
-        detail.perHourValue:SetTextColor(Theme.ProfitColor(analysis.goldPerHour))
-    else
-        detail.perHourValue:SetText("--")
-        detail.perHourValue:SetTextColor(Theme.Unpack("dim"))
     end
 end
 
@@ -1851,9 +1867,10 @@ local function BuildCrafts(container)
     end, false)
     showMaxed:SetPoint("LEFT", accountWide, "RIGHT", 12, 0)
 
-    -- TIME and GOLD/HR (asked 2026-10-09). Kept in Settings; off, the
+    -- TIME and A DAY (asked 2026-10-09; A DAY was GOLD/HR until
+    -- 2026-10-16). Kept in Settings (the key still says per hour); off, the
     -- craft names keep their room. The craft pane always shows both.
-    local perHour = Widgets.CreateCheckbox(toolbar, L["Per hour"], function(checked)
+    local perHour = Widgets.CreateCheckbox(toolbar, L["Per day"], function(checked)
         ns.Config:Set("profitShowsPerHour", checked == true)
         layoutVersion = layoutVersion + 1
         ApplyHeadingLayout()
@@ -1903,7 +1920,7 @@ local function BuildCrafts(container)
         disenchant = function(a) return a.disenchantValue end,
         via = function(a) return a.via end,
         time = function(a) return a.timeSeconds or a.craftSeconds end,
-        perHour = function(a) return a.goldPerHour end,
+        perHour = function(a) return a.perDay end,
         demand = function(a)
             return ns.Demand and ns.Demand:Rank(ns.Demand:Get(a.outputItemID)) or 0
         end,
@@ -1944,6 +1961,7 @@ local function BuildCrafts(container)
             end
             if not AddWaysLines(analysis) then AddDisenchantLine(analysis) end
             AddTimeLines(analysis)
+            AddPerDayLine(analysis)
             AddOwnerLine(analysis)
         end,
 
