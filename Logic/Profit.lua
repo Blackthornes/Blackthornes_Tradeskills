@@ -21,6 +21,16 @@ local SOULBOUND_REASON = L["binds on pickup, so it cannot be sold"]
 -- What to list at
 --------------------------------------------------------------------------------
 
+--- About the deposit for listing `quantity` of an item, from what the
+--- auction house said before; nil until it has said.
+local function HeldDeposit(itemID, quantity)
+    local posting = ns.Posting
+    if not posting then return nil end
+    if posting.EstimateDeposit then return posting:EstimateDeposit(itemID, quantity) end
+    local unit = posting.GetCachedUnitDeposit and posting:GetCachedUnitDeposit(itemID)
+    return unit and math.floor(unit * quantity + 0.5) or nil
+end
+
 --- Net profit for one craft, if a unit sold at this price.
 --
 -- The same arithmetic Analyse does, split out so the price can be chosen by
@@ -32,9 +42,8 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
     local revenue = unitPrice * yield
     local cut = revenue * (ns.Config:Get("auctionCut") or 0.05)
 
-    local unitDeposit = ns.Posting and ns.Posting:GetCachedUnitDeposit(recipe.outputItemID)
-    local relists = ns.Config:Get("expectedRelists") or 1
-    local deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
+    local held = HeldDeposit(recipe.outputItemID, yield)
+    local deposit = held and held * Profit.LostListings() or 0
 
     return (revenue - cut) - (cost.total or 0) - deposit
 end
@@ -503,8 +512,19 @@ end
 function Profit:NetFromListing(itemID, unitPrice)
     local cut = ns.Config:Get("auctionCut") or 0.05
     local deposit = ns.Posting:GetCachedUnitDeposit(itemID) or 0
-    local relists = math.max(1, ns.Config:Get("expectedRelists") or 1)
-    return unitPrice * (1 - cut) - deposit * relists
+    return unitPrice * (1 - cut) - deposit * Profit.LostListings()
+end
+
+--- How many deposits a sale is expected to lose.
+--
+-- The auction house hands the deposit back with the money when an item
+-- sells, so only a listing that runs out or is cancelled keeps it. The
+-- saved `expectedRelists` counts the listings it takes to sell (1, the
+-- default, sells on the first), so the deposits lost are one fewer. Counting
+-- one deposit on every sale took it off profit twice over.
+function Profit.LostListings()
+    local listings = tonumber(ns.Config:Get("expectedRelists")) or 1
+    return math.max(0, math.floor(listings) - 1)
 end
 
 --------------------------------------------------------------------------------
@@ -810,15 +830,13 @@ function Profit:Analyse(recipeID, characterKey, method)
         local revenue = listPrice * yield
         local cut = revenue * auctionCut
 
-        -- The deposit is paid up front and lost on every listing that does
-        -- not sell, so it is a real cost of selling. Ignoring it overstates
-        -- profit on every single craft.
-        local unitDeposit = ns.Posting:GetCachedUnitDeposit(recipe.outputItemID)
-        local relists = ns.Config:Get("expectedRelists") or 1
-        local deposit = unitDeposit and math.floor(unitDeposit * yield * math.max(1, relists) + 0.5) or 0
+        -- The deposit is paid up front and comes back when the item sells,
+        -- so only the listings expected to run out first cost it.
+        local held = HeldDeposit(recipe.outputItemID, yield)
+        local deposit = held and held * Profit.LostListings() or 0
 
         ways.auction = { unit = listPrice, revenue = revenue, cut = cut, deposit = deposit,
-            depositKnown = unitDeposit ~= nil, basis = listBasis, uncertain = listUncertain,
+            depositHeld = held, depositKnown = held ~= nil, basis = listBasis, uncertain = listUncertain,
             profit = revenue - cut - cost.total - deposit }
     end
 
@@ -879,6 +897,7 @@ function Profit:Analyse(recipeID, characterKey, method)
     analysis.netRevenue = chosen.revenue - chosen.cut
     analysis.depositKnown = chosen.depositKnown
     analysis.deposit = chosen.deposit
+    analysis.depositHeld = chosen.depositHeld
 
     analysis.profit = chosen.profit
     analysis.profitPerUnit = analysis.profit / yield
@@ -1278,7 +1297,9 @@ ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], 
     else
         ns.PrintRaw(L.Format("  auction cut     -%s", Util.FormatMoney(analysis.cut)))
 
-        if analysis.depositKnown then
+        if analysis.depositKnown and (analysis.deposit or 0) <= 0 and analysis.depositHeld then
+            ns.PrintRaw(L.Format("  deposit         %s, back when it sells", Util.FormatMoney(analysis.depositHeld)))
+        elseif analysis.depositKnown then
             ns.PrintRaw(L.Format("  deposit         -%s", Util.FormatMoney(analysis.deposit)))
         else
             ns.PrintRaw(L.Format("  |c%sdeposit unknown until you visit an auction house|r",

@@ -148,9 +148,13 @@ function MyAuctions:Deposit(row)
     end
 
     local record = ns.db and ns.db.deposits and ns.db.deposits[row.itemID]
-    if type(record) == "table" and tonumber(record.unit) then
-        return math.max(1, math.floor(record.unit * (row.quantity or 1) + 0.5)), true
+    local deposit
+    if ns.Posting and ns.Posting.DepositFromRecord then
+        deposit = ns.Posting.DepositFromRecord(record, row.quantity or 1)
+    elseif type(record) == "table" and tonumber(record.unit) then
+        deposit = math.max(1, math.floor(record.unit * (row.quantity or 1) + 0.5))
     end
+    if deposit then return deposit, true end
     return nil
 end
 

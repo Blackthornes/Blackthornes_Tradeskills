@@ -28,7 +28,9 @@ end }
 local recipe = { recipeID = RECIPE, name = "Linen Belt", outputItemID = BELT,
     quantityMin = 1, quantityMax = 1, reagents = { { itemID = LINEN, quantity = 7 } } }
 
-local settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 1, minProfit = 0,
+-- Two listings to sell: the first runs out and keeps its deposit, so one
+-- deposit counts. A sale hands the deposit back (see the end).
+local settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 2, minProfit = 0,
     staleAfterSeconds = 48 * 3600, valueOwnedMaterials = true, unscannedMarkupPercent = 50,
     priceUnscannedCrafts = true }
 
@@ -201,6 +203,27 @@ commands.why("Linen Belt")
 check("/bts why follows it", Printed("disenchanting pays most"), true)
 check("and lists every way", Printed("If vendored"), true)
 settings.profitBy = nil
+
+print("")
+print("sold on the first listing, the deposit comes back")
+
+settings.expectedRelists = 1
+a = Profit:Analyse(RECIPE, nil, "auction")
+check("no deposit is lost", a.deposit, 0)
+check("but the one paid up front is known", a.depositHeld, 3)
+check("so the listing pays 3c more", math.floor(a.profit * 100 + 0.5), -1395)
+check("and a listing's net keeps it all", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), 798)
+printed = {}
+ns.Prices:Record(BELT, 200, 200, 4, time(), 200, nil)
+settings.profitBy = "auction"
+commands.why("Linen Belt")
+settings.profitBy = nil
+check("/bts why says it comes back", Printed("back when it sells"), true)
+settings.expectedRelists = 0
+check("a saved 0 loses none either", Profit.LostListings(), 0)
+settings.expectedRelists = 3
+check("three listings lose two", Profit.LostListings(), 2)
+settings.expectedRelists = 2
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

@@ -1260,6 +1260,12 @@ function UpdateDetail(analysis)
             detail.depositLabel:SetText(L["Deposit"])
             detail.depositValue:SetText(L["none"])
             detail.depositValue:SetTextColor(Theme.Unpack("dim"))
+        elseif analysis.depositKnown and (analysis.deposit or 0) <= 0 and analysis.depositHeld then
+            -- Paid when listing and handed back with the sale, so it costs
+            -- nothing here. Shown so the player knows to have it on hand.
+            detail.depositLabel:SetText(L["Deposit"])
+            detail.depositValue:SetText(L.Format("%s, back when it sells", Util.FormatMoney(analysis.depositHeld)))
+            detail.depositValue:SetTextColor(Theme.Unpack("dim"))
         elseif analysis.depositKnown then
             detail.depositLabel:SetText(L["Deposit"])
             detail.depositValue:SetText("-" .. Util.FormatMoney(analysis.deposit))

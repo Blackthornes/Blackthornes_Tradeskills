@@ -616,21 +616,71 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
     if not ns.db or not itemID or not deposit or deposit <= 0 then return end
 
     ns.db.deposits = ns.db.deposits or {}
-    ns.db.deposits[itemID] = {
-        -- Kept exact. A deposit is worked out on the whole stack and rarely
-        -- divides evenly: flooring 39c for 20 to 1c each made the next
-        -- refresh show 20c, and a cheap stack could cache a deposit of 0.
-        unit = deposit / math.max(1, quantity or 1),
+    quantity = math.max(1, math.floor(tonumber(quantity) or 1))
+
+    -- Kept exact. A deposit is worked out on the whole stack and rarely
+    -- divides evenly: flooring 39c for 20 to 1c each made the next refresh
+    -- show 20c, and a cheap stack could cache a deposit of 0.
+    local record = {
+        unit = deposit / quantity,
+        quantity = quantity,
+        least = deposit,
+        leastQuantity = quantity,
         duration = duration,
         at = time(),
     }
+
+    -- The auction house asks a least deposit on any listing (players see 1s
+    -- for one and for twenty alike), so a small listing's share each runs
+    -- high. The biggest listing seen gives the truest share, and the
+    -- smallest says where that floor sits.
+    local old = ns.db.deposits[itemID]
+    if type(old) == "table" and old.duration == duration then
+        local oldQuantity = tonumber(old.quantity)
+        if oldQuantity and oldQuantity > quantity and tonumber(old.unit) then
+            record.unit, record.quantity = old.unit, oldQuantity
+        end
+        local oldLeast = tonumber(old.least)
+        local oldLeastQuantity = tonumber(old.leastQuantity)
+        if oldLeast and oldLeastQuantity and oldLeastQuantity < quantity then
+            record.least, record.leastQuantity = oldLeast, oldLeastQuantity
+        end
+    end
+
+    ns.db.deposits[itemID] = record
+end
+
+--- The deposit a remembered record gives for a listing of `quantity`:
+--- the share each times the count, but never under the least deposit the
+--- auction house was seen to ask.
+function Posting.DepositFromRecord(record, quantity)
+    if type(record) ~= "table" or not tonumber(record.unit) then return nil end
+
+    quantity = math.max(1, quantity or 1)
+    local deposit = math.floor(record.unit * quantity + 0.5)
+
+    -- Only a floor when the small listing paid more each than the big one.
+    -- Without that, its deposit is just the same share for fewer.
+    local least = tonumber(record.least)
+    local leastQuantity = tonumber(record.leastQuantity)
+    if least and leastQuantity and least > record.unit * leastQuantity + 1 then
+        deposit = math.max(deposit, least)
+    end
+
+    return math.max(1, deposit)
+end
+
+--- About what a listing of `quantity` costs to put up, from what the
+--- auction house said before. nil until one was worked out at this length.
+function Posting:EstimateDeposit(itemID, quantity)
+    if not self:GetCachedUnitDeposit(itemID) then return nil end
+    return Posting.DepositFromRecord(ns.db.deposits[itemID], quantity)
 end
 
 function Posting:GetDeposit(itemID, quantity)
     -- Away from an auction house the cached figure is the only honest answer.
     if not ns.Scanner.isAuctionHouseOpen then
-        local unit = self:GetCachedUnitDeposit(itemID)
-        return unit and math.floor(unit * math.max(1, quantity or 1) + 0.5) or nil
+        return self:EstimateDeposit(itemID, quantity)
     end
 
     -- A deposit is a property of the item and the listing length, not of the
@@ -644,7 +694,7 @@ function Posting:GetDeposit(itemID, quantity)
 
     if cached and record and record.at
         and (time() - record.at) < DEPOSIT_CACHE_SECONDS then
-        return math.floor(cached * math.max(1, quantity or 1) + 0.5)
+        return Posting.DepositFromRecord(record, quantity)
     end
 
     local duration = ns.Config:Get("postDuration") or 2

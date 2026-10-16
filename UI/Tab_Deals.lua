@@ -452,7 +452,7 @@ local function UpdateResaleDetail(detail, entry)
     block.bar:Set(entry.resell > 0 and entry.gain / entry.resell or 0, "profit")
 
     local cut = math.floor((ns.Config:Get("auctionCut") or 0.05) * 100 + 0.5)
-    if entry.depositKnown then
+    if entry.depositKnown and entry.depositCounts then
         block.verdict:SetText(L.Format("Buy it, list it again at %s, and keep about %s each after the %d%% cut and the deposit.",
             Plain(entry.resell), Plain(entry.gain), cut))
     else
@@ -465,7 +465,7 @@ local function UpdateResaleDetail(detail, entry)
     parts[#parts + 1] = L.Format("The usual price comes from your %d scans before the last one.", entry.scans - 1)
     local demand = ns.Demand:TooltipText(entry.demand)
     if demand then parts[#parts + 1] = L.Format("Demand: %s.", demand) end
-    if not entry.depositKnown then
+    if entry.depositCounts and not entry.depositKnown then
         parts[#parts + 1] = L["The deposit isn't counted until you've listed one."]
     end
     parts[#parts + 1] = L["Your gold is tied up until it sells."]
