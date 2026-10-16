@@ -713,6 +713,35 @@ and Known by. Lines are kept per spell until `Inventory.changes` moves or
 (`tooltipEnchantCosts`, on unless unticked, never rename it); `/bts tip`
 counts them. Tested in `tools/test_enchanttooltip.lua`.
 
+## Find a material
+
+A player asked (2026-10-16, the owner said build it, from a mockup) what
+to break, make or farm for the best odds at one enchanting material, and
+what had given it before. The Disenchanting tab's "Find a material" tick
+box (at the toolbar's right end; the other views' tick boxes step aside)
+and a material picker show it, under headings: YOU'VE GOTTEN IT FROM
+(your own disenchants, `DisenchantLog`, with "You made it" or "Looted,
+MOB"), BREAK WHAT YOU HAVE, BUY AND BREAK, MAKE AND BREAK (crafts this
+character knows; Queue one) and FARM AND BREAK (Farmer's own kills;
+Show in Farmer). Columns COST EACH (price over how many one gives on
+average), ODDS and WHERE (`disenchantmaterial`). `Logic/MaterialFinder.lua`
+works it out from the tab's own rows (`GetBagRows`, `GetAuctionRows`,
+`GetCraftRows`; a row keeps its `source`, so a bag or auction row's detail
+is the usual one), kept per material until the bags, prices, queue,
+recipes or disenchants move or `KEEP` passes. Nothing is saved; the
+material picked lasts the session (`FirstPick`: the best your disenchants
+have given). Farmer is asked inside a pcall, read only:
+
+```lua
+_G.BlackthornesFarmer.DisenchantFarm:Best(gives, max)   -- gives(itemID): how many one gives
+  -- { { mob, zone, shownZone, kills, perKill, seconds, perHour, items = { { id, name, corpses } } } }
+_G.BlackthornesFarmer.DisenchantFarm:DroppedBy(itemID)  -- the mob that dropped it most, or nil
+_G.BlackthornesFarmer.DisenchantFarm:Show(mob)          -- opens its loot table
+```
+
+Without Farmer the farm heading and "Looted" are left out. Tested in
+`tools/test_materialfinder.lua`. Not yet seen in game.
+
 ## Profit by method
 
 A player asked (2026-10-11, the owner agreeing) for profit split by how it
