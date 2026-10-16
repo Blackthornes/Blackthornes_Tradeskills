@@ -359,7 +359,11 @@ local function UpdateRow(row, analysis)
         ApplyRowLayout(row)
     end
 
-    Theme.SetRowName(row.name, analysis.name or L.Format("recipe %s", analysis.recipeID))
+    -- Gear another of your characters would wear, from Blackthornes
+    -- Equipment (Logic/Upgrades.lua).
+    local name = analysis.name or L.Format("recipe %s", analysis.recipeID)
+    if ns.Upgrades and ns.Upgrades.WithAltText then name = ns.Upgrades:WithAltText(name, analysis.outputItemID) end
+    Theme.SetRowName(row.name, name)
     Theme.SetItemIcon(row.icon, analysis.outputItemID)
     row.marginBar:Set(nil)
 

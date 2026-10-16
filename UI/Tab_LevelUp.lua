@@ -398,6 +398,8 @@ local function UpdateRow(row, entry)
     local forYou = not entry.outputItemID and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
     if forYou then
         name = ("%s  |c%s%s|r"):format(name, ns.COLORS.profit or "ff4fd17a", forYou)
+    elseif entry.outputItemID and ns.Upgrades and ns.Upgrades.WithAltText then
+        name = ns.Upgrades:WithAltText(name, entry.outputItemID)
     end
     Theme.SetRowName(row.name, name)
     row.name:SetTextColor(TierColor(entry.tier))
@@ -557,6 +559,8 @@ local function ShowRowTooltip(row, entry)
 
     local forYou = not entry.learnNext and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
     if forYou then GameTooltip:AddLine(forYou, Theme.Unpack("profit")) end
+    local forAlt = entry.outputItemID and ns.Upgrades and ns.Upgrades.AltText and ns.Upgrades:AltText(entry.outputItemID)
+    if forAlt then GameTooltip:AddLine(forAlt, Theme.Unpack("profit")) end
 
     if entry.neverSubCraft then
         GameTooltip:AddLine(L["Never made as a sub-craft. Crafts that use it buy it instead."], 0.91, 0.76, 0.35, true)

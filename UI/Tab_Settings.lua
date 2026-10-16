@@ -880,6 +880,19 @@ local function Build(outer)
     end, false)
     widgets.neverBelowPaid:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Logic/SisterKeeps.lua (2026-10-16): what the other Blackthornes
+    -- addons want kept stays off List all.
+    local sisterKeepsRow = CreateRow(pages.pricing, 1, L["Keep What Other Addons Need:"],
+        L["Goal items, upgrades, pet food, quest items and Butler's keeps stay off List all."])
+
+    widgets.sisterKeeps = Widgets.CreateCheckbox(sisterKeepsRow, L["On"], function(checked)
+        Config:Set("sellHoldsSisterKeeps", checked)
+        if ns.SisterKeeps then ns.SisterKeeps:Forget() end
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, true)
+    widgets.sisterKeeps:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- No "Confirm before each listing" switch: the confirmation's Yes is the
     -- click that lists. Posting needs a real click, and after the price
     -- check (an auction house search, answered later) there is no other.
@@ -2029,6 +2042,7 @@ local function Refresh()
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
+    widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") ~= false)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
     widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
