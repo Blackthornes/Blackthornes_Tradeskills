@@ -235,6 +235,13 @@ function EnchantTooltip:LinesFor(spellID)
         end
     end
 
+    -- Where it goes on the character playing and how much better, when
+    -- Blackthornes Equipment says it beats what is on now.
+    local forYou = ns.Upgrades and ns.Upgrades.EnchantText and ns.Upgrades:EnchantText(spellID, true)
+    if forYou then
+        lines[#lines + 1] = { L["Best for you"], forYou, color = "profit" }
+    end
+
     return lines
 end
 

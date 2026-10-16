@@ -149,6 +149,32 @@ item-info events. Setting: `showUpgradeArrows`. Equipment's `CLAUDE.md` asks
 its side to keep the call stable; if it changes, change `Logic/Upgrades.lua`
 in the same breath.
 
+Enchants for your gear (a player asked, the owner said build it,
+2026-10-16): an enchanting recipe makes no item, so the Level Up tab shows
+its spell's icon (`Theme.SetSpellIcon`), and when Equipment says it beats
+what is on the gear worn, the green arrow and "For you: Chest +3%" on the
+row, the detail pane, the row's tooltip, "Best for you" on the Learn next
+pane and on the enchant's own tooltip (`UI/EnchantTooltip.lua`). It
+follows `showUpgradeArrows` and asks, inside a pcall, kept per recipe and
+forgotten with the item answers (`Upgrades:EnchantFor`, `EnchantText`):
+
+```lua
+_G.BlackthornesEquipment.Enchants:ForRecipe(recipeID)
+  -- { slot, slotID, gain, current, best }, or nil
+```
+
+Equipment's Enchants view in Where to get upgrades calls back, inside a
+pcall, besides `Queue:Ensure` and `Queue:EnsureBuy`:
+
+```lua
+ns.LearnNext:WhereFor(recipeID)       -- { kind, name, zone, x, y, price } or nil, a fresh table
+ns.LearnNext:ShowTheWayFor(recipeID)  -- Show the way by recipe ID; true when a pin was set
+```
+
+Keep these stable; if one changes, change Equipment's `Logic/Enchants.lua`
+too. Tested in `tools/test_enchantsforyou.lua` and
+`tools/test_learnnext.lua`. Not yet seen in game.
+
 Equipment calls back one way: when a player changes their own stat weights
 in Equipment's weights window, or picks a spec there, it calls, inside a
 pcall:

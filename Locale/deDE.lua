@@ -2865,3 +2865,9 @@ L["Break what it drops: %s."] = "Entzauber, was es fallen lässt: %s."
 L["From your own kills."] = "Aus deinen eigenen Kills."
 L["No ways to get %s yet. Scan the auction house, or break a few items, and they show up here."] = "Noch keine Wege zu %s. Scanne das Auktionshaus oder entzauber ein paar Sachen, dann tauchen sie hier auf."
 L["  ·  Sells for %s"] = "  ·  Verkauft sich für %s"
+
+-- Enchants that are better for you (from Blackthornes Equipment)
+L["%s +%d%%"] = "%s +%d%%"
+L["Best for you"] = "Am besten für dich"
+L["For you: %s"] = "Für dich: %s"
+L["For you: %s +%d%%"] = "Für dich: %s +%d%%"

@@ -305,6 +305,39 @@ function LearnNext:ShowTheWay(row)
     return ok == true
 end
 
+--- Where a recipe is learned, by its ID (a recipe's ID is its spell ID),
+--- for Equipment's Enchants view. A fresh table, or nil when no trainer or
+--- vendor of the player's side teaches it.
+-- @return { kind ("trainer" or "vendor"), name, zone, x, y, price }
+function LearnNext:WhereFor(recipeID)
+    local book = ns.RecipeBook
+    if not (book and book.Get) then return nil end
+    local ok, record = pcall(book.Get, book, tonumber(recipeID))
+    if not ok or type(record) ~= "table" then return nil end
+    local placed, place = pcall(self.Place, self, record)
+    if not placed or not place then return nil end
+    return {
+        kind = place.kind, name = place.name, zone = place.zone,
+        x = place.x, y = place.y, price = place.price,
+    }
+end
+
+--- Show the way to where a recipe is learned, by its ID: the same pin and
+--- chat line as the Level Up tab's button.
+-- @return true when a pin or waypoint was set
+function LearnNext:ShowTheWayFor(recipeID)
+    local book = ns.RecipeBook
+    if not (book and book.Get) then return false end
+    local ok, record = pcall(book.Get, book, tonumber(recipeID))
+    if not ok or type(record) ~= "table" then return false end
+    local place = self:Place(record)
+    if not place then return false end
+    return self:ShowTheWay({
+        place = place, record = record,
+        name = record.name or L.Format("recipe %s", record.recipeID),
+    })
+end
+
 --- Queue materials: the materials for the crafts that give a skill point
 --- for sure (until the recipe turns yellow, at least one), on the list to
 --- buy. Set, not added, so a second click changes nothing.
