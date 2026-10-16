@@ -23,6 +23,7 @@ local Upgrades = ns.NewModule("Upgrades")
 
 local known = {}
 local enchants = {}
+local alts = {}
 
 --- Equipment's Compare module, or nil when Equipment is not loaded (or too
 --- old to answer).
@@ -118,12 +119,66 @@ function Upgrades:EnchantText(recipeID, short)
     return L.Format("For you: %s", answer.slot)
 end
 
+--- Whether a crafted item is an upgrade for one of your other characters,
+--- from Equipment's Butler:Advise (its `alt`, 2026-10-16): `{ name, gain,
+--- level }`, or nil when it is none, it is an upgrade here, or Equipment
+--- is not there. `name` is the character's whole name, `gain` a whole
+--- percent (nil for an empty slot), `level` when it waits on their level.
+--- Kept per item, like the other answers. Never raises.
+function Upgrades:AltFor(itemID)
+    itemID = tonumber(itemID)
+    if not itemID or not self:IsEnabled() then return nil end
+
+    local kept = alts[itemID]
+    if kept ~= nil then return kept or nil end
+
+    local answer = false
+    local equipment = rawget(_G, "BlackthornesEquipment")
+    local butler = type(equipment) == "table" and equipment.Butler
+    if type(butler) == "table" and type(butler.Advise) == "function" then
+        local ok, advice = pcall(butler.Advise, butler, itemID)
+        local alt = ok and type(advice) == "table" and advice.alt
+        if type(alt) == "table" and type(alt.key) == "string" and ns.Recipes and ns.Recipes.GetCharacterName then
+            local named, name = pcall(ns.Recipes.GetCharacterName, ns.Recipes, alt.key)
+            if named and type(name) == "string" and name ~= "" and name ~= "?" and name ~= alt.key then
+                local gain = tonumber(alt.gain)
+                answer = {
+                    name = name,
+                    gain = gain and gain > 0 and math.floor(gain + 0.5) or nil,
+                    level = tonumber(alt.level),
+                }
+            end
+        end
+    end
+    alts[itemID] = answer
+    return answer or nil
+end
+
+--- "Upgrade for Ana Stormwood, +9%" (or "... at level 32"), or nil.
+function Upgrades:AltText(itemID)
+    local answer = self:AltFor(itemID)
+    if not answer then return nil end
+    if answer.level then
+        return L.Format("Upgrade for %s at level %d", answer.name, answer.level)
+    end
+    if answer.gain then return L.Format("Upgrade for %s, +%d%%", answer.name, answer.gain) end
+    return L.Format("Upgrade for %s", answer.name)
+end
+
+--- A row's name with the alt line after it in green, or the name as it is.
+function Upgrades:WithAltText(name, itemID)
+    local text = itemID and self:AltText(itemID)
+    if not text then return name end
+    return ("%s  |c%s%s|r"):format(name, ns.COLORS and ns.COLORS.profit or "ff4fd17a", text)
+end
+
 --- Forget every answer, so the next draw asks again.
 function Upgrades:Forget()
     -- Items arrive from the server all the time (chat links, the auction
     -- house); a new table each time is garbage when nothing was kept.
     if next(known) then known = {} end
     if next(enchants) then enchants = {} end
+    if next(alts) then alts = {} end
 end
 
 --- Forget, and redraw the open tab, the craft pane and the sell list once
