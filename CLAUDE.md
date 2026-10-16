@@ -854,7 +854,12 @@ row whose detail is why (`line.held`), its own List button still working.
 Post Crafted never post one; the drawer's summary counts them. Answers are
 kept per bag copy until `Inventory.changes` moves or `KEEP` seconds pass.
 "Keep What Other Addons Need" on the Pricing page (`sellHoldsSisterKeeps`,
-on unless unticked, never rename it). Tested in
+off unless ticked since the owner asked the same day; `Config:SisterKeepsOffOnce`
+turned off the true the first default saved, once, `sisterKeepsOffOnce`;
+never rename either). Gear Equipment calls an upgrade
+for another character (its `alt`) is held only while "Keep Upgrades for
+Alts" is ticked (`sellHoldsAltUpgrades`, off unless ticked, the owner
+2026-10-16, never rename it). Tested in
 `tools/test_sisterkeeps.lua`. If a sister changes a call, change this file
 too. Not yet seen in game.
 

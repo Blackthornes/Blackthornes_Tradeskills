@@ -78,6 +78,7 @@ time = time or os.time
 
 ns.db = {}
 sisterKeepsOn = true
+altUpgradesOn = true
 ns.Config = {
     Get = function(_, k)
         if k == "undercutCopper" then return 1 end
@@ -85,6 +86,7 @@ ns.Config = {
         if k == "postDuration" then return 2 end
         if k == "allowPostingAtALoss" then return false end
         if k == "sellHoldsSisterKeeps" then return sisterKeepsOn end
+        if k == "sellHoldsAltUpgrades" then return altUpgradesOn end
         return nil
     end,
     GetPriceTable = function() return {} end,
@@ -196,6 +198,7 @@ local function Reset()
     Posting.chosenQuantity = {}
     ns.SisterKeeps:Forget()
     sisterKeepsOn = true
+    altUpgradesOn = true
     commodities = { [GOAL] = true, [FOOD] = true, [KEEP] = true, [QUEST] = true, [CLAM] = true, [PLAIN] = true }
     reserved, recipes, bindTypes = {}, {}, {}
     prices = {}
@@ -235,6 +238,17 @@ do
     check("List all's next is the goal's spare", nextLine and nextLine.itemID, GOAL)
     check("and counts two", (Posting:GetSummary(nil, lines)), 2)
 end
+
+print("\nan alt's upgrade sells unless Keep Upgrades for Alts is ticked")
+Reset()
+altUpgradesOn = nil
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("an alt's upgrade is on the list", LineFor(lines, ALTGEAR) ~= nil, true)
+    check("and not held", LineFor(lines, ALTGEAR).held, nil)
+    check("your own upgrade is still held", LineFor(lines, UPGRADE).held, "An upgrade for you, +6%")
+end
+check("the setting is off unless ticked", ns.SisterKeeps:HoldsAltUpgrades(), false)
 
 print("\nthe drawer shows held rows, dimmed, with why")
 Reset()
