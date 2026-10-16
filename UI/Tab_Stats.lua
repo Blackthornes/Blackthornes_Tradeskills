@@ -759,7 +759,70 @@ local GRAPH_HEIGHT = 180
 -- The header
 --------------------------------------------------------------------------------
 
-local function CreateTile(parent, title)
+StatsUI.BAR_WIDTH = 44
+
+--- The lines the Sold a day tile's hover shows: what the market wants,
+--- then your own listings. Each { left, right } or { left } alone.
+function StatsUI.MarketLines(stats)
+    local lines = {}
+    local market = stats and stats.market
+    if market then
+        if market.perDay then
+            lines[#lines + 1] = { L["Sells a day"], market.perDay < 1 and L["under 1"]
+                or L.Format("about %s", Count(market.perDay)) }
+        end
+        if market.listed then
+            lines[#lines + 1] = { L["Up for sale now"], Count(market.listed) }
+        end
+        lines[#lines + 1] = { L["Stock that sells a day"], Percent(market.share) }
+        if market.daysToSell then
+            local days = market.daysToSell
+            lines[#lines + 1] = { L["Time to sell what's up"], days < 1 and L["under a day"]
+                or days < 1.5 and L["about 1 day"]
+                or L.Format("about %d days", math.floor(days + 0.5)) }
+        elseif market.listed and market.listed > 0 and market.perDay == 0 then
+            lines[#lines + 1] = { L["Time to sell what's up"], L["none sold yet"] }
+        end
+    end
+
+    local listings = stats and stats.listings
+    local ended = listings and (listings.sold or 0) + (listings.expired or 0) or 0
+    if ended > 0 then
+        lines[#lines + 1] = { L["Your own listings"], L.Format("%d of %d sold", listings.sold or 0, ended) }
+    end
+    return lines
+end
+
+local function ShowMarket(tile)
+    local lines = StatsUI.MarketLines(tile.stats)
+    if #lines == 0 then return end
+    GameTooltip:SetOwner(tile, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine(L["What the market wants"], Theme.Unpack("accentHi"))
+    for _, line in ipairs(lines) do
+        GameTooltip:AddDoubleLine(line[1], line[2], 0.85, 0.85, 0.85, 1, 1, 1)
+    end
+    GameTooltip:AddLine(L["From your auction scans."], 0.6, 0.6, 0.6, true)
+    GameTooltip:Show()
+end
+
+local function AddMarketBar(tile)
+    local bar = tile:CreateTexture(nil, "ARTWORK")
+    bar:SetSize(StatsUI.BAR_WIDTH, 4)
+    bar:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -8, -26)
+    bar:SetColorTexture(1, 1, 1, 0.12)
+    bar.fill = tile:CreateTexture(nil, "OVERLAY")
+    bar.fill:SetHeight(4)
+    bar.fill:SetPoint("LEFT", bar, "LEFT", 0, 0)
+    bar:Hide()
+    bar.fill:Hide()
+    tile.bar = bar
+
+    tile:EnableMouse(true)
+    tile:SetScript("OnEnter", ShowMarket)
+    tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+local function CreateTile(parent, title, market)
     local tile = Theme.CreatePanel(parent, "glass", "border")
     tile:SetHeight(KPI_HEIGHT)
     Theme.TopSheen(tile)
@@ -775,6 +838,7 @@ local function CreateTile(parent, title)
     tile.note = Theme.CreateLabel(tile, "tiny", "dim")
     tile.note:SetPoint("BOTTOMLEFT", 8, 5)
     tile.note:SetPoint("RIGHT", -8, 0)
+    if market then AddMarketBar(tile) end
     return tile
 end
 
@@ -810,15 +874,30 @@ local function FillTiles(stats)
     else
         tiles[3].value:SetText(Money(nil))
     end
-    local demand = stats.demand
-    local word = demand and ns.Demand and ns.Demand.Label and ns.Demand:Label(demand)
-    if word then
-        tiles[3].note:SetText(L.Format("demand: %s", word))
+    -- What the market does, as a number (a player asked, 2026-10-16), with a
+    -- bar for the share; your own sales only when no scan says yet.
+    local market, demand = stats.market, stats.demand
+    local bar = tiles[3].bar
+    if market then
+        local color = ns.Demand and ns.Demand:Color({ level = market.level }) or "text"
+        tiles[3].note:SetText(L.Format("%s of stock sells a day", Percent(market.share)))
+        tiles[3].note:SetTextColor(Theme.Unpack(color))
+        bar.fill:SetColorTexture(Theme.Unpack(color))
+        bar.fill:SetWidth(math.max(1, StatsUI.BAR_WIDTH * math.min(1, market.share)))
+        bar:Show()
+        bar.fill:Show()
+    elseif demand and ns.Demand and ns.Demand.Describe then
+        tiles[3].note:SetText(ns.Demand:Describe(demand))
         tiles[3].note:SetTextColor(Theme.Unpack(ns.Demand:Color(demand)))
+        bar:Hide()
+        bar.fill:Hide()
     else
         tiles[3].note:SetText(L["by your scans"])
         tiles[3].note:SetTextColor(Theme.Unpack("dim"))
+        bar:Hide()
+        bar.fill:Hide()
     end
+    tiles[3].stats = stats
 
     local week = stats.week
     tiles[4].value:SetText(Count(week and week.sold or 0))
@@ -1009,7 +1088,7 @@ local function BuildPanel(container)
     widgets.tiles = {
         CreateTile(panel, L["WORTH NOW"]),
         CreateTile(panel, L["PROFIT EACH"]),
-        CreateTile(panel, L["SOLD A DAY"]),
+        CreateTile(panel, L["SOLD A DAY"], true),
         CreateTile(panel, L["YOU SOLD THIS WEEK"]),
     }
 

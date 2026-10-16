@@ -159,10 +159,15 @@ function Demand:Get(itemID)
     if not ok or not rate then return nil end
 
     return {
-        level = rate >= MARKET_HIGH and "high" or rate >= MARKET_SOME and "some" or "low",
+        level = Demand.MarketLevel(rate),
         source = "market",
         rate = rate,
     }
+end
+
+--- The level for a share of the listed stock gone each day.
+function Demand.MarketLevel(share)
+    return share >= MARKET_HIGH and "high" or share >= MARKET_SOME and "some" or "low"
 end
 
 --- "High", "Some" or "Low".
