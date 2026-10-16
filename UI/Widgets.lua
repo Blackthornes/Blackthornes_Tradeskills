@@ -463,6 +463,19 @@ function Widgets.CreateButton(parent, text, onClick, opts)
             text = text and (wait .. "\n\n" .. text) or wait
         end
 
+        -- A button can draw its own tooltip (List Next's preview); the
+        -- wait line still goes first.
+        if type(rawget(self, "tooltipFunc")) == "function" then
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            local wait = self.waitingLabel == true and type(self.waitTip) == "string"
+                and L.Format("|c%sWaiting: %s.|r", ns.COLORS.warn, self.waitTip) or nil
+            local ok, drawn = pcall(self.tooltipFunc, self, GameTooltip, wait)
+            if ok and drawn then
+                GameTooltip:Show()
+                return
+            end
+        end
+
         if text then
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(text, 1, 1, 1, 1, true)

@@ -871,7 +871,14 @@ it cost to make still asks), and `Post`'s guards all still run. List all
 passes over an item still being confirmed (`GetNextPostable`'s
 `skipSettling`), so nothing goes up twice. Listings close together share
 one read back (`ShareVerify`, `NewerVerifying`), and `MAX_CONFIRMING` is
-6. Leaving the auction house forgets every check. "Fast listing" on the
+6. Leaving the auction house forgets every check. The button says what its
+next click does (the owner, 2026-10-16): "Check Prices - N to list" when
+it would only check prices (`Posting:WouldCheckAll`, the same test as
+`PostPanel:ListNext`, read again with the wait labels since a check goes
+stale), else "List Next - N remaining", and its hover
+(`PostPanel.ListNextTooltip`, through the button's `tooltipFunc`) previews
+the next stack: item, how many at what price, total, after the cut,
+deposit, market, vendor, disenchant, cost to make, then what comes after. "Fast listing" on the
 auction page (`fastListing`, on unless unticked, never rename it). Tested
 in `tools/test_fastlisting.lua`. Not yet seen in game.
 
