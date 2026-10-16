@@ -235,6 +235,29 @@ check("the key moves with the clock's hour",
     ns.ItemStats:Key(BOLT) ~= (function() clock = now + 2 * HOUR; return ns.ItemStats:Key(BOLT) end)(), true)
 clock = now
 
+-- Demand as numbers (a player asked, 2026-10-16): what the market does.
+do
+    local savedShare, savedUnits = ns.Prices.GetSalesPerDay, ns.Prices.GetUnitsSoldPerDay
+    ns.Prices.GetSalesPerDay = function() return 0.18 end
+    ns.Prices.GetUnitsSoldPerDay = function() return 4.2 end
+    ns.Demand = { MarketLevel = function(share) return share >= 0.3 and "high" or share >= 0.1 and "some" or "low" end }
+    local record = ns.Prices:Get(BOLT)
+    local savedQuantity = record.quantity
+    record.quantity = 21
+    local market = ns.ItemStats:Build(BOLT, now).market
+    check("market: the share of stock gone a day", market and market.share, 0.18)
+    check("market: about how many go a day", market and market.perDay, 4.2)
+    check("market: how many are up now", market and market.listed, 21)
+    check("market: five days to sell what is up", market and market.daysToSell, 5)
+    check("market: 18% is some", market and market.level, "some")
+    ns.Prices.GetSalesPerDay = function() return nil end
+    check("market: nothing without a share", ns.ItemStats:Build(BOLT, now).market, nil)
+    ns.Prices.GetSalesPerDay, ns.Prices.GetUnitsSoldPerDay = savedShare, savedUnits
+    record.quantity = savedQuantity
+    ns.Demand = nil
+    stats.market = market
+end
+
 local bare = ns.ItemStats:Build(OTHER, now)
 check("an item with nothing kept still builds", bare.itemID, OTHER)
 check("with no weeks", bare.weeks, nil)
@@ -264,6 +287,18 @@ check("a search finds a priced item by ID", ns.UI._StatsList(tostring(OTHER))[1]
 check("an item link gives its ID", ns.StatsUI.ItemFromText("|Hitem:2996::|h[Bolt]|h"), BOLT)
 check("a name gives its item", ns.StatsUI.ItemFromText("Spider Silk"), STARRED)
 check("nothing gives nothing", ns.StatsUI.ItemFromText("  "), nil)
+
+do
+    local lines = ns.StatsUI.MarketLines(stats)
+    local byName = {}
+    for _, line in ipairs(lines) do byName[line[1]] = line[2] end
+    check("hover: sells about 4 a day", byName["Sells a day"], "about 4")
+    check("hover: 21 up now", byName["Up for sale now"], "21")
+    check("hover: 18% of the stock", byName["Stock that sells a day"], "18%")
+    check("hover: about 5 days to sell", byName["Time to sell what's up"], "about 5 days")
+    check("hover: your own listings last", lines[#lines][1], "Your own listings")
+    check("hover: nothing for nothing", #ns.StatsUI.MarketLines({}), 0)
+end
 
 print(("%d passed, %d failed"):format(passed, failed))
 if failed > 0 then error(("%d item stats check(s) failed"):format(failed)) end
