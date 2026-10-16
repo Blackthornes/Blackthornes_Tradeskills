@@ -143,6 +143,11 @@ local DEFAULTS = {
         -- (Logic/SisterKeeps.lua, 2026-10-16). On unless unticked.
         sellHoldsSisterKeeps = true,
 
+        -- Of those, gear Equipment says another character could wear is
+        -- held back only while this is ticked (the owner, 2026-10-16: off
+        -- by default). Never rename it.
+        sellHoldsAltUpgrades = false,
+
         -- Hide crafts that have hit their posted limit rather than showing
         -- them greyed out.
         hideAtPostLimit = true,
