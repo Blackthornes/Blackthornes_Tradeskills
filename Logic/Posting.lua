@@ -1977,6 +1977,28 @@ function Posting.RivalFromRow(itemID, price, ownerFlag)
     return nil
 end
 
+--- Would List Next's click on this line only check prices? The same test
+--- PostPanel:ListNext makes before it calls CheckAll, and the same reasons
+--- CheckAll would not start, so the button can say so before the click.
+function Posting:WouldCheckAll(line, lines)
+    if not (line and line.itemID) then return false end
+    if not self:FastListing() then return false end
+    if self:IsFresh(line.itemID) or self:BulkTried(line.itemID) then return false end
+    if ns.Config:Get("verifyPriceBeforePosting") == false then return false end
+
+    local scanner = ns.Scanner
+    if not (scanner and scanner.isAuctionHouseOpen) or scanner.isScanning then return false end
+    if not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
+            and Util.HasFunction("C_AuctionHouse.MakeItemKey")) then
+        return false
+    end
+
+    for _, other in ipairs(lines or {}) do
+        if other.itemID and not other.link and not self:IsFresh(other.itemID) then return true end
+    end
+    return false
+end
+
 --- Check every price on a list in one search.
 --
 -- The game's search for several items at once (SearchForItemKeys) answers

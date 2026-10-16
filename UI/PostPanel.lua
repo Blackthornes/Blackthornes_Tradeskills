@@ -760,17 +760,142 @@ function PostPanel:UpdateListAll(lines)
     local count = 0
     if lines then count = ns.Posting:GetSummary(nil, lines) or 0 end
     self.listAllCount = count
-    self.listAllLabel = count > 0 and L.Format("List Next - %d remaining", count) or L["List Next"]
 
-    if button.waitingLabel ~= true then button:SetText(self.listAllLabel) end
+    -- The stack the next click lists, and the one after it, for the hover.
+    local Posting = ns.Posting
+    local fast = Posting.FastListing ~= nil and Posting:FastListing()
+    local nextLine = count > 0 and lines and Posting:GetNextPostable(fast and { skipSettling = true } or nil, lines) or nil
+    self.nextLine = nextLine
+    self.afterLine = nil
+    if nextLine then
+        local after = {}
+        for _, line in ipairs(lines) do
+            if line ~= nextLine then after[#after + 1] = line end
+        end
+        self.afterLine = Posting:GetNextPostable(fast and { skipSettling = true } or nil, after)
+    end
 
-    local width = Theme.MeasureText and Theme.MeasureText("small", self.listAllLabel)
-    button:SetWidth(math.max(110, (width or 0) + 24))
+    button.tooltipFunc = PostPanel.ListNextTooltip
+    self:RefreshListAllLabel()
 
     button:SetEnabledState(count > 0)
     button.tooltipText = count > 0
         and L["Lists the most valuable stack. Click again for the next one."]
         or L["Nothing on the list can be listed right now."]
+end
+
+--- "Check Prices" when the next click only checks prices, else "List Next".
+--- Cheap: run with the wait labels too, since a check goes stale with time.
+function PostPanel:RefreshListAllLabel()
+    local button = self.listAll
+    if not button then return end
+
+    local count = self.listAllCount or 0
+    local checks = count > 0 and ns.Posting.WouldCheckAll ~= nil
+        and ns.Posting:WouldCheckAll(self.nextLine, self.shownLines) or false
+    self.checksFirst = checks
+
+    local label
+    if count <= 0 then
+        label = L["List Next"]
+    elseif checks then
+        label = L.Format("Check Prices - %d to list", count)
+    else
+        label = L.Format("List Next - %d remaining", count)
+    end
+    if label == self.listAllLabel then return end
+    self.listAllLabel = label
+
+    if button.waitingLabel ~= true then button:SetText(label) end
+
+    local width = Theme.MeasureText and Theme.MeasureText("small", label)
+    button:SetWidth(math.max(110, (width or 0) + 24))
+end
+
+local function Money(copper)
+    return Util.FormatMoney(copper)
+end
+
+local function ItemIcon(itemID)
+    local ok, icon = pcall(function()
+        if C_Item and C_Item.GetItemIconByID then return C_Item.GetItemIconByID(itemID) end
+        return GetItemIcon and GetItemIcon(itemID)
+    end)
+    return ok and icon or nil
+end
+
+--- List Next's hover: what the next click does. Returns true when drawn.
+function PostPanel.ListNextTooltip(_, tooltip, wait)
+    local self = PostPanel
+    local line = self.nextLine
+    if not line or (self.listAllCount or 0) <= 0 then return false end
+
+    local gold = { 1, 0.82, 0 }
+    if wait then
+        tooltip:SetText(wait, 1, 1, 1, 1, true)
+        tooltip:AddLine(" ")
+    end
+    local function Head(text)
+        if wait then tooltip:AddLine(text, gold[1], gold[2], gold[3])
+        else tooltip:SetText(text, gold[1], gold[2], gold[3]) end
+    end
+
+    if self.checksFirst then
+        Head(L["Check prices first"])
+        tooltip:AddLine(L["This click checks prices for everything here."], 1, 1, 1, true)
+        tooltip:AddLine(L["Then each click lists one."], 1, 1, 1, true)
+        return true
+    end
+
+    Head(L["Next to list"])
+    local icon = ItemIcon(line.itemID)
+    local name = line.label or Util.GetItemLabel(line.itemID)
+    tooltip:AddLine((icon and ("|T%s:20:20|t "):format(icon) or "") .. tostring(name))
+
+    local quantity = line.postQuantity or 1
+    tooltip:AddLine(L.Format("%d at %s each", quantity, Money(line.unitPrice)), 1, 1, 1)
+    tooltip:AddLine(" ")
+
+    local total = line.postTotal or (line.unitPrice * quantity)
+    local cut = ns.Config:Get("auctionCut") or 0.05
+    tooltip:AddDoubleLine(L["Total"], Money(total), 1, 1, 1, 1, 1, 1)
+    tooltip:AddDoubleLine(L["You get after the cut"], Money(total * (1 - cut)), 1, 1, 1, 1, 1, 1)
+    if line.deposit then
+        tooltip:AddDoubleLine(L["Deposit"], Money(line.deposit), 1, 1, 1, 1, 1, 1)
+    end
+
+    local Prices = ns.Prices
+    local market
+    if Prices then
+        local ok, value = pcall(function()
+            if line.link and Prices.GetLinkValue then return Prices:GetLinkValue(line.link) end
+            return Prices:GetValue(line.itemID, "market")
+        end)
+        market = ok and value or nil
+    end
+    local disenchant
+    if ns.Disenchant and ns.Disenchant.GetValue then
+        local ok, value = pcall(ns.Disenchant.GetValue, ns.Disenchant, line.itemID)
+        disenchant = ok and value or nil
+    end
+    local made = line.craftedCost or line.unitCost
+
+    if market or line.vendorPrice or disenchant or made then tooltip:AddLine(" ") end
+    local grey = 0.6
+    if market then tooltip:AddDoubleLine(L["Market value"], Money(market), grey, grey, grey, 1, 1, 1) end
+    if line.vendorPrice and line.vendorPrice > 0 then
+        tooltip:AddDoubleLine(L["Vendor"], Money(line.vendorPrice), grey, grey, grey, 1, 1, 1)
+    end
+    if disenchant then tooltip:AddDoubleLine(L["Disenchant"], Money(disenchant), grey, grey, grey, 1, 1, 1) end
+    if made then tooltip:AddDoubleLine(L["Cost to make"], Money(made), grey, grey, grey, 1, 1, 1) end
+
+    local after = self.afterLine
+    if after then
+        tooltip:AddLine(" ")
+        local afterName = after.label or Util.GetItemLabel(after.itemID)
+        tooltip:AddLine(L.Format("Then: %s x%d", tostring(afterName), after.postQuantity or 1), grey, grey, grey)
+    end
+    return true
 end
 
 --- How tall the panel can be without running into the main window.
@@ -1563,6 +1688,7 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
 
     -- List all waits with the rest, back to its count once the wait is over.
     if self.listAll and self.listAll:IsShown() and (self.listAllCount or 0) > 0 then
+        self:RefreshListAllLabel()
         Apply(self.listAll, self.listAllLabel or L["List Next"], seconds, reason)
     end
 

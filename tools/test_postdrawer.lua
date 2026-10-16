@@ -119,8 +119,39 @@ PostPanel.shownLines = lines
 PostPanel:ListNext()
 check("a click lists the most valuable stack it can", requested and requested[1] == 8 and requested[2] == 3)
 
+-- The hover previews the next stack.
+local tip = { lines = {} }
+function tip:SetText(text) self.lines = { text } end
+function tip:AddLine(text) self.lines[#self.lines + 1] = text end
+function tip:AddDoubleLine(left, right) self.lines[#self.lines + 1] = left .. "=" .. right end
+local function Has(text)
+    for _, line in ipairs(tip.lines) do if line == text then return true end end
+    return false
+end
+ns.Util.GetItemLabel = function(id) return "Item " .. id end
+PostPanel.shownLines = lines
+PostPanel:UpdateListAll(lines)
+check("the hover is drawn", PostPanel.ListNextTooltip(button, tip) == true)
+check("it names the next stack", Has("Next to list") and Has("Item 8"))
+check("how many at what price", Has("3 at 900 each"))
+check("its total", Has("Total=2700"))
+check("and what comes after", Has("Then: Item 9 x2"))
+
+ns.Posting.WouldCheckAll = function() return true end
+PostPanel:UpdateListAll(lines)
+check("a click that checks prices says so", button.text == "Check Prices - 2 to list")
+PostPanel.ListNextTooltip(button, tip)
+check("and its hover too", Has("Check prices first"))
+tip.lines = {}
+PostPanel.ListNextTooltip(button, tip, "Waiting: busy.")
+check("a wait goes first", tip.lines[1] == "Waiting: busy.")
+ns.Posting.WouldCheckAll = nil
+PostPanel:UpdateListAll(lines)
+check("back to List Next", button.text == "List Next - 2 remaining")
+
 PostPanel:UpdateListAll({})
 check("nothing to list: no count", button.text == "List Next")
+check("no preview with nothing to list", PostPanel.ListNextTooltip(button, tip) == false)
 check("and greyed", button.enabled == false)
 
 requested = nil
