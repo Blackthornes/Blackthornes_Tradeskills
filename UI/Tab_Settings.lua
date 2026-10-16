@@ -593,7 +593,7 @@ local function Build(outer)
     widgets.restockOnSale:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local sellOutRow = CreateRow(pages.queue, 1, L["Raise When Sold Out:"],
-        L["When every copy you listed sells, Keep in Stock goes up by 1."])
+        L["When every copy you listed sells, Keep in Stock goes up by 1. When it comes back unsold 3 times in a row, it goes down by 1, but never below where it started."])
 
     widgets.raiseOnSellOut = Widgets.CreateCheckbox(sellOutRow, L["On"], function(checked)
         Config:Set("raiseStockOnSellOut", checked)
@@ -1006,6 +1006,31 @@ local function Build(outer)
     stockEnd:SetPoint("TOPLEFT", widgets.stockEmpty, "BOTTOMLEFT", 0, 0)
     widgets.stockEnd = stockEnd
     pages.queue.last[2] = stockEnd
+
+    -- Items Raise When Sold Out changed (the owner, 2026-10-16), with
+    -- Reset to put each back. Rows made in Refresh, as the lists below are.
+    local changed = CreateSection(pages.queue, 2, L["CHANGED WHEN SOLD OUT"])
+    widgets.changedSection = changed
+    Searchable(pages.queue, changed, L["Changed when sold out raise when sold out keep in stock reset"])
+
+    local changedHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
+    changedHint:SetPoint("TOPLEFT", changed, "BOTTOMLEFT", 0, ROW_GAP)
+    changedHint:SetWidth(COLUMN_WIDTH)
+    changedHint:SetWordWrap(true)
+    changedHint:SetText(L["Keep in Stock numbers that Raise When Sold Out changed. Click Reset to put one back."])
+    widgets.changedHint = changedHint
+
+    widgets.changedEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
+    widgets.changedEmpty:SetWidth(COLUMN_WIDTH)
+    widgets.changedEmpty:SetWordWrap(true)
+    widgets.changedEmpty:SetText(L["None yet."])
+    widgets.changedRows = {}
+
+    local changedEnd = CreateFrame("Frame", nil, pages.queue.content)
+    changedEnd:SetSize(COLUMN_WIDTH, 1)
+    changedEnd:SetPoint("TOPLEFT", widgets.changedEmpty, "BOTTOMLEFT", 0, 0)
+    widgets.changedEnd = changedEnd
+    pages.queue.last[2] = changedEnd
 
     -- Crafts never made to go into another craft (2026-10-07),
     -- marked from the Level Up tab or the x on a queued sub-craft. Laid out
@@ -1884,8 +1909,29 @@ local function RefreshStockProfessions()
     widgets.stockEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
 end
 
+local function RefreshChangedStock()
+    if not widgets.changedHint or not (ns.SellOut and ns.SellOut.Changed) then return end
+
+    local list = {}
+    for _, entry in ipairs(ns.SellOut:Changed()) do
+        list[#list + 1] = { key = entry.itemID,
+            name = L.Format("%s: %d to %d", entry.name, entry.base, entry.limit) }
+    end
+
+    local last = FillIgnored(list, widgets.changedRows, widgets.changedHint,
+        widgets.changedEmpty,
+        function(itemID) ns.SellOut:Reset(itemID) end,
+        L["Put Keep in Stock back to where it started"],
+        function(itemID) return Util.GetItemQualityColor(itemID) end,
+        L["Reset"])
+
+    widgets.changedEnd:ClearAllPoints()
+    widgets.changedEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+end
+
 local function RefreshIgnored()
     RefreshStockProfessions()
+    RefreshChangedStock()
     RefreshNeverSubCrafts()
     if not widgets.ignoredHint or not ns.Profit.GetIgnored then return end
 
