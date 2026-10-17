@@ -758,12 +758,25 @@ function RecipeBookView.WithSwitch(spec)
             previous = button
         end
 
+        -- A tick box at the right end of the switch, for every view
+        -- (Show Equipment Upgrades, 2026-10-17); the rule stops short of it.
+        local corner = spec.corner and spec.corner(container)
+        if corner then
+            corner:SetPoint("RIGHT", container, "TOPRIGHT", -8, -13)
+            local level = container:GetFrameLevel()
+            corner:SetFrameLevel((type(level) == "number" and level or 1) + 5)
+        end
+
         local rule = container:CreateTexture(nil, "ARTWORK")
         if rule then
             rule:SetColorTexture(Theme.Unpack("border"))
             rule:SetHeight(1)
             rule:SetPoint("LEFT", previous, "RIGHT", 6, 0)
-            rule:SetPoint("RIGHT", container, "RIGHT", -8, 0)
+            if corner and corner:IsShown() then
+                rule:SetPoint("RIGHT", corner, "LEFT", -10, 0)
+            else
+                rule:SetPoint("RIGHT", container, "RIGHT", -8, 0)
+            end
         end
 
         return built

@@ -7,13 +7,22 @@
 --   2. No Equipment, no alt, a name Tradeskills does not know, or an
 --      Equipment that raises: no line, nothing raises.
 --   3. Answers are kept until Forget, and the setting turns it off.
+--   4. Off until Show Equipment Upgrades is ticked (the owner, 2026-10-17),
+--      and the box saves one value for every tab.
 
 local ns = {}
 ns.NewModule = function(name) local m = {} ns[name] = m return m end
 ns.RegisterEvent = function() return true end
 ns.COLORS = { profit = "ff4fd17a" }
 local arrowsOn = true
-ns.Config = { Get = function(_, key) if key == "showUpgradeArrows" then return arrowsOn end end }
+local saved = {}
+ns.Config = {
+    Get = function(_, key)
+        if key == "showUpgradeArrows" then return arrowsOn end
+        return saved[key]
+    end,
+    Set = function(_, key, value) saved[key] = value end,
+}
 ns.Recipes = { GetCharacterName = function(_, key)
     if key == "Player-1-ALT" then return "Ana Stormwood" end
     return key
@@ -34,7 +43,7 @@ end
 
 local CHEST, BOOTS, RING, MINE, STRANGER = 101, 102, 103, 104, 105
 local asked = 0
-local saved = BlackthornesEquipment
+local savedEquipment = BlackthornesEquipment
 
 print("\nwith Equipment")
 BlackthornesEquipment = { Butler = { Advise = function(_, id)
@@ -45,6 +54,12 @@ BlackthornesEquipment = { Butler = { Advise = function(_, id)
     if id == MINE then return { upgrade = "now", gain = 8 } end
     if id == STRANGER then return { alt = { key = "Player-9-NOBODY", gain = 5 } } end
 end } }
+
+check("off by default", Upgrades:AltText(CHEST), nil)
+check("asks Equipment nothing while off", asked, 0)
+check("not shown by default", Upgrades:ShowsAlts(), false)
+Upgrades:SetShowsAlts(true)
+check("ticked: saved", saved.showAltUpgrades, true)
 
 check("with the gain", Upgrades:AltText(CHEST), "Upgrade for Ana Stormwood, +11%")
 check("waiting on their level", Upgrades:AltText(BOOTS), "Upgrade for Ana Stormwood at level 32")
@@ -67,6 +82,11 @@ Upgrades:Forget()
 check("off with the upgrade setting", Upgrades:AltText(CHEST), nil)
 arrowsOn = true
 
+Upgrades:SetShowsAlts(false)
+check("unticked: saved", saved.showAltUpgrades, false)
+check("unticked: no line", Upgrades:AltText(CHEST), nil)
+Upgrades:SetShowsAlts(true)
+
 print("\nwithout Equipment, or one that raises")
 Upgrades:Forget()
 BlackthornesEquipment = nil
@@ -75,7 +95,7 @@ Upgrades:Forget()
 BlackthornesEquipment = { Butler = { Advise = function() error("boom") end } }
 check("a raise costs the line, not an error", Upgrades:AltText(CHEST), nil)
 
-BlackthornesEquipment = saved
+BlackthornesEquipment = savedEquipment
 Upgrades:Forget()
 
 if failures > 0 then error(("%d check(s) failed"):format(failures), 0) end

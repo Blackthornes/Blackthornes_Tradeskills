@@ -869,7 +869,13 @@ the Your time view's Farmer call), and crafted gear that's an upgrade for
 another of your characters says so after its name on the Profit, Level Up
 and Queue tabs (`Upgrades:AltFor`, `AltText`, `WithAltText`, from
 Equipment's `Butler:Advise` `alt`; off with the upgrade arrows; tested in
-`tools/test_altupgradecrafts.lua`).
+`tools/test_altupgradecrafts.lua`). Those lines show only while "Show
+Equipment Upgrades" is ticked (the owner, 2026-10-17): a box at the right
+of the Profit and Level Up switch rows (`spec.corner` in
+`RecipeBookView.WithSwitch`) and after the Queue's heading, all one saved
+value (`showAltUpgrades`, off unless ticked, never rename it;
+`Upgrades:ShowsAlts`, `SetShowsAlts`, `CreateAltCheckbox`), shown only
+while Equipment is loaded.
 
 ## The public price API
 
