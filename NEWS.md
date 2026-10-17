@@ -26,7 +26,6 @@ tool prints a note for a shipped line that reads like an advert.
 ## 0.64.0
 
 - Goblin Gold is a small bar that adds up the gold on all your characters on this realm and side. You set a goal and watch the bar fill up. It's off until you turn it on.
-- Recipes that came to Forever show up in Recipes To Learn right away, even before you open a profession.
 
 Fixes and changes:
 
