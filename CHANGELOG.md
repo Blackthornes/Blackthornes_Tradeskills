@@ -9,7 +9,7 @@ the top; a release is refused if its version has no section here.
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
 restart the game fully after updating (`/reload` is not enough).
 
-- **Goblin Gold:** a small bar adds up the gold on every character of your
+- **Gold tracker:** a small bar adds up the gold on every character of your
   realm and side. Set a goal and watch the bar fill up. Off until you tick it
   on the Look page.
 - **Recipes To Learn:** recipe names use their rarity color.
