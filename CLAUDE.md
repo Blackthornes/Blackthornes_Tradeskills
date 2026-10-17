@@ -899,8 +899,9 @@ how long it took and a box for the next, the hover card listing every
 character in dark glass, drag to move, its own size grip. Sounds are the
 game's own by ID. Settings, Look page, GOBLIN GOLD ("Gold Tracker:",
 "Gold Goal:", "Gold Tracker Place:") and "Goblin Gold:" under SOUNDS;
-`/bts gold [on|off|goal N|reset]`. Saved, account wide, never renamed:
-`goldTracker` (off unless ticked), `goldTrackerSound`,
+`/bts gold [on|off|goal N|reset]`, and `/bts gold test [goal|float]`
+(typed only, not in the help line) shows a cheer without saving anything.
+Saved, account wide, never renamed: `goldTracker` (off unless ticked), `goldTrackerSound`,
 `goldTrackerScale`, `goldTrackerX`, `goldTrackerY`. Like every cheer, it
 is never announced. Tested in `tools/test_goldgoal.lua`. Not yet seen in
 game.
