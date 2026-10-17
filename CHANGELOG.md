@@ -4,6 +4,19 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.64.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Goblin Gold:** a small bar adds up the gold on every character of your
+  realm and side. Set a goal and it cheers each tenth of the way. Off until
+  you tick it on the Look page.
+- **Recipes To Learn:** recipes that came to Forever show up before you open
+  a profession window, marked "New on Forever". Recipe names use their rarity
+  color.
+- **Bug fixes:** various fixes to Tradeskills.
+
 ## 0.63.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

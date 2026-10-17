@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.64.0
+
+- Goblin Gold is a small bar that adds up the gold on all your characters on this realm and side. You set a goal and it cheers each tenth of the way. It's off until you turn it on.
+- Recipes that came to Forever show up in Recipes To Learn right away, even before you open a profession.
+
+Fixes and changes:
+
+- Recipe names in Recipes To Learn use their rarity color.
+- Various fixes to Tradeskills.
+
 ## 0.63.1
 
 Fixes and changes:
