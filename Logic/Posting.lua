@@ -364,12 +364,35 @@ local function IndexBags()
                         -- Band". Read inside the pcall'd info above.
                         entry.link = info.hyperlink
                     end
+                    if entry.quality == nil then
+                        entry.quality = tonumber(info.quality)
+                    end
                 end
             end
         end
     end
 
     return order, slots
+end
+
+-- Poor quality (grey) items only ever go to a vendor: the house rule prices
+-- them at vendor only, and Butler says "vendor only" for them, so no list
+-- here offers to post one. The bag slot's own quality first, else the
+-- client's answer for the item.
+local POOR = (Enum and Enum.ItemQuality and Enum.ItemQuality.Poor) or 0
+
+local function IsGrey(itemID, held)
+    local quality = held and held.quality
+    if quality == nil and type(C_Item) == "table" and type(C_Item.GetItemQualityByID) == "function" then
+        local ok, value = pcall(C_Item.GetItemQualityByID, itemID)
+        quality = ok and tonumber(value) or nil
+    end
+    local getInfo = (type(C_Item) == "table" and C_Item.GetItemInfo) or _G.GetItemInfo
+    if quality == nil and type(getInfo) == "function" then
+        local ok, _, _, value = pcall(getInfo, itemID)
+        quality = ok and tonumber(value) or nil
+    end
+    return quality == POOR
 end
 
 --- A validated ItemLocation for a bag slot, or nil.
@@ -1051,6 +1074,9 @@ function Posting:GetPostable(opts)
         elseif self:IsIgnored(itemID) then
             wanted = false
             skipped[itemID] = "ignored (Settings, Ignored items)"
+        elseif IsGrey(itemID, slots[itemID]) then
+            wanted = false
+            skipped[itemID] = "grey, sells to a vendor"
         end
 
         if wanted then
