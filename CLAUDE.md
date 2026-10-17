@@ -685,6 +685,26 @@ the book (keeping Classic's as `classicSkill`); players' reports and a
 recipe item's tooltip still win. Never name where the data came from in
 the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 
+## Recipes Forever added
+
+The owner (2026-10-17): "always add new recipe finds to tradeskills".
+`Data/ForeverRecipes.lua` is written by `tools/make_forever_recipes.py
+<tables folder> --build <build>` from the Forever client's game tables
+(SkillLineAbility, SpellName, SpellEffect, SpellReagents, Item,
+ItemEffect, ItemXItemEffect, ItemSparse); never edit it by hand, never
+commit the tables or name where they came from. It lays every profession
+recipe in Forever's own spell range (`FOREVER_FIRST`, 1,000,000 and up;
+below are other Classic seasons' leftovers) that the book lacks into
+`ns.RECIPE_BOOK`, in the book's row shape with `f = 1` and `y`/`g` for
+yellow and grey, and its recipe items with their vendor price. So they
+show among the recipes to learn and on enchant tooltips before anyone
+opens a profession window; a window's own recipe still wins. They are
+never matched to a Classic recipe by what they make or their name
+(`record.forever`). Where to learn most is not known, so Learn next
+leaves them out, and Recipes to learn says "New on Forever". **Rerun it
+whenever the client tables are pulled again** (the Saturday check), and
+after `make_recipe_book.py`. Tested in `tools/test_foreverrecipes.lua`.
+
 ## Sales details on the item tooltip
 
 A player asked (2026-10-13, the owner agreeing, from a mockup) for more
