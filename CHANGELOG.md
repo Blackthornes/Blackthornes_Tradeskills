@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.63.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Show Equipment Upgrades:** a box on the Profit, Level Up and Queue tabs
+  turns on the note that says a craft is an upgrade for another of your
+  characters. Off until you tick it. Needs Equipment.
+
 ## 0.62.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
