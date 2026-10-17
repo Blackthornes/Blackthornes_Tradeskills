@@ -122,7 +122,16 @@ local function NewView(opts)
         end
 
         Theme.SetRowName(row.name, entry.name)
-        row.name:SetTextColor(Theme.Unpack(entry.known and "dim" or "text"))
+        -- The name in the rarity of what it makes, as on My crafts, faded for
+        -- a recipe already known. Plain until the client has the item; the
+        -- redraw on GET_ITEM_INFO_RECEIVED colours it then.
+        local okColor, r, g, b = pcall(Util.GetItemQualityColor, entry.outputItemID)
+        if okColor and r then
+            row.name:SetTextColor(r, g, b, entry.known and 0.55 or 1)
+        else
+            row.name:SetTextColor(Theme.Unpack(entry.known and "dim" or "text"))
+            if entry.outputItemID then state.waiting = true end
+        end
 
         local cells = row.cells
         -- Green when your skill is already enough to learn it, amber when
