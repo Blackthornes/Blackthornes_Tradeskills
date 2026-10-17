@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.64.0
+
+- A gold tracker is now available in Tradeskills. It's a small bar that adds up the gold on all your characters on this realm and side. You set a goal and watch the bar fill up. It's off until you turn it on with Gold Tracker on the Look page of Settings.
+
+Fixes and changes:
+
+- Recipe names in Recipes To Learn use their rarity color.
+- Various fixes to Tradeskills.
+
 ## 0.63.1
 
 Fixes and changes:
