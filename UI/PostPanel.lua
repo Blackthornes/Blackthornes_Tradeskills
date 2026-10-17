@@ -726,10 +726,10 @@ end
 
 --- The lines Sell shows now, Hide losses applied.
 function PostPanel:ShownLines()
-    local lines = ns.Posting:GetPostable({ includeAll = true, showHeld = true })
+    local lines, toVendor = ns.Posting:GetPostable({ includeAll = true, showHeld = true })
     local hidden = 0
     if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
-    return lines, hidden
+    return lines, hidden, toVendor or 0
 end
 
 --- List all: list the most valuable stack still on the list. Each click
@@ -1658,7 +1658,7 @@ function PostPanel:Refresh()
 
     if TypingInList(self.list) then return end
 
-    local lines, hidden = self:ShownLines()
+    local lines, hidden, toVendor = self:ShownLines()
     self.shownLines = lines
     self:UpdateListAll(lines)
 
@@ -1666,7 +1666,11 @@ function PostPanel:Refresh()
     self.empty:SetShown(#lines == 0)
 
     if #lines == 0 then
-        self.empty:SetText(hidden > 0
+        self.empty:SetText(hidden == 0 and toVendor > 0
+            and (toVendor == 1
+                and L.Format("A vendor pays more for everything here (%d item).\n\nSell it at a vendor.", toVendor)
+                or L.Format("A vendor pays more for everything here (%d items).\n\nSell them at a vendor.", toVendor))
+            or hidden > 0
             and (hidden == 1
                 and L.Format("Everything here would sell at a loss (%d item).\n\nUntick Hide losses to see them.", hidden)
                 or L.Format("Everything here would sell at a loss (%d items).\n\nUntick Hide losses to see them.", hidden))
@@ -1704,7 +1708,8 @@ function PostPanel:Refresh()
             or L.Format("%d items, about %s", #lines, about))
         .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))
             or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or "")
-        .. (keptBack > 0 and ("  ·  " .. L.Format("%d kept for your other addons", keptBack)) or ""))
+        .. (keptBack > 0 and ("  ·  " .. L.Format("%d kept for your other addons", keptBack)) or "")
+        .. (toVendor > 0 and ("  ·  " .. L.Format("%d for the vendor", toVendor)) or ""))
 end
 
 --- The Auctions switch says how many of yours are undercut, in red, so it

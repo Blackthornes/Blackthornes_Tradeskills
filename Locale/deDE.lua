@@ -2951,3 +2951,6 @@ L["Shows when a craft is an upgrade for one of your other characters."] = "Zeigt
 -- Profit by method
 L["Farmed"] = "Gefarmt"
 L["sold at auction, looted or gathered by you"] = "im Auktionshaus verkauft, selbst erbeutet oder gesammelt"
+L["A vendor pays more for everything here (%d item).\n\nSell it at a vendor."] = "Ein Händler zahlt für alles hier mehr (%d Gegenstand).\n\nVerkauf ihn bei einem Händler."
+L["A vendor pays more for everything here (%d items).\n\nSell them at a vendor."] = "Ein Händler zahlt für alles hier mehr (%d Gegenstände).\n\nVerkauf sie bei einem Händler."
+L["%d for the vendor"] = "%d für den Händler"
