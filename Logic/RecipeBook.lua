@@ -8,12 +8,15 @@
 --
 -- The rest of the addon only knows recipes a character has learned, read
 -- from the profession window (Data/Recipes.lua). A recipe item at the auction
--- house is just an item to the game: nothing says what it teaches. So two
+-- house is just an item to the game: nothing says what it teaches. So three
 -- sources are laid together here:
 --
 --   * Data/RecipeBook.lua, generated from Classic 1.12 data: every recipe of
 --     every crafting profession, what it makes and from what, and which
 --     recipe item teaches it, with who sells or drops that item.
+--   * Data/ForeverRecipes.lua, generated from the Forever client's game
+--     tables: the recipes Forever added, laid into that book (f = 1), so
+--     they show before anyone has opened a profession window.
 --   * What profession windows have shown on this account, learned or not
 --     (`seenRecipes`, written by Recipes:Harvest). Where Forever differs
 --     from Classic, the game wins, and recipes Forever added are listed from
@@ -206,11 +209,20 @@ function RecipeBook:GetAll()
             trainerCost = row.t,
             starter = row.s == 1,
             recipeItems = itemsFor[recipeID],
+            forever = row.f == 1 or nil,
+            yellow = row.y,
+            grey = row.g,
         }
 
         merged[recipeID] = record
-        if record.outputItemID then byOutput[record.outputItemID] = record end
-        if record.name then byName[record.name:lower()] = record end
+        -- A recipe Forever added (Data/ForeverRecipes.lua) is kept under the
+        -- game's own ID, so a window's recipe never has to be matched to it
+        -- by what it makes or its name (Forever's First Aid Minor Healing
+        -- Potion makes the same potion as Alchemy's).
+        if not record.forever then
+            if record.outputItemID then byOutput[record.outputItemID] = record end
+            if record.name then byName[record.name:lower()] = record end
+        end
     end
 
     for recipeID, seen in pairs(SeenTable(false) or {}) do
@@ -714,13 +726,17 @@ function RecipeBook:LearnFrom(record)
         end
     end
 
-    if otherItem then
+    if otherItem and record.forever then
+        lines[#lines + 1] = L["New on Forever. Where to get it isn't known yet."]
+    elseif otherItem then
         short = short or L["Quest or other"]
         lines[#lines + 1] = L["Recipe item from a quest, reputation or the other faction"]
     end
 
     if not short and record.seenInGame and not record.recipeItems then
         lines[#lines + 1] = L["Seen in a profession window, but where it's learned isn't known yet"]
+    elseif not short and record.forever and not record.recipeItems then
+        lines[#lines + 1] = L["New on Forever. Where to learn it isn't known yet."]
     end
 
     return short or L["Unknown"], lines
