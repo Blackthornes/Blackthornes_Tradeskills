@@ -943,6 +943,16 @@ end
 -- @return floor   copper, or nil if neither is known
 -- @return reason  "cost" or "vendor", naming which floor applies
 -- @return vendor  the vendor price itself, for display
+--- True when a vendor pays at least what one would bring on the auction
+--- house after its cut, so it is better sold to a vendor. A player asked
+--- (2026-10-17) for Tradeskills to say so, rather than list it as a loss.
+function Posting.VendorPaysMore(itemID, price, vendorPrice)
+    if not price or not vendorPrice or vendorPrice <= 0 then return false end
+    local ok, net = pcall(ns.Profit.NetFromListing, ns.Profit, itemID, price)
+    if not ok or type(net) ~= "number" then net = price end
+    return net <= vendorPrice
+end
+
 function Posting:GetLossFloor(itemID, unitCost)
     local vendorPrice = Util.GetVendorSellPrice(itemID)
 
@@ -1063,6 +1073,9 @@ function Posting:GetPostable(opts)
     -- Why each item in the bags was left out, for /bts readysell.
     local skipped = {}
 
+    -- How many were left for a vendor, for the drawer's summary line.
+    local vendorPile = 0
+
     for _, itemID in ipairs(order) do
         -- Reagents the queue needs are offered too, less the number it needs
         -- (held back below), as crafted stock is: one queued craft needing
@@ -1139,6 +1152,16 @@ function Posting:GetPostable(opts)
             local lossFloor, lossReason, vendorPrice =
                 self:GetLossFloor(itemID, unitCost)
 
+            -- Worth more at a vendor than the auction house pays after its
+            -- cut: it goes to the vendor pile, not this list. A price the
+            -- player typed this session still lists.
+            local toVendor = basis ~= "chosen" and Posting.VendorPaysMore(itemID, price, vendorPrice)
+            if toVendor and sellable and count and count > 0
+                    and not (heldAll and not opts.showHeld) then
+                vendorPile = vendorPile + 1
+                skipped[itemID] = "a vendor pays more"
+            end
+
             -- Under what the last craft of it cost, with that guard on.
             local belowCrafted = price ~= nil
                 and self:BelowCraftedCost(itemID, price) ~= nil
@@ -1166,7 +1189,7 @@ function Posting:GetPostable(opts)
             local needsPrice = opts.includeAll and not opts.includeUnpriced
 
             if sellable and count > 0 and (price or not needsPrice)
-                    and (opts.showHeld or not heldAll) then
+                    and (opts.showHeld or not heldAll) and not toVendor then
                 lines[#lines + 1] = {
                     itemID = itemID,
                     recipeID = outputs[itemID],
@@ -1225,7 +1248,7 @@ function Posting:GetPostable(opts)
         self:WatchReadyToSell(lines, skipped)
     end
 
-    return lines
+    return lines, vendorPile
 end
 
 --------------------------------------------------------------------------------
