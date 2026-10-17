@@ -178,8 +178,21 @@ commands.gold("goal 5,000g")
 check("typed goal is set in gold", GoldGoal:Goal() == 5000 * GOLD)
 commands.gold("goal")
 check("a goal of nothing clears it", GoldGoal:Goal() == nil)
+local before = #cheers
+local savedGoal = GoldGoal:Goal()
+commands.gold("test")
+check("test shows a tenth's cheer", #cheers == before + 1 and cheers[#cheers].kind == "step" and cheers[#cheers].test)
+commands.gold("test goal")
+check("test goal shows the goal's cheer", cheers[#cheers].kind == "goal" and cheers[#cheers].took)
+local floatsBefore = #floats
+commands.gold("test float")
+check("test float floats gold", #floats == floatsBefore + 1)
+check("and none of it saves anything", GoldGoal:Goal() == savedGoal)
 commands.gold("off")
 check("off", settings.goldTracker == false)
+commands.gold("test")
+check("test while off only says to turn it on", #cheers == before + 2
+    and printed[#printed]:find("turn it on first", 1, true) ~= nil)
 commands.gold("on")
 check("on", settings.goldTracker == true)
 
