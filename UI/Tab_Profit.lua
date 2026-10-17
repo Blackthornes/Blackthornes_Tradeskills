@@ -2091,6 +2091,9 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     mainTip = L["The crafts you know, by profit"],
     buildMain = BuildCrafts,
     refreshMain = Refresh,
+    corner = function(parent)
+        return ns.Upgrades and ns.Upgrades.CreateAltCheckbox and ns.Upgrades:CreateAltCheckbox(parent)
+    end,
     -- Your time (UI/YourTimeView.lua, the owner said build it 2026-10-15):
     -- farming a craft's materials against selling them and buying them.
     extras = ns.YourTimeView and {

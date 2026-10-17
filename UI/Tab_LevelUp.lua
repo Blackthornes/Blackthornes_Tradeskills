@@ -1499,6 +1499,9 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     buildMain = Build,
     refreshMain = Refresh,
     learn = ns.RecipeBookView.New({ order = "skill" }),
+    corner = function(parent)
+        return ns.Upgrades and ns.Upgrades.CreateAltCheckbox and ns.Upgrades:CreateAltCheckbox(parent)
+    end,
 })
 
 UI:RegisterTab({

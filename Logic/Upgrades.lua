@@ -127,7 +127,7 @@ end
 --- Kept per item, like the other answers. Never raises.
 function Upgrades:AltFor(itemID)
     itemID = tonumber(itemID)
-    if not itemID or not self:IsEnabled() then return nil end
+    if not itemID or not self:IsEnabled() or not self:ShowsAlts() then return nil end
 
     local kept = alts[itemID]
     if kept ~= nil then return kept or nil end
@@ -152,6 +152,49 @@ function Upgrades:AltFor(itemID)
     end
     alts[itemID] = answer
     return answer or nil
+end
+
+--- Are other characters' upgrades shown on crafts? "Show Equipment
+--- Upgrades" on Profit, Level Up and the Queue (the owner, 2026-10-17: off
+--- until a player ticks it). One saved value for every box.
+function Upgrades:ShowsAlts()
+    return ns.Config and ns.Config:Get("showAltUpgrades") == true or false
+end
+
+local altBoxes = {}
+
+--- Tick or untick every Show Equipment Upgrades box and redraw the tab.
+function Upgrades:SetShowsAlts(on)
+    on = on == true
+    if ns.Config then ns.Config:Set("showAltUpgrades", on) end
+    for _, box in ipairs(altBoxes) do
+        if box.SetChecked then box:SetChecked(on) end
+    end
+    if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+end
+
+--- The Show Equipment Upgrades box for a tab's filter row. Shown only while
+--- Blackthornes Equipment is loaded, since nothing else says what an alt
+--- would wear.
+function Upgrades:CreateAltCheckbox(parent)
+    local Widgets = ns.Widgets
+    if not (Widgets and Widgets.CreateCheckbox) then return nil end
+    local box = Widgets.CreateCheckbox(parent, L["Show Equipment Upgrades"], function(checked)
+        Upgrades:SetShowsAlts(checked)
+    end, self:ShowsAlts())
+    if box.HookScript then
+        box:HookScript("OnEnter", function(owner)
+            GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(L["Shows when a craft is an upgrade for one of your other characters."], 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        box:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    local equipment = rawget(_G, "BlackthornesEquipment")
+    local butler = type(equipment) == "table" and equipment.Butler
+    box:SetShown(type(butler) == "table" and type(butler.Advise) == "function")
+    altBoxes[#altBoxes + 1] = box
+    return box
 end
 
 --- "Upgrade for Ana Stormwood, +9%" (or "... at level 32"), or nil.
