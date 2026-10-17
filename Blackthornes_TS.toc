@@ -63,6 +63,7 @@ Logic\Posting.lua
 Logic\CraftedCost.lua
 Logic\SellOut.lua
 Logic\GoldLog.lua
+Logic\GoldGoal.lua
 Logic\MethodProfit.lua
 Logic\Transfer.lua
 Logic\SaleAlarm.lua
@@ -113,6 +114,7 @@ UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\EnchantTooltip.lua
 UI\MailReport.lua
+UI\GoldGoal.lua
 UI\QueueMailPanel.lua
 UI\RecipeBookView.lua
 UI\YourTimeView.lua

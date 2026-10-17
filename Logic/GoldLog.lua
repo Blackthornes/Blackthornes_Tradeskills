@@ -154,6 +154,10 @@ function GoldLog:Record(source, amount, t)
         session[#session + 1] = { t = t, source = source, amount = amount }
         if #session > MAX_SESSION then table.remove(session, 1) end
     end
+
+    -- Goblin Gold floats new gold up off its bar (Logic/GoldGoal.lua).
+    local GoldGoal = ns.GoldGoal
+    if GoldGoal and GoldGoal.OnRecord then pcall(GoldGoal.OnRecord, GoldGoal, source, amount) end
 end
 
 --- Hour buckets past 8 days are folded away (their days already hold them),

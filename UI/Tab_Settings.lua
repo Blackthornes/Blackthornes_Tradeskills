@@ -1587,6 +1587,9 @@ local function Build(outer)
         L["A coin when another of your characters can make a material for less."])
     SoundRow("goalSound", L["Farmer Goal Set:"],
         L["A cheer when Set goal on the Gather tab makes a Farmer goal."])
+    SoundRow("goldTrackerSound", L["Goblin Gold:"],
+        L["Coins at each tenth of your gold goal, and a cheer when you reach it."],
+        function() if ns.GoldGoalUI then ns.GoldGoalUI.Play("step") end end)
     SoundRow("statsCheer", L["Best Week of Sales:"],
         L["A cheer on the Stats tab when an item has its best week of sales yet, once a week."],
         function()
@@ -1602,6 +1605,41 @@ local function Build(outer)
     end, { width = 60, height = 20 })
     statsOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(statsOpen)
+
+    -- Goblin Gold (asked 2026-10-17): the gold on every character of this
+    -- realm and side, on a small bar, with a goal. Off unless ticked; its
+    -- sound is under SOUNDS. Logic/GoldGoal.lua, UI/GoldGoal.lua. The
+    -- buttons are /bts gold on, off, goal and reset.
+    CreateSection(pages.look, 2, L["GOBLIN GOLD"])
+    local goldRow = CreateRow(pages.look, 2, L["Gold Tracker:"],
+        L["A small bar with the gold on all your characters on this realm and side."])
+
+    widgets.goldTracker = Widgets.CreateCheckbox(goldRow, L["On"], function(checked)
+        if ns.GoldGoal then ns.GoldGoal:SetOn(checked) end
+    end, false)
+    widgets.goldTracker:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local goalRow = CreateRow(pages.look, 2, L["Gold Goal:"],
+        L["Each tenth of the way gets a cheer. Leave it empty for no goal."])
+
+    widgets.goldGoal = Widgets.CreateNumberBox(goalRow, {
+        width = 80, min = 1, max = 99999999, allowEmpty = true, placeholder = L["None"],
+        onChange = function(value)
+            if not ns.GoldGoal then return end
+            local goal = ns.GoldGoal:Goal()
+            if value and goal and math.floor(goal / 10000) == value then return end
+            ns.GoldGoal:SetGoalGold(value)
+        end,
+    })
+    widgets.goldGoal:SetPoint("TOPLEFT", CONTROL_X, 0)
+    AddUnit(goalRow, widgets.goldGoal, "g")
+
+    local goldPlaceRow = CreateRow(pages.look, 2, L["Gold Tracker Place:"])
+    local goldPlace = Widgets.CreateButton(goldPlaceRow, L["Reset"], function()
+        if ns.GoldGoalUI then ns.GoldGoalUI:ResetPlace() end
+    end, { width = 60, height = 20 })
+    goldPlace:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(goldPlace)
 
     -- Sharing (asked 2026-10-07): your characters on another account of
     -- yours, and prices within your guild. Logic/AccountLink.lua and
@@ -2133,6 +2171,9 @@ local function Refresh()
     widgets.saleAlarm:Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
+    widgets.goldTracker:SetChecked(Config:Get("goldTracker") == true)
+    local goldGoal = ns.GoldGoal and ns.GoldGoal:Goal()
+    widgets.goldGoal:SetValue(goldGoal and math.floor(goldGoal / 10000) or nil, true)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local linkBox = widgets.linkNames.editBox
