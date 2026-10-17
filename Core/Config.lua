@@ -306,6 +306,17 @@ local DEFAULTS = {
         -- The Stats tab cheers an item's best week of sales, once (UI/Tab_Stats.lua).
         statsCheer = true,
 
+        -- Goblin Gold (asked 2026-10-17): a bar with the gold on every
+        -- character of this realm and side, and a goal to cheer toward.
+        -- Off unless ticked. Its sound, its size (percent) and where it
+        -- sits. The goal is goldGoals in the saved data. Never rename these.
+        -- See Logic/GoldGoal.lua and UI/GoldGoal.lua.
+        goldTracker = false,
+        goldTrackerSound = true,
+        goldTrackerScale = 100,
+        goldTrackerX = nil,
+        goldTrackerY = nil,
+
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
         tradeRequests = false,

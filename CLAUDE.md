@@ -877,6 +877,34 @@ value (`showAltUpgrades`, off unless ticked, never rename it;
 `Upgrades:ShowsAlts`, `SetShowsAlts`, `CreateAltCheckbox`), shown only
 while Equipment is loaded.
 
+## Goblin Gold
+
+The owner said build it (2026-10-17, from a mockup): a small bar on
+screen with the gold on every character of this realm and side, and a
+goal cheered a tenth at a time. Off unless ticked. `Logic/GoldGoal.lua`
+adds it up from `ns.db.characters` (the character playing at `GetMoney`,
+the rest as last seen, one character under two records once through
+`Characters:Same`, the other account's characters counted; guild data
+never), keeps the goal in `goldGoals[realmKey] = { goal, setAt, best,
+reachedAt }` (never rename it) and cheers once each time `best`, the
+highest tenth reached, moves (a goal starts at the tenth you are on, so
+a dip and a climb back cheers nothing). A cheer waits while you fight,
+at the auction house or with a game panel open (`GoldGoal:Busy`).
+Today, this week, the best day and where most of it came from are
+`GoldLog`'s, gold moved between your characters left out; new gold
+floats up off the bar from `GoldLog:Record` (`GoldGoal:OnRecord`), never
+a transfer. `UI/GoldGoal.lua` draws it: the total counting up, a fill
+with lit ticks, coins and a line at each tenth, a window at the goal with
+how long it took and a box for the next, the hover card listing every
+character in dark glass, drag to move, its own size grip. Sounds are the
+game's own by ID. Settings, Look page, GOBLIN GOLD ("Gold Tracker:",
+"Gold Goal:", "Gold Tracker Place:") and "Goblin Gold:" under SOUNDS;
+`/bts gold [on|off|goal N|reset]`. Saved, account wide, never renamed:
+`goldTracker` (off unless ticked), `goldTrackerSound`,
+`goldTrackerScale`, `goldTrackerX`, `goldTrackerY`. Like every cheer, it
+is never announced. Tested in `tools/test_goldgoal.lua`. Not yet seen in
+game.
+
 ## The public price API
 
 The owner said yes (2026-10-12) to a documented price call for other
