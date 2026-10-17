@@ -23,6 +23,10 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.63.0
+
+- Crafts that help another of your characters only say so when you tick a new box on the Profit, Level Up and Queue tabs. It's off until you turn it on.
+
 ## 0.62.0
 
 - The Characters tab splits Horde and Alliance, and shows level, rested XP, zone and time played.

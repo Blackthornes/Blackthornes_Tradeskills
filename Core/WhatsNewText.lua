@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.63.0", lines = {
+        "Crafts that help another of your characters only say so when you tick a new box on the Profit, Level Up and Queue tabs. It's off until you turn it on.",
+    } },
     { version = "0.62.0", lines = {
         "The Characters tab splits Horde and Alliance, and shows level, rested XP, zone and time played.",
         "The mouse wheel can list and cancel at the auction house. It's off until you turn it on.",
@@ -19,9 +22,5 @@ ns.WHATS_NEW = {
         "The List Next button says what its next click does and shows the next stack when you hover it.",
         "Keep in stock also comes back down after 3 unsold rounds in a row. Settings lists what it changed, with a Reset.",
         "With Equipment, enchanting recipes get a green arrow when they beat what you wear.",
-    } },
-    { version = "0.60.0", lines = {
-        "The Profit tab has a Your time view. It compares farming the materials, selling them as they are, and buying them, in gold an hour.",
-        "Gear with a random suffix gets a price for each suffix.",
     } },
 }
