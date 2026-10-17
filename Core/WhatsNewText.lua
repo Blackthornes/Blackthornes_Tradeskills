@@ -6,7 +6,7 @@ local _, ns = ...
 
 ns.WHATS_NEW = {
     { version = "0.64.0", lines = {
-        "Goblin Gold is a small bar that adds up the gold on all your characters on this realm and side. You set a goal and watch the bar fill up. It's off until you turn it on.",
+        "A gold tracker is now available in Tradeskills. It's a small bar that adds up the gold on all your characters on this realm and side. You set a goal and watch the bar fill up. It's off until you turn it on.",
     } },
     { version = "0.63.0", lines = {
         "Crafts that help another of your characters only say so when you tick a new box on the Profit, Level Up and Queue tabs. It's off until you turn it on.",
