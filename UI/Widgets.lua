@@ -1199,6 +1199,19 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
         end
     end
 
+    --- Moves the menu onto UIParent, scaled to match the box. A menu left
+    --- inside a scrolling list was clipped by it and ran off the window's
+    --- foot with its last options out of sight.
+    local function Lift()
+        pcall(function()
+            if not UIParent then return end
+            if menu:GetParent() ~= UIParent then menu:SetParent(UIParent) end
+            local scale = dropdown:GetEffectiveScale() / UIParent:GetEffectiveScale()
+            if type(scale) == "number" and scale > 0 then menu:SetScale(scale) end
+            menu:SetFrameStrata("DIALOG")
+        end)
+    end
+
     dropdown:SetScript("OnMouseDown", function()
         if menu:IsShown() then
             menu:Hide()
@@ -1211,6 +1224,9 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 end
             end
 
+            -- The menu opens on UIParent at the box's own size, so a list
+            -- that scrolls (Settings' pages) can't cut it off at its edge.
+            Lift()
             Rebuild()
             Place()
             menu:Show()
@@ -1239,6 +1255,18 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     -- open until picked from or clicked shut, as before.
     menu:SetScript("OnShow", function(self)
         pcall(self.RegisterEvent, self, "GLOBAL_MOUSE_DOWN")
+        local ok, top = pcall(dropdown.GetTop, dropdown)
+        self.openTop = ok and type(top) == "number" and top or nil
+    end)
+
+    -- On UIParent the menu no longer moves out of sight with a list that
+    -- scrolls, so it closes once its box has scrolled away.
+    menu:SetScript("OnUpdate", function(self)
+        if not self.openTop then return end
+        local ok, top = pcall(dropdown.GetTop, dropdown)
+        if ok and type(top) == "number" and math.abs(top - self.openTop) > 0.5 then
+            self:Hide()
+        end
     end)
     menu:SetScript("OnHide", function(self)
         pcall(self.UnregisterEvent, self, "GLOBAL_MOUSE_DOWN")
