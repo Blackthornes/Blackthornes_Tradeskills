@@ -96,6 +96,10 @@ local function Region(parent)
     region.CreateTexture = function(self) return Region(self) end
     region.CreateFontString = function(self) return Region(self) end
     region.GetParent = function(self) return self.parent end
+    region.SetParent = function(self, parent) self.parent = parent end
+    region.SetScale = function(self, scale) self.scale = scale end
+    region.GetEffectiveScale = function(self) return self.effectiveScale or 1 end
+    region.GetTop = function(self) return self.top end
     region.GetMinMaxValues = function(self) return self.min or 0, self.max or 0 end
     region.SetMinMaxValues = function(self, lo, hi) self.min, self.max = lo, hi end
     region.GetValue = function(self) return self.value or 0 end
@@ -312,6 +316,20 @@ check("a click on the menu itself leaves it open", dropdown.menu.shown, true)
 dropdown.menu.mouseOver = false
 dropdown.scripts.OnHide(dropdown)
 check("its tab closing takes the menu with it", dropdown.menu.shown, false)
+
+-- A list that scrolls (Settings' pages) cut the menu off at its foot, so it
+-- opens on UIParent at the box's size, and closes once the box scrolls away.
+holder.effectiveScale = 1.2
+dropdown.effectiveScale = 1.2
+dropdown.top = 300
+dropdown.scripts.OnMouseDown(dropdown)
+check("the menu opens on UIParent", dropdown.menu.parent == UIParent, true)
+check("at the box's own size", dropdown.menu.scale, 1.2)
+dropdown.menu.scripts.OnUpdate(dropdown.menu)
+check("it stays open while the box stays put", dropdown.menu.shown, true)
+dropdown.top = 260
+dropdown.menu.scripts.OnUpdate(dropdown.menu)
+check("and closes when the box scrolls away", dropdown.menu.shown, false)
 
 print("")
 print("buttons")
