@@ -504,6 +504,23 @@ ns.RegisterCommand("gold", L["Goblin Gold: your gold on this realm and side (on,
             GoldGoal:SetGoal(nil)
             ns.Print(L["Goblin Gold: no goal now."])
         end
+    elseif word == "test" then
+        -- Typed only, never in the help line: shows a cheer without
+        -- saving anything, so the sounds and the look can be tried.
+        if not GoldGoal:IsOn() then
+            ns.Print(L["Goblin Gold: turn it on first with /bts gold on."])
+        elseif UI then
+            local total = GoldGoal:Total()
+            local goal = GoldGoal:Goal() or GoldGoal.NextGoal(total)
+            if rest == "goal" then
+                pcall(UI.Cheer, UI, { kind = "goal", step = GoldGoal.STEPS, goal = goal, took = 3 * 86400, test = true })
+            elseif rest == "float" then
+                pcall(UI.Float, UI, 48 * COPPER_PER_GOLD)
+            else
+                local step = math.max(1, math.min(GoldGoal.STEPS - 1, GoldGoal.Step(total, goal) + 1))
+                pcall(UI.Cheer, UI, { kind = "step", step = step, goal = goal, test = true })
+            end
+        end
     elseif word == "reset" then
         if UI and UI.ResetPlace then UI:ResetPlace() end
         ns.Print(L["Goblin Gold: the bar is back in its place."])
