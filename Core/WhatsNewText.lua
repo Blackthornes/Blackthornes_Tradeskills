@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "0.64.0", lines = {
+        "A gold tracker is now available in Tradeskills. It's a small bar that adds up the gold on all your characters on this realm and side. You set a goal and watch the bar fill up. It's off until you turn it on with Gold Tracker on the Look page of Settings.",
+    } },
     { version = "0.63.0", lines = {
         "Crafts that help another of your characters only say so when you tick a new box on the Profit, Level Up and Queue tabs. It's off until you turn it on.",
     } },
@@ -15,12 +18,5 @@ ns.WHATS_NEW = {
         "With Farmer, the Gather tab shows how fast you farm a material, and Profit by method has a Farmed line.",
         "With Equipment, crafted gear that helps another of your characters says so.",
         "Profit shows gold a day in place of gold an hour.",
-    } },
-    { version = "0.61.0", lines = {
-        "The Disenchanting tab has a Find a material view. Pick an enchanting material to see what gave it to you before and the best ways to get more.",
-        "Overcutting posts just under a big stack when a few cheap ones sell first. It's off until you turn it on.",
-        "The List Next button says what its next click does and shows the next stack when you hover it.",
-        "Keep in stock also comes back down after 3 unsold rounds in a row. Settings lists what it changed, with a Reset.",
-        "With Equipment, enchanting recipes get a green arrow when they beat what you wear.",
     } },
 }
