@@ -73,6 +73,11 @@ ns.Util = {
   FormatMoney = function(c) return tostring(c) .. "c" end,
   GetItemLabel = function(id) return "item" .. id end,
   Uncolored = function(t) return t end,
+  -- Item 2307 is Uncommon; item 5 (a known recipe's) is Rare; others not loaded.
+  GetItemQualityColor = function(id)
+    if id == 2307 then return 0.12, 1, 0 end
+    if id == 5 then return 0, 0.44, 0.87 end
+  end,
 }
 ns.RegisterEvent = function() end
 
@@ -131,10 +136,13 @@ check("then the rest", dropdown.options[4].text, "Enchanting")
 check("every row listed", #list.data, 3)
 
 print("\nrows")
+local lastRow
 local function Draw(entry)
   local row = Frame()
   list.opts.createRow(row)
+  row.name.SetTextColor = function(self, r, g, b, a) self.color = { r, g, b, a } end
   list.opts.updateRow(row, entry)
+  lastRow = row
   return row.cells
 end
 local boots = Draw(rows[1])
@@ -149,6 +157,11 @@ check("an enchant makes no item", ench.sells.text, "no item")
 check("an unpriced profit is a dash", ench.profit.text, "--")
 check("an unpriced cost is a dash", ench.cost.text, "--")
 check("a known one says so", Draw(rows[3]).learn.text, "Known")
+check("a known one keeps its rarity, faded", lastRow.name.color[3] .. "/" .. lastRow.name.color[4], "0.87/0.55")
+Draw(rows[1])
+check("the name is in its rarity colour", lastRow.name.color[1] .. "/" .. lastRow.name.color[4], "0.12/1")
+Draw(rows[2])
+check("an enchant with no item stays plain", lastRow.name.color[1], 1)
 list.opts.onEnter(Frame(), rows[1])
 list.opts.onEnter(Frame(), rows[2])
 
