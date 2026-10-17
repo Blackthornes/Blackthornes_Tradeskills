@@ -960,6 +960,18 @@ local function Build(container)
     heading.rule:SetPoint("LEFT", heading, "RIGHT", 6, 0)
     heading.rule:SetPoint("RIGHT", clear, "LEFT", -8, 0)
 
+    -- Show Equipment Upgrades (2026-10-17), after the heading; the rule
+    -- starts past it.
+    local altBox = ns.Upgrades and ns.Upgrades.CreateAltCheckbox and ns.Upgrades:CreateAltCheckbox(container)
+    if altBox then
+        altBox:SetPoint("LEFT", heading, "RIGHT", 10, 0)
+        if altBox:IsShown() then
+            heading.rule:ClearAllPoints()
+            heading.rule:SetPoint("LEFT", altBox, "RIGHT", 6, 0)
+            heading.rule:SetPoint("RIGHT", clear, "LEFT", -8, 0)
+        end
+    end
+
     local craftList = Widgets.CreateScrollList(container, {
         -- The craft being made stays lit, as in the craft pane's list.
         isSelected = function(entry)

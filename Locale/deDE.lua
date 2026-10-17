@@ -2945,6 +2945,8 @@ L["The %d you still need"] = "Die %d, die dir noch fehlen"
 L["Upgrade for %s"] = "Verbesserung für %s"
 L["Upgrade for %s at level %d"] = "Verbesserung für %s ab Stufe %d"
 L["Upgrade for %s, +%d%%"] = "Verbesserung für %s, +%d%%"
+L["Show Equipment Upgrades"] = "Equipment-Verbesserungen zeigen"
+L["Shows when a craft is an upgrade for one of your other characters."] = "Zeigt, wenn etwas, das du herstellst, eine Verbesserung für einen deiner anderen Charaktere ist."
 
 -- Profit by method
 L["Farmed"] = "Gefarmt"

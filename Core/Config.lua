@@ -150,6 +150,12 @@ local DEFAULTS = {
         -- by default). Never rename it.
         sellHoldsAltUpgrades = false,
 
+        -- "Show Equipment Upgrades" on Profit, Level Up and the Queue: a
+        -- craft that is an upgrade for another character says so after its
+        -- name (Upgrades:AltText). Off unless ticked (the owner,
+        -- 2026-10-17). Never rename it.
+        showAltUpgrades = false,
+
         -- Hide crafts that have hit their posted limit rather than showing
         -- them greyed out.
         hideAtPostLimit = true,
