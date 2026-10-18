@@ -23,6 +23,21 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.65.0
+
+- Right-click an item on the Sell list to keep some of it on the character you are playing. Your keeps are listed under Keep on This Character on the Queue page of Settings.
+
+Fixes and changes:
+
+- Item names use their rarity color on the shopping list, queue and chat lines.
+- The Level Up tab keeps its skill-up colors.
+- The Sell list holds back only as many copies of an upgrade as a character can wear, so spares can be sold.
+- Items set to always mail can be sold on the character they mail to.
+- The Sell list holds back what Butler keeps.
+- Vendor materials with limited stock use the auction house price when one is listed.
+- The Buy materials button at vendors steps aside when Butler is loaded.
+- Various fixes to Tradeskills.
+
 ## 0.64.0
 
 - A gold tracker is now available in Tradeskills. It's a small bar that adds up the gold on all your characters on this realm and side. You set a goal and watch the bar fill up. It's off until you turn it on with Gold Tracker on the Look page of Settings.
