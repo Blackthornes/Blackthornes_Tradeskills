@@ -6,7 +6,8 @@
 --      ever opened, from Data/VendorPrices.lua.
 --   2. A price seen at a vendor wins over that table.
 --   3. The vendor price wins even when someone lists it cheaper; only a
---      vendor seen with limited stock gives way to a cheaper auction.
+--      vendor seen with limited stock gives way to the auction price,
+--      cheaper or dearer, and only while something is listed.
 --   4. The shortfall list prices the same way.
 --   5. With "Charge market price" unticked, bag materials are free once
 --      across the whole queue, not once per craft queued.
@@ -90,6 +91,21 @@ do
 
     Vendor:GetTable()[THREAD] = { price = 10, limited = true }
     check("a limited shop gives way to a cheaper listing", Cost:GetReagentUnitCost(THREAD), 3)
+
+    Vendor:GetTable()[THREAD] = { price = 1, limited = true }
+    local price, source = Cost:GetReagentUnitCost(THREAD)
+    check("a limited shop gives way to a dearer listing too", price, 3)
+    check("and says it is bought at auction", source, "buy")
+
+    LOWEST[THREAD] = nil
+    price, source = Cost:GetReagentUnitCost(THREAD)
+    check("with nothing listed the limited shop is the price", price, 1)
+    check("and says it comes from a vendor", source, "vendor")
+    LOWEST[THREAD] = 3
+
+    ns.Prices.GetMine = function(_, id) if id == THREAD then return 2, "use" end end
+    check("a price the player set still wins", Cost:GetReagentUnitCost(THREAD), 2)
+    ns.Prices.GetMine = nil
 
     Vendor:GetTable()[VIAL] = { price = 5, extendedCost = true }
     check("an item bought with tokens has no gold price", Vendor:GetUnitPrice(VIAL), nil)
