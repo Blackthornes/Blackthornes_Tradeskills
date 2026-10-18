@@ -517,6 +517,9 @@ local function ShowRowTooltip(row, entry)
         or ns.SkillUp:GetTierLabel(entry.tier)
     GameTooltip:AddDoubleLine(L["Skill up"], chance, 0.7, 0.7, 0.7, r, g, b)
 
+    local steps = entry.recipeID and ns.SkillUp:ColorSteps(entry.recipeID)
+    if steps then GameTooltip:AddLine(steps, 1, 1, 1, true) end
+
     GameTooltip:AddDoubleLine(L["Materials"], entry.cost
         and Util.FormatMoney(entry.cost, { noColor = true }) or L["no price"],
         0.7, 0.7, 0.7, 1, 1, 1)
