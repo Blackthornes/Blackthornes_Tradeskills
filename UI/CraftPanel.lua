@@ -777,6 +777,7 @@ local function UpdateRow(row, line)
         row.name:SetTextColor(r, g, b)
     else
         row.name:SetTextColor(Theme.Unpack("text"))
+        if line.outputItemID then CraftPanel.awaitingItemData = true end
     end
 
     -- The star marks every recipe that can still level you, orange, yellow or
@@ -1685,7 +1686,12 @@ local function UpdateQueuedRow(row, entry)
     Theme.SetItemIcon(row.icon, recipe and recipe.outputItemID)
 
     local r, g, b = Util.GetItemQualityColor(recipe and recipe.outputItemID)
-    if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
+    if r then
+        row.name:SetTextColor(r, g, b)
+    else
+        row.name:SetTextColor(Theme.Unpack("text"))
+        if recipe and recipe.outputItemID then CraftPanel.awaitingItemData = true end
+    end
 
     local status, colour, craftable = CraftPanel:QueuedStatus(entry, CraftPanel.queuedOpen)
 
@@ -1907,15 +1913,19 @@ end
 local function UpdateShoppingRow(row, line)
     local look = CraftPanel:ShoppingLook(line)
 
-    -- Greyed once you have it all. An item link carries its own colour, which
-    -- shows over the label's, so the greyed name goes without it.
-    local label = Util.GetItemLabel(line.itemID)
+    -- The plain name in its rarity colour, greyed once you have it all. Not
+    -- the link: its own colour code shows over the label's, and its brackets
+    -- read as plain text on a list. Plain until the client has the item; the
+    -- redraw on GET_ITEM_INFO_RECEIVED colours it then.
+    SetShoppingName(row, Util.GetItemName(line.itemID))
+    local r, g, b = Util.GetItemQualityColor(line.itemID)
     if look.colour == "profit" then
-        SetShoppingName(row, Util.Uncolored(label))
         row.name:SetTextColor(Theme.Unpack("muted"))
+    elseif r then
+        row.name:SetTextColor(r, g, b)
     else
-        SetShoppingName(row, label)
         row.name:SetTextColor(Theme.Unpack("text"))
+        CraftPanel.awaitingItemData = true
     end
     Theme.SetItemIcon(row.icon, line.itemID)
 
@@ -2184,6 +2194,22 @@ function CraftPanel:Toggle()
     end
 end
 
+--- Item data arrived: colour the names that were waiting for it.
+function CraftPanel:OnItemInfo()
+    if self.itemRedrawQueued or not self.awaitingItemData then return end
+    if not self:IsShown() then return end
+
+    self.itemRedrawQueued = true
+    C_Timer.After(0.2, function()
+        CraftPanel.itemRedrawQueued = false
+        CraftPanel.awaitingItemData = false
+        if not CraftPanel:IsShown() then return end
+        for _, list in ipairs({ CraftPanel.list, CraftPanel.queuedList, CraftPanel.shoppingList }) do
+            if list and list:IsVisible() then list:Refresh() end
+        end
+    end)
+end
+
 --------------------------------------------------------------------------------
 -- Lifecycle
 --------------------------------------------------------------------------------
@@ -2204,6 +2230,13 @@ function CraftPanel:OnEnable()
 
     ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", function()
         CraftPanel:Hide()
+    end)
+
+    -- A name drawn before the client had its item gets its rarity colour
+    -- when the item arrives: the rows on screen are drawn again, once for a
+    -- burst, and only while a row waits and the pane shows.
+    ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", function()
+        CraftPanel:OnItemInfo()
     end)
 
     ns.RegisterCommand("pane", L["show or hide the craft pane"], function()

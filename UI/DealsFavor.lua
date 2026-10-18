@@ -71,7 +71,7 @@ local function ItemName(itemID)
 end
 
 local function BundleText(bundle)
-    return ("%d %s"):format(bundle.count, ItemName(bundle.itemID))
+    return ("%d %s"):format(bundle.count, Util.ColorItemName(bundle.itemID, ItemName(bundle.itemID)))
 end
 
 --- Where the reward came from, in a few words.
@@ -168,7 +168,13 @@ local function UpdateRow(row, entry)
 
     Theme.SetRowName(row.name, entry.have > 0 and ("%s  (%d)"):format(entry.name, entry.have) or entry.name)
     Theme.SetItemIcon(row.icon, entry.itemID or (entry.best and entry.best.itemID))
-    row.name:SetTextColor(Theme.Unpack(entry.perFavor and "text" or "dim"))
+    -- In its rarity colour, faded while it has no price.
+    local r, g, b = Util.GetItemQualityColor(entry.itemID)
+    if r then
+        row.name:SetTextColor(r, g, b, entry.perFavor and 1 or 0.55)
+    else
+        row.name:SetTextColor(Theme.Unpack(entry.perFavor and "text" or "dim"))
+    end
 
     for index, column in ipairs(COLUMNS) do
         FillCell(row.cells[index], column.key, entry)
@@ -310,6 +316,7 @@ local function UpdateDetail(entry)
     if not shown then return end
 
     detail.title:SetText(entry.name)
+    Theme.SetItemNameColor(detail.title, entry.itemID, "accent")
     Theme.SetItemIcon(detail.icon, entry.itemID or (entry.best and entry.best.itemID))
     detail.subtitle:SetText(RewardText(entry))
     detail.subtitle:SetTextColor(Theme.Unpack(entry.source == "learned" and "text"

@@ -147,9 +147,9 @@ local function UpdateRow(row, line)
 
     local done = line.shortfall <= 0
 
-    -- Greyed once you have it all. The link's own colour shows over the
-    -- label's, so the greyed name goes without it.
-    Theme.SetRowName(row.name, done and Util.Uncolored(line.label) or line.label)
+    -- The plain name, set on the label so its colour shows: greyed once you
+    -- have it all, else its rarity colour (below).
+    Theme.SetRowName(row.name, Util.GetItemName(line.itemID, line.label))
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local cells = row.cells
@@ -177,7 +177,13 @@ local function UpdateRow(row, line)
         return
     end
 
-    row.name:SetTextColor(Theme.Unpack("text"))
+    local r, g, b = Util.GetItemQualityColor(line.itemID)
+    if r then
+        row.name:SetTextColor(r, g, b)
+    else
+        row.name:SetTextColor(Theme.Unpack("text"))
+        if line.itemID then state.waiting = true end
+    end
 
     cells.source:SetText(SOURCE_LABELS[line.source] or "?")
     cells.source:SetTextColor(Theme.Unpack(
@@ -487,6 +493,20 @@ local function Build(container)
     widgets.vendorNote = Theme.CreateLabel(container, "tiny", "dim")
     widgets.vendorNote:SetPoint("BOTTOMLEFT", 430, 22)
     widgets.vendorNote:SetPoint("BOTTOMRIGHT", -10, 22)
+
+    -- A name drawn before the client had its item gets its rarity colour when
+    -- the item arrives: the rows on screen again, once for a burst, only
+    -- while a row waits and the list shows.
+    local redrawQueued = false
+    ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", function()
+        if redrawQueued or not state.waiting or not list:IsVisible() then return end
+        redrawQueued = true
+        C_Timer.After(0.2, function()
+            redrawQueued = false
+            state.waiting = false
+            if list:IsVisible() then list:Refresh() end
+        end)
+    end)
 end
 
 UI:RegisterTab({

@@ -541,6 +541,7 @@ local function UpdateDetail(entry)
     end
 
     detail.title:SetText(entry.name or L.Format("item %s", tostring(entry.itemID)))
+    Theme.SetItemNameColor(detail.title, entry.itemID, "accent", KnownQuality(entry))
     Theme.SetItemIcon(detail.icon, entry.itemID)
 
     if entry.route == "auction" then return UpdateResaleDetail(detail, entry) end

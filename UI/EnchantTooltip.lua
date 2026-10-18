@@ -181,13 +181,18 @@ local function Money(copper)
     return Util.FormatMoney(copper, { short = true })
 end
 
+-- The plain name, in its rarity colour once the client has the item.
 local function ItemName(itemID)
+    local name
     if C_Item and type(C_Item.GetItemInfo) == "function" then
-        local ok, name = pcall(C_Item.GetItemInfo, itemID)
-        if ok and type(name) == "string" then return name end
+        local ok, found = pcall(C_Item.GetItemInfo, itemID)
+        if ok and type(found) == "string" then name = found end
     end
-    local label = Util.GetItemLabel(itemID)
-    return Util.Uncolored and Util.Uncolored(label) or label
+    if not name then
+        local label = Util.GetItemLabel(itemID)
+        name = Util.Uncolored and Util.Uncolored(label) or label
+    end
+    return Util.ColorItemName and Util.ColorItemName(itemID, name) or name
 end
 
 --- `{ label, value, muted }` lines, ItemTooltip's shape; empty for a spell

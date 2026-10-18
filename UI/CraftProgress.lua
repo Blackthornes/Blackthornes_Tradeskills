@@ -16,7 +16,7 @@ local Progress = ns.NewModule("CraftProgress")
 Progress.bars = {}
 
 local function ReadUnsafe()
-    local ok, name, text, _, startMS, endMS = pcall(UnitCastingInfo, "player")
+    local ok, name, text, _, startMS, endMS, _, _, _, spellID = pcall(UnitCastingInfo, "player")
     if not ok or not name then return nil end
 
     local castBar = ns.CastBarOnTop
@@ -44,6 +44,7 @@ local function ReadUnsafe()
     return {
         name = label, fraction = fraction, secondsLeft = secondsLeft,
         castSeconds = castSeconds, remaining = remaining,
+        spellID = type(spellID) == "number" and spellID or nil,
     }
 end
 
@@ -166,6 +167,54 @@ function Progress:Create(parent, opts)
     return bar
 end
 
+--- What the craft being cast makes, by its spell (a recipe's ID is its
+--- spell's), else the craft the queue is running. Kept per spell once
+--- found: this is asked each time the bar's words change.
+local outputs = {}
+
+function Progress.OutputItemID(cast)
+    local recipeID = cast and cast.spellID
+    if not recipeID then
+        local active = ns.Crafting and ns.Crafting.active
+        recipeID = active and active.recipeID
+    end
+    if not recipeID then return nil end
+    if not outputs[recipeID] then
+        local recipe
+        if ns.Recipes and ns.Recipes.GetAny then
+            local ok, found = pcall(ns.Recipes.GetAny, ns.Recipes, recipeID)
+            if ok then recipe = found end
+        end
+        -- Kept only once found: recipes read later still get their colour.
+        outputs[recipeID] = recipe and recipe.outputItemID or nil
+    end
+    return outputs[recipeID]
+end
+
+--- The name in the rarity colour of what the craft makes, plain until the
+--- client has the item (the words are set again ten times a second).
+--- Coloured once per item; an item the client has not loaded yet is
+--- asked for again at most once a second, not on every redraw.
+local function ColorName(bar, cast)
+    local itemID = Progress.OutputItemID(cast)
+    if itemID and bar.coloredFor == itemID then return end
+    local now = GetTime and GetTime() or 0
+    if itemID and bar.colorMissFor == itemID and now - (bar.colorMissAt or 0) < 1 then return end
+
+    local r, g, b
+    if itemID and ns.Util and ns.Util.GetItemQualityColor then
+        local ok, red, green, blue = pcall(ns.Util.GetItemQualityColor, itemID)
+        if ok then r, g, b = red, green, blue end
+    end
+    if r then
+        bar.label:SetTextColor(r, g, b)
+        bar.coloredFor, bar.colorMissFor = itemID, nil
+    else
+        bar.label:SetTextColor(Theme.Unpack("text"))
+        bar.coloredFor, bar.colorMissFor, bar.colorMissAt = nil, itemID, now
+    end
+end
+
 local function Update(bar, cast)
     if not cast then
         bar.drawnKey = nil
@@ -196,6 +245,7 @@ local function Update(bar, cast)
 
     local name, choices = Progress.Describe(cast)
     bar.label:SetText(name)
+    ColorName(bar, cast)
 
     -- Nothing is cut off. With too little room this craft's time goes first,
     -- as the fill shows how far it has got, then the words, then the count,

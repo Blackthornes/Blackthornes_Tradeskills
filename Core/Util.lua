@@ -574,10 +574,10 @@ function Util.GetItemLabel(itemID)
     if not itemID then return "?" end
 
     if Util.HasFunction("C_Item.GetItemInfo") then
-        local ok, name, link = pcall(C_Item.GetItemInfo, itemID)
+        local ok, name, link, quality = pcall(C_Item.GetItemInfo, itemID)
         if ok then
             if link then return link end
-            if name then return name end
+            if name then return Util.ColorItemName(itemID, name, quality) end
         end
     end
 
@@ -710,6 +710,40 @@ function Util.GetItemQualityColor(itemID, knownQuality)
 
     qualityColors[itemID] = { r, g, b }
     return r, g, b
+end
+
+--- An item's plain name, never a link: the client's name, else the one the
+--- caller already has, else "item 1234". For a label whose colour is set
+--- with SetTextColor, which a link's own colour code would cover.
+function Util.GetItemName(itemID, fallback)
+    if itemID and Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, name = pcall(C_Item.GetItemInfo, itemID)
+        if ok and type(name) == "string" and name ~= "" then return name end
+    end
+    if type(fallback) == "string" and fallback ~= "" then return Util.Uncolored(fallback) end
+    if not itemID then return "?" end
+    if Util.HasFunction("C_Item.RequestLoadItemDataByID") then
+        pcall(C_Item.RequestLoadItemDataByID, itemID)
+    end
+    return L.Format("item %d", itemID)
+end
+
+--- A name in its item's rarity colour, for a name inside a sentence: only the
+--- name is coloured, the words around it keep their own. Text that already
+--- carries a colour (an item link) and an item whose rarity is not known yet
+--- come back as they are.
+function Util.ColorItemName(itemID, name, knownQuality)
+    if type(name) ~= "string" or name == "" or name:find("|c", 1, true) then return name end
+    local r, g, b = Util.GetItemQualityColor(itemID, knownQuality)
+    if not r then return name end
+    return ("|cff%02x%02x%02x%s|r"):format(
+        math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)
+end
+
+--- An item's name in its rarity colour, for a label that also carries words
+--- in other colours: Util.GetItemName, coloured once the rarity is known.
+function Util.ColoredItemName(itemID, fallback)
+    return Util.ColorItemName(itemID, Util.GetItemName(itemID, fallback))
 end
 
 --- Run something only when the auction house is ready for another request.

@@ -45,6 +45,7 @@ C_Item = { GetItemInfo = function() return "item" end }
 
 ns.Theme = {
   SetRowName = function(label, text) label:SetText(text) end,
+  SetItemNameColor = function() return false end,
   CreateLabel = function() return Label() end,
   CreateItemIcon = function() return Stub() end,
   SetItemIcon = function() end,
@@ -74,6 +75,9 @@ ns.Widgets = {
 ns.Util = {
   FormatMoney = function(c) return tostring(c) .. "c" end,
   GetItemLabel = function(id) return "item" .. id end,
+  ColorItemName = function(_, name) return name end,
+  ColoredItemName = function(id) return "item" .. tostring(id) end,
+  GetItemName = function(id, fallback) return fallback or ("item" .. tostring(id)) end,
   Uncolored = function(t) return t end,
   -- Item 12 is green; the others the client has not sent yet.
   GetItemQualityColor = function(id) if id == 12 then return 0.1, 1, 0 end end,

@@ -2048,7 +2048,14 @@ local function RefreshIgnored()
     local last = FillIgnored(crafts, widgets.ignoredRows, widgets.ignoredHint,
         widgets.ignoredEmpty,
         function(recipeID) ns.Profit:SetIgnored(recipeID, false) end,
-        L["Show this craft on the Profit tab again"])
+        L["Show this craft on the Profit tab again"],
+        function(recipeID)
+            -- In the rarity colour of what the craft makes.
+            local recipe = ns.Recipes and ((ns.Recipes.Get and ns.Recipes:Get(recipeID))
+                or (ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)))
+            local itemID = recipe and recipe.outputItemID
+            if itemID then return Util.GetItemQualityColor(itemID) end
+        end)
 
     widgets.ignoredEnd:ClearAllPoints()
     widgets.ignoredEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)

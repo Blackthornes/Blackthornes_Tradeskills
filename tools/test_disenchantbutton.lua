@@ -189,6 +189,9 @@ ns.Util = {
     FormatAge = function() return "1h" end,
     FormatAgeAgo = function() return "1h ago" end,
     GetItemLabel = function(itemID) return "item" .. tostring(itemID) end,
+    ColorItemName = function(_, name) return name end,
+    ColoredItemName = function(id) return "item" .. tostring(id) end,
+    GetItemName = function(id, fallback) return fallback or ("item" .. tostring(id)) end,
     GetItemQualityColor = noop,
     Round = function(value) return value end,
 }
@@ -197,6 +200,7 @@ local panels = {}
 local function Label(parent) return Frame("FontString", parent) end
 ns.Theme = {
     SetRowName = function(label, text) label:SetText(text) end,
+    SetItemNameColor = function() return false end,
     FONT = "font", sizes = { tiny = 10, small = 11 },
     Fill = function(frame) return Frame("Texture", frame) end,
     Border = function(frame, key, alpha) frame.borderKey, frame.borderAlpha = key, alpha end,
