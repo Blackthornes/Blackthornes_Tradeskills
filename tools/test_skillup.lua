@@ -142,6 +142,35 @@ check("same skill as the reading", SkillUp:GetForRecipe(1, recipe).stale, nil)
 
 check("no reading at all", SkillUp:GetForRecipe(1, { skillLineID = 164 }), nil)
 
+print("\nwhere a recipe changes colour")
+
+local function Plain(text) return text and (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+local savedBook, savedRecipes, savedTTL = ns.RecipeBook, ns.Recipes, SkillUp.levelsAt
+ns.RecipeBook = { Get = function(_, id)
+    if id == 50 then return { yellow = 150, grey = 180, skillLineID = 164 } end
+    if id == 51 then return { skillLineID = 164 } end
+end }
+ns.Recipes = { GetAny = function() return nil end, Get = function() return nil end }
+SkillUp.levelsAt = 1000
+
+SkillUp.levels = { [164] = 140 }
+check("orange: all three ahead", Plain(SkillUp:ColorSteps(50)),
+    "Yellow at 150 \194\183 Green at 165 \194\183 Grey at 180")
+SkillUp.levels = { [164] = 155 }
+check("yellow: green and grey ahead", Plain(SkillUp:ColorSteps(50)),
+    "Green at 165 \194\183 Grey at 180")
+SkillUp.levels = { [164] = 170 }
+check("green: grey ahead", Plain(SkillUp:ColorSteps(50)), "Grey at 180")
+SkillUp.levels = { [164] = 180 }
+check("grey now", Plain(SkillUp:ColorSteps(50)), "Grey now, no more skill ups")
+SkillUp.levels = {}
+check("skill unknown: all three", Plain(SkillUp:ColorSteps(50)),
+    "Yellow at 150 \194\183 Green at 165 \194\183 Grey at 180")
+check("no yellow or grey in the book", SkillUp:ColorSteps(51), nil)
+check("recipe not in the book", SkillUp:ColorSteps(52), nil)
+
+ns.RecipeBook, ns.Recipes, SkillUp.levelsAt = savedBook, savedRecipes, savedTTL
+
 print("")
 if failures > 0 then
   error(string.format("%d skill-up check(s) failed", failures))

@@ -244,9 +244,19 @@ do
   ANALYSIS[102].stockDivisor = 21
   ANALYSIS[102].stock, ANALYSIS[102].posted = 20, 18
 
-  check("stock you already hold sinks a craft down the order",
+  -- The order follows the profit each the row shows, so a row never sits
+  -- above one that says it pays more (a player's report, 2026-10-18).
+  check("stock you hold does not move a craft above one that shows more profit",
+    names(CraftPanel:GetRows({ sortBy = "profit" })),
+    "Rough Sharpening Stone, Copper Chain Belt, Brown Linen Shirt")
+
+  -- Between two that pay the same, the one you hold fewer of goes first.
+  local belt = ANALYSIS[101].profit
+  ANALYSIS[101].profit = ANALYSIS[102].profit
+  check("stock still breaks a tie in profit",
     names(CraftPanel:GetRows({ sortBy = "profit" })),
     "Copper Chain Belt, Rough Sharpening Stone, Brown Linen Shirt")
+  ANALYSIS[101].profit = belt
 
   local row
   for _, line in ipairs(CraftPanel:GetRows({})) do
@@ -707,6 +717,18 @@ do
 
   check("changing the search does too",
     CraftPanel:OrderKey({ sortBy = "name", search = "" }) ~= CraftPanel:OrderKey({ sortBy = "name", search = "belt" }), true)
+
+  -- The order is held only while the cursor is on the pane, so prices read
+  -- after it opened sort the rows once the cursor is away.
+  local savedFrame = CraftPanel.frame
+  local over = true
+  CraftPanel.frame = { IsMouseOver = function() return over end }
+  check("the order is held while the cursor is on the pane", CraftPanel:MouseOver(), true)
+  over = false
+  check("and not once it leaves", CraftPanel:MouseOver(), false)
+  CraftPanel.frame = { IsMouseOver = function() error("secret") end }
+  check("a client that will not say holds nothing", CraftPanel:MouseOver(), false)
+  CraftPanel.frame = savedFrame
 
   _G.C_TradeSkillUI = savedOpen
 end

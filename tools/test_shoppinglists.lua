@@ -226,6 +226,22 @@ check("a name starting with it beats one holding it", found[1].name == "Linen Cl
 check("an item never loaded is left out", #Lists:Suggest("7777") == 0)
 check("nothing typed, nothing found", #Lists:Suggest("  ") == 0)
 check("at most SUGGEST_MOST", #Lists:Suggest("o", 2) == 2)
+found = Lists:Suggest("linen bolt")
+check("every word, in any order", #found == 1 and found[1].name == "Bolt of Linen Cloth")
+found = Lists:Suggest("bolt  of   linen cloths")
+check("extra spaces and a plural still find it", #found == 1 and found[1].name == "Bolt of Linen Cloth")
+found = Lists:Suggest("bolt of linen cloth")
+check("the whole long name finds it", #found == 1 and found[1].name == "Bolt of Linen Cloth")
+check("a word that isn't there finds nothing", #Lists:Suggest("linen bolt silk") == 0)
+-- An item the addon never met, that the game knows by its whole name.
+cached[14047] = "Runecloth"
+local instant = C_Item.GetItemInfoInstant
+functions["C_Item.GetItemInfoInstant"] = true
+C_Item.GetItemInfoInstant = function(name) return name == "Runecloth" and 14047 or nil end
+found = Lists:Suggest("Runecloth")
+check("the game's own name lookup when nothing else matches", #found == 1 and found[1].id == 14047)
+C_Item.GetItemInfoInstant = instant
+cached[14047] = nil
 id, count = View.ParseAdd("linen")
 check("part of a name takes the best", id == 2589 and count == 1)
 id, count = View.ParseAdd("bolt of lin 20")

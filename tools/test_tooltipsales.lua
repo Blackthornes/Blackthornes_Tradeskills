@@ -159,6 +159,10 @@ check("too few days for a trend", ItemTooltip.Trend({ false, false, false, 4, 5,
 check("level is steady", ItemTooltip.Trend({ 10, 10, 10, 10, 10, 10, 1 }), 0)
 check("a day not scanned is a flat mark", ItemTooltip.Bars({ false, 1 }):match("^|T[^:]+:1:") ~= nil, true)
 
+local tallest = 0
+for height in ItemTooltip.Bars({ 1, 5, 9 }):gmatch("|T[^:]+:(%d+):") do tallest = math.max(tallest, tonumber(height)) end
+check("the bars fit a tooltip line", tallest <= 10 and tallest == ItemTooltip.BAR_HEIGHT, true)
+
 time = realTime
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end
 print("\ntest_tooltipsales: ok")

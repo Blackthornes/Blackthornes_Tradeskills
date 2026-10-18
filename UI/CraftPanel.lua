@@ -242,8 +242,16 @@ local SORTS = {
         -- order, and burying them under a zero would be a lie about the money.
         if a.priceable ~= b.priceable then return a.priceable end
 
-        -- Ranked, not raw. See RankOf below: a craft you already have nine of
-        -- listed is worth less right now than the number in the row says.
+        -- By the profit each the row shows. It went by RankOf's stock-weighted
+        -- number, so a row saying 2g each could sit above one saying 5g each
+        -- and the list read as not sorted at all (a player's report,
+        -- 2026-10-18). Crafts at their Keep in stock limit are left out of the
+        -- list already, which is what the weighting was mostly there for.
+        if a.priceable and a.profit ~= b.profit then
+            return a.profit > b.profit
+        end
+
+        -- Two that pay the same: the one you hold fewer of first.
         if a.priceable and a.rank ~= b.rank then
             return a.rank > b.rank
         end
@@ -799,8 +807,13 @@ local function UpdateRow(row, line)
         local parts = {}
 
         if line.priceable then
-            parts[#parts + 1] = L.Format("%s each",
-                Util.FormatMoney(line.profit, { noColor = true, short = true, parts = coins }))
+            local amount = Util.FormatMoney(line.profit, { noColor = true, short = true, parts = coins })
+            -- A craft that makes money shows its amount in green, so it
+            -- reads at once. The rest of the line keeps its colour.
+            if line.profit > 0 and ns.COLORS and ns.COLORS.profit then
+                amount = "|c" .. ns.COLORS.profit .. amount .. "|r"
+            end
+            parts[#parts + 1] = L.Format("%s each", amount)
         elseif line.soulbound then
             -- The whole reason is in the tooltip; the row has room for one word.
             parts[#parts + 1] = L["soulbound"]
@@ -885,6 +898,9 @@ local function ShowRowTooltip(row, line)
                 0.91, 0.76, 0.35, true)
         end
     end
+
+    local steps = ns.SkillUp.ColorSteps and ns.SkillUp:ColorSteps(line.recipeID)
+    if steps then GameTooltip:AddLine(steps, 1, 1, 1, true) end
 
     GameTooltip:AddDoubleLine(L["Materials for"], tostring(line.craftable),
         0.7, 0.7, 0.7, 1, 1, 1)
@@ -1443,11 +1459,48 @@ function CraftPanel:BeginRefresh()
     }
 
     local key = self:OrderKey(opts)
-    if key ~= self.orderKey then
+    if key ~= self.orderKey or not self:MouseOver() then
         self.orderKey, self.heldOrder = key, nil
     end
     opts.keepOrder = self.heldOrder
     return opts
+end
+
+--- Is the cursor on the pane? The order is held only then, so a row never
+--- moves from under a click, and is sorted again once the cursor is away.
+--- Held for good, prices and materials read after the pane opened never
+--- moved a row, and the list stayed in the order it first had (a player's
+--- report, 2026-10-18).
+function CraftPanel:MouseOver()
+    local frame = self.frame
+    if not (frame and frame.IsMouseOver) then return false end
+    local ok, over = pcall(frame.IsMouseOver, frame)
+    return ok and over == true
+end
+
+-- How often, in seconds, a held order looks whether the cursor has gone.
+CraftPanel.LEAVE_LOOK = 0.5
+
+--- Once the cursor leaves a pane whose order is held, sort it again. One
+--- short timer at a time, only while an order is held and the pane shows.
+function CraftPanel:WatchLeave()
+    if self.watchingLeave or not (C_Timer and C_Timer.After) then return end
+    self.watchingLeave = true
+
+    local function Look()
+        if not (CraftPanel.heldOrder and CraftPanel:IsShown()) then
+            CraftPanel.watchingLeave = nil
+            return
+        end
+        if CraftPanel:MouseOver() then
+            C_Timer.After(CraftPanel.LEAVE_LOOK, Look)
+            return
+        end
+        CraftPanel.watchingLeave = nil
+        CraftPanel:RequestRefresh()
+    end
+
+    C_Timer.After(self.LEAVE_LOOK, Look)
 end
 
 --- Put rows worked out for `opts` on screen, with everything that follows them.
@@ -1459,6 +1512,10 @@ function CraftPanel:ApplyRows(rows, opts)
 
     self.list:SetData(rows)
     self.empty:SetShown(#rows == 0)
+
+    -- Rows put on screen in a held order, or under the cursor, are sorted
+    -- again once it leaves.
+    if self:MouseOver() then self:WatchLeave() end
 
     if #rows == 0 then
         local searching = self.search and self.search:GetText() ~= ""
