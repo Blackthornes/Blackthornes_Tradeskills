@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.67.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Vendor Map Pins:** gold pins on the world map show vendors that sell what your queue needs for less than the auction house. Off until you tick it on the Mail & Vendors page.
+- **Favors and Writs:** Search Both, a Buy box, a Make tag when making is cheaper, and a column for how many you have.
+- **Tooltips:** each tooltip line Tradeskills adds can be Off, Shift or Always. The choices are on the Look page.
+- **Characters:** the tab can show one realm at a time.
+- **Bug fixes:** the profession window's craft list sorts by profit and shows green profit each, the price graph has more room, list searches find names with the words in any order, the tooltip bars fit, and various other fixes to Tradeskills.
+
 ## 0.66.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so

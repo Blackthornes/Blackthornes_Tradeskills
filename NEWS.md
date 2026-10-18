@@ -23,6 +23,18 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.67.0
+
+- Gold pins on the world map show vendors that sell what your queue needs for less than the auction house. It's off until you turn on Vendor Map Pins on the Mail & Vendors page of Settings.
+- Favors and Writs has a Search Both button, a Buy box, a Make tag when making is cheaper, and a column for how many you have.
+- Each tooltip line Tradeskills adds can be Off, Shift or Always. You pick on the Look page of Settings.
+- The Characters tab can show one realm at a time.
+
+Fixes and changes:
+
+- The craft list in the profession window sorts by profit and shows green profit each.
+- The price graph has more room, list searches find names with the words in any order, and the tooltip bars fit.
+
 ## 0.66.0
 
 - Tradeskills speaks Simplified Chinese, French, Spanish and Russian now if your game is in one of those.
