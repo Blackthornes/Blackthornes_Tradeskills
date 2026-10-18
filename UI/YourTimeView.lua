@@ -153,7 +153,7 @@ local function ShowRowTooltip(row, entry)
     GameTooltip:AddDoubleLine(L["Buy the mats, then craft"], Money(entry.buyProfit), 1, 1, 1, 1, 1, 1)
     if not entry.farmSeconds and entry.missing then
         GameTooltip:AddLine(L.Format("Farm some %s and this fills in.",
-            Util.Uncolored(Util.GetItemLabel(entry.missing.itemID))), Theme.Unpack("muted"))
+            Util.ColoredItemName(entry.missing.itemID)), Theme.Unpack("muted"))
     end
     GameTooltip:Show()
 end
@@ -306,6 +306,7 @@ end
 
 local function ShowNothing(detail)
     detail.title:SetText(L["Your time"])
+    detail.title:SetTextColor(Theme.Unpack("accent"))
     detail.subtitle:SetText(L["Pick a craft to see where your time goes."])
     detail.waysHeading:Hide()
     detail.materialsHeading:Hide()
@@ -317,6 +318,10 @@ end
 
 local function ShowEntry(detail, entry)
     detail.title:SetText(entry.name)
+    -- In the rarity of what it makes, as its row is.
+    if not Theme.SetItemNameColor(detail.title, entry.outputItemID, "accent") and entry.outputItemID then
+        state.waiting = true
+    end
     if entry.yield and entry.yield ~= 1 then
         detail.subtitle:SetText(L.Format("Makes %s a craft", tostring(entry.yield)))
     else
@@ -354,7 +359,7 @@ local function ShowEntry(detail, entry)
             frame.value:SetText(way.hour and L.Format("%s an hour", Money(way.value)) or Money(way.value))
             frame.value:SetTextColor(Theme.Unpack(best and "profit" or (way.value < 0 and "loss" or "text")))
         end
-        local missing = entry.missing and Util.Uncolored(Util.GetItemLabel(entry.missing.itemID))
+        local missing = entry.missing and Util.ColoredItemName(entry.missing.itemID)
         frame.note:SetText(way.note or (missing and L.Format("Farm some %s and this fills in.", missing)) or "")
         SetBar(frame.bar, way.farm, way.craft, longest)
         frame.bar:SetShown(way.value ~= nil)
@@ -371,7 +376,7 @@ local function ShowEntry(detail, entry)
             line.how:SetText("")
             line:Show()
         elseif mat then
-            local name = Util.Uncolored(Util.GetItemLabel(mat.itemID))
+            local name = Util.ColoredItemName(mat.itemID)
             local count = math.floor(mat.count * 10 + 0.5) / 10
             count = count == math.floor(count) and ("%d"):format(count) or ("%.1f"):format(count)
             line.label:SetText(("%sx %s"):format(count, name))

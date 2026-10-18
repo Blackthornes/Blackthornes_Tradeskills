@@ -51,6 +51,7 @@ C_Timer = { After = function() end, NewTicker = function() return Stub() end }
 
 ns.Theme = {
     SetRowName = function(label, text) label:SetText(text) end,
+    SetItemNameColor = function() return false end,
     FONT = "font",
     sizes = { tiny = 10, small = 11, normal = 12, large = 14, title = 16 },
     CreateLabel = function() return Label() end,

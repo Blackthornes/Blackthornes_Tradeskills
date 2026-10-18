@@ -353,6 +353,7 @@ GameTooltip = Stub()
 local bars, labels = {}, {}
 ns.Theme = {
     SetRowName = function(label, text) label:SetText(text) end,
+    SetItemNameColor = function() return false end,
     CreateLabel = function()
         local label = Label()
         labels[#labels + 1] = label

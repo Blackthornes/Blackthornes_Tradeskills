@@ -1329,7 +1329,7 @@ local function Report(input)
             or ("%d-%d"):format(line.min, line.max)
 
         ns.Print(("  %s%%  %sx %s  %s%s"):format(
-            Util.Round(line.chance * 100, 1), count, line.name or Util.GetItemLabel(line.itemID),
+            Util.Round(line.chance * 100, 1), count, Util.ColorItemName(line.itemID, line.name) or Util.GetItemLabel(line.itemID),
             line.price and L.Format("%s each", Util.FormatMoney(line.price, { noColor = true })) or L["no price"],
             line.counted and "" or L["  (bonus)"]))
     end

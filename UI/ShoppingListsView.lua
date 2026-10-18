@@ -317,6 +317,7 @@ end
 
 local function UpdateRow(row, entry)
     HideAll(row)
+    row.name:SetTextColor(Theme.Unpack("text"))
 
     if entry.kind == "list" then
         row.chevron:SetText(entry.open and "-" or "+")
@@ -354,7 +355,16 @@ local function UpdateRow(row, entry)
     row.name:ClearAllPoints()
     row.name:SetPoint("TOPLEFT", 40, -3)
     row.name:SetPoint("RIGHT", row.want, "LEFT", -6, 0)
-    row.name:SetText(Util.GetItemLabel(line.itemID))
+    -- The plain name in its rarity colour; plain until the client has the
+    -- item, and coloured by the redraw when it comes (View:OnItemInfo).
+    row.name:SetText(Util.GetItemName(line.itemID))
+    local r, g, b = Util.GetItemQualityColor(line.itemID)
+    if r then
+        row.name:SetTextColor(r, g, b)
+    else
+        row.name:SetTextColor(Theme.Unpack("text"))
+        View.waiting = true
+    end
     row.name:Show()
 
     local have = line.need > 0 and L.Format("You have %d, need %d", line.have, line.need)
@@ -718,6 +728,8 @@ local function BuildSuggest(body, box)
         updateRow = function(row, entry)
             Theme.SetItemIcon(row.icon, entry.id)
             row.name:SetText(entry.name)
+            local r, g, b = Util.GetItemQualityColor(entry.id)
+            if r then row.name:SetTextColor(r, g, b) else row.name:SetTextColor(Theme.Unpack("text")) end
         end,
         isSelected = function(entry)
             local picked = View.suggestions and View.suggestions[View.pick or 0]
@@ -904,6 +916,31 @@ function View:Refresh(force)
     self.entries = entries
     self.list:SetData(entries)
     self:UpdateFoot()
+end
+
+--- Item data arrived: names drawn before it get their rarity colour, the
+--- rows on screen drawn again once for a burst, only while one waits.
+function View:OnItemInfo()
+    if self.itemRedrawQueued or not self.waiting then return end
+    if not (self.list and self.shown) then return end
+    self.itemRedrawQueued = true
+    C_Timer.After(0.2, function()
+        View.itemRedrawQueued = false
+        if not (View.list and View.shown) then return end
+        -- Never under a box being typed in (View:Refresh's rule).
+        for _, row in ipairs(View.list.rows or {}) do
+            if row:IsShown() and row.want and row.want:IsShown()
+                and row.want.editBox.HasFocus and row.want.editBox:HasFocus() then
+                return
+            end
+        end
+        View.waiting = false
+        View.list:Refresh()
+    end)
+end
+
+if ns.RegisterEvent then
+    ns.RegisterEvent(View, "GET_ITEM_INFO_RECEIVED", function() View:OnItemInfo() end)
 end
 
 --- What the drawer's summary line says on Lists.

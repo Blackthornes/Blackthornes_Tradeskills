@@ -294,6 +294,23 @@ function Theme.SetRowName(label, text, size)
     label.rowNeed, label.rowNeedText = need, text
 end
 
+--- Colour a label holding an item's name in that item's rarity, as the game
+--- draws it, else in `fallback` (a colour key, "text" when nil). Returns true
+--- when it took the rarity, false while the client does not have the item
+--- yet, so the caller can draw it again when the item arrives.
+function Theme.SetItemNameColor(label, itemID, fallback, knownQuality)
+    local Util = ns.Util
+    if itemID and Util and Util.GetItemQualityColor then
+        local ok, r, g, b = pcall(Util.GetItemQualityColor, itemID, knownQuality)
+        if ok and r then
+            label:SetTextColor(r, g, b)
+            return true
+        end
+    end
+    label:SetTextColor(Theme.Unpack(fallback or "text"))
+    return false
+end
+
 --- Put a money amount on a label in as much detail as fits its width: every
 --- coin, then the two largest, then the largest alone, rounded. Measured, so
 --- a narrow cell never ends in "..." halfway through an amount. A label that

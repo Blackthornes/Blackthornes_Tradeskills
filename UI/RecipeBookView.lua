@@ -297,6 +297,7 @@ local function NewView(opts)
 
     local function ShowNothing(detail)
         detail.title:SetText(L["Recipes to learn"])
+        detail.title:SetTextColor(Theme.Unpack("accent"))
         detail.subtitle:SetText(L["Pick a recipe to see what goes into it and where to learn it."])
         for _, line in ipairs(detail.values) do line:Hide() end
         for _, line in ipairs(detail.materials) do line:Hide() end
@@ -313,6 +314,10 @@ local function NewView(opts)
         local returns = value.returns or {}
 
         detail.title:SetText(entry.name)
+        -- In the rarity of what it makes, as its row is; gold for an enchant.
+        if not Theme.SetItemNameColor(detail.title, entry.outputItemID, "accent") and entry.outputItemID then
+            state.waiting = true
+        end
 
         local parts = {}
         if record.profession then

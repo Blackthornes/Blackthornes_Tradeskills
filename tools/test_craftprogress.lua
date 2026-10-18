@@ -23,6 +23,7 @@ local function Region()
   local r = { shown = true, text = "", width = 0 }
   function r:SetPoint() end
   function r:SetText(t) self.text = t end
+  function r:SetTextColor(red, green, blue) self.color = { red, green, blue } end
   function r:SetWidth(w) self.width = w end
   function r:SetColorTexture() end
   function r:Show() self.shown = true end
