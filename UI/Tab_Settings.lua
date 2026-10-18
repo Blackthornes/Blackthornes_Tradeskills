@@ -1767,6 +1767,36 @@ local function Build(outer)
         Searchable(pages.about, info, info.words)
     end
 
+    -- Sending your own disenchants and recipe skills to the addon's maker
+    -- (Logic/Contribute.lua, the owner 2026-10-18). Off unless ticked, and
+    -- offered only where it can send (North America). Its words wrap under
+    -- the box, since they run long.
+    if ns.Contribute and ns.Contribute:InRegion() then
+        local text = L["Share your data with Blackthornes to improve the Tradeskills AddOn."]
+        local holder = CreateFrame("Frame", nil, pages.about.content)
+        holder:SetSize(COLUMN_WIDTH, 36)
+        local box = Widgets.CreateCheckbox(holder, text, function(checked)
+            ns.Contribute:SetOn(checked)
+        end, Config:Get("shareData") == true)
+        box:SetPoint("TOPLEFT", 0, -2)
+        box:SetWidth(COLUMN_WIDTH)
+        box.box:ClearAllPoints()
+        box.box:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -1)
+        box.label:ClearAllPoints()
+        box.label:SetPoint("TOPLEFT", box.box, "TOPRIGHT", 6, 1)
+        box.label:SetWidth(COLUMN_WIDTH - 24)
+        box.label:SetJustifyH("LEFT")
+        if box.label.SetWordWrap then box.label:SetWordWrap(true) end
+        local ok, tall = pcall(box.label.GetStringHeight, box.label)
+        tall = ok and tonumber(tall) or 0
+        if tall < 14 then tall = 28 end
+        box:SetHeight(math.max(18, tall + 2))
+        holder:SetHeight(math.max(18, tall + 2) + 6)
+        Place(pages.about, 2, holder, -14)
+        Searchable(pages.about, holder, text)
+        widgets.shareData = box
+    end
+
     widgets.describe:SetChecked(Config:Get("settingsDescriptions") == true)
     ShowPage(CurrentPage())
 end
@@ -2193,6 +2223,7 @@ local function Refresh()
     end
     widgets.linkStatus:SetText(ns.AccountLink and ns.AccountLink:Describe() or "")
     widgets.guildPrices:SetChecked(Config:Get("guildPrices") == true)
+    if widgets.shareData then widgets.shareData:SetChecked(Config:Get("shareData") == true) end
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")

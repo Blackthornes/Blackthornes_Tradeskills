@@ -1595,6 +1595,18 @@ local function FitMerchantButton(button)
     button:SetWidth(math.max(MERCHANT_BUTTON_WIDTH, math.ceil((width or 0) + MERCHANT_BUTTON_PAD * 2)))
 end
 
+--- True while Blackthornes Butler is loaded and its window comes up at a
+--- vendor ("Open at a vendor", on unless unticked there). Butler's Buy from
+--- a vendor row then buys the queue's materials, so this button hides.
+function UI.ButlerBuysHere()
+    local ok, yes = pcall(function()
+        if type(_G.BlackthornesButler) ~= "table" then return false end
+        local db = _G.BlackthornesButlerDB
+        return not (type(db) == "table" and db.openAtVendor == false)
+    end)
+    return ok and yes == true
+end
+
 --- A button on Blizzard's vendor window that buys the queue's shortfalls.
 --
 -- Spending your gold is never automatic: this is one deliberate click, and the
@@ -1603,6 +1615,15 @@ function UI:AttachToMerchant()
     -- Only while a vendor is open. A call that lands after it closed showed
     -- the button over the game world, with no vendor to buy from.
     if not (ns.Vendor and ns.Vendor.isMerchantOpen) then
+        if self.merchantButton then self.merchantButton:Hide() end
+        return
+    end
+
+    -- Blackthornes Butler has the same Buy button on its Buy from a vendor
+    -- row, and its window comes up at the vendor, so this one stands down
+    -- (the owner, 2026-10-18). Butler buys through Butler:VendorOffer and
+    -- Butler:BuyFromVendor, so nothing is lost.
+    if UI.ButlerBuysHere() then
         if self.merchantButton then self.merchantButton:Hide() end
         return
     end

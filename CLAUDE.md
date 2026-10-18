@@ -478,7 +478,10 @@ _G.BlackthornesTS.Butler:BuyFromVendor()   -- true, or false and why; never rais
 or its list is not read), `BuyFromVendor` the button's own click
 (`Vendor:BuyNeeded`, then `UI:UpdateMerchantButton`). Tested in
 `tools/test_butlervendor.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
-reads them.
+reads them. While Butler is loaded and its window opens at vendors (its
+`openAtVendor`, read from `BlackthornesButlerDB`), the Buy materials button
+over the vendor window hides (`UI.ButlerBuysHere`, the owner 2026-10-18):
+Butler's Buy row does the buying. Tested in `tools/test_merchantbutton.lua`.
 
 Butler's "For your quests" line (a player asked 2026-10-14, the owner said
 build it: buy what open quests need) has a Search button at the auction
@@ -936,6 +939,33 @@ an ID or a link, and neither ever raises. The README's "For addon authors"
 section documents it. Other people's addons read it, so never rename or
 change these; a new call raises `version`. Tested in
 `tools/test_publicapi.lua`.
+
+## Sending data to Blackthornes
+
+The owner said build it (2026-10-18), as Farmer's "Sending drops to
+Blackthornes": players can opt in to send what their disenchants gave
+(`disenchantLog.items`: casts and each material's times and total) and the
+skill each recipe needs on Forever (`recipeSkills`, the number only) to his
+characters. Prices are never sent. Off by default (`shareData`, never
+rename it), never announced: one tick box on the About page of Settings,
+"Share your data with Blackthornes to improve the Tradeskills AddOn.", no
+hover, only on North American clients (`Contribute:InRegion`,
+`GetCurrentRegion` 1 or 110, else `GetCurrentRegionName` "US"), and
+`/bts share data on|off|log` (typed only, not in the help line).
+`Logic/Contribute.lua` whispers a hello (`Q<id>:<hash>`) over Comm to each
+name in `Contribute.RECIPIENTS` (full names, only in code, never shown; the
+same two as Farmer's list, change both together) 30 s after login and
+every half hour. Only those characters ask (`R<id>`), one sender at a time,
+each at most every half hour, and the sender answers only a recipient
+asking for its own id. The table (`K`) is checked by `Contribute:Clean` and
+kept apart on the receiver in `sharedData[id] = { at, hash, disenchants,
+skills }`, each sender's newest replacing the last (at most `MAX_SENDERS`);
+it never joins the receiver's own logs. A chat line, a sound and a screen
+line say "Got disenchants and recipe levels from NAME.", and `sharedDataLog`
+(`/bts share data log`, the newest `LOG_KEEP`) keeps who sent. Never rename
+`shareDataId`, `sharedData` or `sharedDataLog`. Nothing is folded into the
+shipped data yet. Tested in `tools/test_contribute.lua`. Not yet seen in
+game.
 
 ## Sharing between accounts and with a guild
 
