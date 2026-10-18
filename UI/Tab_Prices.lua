@@ -17,6 +17,11 @@ local UI = ns.UI
 
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
+-- Room between the detail pane's rows. With every row shown the graph was
+-- left a sliver (a player's report, 2026-10-18), so the gaps are a little
+-- smaller and the three rows below go under the Market value row's hover.
+local ROW_GAP = 6
+local FOLDED_ROWS = { quantity = true, scans = true, confidence = true }
 
 -- Right to left. Money sits to the right, so its coins line up; the rest is
 -- centred under its heading. `width` is the least each gets:
@@ -616,10 +621,12 @@ local function BuildDetail(parent)
     local rowsAnchor = titleBlock
 
     detail.values = {}
+    detail.rowOrder = {}
 
     local function AddRow(key, labelText)
         local label = Theme.CreateLabel(detail, "small", "muted")
-        label:SetPoint("TOPLEFT", rowsAnchor, "BOTTOMLEFT", 0, -8)
+        label:SetPoint("TOPLEFT", rowsAnchor, "BOTTOMLEFT", 0, -ROW_GAP)
+        detail.rowOrder[#detail.rowOrder + 1] = key
 
         local value = Theme.CreateLabel(detail, "small", "text", "RIGHT")
         value:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
@@ -665,6 +672,27 @@ local function BuildDetail(parent)
     suffixHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
     detail.suffixHover = suffixHover
 
+    -- The rows folded away (FOLDED_ROWS), on the Market value row's hover.
+    local marketHover = CreateFrame("Frame", nil, detail)
+    marketHover:SetPoint("TOPLEFT", detail.labels.market, "TOPLEFT", 0, 2)
+    marketHover:SetPoint("BOTTOMRIGHT", detail.values.market, "BOTTOMRIGHT", 0, -2)
+    marketHover:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    marketHover:EnableMouse(true)
+    marketHover:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddDoubleLine(detail.labels.market:GetText(), detail.values.market:GetText(),
+            1, 1, 1, 1, 1, 1)
+        for _, key in ipairs(detail.rowOrder) do
+            if FOLDED_ROWS[key] then
+                GameTooltip:AddDoubleLine(detail.labels[key]:GetText(), detail.values[key]:GetText(),
+                    0.7, 0.7, 0.7, 1, 1, 1)
+            end
+        end
+        GameTooltip:Show()
+    end)
+    marketHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.marketHover = marketHover
+
     BuildMyPrice(detail, rowsAnchor)
 
     -- The price graph: the cheapest price hour by hour, 24 hours or 7 days,
@@ -707,6 +735,25 @@ local function BuildDetail(parent)
     return detail
 end
 
+--- Lay the rows that show one under another, then My price under them,
+--- so the price graph below gets the room the hidden ones leave.
+local function LayoutRows(detail)
+    local previous = detail.titleBlock
+    for _, key in ipairs(detail.rowOrder or {}) do
+        local label = detail.labels[key]
+        if label:IsShown() then
+            label:ClearAllPoints()
+            label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -ROW_GAP)
+            previous = label
+        end
+    end
+    local heading = detail.myPrice and detail.myPrice.heading
+    if heading then
+        heading:ClearAllPoints()
+        heading:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -14)
+    end
+end
+
 local function UpdateDetail(entry)
     local detail = widgets.detail
     local shown = entry ~= nil
@@ -721,19 +768,21 @@ local function UpdateDetail(entry)
     if detail.stats then detail.stats:SetShown(shown) end
     detail.star:SetShown(shown)
 
-    for _, value in pairs(detail.values) do
-        value:SetShown(shown)
+    for key, value in pairs(detail.values) do
+        value:SetShown(shown and not FOLDED_ROWS[key])
     end
 
     -- The labels go with their values: left up with nothing selected, they
     -- stood around the "Select an item" line saying nothing.
-    for _, label in pairs(detail.labels or {}) do
-        label:SetShown(shown)
+    for key, label in pairs(detail.labels or {}) do
+        label:SetShown(shown and not FOLDED_ROWS[key])
     end
+    if detail.marketHover then detail.marketHover:SetShown(shown) end
     detail.myPrice:SetShown(shown)
     if not shown then detail.suffixRows = nil end
 
     if not shown then
+        if detail.suffixHover then detail.suffixHover:Hide() end
         return
     end
 
@@ -824,6 +873,14 @@ local function UpdateDetail(entry)
         detail.values.suffixes:SetText(L["none"])
         detail.values.suffixes:SetTextColor(Theme.Unpack("dim"))
     end
+
+    -- Most items have no random suffix, and a row saying "none" took room
+    -- the price graph needs.
+    local hasSuffixes = #suffixRows > 0
+    detail.labels.suffixes:SetShown(hasSuffixes)
+    detail.values.suffixes:SetShown(hasSuffixes)
+    if detail.suffixHover then detail.suffixHover:SetShown(hasSuffixes) end
+    LayoutRows(detail)
 
     detail.deepScan:SetEnabledState(ns.Scanner.isAuctionHouseOpen)
     detail.deepScan.tooltipText = ns.Scanner.isAuctionHouseOpen

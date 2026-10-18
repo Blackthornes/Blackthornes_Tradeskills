@@ -28,6 +28,11 @@ local function Measure(text)
     return #plain * 6
 end
 
+-- The words alone, as the player reads them.
+local function Plain(text)
+    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
 -- Frames and labels whose methods do nothing unless named here. A label is
 -- `room` wide; 0 is one not laid out yet.
 local function NewFrame()
@@ -107,8 +112,8 @@ do
     CraftPanel._UpdateRow(row, CraftLine({ queued = 2, stock = 3, postLimit = 5,
         atPostLimit = true, queuedElsewhere = 2 }))
     check("at the limit, the queued count is said once",
-        row.detail.text, "12g 34s 56c each · can make 3 · have 3, 2 queued, limit 5")
-    check("just once", Count(row.detail.text, "queued"), 1)
+        Plain(row.detail.text), "12g 34s 56c each · can make 3 · have 3, 2 queued, limit 5")
+    check("just once", Count(Plain(row.detail.text), "queued"), 1)
 
     local line = CraftLine({ queued = 3, stock = 2, postLimit = 5 })
     local full = "12g 34s 56c each · can make 3 · have 2 of 5 · queued 3"
@@ -117,23 +122,26 @@ do
     local oneCoin = "12g each · can make 3 · have 2 of 5"
 
     CraftPanel._UpdateRow(row, line)
-    check("with room, the whole line", row.detail.text, full)
+    check("with room, the whole line", Plain(row.detail.text), full)
+    -- Ezmode asked (2026-10-18): a craft that makes money shows its amount
+    -- in green, and only the amount.
+    check("the profit is drawn in green", row.detail.text:find("|c" .. ns.COLORS.profit .. "12g 34s 56c|r each", 1, true) ~= nil, true)
 
     row.detail.room = Measure(noQueued)
     CraftPanel._UpdateRow(row, line)
-    check("a little short, the queued count goes first", row.detail.text, noQueued)
+    check("a little short, the queued count goes first", Plain(row.detail.text), noQueued)
 
     row.detail.room = Measure(twoCoins)
     CraftPanel._UpdateRow(row, line)
-    check("shorter, the copper goes, rounded", row.detail.text, twoCoins)
+    check("shorter, the copper goes, rounded", Plain(row.detail.text), twoCoins)
 
     row.detail.room = Measure(oneCoin)
     CraftPanel._UpdateRow(row, line)
-    check("shorter still, the gold alone", row.detail.text, oneCoin)
+    check("shorter still, the gold alone", Plain(row.detail.text), oneCoin)
 
     row.detail.room = 0
     CraftPanel._UpdateRow(row, line)
-    check("a row not laid out yet gets the whole line", row.detail.text, full)
+    check("a row not laid out yet gets the whole line", Plain(row.detail.text), full)
 end
 
 print("")
