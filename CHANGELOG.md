@@ -4,6 +4,24 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.65.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Keep on This Character:** right-click a row on the Sell list to keep some of
+  that item on the character you are playing. Settings, Queue page, lists them.
+- **Sell list:** it holds back only as many copies of an upgrade as a character
+  can wear, so spares can be sold. Items set to always mail can be sold on the
+  character they mail to. It also holds back what Butler keeps.
+- **Rarity colors:** item names use their rarity color on the shopping list,
+  queue and chat lines. The Level Up tab keeps its skill-up colors.
+- **Prices:** vendor materials with limited stock use the auction house price
+  when one is listed.
+- **Vendors:** the Buy materials button steps aside when Butler is loaded.
+- **Bug fixes:** long names wrap at the auction house, and various other fixes
+  to Tradeskills.
+
 ## 0.64.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
