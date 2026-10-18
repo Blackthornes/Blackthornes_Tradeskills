@@ -80,6 +80,7 @@ Logic\SisterKeeps.lua
 Logic\BagsFull.lua
 Logic\AccountLink.lua
 Logic\GuildPrices.lua
+Logic\Contribute.lua
 Logic\TSMPrices.lua
 Logic\AuctionatorPrices.lua
 Logic\Cooldowns.lua

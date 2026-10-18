@@ -3012,3 +3012,11 @@ L["Wednesday"] = "Mittwoch"
 L["Thursday"] = "Donnerstag"
 L["Friday"] = "Freitag"
 L["Saturday"] = "Samstag"
+
+-- Sharing your data with Blackthornes (Logic/Contribute.lua)
+L["Share your data with Blackthornes to improve the Tradeskills AddOn."] = "Teile deine Daten mit Blackthornes, damit das Tradeskills-AddOn besser wird."
+L["Sharing your data with Blackthornes is on. Thank you."] = "Du teilst deine Daten mit Blackthornes. Danke dir."
+L["Sharing your data with Blackthornes is off."] = "Du teilst deine Daten nicht mit Blackthornes."
+L["Got disenchants and recipe levels from %s."] = "Entzauberungen und Rezeptstufen von %s erhalten."
+L["%s: data from %s."] = "%s: Daten von %s."
+L["Nobody has shared data with you yet."] = "Noch hat niemand Daten mit dir geteilt."

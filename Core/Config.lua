@@ -483,6 +483,10 @@ local DEFAULTS = {
         -- Share scans with guildmates and fill gaps with theirs. On by
         -- default (the owner, 2026-10-07). See Logic/GuildPrices.lua.
         guildPrices = true,
+        -- Send your own disenchant results and recipe skills to the
+        -- addon's maker (2026-10-18). Off unless ticked; never rename it.
+        -- See Logic/Contribute.lua.
+        shareData = false,
         -- Fill gaps with TradeSkillMaster's prices when it is loaded (asked
         -- 2026-10-12). See Logic/TSMPrices.lua.
         tsmPrices = true,
