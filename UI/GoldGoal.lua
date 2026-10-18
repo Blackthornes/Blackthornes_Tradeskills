@@ -34,6 +34,7 @@ local PAD = 10
 local BAR_HEIGHT = 10
 local COIN = [[Interface\Icons\INV_Misc_Coin_01]]
 local EMBLEM = [[Interface\Icons\INV_Misc_Coin_02]]
+local GLOW = ([[Interface\AddOns\%s\Media\Frame\Glow]]):format(ADDON)
 
 -- The game's own sounds, by id: the loot window's coins for a tenth, the
 -- achievement toast for the goal, the level-up chime if that one will not.
@@ -227,12 +228,16 @@ function GoldGoalUI:Build()
     todayLabel:SetPoint("BOTTOMRIGHT", todayValue, "TOPRIGHT", 0, 2)
     todayLabel:SetText(L["Today"])
 
-    -- A soft gold glow behind Today's number when it beats your best day.
+    -- A soft gold glow behind Today's number when it beats your best day:
+    -- the house glow art, faded at every edge and kept inside the rim, not a
+    -- flat box.
     local todayGlow = frame:CreateTexture(nil, "BACKGROUND", nil, 3)
-    todayGlow:SetPoint("TOPLEFT", todayValue, "TOPLEFT", -10, 6)
-    todayGlow:SetPoint("BOTTOMRIGHT", todayValue, "BOTTOMRIGHT", 10, -6)
+    todayGlow:SetPoint("LEFT", todayValue, "LEFT", -12, 0)
+    todayGlow:SetPoint("RIGHT", frame, "RIGHT", -4, 0)
+    todayGlow:SetHeight(24)
+    todayGlow:SetTexture(GLOW)
     pcall(todayGlow.SetBlendMode, todayGlow, "ADD")
-    todayGlow:SetColorTexture(Theme.Unpack("accent", 0.18))
+    todayGlow:SetVertexColor(Theme.Unpack("accent", 0.35))
     todayGlow:Hide()
     self.todayGlow = todayGlow
 
