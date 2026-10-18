@@ -2914,6 +2914,9 @@ L["PROFESSIONS"] = "MÉTIERS"
 L["RESTED"] = "REPOS"
 L["Rested has grown since you last played them."] = "Le repos a grandi depuis la dernière fois que tu l'as joué."
 L["Show:"] = "Afficher :"
+L["Realm:"] = "Royaume :"
+L["This Realm"] = "Ce royaume"
+L["All Realms"] = "Tous les royaumes"
 L["ZONE"] = "ZONE"
 
 -- What the other Blackthornes addons want kept (Logic/SisterKeeps.lua)
