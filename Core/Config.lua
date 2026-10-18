@@ -321,6 +321,11 @@ local DEFAULTS = {
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
         tradeRequests = false,
 
+        -- Pins on the world map at vendors that sell what the queue needs
+        -- for less than the auction house (asked 2026-10-18). See
+        -- Logic/VendorPins.lua.
+        vendorMapPins = false,
+
         -- Learn next on the Level Up tab (2026-10-12): recipes not learned
         -- yet that raise the skill now, under the ones known.
         levelUpLearnNext = true,
