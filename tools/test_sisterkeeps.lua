@@ -90,7 +90,9 @@ ns.Config = {
         return nil
     end,
     GetPriceTable = function() return {} end,
+    GetCharacterKey = function() return playerKey end,
 }
+playerKey = "Player-1-ME"
 
 ns.Scanner = {
     isAuctionHouseOpen = false,
@@ -140,6 +142,7 @@ ns.Cost.FindAnyRecipeForItem = ns.Cost.FindRecipeForItem
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Posting.lua"))("Blackthornes_TS", ns)
+assert(loadfile(lfs_cwd .. "/Logic/KeepHere.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/SisterKeeps.lua"))("Blackthornes_TS", ns)
 
 local Posting = ns.Posting
@@ -352,6 +355,60 @@ commodities[MAILHERE], prices[MAILHERE] = true, { market = 1000 }
 table.insert(bags[0], { itemID = MAILHERE, stackCount = 8 })
 check("an older Butler that can't say still holds it",
     LineFor(Posting:GetPostable({ includeAll = true, showHeld = true }), MAILHERE).held, "On your Always mail list")
+
+print("\nkeep on this character, Tradeskills' own number")
+do
+    local HERE = 2318
+    local function Setup(stack)
+        Reset()
+        ns.db.keepOnCharacter = nil
+        playerKey = "Player-1-ME"
+        commodities[HERE], prices[HERE] = true, { market = 1000 }
+        table.insert(bags[0], { itemID = HERE, stackCount = stack or 20 })
+    end
+    local function Line() return LineFor(Posting:GetPostable({ includeAll = true, showHeld = true }), HERE) end
+
+    Setup()
+    check("a keep is saved", ns.KeepHere:Set(HERE, 15), true)
+    check("it holds its number", Line() and Line().count, 5)
+    check("and says why", Line() and Line().keptWhy, "Keeping 15 on this character")
+    check("it holds even unticked", (function() sisterKeepsOn = false; ns.SisterKeeps:Forget(); return Line().count end)(), 5)
+
+    Setup()
+    ns.KeepHere:Set(HERE, 15)
+    playerKey = "Player-1-ALT"
+    ns.SisterKeeps:Forget()
+    check("another character sells it all", Line() and Line().count, 20)
+    check("and has no number", ns.KeepHere:Count(HERE), nil)
+
+    Setup()
+    ns.KeepHere:Set(HERE, 18)
+    BlackthornesButler.KeepHere = { Count = function(_, id) if id == HERE then return 15 end end,
+        IsAll = function(count) return count >= 9999 end }
+    check("the bigger number wins (Tradeskills)", Line() and Line().count, 2)
+    ns.KeepHere:Set(HERE, 10)
+    check("the bigger number wins (Butler)", Line() and Line().count, 5)
+
+    Setup()
+    ns.KeepHere:Set(HERE, ns.KeepHere.MOST)
+    check("Keep All holds the whole stack", Line() and Line().held, "Keeping all on this character")
+    check("Keep All shows as All", ns.KeepHere.Shown(ns.KeepHere:Count(HERE)), "All")
+
+    Setup()
+    ns.KeepHere:Set(HERE, 15)
+    ns.KeepHere:Set(HERE, 0)
+    check("0 clears it", ns.KeepHere:Count(HERE), nil)
+    check("and it all sells again", Line() and Line().count, 20)
+    check("the list is empty", #ns.KeepHere:Items(), 0)
+
+    Setup()
+    playerKey = "Name-Realm"
+    local done, why = ns.KeepHere:Set(HERE, 15)
+    check("no GUID, nothing saved", done, false)
+    check("and it says why", type(why), "string")
+    check("nothing written", ns.db.keepOnCharacter, nil)
+    playerKey = "Player-1-ME"
+end
 
 print("\nno sisters, or sisters that raise")
 Reset()
