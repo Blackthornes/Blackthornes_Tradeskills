@@ -603,6 +603,7 @@ function Widgets.CreateCheckbox(parent, text, onToggle, initial)
     local label = Theme.CreateLabel(checkbox, "small", "text")
     label:SetPoint("LEFT", box, "RIGHT", 6, 0)
     label:SetText(text)
+    checkbox.label, checkbox.box = label, box
 
     checkbox:SetWidth(label:GetStringWidth() + 24)
     checkbox.checked = initial and true or false
