@@ -101,6 +101,45 @@ function ItemTooltip:IsEnabled()
     return ns.Config:Get("showValueOnItemTooltips") ~= false
 end
 
+-- Off, Shift or Always for each line (asked 2026-10-18, UI/TooltipShift.lua).
+-- Tradeskills keeps settings in Config, so each line's Shift choice is a
+-- setting of its own (never rename them). The sales lines have no Off: their
+-- Shift choice is the tick box they always had, `tooltipSalesShift`.
+ItemTooltip.SHIFT_SETTINGS = {
+    value   = "tooltipValueShift",
+    sales   = "tooltipSalesShift",
+    trend   = "tooltipTrendShift",
+    recipe  = "tooltipRecipeShift",
+    enchant = "tooltipEnchantShift",
+}
+
+local TooltipShift = ns.TooltipShift
+if TooltipShift then
+    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant" }
+
+    function TooltipShift.Read(key)
+        local name = ItemTooltip.SHIFT_SETTINGS[key]
+        return name ~= nil and ns.Config ~= nil and ns.Config:Get(name) == true
+    end
+
+    function TooltipShift.Write(key, on)
+        local name = ItemTooltip.SHIFT_SETTINGS[key]
+        if name and ns.Config then ns.Config:Set(name, on and true or false) end
+    end
+end
+
+--- May this line go on the tooltip now? Asked each time a tooltip is built.
+function ItemTooltip.Shows(key)
+    local shift = ns.TooltipShift
+    if shift then return shift:Shows(key) end
+    -- Without the shared file (a test loading this one alone): the sales
+    -- lines' tick box as it always worked, the rest always.
+    if key ~= "sales" then return true end
+    if not (ns.Config and ns.Config:Get("tooltipSalesShift") == true) then return true end
+    local ok, down = pcall(function() return IsShiftKeyDown and IsShiftKeyDown() end)
+    return ok and down == true
+end
+
 --------------------------------------------------------------------------------
 -- Which item a tooltip is showing
 --------------------------------------------------------------------------------
@@ -342,7 +381,13 @@ function ItemTooltip:LinesFor(itemID, count, link)
     if lowest then lines[#lines + 1] = lowest end
 
     local trend = self:TrendLine(itemID)
-    if trend then lines[#lines + 1] = trend end
+    if trend then
+        if ItemTooltip.Shows("trend") then
+            lines[#lines + 1] = trend
+        else
+            lines.held = true
+        end
+    end
 
     if count and count > 1 then
         lines[#lines + 1] = {
@@ -401,6 +446,10 @@ function ItemTooltip:AddRecipeLines(lines, itemID)
 
     local ok, recipe = pcall(ns.RecipeBook.TooltipLines, ns.RecipeBook, itemID)
     if not ok or type(recipe) ~= "table" then return end
+    if #recipe > 0 and not ItemTooltip.Shows("recipe") then
+        lines.held = true
+        return
+    end
 
     for _, line in ipairs(recipe) do lines[#lines + 1] = line end
 end
@@ -439,7 +488,7 @@ end
 -- A player asked (2026-10-13), the owner agreeing: under Demand, about how
 -- many sell a day, how many are listed now, the last seven days and what
 -- you sold this week. Shown always, or only while Shift is held when
--- "Sales details only with Shift" (`tooltipSalesShift`, off unless ticked,
+-- "Sales Details:" Shift or Always (`tooltipSalesShift`, true for Shift, off unless picked,
 -- never rename it) is on. The game never says what sold, so "Sold a day"
 -- and the seven days are worked out from your own scans and say so.
 
@@ -463,9 +512,7 @@ local INDENT = "   "
 
 --- Whether the sales lines go on the tooltip now.
 function ItemTooltip:ShowsSalesDetails()
-    if not (ns.Config and ns.Config:Get("tooltipSalesShift") == true) then return true end
-    local ok, down = pcall(function() return IsShiftKeyDown and IsShiftKeyDown() end)
-    return ok and down == true
+    return ItemTooltip.Shows("sales")
 end
 
 --- One inline bar, its foot on the line's foot.
@@ -528,7 +575,10 @@ function ItemTooltip:AddDemandLines(lines, itemID)
     local demand = self:DemandLine(itemID, details)
     if demand then lines[#lines + 1] = demand end
 
-    if not details then return end
+    if not details then
+        lines.held = true
+        return
+    end
 
     local prices = ns.Prices
 
@@ -647,6 +697,17 @@ function ItemTooltip.Forget(tooltip)
     decorated[tooltip] = nil
 end
 
+--- A line was held back for Shift: "Hold Shift for more." once.
+function ItemTooltip:HeldBack(tooltip)
+    local shift = ns.TooltipShift
+    if not shift then return end
+    -- The hint shows the tooltip again, which can re-enter the hook.
+    local was = self.writing
+    self.writing = true
+    pcall(shift.Held, shift, tooltip)
+    self.writing = was
+end
+
 function ItemTooltip:AlreadyOn(tooltip, itemID)
     local mark = decorated[tooltip]
 
@@ -697,15 +758,25 @@ function ItemTooltip:Decorate(tooltip, data, count)
     if self:AlreadyOn(tooltip, itemID) then return "duplicate" end
 
     local lines = self:LinesFor(itemID, count, self:LinkForTooltip(tooltip, data))
-    if #lines == 0 then return "quiet" end
+    if #lines == 0 then
+        if lines.held then self:HeldBack(tooltip) end
+        return "quiet"
+    end
 
     if type(Field(tooltip, "AddDoubleLine")) ~= "function" then return "noitem" end
+
+    -- Every value line on Shift, and Shift is up: only the hint goes on.
+    if not ItemTooltip.Shows("value") then
+        self:HeldBack(tooltip)
+        return "held"
+    end
 
     self.writing = true
 
     for i = 1, #lines do
         WriteLine(tooltip, lines[i])
     end
+    if lines.held then self:HeldBack(tooltip) end
 
     -- A tooltip that has grown has to be told to resize. Harmless where the
     -- client does it already, required where a hooked setter is what got us
@@ -744,6 +815,7 @@ function ItemTooltip:AddStackLine(tooltip, count)
     if not count or count <= 1 then return false end
     if not self:IsEnabled() then return false end
     if self.writing then return false end
+    if not ItemTooltip.Shows("value") then return false end
 
     local mark = decorated[tooltip]
 

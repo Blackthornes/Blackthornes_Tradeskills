@@ -98,6 +98,7 @@ Logic\Butler.lua
 Logic\PublicAPI.lua
 Logic\ItemStats.lua
 
+UI\TooltipShift.lua
 UI\Theme.lua
 UI\BlizzardLook.lua
 UI\Widgets.lua

@@ -259,6 +259,15 @@ local DEFAULTS = {
         -- UI/EnchantTooltip.lua. Never rename it.
         tooltipEnchantCosts = true,
 
+        -- Off, Shift or Always for each tooltip line (asked 2026-10-18):
+        -- true keeps that line for while Shift is held. Whether a line is on
+        -- stays in its own setting above, and the sales lines' Shift is
+        -- tooltipSalesShift. See UI/TooltipShift.lua. Never rename them.
+        tooltipValueShift = false,
+        tooltipTrendShift = false,
+        tooltipRecipeShift = false,
+        tooltipEnchantShift = false,
+
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does
         -- nothing without Equipment. See Logic/Upgrades.lua.
