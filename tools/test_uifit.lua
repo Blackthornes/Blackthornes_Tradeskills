@@ -325,6 +325,7 @@ local function Load(path)
 end
 
 Load("/Core/Util.lua")
+Load("/UI/TooltipShift.lua")
 Load("/UI/Theme.lua")
 Load("/UI/Widgets.lua")
 Load("/UI/Columns.lua")

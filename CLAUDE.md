@@ -745,9 +745,9 @@ readings, an estimate and said so), "Listed now" (the last scan's count
 and its age), "Last 7 days" (inline bars from `Prices:GetDailySales` and a
 trend once four whole days were scanned) and "You sold" (`Demand:Week`,
 this week's sales and expiries from the ledger). Each price record keeps
-`daily` for it (`Prices.NoteDaily`; never rename it). "Sales details only
-with Shift" on the Look page (`tooltipSalesShift`, off unless ticked,
-never rename it). Tested in `tools/test_tooltipsales.lua`. Not yet seen in
+`daily` for it (`Prices.NoteDaily`; never rename it). "Sales Details:" on
+the Look page, Shift or Always (`tooltipSalesShift`, true for Shift, off
+unless picked, never rename it; see "Off, Shift or Always on tooltips"). Tested in `tools/test_tooltipsales.lua`. Not yet seen in
 game; the bars are the game's inline texture escape.
 
 ## The Stats tab
@@ -794,6 +794,28 @@ and Known by. Lines are kept per spell until `Inventory.changes` moves or
 `KEEP_FOR` passes. "Enchant costs on tooltips" on the Look page
 (`tooltipEnchantCosts`, on unless unticked, never rename it); `/bts tip`
 counts them. Tested in `tools/test_enchanttooltip.lua`.
+
+## Off, Shift or Always on tooltips
+
+A player asked (2026-10-18, the owner said yes): each tooltip line
+Tradeskills adds can be Off, Shift (only while Shift is held) or Always.
+`UI/TooltipShift.lua` is the same file in all five addons (a fix to it
+belongs in all five); nobody's settings change, so a line that was on
+reads Always and one that was off reads Off. Whether a line is on stays in
+its own setting; Tradeskills keeps the Shift choice in Config (it sets
+`TooltipShift.Read`/`Write` in `UI/ItemTooltip.lua`, `ItemTooltip.SHIFT_SETTINGS`):
+`value` (`showValueOnItemTooltips`, every value line, Shift in
+`tooltipValueShift`), `sales` (the sales lines under Demand, no Off: their
+Shift is the old `tooltipSalesShift`), `trend` (`tooltipTrend`,
+`tooltipTrendShift`), `recipe` (`showRecipeValueOnTooltips`,
+`tooltipRecipeShift`) and `enchant` (`tooltipEnchantCosts`,
+`tooltipEnchantShift`; asked when the lines are written, never kept in
+`EnchantTooltip`'s cache). Never rename any of them. A line held back adds
+"Hold Shift for more." once a tooltip (`TooltipShift:Held`), and the shared
+frame redraws GameTooltip when Shift moves, only while a line is on Shift.
+Dropdowns on the Look page (`ShiftDropdown`, `ShowShiftMode` in
+`UI/Tab_Settings.lua`); the row once "Sales Details on Shift:" is "Sales
+Details:". Tested in `tools/test_tooltipshift.lua`. Not yet seen in game.
 
 ## Find a material
 
