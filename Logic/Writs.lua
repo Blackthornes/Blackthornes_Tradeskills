@@ -382,16 +382,24 @@ local function ItemCosts(itemID)
         buy = ns.Prices:GetValue(itemID, "lowest")
     end
 
-    local make
+    local make, recipeID
     if ns.Cost and ns.Cost.FindAnyRecipeForItem and ns.Cost.GetMaterialValue then
-        local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
+        recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
         if recipeID then make = ns.Cost:GetMaterialValue(recipeID) end
     end
-    return buy, make
+    return buy, make, make and recipeID or nil
 end
 
 local function BagCount(itemID)
     return itemID and ns.Inventory and ns.Inventory:GetBagCount(itemID) or 0
+end
+
+--- Bags, bank and mail on this character.
+local function OwnedCount(itemID)
+    local inventory = ns.Inventory
+    if not (itemID and inventory) then return 0 end
+    if inventory.GetOwnedCount then return inventory:GetOwnedCount(itemID) or 0 end
+    return BagCount(itemID)
 end
 
 --- Every writ, with what a turn-in costs and what a point of reputation
@@ -407,7 +415,7 @@ function Writs:GetRows()
         if writID and ns.Prices then writPrice, noneListed = ns.Prices:ListedNow(writID) end
 
         local count = writ.count or 1
-        local buy, make = ItemCosts(writ.item)
+        local buy, make, recipeID = ItemCosts(writ.item)
         local unit, how = buy, buy and "buy" or nil
         if make and (not unit or make < unit) then unit, how = make, "make" end
         local itemCost = unit and unit * count or nil
@@ -434,6 +442,7 @@ function Writs:GetRows()
             buy = buy and buy * count or nil,
             make = make and make * count or nil,
             how = how,
+            recipeID = recipeID,
             itemCost = itemCost,
             rep = rep,
             money = money,
@@ -441,7 +450,7 @@ function Writs:GetRows()
             turnIns = turnIns,
             total = total,
             perRep = perRep,
-            haveWrits = BagCount(writID),
+            haveWrits = OwnedCount(writID),
             haveItems = BagCount(writ.item),
         }
     end

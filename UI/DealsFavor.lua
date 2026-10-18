@@ -20,14 +20,18 @@ local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
 local BUNDLE_LINES = 5
+-- The Buy box goes from 1 to this many crates.
+local BUY_MOST = 99
 
 -- Columns, laid out right to left, as on the flips list.
 local COLUMNS = {
     { key = "perFavor",   label = L["PER FAVOR"], width = 70, money = true },
     { key = "total",      label = L["TOTAL"], width = 66, money = true },
-    { key = "bundleCost", label = L["BUNDLE"], width = 66, money = true },
+    { key = "bundleCost", label = L["BUNDLE"], width = 96, money = true },
     { key = "cratePrice", label = L["CRATE"], width = 66, money = true },
     { key = "favor",      label = L["FAVOR"], width = 44, justify = "CENTER" },
+    -- Bags, bank and mail on this character (a player asked, 2026-10-18).
+    { key = "have",       label = L["HAVE"], width = 40, justify = "CENTER" },
 }
 
 -- Any column but the crate's name can be hidden (UI/Columns.lua).
@@ -37,6 +41,7 @@ local state = {
     search = "",
     skipOverStack = nil,    -- read from Settings the first time it is asked
     selected = nil,
+    buy = 1,                -- the Buy box, for this session only
 }
 
 local widgets = {}
@@ -118,6 +123,55 @@ local function SearchCrate(row)
     Search(row.itemID, "crate")
 end
 
+--- What Search Both looks for: the crate, then the cheapest bundle, or
+--- the materials to make it when that is cheaper.
+-- @return items, reagents (nil unless made)
+local function BothItems(row, buy)
+    local items = { { itemID = row.itemID, count = buy } }
+    local best = row.best
+    if not best then return items end
+
+    if best.made then
+        local _, reagents = ns.MerchantsFavor.CraftPlan(best.recipeID, best.count * buy)
+        if reagents and #reagents > 0 then
+            for _, reagent in ipairs(reagents) do items[#items + 1] = reagent end
+            return items, reagents
+        end
+    end
+    items[#items + 1] = { itemID = best.itemID, count = best.count * buy }
+    return items
+end
+
+--- The crate and what fills it, in one search (a player asked, 2026-10-18).
+local function SearchBoth(row)
+    if not row then return end
+    local scanner = ns.Scanner
+    if not row.itemID or not row.best or not scanner or not scanner.isAuctionHouseOpen or scanner.isScanning then
+        return Search(row.itemID, "crate")
+    end
+    local items, reagents = BothItems(row, state.buy)
+    local second = reagents and ns.MerchantsFavor.NamesOf(reagents) or ItemName(row.best.itemID)
+    ns.MerchantsFavor:SearchBoth(items, row.name, second)
+end
+
+local function BothTooltip(row)
+    if not row or not row.best then return L["Finds this crate on the auction house. You click Buy yourself."] end
+    local buy = state.buy
+    local _, reagents = BothItems(row, buy)
+    if reagents then
+        return L.Format("Finds %d of this crate and the %s to make %d bundles. You click Buy yourself.",
+            buy, ns.MerchantsFavor.NamesOf(reagents), buy)
+    end
+    return L.Format("Finds %d of this crate and %d of its cheapest bundle. You click Buy yourself.", buy, buy)
+end
+
+--- Queue the crafts that make the cheapest bundle, times the Buy box.
+local function QueueBundle(row)
+    local best = row and row.best
+    if not (best and best.made and best.recipeID) then return end
+    ns.MerchantsFavor:QueueCraft(best.recipeID, best.count * state.buy, ItemName(best.itemID))
+end
+
 local function SearchBundle(row)
     if not row or not row.best then return end
     Search(row.best.itemID, "material")
@@ -150,6 +204,11 @@ local function CreateRow(row)
 end
 
 local function FillCell(cell, key, entry)
+    if key == "have" then
+        cell:SetText(tostring(entry.have or 0))
+        cell:SetTextColor(Theme.Unpack((entry.have or 0) > 0 and "text" or "dim"))
+        return
+    end
     if key == "favor" then
         cell:SetText(entry.favor and tostring(entry.favor) or "?")
         cell:SetTextColor(Theme.Unpack(entry.source == "learned" and "text"
@@ -159,14 +218,19 @@ local function FillCell(cell, key, entry)
 
     local value = entry[key]
     if key == "perFavor" then value = Round(value) end
-    cell:SetText(value and Money(value) or "")
+    local text = value and Money(value) or ""
+    -- Cheaper made than bought: a green Make before the price.
+    if key == "bundleCost" and value and entry.best and entry.best.made then
+        text = L.Format("|c%sMake|r  %s", ns.COLORS.profit, text)
+    end
+    cell:SetText(text)
     cell:SetTextColor(Theme.Unpack(key == "perFavor" and "accent" or key == "total" and "text" or "muted"))
 end
 
 local function UpdateRow(row, entry)
     if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
 
-    Theme.SetRowName(row.name, entry.have > 0 and ("%s  (%d)"):format(entry.name, entry.have) or entry.name)
+    Theme.SetRowName(row.name, entry.name)
     Theme.SetItemIcon(row.icon, entry.itemID or (entry.best and entry.best.itemID))
     -- In its rarity colour, faded while it has no price.
     local r, g, b = Util.GetItemQualityColor(entry.itemID)
@@ -199,10 +263,8 @@ local function ShowRowTooltip(row, entry)
         GameTooltip:AddLine(L.Format("%s for each favor.", Plain(Round(entry.perFavor))), 0.35, 0.85, 0.45, true)
     end
     GameTooltip:AddLine(RewardText(entry), 0.7, 0.7, 0.7, true)
-    if entry.have > 0 then
-        GameTooltip:AddLine(L.Format("You carry %d.", entry.have), 0.85, 0.85, 0.85)
-    end
-    GameTooltip:AddLine(L["Right-click to search the auction house for the crate."], 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L.Format("You have %d, counting your bags, bank and mail.", entry.have or 0), 0.85, 0.85, 0.85)
+    GameTooltip:AddLine(L["Right-click a row to search for both"], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -244,6 +306,60 @@ local function SetLine(line, label, value, labelColor, valueColor)
     line.value:SetTextColor(Theme.Unpack(valueColor or "text"))
 end
 
+--- Buy: [-] [3] [+] crates. How many Search Both looks for, 1 to BUY_MOST.
+local function CreateBuyBox(parent, onChange)
+    local holder = CreateFrame("Frame", nil, parent)
+    holder:SetSize(DETAIL_WIDTH - 24, 22)
+
+    local label = Theme.CreateLabel(holder, "small", "text")
+    label:SetPoint("LEFT", 0, 0)
+    label:SetText(L["Buy:"])
+
+    local count, box = 1, nil
+    local function Set(value)
+        value = math.max(1, math.min(BUY_MOST, math.floor(tonumber(value) or 1)))
+        if box then box:SetValue(value, true) end
+        if value == count then return end
+        count = value
+        onChange(value)
+    end
+
+    holder.minus = Widgets.CreateButton(holder, "-", function() Set(count - 1) end, { width = 22, height = 20 })
+    holder.minus:SetPoint("LEFT", label, "RIGHT", 8, 0)
+
+    box = Widgets.CreateNumberBox(holder, {
+        width = 36, height = 20, min = 1, max = BUY_MOST, justify = "CENTER",
+        onChange = function(value) Set(value) end,
+    })
+    box:SetPoint("LEFT", holder.minus, "RIGHT", 4, 0)
+    box:SetValue(1, true)
+    holder.box = box
+
+    holder.plus = Widgets.CreateButton(holder, "+", function() Set(count + 1) end, { width = 22, height = 20 })
+    holder.plus:SetPoint("LEFT", box, "RIGHT", 4, 0)
+
+    holder.word = Theme.CreateLabel(holder, "small", "muted")
+    holder.word:SetPoint("LEFT", holder.plus, "RIGHT", 8, 0)
+
+    local function Tip()
+        GameTooltip:SetOwner(box, "ANCHOR_TOP")
+        GameTooltip:AddLine(L["How many to buy. When you pick one in the auction house, its buy box fills in this many, and the same for what goes with it."],
+            1, 1, 1, true)
+        GameTooltip:Show()
+    end
+    for _, part in ipairs({ box, box.editBox }) do
+        if part and part.HookScript then
+            part:HookScript("OnEnter", Tip)
+            part:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+    end
+
+    function holder:SetWord(text) self.word:SetText(text) end
+    return holder
+end
+
+local UpdateDetail
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
@@ -270,6 +386,17 @@ local function BuildDetail(parent)
     detail.bundles:SetPoint("TOPLEFT", detail.bundleHeading, "BOTTOMLEFT", 0, -8)
     detail.bundles:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 
+    -- Shown only when the cheapest bundle is cheaper made than bought.
+    detail.makeLine = Theme.CreateLabel(detail, "small", "profit")
+    detail.makeLine:SetPoint("TOPLEFT", detail.bundles, "BOTTOMLEFT", 0, -8)
+    detail.makeLine:SetPoint("RIGHT", detail, "RIGHT", -116, 0)
+    detail.makeLine:SetWordWrap(true)
+
+    detail.queueButton = Widgets.CreateButton(detail, L["Queue Craft"], function()
+        QueueBundle(state.selected)
+    end, { width = 96, height = 20 })
+    detail.queueButton:SetPoint("TOPRIGHT", detail.bundles, "BOTTOMRIGHT", 0, -6)
+
     detail.costHeading = Theme.CreateHeading(detail, L["ONE FAVOR"])
     detail.costHeading:SetPoint("TOPLEFT", detail.bundles, "BOTTOMLEFT", 0, -12)
 
@@ -285,15 +412,27 @@ local function BuildDetail(parent)
 
     detail.crateButton = Widgets.CreateButton(detail, L["Search crate"], function()
         SearchCrate(state.selected)
-    end, { width = 134, primary = true, height = 24 })
+    end, { width = 134, height = 22 })
     detail.crateButton:SetPoint("BOTTOMLEFT", 12, 14)
     detail.crateButton.tooltipText = L["Finds this crate on the auction house. You click Buy yourself."]
 
     detail.bundleButton = Widgets.CreateButton(detail, L["Search bundle"], function()
         SearchBundle(state.selected)
-    end, { width = 134, height = 24 })
+    end, { width = 134, height = 22 })
     detail.bundleButton:SetPoint("LEFT", detail.crateButton, "RIGHT", 8, 0)
     detail.bundleButton.tooltipText = L["Finds the cheapest bundle's material on the auction house."]
+
+    -- The crate and what fills it in one search, the main thing here.
+    detail.bothButton = Widgets.CreateButton(detail, L["Search Both"], function()
+        SearchBoth(state.selected)
+    end, { width = DETAIL_WIDTH - 24, primary = true, height = 24 })
+    detail.bothButton:SetPoint("BOTTOMLEFT", 12, 44)
+
+    detail.buyBox = CreateBuyBox(detail, function(value)
+        state.buy = value
+        UpdateDetail(state.selected)
+    end)
+    detail.buyBox:SetPoint("BOTTOMLEFT", 12, 76)
 
     detail.empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     detail.empty:SetPoint("CENTER")
@@ -304,13 +443,17 @@ local function BuildDetail(parent)
     return detail
 end
 
-local function UpdateDetail(entry)
+function UpdateDetail(entry)
     local detail = widgets.detail
     local shown = entry ~= nil
 
     detail.empty:SetShown(not shown)
+    local made = shown and entry.best and entry.best.made and entry.best.make and entry.best.buy
+    detail.makeLine:SetShown(made and true or false)
+    detail.queueButton:SetShown(made and true or false)
     for _, part in ipairs({ detail.icon, detail.title, detail.subtitle, detail.bundleHeading, detail.bundles,
-            detail.costHeading, detail.sums, detail.note, detail.crateButton, detail.bundleButton }) do
+            detail.costHeading, detail.sums, detail.note, detail.crateButton, detail.bundleButton,
+            detail.bothButton, detail.buyBox }) do
         part:SetShown(shown)
     end
     if not shown then return end
@@ -334,7 +477,11 @@ local function UpdateDetail(entry)
             elseif bundle.overStack then
                 labelColor, valueColor = "dim", "dim"
             end
-            if bundle.vendor then label = L.Format("%s (vendor)", label) end
+            if bundle.made then
+                label = L.Format("%s (make)", label)
+            elseif bundle.vendor then
+                label = L.Format("%s (vendor)", label)
+            end
             if bundle.overStack then
                 label = label .. " *"
                 overStack = true
@@ -344,6 +491,21 @@ local function UpdateDetail(entry)
             SetLine(line, nil)
         end
     end
+
+    -- Room for the make line only when it shows.
+    detail.costHeading:ClearAllPoints()
+    if made then
+        local best = entry.best
+        detail.makeLine:SetText(L.Format("Cheaper to make: %s made, %s bought.", Plain(best.make), Plain(best.buy)))
+        detail.queueButton.tooltipText = L.Format("Adds %d bundles of %s to your craft queue.", state.buy,
+            ItemName(best.itemID))
+        detail.costHeading:SetPoint("TOPLEFT", detail.bundles, "BOTTOMLEFT", 0, -36)
+    else
+        detail.costHeading:SetPoint("TOPLEFT", detail.bundles, "BOTTOMLEFT", 0, -12)
+    end
+
+    detail.buyBox:SetWord(state.buy == 1 and L["crate"] or L["crates"])
+    detail.bothButton.tooltipText = BothTooltip(entry)
 
     local sums = detail.sums.lines
     SetLine(sums[1], L["Crate on the AH"], entry.cratePrice and Plain(entry.cratePrice)
@@ -360,7 +522,7 @@ local function UpdateDetail(entry)
             or L["* Needs more than one stack. That may not work."]
     end
     if entry.have > 0 then
-        parts[#parts + 1] = L.Format("You carry %d of these crates.", entry.have)
+        parts[#parts + 1] = L.Format("You have %d of these crates.", entry.have)
     end
     if not entry.itemID then
         parts[#parts + 1] = L["No auction house price yet."]
@@ -514,7 +676,7 @@ function DealsFavor:Build(view, toolbar)
         onClick = function(entry, _, mouseButton)
             state.selected = entry
             UpdateDetail(entry)
-            if mouseButton == "RightButton" then SearchCrate(entry) end
+            if mouseButton == "RightButton" then SearchBoth(entry) end
         end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
@@ -529,7 +691,7 @@ function DealsFavor:Build(view, toolbar)
 
     local hint = Theme.CreateLabel(view, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText(L["Right-click a row to search for the crate"])
+    hint:SetText(L["Right-click a row to search for both"])
 
     local countLabel = Theme.CreateLabel(view, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)

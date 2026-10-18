@@ -22,14 +22,18 @@ local DealsWrits = ns.NewModule("DealsWrits")
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
 local ICON_GUTTER = 20
+-- The Buy box goes from 1 to this many writs.
+local BUY_MOST = 99
 
 -- Columns, laid out right to left, as on the flips list.
 local COLUMNS = {
     { key = "perRep",    label = L["PER REP"], width = 66, money = true },
     { key = "total",     label = L["TOTAL"], width = 66, money = true },
-    { key = "itemCost",  label = L["ITEM"], width = 66, money = true },
+    { key = "itemCost",  label = L["ITEM"], width = 96, money = true },
     { key = "writPrice", label = L["WRIT"], width = 66, money = true },
     { key = "rep",       label = L["REP"], width = 40, justify = "CENTER" },
+    -- Bags, bank and mail on this character (a player asked, 2026-10-18).
+    { key = "haveWrits", label = L["HAVE"], width = 40, justify = "CENTER" },
 }
 
 -- Any column but the item's name can be hidden (UI/Columns.lua).
@@ -39,6 +43,7 @@ local state = {
     search = "",
     goal = nil,         -- read from Settings the first time it is asked
     selected = nil,
+    buy = 1,            -- the Buy box, for this session only
 }
 
 local widgets = {}
@@ -109,6 +114,57 @@ local function SearchItem(row)
     if row then Search(row.itemID, "item") end
 end
 
+local function ItemName(itemID)
+    return ns.MerchantsFavor and ns.MerchantsFavor.NameOf(itemID) or nil
+end
+
+--- What Search Both looks for: the writ, then the item it asks for, or
+--- the materials to make it when that is cheaper.
+-- @return items, reagents (nil unless made)
+local function BothItems(row, buy)
+    local items = { { itemID = row.writID, count = buy } }
+    if row.how == "make" and row.recipeID and ns.MerchantsFavor then
+        local _, reagents = ns.MerchantsFavor.CraftPlan(row.recipeID, row.count * buy)
+        if reagents and #reagents > 0 then
+            for _, reagent in ipairs(reagents) do items[#items + 1] = reagent end
+            return items, reagents
+        end
+    end
+    items[#items + 1] = { itemID = row.itemID, count = row.count * buy }
+    return items
+end
+
+--- The writ and what it asks for, in one search (a player asked, 2026-10-18).
+local function SearchBoth(row)
+    if not row then return end
+    local scanner = ns.Scanner
+    if not row.writID or not ns.MerchantsFavor or not scanner or not scanner.isAuctionHouseOpen
+            or scanner.isScanning then
+        return Search(row.writID, "writ")
+    end
+    local items, reagents = BothItems(row, state.buy)
+    local first = ItemName(row.writID) or L.Format("Craftsman's Writ: %s", row.name)
+    local second = reagents and ns.MerchantsFavor.NamesOf(reagents) or row.name
+    ns.MerchantsFavor:SearchBoth(items, first, second)
+end
+
+local function BothTooltip(row)
+    local buy = state.buy
+    local _, reagents = BothItems(row, buy)
+    if reagents then
+        return L.Format("Finds %d of this writ and the materials to make %d %s. You click Buy yourself.",
+            buy, row.count * buy, row.name)
+    end
+    return L.Format("Finds %d of this writ and %d of the item it asks for. You click Buy yourself.",
+        buy, row.count * buy)
+end
+
+--- Queue the crafts that make the item, times the Buy box.
+local function QueueItem(row)
+    if not (row and row.how == "make" and row.recipeID and ns.MerchantsFavor) then return end
+    ns.MerchantsFavor:QueueCraft(row.recipeID, row.count * state.buy, row.name)
+end
+
 --------------------------------------------------------------------------------
 -- Rows
 --------------------------------------------------------------------------------
@@ -136,6 +192,11 @@ local function CreateRow(row)
 end
 
 local function FillCell(cell, key, entry)
+    if key == "haveWrits" then
+        cell:SetText(tostring(entry.haveWrits or 0))
+        cell:SetTextColor(Theme.Unpack((entry.haveWrits or 0) > 0 and "text" or "dim"))
+        return
+    end
     if key == "rep" then
         cell:SetText(entry.rep and tostring(entry.rep) or "?")
         cell:SetTextColor(Theme.Unpack(entry.source == "learned" and "text"
@@ -145,14 +206,17 @@ local function FillCell(cell, key, entry)
 
     local value = entry[key]
     if key == "perRep" then value = Round(value) end
-    cell:SetText(value and Money(value) or "")
+    local text = value and Money(value) or ""
+    -- Cheaper made than bought: a green Make before the price.
+    if key == "itemCost" and value and entry.how == "make" then
+        text = L.Format("|c%sMake|r  %s", ns.COLORS.profit, text)
+    end
+    cell:SetText(text)
     cell:SetTextColor(Theme.Unpack(key == "perRep" and "accent" or key == "total" and "text" or "muted"))
 end
 
 local function NameText(entry)
-    local text = entry.count > 1 and ("%d %s"):format(entry.count, entry.name) or entry.name
-    if entry.haveWrits > 0 then text = ("%s  (%d)"):format(text, entry.haveWrits) end
-    return text
+    return entry.count > 1 and ("%d %s"):format(entry.count, entry.name) or entry.name
 end
 
 local function UpdateRow(row, entry)
@@ -204,10 +268,9 @@ local function ShowRowTooltip(row, entry)
         GameTooltip:AddLine(L.Format("%s for each reputation.", Plain(Round(entry.perRep))), 0.35, 0.85, 0.45, true)
     end
     GameTooltip:AddLine(RewardText(entry), 0.7, 0.7, 0.7, true)
-    if entry.haveWrits > 0 then
-        GameTooltip:AddLine(L.Format("You carry %d of these writs.", entry.haveWrits), 0.85, 0.85, 0.85)
-    end
-    GameTooltip:AddLine(L["Right-click to search the auction house for the writ."], 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(L.Format("You have %d, counting your bags, bank and mail.", entry.haveWrits or 0),
+        0.85, 0.85, 0.85)
+    GameTooltip:AddLine(L["Right-click a row to search for both"], 0.5, 0.5, 0.5)
     GameTooltip:Show()
 end
 
@@ -247,6 +310,60 @@ local function SetLine(line, label, value, labelColor, valueColor)
     line.value:SetTextColor(Theme.Unpack(valueColor or "text"))
 end
 
+--- Buy: [-] [3] [+] writs. How many Search Both looks for, 1 to BUY_MOST.
+local function CreateBuyBox(parent, onChange)
+    local holder = CreateFrame("Frame", nil, parent)
+    holder:SetSize(DETAIL_WIDTH - 24, 22)
+
+    local label = Theme.CreateLabel(holder, "small", "text")
+    label:SetPoint("LEFT", 0, 0)
+    label:SetText(L["Buy:"])
+
+    local count, box = 1, nil
+    local function Set(value)
+        value = math.max(1, math.min(BUY_MOST, math.floor(tonumber(value) or 1)))
+        if box then box:SetValue(value, true) end
+        if value == count then return end
+        count = value
+        onChange(value)
+    end
+
+    holder.minus = Widgets.CreateButton(holder, "-", function() Set(count - 1) end, { width = 22, height = 20 })
+    holder.minus:SetPoint("LEFT", label, "RIGHT", 8, 0)
+
+    box = Widgets.CreateNumberBox(holder, {
+        width = 36, height = 20, min = 1, max = BUY_MOST, justify = "CENTER",
+        onChange = function(value) Set(value) end,
+    })
+    box:SetPoint("LEFT", holder.minus, "RIGHT", 4, 0)
+    box:SetValue(1, true)
+    holder.box = box
+
+    holder.plus = Widgets.CreateButton(holder, "+", function() Set(count + 1) end, { width = 22, height = 20 })
+    holder.plus:SetPoint("LEFT", box, "RIGHT", 4, 0)
+
+    holder.word = Theme.CreateLabel(holder, "small", "muted")
+    holder.word:SetPoint("LEFT", holder.plus, "RIGHT", 8, 0)
+
+    local function Tip()
+        GameTooltip:SetOwner(box, "ANCHOR_TOP")
+        GameTooltip:AddLine(L["How many to buy. When you pick one in the auction house, its buy box fills in this many, and the same for what goes with it."],
+            1, 1, 1, true)
+        GameTooltip:Show()
+    end
+    for _, part in ipairs({ box, box.editBox }) do
+        if part and part.HookScript then
+            part:HookScript("OnEnter", Tip)
+            part:HookScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+    end
+
+    function holder:SetWord(text) self.word:SetText(text) end
+    return holder
+end
+
+local UpdateWrit
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
@@ -275,6 +392,17 @@ local function BuildDetail(parent)
     detail.writ:SetPoint("TOPLEFT", detail.writHeading, "BOTTOMLEFT", 0, -8)
     detail.writ:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
 
+    -- Shown only when the item is cheaper made than bought.
+    detail.makeLine = Theme.CreateLabel(detail, "small", "profit")
+    detail.makeLine:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, -8)
+    detail.makeLine:SetPoint("RIGHT", detail, "RIGHT", -116, 0)
+    detail.makeLine:SetWordWrap(true)
+
+    detail.queueButton = Widgets.CreateButton(detail, L["Queue Craft"], function()
+        QueueItem(state.selected)
+    end, { width = 96, height = 20 })
+    detail.queueButton:SetPoint("TOPRIGHT", detail.writ, "BOTTOMRIGHT", 0, -6)
+
     detail.note = Theme.CreateLabel(detail, "tiny", "dim")
     detail.note:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, -10)
     detail.note:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
@@ -283,15 +411,27 @@ local function BuildDetail(parent)
 
     detail.writButton = Widgets.CreateButton(detail, L["Search writ"], function()
         SearchWrit(state.selected)
-    end, { width = 134, primary = true, height = 24 })
+    end, { width = 134, height = 22 })
     detail.writButton:SetPoint("BOTTOMLEFT", 12, 14)
     detail.writButton.tooltipText = L["Finds this writ on the auction house. You click Buy yourself."]
 
     detail.itemButton = Widgets.CreateButton(detail, L["Search item"], function()
         SearchItem(state.selected)
-    end, { width = 134, height = 24 })
+    end, { width = 134, height = 22 })
     detail.itemButton:SetPoint("LEFT", detail.writButton, "RIGHT", 8, 0)
     detail.itemButton.tooltipText = L["Finds the item the writ asks for on the auction house."]
+
+    -- The writ and what it asks for in one search, the main thing here.
+    detail.bothButton = Widgets.CreateButton(detail, L["Search Both"], function()
+        SearchBoth(state.selected)
+    end, { width = DETAIL_WIDTH - 24, primary = true, height = 24 })
+    detail.bothButton:SetPoint("BOTTOMLEFT", 12, 44)
+
+    detail.buyBox = CreateBuyBox(detail, function(value)
+        state.buy = value
+        UpdateWrit(state.selected)
+    end)
+    detail.buyBox:SetPoint("BOTTOMLEFT", 12, 76)
 
     return detail
 end
@@ -353,12 +493,29 @@ local function UpdateGoal(plan)
     detail.routeHeading:SetShown(plan.need > 0)
 end
 
-local function UpdateWrit(entry)
+function UpdateWrit(entry)
     local detail = widgets.detail
     local lines = detail.writ.lines
 
     detail.writButton:SetShown(entry ~= nil)
     detail.itemButton:SetShown(entry ~= nil)
+    detail.bothButton:SetShown(entry ~= nil)
+    detail.buyBox:SetShown(entry ~= nil)
+
+    local made = entry and entry.how == "make" and entry.recipeID and entry.make and entry.buy
+    detail.makeLine:SetShown(made and true or false)
+    detail.queueButton:SetShown(made and true or false)
+    detail.note:ClearAllPoints()
+    detail.note:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, made and -34 or -10)
+    detail.note:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    if made then
+        detail.makeLine:SetText(L.Format("Cheaper to make: %s made, %s bought.", Plain(entry.make), Plain(entry.buy)))
+        detail.queueButton.tooltipText = L.Format("Adds %d %s to your craft queue.", entry.count * state.buy, entry.name)
+    end
+    if entry then
+        detail.buyBox:SetWord(state.buy == 1 and L["writ"] or L["writs"])
+        detail.bothButton.tooltipText = BothTooltip(entry)
+    end
 
     if not entry then
         detail.writHeading:SetText(L["PICK A WRIT"])
@@ -380,11 +537,11 @@ local function UpdateWrit(entry)
     local parts = {}
     if entry then
         parts[#parts + 1] = RewardText(entry)
-        if entry.how == "make" and entry.buy then
+        if entry.how == "make" and entry.buy and not made then
             parts[#parts + 1] = L.Format("Bought, it would be %s.", Plain(entry.buy))
         end
         if entry.haveWrits > 0 then
-            parts[#parts + 1] = L.Format("You carry %d of these writs.", entry.haveWrits)
+            parts[#parts + 1] = L.Format("You have %d of these writs.", entry.haveWrits)
         end
         if not entry.writID then
             parts[#parts + 1] = L["This writ has not been seen in the game yet, so it has no auction house price."]
@@ -549,7 +706,7 @@ function DealsWrits:Build(view, toolbar)
         onClick = function(entry, _, mouseButton)
             state.selected = entry
             UpdateWrit(entry)
-            if mouseButton == "RightButton" then SearchWrit(entry) end
+            if mouseButton == "RightButton" then SearchBoth(entry) end
         end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
@@ -564,7 +721,7 @@ function DealsWrits:Build(view, toolbar)
 
     local hint = Theme.CreateLabel(view, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText(L["Right-click a row to search for the writ"])
+    hint:SetText(L["Right-click a row to search for both"])
 
     local countLabel = Theme.CreateLabel(view, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)
