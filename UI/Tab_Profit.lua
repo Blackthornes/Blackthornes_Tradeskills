@@ -518,6 +518,9 @@ local function ShowMarkTooltip(row, analysis)
     GameTooltip:AddDoubleLine(L["Skill up"], ns.SkillUp:GetTierLabel(skillUp.tier),
         0.7, 0.7, 0.7, r, g, b)
 
+    local steps = ns.SkillUp:ColorSteps(analysis.recipeID)
+    if steps then GameTooltip:AddLine(steps, 1, 1, 1, true) end
+
     GameTooltip:AddDoubleLine(L["Profit each"],
         Util.FormatMoney(analysis.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
 

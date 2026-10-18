@@ -899,6 +899,9 @@ local function ShowRowTooltip(row, line)
         end
     end
 
+    local steps = ns.SkillUp.ColorSteps and ns.SkillUp:ColorSteps(line.recipeID)
+    if steps then GameTooltip:AddLine(steps, 1, 1, 1, true) end
+
     GameTooltip:AddDoubleLine(L["Materials for"], tostring(line.craftable),
         0.7, 0.7, 0.7, 1, 1, 1)
 

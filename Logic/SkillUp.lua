@@ -428,6 +428,35 @@ function SkillUp:GetForRecipe(recipeID, recipe)
     }
 end
 
+--- Where a recipe changes colour, as one tooltip line: "Yellow at 150 ·
+--- Green at 165 · Grey at 180", only the colours still ahead of the skill,
+--- or "Grey now, no more skill ups" once it is grey. nil when the book has
+--- no yellow and grey for it. Green starts halfway, as LearnNext.Tier has it.
+function SkillUp:ColorSteps(recipeID, recipe)
+    local book = ns.RecipeBook and recipeID and ns.RecipeBook:Get(recipeID)
+    local yellow, grey = book and tonumber(book.yellow), book and tonumber(book.grey)
+    if not yellow or not grey or grey <= yellow then return nil end
+    local green = math.floor((yellow + grey) / 2)
+
+    recipe = recipe or (ns.Recipes and ns.Recipes:GetAny(recipeID))
+    local current = self:GetSkillLevel((recipe and recipe.skillLineID) or book.skillLineID)
+
+    if current and current >= grey then
+        return self:GetTierColorCode("trivial") .. L["Grey now, no more skill ups"] .. "|r"
+    end
+
+    local parts = {}
+    local function Add(level, tier, text)
+        if not current or current < level then
+            parts[#parts + 1] = self:GetTierColorCode(tier) .. text .. "|r"
+        end
+    end
+    Add(yellow, "medium", L.Format("Yellow at %d", yellow))
+    Add(green, "easy", L.Format("Green at %d", green))
+    Add(grey, "trivial", L.Format("Grey at %d", grey))
+    return table.concat(parts, " \194\183 ")
+end
+
 --- Does this craft earn a star: it raises your skill AND it pays.
 --
 -- "Pays" is measured against the Minimum profit setting rather than against
