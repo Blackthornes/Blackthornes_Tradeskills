@@ -309,6 +309,16 @@ function EnchantTooltip:Decorate(tooltip, data, spellID)
     if #lines == 0 then return "quiet" end
     if type(Field(tooltip, "AddDoubleLine")) ~= "function" then return "nospell" end
 
+    -- On Shift (UI/TooltipShift.lua), asked here each time, never kept with
+    -- the lines: with Shift up only "Hold Shift for more." goes on.
+    local shift = ns.TooltipShift
+    if shift and not shift:Shows("enchant") then
+        self.writing = true
+        pcall(shift.Held, shift, tooltip)
+        self.writing = false
+        return "held"
+    end
+
     self.writing = true
     for i = 1, #lines do WriteLine(tooltip, lines[i]) end
     Try(Field(tooltip, "Show"), tooltip)

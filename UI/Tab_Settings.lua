@@ -59,6 +59,14 @@ local DEFAULT_PAGE = "pricing"
 
 local widgets = {}
 
+--- An Off / Shift / Always box (see the Look page) set to the saved mode,
+--- without calling its onSelect.
+local function ShowShiftMode(dropdown)
+    local setting = dropdown.shiftSetting
+    local isOn = setting == nil or ns.Config:Get(setting) ~= false
+    dropdown:SetValue(ns.TooltipShift:Mode(isOn, dropdown.shiftKey), true)
+end
+
 -- [key] = { holder, scroll, content, last = { [1], [2] }, rows }; built in Build.
 local pages = {}
 
@@ -1260,50 +1268,58 @@ local function Build(outer)
     end, true)
     widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Off, Shift or Always for each tooltip line (asked 2026-10-18, see
+    -- UI/TooltipShift.lua). Whether the line is on stays in its own
+    -- setting; Shift is kept beside it. The sales lines have no Off.
+    local function ShiftDropdown(row, key, setting, onChange)
+        local Shift = ns.TooltipShift
+        local options = {}
+        if setting then options[#options + 1] = { text = Shift.NAMES[Shift.OFF], value = Shift.OFF } end
+        options[#options + 1] = { text = Shift.NAMES[Shift.SHIFT], value = Shift.SHIFT }
+        options[#options + 1] = { text = Shift.NAMES[Shift.ALWAYS], value = Shift.ALWAYS }
+
+        local dropdown = Widgets.CreateDropdown(row, options, function(mode)
+            local isOn = setting == nil or Config:Get(setting) ~= false
+            Shift:Apply(mode, key, isOn, setting and function(on)
+                Config:Set(setting, on)
+                if onChange then onChange() end
+            end or nil)
+        end, { width = 110 })
+        dropdown:SetPoint("TOPLEFT", CONTROL_X, 0)
+        dropdown.shiftKey, dropdown.shiftSetting = key, setting
+        return dropdown
+    end
+
     local tooltipValueRow = CreateRow(pages.look, 1, L["Value on Tooltips:"])
 
-    widgets.tooltipValue = Widgets.CreateCheckbox(tooltipValueRow, L["On"], function(checked)
-        Config:Set("showValueOnItemTooltips", checked)
-    end, true)
-    widgets.tooltipValue:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.tooltipValue = ShiftDropdown(tooltipValueRow, "value", "showValueOnItemTooltips")
 
     -- Asked 2026-10-13: the sales lines under Demand, kept for Shift.
-    local salesShiftRow = CreateRow(pages.look, 1, L["Sales Details on Shift:"],
-        L["Demand lines on tooltips show only while you hold Shift."])
+    local salesShiftRow = CreateRow(pages.look, 1, L["Sales Details:"],
+        L["The sales lines under Demand."])
 
-    widgets.tooltipSalesShift = Widgets.CreateCheckbox(salesShiftRow, L["On"], function(checked)
-        Config:Set("tooltipSalesShift", checked)
-    end, true)
-    widgets.tooltipSalesShift:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.tooltipSalesShift = ShiftDropdown(salesShiftRow, "sales", nil)
 
     -- Asked 2026-10-14: the Prices tab's trend on the tooltip too.
     local trendRow = CreateRow(pages.look, 1, L["Price Trend on Tooltips:"],
         L["How much the price moved from its 7 or 14 day average."])
 
-    widgets.tooltipTrend = Widgets.CreateCheckbox(trendRow, L["On"], function(checked)
-        Config:Set("tooltipTrend", checked)
-    end, true)
-    widgets.tooltipTrend:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.tooltipTrend = ShiftDropdown(trendRow, "trend", "tooltipTrend")
 
     -- Asked 2026-10-05: is a recipe worth buying, at a glance. The button
     -- is /bts recipes.
     local recipeTipRow = CreateRow(pages.look, 1, L["Recipe Value on Tooltips:"],
         L["On a recipe, shows its cost, what it sells for, and how many crafts pay it back."])
 
-    widgets.recipeTooltips = Widgets.CreateCheckbox(recipeTipRow, L["On"], function(checked)
-        Config:Set("showRecipeValueOnTooltips", checked)
-    end, true)
-    widgets.recipeTooltips:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.recipeTooltips = ShiftDropdown(recipeTipRow, "recipe", "showRecipeValueOnTooltips")
 
     -- Asked 2026-10-14: what an enchant's materials cost, on its tooltip.
     local enchantTipRow = CreateRow(pages.look, 1, L["Enchant Costs on Tooltips:"],
         L["On an enchant, shows what each material costs and who knows it."])
 
-    widgets.enchantTooltips = Widgets.CreateCheckbox(enchantTipRow, L["On"], function(checked)
-        Config:Set("tooltipEnchantCosts", checked)
+    widgets.enchantTooltips = ShiftDropdown(enchantTipRow, "enchant", "tooltipEnchantCosts", function()
         if ns.EnchantTooltip and ns.EnchantTooltip.Forget then ns.EnchantTooltip:Forget() end
-    end, true)
-    widgets.enchantTooltips:SetPoint("TOPLEFT", CONTROL_X, -2)
+    end)
 
     -- Its own row (a player's report, 2026-10-09): beside the tick box it
     -- started 340 pixels in and ran past the column into the next one.
@@ -2200,17 +2216,17 @@ local function Refresh()
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") ~= false)
-    widgets.tooltipValue:SetChecked(Config:Get("showValueOnItemTooltips") ~= false)
-    widgets.tooltipSalesShift:SetChecked(Config:Get("tooltipSalesShift") == true)
-    widgets.tooltipTrend:SetChecked(Config:Get("tooltipTrend") ~= false)
+    ShowShiftMode(widgets.tooltipValue)
+    ShowShiftMode(widgets.tooltipSalesShift)
+    ShowShiftMode(widgets.tooltipTrend)
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.sisters:SetChecked(ns.SisterNote:IsOn())
     if ns.WhatsNew then
         widgets.whatsNewPopup:SetChecked(ns.WhatsNew:IsOn())
         widgets.whatsNewMotion:SetChecked(ns.WhatsNew:IsMotionOn())
     end
-    widgets.recipeTooltips:SetChecked(Config:Get("showRecipeValueOnTooltips") ~= false)
-    widgets.enchantTooltips:SetChecked(Config:Get("tooltipEnchantCosts") ~= false)
+    ShowShiftMode(widgets.recipeTooltips)
+    ShowShiftMode(widgets.enchantTooltips)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
