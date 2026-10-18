@@ -1879,8 +1879,29 @@ local function CreateShoppingRow(row)
     row.bar:SetPoint("TOPLEFT", row, "TOPLEFT", 25, -19)
 
     row.tag = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
+    row.tagRight = -8
     row.tag:SetPoint("TOPLEFT", row, "TOPLEFT", 25 + SHOPPING_BAR_WIDTH + 6, -15)
     row.tag:SetPoint("TOPRIGHT", -8, -15)
+end
+
+--- The bar and its words sit under the name. A long name wraps rather than
+--- ending in "..." (a player's report at the auction house, 2026-10-17), and
+--- then pushes them down and the row grows to hold them.
+local function PlaceShoppingLine(row, need)
+    local barY = need and -(4 + need + 2) or -19
+    local tagY = barY + 4
+    row.bar:SetPoint("TOPLEFT", row, "TOPLEFT", 25, barY)
+    row.tag:SetPoint("TOPLEFT", row, "TOPLEFT", 25 + SHOPPING_BAR_WIDTH + 6, tagY)
+    row.tag:SetPoint("TOPRIGHT", row, "TOPRIGHT", rawget(row, "tagRight") or -8, tagY)
+    if need then row.name.rowNeed = need + 12 end
+end
+
+CraftPanel._PlaceShoppingLine = PlaceShoppingLine
+
+local function SetShoppingName(row, text)
+    if Theme.SetRowName then Theme.SetRowName(row.name, text) else row.name:SetText(text) end
+    local need = rawget(row.name, "rowNeed")
+    PlaceShoppingLine(row, type(need) == "number" and need or nil)
 end
 
 local function UpdateShoppingRow(row, line)
@@ -1890,10 +1911,10 @@ local function UpdateShoppingRow(row, line)
     -- shows over the label's, so the greyed name goes without it.
     local label = Util.GetItemLabel(line.itemID)
     if look.colour == "profit" then
-        row.name:SetText(Util.Uncolored(label))
+        SetShoppingName(row, Util.Uncolored(label))
         row.name:SetTextColor(Theme.Unpack("muted"))
     else
-        row.name:SetText(label)
+        SetShoppingName(row, label)
         row.name:SetTextColor(Theme.Unpack("text"))
     end
     Theme.SetItemIcon(row.icon, line.itemID)

@@ -276,13 +276,42 @@ Reset()
 prices[CLAM] = { market = 9000 }
 check("listed", LineFor(Posting:GetPostable({ includeAll = true }), CLAM) ~= nil, true)
 
-print("\nunticked, nothing is held")
+print("\nunticked, only what Butler keeps is held")
 Reset()
 sisterKeepsOn = false
 do
     local lines = Posting:GetPostable({ includeAll = true })
     check("the upgrade sells", LineFor(lines, UPGRADE) ~= nil, true)
     check("the whole goal stack sells", LineFor(lines, GOAL).count, 20)
+end
+
+print("\nwhat Butler keeps is held, ticked or not")
+for _, on in ipairs({ true, false }) do
+    Reset()
+    sisterKeepsOn = on
+    local AMMO, BACK, HERE = 3030, 2592, 2318
+    commodities[AMMO], commodities[BACK], commodities[HERE] = true, true, true
+    prices[AMMO], prices[BACK], prices[HERE] = { market = 1000 }, { market = 1000 }, { market = 1000 }
+    table.insert(bags[0], { itemID = AMMO, stackCount = 200 })
+    table.insert(bags[0], { itemID = BACK, stackCount = 6 })
+    table.insert(bags[0], { itemID = HERE, stackCount = 20 })
+    BlackthornesButler.Ammo = { Keeps = function(_, id) if id == AMMO then return "Ammo for your bow" end end }
+    BlackthornesButler.Learning = { Get = function(_, id) if id == BACK then return "keep" end end }
+    BlackthornesButler.KeepHere = {
+        Count = function(_, id) if id == HERE then return 15 end end,
+        IsAll = function(count) return count >= 9999 end,
+    }
+    local label = on and " (ticked)" or " (unticked)"
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("a hunter's own ammo is held" .. label, LineFor(lines, AMMO) and LineFor(lines, AMMO).held, "Ammo for your bow")
+    check("bought back is held" .. label, LineFor(lines, BACK) and LineFor(lines, BACK).held,
+        "You bought this back, so Butler keeps it")
+    check("Always keep is held" .. label, LineFor(lines, KEEP) and LineFor(lines, KEEP).held, "On your Always keep list")
+    check("keep here holds its number" .. label, LineFor(lines, HERE) and LineFor(lines, HERE).count, 5)
+    check("and says why" .. label, LineFor(lines, HERE) and LineFor(lines, HERE).keptWhy, "Keeping 15 on this character")
+    check("pet food only when ticked" .. label, LineFor(lines, FOOD).held ~= nil, on)
+    local nextLine = Posting:GetNextPostable(nil, lines)
+    check("List all never picks Butler's ammo" .. label, nextLine and nextLine.itemID ~= AMMO, true)
 end
 
 print("\nno sisters, or sisters that raise")
