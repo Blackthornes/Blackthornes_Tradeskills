@@ -282,6 +282,9 @@ function Vendor:Scan()
         if ns.UI then ns.UI:RefreshActiveTab() end
     end
 
+    -- Where this vendor stands and what it sells, for the vendor map pins.
+    if ns.VendorPins then pcall(ns.VendorPins.Learn, ns.VendorPins, self.merchantItems) end
+
     self.lastUnresolved = unresolved
     return learned
 end

@@ -147,12 +147,13 @@ function Waypoints:MapFor(zone)
 end
 
 --- Put the map pin on a place { zone, x, y } (x and y 0-100 on the zone's
---- map) and point the game's arrow at it.
+--- map; a map ID as `mapID` in place of the zone) and point the game's
+--- arrow at it.
 -- @return true, or false and why ("nospot", "noclient", "nomap")
 function Waypoints:Pin(place)
-    if not (place and place.zone and place.x and place.y) then return false, "nospot" end
+    if not (place and (place.zone or place.mapID) and place.x and place.y) then return false, "nospot" end
     if not self:CanPin() then return false, "noclient" end
-    local mapID = self:MapFor(place.zone)
+    local mapID = place.mapID or self:MapFor(place.zone)
     if not mapID then return false, "nomap" end
 
     local ok = pcall(function()
@@ -185,10 +186,10 @@ end
 --- Hand a place to TomTom's arrow. `title` is what its arrow says.
 -- @return true, or false and why ("nospot", "notomtom", "nomap")
 function Waypoints:TomTom(place, title)
-    if not (place and place.zone and place.x and place.y) then return false, "nospot" end
+    if not (place and (place.zone or place.mapID) and place.x and place.y) then return false, "nospot" end
     local tomtom = TomTomAddon()
     if not tomtom then return false, "notomtom" end
-    local mapID = self:MapFor(place.zone)
+    local mapID = place.mapID or self:MapFor(place.zone)
     if not mapID then return false, "nomap" end
 
     if self.tomtomUID ~= nil then pcall(tomtom.RemoveWaypoint, tomtom, self.tomtomUID) end
