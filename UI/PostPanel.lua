@@ -631,6 +631,14 @@ function PostPanel:Build()
         updateRow = UpdateRow,
         onEnter = ShowRowTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- Right-click: how many to keep on this character (UI/KeepBox.lua,
+        -- the owner said build it 2026-10-18).
+        onClick = function(line, _, mouseButton)
+            if mouseButton == "RightButton" and line and line.itemID and ns.KeepBox then
+                CommitTyping(PostPanel.list)
+                ns.KeepBox:Open(line, PostPanel.frame)
+            end
+        end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, LIST_BOTTOM)
