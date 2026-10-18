@@ -277,6 +277,17 @@ do
     check("nothing held is ever next", picked[UPGRADE] or picked[FOOD] or picked[CLAM] or false, false)
 end
 
+print("\nfive copies of an upgrade: one is held, four sell")
+Reset()
+for _ = 1, 4 do table.insert(bags[0], { itemID = UPGRADE, stackCount = 1 }) end
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    local line = LineFor(lines, UPGRADE)
+    check("four are on the list", line and line.count, 4)
+    check("one is held for you", line and line.kept, 1)
+    check("and says why", line and line.keptWhy, "An upgrade for you, +6%")
+end
+
 print("\na clam worth less opened sells")
 Reset()
 prices[CLAM] = { market = 9000 }

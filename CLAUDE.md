@@ -875,7 +875,10 @@ held whole is left out, or with `showHeld` (the drawer) kept as a dimmed
 row whose detail is why (`line.held`), its own List button still working.
 `GetNextPostable` and `GetSummary` never pick a held line, so List all and
 Post Crafted never post one; the drawer's summary counts them. Answers are
-kept per bag copy until `Inventory.changes` moves or `KEEP` seconds pass.
+kept per bag copy until `Inventory.changes` moves or `KEEP` seconds pass. An upgrade
+(for you or, ticked, an alt) is held only as many copies as a character
+wears, one or two rings or trinkets (`SisterKeeps.Wears`, 2026-10-18); the
+spares sell, as Butler's own window says.
 "Keep What Other Addons Need" on the Pricing page (`sellHoldsSisterKeeps`,
 off unless ticked since the owner asked the same day; `Config:SisterKeepsOffOnce`
 turned off the true the first default saved, once, `sisterKeepsOffOnce`;
