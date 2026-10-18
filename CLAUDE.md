@@ -903,6 +903,30 @@ value (`showAltUpgrades`, off unless ticked, never rename it;
 `Upgrades:ShowsAlts`, `SetShowsAlts`, `CreateAltCheckbox`), shown only
 while Equipment is loaded.
 
+## Keep on this character
+
+A player asked (2026-10-18, the owner said build it, "bigger number"):
+the Sell list's x hides an item on every character, so there was no way
+to keep a few potions on one character and sell the rest on another.
+Right-click a row on the Sell list (`UI/KeepBox.lua`, the house frame,
+Save and Keep All) to keep a number of it on the character playing;
+Settings, Queue page, KEEP ON THIS CHARACTER lists them with Clear.
+`Logic/KeepHere.lua` keeps them account wide by GUID,
+`keepOnCharacter[GUID] = { [itemID] = count }` (never rename it; a
+character whose GUID isn't known reads and writes nothing; 9999,
+`KeepHere.MOST`, is Keep All). `SisterKeeps`' keep-here hold takes the
+bigger of this number and Butler's own (its `KeepHere:Count`), ticked or
+not, and Butler reads this one back the same way, inside a pcall, read
+only:
+
+```lua
+_G.BlackthornesTS.KeepHere:Count(itemID)   -- how many to keep here, or nil
+_G.BlackthornesTS.KeepHere.IsAll(count)    -- true for Keep All
+```
+
+Keep both stable; if one changes, change Butler's `Logic/KeepHere.lua`
+too. Tested in `tools/test_sisterkeeps.lua`. Not yet seen in game.
+
 ## Goblin Gold
 
 The owner said build it (2026-10-17, from a mockup): a small bar on

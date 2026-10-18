@@ -1141,6 +1141,25 @@ local function Build(outer)
     widgets.ignoredItemsEmpty:SetText(L["None. Click the x on an item in Ready to sell at the auction house."])
     widgets.ignoredItemsRows = {}
 
+    local ignoredItemsEnd = CreateFrame("Frame", nil, pages.queue.content)
+    ignoredItemsEnd:SetSize(COLUMN_WIDTH, 1)
+    ignoredItemsEnd:SetPoint("TOPLEFT", widgets.ignoredItemsEmpty, "BOTTOMLEFT", 0, 0)
+    widgets.ignoredItemsEnd = ignoredItemsEnd
+
+    -- What this character keeps back from the Sell list (Logic/KeepHere.lua,
+    -- a player asked, the owner said build it 2026-10-18). Set by
+    -- right-clicking a Sell list row; Clear takes one off.
+    pages.queue.last[2] = ignoredItemsEnd
+    local keepHere = CreateSection(pages.queue, 2, L["KEEP ON THIS CHARACTER"])
+    widgets.keepHereSection = keepHere
+    Searchable(pages.queue, keepHere, L["Keep on this character Sell list right-click"])
+
+    widgets.keepHereEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
+    widgets.keepHereEmpty:SetWidth(COLUMN_WIDTH)
+    widgets.keepHereEmpty:SetWordWrap(true)
+    widgets.keepHereEmpty:SetText(L["Right-click an item on the Sell list to keep some on this character."])
+    widgets.keepHereRows = {}
+
     local data = CreateSection(pages.data, 1, L["SAVED DATA"])
 
     -- All four wrap: "last scan 3h ago (stopped at the page limit)" and the
@@ -2068,11 +2087,27 @@ local function RefreshIgnored()
     end
 
     -- In the item's rarity colour, as Ready to sell draws it.
-    FillIgnored(items, widgets.ignoredItemsRows, widgets.ignoredItemsHint,
+    local lastIgnored = FillIgnored(items, widgets.ignoredItemsRows, widgets.ignoredItemsHint,
         widgets.ignoredItemsEmpty,
         function(itemID) ns.Posting:SetIgnored(itemID, false) end,
         L["Offer this item on Ready to sell again"],
         function(itemID) return Util.GetItemQualityColor(itemID) end)
+
+    if widgets.ignoredItemsEnd then
+        widgets.ignoredItemsEnd:ClearAllPoints()
+        widgets.ignoredItemsEnd:SetPoint("TOPLEFT", lastIgnored, "BOTTOMLEFT", 0, 0)
+    end
+
+    if not widgets.keepHereSection or not ns.KeepHere then return end
+    local keeps = {}
+    for _, entry in ipairs(ns.KeepHere:Items()) do
+        keeps[#keeps + 1] = { key = entry.itemID,
+            name = L.Format("%s  |cff7a8089Keep: %s|r", entry.name, ns.KeepHere.Shown(entry.count)) }
+    end
+    FillIgnored(keeps, widgets.keepHereRows, widgets.keepHereSection, widgets.keepHereEmpty,
+        function(itemID) ns.KeepHere:Set(itemID, 0) end, nil,
+        function(itemID) return Util.GetItemQualityColor(itemID) end,
+        L["Clear"])
 end
 
 local function Refresh()

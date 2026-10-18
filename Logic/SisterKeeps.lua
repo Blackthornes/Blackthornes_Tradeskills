@@ -19,6 +19,9 @@
 --   _G.BlackthornesButler.Learning:Get(itemID)           -- "keep" once bought back
 --   _G.BlackthornesButler.KeepHere:Count(itemID)         -- how many to keep here
 --
+-- Tradeskills' own "Keep on This Character" (Logic/KeepHere.lua) is read
+-- with Butler's, the bigger number winning.
+--
 -- What Butler says to keep is held whether or not "Keep What Other Addons
 -- Need" is ticked (2026-10-17); the rest only while it is.
 --
@@ -164,13 +167,18 @@ local function ButlerReason(itemID)
     return nil
 end
 
---- How many Butler keeps on the character playing ("Keep on This
---- Character"), and why; or nil.
+--- How many to keep on the character playing ("Keep on This Character",
+--- Butler's or Tradeskills' own, Logic/KeepHere.lua), and why; or nil.
+--- Where both have a number, the bigger one wins (the owner, 2026-10-18).
 local function KeepHereHold(itemID, count)
-    local keep = Number((Ask("BlackthornesButler", "KeepHere", "Count", itemID)))
-    if not keep or keep <= 0 then return nil end
+    local butler = Number((Ask("BlackthornesButler", "KeepHere", "Count", itemID)))
     local keepHere = Sister("BlackthornesButler", "KeepHere")
-    local all = keepHere and type(keepHere.IsAll) == "function" and select(2, pcall(keepHere.IsAll, keep)) == true
+    local all = butler and butler > 0 and keepHere and type(keepHere.IsAll) == "function"
+        and select(2, pcall(keepHere.IsAll, butler)) == true
+    local own = ns.KeepHere and ns.KeepHere:Count(itemID)
+    if own and ns.KeepHere.IsAll(own) then all = true end
+    local keep = math.max(butler or 0, own or 0)
+    if keep <= 0 then return nil end
     if all or keep >= count then
         return count, all and L["Keeping all on this character"] or L.Format("Keeping %d on this character", keep)
     end
