@@ -389,6 +389,7 @@ GameTooltip = Stub({ lines = {}, AddLine = function(self, text) self.lines[#self
 
 ns.Theme = {
     SetRowName = function(label, text) label:SetText(text) end,
+    SetItemNameColor = function() return false end,
     CreateLabel = function() return Label() end,
     CreatePanel = function() return Stub() end,
     CreateDivider = function() return Stub() end,

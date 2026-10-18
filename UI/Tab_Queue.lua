@@ -210,6 +210,16 @@ local function ApplyNameColor(row, itemID)
     if itemID then awaitingItemData = true end
 end
 
+-- A material's name: its rarity colour, or the colour that says something
+-- (muted once you have them all, green when an alt makes it for less).
+local function ApplyMaterialColor(row, itemID, nameColour)
+    if nameColour then
+        row.name:SetTextColor(Theme.Unpack(nameColour))
+    else
+        ApplyNameColor(row, itemID)
+    end
+end
+
 local function UpdateCraftRow(row, entry)
     local recipe = ns.Recipes:GetAny(entry.recipeID)
     local analysis = ns.Profit:Analyse(entry.recipeID)
@@ -369,11 +379,10 @@ local function UpdateMaterialRow(row, line)
         PlaceMaterialRow(row)
     end
 
-    -- The name in its item colour, unless it is recoloured below: a link's
-    -- own colour shows over the label's, so a recoloured name goes without.
-    local label = Util.GetItemLabel(line.itemID)
+    -- The plain name, in its rarity colour unless it is recoloured below
+    -- (set on the label, so no link's own colour code covers it).
     local nameColour = line.shortfall <= 0 and "muted" or line.altCraft and "profit" or nil
-    local name = nameColour and Util.Uncolored(label) or label
+    local name = Util.GetItemName(line.itemID)
     -- Bought and still to collect: a quiet note, so a smaller "still needed"
     -- is not a surprise. Once they cover the lot the cost column says so.
     if (line.bought or 0) > 0 and line.shortfall > 0 then
@@ -414,7 +423,7 @@ local function UpdateMaterialRow(row, line)
             or line.fromVendor and "accent" or "muted"))
 
         -- Green: another of your characters can make it for less.
-        row.name:SetTextColor(Theme.Unpack(nameColour or "text"))
+        ApplyMaterialColor(row, line.itemID, nameColour)
 
         -- Buying a vendor reagent off the auction house is a mistake, so do
         -- not offer the search for it, unless the vendor's stock is limited.
@@ -425,14 +434,14 @@ local function UpdateMaterialRow(row, line)
         Theme.SetMoneyText(cells.cost, line.paid, { short = true })
         cells.cost:SetTextColor(Theme.Unpack(line.overpaid and "warn" or "muted"))
 
-        row.name:SetTextColor(Theme.Unpack(nameColour))
+        ApplyMaterialColor(row, line.itemID, nameColour)
         row.search:Hide()
     else
         cells.cost:SetText(line.needsBankTrip and L["in bank"]
             or line.needsMailTrip and L["in mail"] or "")
         cells.cost:SetTextColor(Theme.Unpack("warn"))
 
-        row.name:SetTextColor(Theme.Unpack(nameColour))
+        ApplyMaterialColor(row, line.itemID, nameColour)
         row.search:Hide()
     end
 end
@@ -1069,8 +1078,7 @@ local function Build(container)
     -- Click a heading to sort the materials by it.
     widgets.materialSorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
         name = function(line)
-            local label = Util.GetItemLabel(line.itemID) or ""
-            return label:match("%[(.-)%]") or label
+            return Util.Uncolored(Util.GetItemName(line.itemID) or "")
         end,
         cost = function(line) return line.estimatedCost end,
         have = function(line) return line.have end,
@@ -1135,13 +1143,17 @@ local function Build(container)
     local redrawQueued = false
     ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", function()
         if redrawQueued or not awaitingItemData then return end
-        if not craftList:IsVisible() then return end
+        if not craftList:IsVisible()
+            and not (widgets.materialList and widgets.materialList:IsVisible()) then return end
 
         redrawQueued = true
         C_Timer.After(0.2, function()
             redrawQueued = false
             awaitingItemData = false
             craftList:Refresh()
+            if widgets.materialList and widgets.materialList:IsVisible() then
+                widgets.materialList:Refresh()
+            end
         end)
     end)
 end

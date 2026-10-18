@@ -713,7 +713,7 @@ local function DrawOutcomes(detail, breakdown)
 
         -- Only the most likely outcome is the value; the rest are a bonus.
         line.name:SetText(("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
-            outcome.name or Util.GetItemLabel(outcome.itemID),
+            Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID),
             outcome.counted == false and L["  (bonus)"] or ""))
         Theme.SetItemIcon(line.icon, outcome.itemID)
 
@@ -920,6 +920,7 @@ local function UpdateDetail(entry)
     if not shown then return end
 
     detail.title:SetText(entry.name or L.Format("item %s", tostring(entry.itemID)))
+    Theme.SetItemNameColor(detail.title, entry.itemID, "accent", KnownQuality(entry))
     Theme.SetItemIcon(detail.icon, entry.itemID, entry.link)
 
     if isBag then return UpdateBagDetail(entry) end

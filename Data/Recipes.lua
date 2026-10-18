@@ -596,20 +596,33 @@ end
 
 --- A clickable link for a recipe's output, falling back to its plain name.
 -- Players recognise the item, not the recipe ID, so this is what gets shown.
+--
+-- The item's own link comes first: it carries the item's rarity colour, which
+-- the profession window's recipe link did not always (a chat line read
+-- "made 1 of [Bolt of Silk Cloth]" in plain white). Without either, the name
+-- in its rarity colour.
 function Recipes:GetDisplayLink(recipeID)
-    local recipe = self:Get(recipeID)
+    local recipe = self:Get(recipeID) or (self.GetAny and self:GetAny(recipeID))
+    local outputItemID = recipe and recipe.outputItemID
+
+    if outputItemID and Util.HasFunction("C_Item.GetItemInfo") then
+        local ok, _, link = pcall(C_Item.GetItemInfo, outputItemID)
+        if ok and link then return link end
+    end
 
     if Util.HasFunction("C_TradeSkillUI.GetRecipeItemLink") then
         local ok, link = pcall(C_TradeSkillUI.GetRecipeItemLink, recipeID)
-        if ok and link then return link end
+        if ok and type(link) == "string" and link ~= "" then
+            if outputItemID and Util.ColorItemName and not link:find("|c", 1, true) then
+                return Util.ColorItemName(outputItemID, link)
+            end
+            return link
+        end
     end
 
-    if recipe and recipe.outputItemID and Util.HasFunction("C_Item.GetItemInfo") then
-        local ok, _, link = pcall(C_Item.GetItemInfo, recipe.outputItemID)
-        if ok and link then return link end
-    end
-
-    return (recipe and recipe.name) or L.Format("recipe %s", tostring(recipeID))
+    local name = (recipe and recipe.name) or L.Format("recipe %s", tostring(recipeID))
+    if outputItemID and Util.ColorItemName then return Util.ColorItemName(outputItemID, name) end
+    return name
 end
 
 --- Resolve whatever the player typed into matching recipes.
