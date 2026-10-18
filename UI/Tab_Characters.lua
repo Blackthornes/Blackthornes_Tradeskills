@@ -10,8 +10,9 @@
 --
 -- Every figure but the logged-in character's is from the last time that
 -- character was played (Logic/CharacterNotes.lua keeps them), so the table
--- says when that was. Nothing new is saved here: which side shows, the
--- search, the sort and the open line last the session.
+-- says when that was. Nothing new is saved here: the realm, which side
+-- shows, the search, the sort and the open line last the session. The tab
+-- opens on the realm you're playing (a player asked, 2026-10-18).
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -32,7 +33,9 @@ local CARD_COOLDOWNS = 3
 -- How long the open line keeps its best crafts before working them out again.
 local CRAFTS_KEEP = 30
 
-local state = { view = "characters", show = "both", search = "", open = nil, folded = {} }
+-- `realm` is REALM_HERE, REALM_ALL or a realm's name.
+local REALM_HERE, REALM_ALL = "\1here", "\1all"
+local state = { view = "characters", realm = REALM_HERE, show = "both", search = "", open = nil, folded = {} }
 local widgets = {}
 
 -- The tab has two views: the characters themselves, and every character's
@@ -138,6 +141,56 @@ end
 -- Rested XP tops out at a level and a half.
 local function RestMost()
     return ns.CharacterNotes and ns.CharacterNotes.REST_MOST or 150
+end
+
+--- A realm's name to compare by: case and spaces left out, as the game
+--- writes some names with spaces and some without.
+local function FoldRealm(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    return (name:gsub("%s", ""):lower())
+end
+
+--- The realm of the character playing: its own record's, else the game's.
+local function HereRealm(characters)
+    for _, entry in ipairs(characters) do
+        if entry.isCurrent and type(entry.realm) == "string" and entry.realm ~= "" then return entry.realm end
+    end
+    local ok, realm = pcall(function()
+        local name = GetRealmName()
+        if type(name) == "string" and name ~= "" then return name .. "" end
+    end)
+    return ok and realm or nil
+end
+
+--- Does this character belong under the realm picked? A character saved
+--- before its realm was kept stays under This Realm, so none goes missing.
+local function RealmMatches(entry, here)
+    if state.realm == REALM_ALL then return true end
+    local realm = FoldRealm(entry.realm)
+    if state.realm == REALM_HERE then
+        here = FoldRealm(here)
+        return not here or not realm or realm == here
+    end
+    return realm == FoldRealm(state.realm)
+end
+
+--- This Realm, All Realms, then every realm a character is on, by name.
+local function RealmOptions(characters)
+    local names, seen = {}, {}
+    for _, entry in ipairs(characters) do
+        local folded = FoldRealm(entry.realm)
+        if folded and not seen[folded] then
+            seen[folded] = true
+            names[#names + 1] = entry.realm
+        end
+    end
+    table.sort(names, function(a, b) return a:lower() < b:lower() end)
+    local options = {
+        { value = REALM_HERE, text = L["This Realm"] },
+        { value = REALM_ALL,  text = L["All Realms"] },
+    }
+    for _, name in ipairs(names) do options[#options + 1] = { value = name, text = name } end
+    return options, table.concat(names, "\n")
 end
 
 local function SideOf(entry)
@@ -617,9 +670,11 @@ local function BuildRows(characters)
     end
 
     local search = (state.search or ""):lower()
+    local here = HereRealm(characters)
     for _, entry in ipairs(characters) do
         local side = SideOf(entry)
-        if (state.show == "both" or state.show == side) and Matches(entry, search) then
+        if RealmMatches(entry, here) and (state.show == "both" or state.show == side)
+                and Matches(entry, search) then
             local members = groups[side].members
             members[#members + 1] = entry
         end
@@ -665,6 +720,17 @@ local function RefreshCharacters()
         if entry.key == state.open then open = entry end
     end
     if not open then state.open = nil end
+
+    -- The realm list is laid out again only when a realm comes or goes. A
+    -- realm picked that no character is on now goes back to This Realm.
+    if widgets.realm then
+        local options, key = RealmOptions(characters)
+        if key ~= widgets.realmKey then
+            widgets.realmKey = key
+            widgets.realm:SetOptions(options)
+            state.realm = widgets.realm:GetValue() or REALM_HERE
+        end
+    end
 
     local rows, totals = BuildRows(characters)
     widgets.list:SetData(rows)
@@ -774,10 +840,27 @@ local function BuildSwitch(container)
     return buttons
 end
 
---- Show: Both, Horde, Alliance. The one picked is lit gold.
-local function BuildChips(view)
+--- Realm: This Realm, All Realms, then each realm by name. First on the
+--- bar, as every tab's menus are.
+local function BuildRealm(view)
     local lead = Theme.CreateLabel(view, "small", "muted")
     lead:SetPoint("TOPLEFT", 8, -36)
+    lead:SetText(L["Realm:"])
+
+    local realm = Widgets.CreateDropdown(view, RealmOptions({}), function(value)
+        state.realm = value or REALM_HERE
+        RefreshCharacters()
+    end, { width = 150 })
+    realm:SetPoint("LEFT", lead, "RIGHT", 8, 0)
+    realm:SetValue(state.realm)
+    widgets.realm = realm
+    return realm
+end
+
+--- Show: Both, Horde, Alliance. The one picked is lit gold.
+local function BuildChips(view, after)
+    local lead = Theme.CreateLabel(view, "small", "muted")
+    lead:SetPoint("LEFT", after, "RIGHT", 14, 0)
     lead:SetText(L["Show:"])
 
     local chips, previous = {}, lead
@@ -836,7 +919,7 @@ local function BuildCharacters(view)
     -- Before any row or heading is laid out: they read these widths.
     if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
-    local lastChip = BuildChips(view)
+    local lastChip = BuildChips(view, BuildRealm(view))
 
     local search = Widgets.CreateSearchBox(view, L["Find a character or profession"], function(text)
         state.search = text or ""
