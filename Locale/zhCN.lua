@@ -2912,6 +2912,9 @@ L["PROFESSIONS"] = "专业"
 L["RESTED"] = "休息"
 L["Rested has grown since you last played them."] = "从你上次玩它以来，休息经验又涨了一些。"
 L["Show:"] = "显示："
+L["Realm:"] = "服务器："
+L["This Realm"] = "本服务器"
+L["All Realms"] = "所有服务器"
 L["ZONE"] = "区域"
 
 -- What the other Blackthornes addons want kept (Logic/SisterKeeps.lua)
