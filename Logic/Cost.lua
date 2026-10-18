@@ -53,10 +53,13 @@ function Cost:GetReagentUnitCost(itemID)
     -- Anything a vendor sells costs the vendor price (2026-10-02).
     -- People list vendor-sold thread and vials on the auction house for many
     -- times the shop price, and paying that is a choice, not a cost. The one
-    -- exception is a shop seen with limited stock: it cannot supply a run of
-    -- crafts, so a cheaper auction price still wins there.
+    -- exception is a shop seen with limited stock: it sells a few now and
+    -- then and cannot supply a run of crafts, so whatever is listed is what
+    -- one really costs, dearer or not (a player found Wild Steelbloom at a
+    -- far shop's 50c against 18s listed, 2026-10-18). The shop stays the
+    -- price while nothing is listed. Merchant's Favor crates do the same.
     local limited = ns.Vendor.IsLimited and ns.Vendor:IsLimited(itemID)
-    if vendor and not (limited and auction and auction < vendor) then
+    if vendor and not (limited and auction) then
         if mine and vendor < mine then return mine, "mine" end
         return vendor, "vendor"
     end

@@ -50,13 +50,15 @@ ns.Inventory = {
     GetAltTotal = function() return 0 end,
 }
 
--- The potion: 240 at a vendor with limited stock, 331 listed, 418 to make.
+-- The potion: 240 at a vendor, 331 listed, 418 to make. The vendor is not
+-- marked limited here: a limited shop gives way to any listing by itself
+-- (2026-10-18), so Buy is what moves a shop that never runs out.
 local auction = { [HERB] = 209, [POTION] = 331, [KIT] = 6000 }
 ns.Prices = { GetValue = function(_, id) return auction[id] end }
 local vendor = { [POTION] = 240 }
 ns.Vendor = {
     GetUnitPrice = function(_, id) return vendor[id] end,
-    IsLimited = function(_, id) return id == POTION end,
+    IsLimited = function() return false end,
 }
 
 assert(loadfile(lfs_cwd .. "/Logic/Cost.lua"))("Blackthornes_TS", ns)
