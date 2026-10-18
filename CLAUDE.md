@@ -478,7 +478,10 @@ _G.BlackthornesTS.Butler:BuyFromVendor()   -- true, or false and why; never rais
 or its list is not read), `BuyFromVendor` the button's own click
 (`Vendor:BuyNeeded`, then `UI:UpdateMerchantButton`). Tested in
 `tools/test_butlervendor.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
-reads them.
+reads them. While Butler is loaded and its window opens at vendors (its
+`openAtVendor`, read from `BlackthornesButlerDB`), the Buy materials button
+over the vendor window hides (`UI.ButlerBuysHere`, the owner 2026-10-18):
+Butler's Buy row does the buying. Tested in `tools/test_merchantbutton.lua`.
 
 Butler's "For your quests" line (a player asked 2026-10-14, the owner said
 build it: buy what open quests need) has a Search button at the auction
