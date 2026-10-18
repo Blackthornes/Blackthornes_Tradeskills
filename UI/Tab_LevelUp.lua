@@ -402,17 +402,7 @@ local function UpdateRow(row, entry)
         name = ns.Upgrades:WithAltText(name, entry.outputItemID)
     end
     Theme.SetRowName(row.name, name)
-    -- The name in its item's rarity colour (the owner, 2026-10-18: item
-    -- names always show it); the CHANCE column keeps the game's skill-up
-    -- colour. An enchant makes no item and keeps that colour on its name.
-    -- Plain until the client has the item; the redraw below colours it.
-    local r, g, b = Util.GetItemQualityColor(entry.outputItemID)
-    if r then
-        row.name:SetTextColor(r, g, b)
-    else
-        row.name:SetTextColor(TierColor(entry.tier))
-        if entry.outputItemID then state.waiting = true end
-    end
+    row.name:SetTextColor(TierColor(entry.tier))
     if entry.outputItemID then
         Theme.SetItemIcon(row.icon, entry.outputItemID)
     else
@@ -501,8 +491,8 @@ local function LearnLines(entry)
         lines[#lines + 1] = { L["Trainer"], price }
         lines[#lines + 1] = { L["Taught by"], place.name or "" }
     else
-        -- The recipe item's plain name in its rarity colour.
-        local item = place.itemID and Util.ColoredItemName(place.itemID)
+        local item = place.itemID and Util.GetItemLabel(place.itemID)
+        item = item and Util.Uncolored and Util.Uncolored(item) or item
         lines[#lines + 1] = { item or L["Recipe"], price }
         lines[#lines + 1] = { L["Sold by"], place.name or "" }
     end
@@ -861,9 +851,6 @@ end
 --- The detail pane for a recipe to learn.
 local function UpdateLearnDetail(detail, entry)
     detail.title:SetText(entry.name or L.Format("recipe %s", entry.recipeID))
-    if not Theme.SetItemNameColor(detail.title, entry.outputItemID, "accent") and entry.outputItemID then
-        state.waiting = true
-    end
     local iconItem = entry.outputItemID or (entry.place and entry.place.itemID)
     if iconItem then
         Theme.SetItemIcon(detail.icon, iconItem)
@@ -903,7 +890,7 @@ local function UpdateLearnDetail(detail, entry)
                 line.value:SetText("")
             else
                 line.label:SetText(("%dx %s"):format(reagent.quantity or 1,
-                    Util.ColoredItemName(reagent.itemID)))
+                    Util.Uncolored(Util.GetItemLabel(reagent.itemID))))
                 if reagent.lineCost then
                     line.value:SetText(Util.FormatMoney(reagent.lineCost, { short = true }))
                     line.value:SetTextColor(Theme.Unpack("muted"))
@@ -958,9 +945,6 @@ local function UpdateDetail(entry)
     end
 
     detail.title:SetText(entry.name or L.Format("recipe %s", entry.recipeID))
-    if not Theme.SetItemNameColor(detail.title, entry.outputItemID, "accent") and entry.outputItemID then
-        state.waiting = true
-    end
     if entry.outputItemID then
         Theme.SetItemIcon(detail.icon, entry.outputItemID)
     else
@@ -1437,25 +1421,6 @@ local function Build(container)
     widgets.detail = detail
 
     UpdateDetail(nil)
-
-    -- Names drawn before the client had their item get their rarity colour
-    -- when it comes: the rows on screen and the pane's title, once a burst,
-    -- only while one waits and the list shows.
-    local redrawQueued = false
-    ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", function()
-        if redrawQueued or not state.waiting or not list:IsVisible() then return end
-        redrawQueued = true
-        C_Timer.After(0.2, function()
-            redrawQueued = false
-            state.waiting = false
-            if not list:IsVisible() then return end
-            list:Refresh()
-            local selected = state.selected
-            if selected and selected.outputItemID and detail.title then
-                Theme.SetItemNameColor(detail.title, selected.outputItemID, "accent")
-            end
-        end)
-    end)
 end
 
 --- Rebuild the profession list, and follow the profession last opened.
