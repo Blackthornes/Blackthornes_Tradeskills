@@ -77,6 +77,10 @@ end
 --- the whole run (a player asked for the last, 2026-10-06). The count used
 --- to follow the name, and in the narrow bar beside the profession window it
 --- was cut off.
+---
+--- A time always stays (a player asked, 2026-10-17: with little room the bar
+--- used to fall back to "7 more" alone, so the time went away each time the
+--- next craft started). The shortest choice is the run's time on its own.
 -- @return name, choices  -- the right-hand text, longest first; the bar uses
 --   the first that leaves the name room. One choice on the last craft.
 function Progress.Describe(cast)
@@ -88,14 +92,22 @@ function Progress.Describe(cast)
     return cast.name, {
         L.Format("%s · %s · %s left", count, time, total),
         L.Format("%s · %s left", count, total),
-        count,
+        L.Format("%s · %s", count, total),
+        L.Format("%s left", total),
     }
 end
 
---- A region's text width, or nil when it cannot be measured.
+--- A region's text width, or nil when it cannot be measured. The whole
+--- text's width where the game gives it, not what is drawn: the name is
+--- squeezed by the right-hand text, so its drawn width changes with it.
 local function TextWidth(region)
-    local ok, width = pcall(region.GetStringWidth, region)
-    if ok and type(width) == "number" then return width end
+    for _, method in ipairs({ "GetUnboundedStringWidth", "GetStringWidth" }) do
+        local measure = region[method]
+        if type(measure) == "function" then
+            local ok, width = pcall(measure, region)
+            if ok and type(width) == "number" then return width end
+        end
+    end
     return nil
 end
 
@@ -186,8 +198,8 @@ local function Update(bar, cast)
     bar.label:SetText(name)
 
     -- Nothing is cut off. With too little room this craft's time goes first,
-    -- as the fill shows how far it has got, then the run's time, then the
-    -- name; the count stays.
+    -- as the fill shows how far it has got, then the words, then the count,
+    -- then the name; the run's time stays.
     for _, right in ipairs(choices) do
         bar.timer:SetText(right)
         if not TooWide(bar) then break end

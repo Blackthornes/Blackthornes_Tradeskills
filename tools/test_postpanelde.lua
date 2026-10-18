@@ -133,4 +133,19 @@ check("typing in a LIST box holds the redraw", TypingInList({ rows = { Row(false
 check("otherwise the list redraws", not TypingInList({ rows = { Row(false), Row(false) } }))
 check("a hidden row does not count", not TypingInList({ rows = { Row(true, false) } }))
 
+-- A long name wraps, and the price line moves under it instead of running
+-- over it; the row grows to hold both.
+do
+    local points = {}
+    local row = { name = {}, detail = { SetPoint = function(_, point, _, _, _, y) points[point] = y end } }
+    local PlaceDetail = PostPanel._PlaceDetail
+    PlaceDetail(row, nil)
+    check("one line: the price line sits in its place", points.TOPLEFT == -18 and points.TOPRIGHT == -18)
+    check("and the row keeps its height", row.name.rowNeed == nil)
+    row.name.rowNeed = 24
+    PlaceDetail(row, 24)
+    check("a wrapped name pushes the price line down", points.TOPLEFT == -30 and points.TOPRIGHT == -30)
+    check("and the row grows to hold it", row.name.rowNeed == 40)
+end
+
 print(("\n%d check(s) passed\n"):format(checks))
