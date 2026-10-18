@@ -78,7 +78,8 @@ check(bar.label.text == "Light Leather", "label: " .. bar.label.text)
 check(bar.timer.text == "3 more · 3.0s · 15s left", "timer: " .. bar.timer.text)
 
 -- Nothing is cut off in a narrower bar: this craft's time goes first, then
--- the run's, then the name, and the count stays. The name has what the
+-- the words, then the count, then the name, and the run's time stays (a
+-- player saw "3 more" alone and the time gone). The name has what the
 -- right-hand text leaves it, 18 pixels of padding aside.
 local function Measure(region) return #region.text * 6 end
 local barWidth = 260
@@ -99,12 +100,12 @@ check(bar.timer.text == "3 more · 15s left", "and the run's time, without this 
 barWidth = 150
 driverScript()
 check(bar.label.text == "Light Leather", "narrower still keeps the name: " .. bar.label.text)
-check(bar.timer.text == "3 more", "and the count alone: " .. bar.timer.text)
+check(bar.timer.text == "15s left", "and the run's time stays: " .. bar.timer.text)
 
 barWidth = 180
 driverScript()
 check(bar.label.text == "Light Leather", "between the two keeps the name: " .. bar.label.text)
-check(bar.timer.text == "3 more", "and the count: " .. bar.timer.text)
+check(bar.timer.text == "3 more · 15s", "and the count with the run's time: " .. bar.timer.text)
 
 barWidth = 120
 driverScript()
@@ -114,7 +115,7 @@ check(bar.timer.text == "3 more · 15s left", "and the most that fits the bar st
 barWidth = 100
 driverScript()
 check(bar.label.text == "", "a tiny bar leaves the name off: " .. bar.label.text)
-check(bar.timer.text == "3 more", "and keeps the count: " .. bar.timer.text)
+check(bar.timer.text == "3 more · 15s", "and keeps the count and the run's time: " .. bar.timer.text)
 
 barWidth = 260
 driverScript()

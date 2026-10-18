@@ -14,6 +14,12 @@
 --   _G.BlackthornesButler.Verdicts:Choice(itemID)        -- "keep", "bank", "mail"
 --   _G.BlackthornesButler.Verdicts:InSet(itemID)         -- an equipment set's name
 --   _G.BlackthornesButler.Quests:Reason(itemID)          -- an open quest's need
+--   _G.BlackthornesButler.Ammo:Keeps(itemID)             -- a hunter's own ammo
+--   _G.BlackthornesButler.Learning:Get(itemID)           -- "keep" once bought back
+--   _G.BlackthornesButler.KeepHere:Count(itemID)         -- how many to keep here
+--
+-- What Butler says to keep is held whether or not "Keep What Other Addons
+-- Need" is ticked (2026-10-17); the rest only while it is.
 --
 -- A sister that is not loaded, raises or answers something else is
 -- skipped. Nothing is saved and nothing is written back. Answers are kept
@@ -129,7 +135,40 @@ local function ButlerReason(itemID)
 
     local quest = Ask("BlackthornesButler", "Quests", "Reason", itemID)
     if type(quest) == "string" and quest ~= "" then return quest end
+
+    -- A hunter's own arrows or bullets (a player saw Razor Arrow offered
+    -- while Butler said Keep, 2026-10-17).
+    local ammo = Ask("BlackthornesButler", "Ammo", "Keeps", itemID)
+    if type(ammo) == "string" and ammo ~= "" then return ammo end
+
+    -- Sold by Butler and bought back, so Butler keeps it from then on.
+    if Ask("BlackthornesButler", "Learning", "Get", itemID) == "keep" then
+        return L["You bought this back, so Butler keeps it"]
+    end
     return nil
+end
+
+--- How many Butler keeps on the character playing ("Keep on This
+--- Character"), and why; or nil.
+local function KeepHereHold(itemID, count)
+    local keep = Number((Ask("BlackthornesButler", "KeepHere", "Count", itemID)))
+    if not keep or keep <= 0 then return nil end
+    local keepHere = Sister("BlackthornesButler", "KeepHere")
+    local all = keepHere and type(keepHere.IsAll) == "function" and select(2, pcall(keepHere.IsAll, keep)) == true
+    if all or keep >= count then
+        return count, all and L["Keeping all on this character"] or L.Format("Keeping %d on this character", keep)
+    end
+    return keep, L.Format("Keeping %d on this character", keep)
+end
+
+--- What Butler itself says to keep, and how many. Asked whether or not
+--- "Keep What Other Addons Need" is ticked: these are the player's own
+--- picks in Butler, and the Sell list should never offer what Butler
+--- says to keep.
+local function ButlerHold(itemID, count)
+    local whole = ButlerReason(itemID)
+    if whole then return count, whole end
+    return KeepHereHold(itemID, count)
 end
 
 --- How many to hold back for a Farmer goal, and why; or nil.
@@ -159,7 +198,7 @@ end
 -- holds it.
 function SisterKeeps:Hold(itemID, held, count, price)
     count = tonumber(count) or 0
-    if not itemID or count <= 0 or not self:IsOn() then return 0, nil end
+    if not itemID or count <= 0 then return 0, nil end
 
     local changes = ns.Inventory and ns.Inventory.changes
     if keptChanges ~= changes or not keptAt or Now() - keptAt > self.KEEP then
@@ -167,7 +206,7 @@ function SisterKeeps:Hold(itemID, held, count, price)
     end
 
     local link = held and held.link
-    local key = itemID .. ":" .. count .. ":" .. tostring(price or "")
+    local key = itemID .. ":" .. count .. ":" .. tostring(price or "") .. ":" .. tostring(self:IsOn())
     if type(link) == "string" then
         local ok, itemString = pcall(function()
             local found = string.match(link, "item[%-?%d:]+")
@@ -185,8 +224,12 @@ function SisterKeeps:Hold(itemID, held, count, price)
 end
 
 function SisterKeeps:Work(itemID, held, count, price)
-    local whole = ButlerReason(itemID)
-    if whole then return count, whole end
+    local butler, butlerWhy = ButlerHold(itemID, count)
+    if butler and butler >= count then return count, butlerWhy end
+    if not self:IsOn() then
+        if butler and butler > 0 then return butler, butlerWhy end
+        return 0, nil
+    end
 
     local pet = Ask("BlackthornesPets", "Butler", "Advise", itemID)
     if type(pet) == "table" and pet.eats == true and pet.buff ~= true then
@@ -197,7 +240,7 @@ function SisterKeeps:Work(itemID, held, count, price)
     if gear then return count, gear end
 
     local goal, why = GoalHold(itemID, count)
-    if goal and goal > 0 then return goal, why end
+    if goal and goal > 0 and (not butler or goal > butler) then return goal, why end
 
     local opened = self:OpenedWorth(itemID)
     if opened and price and opened > price then
@@ -206,5 +249,6 @@ function SisterKeeps:Work(itemID, held, count, price)
         return count, L.Format("Worth more opened (%s)", money)
     end
 
+    if butler and butler > 0 then return butler, butlerWhy end
     return 0, nil
 end

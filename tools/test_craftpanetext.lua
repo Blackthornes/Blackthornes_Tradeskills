@@ -185,7 +185,14 @@ ns.Recipes = {
 local function ShoppingRow(room)
     local row = NewFrame()
     row.name, row.icon, row.count, row.tag = NewFrame(), NewFrame(), NewFrame(), NewFrame()
-    row.bar = { Set = noop }
+    row.bar = NewFrame()
+    row.bar.Set = noop
+    local function Points(frame)
+        frame.points = {}
+        frame.SetPoint = function(self, point, _, _, _, y) self.points[point] = y end
+    end
+    Points(row.bar)
+    Points(row.tag)
     row.tag.room = room
     return row
 end
@@ -223,6 +230,26 @@ do
         needsMailTrip = true })
     check("enough only counting the mailbox says in mail", look.tag, "in mail")
     check("in amber", look.colour, "warn")
+
+    -- A long name wraps (Theme.SetRowName), and the bar and its words move
+    -- down under it rather than running over it, and the row grows.
+    check("one line: the bar sits in its place", row.bar.points.TOPLEFT, -19)
+    check("and the words beside it", row.tag.points.TOPRIGHT, -15)
+    ns.Theme.SetRowName = function(label, text)
+        label:SetText(text)
+        label.rowNeed, label.rowNeedText = 24, text
+    end
+    CraftPanel.UpdateShoppingRow(row, toBuy)
+    check("a wrapped name pushes the bar down", row.bar.points.TOPLEFT, -30)
+    check("and the words with it", row.tag.points.TOPLEFT, -26)
+    check("and the row grows to hold them", row.name.rowNeed, 36)
+    ns.Theme.SetRowName = function(label, text)
+        label:SetText(text)
+        label.rowNeed, label.rowNeedText = nil, nil
+    end
+    CraftPanel.UpdateShoppingRow(row, toBuy)
+    check("back on one line, back in place", row.bar.points.TOPLEFT, -19)
+    ns.Theme.SetRowName = nil
 end
 
 print("")
