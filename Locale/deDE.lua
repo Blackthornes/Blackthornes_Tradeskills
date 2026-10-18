@@ -3020,3 +3020,13 @@ L["Sharing your data with Blackthornes is off."] = "Du teilst deine Daten nicht 
 L["Got disenchants and recipe levels from %s."] = "Entzauberungen und Rezeptstufen von %s erhalten."
 L["%s: data from %s."] = "%s: Daten von %s."
 L["Nobody has shared data with you yet."] = "Noch hat niemand Daten mit dir geteilt."
+
+-- Keep on this character (Logic/KeepHere.lua, UI/KeepBox.lua)
+L["Tradeskills can't tell which character you're on right now. Try again outside the dungeon."] = "Tradeskills weiß gerade nicht, auf welchem Charakter du bist. Versuch es außerhalb des Dungeons noch mal."
+L["KEEP ON THIS CHARACTER"] = "AUF DIESEM CHARAKTER BEHALTEN"
+L["Keep on this character Sell list right-click"] = "Auf diesem Charakter behalten Verkaufsliste Rechtsklick"
+L["Right-click an item on the Sell list to keep some on this character."] = "Klick mit rechts auf einen Gegenstand in der Verkaufsliste, um ein paar auf diesem Charakter zu behalten."
+L["%s  |cff7a8089Keep: %s|r"] = "%s  |cff7a8089Behalten: %s|r"
+L["Keep %s on this character"] = "%s auf diesem Charakter behalten"
+L["Anything past this number can go on the Sell list. 0 clears it."] = "Alles über dieser Zahl darf auf die Verkaufsliste. 0 löscht sie."
+L["Keep All"] = "Alle behalten"

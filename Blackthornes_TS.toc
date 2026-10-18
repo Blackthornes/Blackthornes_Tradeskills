@@ -76,6 +76,7 @@ Logic\MerchantsFavor.lua
 Logic\Writs.lua
 Logic\Banks.lua
 Logic\Upgrades.lua
+Logic\KeepHere.lua
 Logic\SisterKeeps.lua
 Logic\BagsFull.lua
 Logic\AccountLink.lua
@@ -104,6 +105,7 @@ UI\ShoppingListsView.lua
 UI\AuctionWheel.lua
 UI\PostPanel.lua
 UI\PriceEditor.lua
+UI\KeepBox.lua
 UI\BuyQuantity.lua
 UI\AuctionsView.lua
 UI\CraftPanel.lua
