@@ -11,7 +11,8 @@
 --   _G.BlackthornesEquipment.Butler:Advise(link, bag, slot)
 --                                                        -- { upgrade, gain, tool, alt }
 --   _G.BlackthornesPets.Butler:Advise(itemID)            -- { eats, buff }
---   _G.BlackthornesButler.Verdicts:Choice(itemID)        -- "keep", "bank", "mail"
+--   _G.BlackthornesButler.Verdicts:Choice(itemID)        -- "keep", "bank", "mail" (and to whom)
+--   _G.BlackthornesButler.Verdicts:IsMe(name)            -- the character playing
 --   _G.BlackthornesButler.Verdicts:InSet(itemID)         -- an equipment set's name
 --   _G.BlackthornesButler.Quests:Reason(itemID)          -- an open quest's need
 --   _G.BlackthornesButler.Ammo:Keeps(itemID)             -- a hunter's own ammo
@@ -123,10 +124,14 @@ end
 
 --- What Butler's own lists say: why to keep it, or nil.
 local function ButlerReason(itemID)
-    local choice = Ask("BlackthornesButler", "Verdicts", "Choice", itemID)
+    local choice, mailTo = Ask("BlackthornesButler", "Verdicts", "Choice", itemID)
     if choice == "keep" then return L["On your Always keep list"] end
     if choice == "bank" then return L["On your Always bank list"] end
-    if choice == "mail" then return L["On your Always mail list"] end
+    -- Mailed to the character playing, it has arrived where it was going,
+    -- so it sells here like anything else (the owner, 2026-10-18).
+    if choice == "mail" and Ask("BlackthornesButler", "Verdicts", "IsMe", mailTo) ~= true then
+        return L["On your Always mail list"]
+    end
 
     local set = Ask("BlackthornesButler", "Verdicts", "InSet", itemID)
     if type(set) == "string" and set ~= "" then

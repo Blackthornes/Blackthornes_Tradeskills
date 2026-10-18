@@ -162,6 +162,7 @@ end
 
 local GOAL, UPGRADE, ALTGEAR, FOOD, KEEP, SET, QUEST, CLAM, PLAIN =
     2589, 7955, 7956, 4536, 3466, 6948, 4306, 7973, 2770
+local MAILHERE, MAILAWAY = 4655, 5503
 
 local function LineFor(lines, itemID)
     for _, line in ipairs(lines) do
@@ -187,7 +188,12 @@ local function Sisters()
     }
     BlackthornesButler = {
         Verdicts = {
-            Choice = function(_, id) if id == KEEP then return "keep" end end,
+            Choice = function(_, id)
+                if id == KEEP then return "keep" end
+                if id == MAILHERE then return "mail", "Ana Stormwood" end
+                if id == MAILAWAY then return "mail", "Bo Ashgrove" end
+            end,
+            IsMe = function(_, name) return name == "Ana Stormwood" end,
             InSet = function(_, id) if id == SET then return "Tank" end end,
         },
         Quests = { Reason = function(_, id) if id == QUEST then return "Spider's Silk needs 4 more" end end },
@@ -313,6 +319,28 @@ for _, on in ipairs({ true, false }) do
     local nextLine = Posting:GetNextPostable(nil, lines)
     check("List all never picks Butler's ammo" .. label, nextLine and nextLine.itemID ~= AMMO, true)
 end
+
+print("\nAlways mail to the character playing sells here")
+for _, on in ipairs({ true, false }) do
+    Reset()
+    sisterKeepsOn = on
+    commodities[MAILHERE], commodities[MAILAWAY] = true, true
+    prices[MAILHERE], prices[MAILAWAY] = { market = 1000 }, { market = 1000 }
+    table.insert(bags[0], { itemID = MAILHERE, stackCount = 8 })
+    table.insert(bags[0], { itemID = MAILAWAY, stackCount = 8 })
+    local label = on and " (ticked)" or " (unticked)"
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("mailed to you, it sells" .. label, LineFor(lines, MAILHERE) and LineFor(lines, MAILHERE).held, nil)
+    check("the whole stack" .. label, LineFor(lines, MAILHERE) and LineFor(lines, MAILHERE).count, 8)
+    check("mailed to another, it's held" .. label, LineFor(lines, MAILAWAY) and LineFor(lines, MAILAWAY).held,
+        "On your Always mail list")
+end
+Reset()
+BlackthornesButler.Verdicts.IsMe = nil
+commodities[MAILHERE], prices[MAILHERE] = true, { market = 1000 }
+table.insert(bags[0], { itemID = MAILHERE, stackCount = 8 })
+check("an older Butler that can't say still holds it",
+    LineFor(Posting:GetPostable({ includeAll = true, showHeld = true }), MAILHERE).held, "On your Always mail list")
 
 print("\nno sisters, or sisters that raise")
 Reset()
