@@ -23,6 +23,7 @@
 -- No character names are kept: only item IDs, amounts and when.
 
 local _, ns = ...
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Util = ns.Util
 
@@ -366,6 +367,46 @@ local function UnitCost(itemID)
     return cost, source == "vendor" and "vendor" or nil
 end
 
+--- What one of an item costs made from bought materials, and the recipe,
+--- when one of the player's characters knows a craft for it.
+function MerchantsFavor.MakeCost(itemID)
+    local cost = ns.Cost
+    if not (itemID and cost and cost.FindAnyRecipeForItem and cost.GetMaterialValue) then return nil end
+    local recipeID = cost:FindAnyRecipeForItem(itemID)
+    if not recipeID then return nil end
+    local perUnit = cost:GetMaterialValue(recipeID)
+    if not perUnit then return nil end
+    return perUnit, recipeID
+end
+
+--- How many crafts make `items` of a recipe's item, and what they use:
+--- crafts, { { itemID, count } }. A recipe making two a craft needs half
+--- the crafts; one the addon has not read gives nil.
+function MerchantsFavor.CraftPlan(recipeID, items)
+    local recipe = recipeID and ns.Recipes and ns.Recipes.GetAny and ns.Recipes:GetAny(recipeID)
+    if type(recipe) ~= "table" then return nil end
+
+    local yield = ((recipe.quantityMin or 1) + (recipe.quantityMax or 1)) / 2
+    if yield <= 0 then yield = 1 end
+    local crafts = math.max(1, math.ceil((items or 1) / yield))
+
+    local reagents = {}
+    for _, reagent in ipairs(recipe.reagents or {}) do
+        if reagent.itemID and reagent.quantity then
+            reagents[#reagents + 1] = { itemID = reagent.itemID, count = reagent.quantity * crafts }
+        end
+    end
+    return crafts, reagents
+end
+
+--- How many of an item this character has, in its bags, bank and mail.
+function MerchantsFavor.Owned(itemID)
+    local inventory = ns.Inventory
+    if not (itemID and inventory) then return 0 end
+    if inventory.GetOwnedCount then return inventory:GetOwnedCount(itemID) or 0 end
+    return inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
+end
+
 --- Every crate, with what it costs to buy and fill and what a favor costs.
 --
 -- A bundle needing more than one stack of its material is marked overStack:
@@ -400,6 +441,19 @@ function MerchantsFavor:GetRows(opts)
                 vendor = from == "vendor",
                 overStack = (stack ~= nil and count > stack) or false,
             }
+            entry.buy = entry.cost
+
+            -- Made from bought materials, when that is cheaper (a player
+            -- asked, 2026-10-18): only for a craft one of the player's
+            -- characters knows.
+            local make, recipeID = MerchantsFavor.MakeCost(materialID)
+            if make then
+                entry.make = make * count
+                entry.recipeID = recipeID
+                if not entry.cost or entry.make < entry.cost then
+                    entry.unit, entry.cost, entry.made, entry.vendor = make, entry.make, true, false
+                end
+            end
             bundles[#bundles + 1] = entry
 
             local usable = not (entry.overStack and opts.skipOverStack)
@@ -432,7 +486,7 @@ function MerchantsFavor:GetRows(opts)
             turnIns = turnIns,
             total = total,
             perFavor = perFavor,
-            have = itemID and ns.Inventory and ns.Inventory:GetBagCount(itemID) or 0,
+            have = MerchantsFavor.Owned(itemID),
         }
     end
 
@@ -444,6 +498,77 @@ function MerchantsFavor:GetRows(opts)
     end)
 
     return rows
+end
+
+--------------------------------------------------------------------------------
+-- Search Both and Queue Craft (the Deals tab's two views)
+--------------------------------------------------------------------------------
+
+--- An item's name as the client gives it, or nil.
+function MerchantsFavor.NameOf(itemID)
+    return itemID and ItemName(itemID) or nil
+end
+
+--- The names of a list of { itemID } joined for a chat line or hover.
+function MerchantsFavor.NamesOf(items)
+    local names = {}
+    for _, item in ipairs(items or {}) do
+        local name = ItemName(item.itemID)
+        if name then names[#names + 1] = name end
+    end
+    return table.concat(names, ", ")
+end
+
+--- Look up a crate or writ and what goes with it in one search, each with
+--- how many: picking one in the results fills the buy box with that many
+--- (UI/BuyQuantity.lua). Where the game takes one item a search, the first
+--- goes alone. Never buys.
+-- @param items { { itemID, count } }, the crate or writ first
+-- @param firstName, secondName for the chat line
+-- @return true when a search was sent
+function MerchantsFavor:SearchBoth(items, firstName, secondName)
+    local ids, counts = {}, {}
+    for _, item in ipairs(items or {}) do
+        local itemID = tonumber(item.itemID)
+        if itemID then
+            if not counts[itemID] then ids[#ids + 1] = itemID end
+            counts[itemID] = (counts[itemID] or 0) + math.max(1, math.floor(tonumber(item.count) or 1))
+        end
+    end
+    if #ids == 0 then return false end
+
+    local lists = ns.ShoppingLists
+    if #ids > 1 and lists and lists.SearchMany then
+        local sent, why = lists:SearchMany(ids, counts)
+        if sent then
+            ns.Print(L.Format("Searching the auction house for %s and %s.", firstName or "?", secondName or "?"))
+            return true
+        end
+        if why ~= "single" then
+            ns.Print(why)
+            return false
+        end
+    end
+    return ns.UI and ns.UI.SearchAuctionHouse and ns.UI:SearchAuctionHouse(ids[1], counts[ids[1]]) or false
+end
+
+--- Queue enough crafts of a recipe to make `items` of its item, and say so.
+-- @return true when the queue took it
+function MerchantsFavor:QueueCraft(recipeID, items, name)
+    local crafts = MerchantsFavor.CraftPlan(recipeID, items)
+    if not (crafts and ns.Queue and ns.Queue.Ensure) then return false end
+
+    -- Each click adds to what is queued already, as the chat line says.
+    local existing
+    if ns.Queue.Find then existing = select(2, ns.Queue:Find(recipeID, true)) end
+    local want = crafts + (existing and existing.quantity or 0)
+    local ok, why = ns.Queue:Ensure(recipeID, want)
+    if not ok then
+        if why then ns.Print(why) end
+        return false
+    end
+    ns.Print(L.Format("Added %d %s to your craft queue.", items, name or "?"))
+    return true
 end
 
 --------------------------------------------------------------------------------
