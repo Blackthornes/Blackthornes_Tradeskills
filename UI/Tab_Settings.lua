@@ -883,7 +883,7 @@ local function Build(outer)
     -- Logic/SisterKeeps.lua (2026-10-16): what the other Blackthornes
     -- addons want kept stays off List all.
     local sisterKeepsRow = CreateRow(pages.pricing, 1, L["Keep What Other Addons Need:"],
-        L["Goal items, your upgrades, pet food, quest items and Butler's keeps stay off List all."])
+        L["Goal items, your upgrades and pet food stay off List all. What Butler keeps always does."])
 
     widgets.sisterKeeps = Widgets.CreateCheckbox(sisterKeepsRow, L["On"], function(checked)
         Config:Set("sellHoldsSisterKeeps", checked)

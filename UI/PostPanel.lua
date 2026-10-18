@@ -285,9 +285,27 @@ local function LossText(line)
     return L["Below what the materials cost."]
 end
 
+--- Where the price line sits: under the name, which can wrap onto more
+--- lines. A long name used to run over the price line (a player's report,
+--- 2026-10-17), so a wrapped name pushes it down and the row grows to hold
+--- both. `need` is how tall the wrapped name stands, nil on one line.
+local function PlaceDetail(row, need)
+    local y = need and -(4 + need + 2) or -18
+    row.detail:SetPoint("TOPLEFT", row, "TOPLEFT", 8, y)
+    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, y)
+    if need then
+        -- The price line under it, and a little room below.
+        row.name.rowNeed = need + 16
+    end
+end
+
+PostPanel._PlaceDetail = PlaceDetail
+
 function UpdateRow(row, line)
     -- Whole, never cut to "...": smaller, then wrapped, when it is long.
     if Theme.SetRowName then Theme.SetRowName(row.name, line.label) else row.name:SetText(line.label) end
+    local need = rawget(row.name, "rowNeed")
+    PlaceDetail(row, type(need) == "number" and need or nil)
     Theme.SetItemIcon(row.icon, line.itemID)
 
     local maxQuantity = line.maxQuantity or line.count or 1
@@ -1472,6 +1490,7 @@ function PostPanel.CreateShoppingRow(row)
 
     local inset = -(8 + SEARCH_WIDTH + 6)
     row.count:SetPoint("TOPRIGHT", row, "TOPRIGHT", inset, -4)
+    row.tagRight = inset
     row.tag:SetPoint("TOPRIGHT", row, "TOPRIGHT", inset, -15)
 end
 
