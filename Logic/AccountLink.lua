@@ -579,6 +579,9 @@ ns.RegisterCommand("share", L["share with your other account and guild: with <na
             end
         elseif word == "test" then
             ns.Comm:Test()
+        elseif word == "data" and ns.Contribute then
+            -- Typed only, and left out of the help line.
+            ns.Contribute:Command(rest)
         else
             ns.Print(AccountLink:Describe())
             if ns.GuildPrices then ns.PrintRaw("  " .. ns.GuildPrices:Describe()) end
