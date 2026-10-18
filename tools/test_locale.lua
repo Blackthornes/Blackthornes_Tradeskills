@@ -1,6 +1,6 @@
--- The translations: on a German client Tradeskills speaks Deutsch, on any
--- other it speaks English, and a word with no German line falls back to its
--- English key. L.Format puts values named by place ("%2$s ... %1$d") in
+-- The translations: on a German, Chinese, French, Spanish or Russian
+-- client Tradeskills speaks that language, on any other it speaks English,
+-- and a word with no line falls back to its English key. L.Format puts values named by place ("%2$s ... %1$d") in
 -- order, which the tests' Lua 5.1 cannot do itself.
 
 local failures = 0
@@ -18,7 +18,9 @@ local function Load(locale)
   _G.GetLocale = function() return locale end
   local ns = {}
   assert(loadfile(lfs_cwd .. "/Locale/Locale.lua"))("Blackthornes_TS", ns)
-  assert(loadfile(lfs_cwd .. "/Locale/deDE.lua"))("Blackthornes_TS", ns)
+  for _, file in ipairs({ "deDE", "zhCN", "frFR", "esES", "ruRU" }) do
+    assert(loadfile(lfs_cwd .. "/Locale/" .. file .. ".lua"))("Blackthornes_TS", ns)
+  end
   return ns
 end
 
@@ -37,7 +39,21 @@ check("values named by place go in order", ns.L.Format("%2$s then %1$d", 7, "fir
 assert(loadfile(lfs_cwd .. "/Core/Util.lua"))("Blackthornes_TS", ns)
 check("a fresh age reads in Deutsch", ns.Util.FormatAge and ns.Util.FormatAge(0) or ns.L["just now"], ns.L["just now"])
 
-ns = Load("frFR")
+-- Simplified Chinese, French, Spanish (both clients) and Russian.
+for _, lang in ipairs({
+  { "zhCN", "队列", "在售 4 件" },
+  { "frFR", "File", "4 en vente" },
+  { "esES", "Cola", "4 publicados" },
+  { "esMX", "Cola", "4 publicados" },
+  { "ruRU", "Очередь", "выставлено: 4" },
+}) do
+  ns = Load(lang[1])
+  check("a tab name in " .. lang[1], ns.L["Queue"], lang[2])
+  check("a line formats in " .. lang[1], ns.L.Format("%d listed", 4), lang[3])
+  check("a missing line falls back in " .. lang[1], ns.L["A string nobody translated"], "A string nobody translated")
+end
+
+ns = Load("itIT")
 check("a language with no file shows English", ns.L["Queue"], "Queue")
 
 _G.GetLocale = nil

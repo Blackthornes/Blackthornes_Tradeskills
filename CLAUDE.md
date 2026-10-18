@@ -1071,6 +1071,23 @@ names stay `deDE` and `Locale/deDE.lua`.
   wrap or grow, never end in "...". The Columns menu lowers capital
   umlauts itself, since Lua's `lower()` does not.
 
+## Simplified Chinese, French, Spanish and Russian
+
+The owner asked (2026-10-18) for Simplified Chinese, French, Spanish and
+Russian in every addon, after a player asked for Chinese. They work like
+German: written by us from the English keys, never from a player's or
+anyone else's file (the owner turned down a player's zip for safety).
+`Locale/zhCN.lua`, `Locale/frFR.lua` ("tu"), `Locale/esES.lua` (one
+Spanish for both Spanish clients: it loads on "esES" and "esMX", neutral
+words, "tú") and `Locale/ruRU.lua` ("ты"), each in the game's own words,
+listed in the TOC after deDE. Lines shared with the other addons (About,
+the sister note, What's New, Settings) use the same wording as theirs.
+Forever's own item names and "Overcutting" stay English, as in German.
+Talk to the owner about "Simplified Chinese", "French" and so on, never
+the codes. Every new string gets a line in all five files;
+`tools/check_locale.py` checks them all. Tested in
+`tools/test_locale.lua`. Not yet seen in game.
+
 ## The house frame (Titanforged)
 
 The owner picked this look for all four addons on 2026-10-04 from two mockups
