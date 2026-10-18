@@ -438,8 +438,10 @@ end
 -- never rename it) is on. The game never says what sold, so "Sold a day"
 -- and the seven days are worked out from your own scans and say so.
 
--- The tallest bar, in pixels, and each bar's width.
-ItemTooltip.BAR_HEIGHT = 12
+-- The tallest bar, in pixels, and each bar's width. No taller than a
+-- tooltip line, or the bars stick out past the line and, as the last line,
+-- past the tooltip's edge (a player's report, 2026-10-18).
+ItemTooltip.BAR_HEIGHT = 10
 ItemTooltip.BAR_WIDTH = 5
 
 -- Under this change between the older and newer days, the trend is steady.
@@ -706,6 +708,7 @@ function ItemTooltip:Decorate(tooltip, data, count)
     -- client does it already, required where a hooked setter is what got us
     -- here.
     Try(Field(tooltip, "Show"), tooltip)
+    self:ResizeSoon(tooltip, itemID)
 
     self.writing = false
 
@@ -721,6 +724,22 @@ function ItemTooltip:Decorate(tooltip, data, count)
     self.counts[outcome] = (self.counts[outcome] or 0) + 1
 
     return outcome
+end
+
+--- Size the tooltip again on the next frame. The width is worked out when
+--- it is shown, and a line of inline bars could be measured short then, so
+--- the trend after the bars ran past the right edge (a player's report,
+--- 2026-10-18). Only while it shows and is still marked for that item.
+function ItemTooltip:ResizeSoon(tooltip, itemID)
+    if not (C_Timer and C_Timer.After) then return end
+    C_Timer.After(0, function()
+        local mark = decorated[tooltip]
+        if not (mark and mark.itemID == itemID) then return end
+        if Try(Field(tooltip, "IsShown"), tooltip) ~= true then return end
+        self.writing = true
+        Try(Field(tooltip, "Show"), tooltip)
+        self.writing = false
+    end)
 end
 
 --- Add the stack total to a tooltip that was already given its unit value.
@@ -763,6 +782,7 @@ function ItemTooltip:AddStackLine(tooltip, count)
 
     WriteLine(tooltip, stackLine)
     Try(Field(tooltip, "Show"), tooltip)
+    self:ResizeSoon(tooltip, itemID)
 
     self.writing = false
 

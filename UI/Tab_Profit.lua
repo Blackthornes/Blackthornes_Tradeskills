@@ -1917,10 +1917,12 @@ local function BuildCrafts(container)
     for key, heading in pairs(widgets.headings) do sortLabels[key] = heading end
     widgets.sorter = Widgets.SortableHeadings and Widgets.SortableHeadings(sortLabels, {
         name = function(a) return a.name end,
-        cost = function(a) return a.costPerUnit end,
-        sells = function(a) return a.unitRevenue end,
-        profit = function(a) return a.profit end,
-        margin = function(a) return a.margin end,
+        -- What the cells show: one craft's cost and what it sells for. Per
+        -- item, a craft that makes several sorted out of step with its row.
+        cost = function(a) return a.priceable and a.totalCost or nil end,
+        sells = function(a) return a.priceable and a.revenue or nil end,
+        profit = function(a) return a.priceable and a.profit or nil end,
+        margin = function(a) return a.priceable and a.margin or nil end,
         age = function(a) return a.age end,
         posted = function(a) return a.stock end,
         make = function(a) return a.craftableNow end,

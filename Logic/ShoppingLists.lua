@@ -410,6 +410,20 @@ function ShoppingLists:NameCandidates()
             end
         end
     end
+    -- Everything a recipe makes or uses, learned or not (2026-10-18: a
+    -- material nobody had priced, carried or crafted with was never found,
+    -- so the names ran out as more of it was typed). Only names the game
+    -- already has are kept, as for the rest.
+    Try(function()
+        local book = ns.RECIPE_BOOK and ns.RECIPE_BOOK.RECIPES
+        for _, row in pairs(type(book) == "table" and book or {}) do
+            if type(row) == "table" then
+                Note(row[3])
+                local mats = type(row[6]) == "table" and row[6] or {}
+                for i = 1, #mats, 2 do Note(mats[i]) end
+            end
+        end
+    end)
     return ids, known
 end
 
@@ -455,21 +469,42 @@ function ShoppingLists:BuildNames(done, force)
     Step()
 end
 
+--- The words of what was typed, for a match by words: each in lower case,
+--- with a plural's "s" let go ("linen cloths" still finds Linen Cloth).
+local function Words(wanted)
+    local words = {}
+    for word in wanted:gmatch("%S+") do
+        if #word > 3 and word:sub(-1) == "s" then word = word:sub(1, -2) end
+        words[#words + 1] = word
+    end
+    return words
+end
+
+local function HasWords(lower, words)
+    for _, word in ipairs(words) do
+        if not lower:find(word, 1, true) then return false end
+    end
+    return true
+end
+
 --- The items whose name holds what was typed, best first: the name itself,
---- then names that start with it, then a word that does, then anywhere.
---- Shorter names first within each, so "linen" gives Linen Cloth before
---- Bolt of Linen Cloth.
+--- then names that start with it, then a word that does, then anywhere,
+--- then names holding every word typed in any order ("linen bolt" finds
+--- Bolt of Linen Cloth). Shorter names first within each, so "linen" gives
+--- Linen Cloth before Bolt of Linen Cloth. When nothing the addon knows
+--- matches, the game is asked for an item of exactly that name.
 function ShoppingLists:Suggest(text, most)
     most = most or self.SUGGEST_MOST
     if type(text) ~= "string" then return {} end
-    local wanted = text:gsub("^%s+", ""):gsub("%s+$", ""):lower()
-    if wanted == "" or not self.names then return {} end
+    local wanted = text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " "):lower()
+    if wanted == "" then return {} end
 
-    local found = {}
-    for _, entry in ipairs(self.names) do
+    local found, seen = {}, {}
+    local words = Words(wanted)
+    for _, entry in ipairs(self.names or {}) do
         local at = entry.lower:find(wanted, 1, true)
+        local rank
         if at then
-            local rank
             if entry.lower == wanted then
                 rank = 1
             elseif at == 1 then
@@ -479,9 +514,21 @@ function ShoppingLists:Suggest(text, most)
             else
                 rank = 4
             end
+        elseif #words > 0 and HasWords(entry.lower, words) then
+            rank = 5
+        end
+        if rank and not seen[entry.id] then
+            seen[entry.id] = true
             found[#found + 1] = { id = entry.id, name = entry.name, rank = rank, lower = entry.lower }
         end
     end
+
+    if #found == 0 then
+        local id = self.ResolveItem(text)
+        local name = id and CachedName(id)
+        if name then found[1] = { id = id, name = name, rank = 1, lower = name:lower() } end
+    end
+
     table.sort(found, function(a, b)
         if a.rank ~= b.rank then return a.rank < b.rank end
         if #a.name ~= #b.name then return #a.name < #b.name end
