@@ -23,6 +23,10 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.66.0
+
+- Tradeskills speaks Simplified Chinese, French, Spanish and Russian now if your game is in one of those.
+
 ## 0.65.0
 
 - Right-click an item on the Sell list to keep some of it on the character you are playing. Your keeps are listed under Keep on This Character on the Queue page of Settings.
