@@ -18,7 +18,8 @@
 -- Tests share one Lua state, so every global replaced here is put back,
 -- including the ones that were not set at all.
 local GLOBALS = { "CreateFrame", "UIParent", "MerchantFrame", "C_Timer", "C_MerchantFrame",
-    "GetMerchantNumItems", "GetMerchantItemLink", "time", "BuyMerchantItem", "GetMoney" }
+    "GetMerchantNumItems", "GetMerchantItemLink", "time", "BuyMerchantItem", "GetMoney",
+    "BlackthornesButler", "BlackthornesButlerDB" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -302,6 +303,27 @@ check("a changed price is", invalidated, 1)
 C_MerchantFrame.GetItemInfo = realInfo
 Vendor.Scan = realScan
 ns.Cost.InvalidateIndex = noop
+Close()
+
+print("")
+print("Butler has the button, so this one stands down")
+
+BlackthornesButler = {}
+BlackthornesButlerDB = nil
+Open()
+check("with Butler loaded it hides", Shown(), false)
+Close()
+BlackthornesButlerDB = { openAtVendor = true }
+Open()
+check("with Butler opening at vendors it hides", Shown(), false)
+Close()
+BlackthornesButlerDB = { openAtVendor = false }
+Open()
+check("with Butler not opening at vendors it shows", Shown(), true)
+Close()
+BlackthornesButler, BlackthornesButlerDB = nil, nil
+Open()
+check("without Butler it shows", Shown(), true)
 Close()
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
