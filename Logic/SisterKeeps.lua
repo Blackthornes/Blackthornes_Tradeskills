@@ -51,6 +51,17 @@ function SisterKeeps:HoldsAltUpgrades()
     return ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsAltUpgrades") == true or false
 end
 
+-- Rings and trinkets: a character wears two.
+local PAIRS = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true }
+
+--- How many of a piece of gear a character wears at once.
+function SisterKeeps.Wears(itemID)
+    local info = C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant
+    if type(info) ~= "function" then return 1 end
+    local ok, _, _, _, equipLoc = pcall(info, itemID)
+    return (ok and PAIRS[equipLoc]) and 2 or 1
+end
+
 function SisterKeeps:Forget()
     kept = {}
     keptAt, keptChanges = nil, nil
@@ -241,8 +252,14 @@ function SisterKeeps:Work(itemID, held, count, price)
         return count, L["Your pet eats this"]
     end
 
+    -- An upgrade is held only as many as a character wears: one, two rings
+    -- or trinkets; the spare copies sell (a player's five robes, 2026-10-18).
     local gear = GearReason(itemID, held and held.link, held and held.bag, held and held.slot)
-    if gear then return count, gear end
+    if gear then
+        local wear = math.min(count, SisterKeeps.Wears(itemID))
+        if butler and butler > wear then return butler, butlerWhy end
+        return wear, gear
+    end
 
     local goal, why = GoalHold(itemID, count)
     if goal and goal > 0 and (not butler or goal > butler) then return goal, why end
