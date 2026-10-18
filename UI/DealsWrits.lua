@@ -160,7 +160,13 @@ local function UpdateRow(row, entry)
 
     Theme.SetRowName(row.name, NameText(entry))
     Theme.SetItemIcon(row.icon, entry.itemID)
-    row.name:SetTextColor(Theme.Unpack(entry.perRep and "text" or "dim"))
+    -- In its rarity colour, faded while it has no price.
+    local r, g, b = Util.GetItemQualityColor(entry.itemID)
+    if r then
+        row.name:SetTextColor(r, g, b, entry.perRep and 1 or 0.55)
+    else
+        row.name:SetTextColor(Theme.Unpack(entry.perRep and "text" or "dim"))
+    end
 
     for index, column in ipairs(COLUMNS) do
         FillCell(row.cells[index], column.key, entry)
@@ -170,21 +176,22 @@ end
 local function ItemLine(entry)
     if not entry.itemCost then return nil end
     local cost = Plain(entry.itemCost)
+    local name = Util.ColorItemName(entry.itemID, entry.name)
     if entry.how == "make" then
         if entry.count > 1 then
-            return L.Format("%d %s, made from materials: %s", entry.count, entry.name, cost)
+            return L.Format("%d %s, made from materials: %s", entry.count, name, cost)
         end
-        return L.Format("%s, made from materials: %s", entry.name, cost)
+        return L.Format("%s, made from materials: %s", name, cost)
     end
     if entry.count > 1 then
-        return L.Format("%d %s, bought: %s", entry.count, entry.name, cost)
+        return L.Format("%d %s, bought: %s", entry.count, name, cost)
     end
-    return L.Format("%s, bought: %s", entry.name, cost)
+    return L.Format("%s, bought: %s", name, cost)
 end
 
 local function ShowRowTooltip(row, entry)
     GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-    GameTooltip:AddLine(L.Format("Craftsman's Writ: %s", entry.name))
+    GameTooltip:AddLine(L.Format("Craftsman's Writ: %s", Util.ColorItemName(entry.itemID, entry.name)))
     GameTooltip:AddLine(L.Format("%s %s, skill %d", TierName(entry.tier), entry.prof, entry.writ.skill),
         0.7, 0.7, 0.7)
 
@@ -329,7 +336,8 @@ local function UpdateGoal(plan)
     local route = detail.route.lines
     if plan.cheapest then
         local cheapest = plan.cheapest
-        SetLine(route[1], L.Format("Cheapest: %d %s, one a day", cheapest.writs, cheapest.row.name),
+        SetLine(route[1], L.Format("Cheapest: %d %s, one a day", cheapest.writs,
+            Util.ColorItemName(cheapest.row.itemID, cheapest.row.name)),
             Plain(Round(cheapest.cost)), "text", "accent")
         local quickest = plan.quickest
         local text = quickest.days == 1 and L.Format("Quickest: %d writs over 1 day", quickest.writs)
@@ -360,7 +368,8 @@ local function UpdateWrit(entry)
         detail.writHeading:SetText(("%s %s"):format(TierName(entry.tier), entry.prof):upper())
         SetLine(lines[1], L["Writ on the AH"], entry.writPrice and Plain(entry.writPrice)
             or (entry.noneListed and L["none listed"] or L["not priced"]))
-        local what = entry.count > 1 and ("%d %s"):format(entry.count, entry.name) or entry.name
+        local named = Util.ColorItemName(entry.itemID, entry.name)
+        local what = entry.count > 1 and ("%d %s"):format(entry.count, named) or named
         SetLine(lines[2], entry.how == "make" and L.Format("%s (made)", what) or what,
             entry.itemCost and Plain(entry.itemCost) or L["not priced"])
         SetLine(lines[3], L["Money back"], entry.money and entry.money > 0 and Plain(entry.money) or L["none known"])

@@ -10,13 +10,13 @@
 --      on the line, and what it means on the hover.
 --   4. A shopping line names the character holding a material by the short
 --      name, and says "on an alt" when even that has no room.
---   5. A greyed name shows grey: the item link's own colour no longer shows
---      over it, in either kind of colour code.
+--   5. A shopping line shows the plain name in its rarity colour, and grey
+--      once you have it all (no link, whose own colour would show over it).
 --   6. Materials waiting in the mailbox read "in mail".
 
 -- Tests share one Lua state, so every global replaced here is put back,
 -- including the ones that were not set at all.
-local GLOBALS = { "CreateFrame", "C_TradeSkillUI" }
+local GLOBALS = { "CreateFrame", "C_TradeSkillUI", "C_Item", "ITEM_QUALITY_COLORS" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -172,6 +172,12 @@ local LINKS = {
     [BOLT] = "|cnIQ1:|Hitem:2996::::::::|h[Bolt of Linen Cloth]|h|r",
 }
 Util.GetItemLabel = function(itemID) return LINKS[itemID] end
+local NAMES = { [CLOTH] = "Linen Cloth", [BOLT] = "Bolt of Linen Cloth" }
+-- Linen is white, the bolt green, as the client has them.
+ITEM_QUALITY_COLORS = { [1] = { r = 1, g = 1, b = 1 }, [2] = { r = 0.1, g = 1, b = 0 } }
+C_Item = { GetItemInfo = function(itemID)
+    return NAMES[itemID], LINKS[itemID], itemID == BOLT and 2 or 1
+end }
 
 ns.db = { characters = {
     ["Player-1-ME"] = { inventory = {} },
@@ -217,14 +223,16 @@ do
     row.tag.room = Measure("12g 35s")
     CraftPanel.UpdateShoppingRow(row, toBuy)
     check("and with less room, fewer", Util.Uncolored(row.tag.text), "12g 35s")
-    check("still to buy keeps its link colour", row.name.text, LINKS[BOLT])
+    check("still to buy shows the plain name", row.name.text, "Bolt of Linen Cloth")
+    check("in its rarity colour", row.name.colour, 0.1)
 
     CraftPanel.UpdateShoppingRow(row, { itemID = CLOTH, needed = 4, have = 6, shortfall = 0 })
     check("have all reads grey", row.name.colour, "muted")
-    check("without the link's own colour over it", row.name.text, "|Hitem:2589::::::::|h[Linen Cloth]|h")
+    check("without the link's own colour over it", row.name.text, "Linen Cloth")
 
     CraftPanel.UpdateShoppingRow(row, { itemID = BOLT, needed = 4, have = 6, shortfall = 0 })
-    check("the named kind of colour code goes too", row.name.text, "|Hitem:2996::::::::|h[Bolt of Linen Cloth]|h")
+    check("a green you have all greys too", row.name.colour, "muted")
+    check("and keeps its plain name", row.name.text, "Bolt of Linen Cloth")
 
     local look = CraftPanel:ShoppingLook({ itemID = BOLT, needed = 5, have = 5, shortfall = 0,
         needsMailTrip = true })

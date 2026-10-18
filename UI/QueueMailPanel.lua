@@ -37,8 +37,10 @@ local MAX_ROWS = 5
 -- Building
 --------------------------------------------------------------------------------
 
+-- The plain name in its rarity colour: a link's brackets read as clutter
+-- in a line of several items.
 local function ItemName(itemID)
-    return Util.Uncolored(Util.GetItemLabel(itemID))
+    return Util.ColoredItemName(itemID)
 end
 
 --- The items line, longest wording first, so the row can take the first

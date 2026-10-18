@@ -556,7 +556,7 @@ local function ShowBreaksInto(owner, analysis)
             or ("%d-%d"):format(outcome.min, outcome.max)
         GameTooltip:AddDoubleLine(
             ("%s%%  %sx %s%s"):format(Util.Round(outcome.chance * 100, 1), count,
-                outcome.name or Util.GetItemLabel(outcome.itemID),
+                Util.ColorItemName(outcome.itemID, outcome.name) or Util.GetItemLabel(outcome.itemID),
                 outcome.counted == false and L["  (bonus)"] or ""),
             outcome.price and L.Format("%s each", Util.FormatMoney(outcome.price, { noColor = true, short = true }))
                 or L["no price"],
@@ -1128,6 +1128,11 @@ function UpdateDetail(analysis)
     end
 
     detail.title:SetText(analysis.name or L.Format("recipe %s", analysis.recipeID))
+    -- In the rarity of what it makes, as its row is; gold for an enchant.
+    if not Theme.SetItemNameColor(detail.title, analysis.outputItemID, "accent")
+        and analysis.outputItemID then
+        awaitingItemData = true
+    end
     Theme.SetItemIcon(detail.icon, analysis.outputItemID)
 
     -- The skill-up clause is coloured inline rather than by the whole label,
@@ -1192,6 +1197,9 @@ function UpdateDetail(analysis)
         line.frame:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
 
         local label = Util.GetItemLabel(reagent.itemID)
+        -- A link carries its rarity colour; a name before the client has the
+        -- item is drawn again when it comes.
+        if not label:find("|c", 1, true) then awaitingItemData = true end
         Theme.SetItemIcon(line.icon, reagent.itemID)
 
         -- Showing have/need inline is the whole point: it answers "can I make

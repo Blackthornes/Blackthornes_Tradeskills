@@ -207,7 +207,7 @@ local function ItemText(itemID, fallback)
         return label
     end
 
-    return fallback or L.Format("item %d", itemID)
+    return Util.ColorItemName(itemID, fallback) or L.Format("item %d", itemID)
 end
 
 --- A sale's name: the item's own where the game knows it, with the stack

@@ -261,7 +261,14 @@ local function FillCard(card, entry)
         local analysis = crafts[index]
         if analysis then
             line.name:SetText(analysis.name or "?")
-            line.name:SetTextColor(Theme.Unpack((analysis.craftableNow or 0) > 0 and "text" or "muted"))
+            -- In the rarity of what it makes, faded while there's nothing to
+            -- make it with.
+            local r, g, b = Util.GetItemQualityColor(analysis.outputItemID)
+            if r then
+                line.name:SetTextColor(r, g, b, (analysis.craftableNow or 0) > 0 and 1 or 0.55)
+            else
+                line.name:SetTextColor(Theme.Unpack((analysis.craftableNow or 0) > 0 and "text" or "muted"))
+            end
             Theme.SetMoneyText(line.value, analysis.profit, { short = true })
             line.value:SetTextColor(Theme.ProfitColor(analysis.profit))
         elseif index == 1 then
@@ -282,7 +289,7 @@ local function FillCard(card, entry)
         local group = cooldowns[index]
         if group then
             line.name:SetText(group.group)
-            line.name:SetTextColor(Theme.Unpack("text"))
+            Theme.SetItemNameColor(line.name, group.itemID, "text")
             if group.ready then
                 line.value:SetText(L["Ready"])
                 line.value:SetTextColor(Theme.Unpack("profit"))

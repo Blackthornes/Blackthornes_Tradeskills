@@ -941,7 +941,12 @@ function RecipeBook:TooltipLines(itemID)
 
     local needs = record.profession and record.skill and record.skill > 0
         and ("%s %d"):format(record.profession, record.skill) or record.profession
-    lines[#lines + 1] = { L["Teaches"], (record.name or "?") .. (needs and ("  (" .. needs .. ")") or "") }
+    -- What it makes, in that item's rarity colour.
+    local taught = record.name or "?"
+    if record.outputItemID and ns.Util and ns.Util.ColorItemName then
+        taught = ns.Util.ColorItemName(record.outputItemID, taught)
+    end
+    lines[#lines + 1] = { L["Teaches"], taught .. (needs and ("  (" .. needs .. ")") or "") }
 
     local knownBy, mine = self:KnownByText(record)
     if knownBy then

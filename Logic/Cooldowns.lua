@@ -456,6 +456,17 @@ end
 -- Saying so
 --------------------------------------------------------------------------------
 
+--- A group's name as chat shows it. An item's cooldown (the Salt Shaker)
+--- names the item in its rarity colour; a craft's is named by its group
+--- ("Transmute"), which is no item.
+function Cooldowns.Shown(group)
+    local Util = ns.Util
+    if group.itemID and Util and Util.ColorItemName then
+        return Util.ColorItemName(group.itemID, group.group)
+    end
+    return group.group
+end
+
 --- Say in chat, once each time it comes ready, every cooldown that is
 --- ready and not yet said.
 function Cooldowns:Announce()
@@ -466,8 +477,8 @@ function Cooldowns:Announce()
         for _, group in ipairs(character.groups) do
             if group.ready and not group.told then
                 parts[#parts + 1] = character.isCurrent
-                    and L.Format("%s here", group.group)
-                    or L.Format("%s on %s", group.group, character.name)
+                    and L.Format("%s here", Cooldowns.Shown(group))
+                    or L.Format("%s on %s", Cooldowns.Shown(group), character.name)
                 for _, id in ipairs(group.ids) do
                     local entry = store[character.key] and store[character.key][id]
                     if entry then entry.told = entry.readyAt end
@@ -510,8 +521,8 @@ function Cooldowns:Report()
     for _, character in ipairs(all) do
         local parts = {}
         for _, group in ipairs(character.groups) do
-            parts[#parts + 1] = group.ready and L.Format("%s ready", group.group)
-                or L.Format("%s in %s", group.group, Cooldowns.LeftText(group.readyAt - Now()))
+            parts[#parts + 1] = group.ready and L.Format("%s ready", Cooldowns.Shown(group))
+                or L.Format("%s in %s", Cooldowns.Shown(group), Cooldowns.LeftText(group.readyAt - Now()))
         end
         ns.Print(L.Format("%s: %s.", character.isCurrent and L.Format("%s (you)", character.name) or character.name,
             table.concat(parts, ", ")))
