@@ -806,8 +806,12 @@ with how many, their gold and time played; a click folds it. Columns
 CHARACTER (class colour, race and class under it), LEVEL (purple XP bar),
 RESTED (blue bar, Full at 150%), GOLD, PROFESSIONS (two, then "+N"), MAIL
 (items waiting), ZONE, PLAYED and LAST SEEN, each sortable within its side
-and hideable (`ns.Columns` list "characters"). Show: Both, Horde, Alliance
-and the search (name, profession, zone) last the session. A click on a
+and hideable (`ns.Columns` list "characters"). Realm: (a player asked,
+the owner said yes 2026-10-18) is first on the bar: This Realm (the
+default, the realm of the character playing; a character saved with no
+realm stays under it), All Realms, then each realm by name, matched
+without case or spaces. Realm, Show: Both, Horde, Alliance and the search
+(name, profession, zone) last the session. A click on a
 character opens a line under it with its best crafts, cooldowns, bags and
 bank age, and Forget character (arms first, never the one playing). The
 Bank view is unchanged.

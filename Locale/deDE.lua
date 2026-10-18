@@ -2914,6 +2914,9 @@ L["PROFESSIONS"] = "BERUFE"
 L["RESTED"] = "ERHOLT"
 L["Rested has grown since you last played them."] = "Erholung ist gewachsen, seit du ihn zuletzt gespielt hast."
 L["Show:"] = "Zeigen:"
+L["Realm:"] = "Realm:"
+L["This Realm"] = "Dieser Realm"
+L["All Realms"] = "Alle Realms"
 L["ZONE"] = "GEBIET"
 
 -- What the other Blackthornes addons want kept (Logic/SisterKeeps.lua)

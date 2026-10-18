@@ -1113,6 +1113,36 @@ rows = Rows()
 check("Show: Horde leaves only the Horde", rows[1].name.text, "HORDE")
 chips[1].scripts.OnClick(chips[1])
 
+-- Realm: This Realm by default, All Realms, then each realm by name.
+local realm = ns.CharactersTab._widgets.realm
+characters[#characters + 1] = { key = "C", name = "Corwen Ashby", realm = "Other Shore", gold = 10,
+    recipeCount = 1, faction = "Horde", level = 12, professions = {} }
+UI:SelectTab("characters")
+local function Named(name)
+    for _, row in pairs(Rows()) do
+        if row.name.text == name and row.data.kind == "char" then return true end
+    end
+    return false
+end
+check("the tab opens on the realm you're playing", Named("Corwen Ashby"), false)
+check("with its own characters", Named("Aldra Stormvale"), true)
+local realmNames = {}
+for _, option in ipairs(realm.options) do realmNames[#realmNames + 1] = option.text end
+check("This Realm, All Realms, then each realm", table.concat(realmNames, ","),
+    "This Realm,All Realms,Forever,Other Shore")
+local function PickRealm(index)
+    local entry = realm.menu.children[index]
+    entry.scripts.OnClick(entry)
+end
+PickRealm(2)
+check("All Realms shows every character", Named("Corwen Ashby") and Named("Brannoc Ironhill"), true)
+PickRealm(4)
+check("a realm by name shows only its characters",
+    Named("Corwen Ashby") and not Named("Aldra Stormvale") and not Named("Brannoc Ironhill"), true)
+characters[#characters] = nil
+UI:SelectTab("characters")
+check("a realm no one is on any more goes back to This Realm", realm:GetValue(), "\1here")
+
 --------------------------------------------------------------------------------
 print("")
 print("Queue")
