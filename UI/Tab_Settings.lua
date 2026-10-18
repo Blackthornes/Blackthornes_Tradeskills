@@ -821,6 +821,16 @@ local function Build(outer)
     sellTest:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(sellTest)
 
+    -- Logic/VendorPins.lua (asked 2026-10-18): gold pins on the world map
+    -- at vendors that sell what the queue needs for less.
+    local vendorPinsRow = CreateRow(pages.mail, 2, L["Vendor Map Pins:"],
+        L["Pins vendors on your world map that sell what your queue needs for less than the auction house."])
+
+    widgets.vendorMapPins = Widgets.CreateCheckbox(vendorPinsRow, L["On"], function(checked)
+        if ns.VendorPins then ns.VendorPins:SetOn(checked) else Config:Set("vendorMapPins", checked) end
+    end, false)
+    widgets.vendorMapPins:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Asked 2026-10-06: the buy window opened at 1 after a Buy list search.
     CreateSection(pages.auction, 1, L["BUYING AND POSTING"])
     local fillBuyRow = CreateRow(pages.auction, 1, L["Fill In Buy Amount:"],
@@ -2243,6 +2253,7 @@ local function Refresh()
     widgets.saleAlarm:Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
+    widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
     widgets.goldTracker:SetChecked(Config:Get("goldTracker") == true)
     local goldGoal = ns.GoldGoal and ns.GoldGoal:Goal()
     widgets.goldGoal:SetValue(goldGoal and math.floor(goldGoal / 10000) or nil, true)

@@ -40,6 +40,7 @@ Data\Inventory.lua
 Data\Mail.lua
 Data\Auctions.lua
 Data\VendorPrices.lua
+Data\VendorSpots.lua
 Data\RecipeBook.lua
 Data\ForeverRecipes.lua
 Data\LearnSpots.lua
@@ -57,6 +58,7 @@ Logic\CraftOrFarm.lua
 Logic\LevelUp.lua
 Logic\RecipeBook.lua
 Logic\Waypoints.lua
+Logic\VendorPins.lua
 Logic\LearnNext.lua
 Logic\Queue.lua
 Logic\QueueActions.lua
@@ -124,6 +126,7 @@ UI\CraftProgress.lua
 UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\EnchantTooltip.lua
+UI\VendorPins.lua
 UI\MailReport.lua
 UI\GoldGoal.lua
 UI\QueueMailPanel.lua

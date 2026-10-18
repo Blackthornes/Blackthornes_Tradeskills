@@ -688,6 +688,34 @@ the book (keeping Classic's as `classicSkill`); players' reports and a
 recipe item's tooltip still win. Never name where the data came from in
 the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 
+## Vendor map pins
+
+A player asked (2026-10-18, the owner said build it, from a mockup with
+the words he approved): gold pins on the world map at vendors that sell a
+material the queue still needs for less than the auction house, or that
+nobody lists there. Only the world map, for the map it shows; only
+vendors of the player's side or of neither; gone once there are enough
+(the shopping list's shortfall). Not for an item set to Buy on the Level
+Up tab. `Logic/VendorPins.lua` picks them (`Wanted`, `For(mapID)`),
+`UI/VendorPins.lua` draws them on the map's canvas (a key, redrawn only
+when the map, zoom, queue, bags, a scan or a learned vendor moved). The
+hover names the vendor, "Has what your queue needs:", each item with how
+many and the cost, "Saves you X over the auction house." and "Click to set
+a map pin." (or "Click for a TomTom arrow."); a click is
+`Waypoints:Pin`/`TomTom`, which now take a `mapID` in place of a zone.
+Where vendors stand: `Data/VendorSpots.lua` (`ns.VENDOR_SPOTS`, Classic's
+vendors of the items in `Data/VendorPrices.lua` that never run out, by
+`tools/make_vendor_spots.py <quest database>`, never by hand), and every
+vendor the player opens (`VendorPins:Learn` from `Vendor:Scan`: NPC ID,
+map and spot, side, and its materials with whether they run out), kept
+account wide in `vendorSpots[npcID]` (never rename it; at most
+`MOST_VENDORS`). A learned vendor takes its shipped place; one whose stock
+runs out is pinned only while the auction house has none. Butler's Buy
+from a vendor row still does the buying. "Vendor Map Pins:" under AT
+VENDORS on the Mail & Vendors page (`vendorMapPins`, off unless ticked,
+never rename it) and `/bts vendorpins on|off`. Tested in
+`tools/test_vendorpins.lua`. Not yet seen in game.
+
 ## Recipes Forever added
 
 The owner (2026-10-17): "always add new recipe finds to tradeskills".

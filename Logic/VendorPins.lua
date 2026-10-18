@@ -1,0 +1,298 @@
+-- Blackthornes Tradeskills -- Logic/VendorPins.lua
+-- Which vendors sell what the queue needs for less than the auction house,
+-- and where they stand, for the pins on the world map (UI/VendorPins.lua).
+--
+-- A player asked, the owner said build it (2026-10-18). A vendor gets a pin
+-- when it sells a material the queue still needs (the shopping list's
+-- shortfall) and it's cheaper there than on the auction house, or nobody
+-- lists it there. "Vendor Map Pins" on the Mail & Vendors page
+-- (`vendorMapPins`, off unless ticked, never rename it) and /bts vendorpins.
+--
+-- Where vendors stand: Classic's, shipped in Data/VendorSpots.lua (vendors
+-- that never run out), and every vendor the player opens, learned from its
+-- window (VendorPins:Learn, from Vendor:Scan) and kept account wide in
+-- `vendorSpots[npc ID] = { name, mapID, x, y, side, items, at }` (never
+-- rename it). A learned vendor takes the place of the shipped one, so a
+-- Forever vendor that moved, or one Forever added, shows where it is now.
+-- One whose stock runs out is pinned only while the auction house has
+-- none (limited-stock items take the auction price when listed). Only
+-- vendors of the player's side, or of neither.
+--
+-- Smooth play: the pins are worked out only while the world map shows,
+-- and again only when the map, the queue, the bags, the prices or a
+-- learned vendor moved (UI/VendorPins.lua keeps the key).
+
+local _, ns = ...
+
+local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
+
+local VendorPins = ns.NewModule("VendorPins")
+
+-- Moves whenever a learned vendor changes, so the map draws again.
+VendorPins.version = 0
+-- At most this many learned vendors are kept; the oldest seen goes first.
+VendorPins.MOST_VENDORS = 300
+-- At most this many items a learned vendor.
+VendorPins.MOST_ITEMS = 80
+
+local function Plain(value)
+    local ok, copy = pcall(function()
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
+    return ok and copy or nil
+end
+
+local function Number(value)
+    local ok, copy = pcall(function() return tonumber(value) end)
+    return ok and copy or nil
+end
+
+local function Read(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local result = { pcall(fn, ...) }
+    if not result[1] then return nil end
+    return unpack(result, 2)
+end
+
+function VendorPins:IsOn()
+    return ns.Config ~= nil and ns.Config:Get("vendorMapPins") == true
+end
+
+function VendorPins:SetOn(on)
+    ns.Config:Set("vendorMapPins", on == true)
+    self.version = self.version + 1
+end
+
+--- The learned vendors, account wide.
+function VendorPins:Store()
+    if not ns.db then return {} end
+    if type(ns.db.vendorSpots) ~= "table" then ns.db.vendorSpots = {} end
+    return ns.db.vendorSpots
+end
+
+--- "A", "H", or "" for a vendor of neither side.
+function VendorPins.Side(faction)
+    if faction == "Alliance" then return "A" end
+    if faction == "Horde" then return "H" end
+    return ""
+end
+
+--- The NPC ID inside a creature's GUID ("Creature-0-1-2-3-4-<id>-...").
+function VendorPins.NpcID(guid)
+    local ok, id = pcall(function()
+        local kind, npc = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)")
+        if kind == "Creature" or kind == "Vehicle" then return tonumber(npc) end
+    end)
+    return ok and id or nil
+end
+
+--- Where the player stands: the map ID and 0-100 on it.
+local function PlayerSpot()
+    local map = type(_G.C_Map) == "table" and _G.C_Map or nil
+    if not map then return nil end
+    local mapID = Number(Read(map.GetBestMapForUnit, "player"))
+    if not mapID then return nil end
+    local pos = Read(map.GetPlayerMapPosition, mapID, "player")
+    if type(pos) ~= "table" and type(pos) ~= "userdata" then return nil end
+    local ok, x, y = pcall(function() return pos:GetXY() end)
+    x, y = ok and Number(x), ok and Number(y)
+    if not (x and y) or (x == 0 and y == 0) then return nil end
+    return mapID, math.floor(x * 1000 + 0.5) / 10, math.floor(y * 1000 + 0.5) / 10
+end
+
+--- Kept from a vendor window: which items it sells for gold and where it
+--- stands. Only materials (reagents and trade goods, or what the shipped
+--- vendor prices know), so the save holds no gear or food lists.
+-- @param items  Vendor.merchantItems: { [itemID] = { price, numAvailable, extendedCost } }
+-- @return true when kept
+function VendorPins:Learn(items)
+    if type(items) ~= "table" then return false end
+    local npcID = self.NpcID(Read(_G.UnitGUID, "npc"))
+    local name = Plain(Read(_G.UnitName, "npc"))
+    if not (npcID and name) then return false end
+    local mapID, x, y = PlayerSpot()
+    if not mapID then return false end
+
+    local sells, count = {}, 0
+    for itemID, item in pairs(items) do
+        if count >= self.MOST_ITEMS then break end
+        if type(item) == "table" and not item.extendedCost and (item.price or 0) > 0 then
+            local material = ns.VENDOR_PRICES ~= nil and ns.VENDOR_PRICES[itemID] ~= nil
+            if not material and type(_G.C_Item) == "table" then
+                local classID = select(6, Read(_G.C_Item.GetItemInfoInstant, itemID))
+                material = classID == 5 or classID == 7
+            end
+            if material then
+                sells[itemID] = (item.numAvailable or -1) < 0
+                count = count + 1
+            end
+        end
+    end
+    if count == 0 then return false end
+
+    local store = self:Store()
+    local was = store[npcID]
+    local side = self.Side(Plain(Read(_G.UnitFactionGroup, "npc")))
+    store[npcID] = { name = name, mapID = mapID, x = x, y = y, side = side, items = sells, at = time() }
+
+    -- The same vendor read again (every buy scans it) is no news.
+    local same = type(was) == "table" and was.mapID == mapID and was.side == side
+        and math.abs((was.x or 0) - x) < 1 and math.abs((was.y or 0) - y) < 1
+        and type(was.items) == "table"
+    if same then
+        for itemID, unlimited in pairs(sells) do
+            if was.items[itemID] ~= unlimited then same = false break end
+        end
+        for itemID in pairs(was.items) do
+            if sells[itemID] == nil then same = false break end
+        end
+    end
+    if not same then self.version = self.version + 1 end
+
+    self:Trim(store)
+    return true
+end
+
+--- Let the oldest seen go once there are more than MOST_VENDORS.
+function VendorPins:Trim(store)
+    local ids = {}
+    for npcID, record in pairs(store) do
+        ids[#ids + 1] = { npcID, type(record) == "table" and record.at or 0 }
+    end
+    if #ids <= self.MOST_VENDORS then return end
+    table.sort(ids, function(a, b) return a[2] < b[2] end)
+    for i = 1, #ids - self.MOST_VENDORS do store[ids[i][1]] = nil end
+end
+
+--- What the queue still needs that a vendor sells for less than the
+--- auction house (or that nobody lists there):
+--- { [itemID] = { need, vendor (copper each), auction (copper each or nil) } }
+function VendorPins:Wanted()
+    local wanted = {}
+    if not (ns.Queue and ns.Queue.GetShoppingList) then return wanted end
+    local ok, list = pcall(ns.Queue.GetShoppingList, ns.Queue)
+    if not ok or type(list) ~= "table" then return wanted end
+    for _, line in ipairs(list) do
+        local vendor, auction = line.vendorUnit, line.auctionUnit
+        local skip = ns.Cost and ns.Cost.SkipsVendor and auction and ns.Cost:SkipsVendor(line.itemID)
+        if (line.shortfall or 0) > 0 and vendor and vendor > 0 and not skip
+            and (not auction or vendor < auction) then
+            wanted[line.itemID] = { need = line.shortfall, vendor = vendor, auction = auction }
+        end
+    end
+    return wanted
+end
+
+--- A shipped zone's map ID: Classic's (Forever's match it), else the
+--- client's by name. Kept once found.
+function VendorPins:MapOf(zone)
+    self.zoneMaps = self.zoneMaps or {}
+    local known = self.zoneMaps[zone]
+    if known ~= nil then return known or nil end
+    local waypoints = ns.Waypoints
+    local mapID = waypoints and waypoints.ZONE_MAPS and waypoints.ZONE_MAPS[zone]
+    if not mapID and waypoints and waypoints.MapFor then mapID = waypoints:MapFor(zone) end
+    -- Only a find is kept: on a loading screen the client knows no maps yet.
+    if mapID then self.zoneMaps[zone] = mapID end
+    return mapID
+end
+
+local function Allowed(side, mine)
+    return side == nil or side == "" or mine == nil or side == mine
+end
+
+--- The vendors to pin on one map: { { npcID, name, mapID, x, y, items =
+--- { { itemID, count, cost, saving } }, saving } }, the biggest saving first.
+-- @param wanted  optional, VendorPins:Wanted()
+function VendorPins:For(mapID, wanted)
+    local vendors = {}
+    if not mapID then return vendors end
+    wanted = wanted or self:Wanted()
+    if next(wanted) == nil then return vendors end
+
+    local playerSide = Plain(Read(_G.UnitFactionGroup, "player"))
+    local mine = playerSide and self.Side(playerSide) or nil
+    if mine == "" then mine = nil end
+
+    local function Add(npcID, name, x, y, sells)
+        local entry = { npcID = npcID, name = name, mapID = mapID, x = x, y = y, items = {}, saving = 0 }
+        for _, itemID in ipairs(sells) do
+            local want = wanted[itemID]
+            local saving = want.auction and (want.auction - want.vendor) * want.need or nil
+            entry.items[#entry.items + 1] = { itemID = itemID, count = want.need,
+                cost = want.vendor * want.need, saving = saving }
+            entry.saving = entry.saving + (saving or 0)
+        end
+        if #entry.items == 0 then return end
+        table.sort(entry.items, function(a, b)
+            if a.cost ~= b.cost then return a.cost > b.cost end
+            return a.itemID < b.itemID
+        end)
+        vendors[#vendors + 1] = entry
+    end
+
+    local store = self:Store()
+    for npcID, record in pairs(store) do
+        if type(record) == "table" and record.mapID == mapID and record.x and record.y
+            and Allowed(record.side, mine) and type(record.items) == "table" then
+            local sells = {}
+            for itemID, unlimited in pairs(record.items) do
+                local want = wanted[itemID]
+                if want and (unlimited or not want.auction) then sells[#sells + 1] = itemID end
+            end
+            table.sort(sells)
+            Add(npcID, record.name, record.x, record.y, sells)
+        end
+    end
+
+    local spots = ns.VENDOR_SPOTS
+    if spots and spots.ITEMS and spots.NPCS then
+        local byNpc = {}
+        for itemID in pairs(wanted) do
+            for _, npcID in ipairs(spots.ITEMS[itemID] or {}) do
+                if store[npcID] == nil then
+                    byNpc[npcID] = byNpc[npcID] or {}
+                    table.insert(byNpc[npcID], itemID)
+                end
+            end
+        end
+        for npcID, sells in pairs(byNpc) do
+            local npc = spots.NPCS[npcID]
+            if npc and Allowed(npc[5], mine) and self:MapOf(npc[2]) == mapID then
+                table.sort(sells)
+                Add(npcID, npc[1], npc[3], npc[4], sells)
+            end
+        end
+    end
+
+    table.sort(vendors, function(a, b)
+        if a.saving ~= b.saving then return a.saving > b.saving end
+        return a.npcID < b.npcID
+    end)
+    return vendors
+end
+
+--- Put the game's map pin, or TomTom's arrow when it is installed, on a vendor.
+-- @return true, or false and why
+function VendorPins:ShowTheWay(vendor)
+    local waypoints = ns.Waypoints
+    if not (waypoints and vendor) then return false, "nospot" end
+    local place = { mapID = vendor.mapID, x = vendor.x, y = vendor.y }
+    if waypoints:HasTomTom() then return waypoints:TomTom(place, vendor.name) end
+    return waypoints:Pin(place)
+end
+
+ns.RegisterCommand("vendorpins", L["Vendor Map Pins (on or off)"], function(args)
+    local word = (args or ""):lower():match("^%s*(%a+)")
+    local on
+    if word == "on" then
+        on = true
+    elseif word == "off" then
+        on = false
+    else
+        on = not VendorPins:IsOn()
+    end
+    VendorPins:SetOn(on)
+    ns.Print(on and L["Vendor Map Pins: on."] or L["Vendor Map Pins: off."])
+    if ns.UI and ns.UI.RefreshActiveTab then ns.UI:RefreshActiveTab() end
+end)
