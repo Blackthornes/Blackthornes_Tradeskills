@@ -102,10 +102,18 @@ ns.Prices = {
 -- Shops, as Cost prices them: a vendor's price beats the auction house's.
 -- itemID -> { price, limited }
 local shops = {}
+local makes = {}
 ns.Cost = {
     GetReagentUnitCost = function(_, itemID)
         if shops[itemID] then return shops[itemID][1], "vendor" end
         return prices[itemID], "buy"
+    end,
+    -- Made from bought materials: itemID -> { recipeID, copper for one }.
+    FindAnyRecipeForItem = function(_, itemID) return makes[itemID] and makes[itemID][1] end,
+    GetMaterialValue = function(_, recipeID)
+        for _, make in pairs(makes) do
+            if make[1] == recipeID then return make[2] end
+        end
     end,
 }
 ns.Vendor = { IsLimited = function(_, itemID) return shops[itemID] ~= nil and shops[itemID][2] == true end }
@@ -403,7 +411,7 @@ ns.Theme = {
     FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
 }
 
-local checkboxes, lists, dropdowns, buttons = {}, {}, {}, {}
+local checkboxes, lists, dropdowns, buttons, numberBoxes = {}, {}, {}, {}, {}
 local searched
 ns.Widgets = {
     CreateDropdown = function(_, options, onSelect, opts)
@@ -418,6 +426,11 @@ ns.Widgets = {
         return box
     end,
     CreateButton = function(_, text, onClick) local button = Stub({ onClick = onClick }); buttons[text] = button; return button end,
+    CreateNumberBox = function(_, opts)
+        local box = Stub({ opts = opts, editBox = Stub(), SetValue = function(self, value) self.value = value end })
+        numberBoxes[#numberBoxes + 1] = box
+        return box
+    end,
     ShowItemTooltip = function() return true end,
     CreateScrollList = function(_, opts)
         local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end })
@@ -440,6 +453,23 @@ ns.VendorFlips = {
     MIN_RESALE_SCANS = 3,
 }
 ns.Demand = { TooltipText = function() return nil end }
+
+-- Light Leather made from Ruined Leather Scraps, three a craft.
+local LEATHER_RECIPE, SCRAPS = 2881, 2934
+ns.Recipes = {
+    GetAny = function(_, recipeID)
+        if recipeID == LEATHER_RECIPE then
+            return { quantityMin = 1, quantityMax = 1, reagents = { { itemID = SCRAPS, quantity = 3 } } }
+        end
+    end,
+}
+local many
+ns.ShoppingLists = { SearchMany = function(_, ids, counts) many = { ids = ids, counts = counts }; return true end }
+local queued = {}
+ns.Queue = {
+    Find = function(_, recipeID) if queued[recipeID] then return 1, { quantity = queued[recipeID] } end end,
+    Ensure = function(_, recipeID, quantity) queued[recipeID] = quantity; return true end,
+}
 
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 
@@ -466,7 +496,8 @@ list.opts.updateRow(row, list.data[1])
 -- Right to left: PER FAVOR, TOTAL, BUNDLE, CRATE, FAVOR.
 check("PER FAVOR shows a price", row.cells[1].text ~= "" and row.cells[1].color == "accent")
 check("FAVOR shows what it pays", row.cells[5].text == "5")
-check("the name says how many are carried", row.name.text == "Apprentice Herbs  (1)")
+check("the name is the crate alone", row.name.text == "Apprentice Herbs")
+check("HAVE counts the crates in your bags", row.cells[6].text == "1")
 
 local unknown = Row(list.data, "artisan-ore")
 list.opts.updateRow(row, unknown)
@@ -491,7 +522,37 @@ check("a learned reward says how often it was seen", Showing("seen on 2 turn%-in
 buttons["Search bundle"].onClick()
 check("the bundle button searches for its material", sent[#sent] == SILVERLEAF)
 list.opts.onClick(Row(list.data, "apprentice-herbs"), 1, "RightButton")
-check("right-click searches for the crate", sent[#sent] == HERBS)
+check("right-click searches for the crate and its cheapest bundle", many and many.ids[1] == HERBS
+    and many.counts[HERBS] == 1 and many.counts[SILVERLEAF] == 20)
+check("and says so in chat", printed[#printed]:find("^Searching the auction house for") ~= nil)
+
+local buyBox = numberBoxes[#numberBoxes]
+buyBox.opts.onChange(2)
+many = nil
+buttons["Search Both"].onClick()
+check("Search Both buys as many as the Buy box says", many and many.counts[HERBS] == 2
+    and many.counts[SILVERLEAF] == 40)
+buyBox.opts.onChange(1)
+
+-- Light Leather made for 50 each beats 80 bought.
+makes[LEATHER] = { LEATHER_RECIPE, 50 }
+local made = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-textiles").best
+check("a bundle cheaper made is priced made", made.itemID == LEATHER and made.made == true
+    and made.cost == 1000 and made.buy == 1600 and made.recipeID == LEATHER_RECIPE)
+searched("")
+list.opts.updateRow(row, Row(list.data, "apprentice-textiles"))
+check("BUNDLE says Make", row.cells[3].text:find("Make") ~= nil)
+list.opts.onClick(Row(list.data, "apprentice-textiles"), 1, "LeftButton")
+check("the detail says making is cheaper", Showing("^Cheaper to make:") ~= nil)
+many = nil
+buttons["Search Both"].onClick()
+check("Search Both looks for what makes the bundle", many and many.ids[1] == TEXTILES
+    and many.counts[SCRAPS] == 60 and not many.counts[LEATHER])
+buttons["Queue Craft"].onClick()
+check("Queue Craft queues the crafts for the bundle", queued[LEATHER_RECIPE] == 20
+    and printed[#printed] == "Added 20 Light Leather to your craft queue.")
+makes[LEATHER] = nil
+searched("")
 
 list.opts.onClick(Row(list.data, "artisan-ore"), 1, "LeftButton")
 printed = {}

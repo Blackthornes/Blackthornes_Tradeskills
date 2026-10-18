@@ -104,6 +104,9 @@ ns.Inventory = {
     GetBagCounts = function() return bags end,
     GetBagCount = function(_, itemID) return bags[itemID] or 0 end,
 }
+-- The bank and mail, on top of the bags, for the HAVE column.
+local banked = {}
+ns.Inventory.GetOwnedCount = function(_, itemID) return (bags[itemID] or 0) + (banked[itemID] or 0) end
 
 local side, standing = "Alliance", 4500
 UnitFactionGroup = function() return side end
@@ -293,6 +296,7 @@ print("\nthe view on the Deals tab")
 
 standing = 4500
 bags = { [ROD_WRIT] = 2 }
+banked = { [ROD_WRIT] = 1 }
 
 local function Stub(fields)
     local frame = fields or {}
@@ -336,7 +340,7 @@ ns.Theme = {
     FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
 }
 
-local lists, dropdowns, buttons = {}, {}, {}
+local lists, dropdowns, buttons, numberBoxes = {}, {}, {}, {}
 local searched
 ns.Widgets = {
     CreateDropdown = function(_, options, onSelect, opts)
@@ -348,6 +352,11 @@ ns.Widgets = {
     CreateSearchBox = function(_, _, onChange) searched = onChange; return Stub() end,
     CreateCheckbox = function(_, _, onToggle, initial) return Stub({ onToggle = onToggle, initial = initial }) end,
     CreateButton = function(_, text, onClick) local button = Stub({ onClick = onClick }); buttons[text] = button; return button end,
+    CreateNumberBox = function(_, opts)
+        local box = Stub({ opts = opts, editBox = Stub(), SetValue = function(self, value) self.value = value end })
+        numberBoxes[#numberBoxes + 1] = box
+        return box
+    end,
     ShowItemTooltip = function() return true end,
     CreateScrollList = function(_, opts)
         local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end })
@@ -370,6 +379,24 @@ ns.VendorFlips = {
     MIN_RESALE_SCANS = 3,
 }
 ns.Demand = { TooltipText = function() return nil end }
+
+-- The Golden Rod's recipe: one rod a craft from two bars.
+local BAR = 3576
+ns.Recipes = {
+    GetAny = function(_, recipeID)
+        if recipeID == ROD_RECIPE then
+            return { quantityMin = 1, quantityMax = 1, reagents = { { itemID = BAR, quantity = 2 } } }
+        end
+    end,
+}
+local many
+ns.ShoppingLists = { SearchMany = function(_, ids, counts) many = { ids = ids, counts = counts }; return true end }
+local queued = {}
+ns.Queue = {
+    Find = function(_, recipeID) if queued[recipeID] then return 1, { quantity = queued[recipeID] } end end,
+    Ensure = function(_, recipeID, quantity) queued[recipeID] = quantity; return true end,
+}
+assert(loadfile(lfs_cwd .. "/Logic/MerchantsFavor.lua"))("Blackthornes_TS", ns)
 
 assert(loadfile(lfs_cwd .. "/UI/Columns.lua"))("Blackthornes_TS", ns)
 
@@ -412,7 +439,9 @@ list.opts.updateRow(row, Row(list.data, ROD))
 -- Right to left: PER REP, TOTAL, ITEM, WRIT, REP.
 check("PER REP shows a price", row.cells[1].text ~= "" and row.cells[1].color == "accent")
 check("REP shows the learned figure", row.cells[5].text == "80" and row.cells[5].color == "text")
-check("the name says how many writs are carried", row.name.text == "Golden Rod  (2)")
+check("the name is the item alone", row.name.text == "Golden Rod")
+check("HAVE counts the writs in your bags, bank and mail", row.cells[6].text == "3")
+check("an item cheaper made says Make", row.cells[3].text:find("Make") ~= nil)
 
 list.opts.updateRow(row, Row(list.data, SHOT))
 check("an order for many says how many", row.name.text == "200 Crafted Solid Shot")
@@ -422,7 +451,30 @@ check("the detail shows the item made", Showing("^Golden Rod %(made%)$") ~= nil)
 buttons["Search item"].onClick()
 check("the item button searches for the item", sent[#sent] == ROD)
 list.opts.onClick(Row(list.data, ROD), 1, "RightButton")
-check("right-click searches for the writ", sent[#sent] == ROD_WRIT)
+check("right-click searches for the writ and what makes the item", many and many.ids[1] == ROD_WRIT
+    and many.ids[2] == BAR and many.counts[ROD_WRIT] == 1 and many.counts[BAR] == 2)
+check("and says so in chat", printed[#printed]:find("^Searching the auction house for") ~= nil)
+check("the detail says making is cheaper", Showing("^Cheaper to make:") ~= nil)
+
+local buyBox = numberBoxes[#numberBoxes]
+buyBox.opts.onChange(3)
+many = nil
+buttons["Search Both"].onClick()
+check("Search Both buys as many as the Buy box says", many and many.counts[ROD_WRIT] == 3
+    and many.counts[BAR] == 6)
+buttons["Queue Craft"].onClick()
+check("Queue Craft queues the crafts for the Buy box", queued[ROD_RECIPE] == 3)
+buttons["Queue Craft"].onClick()
+check("and a second click adds to them", queued[ROD_RECIPE] == 6
+    and printed[#printed] == "Added 3 Golden Rod to your craft queue.")
+buyBox.opts.onChange(1)
+
+local wisdom = Row(list.data, WISDOM)
+list.opts.onClick(wisdom, 1, "LeftButton")
+many = nil
+buttons["Search Both"].onClick()
+check("a bought item is searched with its writ, as many as it asks for", many and many.ids[1] == WISDOM_WRIT
+    and many.counts[WISDOM] == wisdom.count)
 
 list.opts.onClick(Row(list.data, SHOT), 1, "LeftButton")
 printed = {}
