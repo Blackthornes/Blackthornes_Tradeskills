@@ -502,8 +502,11 @@ can take everything on one of the player's shopping lists, so it reads
 them, inside a pcall:
 
 ```lua
-_G.BlackthornesTS.Butler:Lists()   -- { { name, items = { [itemID] = want } } }, ShoppingLists.version; or nil
+_G.BlackthornesTS.Butler:Lists()   -- { { name, id, items = { [itemID] = want } } }, ShoppingLists.version; or nil
 ```
+
+`id` (2026-10-19) is the list's stable id (see "List rules"); Butler's
+Lists page keeps its own Mail To and Keep Here for a list by it.
 
 The player's own lists only (`ShoppingLists:Readable`), never the craft
 queue's, fresh tables each time; nothing is written. Tested in
@@ -1274,6 +1277,30 @@ takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
 `shoppingLists = { { name, items = { { id, want } } } }` (never rename it).
 Tested in `tools/test_shoppinglists.lua` and
 `tools/test_shoppinglistsview.lua`.
+
+## List rules
+
+The owner said build it (2026-10-19, from a mockup; he approved the words):
+a list can carry rules every item on it follows, like a group in other
+auction addons. A **Rules** button on each list's row opens "Rules for
+NAME" (`UI/ListRulesWindow.lua`, the house frame, dark glass rows): WHEN
+YOU SELL Lowest Price, Keep Listed (stacks at a time), Post For, Keep in
+Bags (of each); WHEN YOU BUY Most I'll Pay (each); Clear. The row shows
+"N rules". `Logic/ListRules.lua` keeps them on the list itself,
+`shoppingLists[i].rules = { floor, listed, duration, bags, maxPay }`, and
+each list gets a stable `id` from `shoppingListNextId` (never rename
+`rules`, `id` or `shoppingListNextId`). None is set on a new list, so
+nothing changes until the player sets one. An item follows the first list
+on the Lists view that holds it and has a rule (`ListRules:For`, laid out
+once per `ShoppingLists.version`). Where they reach: `Profit:ChoosePostPrice`
+(Lowest Price, basis "list", unless the Prices tab has the item's own
+price: that wins), `Posting:GetPostable` (Keep in Bags, the bigger keep
+wins with `SisterKeeps`; Keep Listed against `Auctions:GetOwnPostedCount`,
+"Waiting, already N up"), `Posting:DurationFor` (Post For) and
+`BuyQuantity:Fill` (Most I'll Pay fills the box only with units at or
+under it, `BuyQuantity.UnitsUpTo`). The Sell list tags a row with its list
+or "Own price" (`PostPanel._ListTag`). Tested in `tools/test_listrules.lua`.
+Not yet seen in game.
 
 ## The Blizzard window style
 
