@@ -199,6 +199,28 @@
 -- count for the buy box (UI:SearchAuctionHouse) and it answers true, "one",
 -- so Butler's next click sends the rest. Never raises.
 --
+-- Butler's "Craft When It Pays More" (2026-10-19, a player asked, the
+-- owner said build it, off unless ticked in Butler) asks, only while that
+-- is on, whether a bag item is worth more made into something:
+--
+--   _G.BlackthornesTS.Butler:CraftFor(item, carried)   -- a table, or nil; reads only
+--   _G.BlackthornesTS.Butler:QueueCraft(recipeID, crafts)  -- true, or false and why
+--
+-- CraftFor looks only at recipes the character playing knows (not a
+-- dropped profession) that use the item and make something to sell. Each
+-- is valued as the Profit tab's Best does (Profit:Analyse "best": auction,
+-- vendor or disenchant, after the cut and the deposit; an auction the
+-- output rarely sells at counts at Butler.SLOW of itself; an estimate with
+-- no real price never counts), less the other materials at their usual
+-- cost (Cost:GetCraftCost, owned ones at their worth). The best answers
+-- { recipeID, name (the recipe's), itemID (what it makes), per (how many
+-- of the item one craft uses), crafts (how many the `carried` copies make,
+-- else the bags'), perItem (copper one of the item is worth made into it),
+-- needs = { { itemID, count } } (other materials the bags lack for those
+-- crafts) }. nil when nothing it knows uses the item, or for no craft.
+-- Butler weighs perItem against its own best price. QueueCraft is
+-- Queue:Ensure: at least that many crafts queued.
+--
 -- Butler's CLAUDE.md and its Logic/Sisters.lua lean on these calls and these
 -- fields: keep them stable, or change both repos together.
 
@@ -697,6 +719,142 @@ function Butler:Advise(item)
     local ok, answer = pcall(Answer, itemID, link)
     if ok then return answer end
     return nil
+end
+
+--------------------------------------------------------------------------------
+-- Crafts worth more than the item (Butler's "Craft When It Pays More")
+--------------------------------------------------------------------------------
+
+-- An auction the output rarely sells at counts at this much of itself, as
+-- Butler counts a slow seller of its own.
+Butler.SLOW = 0.75
+
+--- [itemID] = { recipeID, ... } for the recipes the character playing knows
+--- that use it and make an item.
+local function ReagentIndex()
+    local index = {}
+    local recipes = ns.Recipes
+    if not (recipes and recipes.GetAll) then return index end
+    local selfKey = SelfKey()
+    for recipeID, recipe in pairs(recipes:GetAll() or {}) do
+        if type(recipe) == "table" and recipe.outputItemID
+            and not (recipes.IsDropped and recipes:IsDropped(recipe, selfKey)) then
+            for _, reagent in ipairs(type(recipe.reagents) == "table" and recipe.reagents or {}) do
+                local id = type(reagent) == "table" and tonumber(reagent.itemID)
+                if id and id ~= recipe.outputItemID then
+                    local list = index[id] or {}
+                    index[id] = list
+                    list[#list + 1] = recipeID
+                end
+            end
+        end
+    end
+    return index
+end
+
+--- What one craft of a recipe puts in the pocket, sold the best way: copper,
+--- or nil when it has no real price.
+local function CraftNet(recipeID)
+    local profit = ns.Profit
+    if not (profit and profit.Analyse) then return nil end
+    local ok, analysis = pcall(profit.Analyse, profit, recipeID, SelfKey(), "best")
+    if not ok or type(analysis) ~= "table" or not analysis.priceable then return nil end
+    local way = analysis.ways and analysis.via and analysis.ways[analysis.via]
+    if type(way) ~= "table" or not way.revenue then return nil end
+    if way.basis == "derived" or way.basis == "uncontested" then return nil end
+    local net = way.revenue - (way.cut or 0) - (way.deposit or 0)
+    if analysis.via == "auction" then
+        local reading = ns.Demand and ns.Demand.Get and ns.Demand:Get(analysis.outputItemID)
+        if reading and reading.level == "low" then net = net * Butler.SLOW end
+    end
+    return net
+end
+
+--- One recipe weighed for one item, or nil.
+local function Weigh(itemID, recipeID, carried)
+    local recipe = ns.Recipes:Get(recipeID)
+    if not recipe then return nil end
+    local per = 0
+    for _, reagent in ipairs(recipe.reagents or {}) do
+        if tonumber(reagent.itemID) == itemID then per = per + (tonumber(reagent.quantity) or 1) end
+    end
+    if per <= 0 then return nil end
+    local crafts = math.floor(carried / per)
+    if crafts < 1 then return nil end
+
+    local net = CraftNet(recipeID)
+    if not net then return nil end
+
+    local okCost, cost = pcall(ns.Cost.GetCraftCost, ns.Cost, recipeID, nil, nil, { valueOwned = true })
+    if not okCost or type(cost) ~= "table" or not cost.priceable then return nil end
+
+    local others, needs = 0, {}
+    for _, line in ipairs(cost.reagents or {}) do
+        if line.itemID ~= itemID then
+            others = others + (line.lineCost or 0)
+            local want = (line.quantity or 0) * crafts
+            local inBags = line.inBags or 0
+            if want > inBags then needs[#needs + 1] = { itemID = line.itemID, count = want - inBags } end
+        end
+    end
+
+    return {
+        recipeID = recipeID,
+        name = recipe.name,
+        itemID = recipe.outputItemID,
+        per = per,
+        crafts = crafts,
+        perItem = math.floor((net - others) / per),
+        needs = needs,
+    }
+end
+
+--- The craft that makes one of this item worth the most, or nil.
+-- Only while Butler's setting is on: Butler asks nothing otherwise.
+function Butler:CraftFor(item, carried)
+    local itemID = tonumber(item)
+    if not itemID and type(item) == "string" then itemID = tonumber(item:match("item:(%d+)")) end
+    if not itemID then return nil end
+    local ok, answer = pcall(function()
+        local kept = Lookup()
+        kept.reagents = kept.reagents or ReagentIndex()
+        local list = kept.reagents[itemID]
+        if not list then return nil end
+        local have = tonumber(carried)
+        if not have and ns.Inventory and ns.Inventory.GetBagCount then
+            have = ns.Inventory:GetBagCount(itemID)
+        end
+        have = have or 0
+
+        kept.crafts = kept.crafts or {}
+        local best
+        for _, recipeID in ipairs(list) do
+            local key = recipeID .. ":" .. itemID .. ":" .. have
+            local weighed = kept.crafts[key]
+            if weighed == nil then
+                weighed = Weigh(itemID, recipeID, have) or false
+                kept.crafts[key] = weighed
+            end
+            if weighed and (not best or weighed.perItem > best.perItem) then best = weighed end
+        end
+        if not best then return nil end
+        local needs = {}
+        for i, need in ipairs(best.needs) do needs[i] = { itemID = need.itemID, count = need.count } end
+        return { recipeID = best.recipeID, name = best.name, itemID = best.itemID, per = best.per,
+            crafts = best.crafts, perItem = best.perItem, needs = needs }
+    end)
+    if ok then return answer end
+    return nil
+end
+
+--- Queue at least `crafts` of a recipe, from Butler's Queue button.
+-- @return true, or false and why; never raises
+function Butler:QueueCraft(recipeID, crafts)
+    local queue = ns.Queue
+    if not (queue and queue.Ensure) then return false, L["the queue would not take it"] end
+    local ok, done, why = pcall(queue.Ensure, queue, recipeID, crafts)
+    if ok and done then return true end
+    return false, ok and why or nil
 end
 
 --- Mark an item bought to disenchant, `count` of them (at least one), or
