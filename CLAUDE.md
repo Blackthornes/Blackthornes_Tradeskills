@@ -588,7 +588,18 @@ the one whose materials stop taking the most stacks, less the new stacks
 what it makes takes (`Crafting:SlotsFreed`, from the bags' counts and
 `BagsFull.MaxStack`, kept until `Inventory.changes` or `Queue.version`
 moves). Ties keep queue order, and a craft waits while a ready sub-craft
-of its own (up its `forRecipes` chain) is ready. The stored queue never
+of its own (up its `forRecipes` chain) is ready. Bag space only picks within the
+first profession group with something ready (below), and the crafts the
+player queued come after every sub-craft.
+
+Bars all at once (a player's report, 2026-10-19: forge, anvil, forge):
+`Queue:RebuildDependencies` keeps one sub-craft per recipe and crafter
+(`MergeSubCrafts`, at the deeper level, `forRecipes` joined), counts what
+is held once across levels (`HeldPool`), and lays the sub-crafts out a
+profession at a time, the one feeding another first, deepest first within
+it (`OrderSubCrafts`, `Queue:ProfessionOf`). Nothing saved changes shape;
+sub-crafts are rebuilt as before. Butler's Jobs keeps this order for its
+parts. Tested in `tools/test_stationorder.lua`. The stored queue never
 moves. The button's tooltip says how many slots it frees. "Craft what frees
 bag space first" on the Queue page (`craftFreesSpaceFirst`, on unless
 unticked, never rename it). Tested in `tools/test_freespacefirst.lua`.
