@@ -214,8 +214,9 @@ function VendorPins:For(mapID, wanted)
     local mine = playerSide and self.Side(playerSide) or nil
     if mine == "" then mine = nil end
 
-    local function Add(npcID, name, x, y, sells)
-        local entry = { npcID = npcID, name = name, mapID = mapID, x = x, y = y, items = {}, saving = 0 }
+    local function Add(npcID, name, x, y, sells, zone)
+        local entry = { npcID = npcID, name = name, mapID = mapID, zone = zone, x = x, y = y,
+            items = {}, saving = 0 }
         for _, itemID in ipairs(sells) do
             local want = wanted[itemID]
             local saving = want.auction and (want.auction - want.vendor) * want.need or nil
@@ -260,7 +261,7 @@ function VendorPins:For(mapID, wanted)
             local npc = spots.NPCS[npcID]
             if npc and Allowed(npc[5], mine) and self:MapOf(npc[2]) == mapID then
                 table.sort(sells)
-                Add(npcID, npc[1], npc[3], npc[4], sells)
+                Add(npcID, npc[1], npc[3], npc[4], sells, npc[2])
             end
         end
     end
@@ -272,14 +273,61 @@ function VendorPins:For(mapID, wanted)
     return vendors
 end
 
---- Put the game's map pin, or TomTom's arrow when it is installed, on a vendor.
+local WHY = {
+    nospot = L["no exact spot is known for them"],
+    noclient = L["this client cannot put a pin on the map"],
+    nomap = L["the map for that zone could not be found"],
+}
+
+--- The zone a vendor stands in, for the chat line: the client's name for
+--- its map, else the shipped zone.
+function VendorPins.ZoneName(vendor)
+    local map = type(_G.C_Map) == "table" and _G.C_Map or nil
+    local info = map and vendor.mapID and Read(map.GetMapInfo, vendor.mapID)
+    if type(info) == "table" then
+        local ok, name = pcall(function() return info.name end)
+        name = ok and Plain(name)
+        if name then return name end
+    end
+    return vendor.zone
+end
+
+--- What the vendor has for the queue, for the chat line: its first item.
+local function WhatFor(vendor)
+    local first = vendor.items and vendor.items[1]
+    local util = ns.Util
+    if not (first and util and util.GetItemLabel) then return vendor.name end
+    local name = util.GetItemLabel(first.itemID)
+    if util.Uncolored then name = util.Uncolored(name) end
+    if type(name) == "string" and name ~= "" then return name end
+    return vendor.name
+end
+
+--- Put TomTom's arrow on a vendor when TomTom is installed, else (or when
+--- TomTom says no) the game's map pin, and say which in chat. A click must
+--- never go by with nothing to show for it.
 -- @return true, or false and why
 function VendorPins:ShowTheWay(vendor)
     local waypoints = ns.Waypoints
     if not (waypoints and vendor) then return false, "nospot" end
     local place = { mapID = vendor.mapID, x = vendor.x, y = vendor.y }
-    if waypoints:HasTomTom() then return waypoints:TomTom(place, vendor.name) end
-    return waypoints:Pin(place)
+    local ok, why
+    if waypoints:HasTomTom() then ok, why = waypoints:TomTom(place, vendor.name) end
+    if not ok then ok, why = waypoints:Pin(place) end
+
+    local who, what, zone = vendor.name or L["them"], WhatFor(vendor), VendorPins.ZoneName(vendor)
+    if ok then
+        self.pinned = vendor.npcID
+        self.version = self.version + 1
+        ns.Print(L.Format("Pinned %s (%s) on your map, %s %s, %s.", who, what,
+            zone or "?", vendor.x, vendor.y))
+    elseif zone then
+        ns.Print(L.Format("Can't pin %s (%s): %s. They are in %s.", who, what,
+            WHY[why] or WHY.nospot, zone))
+    else
+        ns.Print(L.Format("Can't pin %s (%s): %s.", who, what, WHY[why] or WHY.nospot))
+    end
+    return ok == true, why
 end
 
 ns.RegisterCommand("vendorpins", L["Vendor Map Pins (on or off)"], function(args)

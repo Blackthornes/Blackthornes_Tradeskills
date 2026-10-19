@@ -82,6 +82,16 @@ local DURATIONS = {
 
 Posting.DURATIONS = DURATIONS
 
+--- How long an item goes up for: its list's Post For (Logic/ListRules.lua),
+--- else the length picked in the drawer and on the Post tab.
+function Posting:DurationFor(itemID)
+    if ns.ListRules then
+        local ok, duration = pcall(ns.ListRules.Duration, ns.ListRules, itemID)
+        if ok and tonumber(duration) then return duration end
+    end
+    return ns.Config:Get("postDuration") or 2
+end
+
 --------------------------------------------------------------------------------
 -- Capability
 --------------------------------------------------------------------------------
@@ -630,7 +640,7 @@ function Posting:GetCachedUnitDeposit(itemID)
     if not record then return nil end
 
     -- A deposit quoted for a different listing length is not this one.
-    if record.duration ~= (ns.Config:Get("postDuration") or 2) then return nil end
+    if record.duration ~= self:DurationFor(itemID) then return nil end
 
     return record.unit
 end
@@ -720,7 +730,7 @@ function Posting:GetDeposit(itemID, quantity)
         return Posting.DepositFromRecord(record, quantity)
     end
 
-    local duration = ns.Config:Get("postDuration") or 2
+    local duration = self:DurationFor(itemID)
 
     if ns.Scanner:IsCommodity(itemID) then
         if Util.HasFunction("C_AuctionHouse.CalculateCommodityDeposit") then
@@ -1119,15 +1129,38 @@ function Posting:GetPostable(opts)
             -- (showHeld), so the player can list it by hand, but List all
             -- and Post Crafted never pick it (GetNextPostable).
             local heldAll, kept, keptWhy
-            if count and count > 0 and ns.SisterKeeps then
-                local ok, hold, why = pcall(ns.SisterKeeps.Hold, ns.SisterKeeps, itemID, held, count, price)
-                hold = ok and tonumber(hold) or 0
-                if hold > 0 and type(why) == "string" then
+            -- The list the item is on (Logic/ListRules.lua): its Keep in
+            -- Bags is one more keep, the bigger one wins.
+            local listRule = ns.ListRules and ns.ListRules:For(itemID)
+            if count and count > 0 then
+                local hold, why = 0, nil
+                if ns.SisterKeeps then
+                    local ok, sister, sisterWhy = pcall(ns.SisterKeeps.Hold, ns.SisterKeeps, itemID, held, count, price)
+                    sister = ok and tonumber(sister) or 0
+                    if sister > 0 and type(sisterWhy) == "string" then hold, why = sister, sisterWhy end
+                end
+                local bags = listRule and listRule.rules.bags
+                if bags and bags > hold then
+                    hold, why = bags, L.Format("Following your %s list.", listRule.name)
+                end
+                if hold > 0 and why then
                     if hold >= count then
                         heldAll = why
                     else
                         count, kept, keptWhy = count - hold, hold, why
                     end
+                end
+            end
+
+            -- Keep Listed: no more up than the list allows. Full, it waits
+            -- (dimmed, as a keep: its List button still lists it).
+            local listRoom, listUp
+            if listRule and count and count > 0 and not heldAll then
+                listRoom, listUp = ns.ListRules:ListedRoom(itemID)
+                if listRoom and listRoom <= 0 then
+                    heldAll = L.Format("Waiting, already %d up", listUp)
+                elseif listRoom and listRoom < count then
+                    count = listRoom
                 end
             end
 
@@ -1228,6 +1261,10 @@ function Posting:GetPostable(opts)
                     link = held and Util.LinkSuffix(held.link) and held.link or nil,
                     label = held and Util.LinkSuffix(held.link) and held.link
                         or Util.GetItemLabel(itemID),
+                    -- The list whose rules it follows, for the row's tag,
+                    -- and whether its own price on the Prices tab wins.
+                    listName = listRule and listRule.name or nil,
+                    ownPriceWins = listRule and ns.ListRules:OwnPriceWins(itemID) or nil,
                 }
             end
         end
@@ -1550,7 +1587,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         return false
     end
 
-    local duration = ns.Config:Get("postDuration") or 2
+    local duration = self:DurationFor(itemID)
 
     -- Put back as they were if the game refuses the listing.
     local savedPending = self.pending
@@ -2550,7 +2587,7 @@ function Posting:ResolvePending(posted, appeared, target)
         went = pending.quantity or 1
     end
     if went and ns.SellOut then
-        pcall(ns.SellOut.NotePosted, ns.SellOut, pending.itemID, went, ns.Config:Get("postDuration") or 2)
+        pcall(ns.SellOut.NotePosted, ns.SellOut, pending.itemID, went, Posting:DurationFor(pending.itemID))
     end
     if went and ns.StatsLog then
         -- A commodity goes up as one auction, however many units it holds.

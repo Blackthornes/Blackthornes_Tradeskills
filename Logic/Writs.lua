@@ -413,6 +413,11 @@ function Writs:GetRows()
         -- no writ to buy, so no price and no total (Prices:ListedNow).
         local writPrice, noneListed
         if writID and ns.Prices then writPrice, noneListed = ns.Prices:ListedNow(writID) end
+        -- How many are listed at that price, and in all.
+        local onAHAtPrice, onAHTotal
+        if writID and ns.Prices and ns.Prices.ListedCounts then
+            onAHAtPrice, onAHTotal = ns.Prices:ListedCounts(writID, writPrice)
+        end
 
         local count = writ.count or 1
         local buy, make, recipeID = ItemCosts(writ.item)
@@ -451,6 +456,8 @@ function Writs:GetRows()
             total = total,
             perRep = perRep,
             haveWrits = OwnedCount(writID),
+            onAHAtPrice = onAHAtPrice,
+            onAHTotal = onAHTotal,
             haveItems = BagCount(writ.item),
         }
     end

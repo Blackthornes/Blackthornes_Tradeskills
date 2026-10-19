@@ -152,6 +152,13 @@ local function CreateRow(row)
     row.name:SetPoint("TOPLEFT", 25, -4)
     row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
 
+    -- The list whose rules it follows (Logic/ListRules.lua), or "Own price"
+    -- when its own price on the Prices tab wins, at the end of the name line.
+    if ns.ListRulesUI then
+        row.chip = ns.ListRulesUI.CreateChip(row)
+        row.chip:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
+    end
+
     row.detail = Theme.CreateLabel(row, "tiny", "muted")
     row.detail:SetPoint("TOPLEFT", 8, -18)
     row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -18)
@@ -301,7 +308,32 @@ end
 
 PostPanel._PlaceDetail = PlaceDetail
 
+--- The row's tag: its list's name, or "Own price", and what each means.
+local function ListTag(line)
+    if not line.listName then return nil end
+    if line.ownPriceWins then
+        return L["Own price"], "own", L.Format("On %s, but its own price wins", line.listName)
+    end
+    return line.listName, "list", L.Format("Following your %s list.", line.listName)
+end
+
+PostPanel._ListTag = ListTag
+
 function UpdateRow(row, line)
+    -- The tag first, so the name knows how much room it has.
+    local chip = rawget(row, "chip")
+    if chip then
+        local text, kind, hover = ListTag(line)
+        chip:Set(text, kind, hover)
+        row.name:ClearAllPoints()
+        row.name:SetPoint("TOPLEFT", 25, -4)
+        if text then
+            row.name:SetPoint("TOPRIGHT", chip, "TOPLEFT", -4, 0)
+        else
+            row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -TEXT_INSET, -4)
+        end
+    end
+
     -- Whole, never cut to "...": smaller, then wrapped, when it is long.
     if Theme.SetRowName then Theme.SetRowName(row.name, line.label) else row.name:SetText(line.label) end
     local need = rawget(row.name, "rowNeed")
@@ -418,6 +450,13 @@ local function ShowRowTooltip(row, line)
         GameTooltip:AddLine(" ")
     elseif line.kept and line.keptWhy then
         GameTooltip:AddLine(L.Format("%d kept back: %s", line.kept, line.keptWhy), Theme.Unpack("accent"))
+        GameTooltip:AddLine(" ")
+    end
+
+    -- The list it follows (Logic/ListRules.lua).
+    local _, _, listHover = ListTag(line)
+    if listHover and not (line.held or line.keptWhy == listHover) then
+        GameTooltip:AddLine(listHover, Theme.Unpack("accent"))
         GameTooltip:AddLine(" ")
     end
 

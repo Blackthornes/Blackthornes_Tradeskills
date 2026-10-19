@@ -97,6 +97,10 @@ ns.Prices = {
         if noneListed[itemID] then return nil, true end
         return prices[itemID], false
     end,
+    ListedCounts = function(_, itemID)
+        if noneListed[itemID] then return nil, nil end
+        return 4, 9
+    end,
     Count = function() return 6 end,
 }
 -- Shops, as Cost prices them: a vendor's price beats the auction house's.
@@ -497,7 +501,7 @@ list.opts.updateRow(row, list.data[1])
 check("PER FAVOR shows a price", row.cells[1].text ~= "" and row.cells[1].color == "accent")
 check("FAVOR shows what it pays", row.cells[5].text == "5")
 check("the name is the crate alone", row.name.text == "Apprentice Herbs")
-check("HAVE counts the crates in your bags", row.cells[6].text == "1")
+check("ON AH counts the crates listed at this price", row.cells[6].text == "4" and row.cells[6].color == "text")
 
 local unknown = Row(list.data, "artisan-ore")
 list.opts.updateRow(row, unknown)

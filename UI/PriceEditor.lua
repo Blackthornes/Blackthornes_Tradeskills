@@ -190,6 +190,9 @@ local function MoneyBoxes(parent, onCommit)
     return money
 end
 
+-- Also the list rules window's money boxes (UI/ListRulesWindow.lua).
+PriceEditor.MoneyBoxes = MoneyBoxes
+
 local function RowLabel(parent, text, anchor, y)
     local label = Theme.CreateLabel(parent, "small", "muted")
     label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y)

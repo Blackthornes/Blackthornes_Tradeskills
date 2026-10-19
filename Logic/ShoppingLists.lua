@@ -9,7 +9,10 @@
 -- queue", built from Queue:GetShoppingList and never saved.
 --
 -- Saved account wide in `shoppingLists` (never rename it):
---   { { name = "Potion herbs", items = { { id = 2447, want = 40 }, ... } }, ... }
+--   { { name = "Potion herbs", items = { { id = 2447, want = 40 }, ... },
+--       id = 3, rules = { ... } }, ... }
+-- `id` is made once for each list (`shoppingListNextId`, never rename
+-- either) and `rules` are the list's rules (Logic/ListRules.lua).
 -- in the order the player made them. Nothing else from the save goes in, and
 -- a list is only ever removed by the player (Delete).
 --
@@ -37,6 +40,12 @@ local function Changed()
     ShoppingLists.version = ShoppingLists.version + 1
 end
 
+--- Something about a list changed outside this file (its rules,
+--- Logic/ListRules.lua): move the version so views and lookups redraw.
+function ShoppingLists:Touch()
+    Changed()
+end
+
 --------------------------------------------------------------------------------
 -- Storage
 --------------------------------------------------------------------------------
@@ -53,6 +62,18 @@ local function IsList(list)
     return type(list) == "table" and type(list.name) == "string"
 end
 
+--- Give a list its stable id (a number, made once and kept, never
+--- renamed), so Butler can keep its own rules for a list through a rename.
+local function GiveId(list)
+    if tonumber(list.id) then return end
+    local nextId = math.max(1, math.floor(tonumber(ns.db.shoppingListNextId) or 1))
+    for _, other in ipairs(ns.db.shoppingLists or {}) do
+        if type(other) == "table" and tonumber(other.id) and tonumber(other.id) >= nextId then nextId = tonumber(other.id) + 1 end
+    end
+    list.id = nextId
+    ns.db.shoppingListNextId = nextId + 1
+end
+
 local function Items(list)
     if type(list.items) ~= "table" then list.items = {} end
     return list.items
@@ -63,7 +84,10 @@ end
 function ShoppingLists:Readable()
     local out = {}
     for index, list in ipairs(self:All()) do
-        if IsList(list) then out[#out + 1] = { index = index, list = list } end
+        if IsList(list) then
+            GiveId(list)
+            out[#out + 1] = { index = index, list = list }
+        end
     end
     return out
 end

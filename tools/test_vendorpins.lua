@@ -11,9 +11,14 @@
 --      which run out) and takes the shipped one's place; one whose stock
 --      runs out is pinned only while the auction house has none.
 --   4. Only materials are kept, and reading the same vendor again is no news.
---   5. A click pins the game's map, or hands TomTom the place.
+--   5. A click pins the game's map, or hands TomTom the place, falls back
+--      to the game's pin when TomTom says no or the map takes none, and
+--      says in chat what it did.
 --   6. The hover says the approved words, and the slash command turns it
 --      on and off.
+--   7. The pins look as the owner picked (2026-10-19): the best saving full
+--      size and the rest smaller, the pinned one lit, a badge with how many
+--      items, and names only zoomed in or with four pins or fewer.
 
 -- Tests share one Lua state: every global set here is put back at the end.
 local GLOBALS = { "time", "GetLocale", "UnitGUID", "UnitName", "UnitFactionGroup",
@@ -208,7 +213,45 @@ TomTom = {
 VP:ShowTheWay({ name = "Forever Trader", mapID = 1429, x = 20, y = 80 })
 check("hands TomTom the place", tomtomPlace and tomtomPlace.map, 1429)
 check("TomTom's arrow names the vendor", tomtomPlace and tomtomPlace.title, "Forever Trader")
+check("says so in chat", printed[#printed], "Pinned Forever Trader (Forever Trader) on your map, ? 20, 80.")
+
+print("\nTomTom says no: the game's map pin")
+pinned = nil
+TomTom = {
+  AddWaypoint = function() return nil end,
+  RemoveWaypoint = function() end,
+}
+ok = VP:ShowTheWay({ name = "Forever Trader", mapID = 1429, zone = "Elwynn Forest", x = 20, y = 80 })
+check("still pinned", ok, true)
+check("on the game's map", pinned and pinned.map, 1429)
+check("names its zone", printed[#printed], "Pinned Forever Trader (Forever Trader) on your map, Elwynn Forest 20, 80.")
 TomTom = nil
+
+print("\na map that takes no pin")
+pinned = nil
+C_Map.CanSetUserWaypointOnMap = function(map) return map ~= 1453 end
+C_Map.GetMapInfo = function(map)
+  if map == 1453 then return { name = "Stormwind City", parentMapID = 1429 } end
+  if map == 1429 then return { name = "Elwynn Forest", parentMapID = 1415 } end
+end
+C_Map.GetMapRectOnMap = function(map, parent)
+  if map == 1453 and parent == 1429 then return 0.2, 0.4, 0.1, 0.3 end
+end
+ok = VP:ShowTheWay({ name = "Lucan Cordell", mapID = 1453, x = 50, y = 50,
+  items = { { itemID = VIAL } } })
+check("the map around it", pinned and pinned.map, 1429)
+check("the spot moved over (x)", pinned and math.floor(pinned.x * 1000 + 0.5), 300)
+check("the spot moved over (y)", pinned and math.floor(pinned.y * 1000 + 0.5), 200)
+check("chat names the city", printed[#printed], "Pinned Lucan Cordell (Lucan Cordell) on your map, Stormwind City 50, 50.")
+
+print("\nthe game turns the pin down")
+C_Map.HasUserWaypoint = function() return false end
+ok = VP:ShowTheWay({ name = "Lucan Cordell", mapID = 1429, x = 50, y = 50 })
+check("not called pinned", ok, false)
+check("says why", printed[#printed],
+  "Can't pin Lucan Cordell (Lucan Cordell): this client cannot put a pin on the map. They are in Elwynn Forest.")
+C_Map.HasUserWaypoint, C_Map.CanSetUserWaypointOnMap, C_Map.GetMapRectOnMap = nil, nil, nil
+C_Map.GetMapInfo = function() return nil end
 
 print("\nthe hover")
 ns.Util = {
@@ -227,6 +270,25 @@ check("what it saves", lines[4][1], "Saves you 240c over the auction house.")
 check("click", lines[5][1], "Click to set a map pin.")
 lines = ns.VendorPinsUI.TooltipLines({ name = "X", saving = 0, items = {} }, true)
 check("nothing saved, no savings line", lines[3][1], "Click for a TomTom arrow.")
+
+print("\nhow the pins look")
+local five = {}
+for i = 1, 5 do
+  five[i] = { npcID = 200 + i, saving = i == 1 and 500 or 100,
+    items = i == 2 and { {}, {}, {} } or { {} } }
+end
+local looks = ns.VendorPinsUI.Looks(five, 203, false)
+check("the best saving is full size", looks[1].small, false)
+check("the others a size smaller", looks[2].small, true)
+check("a tie with the best stays full size",
+  ns.VendorPinsUI.Looks({ { saving = 5 }, { saving = 5 } })[2].small, false)
+check("the pinned vendor is lit", looks[3].pinned, true)
+check("the others are not", looks[1].pinned, false)
+check("nothing pinned, nothing lit", ns.VendorPinsUI.Looks(five, nil, false)[3].pinned, false)
+check("the badge counts its items", looks[2].count, 3)
+check("five pins zoomed out: no names", looks[1].name, false)
+check("zoomed in: names", ns.VendorPinsUI.Looks(five, nil, true)[1].name, true)
+check("four pins: names", ns.VendorPinsUI.Looks({ five[1], five[2], five[3], five[4] }, nil, false)[4].name, true)
 
 print("\n/bts vendorpins")
 commands.vendorpins("on")
