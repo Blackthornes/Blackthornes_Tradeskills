@@ -426,6 +426,11 @@ function MerchantsFavor:GetRows(opts)
         -- no crate to buy, so no price and no total (Prices:ListedNow).
         local cratePrice, noneListed
         if itemID and ns.Prices then cratePrice, noneListed = ns.Prices:ListedNow(itemID) end
+        -- How many are listed at that price, and in all.
+        local onAHAtPrice, onAHTotal
+        if itemID and ns.Prices and ns.Prices.ListedCounts then
+            onAHAtPrice, onAHTotal = ns.Prices:ListedCounts(itemID, cratePrice)
+        end
 
         local bundles, best = {}, nil
         for _, bundle in ipairs(crate.bundles) do
@@ -487,6 +492,8 @@ function MerchantsFavor:GetRows(opts)
             total = total,
             perFavor = perFavor,
             have = MerchantsFavor.Owned(itemID),
+            onAHAtPrice = onAHAtPrice,
+            onAHTotal = onAHTotal,
         }
     end
 
