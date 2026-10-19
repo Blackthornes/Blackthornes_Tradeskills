@@ -57,13 +57,13 @@ end
 --- Every row to draw, in order: each list, and the open one's tools and items.
 function View:Entries()
     local entries = {}
-    local function AddList(key, name, lines, auto)
+    local function AddList(key, name, lines, auto, rules)
         local total, unpriced = Lists().Total(lines)
         local open = self.open == key
         entries[#entries + 1] = {
             kind = "list", key = key, name = name, auto = auto, open = open,
             count = #lines, total = total, unpriced = unpriced,
-            searchable = Lists().Searchable(lines), lines = lines,
+            searchable = Lists().Searchable(lines), lines = lines, rules = rules or 0,
         }
         if not open then return end
         entries[#entries + 1] = { kind = "tools", key = key, auto = auto }
@@ -74,7 +74,8 @@ function View:Entries()
 
     AddList(QUEUE_KEY, L["From your craft queue"], LinesFor(QUEUE_KEY), true)
     for _, held in ipairs(Lists():Readable()) do
-        AddList(held.index, held.list.name, LinesFor(held.index), false)
+        AddList(held.index, held.list.name, LinesFor(held.index), false,
+            ns.ListRules and ns.ListRules.Count(held.list) or 0)
     end
     return entries
 end
@@ -253,6 +254,12 @@ local function CreateRow(row)
         end })
     row.want:SetPoint("RIGHT", row.itemSearch, "LEFT", -4, 0)
 
+    -- "N rules", after a list's name.
+    if ns.ListRulesUI then
+        row.chip = ns.ListRulesUI.CreateChip(row)
+        row.chip:SetPoint("RIGHT", row.total, "LEFT", -6, 0)
+    end
+
     row.name = Theme.CreateLabel(row, "small", "text")
     row.name:SetPoint("TOPLEFT", 20, -4)
     row.name:SetPoint("RIGHT", row.total, "LEFT", -6, 0)
@@ -277,6 +284,11 @@ local function CreateRow(row)
     row.copy = Tool(L["Copy"], 60, function() View:SetMode("copy", row.data.key) end,
         { tooltip = L["Gives you a line of text to paste in chat or Discord. Paste a list turns it back into a list."] })
     row.copy:SetPoint("LEFT", row.rename, "RIGHT", 6, 0)
+    -- The list's rules (UI/ListRulesWindow.lua, 2026-10-19).
+    row.rules = Tool(L["Rules"], 60, function()
+        if ns.ListRulesUI then ns.ListRulesUI:Toggle(row.data.key, View.frame) end
+    end, { tooltip = L["Set prices and amounts for everything on this list."] })
+    row.rules:SetPoint("LEFT", row.copy, "RIGHT", 6, 0)
     row.delete = Tool(L["Delete"], 70, function()
         local key = row.data.key
         if Armed(key) then
@@ -289,7 +301,7 @@ local function CreateRow(row)
         end
         View:Refresh(true)
     end, { danger = true, tooltip = L["Deletes this list. Click again to be sure."] })
-    row.delete:SetPoint("LEFT", row.copy, "RIGHT", 6, 0)
+    row.delete:SetPoint("LEFT", row.rules, "RIGHT", 6, 0)
     row.saveQueue = Tool(L["Save as a list"], 110, function()
         local index, why = Lists():SaveQueue()
         if index then
@@ -309,6 +321,8 @@ local function HideAll(row)
         part:Hide()
     end
     for _, tool in ipairs(row.tools) do tool:Hide() end
+    local chip = rawget(row, "chip")
+    if chip then chip:Set(nil) end
 end
 
 local function Money(copper)
@@ -324,7 +338,14 @@ local function UpdateRow(row, entry)
         row.chevron:Show()
         row.name:ClearAllPoints()
         row.name:SetPoint("LEFT", 20, 0)
-        row.name:SetPoint("RIGHT", row.total, "LEFT", -6, 0)
+        local tag = ns.ListRulesUI and ns.ListRulesUI.CountText(entry.rules)
+        local chip = rawget(row, "chip")
+        if chip and tag then
+            chip:Set(tag)
+            row.name:SetPoint("RIGHT", chip, "LEFT", -6, 0)
+        else
+            row.name:SetPoint("RIGHT", row.total, "LEFT", -6, 0)
+        end
         local count = entry.count == 1 and L["1 item"] or L.Format("%d items", entry.count)
         row.name:SetText(("|c%s%s|r  |c%s%s|r"):format(ns.COLORS.accent, entry.name, ns.COLORS.muted, count))
         row.name:Show()
@@ -342,6 +363,7 @@ local function UpdateRow(row, entry)
         else
             row.rename:Show()
             row.copy:Show()
+            row.rules:Show()
             row.delete:SetText(Armed(entry.key) and L["Sure?"] or L["Delete"])
             row.delete:SetConfirming(Armed(entry.key))
             row.delete:Show()
@@ -775,6 +797,7 @@ function View:Build(body, frame, topAnchor, opts)
     list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, opts.bottom or 49)
     list:Hide()
     self.list = list
+    self.frame = frame
 
     local pad = opts.edge or 11
     local footMiddle = pad + (opts.footHeight or 34) / 2

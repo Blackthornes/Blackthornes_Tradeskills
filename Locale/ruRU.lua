@@ -3074,3 +3074,27 @@ L["Click for a TomTom arrow."] = "Нажми, чтобы получить стр
 L["Vendor Map Pins (on or off)"] = "Торговцы на карте (on или off)"
 L["Vendor Map Pins: on."] = "Торговцы на карте: вкл."
 L["Vendor Map Pins: off."] = "Торговцы на карте: выкл."
+
+-- ======================================================================
+-- List rules (Logic/ListRules.lua, UI/ListRulesWindow.lua)
+-- ======================================================================
+L["%d rules"] = "Правил: %d"
+L["1 rule"] = "1 правило"
+L["An item's own setting still wins."] = "Своя настройка предмета всё равно главнее."
+L["Following your %s list."] = "По твоему списку %s."
+L["Keep Listed:"] = "Держать на аукционе:"
+L["Keep in Bags:"] = "Оставлять в сумках:"
+L["Lowest Price:"] = "Самая низкая цена:"
+L["Most I'll Pay:"] = "Плачу не больше:"
+L["On %s, but its own price wins"] = "В списке %s, но главнее своя цена"
+L["Own price"] = "Своя цена"
+L["Post For:"] = "Срок:"
+L["Rules"] = "Правила"
+L["Rules for %s"] = "Правила для %s"
+L["Set prices and amounts for everything on this list."] = "Задай цены и количество для всего в этом списке."
+L["WHEN YOU BUY"] = "ПРИ ПОКУПКЕ"
+L["WHEN YOU SELL"] = "ПРИ ПРОДАЖЕ"
+L["Waiting, already %d up"] = "Ждёт, уже выставлено: %d"
+L["each"] = "за штуку"
+L["of each"] = "каждого"
+L["stacks at a time"] = "стопок за раз"

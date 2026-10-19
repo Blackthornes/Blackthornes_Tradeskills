@@ -235,6 +235,19 @@ function BuyQuantity:Fill(itemID)
         return false
     end
 
+    -- Most I'll Pay on the item's list (Logic/ListRules.lua): only as many
+    -- as are listed at that or less each. Nothing filled until the
+    -- listings are in, and nothing when none are that cheap.
+    local most = ns.ListRules and ns.ListRules:Rule(want.itemID, "maxPay")
+    if most then
+        local cheap = self.UnitsUpTo(self:LiveListings(want.itemID), most)
+        if not cheap or cheap < 1 then
+            self.lastResult = cheap and "none at your list's price" or "listings not in yet"
+            return false
+        end
+        needed = math.min(needed, cheap)
+    end
+
     -- Opened at 1 (or empty, before its results are in). Anything else is
     -- the player's own number, or ours already.
     local shown = self:ShownQuantity()
@@ -343,6 +356,20 @@ function BuyQuantity.CostUp(listings, quantity)
         end
     end
     return nil
+end
+
+--- How many units the listings hold at `most` or less each, past the
+--- player's own; nil without listings.
+function BuyQuantity.UnitsUpTo(listings, most)
+    if type(listings) ~= "table" or not tonumber(most) then return nil end
+    local units = 0
+    for _, listing in ipairs(listings) do
+        local price = tonumber(listing.unitPrice)
+        if price and price <= most then
+            units = units + math.max(0, (tonumber(listing.quantity) or 0) - (tonumber(listing.own) or 0))
+        end
+    end
+    return units
 end
 
 --- The listings the auction house holds for a commodity right now.

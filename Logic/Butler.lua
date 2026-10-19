@@ -1558,7 +1558,7 @@ end
 --- (ShoppingLists), so Butler can mail everything on one to a bank alt (a
 --- player asked, the owner said build it, 2026-10-14). The craft queue's
 --- list is not one of them. Never raises, writes nothing; nil on any error.
--- @return { { name, items = { [itemID] = want } } ... } in the player's
+-- @return { { name, id, items = { [itemID] = want } } ... } in the player's
 --   order, fresh tables each time, and ShoppingLists.version
 function Butler:Lists()
     local ok, lists, version = pcall(function()
@@ -1574,7 +1574,7 @@ function Butler:Lists()
                     items[math.floor(itemID)] = math.max(0, math.floor(tonumber(item.want) or 0))
                 end
             end
-            out[#out + 1] = { name = list.name, items = items }
+            out[#out + 1] = { name = list.name, id = tonumber(list.id), items = items }
         end
         return out, tonumber(shopping.version) or 0
     end)
