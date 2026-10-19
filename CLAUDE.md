@@ -510,6 +510,24 @@ queue's, fresh tables each time; nothing is written. Tested in
 `tools/test_butlerlists.lua`. Keep it stable; Butler's `Logic/BankAlt.lua`
 reads it.
 
+Butler's "Craft When It Pays More" (a player asked, the owner said build
+it, 2026-10-19; off unless ticked in Butler) asks, only while it is on,
+inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:CraftFor(item, carried)
+  -- { recipeID, name, itemID (what it makes), per, crafts, perItem, needs = { { itemID, count } } }, or nil
+_G.BlackthornesTS.Butler:QueueCraft(recipeID, crafts)   -- Queue:Ensure; true, or false and why
+```
+
+Only recipes the character playing knows (not a dropped profession) that
+use the item. Each is valued by `Profit:Analyse` "best" after the cut and
+deposit (a slow auction at `Butler.SLOW`, a derived or uncontested price
+never), less the other materials (`Cost:GetCraftCost`, owned at their
+worth); `perItem` is that over how many one craft uses. Kept in the
+lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
+`Logic/Sisters.lua` reads them.
+
 ## Random suffix prices
 
 A player asked (2026-10-15, the owner said build it): gear "of the Monkey"
