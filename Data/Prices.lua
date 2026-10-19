@@ -759,6 +759,16 @@ function Prices:ListedNow(itemID)
     return nil, true
 end
 
+--- How many are on the auction house: at `price` or less (other sellers,
+--- from the last look at the book), and in all as last scanned. Either is
+--- nil when it was not read.
+function Prices:ListedCounts(itemID, price)
+    local record = itemID and self:GetTable()[itemID]
+    if type(record) ~= "table" then return nil, nil end
+    local total = tonumber(record.quantity)
+    return Prices.CountAtOrBelow(record, price), total
+end
+
 --- Best estimate of what one unit is worth.
 --
 -- `which` is one of:
