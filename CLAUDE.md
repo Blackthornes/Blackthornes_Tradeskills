@@ -721,6 +721,14 @@ hover names the vendor, "Has what your queue needs:", each item with how
 many and the cost, "Saves you X over the auction house." and "Click to set
 a map pin." (or "Click for a TomTom arrow."); a click is
 `Waypoints:Pin`/`TomTom`, which now take a `mapID` in place of a zone.
+The look (the owner said build it, 2026-10-19, from a mockup): a gold rim
+round a bag with a gem on top and a glow that breathes (an animation the
+game loops, Window effects Full only), a gold badge with how many queue
+items, names under the pins only zoomed in or with `NAMES_MOST` (4) or
+fewer, the vendors that save less `SMALL` the size, and a beam under the
+one a click pinned (`VendorPins.pinned`); `VendorPinsUI.Looks` works it
+out. The hover is our own card (`ShowCard`: gold rim, dark glass rows,
+rarity and coin colours), on UIParent, never GameTooltip.
 Where vendors stand: `Data/VendorSpots.lua` (`ns.VENDOR_SPOTS`, Classic's
 vendors of the items in `Data/VendorPrices.lua` that never run out, by
 `tools/make_vendor_spots.py <quest database>`, never by hand), and every

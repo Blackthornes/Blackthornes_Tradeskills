@@ -16,6 +16,9 @@
 --      says in chat what it did.
 --   6. The hover says the approved words, and the slash command turns it
 --      on and off.
+--   7. The pins look as the owner picked (2026-10-19): the best saving full
+--      size and the rest smaller, the pinned one lit, a badge with how many
+--      items, and names only zoomed in or with four pins or fewer.
 
 -- Tests share one Lua state: every global set here is put back at the end.
 local GLOBALS = { "time", "GetLocale", "UnitGUID", "UnitName", "UnitFactionGroup",
@@ -267,6 +270,25 @@ check("what it saves", lines[4][1], "Saves you 240c over the auction house.")
 check("click", lines[5][1], "Click to set a map pin.")
 lines = ns.VendorPinsUI.TooltipLines({ name = "X", saving = 0, items = {} }, true)
 check("nothing saved, no savings line", lines[3][1], "Click for a TomTom arrow.")
+
+print("\nhow the pins look")
+local five = {}
+for i = 1, 5 do
+  five[i] = { npcID = 200 + i, saving = i == 1 and 500 or 100,
+    items = i == 2 and { {}, {}, {} } or { {} } }
+end
+local looks = ns.VendorPinsUI.Looks(five, 203, false)
+check("the best saving is full size", looks[1].small, false)
+check("the others a size smaller", looks[2].small, true)
+check("a tie with the best stays full size",
+  ns.VendorPinsUI.Looks({ { saving = 5 }, { saving = 5 } })[2].small, false)
+check("the pinned vendor is lit", looks[3].pinned, true)
+check("the others are not", looks[1].pinned, false)
+check("nothing pinned, nothing lit", ns.VendorPinsUI.Looks(five, nil, false)[3].pinned, false)
+check("the badge counts its items", looks[2].count, 3)
+check("five pins zoomed out: no names", looks[1].name, false)
+check("zoomed in: names", ns.VendorPinsUI.Looks(five, nil, true)[1].name, true)
+check("four pins: names", ns.VendorPinsUI.Looks({ five[1], five[2], five[3], five[4] }, nil, false)[4].name, true)
 
 print("\n/bts vendorpins")
 commands.vendorpins("on")
