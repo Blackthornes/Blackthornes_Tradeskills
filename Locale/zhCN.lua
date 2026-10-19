@@ -3097,3 +3097,8 @@ L["Waiting, already %d up"] = "等待中，已上架 %d 个"
 L["each"] = "每个"
 L["of each"] = "每种"
 L["stacks at a time"] = "组同时上架"
+
+-- Sealed writs
+L["You opened %d"] = "你打开了%d个"
+L["Writ inside worth about"] = "里面的委托约值"
+L["Came from %s: %d of %d"] = "来自%s：%d/%d"

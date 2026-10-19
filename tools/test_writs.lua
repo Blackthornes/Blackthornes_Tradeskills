@@ -296,6 +296,48 @@ check("a secret standing is ignored, not an error", ok)
 C_Reputation.GetFactionDataByID = raising
 
 --------------------------------------------------------------------------------
+print("\nlearning what a sealed writ opens into")
+
+local SEALED = 264150
+items[SEALED] = "Sealed Journeyman's Writ"
+check("a sealed writ is told by its name", Writs:IsSealed(SEALED) == true
+    and Writs:IsSealed(WISDOM_WRIT) == false and Writs.IsSealedName("Sealed Apprentice Crate") == false)
+
+clock = 400
+bags = { [SEALED] = 3 }
+Fire("BAG_UPDATE_DELAYED")
+check("looted ones are not openings", Writs:SealedInfo(SEALED) == nil)
+
+-- Torn open: the sealed writ goes and a Craftsman's Writ comes in.
+clock = 410
+bags = { [SEALED] = 2, [WISDOM_WRIT] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+clock = 420
+bags = { [SEALED] = 1, [WISDOM_WRIT] = 1, [MANA_WRIT] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+
+local info = Writs:SealedInfo(SEALED)
+check("each opening is counted with the writ it gave", info and info.opens == 2 and #info.rows == 2)
+check("the writ inside is worth the average of what came out", info.worth == 1250)
+
+-- A writ bought long after an opening is not one.
+clock = 500
+bags = { [SEALED] = 1, [WISDOM_WRIT] = 2, [MANA_WRIT] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+check("a writ bought later is not counted", Writs:SealedInfo(SEALED).opens == 2)
+
+local sources = Writs:SealedSources(Writs.WritForItem(WISDOM))
+check("a writ says which sealed writ it came from", #sources == 1
+    and sources[1].name == "Sealed Journeyman's Writ" and sources[1].count == 1 and sources[1].opens == 2)
+
+-- A writ with no price yet leaves the worth out.
+prices[MANA_WRIT] = nil
+check("no worth until every writ it gave has a price", Writs:SealedInfo(SEALED).worth == nil)
+prices[MANA_WRIT] = 2000
+bags = {}
+Fire("BAG_UPDATE_DELAYED")
+
+--------------------------------------------------------------------------------
 print("\nthe view on the Deals tab")
 
 standing = 4500
