@@ -7,8 +7,9 @@
 -- map's canvas, the house gold: a gold ring with a coin in it and a soft
 -- glow. Hovering it names the vendor, what it has for the queue and what
 -- buying there saves; a click puts the game's map pin on it, or TomTom's
--- arrow when TomTom is installed. Butler's Buy from a vendor row and the
--- vendor window still do the buying.
+-- arrow when TomTom is installed (the map pin when TomTom says no), says
+-- so in chat, and the pins sit under the game's own. Butler's Buy from a
+-- vendor row and the vendor window still do the buying.
 --
 -- Smooth play: a driver looks four times a second, and only while the map
 -- shows does it do more than one check. The pins are laid out again only
@@ -115,6 +116,48 @@ function VendorPinsUI.BaseLevel(canvas)
         end
     end
     if top and top > level then return top end
+    return level
+end
+
+--- The level of the game's own map pin (the one a click sets), so ours sit
+--- under it: drawn over it, ours hid the very pin the click put there.
+function VendorPinsUI.WaypointLevel()
+    local map = _G.WorldMapFrame
+    if type(map) ~= "table" then return nil end
+    local level
+    if type(map.EnumeratePinsByTemplate) == "function" then
+        local ok, step, state, key = pcall(map.EnumeratePinsByTemplate, map, "WaypointLocationPinTemplate")
+        if ok and type(step) == "function" then
+            for _ = 1, 8 do
+                local okNext, nextKey, value = pcall(step, state, key)
+                if not okNext or nextKey == nil then break end
+                key = nextKey
+                local pin = type(nextKey) == "table" and nextKey or value
+                if type(pin) == "table" and type(pin.GetFrameLevel) == "function" then
+                    local okPin, pinLevel = pcall(pin.GetFrameLevel, pin)
+                    pinLevel = okPin and Number(pinLevel)
+                    if pinLevel and (not level or pinLevel < level) then level = pinLevel end
+                end
+            end
+        end
+    end
+    if not level and type(map.GetPinFrameLevelsManager) == "function" then
+        local ok, manager = pcall(map.GetPinFrameLevelsManager, map)
+        if ok and type(manager) == "table" and type(manager.GetValidFrameLevel) == "function" then
+            local okKept, kept = pcall(manager.GetValidFrameLevel, manager, "PIN_FRAME_LEVEL_WAYPOINT_LOCATION")
+            level = okKept and Number(kept) or nil
+        end
+    end
+    return level
+end
+
+--- The level our pins take: over the map's art and the parts explored,
+--- under the game's map pin when there is room between them.
+function VendorPinsUI.PinLevel(canvas)
+    local base = VendorPinsUI.BaseLevel(canvas)
+    local level = base + VendorPinsUI.ABOVE
+    local waypoint = VendorPinsUI.WaypointLevel()
+    if waypoint and waypoint <= level and waypoint - 1 > base then level = waypoint - 1 end
     return level
 end
 
@@ -252,7 +295,7 @@ function VendorPinsUI:Draw()
     end
 
     local vendors = ns.VendorPins:For(view.mapID)
-    local level = VendorPinsUI.BaseLevel(view.canvas) + VendorPinsUI.ABOVE
+    local level = VendorPinsUI.PinLevel(view.canvas)
     local scale = 1 / view.scale
 
     self.used = 0
