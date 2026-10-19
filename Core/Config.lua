@@ -325,6 +325,8 @@ local DEFAULTS = {
         goldTrackerScale = 100,
         goldTrackerX = nil,
         goldTrackerY = nil,
+        -- Transparent (asked 2026-10-19): 0 (off) to 3, Some, More or Most.
+        goldTrackerSeeThrough = 0,
 
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.

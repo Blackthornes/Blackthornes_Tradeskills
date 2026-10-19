@@ -444,9 +444,154 @@ function GoldGoalUI:Build()
     self.floats, self.coins = {}, {}
     self:MakeMotion()
 
+    -- The dark glass that thins out while Transparent is on: the window, the
+    -- coin's well and the bar's well, and the halo round the rim. The gold,
+    -- the gems, the coin and the rim stay as they are.
+    self.glass = { frame.background, ring.background, track.background }
+    for _, halo in ipairs(frame.haloTextures or {}) do self.glass[#self.glass + 1] = halo end
+    self:ApplySeeThrough()
+
     frame:Hide()
     self:Place()
     return frame
+end
+
+--------------------------------------------------------------------------------
+-- Transparent
+--------------------------------------------------------------------------------
+
+-- Asked 2026-10-19, as Farmer's panels have it (its UI/SeeThrough.lua): the
+-- bar's dark glass thins out so the world shows through, every word gets a
+-- black shadow so it still reads, and the glass comes back while the mouse
+-- is on the bar. Saved as goldTrackerSeeThrough, 0 (Off, the default) to 3;
+-- never rename it. Only the bar's own textures are faded.
+
+--- How much of the glass stays, by level: Some, More, Most.
+GoldGoalUI.SEE_THROUGH = { 0.5, 0.3, 0.15 }
+--- The words /bts gold transparent takes, by level from 0.
+GoldGoalUI.SEE_THROUGH_WORDS = { [0] = "off", "some", "more", "most" }
+--- How often the mouse is looked for, and how long the glass takes to change.
+GoldGoalUI.SEE_THROUGH_LOOK = 0.1
+GoldGoalUI.SEE_THROUGH_FADE = 0.2
+
+--- The bar's level, 0 (off) to #SEE_THROUGH.
+function GoldGoalUI.SeeThroughLevel()
+    local level = tonumber(ns.Config and ns.Config:Get("goldTrackerSeeThrough"))
+    if not level or not GoldGoalUI.SEE_THROUGH[level] then return 0 end
+    return level
+end
+
+--- The levels' names as a player reads them, from 0 (off).
+function GoldGoalUI.SeeThroughNames()
+    return { [0] = L["Off"], L["Some"], L["More"], L["Most"] }
+end
+
+-- The shadow each word had before, so turning it off puts that back.
+local shadowBefore = setmetatable({}, { __mode = "k" })
+
+local function ShadeText(region, on)
+    if type(region) ~= "table" or type(region.GetObjectType) ~= "function" then return end
+    local ok, kind = pcall(region.GetObjectType, region)
+    if not ok or kind ~= "FontString" then return end
+    if on then
+        if not shadowBefore[region] then
+            local okOffset, x, y = pcall(region.GetShadowOffset, region)
+            local okColor, r, g, b, a = pcall(region.GetShadowColor, region)
+            shadowBefore[region] = {
+                x = okOffset and tonumber(x) or 0, y = okOffset and tonumber(y) or 0,
+                r = okColor and tonumber(r) or 0, g = okColor and tonumber(g) or 0,
+                b = okColor and tonumber(b) or 0, a = okColor and tonumber(a) or 1,
+            }
+        end
+        pcall(region.SetShadowColor, region, 0, 0, 0, 1)
+        pcall(region.SetShadowOffset, region, 1, -1)
+    else
+        local was = shadowBefore[region]
+        if not was then return end
+        shadowBefore[region] = nil
+        pcall(region.SetShadowColor, region, was.r, was.g, was.b, was.a)
+        pcall(region.SetShadowOffset, region, was.x, was.y)
+    end
+end
+
+--- A black shadow under every word on `frame` and the frames inside it.
+function GoldGoalUI.ShadeAll(frame, on)
+    if type(frame) ~= "table" then return end
+    if type(frame.GetRegions) == "function" then
+        local regions = { pcall(frame.GetRegions, frame) }
+        for i = 2, #regions do ShadeText(regions[i], on) end
+    end
+    if type(frame.GetChildren) == "function" then
+        local children = { pcall(frame.GetChildren, frame) }
+        for i = 2, #children do GoldGoalUI.ShadeAll(children[i], on) end
+    end
+end
+
+--- Every piece of the glass at `shown` (1 is the usual dark glass).
+function GoldGoalUI:SetGlass(shown)
+    self.glassShown = shown
+    for _, texture in ipairs(self.glass or {}) do
+        pcall(texture.SetAlpha, texture, shown)
+    end
+end
+
+local function MouseOn(frame)
+    if not frame or type(frame.IsMouseOver) ~= "function" then return false end
+    local ok, over = pcall(frame.IsMouseOver, frame)
+    return ok and over == true
+end
+
+--- Put the bar in step with its setting: the glass, the shadows and the
+--- watcher that brings the glass back under the mouse. The watcher runs
+--- only while the bar shows and Transparent is on.
+function GoldGoalUI:ApplySeeThrough()
+    local frame = self.frame
+    if not frame then return end
+    local level = GoldGoalUI.SeeThroughLevel()
+    local on = level > 0
+    GoldGoalUI.ShadeAll(frame, on)
+
+    if not on then
+        if self.seeWatch then self.seeWatch:SetScript("OnUpdate", nil) end
+        self:SetGlass(1)
+        return
+    end
+
+    local clear = GoldGoalUI.SEE_THROUGH[level]
+    self:SetGlass(MouseOn(frame) and 1 or clear)
+    if not self.seeWatch then self.seeWatch = CreateFrame("Frame", nil, frame) end
+    local wait = 0
+    self.seeWatch:SetScript("OnUpdate", function(_, elapsed)
+        elapsed = tonumber(elapsed) or 0
+        wait = wait - elapsed
+        if wait <= 0 then
+            wait = GoldGoalUI.SEE_THROUGH_LOOK
+            self.glassTarget = MouseOn(frame) and 1 or clear
+        end
+        local target = self.glassTarget or clear
+        local shown = self.glassShown or 1
+        if shown == target then return end
+        if Level() == "off" then
+            self:SetGlass(target)
+            return
+        end
+        local step = elapsed / GoldGoalUI.SEE_THROUGH_FADE
+        if shown < target then
+            self:SetGlass(math.min(target, shown + step))
+        else
+            self:SetGlass(math.max(target, shown - step))
+        end
+    end)
+end
+
+--- Set the bar's level, 0 (off) to #SEE_THROUGH. False for a level it lacks.
+function GoldGoalUI:SetSeeThrough(level)
+    level = tonumber(level)
+    if not level or (level ~= 0 and not GoldGoalUI.SEE_THROUGH[level]) then return false end
+    ns.Config:Set("goldTrackerSeeThrough", level)
+    self.glassTarget = nil
+    self:ApplySeeThrough()
+    return true
 end
 
 --- Show or hide the bar as the setting says.
