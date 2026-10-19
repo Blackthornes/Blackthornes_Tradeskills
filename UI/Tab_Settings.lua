@@ -1679,6 +1679,23 @@ local function Build(outer)
     widgets.goldGoal:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(goalRow, widgets.goldGoal, "g")
 
+    -- Transparent (asked 2026-10-19), as Farmer's panels have it: the
+    -- bar's glass thins out and comes back under the mouse. Off by default.
+    local goldClearRow = CreateRow(pages.look, 2, L["Transparent:"])
+    widgets.goldSeeThrough = Widgets.CreateDropdown(goldClearRow, {
+        { text = L["Off"], value = 0 },
+        { text = L["Some"], value = 1 },
+        { text = L["More"], value = 2 },
+        { text = L["Most"], value = 3 },
+    }, function(value)
+        if ns.GoldGoalUI then
+            ns.GoldGoalUI:SetSeeThrough(value)
+        else
+            Config:Set("goldTrackerSeeThrough", value)
+        end
+    end, { width = 110 })
+    widgets.goldSeeThrough:SetPoint("TOPLEFT", CONTROL_X, 0)
+
     local goldPlaceRow = CreateRow(pages.look, 2, L["Gold Tracker Place:"])
     local goldPlace = Widgets.CreateButton(goldPlaceRow, L["Reset"], function()
         if ns.GoldGoalUI then ns.GoldGoalUI:ResetPlace() end
@@ -2272,6 +2289,8 @@ local function Refresh()
     widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
     widgets.goldTracker:SetChecked(Config:Get("goldTracker") == true)
     local goldGoal = ns.GoldGoal and ns.GoldGoal:Goal()
+    widgets.goldSeeThrough:SetValue(ns.GoldGoalUI and ns.GoldGoalUI.SeeThroughLevel()
+        or tonumber(Config:Get("goldTrackerSeeThrough")) or 0, true)
     widgets.goldGoal:SetValue(goldGoal and math.floor(goldGoal / 10000) or nil, true)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 

@@ -487,7 +487,7 @@ end
 -- Command
 --------------------------------------------------------------------------------
 
-ns.RegisterCommand("gold", L["Goblin Gold: your gold on this realm and side (on, off, goal 5000, reset)"], function(args)
+ns.RegisterCommand("gold", L["Goblin Gold: your gold on this realm and side (on, off, goal 5000, reset, transparent)"], function(args)
     args = (args or ""):lower()
     local word, rest = args:match("^%s*(%a+)%s*(.-)%s*$")
     local UI = ns.GoldGoalUI
@@ -520,6 +520,19 @@ ns.RegisterCommand("gold", L["Goblin Gold: your gold on this realm and side (on,
                 local step = math.max(1, math.min(GoldGoal.STEPS - 1, GoldGoal.Step(total, goal) + 1))
                 pcall(UI.Cheer, UI, { kind = "step", step = step, goal = goal, test = true })
             end
+        end
+    elseif word == "transparent" then
+        local level
+        for index = 0, 3 do
+            if UI and UI.SEE_THROUGH_WORDS and UI.SEE_THROUGH_WORDS[index] == rest then level = index end
+        end
+        if not (UI and UI.SetSeeThrough) then
+            return
+        elseif level then
+            UI:SetSeeThrough(level)
+            ns.Print(L.Format("Goblin Gold transparent: %s.", UI.SeeThroughNames()[level]))
+        else
+            ns.Print(L["Type /bts gold transparent off, some, more or most."])
         end
     elseif word == "reset" then
         if UI and UI.ResetPlace then UI:ResetPlace() end
