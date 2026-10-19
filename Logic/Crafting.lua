@@ -182,9 +182,31 @@ function Crafting:PickNext(ready)
         end
     end
 
-    local best, bestSlots
+    -- The queue lists sub-crafts a profession at a time, bars before the
+    -- parts made from them (Queue's OrderSubCrafts). Bag space only picks
+    -- within the first of those groups that has something ready, so Craft
+    -- next never sends you from the forge to the anvil and back. The
+    -- crafts you queued yourself come after every sub-craft.
+    local group, groupOf, lastProfession = 0, {}, nil
+    for _, entry in ipairs(ns.Queue:GetAll()) do
+        if entry.isDependency then
+            local profession = ns.Queue.ProfessionOf and ns.Queue:ProfessionOf(entry) or "?"
+            if profession ~= lastProfession then group, lastProfession = group + 1, profession end
+            groupOf[entry] = group
+        else
+            groupOf[entry] = math.huge
+        end
+    end
+    local firstGroup = math.huge
     for _, entry in ipairs(ready) do
         if not waits[entry.recipeID] then
+            firstGroup = math.min(firstGroup, groupOf[entry] or math.huge)
+        end
+    end
+
+    local best, bestSlots
+    for _, entry in ipairs(ready) do
+        if not waits[entry.recipeID] and (groupOf[entry] or math.huge) == firstGroup then
             local slots = self:SlotsFreed(entry)
             if not best or slots > bestSlots then best, bestSlots = entry, slots end
         end
