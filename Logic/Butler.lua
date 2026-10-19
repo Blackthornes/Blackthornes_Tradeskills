@@ -199,6 +199,20 @@
 -- count for the buy box (UI:SearchAuctionHouse) and it answers true, "one",
 -- so Butler's next click sends the rest. Never raises.
 --
+-- Butler's "Cheapest Skill-Up" line (a player asked, the owner said build
+-- it, 2026-10-19) shows the Level Up tab's top pick for each profession:
+--
+--   _G.BlackthornesTS.Butler:NextSkillUp()      -- a list, or nil; reads only
+--   _G.BlackthornesTS.Butler:QueueSkillUp(id)   -- true, or false and why
+--
+-- One entry per profession the character playing is still levelling
+-- (skill under its max for now): { profession (the client's name), skill,
+-- max, recipeID, itemID, name, tier ("optimal" or "medium"), cost (copper,
+-- the REAL COST column: materials less what it gets back, below 0 when the
+-- craft pays), queued (true while the queue holds it) }, by profession
+-- name. Only a sure or likely point with a priced cost is offered.
+-- QueueSkillUp puts one in the queue (Queue:Ensure).
+--
 -- Butler's "Craft When It Pays More" (2026-10-19, a player asked, the
 -- owner said build it, off unless ticked in Butler) asks, only while that
 -- is on, whether a bag item is worth more made into something:
@@ -1628,6 +1642,98 @@ function Butler:LearnCost()
         copy[line] = { skill = entry.skill, count = entry.count, cost = entry.cost }
     end
     return copy
+end
+
+--------------------------------------------------------------------------------
+-- The cheapest next skill point, for Butler's Jobs
+--------------------------------------------------------------------------------
+
+local SKILL_UP_SECONDS = 30
+local skillUp, skillUpKey, skillUpAt
+
+-- The tiers Butler offers: a sure point, then a likely one.
+local SKILL_UP_TIERS = { optimal = true, medium = true }
+
+local function ProfessionOf(skillLineID)
+    local trade = C_TradeSkillUI
+    if not (skillLineID and type(trade) == "table" and type(trade.GetProfessionInfoBySkillLineID) == "function") then
+        return nil
+    end
+    local ok, info = pcall(trade.GetProfessionInfoBySkillLineID, skillLineID)
+    if ok and type(info) == "table" and (tonumber(info.maxSkillLevel) or 0) > 0 then return info end
+    return nil
+end
+
+local function NextSkillUp()
+    local levelUp = ns.LevelUp
+    if not (levelUp and levelUp.GetRanked) then return nil end
+    local key = table.concat({ SelfKey() or "?", RecipesStamp(),
+        tostring(ns.Queue and ns.Queue.version), tostring(ns.Inventory and ns.Inventory.changes),
+        tostring(ns.Prices and ns.Prices.scanCount) }, ":")
+    if skillUp and skillUpKey == key and Now() - (skillUpAt or 0) < SKILL_UP_SECONDS then
+        return skillUp
+    end
+
+    -- GetRanked's order is the Level Up tab's: the first row of each
+    -- profession that fits is its top pick.
+    local answer, seen = {}, {}
+    for _, row in ipairs(levelUp:GetRanked({}) or {}) do
+        local info = ProfessionOf(row.skillLineID)
+        local name = info and info.professionName
+        local cost = row.realCost or row.cost
+        if name and not seen[name] then
+            local skill, max = tonumber(info.skillLevel) or 0, tonumber(info.maxSkillLevel) or 0
+            if skill >= max then
+                seen[name] = true
+            elseif SKILL_UP_TIERS[row.tier] and type(cost) == "number" then
+                seen[name] = true
+                answer[#answer + 1] = {
+                    profession = name, skill = skill, max = max,
+                    recipeID = row.recipeID, itemID = row.outputItemID, name = row.name,
+                    tier = row.tier, cost = math.floor(cost + 0.5),
+                }
+            end
+        end
+    end
+    table.sort(answer, function(a, b) return a.profession < b.profession end)
+
+    skillUp, skillUpKey, skillUpAt = answer, key, Now()
+    return answer
+end
+
+--- The cheapest craft for the next skill point in each profession the
+--- character playing is still levelling. Never raises, writes nothing; nil
+--- on any error. A fresh table each time.
+function Butler:NextSkillUp()
+    local ok, answer = pcall(NextSkillUp)
+    if not (ok and type(answer) == "table") then return nil end
+    local queue = ns.Queue
+    local copy = {}
+    for _, entry in ipairs(answer) do
+        local queued = false
+        if queue and queue.Find then
+            local found, index = pcall(queue.Find, queue, entry.recipeID)
+            queued = found and index ~= nil
+        end
+        copy[#copy + 1] = {
+            profession = entry.profession, skill = entry.skill, max = entry.max,
+            recipeID = entry.recipeID, itemID = entry.itemID, name = entry.name,
+            tier = entry.tier, cost = entry.cost, queued = queued,
+        }
+    end
+    return copy
+end
+
+--- Butler's Queue button on that line: one of the craft in the queue.
+-- @return true, or false and why. Never raises.
+function Butler:QueueSkillUp(recipeID)
+    recipeID = tonumber(recipeID)
+    if not recipeID then return false, L["no recipe"] end
+    local queue = ns.Queue
+    if not (queue and queue.Ensure) then return false, L["the queue would not take it"] end
+    local ok, done, why = pcall(queue.Ensure, queue, recipeID, 1)
+    if ok and done then return true end
+    return false, ok and why or L["the queue would not take it"]
 end
 
 --------------------------------------------------------------------------------
