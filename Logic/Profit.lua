@@ -151,7 +151,8 @@ end
 -- the unknown case is the one where giving gold away is least defensible.
 --
 -- @return price, basis, why, uncertain  -- basis is "undercut", "match",
---   "market", "derived", "uncontested", "mine", "floor" or "overcut", and nil price when there is
+--   "market", "derived", "uncontested", "mine", "floor", "list" (raised to
+--   its list's Lowest Price) or "overcut", and nil price when there is
 --   nothing to go on. "derived" (never scanned) and "uncontested" (scanned,
 --   but every listing is yours) are both the material-value figure from
 --   DeriveFromMaterials above, and are the two bases that are not evidence
@@ -170,6 +171,14 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
     -- lists at it, "floor" undercuts as usual but never goes below it.
     local mine, mode
     if ns.Prices.GetMine then mine, mode = ns.Prices:GetMine(itemID) end
+
+    -- Else its list's Lowest Price (Logic/ListRules.lua, 2026-10-19):
+    -- undercuts as usual, never below it.
+    local listName
+    if not mine and ns.ListRules then
+        mine, listName = ns.ListRules:Floor(itemID)
+        mode = mine and "floor" or nil
+    end
     if not mine then return self:ChooseMarketPostPrice(itemID, knownCost, link) end
 
     local status
@@ -187,6 +196,9 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
     local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost, link)
     if price and price >= floor then return price, basis, why, uncertain end
 
+    if listName then
+        return floor, "list", L.Format("Following your %s list.", listName), status == nil
+    end
     return floor, "floor", L["the least you set on the Prices tab"], status == nil
 end
 

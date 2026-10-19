@@ -3,7 +3,8 @@
 -- Butler's bank alt can take everything on one of the player's shopping
 -- lists (2026-10-14). What must hold:
 --   1. Each list the player made comes back by name, in order, its items
---      as [itemID] = how many are wanted.
+--      as [itemID] = how many are wanted, with its id (Butler keeps its
+--      own rules for a list by it).
 --   2. A broken entry is skipped, never raised on, and nothing is written.
 --   3. Fresh tables each time, so Butler may keep or change them.
 --   4. Without the lists module, or when it raises, the answer is nil.
@@ -12,7 +13,7 @@ local ns = {}
 ns.NewModule = function(name) local m = {} ns[name] = m return m end
 
 local saved = {
-  { name = "Cloth", items = { { id = 2589, want = 40 }, { id = 4306 }, { id = "bad" }, "junk" } },
+  { name = "Cloth", id = 4, items = { { id = 2589, want = 40 }, { id = 4306 }, { id = "bad" }, "junk" } },
   { name = "Herbs", items = { { id = 765, want = 20 } } },
 }
 ns.ShoppingLists = { version = 7, Readable = function()
@@ -42,6 +43,8 @@ check("by name, in order", lists and lists[1].name .. "," .. lists[2].name, "Clo
 check("an item with how many are wanted", lists[1].items[2589], 40)
 check("an item with no number wants 0", lists[1].items[4306], 0)
 check("the version comes along", version, 7)
+check("each list's id comes along", lists[1].id, 4)
+check("a list with no id has none", lists[2].id, nil)
 
 -- 2.
 local count = 0
