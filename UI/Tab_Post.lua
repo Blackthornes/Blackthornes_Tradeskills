@@ -336,6 +336,8 @@ local function ShowRowTooltip(row, line)
             why = L["Your own price, set on the Prices tab"]
         elseif line.priceBasis == "floor" then
             why = L["Raised to the least you set on the Prices tab"]
+        elseif line.priceBasis == "list" and line.listName then
+            why = L.Format("Following your %s list.", line.listName)
         elseif line.priceBasis == "chosen" then
             why = L["Your price for now, set on Ready to sell"]
         elseif line.priceBasis == "match" then
