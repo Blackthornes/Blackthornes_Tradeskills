@@ -305,6 +305,24 @@ function Queue:PickMaker(itemID, need, makers, keep)
     return best or kept
 end
 
+--- How many of a material are still short once what is held is used.
+--
+-- One material can be needed at two levels: Copper Bars for a Copper
+-- Modulator and for the Copper Bolts that go into it. Each level used to
+-- take the whole of what you hold off its own need, so the same bars were
+-- counted twice, too few were queued, and a second trip to the forge came
+-- later. What one level takes is now gone for the next.
+-- @param pool [itemID] = held and not yet used, filled as it goes
+-- @param held what is held now, as this level counts it
+-- @return the shortfall, never below 0
+local function HeldPool(pool, itemID, held, units)
+    local free = pool[itemID]
+    if free == nil then free = held else free = math.min(free, held) end
+    free = math.max(0, free or 0)
+    pool[itemID] = math.max(0, free - units)
+    return math.max(0, units - free)
+end
+
 --- The sub-crafts for every character at once (see SharesWithAlts).
 --
 -- The same walk as for one character: requirements summed per material over
@@ -317,6 +335,8 @@ function Queue:DeriveAcrossCharacters(manual, derived, maxDepth, planned)
     local makers = MakersByOutput()
     planned = planned or {}
     local selfKey = SelfKey()
+    -- What is held of each material and not yet spoken for (see HeldPool).
+    local pool = {}
 
     local function process(entries, depth)
         if depth >= maxDepth or #entries == 0 then return end
@@ -366,7 +386,7 @@ function Queue:DeriveAcrossCharacters(manual, derived, maxDepth, planned)
                     held = held + BoughtBeyondMail(itemID)
                 end
 
-                local short = math.max(0, need.units - held)
+                local short = HeldPool(pool, itemID, held, need.units)
 
                 if short > 0 then
                     local perCraft = math.max(1, maker.recipe.quantityMin or 1)
@@ -490,6 +510,166 @@ function BoughtBeyondMail(itemID, inMail)
     return math.max(buys:GetUnread(itemID), pending - inMail, 0)
 end
 
+--- The profession a queued craft is made in, by English name, so the
+--- same profession under its two skill lines is one. "?" when unknown.
+function Queue:ProfessionOf(entry)
+    local recipe = entry and ns.Recipes:GetAny(entry.recipeID)
+    local line = recipe and recipe.skillLineID
+    local names = ns.Recipes.SKILL_LINE_PROFESSIONS
+    if line == nil then return "?" end
+    return (names and names[line]) or tostring(line)
+end
+
+--- One sub-craft per recipe and crafter.
+--
+-- A material needed at two levels (Copper Bars for a Copper Modulator and
+-- for the Copper Bolts that go in it) was queued twice, once at each
+-- level, and the two rows sat apart with the bolts between them: bars, then
+-- bolts, then bars again. They are one row now, at the deeper of the two
+-- levels, for everything both were for.
+local function MergeSubCrafts(derived)
+    local merged, byKey = {}, {}
+    for _, entry in ipairs(derived) do
+        local key = tostring(entry.recipeID) .. "|" .. tostring(entry.crafter)
+        local into = byKey[key]
+        if not into then
+            local forRecipes, forCharacters = {}, nil
+            for id in pairs(entry.forRecipes or {}) do forRecipes[id] = true end
+            if entry.forCharacters then
+                forCharacters = {}
+                for id in pairs(entry.forCharacters) do forCharacters[id] = true end
+            end
+            entry.forRecipes, entry.forCharacters = forRecipes, forCharacters
+            byKey[key] = entry
+            merged[#merged + 1] = entry
+        else
+            into.quantity = into.quantity + entry.quantity
+            into.depth = math.max(into.depth or 0, entry.depth or 0)
+            for id in pairs(entry.forRecipes or {}) do into.forRecipes[id] = true end
+            if entry.forCharacters then
+                into.forCharacters = into.forCharacters or {}
+                for id in pairs(entry.forCharacters) do into.forCharacters[id] = true end
+            end
+            -- Kept only while buying is cheaper for every part of it.
+            into.buyCheaper = (into.buyCheaper and entry.buyCheaper) or nil
+            into.owner = into.owner or entry.owner
+        end
+    end
+    return merged
+end
+
+--- The sub-crafts in the order to make them.
+--
+-- A player found the queue sending them from the forge to the anvil and
+-- back (2026-10-19). Sub-crafts are now grouped by profession: one that
+-- makes things for another comes first (every bar is smelted before any
+-- Blacksmithing or Engineering part), and a profession's crafts stay
+-- together. Within a profession, deepest first, then by recipe, so a
+-- rebuild never moves rows around. A craft is never placed before a
+-- sub-craft of its own.
+local function OrderSubCrafts(derived, manual)
+    local profession, deepest = {}, {}
+    for _, entry in ipairs(derived) do
+        local name = Queue:ProfessionOf(entry)
+        profession[entry] = name
+        deepest[name] = math.max(deepest[name] or 0, (entry.depth or 0) + 1)
+    end
+    for _, entry in ipairs(manual) do
+        local name = Queue:ProfessionOf(entry)
+        profession[entry] = name
+        deepest[name] = deepest[name] or 0
+    end
+
+    -- Who each sub-craft is for, by recipe.
+    local byRecipe = {}
+    for _, list in ipairs({ derived, manual }) do
+        for _, entry in ipairs(list) do
+            byRecipe[entry.recipeID] = byRecipe[entry.recipeID] or {}
+            table.insert(byRecipe[entry.recipeID], entry)
+        end
+    end
+
+    -- Which professions feed which: Mining into Blacksmithing and so on.
+    local feeds, waitsOn = {}, {}
+    for name in pairs(deepest) do feeds[name], waitsOn[name] = {}, 0 end
+    local children = {}
+    for _, entry in ipairs(derived) do
+        for parentID in pairs(entry.forRecipes or {}) do
+            for _, parent in ipairs(byRecipe[parentID] or {}) do
+                if parent ~= entry then
+                    children[parent] = (children[parent] or 0) + 1
+                    local from, to = profession[entry], profession[parent]
+                    if from ~= to and not feeds[from][to] then
+                        feeds[from][to] = true
+                        waitsOn[to] = waitsOn[to] + 1
+                    end
+                end
+            end
+        end
+    end
+
+    local function Earlier(a, b)
+        if deepest[a] ~= deepest[b] then return deepest[a] > deepest[b] end
+        return a < b
+    end
+
+    -- Professions in order: one nothing left feeds, the deepest first. A
+    -- loop (two professions feeding each other) falls back to the deepest.
+    local rank, left = {}, {}
+    for name in pairs(deepest) do left[#left + 1] = name end
+    while #left > 0 do
+        local pick, pickIndex, free
+        for index, name in ipairs(left) do
+            local isFree = waitsOn[name] <= 0
+            local better
+            if not pick then better = true
+            elseif isFree ~= free then better = isFree
+            else better = Earlier(name, pick) end
+            if better then pick, pickIndex, free = name, index, isFree end
+        end
+        table.remove(left, pickIndex)
+        rank[pick] = #left
+        for to in pairs(feeds[pick]) do waitsOn[to] = waitsOn[to] - 1 end
+    end
+    -- rank counts down as picked, so a bigger number goes first.
+
+    local function Before(a, b)
+        local ra, rb = rank[profession[a]], rank[profession[b]]
+        if ra ~= rb then return ra > rb end
+        if (a.depth or 0) ~= (b.depth or 0) then return (a.depth or 0) > (b.depth or 0) end
+        if a.recipeID ~= b.recipeID then return a.recipeID < b.recipeID end
+        return tostring(a.crafter) < tostring(b.crafter)
+    end
+
+    -- Placed one at a time: of the sub-crafts whose own sub-crafts are all
+    -- placed, the first by Before. A loop places the first left.
+    local ordered, placed = {}, {}
+    for _ = 1, #derived do
+        local pick
+        for _, entry in ipairs(derived) do
+            if not placed[entry] and (children[entry] or 0) == 0
+                and (not pick or Before(entry, pick)) then
+                pick = entry
+            end
+        end
+        if not pick then
+            for _, entry in ipairs(derived) do
+                if not placed[entry] and (not pick or Before(entry, pick)) then pick = entry end
+            end
+        end
+        placed[pick] = true
+        ordered[#ordered + 1] = pick
+        for parentID in pairs(pick.forRecipes or {}) do
+            for _, parent in ipairs(byRecipe[parentID] or {}) do
+                if parent ~= pick and children[parent] then
+                    children[parent] = children[parent] - 1
+                end
+            end
+        end
+    end
+    return ordered
+end
+
 function Queue:RebuildDependencies()
     local queue = self:GetAll()
 
@@ -529,6 +709,7 @@ function Queue:RebuildDependencies()
         self:DeriveAcrossCharacters(manual, derived, MAX_DEPENDENCY_DEPTH, planned)
     elseif ns.Config:Get("autoQueueSubCrafts") ~= false then
         local selfKey = SelfKey()
+        local pool = {}
 
         local function process(entries, depth)
             if depth >= MAX_DEPENDENCY_DEPTH or #entries == 0 then return end
@@ -563,8 +744,8 @@ function Queue:RebuildDependencies()
                 local subRecipe = subRecipeID and ns.Recipes:GetAny(subRecipeID)
 
                 if subRecipe then
-                    local short = math.max(0, need.units - ns.Inventory:GetOwnedCount(itemID)
-                        - BoughtBeyondMail(itemID))
+                    local short = HeldPool(pool, itemID,
+                        ns.Inventory:GetOwnedCount(itemID) + BoughtBeyondMail(itemID), need.units)
 
                     if short > 0 then
                         -- Missing units become crafts, since one craft can
@@ -594,13 +775,9 @@ function Queue:RebuildDependencies()
         process(manual, 0)
     end
 
-    -- Deepest first: a sub-craft's own sub-crafts have to come before it.
-    -- Ties go by recipe, so a rebuild never swaps sub-crafts of the same
-    -- depth around (table.sort is not stable, and rows must not jump).
-    table.sort(derived, function(a, b)
-        if a.depth ~= b.depth then return a.depth > b.depth end
-        return a.recipeID < b.recipeID
-    end)
+    -- A sub-craft's own sub-crafts come before it, and each profession's
+    -- sub-crafts are done together (OrderSubCrafts).
+    derived = OrderSubCrafts(MergeSubCrafts(derived), manual)
 
     for index = #queue, 1, -1 do
         queue[index] = nil
