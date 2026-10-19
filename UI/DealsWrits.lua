@@ -32,8 +32,9 @@ local COLUMNS = {
     { key = "itemCost",  label = L["ITEM"], width = 96, money = true },
     { key = "writPrice", label = L["WRIT"], width = 66, money = true },
     { key = "rep",       label = L["REP"], width = 40, justify = "CENTER" },
-    -- Bags, bank and mail on this character (a player asked, 2026-10-18).
-    { key = "haveWrits", label = L["HAVE"], width = 40, justify = "CENTER" },
+    -- How many are on the auction house at the row's price (a player
+    -- asked, 2026-10-19; it was what you own before).
+    { key = "onAH", label = L["ON AH"], width = 44, justify = "CENTER" },
 }
 
 -- Any column but the item's name can be hidden (UI/Columns.lua).
@@ -192,9 +193,10 @@ local function CreateRow(row)
 end
 
 local function FillCell(cell, key, entry)
-    if key == "haveWrits" then
-        cell:SetText(tostring(entry.haveWrits or 0))
-        cell:SetTextColor(Theme.Unpack((entry.haveWrits or 0) > 0 and "text" or "dim"))
+    if key == "onAH" then
+        local count = entry.onAHAtPrice or entry.onAHTotal
+        cell:SetText(count and tostring(count) or "")
+        cell:SetTextColor(Theme.Unpack((count or 0) > 0 and "text" or "dim"))
         return
     end
     if key == "rep" then
@@ -268,6 +270,12 @@ local function ShowRowTooltip(row, entry)
         GameTooltip:AddLine(L.Format("%s for each reputation.", Plain(Round(entry.perRep))), 0.35, 0.85, 0.45, true)
     end
     GameTooltip:AddLine(RewardText(entry), 0.7, 0.7, 0.7, true)
+    if entry.onAHAtPrice then
+        GameTooltip:AddLine(L.Format("On the AH at this price: %d", entry.onAHAtPrice), 0.85, 0.85, 0.85)
+    end
+    if entry.onAHTotal then
+        GameTooltip:AddLine(L.Format("On the AH in all: %d", entry.onAHTotal), 0.85, 0.85, 0.85)
+    end
     GameTooltip:AddLine(L.Format("You have %d, counting your bags, bank and mail.", entry.haveWrits or 0),
         0.85, 0.85, 0.85)
     GameTooltip:AddLine(L["Right-click a row to search for both"], 0.5, 0.5, 0.5)
