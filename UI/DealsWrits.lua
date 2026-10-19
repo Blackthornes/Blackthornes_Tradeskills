@@ -276,6 +276,12 @@ local function ShowRowTooltip(row, entry)
     if entry.onAHTotal then
         GameTooltip:AddLine(L.Format("On the AH in all: %d", entry.onAHTotal), 0.85, 0.85, 0.85)
     end
+    if ns.Writs and ns.Writs.SealedSources then
+        for _, source in ipairs(ns.Writs:SealedSources(entry.writ)) do
+            GameTooltip:AddLine(L.Format("Came from %s: %d of %d", source.name, source.count, source.opens),
+                0.95, 0.82, 0.45, true)
+        end
+    end
     GameTooltip:AddLine(L.Format("You have %d, counting your bags, bank and mail.", entry.haveWrits or 0),
         0.85, 0.85, 0.85)
     GameTooltip:AddLine(L["Right-click a row to search for both"], 0.5, 0.5, 0.5)

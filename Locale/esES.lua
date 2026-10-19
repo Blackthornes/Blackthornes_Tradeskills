@@ -3100,3 +3100,8 @@ L["Waiting, already %d up"] = "Esperando, ya hay %d en venta"
 L["each"] = "cada uno"
 L["of each"] = "de cada uno"
 L["stacks at a time"] = "montones a la vez"
+
+-- Sealed writs
+L["You opened %d"] = "Abriste %d"
+L["Writ inside worth about"] = "El encargo de dentro vale unos"
+L["Came from %s: %d of %d"] = "Salió de %s: %d de %d"
