@@ -513,6 +513,22 @@ queue's, fresh tables each time; nothing is written. Tested in
 `tools/test_butlerlists.lua`. Keep it stable; Butler's `Logic/BankAlt.lua`
 reads it.
 
+Butler's "Cheapest Skill-Up" line in Jobs (a player asked, the owner said
+build it, 2026-10-19; off unless ticked in Butler) shows the Level Up
+tab's top pick for each profession, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:NextSkillUp()      -- { { profession, skill, max, recipeID, itemID, name, tier, cost, queued } }, or nil
+_G.BlackthornesTS.Butler:QueueSkillUp(id)   -- one in the queue: true, or false and why
+```
+
+The first row of each profession in `LevelUp:GetRanked`'s order that is a
+sure or likely point with a priced cost (`cost` is REAL COST, below 0 when
+the craft pays); a profession at its max for now has none. Kept 30 s, or
+until the queue, bags, a scan or the recipes move. Tested in
+`tools/test_butlerskillup.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
+reads them.
+
 Butler's "Craft When It Pays More" (a player asked, the owner said build
 it, 2026-10-19; off unless ticked in Butler) asks, only while it is on,
 inside a pcall:
