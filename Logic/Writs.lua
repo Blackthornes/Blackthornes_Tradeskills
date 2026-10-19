@@ -21,6 +21,15 @@
 -- such. None of this has been seen in game yet.
 --
 -- Only item IDs, amounts, when, and the character's GUID are kept; no names.
+--
+-- Sealed writs (the owner, 2026-10-19: "we need our addons to learn how
+-- these work"): mobs drop a Sealed Journeyman's or Expert's Writ, and
+-- tearing it open gives one Craftsman's Writ. When a sealed writ leaves the
+-- bags and a Craftsman's Writ comes in within a few seconds, that opening
+-- is counted, account wide, in merchantsFavor.sealedWrits[sealedID] =
+-- { opens, writs = { [item the writ asks for] = count }, name, at }. The
+-- item tooltip and the Writs tab read it back. Nothing is opened for the
+-- player.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -65,6 +74,7 @@ local function Store()
     local store = db.merchantsFavor
     store.writIDs = store.writIDs or {}
     store.writRewards = store.writRewards or {}
+    store.sealedWrits = store.sealedWrits or {}
     return store
 end
 
@@ -176,6 +186,101 @@ function Writs:OnItemInfo(itemID)
     if not self.searched or not range or type(itemID) ~= "number" then return end
     if itemID < range[1] or itemID > range[2] or seen[itemID] ~= nil then return end
     self:Classify(itemID)
+end
+
+--------------------------------------------------------------------------------
+-- Sealed writs
+--------------------------------------------------------------------------------
+
+--- True for a sealed writ's name ("Sealed Journeyman's Writ").
+function Writs.IsSealedName(name)
+    if type(name) ~= "string" then return false end
+    local lower = name:lower()
+    return lower:find("^sealed ") ~= nil and lower:find("writ$") ~= nil
+end
+
+-- itemID -> true for a sealed writ, false once its name says it is not.
+local sealedSeen = {}
+
+function Writs:IsSealed(itemID)
+    local known = sealedSeen[itemID]
+    if known ~= nil then return known end
+
+    local name = ItemName(itemID)
+    if not name then return false end
+
+    local ok, sealed = pcall(Writs.IsSealedName, name)
+    sealedSeen[itemID] = ok and sealed or false
+    return sealedSeen[itemID]
+end
+
+--- Count one opening: the sealed writ, and the writ it gave.
+function Writs:LearnOpen(sealedID, writ)
+    local store = Store()
+    if not store or not sealedID or not writ then return end
+
+    local record = store.sealedWrits[sealedID] or {}
+    store.sealedWrits[sealedID] = record
+    record.opens = (record.opens or 0) + 1
+    record.writs = record.writs or {}
+    record.writs[writ.item] = (record.writs[writ.item] or 0) + 1
+    record.name = ItemName(sealedID) or record.name
+    record.at = time()
+    Changed()
+end
+
+--- What a sealed writ has opened into, or nil before the first opening.
+-- @return { opens, rows = { { writ, count } } (most first, at most `most`),
+--   worth (the writ inside on average, copper; nil unless every writ it
+--   gave has a price) }
+function Writs:SealedInfo(sealedID, most)
+    local store = Store()
+    local record = store and store.sealedWrits[sealedID]
+    if not record or not record.opens or record.opens <= 0 then return nil end
+
+    local rows, total, priced = {}, 0, true
+    for item, count in pairs(record.writs or {}) do
+        local writ = Writs.WritForItem(item)
+        if writ then
+            rows[#rows + 1] = { writ = writ, count = count }
+            local writID = self:GetWritID(writ)
+            local price = writID and ns.Prices and ns.Prices:GetValue(writID)
+            if price and price > 0 then total = total + price * count else priced = false end
+        end
+    end
+    table.sort(rows, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.writ.name < b.writ.name
+    end)
+    most = most or 5
+    while #rows > most do table.remove(rows) end
+
+    return {
+        opens = record.opens,
+        rows = rows,
+        worth = (priced and #rows > 0) and math.floor(total / record.opens + 0.5) or nil,
+    }
+end
+
+--- The sealed writs this writ came out of.
+-- @return { { name, count, opens } }, most first
+function Writs:SealedSources(writ)
+    local list = {}
+    local store = Store()
+    if not store or not writ then return list end
+
+    for sealedID, record in pairs(store.sealedWrits) do
+        local count = record.writs and record.writs[writ.item]
+        if count and count > 0 then
+            list[#list + 1] = {
+                name = ItemName(sealedID) or record.name or tostring(sealedID),
+                count = count,
+                opens = record.opens or count,
+            }
+        end
+    end
+    table.sort(list, function(a, b) return a.count > b.count end)
+    return list
 end
 
 --------------------------------------------------------------------------------
@@ -346,15 +451,46 @@ function Writs:OnTurnIn(_, _, money)
     end
 end
 
+--- A sealed writ gone and a Craftsman's Writ come in, close together, is
+--- one opening.
+function Writs:NoteOpenings(sealed, writs)
+    local sealedBefore, writsBefore = self.sealedHeld, self.writsHeld
+    self.sealedHeld, self.writsHeld = sealed, writs
+    if not sealedBefore or not writsBefore then return end
+
+    local now = Now()
+    for itemID, had in pairs(sealedBefore) do
+        if had > (sealed[itemID] or 0) then recent.opened = { id = itemID, at = now } end
+    end
+    for itemID, count in pairs(writs) do
+        if count > (writsBefore[itemID] or 0) then
+            recent.unsealed = { writ = self:Classify(itemID), at = now }
+        end
+    end
+
+    local opened, unsealed = recent.opened, recent.unsealed
+    if opened and unsealed and unsealed.writ and math.abs(opened.at - unsealed.at) <= MATCH_SECONDS then
+        self:LearnOpen(opened.id, unsealed.writ)
+        recent.opened, recent.unsealed = nil, nil
+    end
+end
+
 --- Compare the items writs ask for with the last look: one leaving the
 --- bags, as many as its writ asks for, may be a delivery.
 function Writs:OnBags()
     local counts = ns.Inventory and ns.Inventory:GetBagCounts() or {}
 
-    local held = {}
+    local held, sealed, writs = {}, {}, {}
     for itemID, count in pairs(counts) do
         if Writs.WritForItem(itemID) then held[itemID] = count end
+        if self:IsSealed(itemID) then
+            sealed[itemID] = count
+        elseif self:Classify(itemID) then
+            writs[itemID] = count
+        end
     end
+
+    self:NoteOpenings(sealed, writs)
 
     local before = self.held
     self.held = held
