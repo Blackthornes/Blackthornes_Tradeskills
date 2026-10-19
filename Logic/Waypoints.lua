@@ -155,9 +155,12 @@ function Waypoints:Pin(place)
     if not self:CanPin() then return false, "noclient" end
     local mapID = place.mapID or self:MapFor(place.zone)
     if not mapID then return false, "nomap" end
+    local x, y
+    mapID, x, y = Waypoints.PinnableSpot(mapID, place.x / 100, place.y / 100)
+    if not mapID then return false, "noclient" end
 
     local ok = pcall(function()
-        local point = _G.UiMapPoint.CreateFromCoordinates(mapID, place.x / 100, place.y / 100)
+        local point = _G.UiMapPoint.CreateFromCoordinates(mapID, x, y)
         _G.C_Map.SetUserWaypoint(point)
         local super = _G.C_SuperTrack
         if type(super) == "table" and type(super.SetSuperTrackedUserWaypoint) == "function" then
@@ -165,7 +168,33 @@ function Waypoints:Pin(place)
         end
     end)
     if not ok then return false, "noclient" end
+    -- The game can turn a pin down without a word: only a pin it kept counts.
+    local map = Map()
+    if map and type(map.HasUserWaypoint) == "function" and Read(map.HasUserWaypoint) == false then
+        return false, "noclient"
+    end
     return true
+end
+
+--- A map the game takes a pin on, and the spot (0-1) on it. Some maps (a
+--- city or a building on some clients) take none: then the map around it,
+--- with the spot moved over by where the one map sits on the other.
+-- @return mapID, x, y, or nil when no map up the line takes a pin
+function Waypoints.PinnableSpot(mapID, x, y)
+    local map = Map()
+    if not (map and type(map.CanSetUserWaypointOnMap) == "function") then return mapID, x, y end
+    for _ = 1, 4 do
+        if Read(map.CanSetUserWaypointOnMap, mapID) ~= false then return mapID, x, y end
+        local _, parent = Info(mapID)
+        if not parent or parent <= 0 then return nil end
+        local minX, maxX, minY, maxY = Read(map.GetMapRectOnMap, mapID, parent)
+        minX, maxX, minY, maxY = Number(minX), Number(maxX), Number(minY), Number(maxY)
+        if not (minX and maxX and minY and maxY) then return nil end
+        x = minX + x * (maxX - minX)
+        y = minY + y * (maxY - minY)
+        mapID = parent
+    end
+    return nil
 end
 
 -- TomTom (a player asked for it in Farmer, Equipment and Pets; here it is
@@ -210,6 +239,11 @@ function Waypoints:ProbeText()
     parts[#parts + 1] = (type(super) == "table" and type(super.SetSuperTrackedUserWaypoint) == "function")
         and "arrow yes" or "arrow NO"
     parts[#parts + 1] = self:HasTomTom() and "TomTom installed" or "no TomTom"
+    local here = Map() and Number(Read(Map().GetBestMapForUnit, "player"))
+    if here and type(Map().CanSetUserWaypointOnMap) == "function" then
+        parts[#parts + 1] = Read(Map().CanSetUserWaypointOnMap, here) == false
+            and ("pin on map " .. here .. " NO") or ("pin on map " .. here .. " yes")
+    end
     local map = Map()
     parts[#parts + 1] = (map and type(map.GetMapChildrenInfo) == "function") and "map list yes" or "map list NO"
     return table.concat(parts, ", ")

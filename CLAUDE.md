@@ -502,8 +502,11 @@ can take everything on one of the player's shopping lists, so it reads
 them, inside a pcall:
 
 ```lua
-_G.BlackthornesTS.Butler:Lists()   -- { { name, items = { [itemID] = want } } }, ShoppingLists.version; or nil
+_G.BlackthornesTS.Butler:Lists()   -- { { name, id, items = { [itemID] = want } } }, ShoppingLists.version; or nil
 ```
+
+`id` (2026-10-19) is the list's stable id (see "List rules"); Butler's
+Lists page keeps its own Mail To and Keep Here for a list by it.
 
 The player's own lists only (`ShoppingLists:Readable`), never the craft
 queue's, fresh tables each time; nothing is written. Tested in
@@ -525,6 +528,24 @@ the craft pays); a profession at its max for now has none. Kept 30 s, or
 until the queue, bags, a scan or the recipes move. Tested in
 `tools/test_butlerskillup.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
+
+Butler's "Craft When It Pays More" (a player asked, the owner said build
+it, 2026-10-19; off unless ticked in Butler) asks, only while it is on,
+inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:CraftFor(item, carried)
+  -- { recipeID, name, itemID (what it makes), per, crafts, perItem, needs = { { itemID, count } } }, or nil
+_G.BlackthornesTS.Butler:QueueCraft(recipeID, crafts)   -- Queue:Ensure; true, or false and why
+```
+
+Only recipes the character playing knows (not a dropped profession) that
+use the item. Each is valued by `Profit:Analyse` "best" after the cut and
+deposit (a slow auction at `Butler.SLOW`, a derived or uncontested price
+never), less the other materials (`Cost:GetCraftCost`, owned at their
+worth); `perItem` is that over how many one craft uses. Kept in the
+lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
+`Logic/Sisters.lua` reads them.
 
 ## Random suffix prices
 
@@ -604,7 +625,18 @@ the one whose materials stop taking the most stacks, less the new stacks
 what it makes takes (`Crafting:SlotsFreed`, from the bags' counts and
 `BagsFull.MaxStack`, kept until `Inventory.changes` or `Queue.version`
 moves). Ties keep queue order, and a craft waits while a ready sub-craft
-of its own (up its `forRecipes` chain) is ready. The stored queue never
+of its own (up its `forRecipes` chain) is ready. Bag space only picks within the
+first profession group with something ready (below), and the crafts the
+player queued come after every sub-craft.
+
+Bars all at once (a player's report, 2026-10-19: forge, anvil, forge):
+`Queue:RebuildDependencies` keeps one sub-craft per recipe and crafter
+(`MergeSubCrafts`, at the deeper level, `forRecipes` joined), counts what
+is held once across levels (`HeldPool`), and lays the sub-crafts out a
+profession at a time, the one feeding another first, deepest first within
+it (`OrderSubCrafts`, `Queue:ProfessionOf`). Nothing saved changes shape;
+sub-crafts are rebuilt as before. Butler's Jobs keeps this order for its
+parts. Tested in `tools/test_stationorder.lua`. The stored queue never
 moves. The button's tooltip says how many slots it frees. "Craft what frees
 bag space first" on the Queue page (`craftFreesSpaceFirst`, on unless
 unticked, never rename it). Tested in `tools/test_freespacefirst.lua`.
@@ -719,6 +751,14 @@ hover names the vendor, "Has what your queue needs:", each item with how
 many and the cost, "Saves you X over the auction house." and "Click to set
 a map pin." (or "Click for a TomTom arrow."); a click is
 `Waypoints:Pin`/`TomTom`, which now take a `mapID` in place of a zone.
+The look (the owner said build it, 2026-10-19, from a mockup): a gold rim
+round a bag with a gem on top and a glow that breathes (an animation the
+game loops, Window effects Full only), a gold badge with how many queue
+items, names under the pins only zoomed in or with `NAMES_MOST` (4) or
+fewer, the vendors that save less `SMALL` the size, and a beam under the
+one a click pinned (`VendorPins.pinned`); `VendorPinsUI.Looks` works it
+out. The hover is our own card (`ShowCard`: gold rim, dark glass rows,
+rarity and coin colours), on UIParent, never GameTooltip.
 Where vendors stand: `Data/VendorSpots.lua` (`ns.VENDOR_SPOTS`, Classic's
 vendors of the items in `Data/VendorPrices.lua` that never run out, by
 `tools/make_vendor_spots.py <quest database>`, never by hand), and every
@@ -1290,6 +1330,30 @@ takes a second click. `Logic/ShoppingLists.lua` keeps them account wide in
 `shoppingLists = { { name, items = { { id, want } } } }` (never rename it).
 Tested in `tools/test_shoppinglists.lua` and
 `tools/test_shoppinglistsview.lua`.
+
+## List rules
+
+The owner said build it (2026-10-19, from a mockup; he approved the words):
+a list can carry rules every item on it follows, like a group in other
+auction addons. A **Rules** button on each list's row opens "Rules for
+NAME" (`UI/ListRulesWindow.lua`, the house frame, dark glass rows): WHEN
+YOU SELL Lowest Price, Keep Listed (stacks at a time), Post For, Keep in
+Bags (of each); WHEN YOU BUY Most I'll Pay (each); Clear. The row shows
+"N rules". `Logic/ListRules.lua` keeps them on the list itself,
+`shoppingLists[i].rules = { floor, listed, duration, bags, maxPay }`, and
+each list gets a stable `id` from `shoppingListNextId` (never rename
+`rules`, `id` or `shoppingListNextId`). None is set on a new list, so
+nothing changes until the player sets one. An item follows the first list
+on the Lists view that holds it and has a rule (`ListRules:For`, laid out
+once per `ShoppingLists.version`). Where they reach: `Profit:ChoosePostPrice`
+(Lowest Price, basis "list", unless the Prices tab has the item's own
+price: that wins), `Posting:GetPostable` (Keep in Bags, the bigger keep
+wins with `SisterKeeps`; Keep Listed against `Auctions:GetOwnPostedCount`,
+"Waiting, already N up"), `Posting:DurationFor` (Post For) and
+`BuyQuantity:Fill` (Most I'll Pay fills the box only with units at or
+under it, `BuyQuantity.UnitsUpTo`). The Sell list tags a row with its list
+or "Own price" (`PostPanel._ListTag`). Tested in `tools/test_listrules.lua`.
+Not yet seen in game.
 
 ## The Blizzard window style
 
