@@ -404,6 +404,28 @@ check("an item with no reading has no demand line", ItemTooltip:LinesFor(SILK_CL
     or ItemTooltip:LinesFor(SILK_CLOTH, nil)[#ItemTooltip:LinesFor(SILK_CLOTH, nil)][1] ~= "Demand", true)
 ns.Demand = nil
 
+-- A sealed writ the player has opened says what came out.
+ns.Writs = {
+    IsSealed = function(_, itemID) return itemID == LINEN_CLOTH end,
+    SealedInfo = function()
+        return { opens = 6, worth = 12000, rows = {
+            { writ = { name = "Bolt of Silk Cloth" }, count = 3 },
+            { writ = { name = "Heavy Leather" }, count = 2 },
+        } }
+    end,
+}
+lines = ItemTooltip:LinesFor(LINEN_CLOTH, nil)
+local opened
+for i, line in ipairs(lines) do
+    if line[1] == "You opened 6" then opened = i end
+end
+check("a sealed writ says how many were opened", opened ~= nil, true)
+check("then each writ that came out", lines[opened + 1][1] .. " " .. lines[opened + 1][2], "Bolt of Silk Cloth 3 of 6")
+check("and what the writ inside is worth", lines[opened + 3][1], "Writ inside worth about")
+check("other items get no sealed lines", #ItemTooltip:LinesFor(SILK_CLOTH, nil) > 0
+    and ItemTooltip:LinesFor(SILK_CLOTH, nil)[1][1] ~= "You opened 6", true)
+ns.Writs = nil
+
 ns.Prices.Get = nil
 
 print("test_itemtooltip: ok")

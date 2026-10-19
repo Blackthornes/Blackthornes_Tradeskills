@@ -3101,3 +3101,8 @@ L["Waiting, already %d up"] = "Ждёт, уже выставлено: %d"
 L["each"] = "за штуку"
 L["of each"] = "каждого"
 L["stacks at a time"] = "стопок за раз"
+
+-- Sealed writs
+L["You opened %d"] = "Ты открыл: %d"
+L["Writ inside worth about"] = "Заказ внутри стоит около"
+L["Came from %s: %d of %d"] = "Выпал из %s: %d из %d"

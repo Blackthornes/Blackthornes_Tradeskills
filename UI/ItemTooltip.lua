@@ -352,6 +352,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
         self:AddCraftedLines(lines, itemID)
         self:AddRecipeLines(lines, itemID)
+        self:AddSealedLines(lines, itemID)
 
         return lines
     end
@@ -404,8 +405,28 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     self:AddCraftedLines(lines, itemID)
     self:AddRecipeLines(lines, itemID)
+    self:AddSealedLines(lines, itemID)
 
     return lines
+end
+
+--- What a sealed writ has opened into, once the player has opened one
+--- (`Writs:SealedInfo`, learned from their own openings).
+function ItemTooltip:AddSealedLines(lines, itemID)
+    local writs = ns.Writs
+    if not (writs and writs.SealedInfo and writs.IsSealed) then return end
+    if not writs:IsSealed(itemID) then return end
+
+    local info = writs:SealedInfo(itemID, 5)
+    if not info then return end
+
+    lines[#lines + 1] = { L.Format("You opened %d", info.opens), "" }
+    for _, row in ipairs(info.rows) do
+        lines[#lines + 1] = { row.writ.name, L.Format("%d of %d", row.count, info.opens) }
+    end
+    if info.worth then
+        lines[#lines + 1] = { L["Writ inside worth about"], Util.FormatMoney(info.worth, { short = true }) }
+    end
 end
 
 --- The market value now against its average over the picked period

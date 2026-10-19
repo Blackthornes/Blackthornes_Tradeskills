@@ -772,6 +772,22 @@ VENDORS on the Mail & Vendors page (`vendorMapPins`, off unless ticked,
 never rename it) and `/bts vendorpins on|off`. Tested in
 `tools/test_vendorpins.lua`. Not yet seen in game.
 
+## Sealed writs
+
+The owner said build it (2026-10-19): mobs drop a Sealed Journeyman's or
+Expert's Writ, and tearing it open gives one Craftsman's Writ, so the
+addon learns what each opens into. `Writs:NoteOpenings` (from `OnBags`):
+a sealed writ (`Writs.IsSealedName`, "Sealed ... Writ") leaving the bags
+and a Craftsman's Writ coming in within `MATCH_SECONDS` is one opening,
+kept account wide in `merchantsFavor.sealedWrits[sealedID] = { opens,
+writs = { [item the writ asks for] = count }, name, at }` (never rename
+it). The item tooltip (`ItemTooltip:AddSealedLines`, `Writs:SealedInfo`)
+says "You opened N", up to five writs with "3 of 6" and "Writ inside
+worth about" once every writ it gave has a price; a writ row's tooltip
+on the Writs view says "Came from NAME: 3 of 6" (`Writs:SealedSources`).
+Nothing is opened for the player. Tested in `tools/test_writs.lua` and
+`tools/test_itemtooltip.lua`. Not yet seen in game.
+
 ## Recipes Forever added
 
 The owner (2026-10-17): "always add new recipe finds to tradeskills".
