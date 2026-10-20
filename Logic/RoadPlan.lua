@@ -283,6 +283,18 @@ function RoadPlan:Plan(opts)
     }
 end
 
+--- The steps as the list shows them: the ones left first, in order, then
+--- the ones done, in order (the owner asked 2026-10-20). The plan's own
+--- order stays as it is, for "Step N of M", the meter and Queue All.
+function RoadPlan.Shown(steps)
+    local open, done = {}, {}
+    for _, step in ipairs(steps or {}) do
+        if step.done then done[#done + 1] = step else open[#open + 1] = step end
+    end
+    for _, step in ipairs(done) do open[#open + 1] = step end
+    return open
+end
+
 --------------------------------------------------------------------------------
 -- The character's professions, and the plan kept by key
 --------------------------------------------------------------------------------
