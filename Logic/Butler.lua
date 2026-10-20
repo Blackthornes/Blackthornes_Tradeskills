@@ -210,7 +210,10 @@
 -- max, recipeID, itemID, name, tier ("optimal" or "medium"), cost (copper,
 -- the REAL COST column: materials less what it gets back, below 0 when the
 -- craft pays), queued (true while the queue holds it) }, by profession
--- name. Only a sure or likely point with a priced cost is offered.
+-- name. Only a sure or likely point with a priced cost is offered. A
+-- profession at its cap for now (2026-10-20, the owner: send the player to
+-- the trainer) is { profession, english (its English name), skill, max,
+-- capped = true } with no recipe, so Butler can name the rank to train.
 -- QueueSkillUp puts one in the queue (Queue:Ensure).
 --
 -- Butler's "Craft When It Pays More" (2026-10-19, a player asked, the
@@ -1720,6 +1723,18 @@ local function ProfessionOf(skillLineID, lookup)
     return found
 end
 
+--- A profession at its cap for now: Butler names the trainer's next rank.
+--- `english` is the profession's English name, whatever the client's.
+local function Capped(name, skill, max, skillLineID)
+    local recipes = ns.Recipes
+    local english = recipes and recipes.SKILL_LINE_PROFESSIONS and recipes.SKILL_LINE_PROFESSIONS[skillLineID]
+    if not english and recipes and recipes.EnglishProfessionName then
+        local ok, word = pcall(recipes.EnglishProfessionName, name)
+        english = ok and word or nil
+    end
+    return { profession = name, english = english, skill = skill, max = max, capped = true }
+end
+
 local function NextSkillUp()
     local levelUp = ns.LevelUp
     if not (levelUp and levelUp.GetRanked) then return nil end
@@ -1741,6 +1756,7 @@ local function NextSkillUp()
             local skill, max = tonumber(info.skillLevel) or 0, tonumber(info.maxSkillLevel) or 0
             if skill >= max then
                 seen[name] = true
+                answer[#answer + 1] = Capped(name, skill, max, row.skillLineID)
             elseif SKILL_UP_TIERS[row.tier] and type(cost) == "number" then
                 seen[name] = true
                 answer[#answer + 1] = {
@@ -1748,6 +1764,19 @@ local function NextSkillUp()
                     recipeID = row.recipeID, itemID = row.outputItemID, name = row.name,
                     tier = row.tier, cost = math.floor(cost + 0.5),
                 }
+            end
+        end
+    end
+    -- A profession at its cap with nothing on the Level Up tab (gathering
+    -- ones have no crafts) still says it is capped, from the saved read.
+    local recipes = ns.Recipes
+    if recipes and recipes.GetLearnedProfessions then
+        local ok, list = pcall(recipes.GetLearnedProfessions, recipes)
+        for _, entry in ipairs(ok and type(list) == "table" and list or {}) do
+            local skill, max = type(entry) == "table" and tonumber(entry.skillLevel), type(entry) == "table" and tonumber(entry.maxSkillLevel)
+            if skill and max and max > 0 and skill >= max and entry.name and not seen[entry.name] then
+                seen[entry.name] = true
+                answer[#answer + 1] = Capped(entry.name, skill, max, entry.skillLineID)
             end
         end
     end
@@ -1767,7 +1796,7 @@ function Butler:NextSkillUp()
     local copy = {}
     for _, entry in ipairs(answer) do
         local queued = false
-        if queue and queue.Find then
+        if entry.recipeID and queue and queue.Find then
             local found, index = pcall(queue.Find, queue, entry.recipeID)
             queued = found and index ~= nil
         end
@@ -1775,6 +1804,7 @@ function Butler:NextSkillUp()
             profession = entry.profession, skill = entry.skill, max = entry.max,
             recipeID = entry.recipeID, itemID = entry.itemID, name = entry.name,
             tier = entry.tier, cost = entry.cost, queued = queued,
+            capped = entry.capped, english = entry.english,
         }
     end
     return copy
