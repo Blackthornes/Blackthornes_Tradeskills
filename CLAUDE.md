@@ -808,6 +808,32 @@ on the Writs view says "Came from NAME: 3 of 6" (`Writs:SealedSources`).
 Nothing is opened for the player. Tested in `tools/test_writs.lua` and
 `tools/test_itemtooltip.lua`. Not yet seen in game.
 
+## The favor goal
+
+The owner said build it (2026-10-20, from a mockup): a Merchant's Favor
+goal on the Favors and Writs tab. "Favor Goal:" takes a number
+(`favorGoal`, nil for none, never rename it; `MerchantsFavor.Goal`,
+`SetGoal`). `MerchantsFavor:GetPlan` works out the cheapest way there
+from the first priced row of `GetRows` (crates and bundles held come off
+the gold), `FavorHave` reads the favor (its currency by ID once seen,
+`favorCurrency`, else its item, `favorItem`, else the currency list by
+name), and `Steps` lays it out a crate and a bundle at a time. The strip
+(`UI/DealsFavor.lua`) shows a gold bar with tenth ticks, You Have, Still
+to go, Cheapest way and Gold to get there; Add to a List fills a list
+named Merchant's Favor (`AddToList`, set, never doubled). `CheckGoal`
+chimes each new tenth and cheers the goal with the game's own sounds by
+ID; the first look only notes where it stands. A crate's tooltip shows
+what it costs and pays (`ItemTooltip:AddCrateLines`, `RowForItem`;
+"Crate Costs:" on the Look page, Off, Shift or Always, `tooltipCrateCosts`
+on unless unticked and `tooltipCrateShift`, never rename either). While a
+goal is set the auction house drawer has a Favors switch
+(`UI/FavorsView.lua`, `PostPanel:LayTabs`): the steps, and Buy Next buys
+one listing a click (a crate by a search, a bundle by
+`StartCommoditiesPurchase`, then Pay with the game's total); a buy is
+counted until the bags or bank show it (`FavorsView.bought`). Nothing is
+bought without the player's click. Tested in `tools/test_favorgoal.lua`.
+Not yet seen in game.
+
 ## Recipes Forever added
 
 The owner (2026-10-17): "always add new recipe finds to tradeskills".

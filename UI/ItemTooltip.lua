@@ -111,11 +111,12 @@ ItemTooltip.SHIFT_SETTINGS = {
     trend   = "tooltipTrendShift",
     recipe  = "tooltipRecipeShift",
     enchant = "tooltipEnchantShift",
+    crate   = "tooltipCrateShift",
 }
 
 local TooltipShift = ns.TooltipShift
 if TooltipShift then
-    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant" }
+    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant", "crate" }
 
     function TooltipShift.Read(key)
         local name = ItemTooltip.SHIFT_SETTINGS[key]
@@ -125,6 +126,17 @@ if TooltipShift then
     function TooltipShift.Write(key, on)
         local name = ItemTooltip.SHIFT_SETTINGS[key]
         if name and ns.Config then ns.Config:Set(name, on and true or false) end
+    end
+end
+
+-- A crate's Shift lines (Crate on the AH, You Have, Next Best) show while
+-- Shift is held even with its lines on Always, so Shift redraws a tooltip
+-- holding them back too.
+if TooltipShift then
+    local anyShift = TooltipShift.AnyShift
+    function TooltipShift:AnyShift()
+        if ItemTooltip.crateHeld then return true end
+        return anyShift(self)
     end
 end
 
@@ -353,6 +365,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
         self:AddCraftedLines(lines, itemID)
         self:AddRecipeLines(lines, itemID)
         self:AddSealedLines(lines, itemID)
+        self:AddCrateLines(lines, itemID)
 
         return lines
     end
@@ -406,6 +419,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
     self:AddCraftedLines(lines, itemID)
     self:AddRecipeLines(lines, itemID)
     self:AddSealedLines(lines, itemID)
+    self:AddCrateLines(lines, itemID)
 
     return lines
 end
@@ -426,6 +440,61 @@ function ItemTooltip:AddSealedLines(lines, itemID)
     end
     if info.worth then
         lines[#lines + 1] = { L["Writ inside worth about"], Util.FormatMoney(info.worth, { short = true }) }
+    end
+end
+
+--- What a Waylaid Crate costs to fill and pays back (the owner said build
+--- it, 2026-10-20): its cheapest bundle, what that costs, the silver and
+--- favor the turn-in pays and what one favor comes to, from the Favors and
+--- Writs tab's own sums. With Shift held: the crate's own price, how much of
+--- the bundle you have and the next cheapest bundle.
+function ItemTooltip:AddCrateLines(lines, itemID)
+    self.crateHeld = nil
+    if ns.Config and ns.Config:Get("tooltipCrateCosts") == false then return end
+    local favor = ns.MerchantsFavor
+    if not (favor and favor.RowForItem) then return end
+    local row = favor:RowForItem(itemID)
+    if not row then return end
+    if not ItemTooltip.Shows("crate") then
+        lines.held = true
+        return
+    end
+
+    local function Money(value) return Util.FormatMoney(value, { short = true }) end
+    local best = row.best
+    if best then
+        local name = favor.NameOf(best.itemID) or "?"
+        lines[#lines + 1] = { L["Fill It With"], L.Format("%d %s", best.count, name) }
+        if best.cost then lines[#lines + 1] = { L["Fills For"], Money(best.cost) } end
+    end
+    if row.favor then
+        local back = (row.money or 0) > 0
+            and L.Format("%s and %d favor", Money(row.money), row.favor)
+            or L.Format("%d favor", row.favor)
+        lines[#lines + 1] = { L["Pays Back"], back }
+    end
+    if row.perFavor then
+        lines[#lines + 1] = { L["Each Favor"], Money(math.floor(row.perFavor + 0.5)), color = "accent" }
+    end
+
+    local shift = ns.TooltipShift
+    if not (shift and shift.ShiftDown()) then
+        lines.held = true
+        self.crateHeld = true
+        return
+    end
+    lines[#lines + 1] = { L["Crate on the AH"], row.cratePrice and Money(row.cratePrice) or L["none listed"] }
+    if best then
+        local have = favor.Owned(best.itemID)
+        lines[#lines + 1] = { L["You Have"], L.Format("%d of %d", math.min(have, best.count), best.count) }
+    end
+    local next
+    for _, bundle in ipairs(row.bundles or {}) do
+        if bundle ~= best and bundle.cost and (not next or bundle.cost < next.cost) then next = bundle end
+    end
+    if next then
+        local name = favor.NameOf(next.itemID) or "?"
+        lines[#lines + 1] = { L["Next Best"], L.Format("%d %s", next.count, name) }
     end
 end
 
