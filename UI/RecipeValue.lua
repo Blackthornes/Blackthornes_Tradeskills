@@ -61,6 +61,11 @@ local RIGHT_INSET = 6
 -- one with no price on it at all.
 local MIN_NAME_WIDTH = 60
 
+-- A name that will not fit beside the value wraps rather than ending in
+-- "...": onto this many lines, a font size or two smaller when it must.
+local WRAP_LINES = 2
+local MAX_FONT_STEP = 2
+
 -- How often the visible rows are re-read while a profession window is open.
 -- Scrolling recycles rows rather than firing an event, so a row that was
 -- "Copper Chain Belt" a moment ago is now a different recipe with our old
@@ -655,15 +660,23 @@ local function ReleaseName(region)
         Try(Field(region, "SetWordWrap"), region, state.wrap)
     end
 
+    if state.lines ~= nil then
+        Try(Field(region, "SetMaxLines"), region, state.lines)
+    end
+
+    if state.font and state.size then
+        Try(Field(region, "SetFont"), region, state.font, state.size, state.flags)
+    end
+
     return true
 end
 
 --- Narrow a name so it stops short of the value instead of running under it.
 --
--- Word wrap goes off first. A name given less width than its text needs would
--- otherwise fold onto a second line inside a row only tall enough for one,
--- which is a worse-looking row than the one this is fixing. The old setting
--- is kept so it can be put back.
+-- A name is never cut to "..." (the house rule: wrap, never cut). One that
+-- no longer fits on a line wraps onto a second, and steps down a font size
+-- or two first when even two lines would not hold it. Everything changed is
+-- kept so it can be put back.
 local function ShortenName(region, maxRight)
     if region == nil then return false end
 
@@ -675,11 +688,43 @@ local function ShortenName(region, maxRight)
     local width = math.max(maxRight - left, MIN_NAME_WIDTH)
 
     if not shortened[region] then
-        shortened[region] = { wrap = Try(Field(region, "GetWordWrap"), region) }
+        local ok, font, size, flags = pcall(Field(region, "GetFont"), region)
+        if not ok then font, size, flags = nil, nil, nil end
+
+        shortened[region] = {
+            wrap = Try(Field(region, "GetWordWrap"), region),
+            lines = Try(Field(region, "GetMaxLines"), region),
+            font = type(font) == "string" and font or nil,
+            size = type(size) == "number" and size or nil,
+            flags = flags,
+        }
     end
 
-    Try(Field(region, "SetWordWrap"), region, false)
+    local state = shortened[region]
+
     Try(setWidth, region, width)
+
+    -- The whole name's width, not the part a narrowed region shows.
+    local textWidth = Try(Field(region, "GetUnboundedStringWidth"), region)
+        or Try(Field(region, "GetStringWidth"), region)
+    if type(textWidth) ~= "number" or textWidth <= width then
+        -- It fits on one line after all; no wrapping needed.
+        return true
+    end
+
+    Try(Field(region, "SetWordWrap"), region, true)
+    Try(Field(region, "SetMaxLines"), region, 0)
+
+    -- Two lines at the usual size, else a smaller size, measured each step.
+    if state.font and state.size then
+        local size = state.size
+
+        while textWidth > width * WRAP_LINES and size > state.size - MAX_FONT_STEP do
+            size = size - 1
+            Try(Field(region, "SetFont"), region, state.font, size, state.flags)
+            textWidth = Try(Field(region, "GetUnboundedStringWidth"), region) or textWidth * (size / (size + 1))
+        end
+    end
 
     return true
 end
