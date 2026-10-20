@@ -3,7 +3,8 @@
 -- Butler's "Cheapest Skill-Up" line (2026-10-19) shows the Level Up tab's
 -- top pick for each profession. What must hold:
 --   1. One entry a profession, the first fitting row in the Level Up order.
---   2. A profession at its max, or with only green or unread crafts, has none.
+--   2. A profession with only green or unread crafts has none; one at its
+--      max says so (capped, its English name, no recipe), saved ones too.
 --   3. A craft with no price is passed over for the next one.
 --   4. The cost is the real cost when there is one, so a craft that pays
 --      comes back below 0.
@@ -57,17 +58,23 @@ local function check(label, got, want)
 end
 
 -- 1.
-local list = Butler:NextSkillUp()
+local list = {}
+for _, entry in ipairs(Butler:NextSkillUp()) do
+  if not entry.capped then list[#list + 1] = entry end
+end
 check("two professions", list and #list, 2)
 check("by profession name", list[1].profession .. "," .. list[2].profession, "First Aid,Tailoring")
 check("the top priced pick", list[1].name, "Linen Bandage")
 check("its skill and max", list[1].skill .. "/" .. list[1].max, "52/75")
 check("its item", list[1].itemID, 1251)
 
--- 2. Mining is maxed, Blacksmithing only has a green: neither shows.
-local names = {}
-for _, entry in ipairs(list) do names[entry.profession] = true end
-check("a maxed profession has none", names.Mining, nil)
+-- 2. Mining is maxed, Blacksmithing only has a green: neither has a craft.
+local names, capped = {}, {}
+for _, entry in ipairs(Butler:NextSkillUp()) do
+  if entry.capped then capped[entry.profession] = entry else names[entry.profession] = true end
+end
+check("a maxed profession has no craft", names.Mining, nil)
+check("a maxed profession says it is capped", capped.Mining and capped.Mining.max, 75)
 check("a green craft is not offered", names.Blacksmithing, nil)
 
 -- 3.
@@ -109,6 +116,28 @@ check("both professions found", list and #list, 2)
 check("Enchanting from the saved read", list[1].profession .. " " .. list[1].skill .. "/" .. list[1].max, "Enchanting 12/75")
 check("Tailoring through its other ID", list[2].profession .. " " .. list[2].skill .. "/" .. list[2].max, "Tailoring 61/75")
 check("Tailoring's likely pick", list[2].name, "Enchanted Mageweave Pouch")
+ns.Recipes = nil
+
+-- 2b. Capped professions, from the Level Up rows and the saved read.
+ns.Recipes = {
+  SKILL_LINE_PROFESSIONS = { [186] = "Mining", [333] = "Enchanting" },
+  GetLearnedProfessions = function()
+    return {
+      { name = "Enchanting", skillLineID = 333, skillLevel = 150, maxSkillLevel = 150, learned = true },
+      { name = "Mining", skillLineID = 186, skillLevel = 75, maxSkillLevel = 75, learned = true },
+      { name = "First Aid", skillLineID = 129, skillLevel = 52, maxSkillLevel = 75, learned = true },
+    }
+  end,
+}
+INFO[333] = nil INFO[2940] = nil INFO[2948] = nil
+rows = { { recipeID = 5, skillLineID = 186, tier = "optimal", cost = 1, name = "Smelt Copper" } }
+ns.Queue.version = 11
+list = Butler:NextSkillUp()
+check("two capped professions", list and #list, 2)
+check("Enchanting capped from the saved read", list[1].profession .. " " .. tostring(list[1].capped) .. " " .. list[1].english .. " " .. list[1].skill .. "/" .. list[1].max, "Enchanting true Enchanting 150/150")
+check("Mining capped from its row", list[2].profession .. " " .. tostring(list[2].capped) .. " " .. list[2].english, "Mining true Mining")
+check("a capped one has no recipe", list[1].recipeID, nil)
+check("a capped one is not queued", list[1].queued, false)
 ns.Recipes = nil
 
 -- 6.

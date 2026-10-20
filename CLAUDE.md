@@ -524,7 +524,10 @@ _G.BlackthornesTS.Butler:QueueSkillUp(id)   -- one in the queue: true, or false 
 
 The first row of each profession in `LevelUp:GetRanked`'s order that is a
 sure or likely point with a priced cost (`cost` is REAL COST, below 0 when
-the craft pays); a profession at its max for now has none. Kept 30 s, or
+the craft pays). A profession at its max for now (2026-10-20, the owner:
+Butler names the next trainer) comes as `{ profession, english, skill, max,
+capped = true }` with no recipe, from the rows and from the saved read
+(`Recipes:GetLearnedProfessions`); an older Butler skips it. Kept 30 s, or
 until the queue, bags, a scan or the recipes move. Tested in
 `tools/test_butlerskillup.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
