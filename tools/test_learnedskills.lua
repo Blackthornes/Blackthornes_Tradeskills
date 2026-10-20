@@ -83,4 +83,29 @@ ns.db.characters[SELF].professions = nil
 levels[165] = { 0, 0 }
 check("no profession is made up", #Recipes:GetLearnedProfessions() == 0)
 
+print("\none window open, the other professions say nothing")
+-- With the Tailoring window open Forever answered only for Tailoring, and
+-- the saved list lost Enchanting and Cooking with their levels (2026-10-20).
+local names = { [165] = "Leatherworking", [197] = "Tailoring", [333] = "Enchanting", [185] = "Cooking" }
+lines = { 165, 197, 333, 185 }
+levels = { [165] = { 100, 150 }, [197] = { 120, 150 }, [333] = { 90, 150 }, [185] = { 60, 75 } }
+C_TradeSkillUI.GetProfessionInfoBySkillLineID = function(id)
+    if not levels[id] then return nil end
+    return { professionName = names[id], skillLevel = levels[id][1], maxSkillLevel = levels[id][2] }
+end
+Recipes:RefreshProfessions()
+check("all four saved", #ns.db.characters[SELF].professions == 4)
+levels = { [197] = { 121, 150 } }
+Recipes:RefreshProfessions()
+check("Tailoring takes the new read", Level("Tailoring") == 121)
+check("Enchanting is kept", Level("Enchanting") == 90)
+check("Cooking is kept", Level("Cooking") == 60)
+check("still four", #Recipes:GetLearnedProfessions() == 4)
+
+print("\na profession dropped")
+levels = { [165] = { 100, 150 }, [197] = { 121, 150 }, [333] = { 0, 0 }, [185] = { 60, 75 } }
+Recipes:RefreshProfessions()
+check("read as not learned, it goes", Level("Enchanting") == nil)
+check("the rest stay", Level("Cooking") == 60 and Level("Tailoring") == 121)
+
 print(("\n%d checks passed"):format(checks))
