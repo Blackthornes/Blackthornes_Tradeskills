@@ -3205,3 +3205,17 @@ L["Pick the professions you want to level. We'll lay out the road for each one a
 L["You can change this any time in Settings."] = "Это можно поменять в любой момент в настройках."
 L["Not Now"] = "Не сейчас"
 L["Show My Road"] = "Показать мой путь"
+
+-- Realm prices (2026-10-20)
+L["YOUR REALM"] = "ТВОЙ МИР"
+L["Realm Prices:"] = "Цены мира:"
+L["Swaps auction prices with players on your realm who use Tradeskills. Only prices are sent, never names. Your own scans always win."] = "Обменивается ценами аукциона с игроками твоего мира, у которых есть Tradeskills. Отправляются только цены, никогда имена. Твои сканирования всегда важнее."
+L["Realm prices are off."] = "Цены мира выключены."
+L["Listening for prices from your realm. A price is used once 3 players agree on it."] = "Ждём цены от игроков твоего мира. Цена используется, когда 3 игрока согласны."
+L["%s realm price kept, from %d player."] = "Сохранена %s цена мира, от %d игрока."
+L["%s realm price kept, from %d players."] = "Сохранена %s цена мира, от %d игроков."
+L["%s realm prices kept, from %d player."] = "Сохранено %s цен мира, от %d игрока."
+L["%s realm prices kept, from %d players."] = "Сохранено %s цен мира, от %d игроков."
+L["Your realm"] = "Твой мир"
+L["realm prices on"] = "цены мира включены"
+L["realm prices off"] = "цены мира выключены"

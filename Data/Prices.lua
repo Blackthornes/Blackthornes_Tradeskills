@@ -783,7 +783,8 @@ end
 -- A price the player set on the Prices tab (see My prices below) wins over
 -- all but "rival": "use" replaces the scanned price, "floor" lifts it.
 -- Rival stays the auction house's own, since it is the price to undercut.
--- An item nobody has priced may take TradeSkillMaster's (Logic/TSMPrices.lua),
+-- Gaps take your guild's prices, then your realm's (Logic/GuildPrices.lua,
+-- Logic/RealmPrices.lua); an item nobody has priced may take TradeSkillMaster's (Logic/TSMPrices.lua),
 -- then Auctionator's (Logic/AuctionatorPrices.lua).
 -- GetScanValue answers from the scans alone.
 function Prices:GetValue(itemID, which)
@@ -795,9 +796,25 @@ function Prices:GetValue(itemID, which)
     -- gone stale while theirs is newer. A fresh scan of your own always wins.
     -- Only asked when it could be used: their answer is sorted out of every
     -- guildmate's, and prices are read many times a redraw.
+    local filled
     local guild = ns.GuildPrices
     if guild and guild.IsOn and guild:IsOn() and (not scanned or self:IsStale(itemID)) then
         local shared, sharedAt = guild:GetValue(itemID, which)
+        if shared then
+            local record = self:GetTable()[itemID]
+            local seen = type(record) == "table" and record.seen or 0
+            if not scanned or (self:IsStale(itemID) and sharedAt > seen) then
+                scanned = shared
+                filled = true
+            end
+        end
+    end
+
+    -- Then your realm's (Logic/RealmPrices.lua, off unless ticked), the same
+    -- way, only where your guild had nothing to give.
+    local realm = ns.RealmPrices
+    if not filled and realm and realm.IsOn and realm:IsOn() and (not scanned or self:IsStale(itemID)) then
+        local shared, sharedAt = realm:GetValue(itemID, which)
         if shared then
             local record = self:GetTable()[itemID]
             local seen = type(record) == "table" and record.seen or 0
@@ -806,7 +823,7 @@ function Prices:GetValue(itemID, which)
     end
 
     -- TradeSkillMaster's price (Logic/TSMPrices.lua, on unless unticked)
-    -- only for an item neither you nor your guildmates have priced.
+    -- only for an item neither you, your guildmates nor your realm have priced.
     if not scanned then
         local tsm = ns.TSMPrices
         if tsm and tsm.GetValue then
