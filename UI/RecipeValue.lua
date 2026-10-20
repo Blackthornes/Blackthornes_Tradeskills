@@ -684,7 +684,7 @@ local function ShortenName(region, maxRight)
     return true
 end
 
---- Put the value after everything else on the row, or against the right edge.
+--- Put the value against the row's right edge, clear of everything else.
 --
 -- The first version of this measured the recipe's name alone and anchored the
 -- value to it. That printed the value on top of the "[5]" beside a recipe
@@ -694,7 +694,7 @@ end
 -- all of it, and when there is genuinely no room the name gives way rather
 -- than the two being drawn over each other.
 --
--- @return "inline", "shortened" or "right" -- how the value had to be placed,
+-- @return "column", "shortened" or "right" -- how the value had to be placed,
 --   so `/bts value` can report what the rows actually look like rather than
 --   that a position was set.
 local function PositionLabel(label, row, region)
@@ -731,16 +731,15 @@ local function PositionLabel(label, row, region)
 
     local valueLeft = rowRight - RIGHT_INSET - valueWidth
 
-    if textRight + NAME_GAP <= valueLeft then
-        -- Anchored to the row rather than to the name region, so the offset
-        -- means the same thing whatever that region's own left edge is.
-        label:SetJustifyH("LEFT")
-        label:SetPoint("LEFT", row, "LEFT", (textRight - rowLeft) + NAME_GAP, 0)
-        return "inline"
-    end
-
+    -- Every value sits against the row's right edge, so down the list they
+    -- line up in one neat column instead of trailing each name at its own
+    -- length (Trent's screenshot, 2026-10-20).
     label:SetJustifyH("RIGHT")
     label:SetPoint("RIGHT", row, "RIGHT", -RIGHT_INSET, 0)
+
+    if textRight + NAME_GAP <= valueLeft then
+        return "column"
+    end
 
     -- The text reaches into where the value has to go, so the text gives way.
     -- Cutting a name short is a real cost, which is why it is the last resort
@@ -835,7 +834,7 @@ end
 function RecipeValue:Refresh()
     local report = {
         rows = 0, valued = 0, unpriced = 0, unresolved = 0, nolabel = 0,
-        placed = { inline = 0, shortened = 0, right = 0 },
+        placed = { column = 0, shortened = 0, right = 0 },
     }
 
     if not self:IsEnabled() then
@@ -988,12 +987,12 @@ function RecipeValue:PrintReport()
     end
 
     -- The outcome, not the attempt: where the values actually sit right now.
-    -- "beside the name" is the good case; the other two are the rows where
+    -- "in the right-hand column" is the good case; the other two are the rows where
     -- the name and the price were competing for the same space.
     local placed = report.placed or {}
 
-    ns.PrintRaw(("  |c%svalues beside the name|r  %d"):format(
-        ns.COLORS.muted, placed.inline or 0))
+    ns.PrintRaw(("  |c%svalues in the right-hand column|r  %d"):format(
+        ns.COLORS.muted, placed.column or 0))
 
     if (placed.shortened or 0) > 0 then
         ns.PrintRaw(("  |c%snames cut short to fit the value|r  %d"):format(
