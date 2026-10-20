@@ -321,6 +321,16 @@ function Scanner:StartFullScan()
     -- Snapshot when it is available, browse when it is not. Both end up in
     -- the same price database.
     local cooldown = self:GetSnapshotCooldown()
+    if cooldown and ns.db.lastReplicateByOther then
+        -- With Auctionator loaded it is most likely the one that asked, and
+        -- its scan when the auction house opens is a setting it can turn off.
+        if type(rawget(_G, "Auctionator")) == "table" then
+            ns.Print(L["Another addon just did a full scan, so doing a page by page scan instead. Turn off Auctionator's scan when the auction house opens to get the quick scan back."])
+        else
+            ns.Print(L["Another addon just did a full scan, so doing a page by page scan instead."])
+        end
+        return self:StartBrowseScan()
+    end
     if cooldown then
         -- Says when it was last used as well, so a cooldown nobody remembers
         -- starting can be checked against what the player was doing then.
@@ -355,9 +365,13 @@ function Scanner:StartFullScan()
             -- for a scan the server never heard about.
             ns.db.lastReplicateRequest = time()
             ns.db.lastReplicateAnswered = nil
+            ns.db.lastReplicateByOther = nil
             Scanner.awaitingReplicate = true
 
-            if not pcall(C_AuctionHouse.ReplicateItems) then
+            Scanner.sendingOwnReplicate = true
+            local sent = pcall(C_AuctionHouse.ReplicateItems)
+            Scanner.sendingOwnReplicate = false
+            if not sent then
                 Scanner.awaitingReplicate = false
                 ns.Print(L["the game refused the quick full scan, so scanning page by page instead"])
                 Scanner:StartBrowseScan()
@@ -2162,6 +2176,19 @@ function Scanner:OnEnable()
                 Scanner.browseForeign = true
             end
         end
+        -- Another addon asking for the quick full scan uses up the same
+        -- fifteen minutes. Ours asked then would go unanswered and only
+        -- give way to the page-by-page scan half a minute later, so the
+        -- cooldown is stamped here and the next scan goes straight to pages.
+        if type(C_AuctionHouse.ReplicateItems) == "function" then
+            pcall(hooksecurefunc, C_AuctionHouse, "ReplicateItems", function()
+                if Scanner.sendingOwnReplicate or not ns.db then return end
+                ns.db.lastReplicateRequest = time()
+                ns.db.lastReplicateAnswered = nil
+                ns.db.lastReplicateByOther = true
+            end)
+        end
+
         for _, name in ipairs({ "SendBrowseQuery", "SearchForFavorites", "SearchForItemKeys" }) do
             if type(C_AuctionHouse[name]) == "function" then
                 pcall(hooksecurefunc, C_AuctionHouse, name, function(query)
