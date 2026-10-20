@@ -386,8 +386,17 @@ local function Stub(fields)
 end
 
 local labels = {}
+-- A font string in the game has no scripts: calling SetScript on one raises,
+-- and the favor goal's gold line once stopped the whole window being built
+-- that way (2026-10-20). The labels here raise too.
+local function NoScripts(_, name)
+    error("a font string has no " .. name .. "; run it on a frame", 2)
+end
 local function Label()
     local label = Stub({
+        SetScript = function(self) NoScripts(self, "SetScript") end,
+        HookScript = function(self) NoScripts(self, "HookScript") end,
+        GetScript = function(self) NoScripts(self, "GetScript") end,
         text = "",
         SetText = function(self, value) self.text = tostring(value) end,
         GetText = function(self) return self.text end,
