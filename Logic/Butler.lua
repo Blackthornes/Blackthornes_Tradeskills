@@ -1654,14 +1654,66 @@ local skillUp, skillUpKey, skillUpAt
 -- The tiers Butler offers: a sure point, then a likely one.
 local SKILL_UP_TIERS = { optimal = true, medium = true }
 
-local function ProfessionOf(skillLineID)
+local function ReadLine(skillLineID)
     local trade = C_TradeSkillUI
     if not (skillLineID and type(trade) == "table" and type(trade.GetProfessionInfoBySkillLineID) == "function") then
         return nil
     end
     local ok, info = pcall(trade.GetProfessionInfoBySkillLineID, skillLineID)
-    if ok and type(info) == "table" and (tonumber(info.maxSkillLevel) or 0) > 0 then return info end
+    if ok and type(info) == "table" then return info end
     return nil
+end
+
+--- The character's learned professions, found by skill line, by the
+--- client's name and by the English name of either of Forever's two IDs.
+local function LearnedLookup()
+    local byLine, byName, byEnglish = {}, {}, {}
+    local recipes = ns.Recipes
+    if not (recipes and recipes.GetLearnedProfessions) then return byLine, byName, byEnglish end
+    local ok, list = pcall(recipes.GetLearnedProfessions, recipes)
+    local english = recipes.SKILL_LINE_PROFESSIONS or {}
+    for _, entry in ipairs(ok and type(list) == "table" and list or {}) do
+        if type(entry) == "table" and (tonumber(entry.maxSkillLevel) or 0) > 0 and entry.name then
+            local info = { professionName = entry.name, skillLevel = entry.skillLevel,
+                maxSkillLevel = entry.maxSkillLevel }
+            if entry.skillLineID then byLine[entry.skillLineID] = info end
+            byName[entry.name] = info
+            local word = english[entry.skillLineID]
+            if word then byEnglish[word] = info end
+        end
+    end
+    return byLine, byName, byEnglish
+end
+
+--- A recipe's profession with its levels. Forever lists each profession
+--- under two skill-line IDs and only one of them may carry the levels, so
+--- a recipe tagged with the other found nothing and Butler's line stayed
+--- empty (2026-10-20). The other ID, and the last good read Recipes keeps,
+--- fill in for it.
+local function ProfessionOf(skillLineID, lookup)
+    local info = ReadLine(skillLineID)
+    if info and (tonumber(info.maxSkillLevel) or 0) > 0 and info.professionName then return info end
+    if not skillLineID then return nil end
+    lookup.byLine = lookup.byLine or { LearnedLookup() }
+    local byLine, byName, byEnglish = lookup.byLine[1], lookup.byLine[2], lookup.byLine[3]
+    local found = byLine[skillLineID]
+        or (info and info.professionName and byName[info.professionName])
+    local english = ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
+        and ns.Recipes.SKILL_LINE_PROFESSIONS[skillLineID]
+    if not found and english then
+        found = byEnglish[english]
+        if not found then
+            for otherID, other in pairs(ns.Recipes.SKILL_LINE_PROFESSIONS) do
+                if other == english and otherID ~= skillLineID then
+                    local sibling = ReadLine(otherID)
+                    if sibling and (tonumber(sibling.maxSkillLevel) or 0) > 0 and sibling.professionName then
+                        return sibling
+                    end
+                end
+            end
+        end
+    end
+    return found
 end
 
 local function NextSkillUp()
@@ -1676,9 +1728,9 @@ local function NextSkillUp()
 
     -- GetRanked's order is the Level Up tab's: the first row of each
     -- profession that fits is its top pick.
-    local answer, seen = {}, {}
+    local answer, seen, lookup = {}, {}, {}
     for _, row in ipairs(levelUp:GetRanked({}) or {}) do
-        local info = ProfessionOf(row.skillLineID)
+        local info = ProfessionOf(row.skillLineID, lookup)
         local name = info and info.professionName
         local cost = row.realCost or row.cost
         if name and not seen[name] then
