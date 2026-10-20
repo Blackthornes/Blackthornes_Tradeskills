@@ -3108,6 +3108,18 @@ L["You opened %d"] = "Abriste %d"
 L["Writ inside worth about"] = "El encargo de dentro vale unos"
 L["Came from %s: %d of %d"] = "Salió de %s: %d de %d"
 
+-- Goblin Gold: where the gold came from
+L["THIS WEEK"] = "ESTA SEMANA"
+L["%d done"] = "%d hechas"
+L["Mobs"] = "Enemigos"
+L["%d killed"] = "%d matados"
+L["Their loot is worth"] = "Su botín vale"
+L["%s more"] = "%s más"
+L["ALL TIME"] = "EN TOTAL"
+L["Quests done"] = "Misiones hechas"
+L["Mobs killed"] = "Enemigos matados"
+L["Gold from quests"] = "Oro de misiones"
+L["Gold looted"] = "Oro recogido"
 -- Places in line on the Auctions view (2026-10-20).
 L["%d ahead of you"] = "%d antes que tú"
 L["First in line"] = "Primero en la fila"

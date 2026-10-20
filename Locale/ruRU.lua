@@ -3109,6 +3109,18 @@ L["You opened %d"] = "Ты открыл: %d"
 L["Writ inside worth about"] = "Заказ внутри стоит около"
 L["Came from %s: %d of %d"] = "Выпал из %s: %d из %d"
 
+-- Goblin Gold: where the gold came from
+L["THIS WEEK"] = "ЭТА НЕДЕЛЯ"
+L["%d done"] = "выполнено: %d"
+L["Mobs"] = "Противники"
+L["%d killed"] = "убито: %d"
+L["Their loot is worth"] = "Их добыча стоит"
+L["%s more"] = "ещё %s"
+L["ALL TIME"] = "ЗА ВСЁ ВРЕМЯ"
+L["Quests done"] = "Заданий выполнено"
+L["Mobs killed"] = "Противников убито"
+L["Gold from quests"] = "Золото за задания"
+L["Gold looted"] = "Золото с добычи"
 -- Places in line on the Auctions view (2026-10-20).
 L["%d ahead of you"] = "%d перед тобой"
 L["First in line"] = "Первый в очереди"

@@ -43,7 +43,7 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
     local cut = revenue * (ns.Config:Get("auctionCut") or 0.05)
 
     local held = HeldDeposit(recipe.outputItemID, yield)
-    local deposit = held and held * Profit.LostListings() or 0
+    local deposit = held and held * Profit.LostListings(recipe.outputItemID) or 0
 
     return (revenue - cut) - (cost.total or 0) - deposit
 end
@@ -524,7 +524,8 @@ end
 function Profit:NetFromListing(itemID, unitPrice)
     local cut = ns.Config:Get("auctionCut") or 0.05
     local deposit = ns.Posting:GetCachedUnitDeposit(itemID) or 0
-    return unitPrice * (1 - cut) - deposit * Profit.LostListings()
+    if deposit <= 0 then return unitPrice * (1 - cut) end
+    return unitPrice * (1 - cut) - deposit * Profit.LostListings(itemID)
 end
 
 --- How many deposits a sale is expected to lose.
@@ -534,9 +535,18 @@ end
 -- saved `expectedRelists` counts the listings it takes to sell (1, the
 -- default, sells on the first), so the deposits lost are one fewer. Counting
 -- one deposit on every sale took it off profit twice over.
-function Profit.LostListings()
+--
+-- An item that sells slowly (Demand "low") is expected to run out once
+-- before it sells, so it loses at least one deposit (the owner, 2026-10-20).
+-- @param itemID optional; without it only the saved number counts
+function Profit.LostListings(itemID)
     local listings = tonumber(ns.Config:Get("expectedRelists")) or 1
-    return math.max(0, math.floor(listings) - 1)
+    local lost = math.max(0, math.floor(listings) - 1)
+    if itemID and lost < 1 and ns.Demand and ns.Demand.Get then
+        local ok, demand = pcall(ns.Demand.Get, ns.Demand, itemID)
+        if ok and type(demand) == "table" and demand.level == "low" then lost = 1 end
+    end
+    return lost
 end
 
 --------------------------------------------------------------------------------
@@ -866,7 +876,7 @@ function Profit:Analyse(recipeID, characterKey, method)
         -- The deposit is paid up front and comes back when the item sells,
         -- so only the listings expected to run out first cost it.
         local held = HeldDeposit(recipe.outputItemID, yield)
-        local deposit = held and held * Profit.LostListings() or 0
+        local deposit = held and held * Profit.LostListings(recipe.outputItemID) or 0
 
         ways.auction = { unit = listPrice, revenue = revenue, cut = cut, deposit = deposit,
             depositHeld = held, depositKnown = held ~= nil, basis = listBasis, uncertain = listUncertain,

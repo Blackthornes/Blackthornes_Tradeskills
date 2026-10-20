@@ -204,6 +204,14 @@ GL:OnMoney(NOW)
 check("a purse the game will not read is skipped", GL.lastMoney, 1600)
 GetMoney = nil
 
+print("\nquests handed in")
+GL:NoteQuest(NOW)
+GL:NoteQuest(NOW)
+GL:NoteQuest(NOW - 86400 * 3)
+GL:NoteQuest(NOW - 86400 * 9)
+check("today and three days ago count this week", GL:QuestsDone(7, NOW), 3)
+check("today alone", GL:QuestsDone(1, NOW), 2)
+
 print("\nper realm, and pruning")
 realm = "Realm-B"
 check("another realm has nothing", next(GL:GetLog().days), nil)
@@ -211,7 +219,10 @@ realm = "Realm-A"
 log = GL:GetLog()
 log.hours[NOW - 86400 * 20] = { loot = { i = 1, o = 0 } }
 log.days[20240101] = { loot = { i = 1, o = 0 } }
+log.questsDone[20240101] = 4
 GL:Prune(NOW)
+check("old quest counts dropped", log.questsDone[20240101], nil)
+check("this week's quest counts kept", GL:QuestsDone(7, NOW), 3)
 check("old hours folded away", log.hours[NOW - 86400 * 20], nil)
 check("this hour kept", log.hours[hour] ~= nil, true)
 check("days past 400 dropped", log.days[20240101], nil)
