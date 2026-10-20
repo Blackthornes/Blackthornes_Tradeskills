@@ -255,6 +255,7 @@ local function Sources(itemID)
 
     Add("scans", Ask(ns.Prices, "GetScanValue", itemID, "market"))
     Add("guild", (Ask(ns.GuildPrices, "GetValue", itemID, "market")))
+    if Ask(ns.RealmPrices, "IsOn") then Add("realm", (Ask(ns.RealmPrices, "GetValue", itemID, "market"))) end
     if Ask(ns.TSMPrices, "IsOn") then Add("tsm", Ask(ns.TSMPrices, "GetValue", itemID, "market")) end
     if Ask(ns.AuctionatorPrices, "IsOn") then
         Add("auctionator", Ask(ns.AuctionatorPrices, "GetValue", itemID, "market"))

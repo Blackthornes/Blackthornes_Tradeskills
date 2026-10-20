@@ -460,3 +460,16 @@ away from a banker). A shut bank still reports its slot count, with nothing in
 the slots. So `Data/Inventory.lua` reads the bank only between
 `BANKFRAME_OPENED` and `BANKFRAME_CLOSED`; the slot events re-read it only
 inside that window.
+
+## Addon messages on a custom chat channel
+
+Probed 2026-10-20 with `/bts share channel`. `JoinTemporaryChannel` joins a
+named channel, and its join and leave lines can be kept out of chat with
+`ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL_NOTICE", ...)`.
+`C_ChatInfo.SendAddonMessage(prefix, text, "CHANNEL", number)` works: the
+sender hears its own message back, with the sender read as "First Last",
+`channelName` the channel's name and `target` "4. Name". The throttle is
+harsh: about eight at once, then result 3, and sends paced every half second
+were still refused with result 8. A 256-byte message was said to be sent. So
+`Logic/RealmPrices.lua` sends one message every 3 seconds and only when
+nothing else of ours is waiting.

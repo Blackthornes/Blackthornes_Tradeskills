@@ -570,6 +570,10 @@ ns.RegisterCommand("share", L["share with your other account and guild: with <na
             local on = (rest or ""):lower() == "on"
             ns.Config:Set("guildPrices", on)
             ns.Print(on and L["guild prices on"] or L["guild prices off"])
+        elseif word == "realm" then
+            local on = (rest or ""):lower() == "on"
+            if ns.RealmPrices then ns.RealmPrices:SetOn(on) else ns.Config:Set("realmPrices", on) end
+            ns.Print(on and L["realm prices on"] or L["realm prices off"])
         elseif word == "forget" then
             local count = AccountLink:Forget(rest ~= "" and rest or nil)
             if count == 1 then
@@ -588,6 +592,7 @@ ns.RegisterCommand("share", L["share with your other account and guild: with <na
         else
             ns.Print(AccountLink:Describe())
             if ns.GuildPrices then ns.PrintRaw("  " .. ns.GuildPrices:Describe()) end
+            if ns.RealmPrices and ns.RealmPrices:IsOn() then ns.PrintRaw("  " .. ns.RealmPrices:Describe()) end
         end
     end)
 

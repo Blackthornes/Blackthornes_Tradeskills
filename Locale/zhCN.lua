@@ -3200,3 +3200,17 @@ L["Pick the professions you want to level. We'll lay out the road for each one a
 L["You can change this any time in Settings."] = "你随时可以在设置里更改。"
 L["Not Now"] = "以后再说"
 L["Show My Road"] = "显示我的路"
+
+-- Realm prices (2026-10-20)
+L["YOUR REALM"] = "你的服务器"
+L["Realm Prices:"] = "服务器价格："
+L["Swaps auction prices with players on your realm who use Tradeskills. Only prices are sent, never names. Your own scans always win."] = "和你服务器上使用 Tradeskills 的玩家交换拍卖价格。只发送价格，从不发送名字。你自己的扫描永远优先。"
+L["Realm prices are off."] = "服务器价格已关闭。"
+L["Listening for prices from your realm. A price is used once 3 players agree on it."] = "正在接收你服务器上的价格。3 位玩家价格一致后才会使用。"
+L["%s realm price kept, from %d player."] = "已保存 %s 个服务器价格，来自 %d 位玩家。"
+L["%s realm price kept, from %d players."] = "已保存 %s 个服务器价格，来自 %d 位玩家。"
+L["%s realm prices kept, from %d player."] = "已保存 %s 个服务器价格，来自 %d 位玩家。"
+L["%s realm prices kept, from %d players."] = "已保存 %s 个服务器价格，来自 %d 位玩家。"
+L["Your realm"] = "你的服务器"
+L["realm prices on"] = "服务器价格已打开"
+L["realm prices off"] = "服务器价格已关闭"

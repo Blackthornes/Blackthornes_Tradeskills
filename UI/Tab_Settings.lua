@@ -1797,6 +1797,20 @@ local function Build(outer)
     widgets.guildStatus:SetWidth(COLUMN_WIDTH)
     widgets.guildStatus:SetWordWrap(true)
 
+    CreateSection(pages.sharing, 2, L["YOUR REALM"])
+    local realmRow = CreateRow(pages.sharing, 2, L["Realm Prices:"],
+        L["Swaps auction prices with players on your realm who use Tradeskills. Only prices are sent, never names. Your own scans always win."])
+    widgets.realmPrices = Widgets.CreateCheckbox(realmRow, L["On"], function(checked)
+        if ns.RealmPrices then ns.RealmPrices:SetOn(checked) else Config:Set("realmPrices", checked) end
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.realmPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    widgets.realmStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
+    Place(pages.sharing, 2, widgets.realmStatus, -4)
+    widgets.realmStatus:SetWidth(COLUMN_WIDTH)
+    widgets.realmStatus:SetWordWrap(true)
+
     CreateSection(pages.sharing, 2, L["OTHER PRICE ADDONS"])
     local tsmRow = CreateRow(pages.sharing, 2, L["TSM Prices:"],
         L["Uses TradeSkillMaster prices for items you haven't priced."])
@@ -2321,6 +2335,8 @@ local function Refresh()
     widgets.guildPrices:SetChecked(Config:Get("guildPrices") == true)
     if widgets.shareData then widgets.shareData:SetChecked(Config:Get("shareData") == true) end
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Describe() or "")
+    widgets.realmPrices:SetChecked(Config:Get("realmPrices") == true)
+    widgets.realmStatus:SetText(ns.RealmPrices and ns.RealmPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")
     widgets.auctionatorPrices:SetChecked(Config:Get("auctionatorPrices") ~= false)
