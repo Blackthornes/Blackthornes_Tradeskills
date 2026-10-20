@@ -234,8 +234,9 @@ local DEFAULTS = {
 
         -- Write what one of each recipe sells for into Blizzard's own
         -- profession window, beside the recipe's name. Off leaves that window
-        -- exactly as the client draws it.
-        showValueInProfessionWindow = true,
+        -- exactly as the client draws it. Off unless ticked since the owner
+        -- asked (2026-10-20); a save that already has it on keeps it.
+        showValueInProfessionWindow = false,
 
         -- Put what an item is worth on the auction house onto the item's
         -- own tooltip, wherever the game draws one. Off leaves every

@@ -153,11 +153,11 @@ end
 
 --- Is the decoration switched on?
 --
--- `~= false` rather than `== true`: a setting that has never been written is
--- nil, and this one is on by default.
+-- Off unless ticked (the owner, 2026-10-20). A save that already has it on
+-- keeps it.
 function RecipeValue:IsEnabled()
-    if not ns.Config then return true end
-    return ns.Config:Get("showValueInProfessionWindow") ~= false
+    if not ns.Config then return false end
+    return ns.Config:Get("showValueInProfessionWindow") == true
 end
 
 --------------------------------------------------------------------------------
