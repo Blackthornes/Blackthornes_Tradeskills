@@ -22,6 +22,10 @@
 -- Kept per realm like the mail ledger, in hour buckets for the last 8 days
 -- and day buckets for 400 days, with no character names. The session's own
 -- changes are held in memory only.
+--
+-- Quests handed in are counted a day at a time beside the gold (asked
+-- 2026-10-20, for Goblin Gold's gold a quest): `questsDone[YYYYMMDD] = n`
+-- in the same realm's log, kept as long as the days. Never renamed.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -85,7 +89,7 @@ local MAX_SESSION = 2000
 --- This realm's log: { hours = { [hourStart] = bucket }, days = { [YYYYMMDD] = bucket } },
 --- where a bucket is { [source] = { i = copper in, o = copper out } }.
 function GoldLog:GetLog(realmKey)
-    if not ns.db then return { hours = {}, days = {} } end
+    if not ns.db then return { hours = {}, days = {}, questsDone = {} } end
 
     realmKey = realmKey or ns.Config:GetRealmKey()
     ns.db.goldLog = ns.db.goldLog or {}
@@ -97,6 +101,7 @@ function GoldLog:GetLog(realmKey)
     end
     if type(log.hours) ~= "table" then log.hours = {} end
     if type(log.days) ~= "table" then log.days = {} end
+    if type(log.questsDone) ~= "table" then log.questsDone = {} end
 
     return log
 end
@@ -160,6 +165,25 @@ function GoldLog:Record(source, amount, t)
     if GoldGoal and GoldGoal.OnRecord then pcall(GoldGoal.OnRecord, GoldGoal, source, amount) end
 end
 
+--- A quest handed in, counted under the day it was handed in.
+function GoldLog:NoteQuest(t)
+    t = t or time()
+    local log = self:GetLog()
+    local key = GoldLog.DayKey(t)
+    log.questsDone[key] = (tonumber(log.questsDone[key]) or 0) + 1
+end
+
+--- Quests handed in over the last `days` days, today included.
+function GoldLog:QuestsDone(days, now)
+    now = now or time()
+    local log = self:GetLog()
+    local count = 0
+    for back = 0, (days or 7) - 1 do
+        count = count + (tonumber(log.questsDone[GoldLog.DayKey(GoldLog.DayStart(now, -back) + 43200)]) or 0)
+    end
+    return count
+end
+
 --- Hour buckets past 8 days are folded away (their days already hold them),
 --- and day buckets past 400 days dropped.
 function GoldLog:Prune(now)
@@ -176,6 +200,11 @@ function GoldLog:Prune(now)
     for dayKey in pairs(log.days) do
         if type(dayKey) ~= "number" or dayKey < oldest then
             log.days[dayKey] = nil
+        end
+    end
+    for dayKey in pairs(log.questsDone) do
+        if type(dayKey) ~= "number" or dayKey < oldest then
+            log.questsDone[dayKey] = nil
         end
     end
 end
@@ -594,6 +623,7 @@ function GoldLog:OnEnable()
 
     ns.RegisterEvent(self, "QUEST_TURNED_IN", function(_, _, _, _, money)
         if (tonumber(money) or 0) > 0 then GoldLog:Tag("quests", 1) end
+        GoldLog:NoteQuest()
     end)
 
     -- The auction house: a post's deposit, and buying.

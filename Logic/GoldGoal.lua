@@ -321,6 +321,85 @@ function GoldGoal:DaysToGo(total, goal)
     return math.max(1, math.ceil((goal - total) / (week / 7)))
 end
 
+--------------------------------------------------------------------------------
+-- Where this week's gold came from
+--------------------------------------------------------------------------------
+
+-- The game's own Statistics, by ID (asked 2026-10-20). Read only when the
+-- client has GetStatistic; one it does not give is left out.
+GoldGoal.STATISTICS = {
+    quests = 98,       -- Quests completed
+    kills = 1197,      -- Total kills
+    questGold = 326,   -- Gold from quest rewards, in copper
+    looted = 333,      -- Gold looted, in copper
+}
+
+--- A statistic as a number: plain digits, or a money string with the
+--- game's coin icons. nil when the client has none or shows "--".
+function GoldGoal.Statistic(id)
+    if type(GetStatistic) ~= "function" then return nil end
+    local ok, value = pcall(GetStatistic, id)
+    if not ok then return nil end
+    local okRead, number = pcall(function()
+        if type(value) == "number" then return value end
+        if type(value) ~= "string" then return nil end
+        if value:find("|T") then
+            local copper, found = 0, false
+            for amount, texture in value:gmatch("([%d,%.]+)%s*|T([^|]+)|t") do
+                amount = tonumber((amount:gsub("[^%d]", "")))
+                texture = texture:lower()
+                local unit = texture:find("gold") and 10000 or texture:find("silver") and 100
+                    or texture:find("copper") and 1
+                if amount and unit then copper, found = copper + amount * unit, true end
+            end
+            return found and copper or nil
+        end
+        local digits = value:gsub("[%s,%.]", "")
+        if digits:match("^%d+$") then return tonumber(digits) end
+        return nil
+    end)
+    if okRead and type(number) == "number" and number >= 0 then return number end
+    return nil
+end
+
+--- This week's gold by where it came from, with how many quests and kills
+--- were behind it, and the game's all-time numbers.
+--- @return { quests = { gold, count }, mobs = { gold, kills, loot } or nil,
+---   auctionSales, vendorSales, allTime = { quests, kills, questGold, looted } }
+function GoldGoal:Sources(now)
+    local GoldLog = ns.GoldLog
+    now = now or time()
+    local result = { allTime = {} }
+    if GoldLog and GoldLog.Bins and GoldLog.Totals then
+        local ok, totals = pcall(function() return GoldLog:Totals(GoldLog:Bins("week", nil, nil, now)) end)
+        local sources = ok and totals and totals.sources or {}
+        local function In(key) return sources[key] and tonumber(sources[key].i) or 0 end
+        local okCount, quests = pcall(GoldLog.QuestsDone, GoldLog, 7, now)
+        result.quests = { gold = In("quests"), count = okCount and quests or 0 }
+        result.lootGold = In("loot")
+        result.auctionSales = In("auctionSales")
+        result.vendorSales = In("vendorSales")
+    end
+
+    -- Kills and what their loot was worth are Blackthornes Farmer's own
+    -- log; without it the mob lines are left out.
+    local farmer = _G.BlackthornesFarmer
+    local stats = type(farmer) == "table" and farmer.Stats
+    if type(stats) == "table" and type(stats.KillsAndLoot) == "function" then
+        local ok, week = pcall(stats.KillsAndLoot, stats, 7)
+        if ok and type(week) == "table" and tonumber(week.kills) then
+            result.mobs = { gold = result.lootGold or 0, kills = tonumber(week.kills) or 0,
+                loot = tonumber(week.loot) or 0 }
+        end
+    end
+
+    for key, id in pairs(GoldGoal.STATISTICS) do
+        local value = GoldGoal.Statistic(id)
+        if value and value > 0 then result.allTime[key] = value end
+    end
+    return result
+end
+
 --- Where most of the gold came from since the goal was set: the source's
 --- name as the Sales tab shows it, or nil.
 function GoldGoal:MostlyFrom(now)
