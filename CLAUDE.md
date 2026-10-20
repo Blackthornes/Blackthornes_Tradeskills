@@ -774,7 +774,8 @@ level 35), with "You're level N." while the level is short
 (`LearnNext:TrainerFor` names the nearest trainer). What the bags, then
 the bank hold comes off once across the steps, and the footer says how
 much ("To 300:", "What you own already takes off X."). Steps below the
-skill are done. Queue Step queues a known recipe's crafts
+skill are done and sit at the foot of the list (`RoadPlan.Shown`; "Step N
+of M", the meter and Queue All keep the plan's order). Queue Step queues a known recipe's crafts
 (`Queue:Ensure`) or puts a recipe still to learn's materials on the list
 to buy (`Queue:EnsureBuy`); Queue All does every step left; Show the Way
 is `LearnNext:ShowTheWay`. `UI/RoadView.lua` draws it (a profession
