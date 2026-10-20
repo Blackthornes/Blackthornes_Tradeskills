@@ -292,36 +292,71 @@ end
 -- Detail panel
 --------------------------------------------------------------------------------
 
+-- A line stands at least this tall; one whose name wraps stands taller.
+local LINE_HEIGHT = 17
+-- The value column is at least this wide, and grows to fit what it says.
+local VALUE_WIDTH = 80
+local VALUE_MOST = 130
+-- The Buy box and the search buttons at the panel's foot stay put; what is
+-- above them scrolls when it runs longer than the panel.
+local FOOT_HEIGHT = 104
+
+--- Stack the lines by how tall each one stands, so a name that wraps
+--- pushes the lines under it down rather than sitting on them.
+local function PlaceLines(block)
+    local y = 0
+    for _, line in ipairs(block.lines) do
+        line.label:ClearAllPoints()
+        line.label:SetPoint("TOPLEFT", 0, -y)
+        line.label:SetPoint("RIGHT", block, "RIGHT", -(line.valueWidth + 4), 0)
+        line.value:ClearAllPoints()
+        line.value:SetPoint("TOPRIGHT", 0, -y)
+        line.value:SetWidth(line.valueWidth)
+        if line.shown then
+            local need = tonumber(line.label.rowNeed) or 0
+            y = y + math.max(LINE_HEIGHT, need + 3)
+        end
+    end
+    block:SetHeight(math.max(1, y))
+end
+
 local function Lines(parent, count)
     local block = CreateFrame("Frame", nil, parent)
     block.lines = {}
 
     for index = 1, count do
         local label = Theme.CreateLabel(block, "small", "muted")
-        label:SetPoint("TOPLEFT", 0, -(index - 1) * 17)
-        label:SetPoint("RIGHT", block, "RIGHT", -84, 0)
         label:SetWordWrap(false)
 
         local value = Theme.CreateLabel(block, "small", "text", "RIGHT")
-        value:SetPoint("TOPRIGHT", 0, -(index - 1) * 17)
-        value:SetWidth(80)
 
-        block.lines[index] = { label = label, value = value }
+        block.lines[index] = { label = label, value = value, block = block,
+            valueWidth = VALUE_WIDTH, shown = true }
     end
 
-    block:SetHeight(count * 17)
+    PlaceLines(block)
     return block
 end
 
 local function SetLine(line, label, value, labelColor, valueColor)
     line.label:SetShown(label ~= nil)
     line.value:SetShown(label ~= nil)
-    if not label then return end
+    line.shown = label ~= nil
+    if not label then
+        PlaceLines(line.block)
+        return
+    end
 
-    Theme.SetRowName(line.label, label)
-    line.label:SetTextColor(Theme.Unpack(labelColor or "muted"))
     line.value:SetText(value or "")
     line.value:SetTextColor(Theme.Unpack(valueColor or "text"))
+    local width = Theme.MeasureText and Theme.MeasureText("small", value or "")
+    line.valueWidth = math.min(VALUE_MOST, math.max(VALUE_WIDTH, math.ceil(tonumber(width) or 0)))
+
+    -- The name gets its room first, then is measured in it.
+    PlaceLines(line.block)
+    Theme.SetRowName(line.label, label)
+    line.label:SetTextColor(Theme.Unpack(labelColor or "muted"))
+    PlaceLines(line.block)
 end
 
 --- Buy: [-] [3] [+] writs. How many Search Both looks for, 1 to BUY_MOST.
@@ -378,48 +413,78 @@ end
 
 local UpdateWrit
 
+--- Size the scrolling part to what it holds now, and again a frame later
+--- once the game has laid out text set this frame.
+local function FitDetail()
+    -- Read raw: the scroll is only there where the client can make one.
+    local scroll = widgets.detail and rawget(widgets.detail, "scroll")
+    if type(scroll) ~= "table" or type(scroll.FitContent) ~= "function" then return end
+    scroll:FitContent(12)
+    C_Timer.After(0, function() scroll:FitContent(12) end)
+end
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
     Theme.AccentStripe(detail, 2, 0.6)
 
-    detail.title = Theme.CreateLabel(detail, "large", "accent")
-    detail.title:SetPoint("TOPLEFT", 12, -12)
-    detail.title:SetPoint("TOPRIGHT", -12, -12)
+    -- Everything above the foot scrolls, so a long note or a name that wraps
+    -- never runs under the buttons or off the panel.
+    local body = detail
+    if Widgets.CreateScrollFrame then
+        local scroll = Widgets.CreateScrollFrame(detail, { step = 40 })
+        scroll:SetPoint("TOPLEFT", 0, -2)
+        scroll:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -10, FOOT_HEIGHT)
+        scroll.content:SetWidth(DETAIL_WIDTH - 10)
+        detail.scroll = scroll
+        body = scroll.content
+    end
+    local inset = body == detail and -12 or -4
+
+    detail.title = Theme.CreateLabel(body, "large", "accent")
+    detail.title:SetPoint("TOPLEFT", 12, -10)
+    detail.title:SetPoint("TOPRIGHT", inset, -10)
     detail.title:SetWordWrap(true)
 
-    detail.goal = Lines(detail, 5)
+    detail.goal = Lines(body, 5)
     detail.goal:SetPoint("TOPLEFT", detail.title, "BOTTOMLEFT", 0, -10)
-    detail.goal:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    detail.goal:SetPoint("RIGHT", body, "RIGHT", inset, 0)
 
-    detail.routeHeading = Theme.CreateHeading(detail, L["BUYING WRITS AND ITEMS"])
+    detail.routeHeading = Theme.CreateHeading(body, L["BUYING WRITS AND ITEMS"])
     detail.routeHeading:SetPoint("TOPLEFT", detail.goal, "BOTTOMLEFT", 0, -12)
 
-    detail.route = Lines(detail, 2)
+    detail.route = Lines(body, 2)
     detail.route:SetPoint("TOPLEFT", detail.routeHeading, "BOTTOMLEFT", 0, -8)
-    detail.route:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    detail.route:SetPoint("RIGHT", body, "RIGHT", inset, 0)
 
-    detail.writHeading = Theme.CreateHeading(detail, L["PICK A WRIT"])
+    detail.writHeading = Theme.CreateHeading(body, L["PICK A WRIT"])
     detail.writHeading:SetPoint("TOPLEFT", detail.route, "BOTTOMLEFT", 0, -12)
 
-    detail.writ = Lines(detail, 4)
+    detail.writ = Lines(body, 4)
     detail.writ:SetPoint("TOPLEFT", detail.writHeading, "BOTTOMLEFT", 0, -8)
-    detail.writ:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    detail.writ:SetPoint("RIGHT", body, "RIGHT", inset, 0)
 
-    -- Shown only when the item is cheaper made than bought.
-    detail.makeLine = Theme.CreateLabel(detail, "small", "profit")
-    detail.makeLine:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, -8)
-    detail.makeLine:SetPoint("RIGHT", detail, "RIGHT", -116, 0)
+    -- Shown only when the item is cheaper made than bought. As tall as its
+    -- words or the button, whichever is taller, so the note sits under both.
+    detail.makeRow = CreateFrame("Frame", nil, body)
+    detail.makeRow:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, -6)
+    detail.makeRow:SetPoint("RIGHT", body, "RIGHT", inset, 0)
+    detail.makeRow:SetHeight(22)
+
+    detail.makeLine = Theme.CreateLabel(detail.makeRow, "small", "profit")
+    detail.makeLine:SetPoint("TOPLEFT", 0, -2)
+    detail.makeLine:SetPoint("RIGHT", detail.makeRow, "RIGHT", -104, 0)
     detail.makeLine:SetWordWrap(true)
+    detail.makeLine:SetJustifyV("TOP")
 
-    detail.queueButton = Widgets.CreateButton(detail, L["Queue Craft"], function()
+    detail.queueButton = Widgets.CreateButton(detail.makeRow, L["Queue Craft"], function()
         QueueItem(state.selected)
     end, { width = 96, height = 20 })
-    detail.queueButton:SetPoint("TOPRIGHT", detail.writ, "BOTTOMRIGHT", 0, -6)
+    detail.queueButton:SetPoint("TOPRIGHT", 0, 0)
 
-    detail.note = Theme.CreateLabel(detail, "tiny", "dim")
+    detail.note = Theme.CreateLabel(body, "tiny", "dim")
     detail.note:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, -10)
-    detail.note:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    detail.note:SetPoint("RIGHT", body, "RIGHT", inset, 0)
     detail.note:SetWordWrap(true)
     detail.note:SetJustifyV("TOP")
 
@@ -447,6 +512,7 @@ local function BuildDetail(parent)
     end)
     detail.buyBox:SetPoint("BOTTOMLEFT", 12, 76)
 
+    detail:HookScript("OnShow", FitDetail)
     return detail
 end
 
@@ -505,6 +571,7 @@ local function UpdateGoal(plan)
         SetLine(route[2], nil)
     end
     detail.routeHeading:SetShown(plan.need > 0)
+    FitDetail()
 end
 
 function UpdateWrit(entry)
@@ -517,14 +584,22 @@ function UpdateWrit(entry)
     detail.buyBox:SetShown(entry ~= nil)
 
     local made = entry and entry.how == "make" and entry.recipeID and entry.make and entry.buy
+    detail.makeRow:SetShown(made and true or false)
     detail.makeLine:SetShown(made and true or false)
     detail.queueButton:SetShown(made and true or false)
     detail.note:ClearAllPoints()
-    detail.note:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, made and -34 or -10)
-    detail.note:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    if made then
+        detail.note:SetPoint("TOPLEFT", detail.makeRow, "BOTTOMLEFT", 0, -8)
+    else
+        detail.note:SetPoint("TOPLEFT", detail.writ, "BOTTOMLEFT", 0, -10)
+    end
+    detail.note:SetPoint("RIGHT", detail.makeRow, "RIGHT", 0, 0)
     if made then
         detail.makeLine:SetText(L.Format("Cheaper to make: %s made, %s bought.", Plain(entry.make), Plain(entry.buy)))
         detail.queueButton.tooltipText = L.Format("Adds %d %s to your craft queue.", entry.count * state.buy, entry.name)
+        local ok, height = pcall(detail.makeLine.GetStringHeight, detail.makeLine)
+        height = ok and tonumber(height) or 0
+        detail.makeRow:SetHeight(math.max(22, math.ceil(height) + 4))
     end
     if entry then
         detail.buyBox:SetWord(state.buy == 1 and L["writ"] or L["writs"])
@@ -565,6 +640,7 @@ function UpdateWrit(entry)
     end
     parts[#parts + 1] = L["Each order can be done once a day. The coin pouch a turn-in gives is not counted."]
     detail.note:SetText(table.concat(parts, " "))
+    FitDetail()
 end
 
 --------------------------------------------------------------------------------
@@ -666,6 +742,13 @@ end
 
 --- Lay the view out in `view`, under the tab's option bar `toolbar`.
 function DealsWrits:Build(view, toolbar)
+    -- A price cheaper made has a green Make before it, so its column is
+    -- measured to hold both, not just the price.
+    for _, column in ipairs(COLUMNS) do
+        if column.key == "itemCost" and Widgets.MONEY_SAMPLE and ns.COLORS then
+            column.sample = L.Format("|c%sMake|r  %s", ns.COLORS.profit, Widgets.MONEY_SAMPLE)
+        end
+    end
     if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
     local headings = CreateFrame("Frame", nil, view)
