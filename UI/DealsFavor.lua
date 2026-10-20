@@ -653,6 +653,8 @@ local function CratesText(count)
 end
 
 --- Count the gold line from what it showed to `value`, or set it at once.
+--- The count runs on the strip's own frame: a font string has no scripts,
+--- and calling SetScript on one stopped the whole window being built.
 local function CountGold(value)
     local goal = widgets.goal
     if not goal then return end
@@ -661,7 +663,7 @@ local function CountGold(value)
 
     if not value then
         goal.goldShown = nil
-        label:SetScript("OnUpdate", nil)
+        goal:SetScript("OnUpdate", nil)
         label:SetText("--")
         label:SetTextColor(Theme.Unpack("dim"))
         return
@@ -671,17 +673,17 @@ local function CountGold(value)
     local from = goal.goldShown
     if not from or from == value or not MotionFull() or not label:IsVisible() then
         goal.goldShown = value
-        label:SetScript("OnUpdate", nil)
+        goal:SetScript("OnUpdate", nil)
         label:SetText(Money(value))
         return
     end
 
     local started = GetTime()
-    label:SetScript("OnUpdate", function(self)
+    goal:SetScript("OnUpdate", function(self)
         local k = math.min(1, (GetTime() - started) / COUNT_SECONDS)
         local eased = 1 - (1 - k) ^ 3
         goal.goldShown = math.floor(from + (value - from) * eased + 0.5)
-        self:SetText(Money(goal.goldShown))
+        label:SetText(Money(goal.goldShown))
         if k >= 1 then self:SetScript("OnUpdate", nil) end
     end)
 end
