@@ -1902,6 +1902,9 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
     local pending = self.pendingItem
     local ours = pending ~= nil and pending.itemID == itemID
 
+    -- Your place in line, for an item you have up (MyAuctions, read only).
+    if ns.MyAuctions and ns.MyAuctions.NoteCommodityPlaces then ns.MyAuctions:NoteCommodityPlaces(itemID) end
+
     -- Not ours, and not wanted: leave the results alone exactly as before.
     if not ours and not self:PassiveCaptureEnabled() then return end
 
@@ -1986,6 +1989,9 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
 
     local itemID = key.itemID or (ours and pending.itemID)
     if not itemID then return end
+
+    -- Your place in line, for an item you have up (MyAuctions, read only).
+    if key.itemID and ns.MyAuctions and ns.MyAuctions.NoteItemPlaces then ns.MyAuctions:NoteItemPlaces(key) end
 
     if not ours and not self:PassiveCaptureEnabled() then return end
 

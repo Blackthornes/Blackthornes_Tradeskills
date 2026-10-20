@@ -3155,3 +3155,13 @@ L["You need %s for that."] = "这需要 %s。"
 L["Your %s shopping list has what your goal needs."] = "你的购物清单 %s 已有目标需要的东西。"
 L["Your favor goal"] = "你的恩惠目标"
 L["about %s to go"] = "还差大约 %s"
+
+-- Places in line on the Auctions view (2026-10-20).
+L["%d ahead of you"] = "前面还有 %d 个"
+L["First in line"] = "排在最前"
+L["%d more at your price"] = "同价还有 %d 个"
+L["%d listings at your price will sell before yours."] = "有 %d 个同价拍卖会比你的先卖出。"
+L["Yours sells first at this price."] = "同价时你的会先卖出。"
+L["Checked %s."] = "%s查看过。"
+L["Check Places"] = "查看排位"
+L["Looks up each of your auctions to see how many sell before yours."] = "逐个查看你的拍卖，看看有多少会比你的先卖出。"

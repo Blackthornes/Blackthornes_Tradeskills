@@ -713,6 +713,9 @@ function Auctions:ReadOwned(opts)
                         ends = listing.ends,
                         band = listing.band,
                         hasBid = bidOk and hasBid or false,
+                        -- The exact key, random suffix and all, so Check
+                        -- Places searches this very item (MyAuctions).
+                        itemKey = type(info.itemKey) == "table" and info.itemKey or nil,
                     }
                 end
             end

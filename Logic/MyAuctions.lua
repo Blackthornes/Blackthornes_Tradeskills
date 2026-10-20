@@ -18,6 +18,15 @@
 -- is read back from your auctions, as a listing is. A cancelled auction's
 -- item comes back in the mail, and its deposit is not returned, so listing it
 -- again costs a new one: each row says about how much.
+--
+-- Places in line (a player asked, the owner said build it from a mockup,
+-- 2026-10-20): "Cheapest" is true but says nothing about the auctions at
+-- your price listed before yours, which sell first. Every search that comes
+-- back for an item you have up (yours, the player's own, Check Places) is
+-- read once more for it (`NoteItemPlaces`, `NoteCommodityPlaces`): an item
+-- auction learns how many others at its price and suffix come before it in
+-- the list, a commodity how many units of others share its price. Kept for
+-- the session only, shown while under FRESH old.
 
 local _, ns = ...
 
@@ -188,6 +197,7 @@ function MyAuctions:Rows()
             row.mine = true
             row.state, row.rival, row.gap = JudgeRow(row)
             row.cancelling = cancelling[row.auctionID] ~= nil
+            self:AttachPlace(row, now)
             rows[#rows + 1] = row
             summary.up = summary.up + 1
             if row.state == "undercut" and not row.cancelling then summary.undercut = summary.undercut + 1 end
@@ -212,6 +222,8 @@ function MyAuctions:Rows()
         if (a.alt or false) ~= (b.alt or false) then return not a.alt end
         local oa, ob = order[a.state] or 9, order[b.state] or 9
         if oa ~= ob then return oa < ob end
+        -- Cheapest, but others at that price sell first: those first.
+        if (a.behind or false) ~= (b.behind or false) then return a.behind or false end
         -- Most money under first, then soonest to end.
         local ga = (a.gap or 0) * (a.quantity or 1)
         local gb = (b.gap or 0) * (b.quantity or 1)
@@ -342,6 +354,225 @@ function MyAuctions:OnRead(live, final, sold)
             ns.Print(L.Format("%s is still up. The cancel didn't go through.", label))
         end
     end
+end
+
+--------------------------------------------------------------------------------
+-- Places in line
+--------------------------------------------------------------------------------
+
+-- auctionID -> { ahead, at }: other auctions at your price and suffix listed
+-- before yours, as the last search showed them.
+MyAuctions.places = {}
+
+-- itemID -> { units = { [unit price] = others' units at it }, at }.
+MyAuctions.more = {}
+
+-- Prices this close count as the same price (unit prices of stacks round).
+local SAME_PRICE = 1
+
+local function LiveAuctions()
+    return (ns.Auctions and ns.Auctions.live) or {}
+end
+
+--- Whether you have an auction of this item up, so a search for it is worth
+--- reading again for places.
+function MyAuctions:Wants(itemID)
+    if not itemID then return false end
+    for _, auction in ipairs(LiveAuctions()) do
+        if auction.itemID == itemID then return true end
+    end
+    return false
+end
+
+local function SuffixOf(link)
+    return (link and Util.LinkSuffix and Util.LinkSuffix(link)) or 0
+end
+
+--- Read an item search's rows, in the order the auction house lists them.
+-- rows: { { auctionID, unit, own, suffix } }. Returns how many places moved.
+function MyAuctions:NotePlaces(itemID, rows, at)
+    if not (itemID and type(rows) == "table") then return 0 end
+    at = at or time()
+
+    local mine = {}
+    for _, auction in ipairs(LiveAuctions()) do
+        if auction.itemID == itemID and auction.auctionID then mine[auction.auctionID] = auction end
+    end
+    if next(mine) == nil then return 0 end
+
+    local noted = 0
+    for i, row in ipairs(rows) do
+        local auction = row.auctionID and mine[row.auctionID]
+        if auction and auction.unit then
+            local suffix = SuffixOf(auction.link)
+            local ahead = 0
+            for j = 1, i - 1 do
+                local other = rows[j]
+                if not other.own and other.unit and math.abs(other.unit - auction.unit) <= SAME_PRICE
+                    and (other.suffix or 0) == suffix then
+                    ahead = ahead + 1
+                end
+            end
+            self.places[row.auctionID] = { ahead = ahead, at = at }
+            noted = noted + 1
+        end
+    end
+    if noted > 0 then self.version = self.version + 1 end
+    return noted
+end
+
+--- Read a commodity search's price levels.
+-- levels: { { unit, quantity, ownUnits } }.
+function MyAuctions:NoteMore(itemID, levels, at)
+    if not (itemID and type(levels) == "table") then return false end
+    local units = {}
+    for _, level in ipairs(levels) do
+        if level.unit and (level.ownUnits or 0) > 0 then
+            units[level.unit] = math.max(0, (level.quantity or 0) - level.ownUnits)
+        end
+    end
+    if next(units) == nil then return false end
+    self.more[itemID] = { units = units, at = at or time() }
+    self.version = self.version + 1
+    return true
+end
+
+--- After an item search came back: read its rows for places (never raises).
+function MyAuctions:NoteItemPlaces(key)
+    if type(key) ~= "table" or not self:Wants(key.itemID) then return end
+    local AH = _G.C_AuctionHouse
+    local ok = pcall(function()
+        local count = AH.GetNumItemSearchResults(key)
+        if not count or count <= 0 then return end
+        local keySuffix = tonumber(key.itemSuffix) or 0
+        local rows = {}
+        for i = 1, count do
+            local info = AH.GetItemSearchResultInfo(key, i)
+            if info and (tonumber(info.buyoutAmount) or 0) > 0 then
+                local quantity = info.quantity or 1
+                local suffix = keySuffix ~= 0 and keySuffix or SuffixOf(info.itemLink)
+                rows[#rows + 1] = {
+                    auctionID = info.auctionID,
+                    unit = Util.UnitPriceFromStack(key.itemID, info.buyoutAmount, quantity),
+                    own = info.containsOwnerItem == true,
+                    suffix = suffix,
+                }
+            end
+        end
+        self:NotePlaces(key.itemID, rows)
+    end)
+    if not ok then ns.Debug("places: an item search could not be read") end
+end
+
+--- After a commodity search came back: read its levels (never raises).
+function MyAuctions:NoteCommodityPlaces(itemID)
+    if not self:Wants(itemID) then return end
+    local AH = _G.C_AuctionHouse
+    local ok = pcall(function()
+        local count = AH.GetNumCommoditySearchResults(itemID)
+        if not count or count <= 0 then return end
+        local levels = {}
+        for i = 1, count do
+            local info = AH.GetCommoditySearchResultInfo(itemID, i)
+            if info and info.unitPrice then
+                levels[#levels + 1] = {
+                    unit = info.unitPrice,
+                    quantity = info.quantity or 1,
+                    ownUnits = info.containsOwnerItem == true and (tonumber(info.numOwnerItems) or 0) or 0,
+                }
+            end
+        end
+        self:NoteMore(itemID, levels)
+    end)
+    if not ok then ns.Debug("places: a commodity search could not be read") end
+end
+
+--- Lay what the searches said on one of your rows: `ahead` (auctions
+--- before it) or `more` (others' units at its price), with `placeAt`, and
+--- `behind` when a cheapest auction has others selling first.
+function MyAuctions:AttachPlace(row, now)
+    now = now or time()
+    local place = row.auctionID and self.places[row.auctionID]
+    if place and now - place.at <= self.FRESH then
+        row.ahead, row.placeAt = place.ahead, place.at
+    else
+        local more = row.itemID and self.more[row.itemID]
+        if more and now - more.at <= self.FRESH and row.unit then
+            for unit, others in pairs(more.units) do
+                if math.abs(unit - row.unit) <= SAME_PRICE then
+                    row.more, row.placeAt = others, more.at
+                    break
+                end
+            end
+        end
+    end
+    row.behind = row.state == "cheapest" and ((row.ahead or 0) > 0 or (row.more or 0) > 0) or nil
+end
+
+--- Whether Check Places can run now, and why not.
+function MyAuctions:CanCheckPlaces()
+    if not AuctionHouseOpen() then return false, L["the auction house must be open"] end
+    if self.checking then return false end
+    if ns.Scanner and ns.Scanner.isScanning then return false, L["wait for the scan to finish"] end
+    if #LiveAuctions() == 0 then return false end
+    return true
+end
+
+--- Check Places: search each item you have up, one at a time, in the
+--- background. Each answer is read for places as it comes back.
+function MyAuctions:CheckPlaces()
+    local can, reason = self:CanCheckPlaces()
+    if not can then
+        if reason then ns.Print(reason) end
+        return false
+    end
+
+    local list, seen = {}, {}
+    for _, auction in ipairs(LiveAuctions()) do
+        local suffix = auction.itemKey and tonumber(auction.itemKey.itemSuffix) or SuffixOf(auction.link)
+        local id = auction.itemID and (auction.itemID .. ":" .. suffix)
+        if id and not seen[id] then
+            seen[id] = { itemID = auction.itemID, itemKey = auction.itemKey }
+            list[#list + 1] = seen[id]
+        elseif id and not seen[id].itemKey then
+            -- One copy with the exact key is enough to search them all.
+            seen[id].itemKey = auction.itemKey
+        end
+    end
+    self.checking = list
+    self.version = self.version + 1
+    self:CheckNext()
+    return true
+end
+
+function MyAuctions:CheckNext()
+    local list = self.checking
+    local Scanner = ns.Scanner
+    if not list or #list == 0 or not (Scanner and Scanner.isAuctionHouseOpen) then
+        self.checking = nil
+        self.version = self.version + 1
+        return
+    end
+
+    -- A search the player is waiting on goes first.
+    if Scanner.pendingItem then
+        C_Timer.After(3, function() MyAuctions:CheckNext() end)
+        return
+    end
+
+    local item = table.remove(list, 1)
+    local started = Scanner:ScanItem(item.itemID, function(_, _, _, _, _, _, status)
+        if status == "superseded" then
+            C_Timer.After(3, function() MyAuctions:CheckNext() end)
+        else
+            MyAuctions:CheckNext()
+        end
+    end, {
+        itemKey = item.itemKey,
+        priority = ns.AHQueue and ns.AHQueue.PRIORITY and ns.AHQueue.PRIORITY.scan,
+        quiet = true,
+    })
+    if not started then self:CheckNext() end
 end
 
 --- For /bts probe: which cancel calls this client has, and what happened.

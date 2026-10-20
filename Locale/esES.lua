@@ -3158,3 +3158,13 @@ L["You need %s for that."] = "Necesitas %s para eso."
 L["Your %s shopping list has what your goal needs."] = "Tu lista de compra %s tiene lo que tu objetivo necesita."
 L["Your favor goal"] = "Tu objetivo de favor"
 L["about %s to go"] = "faltan unos %s"
+
+-- Places in line on the Auctions view (2026-10-20).
+L["%d ahead of you"] = "%d antes que tú"
+L["First in line"] = "Primero en la fila"
+L["%d more at your price"] = "%d más a tu precio"
+L["%d listings at your price will sell before yours."] = "%d subastas a tu precio se venderán antes que la tuya."
+L["Yours sells first at this price."] = "El tuyo se vende primero a este precio."
+L["Checked %s."] = "Revisado %s."
+L["Check Places"] = "Ver puestos"
+L["Looks up each of your auctions to see how many sell before yours."] = "Mira cada una de tus subastas para ver cuántas se venden antes que la tuya."

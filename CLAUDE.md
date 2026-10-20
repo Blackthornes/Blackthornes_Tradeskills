@@ -709,6 +709,23 @@ warns when that is more than the gap. Cancel next at the foot takes the
 one with the most money under. `/bts probe` has a "cancel auctions" line.
 Tested in `tools/test_myauctions.lua`. Not yet seen in game.
 
+Places in line (a player asked, the owner said build it from a mockup,
+2026-10-20): "Cheapest" says nothing about auctions at your price listed
+before yours, which sell first. Every item or commodity search that comes
+back for an item you have up (the addon's, the player's own, or **Check
+Places** at the foot, `MyAuctions:CheckPlaces`, one item and suffix at a
+time at background priority, through each live auction's `itemKey`) is read
+once more (`MyAuctions:NoteItemPlaces`, `NoteCommodityPlaces`, called first
+in the Scanner's two search handlers): an item auction keeps how many
+others at its price and suffix come before it (`MyAuctions.places`), a
+commodity how many of others' units share its price (`MyAuctions.more`).
+Session only, nothing saved, shown while under `FRESH`. A cheapest row then
+ends its line with amber "34 ahead of you", green "First in line" or amber
+"480 more at your price"; with others ahead (`row.behind`) it sorts first
+among the cheapest, its "Cheapest" is amber and it gets Cancel. Cancel next
+stays undercut only. Tested in `tools/test_auctionplaces.lua`. Not yet
+seen in game.
+
 ## Learn next
 
 The owner said build it (2026-10-12), from a mockup he picked

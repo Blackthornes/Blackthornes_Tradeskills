@@ -3159,3 +3159,13 @@ L["You need %s for that."] = "Для этого нужно %s."
 L["Your %s shopping list has what your goal needs."] = "В твоём списке покупок %s есть всё для цели."
 L["Your favor goal"] = "Твоя цель по услугам"
 L["about %s to go"] = "осталось около %s"
+
+-- Places in line on the Auctions view (2026-10-20).
+L["%d ahead of you"] = "%d перед тобой"
+L["First in line"] = "Первый в очереди"
+L["%d more at your price"] = "Ещё %d по твоей цене"
+L["%d listings at your price will sell before yours."] = "%d лота по твоей цене продадутся раньше твоего."
+L["Yours sells first at this price."] = "Твой лот продастся первым по этой цене."
+L["Checked %s."] = "Проверено %s."
+L["Check Places"] = "Проверить места"
+L["Looks up each of your auctions to see how many sell before yours."] = "Смотрит каждый твой лот: сколько продадутся раньше него."
