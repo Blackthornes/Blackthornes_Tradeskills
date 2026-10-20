@@ -378,7 +378,8 @@ local function Stub(fields)
     frame.SetShown = frame.SetShown or function(self, value) rawset(self, "shown", value) end
     frame.Hide = frame.Hide or function(self) rawset(self, "shown", false) end
     return setmetatable(frame, { __index = function(self, key)
-        local noop = function() end
+        -- Textures, labels and animations made on a frame are frames too.
+        local noop = key:match("^Create") and function() return Stub() end or function() end
         rawset(self, key, noop)
         return noop
     end })

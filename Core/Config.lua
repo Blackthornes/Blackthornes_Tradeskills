@@ -204,6 +204,11 @@ local DEFAULTS = {
         -- crate from them when last reported (UI/DealsFavor.lua).
         favorSkipOverStack = true,
 
+        -- Deals, Merchant's Favor: the favor goal (2026-10-20), typed on
+        -- the tab as "favorGoal", nil until one is set. The auction house
+        -- drawer's Favors switch shows only while there is one. Never
+        -- rename it.
+
         -- Ready to sell at the auction house: leave out the rows at a loss
         -- (UI/PostPanel.lua, "Hide losses"). Off until ticked.
         postHideLosses = false,
@@ -259,6 +264,11 @@ local DEFAULTS = {
         -- UI/EnchantTooltip.lua. Never rename it.
         tooltipEnchantCosts = true,
 
+        -- On a Waylaid Crate's tooltip (2026-10-20): what fills it, what that
+        -- costs, what it pays back and a favor's price. See
+        -- UI/ItemTooltip.lua. Never rename it.
+        tooltipCrateCosts = true,
+
         -- Off, Shift or Always for each tooltip line (asked 2026-10-18):
         -- true keeps that line for while Shift is held. Whether a line is on
         -- stays in its own setting above, and the sales lines' Shift is
@@ -267,6 +277,7 @@ local DEFAULTS = {
         tooltipTrendShift = false,
         tooltipRecipeShift = false,
         tooltipEnchantShift = false,
+        tooltipCrateShift = false,
 
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does

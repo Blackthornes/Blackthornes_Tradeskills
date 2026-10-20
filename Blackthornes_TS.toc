@@ -117,6 +117,7 @@ UI\ListRulesWindow.lua
 UI\KeepBox.lua
 UI\BuyQuantity.lua
 UI\AuctionsView.lua
+UI\FavorsView.lua
 UI\CraftPanel.lua
 UI\ProfessionOpener.lua
 UI\Disenchanter.lua

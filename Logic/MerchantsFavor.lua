@@ -48,6 +48,8 @@ local FAVOR_NAME = "merchant's favor"
 --   crateIDs[crateKey] = itemID     a crate found in the game by its name
 --   links[crateKey]    = sealedID   the sealed crate that kind fills into
 --   rewards[sealedID]  = { favor, money, turnIns, at }
+--   favorCurrency      = currencyID  Merchant's Favor, when it is a currency
+--   favorItem          = itemID      Merchant's Favor, when it is an item
 local function Store()
     local db = ns.db
     if not db then return nil end
@@ -304,8 +306,9 @@ function MerchantsFavor:OnBags()
             filled = itemID
         elseif kind.kind == "sealed" and change < 0 then
             handed = itemID
-        elseif kind.kind == "favor" and change > 0 then
-            self:NoteFavor(change)
+        elseif kind.kind == "favor" then
+            self:NoteFavorItem(itemID)
+            if change > 0 then self:NoteFavor(change) end
         end
     end
     for itemID in pairs(held) do Look(itemID) end
@@ -331,7 +334,12 @@ function MerchantsFavor:OnCurrency(currencyID, _, change)
         self.currencyNames[currencyID] = name
     end
 
-    if MerchantsFavor.IsFavorName(name or nil) then self:NoteFavor(change) end
+    if MerchantsFavor.IsFavorName(name or nil) then
+        local store = Store()
+        if store and store.favorCurrency ~= currencyID then store.favorCurrency = currencyID end
+        self:NoteFavor(change)
+        self:CheckGoal()
+    end
 end
 
 function MerchantsFavor:OnMoney()
@@ -507,6 +515,215 @@ function MerchantsFavor:GetRows(opts)
     return rows
 end
 
+--- The row for a Waylaid Crate item, for its tooltip, or nil for anything
+--- else. The rows are laid out once and kept until something moves or a
+--- few seconds pass, since a tooltip is drawn again and again.
+local ROW_KEEP = 5
+function MerchantsFavor:RowForItem(itemID)
+    if type(itemID) ~= "number" then return nil end
+    local kind = self:Classify(itemID)
+    if not (kind and kind.kind == "crate") then return nil end
+
+    local now = Now()
+    local kept = self.tipRows
+    if not kept or kept.version ~= MerchantsFavor.version or now - kept.at > ROW_KEEP then
+        local rows = self:GetRows({ skipOverStack = ns.Config and ns.Config:Get("favorSkipOverStack") ~= false })
+        kept = { version = MerchantsFavor.version, at = now, byKey = {} }
+        for _, row in ipairs(rows) do kept.byKey[row.key] = row end
+        self.tipRows = kept
+    end
+    return kept.byKey[kind.crate.key]
+end
+
+--------------------------------------------------------------------------------
+-- The favor goal (the owner said build it, 2026-10-20, from a mockup)
+--------------------------------------------------------------------------------
+
+--- Keep the item ID Merchant's Favor has, when it is an item.
+function MerchantsFavor:NoteFavorItem(itemID)
+    local store = Store()
+    if store and store.favorItem ~= itemID then store.favorItem = itemID end
+end
+
+--- The favor goal typed on the Favors and Writs tab, or nil when none.
+function MerchantsFavor.Goal()
+    local goal = ns.Config and tonumber(ns.Config:Get("favorGoal"))
+    if goal and goal > 0 then return math.floor(goal) end
+    return nil
+end
+
+--- Set the goal; nil or 0 clears it.
+function MerchantsFavor:SetGoal(goal)
+    goal = tonumber(goal)
+    if goal and goal > 0 then goal = math.floor(goal) else goal = nil end
+    if ns.Config then ns.Config:Set("favorGoal", goal) end
+    self.goalTenth, self.goalFor = nil, nil
+    self:CheckGoal()
+    Changed()
+end
+
+--- A currency's amount from the currency list, by name: Merchant's Favor
+--- before its ID is known.
+local function CurrencyByName()
+    if not (Util.HasFunction("C_CurrencyInfo.GetCurrencyListSize")
+        and Util.HasFunction("C_CurrencyInfo.GetCurrencyListInfo")) then return nil end
+    local ok, size = pcall(C_CurrencyInfo.GetCurrencyListSize)
+    if not ok or type(size) ~= "number" then return nil end
+    for index = 1, math.min(size, 200) do
+        local got, info = pcall(C_CurrencyInfo.GetCurrencyListInfo, index)
+        if got and type(info) == "table" and not info.isHeader
+            and MerchantsFavor.IsFavorName(info.name) and type(info.quantity) == "number" then
+            return info.quantity
+        end
+    end
+    return nil
+end
+
+--- How much Merchant's Favor the character playing has, or nil when the
+--- game has not said yet.
+function MerchantsFavor:FavorHave()
+    local store = Store()
+    if store and store.favorCurrency and Util.HasFunction("C_CurrencyInfo.GetCurrencyInfo") then
+        local ok, info = pcall(C_CurrencyInfo.GetCurrencyInfo, store.favorCurrency)
+        if ok and type(info) == "table" and type(info.quantity) == "number" then return info.quantity end
+    end
+    if store and store.favorItem then return MerchantsFavor.Owned(store.favorItem) end
+    return CurrencyByName()
+end
+
+--- What it takes to reach the goal by the cheapest crate.
+--
+-- Favor comes only when a crate is handed in, so what was bought toward the
+-- goal is counted by the crates and bundle materials held: each crate the
+-- plan needs is one Waylaid Crate and one bundle, and those already owned
+-- (bags and bank) come off the gold.
+--
+-- @param goal favor wanted, nil for the saved goal
+-- @param rows GetRows' answer, nil to read them
+-- @return nil without a goal, else { goal, have, need, best (the row),
+--   crates, cratesHave, bundlesHave, materialHave, gold, reached }
+function MerchantsFavor:GetPlan(goal, rows)
+    goal = tonumber(goal) or MerchantsFavor.Goal()
+    if not goal or goal <= 0 then return nil end
+
+    local have = self:FavorHave()
+    local plan = { goal = goal, have = have, need = math.max(0, goal - (have or 0)) }
+    plan.reached = have ~= nil and have >= goal
+    if plan.need <= 0 then return plan end
+
+    rows = rows or self:GetRows({ skipOverStack = ns.Config and ns.Config:Get("favorSkipOverStack") ~= false })
+    for _, row in ipairs(rows) do
+        if row.perFavor and row.favor and row.favor > 0 and row.best then
+            plan.best = row
+            break
+        end
+    end
+    local best = plan.best
+    if not best then return plan end
+
+    local bundle = best.best
+    plan.crates = math.ceil(plan.need / best.favor)
+    plan.cratesHave = math.min(plan.crates, best.have or 0)
+    plan.materialHave = MerchantsFavor.Owned(bundle.itemID)
+    plan.bundlesHave = math.min(plan.crates, math.floor(plan.materialHave / math.max(1, bundle.count)))
+    local gold = (plan.crates - plan.cratesHave) * (best.cratePrice or 0)
+        + (plan.crates - plan.bundlesHave) * (bundle.cost or 0)
+        - plan.crates * (best.money or 0)
+    plan.gold = math.max(0, gold)
+    return plan
+end
+
+--- One auction house buy a listing at a time: a crate, then a bundle's
+--- material, for every crate the plan needs. A step is done once the bags
+--- and bank hold it.
+-- @return steps { { itemID, count, price, done, crate } }, how many left
+function MerchantsFavor.Steps(plan)
+    local steps, left = {}, 0
+    local best = plan and plan.best
+    if not (best and plan.crates and best.itemID) then return steps, 0 end
+
+    local bundle = best.best
+    local buyEach = bundle.buy or bundle.cost
+    for i = 1, plan.crates do
+        local crateDone = (best.have or 0) >= i
+        steps[#steps + 1] = { itemID = best.itemID, count = 1, price = best.cratePrice, done = crateDone, crate = true }
+        local bundleDone = (plan.materialHave or 0) >= i * bundle.count
+        steps[#steps + 1] = { itemID = bundle.itemID, count = bundle.count, price = buyEach, done = bundleDone }
+        if not crateDone then left = left + 1 end
+        if not bundleDone then left = left + 1 end
+    end
+    return steps, left
+end
+
+-- The game's own sounds, by id: coins for a tenth, the achievement toast
+-- for the goal (Goblin Gold's).
+MerchantsFavor.SOUNDS = {
+    tenth = { 120, 878 },
+    goal = { 12891, 888 },
+}
+
+local function Play(which)
+    if type(PlaySound) ~= "function" then return end
+    for _, id in ipairs(MerchantsFavor.SOUNDS[which] or {}) do
+        local ok, willPlay = pcall(PlaySound, id, "Master")
+        if ok and willPlay then return end
+    end
+end
+
+--- Chime each tenth of the goal reached, and cheer the goal. The first look
+--- this session (or after the goal changes) only notes where it stands, so
+--- a login or a dip and climb back plays nothing.
+-- @return "tenth", "goal" or nil
+function MerchantsFavor:CheckGoal()
+    local goal = MerchantsFavor.Goal()
+    local have = goal and self:FavorHave()
+    if not (goal and have) then return nil end
+
+    local tenth = math.min(10, math.floor(have * 10 / goal))
+    if self.goalFor ~= goal or not self.goalTenth then
+        self.goalFor, self.goalTenth = goal, tenth
+        return nil
+    end
+    if tenth <= self.goalTenth then return nil end
+    self.goalTenth = tenth
+    Changed()
+
+    if tenth >= 10 then
+        Play("goal")
+        ns.Print(L["Favor goal reached!"])
+        return "goal"
+    end
+    Play("tenth")
+    return "tenth"
+end
+
+--- Make (or fill) a shopping list named Merchant's Favor with what the goal
+--- still needs to buy: the crates and the bundles' material.
+-- @return the list's index, or nil and why
+function MerchantsFavor:AddToList(plan)
+    local lists = ns.ShoppingLists
+    if not (lists and lists.All and lists.Make and lists.Add) then return nil, L["Shopping lists aren't ready yet."] end
+    plan = plan or self:GetPlan()
+    local best = plan and plan.best
+    if not (best and plan.crates and best.itemID) then return nil, L["There's nothing to buy for your goal yet."] end
+
+    local name = L["Merchant's Favor"]
+    local index
+    for i, list in ipairs(lists:All() or {}) do
+        if list.name == name then index = i break end
+    end
+    if not index then index = lists:Make(name) end
+    if not index then return nil, L["Shopping lists aren't ready yet."] end
+
+    -- Set to what the goal needs, so a second click never doubles it.
+    local function Put(itemID, want)
+        if not (lists.SetWant and lists:SetWant(index, itemID, want)) then lists:Add(index, itemID, want) end
+    end
+    Put(best.itemID, plan.crates)
+    Put(best.best.itemID, plan.crates * best.best.count)
+    return index
+end
+
 --------------------------------------------------------------------------------
 -- Search Both and Queue Craft (the Deals tab's two views)
 --------------------------------------------------------------------------------
@@ -594,7 +811,10 @@ function MerchantsFavor:OnEnable()
     self:OnMoney()
     self:OnBags()
 
-    ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", Quietly(self.OnBags))
+    ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", Quietly(function(module)
+        module:OnBags()
+        module:CheckGoal()
+    end))
     ns.RegisterEvent(self, "PLAYER_MONEY", Quietly(self.OnMoney))
     ns.RegisterEvent(self, "CURRENCY_DISPLAY_UPDATE", Quietly(self.OnCurrency))
     ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", Quietly(self.OnItemInfo))

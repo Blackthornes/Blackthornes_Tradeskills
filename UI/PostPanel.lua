@@ -611,7 +611,10 @@ function PostPanel:Build()
     -- Lists (a player asked, 2026-10-14): the player's own named shopping
     -- lists, UI/ShoppingListsView.lua. Auctions (asked the same day): your
     -- auctions, the undercut ones first with a Cancel each, UI/AuctionsView.lua.
-    local views = { { "sell", L["Sell"] }, { "buy", L["Buy"] }, { "lists", L["Lists"] }, { "auctions", L["Auctions"] } }
+    -- Favors (the owner, 2026-10-20): what a favor goal still needs, shown
+    -- only while a goal is set (PostPanel:LayTabs), UI/FavorsView.lua.
+    local views = { { "sell", L["Sell"] }, { "buy", L["Buy"] }, { "lists", L["Lists"] }, { "auctions", L["Auctions"] },
+        { "favors", L["Favors"] } }
     local share = math.floor((PANEL_WIDTH - 28) / #views)
     local tabs = {}
     for _, view in ipairs(views) do tabs[#tabs + 1] = { key = view[1], text = view[2], width = share } end
@@ -619,8 +622,9 @@ function PostPanel:Build()
         PostPanel:SetView(key)
     end)
     switch:SetPoint("TOPLEFT", 14, CONTENT_TOP)
-    switch:Select(self.view)
     self.switch = switch
+    self:LayTabs(true)
+    switch:Select(self.view)
 
     -- Hide losses (asked 2026-10-11): a small box at the summary line's right
     -- end that leaves out the rows drawn red, the ones the auction house would
@@ -706,6 +710,9 @@ function PostPanel:Build()
 
     if ns.AuctionsView then
         ns.AuctionsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
+    end
+    if ns.FavorsView then
+        ns.FavorsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
     end
 
     local empty = Theme.CreateLabel(body, "small", "dim", "CENTER")
@@ -1431,7 +1438,8 @@ end
 
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
-    self.view = (view == "buy" or view == "lists" or view == "auctions") and view or "sell"
+    if view == "favors" and not PostPanel.ShowsFavors() then view = "sell" end
+    self.view = (view == "buy" or view == "lists" or view == "auctions" or view == "favors") and view or "sell"
     self.searchStep = nil
     if self.switch then self.switch:Select(self.view) end
     self.shoppingAt = nil
@@ -1677,11 +1685,34 @@ function PostPanel:Refresh()
     if self.searchAll then self.searchAll:SetShown(self.view == "buy") end
 
     self:UpdateAuctionsTab()
+    if self:LayTabs() and self.view == "favors" and not PostPanel.ShowsFavors() then
+        self.view = "sell"
+        if self.switch then self.switch:Select(self.view) end
+    end
     local View = ns.ShoppingListsView
     if View and View.list then View:SetShown(self.view == "lists") end
     local Auctions = ns.AuctionsView
     if Auctions and Auctions.list then Auctions:SetShown(self.view == "auctions") end
-    if self.footNote then self.footNote:SetShown(self.view ~= "lists" and self.view ~= "auctions") end
+    local Favors = ns.FavorsView
+    if Favors and Favors.list and (Favors.shown or false) ~= (self.view == "favors") then
+        Favors:SetShown(self.view == "favors")
+    end
+    if self.footNote then
+        self.footNote:SetShown(self.view ~= "lists" and self.view ~= "auctions" and self.view ~= "favors")
+    end
+
+    if self.view == "favors" then
+        if self.listAll then self.listAll:Hide() end
+        self.list:Hide()
+        self.shoppingList:Hide()
+        self.empty:Hide()
+        if Favors then
+            Favors:Refresh()
+            self.summary:SetText(Favors:Summary())
+            self:SetTitle(Favors:Title())
+        end
+        return
+    end
 
     if self.view == "auctions" then
         if self.listAll then self.listAll:Hide() end
@@ -1776,6 +1807,42 @@ function PostPanel:Refresh()
             or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or "")
         .. (keptBack > 0 and ("  ·  " .. L.Format("%d kept for your other addons", keptBack)) or "")
         .. (toVendor > 0 and ("  ·  " .. L.Format("%d for the vendor", toVendor)) or ""))
+end
+
+--- The Favors switch shows only while a favor goal is set.
+function PostPanel.ShowsFavors()
+    local MerchantsFavor = ns.MerchantsFavor
+    return MerchantsFavor ~= nil and ns.FavorsView ~= nil and MerchantsFavor.Goal() ~= nil
+end
+
+--- Lay the switch's tabs side by side, sharing the drawer's width, with
+--- Favors only while a goal is set. Laid out again only when that changes.
+-- @return true when the tabs moved
+function PostPanel:LayTabs(force)
+    local switch = self.switch
+    if not (switch and switch.tabs) then return false end
+    local withFavors = PostPanel.ShowsFavors()
+    if not force and withFavors == self.tabsWithFavors then return false end
+    self.tabsWithFavors = withFavors
+
+    local shown = {}
+    for _, tab in ipairs(switch.tabs) do
+        local on = tab.key ~= "favors" or withFavors
+        tab:SetShown(on)
+        if on then shown[#shown + 1] = tab end
+    end
+    local share = math.floor((PANEL_WIDTH - 28) / math.max(1, #shown))
+    local x = 0
+    for _, tab in ipairs(shown) do
+        tab:ClearAllPoints()
+        tab:SetPoint("BOTTOMLEFT", x, 0)
+        tab:SetWidth(share)
+        tab.left, tab.span = x, share
+        x = x + share
+    end
+    switch:SetWidth(math.max(x, 1))
+    if switch.selected then switch:Select(switch.selected) end
+    return true
 end
 
 --- The Auctions switch says how many of yours are undercut, in red, so it
