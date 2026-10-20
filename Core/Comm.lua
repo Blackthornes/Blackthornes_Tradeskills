@@ -375,7 +375,9 @@ function Comm:CHAT_MSG_ADDON(_, prefix, text, channel, sender, target, zoneChann
     if kind == "D" then
         ReceiveChunk(sender, body, channel)
     elseif self.handlers[kind] then
-        Dispatch(self.handlers[kind], sender, body, channel)
+        -- A channel's name and number come along for handlers that listen to
+        -- one (Logic/RealmPrices.lua); the others take only the first three.
+        Dispatch(self.handlers[kind], sender, body, channel, Comm.Plain(channelName), Comm.Plain(target))
     end
 end
 

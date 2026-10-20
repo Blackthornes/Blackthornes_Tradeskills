@@ -3203,3 +3203,17 @@ L["Pick the professions you want to level. We'll lay out the road for each one a
 L["You can change this any time in Settings."] = "Tu peux changer ça quand tu veux dans les Réglages."
 L["Not Now"] = "Pas maintenant"
 L["Show My Road"] = "Voir ma route"
+
+-- Realm prices (2026-10-20)
+L["YOUR REALM"] = "TON ROYAUME"
+L["Realm Prices:"] = "Prix du royaume :"
+L["Swaps auction prices with players on your realm who use Tradeskills. Only prices are sent, never names. Your own scans always win."] = "Échange les prix de l'hôtel des ventes avec les joueurs de ton royaume qui utilisent Tradeskills. Seuls les prix sont envoyés, jamais les noms. Tes propres scans passent toujours en premier."
+L["Realm prices are off."] = "Les prix du royaume sont désactivés."
+L["Listening for prices from your realm. A price is used once 3 players agree on it."] = "À l'écoute des prix de ton royaume. Un prix est utilisé dès que 3 joueurs sont d'accord."
+L["%s realm price kept, from %d player."] = "%s prix du royaume gardé, venant de %d joueur."
+L["%s realm price kept, from %d players."] = "%s prix du royaume gardé, venant de %d joueurs."
+L["%s realm prices kept, from %d player."] = "%s prix du royaume gardés, venant de %d joueur."
+L["%s realm prices kept, from %d players."] = "%s prix du royaume gardés, venant de %d joueurs."
+L["Your realm"] = "Ton royaume"
+L["realm prices on"] = "prix du royaume activés"
+L["realm prices off"] = "prix du royaume désactivés"

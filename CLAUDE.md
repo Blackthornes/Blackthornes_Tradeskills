@@ -1273,6 +1273,25 @@ and `Core/Serialize.lua` are copies of ours (prefix `BFRshare` instead of
 its own pairing (`shareNames`) rather than reading `linkNames`. A fix to
 `Core/Comm.lua` or `Core/Serialize.lua` here belongs in Farmer's too.
 
+## Sharing with your realm
+
+The owner asked (2026-10-20) for live prices without an app, a server or a
+cost, picked a hidden in-game channel, and said build it from a mockup whose
+words he approved. Tradeskills only: Farmer never shares past the guild.
+`Logic/RealmPrices.lua`, off unless ticked (`realmPrices`, YOUR REALM on the
+Sharing page, `/bts share realm on|off`, typed only like guild). When on it
+joins a hidden channel for the side (`BTSPrices` plus A, H or N), hides its
+join lines, and shares the last scan (Y announce, then Z prices, the guild's
+batches) one message every `SEND_GAP` seconds, never in a fight, at most once
+an hour, and not when `MIN_SENDERS` others covered that scan. Kept by a hash
+of the sender's name, never the name, in `realmPrices[realm][itemID]` and
+`realmPricesSent` (never rename either). A price is used only once 3 players
+sent one, the middle of the last 5, and only to fill a gap after your own
+scans and your guild's (`Prices:GetValue`), before TSM and Auctionator. A
+price far from a fresh one of your own is refused. `Comm` hands handlers the
+channel's name and target as fourth and fifth arguments. Tested in
+`tools/test_realmprices.lua`. Not yet seen in game.
+
 ## German translation
 
 The owner said yes (2026-10-12) to German in Tradeskills, after Pets'
