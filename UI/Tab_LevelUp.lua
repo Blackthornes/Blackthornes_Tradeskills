@@ -1075,25 +1075,43 @@ end
 -- List
 --------------------------------------------------------------------------------
 
+--- The picked profession's skill, as Road to 300 shows it. Read by name
+--- from Recipes:GetLearnedProfessions, which keeps the last good read, so it
+--- shows with the profession window shut too; Forever lists a profession
+--- under two IDs and the one with the levels may not be the recipes' own.
 local function UpdateSkillLabel()
-    local skillLines = state.profession and skillLinesByName[state.profession]
     local label = widgets.skillLabel
+    local skillLines = state.profession and skillLinesByName[state.profession]
 
     if not skillLines then
         label:SetText("")
         return
     end
 
+    local best
     for skillLineID in pairs(skillLines) do
         local info = ProfessionInfo(skillLineID)
-
-        if info and (info.maxSkillLevel or 0) > 0 then
-            label:SetText(L.Format("Skill %d / %d", info.skillLevel or 0, info.maxSkillLevel))
-            return
+        if info and (info.maxSkillLevel or 0) > ((best and best.max) or 0) then
+            best = { skill = info.skillLevel or 0, max = info.maxSkillLevel }
         end
     end
 
-    label:SetText("")
+    if not best and ns.Recipes and ns.Recipes.GetLearnedProfessions then
+        local ok, learned = pcall(ns.Recipes.GetLearnedProfessions, ns.Recipes)
+        for _, profession in ipairs(ok and type(learned) == "table" and learned or {}) do
+            if (profession.maxSkillLevel or 0) > 0
+                and (profession.name == state.profession or skillLines[profession.skillLineID]) then
+                best = { skill = profession.skillLevel or 0, max = profession.maxSkillLevel }
+                break
+            end
+        end
+    end
+
+    if best then
+        label:SetText(("%s  %d / %d"):format(tostring(state.profession):upper(), best.skill, best.max))
+    else
+        label:SetText("")
+    end
 end
 
 --- The character's skill in each profession shown, by Classic skill line,
@@ -1514,7 +1532,7 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
         },
     } or nil,
     learnText = L["Learn Next"],
-    learn = ns.RecipeBookView.New({ order = "skill" }),
+    learn = ns.RecipeBookView.New({ order = "skill", showSkill = true }),
     corner = function(parent)
         return ns.Upgrades and ns.Upgrades.CreateAltCheckbox and ns.Upgrades:CreateAltCheckbox(parent)
     end,

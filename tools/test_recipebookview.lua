@@ -9,6 +9,8 @@
 --   5. SKILL is green within the character's skill, amber above it.
 --   6. The Level Up tab's copy keeps its own filters and asks for skill
 --      order; the switch shows one view at a time and redraws only that one.
+--   7. With showSkill it shows the picked profession's skill, or all of
+--      yours under All professions; the Profit tab's copy shows none.
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -222,6 +224,22 @@ second.SetProfession("ench")
 View.SetProfession("leath")
 check("its own profession", second._state.profession, "Enchanting")
 check("does not move the other's", View._state.profession, "Leatherworking")
+
+print("\nthe skill at the top right")
+check("the Profit copy shows none", View._widgets.skill, nil)
+ns.Recipes.GetLearnedProfessions = function()
+  return { { name = "Enchanting", skillLevel = 206, maxSkillLevel = 225 },
+           { name = "Tailoring", skillLevel = 150, maxSkillLevel = 150 } }
+end
+local third = View.New({ order = "skill", showSkill = true })
+third.Build(Frame())
+third.SetProfession("ench")
+third.Refresh()
+check("the picked profession's skill", third._widgets.skill.text, "ENCHANTING  206 / 225")
+third._state.profession = "all"
+third.Refresh()
+check("every one of yours under All professions", third._widgets.skill.text,
+  "ENCHANTING  206 / 225   ·   TAILORING  150 / 150")
 
 print("\nthe switch at the top of a tab")
 local built, refreshed = nil, 0
