@@ -229,6 +229,8 @@ local function FillCell(cell, key, entry)
     cell:SetTextColor(Theme.Unpack(key == "perFavor" and "accent" or key == "total" and "text" or "muted"))
 end
 
+local SlideRow
+
 local function UpdateRow(row, entry)
     if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
 
@@ -244,6 +246,12 @@ local function UpdateRow(row, entry)
 
     for index, column in ipairs(COLUMNS) do
         FillCell(row.cells[index], column.key, entry)
+    end
+
+    local moved = state.slides and entry.key and state.slides[entry.key]
+    if moved then
+        state.slides[entry.key] = nil
+        SlideRow(row, moved)
     end
 end
 
@@ -617,6 +625,264 @@ function UpdateDetail(entry)
 end
 
 --------------------------------------------------------------------------------
+-- The favor goal (the owner said build it, 2026-10-20, from a mockup)
+--------------------------------------------------------------------------------
+
+-- The strip under the list: the heading and box, the bar, two columns of
+-- lines.
+local GOAL_HEIGHT = 92
+local GOAL_LINE = 15
+-- How long the gold takes to count to a new total, and a row to slide to
+-- its new place, with Window effects on Full.
+local COUNT_SECONDS = 0.9
+local SLIDE_SECONDS = 0.35
+
+local function MotionFull()
+    local motion = ns.Motion
+    local ok, level = pcall(function() return motion and motion.Level and motion.Level() end)
+    return not ok or level == nil or level == "full"
+end
+
+local function FavorText(amount)
+    return L.Format("%d favor", amount)
+end
+
+local function CratesText(count)
+    if count == 1 then return L["1 crate"] end
+    return L.Format("%d crates", count)
+end
+
+--- Count the gold line from what it showed to `value`, or set it at once.
+local function CountGold(value)
+    local goal = widgets.goal
+    if not goal then return end
+    local label = goal.gold
+    goal.goldTarget = value
+
+    if not value then
+        goal.goldShown = nil
+        label:SetScript("OnUpdate", nil)
+        label:SetText("--")
+        label:SetTextColor(Theme.Unpack("dim"))
+        return
+    end
+    label:SetTextColor(Theme.Unpack("text"))
+
+    local from = goal.goldShown
+    if not from or from == value or not MotionFull() or not label:IsVisible() then
+        goal.goldShown = value
+        label:SetScript("OnUpdate", nil)
+        label:SetText(Money(value))
+        return
+    end
+
+    local started = GetTime()
+    label:SetScript("OnUpdate", function(self)
+        local k = math.min(1, (GetTime() - started) / COUNT_SECONDS)
+        local eased = 1 - (1 - k) ^ 3
+        goal.goldShown = math.floor(from + (value - from) * eased + 0.5)
+        self:SetText(Money(goal.goldShown))
+        if k >= 1 then self:SetScript("OnUpdate", nil) end
+    end)
+end
+
+local function GoalLine(parent, labelText)
+    local label = Theme.CreateLabel(parent, "small", "muted")
+    label:SetText(labelText)
+    local value = Theme.CreateLabel(parent, "small", "text", "RIGHT")
+    return { label = label, value = value }
+end
+
+local function BuildGoal(view)
+    local goal = CreateFrame("Frame", nil, view)
+    goal:SetHeight(GOAL_HEIGHT)
+    widgets.goal = goal
+
+    local heading = Theme.CreateHeading(goal, L["YOUR FAVOR GOAL"])
+    heading:SetPoint("TOPLEFT", 8, -4)
+
+    goal.addList = Widgets.CreateButton(goal, L["Add to a List"], function()
+        local index, why = ns.MerchantsFavor:AddToList()
+        if not index then
+            if why then ns.Print(why) end
+            return
+        end
+        local name = L["Merchant's Favor"]
+        ns.Print(L.Format("Your %s shopping list has what your goal needs.", name))
+    end, { height = 20 })
+    goal.addList:SetPoint("TOPRIGHT", goal, "TOPRIGHT", -4, 0)
+
+    goal.box = Widgets.CreateNumberBox(goal, {
+        width = 70, height = 20, min = 1, max = 999999, allowEmpty = true, justify = "CENTER",
+        onChange = function(value)
+            ns.MerchantsFavor:SetGoal(value)
+            DealsFavor:Refresh()
+            if ns.PostPanel and ns.PostPanel.Refresh then pcall(ns.PostPanel.Refresh, ns.PostPanel) end
+        end,
+    })
+    goal.box:SetPoint("RIGHT", goal.addList, "LEFT", -12, 0)
+
+    local boxLabel = Theme.CreateLabel(goal, "small", "text")
+    boxLabel:SetPoint("RIGHT", goal.box, "LEFT", -6, 0)
+    boxLabel:SetText(L["Favor Goal:"])
+    -- The heading's rule stops short of the box.
+    local rule = type(heading) == "table" and rawget(heading, "rule")
+    if type(rule) == "table" then
+        rule:ClearAllPoints()
+        rule:SetPoint("LEFT", heading, "RIGHT", 6, 0)
+        rule:SetPoint("RIGHT", boxLabel, "LEFT", -10, 0)
+    end
+
+    -- The bar: dark glass, a gold fill and a tick at each tenth.
+    local bar = CreateFrame("Frame", nil, goal)
+    bar:SetHeight(10)
+    bar:SetPoint("TOPLEFT", goal, "TOPLEFT", 8, -30)
+    bar:SetPoint("TOPRIGHT", goal, "TOPRIGHT", -4, -30)
+    local back = bar:CreateTexture(nil, "BACKGROUND")
+    back:SetAllPoints()
+    back:SetColorTexture(Theme.Unpack("glassAlt"))
+    local edge = bar:CreateTexture(nil, "BORDER")
+    edge:SetPoint("BOTTOMLEFT")
+    edge:SetPoint("BOTTOMRIGHT")
+    edge:SetHeight(1)
+    edge:SetColorTexture(Theme.Unpack("border", 0.6))
+    local fill = bar:CreateTexture(nil, "ARTWORK")
+    fill:SetPoint("TOPLEFT")
+    fill:SetPoint("BOTTOMLEFT")
+    fill:SetWidth(1)
+    fill:SetColorTexture(Theme.Unpack("accent"))
+    bar.fill = fill
+    bar.ticks = {}
+    for i = 1, 9 do
+        local tick = bar:CreateTexture(nil, "OVERLAY")
+        tick:SetSize(1, 10)
+        tick:SetColorTexture(Theme.Unpack("ink", 0.7))
+        bar.ticks[i] = tick
+    end
+    bar:SetScript("OnSizeChanged", function(self, width)
+        width = tonumber(width) or self:GetWidth() or 0
+        for i, tick in ipairs(self.ticks) do
+            tick:ClearAllPoints()
+            tick:SetPoint("LEFT", self, "LEFT", math.floor(width * i / 10), 0)
+        end
+        if self.share then self.fill:SetWidth(math.max(1, width * self.share)) end
+        self.fill:SetShown((self.share or 0) > 0)
+    end)
+    goal.bar = bar
+
+    -- Two columns of lines.
+    goal.have = GoalLine(goal, L["You have"])
+    goal.toGo = GoalLine(goal, L["Still to go"])
+    goal.way = GoalLine(goal, L["Cheapest way"])
+    goal.goldLine = GoalLine(goal, L["Gold to get there"])
+    goal.gold = goal.goldLine.value
+
+    local function Place(line, column, row)
+        local y = -48 - (row - 1) * (GOAL_LINE + 4)
+        line.label:ClearAllPoints()
+        line.value:ClearAllPoints()
+        if column == 1 then
+            line.label:SetPoint("TOPLEFT", goal, "TOPLEFT", 8, y)
+            line.value:SetPoint("TOPRIGHT", goal, "TOP", -10, y)
+        else
+            line.label:SetPoint("TOPLEFT", goal, "TOP", 10, y)
+            line.value:SetPoint("TOPRIGHT", goal, "TOPRIGHT", -4, y)
+        end
+    end
+    Place(goal.have, 1, 1)
+    Place(goal.toGo, 1, 2)
+    Place(goal.way, 2, 1)
+    Place(goal.goldLine, 2, 2)
+
+    return goal
+end
+
+local function SetBar(share)
+    local bar = widgets.goal and widgets.goal.bar
+    if not bar then return end
+    bar.share = math.max(0, math.min(1, share or 0))
+    local width = bar:GetWidth() or 0
+    bar.fill:SetWidth(math.max(1, width * bar.share))
+    bar.fill:SetShown(bar.share > 0)
+    for i, tick in ipairs(bar.ticks) do
+        tick:SetColorTexture(Theme.Unpack(i / 10 <= bar.share and "ink" or "border", 0.7))
+    end
+end
+
+--- Fill the strip from the goal's plan.
+local function UpdateGoal(rows)
+    local goal = widgets.goal
+    if not goal then return end
+
+    local favor = ns.MerchantsFavor
+    local target = favor.Goal()
+    if not (goal.box.editBox and goal.box.editBox.HasFocus and goal.box.editBox:HasFocus()) then
+        goal.box:SetValue(target, true)
+    end
+
+    local plan = target and favor:GetPlan(target, rows)
+    local function Set(line, text, color)
+        line.value:SetText(text or "--")
+        line.value:SetTextColor(Theme.Unpack(text and (color or "text") or "dim"))
+    end
+
+    if not plan then
+        Set(goal.have, favor:FavorHave() and FavorText(favor:FavorHave()))
+        Set(goal.toGo, nil)
+        Set(goal.way, nil)
+        CountGold(nil)
+        SetBar(0)
+        goal.addList:Disable()
+        return
+    end
+
+    Set(goal.have, plan.have and FavorText(plan.have))
+    Set(goal.toGo, FavorText(plan.need), plan.need == 0 and "profit" or "accent")
+    SetBar(plan.have and plan.have / plan.goal or 0)
+
+    if plan.need == 0 then
+        Set(goal.way, nil)
+        CountGold(0)
+        goal.addList:Disable()
+        return
+    end
+    if plan.best and plan.crates then
+        Set(goal.way, CratesText(plan.crates))
+        CountGold(plan.gold)
+        goal.addList:Enable()
+    else
+        Set(goal.way, nil)
+        CountGold(nil)
+        goal.addList:Disable()
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Rows slide to their new place (with Window effects on Full)
+--------------------------------------------------------------------------------
+
+--- Slide a row from `rows` rows away to where it is drawn now.
+function SlideRow(row, rows)
+    if not (row.CreateAnimationGroup and rows and rows ~= 0) then return end
+    if not row.slide then
+        local group = row:CreateAnimationGroup()
+        local jump = group:CreateAnimation("Translation")
+        jump:SetOrder(1)
+        jump:SetDuration(0.001)
+        local back = group:CreateAnimation("Translation")
+        back:SetOrder(2)
+        back:SetDuration(SLIDE_SECONDS)
+        if back.SetSmoothing then back:SetSmoothing("OUT") end
+        row.slide = { group = group, jump = jump, back = back }
+    end
+    local dy = rows * ROW_HEIGHT
+    row.slide.group:Stop()
+    row.slide.jump:SetOffset(0, dy)
+    row.slide.back:SetOffset(0, -dy)
+    row.slide.group:Play()
+end
+
+--------------------------------------------------------------------------------
 -- List
 --------------------------------------------------------------------------------
 
@@ -666,7 +932,25 @@ function DealsFavor:Refresh()
     end
 
     if widgets.sorter then rows = widgets.sorter:Sort(rows) end
+
+    -- When the order moves (new prices, a heading clicked), each row slides
+    -- from where it was to its new place. Not while the search changes.
+    local places = {}
+    for index, row in ipairs(rows) do places[row.key] = index end
+    state.slides = nil
+    if state.places and state.placesSearch == state.search and MotionFull() then
+        for key, index in pairs(places) do
+            local was = state.places[key]
+            if was and was ~= index then
+                state.slides = state.slides or {}
+                state.slides[key] = index - was
+            end
+        end
+    end
+    state.places, state.placesSearch = places, state.search
+
     widgets.list:SetData(rows)
+    UpdateGoal()
 
     widgets.emptyLabel:SetShown(#rows == 0)
     if #rows == 0 then widgets.emptyLabel:SetText(L.Format("No crate matching \"%s\".", state.search)) end
@@ -772,8 +1056,12 @@ function DealsFavor:Build(view, toolbar)
         end,
     })
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
-    list:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 24)
+    list:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 24 + GOAL_HEIGHT + 6)
     widgets.list = list
+
+    local goal = BuildGoal(view)
+    goal:SetPoint("BOTTOMLEFT", view, "BOTTOMLEFT", 0, 26)
+    goal:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 26)
 
     local emptyLabel = Theme.CreateLabel(view, "small", "dim", "CENTER")
     emptyLabel:SetPoint("CENTER", list, "CENTER", 0, 10)
@@ -809,6 +1097,20 @@ function DealsFavor:Build(view, toolbar)
             if list:IsVisible() then DealsFavor:Refresh() end
         end)
     end)
+
+    -- Favor, crates and bundles coming in move the goal; one redraw of the
+    -- strip a burst, only while it shows.
+    local goalQueued = false
+    local function GoalSoon()
+        if goalQueued or not goal:IsVisible() then return end
+        goalQueued = true
+        C_Timer.After(0.5, function()
+            goalQueued = false
+            if goal:IsVisible() then UpdateGoal() end
+        end)
+    end
+    ns.RegisterEvent(goal, "BAG_UPDATE_DELAYED", GoalSoon)
+    ns.RegisterEvent(goal, "CURRENCY_DISPLAY_UPDATE", GoalSoon)
 
     ns.MerchantsFavor:FindCrates()
 end
