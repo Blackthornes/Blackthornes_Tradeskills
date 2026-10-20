@@ -57,6 +57,8 @@ ns.Columns:Register("recipes", L["Recipes to learn"], COLUMNS)
 --
 -- @param opts.order  "skill" lists recipes by the skill they need, for
 --   levelling; otherwise the most profit comes first
+-- @param opts.showSkill  the picked profession's skill at the top right, as
+--   Road to 300 shows it (every profession you have under All professions)
 local function NewView(opts)
     opts = opts or {}
     local instance = {}
@@ -436,10 +438,25 @@ local function NewView(opts)
 
         -- The character's skill in each profession, for the SKILL column.
         state.skills = {}
+        local levels = {}
         if ns.Recipes and ns.Recipes.GetLearnedProfessions then
             for _, profession in ipairs(ns.Recipes:GetLearnedProfessions()) do
                 state.skills[BookName(profession)] = profession.skillLevel
+                levels[#levels + 1] = { book = BookName(profession), profession = profession }
             end
+        end
+
+        if widgets.skill then
+            local parts = {}
+            for _, level in ipairs(levels) do
+                local profession = level.profession
+                if (profession.maxSkillLevel or 0) > 0
+                    and (state.profession == ALL or state.profession == level.book) then
+                    parts[#parts + 1] = ("%s  %d / %d"):format(tostring(profession.name):upper(),
+                        profession.skillLevel or 0, profession.maxSkillLevel)
+                end
+            end
+            widgets.skill:SetText(table.concat(parts, "   ·   "))
         end
 
         local rows = ns.RecipeBook:List({
@@ -530,6 +547,14 @@ local function NewView(opts)
             instance.Refresh()
         end, false)
         known:SetPoint("LEFT", search, "RIGHT", 12, 0)
+
+        if opts.showSkill then
+            local skill = Theme.CreateLabel(view, "normal", "accent", "RIGHT")
+            skill:SetPoint("RIGHT", view, "TOPRIGHT", right, -19)
+            skill:SetPoint("LEFT", known, "RIGHT", 12, 0)
+            skill:SetWordWrap(false)
+            widgets.skill = skill
+        end
 
         local headings = CreateFrame("Frame", nil, view)
         headings:SetHeight(16)
