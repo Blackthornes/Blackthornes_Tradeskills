@@ -23,6 +23,18 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.68.0
+
+- Rules for a whole shopping list. Each list can mail what's on it to one of your characters and keep a number of each on every character.
+- Goblin Gold has a Transparent choice. It's on the Look page of Settings.
+- Favors and Writs shows what's on the auction house for each item.
+- Tradeskills learns what your sealed writs open into.
+- With Butler, your best next skill point shows in Butler's Jobs, and Butler says when a craft you know earns more than selling.
+
+Fixes and changes:
+
+- Several bug fixes for the craft queue, Favors and Writs, the vendor map pins and the skill point line in Butler.
+
 ## 0.67.0
 
 - Gold pins on the world map show vendors that sell what your queue needs for less than the auction house. It's off until you turn on Vendor Map Pins on the Mail & Vendors page of Settings.
