@@ -377,6 +377,20 @@ function Probe:PrintReport()
     Line("craft PROTECTED", Yes(caps.tradeskill.craftRecipeSecure))
     Line("quality functions", Yes(caps.tradeskill.hasQualityFunctions))
     Line("quality tiers in use", Yes(caps.tradeskill.qualityTiersObserved))
+    -- Goblin Gold's all-time numbers (2026-10-20): what the game's
+    -- Statistics give an addon.
+    if ns.GoldGoal and ns.GoldGoal.STATISTICS then
+        local parts = {}
+        for _, key in ipairs({ "quests", "kills", "questGold", "looted" }) do
+            local raw = "none"
+            if type(GetStatistic) == "function" then
+                local ok, value = pcall(GetStatistic, ns.GoldGoal.STATISTICS[key])
+                raw = ok and tostring(value) or "error"
+            end
+            parts[#parts + 1] = key .. "=" .. raw .. " (" .. tostring(ns.GoldGoal.Statistic(ns.GoldGoal.STATISTICS[key])) .. ")"
+        end
+        Line("statistics", table.concat(parts, ", "))
+    end
     -- Learn next's Show the way (2026-10-12).
     if ns.Waypoints then Line("show the way", ns.Waypoints:ProbeText()) end
 
