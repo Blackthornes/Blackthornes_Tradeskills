@@ -223,6 +223,25 @@ settings.expectedRelists = 0
 check("a saved 0 loses none either", Profit.LostListings(), 0)
 settings.expectedRelists = 3
 check("three listings lose two", Profit.LostListings(), 2)
+settings.expectedRelists = 1
+
+print("")
+print("a slow seller is expected to lose one deposit")
+
+local demand = { [BELT] = "low" }
+ns.Demand = { Get = function(_, id) return demand[id] and { level = demand[id] } or nil end }
+check("low demand loses one", Profit.LostListings(BELT), 1)
+check("other items lose none", Profit.LostListings(LINEN), 0)
+check("asked with no item, only the setting counts", Profit.LostListings(), 0)
+a = Profit:Analyse(RECIPE, nil, "auction")
+check("the craft pays the 3c deposit", a.deposit, 3)
+check("a listing's net loses it too", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), 768)
+settings.expectedRelists = 3
+check("a saved number above one still wins", Profit.LostListings(BELT), 2)
+demand[BELT] = "some"
+settings.expectedRelists = 1
+check("some demand loses none", Profit.LostListings(BELT), 0)
+ns.Demand = nil
 settings.expectedRelists = 2
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
