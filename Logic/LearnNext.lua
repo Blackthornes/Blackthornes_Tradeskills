@@ -146,6 +146,22 @@ function LearnNext:Place(record)
     return nil
 end
 
+--- The nearest trainer of the player's side for a profession who teaches
+--- up to a skill, for Road to 300's trainer steps (2026-10-20).
+-- @param line   the Classic skill line
+-- @param needs  the skill they must teach to
+-- @return { kind = "trainer", name, zone, x, y } or nil
+function LearnNext:TrainerFor(line, needs)
+    local side = Side()
+    local trainers = {}
+    for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
+        if OnSide(row[5], side) and (row[6] or 0) >= (needs or 0) then
+            trainers[#trainers + 1] = { kind = "trainer", name = row[1], zone = row[2], x = row[3], y = row[4] }
+        end
+    end
+    return Nearest(trainers, side)
+end
+
 --- The skill up colour an unlearned recipe gives at a skill, from Forever's
 --- yellow and grey; "unknown" when they are not known.
 function LearnNext.Tier(record, skill)

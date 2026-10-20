@@ -664,8 +664,9 @@ local SWITCH_HEIGHT = 22
 --   redraws its own view
 -- @param spec.learn  the copy of Recipes to learn to show (a NewView), or
 --   the Profit tab's when nil
+-- @param spec.learnText  the learn view's name, when not RECIPES TO LEARN
 -- @param spec.extras  optional views shown between the two, each
---   { key, text, tip, build(view), refresh() }
+--   { key, text, tip (optional), build(view), refresh() }
 -- @return { Build(container), Refresh(), ShowView(key) }
 function RecipeBookView.WithSwitch(spec)
     local learn = spec.learn or main
@@ -717,7 +718,7 @@ function RecipeBookView.WithSwitch(spec)
         for _, extra in ipairs(extras) do
             definitions[#definitions + 1] = { key = extra.key, text = extra.text, tip = extra.tip }
         end
-        definitions[#definitions + 1] = { key = "learn", text = L["RECIPES TO LEARN"],
+        definitions[#definitions + 1] = { key = "learn", text = spec.learnText or L["RECIPES TO LEARN"],
             tip = L["Recipes you have not learned, and what each is worth"] }
         local built, previous = {}, nil
 
@@ -757,9 +758,12 @@ function RecipeBookView.WithSwitch(spec)
                 if part.key ~= tab.view then
                     part.label:SetTextColor(Theme.Unpack("text"))
                 end
-                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-                GameTooltip:SetText(definition.tip, 1, 1, 1)
-                GameTooltip:Show()
+                -- A view with no tip shows none (Road to 300, 2026-10-20).
+                if definition.tip then
+                    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+                    GameTooltip:SetText(definition.tip, 1, 1, 1)
+                    GameTooltip:Show()
+                end
             end)
             button:SetScript("OnLeave", function()
                 if part.key ~= tab.view then
