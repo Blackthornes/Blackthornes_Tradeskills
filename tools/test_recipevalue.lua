@@ -182,7 +182,14 @@ check("a frame full of buttons counts nothing", RecipeValue:CountRecipes({
 -- The setting
 --------------------------------------------------------------------------------
 
-check("on by default", RecipeValue:IsEnabled(), true)
+check("off by default", RecipeValue:IsEnabled(), false)
+do
+  local f = assert(io.open("Core/Config.lua", "r"))
+  local source = f:read("*a")
+  f:close()
+  check("and a fresh save starts with it off",
+    source:find("showValueInProfessionWindow = false,", 1, true) ~= nil, true)
+end
 
 ns.settings.showValueInProfessionWindow = false
 check("off when switched off", RecipeValue:IsEnabled(), false)
