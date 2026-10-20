@@ -3,7 +3,7 @@
 -- from a mockup): one profession's way up as steps, from Logic/RoadPlan.lua.
 --
 -- A dark glass row a step, the one to do now in gold with a gold edge,
--- the ones passed ticked and dim. Above: the profession, its skill, which
+-- the ones passed ticked and dim, at the foot of the list. Above: the profession, its skill, which
 -- step and a meter of the steps. Below: what the rest costs, what the
 -- bags and bank take off, and Queue All. The plan is asked for only while
 -- this view shows, and worked out again only when its key moves.
@@ -301,7 +301,7 @@ function RoadView:Refresh()
         return
     end
 
-    widgets.list:SetData(plan.steps)
+    widgets.list:SetData(ns.RoadPlan.Shown(plan.steps))
     if plan.current then
         widgets.stepOf:SetText(L.Format("Step %d of %d", plan.current, #plan.steps))
     else

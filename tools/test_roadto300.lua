@@ -14,6 +14,7 @@
 --   6. Queue Step queues a known recipe's crafts, or a recipe still to
 --      learn's materials on the list to buy; Queue All every step left.
 --   7. The plan is kept by key and worked out again when it moves.
+--   8. The list shows the steps left first, the done ones after.
 
 local GLOBALS = { "time", "GetTime", "UnitFactionGroup", "GetRealZoneText", "GetLocale",
   "UnitLevel", "C_Timer", "C_Map" }
@@ -272,6 +273,15 @@ ensured, bought = {}, {}
 local count = Road:QueueAll(plan)
 check("Queue All: every craft step left", count > 1, true)
 check("never a done step", ensured[1], nil)
+
+print("\ndone steps go to the foot of the list")
+local a, b, c, d = { done = true }, { done = true }, {}, {}
+local shown = Road.Shown({ a, b, c, d })
+check("the step to do now is first", shown[1], c)
+check("then the next one left", shown[2], d)
+check("done steps after, in order", shown[3] == a and shown[4] == b, true)
+check("nothing lost", #shown, 4)
+check("the plan keeps its own order", plan.steps[1].done, true)
 
 print("\nthe Welcome card's picks order the roads")
 ns.Recipes.GetLearnedProfessions = function()
