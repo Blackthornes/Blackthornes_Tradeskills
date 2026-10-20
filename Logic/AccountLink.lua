@@ -579,6 +579,9 @@ ns.RegisterCommand("share", L["share with your other account and guild: with <na
             end
         elseif word == "test" then
             ns.Comm:Test()
+        elseif word == "channel" then
+            -- Typed only, and left out of the help line: a check for Claude.
+            ns.KeepCheck("share channel", ns.Comm.ChannelTest, ns.Comm)
         elseif word == "data" and ns.Contribute then
             -- Typed only, and left out of the help line.
             ns.Contribute:Command(rest)
