@@ -510,6 +510,10 @@ local DEFAULTS = {
         -- Share scans with guildmates and fill gaps with theirs. On by
         -- default (the owner, 2026-10-07). See Logic/GuildPrices.lua.
         guildPrices = true,
+        -- Share scans with players on your realm over a hidden channel, and
+        -- fill what is still missing with theirs (2026-10-20). Off unless
+        -- ticked; never rename it. See Logic/RealmPrices.lua.
+        realmPrices = false,
         -- Send your own disenchant results and recipe skills to the
         -- addon's maker (2026-10-18). Off unless ticked; never rename it.
         -- See Logic/Contribute.lua.

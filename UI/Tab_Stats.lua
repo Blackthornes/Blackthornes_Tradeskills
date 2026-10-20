@@ -563,6 +563,7 @@ end
 local SOURCE_WORDS = {
     scans = L["Your scans"],
     guild = L["Your guild"],
+    realm = L["Your realm"],
     tsm = "TradeSkillMaster",
     auctionator = "Auctionator",
     vendorPays = L["A vendor pays"],
