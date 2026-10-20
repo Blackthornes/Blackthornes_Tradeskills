@@ -356,7 +356,7 @@ local function ReceiveChunk(sender, body, channel)
 end
 
 --- One addon message arrived. Everything about it is read as plain data.
-function Comm:CHAT_MSG_ADDON(_, prefix, text, channel, sender)
+function Comm:CHAT_MSG_ADDON(_, prefix, text, channel, sender, target, zoneChannelID, localID, channelName)
     -- The prefix first: most messages are other addons', and theirs are
     -- dropped before anything else of them is copied.
     prefix = Comm.Plain(prefix)
@@ -367,6 +367,9 @@ function Comm:CHAT_MSG_ADDON(_, prefix, text, channel, sender)
 
     self.received = self.received + 1
     if self.testing then self:NoteTestEcho(text, sender) end
+    if self.channelTest then
+        self:NoteChannelEcho(text, sender, channel, Comm.Plain(target), localID, Comm.Plain(channelName))
+    end
 
     local kind, body = text:sub(1, 1), text:sub(2)
     if kind == "D" then
@@ -471,6 +474,205 @@ function Comm:NoteTestEcho(text, sender)
     if first ~= "T" and first ~= "t" then return end
     self.testing.echoes = self.testing.echoes + 1
     self.testing.sender = sender
+end
+
+--------------------------------------------------------------------------------
+-- The channel check (/bts share channel)
+--------------------------------------------------------------------------------
+
+-- The owner picked it (2026-10-20): auction prices shared between players
+-- of the same realm over a hidden chat channel, not only the guild. Before
+-- anything is built, this asks the client what it allows: whether an addon
+-- can join a channel of its own, send addon messages on it ("CHANNEL"),
+-- hear its own come back, how big one may be, how fast they may go, and
+-- whether the join and leave lines can be kept out of chat. It joins a
+-- test channel, sends a few dozen short messages, leaves again and saves
+-- every line it printed for Claude. Nothing is shared and nothing is kept.
+
+Comm.TEST_CHANNEL = "BTSPriceTest"
+
+-- How many to send at once, and how many paced, one every PACED_GAP seconds.
+Comm.CHANNEL_BURST = 30
+Comm.CHANNEL_PACED = 20
+local PACED_GAP = 0.5
+-- Seconds to wait for the join, for messages to come back, for the leave.
+local JOIN_WAIT, ECHO_WAIT, LEAVE_WAIT = 2, 3, 2
+
+local function After(seconds, fn)
+    if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+        C_Timer.After(seconds, fn)
+    else
+        fn()
+    end
+end
+
+--- Print a line of the channel check, and add it to the saved check when it
+--- arrives after the check's own frame (the timers below).
+local function ChannelLine(text)
+    ns.PrintRaw(text)
+    local test = Comm.channelTest
+    if not (test and test.late) then return end
+    local db = ns.db and ns.db.global
+    local probe = type(db) == "table" and db.lastProbe
+    if type(probe) == "table" and probe.check == "share channel" and type(probe.lines) == "table" then
+        probe.lines[#probe.lines + 1] = text
+    end
+end
+
+--- The channel's number and name as the client gives them; 0 when not in it.
+function Comm.ChannelNumber(name)
+    if type(GetChannelName) ~= "function" then return 0 end
+    local ok, id, shown = pcall(GetChannelName, name)
+    if not ok then return 0 end
+    return tonumber(id) or 0, Comm.Plain(shown)
+end
+
+--- How many chat channels this character is in now.
+local function ChannelCount()
+    if type(GetChannelList) ~= "function" then return nil end
+    local ok, count = pcall(function() return select("#", GetChannelList()) / 3 end)
+    return ok and count or nil
+end
+
+--- Hides the test channel's join and leave lines and counts them.
+function Comm.FilterChannelNotice(_, _, notice, _, _, channelString, _, _, _, _, channelName)
+    local test = Comm.channelTest
+    if not test then return false end
+    local name = Comm.Plain(channelName) or Comm.Plain(channelString) or ""
+    if not name:lower():find(Comm.TEST_CHANNEL:lower(), 1, true) then return false end
+    test.hidden = test.hidden + 1
+    test.notices[#test.notices + 1] = Comm.Plain(notice) or "?"
+    return true
+end
+
+local function Describe(outcome, why)
+    if why == nil or why == "" then return outcome end
+    return outcome .. " (" .. tostring(why) .. ")"
+end
+
+function Comm:ChannelTest()
+    if InCombat() then ns.Print("share channel: try again out of a fight") return end
+    if self.channelTest then ns.Print("share channel: the check is already running") return end
+
+    local name = Comm.TEST_CHANNEL
+    local test = { echoes = {}, hidden = 0, notices = {}, late = false }
+    self.channelTest = test
+
+    ns.Print("share channel: checking a hidden chat channel for sharing prices. It takes about 20 seconds.")
+    ChannelLine(("  prefix %s registered: %s"):format(Comm.PREFIX, tostring(self:Register())))
+    ChannelLine(("  calls: JoinTemporaryChannel %s, JoinChannelByName %s, LeaveChannelByName %s, GetChannelName %s, C_ChatInfo.SendAddonMessage %s"):format(
+        tostring(type(JoinTemporaryChannel) == "function"), tostring(type(JoinChannelByName) == "function"),
+        tostring(type(LeaveChannelByName) == "function"), tostring(type(GetChannelName) == "function"),
+        tostring(type(C_ChatInfo) == "table" and type(C_ChatInfo.SendAddonMessage) == "function")))
+    ChannelLine("  channels you are in now: " .. tostring(ChannelCount() or "unknown"))
+
+    if not self.noticeFilter and type(ChatFrame_AddMessageEventFilter) == "function" then
+        self.noticeFilter = pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_CHANNEL_NOTICE",
+            Comm.FilterChannelNotice)
+    end
+
+    local already = Comm.ChannelNumber(name)
+    local join, ok, a, b = "none", false, nil, nil
+    if already > 0 then
+        join = "already in it"
+    elseif type(JoinTemporaryChannel) == "function" then
+        join = "JoinTemporaryChannel"
+        ok, a, b = pcall(JoinTemporaryChannel, name)
+    elseif type(JoinChannelByName) == "function" then
+        join = "JoinChannelByName"
+        ok, a, b = pcall(JoinChannelByName, name)
+    end
+    if join ~= "already in it" then
+        ChannelLine(("  join with %s: %s, returned %s, %s"):format(join,
+            ok and "ran" or "raised", tostring(a), tostring(b)))
+    end
+
+    test.late = true
+    After(JOIN_WAIT, function() Comm:ChannelSend(name) end)
+end
+
+function Comm:ChannelSend(name)
+    local test = self.channelTest
+    if not test then return end
+    local id, shown = Comm.ChannelNumber(name)
+    ChannelLine(("  in the channel after %d seconds: %s (number %d, named \"%s\")"):format(
+        JOIN_WAIT, tostring(id > 0), id, tostring(shown or "")))
+    ChannelLine("  channels you are in now: " .. tostring(ChannelCount() or "unknown"))
+    if id <= 0 then
+        ChannelLine("  could not join, so nothing was sent")
+        return self:ChannelLeave(name)
+    end
+
+    local target = tostring(id)
+    local outcome, why = Comm.RawSend("cL" .. ("L"):rep(Comm.MAX_MESSAGE - 2), "CHANNEL", target)
+    ChannelLine("  a 255-byte message: " .. Describe(outcome, why))
+    outcome, why = Comm.RawSend("cX" .. ("X"):rep(Comm.MAX_MESSAGE - 1), "CHANNEL", target)
+    ChannelLine("  a 256-byte one (should be refused): " .. Describe(outcome, why))
+
+    local results, firstRefused, sent = {}, nil, 0
+    for i = 1, Comm.CHANNEL_BURST do
+        outcome, why = Comm.RawSend("cA" .. i, "CHANNEL", target)
+        if outcome == "sent" then
+            sent = sent + 1
+        elseif not firstRefused then
+            firstRefused = i
+            results[#results + 1] = ("#%d %s"):format(i, Describe(outcome, why))
+        end
+    end
+    ChannelLine(("  %d at once: %d went, first refused %s"):format(Comm.CHANNEL_BURST, sent,
+        firstRefused and results[1] or "none"))
+    test.burstSent = sent
+
+    -- Paced: one every PACED_GAP seconds, after the burst's echoes are in.
+    After(ECHO_WAIT, function()
+        ChannelLine(("  came back from that: long %d, at once %d, sender read as \"%s\", channel %s, target %s, number %s, name %s"):format(
+            test.echoes.L or 0, test.echoes.A or 0, tostring(test.sender or "nothing arrived"),
+            tostring(test.channel), tostring(test.target), tostring(test.localID), tostring(test.channelName)))
+        local paced, refused = 0, 0
+        local function Step(i)
+            if i > Comm.CHANNEL_PACED then
+                ChannelLine(("  %d paced, one every %.1f s: %d went, %d refused"):format(
+                    Comm.CHANNEL_PACED, PACED_GAP, paced, refused))
+                After(ECHO_WAIT, function()
+                    ChannelLine(("  came back from the paced ones: %d"):format(test.echoes.B or 0))
+                    Comm:ChannelLeave(name)
+                end)
+                return
+            end
+            local result, reason = Comm.RawSend("cB" .. i, "CHANNEL", target)
+            if result == "sent" then paced = paced + 1 else
+                refused = refused + 1
+                if refused == 1 then ChannelLine(("  paced #%d refused: %s"):format(i, Describe(result, reason))) end
+            end
+            After(PACED_GAP, function() Step(i + 1) end)
+        end
+        Step(1)
+    end)
+end
+
+function Comm:ChannelLeave(name)
+    if type(LeaveChannelByName) == "function" then pcall(LeaveChannelByName, name) end
+    After(LEAVE_WAIT, function()
+        local test = Comm.channelTest
+        local id = Comm.ChannelNumber(name)
+        ChannelLine(("  left the channel: %s"):format(tostring(id <= 0)))
+        if test then
+            ChannelLine(("  join and leave lines kept out of chat: %d (%s)"):format(test.hidden,
+                #test.notices > 0 and table.concat(test.notices, ", ") or "none seen"))
+        end
+        ChannelLine("  done. Type /reload so Claude can read these lines.")
+        Comm.channelTest = nil
+    end)
+end
+
+--- One of the channel check's own messages came back.
+function Comm:NoteChannelEcho(text, sender, channel, target, localID, channelName)
+    local test = self.channelTest
+    if text:sub(1, 1) ~= "c" then return end
+    local phase = text:sub(2, 2)
+    test.echoes[phase] = (test.echoes[phase] or 0) + 1
+    test.sender, test.channel, test.target = sender, channel, target
+    test.localID, test.channelName = localID, channelName
 end
 
 --------------------------------------------------------------------------------
