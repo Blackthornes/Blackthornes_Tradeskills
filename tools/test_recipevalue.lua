@@ -221,6 +221,7 @@ check("a recipe added after the first read is matched",
 RECIPES[201] = { recipeID = 201, name = "Bolt of Woolen Cloth",   outputItemID = 2997 }
 RECIPES[202] = { recipeID = 202, name = "Double-stitched Woolen Shoulders", outputItemID = 2998 }
 RECIPES[203] = { recipeID = 203, name = "Linen Bag",              outputItemID = 2999 }
+RECIPES[204] = { recipeID = 204, name = "Double-stitched Woolen Shoulders of the Long Winter Night", outputItemID = 2998 }
 
 PRICES[2997] = 55600
 PRICES[2998] = 68200
@@ -242,14 +243,20 @@ local function Region(text, left, opts)
     justify = opts.justify,
 
     GetText = function(self) return self.text end,
-    GetStringWidth = function(self) return #(self.text or "") * CHAR end,
+    size = 12,
+    maxLines = 1,
+    GetStringWidth = function(self) return #(self.text or "") * CHAR * self.size / 12 end,
+    GetFont = function(self) return "Fonts\\FRIZQT__.TTF", self.size, "" end,
+    SetFont = function(self, _, size) self.size = size end,
+    GetMaxLines = function(self) return self.maxLines end,
+    SetMaxLines = function(self, n) self.maxLines = n end,
     GetLeft = function(self) return self.left end,
     GetRight = function(self) return ROW_RIGHT end,
     GetJustifyH = function(self) return self.justify end,
     IsShown = function(self) return self.shown end,
     SetWidth = function(self, w) self.width = w end,
     SetWordWrap = function(self, w) self.wrap = w end,
-    GetWordWrap = function(self) return self.wrap end,
+    GetWordWrap = function(self) return self.wrap == true end,
   }
 end
 
@@ -328,21 +335,33 @@ do
   local outcome, placement = RecipeValue:DecorateRow(row)
 
   check("a counted recipe is still valued", outcome, "valued")
-  check("and its value sits beside the row's text", placement, "inline")
+  check("and its value sits in the right-hand column", placement, "column")
 
   local point, x = Placement(row)
-  check("anchored from the row's left edge", point, "LEFT")
+  check("anchored to the row's right edge", point, "RIGHT")
+  check("at the same inset as every other row", x, -RecipeValue.RIGHT_INSET)
+  check("right-justified, so the coins line up", row.label.justify, "RIGHT")
 
-  -- The count region runs from 148 to 166. Anything at or left of 166 is the
-  -- bug: the price printed over the "[5]".
+  -- The count region runs from 148 to 166. A value starting at or left of
+  -- 166 would be printed over the "[5]".
   local countRight = 148 + #"[5]" * CHAR
+  local valueLeft = ROW_RIGHT - RecipeValue.RIGHT_INSET - #row.label.text * CHAR
 
   check("the value clears the count, not just the name",
-    x >= countRight + RecipeValue.NAME_GAP, true)
+    valueLeft >= countRight + RecipeValue.NAME_GAP, true)
+  check("and the name keeps its full width", row.Text.width, nil)
+end
 
-  -- The name alone ends at 130, which is where the broken version put it.
-  check("and is not where measuring the name alone would put it",
-    x > 20 + #"Bolt of Woolen Cloth" * CHAR + RecipeValue.NAME_GAP, true)
+-- Row 1b: a short name and a long one put their values at the same edge.
+do
+  local short = Row("Linen Bag")
+  local long = Row("Bolt of Woolen Cloth", { count = "[5]" })
+  RecipeValue:DecorateRow(short)
+  RecipeValue:DecorateRow(long)
+
+  local p1, x1 = Placement(short)
+  local p2, x2 = Placement(long)
+  check("short and long names share one value column", p1 .. x1, p2 .. x2)
 end
 
 -- Row 2: the label must not measure itself. Left in, it would step right by
@@ -374,7 +393,9 @@ do
   local point = Placement(row)
   check("the value goes to the right edge", point, "RIGHT")
   check("the name was given a width", type(row.Text.width), "number")
-  check("word wrap was turned off first", row.Text.wrap, false)
+  check("the name wraps rather than ending in ...", row.Text.wrap, true)
+  check("onto as many lines as it needs", row.Text.maxLines, 0)
+  check("at its usual size while two lines hold it", row.Text.size, 12)
 
   -- It has to stop short of the value, with the gap between them.
   local valueWidth = #row.label.text * CHAR
@@ -383,8 +404,24 @@ do
   check("and stops short of the value",
     row.Text.left + row.Text.width <= valueLeft - RecipeValue.NAME_GAP + 0.5, true)
 
-  check("but is never cut to nothing",
+  check("but is never squeezed to nothing",
     row.Text.width >= RecipeValue.MIN_NAME_WIDTH, true)
+end
+
+-- Row 3b: a name too long for two lines steps down a size, and gets its
+-- own size, wrap and lines back when the row is reused for a short name.
+do
+  local row = Row("Double-stitched Woolen Shoulders of the Long Winter Night")
+  RecipeValue:DecorateRow(row)
+
+  check("a very long name steps down a size", row.Text.size < 12, true)
+  check("but only a step or two", row.Text.size >= 10, true)
+
+  row.Text.text = "Linen Bag"
+  RecipeValue:DecorateRow(row)
+  check("its size comes back", row.Text.size, 12)
+  check("it no longer wraps", row.Text.wrap == true, false)
+  check("its lines come back", row.Text.maxLines, 1)
 end
 
 -- Row 4: rows are recycled. One that held a long name and now holds a short
@@ -397,7 +434,7 @@ do
   row.Text.text = "Linen Bag"
   local _, placement = RecipeValue:DecorateRow(row)
 
-  check("the short name fits beside its value", placement, "inline")
+  check("the short name fits beside its value", placement, "column")
   check("and the width was handed back", row.Text.width, 0)
 end
 
@@ -450,7 +487,7 @@ do
 
   local outcome, placement = RecipeValue:DecorateRow(row)
   check("an unchanged row is not placed again", placed, 0)
-  check("and still reports its value and place", outcome .. " " .. placement, "valued inline")
+  check("and still reports its value and place", outcome .. " " .. placement, "valued column")
 
   row.Text.text = "Bolt of Woolen Cloth [12]"
   RecipeValue:DecorateRow(row)
