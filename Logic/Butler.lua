@@ -1679,6 +1679,7 @@ local function LearnedLookup()
             if entry.skillLineID then byLine[entry.skillLineID] = info end
             byName[entry.name] = info
             local word = english[entry.skillLineID]
+                or (recipes.EnglishProfessionName and recipes.EnglishProfessionName(entry))
             if word then byEnglish[word] = info end
         end
     end
@@ -1700,6 +1701,9 @@ local function ProfessionOf(skillLineID, lookup)
         or (info and info.professionName and byName[info.professionName])
     local english = ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
         and ns.Recipes.SKILL_LINE_PROFESSIONS[skillLineID]
+    if not english and info and info.professionName and ns.Recipes.EnglishProfessionName then
+        english = ns.Recipes.EnglishProfessionName(info.professionName)
+    end
     if not found and english then
         found = byEnglish[english]
         if not found then
