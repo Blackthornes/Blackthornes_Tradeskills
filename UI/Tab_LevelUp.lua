@@ -1495,12 +1495,25 @@ end
 -- level up as well"), its own copy listed by the skill each recipe needs, so
 -- the next recipe to get on the way up is near the top. Without
 -- UI/RecipeBookView.lua (the tests load this file alone) the tab is the list.
+--
+-- Road to 300 (the owner said build it, 2026-10-20, from a mockup): the
+-- views are Next Point (the tab's own list), Road to 300 (UI/RoadView.lua)
+-- and Learn Next (the recipes to learn).
 local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     mainKey = "recipes",
-    mainText = L["MY RECIPES"],
+    mainText = L["Next Point"],
     mainTip = L["The recipes you know, cheapest way up first"],
     buildMain = Build,
     refreshMain = Refresh,
+    extras = ns.RoadView and {
+        {
+            key = "road",
+            text = L["Road to 300"],
+            build = function(view) ns.RoadView:Build(view) end,
+            refresh = function() ns.RoadView:Refresh() end,
+        },
+    } or nil,
+    learnText = L["Learn Next"],
     learn = ns.RecipeBookView.New({ order = "skill" }),
     corner = function(parent)
         return ns.Upgrades and ns.Upgrades.CreateAltCheckbox and ns.Upgrades:CreateAltCheckbox(parent)
@@ -1515,3 +1528,15 @@ UI:RegisterTab({
     refresh = switch and switch.Refresh or Refresh,
     onShow = OnShow,
 })
+
+--- Open the Level Up tab on Road to 300 for a profession (its Classic
+--- skill line), for the Welcome card's Show My Road.
+ns.LevelUpTab = {
+    ShowRoad = function(line)
+        if not switch then return end
+        if ns.RoadView then ns.RoadView:Pick(line) end
+        UI:Show()
+        if UI.SelectTab then UI:SelectTab("levelup") end
+        switch.ShowView("road")
+    end,
+}
