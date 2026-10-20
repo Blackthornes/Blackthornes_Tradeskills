@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.68.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Shopping list rules:** each list can mail what's on it to one of your characters and keep a number of each on every character.
+- **Goblin Gold:** has a Transparent choice. It's on the Look page of Settings.
+- **Favors and Writs:** shows what's on the auction house for each item.
+- **Sealed writs:** Tradeskills learns what your sealed writs open into.
+- **Butler:** with Butler, your best next skill point shows in Butler's Jobs, and Butler says when a craft you know earns more than selling.
+- **Bug fixes:** several bug fixes for the craft queue, Favors and Writs, the vendor map pins and the skill point line in Butler.
+
 ## 0.67.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
