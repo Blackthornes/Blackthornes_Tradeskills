@@ -3104,3 +3104,13 @@ L["stacks at a time"] = "组同时上架"
 L["You opened %d"] = "你打开了%d个"
 L["Writ inside worth about"] = "里面的委托约值"
 L["Came from %s: %d of %d"] = "来自%s：%d/%d"
+
+-- Places in line on the Auctions view (2026-10-20).
+L["%d ahead of you"] = "前面还有 %d 个"
+L["First in line"] = "排在最前"
+L["%d more at your price"] = "同价还有 %d 个"
+L["%d listings at your price will sell before yours."] = "有 %d 个同价拍卖会比你的先卖出。"
+L["Yours sells first at this price."] = "同价时你的会先卖出。"
+L["Checked %s."] = "%s查看过。"
+L["Check Places"] = "查看排位"
+L["Looks up each of your auctions to see how many sell before yours."] = "逐个查看你的拍卖，看看有多少会比你的先卖出。"

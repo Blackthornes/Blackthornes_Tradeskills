@@ -89,6 +89,12 @@ function AuctionsView.DetailTexts(row)
         Add(who, each)
     elseif row.state == "cheapest" then
         local next_ = row.rival and L.Format("next %s", Money(row.rival)) or L["only yours listed"]
+        local place = AuctionsView.PlaceText(row)
+        if place then
+            Add(who, each, next_, place, ends)
+            Add(who, each, next_, place)
+            Add(who, each, place)
+        end
         Add(who, each, next_, ends)
         Add(who, each, next_)
         Add(who, each)
@@ -103,11 +109,28 @@ function AuctionsView.DetailTexts(row)
     return texts
 end
 
---- What sits at the row's right end when there is no Cancel button.
+--- Where a cheapest auction stands in line, coloured, or nil when no
+--- recent search has said.
+function AuctionsView.PlaceText(row)
+    if row.ahead then
+        if row.ahead > 0 then return Colored("warn", L.Format("%d ahead of you", row.ahead)) end
+        return Colored("profit", L["First in line"])
+    end
+    if row.more and row.more > 0 then return Colored("warn", L.Format("%d more at your price", row.more)) end
+    return nil
+end
+
+--- A row with a Cancel button: undercut, or cheapest with others selling
+--- first at its price.
+function AuctionsView.Cancellable(row)
+    return row.mine and not row.cancelling and (row.state == "undercut" or row.behind == true) or false
+end
+
+--- What sits at the row's right end: the state, beside Cancel when there is one.
 function AuctionsView.BadgeText(row)
     if row.alt then return L["Log in to cancel"], "dim" end
     if row.cancelling then return L["Cancelling"], "warn" end
-    if row.state == "cheapest" then return L["Cheapest"], "profit" end
+    if row.state == "cheapest" then return L["Cheapest"], row.behind and "warn" or "profit" end
     if row.state == "overcut" then return L["Overcut"], "profit" end
     if row.state == "unknown" then return L["Unknown"], "muted" end
     return nil
@@ -200,7 +223,7 @@ local function UpdateRow(row, entry)
         return
     end
 
-    local undercut = entry.state == "undercut" and entry.mine and not entry.cancelling
+    local undercut = AuctionsView.Cancellable(entry)
     row.redEdge:SetShown(entry.state == "undercut")
     row.cancel:SetShown(undercut)
     if undercut then
@@ -216,9 +239,17 @@ local function UpdateRow(row, entry)
         row.deposit:SetTextColor(Theme.Unpack(ns.MyAuctions:GapSmallerThanDeposit(entry) and "warn" or "dim"))
     end
 
+    -- An undercut row's red edge and Cancel say it all; a cheapest one with
+    -- others ahead keeps its amber word beside Cancel.
     local badge, color = nil, nil
-    if not undercut then badge, color = AuctionsView.BadgeText(entry) end
+    if entry.state ~= "undercut" or not undercut then badge, color = AuctionsView.BadgeText(entry) end
     row.badge:SetShown(badge ~= nil)
+    row.badge:ClearAllPoints()
+    if badge and undercut then
+        row.badge:SetPoint("RIGHT", row.cancel, "LEFT", -6, 0)
+    else
+        row.badge:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    end
     if badge then
         row.badge:SetText(badge)
         row.badge:SetTextColor(Theme.Unpack(color or "muted"))
@@ -229,7 +260,8 @@ local function UpdateRow(row, entry)
     local nameInset, detailInset = RIGHT_INSET, RIGHT_INSET
     if badge then
         local width = Theme.TextWidth(row.badge)
-        if width then nameInset = math.max(nameInset, math.ceil(width) + 16) end
+        local beside = undercut and (CANCEL_WIDTH + 14) or 0
+        if width then nameInset = math.max(nameInset, math.ceil(width) + 16 + beside) end
         detailInset = nameInset
     end
     if deposit then
@@ -280,6 +312,20 @@ local function ShowTooltip(row, entry)
     end
     if entry.left then
         GameTooltip:AddDoubleLine(L["Ends in"], Util.FormatAge(entry.left), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+    if entry.state == "cheapest" and (entry.ahead or entry.more) then
+        if entry.ahead and entry.ahead > 0 then
+            GameTooltip:AddLine(L.Format("%d listings at your price will sell before yours.", entry.ahead),
+                Theme.Unpack("warn"))
+        elseif entry.ahead then
+            GameTooltip:AddLine(L["Yours sells first at this price."], Theme.Unpack("profit"))
+        elseif entry.more and entry.more > 0 then
+            GameTooltip:AddLine(L.Format("%d more at your price", entry.more), Theme.Unpack("warn"))
+        end
+        if entry.placeAt then
+            GameTooltip:AddLine(L.Format("Checked %s.", Util.FormatAgeAgo(math.max(0, time() - entry.placeAt))),
+                0.7, 0.7, 0.7)
+        end
     end
     if entry.state == "overcut" then
         GameTooltip:AddLine(L["Posted just under the big stack. The cheaper ones should sell first."], 0.7, 0.7, 0.7, true)
@@ -354,9 +400,23 @@ function AuctionsView:Build(body, frame, topAnchor, opts)
     cancelNext:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
     self.cancelNext = cancelNext
 
+    -- Check Places: searches each of your auctions, to see who sells first.
+    local checkWidth = 90
+    if Theme.MeasureText then
+        local ok, width = pcall(Theme.MeasureText, "small", L["Check Places"])
+        if ok and type(width) == "number" then checkWidth = math.max(checkWidth, width + 20) end
+    end
+    local checkPlaces = Widgets.CreateButton(body, L["Check Places"], function()
+        ns.MyAuctions:CheckPlaces()
+        AuctionsView:Refresh(true)
+    end, { width = checkWidth, height = 22,
+           tooltip = L["Looks up each of your auctions to see how many sell before yours."] })
+    checkPlaces:SetPoint("RIGHT", cancelNext, "LEFT", -6, 0)
+    self.checkPlaces = checkPlaces
+
     local note = Theme.CreateLabel(body, "tiny", "muted")
     note:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
-    note:SetPoint("RIGHT", cancelNext, "LEFT", -8, 0)
+    note:SetPoint("RIGHT", checkPlaces, "LEFT", -8, 0)
     note:SetWordWrap(true)
     note:SetText(L["One cancel per click. Items come back in the mail."])
     self.note = note
@@ -367,7 +427,7 @@ function AuctionsView:Build(body, frame, topAnchor, opts)
     empty:SetWordWrap(true)
     self.empty = empty
 
-    self.parts = { list, cancelNext, note }
+    self.parts = { list, cancelNext, checkPlaces, note }
     self:SetShown(false)
 end
 
@@ -384,6 +444,13 @@ function AuctionsView:Refresh(force)
     if not (self.list and self.shown) then return end
 
     local MyAuctions = ns.MyAuctions
+    -- Every tick: a scan starting or ending says whether it can run.
+    local canCheck = (MyAuctions:CanCheckPlaces()) and true or false
+    if canCheck ~= self.canCheck then
+        self.canCheck = canCheck
+        self.checkPlaces:SetEnabledState(canCheck)
+    end
+
     local key = ("%d:%d:%d"):format(MyAuctions.version or 0, math.floor(time() / 60),
         ns.Prices and ns.Prices.changes or 0)
     if not force and key == self.key then return end
