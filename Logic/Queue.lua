@@ -245,6 +245,23 @@ local function MakersByOutput()
     return byOutput
 end
 
+--- What mailing a material costs for each one made, when the one making it
+--- is not the one using it: a stamp a stack attached (QueueMail.POSTAGE),
+--- for each character it goes to. 0 when nobody needs a mail.
+function Queue.PostagePerUnit(itemID, need, makerKey)
+    local units = need and tonumber(need.units) or 0
+    if units <= 0 then return 0 end
+    local mails = 0
+    for crafter in pairs(need.crafters or {}) do
+        if crafter ~= makerKey then mails = mails + 1 end
+    end
+    if mails == 0 then return 0 end
+    local stack = ns.BagsFull and ns.BagsFull.MaxStack and ns.BagsFull.MaxStack(itemID)
+    stack = math.max(1, tonumber(stack) or 1)
+    local stamp = ns.QueueMail and ns.QueueMail.POSTAGE or 30
+    return mails * math.ceil(units / stack) * stamp / units
+end
+
 --- Who should make a material, when making it beats buying it.
 --
 -- Only characters who can mail it to everyone who needs it. Something that
@@ -284,6 +301,10 @@ function Queue:PickMaker(itemID, need, makers, keep)
         if reachable then
             local cost = ns.Cost:GetCraftCost(candidate.recipeID)
             local unit = cost and cost.priceable and cost.perUnit
+            -- Made on another character, it has to be mailed: count the
+            -- postage, so an alt only makes it when that still beats buying
+            -- (the owner, 2026-10-20).
+            if unit then unit = unit + Queue.PostagePerUnit(itemID, need, candidate.characterKey) end
 
             if unit and (not buyUnit or unit < buyUnit) then
                 local rank = need.crafters[candidate.characterKey] and 0

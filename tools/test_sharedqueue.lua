@@ -305,6 +305,29 @@ queueOneBag(characters)
 check("Bob makes his own bolts when he can", Queue:GetCrafter(entryFor(20)) == BOB)
 check("and nothing is mailed", delivery(LOOM) == nil)
 
+print("\npostage counts when an alt makes it")
+
+-- Bolts made from wool at 340c cost 1020c, under the 1030c to buy them,
+-- but three stamps of 30c to mail them over make Loom's 1050c each.
+auction[WOOL] = 340
+queueOneBag()
+check("Loom is not given bolts the mail makes dearer", entryFor(20) == nil)
+check("so they are bought", row(BOLT) and row(BOLT).shortfall == 3)
+check("a stamp a stack, spread over what is made",
+    Queue.PostagePerUnit(BOLT, { units = 3, crafters = { [BOB] = true } }, LOOM) == 30)
+check("nothing to mail, no postage",
+    Queue.PostagePerUnit(BOLT, { units = 3, crafters = { [BOB] = true } }, BOB) == 0)
+ns.BagsFull = { MaxStack = function() return 20 end }
+check("twenty to a stack, one stamp for all three",
+    Queue.PostagePerUnit(BOLT, { units = 3, crafters = { [BOB] = true } }, LOOM) == 10)
+ns.BagsFull = nil
+
+characters = freshCharacters()
+characters[BOB].recipes[20] = BOLT_RECIPE
+queueOneBag(characters)
+check("Bob still makes his own, with nothing to mail", Queue:GetCrafter(entryFor(20)) == BOB)
+auction[WOOL] = 295
+
 print("\nnot ticked: the default")
 
 settings.queueAltCrafting = nil
