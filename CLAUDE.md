@@ -1085,6 +1085,27 @@ Saved, account wide, never renamed: `goldTracker` (off unless ticked), `goldTrac
 is never announced. Tested in `tools/test_goldgoal.lua`. Not yet seen in
 game.
 
+Where the gold came from (the owner said build it, 2026-10-20, from a
+mockup whose words he approved): the hover card ends with THIS WEEK
+(Quests with how many were handed in and gold each, Mobs with kills and
+gold each counting their loot, "Their loot is worth", Auction sales and
+Vendor sales) and ALL TIME (Quests done, Mobs killed, Gold from quests,
+Gold looted). `GoldGoal:Sources` reads `GoldLog`'s week by source,
+`GoldLog:QuestsDone` (every hand-in counted from this update, in
+`goldLog[realm].questsDone[YYYYMMDD]`, never rename it) and the game's
+Statistics (`GoldGoal.STATISTICS`, `GoldGoal.Statistic`: a statistic the
+client does not give is left out; `/bts probe` has a "statistics" line).
+Kills and loot worth are Blackthornes Farmer's, inside a pcall, read only:
+
+```lua
+_G.BlackthornesFarmer.Stats:KillsAndLoot(7)   -- { kills, loot, coin } over the last 7 days
+```
+
+Without Farmer the Mobs row is its gold alone. If the call changes, change
+`GoldGoal:Sources` too. `UI/GoldGoal.lua`'s `GoldGoalUI.SourceLines`
+builds the rows. Tested in `tools/test_goldsources.lua` and
+`tools/test_goldlog.lua`.
+
 ## The public price API
 
 The owner said yes (2026-10-12) to a documented price call for other
