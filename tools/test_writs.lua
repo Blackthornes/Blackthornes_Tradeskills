@@ -363,6 +363,9 @@ local function Label()
         SetText = function(self, value) self.text = tostring(value) end,
         GetText = function(self) return self.text end,
         SetTextColor = function(self, a) self.color = a end,
+        SetPoint = function(self, point, a, b, c)
+            if point == "TOPLEFT" then self.top = type(a) == "number" and b or c end
+        end,
     })
     labels[#labels + 1] = label
     return label
@@ -372,7 +375,8 @@ CreateFrame = function() return Stub() end
 GameTooltip = Stub({ lines = {}, AddLine = function(self, text) self.lines[#self.lines + 1] = text end })
 
 ns.Theme = {
-    SetRowName = function(label, text) label:SetText(text) end,
+    -- A long name wraps onto two lines in the game.
+    SetRowName = function(label, text) label:SetText(text); label.rowNeed = #text > 40 and 28 or nil end,
     CreateLabel = function() return Label() end,
     CreatePanel = function() return Stub() end,
     CreateDivider = function() return Stub() end,
@@ -386,7 +390,7 @@ ns.Theme = {
     FitText = function(label, texts) label:SetText(texts[1]); return texts[1] end,
 }
 
-local lists, dropdowns, buttons, numberBoxes = {}, {}, {}, {}
+local lists, dropdowns, buttons, numberBoxes, scrolls = {}, {}, {}, {}, {}
 local searched
 ns.Widgets = {
     CreateDropdown = function(_, options, onSelect, opts)
@@ -404,6 +408,12 @@ ns.Widgets = {
         return box
     end,
     ShowItemTooltip = function() return true end,
+    CreateScrollFrame = function()
+        local scroll = Stub({ content = Stub(), fitted = 0 })
+        scroll.FitContent = function(self) self.fitted = self.fitted + 1 end
+        scrolls[#scrolls + 1] = scroll
+        return scroll
+    end,
     CreateScrollList = function(_, opts)
         local list = Stub({ opts = opts, SetData = function(self, data) self.data = data end })
         lists[#lists + 1] = list
@@ -478,6 +488,24 @@ check("and says how far it is", Showing("^Now %(Friendly%)$") ~= nil and Showing
 check("and marks reported figures", Showing("^Expert writs %(125 each%*%)$") ~= nil
     and Showing("^Journeyman writs %(80 each%)$") ~= nil)
 check("and the cheapest way", Showing("^Cheapest: 57 Golden Rod, one a day$") ~= nil)
+
+local function LabelOf(pattern)
+    for _, label in ipairs(labels) do
+        if label.text:find(pattern) then return label end
+    end
+end
+local cheapest, quickest = LabelOf("^Cheapest: "), LabelOf("^Quickest: ")
+check("a line sits under the one before it", cheapest.top == 0 and quickest.top == -17)
+local plainName = ns.Theme.SetRowName
+ns.Theme.SetRowName = function(label, text)
+    plainName(label, text)
+    if text:find("^Cheapest: ") then label.rowNeed = 28 end
+end
+ns.DealsWrits:Refresh()
+check("a line that wraps pushes the next one down", LabelOf("^Quickest: ").top <= -31)
+ns.Theme.SetRowName = plainName
+ns.DealsWrits:Refresh()
+check("the panel scrolls what it holds", #scrolls == 1 and scrolls[1].fitted > 0)
 
 local row = Stub()
 list.opts.createRow(row)
