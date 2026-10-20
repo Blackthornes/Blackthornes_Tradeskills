@@ -9,6 +9,9 @@
 --      comes back below 0.
 --   5. queued follows the queue, and QueueSkillUp adds one.
 --   6. Without Level Up, or when it raises, the answer is nil.
+--   7. A recipe tagged with the skill-line ID that carries no levels still
+--      finds its profession: through the other ID, or the last good read
+--      Recipes keeps (Forever lists each profession under two IDs).
 
 local ns = {}
 ns.NewModule = function(name) local m = {} ns[name] = m return m end
@@ -84,6 +87,29 @@ check("a bad recipe is refused", (Butler:QueueSkillUp("x")), false)
 -- A fresh table each time.
 Butler:NextSkillUp()[1].name = "changed"
 check("a fresh table each time", Butler:NextSkillUp()[1].name, "Linen Bandage")
+
+-- 7. Tailoring's 2948 and Enchanting's 333 read as not learned; 197 has
+-- Tailoring's levels and Enchanting is only in the saved read.
+INFO[2948] = { professionName = "Tailoring", skillLevel = 0, maxSkillLevel = 0 }
+INFO[333] = { professionName = "Enchanting", skillLevel = 0, maxSkillLevel = 0 }
+INFO[2940] = { professionName = "Enchanting", skillLevel = 0, maxSkillLevel = 0 }
+ns.Recipes = {
+  SKILL_LINE_PROFESSIONS = { [2948] = "Tailoring", [197] = "Tailoring", [2940] = "Enchanting", [333] = "Enchanting" },
+  GetLearnedProfessions = function()
+    return { { name = "Enchanting", skillLineID = 2940, skillLevel = 12, maxSkillLevel = 75, learned = true } }
+  end,
+}
+rows = {
+  { recipeID = 7, skillLineID = 2948, tier = "medium", cost = 40, name = "Enchanted Mageweave Pouch", outputItemID = 22246 },
+  { recipeID = 8, skillLineID = 333, tier = "optimal", cost = 30, name = "Minor Mana Oil", outputItemID = 20745 },
+}
+ns.Queue.version = 10
+list = Butler:NextSkillUp()
+check("both professions found", list and #list, 2)
+check("Enchanting from the saved read", list[1].profession .. " " .. list[1].skill .. "/" .. list[1].max, "Enchanting 12/75")
+check("Tailoring through its other ID", list[2].profession .. " " .. list[2].skill .. "/" .. list[2].max, "Tailoring 61/75")
+check("Tailoring's likely pick", list[2].name, "Enchanted Mageweave Pouch")
+ns.Recipes = nil
 
 -- 6.
 ns.Queue.version = 2
