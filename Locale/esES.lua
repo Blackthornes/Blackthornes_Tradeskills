@@ -3107,3 +3107,13 @@ L["stacks at a time"] = "montones a la vez"
 L["You opened %d"] = "Abriste %d"
 L["Writ inside worth about"] = "El encargo de dentro vale unos"
 L["Came from %s: %d of %d"] = "Salió de %s: %d de %d"
+
+-- Places in line on the Auctions view (2026-10-20).
+L["%d ahead of you"] = "%d antes que tú"
+L["First in line"] = "Primero en la fila"
+L["%d more at your price"] = "%d más a tu precio"
+L["%d listings at your price will sell before yours."] = "%d subastas a tu precio se venderán antes que la tuya."
+L["Yours sells first at this price."] = "El tuyo se vende primero a este precio."
+L["Checked %s."] = "Revisado %s."
+L["Check Places"] = "Ver puestos"
+L["Looks up each of your auctions to see how many sell before yours."] = "Mira cada una de tus subastas para ver cuántas se venden antes que la tuya."
