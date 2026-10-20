@@ -961,6 +961,37 @@ function Recipes:OnTradeSkillUpdate()
     self.harvestTimer = C_Timer.NewTimer(0.5, Try)
 end
 
+--- A fresh profession read with the saved professions it left out put
+--- back. With one profession window open, Forever can answer only for that
+--- profession and say nothing of the others, so a read made then dropped
+--- every other profession from the saved list, and with it their levels
+--- (Butler's skill-up line showed only Tailoring, 2026-10-20). A saved one
+--- goes only when the fresh read names it and says it is not learned.
+-- @return a new list, fresh's entries first
+function Recipes.KeepUnread(fresh, saved)
+    local function Key(profession)
+        return Recipes.EnglishProfessionName(profession) or profession.name
+    end
+
+    local merged, named = {}, {}
+    for _, profession in ipairs(fresh or {}) do
+        merged[#merged + 1] = profession
+        local key = Key(profession)
+        if key then named[key] = true end
+    end
+
+    for _, profession in ipairs(type(saved) == "table" and saved or {}) do
+        local key = type(profession) == "table" and profession.learned and Key(profession)
+        if key and not named[key] then
+            merged[#merged + 1] = profession
+            named[key] = true
+        end
+    end
+
+    table.sort(merged, function(a, b) return (a.name or "") < (b.name or "") end)
+    return merged
+end
+
 --- Re-read professions into the cache, refusing to make things worse.
 --
 -- At PLAYER_LOGIN the profession list is already enumerable but the skill
@@ -985,7 +1016,9 @@ function Recipes:RefreshProfessions()
         return false
     end
 
-    if AnyLearned(fresh) or not AnyLearned(record.professions) then
+    if AnyLearned(fresh) then
+        record.professions = Recipes.KeepUnread(fresh, record.professions)
+    elseif not AnyLearned(record.professions) then
         record.professions = fresh
     end
 
