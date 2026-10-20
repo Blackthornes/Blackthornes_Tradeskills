@@ -328,21 +328,33 @@ do
   local outcome, placement = RecipeValue:DecorateRow(row)
 
   check("a counted recipe is still valued", outcome, "valued")
-  check("and its value sits beside the row's text", placement, "inline")
+  check("and its value sits in the right-hand column", placement, "column")
 
   local point, x = Placement(row)
-  check("anchored from the row's left edge", point, "LEFT")
+  check("anchored to the row's right edge", point, "RIGHT")
+  check("at the same inset as every other row", x, -RecipeValue.RIGHT_INSET)
+  check("right-justified, so the coins line up", row.label.justify, "RIGHT")
 
-  -- The count region runs from 148 to 166. Anything at or left of 166 is the
-  -- bug: the price printed over the "[5]".
+  -- The count region runs from 148 to 166. A value starting at or left of
+  -- 166 would be printed over the "[5]".
   local countRight = 148 + #"[5]" * CHAR
+  local valueLeft = ROW_RIGHT - RecipeValue.RIGHT_INSET - #row.label.text * CHAR
 
   check("the value clears the count, not just the name",
-    x >= countRight + RecipeValue.NAME_GAP, true)
+    valueLeft >= countRight + RecipeValue.NAME_GAP, true)
+  check("and the name keeps its full width", row.Text.width, nil)
+end
 
-  -- The name alone ends at 130, which is where the broken version put it.
-  check("and is not where measuring the name alone would put it",
-    x > 20 + #"Bolt of Woolen Cloth" * CHAR + RecipeValue.NAME_GAP, true)
+-- Row 1b: a short name and a long one put their values at the same edge.
+do
+  local short = Row("Linen Bag")
+  local long = Row("Bolt of Woolen Cloth", { count = "[5]" })
+  RecipeValue:DecorateRow(short)
+  RecipeValue:DecorateRow(long)
+
+  local p1, x1 = Placement(short)
+  local p2, x2 = Placement(long)
+  check("short and long names share one value column", p1 .. x1, p2 .. x2)
 end
 
 -- Row 2: the label must not measure itself. Left in, it would step right by
@@ -397,7 +409,7 @@ do
   row.Text.text = "Linen Bag"
   local _, placement = RecipeValue:DecorateRow(row)
 
-  check("the short name fits beside its value", placement, "inline")
+  check("the short name fits beside its value", placement, "column")
   check("and the width was handed back", row.Text.width, 0)
 end
 
@@ -450,7 +462,7 @@ do
 
   local outcome, placement = RecipeValue:DecorateRow(row)
   check("an unchanged row is not placed again", placed, 0)
-  check("and still reports its value and place", outcome .. " " .. placement, "valued inline")
+  check("and still reports its value and place", outcome .. " " .. placement, "valued column")
 
   row.Text.text = "Bolt of Woolen Cloth [12]"
   RecipeValue:DecorateRow(row)
