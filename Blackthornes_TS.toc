@@ -60,6 +60,8 @@ Logic\RecipeBook.lua
 Logic\Waypoints.lua
 Logic\VendorPins.lua
 Logic\LearnNext.lua
+Logic\RoadPlan.lua
+Logic\Welcome.lua
 Logic\Queue.lua
 Logic\QueueActions.lua
 Logic\QueueMail.lua
@@ -137,7 +139,9 @@ UI\QueueMailPanel.lua
 UI\RecipeBookView.lua
 UI\YourTimeView.lua
 UI\Tab_Profit.lua
+UI\RoadView.lua
 UI\Tab_LevelUp.lua
+UI\Welcome.lua
 UI\Tab_Disenchanting.lua
 UI\DealsFavor.lua
 UI\DealsWrits.lua

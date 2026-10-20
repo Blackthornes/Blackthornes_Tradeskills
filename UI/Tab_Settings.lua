@@ -1656,6 +1656,15 @@ local function Build(outer)
     statsOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(statsOpen)
 
+    -- The Welcome card (2026-10-20): which professions' roads come first on
+    -- the Level Up tab's Road to 300. Opens the card again.
+    local roadRow = CreateRow(pages.look, 2, L["Road to 300:"])
+    local roadOpen = Widgets.CreateButton(roadRow, L["Open"], function()
+        if ns.WelcomeUI then ns.WelcomeUI:Show() end
+    end, { width = 60, height = 20 })
+    roadOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(roadOpen)
+
     -- Goblin Gold (asked 2026-10-17): the gold on every character of this
     -- realm and side, on a small bar, with a goal. Off unless ticked; its
     -- sound is under SOUNDS. Logic/GoldGoal.lua, UI/GoldGoal.lua. The

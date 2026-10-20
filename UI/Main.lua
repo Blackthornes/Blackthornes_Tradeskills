@@ -836,6 +836,10 @@ function UI:Show()
     -- from wherever it is going to sit.
     if opening and ns.Motion then ns.Motion:Open(self.window) end
     if opening and ns.Titanforged then ns.Titanforged:Opened(self.window) end
+
+    -- The Welcome card, the first time this character opens the window
+    -- (UI/Welcome.lua, 2026-10-20).
+    if opening and ns.WelcomeUI then pcall(ns.WelcomeUI.MaybeShow, ns.WelcomeUI) end
 end
 
 function UI:Hide()

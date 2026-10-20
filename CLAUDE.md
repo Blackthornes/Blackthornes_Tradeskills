@@ -756,6 +756,51 @@ the book (keeping Classic's as `classicSkill`); players' reports and a
 recipe item's tooltip still win. Never name where the data came from in
 the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 
+## Road to 300
+
+The owner said build it (2026-10-20, from a mockup whose words he
+approved): the Level Up tab's switch reads Next Point (the tab's own
+list), Road to 300 and Learn Next (the recipes to learn;
+`RecipeBookView.WithSwitch` takes `learnText`). `Logic/RoadPlan.lua` lays
+out the whole way to 300 for one profession: from the skill now, each
+stretch takes the recipe cheapest a point, known or taught by a trainer
+or vendor of the player's side (`RoadPlan:Candidates`, `LearnNext:Place`);
+a step is one recipe in one colour, "every craft" while orange, "most
+crafts" while yellow, its crafts 1 over the chance (`RoadPlan.Chance`: 1
+below yellow, (grey - skill) / (grey - yellow) up to grey). Trainer steps
+sit at Classic's ranks (`RoadPlan.RANKS`: Journeyman at 50 to 150 and
+level 10, Expert at 125 to 225 and level 20, Artisan at 200 to 300 and
+level 35), with "You're level N." while the level is short
+(`LearnNext:TrainerFor` names the nearest trainer). What the bags, then
+the bank hold comes off once across the steps, and the footer says how
+much ("To 300:", "What you own already takes off X."). Steps below the
+skill are done. Queue Step queues a known recipe's crafts
+(`Queue:Ensure`) or puts a recipe still to learn's materials on the list
+to buy (`Queue:EnsureBuy`); Queue All does every step left; Show the Way
+is `LearnNext:ShowTheWay`. `UI/RoadView.lua` draws it (a profession
+picker, the heading with the skill, "Step N of M" and a meter, dark glass
+rows, the step to do now `glassActive`). The plan is worked out only
+while the view shows, its prices a few recipes a frame
+(`RoadPlan.BUDGET`), and kept until its key moves (skill, cap, level,
+recipes, `Inventory.changes`, `Prices.scanCount`, `Queue.version`).
+Nothing new is saved. Cooking and First Aid stop at their last rank.
+Tested in `tools/test_roadto300.lua`. Not yet seen in game.
+
+## Welcome card
+
+The owner said build it (2026-10-20, from the same mockup): the first
+time the window opens on a character, a card ("Welcome", the house frame)
+asks which of its professions to level, each ticked with its skill. Show
+My Road keeps the ticked ones and opens Road to 300 on the first
+(`LevelUpTab.ShowRoad`); Not Now closes it. Either way it never comes back
+by itself (`Welcome:Due`, asked from `UI:Show`); "Road to 300:" on the
+Look page of Settings opens it again (`WelcomeUI:Show`). It changes no
+setting: the picks only put those roads first in the picker
+(`RoadPlan:Professions`). `Logic/Welcome.lua` keeps, per character in
+`BlackthornesTSCharDB`, `welcomeSeen` and `roadPicks` (Classic skill
+lines in order); never rename either. `UI/Welcome.lua` draws it. Tested
+in `tools/test_welcome.lua`. Not yet seen in game.
+
 ## Vendor map pins
 
 A player asked (2026-10-18, the owner said build it, from a mockup with
