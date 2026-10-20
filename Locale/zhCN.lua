@@ -3105,6 +3105,18 @@ L["You opened %d"] = "你打开了%d个"
 L["Writ inside worth about"] = "里面的委托约值"
 L["Came from %s: %d of %d"] = "来自%s：%d/%d"
 
+-- Goblin Gold: where the gold came from
+L["THIS WEEK"] = "本周"
+L["%d done"] = "完成 %d 个"
+L["Mobs"] = "怪物"
+L["%d killed"] = "击杀 %d 个"
+L["Their loot is worth"] = "它们的战利品价值"
+L["%s more"] = "另加 %s"
+L["ALL TIME"] = "全部"
+L["Quests done"] = "完成的任务"
+L["Mobs killed"] = "击杀的怪物"
+L["Gold from quests"] = "任务获得的金币"
+L["Gold looted"] = "拾取的金币"
 -- Places in line on the Auctions view (2026-10-20).
 L["%d ahead of you"] = "前面还有 %d 个"
 L["First in line"] = "排在最前"

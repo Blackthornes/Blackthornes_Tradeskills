@@ -1091,6 +1091,10 @@ local function CardRow(card, index)
     row.line:SetPoint("BOTTOMRIGHT", 0, 0)
     row.line:SetHeight(1)
     row.line:SetColorTexture(Theme.Unpack("border", 0.6))
+    row.chip = row:CreateTexture(nil, "ARTWORK")
+    row.chip:SetSize(9, 9)
+    row.chip:SetPoint("LEFT", 8, 0)
+    row.chip:Hide()
     row.left = Theme.CreateLabel(row, "small", "text")
     row.left:SetPoint("LEFT", 8, 0)
     row.note = Theme.CreateLabel(row, "tiny", "muted")
@@ -1103,6 +1107,88 @@ end
 
 local function Width(label)
     return Theme.TextWidth(label) or 0
+end
+
+local function SourceColor(key)
+    local source = ns.GoldLog and ns.GoldLog.GetSource and ns.GoldLog:GetSource(key)
+    return source and source.color
+end
+
+-- A whole count with its thousands grouped, the game's way when it can.
+function GoldGoalUI.Count(n)
+    n = math.floor(tonumber(n) or 0)
+    if type(BreakUpLargeNumbers) == "function" then
+        local ok, text = pcall(BreakUpLargeNumbers, n)
+        if ok and type(text) == "string" then return text end
+    end
+    local text = tostring(n)
+    local grouped
+    repeat
+        text, grouped = text:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+    until grouped == 0
+    return text
+end
+
+local function Muted(text)
+    return "|c" .. (ns.COLORS and ns.COLORS.muted or "ff9a9a9a") .. text .. "|r"
+end
+
+--- Where this week's gold came from, and the game's all-time numbers,
+--- added to the card's lines (asked 2026-10-20, from a mockup).
+function GoldGoalUI.SourceLines(lines, sources)
+    if type(sources) ~= "table" then return lines end
+    local week = {}
+
+    local quests = sources.quests
+    if quests and ((quests.gold or 0) > 0 or (quests.count or 0) > 0) then
+        local right = Money(quests.gold or 0, 2)
+        if (quests.count or 0) > 0 and (quests.gold or 0) > 0 then
+            right = right .. "  " .. Muted(L.Format("%s each", Money(math.floor(quests.gold / quests.count + 0.5), 2)))
+        end
+        week[#week + 1] = { left = L["Quests"], chip = SourceColor("quests"),
+            note = (quests.count or 0) > 0 and L.Format("%d done", quests.count) or nil, right = right }
+    end
+
+    local mobs = sources.mobs
+    local mobGold = mobs and mobs.gold or sources.lootGold or 0
+    if (mobs and (mobs.kills or 0) > 0) or mobGold > 0 then
+        local right = Money(mobGold, 2)
+        local kills = mobs and mobs.kills or 0
+        if kills > 0 and mobGold + (mobs.loot or 0) > 0 then
+            right = right .. "  " .. Muted(L.Format("%s each",
+                Money(math.floor((mobGold + (mobs.loot or 0)) / kills + 0.5), 2)))
+        end
+        week[#week + 1] = { left = L["Mobs"], chip = SourceColor("loot"),
+            note = kills > 0 and L.Format("%d killed", kills) or nil, right = right }
+        if mobs and (mobs.loot or 0) > 0 then
+            week[#week + 1] = { left = L["Their loot is worth"],
+                right = L.Format("%s more", Money(mobs.loot, 2)) }
+        end
+    end
+
+    for _, key in ipairs({ "auctionSales", "vendorSales" }) do
+        if (sources[key] or 0) > 0 then
+            local source = ns.GoldLog:GetSource(key)
+            week[#week + 1] = { left = source.text, chip = source.color, right = Money(sources[key], 2) }
+        end
+    end
+
+    if week[1] then
+        lines[#lines + 1] = { left = L["THIS WEEK"], heading = true }
+        for _, line in ipairs(week) do lines[#lines + 1] = line end
+    end
+
+    local allTime = sources.allTime or {}
+    local always = {}
+    if allTime.quests then always[#always + 1] = { left = L["Quests done"], right = GoldGoalUI.Count(allTime.quests) } end
+    if allTime.kills then always[#always + 1] = { left = L["Mobs killed"], right = GoldGoalUI.Count(allTime.kills) } end
+    if allTime.questGold then always[#always + 1] = { left = L["Gold from quests"], right = Money(allTime.questGold, 2) } end
+    if allTime.looted then always[#always + 1] = { left = L["Gold looted"], right = Money(allTime.looted, 2) } end
+    if always[1] then
+        lines[#lines + 1] = { left = L["ALL TIME"], heading = true }
+        for _, line in ipairs(always) do lines[#lines + 1] = line end
+    end
+    return lines
 end
 
 --- The card under the bar: every character counted, then the week, the
@@ -1156,16 +1242,27 @@ function GoldGoalUI:ShowCard()
         end
     end
 
+    GoldGoalUI.SourceLines(lines, GoldGoal:Sources(now))
+
     -- Wide enough for its longest line, measured, so nothing is cut short.
     local width = 220
     for index, line in ipairs(lines) do
         local row = CardRow(card, index)
         row.left:SetText(line.left)
-        row.left:SetTextColor(Theme.Unpack(line.strong and "accentHi" or "text"))
+        row.left:SetTextColor(Theme.Unpack(line.heading and "accent" or line.strong and "accentHi" or "text"))
+        row.left:ClearAllPoints()
+        if line.chip then
+            row.chip:SetColorTexture(line.chip[1], line.chip[2], line.chip[3], 1)
+            row.chip:Show()
+            row.left:SetPoint("LEFT", 21, 0)
+        else
+            row.chip:Hide()
+            row.left:SetPoint("LEFT", 8, 0)
+        end
         row.note:SetText(line.note or "")
         row.right:SetText(line.right or "")
         row.right:SetTextColor(Theme.Unpack(line.color or (line.strong and "accentHi" or "text")))
-        local need = 16 + Width(row.left) + (line.note and 6 + Width(row.note) or 0) + 18 + Width(row.right)
+        local need = 16 + (line.chip and 13 or 0) + Width(row.left) + (line.note and 6 + Width(row.note) or 0) + 18 + Width(row.right)
         width = math.max(width, math.ceil(need))
     end
 
