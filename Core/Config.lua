@@ -339,6 +339,9 @@ local DEFAULTS = {
         goldTrackerY = nil,
         -- Transparent (asked 2026-10-19): 0 (off) to 3, Some, More or Most.
         goldTrackerSeeThrough = 0,
+        -- Count Gold On (asked 2026-10-21): "all" characters of this realm
+        -- and side, or only the "character" playing.
+        goldTrackerCount = "all",
 
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.

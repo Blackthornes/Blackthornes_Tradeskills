@@ -20,6 +20,14 @@
 --
 -- Saved, account wide, never renamed: `goldGoals[realmKey] = { goal,
 -- setAt, best, reachedAt }`. UI/GoldGoal.lua draws it.
+--
+-- A player asked (2026-10-21, the owner said build it) for it to count the
+-- character playing alone. "Count Gold On:" (`goldTrackerCount`, "all"
+-- unless "character" is picked, never rename it) picks it. Counting one
+-- character, its goal is its own, kept by GUID in
+-- `goldGoalCharacters[guid]` (the same fields; never rename it), so the
+-- realm's goal is left as it was. Today, this week and where the gold came
+-- from stay the realm's: the gold log is kept per realm.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -65,6 +73,20 @@ end
 
 function GoldGoal:IsOn()
     return ns.Config and ns.Config:Get("goldTracker") == true
+end
+
+--- True while it counts only the character playing.
+function GoldGoal:OnlyThisCharacter()
+    return ns.Config and ns.Config:Get("goldTrackerCount") == "character" or false
+end
+
+--- Count every character of this realm and side ("all") or only the one
+--- playing ("character").
+function GoldGoal:SetCount(mode)
+    if not ns.Config then return end
+    ns.Config:Set("goldTrackerCount", mode == "character" and "character" or "all")
+    self.pending = nil
+    self:Changed()
 end
 
 --------------------------------------------------------------------------------
@@ -115,6 +137,7 @@ function GoldGoal:Members(now)
     local selfKey = ns.Config and ns.Config:GetCharacterKey()
     local realm, faction = self:Here()
     realm, faction = Fold(realm), Fold(faction)
+    local onlyHere = self:OnlyThisCharacter()
 
     -- GUID keys first, so a character's GUID record is the one counted and
     -- an old name-realm record of it is the one left out.
@@ -132,7 +155,7 @@ function GoldGoal:Members(now)
     for _, key in ipairs(keys) do
         local record = ns.db.characters[key]
         local isCurrent = key == selfKey
-        local here = isCurrent or (realm ~= nil and faction ~= nil
+        local here = isCurrent or (not onlyHere and realm ~= nil and faction ~= nil
             and Fold(record.realm) == realm and Fold(record.faction) == faction)
 
         if here then
@@ -179,9 +202,31 @@ end
 -- The goal
 --------------------------------------------------------------------------------
 
---- This realm and side's goal record, made when `create`.
+-- The character playing's own goal record, by GUID, made when `create`.
+local function CharacterRecord(create)
+    local key = ns.Config and ns.Config:GetCharacterKey()
+    -- A character known only by its name is no place to keep one.
+    if type(key) ~= "string" or not key:find("^Player%-") then return nil end
+
+    if type(ns.db.goldGoalCharacters) ~= "table" then
+        if not create then return nil end
+        ns.db.goldGoalCharacters = {}
+    end
+
+    local record = ns.db.goldGoalCharacters[key]
+    if type(record) ~= "table" then
+        if not create then return nil end
+        record = {}
+        ns.db.goldGoalCharacters[key] = record
+    end
+    return record
+end
+
+--- This realm and side's goal record, or the character playing's while it
+--- counts only that one, made when `create`.
 function GoldGoal:Record(create)
     if not ns.db then return nil end
+    if self:OnlyThisCharacter() then return CharacterRecord(create) end
     local realmKey = ns.Config and ns.Config:GetRealmKey()
     -- A realm or side the client would not read is no place to keep one.
     if not realmKey or realmKey:find("^UnknownRealm%-") then return nil end
