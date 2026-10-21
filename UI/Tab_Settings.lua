@@ -1678,6 +1678,24 @@ local function Build(outer)
     end, false)
     widgets.goldTracker:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Count Gold On (asked 2026-10-21): every character, or only the one
+    -- playing, with a goal of its own (Logic/GoldGoal.lua).
+    local countRow = CreateRow(pages.look, 2, L["Count Gold On:"])
+    widgets.goldCount = Widgets.CreateDropdown(countRow, {
+        { text = L["All Characters"], value = "all" },
+        { text = L["This Character"], value = "character" },
+    }, function(value)
+        if ns.GoldGoal then
+            ns.GoldGoal:SetCount(value)
+        else
+            Config:Set("goldTrackerCount", value)
+        end
+        -- The goal box shows the goal of what is counted now.
+        local goal = ns.GoldGoal and ns.GoldGoal:Goal()
+        widgets.goldGoal:SetValue(goal and math.floor(goal / 10000) or nil, true)
+    end, { width = 130 })
+    widgets.goldCount:SetPoint("TOPLEFT", CONTROL_X, 0)
+
     local goalRow = CreateRow(pages.look, 2, L["Gold Goal:"],
         L["Each tenth of the way gets a cheer. Leave it empty for no goal."])
 
@@ -2317,6 +2335,7 @@ local function Refresh()
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
     widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
     widgets.goldTracker:SetChecked(Config:Get("goldTracker") == true)
+    widgets.goldCount:SetValue(Config:Get("goldTrackerCount") == "character" and "character" or "all", true)
     local goldGoal = ns.GoldGoal and ns.GoldGoal:Goal()
     widgets.goldSeeThrough:SetValue(ns.GoldGoalUI and ns.GoldGoalUI.SeeThroughLevel()
         or tonumber(Config:Get("goldTrackerSeeThrough")) or 0, true)

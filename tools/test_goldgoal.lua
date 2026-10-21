@@ -201,6 +201,28 @@ check("tenths are counted down", GoldGoal.Step(1999, 2000) == 9 and GoldGoal.Ste
 check("the next goal is round and past what you have",
     GoldGoal.NextGoal(5120 * GOLD) == 8000 * GOLD and GoldGoal.NextGoal(340 * GOLD) == 550 * GOLD)
 
+print("\ngoblin gold: only this character")
+
+local realmGoal = ns.db.goldGoals["Forever-Horde"].goal
+check("all characters unless picked", GoldGoal:OnlyThisCharacter() == false)
+GoldGoal:SetCount("character")
+check("saved as this character", settings.goldTrackerCount == "character")
+local mine, mineCount = GoldGoal:Total()
+check("only the one playing counts", mineCount == 1 and mine == money
+    and GoldGoal:Members()[1].isCurrent)
+check("no goal of its own yet", GoldGoal:Goal() == nil)
+local cheered = #cheers
+GoldGoal:SetGoal(5000 * GOLD)
+check("its goal is kept by GUID", ns.db.goldGoalCharacters["Player-1-AAA"].goal == 5000 * GOLD)
+check("the realm's goal is left as it was", ns.db.goldGoals["Forever-Horde"].goal == realmGoal)
+money = money + 1000 * GOLD
+GoldGoal:Changed()
+check("and cheers on its own", #cheers == cheered + 1 and cheers[#cheers].goal == 5000 * GOLD)
+GoldGoal:SetCount("all")
+check("back to all, the realm's goal again", GoldGoal:Goal() == realmGoal and select(2, GoldGoal:Total()) == 3)
+money = money - 1000 * GOLD
+GoldGoal:Changed()
+
 ns.Theme, ns.Widgets = {}, {}
 ns.GoldLog = {
     KeyStart = function(day) return os.time({ year = math.floor(day / 10000), month = math.floor(day / 100) % 100, day = day % 100, hour = 0 }) end,
