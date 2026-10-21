@@ -1170,7 +1170,13 @@ game's own by ID. Settings, Look page, GOBLIN GOLD ("Gold Tracker:",
 `/bts gold [on|off|goal N|reset]`, and `/bts gold test [goal|float]`
 (typed only, not in the help line) shows a cheer without saving anything.
 Saved, account wide, never renamed: `goldTracker` (off unless ticked), `goldTrackerSound`,
-`goldTrackerScale`, `goldTrackerX`, `goldTrackerY`. Like every cheer, it
+`goldTrackerScale`, `goldTrackerX`, `goldTrackerY`. "Count Gold On:" (a player asked,
+the owner said build it, 2026-10-21) picks All Characters or This
+Character (`goldTrackerCount`, "all" unless picked, never rename it):
+counting one character, `GoldGoal:Members` keeps only the one playing and
+its goal is its own, by GUID in `goldGoalCharacters[guid]` (the same
+fields; never rename it), so the realm's goal stays as it was. Today,
+this week and the sources stay the realm's, since `GoldLog` is per realm. Like every cheer, it
 is never announced. Tested in `tools/test_goldgoal.lua`. Not yet seen in
 game.
 
