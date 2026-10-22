@@ -124,6 +124,7 @@ UI\PostPanel.lua
 UI\PriceEditor.lua
 UI\ListRulesWindow.lua
 UI\KeepBox.lua
+UI\NeverMakeBox.lua
 UI\BuyQuantity.lua
 UI\AuctionsView.lua
 UI\FavorsView.lua
