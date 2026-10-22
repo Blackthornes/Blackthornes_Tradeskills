@@ -515,7 +515,8 @@ check("PER REP shows a price", row.cells[1].text ~= "" and row.cells[1].color ==
 check("REP shows the learned figure", row.cells[5].text == "80" and row.cells[5].color == "text")
 check("the name is the item alone", row.name.text == "Golden Rod")
 check("ON AH counts the writs listed at this price", row.cells[6].text == "4" and row.cells[6].color == "text")
-check("an item cheaper made says Make", row.cells[3].text:find("Make") ~= nil)
+check("an item cheaper made says Make, pinned at the column's left", row.make and row.make.text == "Make"
+    and row.make.shown == true and row.cells[3].text:find("Make") == nil)
 
 list.opts.updateRow(row, Row(list.data, SHOT))
 check("an order for many says how many", row.name.text == "200 Crafted Solid Shot")

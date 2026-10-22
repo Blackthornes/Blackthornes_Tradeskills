@@ -1259,7 +1259,7 @@ function Config:WarnAccountDataLost()
 
     if type(PlaySound) == "function" then
         local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
-        pcall(PlaySound, kits.RAID_WARNING or 8959)
+        pcall(PlaySound, kits.RAID_WARNING or 8959, "Master")
     end
 end
 

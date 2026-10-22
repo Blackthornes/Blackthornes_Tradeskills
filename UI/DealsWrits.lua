@@ -30,7 +30,7 @@ local COLUMNS = {
     { key = "perRep",    label = L["PER REP"], width = 66, money = true },
     { key = "total",     label = L["TOTAL"], width = 66, money = true },
     { key = "itemCost",  label = L["ITEM"], width = 96, money = true },
-    { key = "writPrice", label = L["WRIT"], width = 66, money = true },
+    { key = "writPrice", label = L["WRIT"], width = 80, money = true },
     { key = "rep",       label = L["REP"], width = 40, justify = "CENTER" },
     -- How many are on the auction house at the row's price (a player
     -- asked, 2026-10-19; it was what you own before).
@@ -187,6 +187,15 @@ local function CreateRow(row)
     row.cells = {}
     for index, column in ipairs(COLUMNS) do
         row.cells[index] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
+        -- Cheaper made than bought: a green Make at the left of the
+        -- price's column, in one spot down the list whatever the price
+        -- (Ezmode's report, 2026-10-22: it rode beside the price before).
+        if column.key == "itemCost" then
+            row.make = Theme.CreateLabel(row, "small", "profit", "LEFT")
+            row.make:SetPoint("LEFT", row.cells[index], "LEFT", 0, 0)
+            row.make:SetText(L["Make"])
+            row.makeCell = row.cells[index]
+        end
     end
 
     PlaceRow(row)
@@ -209,10 +218,6 @@ local function FillCell(cell, key, entry)
     local value = entry[key]
     if key == "perRep" then value = Round(value) end
     local text = value and Money(value) or ""
-    -- Cheaper made than bought: a green Make before the price.
-    if key == "itemCost" and value and entry.how == "make" then
-        text = L.Format("|c%sMake|r  %s", ns.COLORS.profit, text)
-    end
     cell:SetText(text)
     cell:SetTextColor(Theme.Unpack(key == "perRep" and "accent" or key == "total" and "text" or "muted"))
 end
@@ -236,6 +241,10 @@ local function UpdateRow(row, entry)
 
     for index, column in ipairs(COLUMNS) do
         FillCell(row.cells[index], column.key, entry)
+    end
+    if row.make then
+        local shown = row.makeCell and (not row.makeCell.IsShown or row.makeCell:IsShown() ~= false)
+        row.make:SetShown((shown and entry.itemCost and entry.how == "make") and true or false)
     end
 end
 
