@@ -212,6 +212,10 @@ local DEFAULTS = {
         -- Ready to sell at the auction house: leave out the rows at a loss
         -- (UI/PostPanel.lua, "Hide losses"). Off until ticked.
         postHideLosses = false,
+        -- Profit by method's headings folded away, their keys comma apart
+        -- (a player asked, the owner said yes from a mockup, 2026-10-22).
+        -- Never rename it.
+        salesMethodsFolded = "",
 
         -- Deals, Craftsman's Writs: the reputation goal the panel works
         -- towards (UI/DealsWrits.lua).

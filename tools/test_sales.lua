@@ -191,10 +191,11 @@ end
 -- The carried-over history is read from the saved database; stand in for it.
 ns.Mail.GetRestoredRollup = function() return restoredRollup end
 
-local createRow, updateRow, listData
+local createRow, updateRow, listData, clickRow
 
 ns.Widgets.CreateScrollList = function(_, opts)
     createRow, updateRow = opts.createRow, opts.updateRow
+    clickRow = opts.onClick
 
     return Stub({
         SetData = function(_, data) listData = data end,
@@ -219,7 +220,7 @@ tab.build(Stub())
 assert(updateRow, "Tab_Sales did not hand over its row callbacks")
 
 local function Row(data)
-    local row = Stub()
+    local row = Stub({ CreateTexture = function() return Stub() end })
     createRow(row)
     updateRow(row, data)
     return row
@@ -674,6 +675,33 @@ selectPeriod("week")
 
 selectView("sales")
 ns.db.goldLog = nil
+
+print("")
+print("Profit by method folds by type (a player asked, 2026-10-22)")
+
+local saved = {}
+ns.Config.Get = function(_, key) return saved[key] end
+ns.Config.Set = function(_, key, value) saved[key] = value end
+local crafted = { n = 2, income = 500, cost = 100, unknown = 0, profit = 400,
+    list = { { itemID = 101, n = 2, income = 500, cost = 100, unknown = 0, profit = 400 } } }
+local empty = { n = 0, income = 0, cost = 0, unknown = 0, profit = 0, list = {} }
+ns.MethodProfit = {
+    METHODS = { { key = "crafted", text = "Crafted" }, { key = "vendored", text = "Vendored" } },
+    Range = function() return 0, 1 end,
+    Summary = function() return { methods = { crafted = crafted, vendored = empty },
+        total = { n = 2, income = 500, cost = 100, unknown = 0, profit = 400 } } end,
+}
+selectView("methods")
+check("a heading and its item", #listData, 2)
+clickRow(listData[1])
+check("a click folds the heading", #listData, 1)
+check("which keeps its total", listData[1].group.profit, 400)
+check("and is kept for next time", saved.salesMethodsFolded, "crafted")
+clickRow(listData[1])
+check("a second click opens it", #listData, 2)
+check("and nothing is kept folded", saved.salesMethodsFolded, "")
+ns.MethodProfit = nil
+selectView("sales")
 
 print("")
 print(string.format("%d passed, %d failed", passed, failed))
