@@ -877,6 +877,24 @@ VENDORS on the Mail & Vendors page (`vendorMapPins`, off unless ticked,
 never rename it) and `/bts vendorpins on|off`. Tested in
 `tools/test_vendorpins.lua`. Not yet seen in game.
 
+Where the game saw it wins (the owner, 2026-10-22, after a player's Show
+the way led to a recipe vendor's Classic spot; his rule for every addon):
+a spot seen in game always beats Classic's listed one. `Vendor:Scan`
+keeps recipe-only vendors too, and a trainer's window keeps where it
+stands (`VendorPins:LearnTrainer` on `TRAINER_SHOW`, account wide in
+`trainerSpots[npcID] = { name, mapID, x, y, side, at }`, never rename
+it). Between them and Classic sit the shipped Forever spots,
+`Data/ForeverVendorSpots.lua` (`ns.FOREVER_VENDOR_SPOTS`,
+`ns.FOREVER_TRAINER_SPOTS`), written by `tools/forever_vendor_spots.py
+<save>` from only those two tables of the owner's save (never when it was
+seen), keeping what is shipped; never by hand, and run at each release
+with the other fold-ins, never announced. `VendorPins:SeenAt(name, zone,
+kind)` (by name, any case, on the zone's map when known) is what Learn
+next's `Place` reads first, so Show the way, the arrow and Equipment's
+`WhereFor` follow; `VendorPins:Known` lays the shipped spots under the
+player's own for the map pins. Tested in `tools/test_vendorpins.lua`,
+`tools/test_learnnext.lua` and `tools/test_forever_vendor_spots.py`.
+
 ## Sealed writs
 
 The owner said build it (2026-10-19): mobs drop a Sealed Journeyman's or

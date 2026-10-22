@@ -44,6 +44,9 @@ jobs:
       - name: The clear-to-post check catches what it should
         run: python tools/test_check_package.py
 
+      - name: Vendor and trainer spots fold in from a save
+        run: python tools/test_forever_vendor_spots.py
+
       - name: Discord announcement tests
         run: python tools/test_announce_discord.py
 

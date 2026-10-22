@@ -290,6 +290,54 @@ check("five pins zoomed out: no names", looks[1].name, false)
 check("zoomed in: names", ns.VendorPinsUI.Looks(five, nil, true)[1].name, true)
 check("four pins: names", ns.VendorPinsUI.Looks({ five[1], five[2], five[3], five[4] }, nil, false)[4].name, true)
 
+print("\nwhere the game saw a vendor wins (Show the way)")
+VP.MOST_VENDORS = 300
+ns.db.vendorSpots = {}
+CLASSES[9100] = 9   -- a recipe
+npc.guid, npc.name, npc.faction = "Creature-0-1-2-3-340-0000ABCD", "Recipe Seller", "Alliance"
+spot.map, spot.x, spot.y = 1453, 0.7, 0.2
+check("a vendor of recipes alone is kept", VP:Learn({ [9100] = { price = 400, numAvailable = -1 } }), true)
+check("with no materials", next(ns.db.vendorSpots[340].items), nil)
+npc.guid = "Creature-0-1-2-3-341-0000ABCD"
+check("one selling neither is not", VP:Learn({ [9002] = { price = 500, numAvailable = -1 } }), false)
+local seen = VP:SeenAt("Recipe Seller", "Stormwind City")
+check("seen at its spot", seen and (seen.mapID .. " " .. seen.x .. " " .. seen.y), "1453 70 20")
+check("any case", VP:SeenAt("recipe seller", "Stormwind City") ~= nil, true)
+check("a namesake in another zone is not it", VP:SeenAt("Recipe Seller", "Elwynn Forest"), nil)
+check("a vendor never seen", VP:SeenAt("Kendor", "Stormwind City"), nil)
+
+-- The owner's spots, shipped (Data/ForeverVendorSpots.lua): under the
+-- player's own, over Classic's.
+ns.FOREVER_VENDOR_SPOTS = {
+  [340] = { "Recipe Seller", 1453, 10, 10, "A", {} },
+  [101] = { "Alliance Supplier", 1453, 61, 72, "A", { [THREAD] = true } },
+  [600] = { "Shipped Cook", 1453, 33, 44, "A", {} },
+}
+seen = VP:SeenAt("Recipe Seller", "Stormwind City")
+check("your own spot beats the shipped one", seen and seen.x, 70)
+seen = VP:SeenAt("Shipped Cook", "Stormwind City")
+check("a shipped spot when you never saw it", seen and (seen.x .. "," .. seen.y), "33,44")
+shopping = { Line(THREAD, 20, 10, 25) }
+vendors = VP:For(1453)
+check("the shipped spot beats Classic's on the map", vendors[1] and vendors[1].x, 61)
+check("pinned once", #vendors, 1)
+ns.FOREVER_VENDOR_SPOTS = nil
+shopping = {}
+
+print("\ntrainers, where the game saw them")
+npc.guid, npc.name, npc.faction = "Creature-0-1-2-3-1430-0000ABCD", "Tomas", "Alliance"
+spot.map, spot.x, spot.y = 1453, 0.775, 0.531
+check("kept at the trainer window", VP:LearnTrainer(), true)
+seen = VP:SeenAt("Tomas", "Stormwind City", "trainer")
+check("seen at its spot", seen and (seen.x .. "," .. seen.y), "77.5,53.1")
+check("a trainer is no vendor", VP:SeenAt("Tomas", "Stormwind City"), nil)
+ns.FOREVER_TRAINER_SPOTS = { [5000] = { "Shipped Trainer", 1453, 12, 34, "A", {} } }
+seen = VP:SeenAt("Shipped Trainer", "Stormwind City", "trainer")
+check("a shipped trainer spot", seen and seen.y, 34)
+ns.FOREVER_TRAINER_SPOTS = nil
+npc.guid = nil
+check("nobody targeted, nothing kept", VP:LearnTrainer(), false)
+
 print("\n/bts vendorpins")
 commands.vendorpins("on")
 check("on", settings.vendorMapPins, true)
