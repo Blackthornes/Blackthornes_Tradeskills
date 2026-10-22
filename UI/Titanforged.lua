@@ -261,6 +261,9 @@ local function CloseGem(trim, onClick)
     return close
 end
 
+-- Pets' and Equipment's arrows wear the same gem beside their plates.
+Titanforged.CloseGem = CloseGem
+
 --------------------------------------------------------------------------------
 -- Dressing a frame
 --------------------------------------------------------------------------------
