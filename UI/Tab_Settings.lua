@@ -1865,7 +1865,7 @@ local function Build(outer)
     widgets.tsmStatus:SetWordWrap(true)
 
     local auctionatorRow = CreateRow(pages.sharing, 2, L["Auctionator Prices:"],
-        L["Uses Auctionator prices for items nothing else has priced."])
+        L["Uses Auctionator prices for items nothing else has priced, or when its price is newer than your old one."])
     widgets.auctionatorPrices = Widgets.CreateCheckbox(auctionatorRow, L["On"], function(checked)
         Config:Set("auctionatorPrices", checked)
         if ns.AuctionatorPrices then ns.AuctionatorPrices:Forget() end

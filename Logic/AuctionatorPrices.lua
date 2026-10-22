@@ -6,11 +6,15 @@
 -- addon API, with no TOC dependency:
 --
 --   Auctionator.API.v1.GetAuctionPriceByItemID(callerID, itemID)   -- copper, or nil
+--   Auctionator.API.v1.GetAuctionAgeByItemID(callerID, itemID)     -- whole days since seen, or nil
 --
 -- Auctionator's price is the cheapest listing from the player's own scans,
 -- so unlike TSM's it has Forever prices. It raises when called wrongly, hence
--- the pcall. Prices:GetValue asks here only when your scans, your guildmates'
--- and TSM have no price; "rival" never asks (it is this auction house now).
+-- the pcall. Prices:GetValue asks here when your scans, your guildmates'
+-- and TSM have no price, and (2026-10-22, the owner said yes to a player's
+-- idea) when your own price has gone stale and Auctionator saw the item
+-- more recently (`NewerThan`), as guild and realm prices already may.
+-- "rival" never asks (it is this auction house now).
 --
 -- On unless unticked (`auctionatorPrices`, Settings, Sharing; never rename
 -- it). Prices are read many times a redraw, so each answer is kept CACHE_FOR
@@ -27,6 +31,7 @@ AuctionatorPrices.MAX_PRICE = 1e11    -- above this is not a price (10 million g
 AuctionatorPrices.ASKS = { market = true, min = true, lowest = true }
 
 local cache = {}                      -- [itemID] = { value or false, at }
+local ages = {}                       -- [itemID] = { days or false, at }
 AuctionatorPrices.used = 0            -- prices taken from Auctionator this session
 
 function AuctionatorPrices:IsOn()
@@ -72,9 +77,47 @@ function AuctionatorPrices:GetValue(itemID, which)
     return value
 end
 
+--- Auctionator's age call, or nil when this Auctionator has none.
+function AuctionatorPrices.AgeCall()
+    local addon = rawget(_G, "Auctionator")
+    local api = type(addon) == "table" and type(addon.API) == "table" and addon.API.v1
+    if type(api) ~= "table" or type(api.GetAuctionAgeByItemID) ~= "function" then return nil end
+    return api.GetAuctionAgeByItemID
+end
+
+--- How many whole days ago Auctionator last saw the item, or nil.
+function AuctionatorPrices:AgeDays(itemID)
+    if type(itemID) ~= "number" or not self:IsOn() then return nil end
+    local call = self.AgeCall()
+    if not call then return nil end
+
+    local now = GetTime and GetTime() or 0
+    local entry = ages[itemID]
+    if entry and now - entry[2] < self.CACHE_FOR then
+        return entry[1] or nil
+    end
+
+    local ok, days = pcall(call, self.CALLER, itemID)
+    if not ok or type(days) ~= "number" or days ~= days or days < 0 then days = nil end
+    if days then days = math.floor(days) end
+    ages[itemID] = { days or false, now }
+    return days
+end
+
+--- True when Auctionator saw the item more recently than a price of ours
+--- `ourAge` seconds old. Its age is in whole days, so it counts only when
+--- it is a whole day younger than ours: never a tie.
+function AuctionatorPrices:NewerThan(itemID, ourAge)
+    if type(ourAge) ~= "number" then return false end
+    local days = self:AgeDays(itemID)
+    if not days then return false end
+    return days < math.floor(ourAge / 86400)
+end
+
 --- Forget kept answers (the setting was changed).
 function AuctionatorPrices:Forget()
     cache = {}
+    ages = {}
 end
 
 --- Called by Prices:GetValue when it hands out an Auctionator price.
