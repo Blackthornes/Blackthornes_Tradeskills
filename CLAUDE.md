@@ -1354,7 +1354,11 @@ Auctionator comes after TSM (the owner said yes and allowed naming it,
 `Auctionator.API.v1.GetAuctionPriceByItemID("Blackthornes_TS", itemID)`
 the same way, one price for market, min and lowest. Its price is the
 player's own scans, so it has Forever prices (other Forever addons read the
-same call). "Auctionator prices" (`auctionatorPrices`, on unless unticked,
+same call). A stale price of your own also gives way to it when Auctionator
+saw the item a whole day later (the owner said yes to a player's idea,
+2026-10-22; `AuctionatorPrices:NewerThan`, from
+`Auctionator.API.v1.GetAuctionAgeByItemID`, kept 60 s), as guild and
+realm prices may; only for a stale price neither of those replaced. "Auctionator prices" (`auctionatorPrices`, on unless unticked,
 never rename it). Tested in `tools/test_auctionatorprices.lua`.
 
 Farmer shares its own counts the same way (2026-10-11): its `Core/Comm.lua`

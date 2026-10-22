@@ -785,7 +785,8 @@ end
 -- Rival stays the auction house's own, since it is the price to undercut.
 -- Gaps take your guild's prices, then your realm's (Logic/GuildPrices.lua,
 -- Logic/RealmPrices.lua); an item nobody has priced may take TradeSkillMaster's (Logic/TSMPrices.lua),
--- then Auctionator's (Logic/AuctionatorPrices.lua).
+-- then Auctionator's (Logic/AuctionatorPrices.lua). A stale price of your
+-- own also gives way to Auctionator's when Auctionator saw the item later.
 -- GetScanValue answers from the scans alone.
 function Prices:GetValue(itemID, which)
     local scanned = self:GetScanValue(itemID, which)
@@ -818,7 +819,10 @@ function Prices:GetValue(itemID, which)
         if shared then
             local record = self:GetTable()[itemID]
             local seen = type(record) == "table" and record.seen or 0
-            if not scanned or (self:IsStale(itemID) and sharedAt > seen) then scanned = shared end
+            if not scanned or (self:IsStale(itemID) and sharedAt > seen) then
+                scanned = shared
+                filled = true
+            end
         end
     end
 
@@ -832,6 +836,20 @@ function Prices:GetValue(itemID, which)
         end
     end
     -- Then Auctionator's (Logic/AuctionatorPrices.lua, on unless unticked).
+    -- It also takes over from your own price once that has gone stale, when
+    -- Auctionator saw the item more recently, as guild and realm prices may.
+    -- Asked only for a stale price nobody else replaced.
+    if scanned and not filled and self:IsStale(itemID) then
+        local auctionator = ns.AuctionatorPrices
+        local age = self:GetAge(itemID)
+        if age and auctionator and auctionator.NewerThan and auctionator:NewerThan(itemID, age) then
+            local newer = auctionator:GetValue(itemID, which)
+            if newer then
+                scanned = newer
+                if auctionator.Used then auctionator:Used() end
+            end
+        end
+    end
     if not scanned then
         local auctionator = ns.AuctionatorPrices
         if auctionator and auctionator.GetValue then
