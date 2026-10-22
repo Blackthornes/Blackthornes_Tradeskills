@@ -392,7 +392,16 @@ ns.Theme = {
 
 local lists, dropdowns, buttons, numberBoxes, scrolls = {}, {}, {}, {}, {}
 local searched
+local pages = {}
 ns.Widgets = {
+    CreateTabStrip = function(_, tabs, onSelect)
+        local options = {}
+        for index, tab in ipairs(tabs) do options[index] = { text = tab.text, value = tab.key } end
+        local strip = Stub({ options = options, onSelect = onSelect,
+            Select = function(self, key) self.value = key end })
+        pages[#pages + 1] = strip
+        return strip
+    end,
     CreateDropdown = function(_, options, onSelect, opts)
         local dropdown = Stub({ options = options, onSelect = onSelect, opts = opts,
             SetValue = function(self, value) self.value = value end })
@@ -465,8 +474,8 @@ assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 local tab = tabs.deals
 tab.build(Stub())
 
-local show, goal = dropdowns[2], dropdowns[3]
-check("the Show menu offers the writs", show.options[3].value == "writs")
+local show, goal = pages[1], dropdowns[2]
+check("the pages offer the writs", show.options[3].value == "writs")
 check("the goal menu has four goals, Honored picked", #goal.options == 4 and goal.value == "honored"
     and goal.options[2].text == "Goal: Honored")
 check("and is hidden on the flips", goal.shown == false)
