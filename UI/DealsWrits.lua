@@ -189,7 +189,7 @@ local function CreateRow(row)
         row.cells[index] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
         -- Cheaper made than bought: a green Make at the left of the
         -- price's column, in one spot down the list whatever the price
-        -- (Ezmode's report, 2026-10-22: it rode beside the price before).
+        -- (a player's report, 2026-10-22: it rode beside the price before).
         if column.key == "itemCost" then
             row.make = Theme.CreateLabel(row, "small", "profit", "LEFT")
             row.make:SetPoint("LEFT", row.cells[index], "LEFT", 0, 0)

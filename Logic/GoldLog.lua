@@ -321,6 +321,7 @@ function GoldLog:OnMoney(now)
 
     now = now or time()
     self:Record(self:Classify(delta, now), delta, now)
+    pcall(self.NoteGold, self, money, now)
 end
 
 --------------------------------------------------------------------------------
@@ -408,12 +409,27 @@ end
 
 -- Periods offered on the Sales tab, in menu order.
 GoldLog.PERIODS = {
-    { text = L["This session"],  value = "session" },
-    { text = L["Today"],         value = "today" },
-    { text = L["Last 7 days"],   value = "week" },
-    { text = L["Last 30 days"],  value = "month" },
-    { text = L["Pick dates"],    value = "pick" },
+    { text = L["Session"], value = "session" },
+    { text = L["Today"],   value = "today" },
+    { text = L["7d"],      value = "week" },
+    { text = L["30d"],     value = "month" },
+    { text = L["3m"],      value = "quarter" },
+    { text = L["Year"],    value = "year" },
+    { text = L["All"],     value = "all" },
+    { text = L["Pick dates"], value = "pick" },
 }
+
+-- How many days back each day period reaches, today in.
+GoldLog.PERIOD_DAYS = { week = 7, month = 30, quarter = 91, year = 365 }
+
+--- The first day anything was written down, as the day's midnight, or nil.
+function GoldLog:FirstDay()
+    local first
+    for dayKey in pairs(self:GetLog().days) do
+        if type(dayKey) == "number" and (not first or dayKey < first) then first = dayKey end
+    end
+    return first and GoldLog.KeyStart(first) or nil
+end
 
 local function NewBin(label, from, to)
     return { label = label, from = from, to = to, sources = {} }
@@ -511,8 +527,12 @@ function GoldLog:Bins(period, fromKey, toKey, now)
     local fromStart, toStart
     if period == "pick" and fromKey and toKey then
         fromStart, toStart = GoldLog.KeyStart(math.min(fromKey, toKey)), GoldLog.KeyStart(math.max(fromKey, toKey))
+    elseif period == "all" then
+        toStart = GoldLog.DayStart(now)
+        -- From the first day kept, and never fewer than seven bars.
+        fromStart = math.min(self:FirstDay() or toStart, GoldLog.DayStart(now, -6))
     else
-        local days = period == "month" and 30 or 7
+        local days = GoldLog.PERIOD_DAYS[period] or 7
         toStart = GoldLog.DayStart(now)
         fromStart = GoldLog.DayStart(now, -(days - 1))
     end
@@ -574,6 +594,163 @@ function GoldLog:Days()
 end
 
 --------------------------------------------------------------------------------
+-- Your gold over time
+--------------------------------------------------------------------------------
+
+-- A player asked (2026-10-22, the owner said yes from a mockup): a line of
+-- your total gold over the chart. For all your characters it is worked back
+-- from the gold they have now and what came in and went out since, so it
+-- reaches back as far as the log does. The log keeps no names, so for the
+-- character playing its gold is written down as it changes, by GUID, in
+-- this realm's log as `goldByCharacter[guid] = { hours, days }` (never
+-- renamed), kept as long as the log's own buckets; its line starts there.
+
+local function CharacterGold(create)
+    local key = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    -- A character known only by its name is no place to keep one.
+    if type(key) ~= "string" or not key:find("^Player%-") then return nil end
+
+    local log = GoldLog:GetLog()
+    if type(log.goldByCharacter) ~= "table" then
+        if not create then return nil end
+        log.goldByCharacter = {}
+    end
+    local record = log.goldByCharacter[key]
+    if type(record) ~= "table" then
+        if not create then return nil end
+        record = { hours = {}, days = {} }
+        log.goldByCharacter[key] = record
+    end
+    if type(record.hours) ~= "table" then record.hours = {} end
+    if type(record.days) ~= "table" then record.days = {} end
+    return record
+end
+
+--- Write down the gold the character playing has now.
+function GoldLog:NoteGold(money, t)
+    money = tonumber(money)
+    if not money then return end
+    local record = CharacterGold(true)
+    if not record then return end
+    t = t or time()
+    record.hours[t - (t % HOUR)] = money
+    record.days[GoldLog.DayKey(t)] = money
+end
+
+--- The character playing's kept gold past the log's own reach let go.
+function GoldLog:PruneGold(now)
+    now = now or time()
+    local log = self:GetLog()
+    if type(log.goldByCharacter) ~= "table" then return end
+    local oldest = GoldLog.DayKey(now - KEEP_DAYS * DAY)
+    for _, record in pairs(log.goldByCharacter) do
+        if type(record) == "table" then
+            for hourStart in pairs(type(record.hours) == "table" and record.hours or {}) do
+                if type(hourStart) ~= "number" or hourStart < now - KEEP_HOURS then record.hours[hourStart] = nil end
+            end
+            for dayKey in pairs(type(record.days) == "table" and record.days or {}) do
+                if type(dayKey) ~= "number" or dayKey < oldest then record.days[dayKey] = nil end
+            end
+        end
+    end
+end
+
+-- What came in less what went out, from `t` on, never counting gold moved
+-- between your own characters. `hourly` reads the hour buckets.
+local function NetSince(log, t, hourly)
+    local net = 0
+    local function Add(bucket)
+        for source, line in pairs(type(bucket) == "table" and bucket or {}) do
+            local known = SOURCE_BY_KEY[source]
+            if known and not known.moved and type(line) == "table" then
+                net = net + (tonumber(line.i) or 0) - (tonumber(line.o) or 0)
+            end
+        end
+    end
+    if hourly then
+        for key, bucket in pairs(log.hours) do
+            if type(key) == "number" and key >= t then Add(bucket) end
+        end
+    else
+        for dayKey, bucket in pairs(log.days) do
+            if type(dayKey) == "number" and GoldLog.KeyStart(dayKey) >= t then Add(bucket) end
+        end
+    end
+    return net
+end
+
+-- The session's own changes from `t` on, moved gold counted or not.
+local function SessionSince(t, withMoved)
+    local net = 0
+    for _, change in ipairs(GoldLog.session or {}) do
+        if change.t >= t and (withMoved or not SOURCE_BY_KEY[change.source].moved) then
+            net = net + change.amount
+        end
+    end
+    return net
+end
+
+-- The newest kept reading at or before `t`.
+local function Reading(readings, t, byDay)
+    local best, value
+    for key, money in pairs(readings) do
+        local at = byDay and GoldLog.KeyStart(key) or key
+        if type(at) == "number" and at < t and (not best or at > best) then
+            best, value = at, tonumber(money)
+        end
+    end
+    return value
+end
+
+--- Your gold at the end of each bin from GoldLog:Bins.
+--
+-- @param who  "all" (every character on this realm and side) or "character"
+-- @param period  the bins' period, so the right buckets are read
+-- @return array, one entry a bin: copper, or false where it is not known
+function GoldLog:Line(bins, who, period, now)
+    now = now or time()
+    local line = {}
+    local log = self:GetLog()
+    local hourly = period == "today"
+
+    if who == "character" then
+        local money = Money()
+        local record = CharacterGold(false)
+        for index, bin in ipairs(bins) do
+            local at = math.min(bin.to, now)
+            local value
+            if period == "session" or at >= now then
+                value = money and (money - SessionSince(at, true)) or nil
+            elseif record then
+                value = Reading(hourly and record.hours or record.days, at, not hourly)
+            end
+            line[index] = value or false
+        end
+        return line
+    end
+
+    local total
+    local GoldGoal = ns.GoldGoal
+    if GoldGoal and GoldGoal.Total then
+        local ok, sum = pcall(GoldGoal.Total, GoldGoal, now, true)
+        if ok then total = tonumber(sum) end
+    end
+    if not total then return line end
+
+    for index, bin in ipairs(bins) do
+        local at = math.min(bin.to, now)
+        if at >= now then
+            line[index] = total
+        elseif period == "session" then
+            line[index] = total - SessionSince(at, false)
+        else
+            line[index] = total - NetSince(log, at, hourly)
+        end
+    end
+    return line
+end
+
+--------------------------------------------------------------------------------
 -- Watching
 --------------------------------------------------------------------------------
 
@@ -596,6 +773,7 @@ function GoldLog:OnEnable()
     self.lastMoney = Money()
 
     pcall(self.Prune, self)
+    pcall(self.PruneGold, self)
 
     ns.RegisterEvent(self, "PLAYER_MONEY", function() GoldLog:OnMoney() end)
     ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", function()
@@ -603,6 +781,7 @@ function GoldLog:OnEnable()
         -- not put down to whatever happens next.
         GoldLog.lastMoney = Money() or GoldLog.lastMoney
         GoldLog.ready = true
+        if GoldLog.lastMoney then pcall(GoldLog.NoteGold, GoldLog, GoldLog.lastMoney) end
     end)
 
     local function Window(window, showEvent, hideEvent)
