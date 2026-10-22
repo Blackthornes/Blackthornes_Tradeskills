@@ -2824,7 +2824,7 @@ L["Swaps scans with guildmates who use Tradeskills. Your own scans always win."]
 L["TSM Prices:"] = "TSM 价格："
 L["Uses TradeSkillMaster prices for items you haven't priced."] = "对你没有价格的物品，使用 TradeSkillMaster 的价格。"
 L["Auctionator Prices:"] = "Auctionator 价格："
-L["Uses Auctionator prices for items nothing else has priced."] = "对别的都没有价格的物品，使用 Auctionator 的价格。"
+L["Uses Auctionator prices for items nothing else has priced, or when its price is newer than your old one."] = "对别的都没有价格的物品，或者它的价格比你的旧价格更新时，使用 Auctionator 的价格。"
 L["Remove Old Prices:"] = "清除旧价格："
 L["Remove"] = "移除"
 L["Drops items not seen at the auction house for 21 days."] = "去掉 21 天没在拍卖行出现过的物品。"
