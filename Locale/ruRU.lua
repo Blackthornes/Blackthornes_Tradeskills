@@ -3269,3 +3269,9 @@ L["The queue will buy it instead, from now on."] = "С этого момента
 L["You can undo this in Settings, Queue."] = "Отменить можно в Настройки, Очередь."
 L["Buy It"] = "Покупать"
 L["Keep Making"] = "Продолжать делать"
+
+-- Gold on hand on the Level Up tab ("Can afford", LevelUp:ShortNote).
+L["Can afford"] = "По карману"
+L["Only shows crafts you can buy the missing materials for with the gold you have on you."] = "Показывает только рецепты, недостающие материалы для которых можно купить на золото, что у тебя есть."
+L["You need about %s to buy what's missing. You have %s."] = "Чтобы купить недостающее, нужно около %s. У тебя %s."
+L["Nothing that gives skill fits the gold you have."] = "Ничего, что даёт навык, не по карману с твоим золотом."

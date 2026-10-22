@@ -355,6 +355,9 @@ local DEFAULTS = {
         -- Learn next on the Level Up tab (2026-10-12): recipes not learned
         -- yet that raise the skill now, under the ones known.
         levelUpLearnNext = true,
+        -- Level Up's "Can afford" (2026-10-22): only crafts whose missing
+        -- materials the gold carried can buy. Never rename it.
+        levelUpCanAfford = false,
 
         -- Keep the game's "A buyer has been found for your auction" lines out
         -- of chat. The sale still goes into the Sales tab (Data/Mail.lua's
