@@ -756,6 +756,22 @@ the book (keeping Classic's as `classicSkill`); players' reports and a
 recipe item's tooltip still win. Never name where the data came from in
 the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 
+## Show the way across zones and the sea
+
+The owner said build it (2026-10-21, from a mockup) in every addon: with
+"Guide Me:" ticked on the Look page (`arrowRoute`, account wide, off
+unless ticked, never rename it), Learn next's Show the way to a trainer
+or vendor in another zone or across the sea lists the steps in chat
+(flights this character knows, the boats and zeppelins of its side, its
+Hearthstone, walks through the zones between) and pins the first stop
+(`LearnNext.Guide`, `Travel:Guide`). `Logic/Travel.lua`, `Data/Travel.lua`,
+`Data/TravelZones.lua` and the two `tools/make_travel*.py` are Farmer's,
+the same in every addon (a fix to one belongs in all; Farmer's
+`CLAUDE.md` has the details); Tradeskills has no arrow, so no card or map
+line, and its defaults need no `ns.TravelHost`. It reads the flights,
+crossings and Hearthstone spot the other addons saved. Tested in
+`tools/test_learnnext.lua`. Not yet seen in game.
+
 ## Road to 300
 
 The owner said build it (2026-10-20, from a mockup whose words he

@@ -1665,6 +1665,15 @@ local function Build(outer)
     roadOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(roadOpen)
 
+    -- Show the way to a trainer or vendor far away step by step
+    -- (Logic/Travel.lua, the same in every addon). Off unless ticked.
+    local guideRow = CreateRow(pages.look, 2, L["Guide Me:"],
+        L["When a trainer or vendor is in another zone or across the sea, Show the way lists the steps and pins the first stop."])
+    widgets.arrowRoute = Widgets.CreateCheckbox(guideRow, L["On"], function(checked)
+        if ns.Travel then ns.Travel:SetOn(checked) end
+    end, false)
+    widgets.arrowRoute:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Goblin Gold (asked 2026-10-17): the gold on every character of this
     -- realm and side, on a small bar, with a goal. Off unless ticked; its
     -- sound is under SOUNDS. Logic/GoldGoal.lua, UI/GoldGoal.lua. The
@@ -2334,6 +2343,7 @@ local function Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
     widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
+    widgets.arrowRoute:SetChecked(type(ns.db) == "table" and ns.db.arrowRoute == true)
     widgets.goldTracker:SetChecked(Config:Get("goldTracker") == true)
     widgets.goldCount:SetValue(Config:Get("goldTrackerCount") == "character" and "character" or "all", true)
     local goldGoal = ns.GoldGoal and ns.GoldGoal:Goal()

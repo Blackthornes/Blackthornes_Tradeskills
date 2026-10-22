@@ -1,0 +1,197 @@
+"""Writes Data/Travel.lua: the flight masters, flights, docks and rides the
+arrow plans a trip with (Logic/Travel.lua).
+
+Run from the repository root with the Forever client's game tables exported
+as CSV, one file per table, in one folder:
+
+    python tools/make_travel.py <tables> <build>
+
+It reads TaxiNodes (each flight master: its name, continent, spot and side),
+TaxiPath (the flights between them) and GameObjects (the signs on the docks
+and zeppelin towers, for where a boat or zeppelin leaves from). What it
+writes:
+
+- flights[id] = { name, side, continent, north, west, zone }: every flight
+  master of the Alliance ("A"), the Horde ("H") or both ("AH"). Rows the
+  client keeps for transports, quest flights, tests and cut content are
+  left out, and so are nodes neither side can use or
+  no flight reaches.
+- paths = { from, to, ... }: one flight a pair, between kept flight masters.
+- docks[key] = { name, continent, north, west, zone }: where each boat and
+  zeppelin leaves from, read from the sign or flight master that stands
+  there (DOCKS below names which). Never a typed spot.
+- rides = { { a, b, kind, side }, ... }: the boats and zeppelins between
+  docks, both ways.
+
+The client's world coordinates are kept as they are: north and west, in
+yards, on continent 0 (Eastern Kingdoms) or 1 (Kalimdor), as
+C_Map.GetWorldPosFromMapPos gives them.
+
+Never edit the output by hand; rerun this when the client's tables change.
+"""
+
+import csv
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_package import PRIVATE  # noqa: E402
+
+OUT = Path("Data/Travel.lua")
+
+CONTINENTS = (0, 1)
+ALLIANCE, HORDE = 1, 2
+LEFT_OUT = ("Transport,", "Generic,", "Quest Path", "zzOLD", "Programmer Isle")
+
+# Where each ride leaves from: the table row that stands there. "go" is a
+# GameObjects ID (a dock's sign), "taxi" a TaxiNodes ID (the flight master
+# or transport point at that dock, where the table has no sign).
+DOCKS = [
+    ("auberdine", "Auberdine", "Darkshore", ("go", 176364)),
+    ("menethil", "Menethil Harbor", "Wetlands", ("go", 176369)),
+    ("theramore", "Theramore", "Dustwallow Marsh", ("go", 21065)),
+    ("ratchet", "Ratchet", "The Barrens", ("sign", "Maiden's Fancy")),
+    ("bootybay", "Booty Bay", "Stranglethorn Vale", ("taxi", 18)),
+    ("ruttheran", "Rut'theran Village", "Teldrassil", ("taxi", 27)),
+    ("orgrimmar", "Orgrimmar", "Durotar", ("go", 165557)),
+    ("undercity", "Undercity", "Tirisfal Glades", ("go", 165558)),
+    ("gromgol", "Grom'gol", "Stranglethorn Vale", ("taxi", 47)),
+]
+
+RIDES = [
+    ("menethil", "theramore", "boat", "A"),
+    ("menethil", "auberdine", "boat", "A"),
+    ("auberdine", "ruttheran", "boat", "A"),
+    ("bootybay", "ratchet", "boat", "AH"),
+    ("orgrimmar", "undercity", "zeppelin", "H"),
+    ("orgrimmar", "gromgol", "zeppelin", "H"),
+    ("undercity", "gromgol", "zeppelin", "H"),
+]
+
+
+def rows(folder, name):
+    with open(Path(folder) / f"{name}.csv", newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def private(text):
+    return any(pattern.search(text) for _, pattern in PRIVATE)
+
+
+def side_of(row):
+    flags = int(row["Flags"] or 0)
+    side = ""
+    if flags & ALLIANCE or int(row["MountCreatureID_1"] or 0):
+        side += "A"
+    if flags & HORDE or int(row["MountCreatureID_0"] or 0):
+        side += "H"
+    return side
+
+
+def zone_of(name):
+    return name.split(", ", 1)[1] if ", " in name else name
+
+
+def read_flights(folder):
+    flights = {}
+    for row in rows(folder, "TaxiNodes"):
+        name = row["Name_lang"].strip()
+        continent = int(row["ContinentID"] or -1)
+        if not name or name.startswith(LEFT_OUT) or continent not in CONTINENTS:
+            continue
+        if private(name):
+            continue
+        side = side_of(row)
+        north, west = float(row["Pos_0"]), float(row["Pos_1"])
+        if not side or (north == 0 and west == 0):
+            continue
+        flights[int(row["ID"])] = (name, side, continent, round(north, 1), round(west, 1), zone_of(name))
+    return flights
+
+
+def read_paths(folder, flights):
+    paths = set()
+    for row in rows(folder, "TaxiPath"):
+        a, b = int(row["FromTaxiNode"]), int(row["ToTaxiNode"])
+        if a in flights and b in flights and a != b:
+            paths.add((a, b))
+    return sorted(paths)
+
+
+def read_docks(folder):
+    signs = {int(row["ID"]): row for row in rows(folder, "GameObjects")}
+    by_name = {}
+    for row in signs.values():
+        by_name.setdefault(row["Name_lang"].split(" - ")[0].strip(), row)
+    nodes = {int(row["ID"]): row for row in rows(folder, "TaxiNodes")}
+
+    docks = {}
+    for key, name, zone, (kind, ref) in DOCKS:
+        if kind == "go":
+            row = signs.get(ref)
+            continent = row and int(row["OwnerID"])
+        elif kind == "sign":
+            row = by_name.get(ref)
+            continent = row and int(row["OwnerID"])
+        else:
+            row = nodes.get(ref)
+            continent = row and int(row["ContinentID"])
+        if not row:
+            raise SystemExit(f"make_travel: no row for the {name} dock ({kind} {ref})")
+        docks[key] = (name, continent, round(float(row["Pos_0"]), 1), round(float(row["Pos_1"]), 1), zone)
+    return docks
+
+
+def lua_string(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def write(build, flights, paths, docks):
+    out = [
+        "-- Blackthornes Farmer -- Data/Travel.lua",
+        "-- Generated by tools/make_travel.py from the Forever client's game tables",
+        f"-- (build {build}); never edit by hand. Flight masters, flights, docks",
+        "-- and rides only, for the arrow's trips (Logic/Travel.lua).",
+        "",
+        "local _, ns = ...",
+        "",
+        "ns.TRAVEL_DATA = {",
+        f"    build = {lua_string(build)},",
+        "",
+        "    -- [node] = { name, side, continent, north, west, zone }",
+        "    flights = {",
+    ]
+    for node in sorted(flights):
+        name, side, continent, north, west, zone = flights[node]
+        out.append(f"        [{node}] = {{ {lua_string(name)}, \"{side}\", {continent}, {north}, {west}, {lua_string(zone)} }},")
+    out += ["    },", "", "    -- from, to: one flight a pair.", "    paths = {"]
+    for index in range(0, len(paths), 8):
+        chunk = paths[index:index + 8]
+        out.append("        " + " ".join(f"{a}, {b}," for a, b in chunk))
+    out += ["    },", "", "    -- [key] = { name, continent, north, west, zone }", "    docks = {"]
+    for key in sorted(docks):
+        name, continent, north, west, zone = docks[key]
+        out.append(f"        {key} = {{ {lua_string(name)}, {continent}, {north}, {west}, {lua_string(zone)} }},")
+    out += ["    },", "", "    -- { a, b, kind, side }: both ways.", "    rides = {"]
+    for a, b, kind, side in RIDES:
+        out.append(f"        {{ \"{a}\", \"{b}\", \"{kind}\", \"{side}\" }},")
+    out += ["    },", "}", ""]
+    OUT.write_text("\n".join(out), encoding="utf-8", newline="\n")
+
+
+def main(argv):
+    if len(argv) != 3:
+        raise SystemExit("usage: python tools/make_travel.py <tables> <build>")
+    folder, build = argv[1], argv[2]
+    flights = read_flights(folder)
+    paths = read_paths(folder, flights)
+    # A flight master no flight reaches is no use on a trip.
+    used = {node for pair in paths for node in pair}
+    flights = {node: row for node, row in flights.items() if node in used}
+    docks = read_docks(folder)
+    write(build, flights, paths, docks)
+    print(f"make_travel: {len(flights)} flight masters, {len(paths)} flights, {len(docks)} docks -> {OUT}")
+
+
+if __name__ == "__main__":
+    main(sys.argv)

@@ -267,6 +267,29 @@ check("its title", added and added.title, "Journey Jen (Trained Boots)")
 check("no game pin then", pinned, nil)
 TomTom = nil
 
+-- Far away with "Guide Me:" ticked (Logic/Travel.lua): the steps in chat
+-- and the pin on the first stop.
+local asked
+ns.Travel = {
+  IsOn = function() return true end,
+  Guide = function(_, target)
+    asked = target
+    return { lines = { "1. Fly to Menethil Harbor", "2. Walk to Wetlands" },
+      point = { map = 1429, x = 0.5, y = 0.45, name = "Fly to Menethil Harbor" } }
+  end,
+}
+pinned = nil
+local before = #printed
+check("guided: pinned", LN:ShowTheWay(Find(rows, "Vendor Belt")), true)
+check("the place asked for", asked and asked.zone .. " " .. asked.mx, "Wetlands 0.25")
+check("the pin is on the first stop", pinned and pinned.map .. " " .. pinned.y, "1429 0.45")
+check("chat says the way", printed[before + 1], "The way to Alli (Pattern: Belt), with a pin on the first stop:")
+ns.Travel.IsOn = function() return false end
+pinned = nil
+LN:ShowTheWay(Find(rows, "Vendor Belt"))
+check("off: the place itself", pinned and pinned.map, 1437)
+ns.Travel = nil
+
 print("\nwhere for Equipment, by recipe ID")
 local where = LN:WhereFor(3)
 check("a vendor's place", where and where.kind .. " " .. where.name, "vendor Alli")
