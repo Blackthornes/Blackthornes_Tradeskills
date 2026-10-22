@@ -3,7 +3,7 @@
 -- Asked 2026-09-29: "Can we setup a way to Disenchant items in your bag
 -- under the Disenchant tab?" What this pins down:
 --   * the tab still opens on the auction house deals, as before;
---   * "Items in my bags" ticked lists the bag rows with their own columns;
+--   * the My Bags page lists the bag rows with their own columns;
 --   * the top row is picked by itself and the Disenchant button is armed on
 --     it, and the next row takes over once that item has gone;
 --   * the button is not armed when the item cannot be disenchanted now, and
@@ -82,9 +82,13 @@ ns.Theme = {
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
 }
 
-local checkboxes, dropdown, buttons = {}, nil, {}
+local checkboxes, dropdown, buttons, pages = {}, nil, {}, nil
 
 ns.Widgets = {
+    CreateTabStrip = function(_, tabs, onSelect)
+        pages = Shown({ tabs = tabs, onSelect = onSelect, Select = function(self, key) self.selected = key end })
+        return pages
+    end,
     CreateSearchBox = function() return Stub() end,
     CreateDropdown = function(_, options, onSelect)
         dropdown = { options = options, select = onSelect }
@@ -212,10 +216,10 @@ list.opts.onClick(auctionRows[1], 1, "LeftButton")
 check("picking a deal offers the search", search.shown and not disenchant.shown)
 
 print("\nthe bags view")
-local bagsBox = checkboxes["Items in my bags"]
-check("there is a tick box for it", bagsBox ~= nil)
+check("there is a page for it", pages ~= nil and pages.tabs[2].key == "bag"
+    and pages.tabs[2].text == "My Bags")
 
-bagsBox.onToggle(true)
+pages.onSelect("bag")
 check("it lists what is in the bags", list.data == bagRows)
 check("with its own tick box", checkboxes["Only where disenchanting pays more"].shown
     and not checkboxes["Only deals over my minimums"].shown)
@@ -275,7 +279,7 @@ check("it cheers the finish", Showing("Done. You disenchanted 1 item this sessio
 check("no button without an item", not disenchant.shown)
 
 print("\nback to the auction house")
-bagsBox.onToggle(false)
+pages.onSelect("auction")
 check("the deals come back", list.data == auctionRows)
 check("and the Disenchant button goes", not disenchant.shown)
 

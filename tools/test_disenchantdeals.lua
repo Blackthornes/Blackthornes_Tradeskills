@@ -426,6 +426,7 @@ ns.Theme = {
 
 local checkboxes, lists = {}, {}
 ns.Widgets = {
+    CreateTabStrip = function() return Stub() end,
     CreateSearchBox = function() return Stub() end,
     CreateDropdown = function() return Stub() end,
     CreateCheckbox = function(_, text, onToggle) local box = Stub({ onToggle = onToggle }); checkboxes[text] = box; return box end,

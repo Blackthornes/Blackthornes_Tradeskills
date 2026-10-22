@@ -1384,15 +1384,36 @@ local function Build(container)
         for _, view in pairs(VIEWS) do Widgets.FitColumns(view.columns) end
     end
 
+    local function SwitchTo(name)
+        if name == "material" and not state.material and ns.MaterialFinder then
+            state.material = ns.MaterialFinder:FirstPick()
+        end
+        state.view = name
+        state.selected = nil
+        widgets.view:Select(name)
+        ApplyView()
+        widgets.list:ScrollToTop()
+        Refresh()
+    end
+
+    -- The three lists are pages along the top (a player asked, the owner
+    -- said yes from a mockup, 2026-10-22), so the one showing is always
+    -- named; tick boxes switched them before.
+    local view = Widgets.CreateTabStrip(container, {
+        { key = "auction",  text = L["Auction House"] },
+        { key = "bag",      text = L["My Bags"] },
+        { key = "material", text = L["Find a Material"] },
+    }, SwitchTo)
+    view:SetPoint("TOPLEFT", 8, -8)
+    view:Select(state.view)
+    widgets.view = view
+
     local toolbar = CreateFrame("Frame", nil, container)
-    toolbar:SetPoint("TOPLEFT", 8, -8)
-    toolbar:SetPoint("TOPRIGHT", -8, -8)
+    toolbar:SetPoint("TOPLEFT", view, "BOTTOMLEFT", 0, -6)
+    toolbar:SetPoint("RIGHT", container, "RIGHT", -8, 0)
     toolbar:SetHeight(24)
 
-    -- Search first, then the tick boxes, as on every tab
-    -- (2026-10-06). The view stays a tick box rather than a menu (a player's
-    -- request, 2026-10-02): one click between the auction house deals and
-    -- disenchanting from the bags.
+    -- Search first, then the tick boxes, as on every tab (2026-10-06).
     local search = Widgets.CreateSearchBox(toolbar, L["Search items"], function(text)
         state.search = text or ""
         Refresh()
@@ -1400,41 +1421,13 @@ local function Build(container)
     search:SetPoint("LEFT", 0, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
 
-    local function SwitchTo(name)
-        state.view = name
-        state.selected = nil
-        widgets.view:SetChecked(name == "bag")
-        widgets.find:SetChecked(name == "material")
-        ApplyView()
-        widgets.list:ScrollToTop()
-        Refresh()
-    end
-
-    local view = Widgets.CreateCheckbox(toolbar, L["Items in my bags"], function(checked)
-        SwitchTo(checked and "bag" or "auction")
-    end, state.view == "bag")
-    view:SetPoint("LEFT", search, "RIGHT", 12, 0)
-    widgets.view = view
-
-    -- Find a material (2026-10-16): pick a material and see every way to get
-    -- one. At the toolbar's right end, so the other tick boxes keep their
-    -- places.
-    local find = Widgets.CreateCheckbox(toolbar, L["Find a material"], function(checked)
-        if checked and not state.material and ns.MaterialFinder then
-            state.material = ns.MaterialFinder:FirstPick()
-        end
-        SwitchTo(checked and "material" or "auction")
-    end, state.view == "material")
-    find:SetPoint("RIGHT", toolbar, "RIGHT", 0, 0)
-    widgets.find = find
-
     local material = Widgets.CreateDropdown(toolbar, {}, function(value)
         state.material = value
         state.selected = nil
         widgets.list:ScrollToTop()
         Refresh()
     end, { width = 200 })
-    material:SetPoint("LEFT", view, "RIGHT", 12, 0)
+    material:SetPoint("LEFT", search, "RIGHT", 12, 0)
     material:Hide()
     widgets.material = material
 
@@ -1442,7 +1435,7 @@ local function Build(container)
         state.dealsOnly = checked
         Refresh()
     end, state.dealsOnly)
-    dealsOnly:SetPoint("LEFT", view, "RIGHT", 12, 0)
+    dealsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.dealsOnly = dealsOnly
 
     local hideTooHigh = Widgets.CreateCheckbox(toolbar, L["Only ones I can disenchant"], function(checked)
@@ -1458,7 +1451,7 @@ local function Build(container)
         state.beatsOnly = checked
         Refresh()
     end, state.beatsOnly)
-    beatsOnly:SetPoint("LEFT", view, "RIGHT", 12, 0)
+    beatsOnly:SetPoint("LEFT", search, "RIGHT", 12, 0)
     widgets.beatsOnly = beatsOnly
 
     -- Column headings
@@ -1570,7 +1563,7 @@ local function Build(container)
     countLabel:SetWordWrap(false)
 
     local detail = BuildDetail(container)
-    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
+    detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
