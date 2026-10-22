@@ -14,6 +14,14 @@
 -- `vendorSpots[npc ID] = { name, mapID, x, y, side, items, at }` (never
 -- rename it). A learned vendor takes the place of the shipped one, so a
 -- Forever vendor that moved, or one Forever added, shows where it is now.
+-- Learn next's Show the way reads the same spots (VendorPins:SeenAt), so a
+-- vendor that sells only recipes is kept too, with no materials. Between
+-- the two sits Data/ForeverVendorSpots.lua (the owner's spots, folded in at
+-- a release by tools/forever_vendor_spots.py): what the game showed always
+-- wins over Classic's spot (the owner, 2026-10-22). Trainers the same way:
+-- each trainer window keeps where it stands (VendorPins:LearnTrainer) in
+-- `trainerSpots[npc ID] = { name, mapID, x, y, side, at }` (never rename
+-- it), over the shipped `ns.FOREVER_TRAINER_SPOTS`.
 -- One whose stock runs out is pinned only while the auction house has
 -- none (limited-stock items take the auction price when listed). Only
 -- vendors of the player's side, or of neither.
@@ -70,6 +78,32 @@ function VendorPins:Store()
     return ns.db.vendorSpots
 end
 
+--- The trainers learned, account wide.
+function VendorPins:TrainerStore()
+    if not ns.db then return {} end
+    if type(ns.db.trainerSpots) ~= "table" then ns.db.trainerSpots = {} end
+    return ns.db.trainerSpots
+end
+
+--- Every vendor (or, with kind "trainer", every trainer) the game has
+--- shown: the shipped Forever spots (Data/ForeverVendorSpots.lua) with this
+--- account's own over them.
+--- { [npc ID] = { name, mapID, x, y, side, items } }, read only.
+function VendorPins:Known(kind)
+    local trainer = kind == "trainer"
+    local known = {}
+    for npcID, row in pairs((trainer and ns.FOREVER_TRAINER_SPOTS or ns.FOREVER_VENDOR_SPOTS) or {}) do
+        if type(row) == "table" then
+            known[npcID] = { name = row[1], mapID = row[2], x = row[3], y = row[4],
+                side = row[5], items = type(row[6]) == "table" and row[6] or {}, at = 0 }
+        end
+    end
+    for npcID, record in pairs(trainer and self:TrainerStore() or self:Store()) do
+        if type(record) == "table" then known[npcID] = record end
+    end
+    return known
+end
+
 --- "A", "H", or "" for a vendor of neither side.
 function VendorPins.Side(faction)
     if faction == "Alliance" then return "A" end
@@ -113,7 +147,7 @@ function VendorPins:Learn(items)
     local mapID, x, y = PlayerSpot()
     if not mapID then return false end
 
-    local sells, count = {}, 0
+    local sells, count, recipes = {}, 0, false
     for itemID, item in pairs(items) do
         if count >= self.MOST_ITEMS then break end
         if type(item) == "table" and not item.extendedCost and (item.price or 0) > 0 then
@@ -121,6 +155,7 @@ function VendorPins:Learn(items)
             if not material and type(_G.C_Item) == "table" then
                 local classID = select(6, Read(_G.C_Item.GetItemInfoInstant, itemID))
                 material = classID == 5 or classID == 7
+                recipes = recipes or classID == 9
             end
             if material then
                 sells[itemID] = (item.numAvailable or -1) < 0
@@ -128,7 +163,8 @@ function VendorPins:Learn(items)
             end
         end
     end
-    if count == 0 then return false end
+    -- A vendor of recipes alone is kept for where it stands (Show the way).
+    if count == 0 and not recipes then return false end
 
     local store = self:Store()
     local was = store[npcID]
@@ -151,6 +187,49 @@ function VendorPins:Learn(items)
 
     self:Trim(store)
     return true
+end
+
+--- Where the game saw a vendor (or, with kind "trainer", a trainer) stand,
+--- by the name and zone the shipped data gives it: { mapID, x, y } from the
+--- last time its window was opened, or nil. On the zone's own map when that
+--- map is known, so a namesake elsewhere is never taken for it.
+function VendorPins:SeenAt(name, zone, kind)
+    if type(name) ~= "string" or name == "" then return nil end
+    local want = name:lower()
+    local zoneMap = zone and zone ~= "" and self:MapOf(zone) or nil
+    local best
+    for _, record in pairs(self:Known(kind)) do
+        if type(record) == "table" and type(record.name) == "string" and record.name:lower() == want
+            and record.mapID and record.x and record.y
+            and (not zoneMap or record.mapID == zoneMap)
+            and (not best or (record.at or 0) > (best.at or 0)) then
+            best = record
+        end
+    end
+    if not best then return nil end
+    return { mapID = best.mapID, x = best.x, y = best.y }
+end
+
+--- Kept from a trainer window: where the trainer stands, so Show the way
+--- goes where the game showed it rather than Classic's spot.
+-- @return true when kept
+function VendorPins:LearnTrainer()
+    local npcID = self.NpcID(Read(_G.UnitGUID, "npc"))
+    local name = Plain(Read(_G.UnitName, "npc"))
+    if not (npcID and name) then return false end
+    local mapID, x, y = PlayerSpot()
+    if not mapID then return false end
+    local store = self:TrainerStore()
+    store[npcID] = { name = name, mapID = mapID, x = x, y = y,
+        side = self.Side(Plain(Read(_G.UnitFactionGroup, "npc"))), at = time() }
+    self:Trim(store)
+    return true
+end
+
+function VendorPins:OnEnable()
+    if ns.RegisterEvent then
+        ns.RegisterEvent(self, "TRAINER_SHOW", function() VendorPins:LearnTrainer() end)
+    end
 end
 
 --- Let the oldest seen go once there are more than MOST_VENDORS.
@@ -232,7 +311,7 @@ function VendorPins:For(mapID, wanted)
         vendors[#vendors + 1] = entry
     end
 
-    local store = self:Store()
+    local store = self:Known()
     for npcID, record in pairs(store) do
         if type(record) == "table" and record.mapID == mapID and record.x and record.y
             and Allowed(record.side, mine) and type(record.items) == "table" then
