@@ -303,19 +303,34 @@ local function WhatFor(vendor)
     return vendor.name
 end
 
---- Put TomTom's arrow on a vendor when TomTom is installed, else (or when
---- TomTom says no) the game's map pin, and say which in chat. A click must
---- never go by with nothing to show for it.
+--- Aim the arrow at a vendor, else put TomTom's arrow on it when TomTom is
+--- installed, else (or when TomTom says no) the game's map pin, and say
+--- which in chat. A click must never go by with nothing to show for it.
 -- @return true, or false and why
 function VendorPins:ShowTheWay(vendor)
     local waypoints = ns.Waypoints
     if not (waypoints and vendor) then return false, "nospot" end
     local place = { mapID = vendor.mapID, x = vendor.x, y = vendor.y }
+    local who, what, zone = vendor.name or L["them"], WhatFor(vendor), VendorPins.ZoneName(vendor)
+
+    -- The arrow first (Logic/WayArrow.lua), as Show the way on the Level Up
+    -- tab: TomTom's arrow takes over from it when "Use TomTom:" is ticked.
+    local arrow = ns.WayArrow
+    if arrow and arrow.AimAt then
+        local aimed, took = pcall(arrow.AimAt, arrow, { mapID = vendor.mapID, zone = zone,
+            x = vendor.x, y = vendor.y }, ("%s (%s)"):format(who, what))
+        if aimed and took then
+            self.pinned = vendor.npcID
+            self.version = self.version + 1
+            ns.Print(L.Format("The arrow shows the way to %s (%s).", who, what))
+            return true
+        end
+    end
+
     local ok, why
     if waypoints:HasTomTom() then ok, why = waypoints:TomTom(place, vendor.name) end
     if not ok then ok, why = waypoints:Pin(place) end
 
-    local who, what, zone = vendor.name or L["them"], WhatFor(vendor), VendorPins.ZoneName(vendor)
     if ok then
         self.pinned = vendor.npcID
         self.version = self.version + 1

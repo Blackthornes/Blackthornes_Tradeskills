@@ -267,6 +267,51 @@ check("its title", added and added.title, "Journey Jen (Trained Boots)")
 check("no game pin then", pinned, nil)
 TomTom = nil
 
+-- Far away with "Guide Me:" ticked (Logic/Travel.lua): the steps in chat
+-- and the pin on the first stop.
+local asked
+ns.Travel = {
+  IsOn = function() return true end,
+  Guide = function(_, target)
+    asked = target
+    return { lines = { "1. Fly to Menethil Harbor", "2. Walk to Wetlands" },
+      point = { map = 1429, x = 0.5, y = 0.45, name = "Fly to Menethil Harbor" } }
+  end,
+}
+pinned = nil
+local before = #printed
+check("guided: pinned", LN:ShowTheWay(Find(rows, "Vendor Belt")), true)
+check("the place asked for", asked and asked.zone .. " " .. asked.mx, "Wetlands 0.25")
+check("the pin is on the first stop", pinned and pinned.map .. " " .. pinned.y, "1429 0.45")
+check("chat says the way", printed[before + 1], "The way to Alli (Pattern: Belt), with a pin on the first stop:")
+ns.Travel.IsOn = function() return false end
+pinned = nil
+LN:ShowTheWay(Find(rows, "Vendor Belt"))
+check("off: the place itself", pinned and pinned.map, 1437)
+ns.Travel = nil
+
+print("\nthe arrow")
+-- Logic/WayArrow.lua, the same dial as the other addons': Show the way aims
+-- it, with no map pin behind it.
+ns.charDb = {}
+assert(loadfile(lfs_cwd .. "/Logic/WayArrow.lua"))("Blackthornes_TS", ns)
+pinned = nil
+check("Show the way aims the arrow", LN:ShowTheWay(Find(rows, "Vendor Belt")), true)
+local aimedAt = ns.charDb.wayArrowPlace
+check("on the zone's map", aimedAt and aimedAt.map, 1437)
+check("at the spot", aimedAt and aimedAt.x, 0.25)
+check("named for who and what", aimedAt and aimedAt.name, "Alli (Pattern: Belt)")
+check("no map pin behind it", pinned, nil)
+check("chat says so", printed[#printed], "The arrow shows the way to Alli (Pattern: Belt).")
+ns.WayArrow:Clear()
+check("its close puts it away", ns.charDb.wayArrowPlace, nil)
+-- A zone the map can't be found for: the pin as before.
+local findMap = ns.Waypoints.MapFor
+ns.Waypoints.MapFor = function() return nil end
+check("no map: the arrow can't take it", ns.WayArrow:AimAt({ zone = "Nowhere", x = 10, y = 10 }, "x"), false)
+ns.Waypoints.MapFor = findMap
+ns.WayArrow, ns.charDb = nil, nil
+
 print("\nwhere for Equipment, by recipe ID")
 local where = LN:WhereFor(3)
 check("a vendor's place", where and where.kind .. " " .. where.name, "vendor Alli")
