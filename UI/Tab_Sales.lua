@@ -474,6 +474,14 @@ local function BuildDetail(parent)
     Theme.AccentStripe(detail, 2, 0.6)
     detail:SetWidth(DETAIL_WIDTH)
 
+    -- The item's charts on the Stats tab (UI/Tab_Stats.lua), as the Prices
+    -- tab has it; shown only while one item is picked.
+    detail.stats = Widgets.CreateButton(detail, L["Stats"], function()
+        if detail.statsItem and ns.StatsUI then ns.StatsUI:ShowItem(detail.statsItem) end
+    end, { width = 50, height = 20, tooltip = L["See this item's charts on the Stats tab"] })
+    detail.stats:SetPoint("TOPRIGHT", -8, -9)
+    detail.stats:Hide()
+
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetPoint("TOPRIGHT", -12, -12)
@@ -481,7 +489,7 @@ local function BuildDetail(parent)
 
     local subtitle = Theme.CreateLabel(detail, "small", "muted")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    subtitle:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -4)
+    subtitle:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
     detail.subtitle = subtitle
 
     detail.lines = {}
@@ -572,6 +580,19 @@ local function AddProfitLines(Add, subject)
     end
 end
 
+--- The Stats button for one item, and room for it beside the title.
+local function ShowStatsButton(detail, itemID)
+    detail.statsItem = itemID
+    detail.stats:SetShown(itemID ~= nil)
+    detail.title:ClearAllPoints()
+    detail.title:SetPoint("TOPLEFT", 12, -12)
+    if itemID then
+        detail.title:SetPoint("TOPRIGHT", detail.stats, "TOPLEFT", -6, -3)
+    else
+        detail.title:SetPoint("TOPRIGHT", -12, -12)
+    end
+end
+
 local function UpdateDetail(item, totals)
     local detail = widgets.detail
     local lines = {}
@@ -579,6 +600,8 @@ local function UpdateDetail(item, totals)
     local function Add(label, value, color)
         lines[#lines + 1] = { label, value, color }
     end
+
+    ShowStatsButton(detail, item and item.itemID)
 
     if item then
         detail.title:SetText(ItemLabel(item.itemID, item.name))
@@ -919,6 +942,7 @@ local function RefreshMethods()
     lines[#lines + 1] = { L["Taken in"], Util.FormatMoney(total.income), "profit" }
     lines[#lines + 1] = { L["Cost"], Util.FormatMoney(total.cost), total.cost > 0 and "loss" or "muted" }
 
+    ShowStatsButton(detail, nil)
     detail.title:SetText(L["Profit by method"])
     detail.subtitle:SetText(PeriodText())
     SetLines(detail, lines)

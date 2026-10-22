@@ -300,5 +300,14 @@ do
     check("hover: nothing for nothing", #ns.StatsUI.MarketLines({}), 0)
 end
 
+-- Every card says what it shows on hover.
+do
+    local missing = 0
+    for _, card in ipairs(ns.StatsUI.CARDS or {}) do
+        if type(card.hint) ~= "string" or card.hint == "" then missing = missing + 1 end
+    end
+    check("every card has a hover", #(ns.StatsUI.CARDS or {}) > 0 and missing, 0)
+end
+
 print(("%d passed, %d failed"):format(passed, failed))
 if failed > 0 then error(("%d item stats check(s) failed"):format(failed)) end
