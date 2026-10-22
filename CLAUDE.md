@@ -483,6 +483,19 @@ reads them. While Butler is loaded and its window opens at vendors (its
 over the vendor window hides (`UI.ButlerBuysHere`, the owner 2026-10-18):
 Butler's Buy row does the buying. Tested in `tools/test_merchantbutton.lua`.
 
+Butler's tooltip line "Vendors sell it for 25c" (a player asked, the
+owner said build it, 2026-10-22) asks what a vendor charges for one,
+inside a pcall, read only:
+
+```lua
+_G.BlackthornesTS.Butler:VendorPrice(itemID)   -- copper, or nil
+```
+
+`Vendor:GetUnitPrice`'s answer (a price seen at a merchant, else
+`Data/VendorPrices.lua`); nil for anything no vendor is known to sell.
+Tested in `tools/test_butlervendor.lua`. Keep it stable; Butler's
+`Logic/VendorPrices.lua` reads it.
+
 Butler's "For your quests" line (a player asked 2026-10-14, the owner said
 build it: buy what open quests need) has a Search button at the auction
 house, calling, inside a pcall:

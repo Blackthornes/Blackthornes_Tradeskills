@@ -188,6 +188,15 @@
 -- button's click (Vendor:BuyNeeded): the same checks, the same one stack a
 -- step, and it says in chat why when it buys nothing.
 --
+-- Butler's tooltip line "Vendors sell it for 25c" (2026-10-22, a player
+-- asked for what an NPC vendor charges, the owner said build it) asks:
+--
+--   _G.BlackthornesTS.Butler:VendorPrice(itemID)   -- copper for one, or nil
+--
+-- Vendor:GetUnitPrice's answer: a price seen at a merchant, else the shipped
+-- Classic price for materials vendors keep in stock; nil for anything no
+-- vendor is known to sell or that costs tokens. Never raises, writes nothing.
+--
 -- Butler's "For your quests" line (2026-10-14, a player asked to buy what
 -- open quests need) has a Search button at the auction house:
 --
@@ -1871,6 +1880,14 @@ function Butler:BuyFromVendor()
     end)
     if not ok then return false, L["Tradeskills could not buy from this vendor"] end
     return started == true, why
+end
+
+--- What a vendor charges for one, for Butler's tooltip line. Copper, or
+--- nil when no vendor is known to sell it. Never raises, writes nothing.
+function Butler:VendorPrice(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return nil end
+    return VendorPrice(itemID)
 end
 
 --- Look up items on the auction house, from Butler's Search click. Every

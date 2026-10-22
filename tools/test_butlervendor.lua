@@ -82,6 +82,17 @@ ns.Vendor.BuyNeeded = function() error("boom") end
 ok, why = Butler:BuyFromVendor()
 check("BuyFromVendor never raises", ok, false)
 
+-- VendorPrice: Butler's tooltip line asks what a vendor charges for one.
+ns.Vendor.GetUnitPrice = function(_, itemID)
+  if itemID == 2320 then return 10 end
+  if itemID == 666 then error("boom") end
+  return nil
+end
+check("a vendor's price for one", Butler:VendorPrice(2320), 10)
+check("an item no vendor sells has none", Butler:VendorPrice(4306), nil)
+check("not an item, no price", Butler:VendorPrice("nope"), nil)
+check("VendorPrice never raises", Butler:VendorPrice(666), nil)
+
 print("")
 if failures > 0 then
   error(string.format("%d Butler vendor check(s) failed", failures))
