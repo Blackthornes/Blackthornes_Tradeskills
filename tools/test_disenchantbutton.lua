@@ -230,7 +230,7 @@ ns.Theme = {
     SetMoneyText = function(label, copper) label:SetText(tostring(copper or 0)) end,
 }
 
-local made = { buttons = {}, dropdowns = {}, checkboxes = {}, lists = {} }
+local made = { buttons = {}, dropdowns = {}, checkboxes = {}, lists = {}, strips = {} }
 ns.Widgets = {
     CreateButton = function(parent, text, onClick)
         local button = Frame("Button", parent)
@@ -244,6 +244,13 @@ ns.Widgets = {
         local box = Frame("Frame", parent)
         box.editBox = Frame("EditBox", box)
         return box
+    end,
+    CreateTabStrip = function(parent, tabs, onSelect)
+        local strip = Frame("Frame", parent)
+        strip.tabs, strip.onSelect = tabs, onSelect
+        strip.Select = function(self, key) self.selected = key end
+        made.strips[#made.strips + 1] = strip
+        return strip
     end,
     CreateCheckbox = function(parent, text, onClick)
         local box = Frame("CheckButton", parent)
@@ -379,14 +386,14 @@ local en = {
 }
 local de = {
     button = Under("disenchanting", made.buttons, Labelled("Disenchant")),
-    -- A tick box since 2026-10-02; select() keeps the steps below readable.
-    view = Under("disenchanting", made.checkboxes, Labelled("Items in my bags")),
+    -- Pages since 2026-10-22; select() keeps the steps below readable.
+    view = Under("disenchanting", made.strips),
     list = Under("disenchanting", made.lists),
     hideTooHigh = Under("disenchanting", made.checkboxes, Labelled("Only ones I can disenchant")),
     detail = Under("disenchanting", panels),
 }
 
-de.view.select = function(value) de.view.onClick(value == "bag") end
+de.view.select = function(value) de.view.onSelect(value) end
 
 local checks = 0
 local function check(label, condition)
