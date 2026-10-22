@@ -242,6 +242,12 @@ function MethodProfit.Range(period, fromKey, toKey, now)
         return GoldLog.DayStart(now), now + 1
     elseif period == "month" then
         return now - 30 * DAY, now + 1
+    elseif period == "quarter" then
+        return now - 91 * DAY, now + 1
+    elseif period == "year" then
+        return now - 365 * DAY, now + 1
+    elseif period == "all" then
+        return 0, now + 1
     elseif period == "pick" and fromKey and toKey then
         local low, high = math.min(fromKey, toKey), math.max(fromKey, toKey)
         return GoldLog.KeyStart(low), GoldLog.DayStart(GoldLog.KeyStart(high), 1)

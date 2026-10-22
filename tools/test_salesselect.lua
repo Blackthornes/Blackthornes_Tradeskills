@@ -63,6 +63,7 @@ local listOpts, listData
 ns.Widgets = {
     CreateSearchBox = function() return Frame() end,
     CreateDropdown = function() return Frame() end,
+    CreateTabStrip = function() local strip = Frame() strip.Select = function() end return strip end,
     CreateScrollList = function(_, opts)
         listOpts = opts
         local list = Frame()
