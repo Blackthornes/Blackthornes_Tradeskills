@@ -9,8 +9,9 @@
 -- Logic/RecipeBook.lua); a recipe still a few points out of reach is listed
 -- after the rest, "At 120". The trainer or vendor picked is on the player's
 -- side, in the zone they are in when one is, else in a city of theirs.
--- Show the way puts the game's own map pin on them, or TomTom's arrow when
--- TomTom is installed (Logic/Waypoints.lua).
+-- Show the way aims the arrow at them (Logic/WayArrow.lua), or, where the
+-- arrow can't find the map, puts the game's own map pin on them, or
+-- TomTom's arrow when TomTom is installed (Logic/Waypoints.lua).
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -305,8 +306,8 @@ function LearnNext.Guide(place, who)
     return guide
 end
 
---- Show the way: the map pin (or TomTom's arrow) on the trainer or vendor,
---- and a line in chat that says where.
+--- Show the way: the arrow on the trainer or vendor, else the map pin (or
+--- TomTom's arrow), and a line in chat that says where.
 -- @return true when a pin or waypoint was set
 function LearnNext:ShowTheWay(row)
     local place = row and row.place
@@ -316,6 +317,18 @@ function LearnNext:ShowTheWay(row)
 
     local ok, why
     local Waypoints = ns.Waypoints
+
+    -- The arrow (Logic/WayArrow.lua), the same as the other addons': it
+    -- leads the way step by step with "Guide Me:" ticked, and hands off to
+    -- TomTom's arrow when "Use TomTom:" is.
+    local arrow = ns.WayArrow
+    if arrow and arrow.AimAt then
+        local aimed, took = pcall(arrow.AimAt, arrow, place, ("%s (%s)"):format(who, what))
+        if aimed and took then
+            ns.Print(L.Format("The arrow shows the way to %s (%s).", who, what))
+            return true
+        end
+    end
 
     -- In another zone or across the sea, with "Guide Me:" ticked: the steps
     -- in chat, and the pin on the first stop (Logic/Travel.lua).

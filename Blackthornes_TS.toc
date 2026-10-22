@@ -58,6 +58,8 @@ Logic\LevelUp.lua
 Logic\RecipeBook.lua
 Logic\Waypoints.lua
 Logic\Travel.lua
+Logic\TomTom.lua
+Logic\WayArrow.lua
 Logic\VendorPins.lua
 Logic\LearnNext.lua
 Logic\RoadPlan.lua
@@ -134,6 +136,9 @@ UI\RecipeValue.lua
 UI\ItemTooltip.lua
 UI\EnchantTooltip.lua
 UI\VendorPins.lua
+UI\WayArrow.lua
+UI\TravelCard.lua
+UI\TravelMap.lua
 UI\MailReport.lua
 UI\GoldGoal.lua
 UI\QueueMailPanel.lua

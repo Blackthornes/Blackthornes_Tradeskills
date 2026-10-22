@@ -1665,10 +1665,20 @@ local function Build(outer)
     roadOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(roadOpen)
 
+    -- Show the way aims the arrow (Logic/WayArrow.lua); with TomTom
+    -- installed, its arrow instead while this is ticked (Logic/TomTom.lua,
+    -- the same file in every addon with an arrow). On unless unticked.
+    local tomtomRow = CreateRow(pages.look, 2, L["Use TomTom:"],
+        L["With TomTom installed, its arrow shows the way instead."])
+    widgets.useTomTom = Widgets.CreateCheckbox(tomtomRow, L["On"], function(checked)
+        if ns.TomTom then ns.TomTom:SetOn(checked) end
+    end, true)
+    widgets.useTomTom:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Show the way to a trainer or vendor far away step by step
     -- (Logic/Travel.lua, the same in every addon). Off unless ticked.
     local guideRow = CreateRow(pages.look, 2, L["Guide Me:"],
-        L["When a trainer or vendor is in another zone or across the sea, Show the way lists the steps and pins the first stop."])
+        L["When the place is in another zone or across the sea, the arrow leads you there step by step."])
     widgets.arrowRoute = Widgets.CreateCheckbox(guideRow, L["On"], function(checked)
         if ns.Travel then ns.Travel:SetOn(checked) end
     end, false)
@@ -2344,6 +2354,7 @@ local function Refresh()
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
     widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
     widgets.arrowRoute:SetChecked(type(ns.db) == "table" and ns.db.arrowRoute == true)
+    widgets.useTomTom:SetChecked(type(ns.db) ~= "table" or ns.db.useTomTom ~= false)
     widgets.goldTracker:SetChecked(Config:Get("goldTracker") == true)
     widgets.goldCount:SetValue(Config:Get("goldTrackerCount") == "character" and "character" or "all", true)
     local goldGoal = ns.GoldGoal and ns.GoldGoal:Goal()
