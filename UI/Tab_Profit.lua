@@ -319,6 +319,25 @@ local function AddPerDayLine(analysis)
     GameTooltip:Show()
 end
 
+--- What the STOCK column's "0/3" means (a player asked, the owner said yes,
+--- 2026-10-22): how many you have, and how many you keep and why.
+local function StockLine(analysis)
+    local stock = analysis.stock or 0
+    if analysis.postLimit and analysis.postLimit > 0 then
+        return L.Format("You have %d. You keep %d (Keep in Stock).", stock, analysis.postLimit)
+    elseif analysis.learnedLimit then
+        return L.Format("You have %d. You keep %d (learned from your sales).", stock, analysis.learnedLimit)
+    end
+end
+
+local function AddStockLine(analysis)
+    local text = StockLine(analysis)
+    if not text or not GameTooltip:IsShown() then return end
+    local r, g, b = 0.7, 0.7, 0.7
+    GameTooltip:AddLine(text, r, g, b, true)
+    GameTooltip:Show()
+end
+
 --- Say so on the row's tooltip when disenchanting pays more than selling.
 local function AddDisenchantLine(analysis)
     if not analysis.disenchantBeatsSale or not GameTooltip:IsShown() then return end
@@ -841,7 +860,8 @@ local function BuildDetail(parent)
         -- already run by now and keeps the box as it was for the same craft.
         local fresh = ns.Profit:Analyse(recipeID, nil, Method())
         if fresh then
-            quantity:SetText(tostring(ns.Profit.MaxCrafts(fresh.craftableNow, fresh.roomInCrafts)))
+            quantity:SetText(tostring(ns.Profit.MaxCrafts(fresh.craftableNow, fresh.roomInCrafts,
+                fresh.learnedRoomInCrafts)))
         end
     end, { width = 100, primary = true, height = 24 })
     GrowToFit(addButton)
@@ -855,7 +875,7 @@ local function BuildDetail(parent)
         -- Room is counted in items and this box is counted in crafts, so it
         -- is the converted figure that may be compared against a craft count.
         local most = ns.Profit.MaxCrafts(state.selected.craftableNow,
-            state.selected.roomInCrafts)
+            state.selected.roomInCrafts, state.selected.learnedRoomInCrafts)
         if most == 0 and state.selected.waitingForLow then
             ns.Print(L.Format("no more %s yet: Restock When Down To is on, so more are made once you are down to %d",
                 state.selected.name or L["of that craft"], state.selected.restockAt or 0))
@@ -1505,7 +1525,8 @@ function UpdateDetail(analysis)
     -- Crafts, not items, and what Max would write: 0 once the limit is
     -- reached. Floored at 1, the box said 1 at "room for 0" and Add queued
     -- one past the limit.
-    local suggested = ns.Profit.MaxCrafts(analysis.craftableNow, analysis.roomInCrafts)
+    local suggested = ns.Profit.MaxCrafts(analysis.craftableNow, analysis.roomInCrafts,
+        analysis.learnedRoomInCrafts)
     if newCraft then detail.quantity:SetText(tostring(suggested)) end
 
     if analysis.atPostLimit then
@@ -1975,6 +1996,7 @@ local function BuildCrafts(container)
             if not AddWaysLines(analysis) then AddDisenchantLine(analysis) end
             AddTimeLines(analysis)
             AddPerDayLine(analysis)
+            AddStockLine(analysis)
             AddOwnerLine(analysis)
         end,
 
@@ -2131,6 +2153,7 @@ end
 --- Recipes to learn, optionally on one profession.
 ns.ProfitTab = {
     ShowView = ShowView,
+    StockLine = StockLine,
     ShowRecipesToLearn = function(profession)
         if not (ns.UI and ns.UI.Show) then
             ns.Print(L["the window is not ready yet, try again in a moment"])
