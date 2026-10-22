@@ -190,11 +190,59 @@ function LevelUp.Method()
     return "best"
 end
 
+--------------------------------------------------------------------------------
+-- Gold on hand (a player asked, the owner said build it, 2026-10-22)
+--------------------------------------------------------------------------------
+
+--- What buying the materials one craft is short of would cost, bank
+--- counted as owned: 0 when the bags and bank hold them all, nil when a
+--- missing one has no price.
+function LevelUp.ToBuy(costDetail)
+    if type(costDetail) ~= "table" then return nil end
+    local total = 0
+    for _, reagent in ipairs(costDetail.reagents or {}) do
+        local short = reagent.shortfall or 0
+        if short > 0 then
+            if not reagent.unitCost then return nil end
+            total = total + reagent.unitCost * short
+        end
+    end
+    return math.floor(total + 0.5)
+end
+
+--- The gold the character playing carries, in copper; nil when the client
+--- will not say.
+function LevelUp.Purse()
+    if type(GetMoney) ~= "function" then return nil end
+    local ok, money = pcall(GetMoney)
+    return ok and type(money) == "number" and money or nil
+end
+
+--- How much short the purse is of buying what one craft is missing.
+-- @return need, have when the missing materials cost more than is carried;
+--   nil otherwise (or when either is not known)
+function LevelUp:ShortOfGold(row, purse)
+    local need = row and row.toBuy
+    purse = purse or LevelUp.Purse()
+    if type(need) ~= "number" or type(purse) ~= "number" then return nil end
+    if need > purse then return need, purse end
+    return nil
+end
+
+--- The red line under a craft whose missing materials cost more than the
+--- gold carried, or nil.
+function LevelUp:ShortNote(row, purse)
+    local need, have = self:ShortOfGold(row, purse)
+    if not need then return nil end
+    local function Money(copper) return ns.Util.FormatMoney(copper, { noColor = true }) end
+    return L.Format("You need about %s to buy what's missing. You have %s.", Money(need), Money(have))
+end
+
 --- One row of the list.
 --
 -- @return { recipeID, name, outputItemID, skillLineID, tier, skillUp,
 --           cost, costDetail, returns, back, backWay, realCost,
---           craftableNow, missing }
+--           craftableNow, missing, toBuy }
 --   cost is the material cost of one craft in copper, or nil when a
 --   material has no price. back is the most one craft gets back (backWay
 --   says how), and realCost the cost less that, below zero when the craft
@@ -272,6 +320,7 @@ function LevelUp:BuildRow(recipeID, recipe, materials)
     end
 
     local cost = costDetail and costDetail.priceable and costDetail.total or nil
+    local toBuy = LevelUp.ToBuy(costDetail)
     local returns = self:GetReturns(recipe, costDetail)
     local back = returns and returns.best or nil
 
@@ -290,6 +339,7 @@ function LevelUp:BuildRow(recipeID, recipe, materials)
         realCost = cost and back and (cost - back) or nil,
         craftableNow = ns.Profit:GetCraftableCount(recipeID),
         missing = missing,
+        toBuy = toBuy,
         isMaterial = recipe.outputItemID ~= nil and materials[recipe.outputItemID] == true,
         neverSubCraft = ns.Cost.IsNeverSubCraft and ns.Cost:IsNeverSubCraft(recipeID) or false,
         -- "make", "buy" or nil, and whether a vendor sells it, for the
@@ -307,6 +357,8 @@ end
 --   profession under two skill-line IDs and a recipe may carry either.
 -- @param opts.includeTrivial  keep grey recipes (always last)
 -- @param opts.craftableOnly   keep only what the bags cover right now
+-- @param opts.canAfford       leave out crafts whose missing materials cost
+--   more than the gold carried ("Can afford")
 -- @param opts.search          part of a name, any case
 -- @param opts.subCraftsOnly   keep only crafts whose item another craft
 --   uses, grey ones too, from every character: where to mark one never to
@@ -320,6 +372,7 @@ function LevelUp:GetRanked(opts)
     local materials = self:GetMaterialSet()
 
     local recipes, knownBy = self:ListedRecipes(opts.subCraftsOnly)
+    local purse = opts.canAfford and LevelUp.Purse() or nil
 
     for recipeID, recipe in pairs(recipes) do
         local keep = not opts.skillLines or opts.skillLines[recipe.skillLineID]
@@ -348,6 +401,7 @@ function LevelUp:GetRanked(opts)
                 local showGrey = opts.includeTrivial or opts.subCraftsOnly
                 if row.tier == "trivial" and not showGrey then row = nil end
                 if row and opts.craftableOnly and row.craftableNow < 1 then row = nil end
+                if row and purse and self:ShortOfGold(row, purse) then row = nil end
             end
 
             if row then rows[#rows + 1] = row end

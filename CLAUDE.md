@@ -518,7 +518,7 @@ build it, 2026-10-19; off unless ticked in Butler) shows the Level Up
 tab's top pick for each profession, inside a pcall:
 
 ```lua
-_G.BlackthornesTS.Butler:NextSkillUp()      -- { { profession, skill, max, recipeID, itemID, name, tier, cost, queued } }, or nil
+_G.BlackthornesTS.Butler:NextSkillUp()      -- { { profession, skill, max, recipeID, itemID, name, tier, cost, queued, toBuy } }, or nil
 _G.BlackthornesTS.Butler:QueueSkillUp(id)   -- one in the queue: true, or false and why
 ```
 
@@ -528,8 +528,12 @@ the craft pays). A profession at its max for now (2026-10-20, the owner:
 Butler names the next trainer) comes as `{ profession, english, skill, max,
 capped = true }` with no recipe, from the rows and from the saved read
 (`Recipes:GetLearnedProfessions`); an older Butler skips it. Kept 30 s, or
-until the queue, bags, a scan or the recipes move. Tested in
-`tools/test_butlerskillup.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
+until the queue, bags, a scan, the recipes, the purse or "Can afford"
+move. `toBuy` (2026-10-22) is copper to buy what the bags and bank lack
+(`LevelUp.ToBuy`), and Butler shows the same red note when it is more
+than the purse; with "Can afford" ticked the pick skips crafts the purse
+can't cover. Tested in `tools/test_butlerskillup.lua` and
+`tools/test_canafford.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
 
 Butler's "Craft When It Pays More" (a player asked, the owner said build
@@ -725,6 +729,21 @@ ends its line with amber "34 ahead of you", green "First in line" or amber
 among the cheapest, its "Cheapest" is amber and it gets Cancel. Cancel next
 stays undercut only. Tested in `tools/test_auctionplaces.lua`. Not yet
 seen in game.
+
+## Can afford
+
+A player asked, the owner said build it (2026-10-22): the Level Up tab
+says when a craft's missing materials cost more than the gold on hand,
+and can leave those out. `LevelUp.ToBuy(costDetail)` adds each reagent's
+`shortfall` (bags and bank count as owned) times its `unitCost`; each row
+carries it as `toBuy`. `LevelUp:ShortNote(row)` gives "You need about X
+to buy what's missing. You have Y." in red on the row's hover and the
+detail panel. "Can afford" in the toolbar (`levelUpCanAfford`, account
+wide, off unless ticked, never rename it) passes `canAfford` to
+`GetRanked`, which drops rows the purse (`GetMoney`) can't cover; Learn
+Next and Road to 300 are unchanged. `PLAYER_MONEY` redraws the shown
+list 0.3 s later. Butler's Cheapest Skill-Up follows the same box. Tested
+in `tools/test_canafford.lua`.
 
 ## Learn next
 
