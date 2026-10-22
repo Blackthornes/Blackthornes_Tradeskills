@@ -1,4 +1,4 @@
--- The LIST box on the Ready to sell list and the Post tab, outside WoW.
+-- The LIST box on the Ready to sell list, outside WoW.
 --
 -- What must hold:
 --   1. A number typed and not yet entered counts when List is clicked.
@@ -228,42 +228,6 @@ do
     check("then what it will list", GameTooltip.text:find("List 20 of 20", 1, true) ~= nil, true)
 end
 
-print("")
-print("the Post tab")
-
-do
-    local ns = NewNamespace()
-    local tab
-    ns.UI = { RegisterTab = function(_, def) tab = def end, RefreshActiveTab = noop }
-
-    Load(ns, "/Core/Util.lua")
-    Load(ns, "/Logic/Posting.lua")
-    Load(ns, "/UI/Widgets.lua")
-    Load(ns, "/UI/Columns.lua")
-    Load(ns, "/UI/Tab_Post.lua")
-
-    local lines = Lines()
-    ns.Posting.GetPostable = function() return lines end
-    ns.Posting.CanPost = function() return true end
-
-    local requested = {}
-    ns.Posting.Request = function(_, itemID, quantity)
-        requested.itemID, requested.quantity = itemID, quantity
-    end
-
-    local list
-    local realCreateScrollList = ns.Widgets.CreateScrollList
-    ns.Widgets.CreateScrollList = function(...)
-        list = realCreateScrollList(...)
-        return list
-    end
-
-    tab.build(NewFrame())
-    list.height = 26 * 10
-    tab.refresh()
-
-    Exercise(list, ns.Posting, requested)
-end
 
 for key, value in pairs(saved) do _G[key] = value end
 

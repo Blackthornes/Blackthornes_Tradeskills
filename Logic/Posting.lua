@@ -113,7 +113,7 @@ function Posting:MarkBlocked()
 
     self.blocked = true
     ns.Warn(L["the game will not let addons list auctions."])
-    ns.Warn(L["the Post tab still shows what to list and at what price."])
+    ns.Warn(L["Ready to sell still shows what to list and at what price."])
 
     if ns.UI then ns.UI:RefreshActiveTab() end
 end
