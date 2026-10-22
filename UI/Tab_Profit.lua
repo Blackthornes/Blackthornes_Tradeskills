@@ -620,9 +620,17 @@ local function BuildDetail(parent)
     detail.icon = icon
     if Widgets.ItemHotspot then Widgets.ItemHotspot(icon) end
 
+    -- What it makes, on the Stats tab (UI/Tab_Stats.lua), as the Prices
+    -- tab has it.
+    detail.stats = Widgets.CreateButton(detail, L["Stats"], function()
+        if detail.statsItem and ns.StatsUI then ns.StatsUI:ShowItem(detail.statsItem) end
+    end, { width = 50, height = 20, tooltip = L["See this item's charts on the Stats tab"] })
+    detail.stats:SetPoint("TOPRIGHT", -8, -9)
+    detail.stats:Hide()
+
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 50, -12)
-    title:SetPoint("TOPRIGHT", -12, -12)
+    title:SetPoint("TOPRIGHT", detail.stats, "TOPLEFT", -6, -3)
     title:SetWordWrap(true)
     detail.title = title
 
@@ -1130,6 +1138,8 @@ function UpdateDetail(analysis)
     detail.moreLine:Hide()
 
     detail.title:SetShown(hasSelection)
+    detail.statsItem = analysis and analysis.outputItemID or nil
+    detail.stats:SetShown(detail.statsItem ~= nil)
     detail.subtitle:SetShown(hasSelection)
     detail.reagentHeading:SetShown(hasSelection)
     detail.maxButton:SetShown(hasSelection)
