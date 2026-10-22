@@ -251,14 +251,55 @@ function SaleAlarm:LogHeard(item, via)
     return true
 end
 
+-- Why a sale of something you keep in stock queued nothing, said under the
+-- game's sale line (a player asked why a sale left the queue alone). Only
+-- for a craft with a number to keep: a sale of anything else stays quiet.
+
 --- Queue another of what sold, when there is room (Queue:RestockSold),
---- and say so under the game's sale line.
+--- and say so under the game's sale line, or why not.
 function SaleAlarm:Restock(itemID, item)
     if not itemID or not ns.Queue then return false end
-    local ok, recipeID = pcall(ns.Queue.RestockSold, ns.Queue, itemID)
-    if not (ok and recipeID) then return false end
-    ns.Print(L.Format("%s sold: queued another to keep your stock up.", item))
-    return true
+    local ok, recipeID, why = pcall(ns.Queue.RestockSold, ns.Queue, itemID)
+    if not ok then return false end
+    if recipeID then
+        ns.Print(L.Format("%s sold: queued another to keep your stock up.", item))
+        return true
+    end
+    if why == "full" then
+        ns.Print(L.Format("%s sold: nothing queued, you still have as many as you keep.", item))
+    elseif why == "waiting" then
+        ns.Print(L.Format("%s sold: nothing queued yet, it waits until you run low.", item))
+    elseif why == "loss" then
+        ns.Print(L.Format("%s sold: nothing queued, making it costs more than it sells for.", item))
+    end
+    return false
+end
+
+--- Sales first found in the mail, ones the chat line never told us about
+--- (sold while you were away, or with chat missed): queue another of each
+--- the same way, in one line. A sale already heard was restocked then.
+-- @param entries the ledger's new sold entries from this reading
+function SaleAlarm:RestockFromMail(entries)
+    if type(entries) ~= "table" or #entries == 0 or not ns.Queue then return 0 end
+    if ns.Mail and ns.Mail.SettleHeard then pcall(ns.Mail.SettleHeard, ns.Mail) end
+
+    local names, seen = {}, {}
+    for _, entry in ipairs(entries) do
+        if not entry.heard and entry.itemID then
+            local ok, recipeID = pcall(ns.Queue.RestockSold, ns.Queue, entry.itemID)
+            if ok and recipeID and not seen[entry.itemID] then
+                seen[entry.itemID] = true
+                local plain = ns.Mail.PlainName and ns.Mail.PlainName(entry.name) or entry.name
+                names[#names + 1] = plain or tostring(entry.itemID)
+            end
+        end
+    end
+
+    if #names > 0 then
+        ns.Print(L.Format("%s sold while you were away: queued more to keep your stock up.",
+            table.concat(names, ", ")))
+    end
+    return #names
 end
 
 function SaleAlarm:CHAT_MSG_SYSTEM(_, text)

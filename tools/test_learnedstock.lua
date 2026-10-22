@@ -172,4 +172,46 @@ config.learnStockFromSales = nil
 ns.db.postLimits[BOOTS] = nil
 check("on again, it learns", Auctions:GetLearnedLimit(BOOTS) == 2)
 
+-- When a sale queues nothing, chat says why; a sale of something with no
+-- number to keep stays quiet.
+ns.db.queue = {}
+ns.db.postLimits[BOOTS] = 2
+bags[BOOTS] = 2
+local before = #printed
+SaleAlarm:Restock(BOOTS, "Boots")
+check("full: chat says you have as many as you keep",
+    printed[#printed] == "Boots sold: nothing queued, you still have as many as you keep.", printed[#printed])
+bags[BOOTS] = 0
+profits[1] = -10
+SaleAlarm:Restock(BOOTS, "Boots")
+check("a loss: chat says it costs more", printed[#printed]
+    == "Boots sold: nothing queued, making it costs more than it sells for.", printed[#printed])
+profits[1] = nil
+config.restockWhenLow, config.restockAt = true, 0
+bags[BOOTS] = 1
+SaleAlarm:Restock(BOOTS, "Boots")
+check("waiting: chat says it waits", printed[#printed]
+    == "Boots sold: nothing queued yet, it waits until you run low.", printed[#printed])
+config.restockWhenLow = false
+before = #printed
+SaleAlarm:Restock(999, "Rock")
+check("nobody crafts it: nothing said", #printed == before)
+local _, why = Queue:RestockSold(999)
+check("and the reason is kept", why == "nocraft", why)
+
+-- Sales first found in the mail top the stock up too, in one line; one
+-- already heard was restocked then.
+ns.db.queue = {}
+bags[BOOTS] = 0
+local fromMail = SaleAlarm:RestockFromMail({
+    { kind = "sold", itemID = BOOTS, name = "Boots" },
+    { kind = "sold", itemID = BOOTS, name = "Boots", heard = true },
+    { kind = "sold", itemID = 999, name = "Rock" },
+})
+check("an unheard sale in the mail queues another", fromMail == 1 and queued(1) == 1, queued(1))
+check("and chat says so once", printed[#printed]
+    == "Boots sold while you were away: queued more to keep your stock up.", printed[#printed])
+check("nothing new: nothing said", SaleAlarm:RestockFromMail({}) == 0)
+ns.db.postLimits[BOOTS] = nil
+
 print(("%d checks passed"):format(checks))
