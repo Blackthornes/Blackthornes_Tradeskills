@@ -762,6 +762,27 @@ Next and Road to 300 are unchanged. `PLAYER_MONEY` redraws the shown
 list 0.3 s later. Butler's Cheapest Skill-Up follows the same box. Tested
 in `tools/test_canafford.lua`.
 
+## Legacy perks, read only
+
+The owner said build it (2026-10-22): Forever's Legacy is a C_Traits
+config (the spell "Legacy System - Create Trait Config"), and Tradeskills
+reads what the player spent, never more. `Logic/Legacy.lua` finds the
+config a slice a frame, 10 s after login and again after a trait event
+(trait system IDs, then tree IDs; class talents never count; a config
+named Legacy or holding a node in `NODE_FIRST` to `NODE_LAST`, 110284 to
+110319, not confirmed), and reads each node's rank through
+`C_Traits.GetNodeInfo`, every call in a pcall. It never buys a rank,
+commits a config or suggests a build (the owner: "we just read what they
+have set"). Master Chef (found by its English name, or
+`MASTER_CHEF_NODE` once a probe shows its ID) raises a cooking recipe's
+yield in `Cost:GetCraftCost` by up to `MASTER_CHEF_MOST` (50% at its last
+rank), only for a recipe the character playing knows, so the Profit tab
+follows it. Bartering needs nothing: vendor prices come from the real
+merchant window. Nothing read, nothing changes. Nothing is saved and no
+player words are new. `/bts probe` has "legacy" lines (the config, points
+left, each node's rank, Master Chef's yield, currencies 3485 and 3499).
+Tested in `tools/test_legacy.lua`. Not yet seen in game.
+
 ## Learn next
 
 The owner said build it (2026-10-12), from a mockup he picked
