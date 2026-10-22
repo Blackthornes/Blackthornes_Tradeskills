@@ -1714,7 +1714,9 @@ local function CreateQueuedRow(row)
     row.remove = Widgets.CreateButton(row, "x", function()
         if not row.data then return end
         if row.data.isDependency then
-            ns.Queue:NeverMake(row.data)
+            -- Asks first: it sets the craft to Buy for good (UI/NeverMakeBox.lua).
+            if ns.NeverMakeBox then ns.NeverMakeBox.Click(row.data, row.remove)
+            else ns.Queue:NeverMake(row.data) end
         else
             ns.Queue:Remove(row.data.recipeID)
         end

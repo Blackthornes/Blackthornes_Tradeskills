@@ -3258,3 +3258,10 @@ L["Got %s prices from your guild %s."] = "%2$s从公会收到%1$s个价格。"
 L["No prices from your guild yet. They come in after a guildmate scans the auction house."] = "还没有收到公会的价格。公会成员扫描拍卖行后就会收到。"
 L["You shared %s prices %s."] = "你%2$s分享了%1$s个价格。"
 L["You're not in a guild on this character."] = "这个角色不在公会里。"
+
+-- Asking before the x on a sub-craft sets it to Buy (UI/NeverMakeBox.lua).
+L["Stop making %s?"] = "不再制造%s？"
+L["The queue will buy it instead, from now on."] = "从现在起，队列会改为购买它。"
+L["You can undo this in Settings, Queue."] = "你可以在设置、队列里改回来。"
+L["Buy It"] = "购买"
+L["Keep Making"] = "继续制造"
