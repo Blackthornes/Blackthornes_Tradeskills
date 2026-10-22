@@ -156,7 +156,6 @@ UI\DealsWrits.lua
 UI\Tab_Deals.lua
 UI\Tab_Queue.lua
 UI\Tab_Gather.lua
-UI\Tab_Post.lua
 UI\Tab_Prices.lua
 UI\GoldChart.lua
 UI\Tab_Sales.lua

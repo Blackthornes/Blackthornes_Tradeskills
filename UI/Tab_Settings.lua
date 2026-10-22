@@ -1150,7 +1150,7 @@ local function Build(outer)
     ignoredItemsHint:SetPoint("TOPLEFT", ignoredItems, "BOTTOMLEFT", 0, ROW_GAP)
     ignoredItemsHint:SetWidth(COLUMN_WIDTH)
     ignoredItemsHint:SetWordWrap(true)
-    ignoredItemsHint:SetText(L["These are never offered for sale on Ready to sell or the Post tab, on any character. Click Restore to bring one back."])
+    ignoredItemsHint:SetText(L["These are never offered for sale on Ready to sell, on any character. Click Restore to bring one back."])
     widgets.ignoredItemsHint = ignoredItemsHint
 
     widgets.ignoredItemsEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
