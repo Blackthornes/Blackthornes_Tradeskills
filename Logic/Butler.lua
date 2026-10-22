@@ -1618,16 +1618,25 @@ local function LearnCost()
             if tier ~= "trivial" then
                 local entry = answer[line]
                 if not entry then
-                    entry = { skill = skill, count = 0, cost = 0 }
+                    entry = { skill = skill, count = 0, cost = 0, recipes = {} }
                     answer[line] = entry
                 end
                 entry.count = entry.count + 1
                 entry.cost = entry.cost + (tonumber(record.trainerCost) or 0)
+                entry.recipes[#entry.recipes + 1] = {
+                    recipeID = record.recipeID, name = record.name, cost = tonumber(record.trainerCost) or 0,
+                }
             end
         end
     end
     for line in pairs(knowsSome) do
-        if not answer[line] then answer[line] = { skill = skills[line], count = 0, cost = 0 } end
+        if not answer[line] then answer[line] = { skill = skills[line], count = 0, cost = 0, recipes = {} } end
+    end
+    for _, entry in pairs(answer) do
+        table.sort(entry.recipes, function(a, b)
+            if a.cost ~= b.cost then return a.cost < b.cost end
+            return (a.name or "") < (b.name or "")
+        end)
     end
 
     learnCost, learnCostKey, learnCostAt = answer, key, Now()
@@ -1642,7 +1651,11 @@ function Butler:LearnCost()
     if not (ok and type(answer) == "table") then return nil end
     local copy = {}
     for line, entry in pairs(answer) do
-        copy[line] = { skill = entry.skill, count = entry.count, cost = entry.cost }
+        local recipes = {}
+        for i, recipe in ipairs(entry.recipes or {}) do
+            recipes[i] = { recipeID = recipe.recipeID, name = recipe.name, cost = recipe.cost }
+        end
+        copy[line] = { skill = entry.skill, count = entry.count, cost = entry.cost, recipes = recipes }
     end
     return copy
 end

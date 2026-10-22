@@ -456,8 +456,12 @@ Butler's gold goals (the owner said build it, 2026-10-13) ask what the
 trainers' recipes the character playing could learn now would cost:
 
 ```lua
-_G.BlackthornesTS.Butler:LearnCost()   -- { [Classic skill line] = { skill, count, cost } }, or nil
+_G.BlackthornesTS.Butler:LearnCost()   -- { [Classic skill line] = { skill, count, cost, recipes } }, or nil
 ```
+
+`recipes` (2026-10-22, a player asked which recipe it meant) is `{ {
+recipeID, name, cost } }`, cheapest first; Butler names them on the goal's
+hover and a click calls `LearnNext:ShowTheWayFor(recipeID)`.
 
 Recipes with a trainer's price in the book, reached by the skill, not
 learned and not grey (`LearnNext.Tier`), by profession; a profession
