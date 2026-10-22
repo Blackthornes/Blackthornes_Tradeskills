@@ -1740,7 +1740,10 @@ local function NextSkillUp()
     if not (levelUp and levelUp.GetRanked) then return nil end
     local key = table.concat({ SelfKey() or "?", RecipesStamp(),
         tostring(ns.Queue and ns.Queue.version), tostring(ns.Inventory and ns.Inventory.changes),
-        tostring(ns.Prices and ns.Prices.scanCount) }, ":")
+        tostring(ns.Prices and ns.Prices.scanCount),
+        -- "Can afford" on the Level Up tab, and the gold it is held to.
+        tostring(ns.Config and ns.Config:Get("levelUpCanAfford") == true),
+        tostring(levelUp.Purse and levelUp.Purse()) }, ":")
     if skillUp and skillUpKey == key and Now() - (skillUpAt or 0) < SKILL_UP_SECONDS then
         return skillUp
     end
@@ -1748,7 +1751,8 @@ local function NextSkillUp()
     -- GetRanked's order is the Level Up tab's: the first row of each
     -- profession that fits is its top pick.
     local answer, seen, lookup = {}, {}, {}
-    for _, row in ipairs(levelUp:GetRanked({}) or {}) do
+    local canAfford = ns.Config and ns.Config:Get("levelUpCanAfford") == true
+    for _, row in ipairs(levelUp:GetRanked({ canAfford = canAfford }) or {}) do
         local info = ProfessionOf(row.skillLineID, lookup)
         local name = info and info.professionName
         local cost = row.realCost or row.cost
@@ -1763,6 +1767,7 @@ local function NextSkillUp()
                     profession = name, skill = skill, max = max,
                     recipeID = row.recipeID, itemID = row.outputItemID, name = row.name,
                     tier = row.tier, cost = math.floor(cost + 0.5),
+                    toBuy = row.toBuy,
                 }
             end
         end
@@ -1805,6 +1810,7 @@ function Butler:NextSkillUp()
             recipeID = entry.recipeID, itemID = entry.itemID, name = entry.name,
             tier = entry.tier, cost = entry.cost, queued = queued,
             capped = entry.capped, english = entry.english,
+            toBuy = entry.toBuy,
         }
     end
     return copy

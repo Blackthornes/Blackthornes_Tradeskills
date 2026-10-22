@@ -3264,3 +3264,9 @@ L["The queue will buy it instead, from now on."] = "从现在起，队列会改�
 L["You can undo this in Settings, Queue."] = "你可以在设置、队列里改回来。"
 L["Buy It"] = "购买"
 L["Keep Making"] = "继续制造"
+
+-- Gold on hand on the Level Up tab ("Can afford", LevelUp:ShortNote).
+L["Can afford"] = "买得起"
+L["Only shows crafts you can buy the missing materials for with the gold you have on you."] = "只显示用你身上的金币能买齐缺少材料的配方。"
+L["You need about %s to buy what's missing. You have %s."] = "买齐缺少的材料大约需要%s。你有%s。"
+L["Nothing that gives skill fits the gold you have."] = "没有能提升技能的配方在你的金币范围内。"

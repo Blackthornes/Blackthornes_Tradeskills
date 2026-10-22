@@ -3266,3 +3266,9 @@ L["The queue will buy it instead, from now on."] = "La file l'achètera à la pl
 L["You can undo this in Settings, Queue."] = "Tu peux annuler ça dans Réglages, File."
 L["Buy It"] = "L'acheter"
 L["Keep Making"] = "Continuer à fabriquer"
+
+-- Gold on hand on the Level Up tab ("Can afford", LevelUp:ShortNote).
+L["Can afford"] = "Abordable"
+L["Only shows crafts you can buy the missing materials for with the gold you have on you."] = "Montre seulement les recettes dont tu peux acheter les composants manquants avec l'or que tu as sur toi."
+L["You need about %s to buy what's missing. You have %s."] = "Il te faut environ %s pour acheter ce qui manque. Tu as %s."
+L["Nothing that gives skill fits the gold you have."] = "Rien qui donne de la compétence ne rentre dans ton or."
