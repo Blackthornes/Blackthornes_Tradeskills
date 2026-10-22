@@ -59,6 +59,7 @@ local state = {
     followed = nil,         -- the last-open skill line the choice was made from
     started = false,        -- a default has been picked once already
     craftableOnly = false,
+    canAfford = false,
     includeTrivial = false,
     subCraftsOnly = false,
     learnNext = true,
@@ -93,6 +94,7 @@ local UpdateCraftButton
 
 -- Defined after Build; Sub-crafts only rebuilds the profession list with it.
 local OnShow
+local FitToolbar
 
 -- Profession name -> set of skill-line IDs carrying it. Forever lists every
 -- profession under two IDs and a recipe may be tagged with either, so the
@@ -560,6 +562,9 @@ local function ShowRowTooltip(row, entry)
     local note = StaleNote(entry.skillUp)
     if note then GameTooltip:AddLine(note, 0.91, 0.76, 0.35, true) end
 
+    local short = not entry.learnNext and ns.LevelUp:ShortNote(entry)
+    if short then GameTooltip:AddLine(short, Theme.Unpack("loss")) end
+
     local forYou = not entry.learnNext and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
     if forYou then GameTooltip:AddLine(forYou, Theme.Unpack("profit")) end
     local forAlt = entry.outputItemID and ns.Upgrades and ns.Upgrades.AltText and ns.Upgrades:AltText(entry.outputItemID)
@@ -964,9 +969,10 @@ local function UpdateDetail(entry)
     detail.subtitle:SetTextColor(r, g, b)
 
     local stale = StaleNote(entry.skillUp)
-    local forYou = not stale and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
-    detail.note:SetText(stale or forYou or "")
-    detail.note:SetTextColor(Theme.Unpack(forYou and "profit" or "warn"))
+    local short = ns.LevelUp:ShortNote(entry)
+    local forYou = not (stale or short) and ns.Upgrades and ns.Upgrades:EnchantText(entry.recipeID)
+    detail.note:SetText(stale and short and (stale .. "\n" .. short) or stale or short or forYou or "")
+    detail.note:SetTextColor(Theme.Unpack(forYou and "profit" or (short and not stale) and "loss" or "warn"))
 
     local anchor = detail.reagentHeading
     local reagents = (entry.costDetail and entry.costDetail.reagents) or {}
@@ -1079,6 +1085,21 @@ end
 --- from Recipes:GetLearnedProfessions, which keeps the last good read, so it
 --- shows with the profession window shut too; Forever lists a profession
 --- under two IDs and the one with the levels may not be the recipes' own.
+--- The search box gives up room when the tick boxes would run into the
+--- skill line on the right (a longer language, "Can afford" added).
+FitToolbar = function()
+    local search, last, label = widgets.search, widgets.canAfford, widgets.skillLabel
+    if not (search and last and label and widgets.toolbar) then return end
+    search:SetWidth(Widgets.SEARCH_WIDTH)
+    local ok, lastRight = pcall(last.GetRight, last)
+    local okRight, edge = pcall(widgets.toolbar.GetRight, widgets.toolbar)
+    local okWidth, width = pcall(label.GetStringWidth, label)
+    if not (ok and okRight and okWidth and type(lastRight) == "number"
+            and type(edge) == "number" and type(width) == "number") then return end
+    local over = lastRight + 12 - (edge - width)
+    if over > 0 then search:SetWidth(math.max(90, Widgets.SEARCH_WIDTH - over)) end
+end
+
 local function UpdateSkillLabel()
     local label = widgets.skillLabel
     local skillLines = state.profession and skillLinesByName[state.profession]
@@ -1112,6 +1133,7 @@ local function UpdateSkillLabel()
     else
         label:SetText("")
     end
+    FitToolbar()
 end
 
 --- The character's skill in each profession shown, by Classic skill line,
@@ -1163,6 +1185,7 @@ local function Refresh()
         skillLines = state.profession and skillLinesByName[state.profession] or nil,
         includeTrivial = state.includeTrivial,
         craftableOnly = state.craftableOnly,
+        canAfford = state.canAfford,
         subCraftsOnly = state.subCraftsOnly,
         search = state.search,
     })
@@ -1220,6 +1243,8 @@ local function Refresh()
             widgets.emptyLabel:SetText(L["Nothing you know here makes a material for another craft."])
         elseif state.craftableOnly then
             widgets.emptyLabel:SetText(L["Nothing that gives skill can be made from your bags right now."])
+        elseif state.canAfford then
+            widgets.emptyLabel:SetText(L["Nothing that gives skill fits the gold you have."])
         else
             widgets.emptyLabel:SetText(L["Nothing you know gives skill any more. Tick \"Show grey\" to see the rest, or learn new recipes."])
         end
@@ -1282,6 +1307,8 @@ local function Build(container)
     end)
     search:SetPoint("LEFT", profession, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
+    widgets.search = search
+    widgets.toolbar = toolbar
 
     local craftable = Widgets.CreateCheckbox(toolbar, L["Craftable now"], function(checked)
         state.craftableOnly = checked
@@ -1333,6 +1360,25 @@ local function Build(container)
         GameTooltip:Show()
     end)
     learnNext:HookScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Can afford (a player asked, the owner said build it, 2026-10-22):
+    -- leaves out crafts whose missing materials cost more than the gold
+    -- carried. Kept between sessions; Butler's Cheapest Skill-Up follows it.
+    state.canAfford = ns.Config:Get("levelUpCanAfford") == true
+    local canAfford = Widgets.CreateCheckbox(toolbar, L["Can afford"], function(checked)
+        state.canAfford = checked
+        ns.Config:Set("levelUpCanAfford", checked)
+        widgets.list:ScrollToTop()
+        Refresh()
+    end, state.canAfford)
+    canAfford:SetPoint("LEFT", learnNext, "RIGHT", 12, 0)
+    canAfford:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(L["Only shows crafts you can buy the missing materials for with the gold you have on you."], 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    canAfford:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    widgets.canAfford = canAfford
 
     local skillLabel = Theme.CreateLabel(toolbar, "normal", "accent", "RIGHT")
     skillLabel:SetPoint("RIGHT", 0, 0)
@@ -1420,6 +1466,18 @@ local function Build(container)
     list:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
     list:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 24)
     widgets.list = list
+
+    -- Gold coming in or going out moves "Can afford" and the red notes:
+    -- redrawn a moment later, only while the list shows.
+    local goldQueued = false
+    ns.RegisterEvent(state, "PLAYER_MONEY", function()
+        if goldQueued or not list:IsVisible() then return end
+        goldQueued = true
+        C_Timer.After(0.3, function()
+            goldQueued = false
+            if list:IsVisible() then Refresh() end
+        end)
+    end)
 
     local emptyLabel = Theme.CreateLabel(container, "small", "dim", "CENTER")
     emptyLabel:SetPoint("CENTER", list, "CENTER", 0, 10)
