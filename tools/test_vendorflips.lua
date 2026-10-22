@@ -379,7 +379,16 @@ ns.Theme = {
 
 local checkboxes, lists, dropdowns = {}, {}, {}
 local searched
+local pages = {}
 ns.Widgets = {
+    CreateTabStrip = function(_, tabs, onSelect)
+        local options = {}
+        for index, tab in ipairs(tabs) do options[index] = { text = tab.text, value = tab.key } end
+        local strip = Stub({ options = options, onSelect = onSelect,
+            Select = function(self, key) self.value = key end })
+        pages[#pages + 1] = strip
+        return strip
+    end,
     CreateDropdown = function(_, options, onSelect, opts)
         local dropdown = Stub({ options = options, onSelect = onSelect, opts = opts })
         dropdowns[#dropdowns + 1] = dropdown

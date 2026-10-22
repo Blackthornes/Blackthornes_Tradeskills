@@ -809,9 +809,26 @@ local function Build(container)
     -- Before any row or heading is laid out: they read these widths.
     if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
+    -- What the tab shows is pages along the top (a player asked, the owner
+    -- said yes from a mockup, 2026-10-22; a "Show:" menu before), with the
+    -- page's own bar under them.
+    local pageTabs = {
+        { key = "favor", text = L["Merchant's Favor"] },
+        { key = "writs", text = L["Craftsman's Writs"] },
+    }
+    if SHOW_FLIPS then
+        table.insert(pageTabs, 1, { key = "flips", text = L["Flips"] })
+    end
+    local show = Widgets.CreateTabStrip(container, pageTabs, function(value)
+        UI.DealsSetView(value)
+    end)
+    show:SetPoint("TOPLEFT", 8, -8)
+    show:Select(state.view)
+    widgets.show = show
+
     local toolbar = CreateFrame("Frame", nil, container)
-    toolbar:SetPoint("TOPLEFT", 8, -8)
-    toolbar:SetPoint("TOPRIGHT", -8, -8)
+    toolbar:SetPoint("TOPLEFT", show, "BOTTOMLEFT", 0, -6)
+    toolbar:SetPoint("RIGHT", container, "RIGHT", -8, 0)
     toolbar:SetHeight(24)
     widgets.toolbar = toolbar
 
@@ -852,24 +869,7 @@ local function Build(container)
     sellTo.tooltipText = L["Tick the ways you'll sell what you buy. Each item shows under whichever pays most."]
     widgets.sellTo = sellTo
 
-    -- Made after Sell to but placed first: what the tab shows.
-    local showOptions = {
-        { text = L["Show: Merchant's Favor"], value = "favor" },
-        { text = L["Show: Craftsman's Writs"], value = "writs" },
-    }
-    if SHOW_FLIPS then
-        table.insert(showOptions, 1, { text = L["Show: Flips"], value = "flips" })
-    end
-    local show = Widgets.CreateDropdown(toolbar, showOptions, function(value)
-        UI.DealsSetView(value)
-    end, { width = 160 })
-    show:SetPoint("LEFT", 0, 0)
-    show:SetValue(state.view)
-    show.tooltipText = SHOW_FLIPS
-        and L["Flips: items to buy and sell again. Merchant's Favor: crates by what each favor costs. Craftsman's Writs: writs by what your reputation goal costs."]
-        or L["Merchant's Favor: crates by what each favor costs. Craftsman's Writs: writs by what your reputation goal costs."]
-    widgets.show = show
-    sellTo:SetPoint("LEFT", show, "RIGHT", 8, 0)
+    sellTo:SetPoint("LEFT", 0, 0)
 
     -- The reputation goal, for the writs; it takes Sell to's place.
     local goals = {}
@@ -881,7 +881,7 @@ local function Build(container)
         ns.Config:Set("writGoal", value)
         ShowFromTop()
     end, { width = 130 })
-    goal:SetPoint("LEFT", show, "RIGHT", 8, 0)
+    goal:SetPoint("LEFT", 0, 0)
     if ns.DealsWrits then goal:SetValue(ns.DealsWrits:GetGoal()) end
     goal.tooltipText = L["The standing you want with your trade camp. The right side shows the writs it takes and their cost."]
     goal:Hide()
@@ -1015,7 +1015,7 @@ local function Build(container)
     countLabel:SetWordWrap(false)
 
     local detail = BuildDetail(flipsView)
-    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
+    detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
@@ -1084,10 +1084,15 @@ function UI.DealsSetView(view)
     widgets.skipOverStack:SetShown(view == "favor")
     widgets.goal:SetShown(view == "writs")
 
-    -- Search sits after the menus this view shows.
-    local before = view == "flips" and widgets.sellTo or view == "writs" and widgets.goal or widgets.show
+    -- Search sits after the menu this view shows, first when it has none.
+    if widgets.show and widgets.show.Select then widgets.show:Select(view) end
+    local before = view == "flips" and widgets.sellTo or view == "writs" and widgets.goal or nil
     widgets.search:ClearAllPoints()
-    widgets.search:SetPoint("LEFT", before, "RIGHT", 8, 0)
+    if before then
+        widgets.search:SetPoint("LEFT", before, "RIGHT", 8, 0)
+    else
+        widgets.search:SetPoint("LEFT", widgets.toolbar, "LEFT", 0, 0)
+    end
 
     Refresh()
     if module then module:ScrollToTop() elseif widgets.list then widgets.list:ScrollToTop() end

@@ -427,7 +427,16 @@ ns.Theme = {
 
 local checkboxes, lists, dropdowns, buttons, numberBoxes = {}, {}, {}, {}, {}
 local searched
+local pages = {}
 ns.Widgets = {
+    CreateTabStrip = function(_, tabs, onSelect)
+        local options = {}
+        for index, tab in ipairs(tabs) do options[index] = { text = tab.text, value = tab.key } end
+        local strip = Stub({ options = options, onSelect = onSelect,
+            Select = function(self, key) self.value = key end })
+        pages[#pages + 1] = strip
+        return strip
+    end,
     CreateDropdown = function(_, options, onSelect, opts)
         local dropdown = Stub({ options = options, onSelect = onSelect, opts = opts })
         dropdowns[#dropdowns + 1] = dropdown
@@ -494,8 +503,8 @@ assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 local tab = tabs.deals
 tab.build(Stub())
 
-local show = dropdowns[2]
-check("the Deals tab has a Show menu", show and #show.options == 3 and show.options[2].value == "favor")
+local show = pages[1]
+check("the Deals tab has pages", show and #show.options == 3 and show.options[2].value == "favor")
 check("the flips stay the first view", #lists == 1)
 check("the tick box starts ticked, as Settings has nothing yet", checkboxes["Skip bundles over a stack"].initial == true)
 
@@ -588,13 +597,14 @@ check("back to the flips, the favor list is left alone", #lists == 2)
 print("\nwith the flips put away (the owner, 2026-10-13)")
 ns.DEALS_FLIPS = nil
 for key in pairs(dropdowns) do dropdowns[key] = nil end
+for key in pairs(pages) do pages[key] = nil end
 for key in pairs(lists) do lists[key] = nil end
 assert(loadfile(lfs_cwd .. "/UI/Tab_Deals.lua"))("Blackthornes_TS", ns)
 tab = tabs.deals
 check("the tab is Favors and Writs", tab.text == "Favors and Writs")
 tab.build(Stub())
-show = dropdowns[2]
-check("the Show menu has no Flips", #show.options == 2 and show.options[1].value == "favor"
+show = pages[1]
+check("the pages have no Flips", #show.options == 2 and show.options[1].value == "favor"
     and show.options[2].value == "writs")
 check("it opens on Merchant's Favor", #lists == 2
     and lists[2].data and #lists[2].data == #ns.WAYLAID_CRATES)

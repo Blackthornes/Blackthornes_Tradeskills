@@ -837,7 +837,7 @@ function DealsWrits:Build(view, toolbar)
     widgets.countLabel = countLabel
 
     local detail = BuildDetail(view)
-    detail:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8, -40)
+    detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
