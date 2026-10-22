@@ -1623,7 +1623,7 @@ function PostPanel:RefreshShopping()
 end
 
 --- The summary line under the tabs. Never shorter than the tick boxes at
---- its right (Ezmode's report, 2026-10-22): with no words in it the line
+--- its right (a player's report, 2026-10-22): with no words in it the line
 --- under it rose through Overcutting and Hide losses.
 function PostPanel:SetSummary(text)
     local summary = self.summary
