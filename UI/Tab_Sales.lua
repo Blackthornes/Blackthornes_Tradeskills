@@ -151,6 +151,12 @@ local function CreateRow(row)
     row.icon = Theme.CreateItemIcon(row, 24)
     row.icon:SetPoint("LEFT", 8, 0)
 
+    -- A method's heading folds its items away, in the icon's place.
+    row.fold = row:CreateTexture(nil, "ARTWORK")
+    row.fold:SetSize(14, 14)
+    row.fold:SetPoint("LEFT", 13, 0)
+    row.fold:Hide()
+
     row.name = Theme.CreateLabel(row, "normal", "text")
     row.name:SetPoint("TOPLEFT", 40, -4)
     row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -130, -4)
@@ -380,9 +386,30 @@ local METHOD_UNITS = {
     vendored = L["%d sold to vendors"], disenchanted = L["%d disenchanted"],
 }
 
+--- Profit by method's folded headings, from the setting kept as "a,b".
+local function FoldedMethods()
+    local folded = {}
+    local saved = ns.Config and ns.Config.Get and ns.Config:Get("salesMethodsFolded")
+    for key in tostring(type(saved) == "string" and saved or ""):gmatch("[^,]+") do folded[key] = true end
+    return folded
+end
+
+--- Fold a method's heading or open it again, kept for next time.
+local function ToggleMethod(key)
+    local folded = FoldedMethods()
+    folded[key] = not folded[key] or nil
+    local keys = {}
+    for method in pairs(folded) do keys[#keys + 1] = method end
+    table.sort(keys)
+    if ns.Config and ns.Config.Set then ns.Config:Set("salesMethodsFolded", table.concat(keys, ",")) end
+end
+
 --- A method's heading: its profit, and what it is made of.
 local function UpdateMethodRow(row, data)
     Theme.SetItemIcon(row.icon, nil)
+    row.fold:Show()
+    pcall(row.fold.SetTexture, row.fold, data.folded
+        and [[Interface\Buttons\UI-PlusButton-Up]] or [[Interface\Buttons\UI-MinusButton-Up]])
 
     row.name:SetText(data.method.text)
     row.name:SetTextColor(Theme.Unpack("accent"))
@@ -409,6 +436,7 @@ local function UpdateMethodItemRow(row, data)
 end
 
 local function UpdateRow(row, data)
+    row.fold:SetShown(data.methodRow and true or false)
     if data.haul then
         UpdateVisitRow(row, data)
         return
@@ -858,11 +886,12 @@ local function RefreshMethods()
     local total = summary.total
 
     local data = {}
+    local folded = FoldedMethods()
     for _, method in ipairs(ns.MethodProfit.METHODS) do
         local group = summary.methods[method.key]
         if group.n > 0 then
-            data[#data + 1] = { methodRow = true, method = method, group = group }
-            for _, item in ipairs(group.list) do
+            data[#data + 1] = { methodRow = true, method = method, group = group, folded = folded[method.key] }
+            for _, item in ipairs(folded[method.key] and {} or group.list) do
                 data[#data + 1] = { methodItem = true, key = method.key,
                     itemID = item.itemID, item = item }
             end
@@ -1217,7 +1246,12 @@ local function Build(container)
             return SelectionKey(data) == state.selected
         end,
         onClick = function(data)
-            if data.methodRow or data.methodItem then return end
+            if data.methodRow then
+                ToggleMethod(data.method.key)
+                Refresh()
+                return
+            end
+            if data.methodItem then return end
             if data.haul then
                 if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end
                 return
