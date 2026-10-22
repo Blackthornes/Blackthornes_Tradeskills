@@ -39,6 +39,12 @@ GuildPrices.FAR = 10                  -- 10x from a fresh price of yours is refu
 GuildPrices.MAX_PER_SENDER_HOUR = 6000
 GuildPrices.MAX_ITEM_ID = 10000000      -- an item ID past this is not an item
 GuildPrices.MAX_STORED = 4 * GuildPrices.MAX_ITEMS  -- items kept for a realm
+-- Catching up (2026-10-22): a guildmate who logs in after a scan asks once,
+-- and the one with the newest scan sends it again.
+GuildPrices.ASK_AFTER = 45            -- seconds after login
+GuildPrices.ANSWER_SCAN_AGE = 24 * HOUR  -- a scan older than this is not sent again
+GuildPrices.ANSWER_EVERY = HOUR       -- at most one catch-up sent an hour
+GuildPrices.ANSWER_WAIT = 20          -- longest wait before answering
 
 --------------------------------------------------------------------------------
 -- Saved data
@@ -230,6 +236,10 @@ local function InGuild()
     return ok and yes == true
 end
 
+local function IsMe(sender)
+    return Comm.IsMe(sender)
+end
+
 --- Why the last scan is not being shared now, or nil when it should be.
 function GuildPrices:WhyNotShare(now)
     now = now or time()
@@ -259,7 +269,7 @@ function GuildPrices:Share(now)
 
     -- Saved, so a /reload does not send the same scan again.
     ns.db.guildPricesSent = type(ns.db.guildPricesSent) == "table" and ns.db.guildPricesSent or {}
-    ns.db.guildPricesSent[ns.Config:GetRealmKey()] = { at = now, scanAt = scanAt }
+    ns.db.guildPricesSent[ns.Config:GetRealmKey()] = { at = now, scanAt = scanAt, count = math.min(count, self.MAX_ITEMS) }
 
     Comm:Send("S", Comm.ToBase36(scanAt), "GUILD")
     for _, body in ipairs(batches) do
@@ -271,12 +281,75 @@ function GuildPrices:Share(now)
 end
 
 --------------------------------------------------------------------------------
+-- Catching up
+--------------------------------------------------------------------------------
+-- G<newest scan held>: "I just logged in; this is the newest guild scan I
+-- have". A guildmate whose own scan is newer waits a moment, longer the
+-- older their scan, and sends it unless someone else's came first. So one
+-- guildmate answers, the one with the newest scan.
+
+--- The newest scan time of any guild price kept for this realm, or 0.
+function GuildPrices:NewestHeld()
+    local newest = 0
+    for _, list in pairs(RealmTable(false) or {}) do
+        if type(list) == "table" then
+            for index = 2, #list, STRIDE do
+                if type(list[index]) == "number" and list[index] > newest then newest = list[index] end
+            end
+        end
+    end
+    return newest
+end
+
+function GuildPrices:Ask()
+    if not self:IsOn() or not InGuild() then return false end
+    local held = self:NewestHeld()
+    local own = ns.Prices:GetLastScan() or 0
+    Comm:Send("G", Comm.ToBase36(math.max(held, own)), "GUILD")
+    return true
+end
+
+--- Send a scan again for a guildmate who missed it.
+function GuildPrices:Resend(scanAt, now)
+    now = now or time()
+    local batches, head, count = self:Batches(scanAt)
+    if #batches == 0 then return false end
+    self.answeredAt = now
+    ns.db.guildPricesSent = type(ns.db.guildPricesSent) == "table" and ns.db.guildPricesSent or {}
+    ns.db.guildPricesSent[ns.Config:GetRealmKey()] = { at = now, scanAt = scanAt, count = math.min(count, self.MAX_ITEMS) }
+    Comm:Send("S", Comm.ToBase36(scanAt), "GUILD")
+    for _, body in ipairs(batches) do Comm:Send("P", head:sub(2) .. body, "GUILD") end
+    return true
+end
+
+function GuildPrices:OnAsk(sender, body, channel, now)
+    if channel ~= "GUILD" or IsMe(sender) or not self:IsOn() then return end
+    now = now or time()
+    local theirs = Comm.FromBase36(body) or 0
+    local scanAt = ns.Prices:GetLastScan()
+    if not scanAt or now - scanAt > self.ANSWER_SCAN_AGE then return end
+    if scanAt <= theirs + self.HEARD_COVERS then return end
+    if self.answeredAt and now - self.answeredAt < self.ANSWER_EVERY then return end
+    if self.answering then return end
+
+    -- The newer the scan, the sooner: the newest one goes first and the
+    -- others hear it go out (OnAnnounce) and stand down.
+    local wait = 2 + math.min(self.ANSWER_WAIT - 2, (now - scanAt) / self.ANSWER_SCAN_AGE * (self.ANSWER_WAIT - 2))
+        + math.random() * 2
+    self.answering = true
+    local askedAt = GetTime()
+    C_Timer.After(wait, function()
+        GuildPrices.answering = nil
+        -- Someone's scan went out since the ask: theirs answered it.
+        if GuildPrices.announcedAt and GuildPrices.announcedAt >= askedAt then return end
+        if not GuildPrices:IsOn() then return end
+        GuildPrices:Resend(scanAt)
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- Receiving
 --------------------------------------------------------------------------------
-
-local function IsMe(sender)
-    return Comm.IsMe(sender)
-end
 
 function GuildPrices:OnAnnounce(sender, body, channel)
     if channel ~= "GUILD" or IsMe(sender) then return end
@@ -285,6 +358,7 @@ function GuildPrices:OnAnnounce(sender, body, channel)
     self.heard = self.heard or {}
     local realmKey = ns.Config:GetRealmKey()
     if not self.heard[realmKey] or at > self.heard[realmKey] then self.heard[realmKey] = at end
+    self.announcedAt = GetTime()
 end
 
 --- How far from your own fresh price a guildmate's may be.
@@ -340,6 +414,31 @@ end
 -- Status and lifecycle
 --------------------------------------------------------------------------------
 
+--- One line for Settings: what came in from the guild and when, and what
+--- you last shared. Read from the save, so it holds through a /reload.
+function GuildPrices:Status(now)
+    if not self:IsOn() then return L["Guild prices are off."] end
+    if not InGuild() then return L["You're not in a guild on this character."] end
+    now = now or time()
+    local Util = ns.Util
+    local function Comma(n) return Util and Util.Comma and Util.Comma(n) or tostring(n) end
+    local function Ago(at)
+        return Util and Util.FormatAgeAgo and Util.FormatAgeAgo(math.max(0, now - at)) or ""
+    end
+    local count, newest = self:Count(), self:NewestHeld()
+    local parts = {}
+    if count == 0 or newest == 0 then
+        parts[1] = L["No prices from your guild yet. They come in after a guildmate scans the auction house."]
+    else
+        parts[1] = L.Format("Got %s prices from your guild %s.", Comma(count), Ago(newest))
+    end
+    local mine = self:LastSent()
+    if mine and tonumber(mine.at) and tonumber(mine.count) then
+        parts[#parts + 1] = L.Format("You shared %s prices %s.", Comma(mine.count), Ago(mine.at))
+    end
+    return table.concat(parts, " ")
+end
+
 function GuildPrices:Describe()
     if not self:IsOn() then return L["Guild prices are off."] end
     local shown = ns.Util and ns.Util.Comma and ns.Util.Comma(self:Count()) or tostring(self:Count())
@@ -360,6 +459,8 @@ function GuildPrices:OnEnable()
     self:Prune()
     Comm:On("S", function(...) GuildPrices:OnAnnounce(...) end)
     Comm:On("P", function(...) GuildPrices:OnPrices(...) end)
+    Comm:On("G", function(...) GuildPrices:OnAsk(...) end)
+    C_Timer.After(self.ASK_AFTER, function() GuildPrices:Ask() end)
 
     -- Looked at once a minute; Share decides whether anything goes.
     self.ticker = C_Timer.NewTicker(60, function() GuildPrices:Share() end)

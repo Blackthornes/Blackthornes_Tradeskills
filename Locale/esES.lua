@@ -3254,3 +3254,10 @@ L["When the place is in another zone or across the sea, the arrow leads you ther
 L["With TomTom installed, its arrow shows the way instead."] = "Si tienes TomTom, su flecha te muestra el camino."
 L["You're there"] = "Ya llegaste"
 L["Your Way There"] = "Tu camino"
+
+-- Guild Status in Settings
+L["Guild Status:"] = "Estado de la hermandad:"
+L["Got %s prices from your guild %s."] = "Recibiste %s precios de tu hermandad %s."
+L["No prices from your guild yet. They come in after a guildmate scans the auction house."] = "Aún no hay precios de tu hermandad. Llegan cuando un miembro escanea la casa de subastas."
+L["You shared %s prices %s."] = "Compartiste %s precios %s."
+L["You're not in a guild on this character."] = "Este personaje no está en una hermandad."

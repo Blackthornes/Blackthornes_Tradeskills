@@ -3251,3 +3251,10 @@ L["When the place is in another zone or across the sea, the arrow leads you ther
 L["With TomTom installed, its arrow shows the way instead."] = "装了 TomTom 的话，就由它的箭头来指路。"
 L["You're there"] = "你到了"
 L["Your Way There"] = "前往路线"
+
+-- Guild Status in Settings
+L["Guild Status:"] = "公会状态："
+L["Got %s prices from your guild %s."] = "%2$s从公会收到%1$s个价格。"
+L["No prices from your guild yet. They come in after a guildmate scans the auction house."] = "还没有收到公会的价格。公会成员扫描拍卖行后就会收到。"
+L["You shared %s prices %s."] = "你%2$s分享了%1$s个价格。"
+L["You're not in a guild on this character."] = "这个角色不在公会里。"
