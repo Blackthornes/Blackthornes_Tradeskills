@@ -3252,3 +3252,10 @@ L["When the place is in another zone or across the sea, the arrow leads you ther
 L["With TomTom installed, its arrow shows the way instead."] = "Ist TomTom installiert, zeigt stattdessen sein Pfeil den Weg."
 L["You're there"] = "Du bist da"
 L["Your Way There"] = "Dein Weg dorthin"
+
+-- Guild Status in Settings
+L["Guild Status:"] = "Gildenstatus:"
+L["Got %s prices from your guild %s."] = "%s Preise von deiner Gilde erhalten, %s."
+L["No prices from your guild yet. They come in after a guildmate scans the auction house."] = "Noch keine Preise von deiner Gilde. Sie kommen, nachdem ein Gildenmitglied das Auktionshaus scannt."
+L["You shared %s prices %s."] = "Du hast %s Preise geteilt, %s."
+L["You're not in a guild on this character."] = "Dieser Charakter ist in keiner Gilde."
