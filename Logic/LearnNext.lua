@@ -290,6 +290,21 @@ local WHY = {
     nomap = L["the map for that zone could not be found"],
 }
 
+--- The way there to a trainer or vendor far away, by Logic/Travel.lua (the
+--- same file in every Blackthornes addon): its steps and the first stop to
+--- pin, or nil when it is near, "Guide Me:" is off or no way is known.
+function LearnNext.Guide(place, who)
+    local Travel = ns.Travel
+    if not (Travel and Travel.IsOn and Travel.IsOn() and place.zone and place.x and place.y) then return nil end
+    local mapID = ns.Waypoints and ns.Waypoints:MapFor(place.zone)
+    local target = { name = who, zone = place.zone, map = mapID,
+        mx = mapID and place.x / 100 or nil, my = mapID and place.y / 100 or nil,
+        coords = { place.x, place.y } }
+    local ok, guide = pcall(Travel.Guide, Travel, target)
+    if not ok or type(guide) ~= "table" or type(guide.point) ~= "table" or #guide.lines == 0 then return nil end
+    return guide
+end
+
 --- Show the way: the map pin (or TomTom's arrow) on the trainer or vendor,
 --- and a line in chat that says where.
 -- @return true when a pin or waypoint was set
@@ -301,6 +316,24 @@ function LearnNext:ShowTheWay(row)
 
     local ok, why
     local Waypoints = ns.Waypoints
+
+    -- In another zone or across the sea, with "Guide Me:" ticked: the steps
+    -- in chat, and the pin on the first stop (Logic/Travel.lua).
+    local guide = LearnNext.Guide(place, who)
+    if guide then
+        local stop = { mapID = guide.point.map, x = guide.point.x * 100, y = guide.point.y * 100 }
+        if Waypoints and Waypoints:HasTomTom() then
+            ok = Waypoints:TomTom(stop, guide.point.name)
+        end
+        if not ok and Waypoints then ok = Waypoints:Pin(stop) end
+        if ok then
+            ns.Print(L.Format("The way to %s (%s), with a pin on the first stop:", who, what))
+            local say = ns.PrintRaw or ns.Print
+            for _, line in ipairs(guide.lines) do say("  " .. line) end
+            return true
+        end
+    end
+
     if Waypoints and Waypoints:HasTomTom() then
         ok, why = Waypoints:TomTom(place, ("%s (%s)"):format(who, what))
     end
