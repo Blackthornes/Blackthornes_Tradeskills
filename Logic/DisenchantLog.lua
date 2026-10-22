@@ -199,7 +199,7 @@ local function Chime(big)
     if ns.Config and ns.Config:Get("disenchantSound") == false then return end
     local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
     local kit = big and (kits.LEVELUPSOUND or 888) or kits.UI_EPICLOOT_TOAST
-    if kit then pcall(PlaySound, kit) end
+    if kit then pcall(PlaySound, kit, "Master") end
 end
 
 DisenchantLog._Flash, DisenchantLog._Chime = Flash, Chime

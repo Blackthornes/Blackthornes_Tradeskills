@@ -970,7 +970,7 @@ local function MaybeCheer(stats)
 
     if type(PlaySound) == "function" then
         local kit = type(SOUNDKIT) == "table" and SOUNDKIT.IG_QUEST_LIST_COMPLETE or 878
-        pcall(PlaySound, kit)
+        pcall(PlaySound, kit, "Master")
     end
 
     local card = widgets.cards.weeks

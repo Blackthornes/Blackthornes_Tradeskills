@@ -555,7 +555,8 @@ check("a bundle cheaper made is priced made", made.itemID == LEATHER and made.ma
     and made.cost == 1000 and made.buy == 1600 and made.recipeID == LEATHER_RECIPE)
 searched("")
 list.opts.updateRow(row, Row(list.data, "apprentice-textiles"))
-check("BUNDLE says Make", row.cells[3].text:find("Make") ~= nil)
+check("BUNDLE says Make, pinned at the column's left", row.make and row.make.text == "Make" and row.make.shown == true
+    and row.cells[3].text:find("Make") == nil)
 list.opts.onClick(Row(list.data, "apprentice-textiles"), 1, "LeftButton")
 check("the detail says making is cheaper", Showing("^Cheaper to make:") ~= nil)
 many = nil

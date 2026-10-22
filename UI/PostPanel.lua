@@ -38,6 +38,7 @@ local CONTENT_TOP = -(HEADER_TOP + HEADER_HEIGHT + 7)
 
 -- Folded, the drawer is its header, so Scan stays in reach.
 PostPanel.FOLDED_HEIGHT = HEADER_TOP + HEADER_HEIGHT + EDGE_PAD
+PostPanel.SUMMARY_LEAST = 18
 
 -- The band at the foot with List all, the drawer's one gold button.
 local FOOT_HEIGHT = 34
@@ -662,6 +663,7 @@ function PostPanel:Build()
     summary:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -6)
     summary:SetPoint("RIGHT", overcut, "LEFT", -8, 0)
     summary:SetWordWrap(true)
+    if summary.SetJustifyV then summary:SetJustifyV("TOP") end
     self.summary = summary
 
     local divider = Theme.CreateDivider(body)
@@ -1613,11 +1615,26 @@ function PostPanel:RefreshShopping()
         self.empty:SetText(ns.Queue:Count() == 0
             and L["Nothing queued.\n\nQueue crafts and the materials they need show up here."]
             or L["You already have everything the queue needs."])
-        self.summary:SetText("")
+        self:SetSummary("")
         return
     end
 
-    self.summary:SetText(text)
+    self:SetSummary(text)
+end
+
+--- The summary line under the tabs. Never shorter than the tick boxes at
+--- its right (Ezmode's report, 2026-10-22): with no words in it the line
+--- under it rose through Overcutting and Hide losses.
+function PostPanel:SetSummary(text)
+    local summary = self.summary
+    if not summary then return end
+    summary:SetText(text or "")
+    if not summary.SetHeight then return end
+    local box = self.hideLosses
+    local least = (box and box.GetHeight and box:GetHeight()) or 0
+    if not least or least <= 0 then least = PostPanel.SUMMARY_LEAST end
+    local tall = (text and text ~= "" and summary.GetStringHeight and summary:GetStringHeight()) or 0
+    summary:SetHeight(math.max(least, tall or 0))
 end
 
 --- Back in place, and laid out against the main window, without rebuilding
@@ -1708,7 +1725,7 @@ function PostPanel:Refresh()
         self.empty:Hide()
         if Favors then
             Favors:Refresh()
-            self.summary:SetText(Favors:Summary())
+            self:SetSummary(Favors:Summary())
             self:SetTitle(Favors:Title())
         end
         return
@@ -1721,7 +1738,7 @@ function PostPanel:Refresh()
         self.empty:Hide()
         if Auctions then
             Auctions:Refresh()
-            self.summary:SetText(Auctions:Summary())
+            self:SetSummary(Auctions:Summary())
             self:SetTitle(Auctions:Title())
         end
         return
@@ -1734,7 +1751,7 @@ function PostPanel:Refresh()
         self.empty:Hide()
         self:SetTitle(L["Shopping lists"])
         if View then
-            self.summary:SetText(View:Summary())
+            self:SetSummary(View:Summary())
             View:Refresh()
         end
         return
@@ -1772,7 +1789,7 @@ function PostPanel:Refresh()
                 and L.Format("Everything here would sell at a loss (%d item).\n\nUntick Hide losses to see them.", hidden)
                 or L.Format("Everything here would sell at a loss (%d items).\n\nUntick Hide losses to see them.", hidden))
             or L["Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for."])
-        self.summary:SetText("")
+        self:SetSummary("")
         self:SetTitle(L["Ready to sell"])
         return
     end
@@ -1800,7 +1817,7 @@ function PostPanel:Refresh()
 
     local about = ("|c%s%s|r"):format(ns.COLORS.accent,
         Util.FormatMoney(total, { noColor = true, short = true }))
-    self.summary:SetText((#lines == 1
+    self:SetSummary((#lines == 1
             and L.Format("%d item, about %s", #lines, about)
             or L.Format("%d items, about %s", #lines, about))
         .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))

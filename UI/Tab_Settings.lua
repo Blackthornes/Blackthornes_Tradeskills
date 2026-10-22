@@ -1644,7 +1644,7 @@ local function Build(outer)
         L["A cheer on the Stats tab when an item has its best week of sales yet, once a week."],
         function()
             local kit = type(SOUNDKIT) == "table" and SOUNDKIT.IG_QUEST_LIST_COMPLETE or 878
-            pcall(PlaySound, kit)
+            pcall(PlaySound, kit, "Master")
         end)
 
     -- UI/Tab_Stats.lua (asked 2026-10-14): one item at a time, in charts.
