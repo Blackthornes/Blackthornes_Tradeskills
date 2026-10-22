@@ -9,6 +9,9 @@
 -- Logic/RecipeBook.lua); a recipe still a few points out of reach is listed
 -- after the rest, "At 120". The trainer or vendor picked is on the player's
 -- side, in the zone they are in when one is, else in a city of theirs.
+-- A trainer or vendor stands where the game saw it, when its window has
+-- been opened or the shipped Forever spots have it (VendorPins:SeenAt),
+-- else at Classic's spot.
 -- Show the way aims the arrow at them (Logic/WayArrow.lua), or, where the
 -- arrow can't find the map, puts the game's own map pin on them, or
 -- TomTom's arrow when TomTom is installed (Logic/Waypoints.lua).
@@ -92,10 +95,18 @@ local function Nearest(places, side)
     return city or places[1]
 end
 
+--- Where the game saw a vendor or trainer stand (Logic/VendorPins.lua), or nil.
+local function SeenAt(name, zone, kind)
+    local pins = ns.VendorPins
+    if not (pins and pins.SeenAt) then return nil end
+    local ok, seen = pcall(pins.SeenAt, pins, name, zone, kind)
+    return ok and type(seen) == "table" and seen or nil
+end
+
 --- Where a recipe is learned: the trainer or vendor to go to.
 --
--- @return { kind = "trainer" | "vendor", name, zone, x, y, price, itemID }
---   or nil when neither teaches it on the player's side
+-- @return { kind = "trainer" | "vendor", name, zone, x, y, price, itemID,
+--   mapID (only where the game saw a vendor stand) } or nil when neither teaches it on the player's side
 function LearnNext:Place(record)
     if not record then return nil end
     local side = Side()
@@ -109,9 +120,11 @@ function LearnNext:Place(record)
         for _, row in ipairs((spots.TRAINERS or {})[line] or {}) do
             if OnSide(row[5], side) then sideTop = math.max(sideTop or 0, row[6] or 0) end
             if OnSide(row[5], side) and (row[6] or 0) >= needs then
+                local seen = SeenAt(row[1], row[2], "trainer")
                 trainers[#trainers + 1] = {
-                    kind = "trainer", name = row[1], zone = row[2], x = row[3], y = row[4],
-                    price = record.trainerCost,
+                    kind = "trainer", name = row[1], zone = row[2],
+                    x = seen and seen.x or row[3], y = seen and seen.y or row[4],
+                    mapID = seen and seen.mapID, price = record.trainerCost,
                 }
             end
         end
@@ -123,10 +136,14 @@ function LearnNext:Place(record)
         local list = book and book.v
         for i = 1, list and #list - 2 or 0, 3 do
             if OnSide(list[i + 2], side) then
-                local where = (spots.VENDORS or {})[list[i] .. "|" .. (list[i + 1] or "")]
+                -- Where the game saw the vendor stand wins over Classic's
+                -- spot: Forever moved some.
+                local seen = SeenAt(list[i], list[i + 1])
+                local where = seen and { seen.x, seen.y }
+                    or (spots.VENDORS or {})[list[i] .. "|" .. (list[i + 1] or "")]
                 vendors[#vendors + 1] = {
                     kind = "vendor", name = list[i], zone = list[i + 1] ~= "" and list[i + 1] or nil,
-                    x = where and where[1], y = where and where[2],
+                    x = where and where[1], y = where and where[2], mapID = seen and seen.mapID,
                     price = book[2], itemID = itemID,
                 }
             end
@@ -380,7 +397,7 @@ function LearnNext:WhereFor(recipeID)
     if not placed or not place then return nil end
     return {
         kind = place.kind, name = place.name, zone = place.zone,
-        x = place.x, y = place.y, price = place.price,
+        x = place.x, y = place.y, price = place.price, mapID = place.mapID,
     }
 end
 
