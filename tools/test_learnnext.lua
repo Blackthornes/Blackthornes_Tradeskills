@@ -374,6 +374,10 @@ check("by Classic skill line", lw ~= nil, true)
 check("trainer recipes the skill reaches, not learned, not grey", lw and lw.count, 2)
 check("what they cost", lw and lw.cost, 3500)
 check("the skill", lw and lw.skill, 100)
+check("each recipe named", lw and lw.recipes and #lw.recipes, 2)
+check("with its ID and price", lw and lw.recipes and lw.recipes[1].recipeID ~= nil
+  and lw.recipes[1].cost > 0, true)
+check("cheapest first", lw and lw.recipes and lw.recipes[1].cost <= lw.recipes[2].cost, true)
 ns.Recipes.GetAccountWide = function() return {} end
 Book.known = nil
 ns.db.characters.me.recipesCachedAt = 6
