@@ -477,6 +477,16 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
     -- honest expectation over many crafts even though any single craft differs.
     local averageYield = ((recipe.quantityMin or 1) + (recipe.quantityMax or 1)) / 2
     if averageYield <= 0 then averageYield = 1 end
+    -- Master Chef (a Legacy perk) gives extra results when this character
+    -- cooks. Read only from the game; with nothing read it stays as it was.
+    if ns.Legacy and ns.Recipes and ns.Recipes.SKILL_LINE_PROFESSIONS
+        and ns.Recipes.SKILL_LINE_PROFESSIONS[recipe.skillLineID] == "Cooking"
+        and type(ns.Recipes.Get) == "function" and ns.Recipes:Get(recipeID) == recipe then
+        local ok, extra = pcall(ns.Legacy.CookingYield, ns.Legacy)
+        if ok and type(extra) == "number" and extra > 1 then
+            averageYield = averageYield * extra
+        end
+    end
 
     result.yield = averageYield
     result.perUnit = result.total / averageYield

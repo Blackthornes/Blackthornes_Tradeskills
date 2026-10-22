@@ -51,6 +51,7 @@ Data\CraftsmansWrits.lua
 Data\Travel.lua
 Data\TravelZones.lua
 
+Logic\Legacy.lua
 Logic\Cost.lua
 Logic\CraftTime.lua
 Logic\Disenchant.lua
