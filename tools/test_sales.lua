@@ -95,9 +95,9 @@ ns.Theme = {
     SetItemIcon = function() end,
 }
 
--- The tab's only way to change view is the dropdown's callback, so the stub
--- keeps hold of it.
-local selectView, selectPeriod
+-- The tab's only way to change view is its page strip's callback, so the
+-- stub keeps hold of it.
+local selectView, selectPeriod, viewTabs, periodTabs, whoTabs
 
 ns.Widgets = {
     CreateSearchBox = function() return Stub() end,
@@ -106,6 +106,15 @@ ns.Widgets = {
         if first == "sales" then selectView = onSelect end
         if first == "session" then selectPeriod = onSelect end
         return Stub()
+    end,
+    CreateTabStrip = function(_, tabs, onSelect)
+        local first = tabs and tabs[1] and tabs[1].key
+        if first == "sales" then selectView, viewTabs = onSelect, tabs end
+        if first == "session" then selectPeriod, periodTabs = onSelect, tabs end
+        if first == "character" then whoTabs = tabs end
+        local strip = Stub()
+        strip.Select = function(self, key) self.selected = key end
+        return strip
     end,
     CreateCheckbox = function() return Stub() end,
     CreateNumberBox = function() return Stub() end,
@@ -357,7 +366,11 @@ print("The By item view")
 tab.refresh()  -- still in the Recent view: sales only
 check("the event list shows only what sold", #listData, 3)
 
-assert(selectView, "Tab_Sales did not hand over its view dropdown callback")
+assert(selectView, "Tab_Sales did not hand over its view pages' callback")
+check("the views are pages", #viewTabs, 7)
+check("the periods are pages", #periodTabs, 8)
+check("with Pick dates last", periodTabs[8].key, "pick")
+check("whose gold: this character or all", whoTabs and #whoTabs, 2)
 
 selectView("all")
 check("'Recent, all' shows what came back as well", #listData, 5)

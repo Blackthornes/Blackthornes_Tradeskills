@@ -20,6 +20,12 @@ ns.GoldChart = GoldChart
 local LEGEND_ROWS = 22
 local ROW_HEIGHT = 15
 
+-- Your gold over the period rides above the bars (a player asked, the owner
+-- said yes from a mockup, 2026-10-22): how tall its band is, and the room
+-- for its heading and the bars' heading.
+GoldChart.LINE_HEIGHT = 96
+local HEADING_ROOM = 18
+
 --------------------------------------------------------------------------------
 -- Money in words
 --------------------------------------------------------------------------------
@@ -39,10 +45,39 @@ function GoldChart.CreateChart(parent)
     Theme.Recess(chart)
 
     -- Room inside the well for the scale on the left and the times below.
+    -- With a gold line the bars sit under it (GoldChart.SetLine).
     local plot = CreateFrame("Frame", nil, chart)
-    plot:SetPoint("TOPLEFT", 70, -16)
-    plot:SetPoint("BOTTOMRIGHT", -14, 26)
     chart.plot = plot
+
+    local linePlot = CreateFrame("Frame", nil, chart)
+    linePlot:SetPoint("TOPLEFT", 70, -16 - HEADING_ROOM)
+    linePlot:SetPoint("TOPRIGHT", -14, -16 - HEADING_ROOM)
+    linePlot:SetHeight(GoldChart.LINE_HEIGHT)
+    linePlot:Hide()
+    chart.linePlot = linePlot
+    chart.lineParts, chart.lineDots = {}, {}
+
+    chart.lineHeading = Theme.CreateLabel(chart, "tiny", "muted", "LEFT")
+    chart.lineHeading:SetPoint("BOTTOMLEFT", linePlot, "TOPLEFT", 0, 4)
+    chart.lineHeading:SetText(L["Total gold"]:upper())
+    chart.lineHeading:Hide()
+
+    chart.barHeading = Theme.CreateLabel(chart, "tiny", "muted", "LEFT")
+    chart.barHeading:SetPoint("BOTTOMLEFT", plot, "TOPLEFT", 0, 6)
+    chart.barHeading:SetText(L["Gold in and out"]:upper())
+    chart.barHeading:Hide()
+
+    chart.lineTop = Theme.CreateLabel(chart, "tiny", "muted", "RIGHT")
+    chart.lineTop:SetPoint("TOPRIGHT", linePlot, "TOPLEFT", -6, 4)
+    chart.lineTop:SetWidth(62)
+    chart.lineBottom = Theme.CreateLabel(chart, "tiny", "muted", "RIGHT")
+    chart.lineBottom:SetPoint("BOTTOMRIGHT", linePlot, "BOTTOMLEFT", -6, -4)
+    chart.lineBottom:SetWidth(62)
+
+    chart.lineNow = Theme.CreateLabel(chart, "tiny", "accentHi", "RIGHT")
+    chart.lineNow:Hide()
+
+    GoldChart.PlacePlot(chart, false)
 
     local zero = plot:CreateTexture(nil, "OVERLAY")
     zero:SetHeight(1)
@@ -75,6 +110,24 @@ function GoldChart.CreateChart(parent)
 
     chart.columns = {}
     return chart
+end
+
+--- The bars take the whole well, or the part under the gold line.
+function GoldChart.PlacePlot(chart, withLine)
+    local plot = chart.plot
+    plot:ClearAllPoints()
+    local top = withLine and (16 + HEADING_ROOM + GoldChart.LINE_HEIGHT + 14 + HEADING_ROOM) or 16
+    plot:SetPoint("TOPLEFT", 70, -top)
+    plot:SetPoint("BOTTOMRIGHT", -14, 26)
+    chart.linePlot:SetShown(withLine and true or false)
+    chart.lineHeading:SetShown(withLine and true or false)
+    chart.barHeading:SetShown(withLine and true or false)
+    if not withLine then
+        chart.lineTop:SetText("")
+        chart.lineBottom:SetText("")
+        chart.lineNow:Hide()
+    end
+    chart.withLine = withLine and true or false
 end
 
 --- One bar's frame: a hit area for the tooltip and a pool of segments.
@@ -134,6 +187,11 @@ function GoldChart.ShowTooltip(owner, bin)
                 spending = spending + line.o
             end
         end
+    end
+
+    if type(bin.gold) == "number" then
+        GameTooltip:AddDoubleLine(L["Total gold"], Util.FormatMoney(bin.gold, { short = true, noColor = true }),
+            1, 1, 1, Theme.Unpack("accentHi"))
     end
 
     if income == 0 and spending == 0 then
@@ -261,6 +319,139 @@ function GoldChart.SetBins(chart, bins, emptyText)
         tick:SetText(bins[index].label or "")
         tick:Show()
     end
+end
+
+--------------------------------------------------------------------------------
+-- The gold line
+--------------------------------------------------------------------------------
+
+--- The gold line's top and bottom: the most and least known, kept apart
+--- so a flat line sits in the middle rather than on an edge.
+function GoldChart.LineScale(values)
+    local low, high
+    for _, value in ipairs(values) do
+        if type(value) == "number" then
+            if not low or value < low then low = value end
+            if not high or value > high then high = value end
+        end
+    end
+    if not low then return nil end
+    if high == low then
+        local pad = math.max(10000, math.floor(high * 0.05))
+        low, high = math.max(0, low - pad), high + pad
+    end
+    return low, high
+end
+
+local function LinePart(chart, index)
+    local part = chart.lineParts[index]
+    if part then return part end
+    local plot = chart.linePlot
+    local glow = plot:CreateLine(nil, "ARTWORK", nil, 1)
+    local line = plot:CreateLine(nil, "ARTWORK", nil, 2)
+    pcall(glow.SetBlendMode, glow, "ADD")
+    glow:SetThickness(6)
+    line:SetThickness(2)
+    glow:SetColorTexture(Theme.Unpack("accent", 0.22))
+    line:SetColorTexture(Theme.Unpack("accentHi", 0.95))
+    part = { glow = glow, line = line }
+    chart.lineParts[index] = part
+    return part
+end
+
+local function LineDot(chart, index, x, y, size, alpha)
+    local dot = chart.lineDots[index]
+    if not dot then
+        dot = chart.linePlot:CreateTexture(nil, "OVERLAY")
+        chart.lineDots[index] = dot
+    end
+    dot:ClearAllPoints()
+    dot:SetSize(size, size)
+    dot:SetPoint("CENTER", chart.linePlot, "BOTTOMLEFT", x, y)
+    dot:SetColorTexture(Theme.Unpack("accentHi", alpha))
+    dot:Show()
+    return dot
+end
+
+--- Draw your gold at the end of each bin over the bars, or take it away.
+-- @param values  from GoldLog:Line, one a bin, false where not known; nil hides it
+function GoldChart.SetLine(chart, bins, values)
+    for _, part in pairs(chart.lineParts) do
+        part.glow:Hide()
+        part.line:Hide()
+    end
+    for _, dot in pairs(chart.lineDots) do dot:Hide() end
+
+    local low, high
+    if values then low, high = GoldChart.LineScale(values) end
+    GoldChart.PlacePlot(chart, low and true or false)
+    for index, bin in ipairs(bins or {}) do
+        bin.gold = values and type(values[index]) == "number" and values[index] or nil
+    end
+    if not low then return end
+
+    local plot = chart.linePlot
+    local width = plot:GetWidth()
+    local height = plot:GetHeight()
+    if type(width) ~= "number" or width <= 0 then width = 400 end
+    if type(height) ~= "number" or height <= 0 then height = GoldChart.LINE_HEIGHT end
+
+    chart.lineTop:SetText(Util.FormatMoney(high, { short = true, noColor = true }))
+    chart.lineBottom:SetText(Util.FormatMoney(low, { short = true, noColor = true }))
+
+    local count = #bins
+    local slot = width / math.max(count, 1)
+    local placed = {}
+    for index = 1, count do
+        local value = values[index]
+        if type(value) == "number" then
+            placed[#placed + 1] = { x = (index - 0.5) * slot,
+                y = 2 + (value - low) / (high - low) * (height - 4), value = value }
+        end
+    end
+
+    -- Lines where the client draws them, dots where it does not. A gap in
+    -- what is known is bridged, since the gold was somewhere between.
+    local lines = type(plot.CreateLine) == "function" and chart.canLine ~= false
+    if lines then
+        for index = 2, #placed do
+            local a, b = placed[index - 1], placed[index]
+            local ok = pcall(function()
+                local part = LinePart(chart, index - 1)
+                for _, piece in ipairs({ part.glow, part.line }) do
+                    piece:SetStartPoint("BOTTOMLEFT", plot, a.x, a.y)
+                    piece:SetEndPoint("BOTTOMLEFT", plot, b.x, b.y)
+                    piece:Show()
+                end
+            end)
+            if not ok then
+                chart.canLine = false
+                for _, part in pairs(chart.lineParts) do
+                    part.glow:Hide()
+                    part.line:Hide()
+                end
+                lines = false
+                break
+            end
+        end
+    end
+
+    local used = 0
+    if not lines then
+        for _, point in ipairs(placed) do
+            used = used + 1
+            LineDot(chart, used, point.x, point.y, 3, 0.9)
+        end
+    end
+
+    -- The newest point is marked, with what it is.
+    local last = placed[#placed]
+    used = used + 1
+    LineDot(chart, used, last.x, last.y, 7, 1)
+    chart.lineNow:ClearAllPoints()
+    chart.lineNow:SetPoint("BOTTOMRIGHT", plot, "BOTTOMLEFT", last.x - 6, last.y + 4)
+    chart.lineNow:SetText(Util.FormatMoney(last.value, { short = true, noColor = true }))
+    chart.lineNow:Show()
 end
 
 --------------------------------------------------------------------------------

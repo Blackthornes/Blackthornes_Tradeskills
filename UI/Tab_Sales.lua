@@ -45,7 +45,16 @@ local VIEWS = {
     { text = L["Gold in and out"], value = "gold" },
 }
 
-local state = { view = "sales", search = "", selected = nil, period = "week" }
+local state = { view = "sales", search = "", selected = nil, period = "week", who = "all" }
+
+-- Whose gold the line over Gold in and out follows (a player asked, the
+-- owner said yes from a mockup, 2026-10-22). All characters by default: it
+-- reaches back as far as the log does, while the character playing's line
+-- starts from the day its gold was first written down.
+local WHO = {
+    { key = "character", text = L["This character"] },
+    { key = "all",       text = L["All characters"] },
+}
 local widgets = {}
 
 --------------------------------------------------------------------------------
@@ -732,6 +741,7 @@ end
 local PERIOD_TEXT = {
     session = L["this session"], today = L["today"],
     week = L["the last 7 days"], month = L["the last 30 days"],
+    quarter = L["the last 3 months"], year = L["the last year"], all = L["all time"],
 }
 
 --- A day as the date pickers show it: "Oct 06".
@@ -778,6 +788,7 @@ local function ApplyLayout()
     widgets.legend:SetShown(gold)
     widgets.search:SetShown(not gold and not methods)
     widgets.period:SetShown(gold or methods)
+    widgets.who:SetShown(gold)
 
     local picking = (gold or methods) and state.period == "pick"
     widgets.fromDay:SetShown(picking)
@@ -819,6 +830,8 @@ local function RefreshGold()
         end
     end
 
+    local line = ns.GoldLog.Line and ns.GoldLog:Line(bins, state.who, state.period) or nil
+    ns.GoldChart.SetLine(widgets.chart, bins, line)
     ns.GoldChart.SetBins(widgets.chart, bins,
         L["Nothing yet. Gold you make and spend from now on is written down here, with where it came from."])
 
@@ -1106,29 +1119,35 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
-    -- Across the top, over the list and the panel, like every other tab's
-    -- option bar: the menu first, then search (2026-10-06).
-    local toolbar = CreateFrame("Frame", nil, container)
-    toolbar:SetPoint("TOPLEFT", 8, -8)
-    toolbar:SetPoint("TOPRIGHT", -8, -8)
-    toolbar:SetHeight(24)
-
-    local view = Widgets.CreateDropdown(toolbar, VIEWS, function(value)
+    -- The views are pages along the top (a player asked, the owner said yes
+    -- from a mockup, 2026-10-22: a menu hid which one was showing); under
+    -- them each view's own bar, search or the period.
+    local viewTabs = {}
+    for _, view in ipairs(VIEWS) do viewTabs[#viewTabs + 1] = { key = view.value, text = view.text } end
+    local view = Widgets.CreateTabStrip(container, viewTabs, function(value)
         state.view = value
         Refresh()
-    end, { width = 168 })
-    view:SetPoint("LEFT", 0, 0)
-    view:SetValue(state.view)
+    end, { width = 1060 })
+    view:SetPoint("TOPLEFT", 8, -8)
+    view:Select(state.view)
     widgets.view = view
 
-    -- Gold in and out's own menus, shown only in that view, in the search
-    -- box's place.
-    local period = Widgets.CreateDropdown(toolbar, ns.GoldLog and ns.GoldLog.PERIODS or {}, function(value)
+    local toolbar = CreateFrame("Frame", nil, container)
+    toolbar:SetPoint("TOPLEFT", view, "BOTTOMLEFT", 0, -6)
+    toolbar:SetPoint("RIGHT", container, "RIGHT", -8, 0)
+    toolbar:SetHeight(24)
+
+    -- The periods are pages too, Pick dates last with its two days.
+    local periodTabs = {}
+    for _, period in ipairs(ns.GoldLog and ns.GoldLog.PERIODS or {}) do
+        periodTabs[#periodTabs + 1] = { key = period.value, text = period.text }
+    end
+    local period = Widgets.CreateTabStrip(toolbar, periodTabs, function(value)
         state.period = value
         Refresh()
-    end, { width = 120 })
-    period:SetPoint("LEFT", view, "RIGHT", 8, 0)
-    period:SetValue(state.period)
+    end, { width = 560 })
+    period:SetPoint("LEFT", 0, 0)
+    period:Select(state.period)
     widgets.period = period
 
     local fromDay = Widgets.CreateDropdown(toolbar, {}, function(value)
@@ -1150,11 +1169,19 @@ local function Build(container)
     toDay:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
     widgets.toDay = toDay
 
+    local who = Widgets.CreateTabStrip(toolbar, WHO, function(value)
+        state.who = value
+        Refresh()
+    end, { width = DETAIL_WIDTH })
+    who:SetPoint("RIGHT", 0, 0)
+    who:Select(state.who)
+    widgets.who = who
+
     local search = Widgets.CreateSearchBox(toolbar, L["Search sales"], function(text)
         state.search = text or ""
         Refresh()
     end)
-    search:SetPoint("LEFT", view, "RIGHT", 8, 0)
+    search:SetPoint("LEFT", 0, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
     widgets.search = search
 
@@ -1225,7 +1252,7 @@ local function Build(container)
     widgets.summary = summary
 
     local detail = BuildDetail(container)
-    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
+    detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
@@ -1236,7 +1263,7 @@ local function Build(container)
     widgets.chart = chart
 
     local legend = ns.GoldChart.CreateLegend(container, DETAIL_WIDTH)
-    legend:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
+    legend:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     legend:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     legend:Hide()
     widgets.legend = legend
@@ -1275,7 +1302,7 @@ end
 ns.SalesTab = {
     ShowVisits = function()
         state.view = "visits"
-        if widgets.view then widgets.view:SetValue("visits") end
+        if widgets.view then widgets.view:Select("visits") end
     end,
 }
 
