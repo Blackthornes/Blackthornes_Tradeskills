@@ -3260,3 +3260,10 @@ L["Got %s prices from your guild %s."] = "Recibiste %s precios de tu hermandad %
 L["No prices from your guild yet. They come in after a guildmate scans the auction house."] = "Aún no hay precios de tu hermandad. Llegan cuando un miembro escanea la casa de subastas."
 L["You shared %s prices %s."] = "Compartiste %s precios %s."
 L["You're not in a guild on this character."] = "Este personaje no está en una hermandad."
+
+-- Asking before the x on a sub-craft sets it to Buy (UI/NeverMakeBox.lua).
+L["Stop making %s?"] = "¿Dejar de fabricar %s?"
+L["The queue will buy it instead, from now on."] = "Desde ahora, la cola lo comprará en su lugar."
+L["You can undo this in Settings, Queue."] = "Puedes deshacerlo en Ajustes, Cola."
+L["Buy It"] = "Comprarlo"
+L["Keep Making"] = "Seguir fabricando"
