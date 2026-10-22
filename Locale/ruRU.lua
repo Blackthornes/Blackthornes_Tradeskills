@@ -3255,3 +3255,10 @@ L["When the place is in another zone or across the sea, the arrow leads you ther
 L["With TomTom installed, its arrow shows the way instead."] = "Если TomTom установлен, путь показывает его стрелка."
 L["You're there"] = "Ты на месте"
 L["Your Way There"] = "Твой путь"
+
+-- Guild Status in Settings
+L["Guild Status:"] = "Состояние гильдии:"
+L["Got %s prices from your guild %s."] = "Получено цен от гильдии: %s, %s."
+L["No prices from your guild yet. They come in after a guildmate scans the auction house."] = "Цен от гильдии пока нет. Они придут, когда согильдиец просканирует аукцион."
+L["You shared %s prices %s."] = "Ты поделился ценами: %s, %s."
+L["You're not in a guild on this character."] = "Этот персонаж не состоит в гильдии."

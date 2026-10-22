@@ -414,6 +414,69 @@ current = ana
 check("Ana does not keep her own echo", ana.ns.GuildPrices:GetValue(2592), nil)
 check("not sent again within the hour", select(2, ana.ns.GuildPrices:Share()), "already shared")
 
+-- What Settings says.
+current = bob
+check("Bob's status says what came in", GuildPrices:Status(),
+    "Got " .. GuildPrices:Count() .. " prices from your guild just now.")
+current = ana
+check("Ana's says what she shared too",
+    ana.ns.GuildPrices:Status():find("You shared 2 prices just now.", 1, true) ~= nil, true)
+do
+    local fresh = NewClient("Gus", "Forever-Alliance")
+    current = fresh
+    fresh.settings.guildPrices = true
+    check("before anything comes in", fresh.ns.GuildPrices:Status(),
+        "No prices from your guild yet. They come in after a guildmate scans the auction house.")
+    IsInGuild = function() return false end
+    check("out of a guild", fresh.ns.GuildPrices:Status(), "You're not in a guild on this character.")
+    IsInGuild = function() return true end
+    fresh.settings.guildPrices = false
+    check("turned off", fresh.ns.GuildPrices:Status(), "Guild prices are off.")
+end
+
+-- A guildmate who logs in after the scan asks, and one guildmate sends it again.
+do
+    local timers = {}
+    local realAfter = C_Timer.After
+    C_Timer.After = function(delay, fn) timers[#timers + 1] = { delay = delay, fn = fn, client = current } end
+    local fay = NewClient("Fay", "Forever-Alliance")
+    fay.guild = true
+    fay.settings.guildPrices = true
+    clients[#clients + 1] = fay
+    timers = {}
+    current = fay
+    check("Fay asks after logging in", fay.ns.GuildPrices:Ask(), true)
+    Run()
+    table.sort(timers, function(a, b) return a.delay < b.delay end)
+    check("more than one guildmate could answer", #timers >= 2, true)
+    for _, timer in ipairs(timers) do
+        current = timer.client
+        timer.fn()
+        Run()
+    end
+    current = fay
+    check("Fay has the guild's prices now", fay.ns.GuildPrices:GetValue(2592), 500)
+    local answered = 0
+    for _, client in ipairs(clients) do
+        if client.ns.GuildPrices.answeredAt then answered = answered + 1 end
+    end
+    check("only one guildmate sent it again", answered, 1)
+    current = ana
+    check("asked again within the hour, nothing goes", (function()
+        timers = {}
+        for _, client in ipairs(clients) do
+            if client.ns.GuildPrices.answeredAt then
+                current = client
+                client.ns.GuildPrices:OnAsk("Hal-Realm", Comm.ToBase36(0), "GUILD")
+            end
+        end
+        return #timers
+    end)(), 0)
+    C_Timer.After = realAfter
+    -- Fay stays out of what follows.
+    clients[#clients] = nil
+end
+
 -- Bob's own fresh scan always wins, and a far-off price is refused.
 Scan(bob, { [2589] = 1500 }, clock)
 current = bob

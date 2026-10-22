@@ -1294,6 +1294,13 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   in `Prices:GetValue`: an item never scanned, or one gone stale while
   theirs is newer. So Farmer's `GetValue` can now answer from a guild
   price unless the player turned it off; still copper or nil.
+  Catching up (a player's report, 2026-10-22): `ASK_AFTER` seconds after
+  login a guildmate sends `G<newest scan held>`, and anyone whose own scan
+  is newer (under `ANSWER_SCAN_AGE`) waits, the newer the sooner, and sends
+  it again unless another scan went out since (`OnAsk`, `Resend`, at most
+  every `ANSWER_EVERY`). "Guild Status:" on the Sharing page is
+  `GuildPrices:Status()`, from the save (`guildPricesSent` now keeps
+  `count`). Comm sends 8 in a burst, then one a second.
 
 TradeSkillMaster (a player asked, the owner agreed 2026-10-12 and said TSM
 may be named in public for this, a second exception beside TomTom):
