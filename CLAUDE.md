@@ -760,17 +760,40 @@ the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 
 The owner said build it (2026-10-21, from a mockup) in every addon: with
 "Guide Me:" ticked on the Look page (`arrowRoute`, account wide, off
-unless ticked, never rename it), Learn next's Show the way to a trainer
-or vendor in another zone or across the sea lists the steps in chat
-(flights this character knows, the boats and zeppelins of its side, its
-Hearthstone, walks through the zones between) and pins the first stop
-(`LearnNext.Guide`, `Travel:Guide`). `Logic/Travel.lua`, `Data/Travel.lua`,
-`Data/TravelZones.lua` and the two `tools/make_travel*.py` are Farmer's,
-the same in every addon (a fix to one belongs in all; Farmer's
-`CLAUDE.md` has the details); Tradeskills has no arrow, so no card or map
-line, and its defaults need no `ns.TravelHost`. It reads the flights,
-crossings and Hearthstone spot the other addons saved. Tested in
+unless ticked, never rename it), the arrow below leads to a trainer or
+vendor in another zone or across the sea step by step (flights this
+character knows, the boats and zeppelins of its side, its Hearthstone,
+walks through the zones between). Without the arrow (no map for the
+place) Learn next's Show the way lists the steps in chat and pins the
+first stop (`LearnNext.Guide`, `Travel:Guide`). `Logic/Travel.lua`,
+`Data/Travel.lua`, `Data/TravelZones.lua`, `UI/TravelCard.lua`,
+`UI/TravelMap.lua`, `Media/Frame/TravelDot.tga` and the two
+`tools/make_travel*.py` are Farmer's, the same in every addon (a fix to
+one belongs in all; Farmer's `CLAUDE.md` has the details). It reads the
+flights, crossings and Hearthstone spot the other addons saved. Tested in
 `tools/test_learnnext.lua`. Not yet seen in game.
+
+## The arrow
+
+The owner asked (2026-10-22) for Tradeskills and Butler to guide as the
+other addons do: the arrow when they point at an NPC or a place, and the
+same TomTom choice. `Logic/WayArrow.lua` and `UI/WayArrow.lua` are the
+house dial (Farmer's `Logic/Arrow.lua` and `UI/Arrow.lua`, by way of
+Butler's copy; `tools/make_arrow_art.py` draws the same `Media/Arrow/*.tga`),
+with `ns.TravelHost` at the end of `Logic/WayArrow.lua`. `WayArrow:AimAt
+(place, title)` (place `{ zone or mapID, x, y }`, 0 to 100; false when no
+map is found) is called first by Learn next's Show the way
+(`LearnNext:ShowTheWay`) and a vendor pin's click (`VendorPins:ShowTheWay`),
+which print "The arrow shows the way to NAME (WHAT)."; the old pin is the
+fallback. The arrow shows only while a place is set
+(`charDb.wayArrowPlace`, per character; its spot `wayArrowX`/`wayArrowY`,
+account wide), and goes with its close gem or when a trainer or vendor
+window opens on arrival (`WayArrow:Reached`). It joins the one-arrow rule
+(`_G.BlackthornesArrows`, as "Tradeskills"). `Logic/TomTom.lua` is the
+shared TomTom file: "Use TomTom:" on the Look page (`useTomTom`, account
+wide, on unless unticked, never rename it) hands TomTom the place
+instead. Never rename `wayArrowPlace`, `wayArrowX` or `wayArrowY`. Tested
+in `tools/test_learnnext.lua`. Not yet seen in game.
 
 ## Road to 300
 

@@ -195,7 +195,16 @@ function VendorPinsUI.TooltipLines(vendor, hasTomTom)
         lines[#lines + 1] = { L.Format("Saves you %s over the auction house.", Util.FormatMoney(vendor.saving)),
             nil, "green" }
     end
-    lines[#lines + 1] = { hasTomTom and L["Click for a TomTom arrow."] or L["Click to set a map pin."], nil, "blue" }
+    -- A click aims the arrow (Logic/WayArrow.lua), which hands off to
+    -- TomTom's when "Use TomTom:" is ticked.
+    local hint = L["Click to set a map pin."]
+    local tomtomOn = not (ns.TomTom and ns.TomTom.IsOn) or ns.TomTom.IsOn()
+    if hasTomTom and tomtomOn then
+        hint = L["Click for a TomTom arrow."]
+    elseif ns.WayArrow and ns.WayArrow.AimAt then
+        hint = L["Click for an arrow."]
+    end
+    lines[#lines + 1] = { hint, nil, "blue" }
     return lines
 end
 
