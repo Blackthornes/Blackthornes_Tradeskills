@@ -95,9 +95,9 @@ ns.Theme = {
     SetItemIcon = function() end,
 }
 
--- The tab's only way to change view is the dropdown's callback, so the stub
--- keeps hold of it.
-local selectView, selectPeriod
+-- The tab's only way to change view is its page strip's callback, so the
+-- stub keeps hold of it.
+local selectView, selectPeriod, viewTabs, periodTabs, whoTabs
 
 ns.Widgets = {
     CreateSearchBox = function() return Stub() end,
@@ -106,6 +106,15 @@ ns.Widgets = {
         if first == "sales" then selectView = onSelect end
         if first == "session" then selectPeriod = onSelect end
         return Stub()
+    end,
+    CreateTabStrip = function(_, tabs, onSelect)
+        local first = tabs and tabs[1] and tabs[1].key
+        if first == "sales" then selectView, viewTabs = onSelect, tabs end
+        if first == "session" then selectPeriod, periodTabs = onSelect, tabs end
+        if first == "character" then whoTabs = tabs end
+        local strip = Stub()
+        strip.Select = function(self, key) self.selected = key end
+        return strip
     end,
     CreateCheckbox = function() return Stub() end,
     CreateNumberBox = function() return Stub() end,
@@ -182,10 +191,11 @@ end
 -- The carried-over history is read from the saved database; stand in for it.
 ns.Mail.GetRestoredRollup = function() return restoredRollup end
 
-local createRow, updateRow, listData
+local createRow, updateRow, listData, clickRow
 
 ns.Widgets.CreateScrollList = function(_, opts)
     createRow, updateRow = opts.createRow, opts.updateRow
+    clickRow = opts.onClick
 
     return Stub({
         SetData = function(_, data) listData = data end,
@@ -210,7 +220,7 @@ tab.build(Stub())
 assert(updateRow, "Tab_Sales did not hand over its row callbacks")
 
 local function Row(data)
-    local row = Stub()
+    local row = Stub({ CreateTexture = function() return Stub() end })
     createRow(row)
     updateRow(row, data)
     return row
@@ -357,7 +367,11 @@ print("The By item view")
 tab.refresh()  -- still in the Recent view: sales only
 check("the event list shows only what sold", #listData, 3)
 
-assert(selectView, "Tab_Sales did not hand over its view dropdown callback")
+assert(selectView, "Tab_Sales did not hand over its view pages' callback")
+check("the views are pages", #viewTabs, 7)
+check("the periods are pages", #periodTabs, 8)
+check("with Pick dates last", periodTabs[8].key, "pick")
+check("whose gold: this character or all", whoTabs and #whoTabs, 2)
 
 selectView("all")
 check("'Recent, all' shows what came back as well", #listData, 5)
@@ -661,6 +675,33 @@ selectPeriod("week")
 
 selectView("sales")
 ns.db.goldLog = nil
+
+print("")
+print("Profit by method folds by type (a player asked, 2026-10-22)")
+
+local saved = {}
+ns.Config.Get = function(_, key) return saved[key] end
+ns.Config.Set = function(_, key, value) saved[key] = value end
+local crafted = { n = 2, income = 500, cost = 100, unknown = 0, profit = 400,
+    list = { { itemID = 101, n = 2, income = 500, cost = 100, unknown = 0, profit = 400 } } }
+local empty = { n = 0, income = 0, cost = 0, unknown = 0, profit = 0, list = {} }
+ns.MethodProfit = {
+    METHODS = { { key = "crafted", text = "Crafted" }, { key = "vendored", text = "Vendored" } },
+    Range = function() return 0, 1 end,
+    Summary = function() return { methods = { crafted = crafted, vendored = empty },
+        total = { n = 2, income = 500, cost = 100, unknown = 0, profit = 400 } } end,
+}
+selectView("methods")
+check("a heading and its item", #listData, 2)
+clickRow(listData[1])
+check("a click folds the heading", #listData, 1)
+check("which keeps its total", listData[1].group.profit, 400)
+check("and is kept for next time", saved.salesMethodsFolded, "crafted")
+clickRow(listData[1])
+check("a second click opens it", #listData, 2)
+check("and nothing is kept folded", saved.salesMethodsFolded, "")
+ns.MethodProfit = nil
+selectView("sales")
 
 print("")
 print(string.format("%d passed, %d failed", passed, failed))

@@ -329,6 +329,9 @@ end
 UI.MOVED_TABS = {
     enchanting = "profit",
     vendorflips = "deals",
+    -- Posting is the drawer's Sell list now; a window left on the old Post
+    -- tab opens on Profit.
+    post = "profit",
 }
 
 function UI:SelectTab(key)
@@ -1101,7 +1104,7 @@ function UI:CelebrateScan(result)
 
     if (not ns.Config or ns.Config:Get("scanSounds") ~= false) and type(PlaySound) == "function" then
         local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
-        pcall(PlaySound, kits.IG_QUEST_LIST_COMPLETE or 878)
+        pcall(PlaySound, kits.IG_QUEST_LIST_COMPLETE or 878, "Master")
     end
 end
 
@@ -1220,7 +1223,7 @@ end
 --
 -- Left-click lists the most valuable stack; posting needs a hardware event
 -- per listing anyway, so clicking repeatedly works down the list.
--- Right-click opens the Post tab for the full table.
+-- Right-click opens the window.
 function UI:AttachPostButton()
     local bar = self:GetAuctionBar()
     local button = self.postButton
@@ -1236,8 +1239,9 @@ function UI:AttachPostButton()
     if not button then
         button = Widgets.CreateButton(bar, L["Post Crafted"], function(_, mouseButton)
             if mouseButton == "RightButton" or ns.Posting:IsBlocked() then
+                -- The Post tab is gone (a player asked; posting is the
+                -- drawer's Sell list), so this opens the window.
                 UI:Show()
-                UI:SelectTab("post")
                 return
             end
 
@@ -2059,9 +2063,6 @@ function UI:OnEnable()
 
             if ns.PostPanel then ns.PostPanel:Refresh() end
 
-            if UI.activeTab == "post" then
-                UI:RefreshActiveTab()
-            end
         end)
 
         -- A second, faster ticker purely for the countdown. One second is too

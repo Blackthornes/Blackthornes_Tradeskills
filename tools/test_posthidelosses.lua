@@ -128,4 +128,26 @@ check("off again when unticked", PostPanel:HidingLosses() == false)
 local config = assert(io.open(lfs_cwd .. "/Core/Config.lua")):read("*a")
 check("the setting has a default of off", config:find("postHideLosses = false", 1, true) ~= nil)
 
+-- The summary line is never shorter than the tick boxes beside it (a player's
+-- report, 2026-10-22): empty, the line under it ran through Overcutting and
+-- Hide losses.
+local function FakeSummary(height)
+    local s = { text = nil, height = nil }
+    function s:SetText(v) self.text = v end
+    function s:SetHeight(v) self.height = v end
+    function s:GetStringHeight() return height end
+    return s
+end
+local panel = setmetatable({ summary = FakeSummary(0),
+    hideLosses = { GetHeight = function() return 20 end } }, { __index = PostPanel })
+panel:SetSummary("")
+check("an empty summary keeps the boxes' height", panel.summary.height == 20 and panel.summary.text == "")
+panel.summary = FakeSummary(34)
+panel:SetSummary("two lines of words")
+check("a taller summary keeps its own height", panel.summary.height == 34)
+panel.summary = FakeSummary(0)
+panel.hideLosses = nil
+panel:SetSummary(nil)
+check("with no box it still keeps a line", panel.summary.height == PostPanel.SUMMARY_LEAST)
+
 print(("\n%d check(s) passed\n"):format(checks))

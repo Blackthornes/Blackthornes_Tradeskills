@@ -278,7 +278,12 @@ function Mail:Read()
     self.readThisSession = true
     self.lastComplete = complete
 
+    self.newSales = nil
     self:Reconcile(mails, complete)
+    if self.newSales and ns.SaleAlarm and ns.SaleAlarm.RestockFromMail then
+        pcall(ns.SaleAlarm.RestockFromMail, ns.SaleAlarm, self.newSales)
+    end
+    self.newSales = nil
 
     -- A craft whose listings have all run out can now be judged: back in
     -- the mail, or sold (Logic/SellOut.lua).
@@ -946,6 +951,13 @@ function Mail:Reconcile(mails, complete)
                 elseif kind then
                     local entry = Describe(mail, kind, itemName, invoice)
                     ledger.entries[#ledger.entries + 1] = entry
+                    -- A sale first seen now can top the stock up
+                    -- (SaleAlarm:RestockFromMail); not on a character's
+                    -- first reading, which writes down every old mail.
+                    if kind == "sold" and not firstReading then
+                        self.newSales = self.newSales or {}
+                        self.newSales[#self.newSales + 1] = entry
+                    end
                     self.unresolvedFor = nil
                     -- How long your listings take to sell (Data/StatsLog.lua).
                     if ns.StatsLog then pcall(ns.StatsLog.NoteLedger, ns.StatsLog, entry, mail) end

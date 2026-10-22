@@ -1133,20 +1133,23 @@ end
 --- under Keep in stock, or under what your sales taught when no number is
 --- set (the owner, 2026-10-11: stock that tops itself up). Never for a craft
 --- that loses money, nor while "Wait until it runs low" is waiting.
---- @return the recipe ID queued, or nil
+--- @return the recipe ID queued, or nil and why: "off", "nocraft",
+---   "nostock" (no number to keep), "full", "waiting", "loss" or "failed"
 function Queue:RestockSold(itemID)
-    if not itemID or ns.Config:Get("restockOnSale") == false then return nil end
+    if not itemID or ns.Config:Get("restockOnSale") == false then return nil, "off" end
     local recipeID = self:RecipeFor(itemID)
-    if not recipeID then return nil end
+    if not recipeID then return nil, "nocraft" end
 
     local room, _, _, _, _, _, waiting = ns.Auctions:GetRoom(itemID, nil, true)
-    if not room or room <= 0 or waiting then return nil end
+    if not room then return nil, "nostock" end
+    if waiting then return nil, "waiting" end
+    if room <= 0 then return nil, "full" end
 
     local ok, analysis = pcall(ns.Profit.Analyse, ns.Profit, recipeID)
-    if ok and analysis and analysis.profit and analysis.profit <= 0 then return nil end
+    if ok and analysis and analysis.profit and analysis.profit <= 0 then return nil, "loss" end
 
     if self:Add(recipeID, 1) then return recipeID end
-    return nil
+    return nil, "failed"
 end
 
 function Queue:SetQuantity(recipeID, quantity)

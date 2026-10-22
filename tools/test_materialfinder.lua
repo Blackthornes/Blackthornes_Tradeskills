@@ -85,9 +85,13 @@ ns.Theme = {
     ProfitColor = function(value) return (value or 0) >= 0 and "profit" or "loss" end,
 }
 
-local checkboxes, dropdown, buttons = {}, nil, {}
+local checkboxes, dropdown, buttons, pages = {}, nil, {}, nil
 
 ns.Widgets = {
+    CreateTabStrip = function(_, tabs, onSelect)
+        pages = Shown({ tabs = tabs, onSelect = onSelect, Select = function(self, key) self.selected = key end })
+        return pages
+    end,
     CreateSearchBox = function() return Stub() end,
     CreateDropdown = function(_, options, onSelect)
         dropdown = { options = options, select = onSelect }
@@ -278,9 +282,8 @@ tab.refresh()
 local list = lists[#lists]
 check("it still opens on the auction house", list.data == auctionRows)
 
-local find = checkboxes["Find a material"]
-check("a tick box for it", find ~= nil)
-find.onToggle(true)
+check("a page for it", pages ~= nil and pages.tabs[3].key == "material")
+pages.onSelect("material")
 
 local data = list.data
 local headings = {}
@@ -340,7 +343,7 @@ dropdown.select(DUST)
 local only = list.data
 check("another material lists its own", #only == 4 and only[2].itemID == 70 and only[4].itemID == 43)
 
-find.onToggle(false)
+pages.onSelect("auction")
 check("back to the auction house", list.data == auctionRows)
 
 print(("\n%d check(s) passed\n"):format(checks))

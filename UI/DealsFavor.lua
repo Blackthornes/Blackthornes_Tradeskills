@@ -199,6 +199,15 @@ local function CreateRow(row)
     row.cells = {}
     for index, column in ipairs(COLUMNS) do
         row.cells[index] = Theme.CreateLabel(row, "small", "text", column.justify or "RIGHT")
+        -- Cheaper made than bought: a green Make at the left of the
+        -- price's column, in one spot down the list whatever the price
+        -- (a player's report, 2026-10-22: it rode beside the price before).
+        if column.key == "bundleCost" then
+            row.make = Theme.CreateLabel(row, "small", "profit", "LEFT")
+            row.make:SetPoint("LEFT", row.cells[index], "LEFT", 0, 0)
+            row.make:SetText(L["Make"])
+            row.makeCell = row.cells[index]
+        end
     end
 
     PlaceRow(row)
@@ -221,10 +230,6 @@ local function FillCell(cell, key, entry)
     local value = entry[key]
     if key == "perFavor" then value = Round(value) end
     local text = value and Money(value) or ""
-    -- Cheaper made than bought: a green Make before the price.
-    if key == "bundleCost" and value and entry.best and entry.best.made then
-        text = L.Format("|c%sMake|r  %s", ns.COLORS.profit, text)
-    end
     cell:SetText(text)
     cell:SetTextColor(Theme.Unpack(key == "perFavor" and "accent" or key == "total" and "text" or "muted"))
 end
@@ -246,6 +251,10 @@ local function UpdateRow(row, entry)
 
     for index, column in ipairs(COLUMNS) do
         FillCell(row.cells[index], column.key, entry)
+    end
+    if row.make then
+        local shown = row.makeCell and (not row.makeCell.IsShown or row.makeCell:IsShown() ~= false)
+        row.make:SetShown((shown and entry.bundleCost and entry.best and entry.best.made) and true or false)
     end
 
     local moved = state.slides and entry.key and state.slides[entry.key]
@@ -1083,7 +1092,7 @@ function DealsFavor:Build(view, toolbar)
     widgets.countLabel = countLabel
 
     local detail = BuildDetail(view)
-    detail:SetPoint("TOPRIGHT", view, "TOPRIGHT", -8, -40)
+    detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
     UpdateDetail(nil)

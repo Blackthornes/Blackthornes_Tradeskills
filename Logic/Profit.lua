@@ -510,7 +510,12 @@ Profit.RoomInCrafts = RoomInCrafts
 --- What the Profit tab's Max button fills in: whichever runs out first,
 --- materials or room under the limit. Room left at all allows one craft,
 --- but none left is 0. It said 1 there, and Add queued one past the limit.
-function Profit.MaxCrafts(craftableNow, roomInCrafts)
+---
+--- With no Keep in Stock set, `learnedRoom` (crafts up to what your sales
+--- taught) is the answer, as Queue All has it: "0/3" fills in 3 (a player
+--- asked, the owner said yes, 2026-10-22).
+function Profit.MaxCrafts(craftableNow, roomInCrafts, learnedRoom)
+    if roomInCrafts == nil and learnedRoom ~= nil then return math.max(0, learnedRoom) end
     if roomInCrafts and roomInCrafts <= 0 then return 0 end
 
     local most = math.max(1, craftableNow or 1)
@@ -832,6 +837,11 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- restock use it, and the detail pane says so.
     analysis.learnedLimit = room == nil and ns.Auctions.GetLearnedLimit
         and ns.Auctions:GetLearnedLimit(recipe.outputItemID) or nil
+    -- And the crafts that leaves room for, which Max fills in.
+    if analysis.learnedLimit then
+        local learnedRoom = ns.Auctions:GetRoom(recipe.outputItemID, nil, true)
+        analysis.learnedRoomInCrafts = RoomInCrafts(learnedRoom, recipe)
+    end
 
     -- Ranked by disenchanting, a craft no auction or vendor prices may
     -- still be worth breaking down.
