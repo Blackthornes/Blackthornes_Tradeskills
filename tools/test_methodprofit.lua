@@ -138,6 +138,12 @@ local from, to = MP.Range("session", nil, nil, now)
 check("session starts when the session did", from, now - 600)
 from, to = MP.Range("week", nil, nil, now)
 check("a week back", now - from, 7 * 86400)
+from = MP.Range("quarter", nil, nil, now)
+check("3m: 91 days back", now - from, 91 * 86400)
+from = MP.Range("year", nil, nil, now)
+check("a year back", now - from, 365 * 86400)
+from = MP.Range("all", nil, nil, now)
+check("all: from the start", from, 0)
 check("totals add up", MP:Summary(now - 3600, now + 1).total.profit,
   s.methods.crafted.profit + s.methods.flipped.profit + s.methods.other.profit
   + s.methods.vendored.profit + s.methods.disenchanted.profit)

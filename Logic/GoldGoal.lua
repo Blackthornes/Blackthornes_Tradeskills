@@ -128,8 +128,9 @@ local function NameOf(key)
 end
 
 --- Every character counted, most gold first: { key, name (whole), gold,
---- at (when its gold was read), isCurrent, linked }.
-function GoldGoal:Members(now)
+--- at (when its gold was read), isCurrent, linked }. `everyone` counts
+--- the whole realm and side whatever Goblin Gold is set to count.
+function GoldGoal:Members(now, everyone)
     local members = {}
     if not (ns.db and type(ns.db.characters) == "table") then return members end
 
@@ -137,7 +138,7 @@ function GoldGoal:Members(now)
     local selfKey = ns.Config and ns.Config:GetCharacterKey()
     local realm, faction = self:Here()
     realm, faction = Fold(realm), Fold(faction)
-    local onlyHere = self:OnlyThisCharacter()
+    local onlyHere = not everyone and self:OnlyThisCharacter()
 
     -- GUID keys first, so a character's GUID record is the one counted and
     -- an old name-realm record of it is the one left out.
@@ -189,9 +190,9 @@ function GoldGoal:Members(now)
 end
 
 --- The gold of every character counted, in copper, and how many there are.
-function GoldGoal:Total(now)
+function GoldGoal:Total(now, everyone)
     local total, count = 0, 0
-    for _, member in ipairs(self:Members(now)) do
+    for _, member in ipairs(self:Members(now, everyone)) do
         total = total + member.gold
         count = count + 1
     end

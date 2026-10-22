@@ -306,4 +306,11 @@ check("back to the materials, the graph goes", not graphFrame.shown)
 check("and the cut comes back", cut.shown)
 check("with the deposit", deposit.shown)
 
+print("\nthe STOCK column's hover")
+local StockLine = ns.ProfitTab.StockLine
+check("a typed number says so", StockLine({ stock = 1, postLimit = 4 }) == "You have 1. You keep 4 (Keep in Stock).")
+check("a learned one says where it came from",
+    StockLine({ stock = 0, learnedLimit = 3 }) == "You have 0. You keep 3 (learned from your sales).")
+check("no number, no line", StockLine({ stock = 2 }) == nil)
+
 print(("\n%d check(s) passed\n"):format(checks))

@@ -129,6 +129,12 @@ check("no limit set leaves materials in charge", MaxButton(20, nil, FIVE_EACH), 
 check("a full shelf offers nothing, not one past the limit", MaxButton(20, 0, FIVE_EACH), 0)
 check("room for less than one craft still offers one", MaxButton(20, 3, FIVE_EACH), 1)
 
+-- No Keep in Stock, but your sales taught 3 (a player asked, 2026-10-22):
+-- Max fills in the learned room, as Queue All does, materials or not.
+check("0/3 learned fills in 3", ns.Profit.MaxCrafts(0, nil, 3), 3)
+check("at the learned number, 0", ns.Profit.MaxCrafts(20, nil, 0), 0)
+check("a typed number still wins", ns.Profit.MaxCrafts(20, 2, 3), 2)
+
 print("")
 if failures > 0 then
     error(string.format("%d craft-room check(s) failed", failures), 0)

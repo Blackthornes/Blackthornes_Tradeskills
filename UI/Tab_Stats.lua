@@ -741,20 +741,43 @@ function Draw.methods(card, stats, width)
 end
 
 -- In the order they are placed, after the price graph.
+-- Each card's hover says what it shows (a player asked what the cards mean).
 local CARDS = {
-    { key = "heat",     heading = L["CHEAPEST TIMES THIS WEEK"], height = 150 },
-    { key = "cost",     heading = L["WHERE EACH SALE GOES"],     height = 142 },
-    { key = "weeks",    heading = L["SALES BY WEEK"],            height = 150 },
-    { key = "listings", heading = L["YOUR LISTINGS"],            height = 124 },
-    { key = "long",     heading = L["LAST 90 DAYS"],             height = 142 },
-    { key = "stock",    heading = L["LISTED AT EACH SCAN"],      height = 124 },
-    { key = "sellers",  heading = L["WHO ELSE SELLS IT"],        height = 142 },
-    { key = "sources",  heading = L["PRICE BY SOURCE"],          height = 142 },
-    { key = "speed",    heading = L["HOW FAST YOURS SELL"],      height = 124 },
-    { key = "methods",  heading = L["LAST 30 DAYS BY METHOD"],   height = 124 },
+    { key = "heat",     heading = L["CHEAPEST TIMES THIS WEEK"], height = 150,
+      hint = L["Green squares are the cheapest times of day and gold ones the dearest. Buy in the green and sell in the gold."] },
+    { key = "cost",     heading = L["WHERE EACH SALE GOES"],     height = 142,
+      hint = L["What one sale pays, split into the materials, the auction house's cut, the deposit and what you keep."] },
+    { key = "weeks",    heading = L["SALES BY WEEK"],            height = 150,
+      hint = L["How much gold this item made you each week."] },
+    { key = "listings", heading = L["YOUR LISTINGS"],            height = 124,
+      hint = L["How many of your auctions sold, came back or were taken down."] },
+    { key = "long",     heading = L["LAST 90 DAYS"],             height = 142,
+      hint = L["The price over the last three months, to see if it's going up or down."] },
+    { key = "stock",    heading = L["LISTED AT EACH SCAN"],      height = 124,
+      hint = L["How many were up for sale each time you scanned."] },
+    { key = "sellers",  heading = L["WHO ELSE SELLS IT"],        height = 142,
+      hint = L["How many others sold it at your last full scan, and how many the biggest seller had next to yours."] },
+    { key = "sources",  heading = L["PRICE BY SOURCE"],          height = 142,
+      hint = L["The price each place gives, such as your scans, your guild or a vendor."] },
+    { key = "speed",    heading = L["HOW FAST YOURS SELL"],      height = 124,
+      hint = L["How long your auctions take to sell, from when you post them."] },
+    { key = "methods",  heading = L["LAST 30 DAYS BY METHOD"],   height = 124,
+      hint = L["What this item made you in the last 30 days, by how you got it: crafted, farmed, flipped and more."] },
 }
 
 local GRAPH_HEIGHT = 180
+
+--- A card's hover: its heading, then what it shows.
+function StatsUI.ShowHint(card)
+    if not card or not card.hint then return end
+    GameTooltip:SetOwner(card, "ANCHOR_TOP")
+    if card.heading and card.heading.GetText then
+        GameTooltip:AddLine(card.heading:GetText(), Theme.Unpack("accentHi"))
+    end
+    GameTooltip:AddLine(card.hint, 0.85, 0.85, 0.85, true)
+    GameTooltip:Show()
+end
+StatsUI.CARDS = CARDS
 
 --------------------------------------------------------------------------------
 -- The header
@@ -970,7 +993,7 @@ local function MaybeCheer(stats)
 
     if type(PlaySound) == "function" then
         local kit = type(SOUNDKIT) == "table" and SOUNDKIT.IG_QUEST_LIST_COMPLETE or 878
-        pcall(PlaySound, kit)
+        pcall(PlaySound, kit, "Master")
     end
 
     local card = widgets.cards.weeks
@@ -1111,6 +1134,10 @@ local function BuildPanel(container)
     for _, definition in ipairs(CARDS) do
         local card = CreateCard(scroll.content, definition.heading, definition.height)
         Theme.Halo(card, 6, 0, "gilt")
+        card.hint = definition.hint
+        card:EnableMouse(true)
+        card:SetScript("OnEnter", StatsUI.ShowHint)
+        card:SetScript("OnLeave", function() GameTooltip:Hide() end)
         widgets.cards[definition.key] = card
     end
 

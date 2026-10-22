@@ -45,7 +45,16 @@ local VIEWS = {
     { text = L["Gold in and out"], value = "gold" },
 }
 
-local state = { view = "sales", search = "", selected = nil, period = "week" }
+local state = { view = "sales", search = "", selected = nil, period = "week", who = "all" }
+
+-- Whose gold the line over Gold in and out follows (a player asked, the
+-- owner said yes from a mockup, 2026-10-22). All characters by default: it
+-- reaches back as far as the log does, while the character playing's line
+-- starts from the day its gold was first written down.
+local WHO = {
+    { key = "character", text = L["This character"] },
+    { key = "all",       text = L["All characters"] },
+}
 local widgets = {}
 
 --------------------------------------------------------------------------------
@@ -141,6 +150,12 @@ local function CreateRow(row)
     -- The item's icon beside both lines, as the bags draw it.
     row.icon = Theme.CreateItemIcon(row, 24)
     row.icon:SetPoint("LEFT", 8, 0)
+
+    -- A method's heading folds its items away, in the icon's place.
+    row.fold = row:CreateTexture(nil, "ARTWORK")
+    row.fold:SetSize(14, 14)
+    row.fold:SetPoint("LEFT", 13, 0)
+    row.fold:Hide()
 
     row.name = Theme.CreateLabel(row, "normal", "text")
     row.name:SetPoint("TOPLEFT", 40, -4)
@@ -371,9 +386,30 @@ local METHOD_UNITS = {
     vendored = L["%d sold to vendors"], disenchanted = L["%d disenchanted"],
 }
 
+--- Profit by method's folded headings, from the setting kept as "a,b".
+local function FoldedMethods()
+    local folded = {}
+    local saved = ns.Config and ns.Config.Get and ns.Config:Get("salesMethodsFolded")
+    for key in tostring(type(saved) == "string" and saved or ""):gmatch("[^,]+") do folded[key] = true end
+    return folded
+end
+
+--- Fold a method's heading or open it again, kept for next time.
+local function ToggleMethod(key)
+    local folded = FoldedMethods()
+    folded[key] = not folded[key] or nil
+    local keys = {}
+    for method in pairs(folded) do keys[#keys + 1] = method end
+    table.sort(keys)
+    if ns.Config and ns.Config.Set then ns.Config:Set("salesMethodsFolded", table.concat(keys, ",")) end
+end
+
 --- A method's heading: its profit, and what it is made of.
 local function UpdateMethodRow(row, data)
     Theme.SetItemIcon(row.icon, nil)
+    row.fold:Show()
+    pcall(row.fold.SetTexture, row.fold, data.folded
+        and [[Interface\Buttons\UI-PlusButton-Up]] or [[Interface\Buttons\UI-MinusButton-Up]])
 
     row.name:SetText(data.method.text)
     row.name:SetTextColor(Theme.Unpack("accent"))
@@ -400,6 +436,7 @@ local function UpdateMethodItemRow(row, data)
 end
 
 local function UpdateRow(row, data)
+    row.fold:SetShown(data.methodRow and true or false)
     if data.haul then
         UpdateVisitRow(row, data)
         return
@@ -437,6 +474,14 @@ local function BuildDetail(parent)
     Theme.AccentStripe(detail, 2, 0.6)
     detail:SetWidth(DETAIL_WIDTH)
 
+    -- The item's charts on the Stats tab (UI/Tab_Stats.lua), as the Prices
+    -- tab has it; shown only while one item is picked.
+    detail.stats = Widgets.CreateButton(detail, L["Stats"], function()
+        if detail.statsItem and ns.StatsUI then ns.StatsUI:ShowItem(detail.statsItem) end
+    end, { width = 50, height = 20, tooltip = L["See this item's charts on the Stats tab"] })
+    detail.stats:SetPoint("TOPRIGHT", -8, -9)
+    detail.stats:Hide()
+
     local title = Theme.CreateLabel(detail, "large", "accent")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetPoint("TOPRIGHT", -12, -12)
@@ -444,7 +489,7 @@ local function BuildDetail(parent)
 
     local subtitle = Theme.CreateLabel(detail, "small", "muted")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    subtitle:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -4)
+    subtitle:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
     detail.subtitle = subtitle
 
     detail.lines = {}
@@ -535,6 +580,19 @@ local function AddProfitLines(Add, subject)
     end
 end
 
+--- The Stats button for one item, and room for it beside the title.
+local function ShowStatsButton(detail, itemID)
+    detail.statsItem = itemID
+    detail.stats:SetShown(itemID ~= nil)
+    detail.title:ClearAllPoints()
+    detail.title:SetPoint("TOPLEFT", 12, -12)
+    if itemID then
+        detail.title:SetPoint("TOPRIGHT", detail.stats, "TOPLEFT", -6, -3)
+    else
+        detail.title:SetPoint("TOPRIGHT", -12, -12)
+    end
+end
+
 local function UpdateDetail(item, totals)
     local detail = widgets.detail
     local lines = {}
@@ -542,6 +600,8 @@ local function UpdateDetail(item, totals)
     local function Add(label, value, color)
         lines[#lines + 1] = { label, value, color }
     end
+
+    ShowStatsButton(detail, item and item.itemID)
 
     if item then
         detail.title:SetText(ItemLabel(item.itemID, item.name))
@@ -732,6 +792,7 @@ end
 local PERIOD_TEXT = {
     session = L["this session"], today = L["today"],
     week = L["the last 7 days"], month = L["the last 30 days"],
+    quarter = L["the last 3 months"], year = L["the last year"], all = L["all time"],
 }
 
 --- A day as the date pickers show it: "Oct 06".
@@ -778,6 +839,7 @@ local function ApplyLayout()
     widgets.legend:SetShown(gold)
     widgets.search:SetShown(not gold and not methods)
     widgets.period:SetShown(gold or methods)
+    widgets.who:SetShown(gold)
 
     local picking = (gold or methods) and state.period == "pick"
     widgets.fromDay:SetShown(picking)
@@ -819,6 +881,8 @@ local function RefreshGold()
         end
     end
 
+    local line = ns.GoldLog.Line and ns.GoldLog:Line(bins, state.who, state.period) or nil
+    ns.GoldChart.SetLine(widgets.chart, bins, line)
     ns.GoldChart.SetBins(widgets.chart, bins,
         L["Nothing yet. Gold you make and spend from now on is written down here, with where it came from."])
 
@@ -845,11 +909,12 @@ local function RefreshMethods()
     local total = summary.total
 
     local data = {}
+    local folded = FoldedMethods()
     for _, method in ipairs(ns.MethodProfit.METHODS) do
         local group = summary.methods[method.key]
         if group.n > 0 then
-            data[#data + 1] = { methodRow = true, method = method, group = group }
-            for _, item in ipairs(group.list) do
+            data[#data + 1] = { methodRow = true, method = method, group = group, folded = folded[method.key] }
+            for _, item in ipairs(folded[method.key] and {} or group.list) do
                 data[#data + 1] = { methodItem = true, key = method.key,
                     itemID = item.itemID, item = item }
             end
@@ -877,6 +942,7 @@ local function RefreshMethods()
     lines[#lines + 1] = { L["Taken in"], Util.FormatMoney(total.income), "profit" }
     lines[#lines + 1] = { L["Cost"], Util.FormatMoney(total.cost), total.cost > 0 and "loss" or "muted" }
 
+    ShowStatsButton(detail, nil)
     detail.title:SetText(L["Profit by method"])
     detail.subtitle:SetText(PeriodText())
     SetLines(detail, lines)
@@ -1106,29 +1172,35 @@ end
 --------------------------------------------------------------------------------
 
 local function Build(container)
-    -- Across the top, over the list and the panel, like every other tab's
-    -- option bar: the menu first, then search (2026-10-06).
-    local toolbar = CreateFrame("Frame", nil, container)
-    toolbar:SetPoint("TOPLEFT", 8, -8)
-    toolbar:SetPoint("TOPRIGHT", -8, -8)
-    toolbar:SetHeight(24)
-
-    local view = Widgets.CreateDropdown(toolbar, VIEWS, function(value)
+    -- The views are pages along the top (a player asked, the owner said yes
+    -- from a mockup, 2026-10-22: a menu hid which one was showing); under
+    -- them each view's own bar, search or the period.
+    local viewTabs = {}
+    for _, view in ipairs(VIEWS) do viewTabs[#viewTabs + 1] = { key = view.value, text = view.text } end
+    local view = Widgets.CreateTabStrip(container, viewTabs, function(value)
         state.view = value
         Refresh()
-    end, { width = 168 })
-    view:SetPoint("LEFT", 0, 0)
-    view:SetValue(state.view)
+    end, { width = 1060 })
+    view:SetPoint("TOPLEFT", 8, -8)
+    view:Select(state.view)
     widgets.view = view
 
-    -- Gold in and out's own menus, shown only in that view, in the search
-    -- box's place.
-    local period = Widgets.CreateDropdown(toolbar, ns.GoldLog and ns.GoldLog.PERIODS or {}, function(value)
+    local toolbar = CreateFrame("Frame", nil, container)
+    toolbar:SetPoint("TOPLEFT", view, "BOTTOMLEFT", 0, -6)
+    toolbar:SetPoint("RIGHT", container, "RIGHT", -8, 0)
+    toolbar:SetHeight(24)
+
+    -- The periods are pages too, Pick dates last with its two days.
+    local periodTabs = {}
+    for _, period in ipairs(ns.GoldLog and ns.GoldLog.PERIODS or {}) do
+        periodTabs[#periodTabs + 1] = { key = period.value, text = period.text }
+    end
+    local period = Widgets.CreateTabStrip(toolbar, periodTabs, function(value)
         state.period = value
         Refresh()
-    end, { width = 120 })
-    period:SetPoint("LEFT", view, "RIGHT", 8, 0)
-    period:SetValue(state.period)
+    end, { width = 560 })
+    period:SetPoint("LEFT", 0, 0)
+    period:Select(state.period)
     widgets.period = period
 
     local fromDay = Widgets.CreateDropdown(toolbar, {}, function(value)
@@ -1150,11 +1222,19 @@ local function Build(container)
     toDay:SetPoint("LEFT", toLabel, "RIGHT", 6, 0)
     widgets.toDay = toDay
 
+    local who = Widgets.CreateTabStrip(toolbar, WHO, function(value)
+        state.who = value
+        Refresh()
+    end, { width = DETAIL_WIDTH })
+    who:SetPoint("RIGHT", 0, 0)
+    who:Select(state.who)
+    widgets.who = who
+
     local search = Widgets.CreateSearchBox(toolbar, L["Search sales"], function(text)
         state.search = text or ""
         Refresh()
     end)
-    search:SetPoint("LEFT", view, "RIGHT", 8, 0)
+    search:SetPoint("LEFT", 0, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
     widgets.search = search
 
@@ -1190,7 +1270,12 @@ local function Build(container)
             return SelectionKey(data) == state.selected
         end,
         onClick = function(data)
-            if data.methodRow or data.methodItem then return end
+            if data.methodRow then
+                ToggleMethod(data.method.key)
+                Refresh()
+                return
+            end
+            if data.methodItem then return end
             if data.haul then
                 if ns.MailReport then ns.MailReport:Show(data, { replay = true }) end
                 return
@@ -1225,7 +1310,7 @@ local function Build(container)
     widgets.summary = summary
 
     local detail = BuildDetail(container)
-    detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
+    detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     detail:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     widgets.detail = detail
 
@@ -1236,7 +1321,7 @@ local function Build(container)
     widgets.chart = chart
 
     local legend = ns.GoldChart.CreateLegend(container, DETAIL_WIDTH)
-    legend:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)
+    legend:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
     legend:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -8, 8)
     legend:Hide()
     widgets.legend = legend
@@ -1275,7 +1360,7 @@ end
 ns.SalesTab = {
     ShowVisits = function()
         state.view = "visits"
-        if widgets.view then widgets.view:SetValue("visits") end
+        if widgets.view then widgets.view:Select("visits") end
     end,
 }
 
