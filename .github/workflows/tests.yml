@@ -35,6 +35,9 @@ jobs:
         continue-on-error: true
         run: python tools/check_locale.py
 
+      - name: Vendor and trainer spots fold in from a save
+        run: python tools/test_forever_vendor_spots.py
+
       - name: No saved variables, WTF folders, keys or .env files
         run: python tools/check_private_files.py
 

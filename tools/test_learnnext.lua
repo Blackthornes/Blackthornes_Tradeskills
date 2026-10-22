@@ -312,6 +312,28 @@ check("no map: the arrow can't take it", ns.WayArrow:AimAt({ zone = "Nowhere", x
 ns.Waypoints.MapFor = findMap
 ns.WayArrow, ns.charDb = nil, nil
 
+print("\nwhere the game saw the vendor")
+-- Logic/VendorPins.lua knows where a vendor stood when its window was
+-- opened; that wins over Classic's spot (the owner, 2026-10-22).
+ns.VendorPins = { SeenAt = function(_, name, zone)
+  if name == "Alli" and zone == "Wetlands" then return { mapID = 1437, x = 61.5, y = 30.2 } end
+end }
+local moved = Find(LN:GetRows({ skills = { [165] = 100 } }), "Vendor Belt").place
+check("the spot the game saw", moved and ("%s,%s"):format(moved.x, moved.y), "61.5,30.2")
+check("on the map it was seen on", moved and moved.mapID, 1437)
+pinned = nil
+check("Show the way pins it", LN:ShowTheWayFor(3), true)
+check("there", pinned and pinned.x, 0.615)
+ns.VendorPins = { SeenAt = function(_, name, _, kind)
+  if kind == "trainer" and name == "Journey Jen" then return { mapID = 1429, x = 11, y = 22 } end
+end }
+local trainerSeen = LN:Place(Book:Get(2))
+check("a trainer where the game saw it", trainerSeen and ("%s %s,%s"):format(trainerSeen.name, trainerSeen.x, trainerSeen.y),
+  "Journey Jen 11,22")
+ns.VendorPins = { SeenAt = function() error("broken") end }
+check("a broken lookup keeps Classic's spot", LN:WhereFor(3).x, 25)
+ns.VendorPins = nil
+
 print("\nwhere for Equipment, by recipe ID")
 local where = LN:WhereFor(3)
 check("a vendor's place", where and where.kind .. " " .. where.name, "vendor Alli")
