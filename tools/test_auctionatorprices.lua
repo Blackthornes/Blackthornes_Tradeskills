@@ -8,6 +8,8 @@
 --   4. Unticked, Auctionator is never asked.
 --   5. An Auctionator error, a non-number or a silly number is no price.
 --   6. Answers are kept for a while, so a redraw does not ask again.
+--   7. A stale price of your own gives way to Auctionator's only when
+--      Auctionator saw the item a whole day later; a fresh one never asks.
 
 local GLOBALS = { "TSM_API", "Auctionator", "GetTime" }
 local saved = {}
@@ -85,6 +87,39 @@ TSM_API = nil
 
 priceTable[2589] = { market = 300, scans = 1, history = {}, seen = time() }
 check("your own scan wins", Prices:GetValue(2589) == 300)
+
+-- 7. Stale own prices and Auctionator's age.
+local ageAsked = 0
+local ageDays = 0
+Auctionator.API.v1.GetAuctionAgeByItemID = function(caller, itemID)
+    if type(caller) ~= "string" then error("bad caller") end
+    ageAsked = ageAsked + 1
+    return ageDays
+end
+Auc:Forget()
+check("a fresh own price never asks Auctionator's age",
+    Prices:GetValue(2589) == 300 and ageAsked == 0)
+priceTable[2589].seen = time() - 3 * 86400
+check("a stale own price gives way to a newer Auctionator price", Prices:GetValue(2589) == 778)
+Auc:Forget()
+ageDays = 3
+check("not when Auctionator saw it no later", Prices:GetValue(2589) == 300)
+Auc:Forget()
+ageDays = 2
+check("a whole day younger is newer", Prices:GetValue(2589) == 778)
+Auc:Forget()
+ageDays = nil
+check("no age from Auctionator keeps your price", Prices:GetValue(2589) == 300)
+Auc:Forget()
+ageDays = 0
+check("rival is still your own", Prices:GetValue(2589, "rival") == nil)
+Auctionator.API.v1.GetAuctionAgeByItemID = function() error("boom") end
+Auc:Forget()
+check("an age error keeps your price", Prices:GetValue(2589) == 300)
+Auctionator.API.v1.GetAuctionAgeByItemID = nil
+Auc:Forget()
+check("an Auctionator with no age call keeps your price", Prices:GetValue(2589) == 300)
+priceTable[2589].seen = time()
 
 settings.auctionatorPrices = false
 Auc:Forget()
