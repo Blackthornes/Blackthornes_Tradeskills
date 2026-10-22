@@ -391,6 +391,10 @@ function Probe:PrintReport()
         end
         Line("statistics", table.concat(parts, ", "))
     end
+    -- Legacy perks (2026-10-22): what the game lets an addon read.
+    if ns.Legacy then
+        for _, line in ipairs(ns.Legacy:ProbeLines()) do Line(line[1], line[2]) end
+    end
     -- Learn next's Show the way (2026-10-12).
     if ns.Waypoints then Line("show the way", ns.Waypoints:ProbeText()) end
 
