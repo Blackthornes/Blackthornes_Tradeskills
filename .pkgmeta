@@ -12,6 +12,8 @@ ignore:
   - .gitattributes
   - .gitignore
   - .pkgmeta
+  # Gets a cloud workspace ready to run the checks. Not for players.
+  - .claude
   - docs
   - tools
   - deploy.ps1

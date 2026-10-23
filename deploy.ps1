@@ -31,7 +31,7 @@ $SourceRoot = $PSScriptRoot
 $TargetRoot = Join-Path $GamePath "Interface\AddOns\$AddonName"
 
 # Files and folders that belong in the repo but not in the client.
-$Exclude = @('tools', 'docs', '.git', '.vscode')
+$Exclude = @('tools', 'docs', '.git', '.claude', '.vscode')
 $ExcludeFiles = @('deploy.ps1', '.gitignore', 'README.md', 'CLAUDE.md')
 
 if (-not (Test-Path $GamePath)) {
