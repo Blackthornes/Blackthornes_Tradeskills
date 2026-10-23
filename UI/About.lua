@@ -32,6 +32,14 @@ About.NOTE = {
     L["If you have an idea or something isn't working, come find me on my Discord at discord.gg/f2geDecrw2. I read every comment and report."],
 }
 
+--- The thank-you at the very top of What's New, once per account, a
+--- paragraph each (the owner, 2026-10-23).
+About.THANKS = {
+    L["Thank you to everyone who sent ideas and bug reports. You helped shape every one of these add-ons. Without you, they would not be what they are today."],
+    L["There are still some bugs to work out, and those fixes will come with time. If you find one, jump on our Discord and share it. You can find the link on the About page in Settings. Every message gets read."],
+    L["WoW Forever is almost here, and we can't wait. We look forward to building and improving these add-ons with you from here on."],
+}
+
 -- The name each addon goes by, for "Blackthornes Farmer 0.31.0".
 About.TITLES = {
     Blackthornes_Farmer = "Blackthornes Farmer",
