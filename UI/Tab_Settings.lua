@@ -818,17 +818,6 @@ local function Build(outer)
     end, true)
     widgets.sellMarked:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- Buttons beside a tick box ran past the column's edge (2026-10-09), so
-    -- each has its own row now.
-    local sellTestRow = CreateRow(pages.mail, 2, L["Test Vendor Selling:"],
-        L["At a vendor, sells your cheapest grey to check selling works."])
-
-    local sellTest = Widgets.CreateButton(sellTestRow, L["Test"], function()
-        if ns.SellMarked then ns.SellMarked:Test() end
-    end, { width = 60, height = 20 })
-    sellTest:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(sellTest)
-
     -- Logic/VendorPins.lua (asked 2026-10-18): gold pins on the world map
     -- at vendors that sell what the queue needs for less.
     local vendorPinsRow = CreateRow(pages.mail, 2, L["Vendor Map Pins:"],
