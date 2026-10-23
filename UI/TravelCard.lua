@@ -5,7 +5,10 @@
 -- on Map. The owner said build it (2026-10-21) from the mockup.
 --
 -- It shows only while the arrow is on a trip and the dial shows, and is
--- drawn again only when the steps or the one you are on change. Its own
+-- drawn again only when the steps or the one you are on change. Its close
+-- gem only puts the card away (`TravelCard:Close`): the arrow still leads
+-- the way, and the card comes back when the arrow is aimed somewhere else.
+-- Stop ends the trip. Its own
 -- frame on UIParent; it can be dragged, and keeps its place in
 -- `travelCardX`/`travelCardY` and its size in `travelCardScale` (account
 -- wide, never rename them).
@@ -51,7 +54,7 @@ function TravelCard:Build()
     if ns.Titanforged then
         trim = ns.Titanforged:Dress(frame, {
             title = L["Your Way There"],
-            close = function() TravelCard:Stop() end,
+            close = function() TravelCard:Close() end,
         })
     else
         Theme.Border(frame, "borderLit")
@@ -187,6 +190,14 @@ function TravelCard:Update(state)
         return
     end
     local plan = trip.plan
+    if self.closedKey then
+        if self.closedKey == plan.key then
+            if self.frame then self.frame:Hide() end
+            return
+        end
+        self.closedKey = nil
+    end
+    self.shownPlan = plan.key
     local key = ("%s|%d|%d|%s"):format(plan.key or "", plan.done or 0, #plan.steps, trip.line or "")
     local frame = self:Build()
     if key ~= self.drawnKey then
@@ -218,6 +229,13 @@ end
 function TravelCard:Hide()
     if self.frame then self.frame:Hide() end
     self.drawnKey = nil
+end
+
+--- The close gem: only the card goes, for this place. The arrow keeps
+--- leading the way step by step.
+function TravelCard:Close()
+    self.closedKey = self.shownPlan or self.closedKey
+    self:Hide()
 end
 
 --- Stop: the trip ends and the arrow points straight again, as before.
