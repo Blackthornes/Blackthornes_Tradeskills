@@ -34,7 +34,6 @@ tool prints a note for a shipped line that reads like an advert.
 Fixes and changes:
 
 - Profit counts postage and the deposit lost on slow sellers.
-- Values in the profession window line up, and they're off until you tick them.
 - The Post tab is gone. Posting is in the Sell list at the auction house.
 - Several bug fixes for the craft queue, cooking profit and prices.
 

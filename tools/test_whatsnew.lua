@@ -390,6 +390,22 @@ button:GetScript("OnClick")(button)
 check("the button runs it", ran == 1, ran)
 check("and closes the window", not Window():IsShown())
 
+-- A card that sends the player to another window leaves this one up.
+Client()
+local stayRan = 0
+local stayDB = { whatsNewSeen = "0.30.0" }
+farmer = Addon("Blackthornes_Farmer", stayDB, FARMER_NEWS, { note = true, tips = {
+    { key = "stays", title = "Stays", paragraphs = { "Open it." }, button = "Open",
+      stay = true, due = function() return true end, run = function() stayRan = stayRan + 1 end },
+} })
+Login({ farmer })
+Fire()
+owner = farmer.WhatsNew.Owner()
+local stayButton = rawget(owner.cards[2], "actions")["Open"]
+stayButton:GetScript("OnClick")(stayButton)
+check("a stay card runs it", stayRan == 1, stayRan)
+check("and keeps the window up", Window():IsShown())
+
 Client()
 farmer = Addon("Blackthornes_Farmer", tipDB, FARMER_NEWS, { note = true, tips = Tips() })
 Login({ farmer })
