@@ -186,15 +186,16 @@ function ListRulesUI:Build()
     y = y - ROW_HEIGHT
 
     local duration = Row(frame, y, 3, L["Post For:"])
-    local back = Widgets.CreateButton(duration, "<", function() ListRulesUI:StepDuration(-1) end,
-        { width = 20, height = 20 })
-    back:SetPoint("LEFT", duration.label, "RIGHT", 0, 0)
-    self.durationText = Theme.CreateLabel(duration, "small", "text", "CENTER")
-    self.durationText:SetPoint("LEFT", back, "RIGHT", 4, 0)
-    self.durationText:SetWidth(72)
-    local forward = Widgets.CreateButton(duration, ">", function() ListRulesUI:StepDuration(1) end,
-        { width = 20, height = 20 })
-    forward:SetPoint("LEFT", self.durationText, "RIGHT", 4, 0)
+    -- A drop-down of the three lengths (the owner, 2026-10-23: drop-downs,
+    -- never < > pickers). With no rule it shows the drawer's, dimmed.
+    local lengths = (ns.Posting and ns.Posting.DURATIONS) or {}
+    self.duration = Widgets.CreateDropdown(duration, lengths, function(value)
+        ListRulesUI:Save("duration", value)
+    end, { width = 110 })
+    self.duration:SetPoint("LEFT", duration.label, "RIGHT", 0, 0)
+    -- Over the rows below it, not under them.
+    self.duration.menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    self.durationText = self.duration.label
     y = y - ROW_HEIGHT
 
     local bags = Row(frame, y, 4, L["Keep in Bags:"])
@@ -281,23 +282,6 @@ function ListRulesUI:Save(field, value)
     end
 end
 
-local function DurationText(value)
-    for _, option in ipairs((ns.Posting and ns.Posting.DURATIONS) or {}) do
-        if option.value == value then return option.text end
-    end
-    return ""
-end
-
---- Post For steps through no rule (the drawer's length, dimmed), then the
---- three lengths.
-function ListRulesUI:StepDuration(step)
-    local list = self:List()
-    if not list then return end
-    local now = Rules().Of(list).duration or 0
-    local value = (now + step) % 4
-    self:Save("duration", value > 0 and value or nil)
-end
-
 function ListRulesUI:Draw()
     local list = self:List()
     if not list then return self:Hide() end
@@ -318,10 +302,10 @@ function ListRulesUI:Draw()
     self.drawing = nil
 
     if rules.duration then
-        self.durationText:SetText(DurationText(rules.duration))
+        self.duration:SetValue(rules.duration)
         self.durationText:SetTextColor(Theme.Unpack("text"))
     else
-        self.durationText:SetText(DurationText((ns.Config and ns.Config:Get("postDuration")) or 2))
+        self.duration:SetValue((ns.Config and ns.Config:Get("postDuration")) or 2)
         self.durationText:SetTextColor(Theme.Unpack("dim"))
     end
 end
