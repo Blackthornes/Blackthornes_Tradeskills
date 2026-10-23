@@ -134,6 +134,10 @@ local function Addon(folder, db, news, opts)
     }
     ns.WHATS_NEW = news
     if opts.note then ns.About = { NOTE = { "First paragraph.", "Second paragraph." } } end
+    if opts.thanks then
+        ns.About = ns.About or {}
+        ns.About.THANKS = { "Thanks one.", "Thanks two." }
+    end
     ns.WHATS_NEW_TIPS = opts.tips
     local chunk = assert(loadfile(lfs_cwd .. "/UI/WhatsNew.lua"))
     chunk(folder, ns)
@@ -357,6 +361,35 @@ Login({ farmer })
 Fire()
 check("off: no window", not Window())
 check("and the note is not kept as seen", offDB.aboutNoteSeen == nil)
+
+--------------------------------------------------------------------------------
+-- The thank-you: once per account, above the note
+--------------------------------------------------------------------------------
+
+Client()
+farmerDB, tsDB = { whatsNewSeen = "0.30.0" }, {}
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true, thanks = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true, thanks = true })
+check("the thank-you is due", farmer.WhatsNew:ThanksDue())
+Login({ farmer, ts })
+Fire()
+list = Shown(farmer)
+check("the thank-you heads the window", list and list[1].note and list[1].addon.title == "Thank you"
+    and #list[1].paragraphs == 2, list and list[1] and list[1].addon.title)
+check("the note follows it", list[2] and list[2].note and list[2].addon.title ~= "Thank you")
+check("kept as seen in every sister", farmerDB.thanksSeen == true and tsDB.thanksSeen == true)
+
+Client()
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true, thanks = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true, thanks = true })
+check("it is not due again", not farmer.WhatsNew:ThanksDue())
+
+Client()
+local offThanks = { whatsNewSeen = "0.30.0", whatsNewPopup = false }
+farmer = Addon("Blackthornes_Farmer", offThanks, FARMER_NEWS, { note = true, thanks = true })
+Login({ farmer })
+Fire()
+check("with the window off it waits", offThanks.thanksSeen == nil)
 
 --------------------------------------------------------------------------------
 -- One-time cards: once, after the note, only when due
