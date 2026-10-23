@@ -15,10 +15,12 @@
 -- vendor is open, and checked again just before the click runs, since a
 -- "/use" away from a vendor would equip the item too.
 --
--- Whether Forever lets addon code sell is not known, so /bts selltest (and
--- the Settings button beside Sell marked) sells the cheapest grey item in the
--- bags from addon code and keeps what happened. If it worked, one click sells
--- every marked item (up to 12) instead of one.
+-- Whether Forever lets addon code sell is not known. There is no Test
+-- button (the owner, 2026-10-23): after the first click sells a stack, the
+-- next marked stack is sold from addon code and what happened is kept
+-- (`SellMarked:QuietTest`). If it worked, one click sells every marked item
+-- (up to 12) instead of one. /bts selltest still runs the old check, on the
+-- cheapest grey item.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -30,6 +32,8 @@ local Util = ns.Util
 local BUTTON_WIDTH = 150
 local BUTTON_PAD = 12
 local SELL_GAP = 0.3
+-- How long after the first click's sale the quiet check waits.
+SellMarked.QUIET_WAIT = 1
 
 local function InCombat()
     return type(InCombatLockdown) == "function" and InCombatLockdown() and true or false
@@ -153,6 +157,10 @@ function SellMarked:Create()
         if pending then
             SellMarked.soldThisVisit = (SellMarked.soldThisVisit or 0) + 1
             ns.QueueActions:Used(pending.itemID, pending.count)
+            if SellMarked:TestResult() == nil then
+                -- Once the click's own sale has settled.
+                C_Timer.After(SellMarked.QUIET_WAIT, function() SellMarked:QuietTest(pending) end)
+            end
         end
         SellMarked:Update()
     end)
@@ -331,6 +339,42 @@ function SellMarked:Test()
     end)
 end
 
+--- After a click sold a stack, sell the next marked stack from addon code
+--- and keep whether the game let it. Says nothing: the button's words
+--- change when it works.
+function SellMarked:QuietTest(clicked)
+    if self:TestResult() ~= nil or self.selling or InCombat() then return end
+    if not MerchantOpen() or self:Room() <= 0 then return end
+    if not Util.HasFunction("C_Container.UseContainerItem") then return end
+    local item
+    for _, candidate in ipairs(ns.QueueActions:Slots("vendor", self:Room() + 1)) do
+        local same = clicked and candidate.bag == clicked.bag and candidate.slot == clicked.slot
+        local ok, id = pcall(C_Container.GetContainerItemID, candidate.bag, candidate.slot)
+        if not same and ok and id == candidate.itemID then
+            item = candidate
+            break
+        end
+    end
+    if not item then return end
+
+    local moneyBefore = GetMoney and GetMoney() or 0
+    local called, err = pcall(C_Container.UseContainerItem, item.bag, item.slot)
+
+    C_Timer.After(1, function()
+        local ok, still = pcall(C_Container.GetContainerItemID, item.bag, item.slot)
+        local gone = ok and still ~= item.itemID
+        local gained = (GetMoney and GetMoney() or 0) > moneyBefore
+        if SellMarked:TestResult() ~= nil then return end
+        ns.db.sellTest = { at = time(), result = (called and gone and gained) and "works" or "blocked",
+            quiet = true, error = (not called and err) and tostring(err):sub(1, 120) or nil }
+        if gone then
+            SellMarked.soldThisVisit = (SellMarked.soldThisVisit or 0) + 1
+            ns.QueueActions:Used(item.itemID, item.count)
+        end
+        SellMarked:Update()
+    end)
+end
+
 --- One line for /bts probe.
 function SellMarked:ProbeText()
     local result, at = self:TestResult()
@@ -339,7 +383,7 @@ function SellMarked:ProbeText()
     elseif result == "blocked" then
         return ("|c%sblocked|r, one click a stack (tested %s)"):format(ns.COLORS.loss, Util.FormatAgeAgo and Util.FormatAgeAgo(time() - (at or time())) or "")
     end
-    return ("|c%snot tested|r: at a vendor, /bts selltest sells your cheapest grey item"):format(ns.COLORS.warn)
+    return ("|c%snot tested|r: the second stack Sell marked sells checks it, or /bts selltest"):format(ns.COLORS.warn)
 end
 
 --------------------------------------------------------------------------------
