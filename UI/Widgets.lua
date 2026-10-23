@@ -963,6 +963,7 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     local label = Theme.CreateLabel(dropdown, "small", "text")
     label:SetPoint("LEFT", 6, 0)
     label:SetPoint("RIGHT", -18, 0)
+    dropdown.label = label
 
     -- A small solid arrow pointing down where a letter "v" stood, drawn from
     -- four rows of plain colour (7, 5, 3 and 1 pixels wide) the way the rest
