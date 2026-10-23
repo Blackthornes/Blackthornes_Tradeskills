@@ -19,7 +19,7 @@ ns.Util = {}
 
 time = time or os.time
 
-local BAG, BOLT, WOOL, DYE, THREAD = 5000, 2997, 2592, 3825, 2321
+local BAG, BOLT, WOOL, DYE, THREAD, DUST = 5000, 2997, 2592, 3825, 2321, 10940
 
 local config = { valueOwnedMaterials = true }
 ns.Config = { Get = function(_, key) return config[key] end }
@@ -31,6 +31,8 @@ local recipes = {
                           { itemID = THREAD, quantity = 1 } } },
     [20] = { recipeID = 20, outputItemID = BOLT, quantityMin = 1, quantityMax = 1,
              reagents = { { itemID = WOOL, quantity = 3 } } },
+    -- An enchant makes no item, so nothing it makes has a price.
+    [30] = { recipeID = 30, reagents = { { itemID = DUST, quantity = 4 } } },
 }
 ns.Recipes = {
     Get = function(_, id) return recipes[id] end,
@@ -49,7 +51,7 @@ ns.Inventory = {
 
 -- Cheapest listing per unit, from the screenshot: bolts 30s 90c for 3,
 -- wool 26s 55c for 9, dye 48s 85c. Thread comes from a vendor at 90c.
-local auction = { [BOLT] = 1030, [WOOL] = 295, [DYE] = 4885 }
+local auction = { [BOLT] = 1030, [WOOL] = 295, [DYE] = 4885, [DUST] = 78 }
 ns.Prices = { GetValue = function(_, id) return auction[id] end }
 ns.Vendor = {
     GetUnitPrice = function(_, id) return id == THREAD and 90 or nil end,
@@ -65,7 +67,8 @@ assert(loadfile(lfs_cwd .. "/Logic/Queue.lua"))("Blackthornes_TS", ns)
 ns.Profit = { Analyse = function(_, recipeID)
     local cost = ns.Cost:GetCraftCost(recipeID)
     if not cost or not cost.priceable then return { priceable = false } end
-    local sells = salePrice[recipes[recipeID].outputItemID]
+    local sells = salePrice[recipes[recipeID].outputItemID or 0]
+    if not sells then return { priceable = false, reason = "output has no price data" } end
     return { priceable = true, totalCost = cost.total, profit = sells - cost.total }
 end }
 
@@ -164,5 +167,21 @@ totals = Queue:GetTotals()
 check("materials cost the wool for them (got " .. totals.cost .. ")", totals.cost == 3600 + 4885 + 90)
 check("to buy matches the footer", Queue:GetShoppingTotal() == totals.cost)
 auction[WOOL] = 295
+
+print("\nan enchant, which makes nothing to sell")
+
+-- Enchant Boots - Minor Stamina x112: the footer said materials 0c while
+-- To buy said 348g for the dust.
+Cost:InvalidateIndex()
+ns.db = { queue = {} }
+Queue:Add(30, 112)
+totals = Queue:GetTotals()
+check("materials count the dust (got " .. totals.cost .. ")", totals.cost == 112 * 4 * 78)
+check("profit is not known", totals.priceable == false and totals.profit == 0)
+check("to buy matches the footer", Queue:GetShoppingTotal() == totals.cost)
+Queue:Add(10, 1)
+totals = Queue:GetTotals()
+check("beside a priced craft both materials count", totals.cost == 112 * 4 * 78 + 7630)
+check("profit is only the priced craft's", totals.profit == 7550 - 7630 and totals.priceable == false)
 
 print(("\n%d check(s) passed\n"):format(checks))
