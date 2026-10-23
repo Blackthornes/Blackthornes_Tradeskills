@@ -32,7 +32,9 @@
 -- due }, such as Equipment's word about its Upgrade quest. Each is looked
 -- at once per account, with the next window that comes up by itself, and
 -- shown only while due() says so; then it is kept in that addon's
--- whatsNewTipsSeen[key] and never shown again. Its button calls run().
+-- whatsNewTipsSeen[key] and never shown again. Its button calls run() and
+-- closes the window, unless the card says stay = true (a button that opens
+-- another window, such as Settings, leaves this one up).
 --
 -- Saved, account wide, never renamed: whatsNewSeen (per addon), aboutNoteSeen,
 -- whatsNewTipsSeen (per addon),
@@ -59,7 +61,7 @@ if type(Format) ~= "function" then Format = string.format end
 
 -- Raised when this file changes in a way an older copy cannot draw: the
 -- newest copy loaded builds the window.
-WhatsNew.FILE_VERSION = 4
+WhatsNew.FILE_VERSION = 5
 
 -- Seconds after login, so the window comes up once the game has settled.
 WhatsNew.DELAY = 5
@@ -277,6 +279,7 @@ function WhatsNew:TakeTips()
                             hint = tip.hint,
                             button = tip.button,
                             run = tip.run,
+                            stay = tip.stay,
                         }
                     end
                 end
@@ -972,7 +975,7 @@ local function Fill(card, entry, width, index)
             button:SetScript("OnClick", function()
                 local ok, err = pcall(entry.run)
                 if not ok and ns.Debug then ns.Debug("what's new:", tostring(err)) end
-                WhatsNew.Owner():Close()
+                if not entry.stay then WhatsNew.Owner():Close() end
             end)
             button:ClearAllPoints()
             button:SetPoint("TOPLEFT", card, "TOPLEFT", column, y - 1)
