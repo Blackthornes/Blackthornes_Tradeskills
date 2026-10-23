@@ -44,14 +44,22 @@ local function Picked()
     return list[1], list
 end
 
---- Fit a button to its words, as the other tabs do.
-local function Fit(button)
-    local label = button.GetFontString and button:GetFontString()
+--- Fit a button to its words, as the other tabs do. The house button keeps
+--- its words in `button.label` (it has no GetFontString), measured drawn in
+--- full and at the font size, so "Show the Way" never ends in "...".
+function RoadView.Fit(button)
+    local label = button.label or (button.GetFontString and button:GetFontString())
     local width = label and Theme.TextWidth and Theme.TextWidth(label)
+    local text = label and label.GetText and label:GetText()
+    if Theme.MeasureText and type(text) == "string" then
+        local ok, measured = pcall(Theme.MeasureText, "small", text)
+        if ok and type(measured) == "number" then width = math.max(width or 0, measured) end
+    end
     if type(width) == "number" and width > 0 then
         button:SetWidth(math.max(button:GetWidth() or 0, math.ceil(width + 20)))
     end
 end
+local Fit = RoadView.Fit
 
 --------------------------------------------------------------------------------
 -- Rows
