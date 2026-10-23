@@ -60,7 +60,9 @@ DOCKS = [
     # The Orgrimmar tower has a platform for each zeppelin (2026-10-23).
     ("orgrimmar", "Orgrimmar", "Durotar", ("seen", (1411, 50.8, 13.7))),
     ("orgrimmargromgol", "Orgrimmar", "Durotar", ("seen", (1411, 50.6, 12.8))),
-    ("undercity", "Undercity", "Tirisfal Glades", ("go", 165558)),
+    # The Undercity tower's Orgrimmar platform; its Grom'gol one is on the
+    # same tower and waits for a spot seen in game.
+    ("undercity", "Undercity", "Tirisfal Glades", ("seen", (1420, 60.7, 58.8))),
     ("gromgol", "Grom'gol", "Stranglethorn Vale", ("taxi", 47)),
 ]
 
