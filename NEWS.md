@@ -23,6 +23,20 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 0.69.0
+
+- Set a Favor Goal on the Favors and Writs tab and Tradeskills shows the cheapest way to get there. The Favors switch at the auction house only shows up after you set a goal.
+- Road to 300 lays out your whole way to 300 for a profession. A Welcome card shows the first time you open the window.
+- Level Up shows your profession's skill on every view, and a Can Afford box leaves out crafts you can't pay for.
+- My Auctions shows how many auctions at your price sell before yours.
+- Goblin Gold shows where this week's gold came from, and it can count only the character you're on.
+
+Fixes and changes:
+
+- Profit counts postage and the deposit lost on slow sellers.
+- The Post tab is gone. Posting is in the Sell list at the auction house.
+- Several bug fixes for the craft queue, cooking profit and prices.
+
 ## 0.68.0
 
 - Rules for a whole shopping list. Each list can mail what's on it to one of your characters and keep a number of each on every character.

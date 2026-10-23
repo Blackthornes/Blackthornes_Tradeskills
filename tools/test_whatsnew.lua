@@ -134,6 +134,10 @@ local function Addon(folder, db, news, opts)
     }
     ns.WHATS_NEW = news
     if opts.note then ns.About = { NOTE = { "First paragraph.", "Second paragraph." } } end
+    if opts.thanks then
+        ns.About = ns.About or {}
+        ns.About.THANKS = { "Thanks one.", "Thanks two." }
+    end
     ns.WHATS_NEW_TIPS = opts.tips
     local chunk = assert(loadfile(lfs_cwd .. "/UI/WhatsNew.lua"))
     chunk(folder, ns)
@@ -359,6 +363,35 @@ check("off: no window", not Window())
 check("and the note is not kept as seen", offDB.aboutNoteSeen == nil)
 
 --------------------------------------------------------------------------------
+-- The thank-you: once per account, above the note
+--------------------------------------------------------------------------------
+
+Client()
+farmerDB, tsDB = { whatsNewSeen = "0.30.0" }, {}
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true, thanks = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true, thanks = true })
+check("the thank-you is due", farmer.WhatsNew:ThanksDue())
+Login({ farmer, ts })
+Fire()
+list = Shown(farmer)
+check("the thank-you heads the window", list and list[1].note and list[1].addon.title == "Thank you"
+    and #list[1].paragraphs == 2, list and list[1] and list[1].addon.title)
+check("the note follows it", list[2] and list[2].note and list[2].addon.title ~= "Thank you")
+check("kept as seen in every sister", farmerDB.thanksSeen == true and tsDB.thanksSeen == true)
+
+Client()
+farmer = Addon("Blackthornes_Farmer", farmerDB, FARMER_NEWS, { note = true, thanks = true })
+ts = Addon("Blackthornes_TS", tsDB, TS_NEWS, { note = true, thanks = true })
+check("it is not due again", not farmer.WhatsNew:ThanksDue())
+
+Client()
+local offThanks = { whatsNewSeen = "0.30.0", whatsNewPopup = false }
+farmer = Addon("Blackthornes_Farmer", offThanks, FARMER_NEWS, { note = true, thanks = true })
+Login({ farmer })
+Fire()
+check("with the window off it waits", offThanks.thanksSeen == nil)
+
+--------------------------------------------------------------------------------
 -- One-time cards: once, after the note, only when due
 --------------------------------------------------------------------------------
 
@@ -389,6 +422,22 @@ check("the note's card has no button", not rawget(owner.cards[1], "actions"))
 button:GetScript("OnClick")(button)
 check("the button runs it", ran == 1, ran)
 check("and closes the window", not Window():IsShown())
+
+-- A card that sends the player to another window leaves this one up.
+Client()
+local stayRan = 0
+local stayDB = { whatsNewSeen = "0.30.0" }
+farmer = Addon("Blackthornes_Farmer", stayDB, FARMER_NEWS, { note = true, tips = {
+    { key = "stays", title = "Stays", paragraphs = { "Open it." }, button = "Open",
+      stay = true, due = function() return true end, run = function() stayRan = stayRan + 1 end },
+} })
+Login({ farmer })
+Fire()
+owner = farmer.WhatsNew.Owner()
+local stayButton = rawget(owner.cards[2], "actions")["Open"]
+stayButton:GetScript("OnClick")(stayButton)
+check("a stay card runs it", stayRan == 1, stayRan)
+check("and keeps the window up", Window():IsShown())
 
 Client()
 farmer = Addon("Blackthornes_Farmer", tipDB, FARMER_NEWS, { note = true, tips = Tips() })
