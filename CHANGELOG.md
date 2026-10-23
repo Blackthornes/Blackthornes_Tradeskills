@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 0.69.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Favor goal:** set a Favor Goal on the Favors and Writs tab and Tradeskills shows the cheapest way to get there. The Favors switch at the auction house only shows up after you set a goal.
+- **Road to 300:** a Level Up view that lays out your whole way to 300 for a profession, with a Welcome card the first time you open the window. "Road to 300" on the Look page opens the card again.
+- **Level Up:** your profession's skill shows on every view, and a Can Afford box leaves out crafts you can't pay for.
+- **My Auctions:** shows how many auctions at your price sell before yours. Check Places looks them up.
+- **Goblin Gold:** shows where this week's gold came from, and Count Gold On can count only the character you're on. It's on the Look page.
+- **Profit:** counts postage and the deposit lost on slow sellers.
+- **Profession window:** values line up, and they're off until you tick Value in Profession Window.
+- **Post tab:** gone. Posting is in the Sell list at the auction house.
+- **Bug fixes:** several bug fixes for the craft queue, cooking profit, guild prices, Auctionator prices and the Look page.
+
 ## 0.68.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
