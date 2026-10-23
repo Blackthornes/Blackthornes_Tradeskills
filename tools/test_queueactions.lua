@@ -28,6 +28,7 @@ local saved = {
     CreateFrame = CreateFrame, C_Container = C_Container, C_Item = C_Item,
     InCombatLockdown = InCombatLockdown, UIParent = UIParent, GetTime = GetTime,
     C_Timer = C_Timer, MerchantFrame = MerchantFrame, GameTooltip = GameTooltip,
+    GetMoney = GetMoney,
 }
 
 local function Frame()
@@ -280,6 +281,33 @@ button.scripts.PreClick(button)
 check("no more than 12 a visit, so buyback can undo every sale", button:GetAttribute("type") == nil)
 events.MERCHANT_SHOW(SellMarked, "MERCHANT_SHOW")
 check("a new visit starts again", SellMarked.soldThisVisit == 0)
+
+-- No Test button (the owner, 2026-10-23): untested, the click's own sale
+-- is followed by one from addon code, which says whether one click may
+-- sell them all.
+do
+    for slot = 1, 16 do if bags[slot] and bags[slot].id == 2003 then bags[slot] = nil end end
+    bags[7] = { id = 2003, count = 1 }
+    bags[8] = { id = 2003, count = 1 }
+    for id in pairs(marks) do marks[id] = nil end
+    QA:NoteMade({ recipeID = 3, quantity = 2 }, 2003, 2)
+    local money = 0
+    GetMoney = function() return money end
+    C_Container.UseContainerItem = function(_, slot) bags[slot] = nil; money = money + 10 end
+    ns.db.sellTest = nil
+    button.scripts.PreClick(button)
+    local aimed = button:GetAttribute("macrotext")
+    -- The game locks the slot the click sold from.
+    local clicked = tonumber(aimed and aimed:match("(%d+)$") or "")
+    if clicked and bags[clicked] then bags[clicked].locked = true end
+    button.scripts.PostClick(button)
+    check("untested, the next stack is sold from addon code to check",
+        clicked ~= nil and bags[clicked] ~= nil and bags[clicked == 7 and 8 or 7] == nil)
+    check("and what it found is kept", ns.db.sellTest and ns.db.sellTest.result == "works"
+        and ns.db.sellTest.quiet == true)
+    check("so one click sells them all now", SellMarked:CanSellAll())
+    C_Container.UseContainerItem = nil
+end
 
 ns.settings.sellMarkedButton = false
 SellMarked:Update()
