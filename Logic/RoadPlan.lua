@@ -530,8 +530,17 @@ function RoadPlan.Texts(step, professionName, level, line)
     texts.chip = step.orange and L["every craft"] or L["most crafts"]
     for _, need in ipairs(step.needs or {}) do texts.lines[#texts.lines + 1] = RoadPlan.NeedText(need) end
     if step.learn then
-        local kind, zone = ns.LearnNext.WhereText(step.learn)
-        texts.lines[#texts.lines + 1] = zone and (kind .. "  " .. zone) or kind
+        if step.learn.kind == "trainer" then
+            -- Where the trainer stands, as the row's Show the Way aims (the
+            -- owner, 2026-10-23: a lone "Trainer" said nothing).
+            local zone = step.learn.zone
+            texts.lines[#texts.lines + 1] = zone
+                and L.Format("Learn it from the %s trainer in %s.", professionName, zone)
+                or L.Format("Learn it from the %s trainer.", professionName)
+        else
+            local kind, zone = ns.LearnNext.WhereText(step.learn)
+            texts.lines[#texts.lines + 1] = zone and (kind .. "  " .. zone) or kind
+        end
     end
     if step.sells and step.sells > 0 and ns.Util and ns.Util.FormatMoney then
         texts.lines[#texts.lines + 1] = L.Format("Sells for about %s each, so it pays some back.",
