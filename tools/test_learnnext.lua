@@ -267,6 +267,16 @@ check("its title", added and added.title, "Journey Jen (Trained Boots)")
 check("no game pin then", pinned, nil)
 TomTom = nil
 
+-- "Guide Me:" is on until the player unticks it (Logic/Travel.lua).
+if ns.Travel and ns.Travel.IsOn then
+    local kept = ns.db.arrowRoute
+    ns.db.arrowRoute = nil
+    check("Guide Me is on when never set", ns.Travel.IsOn(), true)
+    ns.db.arrowRoute = false
+    check("and off once unticked", ns.Travel.IsOn(), false)
+    ns.db.arrowRoute = kept
+end
+
 -- Far away with "Guide Me:" ticked (Logic/Travel.lua): the steps in chat
 -- and the pin on the first stop.
 local asked

@@ -816,8 +816,8 @@ the repo. Tested in `tools/test_learnnext.lua`. Not yet seen in game.
 ## Show the way across zones and the sea
 
 The owner said build it (2026-10-21, from a mockup) in every addon: with
-"Guide Me:" ticked on the Look page (`arrowRoute`, account wide, off
-unless ticked, never rename it), the arrow below leads to a trainer or
+"Guide Me:" ticked on the Look page (`arrowRoute`, account wide, on
+unless unticked, never rename it), the arrow below leads to a trainer or
 vendor in another zone or across the sea step by step (flights this
 character knows, the boats and zeppelins of its side, its Hearthstone,
 walks through the zones between). Without the arrow (no map for the
