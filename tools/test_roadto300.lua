@@ -203,7 +203,9 @@ check("chip", texts.chip, "every craft")
 check("range", texts.range, "64 to 75")
 check("materials from bags then bank", texts.lines[1],
   "Needs 66 Copper Bar. You have 51, buy 5. Your banker has 10.")
-check("where it is learned", texts.lines[2], "Trainer")
+check("where it is learned, with the trainer's zone", texts.lines[2],
+  "Learn it from the Blacksmithing trainer in " .. tostring(beltStep.learn.zone) .. ".")
+check("the trainer has a zone", beltStep.learn.zone ~= nil, true)
 check("sells some back", texts.lines[#texts.lines], "Sells for about 1800c each, so it pays some back.")
 check("cost: what to buy and the recipe", beltStep.cost, 5 * 20 + 50)
 
