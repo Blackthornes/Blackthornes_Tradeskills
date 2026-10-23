@@ -778,7 +778,7 @@ local function PositionLabel(label, row, region)
 
     -- Every value sits against the row's right edge, so down the list they
     -- line up in one neat column instead of trailing each name at its own
-    -- length (Trent's screenshot, 2026-10-20).
+    -- length (the owner's screenshot, 2026-10-20).
     label:SetJustifyH("RIGHT")
     label:SetPoint("RIGHT", row, "RIGHT", -RIGHT_INSET, 0)
 
