@@ -1527,7 +1527,11 @@ function Queue:GetTotals()
             -- Counted inside the craft it serves.
         elseif priced then
             totals.cost = totals.cost + priced.cost
-            totals.profit = totals.profit + priced.profit
+            if priced.profit then
+                totals.profit = totals.profit + priced.profit
+            else
+                totals.priceable = false
+            end
         else
             totals.priceable = false
         end
@@ -1546,7 +1550,8 @@ end
 -- served, and everything past them costs what it would to buy.
 --
 -- @return { [entry] = { cost = copper, profit = copper } } for every entry
---   that is not a sub-craft and can be priced
+--   that is not a sub-craft and whose materials can be priced; profit is
+--   nil when what it makes has no price
 function Queue:BuildEntryCosts()
     local result = {}
     local cashView = not ns.Config:Get("valueOwnedMaterials")
@@ -1581,15 +1586,22 @@ function Queue:BuildEntryCosts()
 
     for _, entry in ipairs(self:GetAll()) do
         local analysis = not entry.isDependency and ns.Profit:Analyse(entry.recipeID)
+        local count = entry.quantity
+        local cost
 
-        if analysis and analysis.priceable then
-            local count = entry.quantity
-            local cost = analysis.totalCost * count
+        -- The materials are costed even when what the craft makes has no
+        -- price (an enchant makes no item at all): the footer's materials
+        -- said 0c beside To buy's 348g on 112 boots enchants.
+        if analysis and analysis.priceable then cost = analysis.totalCost * count end
 
+        if analysis then
             local planned = ns.Cost:GetCraftCost(entry.recipeID, nil, nil, { made = made })
             if planned and planned.priceable then
                 cost = planned.total * count
             end
+        end
+
+        if cost then
 
             -- Every line at what it is worth, then the bags taken off
             -- ("Charge market price" unticked) and what is bought priced
@@ -1622,10 +1634,12 @@ function Queue:BuildEntryCosts()
             end
 
             -- Profit moves with cost one for one: the sale and its cut are
-            -- the same however the materials were paid for.
+            -- the same however the materials were paid for. No sale price,
+            -- no profit: only the materials are known.
             result[entry] = {
                 cost = cost,
-                profit = analysis.profit * count + analysis.totalCost * count - cost,
+                profit = analysis.priceable
+                    and (analysis.profit * count + analysis.totalCost * count - cost) or nil,
             }
         end
     end
