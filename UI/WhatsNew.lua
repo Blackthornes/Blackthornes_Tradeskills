@@ -32,9 +32,15 @@
 -- due }, such as Equipment's word about its Upgrade quest. Each is looked
 -- at once per account, with the next window that comes up by itself, and
 -- shown only while due() says so; then it is kept in that addon's
--- whatsNewTipsSeen[key] and never shown again. Its button calls run().
+-- whatsNewTipsSeen[key] and never shown again. Its button calls run() and
+-- closes the window, unless the card says stay = true (a button that opens
+-- another window, such as Settings, leaves this one up).
+--
+-- The thank-you (2026-10-23): one card above the note, once per account,
+-- the words of About.THANKS; thanksSeen is set in every sister's save.
 --
 -- Saved, account wide, never renamed: whatsNewSeen (per addon), aboutNoteSeen,
+-- thanksSeen,
 -- whatsNewTipsSeen (per addon),
 -- whatsNewPopup (on unless unticked) and whatsNewMotion (on unless
 -- unticked), which are off in all when off in any, as sisterNote is, and
@@ -59,7 +65,7 @@ if type(Format) ~= "function" then Format = string.format end
 
 -- Raised when this file changes in a way an older copy cannot draw: the
 -- newest copy loaded builds the window.
-WhatsNew.FILE_VERSION = 4
+WhatsNew.FILE_VERSION = 6
 
 -- Seconds after login, so the window comes up once the game has settled.
 WhatsNew.DELAY = 5
@@ -248,6 +254,26 @@ function WhatsNew:NoteEntry()
     }
 end
 
+--- Whether the thank-you at the very top is still to be shown: seen in no
+--- sister (thanksSeen, account wide).
+function WhatsNew:ThanksDue()
+    local About = ns.About
+    if not (About and type(About.THANKS) == "table" and #About.THANKS > 0) then return false end
+    for _, db in ipairs(self:Stores()) do
+        if db.thanksSeen then return false end
+    end
+    return true
+end
+
+--- The thank-you as a card for the list.
+function WhatsNew:ThanksEntry()
+    return {
+        note = true,
+        addon = { title = L["Thank you"], icon = [[Interface\Icons\INV_Misc_Gift_01]] },
+        paragraphs = ns.About.THANKS,
+    }
+end
+
 --- The one-time cards still to show, as cards for the list. Each tip is
 --- looked at once: kept as seen in its addon's save whether due or not, so
 --- one a player had no need of never turns up later.
@@ -277,6 +303,7 @@ function WhatsNew:TakeTips()
                             hint = tip.hint,
                             button = tip.button,
                             run = tip.run,
+                            stay = tip.stay,
                         }
                     end
                 end
@@ -333,7 +360,12 @@ function WhatsNew:Check()
         table.insert(list, 1, self:NoteEntry())
         for _, db in ipairs(self:Stores()) do db.aboutNoteSeen = true end
     end
-    local at = (list[1] and list[1].note) and 2 or 1
+    if self:ThanksDue() then
+        table.insert(list, 1, self:ThanksEntry())
+        for _, db in ipairs(self:Stores()) do db.thanksSeen = true end
+    end
+    local at = 1
+    while list[at] and list[at].note do at = at + 1 end
     for _, tip in ipairs(self:TakeTips()) do
         table.insert(list, at, tip)
         at = at + 1
@@ -972,7 +1004,7 @@ local function Fill(card, entry, width, index)
             button:SetScript("OnClick", function()
                 local ok, err = pcall(entry.run)
                 if not ok and ns.Debug then ns.Debug("what's new:", tostring(err)) end
-                WhatsNew.Owner():Close()
+                if not entry.stay then WhatsNew.Owner():Close() end
             end)
             button:ClearAllPoints()
             button:SetPoint("TOPLEFT", card, "TOPLEFT", column, y - 1)
