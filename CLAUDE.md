@@ -845,7 +845,8 @@ which print "The arrow shows the way to NAME (WHAT)."; the old pin is the
 fallback. The arrow shows only while a place is set
 (`charDb.wayArrowPlace`, per character; its spot `wayArrowX`/`wayArrowY`,
 account wide), and goes with its close gem or when a trainer or vendor
-window opens on arrival (`WayArrow:Reached`). It joins the one-arrow rule
+window opens on arrival (`WayArrow:Reached`). The dial takes no clicks and shows no hover text (the owner,
+2026-10-23): drag moves it and the red gem closes it. It joins the one-arrow rule
 (`_G.BlackthornesArrows`, as "Tradeskills"). `Logic/TomTom.lua` is the
 shared TomTom file: "Use TomTom:" on the Look page (`useTomTom`, account
 wide, on unless unticked, never rename it) hands TomTom the place
