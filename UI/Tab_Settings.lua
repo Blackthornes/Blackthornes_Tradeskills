@@ -1629,12 +1629,12 @@ local function Build(outer)
     widgets.useTomTom:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- Show the way to a trainer or vendor far away step by step
-    -- (Logic/Travel.lua, the same in every addon). Off unless ticked.
+    -- (Logic/Travel.lua, the same in every addon). On unless unticked.
     local guideRow = CreateRow(pages.look, 2, L["Guide Me:"],
         L["When the place is in another zone or across the sea, the arrow leads you there step by step."])
     widgets.arrowRoute = Widgets.CreateCheckbox(guideRow, L["On"], function(checked)
         if ns.Travel then ns.Travel:SetOn(checked) end
-    end, false)
+    end, true)
     widgets.arrowRoute:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     -- Goblin Gold (asked 2026-10-17): the gold on every character of this
@@ -2301,7 +2301,7 @@ local function Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
     widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
-    widgets.arrowRoute:SetChecked(type(ns.db) == "table" and ns.db.arrowRoute == true)
+    widgets.arrowRoute:SetChecked(type(ns.db) == "table" and ns.db.arrowRoute ~= false)
     widgets.useTomTom:SetChecked(type(ns.db) ~= "table" or ns.db.useTomTom ~= false)
     widgets.goldTracker:SetChecked(Config:Get("goldTracker") == true)
     widgets.goldCount:SetValue(Config:Get("goldTrackerCount") == "character" and "character" or "all", true)
