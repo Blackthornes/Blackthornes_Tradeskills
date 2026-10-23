@@ -19,7 +19,8 @@ writes:
 - paths = { from, to, ... }: one flight a pair, between kept flight masters.
 - docks[key] = { name, continent, north, west, zone }: where each boat and
   zeppelin leaves from, read from the sign or flight master that stands
-  there (DOCKS below names which). Never a typed spot.
+  there (DOCKS below names which), or the boarding spot seen in game on a
+  zone's map, which beats the tables' row. Never a made up spot.
 - rides = { { a, b, kind, side }, ... }: the boats and zeppelins between
   docks, both ways.
 
@@ -45,7 +46,10 @@ LEFT_OUT = ("Transport,", "Generic,", "Quest Path", "zzOLD", "Programmer Isle")
 
 # Where each ride leaves from: the table row that stands there. "go" is a
 # GameObjects ID (a dock's sign), "taxi" a TaxiNodes ID (the flight master
-# or transport point at that dock, where the table has no sign).
+# or transport point at that dock, where the table has no sign). "seen" is
+# the boarding spot read off the game's map in play, (UiMap ID, x, y) in
+# percent; a spot seen in game beats the tables' row, which can be a road
+# sign some way off.
 DOCKS = [
     ("auberdine", "Auberdine", "Darkshore", ("go", 176364)),
     ("menethil", "Menethil Harbor", "Wetlands", ("go", 176369)),
@@ -53,8 +57,12 @@ DOCKS = [
     ("ratchet", "Ratchet", "The Barrens", ("sign", "Maiden's Fancy")),
     ("bootybay", "Booty Bay", "Stranglethorn Vale", ("taxi", 18)),
     ("ruttheran", "Rut'theran Village", "Teldrassil", ("taxi", 27)),
-    ("orgrimmar", "Orgrimmar", "Durotar", ("go", 165557)),
-    ("undercity", "Undercity", "Tirisfal Glades", ("go", 165558)),
+    # The Orgrimmar tower has a platform for each zeppelin (2026-10-23).
+    ("orgrimmar", "Orgrimmar", "Durotar", ("seen", (1411, 50.8, 13.7))),
+    ("orgrimmargromgol", "Orgrimmar", "Durotar", ("seen", (1411, 50.6, 12.8))),
+    # The Undercity tower's Orgrimmar platform; its Grom'gol one is on the
+    # same tower and waits for a spot seen in game.
+    ("undercity", "Undercity", "Tirisfal Glades", ("seen", (1420, 60.7, 58.8))),
     ("gromgol", "Grom'gol", "Stranglethorn Vale", ("taxi", 47)),
 ]
 
@@ -64,7 +72,7 @@ RIDES = [
     ("auberdine", "ruttheran", "boat", "A"),
     ("bootybay", "ratchet", "boat", "AH"),
     ("orgrimmar", "undercity", "zeppelin", "H"),
-    ("orgrimmar", "gromgol", "zeppelin", "H"),
+    ("orgrimmargromgol", "gromgol", "zeppelin", "H"),
     ("undercity", "gromgol", "zeppelin", "H"),
 ]
 
@@ -118,15 +126,39 @@ def read_paths(folder, flights):
     return sorted(paths)
 
 
+def seen_spot(maps, ui_map, x, y):
+    """A spot on a zone's map (percent, as the game shows it) in world
+    north and west, by the map's corners in UiMapAssignment."""
+    row = maps.get(ui_map)
+    if not row:
+        return None
+    north_lo, west_lo = float(row["Region_0"]), float(row["Region_1"])
+    north_hi, west_hi = float(row["Region_3"]), float(row["Region_4"])
+    north = north_hi - (y / 100) * (north_hi - north_lo)
+    west = west_hi - (x / 100) * (west_hi - west_lo)
+    return int(row["MapID"]), round(north, 1), round(west, 1)
+
+
 def read_docks(folder):
     signs = {int(row["ID"]): row for row in rows(folder, "GameObjects")}
     by_name = {}
     for row in signs.values():
         by_name.setdefault(row["Name_lang"].split(" - ")[0].strip(), row)
     nodes = {int(row["ID"]): row for row in rows(folder, "TaxiNodes")}
+    maps = {
+        int(row["UiMapID"]): row
+        for row in rows(folder, "UiMapAssignment")
+        if int(row["OrderIndex"] or 0) == 0
+    }
 
     docks = {}
     for key, name, zone, (kind, ref) in DOCKS:
+        if kind == "seen":
+            spot = seen_spot(maps, *ref)
+            if not spot:
+                raise SystemExit(f"make_travel: no map for the {name} dock ({kind} {ref})")
+            docks[key] = (name,) + spot + (zone,)
+            continue
         if kind == "go":
             row = signs.get(ref)
             continent = row and int(row["OwnerID"])
