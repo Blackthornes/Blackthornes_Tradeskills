@@ -51,7 +51,7 @@ local PAGES = {
     { key = "sharing", text = L["SHARING"],
       tip = L["Your other account and guild prices"] },
     { key = "data", text = L["DATA"],
-      tip = L["What is saved, clearing old prices and debug output"] },
+      tip = L["What is saved and clearing old prices"] },
     { key = "about", text = L["ABOUT"],
       tip = L["How these addons are made, the version, the Discord and the other Blackthornes addons"] },
 }
@@ -1526,44 +1526,8 @@ local function Build(outer)
     ns.Columns.onAnyChange = PaintHiddenCount
     PaintHiddenCount()
 
-    CreateSection(pages.data, 1, L["TROUBLESHOOTING"])
-    local debugRow = CreateRow(pages.data, 1, L["Debug:"],
-        L["Extra chat messages to help track down a problem."])
-
-    widgets.debug = Widgets.CreateCheckbox(debugRow, L["On"], function(checked)
-        ns.db.global.debug = checked
-    end, false)
-    widgets.debug:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    -- The probe as a button (asked 2026-10-10); what it finds is also kept
-    -- in the saved data for Claude to read after a /reload.
-    local probeRow = CreateRow(pages.data, 1, L["Client Check:"],
-        L["Lists in chat what the game supports and whether your data is saved."])
-
-    widgets.probe = Widgets.CreateButton(probeRow, L["Check"], function()
-        local command = ns.commands and ns.commands.probe
-        if command then command.fn("") end
-    end, { width = 80, height = 20 })
-    widgets.probe:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(widgets.probe)
-
-    -- /bts perf and /bts perf clear as buttons; what Show lists is kept for
-    -- Claude too.
-    local perfRow = CreateRow(pages.data, 1, L["Speed Check:"],
-        L["Show lists in chat the slowest things Tradeskills did since you logged in, to find a hitch. Clear starts over."])
-
-    local function Perf(rest)
-        local command = ns.commands and ns.commands.perf
-        if command then command.fn(rest) end
-    end
-    widgets.perfShow = Widgets.CreateButton(perfRow, L["Show"], function() Perf("") end,
-        { width = 60, height = 20 })
-    widgets.perfShow:SetPoint("TOPLEFT", CONTROL_X, -2)
-    FitButton(widgets.perfShow)
-    widgets.perfClear = Widgets.CreateButton(perfRow, L["Clear"], function() Perf("clear") end,
-        { width = 60, height = 20 })
-    widgets.perfClear:SetPoint("LEFT", widgets.perfShow, "RIGHT", 6, 0)
-    FitButton(widgets.perfClear)
+    -- Debug, the client check and the speed check are typed only (/bts
+    -- debug, probe, perf; the owner, 2026-10-23): players don't need them.
 
     -- Every sound the addon plays, each with its own switch, all on to start
     -- with. The one sound not here is the warning that saved data failed to
@@ -1806,11 +1770,7 @@ local function Build(outer)
     Place(pages.sharing, 1, syncButton, -10)
     FitButton(syncButton)
 
-    local testButton = Widgets.CreateButton(pages.sharing.content, L["Test"], function()
-        if ns.Comm then ns.Comm:Test() end
-    end, { width = 80, height = 22, tooltip = L["Whisper yourself a few addon messages and say in chat what the game did with them"] })
-    testButton:SetPoint("LEFT", syncButton, "RIGHT", 8, 0)
-    FitButton(testButton)
+    -- The whisper test is typed only (/bts share test; the owner, 2026-10-23).
 
     -- Forget their characters is a typed command now (the owner,
     -- 2026-10-15): /bts forgetlinked confirm. Settings never deletes data.
@@ -1882,7 +1842,6 @@ local function Build(outer)
     Searchable(pages.queue, exportButton, L["Export queue Copy your queue, settings and stock limits as a code"])
     Searchable(pages.queue, importButton, L["Import Load a code"])
     Searchable(pages.sharing, syncButton, L["Sync now Contact your other account now and swap anything that changed"])
-    Searchable(pages.sharing, testButton, L["Test messages Whisper yourself a few addon messages"])
 
     -- About (UI/About.lua): the note on how the addons are made, then the
     -- version, the Discord and the other Blackthornes addons.
@@ -2305,7 +2264,6 @@ local function Refresh()
     widgets.disenchantQuality:SetValue(ns.QueueMail and ns.QueueMail:GetDisenchantQuality()
         or Config:Get("disenchanterQuality") or 2, true)
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
-    widgets.debug:SetChecked(ns.db.global.debug == true)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") == true)
