@@ -136,7 +136,7 @@ ns.TRAVEL_DATA = {
         ratchet = { "Ratchet", 1, -954.0, -3760.7, "The Barrens" },
         ruttheran = { "Rut'theran Village", 1, 8643.6, 841.0, "Teldrassil" },
         theramore = { "Theramore", 1, -3791.7, -4507.1, "Dustwallow Marsh" },
-        undercity = { "Undercity", 0, 1981.6, 249.8, "Tirisfal Glades" },
+        undercity = { "Undercity", 0, 2066.1, 290.5, "Tirisfal Glades" },
     },
 
     -- { a, b, kind, side }: both ways.
