@@ -33,7 +33,7 @@
 -- flights you know, where you crossed, where your Hearthstone lands) the
 -- others read too, so a flight learned with one addon loaded counts in all.
 --
--- Saved in each addon's account save, never renamed: `arrowRoute` (off
+-- Saved in each addon's account save, never renamed: `arrowRoute` (on
 -- unless ticked), `travelFlights`, `travelCrossings`, `travelHearth`.
 -- Nothing is shared with anyone.
 
@@ -294,7 +294,7 @@ local function DB() return Host.DB() end
 
 function Travel.IsOn()
     local db = DB()
-    return type(db) == "table" and db.arrowRoute == true
+    return type(db) == "table" and db.arrowRoute ~= false
 end
 
 function Travel:SetOn(on)
