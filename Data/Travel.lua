@@ -131,11 +131,12 @@ ns.TRAVEL_DATA = {
         bootybay = { "Booty Bay", 0, -14444.3, 509.6, "Stranglethorn Vale" },
         gromgol = { "Grom'gol", 0, -12418.8, 235.4, "Stranglethorn Vale" },
         menethil = { "Menethil Harbor", 0, -3776.2, -731.8, "Wetlands" },
-        orgrimmar = { "Orgrimmar", 1, 1303.9, -4397.8, "Durotar" },
+        orgrimmar = { "Orgrimmar", 1, 1325.4, -4648.5, "Durotar" },
+        orgrimmargromgol = { "Orgrimmar", 1, 1357.1, -4638.0, "Durotar" },
         ratchet = { "Ratchet", 1, -954.0, -3760.7, "The Barrens" },
         ruttheran = { "Rut'theran Village", 1, 8643.6, 841.0, "Teldrassil" },
         theramore = { "Theramore", 1, -3791.7, -4507.1, "Dustwallow Marsh" },
-        undercity = { "Undercity", 0, 1981.6, 249.8, "Tirisfal Glades" },
+        undercity = { "Undercity", 0, 2066.1, 290.5, "Tirisfal Glades" },
     },
 
     -- { a, b, kind, side }: both ways.
@@ -145,7 +146,7 @@ ns.TRAVEL_DATA = {
         { "auberdine", "ruttheran", "boat", "A" },
         { "bootybay", "ratchet", "boat", "AH" },
         { "orgrimmar", "undercity", "zeppelin", "H" },
-        { "orgrimmar", "gromgol", "zeppelin", "H" },
+        { "orgrimmargromgol", "gromgol", "zeppelin", "H" },
         { "undercity", "gromgol", "zeppelin", "H" },
     },
 }
