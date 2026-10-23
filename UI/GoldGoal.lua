@@ -189,7 +189,7 @@ local function BuildGrip(frame)
         Theme.SetBorderColor(self, "accent")
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(L["Drag to change the size. Right-click for the normal size."], 1, 1, 1, true)
+            GameTooltip:SetText(L["Drag to change the size. Right-click for the normal size."], 1, 1, 1, 1, true)
             GameTooltip:Show()
         end
     end)
