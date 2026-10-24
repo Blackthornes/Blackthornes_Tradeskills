@@ -1867,6 +1867,12 @@ local function BuildCrafts(container)
         ApplyHeadingLayout()
 
         Refresh()
+
+        -- The pane beside the profession window counts the same way.
+        local pane = ns.CraftPanel
+        if pane and pane.RequestRefresh and pane.IsShown and pane:IsShown() then
+            pane:RequestRefresh()
+        end
     end, { width = 140 })
     method:SetPoint("LEFT", profession, "RIGHT", 8, 0)
     method:SetValue(Method() or "best")
