@@ -1784,6 +1784,14 @@ local function Build(outer)
     widgets.guildStatus:SetWidth(COLUMN_WIDTH)
     widgets.guildStatus:SetWordWrap(true)
 
+    local craftersRow = CreateRow(pages.sharing, 2, L["Guild Crafters:"],
+        L["Shows guildmates online who can make a craft. Your guild sees which recipes you know."])
+    widgets.guildCrafters = Widgets.CreateCheckbox(craftersRow, L["On"], function(checked)
+        if ns.GuildCrafters then ns.GuildCrafters:SetOn(checked) else Config:Set("guildCrafters", checked) end
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.guildCrafters:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     CreateSection(pages.sharing, 2, L["YOUR REALM"])
     local realmRow = CreateRow(pages.sharing, 2, L["Realm Prices:"],
         L["Swaps auction prices with players on your realm who use Tradeskills. Only prices are sent, never names. Your own scans always win."])
@@ -2321,6 +2329,7 @@ local function Refresh()
     end
     widgets.linkStatus:SetText(ns.AccountLink and ns.AccountLink:Describe() or "")
     widgets.guildPrices:SetChecked(Config:Get("guildPrices") == true)
+    widgets.guildCrafters:SetChecked(Config:Get("guildCrafters") == true)
     if widgets.shareData then widgets.shareData:SetChecked(Config:Get("shareData") == true) end
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Status() or "")
     widgets.realmPrices:SetChecked(Config:Get("realmPrices") == true)
