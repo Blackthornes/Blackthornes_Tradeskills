@@ -455,7 +455,9 @@ do
         Run()
     end
     current = fay
-    check("Fay has the guild's prices now", fay.ns.GuildPrices:GetValue(2592), 500)
+    -- Whoever's wait comes up first answers (the waits are partly random),
+    -- so check an item every scanned guildmate has.
+    check("Fay has the guild's prices now", fay.ns.GuildPrices:GetValue(2589) ~= nil, true)
     local answered = 0
     for _, client in ipairs(clients) do
         if client.ns.GuildPrices.answeredAt then answered = answered + 1 end

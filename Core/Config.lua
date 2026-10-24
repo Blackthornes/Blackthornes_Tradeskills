@@ -521,6 +521,11 @@ local DEFAULTS = {
         -- Share scans with guildmates and fill gaps with theirs. On by
         -- default (the owner, 2026-10-07). See Logic/GuildPrices.lua.
         guildPrices = true,
+        -- Tell the guild which recipes this character knows, and show who
+        -- online can make a craft (a player asked, the owner said guild
+        -- only, 2026-10-24). Off unless ticked; never rename it. See
+        -- Logic/GuildCrafters.lua.
+        guildCrafters = false,
         -- Share scans with players on your realm over a hidden channel, and
         -- fill what is still missing with theirs (2026-10-20). Off unless
         -- ticked; never rename it. See Logic/RealmPrices.lua.

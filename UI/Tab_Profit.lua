@@ -12,6 +12,8 @@ local UI = ns.UI
 
 local ROW_HEIGHT = 22
 local DETAIL_WIDTH = 300
+-- The guildmates line: its label, then one row of names.
+local CRAFTERS_HEIGHT = 32
 
 -- The detail pane's summary lines: materials, prices, cut, profit.
 local SUMMARY_ROW_HEIGHT = 17
@@ -609,6 +611,94 @@ local function GrowToFit(button)
     end
 end
 
+--- One name on the guildmates line: gold, lit under the mouse, a click
+--- opens a whisper. `name` is nil for the "+N more" button, whose hover
+--- lists the rest.
+local function CrafterButton(crafters, index)
+    local button = crafters.names[index]
+    if button then return button end
+    button = CreateFrame("Button", nil, crafters)
+    button:SetHeight(14)
+    button.text = Theme.CreateLabel(button, "small", "accent")
+    button.text:SetPoint("LEFT", 0, 0)
+    button:SetScript("OnEnter", function(self)
+        self.text:SetTextColor(Theme.Unpack("text"))
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if self.name then
+            GameTooltip:SetText(L.Format("Click to whisper %s.", self.name), 1, 1, 1, 1, true)
+        else
+            for _, other in ipairs(self.rest or {}) do GameTooltip:AddLine(other, 1, 0.82, 0) end
+        end
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(self)
+        self.text:SetTextColor(Theme.Unpack(self.name and "accent" or "muted"))
+        GameTooltip:Hide()
+    end)
+    button:SetScript("OnClick", function(self)
+        if self.name and ns.GuildCrafters then ns.GuildCrafters.Whisper(self.name) end
+    end)
+    crafters.names[index] = button
+    return button
+end
+
+--- Fill the guildmates line for a craft, or hide it. The names go on one
+--- row, as many as fit, then "+N more".
+local function UpdateCrafters(detail, analysis)
+    local crafters = rawget(detail, "crafters")
+    if type(crafters) ~= "table" then return end
+    for _, button in ipairs(crafters.names) do button:Hide() end
+
+    local names = {}
+    if analysis and ns.GuildCrafters and ns.GuildCrafters.WhoCanMake then
+        local ok, found = pcall(ns.GuildCrafters.WhoCanMake, ns.GuildCrafters, analysis.recipeID)
+        if ok and type(found) == "table" then names = found end
+    end
+
+    detail.reagentHeading:ClearAllPoints()
+    if #names == 0 then
+        crafters:Hide()
+        detail.reagentHeading:SetPoint("TOPLEFT", detail.subtitle, "BOTTOMLEFT", -38, -12)
+        return
+    end
+    crafters:Show()
+    detail.reagentHeading:SetPoint("TOPLEFT", crafters, "BOTTOMLEFT", -38, -8)
+
+    local okWidth, room = pcall(crafters.GetWidth, crafters)
+    if not okWidth or type(room) ~= "number" or room <= 0 then room = DETAIL_WIDTH - 62 end
+    local gap = 10
+    local x, shown = 0, 0
+    for index, name in ipairs(names) do
+        local button = CrafterButton(crafters, index)
+        button.name, button.rest = name, nil
+        button.text:SetText(name)
+        button.text:SetTextColor(Theme.Unpack("accent"))
+        local width = math.ceil(Theme.TextWidth(button.text) or (#name * 6))
+        -- Room left for this name, and for a "+N more" after it when more follow.
+        local need = width + (index < #names and 60 or 0)
+        if shown > 0 and x + need > room then break end
+        button:SetWidth(width)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", crafters, "TOPLEFT", x, -16)
+        button:Show()
+        x = x + width + gap
+        shown = index
+    end
+
+    if shown < #names then
+        local more = CrafterButton(crafters, shown + 1)
+        more.name = nil
+        more.rest = {}
+        for index = shown + 1, #names do more.rest[#more.rest + 1] = names[index] end
+        more.text:SetText(L.Format("+%d more", #names - shown))
+        more.text:SetTextColor(Theme.Unpack("muted"))
+        more:SetWidth(math.ceil(Theme.TextWidth(more.text) or 50))
+        more:ClearAllPoints()
+        more:SetPoint("TOPLEFT", crafters, "TOPLEFT", x, -16)
+        more:Show()
+    end
+end
+
 local function BuildDetail(parent)
     local detail = Theme.CreatePanel(parent, "window")
     detail:SetWidth(DETAIL_WIDTH)
@@ -642,6 +732,22 @@ local function BuildDetail(parent)
     subtitle:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
     subtitle:SetWordWrap(true)
     detail.subtitle = subtitle
+
+    -- Guildmates online who can make it (Logic/GuildCrafters.lua): a line
+    -- under the subtitle, shown only when someone is, each name a click
+    -- that opens a whisper. The materials move down under it.
+    local crafters = CreateFrame("Frame", nil, detail)
+    crafters:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -6)
+    crafters:SetPoint("RIGHT", detail, "RIGHT", -12, 0)
+    crafters:SetHeight(CRAFTERS_HEIGHT)
+    crafters.label = Theme.CreateLabel(crafters, "small", "muted")
+    crafters.label:SetPoint("TOPLEFT", 0, 0)
+    crafters.label:SetPoint("RIGHT", crafters, "RIGHT", 0, 0)
+    crafters.label:SetWordWrap(true)
+    crafters.label:SetText(L["Guildmates who can make it:"])
+    crafters.names = {}
+    crafters:Hide()
+    detail.crafters = crafters
 
     local reagentHeading = Theme.CreateHeading(detail, L["MATERIALS"])
     -- Back out under the icon, so the list of materials starts at the edge.
@@ -1156,6 +1262,7 @@ function UpdateDetail(analysis)
     UpdateDisenchantButton(detail, analysis)
 
     if not hasSelection then
+        UpdateCrafters(detail, nil)
         UpdateGraph(detail, nil)
         return
     end
@@ -1191,6 +1298,8 @@ function UpdateDetail(analysis)
         detail.subtitle:SetText(analysis.reason or L["cannot be priced"])
         detail.subtitle:SetTextColor(Theme.Unpack("warn"))
     end
+
+    UpdateCrafters(detail, analysis)
 
     -- Reagent lines. When there are more than fit, the last line that fits
     -- says how many more there are instead.

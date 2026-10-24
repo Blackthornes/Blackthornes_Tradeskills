@@ -1434,6 +1434,26 @@ and `Core/Serialize.lua` are copies of ours (prefix `BFRshare` instead of
 its own pairing (`shareNames`) rather than reading `linkNames`. A fix to
 `Core/Comm.lua` or `Core/Serialize.lua` here belongs in Farmer's too.
 
+## Guildmates who can make it
+
+A player asked (2026-10-24) to see, on a craft, who else using the addon
+online knows the recipe and whisper them; the owner said guild only, never
+the realm. Off unless ticked: "Guild Crafters:" under YOUR GUILD on the
+Sharing page (`guildCrafters`, account wide, never rename it).
+`Logic/GuildCrafters.lua` talks over `Core/Comm.lua`: a guild hello
+(`B<hash>`, `:1` the first a session) 40 s after login and every ten
+minutes, a whispered ask (`N`) when the hash is new, and the list whispered
+back (`L`, `{ h, r }`, recipe IDs in base 36), each guildmate at most every
+ten minutes, answers to a first hello spread over a few seconds. Only names
+and recipe IDs go. A whisper is taken only from someone whose guild hello
+came first, or in the minute after our own first hello (`OPEN_FOR`), and
+once the roster is read only names on it show (`members`); one it shows
+offline, or not heard for `ONLINE_FOR`, is dropped. Nothing is saved.
+The Profit tab's detail pane lists them under "Guildmates who can make
+it:" (`UpdateCrafters` in `UI/Tab_Profit.lua`), a click whispers by full
+name (`GuildCrafters.Whisper`). Tested in `tools/test_guildcrafters.lua`.
+Not yet seen in game.
+
 ## Sharing with your realm
 
 The owner asked (2026-10-20) for live prices without an app, a server or a
