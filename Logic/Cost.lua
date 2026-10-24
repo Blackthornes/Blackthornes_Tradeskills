@@ -153,7 +153,86 @@ function Cost:RebuildOutputIndex()
 
     self.recipeByOutput = index
     self.anyRecipeByOutput = anywhere
+    self.altRecipeByOutput = self:BuildAltIndex()
     self.recipeIndexStale = false
+end
+
+--------------------------------------------------------------------------------
+-- Parts an alt makes
+--------------------------------------------------------------------------------
+
+-- A player asked, the owner said yes (2026-10-24): a part only another of
+-- your characters can make was priced at what buying it costs, so a craft
+-- the account could make cheaply looked dear. With "Alts Make Sub-Crafts"
+-- ticked (queueAltCrafting, the switch that hands sub-crafts to alts), such
+-- a part is priced at its materials plus postage, and its line says who
+-- makes it. The queue already gives that alt the craft and the mailbox the
+-- mail (Queue:DeriveAcrossCharacters). Left out, and so bought as before:
+-- a craft with a cooldown (Mooncloth, transmutes), which can't be made as
+-- many times as a queue wants; one marked never to make as a sub-craft; a
+-- dropped profession's; an alt this character can't mail; and anything
+-- that binds when picked up, which can't be mailed.
+
+--- Every other character's crafts by the item they make, for AltRecipeFor.
+--- @return [itemID] = { recipeID, characterKey }
+function Cost:BuildAltIndex()
+    local list = {}
+    local selfKey = ns.Config.GetCharacterKey and ns.Config:GetCharacterKey() or nil
+    local characters = ns.db and ns.db.characters
+    local queue = ns.Queue
+    if not (selfKey and type(characters) == "table" and queue and queue.CanMail) then return list end
+
+    local keys = {}
+    for characterKey, record in pairs(characters) do
+        if type(record) == "table" and characterKey ~= selfKey then keys[#keys + 1] = characterKey end
+    end
+    -- A fixed order, so the same alt is named whoever looks.
+    table.sort(keys)
+
+    local cooldowns = ns.Cooldowns
+    for _, characterKey in ipairs(keys) do
+        local record = characters[characterKey]
+        if queue:CanMail(characterKey, selfKey) and type(record.recipes) == "table" then
+            for recipeID, recipe in pairs(record.recipes) do
+                local itemID = type(recipe) == "table" and recipe.outputItemID
+                local dropped = itemID and ns.Recipes.IsDropped
+                    and ns.Recipes:IsDropped(recipe, characterKey)
+                local cooldown = itemID and cooldowns and cooldowns.HasCooldown
+                    and cooldowns:HasCooldown(recipeID)
+                if itemID and not list[itemID] and not dropped and not cooldown
+                    and not self:IsNeverSubCraft(recipeID) then
+                    list[itemID] = { recipeID = recipeID, characterKey = characterKey }
+                end
+            end
+        end
+    end
+    return list
+end
+
+--- The whole name of the alt who makes a part (reagent.madeBy), for its line.
+function Cost.MadeByName(characterKey)
+    if not characterKey then return nil end
+    local recipes = ns.Recipes
+    local name = recipes and recipes.GetCharacterName and recipes:GetCharacterName(characterKey)
+    return type(name) == "string" and name ~= "" and name or nil
+end
+
+--- The craft another of your characters would make this part with, while
+--- alts make sub-crafts. nil when the character playing can make it itself.
+--- @return recipeID, characterKey
+function Cost:AltRecipeFor(itemID)
+    if not itemID then return nil end
+    if not (ns.Queue and ns.Queue.SharesWithAlts and ns.Queue:SharesWithAlts()) then return nil end
+    if self.recipeByOutput == nil or self.recipeIndexStale then
+        self:RebuildOutputIndex()
+    end
+    if self.recipeByOutput[itemID] then return nil end
+    local alt = self.altRecipeByOutput and self.altRecipeByOutput[itemID]
+    if not alt then return nil end
+    if ns.Util and ns.Util.IsBoundOnPickup and ns.Util.IsBoundOnPickup(itemID) == true then
+        return nil
+    end
+    return alt.recipeID, alt.characterKey
 end
 
 function Cost:InvalidateIndex()
@@ -355,7 +434,8 @@ end
 --   total        copper cost of a single craft, or nil when unpriceable
 --   perUnit      cost per output item
 --   reagents     array of { itemID, quantity, unitCost, lineCost, source,
---                           have, shortfall, crafted, toMake, subCost }
+--                           have, shortfall, crafted, toMake, subCost,
+--                           madeBy (the alt who makes it, when not made here) }
 --   unpriced     array of itemIDs with no price data
 --   priceable    false when any reagent has no price
 function Cost:GetCraftCost(recipeID, depth, visited, opts)
@@ -394,12 +474,17 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
         local unitCost, source = self:GetReagentUnitCost(itemID)
         local crafted = false
         local subCost
+        -- The other character who makes it, when it is not made here.
+        local madeBy
 
         -- If we know how to make this reagent and making it is cheaper than
         -- buying it, price it at the cheaper option and flag it as a sub-craft
         -- so the queue can sequence it first.
         if depth < MAX_SUBCRAFT_DEPTH then
             local subRecipeID = self:FindRecipeForItem(itemID)
+            -- Else another of your characters, while alts make sub-crafts.
+            local altKey
+            if not subRecipeID then subRecipeID, altKey = self:AltRecipeFor(itemID) end
 
             local made = opts and opts.made
             if made and not made[itemID] then subRecipeID = nil end
@@ -407,15 +492,24 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
             -- Not over a price the player chose to use for it.
             if subRecipeID and not visited[subRecipeID] and source ~= "mine" then
                 local subResult = self:GetCraftCost(subRecipeID, depth + 1, visited, opts)
+                local perUnit = subResult and subResult.priceable and subResult.perUnit
 
-                if subResult and subResult.priceable and subResult.perUnit then
+                -- Made on an alt, it comes by mail: the postage counts too,
+                -- as it does when the queue picks who makes it.
+                if perUnit and altKey and ns.Queue and ns.Queue.PostagePerUnit then
+                    perUnit = perUnit + ns.Queue.PostagePerUnit(itemID,
+                        { units = quantity, crafters = { [ns.Config:GetCharacterKey()] = true } }, altKey)
+                end
+
+                if perUnit then
                     -- Set to Make on the Level Up tab: made whatever buying costs.
                     local always = self:ItemChoice(itemID) == "make"
-                    if not unitCost or made or always or subResult.perUnit < unitCost then
-                        unitCost = subResult.perUnit
+                    if not unitCost or made or always or perUnit < unitCost then
+                        unitCost = perUnit
                         source = "craft"
                         crafted = true
                         subCost = subResult
+                        madeBy = altKey
                     end
                 end
             end
@@ -450,6 +544,7 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
             -- costing, for the time a craft takes (Logic/CraftTime.lua).
             toMake = (crafted and source == "craft") and (quantity - free) or 0,
             subCost = subCost,
+            madeBy = madeBy,
             have = have,
             inBags = inBags,
             shortfall = math.max(0, quantity - have),
