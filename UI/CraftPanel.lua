@@ -331,6 +331,20 @@ local function RoomInCrafts(room, recipe)
     return math.max(1, math.floor(room / perCraft))
 end
 
+--- How the pane counts profit: the Profit tab's "Profit:" choice, one
+--- setting for both (a player asked, the owner said build it, 2026-10-24).
+--- Auction stays the sale it always counted (Profit:Analyse with no
+--- method), so picking it puts the pane back as it was.
+-- @return "best", "vendor", "disenchant", or nil for the sale alone
+local function PaneMethod()
+    local Profit = ns.Profit
+    local method = Profit and Profit.GetMethod and Profit:GetMethod() or nil
+    if method == "auction" then return nil end
+    return method
+end
+
+CraftPanel.PaneMethod = PaneMethod
+
 --- What the rows are read from: the search, the recipes the open window
 --- shows, and what is cached for them.
 local function RowSources(self, opts)
@@ -365,7 +379,9 @@ local function RowFor(recipeID, recipe, opts, search, tally)
     -- Plain substring, not a pattern: a recipe name with a hyphen in
     -- it would otherwise be a malformed pattern and match nothing.
     if search == "" or name:lower():find(search, 1, true) then
-        local analysis = ns.Profit:Analyse(recipeID)
+        local method = opts.method
+        if method == nil and opts.methodRead == nil then method = PaneMethod() end
+        local analysis = ns.Profit:Analyse(recipeID, nil, method)
         local _, queued = ns.Queue:Find(recipeID, true)
 
         local atLimit = (analysis and analysis.atPostLimit) == true
@@ -396,6 +412,12 @@ local function RowFor(recipeID, recipe, opts, search, tally)
                 outputItemID = recipe.outputItemID,
                 priceable = (analysis and analysis.priceable) == true,
                 profit = (analysis and analysis.profit) or 0,
+
+                -- Which way the profit is for, and what each way makes,
+                -- once the pane counts more than the sale.
+                via = method and analysis and analysis.via or nil,
+                ways = method and analysis and ns.Profit.DescribeWays
+                    and ns.Profit:DescribeWays(analysis) or nil,
 
                 -- Does it still skill you up, and is it worth a star.
                 skillUpTier = analysis and analysis.skillUp
@@ -486,7 +508,7 @@ function CraftPanel:OrderKey(opts)
     end
 
     return table.concat({ tostring(opts.sortBy), opts.search or "",
-        tostring(opts.ignoreLimit), count, sum }, "|")
+        tostring(opts.ignoreLimit), tostring(opts.method), count, sum }, "|")
 end
 
 --------------------------------------------------------------------------------
@@ -813,7 +835,13 @@ local function UpdateRow(row, line)
             if line.profit > 0 and ns.COLORS and ns.COLORS.profit then
                 amount = "|c" .. ns.COLORS.profit .. amount .. "|r"
             end
-            parts[#parts + 1] = L.Format("%s each", amount)
+            -- Which way it is for, in the VIA column's words.
+            local via = line.via and ns.Profit.WAY_LABELS and ns.Profit.WAY_LABELS[line.via]
+            if via then
+                parts[#parts + 1] = L.Format("%s each (%s)", amount, via)
+            else
+                parts[#parts + 1] = L.Format("%s each", amount)
+            end
         elseif line.soulbound then
             -- The whole reason is in the tooltip; the row has room for one word.
             parts[#parts + 1] = L["soulbound"]
@@ -884,6 +912,16 @@ local function ShowRowTooltip(row, line)
             Util.FormatMoney(line.profit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
     else
         GameTooltip:AddLine(line.reason or L["No price data for this yet"], 0.9, 0.38, 0.31)
+    end
+
+    -- What each way makes, as on the Profit tab, the one counted lit.
+    for _, way in ipairs(line.ways or {}) do
+        local label = way.label .. (way.note and (" (" .. way.note .. ")") or "")
+        local r, g, b = 0.7, 0.7, 0.7
+        if way.chosen then r, g, b = Theme.Unpack("accent") end
+        local vr, vg, vb = Theme.Unpack(way.profit >= 0 and "profit" or "loss")
+        GameTooltip:AddDoubleLine(label, Util.FormatMoney(way.profit, { noColor = true }),
+            r, g, b, vr, vg, vb)
     end
 
     -- Above materials, because on a profession still climbing it is the thing
@@ -1456,6 +1494,8 @@ function CraftPanel:BeginRefresh()
         search = self.search and self.search:GetText() or "",
         sortBy = self.sortBy,
         ignoreLimit = self:IgnoringLimit(),
+        method = PaneMethod(),
+        methodRead = true,
     }
 
     local key = self:OrderKey(opts)
