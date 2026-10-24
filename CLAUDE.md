@@ -1635,6 +1635,25 @@ under it, `BuyQuantity.UnitsUpTo`). The Sell list tags a row with its list
 or "Own price" (`PostPanel._ListTag`). Tested in `tools/test_listrules.lua`.
 Not yet seen in game.
 
+## The fold gem
+
+A player asked, the owner picked the mockup (2026-10-24), in all five
+addons: a small gold gem left of a window's red close gem folds the window
+down to its plate and opens it back up. `UI/FoldWindow.lua` is the same
+file in all five (a fix to it belongs in all five), and so are
+`tools/make_fold_art.py` (draws `Media/Frame/FoldGem.tga`; rerun it, never
+edit the TGA) and `tools/test_foldwindow.lua`. `FoldWindow:Add(frame,
+{ onToggle, canFold })` after `Titanforged:Dress`; it sits on the trim, so
+`Titanforged.lua` and `BlizzardLook.lua` are untouched. Folded, the window
+keeps its place and width and is `FoldWindow.HEIGHT` tall: the rim, fill
+and halo stay (`FoldWindow.Keeps`, by where each lies), the bottom corners
+and everything else on it hide and stay hidden while folded, and it can
+still be dragged. The gem again, closing it, or opening it by a command or
+the minimap button opens it full (`Unfold`). In a fight it will not fold
+over a button the game guards. With the Blizzard style it is the game's
+own minimize and maximize art when the client has it. Tooltips "Collapse
+this window" and "Expand this window"; nothing is saved. Here: the main window (`UI/Main.lua`).
+
 ## The Blizzard window style
 
 The owner asked (2026-10-10) for a choice of the game's own look beside
