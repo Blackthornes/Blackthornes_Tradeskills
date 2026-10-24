@@ -931,6 +931,53 @@ do
   ns.Util.NewWorker = nil
 end
 
+-- The pane counts profit the way the Profit tab's "Profit:" choice says
+-- (2026-10-24). Auction is the sale it always counted, so no method then.
+do
+  local realAnalyse, realGetMethod, realDescribe =
+    ns.Profit.Analyse, ns.Profit.GetMethod, ns.Profit.DescribeWays
+  local asked = {}
+  local pick = "best"
+  ns.Profit.GetMethod = function() return pick end
+  ns.Profit.Analyse = function(_, recipeID, _, method)
+    asked[#asked + 1] = method or "none"
+    local base = ANALYSIS[recipeID]
+    if not method then return base end
+    if recipeID == 101 then
+      return { priceable = true, profit = 20000, via = "disenchant", ways = {} }
+    end
+    return { priceable = base.priceable, profit = base.profit, reason = base.reason,
+      via = base.priceable and "auction" or nil, ways = {} }
+  end
+  ns.Profit.DescribeWays = function(_, analysis)
+    return analysis.via and { { way = analysis.via, label = "If disenchanted", profit = analysis.profit, chosen = true } } or {}
+  end
+
+  check("Best is asked for by name", CraftPanel.PaneMethod(), "best")
+  local rows = CraftPanel:GetRows({ sortBy = "profit" })
+  check("the pane asks the profit for the picked way", asked[1], "best")
+  check("Sort by Profit follows the new numbers", rows[1].name, "Copper Chain Belt")
+  check("the row knows which way won", rows[1].via, "disenchant")
+  check("and what each way makes, for the hover", #rows[1].ways, 1)
+
+  pick, asked = "auction", {}
+  check("Auction is the sale the pane always counted", CraftPanel.PaneMethod(), nil)
+  rows = CraftPanel:GetRows({ sortBy = "profit" })
+  check("so no way is asked for", asked[1], "none")
+  check("the order is as it was", rows[1].name, "Rough Sharpening Stone")
+  check("and no way is named", rows[1].via, nil)
+
+  pick, asked = "vendor", {}
+  CraftPanel:GetRows({ sortBy = "profit", method = nil, methodRead = true })
+  check("a refresh that read Auction is not asked again", asked[1], "none")
+
+  check("the order is worked out again when the choice moves",
+    CraftPanel:OrderKey({ method = "best" }) ~= CraftPanel:OrderKey({}), true)
+
+  ns.Profit.Analyse, ns.Profit.GetMethod, ns.Profit.DescribeWays =
+    realAnalyse, realGetMethod, realDescribe
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))
