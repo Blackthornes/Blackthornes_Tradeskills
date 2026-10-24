@@ -853,6 +853,7 @@ L["Saves this price on the Prices tab and uses it from now on. Unticked, it last
 L["Keeps this price and closes. Nothing is listed."] = "Оставляет эту цену и закрывается. Ничего не выставляется."
 L["saved %s as your price for %s on the Prices tab."] = "%s сохранена как твоя цена для %s на вкладке «Цены»."
 L["%s each"] = "%s за штуку"
+L["%s each (%s)"] = "%s за штуку (%s)"
 L["no price yet"] = "цены пока нет"
 L["of %d"] = "из %d"
 L["List %d"] = "Выставить %d"

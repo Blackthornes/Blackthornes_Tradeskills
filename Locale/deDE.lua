@@ -851,6 +851,7 @@ L["Saves this price on the Prices tab and uses it from now on. Unticked, it last
 L["Keeps this price and closes. Nothing is listed."] = "Behält diesen Preis und schließt. Nichts wird eingestellt."
 L["saved %s as your price for %s on the Prices tab."] = "%s als deinen Preis für %s im Reiter Preise gespeichert."
 L["%s each"] = "%s pro Stück"
+L["%s each (%s)"] = "%s pro Stück (%s)"
 L["no price yet"] = "noch kein Preis"
 L["of %d"] = "von %d"
 L["List %d"] = "%d einstellen"

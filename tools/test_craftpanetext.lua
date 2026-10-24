@@ -144,6 +144,24 @@ do
     check("a row not laid out yet gets the whole line", Plain(row.detail.text), full)
 end
 
+-- The pane follows the Profit tab's "Profit:" choice (2026-10-24): the way
+-- the profit is for follows the amount, in the VIA column's words.
+do
+    local savedProfit = ns.Profit
+    ns.Profit = { WAY_LABELS = { auction = "AH", vendor = "Vendor", disenchant = "DE" } }
+    local row = CraftRow(1000)
+    CraftPanel._UpdateRow(row, CraftLine({ via = "disenchant" }))
+    check("a disenchant says so after the amount",
+        Plain(row.detail.text), "12g 34s 56c each (DE) · can make 3")
+    CraftPanel._UpdateRow(row, CraftLine({ via = "vendor", profit = -300 }))
+    check("a loss to a vendor says so too",
+        Plain(row.detail.text), "-3s 00c each (Vendor) · can make 3")
+    CraftPanel._UpdateRow(row, CraftLine({}))
+    check("counted at the auction house, as it always was, nothing is added",
+        Plain(row.detail.text), "12g 34s 56c each · can make 3")
+    ns.Profit = savedProfit
+end
+
 print("")
 print("the queue total along the bottom")
 

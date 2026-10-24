@@ -849,6 +849,7 @@ L["Saves this price on the Prices tab and uses it from now on. Unticked, it last
 L["Keeps this price and closes. Nothing is listed."] = "保留这个价格并关闭。什么都不上架。"
 L["saved %s as your price for %s on the Prices tab."] = "已在价格标签页把 %s 保存为你的 %s 价格。"
 L["%s each"] = "每件 %s"
+L["%s each (%s)"] = "每件 %s（%s）"
 L["no price yet"] = "还没有价格"
 L["of %d"] = "共 %d"
 L["List %d"] = "上架 %d 件"
