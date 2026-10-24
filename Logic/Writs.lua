@@ -30,6 +30,15 @@
 -- { opens, writs = { [item the writ asks for] = count }, name, at }. The
 -- item tooltip and the Writs tab read it back. Nothing is opened for the
 -- player.
+--
+-- Coin bags (the owner, 2026-10-24): a turn-in also gives a bag of coins,
+-- one item ID for each level of writ. An item that comes into the bags with
+-- a turn-in is noted as that level's bag (merchantsFavor.writBags[tier] =
+-- { [itemID] = time }); when one leaves the bags and money comes in within
+-- a few seconds, away from a vendor, mailbox, auction house or trade, that
+-- opening is counted, account wide, in merchantsFavor.coinBags[itemID] =
+-- { opens, copper, at }. The average comes off a turn-in's cost as money
+-- back. Nothing is opened for the player.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -66,6 +75,8 @@ Writs.DEFAULT_GOAL = "honored"
 --
 --   writIDs[itemID]           = writ item ID found in the game by its name
 --   writRewards[guid][tier]   = { rep, money, turnIns, at }
+--   writBags[tier]            = { [coin bag item ID] = time first seen }
+--   coinBags[itemID]          = { opens, copper (in all), at }
 local function Store()
     local db = ns.db
     if not db then return nil end
@@ -75,6 +86,8 @@ local function Store()
     store.writIDs = store.writIDs or {}
     store.writRewards = store.writRewards or {}
     store.sealedWrits = store.sealedWrits or {}
+    store.writBags = store.writBags or {}
+    store.coinBags = store.coinBags or {}
     return store
 end
 
@@ -373,13 +386,69 @@ function Writs:GetReward(tier)
     local mine = store and key and store.writRewards[key]
     local learned = mine and mine[tier]
 
+    local bag = self:BagWorth(tier) or 0
     if learned and learned.rep then
-        return learned.rep, learned.money or 0, "learned", learned.turnIns or 1
+        return learned.rep, (learned.money or 0) + bag, "learned", learned.turnIns or 1
     end
 
     local reported = ns.WRIT_REPUTATION and ns.WRIT_REPUTATION[tier]
-    if reported then return reported, 0, "reported" end
+    if reported then return reported, bag, "reported" end
     return nil, nil, nil
+end
+
+--------------------------------------------------------------------------------
+-- Coin bags
+--------------------------------------------------------------------------------
+
+--- What the coin bag a level of writ pays is worth on average, in copper,
+--- or nil before one has been opened.
+function Writs:BagWorth(tier)
+    local store = Store()
+    local bags = store and tier and store.writBags[tier]
+    if not bags then return nil end
+
+    local best
+    for itemID in pairs(bags) do
+        local record = store.coinBags[itemID]
+        if record and (record.opens or 0) > 0 and (not best or record.opens > best.opens) then
+            best = record
+        end
+    end
+    if not best then return nil end
+    return math.floor((best.copper or 0) / best.opens + 0.5)
+end
+
+--- An item that came in with a turn-in is that level's coin bag.
+function Writs:NoteBag(tier, itemID)
+    local store = Store()
+    if not store or not tier or not itemID then return end
+    store.writBags[tier] = store.writBags[tier] or {}
+    if store.writBags[tier][itemID] then return end
+    store.writBags[tier][itemID] = time()
+    Changed()
+end
+
+--- Count one coin bag opened and the money it gave.
+function Writs:LearnBag(itemID, copper)
+    local store = Store()
+    if not store or not itemID or type(copper) ~= "number" or copper <= 0 then return end
+
+    local record = store.coinBags[itemID] or {}
+    store.coinBags[itemID] = record
+    record.opens = (record.opens or 0) + 1
+    record.copper = (record.copper or 0) + copper
+    record.at = time()
+    Changed()
+end
+
+--- True for an item already noted as some level's coin bag.
+function Writs:IsCoinBag(itemID)
+    local store = Store()
+    if not store then return false end
+    for _, bags in pairs(store.writBags) do
+        if bags[itemID] then return true end
+    end
+    return false
 end
 
 --- Keep one turn-in's reward. The smallest seen is kept, in case a first
@@ -411,7 +480,8 @@ function Writs:Resolve()
     if delivered and rep and math.abs(rep.at - delivered.at) <= MATCH_SECONDS then
         local money = (paid and math.abs(paid.at - delivered.at) <= MATCH_SECONDS) and paid.amount or 0
         self:Learn(delivered.writ.tier, rep.amount, money)
-        recent = {}
+        recent = { turnIn = { tier = delivered.writ.tier, at = delivered.at }, arrived = recent.arrived }
+        self:MatchBag()
         return
     end
 
@@ -449,6 +519,81 @@ function Writs:OnTurnIn(_, _, money)
     if C_Timer and C_Timer.After then
         C_Timer.After(1, function() pcall(Writs.OnFaction, Writs) end)
     end
+end
+
+-- A vendor, mailbox, auction house or trade window can move money and items
+-- together; nothing is learned while one is open.
+local busy = {}
+
+local function Busy()
+    for _, open in pairs(busy) do
+        if open then return true end
+    end
+    return false
+end
+
+local function ReadMoney()
+    if type(GetMoney) ~= "function" then return nil end
+    local ok, money = pcall(GetMoney)
+    if not ok or type(money) ~= "number" then return nil end
+    -- A secret value raises when sums are done with it.
+    if not pcall(function() return money + 0 end) then return nil end
+    return money
+end
+
+--- Items that came in with a turn-in are that level's coin bag.
+function Writs:MatchBag()
+    local turnIn, arrived = recent.turnIn, recent.arrived
+    if not (turnIn and arrived) then return end
+    if math.abs(arrived.at - turnIn.at) > MATCH_SECONDS then return end
+    for itemID in pairs(arrived.ids) do self:NoteBag(turnIn.tier, itemID) end
+    recent.arrived = nil
+end
+
+--- A coin bag gone and money come in, close together, is one opening.
+function Writs:MatchCoins()
+    local opened, coins = recent.bagOpened, recent.coins
+    if not (opened and coins) then return end
+    if math.abs(opened.at - coins.at) > MATCH_SECONDS then return end
+    self:LearnBag(opened.id, coins.amount)
+    recent.bagOpened, recent.coins = nil, nil
+end
+
+--- Compare the whole bags with the last look, for coin bags coming in with
+--- a turn-in and going out when opened.
+function Writs:NoteBags(counts, skip)
+    local before = self.allHeld
+    self.allHeld = counts
+    if not before or Busy() then return end
+
+    local now, ids = Now(), nil
+    for itemID, count in pairs(counts) do
+        -- A turn-in gives one bag.
+        if count - (before[itemID] or 0) == 1 and not skip[itemID] then
+            ids = ids or {}
+            ids[itemID] = true
+        end
+    end
+    if ids then
+        recent.arrived = { ids = ids, at = now }
+        self:MatchBag()
+    end
+
+    for itemID, had in pairs(before) do
+        if had > (counts[itemID] or 0) and self:IsCoinBag(itemID) then
+            recent.bagOpened = { id = itemID, at = now }
+        end
+    end
+    self:MatchCoins()
+end
+
+function Writs:OnMoney()
+    local money = ReadMoney()
+    local before = self.money
+    self.money = money
+    if not (money and before) or Busy() or money <= before then return end
+    recent.coins = { amount = money - before, at = Now() }
+    self:MatchCoins()
 end
 
 --- A sealed writ gone and a Craftsman's Writ come in, close together, is
@@ -491,6 +636,15 @@ function Writs:OnBags()
     end
 
     self:NoteOpenings(sealed, writs)
+
+    -- What writs ask for, the writs and the sealed ones are no coin bags.
+    local skip = {}
+    for itemID in pairs(held) do skip[itemID] = true end
+    for itemID in pairs(sealed) do skip[itemID] = true end
+    for itemID in pairs(writs) do skip[itemID] = true end
+    local all = {}
+    for itemID, count in pairs(counts) do all[itemID] = count end
+    self:NoteBags(all, skip)
 
     local before = self.held
     self.held = held
@@ -695,10 +849,33 @@ end
 function Writs:OnEnable()
     pcall(self.OnBags, self)
     pcall(self.OnFaction, self)
+    self.money = ReadMoney()
 
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", Quietly(self.OnBags))
     ns.RegisterEvent(self, "UPDATE_FACTION", Quietly(self.OnFaction))
     ns.RegisterEvent(self, "QUEST_TURNED_IN", Quietly(self.OnTurnIn))
     ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", Quietly(self.OnItemInfo))
     ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", Quietly(self.OnFaction))
+    ns.RegisterEvent(self, "PLAYER_MONEY", Quietly(self.OnMoney))
+
+    for _, pair in ipairs({
+        { "MERCHANT_SHOW", "MERCHANT_CLOSED", "merchant" },
+        { "MAIL_SHOW", "MAIL_CLOSED", "mail" },
+        { "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "auction" },
+        { "TRADE_SHOW", "TRADE_CLOSED", "trade" },
+    }) do
+        local key = pair[3]
+        ns.RegisterEvent(self, pair[1], function() busy[key] = true end)
+        ns.RegisterEvent(self, pair[2], function()
+            busy[key] = false
+            -- What moved while it was open is no opening.
+            local counts = ns.Inventory and ns.Inventory:GetBagCounts()
+            if counts then
+                local copy = {}
+                for itemID, count in pairs(counts) do copy[itemID] = count end
+                self.allHeld = copy
+            end
+            self.money = ReadMoney()
+        end)
+    end
 end

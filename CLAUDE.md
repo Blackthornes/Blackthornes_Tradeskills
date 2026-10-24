@@ -969,6 +969,17 @@ on the Writs view says "Came from NAME: 3 of 6" (`Writs:SealedSources`).
 Nothing is opened for the player. Tested in `tools/test_writs.lua` and
 `tools/test_itemtooltip.lua`. Not yet seen in game.
 
+Coin bags (the owner said build it, 2026-10-24, after a player noticed
+each rank's bag shares one item ID): an item that comes into the bags
+with a learned turn-in is that level's bag, account wide in
+`merchantsFavor.writBags[tier] = { [itemID] = time }`; one leaving the
+bags with money coming in within `MATCH_SECONDS`, never at a vendor,
+mailbox, auction house or trade, is an opening, kept in
+`merchantsFavor.coinBags[itemID] = { opens, copper, at }` (never rename
+either). `Writs:BagWorth(tier)`, the average, is added to `GetReward`'s
+money, so it comes off a turn-in's cost and shows as Money back. No new
+words. Tested in `tools/test_writs.lua`. Not yet seen in game.
+
 ## The favor goal
 
 The owner said build it (2026-10-20, from a mockup): a Merchant's Favor
