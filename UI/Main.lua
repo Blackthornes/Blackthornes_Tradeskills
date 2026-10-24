@@ -161,6 +161,15 @@ function UI:Build()
     -- the window opens and settles to a faint light.
     Theme.Halo(window, 12, 0.14)
 
+    -- The fold gem beside the close gem folds the window down to its plate
+    -- (UI/FoldWindow.lua, a player asked, 2026-10-24).
+    if ns.FoldWindow then
+        ns.FoldWindow:Add(window, { onToggle = function(folded)
+            if ns.PostPanel then ns.PostPanel:Reflow() end
+            if not folded then UI:RefreshActiveTab() end
+        end })
+    end
+
     window:SetScript("OnDragStart", function(self)
         -- Still rising into place: land it first, or the opening would keep
         -- pulling the window back under the cursor.
@@ -820,6 +829,8 @@ function UI:Show()
 
     local opening = not self.window:IsShown()
     self.window:Show()
+    -- Asked for again while folded: open it full.
+    if ns.FoldWindow then ns.FoldWindow:Unfold(self.window) end
 
     -- In front of the craft queue pane and the sell list, which share its
     -- strata: the window just asked for is the one wanted on top (a

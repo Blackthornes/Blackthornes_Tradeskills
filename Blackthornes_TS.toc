@@ -114,6 +114,7 @@ UI\BlizzardLook.lua
 UI\Widgets.lua
 UI\Columns.lua
 UI\Titanforged.lua
+UI\FoldWindow.lua
 UI\About.lua
 UI\WhatsNew.lua
 UI\Collapse.lua
