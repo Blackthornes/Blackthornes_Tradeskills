@@ -1004,7 +1004,11 @@ local function UpdateDetail(entry)
         line.frame:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -12, 0)
 
         local label = ("%dx %s"):format(reagent.quantity, Util.GetItemLabel(reagent.itemID))
-        if reagent.crafted then
+        local maker = ns.Cost and ns.Cost.MadeByName and ns.Cost.MadeByName(reagent.madeBy)
+        if maker then
+            -- Made by an alt and mailed here.
+            label = L.Format("%s (made by %s)", label, maker)
+        elseif reagent.crafted then
             label = L.Format("%s (make it)", label)
         elseif ns.Cost.NeverMadeRecipeFor and ns.Cost:NeverMadeRecipeFor(reagent.itemID) then
             -- Marked never to make as a sub-craft, so it is bought.

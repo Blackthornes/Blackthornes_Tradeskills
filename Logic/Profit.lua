@@ -1283,7 +1283,9 @@ ns.RegisterCommand("why", L["<name, link or row number>: full cost breakdown"], 
     end
 
     for _, reagent in ipairs(analysis.cost.reagents) do
-        local note = reagent.crafted and L["cheaper to craft"]
+        local maker = reagent.madeBy and ns.Cost and ns.Cost.MadeByName and ns.Cost.MadeByName(reagent.madeBy)
+        local note = maker and L.Format("made by %s", maker)
+            or reagent.crafted and L["cheaper to craft"]
             or reagent.source == "mine" and L["my price"] or SOURCE_NOTES[reagent.source] or reagent.source
         local shortfall = reagent.shortfall > 0
             and L.Format(" |c%sneed %d more|r", ns.COLORS.warn, reagent.shortfall)

@@ -1234,6 +1234,11 @@ function UpdateDetail(analysis)
         -- item is drawn again when it comes.
         if not label:find("|c", 1, true) then awaitingItemData = true end
         Theme.SetItemIcon(line.icon, reagent.itemID)
+        -- Made by an alt and mailed here, priced at its materials.
+        local maker = ns.Cost and ns.Cost.MadeByName and ns.Cost.MadeByName(reagent.madeBy)
+        if maker then
+            label = L.Format("%s (made by %s)", label, maker)
+        end
 
         -- Showing have/need inline is the whole point: it answers "can I make
         -- this" without a second screen.
