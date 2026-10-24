@@ -639,6 +639,23 @@ out again only when the recipe count changes (checked at most every
 (`tradeRequests`, off unless ticked, the owner 2026-10-12; never rename it) and `/bts requests`.
 Tested in `tools/test_craftrequests.lua`. Not yet seen in game.
 
+## Parts an alt makes, in the profit math
+
+A player asked, the owner said yes (2026-10-24): a part only another of
+your characters can make was priced at what buying it costs. With "Alts
+Make Sub-Crafts:" ticked (`queueAltCrafting`, the switch that already
+hands sub-crafts to alts in `Queue:DeriveAcrossCharacters`),
+`Cost:GetCraftCost` prices such a part at the alt's materials plus postage
+(`Queue.PostagePerUnit`) when that beats buying, marks it `crafted` with
+`madeBy` (the alt's key, `Cost:AltRecipeFor`, `BuildAltIndex`), and the
+material lines on the Profit and Level Up tabs and `/bts why` say "made by
+NAME" (`Cost.MadeByName`, the whole name). Left at the buying price: a
+cooldown craft (`Cooldowns:HasCooldown`: Classic's `KNOWN`, or one any
+character was seen waiting on), one in `neverSubCrafts`, a dropped
+profession's, an alt this character can't mail, and anything bound when
+picked up. The character's own recipe always comes first. Nothing saved.
+Tested in `tools/test_altpartcost.lua`.
+
 ## Craft next frees bag space first
 
 A player asked (2026-10-14, the owner agreeing) for the queue to craft

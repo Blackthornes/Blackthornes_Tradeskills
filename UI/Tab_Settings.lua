@@ -710,9 +710,14 @@ local function Build(outer)
 
     widgets.shareQueue = Widgets.CreateCheckbox(shareRow, L["On"], function(checked)
         Config:Set("queueAltCrafting", checked)
-        -- Who makes each sub-craft is worked out when the queue is rebuilt.
-        ns.Queue:RebuildDependencies()
-        ns.Queue:Notify()
+        -- Who makes each sub-craft is worked out when the queue is rebuilt,
+        -- and a part an alt makes is priced at its materials only while on.
+        if ns.Cost.Changed then
+            ns.Cost:Changed()
+        else
+            ns.Queue:RebuildDependencies()
+            ns.Queue:Notify()
+        end
     end, false)
     widgets.shareQueue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
