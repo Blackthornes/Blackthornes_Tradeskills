@@ -223,6 +223,19 @@ local function RecipeName(record, recipeID)
     return nil
 end
 
+--- Does this craft have a cooldown? Classic's own, or one any character
+--- was seen waiting on. Cost.lua leaves these at their buying price when
+--- only an alt makes them, since one can't be made as often as a queue wants.
+function Cooldowns:HasCooldown(recipeID)
+    if type(recipeID) ~= "number" then return false end
+    if Cooldowns.KNOWN[recipeID] then return true end
+    local id = "spell:" .. recipeID
+    for _, entries in pairs(Store() or {}) do
+        if type(entries) == "table" and entries[id] then return true end
+    end
+    return false
+end
+
 --- From the profession window's harvest: one learned recipe and what the
 --- window says of its cooldown.
 function Cooldowns:NoteRecipe(recipeID, info)
