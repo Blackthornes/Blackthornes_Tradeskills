@@ -12,6 +12,8 @@
 --     quickest (every priced order each day);
 --   * the item a writ asks for leaving the bags while the standing rises is
 --     what that level of writ paid;
+--   * the coin bag a turn-in gives is learned, and what opening it pays
+--     comes off that level's turn-ins as money back;
 --   * the Deals tab's Show menu swaps in the view, and its goal menu is kept
 --     in Settings.
 
@@ -32,7 +34,7 @@ ns.PrintRaw, ns.Debug, ns.Warn = function() end, function() end, function() end
 -- Put back at the end: every suite shares one Lua runtime.
 local saved = { C_Item = C_Item, GetTime = GetTime, CreateFrame = CreateFrame, GameTooltip = GameTooltip,
                 C_Timer = C_Timer, C_Reputation = C_Reputation, UnitFactionGroup = UnitFactionGroup,
-                GetFactionInfoByID = GetFactionInfoByID }
+                GetFactionInfoByID = GetFactionInfoByID, GetMoney = GetMoney }
 
 local clock = 100
 GetTime = function() return clock end
@@ -338,6 +340,83 @@ bags = {}
 Fire("BAG_UPDATE_DELAYED")
 
 --------------------------------------------------------------------------------
+print("\nlearning what a coin bag is worth")
+
+local COIN_BAG, JUNK = 264170, 2589
+local money = 10000
+GetMoney = function() return money end
+Fire("PLAYER_MONEY")
+
+clock = 600
+bags = { [MANA] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+
+-- An Expert turn-in: the potion goes, a coin bag comes in, the standing rises.
+clock = 610
+bags = { [COIN_BAG] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+Fire("QUEST_TURNED_IN", 94300, 0, 0)
+standing = 4725
+Fire("UPDATE_FACTION")
+Flush()
+check("the bag that came with the turn-in is that level's coin bag",
+    ns.db.merchantsFavor.writBags[2] and ns.db.merchantsFavor.writBags[2][COIN_BAG] ~= nil)
+check("a bag never opened adds no money back", Row(Writs:GetRows(), MANA).money == 0)
+
+-- Opened: the bag goes and money comes in.
+clock = 700
+bags = {}
+Fire("BAG_UPDATE_DELAYED")
+money = money + 5000
+Fire("PLAYER_MONEY")
+check("an opening is counted with the money it gave", ns.db.merchantsFavor.coinBags[COIN_BAG].opens == 1
+    and ns.db.merchantsFavor.coinBags[COIN_BAG].copper == 5000)
+check("its worth comes off the turn-in as money back", Row(Writs:GetRows(), MANA).money == 5000
+    and Row(Writs:GetRows(), WISDOM).money == 0)
+
+-- Money first, the bag a moment later, is an opening too.
+clock = 800
+bags = { [COIN_BAG] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+clock = 900
+money = money + 3000
+Fire("PLAYER_MONEY")
+bags = {}
+Fire("BAG_UPDATE_DELAYED")
+check("the worth is the average of every opening", Writs:BagWorth(2) == 4000)
+
+-- Sold at a vendor: no opening.
+clock = 1000
+bags = { [COIN_BAG] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+Fire("MERCHANT_SHOW")
+bags = {}
+Fire("BAG_UPDATE_DELAYED")
+money = money + 100
+Fire("PLAYER_MONEY")
+Fire("MERCHANT_CLOSED")
+check("a bag sold at a vendor is not an opening", ns.db.merchantsFavor.coinBags[COIN_BAG].opens == 2)
+
+-- Something else going while money comes in is no coin bag.
+clock = 1100
+bags = { [JUNK] = 1 }
+Fire("BAG_UPDATE_DELAYED")
+clock = 1200
+bags = {}
+Fire("BAG_UPDATE_DELAYED")
+money = money + 700
+Fire("PLAYER_MONEY")
+check("an item that never came with a turn-in is no coin bag", ns.db.merchantsFavor.coinBags[JUNK] == nil)
+
+-- A secret purse is no error.
+GetMoney = function() error("secret") end
+check("a secret purse is ignored, not an error", pcall(Fire, "PLAYER_MONEY"))
+GetMoney = saved.GetMoney
+-- The view below is priced without them.
+ns.db.merchantsFavor.writBags, ns.db.merchantsFavor.coinBags = {}, {}
+ns.db.merchantsFavor.writRewards["Player-1-0001"][2] = nil
+
+--------------------------------------------------------------------------------
 print("\nthe view on the Deals tab")
 
 standing = 4500
@@ -577,7 +656,7 @@ show.onSelect("flips")
 check("back to the flips, the goal menu hides", goal.shown == false and #lists == 2)
 
 for _, key in ipairs({ "C_Item", "GetTime", "CreateFrame", "GameTooltip", "C_Timer", "C_Reputation",
-        "UnitFactionGroup", "GetFactionInfoByID" }) do
+        "UnitFactionGroup", "GetFactionInfoByID", "GetMoney" }) do
     _G[key] = saved[key]
 end
 
