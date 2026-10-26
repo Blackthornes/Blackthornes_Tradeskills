@@ -896,6 +896,14 @@ wide, on unless unticked, never rename it) hands TomTom the place
 instead. Never rename `wayArrowPlace`, `wayArrowX` or `wayArrowY`. Tested
 in `tools/test_learnnext.lua`. Not yet seen in game.
 
+Arrow Size (the owner, 2026-10-26, in every addon with an arrow): "Arrow
+Size:" under "Guide Me:" picks 50%, 75% or 100% for the whole dial,
+plate and words (`ArrowUI.SIZES`, `Scale`, `Size`, `SetSize`;
+`wayArrowSize`, account wide, nil for 100, never rename it). The saved
+spot is kept in the screen's own units (stored times the scale), so a new
+size keeps the arrow where it was. No hover. Tested in
+`tools/test_arrowsize.lua`. A fix belongs in all five.
+
 ## Road to 300
 
 The owner said build it (2026-10-20, from a mockup whose words he
