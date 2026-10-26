@@ -14,7 +14,7 @@ restart the game fully after updating (`/reload` is not enough).
 - **Writ coin bags:** the coin bags from writ turn-ins are valued, so Money Back is more exact.
 - **Parts your alts make:** a part only one of your alts can make is priced at that alt's materials.
 - **Road to 300:** a recipe you buy has its crafts queued once you learn it.
-- **Price Order:** on the Sharing page, pick whether TSM or Auctionator is asked first.
+- **Price Order:** on the Sharing page, pick whether TSM or Auctionator is asked first. TSM comes first unless you change it.
 - **Arrow Size:** pick 50%, 75% or 100% for the guide arrow.
 - **Fold gem:** a small gem beside the close button folds a window down to its title and opens it again.
 - **Settings:** word choices are drop-downs.
