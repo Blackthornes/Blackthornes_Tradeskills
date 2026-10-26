@@ -915,6 +915,16 @@ function Recipes:Harvest()
             end
             if added > 0 and ns.Mail and ns.Mail.ForgetOutputSet then ns.Mail:ForgetOutputSet() end
 
+            -- A recipe Road to 300 put materials on the list for, now
+            -- learned: its crafts go in the queue.
+            if added > 0 and ns.Queue and ns.Queue.QueueLearned then
+                local ok, queued = pcall(ns.Queue.QueueLearned, ns.Queue)
+                for _, want in ipairs(ok and type(queued) == "table" and queued or {}) do
+                    ns.Print(L.Format("You learned %s, so %d crafts went in your queue.",
+                        want.name or L["a recipe"], want.crafts))
+                end
+            end
+
             if ns.UI and ns.UI.OnRecipesUpdated then
                 ns.UI:OnRecipesUpdated()
             end

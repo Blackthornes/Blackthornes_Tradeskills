@@ -339,7 +339,7 @@ end
 function RoadView:QueueStep(step)
     if not ns.RoadPlan:QueueStep(step) then return end
     if step.learn then
-        ns.Print(L.Format("Put the materials for %d %s on your list to buy.", step.crafts, step.name))
+        ns.Print(L.Format("Put the materials for %d %s on your list to buy. When you learn the recipe, the crafts move to your queue.", step.crafts, step.name))
     else
         ns.Print(L.Format("queued %dx %s", step.crafts, step.name))
     end

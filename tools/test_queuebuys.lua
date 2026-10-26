@@ -157,4 +157,35 @@ check("a second click buys no more", #ns.db.queueBuys == 1)
 check("never an upgrade to buy", Queue:ForUpgrade(GAUNTLETS) == nil)
 bags[GAUNTLETS] = nil
 
+print("\nRoad to 300: the crafts go in the queue once the recipe is learned")
+
+ns.db.queueBuys, ns.db.queue = {}, {}
+local BELT_RECIPE = 2662
+local road = { recipeID = BELT_RECIPE, name = "Copper Chain Belt", crafts = 11 }
+Queue:EnsureBuy(BAR, 66, nil, road)
+Queue:EnsureBuy(STONE, 11, nil, road)
+Queue:EnsureBuy(CLOAK, 1, CLOAK)
+check("the lines keep how many crafts", ns.db.queueBuys[1].forCrafts == 11)
+check("nothing queued while the recipe is not known", #Queue:QueueLearned() == 0 and #ns.db.queueBuys == 3)
+local learnNext = { recipeID = GAUNTLETS_RECIPE, name = "Gauntlets" }
+Queue:EnsureBuy(BAR, 40, nil, learnNext)
+local ensured
+local realEnsure = Queue.Ensure
+Queue.Ensure = function(_, id, count) ensured = { id, count } return true end
+recipes[BELT_RECIPE] = { recipeID = BELT_RECIPE, name = "Copper Chain Belt", outputItemID = 2851, reagents = {} }
+local queued = Queue:QueueLearned()
+check("learned: its crafts are queued", ensured and ensured[1] == BELT_RECIPE and ensured[2] == 11)
+check("and said", #queued == 1 and queued[1].crafts == 11 and queued[1].name == "Copper Chain Belt")
+check("its lines come off the list", #ns.db.queueBuys == 2)
+check("other lines stay", ns.db.queueBuys[1].itemID == CLOAK or ns.db.queueBuys[2].itemID == CLOAK)
+ensured = nil
+check("a Learn next line with no crafts is left alone", #Queue:QueueLearned() == 0 and ensured == nil)
+selfKey = "Bob-Realm"
+Queue:EnsureBuy(BAR, 66, nil, road)
+selfKey = "Ana-Realm"
+check("another character's line is never taken", #Queue:QueueLearned() == 0 and #ns.db.queueBuys == 3)
+Queue.Ensure = realEnsure
+recipes[BELT_RECIPE] = nil
+ns.db.queueBuys, ns.db.queue = {}, {}
+
 print(("\n%d checks passed"):format(checks))

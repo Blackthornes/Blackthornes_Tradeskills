@@ -1337,10 +1337,13 @@ end
 -- @param itemID   what to buy
 -- @param count    how many
 -- @param forItem  the gear it is for (the item itself when buying the gear)
--- @param forRecipe  optional { recipeID, name }: materials for a recipe to
---   learn and skill up with (Level Up's Learn next). Such a line is not tied
---   to owning an item, which the first craft would, so it stays until its x
---   or Clear all.
+-- @param forRecipe  optional { recipeID, name, crafts }: materials for a
+--   recipe to learn and skill up with (Level Up's Learn next, Road to 300).
+--   Such a line is not tied to owning an item, which the first craft would,
+--   so it stays until its x or Clear all. With `crafts` (Road to 300's Queue
+--   Step), the line is kept with how many crafts it was for, and once the
+--   character learns the recipe Queue:QueueLearned queues them and lets the
+--   line go.
 -- @return true, or nil and why
 function Queue:EnsureBuy(itemID, count, forItem, forRecipe)
     itemID, forItem = tonumber(itemID), tonumber(forItem)
@@ -1360,6 +1363,8 @@ function Queue:EnsureBuy(itemID, count, forItem, forRecipe)
     for _, line in ipairs(buys) do
         if type(line) == "table" and line.itemID == itemID and line.forItem == forItem
             and line.forRecipe == recipeID and MineToSee(line, selfKey) then
+            local crafts = recipeID and tonumber(forRecipe.crafts) or nil
+            if crafts then line.forCrafts = math.max(tonumber(line.forCrafts) or 0, math.floor(crafts)) end
             if line.count == count then return true end
             line.count = count
             self:Notify()
@@ -1370,6 +1375,7 @@ function Queue:EnsureBuy(itemID, count, forItem, forRecipe)
     buys[#buys + 1] = {
         itemID = itemID, count = count, forItem = forItem,
         forRecipe = recipeID, forRecipeName = recipeID and forRecipe.name or nil,
+        forCrafts = recipeID and tonumber(forRecipe.crafts) and math.floor(tonumber(forRecipe.crafts)) or nil,
         owner = selfKey, addedAt = time(),
     }
     self:Notify()
@@ -1399,6 +1405,50 @@ function Queue:ClearBuys()
         local line = buys[index]
         if type(line) == "table" and MineToSee(line, selfKey) then table.remove(buys, index) end
     end
+end
+
+--- A recipe Road to 300's Queue Step put materials on the list for has
+--- been learned (Recipes:Harvest calls this when it is done): its crafts go
+--- in the queue and those lines come off the list, so the queue's own
+--- shopping list counts the materials once. Only this character's lines,
+--- only recipes it now knows itself.
+-- @return { { recipeID, name, crafts } } for each recipe queued
+function Queue:QueueLearned()
+    local buys, selfKey = Buys(false), SelfKey()
+    local found, order = {}, {}
+    for _, line in ipairs(buys) do
+        if type(line) == "table" and line.forRecipe and tonumber(line.forCrafts)
+            and MineToSee(line, selfKey) then
+            local have = found[line.forRecipe]
+            if not have then
+                have = { recipeID = line.forRecipe, name = line.forRecipeName, crafts = 0 }
+                found[line.forRecipe] = have
+                order[#order + 1] = have
+            end
+            have.crafts = math.max(have.crafts, math.floor(tonumber(line.forCrafts)))
+        end
+    end
+
+    local queued = {}
+    for _, want in ipairs(order) do
+        local mine = ns.Recipes and ns.Recipes.Get and ns.Recipes:Get(want.recipeID)
+        if mine and want.crafts > 0 then
+            local ok, done = pcall(self.Ensure, self, want.recipeID, want.crafts)
+            if ok and done then
+                for index = #buys, 1, -1 do
+                    local line = buys[index]
+                    if type(line) == "table" and line.forRecipe == want.recipeID
+                        and MineToSee(line, selfKey) then
+                        table.remove(buys, index)
+                    end
+                end
+                want.name = mine.name or want.name
+                queued[#queued + 1] = want
+            end
+        end
+    end
+    if #queued > 0 then self:Notify() end
+    return queued
 end
 
 --- Have at least `quantity` of a craft queued. For Blackthornes Equipment:
