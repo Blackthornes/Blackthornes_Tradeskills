@@ -11,7 +11,7 @@ ns.WHATS_NEW = {
         "Coin bags from writ turn-ins are valued, so Money Back is more exact.",
         "A part only one of your alts can make is priced at that alt's materials.",
         "Road to 300 queues a bought recipe's crafts once you learn it.",
-        "Price Order on the Sharing page lets you ask Auctionator before TSM.",
+        "Price Order on the Sharing page picks whether TSM or Auctionator is asked first. TSM comes first unless you change it.",
         "Arrow Size picks 50%, 75% or 100% for the guide arrow.",
         "A small gem beside the close button folds a window down to its title.",
     } },
