@@ -425,7 +425,9 @@ function RoadPlan:QueueStep(step)
         return ok and done and true or false
     end
     if not queue.EnsureBuy then return false end
-    local forRecipe = { recipeID = step.recipeID, name = step.name }
+    -- With the crafts kept on each line, so they go in the queue by
+    -- themselves once the recipe is learned (Queue:QueueLearned).
+    local forRecipe = { recipeID = step.recipeID, name = step.name, crafts = step.crafts }
     local any = false
     for _, need in ipairs(step.needs or {}) do
         if need.count > 0 then
@@ -538,8 +540,10 @@ function RoadPlan.Texts(step, professionName, level, line)
                 and L.Format("Learn it from the %s trainer in %s.", professionName, zone)
                 or L.Format("Learn it from the %s trainer.", professionName)
         else
-            local kind, zone = ns.LearnNext.WhereText(step.learn)
-            texts.lines[#texts.lines + 1] = zone and (kind .. "  " .. zone) or kind
+            local zone = step.learn.zone
+            texts.lines[#texts.lines + 1] = zone
+                and L.Format("You don't know this recipe yet. Buy it from a vendor in %s.", zone)
+                or L["You don't know this recipe yet. Buy it from a vendor."]
         end
     end
     if step.sells and step.sells > 0 and ns.Util and ns.Util.FormatMoney then
