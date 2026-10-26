@@ -206,6 +206,13 @@ check("materials from bags then bank", texts.lines[1],
 check("where it is learned, with the trainer's zone", texts.lines[2],
   "Learn it from the Blacksmithing trainer in " .. tostring(beltStep.learn.zone) .. ".")
 check("the trainer has a zone", beltStep.learn.zone ~= nil, true)
+local vendorStep = { kind = "craft", recipeID = 9, crafts = 4, from = 70, to = 74, orange = true,
+  outputItemID = 9, name = "Vendor Thing", needs = {}, learn = { kind = "vendor", zone = "Westfall" } }
+check("a recipe to buy says so, with the zone", Road.Texts(vendorStep, "Blacksmithing", 15, 164).lines[1],
+  "You don't know this recipe yet. Buy it from a vendor in Westfall.")
+vendorStep.learn.zone = nil
+check("and without a zone", Road.Texts(vendorStep, "Blacksmithing", 15, 164).lines[1],
+  "You don't know this recipe yet. Buy it from a vendor.")
 check("sells some back", texts.lines[#texts.lines], "Sells for about 1800c each, so it pays some back.")
 check("cost: what to buy and the recipe", beltStep.cost, 5 * 20 + 50)
 
@@ -267,6 +274,7 @@ ns.Queue = {
 check("a recipe to learn puts its materials to buy", Road:QueueStep(beltStep), true)
 check("all of them", bought[BAR] and bought[BAR][1], 66)
 check("tied to the recipe", bought[BAR] and bought[BAR][2].recipeID, 3)
+check("with how many crafts it is for", bought[BAR] and bought[BAR][2].crafts, beltStep.crafts)
 local known = { kind = "craft", recipeID = 2, crafts = 7, needs = {} }
 check("a known recipe is queued", Road:QueueStep(known), true)
 check("its crafts", ensured[2], 7)

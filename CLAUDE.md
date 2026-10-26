@@ -918,7 +918,13 @@ skill are done and sit at the foot of the list (`RoadPlan.Shown`; "Step N
 of M", the meter and Queue All keep the plan's order). Queue Step queues a known recipe's crafts
 (`Queue:Ensure`) or puts a recipe still to learn's materials on the list
 to buy (`Queue:EnsureBuy`); Queue All does every step left; Show the Way
-is `LearnNext:ShowTheWay`. `UI/RoadView.lua` draws it (a profession
+is `LearnNext:ShowTheWay`. A recipe still to buy says "You don't know this
+recipe yet. Buy it from a vendor in ZONE." (the trainer's wording stays).
+Its Queue Step lines keep how many crafts they were for (`forCrafts` on
+the `queueBuys` line, never rename it), and once the character learns the
+recipe (`Recipes:Harvest` adds it) `Queue:QueueLearned` queues those crafts
+and takes the lines off, so nothing is bought twice; Learn next's lines,
+which carry no crafts, are left alone (the owner said yes 2026-10-26). `UI/RoadView.lua` draws it (a profession
 picker, the heading with the skill, "Step N of M" and a meter, dark glass
 rows, the step to do now `glassActive`). The plan is worked out only
 while the view shows, its prices a few recipes a frame
