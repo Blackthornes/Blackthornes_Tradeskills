@@ -23,6 +23,22 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.0.0
+
+- Shuffles on the Profit tab: pick something in your bags and see every way to turn it into gold, with the best place to stop.
+- Guild Crafters shows guildmates online who can make a craft. It's off until you tick it on the Sharing page.
+- Coin bags from writ turn-ins are valued, so Money Back is more exact.
+- A part only one of your alts can make is priced at that alt's materials.
+- Road to 300 queues a bought recipe's crafts once you learn it.
+- Price Order on the Sharing page picks whether TSM or Auctionator is asked first. TSM comes first unless you change it.
+- Arrow Size picks 50%, 75% or 100% for the guide arrow.
+- A small gem beside the close button folds a window down to its title.
+
+Fixes and changes:
+
+- Several bug fixes for the craft pane's profit and the Rules window.
+- Word choices in Settings are now drop-downs.
+
 ## 0.69.0
 
 - Set a Favor Goal on the Favors and Writs tab and Tradeskills shows the cheapest way to get there. The Favors switch at the auction house only shows up after you set a goal.

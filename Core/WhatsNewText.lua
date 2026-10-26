@@ -5,6 +5,16 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.0.0", lines = {
+        "Shuffles on the Profit tab: pick something in your bags and see every way to turn it into gold, with the best place to stop.",
+        "Guild Crafters shows guildmates online who can make a craft. It's off until you tick it on the Sharing page.",
+        "Coin bags from writ turn-ins are valued, so Money Back is more exact.",
+        "A part only one of your alts can make is priced at that alt's materials.",
+        "Road to 300 queues a bought recipe's crafts once you learn it.",
+        "Price Order on the Sharing page picks whether TSM or Auctionator is asked first. TSM comes first unless you change it.",
+        "Arrow Size picks 50%, 75% or 100% for the guide arrow.",
+        "A small gem beside the close button folds a window down to its title.",
+    } },
     { version = "0.69.0", lines = {
         "Set a Favor Goal on the Favors and Writs tab and Tradeskills shows the cheapest way to get there. The Favors switch at the auction house only shows up after you set a goal.",
         "Road to 300 lays out your whole way to 300 for a profession. A Welcome card shows the first time you open the window.",
@@ -18,11 +28,5 @@ ns.WHATS_NEW = {
         "Favors and Writs shows what's on the auction house for each item.",
         "Tradeskills learns what your sealed writs open into.",
         "With Butler, your best next skill point shows in Butler's Jobs, and Butler says when a craft you know earns more than selling.",
-    } },
-    { version = "0.67.0", lines = {
-        "Gold pins on the world map show vendors that sell what your queue needs for less than the auction house. It's off until you turn on Vendor Map Pins on the Mail & Vendors page of Settings.",
-        "Favors and Writs has a Search Both button, a Buy box, a Make tag when making is cheaper, and a column for how many you have.",
-        "Each tooltip line Tradeskills adds can be Off, Shift or Always. You pick on the Look page of Settings.",
-        "The Characters tab can show one realm at a time.",
     } },
 }

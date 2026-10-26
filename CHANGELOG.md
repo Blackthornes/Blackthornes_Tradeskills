@@ -4,6 +4,22 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.0.0
+
+For WoW: Forever (interface 16001). Files were added and the TOC changed, so
+restart the game fully after updating (`/reload` is not enough).
+
+- **Shuffles:** a new view on the Profit tab. Pick something in your bags and see every way to turn it into gold, with the best place to stop.
+- **Guild Crafters:** shows guildmates online who can make a craft. It's off until you tick it on the Sharing page.
+- **Writ coin bags:** the coin bags from writ turn-ins are valued, so Money Back is more exact.
+- **Parts your alts make:** a part only one of your alts can make is priced at that alt's materials.
+- **Road to 300:** a recipe you buy has its crafts queued once you learn it.
+- **Price Order:** on the Sharing page, pick whether TSM or Auctionator is asked first. TSM comes first unless you change it.
+- **Arrow Size:** pick 50%, 75% or 100% for the guide arrow.
+- **Fold gem:** a small gem beside the close button folds a window down to its title and opens it again.
+- **Settings:** word choices are drop-downs.
+- **Bug fixes:** several bug fixes for the craft pane's profit and the Rules window.
+
 ## 0.69.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
