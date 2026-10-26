@@ -4,7 +4,8 @@
 --   1. Without Auctionator loaded, nothing changes.
 --   2. An item nobody has priced takes Auctionator's price, asked with our
 --      caller ID; "rival" never asks.
---   3. Your own scan wins, and TSM's comes before Auctionator's.
+--   3. Your own scan wins, and TSM's comes before Auctionator's, unless
+--      the player picked Auctionator first (Price Order).
 --   4. Unticked, Auctionator is never asked.
 --   5. An Auctionator error, a non-number or a silly number is no price.
 --   6. Answers are kept for a while, so a redraw does not ask again.
@@ -83,6 +84,22 @@ check("and asked again after", #asked == before + 1)
 TSM_API = { GetCustomPriceValue = function() return 500 end }
 Auc:Forget()
 check("TSM's price comes before Auctionator's", Prices:GetValue(2590) == 500)
+check("TSM is first unless picked otherwise", Prices:Order() == "tsm")
+
+-- Price Order (the owner, 2026-10-26): Auctionator first when picked.
+settings.priceOrder = "auctionator"
+Auc:Forget(); ns.TSMPrices:Forget()
+check("Auctionator first is read", Prices:Order() == "auctionator")
+check("with Auctionator first, its price comes before TSM's", Prices:GetValue(2590) == 778)
+local auctionatorPrice = price
+price = nil
+Auc:Forget(); ns.TSMPrices:Forget()
+check("TSM fills what Auctionator lacks", Prices:GetValue(2595) == 500)
+price = auctionatorPrice
+settings.priceOrder = "tsm"
+Auc:Forget(); ns.TSMPrices:Forget()
+check("back to TSM first", Prices:GetValue(2590) == 500)
+settings.priceOrder = nil
 TSM_API = nil
 
 priceTable[2589] = { market = 300, scans = 1, history = {}, seen = time() }
