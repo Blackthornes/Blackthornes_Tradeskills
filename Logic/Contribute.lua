@@ -9,7 +9,7 @@
 --
 -- The conversation, one way:
 --   * A player with it ticked whispers a short hello ("Q<id>:<hash>") to
---     each name in RECIPIENTS, soon after login and every half hour. The
+--     each name in RECIPIENTS, soon after login and every five minutes. The
 --     hash says what they have; nothing in chat or Settings says whether
 --     anyone was there (Comm hides the game's "No player named ..." line).
 --   * Only the characters named in RECIPIENTS answer, and only for a hash
@@ -24,7 +24,8 @@
 --   * On the receiving side each sender's latest table replaces the one
 --     before (`sharedData[id]`), so nothing is ever counted twice. It never
 --     joins the receiver's own disenchants or recipe skills, and nothing in
---     the windows reads it. One sender is taken at a time, each at most
+--     the windows reads it. One sender is taken at a time, the next as
+--     soon as one is done (or given up after SYNC_TIMEOUT), each at most
 --     every SYNC_GAP, and at most MAX_SENDERS are kept.
 --   * When a table comes in, one chat line says so, with a sound and a
 --     line on screen. `/bts share data log` (typed only) lists them.
@@ -55,11 +56,11 @@ Contribute.RECIPIENTS = {
 Contribute.REGIONS = { [1] = true, [110] = true }
 Contribute.REGION_NAME = "US"
 
-Contribute.HELLO_SECONDS = 1800   -- a hello every half hour
+Contribute.HELLO_SECONDS = 300    -- a hello every five minutes (the owner, 2026-10-26)
 Contribute.FIRST_HELLO = 30       -- and this long after login
-Contribute.SYNC_GAP = 1800        -- one sender taken at most this often
+Contribute.SYNC_GAP = 300         -- one sender taken at most this often
 Contribute.SYNC_TIMEOUT = 180     -- an ask left unanswered this long is given up
-Contribute.SEND_GAP = 600         -- a sender answers a recipient at most this often
+Contribute.SEND_GAP = 300         -- a sender answers a recipient at most this often
 Contribute.MAX_SENDERS = 500
 Contribute.MAX_ITEMS = 3000       -- disenchanted items in one table
 Contribute.MAX_SKILLS = 5000      -- recipe skills in one table
@@ -265,6 +266,11 @@ function Contribute:Next()
     if not waiting then return end
     self.current = { id = waiting.id, key = Comm.NameKey(waiting.name), at = Now() }
     Comm:Send("R", waiting.id, "WHISPER", waiting.name)
+    -- One that never answers is given up, and the next asked, without
+    -- waiting for another hello.
+    if type(C_Timer) == "table" and C_Timer.After then
+        C_Timer.After(self.SYNC_TIMEOUT + 1, function() Contribute:Next() end)
+    end
 end
 
 --- Only numbers in the shapes Payload makes; anything else is left out.
