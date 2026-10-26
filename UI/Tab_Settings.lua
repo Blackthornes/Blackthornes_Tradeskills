@@ -1840,6 +1840,21 @@ local function Build(outer)
     widgets.auctionatorStatus:SetWidth(COLUMN_WIDTH)
     widgets.auctionatorStatus:SetWordWrap(true)
 
+    -- Which of the two is asked first (the owner, 2026-10-26).
+    local orderRow = CreateRow(pages.sharing, 2, L["Price Order:"],
+        L["Which one to ask first for items nothing else has priced."])
+    local orderOptions = {
+        { text = L["TSM First"], value = "tsm" },
+        { text = L["Auctionator First"], value = "auctionator" },
+    }
+    widgets.priceOrder = Widgets.CreateDropdown(orderRow, orderOptions, function(value)
+        Config:Set("priceOrder", value)
+        if ns.TSMPrices then ns.TSMPrices:Forget() end
+        if ns.AuctionatorPrices then ns.AuctionatorPrices:Forget() end
+        UI:RefreshActiveTab()
+    end, { width = 150 })
+    widgets.priceOrder:SetPoint("TOPLEFT", CONTROL_X, 0)
+
     -- The buttons standing on their own, so the search finds them too.
     Searchable(pages.queue, exportButton, L["Export queue Copy your queue, settings and stock limits as a code"])
     Searchable(pages.queue, importButton, L["Import Load a code"])
@@ -2343,6 +2358,7 @@ local function Refresh()
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")
     widgets.auctionatorPrices:SetChecked(Config:Get("auctionatorPrices") ~= false)
     widgets.auctionatorStatus:SetText(ns.AuctionatorPrices and ns.AuctionatorPrices:Describe() or "")
+    widgets.priceOrder:SetValue(Config:Get("priceOrder") == "auctionator" and "auctionator" or "tsm")
 
     local lastScan, capped = ns.Prices:GetLastScan()
 
