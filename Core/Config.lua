@@ -539,6 +539,9 @@ local DEFAULTS = {
         tsmPrices = true,
         -- Then Auctionator's (asked 2026-10-12). See Logic/AuctionatorPrices.lua.
         auctionatorPrices = true,
+        -- Which of those two is asked first: "tsm" or "auctionator"
+        -- (the owner, 2026-10-26). See Prices:Order. Never rename it.
+        priceOrder = "tsm",
     },
 
     -- realmKey -> itemID -> price record

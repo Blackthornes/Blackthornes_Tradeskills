@@ -1459,6 +1459,11 @@ saw the item a whole day later (the owner said yes to a player's idea,
 `Auctionator.API.v1.GetAuctionAgeByItemID`, kept 60 s), as guild and
 realm prices may; only for a stale price neither of those replaced. "Auctionator prices" (`auctionatorPrices`, on unless unticked,
 never rename it). Tested in `tools/test_auctionatorprices.lua`.
+"Price Order:" under them on the Sharing page (the owner, 2026-10-26)
+picks TSM First (the default) or Auctionator First for items nothing else
+has priced (`priceOrder`, "tsm" or "auctionator", account wide, never
+rename it; `Prices:Order`, `OrderedOthers`). The stale-price rule above
+holds either way. Farmer has the same choice (its `Value:PriceOrder`).
 
 Farmer shares its own counts the same way (2026-10-11): its `Core/Comm.lua`
 and `Core/Serialize.lua` are copies of ours (prefix `BFRshare` instead of
