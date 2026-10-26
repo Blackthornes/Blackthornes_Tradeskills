@@ -769,6 +769,28 @@ function Prices:ListedCounts(itemID, price)
     return Prices.CountAtOrBelow(record, price), total
 end
 
+-- One of TSM's or Auctionator's modules for a price, counted when used.
+local function AskOther(source, itemID, which)
+    if not (source and source.GetValue) then return nil end
+    local value = source:GetValue(itemID, which)
+    if value and source.Used then source:Used() end
+    return value
+end
+
+--- "auctionator" when the player asked for Auctionator's prices before
+--- TSM's ("Price Order:", `priceOrder`, the owner 2026-10-26), else "tsm".
+function Prices:Order()
+    return ns.Config and ns.Config:Get("priceOrder") == "auctionator" and "auctionator" or "tsm"
+end
+
+--- TSM's and Auctionator's modules in the order they are asked, first and
+--- second (either may be nil). No table, since prices are read many times
+--- a redraw.
+function Prices:OrderedOthers()
+    if self:Order() == "auctionator" then return ns.AuctionatorPrices, ns.TSMPrices end
+    return ns.TSMPrices, ns.AuctionatorPrices
+end
+
 --- Best estimate of what one unit is worth.
 --
 -- `which` is one of:
@@ -785,7 +807,8 @@ end
 -- Rival stays the auction house's own, since it is the price to undercut.
 -- Gaps take your guild's prices, then your realm's (Logic/GuildPrices.lua,
 -- Logic/RealmPrices.lua); an item nobody has priced may take TradeSkillMaster's (Logic/TSMPrices.lua),
--- then Auctionator's (Logic/AuctionatorPrices.lua). A stale price of your
+-- then Auctionator's (Logic/AuctionatorPrices.lua), or the other way round
+-- when the player picked Auctionator first (Prices:Order). A stale price of your
 -- own also gives way to Auctionator's when Auctionator saw the item later.
 -- GetScanValue answers from the scans alone.
 function Prices:GetValue(itemID, which)
@@ -826,18 +849,9 @@ function Prices:GetValue(itemID, which)
         end
     end
 
-    -- TradeSkillMaster's price (Logic/TSMPrices.lua, on unless unticked)
-    -- only for an item neither you, your guildmates nor your realm have priced.
-    if not scanned then
-        local tsm = ns.TSMPrices
-        if tsm and tsm.GetValue then
-            scanned = tsm:GetValue(itemID, which)
-            if scanned and tsm.Used then tsm:Used() end
-        end
-    end
-    -- Then Auctionator's (Logic/AuctionatorPrices.lua, on unless unticked).
-    -- It also takes over from your own price once that has gone stale, when
-    -- Auctionator saw the item more recently, as guild and realm prices may.
+    -- Auctionator's price also takes over from your own price once that
+    -- has gone stale, when Auctionator saw the item more recently, as guild
+    -- and realm prices may, whichever Price Order is picked.
     -- Asked only for a stale price nobody else replaced.
     if scanned and not filled and self:IsStale(itemID) then
         local auctionator = ns.AuctionatorPrices
@@ -850,12 +864,13 @@ function Prices:GetValue(itemID, which)
             end
         end
     end
+    -- An item neither you, your guildmates nor your realm have priced takes
+    -- TradeSkillMaster's (Logic/TSMPrices.lua), then Auctionator's, each on
+    -- unless unticked, or Auctionator's first when the player picked it
+    -- ("Price Order:", Prices:Order).
     if not scanned then
-        local auctionator = ns.AuctionatorPrices
-        if auctionator and auctionator.GetValue then
-            scanned = auctionator:GetValue(itemID, which)
-            if scanned and auctionator.Used then auctionator:Used() end
-        end
+        local first, second = self:OrderedOthers()
+        scanned = AskOther(first, itemID, which) or AskOther(second, itemID, which)
     end
 
     local mine, mode = self:GetMine(itemID)
