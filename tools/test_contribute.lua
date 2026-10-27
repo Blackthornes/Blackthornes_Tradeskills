@@ -105,8 +105,9 @@ local function Run()
 end
 
 local ana = NewClient("Ana Smith")
-local farmer = NewClient("Blackthornes Farmer")
-local wither = NewClient("Blackthorne Wither")
+local tradeskills = NewClient("Blackthornes Tradeskills")
+local farmer = NewClient("Blackthornes Farms")
+local wither = NewClient("Blackthornes Wither")
 local carl = NewClient("Carl Jones")
 clients = { ana, farmer, wither, carl }
 -- Both of the owner's characters are on one account: one save between them.
@@ -124,11 +125,13 @@ ana.ns.db.recipeSkills = { [2406] = { skill = 110, profession = "Leatherworking"
 print("\nchoosing")
 local C = ana.ns.Contribute
 check("off by default", C:On(), false)
-check("the shipped list names two whole names", #C:Recipients(), 2)
+check("the shipped list names three whole names", #C:Recipients(), 3)
 current = farmer
-check("Blackthornes Farmer receives", farmer.ns.Contribute:Receiving())
+check("Blackthornes Farms receives", farmer.ns.Contribute:Receiving())
 current = wither
-check("Blackthorne Wither receives", wither.ns.Contribute:Receiving())
+check("Blackthornes Wither receives", wither.ns.Contribute:Receiving())
+current = tradeskills
+check("Blackthornes Tradeskills receives", tradeskills.ns.Contribute:Receiving())
 current = carl
 check("anyone else does not", carl.ns.Contribute:Receiving(), false)
 current = ana
