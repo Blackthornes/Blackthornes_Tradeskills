@@ -46,8 +46,9 @@ local Comm = ns.Comm
 -- The characters data is sent to: full names, first and last. Kept only
 -- here, never shown to players. Empty sends nothing.
 Contribute.RECIPIENTS = {
-    "Blackthornes Farmer",
-    "Blackthorne Wither",
+    "Blackthornes Farms",
+    "Blackthornes Wither",
+    "Blackthornes Tradeskills",
 }
 
 -- North America only, as in Farmer: GetCurrentRegion's 1 is the Americas,

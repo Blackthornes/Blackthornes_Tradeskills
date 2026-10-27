@@ -1417,7 +1417,7 @@ hover, only on North American clients (`Contribute:InRegion`,
 `/bts share data on|off|log` (typed only, not in the help line).
 `Logic/Contribute.lua` whispers a hello (`Q<id>:<hash>`) over Comm to each
 name in `Contribute.RECIPIENTS` (full names, only in code, never shown; the
-same two as Farmer's list, change both together) 30 s after login and
+same three as Farmer's and Equipment's lists, change all three together) 30 s after login and
 every five minutes (the owner, 2026-10-26). Only those characters ask
 (`R<id>`), one sender at a time, the next as soon as one is done (or given
 up after `SYNC_TIMEOUT`), each at most every five minutes, and the sender
