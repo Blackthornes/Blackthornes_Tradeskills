@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.1.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Road to 300:** Pick By on the Road to 300 bar lets you choose Lowest Cost or Real Cost. Real Cost counts what selling your crafts brings back.
+- **UI:** various UI improvements.
+
 ## 1.0.0
 
 For WoW: Forever (interface 16001). Files were added and the TOC changed, so
