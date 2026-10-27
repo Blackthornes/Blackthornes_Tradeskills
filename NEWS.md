@@ -23,6 +23,14 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.1.0
+
+- Road to 300 has Pick By: Lowest Cost or Real Cost. Real Cost counts what selling your crafts brings back.
+
+Fixes and changes:
+
+- Various UI improvements.
+
 ## 1.0.0
 
 - Shuffles on the Profit tab: pick something in your bags and see every way to turn it into gold, with the best place to stop.
