@@ -938,7 +938,15 @@ rows, the step to do now `glassActive`). The plan is worked out only
 while the view shows, its prices a few recipes a frame
 (`RoadPlan.BUDGET`), and kept until its key moves (skill, cap, level,
 recipes, `Inventory.changes`, `Prices.scanCount`, `Queue.version`).
-Nothing new is saved. Cooking and First Aid stop at their last rank.
+Nothing new is saved beyond Pick By. Cooking and First Aid stop at their
+last rank. "Pick By:" on the road's bar (the owner said build it, 2026-10-27, from a
+mockup whose words he approved) picks Lowest Cost (the default, as before)
+or Real Cost: each stretch's recipe is then chosen by what it costs less
+what selling a craft brings back (`LevelUp:GetReturns`' best, kept on
+`price.back`), and the footer adds "Selling what you make brings back
+about X." (`plan.back`, `RoadView.FootText`). "To 300:" still counts the
+gold spent. `roadPickBy` ("lowest" or "real", account wide, never rename
+it; `RoadPlan.PickBy`) is part of the plan's key.
 Tested in `tools/test_roadto300.lua`. Not yet seen in game.
 
 ## Welcome card
