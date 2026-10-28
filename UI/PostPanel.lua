@@ -659,9 +659,14 @@ function PostPanel:Build()
     if summary.SetJustifyV then summary:SetJustifyV("TOP") end
     self.summary = summary
 
+    -- The Sale Total band (UI/SaleTotal.lua) sits between the summary and
+    -- the divider on Sell; PostPanel:PlaceDivider moves the divider under it.
+    if ns.SaleTotal then ns.SaleTotal:Build(body, summary, frame) end
+
     local divider = Theme.CreateDivider(body)
     divider:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -6)
     divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, 0)
+    self.divider = divider
 
     local list = Widgets.CreateScrollList(body, {
         rowHeight = ROW_HEIGHT,
@@ -1637,12 +1642,32 @@ function PostPanel:Place()
     if self.frame and self.frame:IsShown() then self:Reflow() end
 end
 
+--- The divider under the summary, or under the Sale Total band while it
+--- shows. Moved only when that changes.
+function PostPanel:PlaceDivider(banding)
+    local divider = self.divider
+    if not divider or self.dividerUnderBand == banding then return end
+    local SaleTotal = ns.SaleTotal
+    divider:ClearAllPoints()
+    if banding and SaleTotal and SaleTotal.band then
+        divider:SetPoint("TOPLEFT", SaleTotal.band, "BOTTOMLEFT", 0, -6)
+    else
+        divider:SetPoint("TOPLEFT", self.summary, "BOTTOMLEFT", 0, -6)
+    end
+    divider:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -14, 0)
+    self.dividerUnderBand = banding
+end
+
 function PostPanel:Refresh()
     -- Before the shown check: this is how a panel that stepped aside for the
     -- character window comes back.
     self:Redock()
 
     if not self.frame or not self.frame:IsShown() then return end
+
+    -- The Sale Total shows on Sell only, while it is on.
+    local banding = ns.SaleTotal ~= nil and ns.SaleTotal:SetShown(self.view == "sell" and not self:IsCollapsed()) or false
+    self:PlaceDivider(banding)
 
     -- Cheap, and it catches the main window being dragged, which has no event.
     self:Reflow()
@@ -1784,6 +1809,7 @@ function PostPanel:Refresh()
             or L["Nothing in your bags with a known price.\n\nScan the auction house to find out what things sell for."])
         self:SetSummary("")
         self:SetTitle(L["Ready to sell"])
+        if banding then ns.SaleTotal:Update(lines, 0) end
         return
     end
 
@@ -1801,18 +1827,28 @@ function PostPanel:Refresh()
     -- there to see with the drawer folded away; folded, the count too.
     local worth = ("|c%s%s|r"):format(ns.COLORS.accent,
         Util.FormatMoney(total, { noColor = true, short = true }))
+    -- With the Sale Total band up the worth is there, so the title and
+    -- the summary leave it out; folded, the band is hidden and they keep it.
     if self:IsCollapsed() then
         self:SetTitle(L.Format("Ready to sell (%d) · %s", #lines, worth),
             L.Format("Ready to sell (%d)", #lines))
+    elseif banding then
+        self:SetTitle(L["Ready to sell"])
     else
         self:SetTitle(L.Format("Ready to sell · %s", worth), L["Ready to sell"])
     end
+    if banding then ns.SaleTotal:Update(lines, keptBack) end
 
     local about = ("|c%s%s|r"):format(ns.COLORS.accent,
         Util.FormatMoney(total, { noColor = true, short = true }))
-    self:SetSummary((#lines == 1
-            and L.Format("%d item, about %s", #lines, about)
-            or L.Format("%d items, about %s", #lines, about))
+    local count
+    if banding then
+        count = #lines == 1 and L.Format("%d item", #lines) or L.Format("%d items", #lines)
+    else
+        count = #lines == 1 and L.Format("%d item, about %s", #lines, about)
+            or L.Format("%d items, about %s", #lines, about)
+    end
+    self:SetSummary(count
         .. (hidden > 0 and ("  ·  " .. L.Format("%d hidden", hidden))
             or losses > 0 and ("  ·  |c%s%s|r"):format(ns.COLORS.loss, L.Format("%d at a loss", losses)) or "")
         .. (keptBack > 0 and ("  ·  " .. L.Format("%d kept for your other addons", keptBack)) or "")
