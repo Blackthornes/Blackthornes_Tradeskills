@@ -667,6 +667,14 @@ local function UpdateCrafters(detail, analysis)
 
     local okWidth, room = pcall(crafters.GetWidth, crafters)
     if not okWidth or type(room) ~= "number" or room <= 0 then room = DETAIL_WIDTH - 62 end
+    -- The names go under the heading however many lines it wraps to
+    -- (German runs longer), and the line grows to hold them.
+    local line = (Theme.sizes.small or 11) + 2
+    local lines = math.max(1, math.ceil((Theme.TextWidth(crafters.label) or 0) / room))
+    local okTall, tall = pcall(crafters.label.GetStringHeight, crafters.label)
+    tall = math.max(lines * line, okTall and tonumber(tall) or 0)
+    local top = -math.ceil(tall + 3)
+    crafters:SetHeight(math.max(CRAFTERS_HEIGHT, math.ceil(tall + 3) + 16))
     local gap = 10
     local x, shown = 0, 0
     for index, name in ipairs(names) do
@@ -680,7 +688,7 @@ local function UpdateCrafters(detail, analysis)
         if shown > 0 and x + need > room then break end
         button:SetWidth(width)
         button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", crafters, "TOPLEFT", x, -16)
+        button:SetPoint("TOPLEFT", crafters, "TOPLEFT", x, top)
         button:Show()
         x = x + width + gap
         shown = index
@@ -695,7 +703,7 @@ local function UpdateCrafters(detail, analysis)
         more.text:SetTextColor(Theme.Unpack("muted"))
         more:SetWidth(math.ceil(Theme.TextWidth(more.text) or 50))
         more:ClearAllPoints()
-        more:SetPoint("TOPLEFT", crafters, "TOPLEFT", x, -16)
+        more:SetPoint("TOPLEFT", crafters, "TOPLEFT", x, top)
         more:Show()
     end
 end
