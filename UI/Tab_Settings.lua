@@ -1257,7 +1257,7 @@ local function Build(outer)
     AddUnit(budgetRow, widgets.budget, L["ms"])
 
     local autoScanRow = CreateRow(pages.auction, 2, L["Auto Scan:"],
-        L["Scans when the auction house opens and prices are old or missing."])
+        L["Does one quick scan when you open the auction house, if you haven't scanned in the last 15 minutes."])
 
     widgets.autoScan = Widgets.CreateCheckbox(autoScanRow, L["On"], function(checked)
         Config:Set("autoScan", checked)
