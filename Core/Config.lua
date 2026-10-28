@@ -128,10 +128,17 @@ local DEFAULTS = {
         -- posts (Logic/Posting.lua). Kept so a saved value is never dropped.
         confirmBeforePosting = true,
 
+        -- Show the Yes/No box with the prices before each listing. Off by
+        -- default (the owner, 2026-10-28: less in the way when posting): a
+        -- click on a checked price lists it, and a click on one not checked
+        -- yet checks it, then the next click lists. Never rename it.
+        askBeforeListing = false,
+
         -- Whether to recommend selling below material cost. Such items are
         -- always shown, just marked red and skipped when picking what is
-        -- worth listing.
-        allowPostingAtALoss = false,
+        -- worth listing. On by default since 2026-10-28 (the owner); a
+        -- value already saved is kept, so only new installs start with it.
+        allowPostingAtALoss = true,
 
         -- Refuse a listing that, after the auction house's cut, brings in
         -- less than what the last craft of it cost (asked 2026-10-05). Off
