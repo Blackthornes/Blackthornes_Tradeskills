@@ -31,6 +31,11 @@ local REPLICATE_COOLDOWN = 15 * 60
 -- REPLICATE_ITEM_LIST_UPDATE.
 local QUICK_SCAN_WAIT = 30
 
+-- The auto scan's quick scan, once a visit, when the last scan is older than
+-- this (the owner, 2026-10-28). The same as the server's own cooldown, so the
+-- quick scan is ready again by then.
+Scanner.AUTO_QUICK_AFTER = 15 * 60
+
 -- A browse sweep that never reports itself complete would otherwise page for
 -- ever, one throttled request at a time.
 local MAX_BROWSE_PAGES = 40
@@ -306,12 +311,21 @@ function Scanner:GetSnapshotCooldown()
     return remaining > 0 and remaining or nil
 end
 
-function Scanner:StartFullScan()
+--- opts.quickOnly (the auto scan's quick scan): only the quick full scan,
+--- said nothing about in chat. When it is not ready, nothing starts; when it
+--- does not answer or comes back empty, it stops quietly rather than
+--- sweeping page by page.
+function Scanner:StartFullScan(opts)
+    local quickOnly = type(opts) == "table" and opts.quickOnly == true
     local allowed, reason = self:CanFullScan()
     if not allowed then
-        ns.Print(reason)
+        if not quickOnly then ns.Print(reason) end
         return false
     end
+    if quickOnly and (not ns.Compat:Get().auction.hasReplicate or self:GetSnapshotCooldown()) then
+        return false
+    end
+    self.quickOnly = quickOnly
 
     self.scanStartedAt = GetTime()
     -- Wall-clock start, so a finished scan can tell its own records from
@@ -340,7 +354,7 @@ function Scanner:StartFullScan()
         return self:StartBrowseScan()
     end
 
-    ns.Print(L["asking for a quick full scan..."])
+    if not quickOnly then ns.Print(L["asking for a quick full scan..."]) end
 
     -- Queued rather than sent. A scan is the addon's heaviest use of a channel
     -- the player is also posting on, so it waits behind anything they clicked
@@ -373,6 +387,10 @@ function Scanner:StartFullScan()
             Scanner.sendingOwnReplicate = false
             if not sent then
                 Scanner.awaitingReplicate = false
+                if Scanner.quickOnly then
+                    Scanner:StopQuickOnly()
+                    return true
+                end
                 ns.Print(L["the game refused the quick full scan, so scanning page by page instead"])
                 Scanner:StartBrowseScan()
                 return true
@@ -388,6 +406,11 @@ function Scanner:StartFullScan()
             Scanner.timeoutHandle = C_Timer.NewTimer(QUICK_SCAN_WAIT, function()
                 Scanner.timeoutHandle = nil
                 if Scanner.isScanning and not Scanner.isReading then
+                    -- Still listening: a late answer is read all the same.
+                    if Scanner.quickOnly then
+                        Scanner:StopQuickOnly()
+                        return
+                    end
                     ns.Print(L.Format("the quick full scan has not answered in %d seconds, so scanning page by page until it does",
                         QUICK_SCAN_WAIT))
                     Scanner:StartBrowseScan()
@@ -401,7 +424,7 @@ function Scanner:StartFullScan()
             Scanner.scanQueued = false
 
             if not Scanner.isScanning then
-                if not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
+                if not Scanner.quickOnly and not (ns.AHQueue and ns.AHQueue.IsFlushing and ns.AHQueue:IsFlushing()) then
                     ns.Print(L["the auction house stayed busy; the scan was not sent."])
                 end
                 if ns.UI then ns.UI:OnScanComplete() end
@@ -981,6 +1004,10 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
 
     self.awaitingReplicate = false
 
+    if not answered and self.quickOnly then
+        self:StopQuickOnly()
+        return
+    end
     if not answered then
         ns.Print(L["the quick full scan came back empty, so scanning page by page instead"])
         self:StartBrowseScan()
@@ -994,6 +1021,12 @@ function Scanner:REPLICATE_ITEM_LIST_UPDATE()
     self.isScanning = true
 
     self:ReadReplicateResults(numItems)
+end
+
+--- The auto scan's quick scan gave nothing back: stand down, saying nothing.
+function Scanner:StopQuickOnly()
+    self.isScanning = false
+    if ns.UI then ns.UI:OnScanComplete() end
 end
 
 --- Stop a page-by-page sweep without saving it, for a quick scan that has
@@ -1014,6 +1047,8 @@ end
 
 --- Walk the snapshot, accumulating per-item listings.
 function Scanner:ReadReplicateResults(numItems)
+    -- An automatic quick scan reads its answer without a word in chat.
+    local Say = self.quickOnly and ns.Debug or ns.Print
     self.isReading = true
 
     local observations = {}
@@ -1207,12 +1242,12 @@ function Scanner:ReadReplicateResults(numItems)
             self.isScanning = false
             self.isReading = false
 
-            ns.Print(L.Format("scan complete: %s listings across %s items in %.1fs%s",
+            Say(L.Format("scan complete: %s listings across %s items in %.1fs%s",
                 Util.Comma(numItems - skipped), Util.Comma(recorded), elapsed,
                 skipped > 0 and L.Format(" (%s skipped)", Util.Comma(skipped)) or ""))
 
             if soldOut > 0 then
-                ns.Print(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
+                Say(L.Format("%s item(s) sold out since they were last seen", Util.Comma(soldOut)))
             end
 
             implausible = implausible + ns.Prices:TakeImplausibleCount()
@@ -1220,9 +1255,9 @@ function Scanner:ReadReplicateResults(numItems)
             if implausible > 0 then
                 local ceiling = Util.FormatMoney(ns.Prices.MAX_CREDIBLE_COPPER, { noColor = true, short = true })
                 if implausible == 1 then
-                    ns.Print(L.Format("%s listing ignored: priced above %s", Util.Comma(implausible), ceiling))
+                    Say(L.Format("%s listing ignored: priced above %s", Util.Comma(implausible), ceiling))
                 else
-                    ns.Print(L.Format("%s listings ignored: priced above %s", Util.Comma(implausible), ceiling))
+                    Say(L.Format("%s listings ignored: priced above %s", Util.Comma(implausible), ceiling))
                 end
             end
 
@@ -1234,7 +1269,7 @@ function Scanner:ReadReplicateResults(numItems)
         onCancel = function()
             self.isScanning = false
             self.isReading = false
-            ns.Print(L["scan cancelled"])
+            Say(L["scan cancelled"])
 
             if ns.UI and ns.UI.OnScanComplete then
                 ns.UI:OnScanComplete()
@@ -1245,7 +1280,7 @@ function Scanner:ReadReplicateResults(numItems)
     self.worker = worker
     worker:Start(indices)
 
-    ns.Print(L.Format("reading %s listings...", Util.Comma(numItems)))
+    Say(L.Format("reading %s listings...", Util.Comma(numItems)))
 end
 
 function Scanner:CancelScan()
@@ -2109,6 +2144,7 @@ end
 
 function Scanner:AUCTION_HOUSE_SHOW()
     self.isAuctionHouseOpen = true
+    self.autoScanTried = false
     -- A new visit: purchases are held to what the list says from now on.
     if ns.Prices.ForgetBeforeLook then ns.Prices:ForgetBeforeLook() end
     self.settledSearchDisplay = false
@@ -2129,13 +2165,17 @@ end
 function Scanner:ConsiderAutoScan(attempt)
     if ns.Config:Get("autoScan") == false then return end
     if self.isScanning or self.scanQueued then return end
+    -- One a visit: whatever happened to it, it is not tried again until the
+    -- auction house is opened again.
+    if self.autoScanTried then return end
 
     -- Queueing behind the sell frame would also work, but then a scan nobody
     -- asked for sits in the queue until it expires. Come back later instead, and
     -- give up quietly if the player is selling the whole time.
     attempt = attempt or 1
 
-    if ns.AHQueue:PlayerIsSelling() then
+    local fighting = type(InCombatLockdown) == "function" and InCombatLockdown()
+    if fighting or ns.AHQueue:PlayerIsSelling() then
         if attempt > 4 then return end
 
         ns.Debug("waiting to scan: Blizzard's Sell tab is open")
@@ -2154,8 +2194,17 @@ function Scanner:ConsiderAutoScan(attempt)
     local stale = not lastScan
         or (time() - lastScan) > (ns.Config:Get("staleAfterSeconds") or 172800)
 
-    if count > 0 and not stale then return end
+    if count > 0 and not stale then
+        -- Prices that are fine but not fresh: one quiet quick scan, when the
+        -- last scan is over AUTO_QUICK_AFTER old and the quick scan is ready.
+        -- Never page by page for this; that is the Scan button's.
+        if time() - lastScan <= Scanner.AUTO_QUICK_AFTER then return end
+        self.autoScanTried = true
+        self:StartFullScan({ quickOnly = true })
+        return
+    end
 
+    self.autoScanTried = true
     ns.Print(count == 0
         and L["no price data, so scanning automatically"]
         or L["prices are out of date, so scanning automatically"])

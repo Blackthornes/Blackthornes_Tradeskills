@@ -1518,8 +1518,13 @@ Not yet seen in game.
 The owner asked (2026-10-20) for live prices without an app, a server or a
 cost, picked a hidden in-game channel, and said build it from a mockup whose
 words he approved. Tradeskills only: Farmer never shares past the guild.
-`Logic/RealmPrices.lua`, off unless ticked (`realmPrices`, YOUR REALM on the
-Sharing page, `/bts share realm on|off`, typed only like guild). When on it
+`Logic/RealmPrices.lua`, on unless unticked since the owner asked
+2026-10-28 (`realmPrices`, YOUR REALM on the Sharing page, `/bts share
+realm on|off`, typed only like guild; never announced). Saves made before
+kept `false` from the old default, so `Config:RealmPricesOnOnce` turns it
+on once (`realmPricesOnOnce`, never rename it); unticked after that stays
+off. No price table ships with the addon (the owner, the same day: one
+region's prices don't fit another's). When on it
 joins a hidden channel for the side (`BTSPrices` plus A, H or N), hides its
 join lines, and shares the last scan (Y announce, then Z prices, the guild's
 batches) one message every `SEND_GAP` seconds, never in a fight, at most once
@@ -1531,6 +1536,21 @@ scans and your guild's (`Prices:GetValue`), before TSM and Auctionator. A
 price far from a fresh one of your own is refused. `Comm` hands handlers the
 channel's name and target as fourth and fifth arguments. Tested in
 `tools/test_realmprices.lua`. Not yet seen in game.
+
+## A quick scan when you open the auction house
+
+The owner asked (2026-10-28): with "Auto Scan:" ticked (`autoScan`, on
+unless unticked, the auction page), opening the auction house also asks
+for one quick full scan when the last scan is over
+`Scanner.AUTO_QUICK_AFTER` (15 minutes) old, as well as the old case
+(no prices, or prices past `staleAfterSeconds`, which still scans page by
+page when it must). `Scanner:ConsiderAutoScan` tries once a visit
+(`autoScanTried`, reset on `AUCTION_HOUSE_SHOW`), never in a fight or
+while the player is selling. `StartFullScan({ quickOnly = true })` asks
+only for the quick scan: nothing while it cools down, no page-by-page
+sweep when it goes unanswered or comes back empty (`StopQuickOnly`), and
+nothing said in chat (`ReadReplicateResults` speaks through `ns.Debug`).
+Never a continuous scan. Tested in `tools/test_autoquickscan.lua`.
 
 ## German translation
 
