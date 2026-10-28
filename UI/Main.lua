@@ -428,6 +428,8 @@ function UI:SetScanProgress(fraction)
     if self.scanHint then
         self.scanHint:SetText(L.Format("scanning... %d%%", math.floor((fraction or 0) * 100)))
     end
+
+    if ns.SaleTotal then ns.SaleTotal:Progress(fraction) end
 end
 
 --- @param result nil when the scan was cancelled or gave up; on a finished
@@ -438,6 +440,11 @@ function UI:OnScanComplete(result)
 
     if self.progressBar then self.progressBar:Hide() end
     if self.scanHint then self.scanHint:SetText("") end
+
+    -- The drawer's Sale Total counts up the new prices (UI/SaleTotal.lua).
+    if ns.SaleTotal then
+        if result then ns.SaleTotal:ScanFinished() else ns.SaleTotal:ScanStopped() end
+    end
 
     if result then
         self:CelebrateScan(result)
@@ -458,6 +465,9 @@ function UI:OnScanComplete(result)
     self:UpdateAuctionButton()
     self:UpdateHeader()
     self:RefreshActiveTab()
+
+    -- The new prices in the drawer, which plays the Sale Total's count-up.
+    if result and ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
 end
 
 function UI:OnRecipesUpdated()

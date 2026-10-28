@@ -1264,6 +1264,15 @@ local function Build(outer)
     end, true)
     widgets.autoScan:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    local saleTotalRow = CreateRow(pages.auction, 2, L["Sale Total:"],
+        L["What everything on your Sell list would bring in at today's prices, after the auction house cut."])
+
+    widgets.saleTotal = Widgets.CreateCheckbox(saleTotalRow, L["On"], function(checked)
+        Config:Set("saleTotal", checked)
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, true)
+    widgets.saleTotal:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local learnRow = CreateRow(pages.auction, 2, L["Learn From Searches:"],
         L["Also takes prices from your own searches."])
 
@@ -2305,6 +2314,7 @@ local function Refresh()
         or Config:Get("disenchanterQuality") or 2, true)
     widgets.valueOwned:SetChecked(Config:Get("valueOwnedMaterials") ~= false)
     widgets.autoScan:SetChecked(Config:Get("autoScan") ~= false)
+    widgets.saleTotal:SetChecked(Config:Get("saleTotal") ~= false)
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") == true)
     ShowShiftMode(widgets.tooltipValue)
