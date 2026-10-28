@@ -3333,3 +3333,10 @@ L["%d (not counted)"] = "%d (не считается)"
 L["Since Last Scan:"] = "С прошлого сканирования:"
 L["Best Yet:"] = "Лучшая сумма:"
 L["What everything on your Sell list would bring in at today's prices, after the auction house cut."] = "Сколько принесёт всё из твоего списка продажи по сегодняшним ценам, за вычетом доли аукциона."
+
+-- The shared Blackthornes minimap button (2026-10-28)
+L["Click a name to open it. Right-click for its settings."] = "Нажми на название, чтобы открыть. Правый клик открывает его настройки."
+L["Click to pick an addon"] = "Нажми, чтобы выбрать аддон"
+L["Combine Addon Buttons:"] = "Объединить кнопки аддонов:"
+L["Crafting, prices and the auction house"] = "Ремесло, цены и аукцион"
+L["Right-click for settings"] = "Правый щелчок для настроек"
