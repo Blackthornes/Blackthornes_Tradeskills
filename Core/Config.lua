@@ -538,9 +538,10 @@ local DEFAULTS = {
         -- Logic/GuildCrafters.lua.
         guildCrafters = false,
         -- Share scans with players on your realm over a hidden channel, and
-        -- fill what is still missing with theirs (2026-10-20). Off unless
-        -- ticked; never rename it. See Logic/RealmPrices.lua.
-        realmPrices = false,
+        -- fill what is still missing with theirs (2026-10-20). On unless
+        -- unticked since the owner asked 2026-10-28; never rename it. See
+        -- Logic/RealmPrices.lua and Config:RealmPricesOnOnce.
+        realmPrices = true,
         -- Send your own disenchant results and recipe skills to the
         -- addon's maker (2026-10-18). Off unless ticked; never rename it.
         -- See Logic/Contribute.lua.
@@ -1178,6 +1179,20 @@ function Config:Bootstrap()
     end
 
     self:SisterKeepsOffOnce(db)
+    self:RealmPricesOnOnce(db)
+end
+
+--- Realm Prices was off unless ticked until 2026-10-28, when the owner
+--- asked for it on. The old default was copied into every save, so it is
+--- turned on once, and the save says so (`realmPricesOnOnce`, never rename
+--- it). A player who unticks it after that keeps it off.
+function Config:RealmPricesOnOnce(db)
+    if type(db) ~= "table" or db.realmPricesOnOnce then return end
+    db.realmPricesOnOnce = true
+    if type(db.settings) == "table" and db.settings.realmPrices ~= true then
+        ns.db = ns.db or db
+        self:Set("realmPrices", true)
+    end
 end
 
 --- "Keep What Other Addons Need" was on by default for a day (2026-10-16)
