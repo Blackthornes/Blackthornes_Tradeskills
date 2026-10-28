@@ -23,6 +23,17 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.2.0
+
+- Price limits: a Never Below price on the Prices tab can have a Highest price and a When Cheaper choice. A list's Rules window also takes Lowest Price as a percent of market or cost.
+- Sale Total on the Sell drawer shows what your Sell list would bring in at today's prices, and counts up after each scan. Turn it off with Sale Total on the Auction House page.
+
+Fixes and changes:
+
+- Listing skips the Yes or No box now. Ask Before Listing on the Auction House page brings it back.
+- Sell at a Loss starts on for new installs.
+- Several bug fixes for the Disenchanting tab in French and Spanish.
+
 ## 1.1.0
 
 - Road to 300 has Pick By: Lowest Cost or Real Cost. Real Cost counts what selling your crafts brings back.
