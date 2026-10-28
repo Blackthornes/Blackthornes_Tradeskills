@@ -1257,7 +1257,7 @@ local function Build(outer)
     AddUnit(budgetRow, widgets.budget, L["ms"])
 
     local autoScanRow = CreateRow(pages.auction, 2, L["Auto Scan:"],
-        L["Scans when the auction house opens and prices are old or missing."])
+        L["Does one quick scan when you open the auction house, if you haven't scanned in the last 15 minutes."])
 
     widgets.autoScan = Widgets.CreateCheckbox(autoScanRow, L["On"], function(checked)
         Config:Set("autoScan", checked)
@@ -1825,7 +1825,7 @@ local function Build(outer)
     widgets.realmPrices = Widgets.CreateCheckbox(realmRow, L["On"], function(checked)
         if ns.RealmPrices then ns.RealmPrices:SetOn(checked) else Config:Set("realmPrices", checked) end
         UI:RefreshActiveTab()
-    end, false)
+    end, true)
     widgets.realmPrices:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     widgets.realmStatus = Theme.CreateLabel(pages.sharing.content, "tiny", "muted")
@@ -2376,7 +2376,7 @@ local function Refresh()
     widgets.guildCrafters:SetChecked(Config:Get("guildCrafters") == true)
     if widgets.shareData then widgets.shareData:SetChecked(Config:Get("shareData") == true) end
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Status() or "")
-    widgets.realmPrices:SetChecked(Config:Get("realmPrices") == true)
+    widgets.realmPrices:SetChecked(Config:Get("realmPrices") ~= false)
     widgets.realmStatus:SetText(ns.RealmPrices and ns.RealmPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")

@@ -161,7 +161,7 @@ local function Scan(client, prices, at)
 end
 
 --------------------------------------------------------------------------------
-print("\noff by default")
+print("\non by default, off when unticked")
 --------------------------------------------------------------------------------
 
 local ana = NewClient("Ana", "Forever-Alliance")
@@ -171,7 +171,9 @@ local dora = NewClient("Dora", "Forever-Alliance")
 clients = { ana, bob, carl, dora }
 
 check("the setting starts unset", ana.settings.realmPrices, nil)
-check("it reads as off", ana.ns.RealmPrices:IsOn(), false)
+check("unset reads as on", ana.ns.RealmPrices:IsOn(), true)
+for _, client in ipairs(clients) do client.settings.realmPrices = false end
+check("unticked reads as off", ana.ns.RealmPrices:IsOn(), false)
 current = ana
 check("off: joining does nothing", ana.ns.RealmPrices:Join(), false)
 check("off: no channel joined", next(ana.channels), nil)

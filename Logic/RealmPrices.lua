@@ -7,7 +7,7 @@
 -- 2026-10-07 for fear of made-up prices, so this one asks more before it
 -- believes anything. Tradeskills only: Farmer stays guild at most.
 --
--- Off unless ticked; Settings, Sharing, YOUR REALM: `realmPrices`. When on:
+-- On unless unticked (2026-10-28); Settings, Sharing, YOUR REALM: `realmPrices`. When on:
 --   * Tradeskills joins a hidden chat channel named for the realm's side
 --     (CHANNEL_BASE plus A, H or N) and keeps its join and leave lines out of
 --     chat. The probe of 2026-10-20 found Forever lets addons join one and
@@ -54,7 +54,7 @@ RealmPrices.JOIN_DELAY = 20           -- seconds after login before joining
 --------------------------------------------------------------------------------
 
 function RealmPrices:IsOn()
-    return ns.Config and ns.Config:Get("realmPrices") == true
+    return ns.Config and ns.Config:Get("realmPrices") ~= false
 end
 
 local function RealmTable(create)
