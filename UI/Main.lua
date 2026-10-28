@@ -1486,6 +1486,7 @@ function UI:ShowTransferDialog(mode)
         local box = Theme.CreatePanel(dialog, "row")
         box:SetPoint("TOPLEFT", 20, -80)
         box:SetPoint("BOTTOMRIGHT", -20, 56)
+        dialog.box = box
 
         local scroll = CreateFrame("ScrollFrame", nil, box)
         scroll:SetPoint("TOPLEFT", 6, -6)
@@ -1588,6 +1589,18 @@ function UI:ShowTransferDialog(mode)
         dialog.close:ClearAllPoints()
         dialog.close:SetPoint("BOTTOMRIGHT", dialog.action, "BOTTOMLEFT", -8, 0)
     end
+
+    -- A hint that wraps past two lines (German runs longer) moves the box
+    -- down and the window grows, so it never lies over the box.
+    local line = (Theme.sizes.small or 11) + 2
+    local lines = math.max(1, math.ceil((Theme.TextWidth(dialog.hint) or 0) / 520))
+    local okTall, tall = pcall(dialog.hint.GetStringHeight, dialog.hint)
+    tall = math.max(lines * line, okTall and tonumber(tall) or 0)
+    local down = math.max(0, math.ceil(tall) - 34)
+    dialog.box:ClearAllPoints()
+    dialog.box:SetPoint("TOPLEFT", 20, -80 - down)
+    dialog.box:SetPoint("BOTTOMRIGHT", -20, 56)
+    dialog:SetHeight(260 + down)
 
     -- A new code starts at its top, not wherever the last one was left.
     dialog.scrollTo(0)
