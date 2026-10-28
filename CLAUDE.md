@@ -1520,7 +1520,8 @@ cost, picked a hidden in-game channel, and said build it from a mockup whose
 words he approved. Tradeskills only: Farmer never shares past the guild.
 `Logic/RealmPrices.lua`, on unless unticked since the owner asked
 2026-10-28 (`realmPrices`, YOUR REALM on the Sharing page, `/bts share
-realm on|off`, typed only like guild; never announced). Saves made before
+realm on|off`, typed only like guild). Release notes may say it is
+there, never that its setting was turned on (the owner, 2026-10-28). Saves made before
 kept `false` from the old default, so `Config:RealmPricesOnOnce` turns it
 on once (`realmPricesOnOnce`, never rename it); unticked after that stays
 off. No price table ships with the addon (the owner, the same day: one
