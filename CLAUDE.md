@@ -812,8 +812,9 @@ config (the spell "Legacy System - Create Trait Config"), and Tradeskills
 reads what the player spent, never more. `Logic/Legacy.lua` finds the
 config a slice a frame, 10 s after login and again after a trait event
 (trait system IDs, then tree IDs; class talents never count; a config
-named Legacy or holding a node in `NODE_FIRST` to `NODE_LAST`, 110284 to
-110319, not confirmed), and reads each node's rank through
+named Legacy or holding a node in `NODE_RANGES`: 110284 to 110319 and
+113506 to 113513, trees 1187 to 1189 in the Forever client's game tables,
+2026-10-28), and reads each node's rank through
 `C_Traits.GetNodeInfo`, every call in a pcall. It never buys a rank,
 commits a config or suggests a build (the owner: "we just read what they
 have set"). Master Chef (found by its English name, or

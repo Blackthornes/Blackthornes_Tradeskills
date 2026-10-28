@@ -94,6 +94,25 @@ check("an alt's cooking is left alone", ns.Cost:GetCraftCost(11).yield, 1)
 mine[9] = recipe
 
 print("")
+print("the later Legacy perks")
+check("113508 is a Legacy node", Legacy:InRange(113508), true)
+check("110319 still is", Legacy:InRange(110319), true)
+check("110320 is not", Legacy:InRange(110320), false)
+local wide = Legacy:RangeNodes()
+check("the fallback list ends at 113513", wide[#wide], 113513)
+local getInfo, getNodes = C_Traits.GetConfigInfo, C_Traits.GetTreeNodes
+C_Traits.GetConfigInfo = function(configID)
+    if configID == 43 then return { ID = 43, name = "", treeIDs = { 1188 } } end
+    return getInfo(configID)
+end
+C_Traits.GetTreeNodes = function(treeID)
+    if treeID == 1188 then return { 113510, 113511 } end
+    return getNodes(treeID)
+end
+check("a tree with only later perks is Legacy", Legacy:IsLegacy(43), true)
+C_Traits.GetConfigInfo, C_Traits.GetTreeNodes = getInfo, getNodes
+
+print("")
 print("nothing to read")
 C_Traits = nil
 Legacy.configID, Legacy.searched, Legacy.masterChefNode = nil, nil, nil

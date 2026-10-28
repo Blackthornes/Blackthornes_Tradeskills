@@ -21,10 +21,14 @@ local _, ns = ...
 
 local Legacy = ns.NewModule("Legacy")
 
--- Node IDs seen for the Legacy trees on the beta. Not confirmed: they are
--- only used to tell the Legacy config from other trait configs.
-Legacy.NODE_FIRST = 110284
-Legacy.NODE_LAST = 110319
+-- Where the Legacy trees' nodes sit in the client's numbering. The Forever
+-- client's game tables put them in trees 1187 to 1189 (trait system 45):
+-- 110284 to 110319, and the later perks 113506 to 113513. Used to tell the
+-- Legacy config from other trait configs, and to read the nodes when the
+-- client gives no tree list.
+Legacy.NODE_RANGES = { { 110284, 110319 }, { 113506, 113513 } }
+Legacy.NODE_FIRST = Legacy.NODE_RANGES[1][1]
+Legacy.NODE_LAST = Legacy.NODE_RANGES[1][2]
 
 -- Currencies in the client's tables: Legacy Track renown and the reset
 -- charges.
@@ -58,6 +62,24 @@ end
 local function Number(value)
     local ok, result = pcall(function() return type(value) == "number" and value or nil end)
     return ok and result or nil
+end
+
+--- True when a node ID is in one of the Legacy ranges.
+function Legacy:InRange(nodeID)
+    if not Number(nodeID) then return false end
+    for _, range in ipairs(self.NODE_RANGES) do
+        if nodeID >= range[1] and nodeID <= range[2] then return true end
+    end
+    return false
+end
+
+--- Every node ID in the Legacy ranges.
+function Legacy:RangeNodes()
+    local ids = {}
+    for _, range in ipairs(self.NODE_RANGES) do
+        for id = range[1], range[2] do ids[#ids + 1] = id end
+    end
+    return ids
 end
 
 --------------------------------------------------------------------------------
@@ -94,9 +116,7 @@ function Legacy:IsLegacy(configID)
     end)
     if okName and named then return true end
     for _, nodeID in ipairs(nodes or {}) do
-        if Number(nodeID) and nodeID >= self.NODE_FIRST and nodeID <= self.NODE_LAST then
-            return true
-        end
+        if self:InRange(nodeID) then return true end
     end
     -- No tree list: ask for one of the nodes directly.
     local node = Call("C_Traits.GetNodeInfo", configID, self.NODE_FIRST)
@@ -216,8 +236,7 @@ function Legacy:Nodes()
     if not self.configID then return nodes end
     local ids = self:ConfigNodes(self.configID)
     if not ids or #ids == 0 then
-        ids = {}
-        for id = self.NODE_FIRST, self.NODE_LAST do ids[#ids + 1] = id end
+        ids = self:RangeNodes()
     end
     table.sort(ids, function(a, b) return (Number(a) or 0) < (Number(b) or 0) end)
     for _, nodeID in ipairs(ids) do
