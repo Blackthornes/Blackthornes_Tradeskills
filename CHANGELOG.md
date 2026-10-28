@@ -4,6 +4,15 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.2.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Price limits:** a "Never below" price on the Prices tab can have a Highest price and a When Cheaper choice, List Anyway or Wait. A list's Rules window takes Lowest Price as a percent of market or cost, and a Highest Price.
+- **Sale Total:** a band on the Sell drawer shows what your Sell list would bring in at today's prices after the auction house cut, and counts up after each scan. It is on until you untick Sale Total on the Auction House page of Settings.
+- **Listing:** a listing no longer shows the Yes or No box. Ask Before Listing on the Auction House page brings it back. Sell at a Loss starts on for new installs.
+- **Bug fixes:** several bug fixes for the Disenchanting tab in French and Spanish.
+
 ## 1.1.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
