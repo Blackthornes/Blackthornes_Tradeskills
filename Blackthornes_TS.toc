@@ -127,6 +127,7 @@ UI\PriceGraph.lua
 UI\Main.lua
 UI\ShoppingListsView.lua
 UI\AuctionWheel.lua
+UI\SaleTotal.lua
 UI\PostPanel.lua
 UI\PriceEditor.lua
 UI\ListRulesWindow.lua

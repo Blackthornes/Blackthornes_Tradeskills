@@ -235,6 +235,11 @@ local DEFAULTS = {
         -- between sessions this is what makes the addon self-sufficient.
         autoScan = true,
 
+        -- The Sale Total on the drawer's Sell view, counting up after a scan
+        -- (UI/SaleTotal.lua, the owner 2026-10-28: on for everyone). Never
+        -- rename it, nor saleTotalBest and saleTotalLast, kept beside it.
+        saleTotal = true,
+
         -- Read prices out of the searches the player runs in Blizzard's own
         -- auction house UI, as well as the addon's scans. The client announces
         -- every search result the same way whoever asked for it, so this costs
