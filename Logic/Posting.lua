@@ -2104,9 +2104,31 @@ end
 --   ("of the Monkey") is not the price of the plain item, so it is not kept.
 function Posting:NoteChecked(itemID, itemKey)
     if not itemID then return end
-    if type(itemKey) == "table" and (tonumber(itemKey.itemSuffix) or 0) ~= 0 then return end
+    local suffix = type(itemKey) == "table" and tonumber(itemKey.itemSuffix) or 0
+    if suffix ~= 0 then
+        -- That one suffix's price, kept apart: only the copy with it may be
+        -- listed on the click, and only while the box is off.
+        if type(rawget(self, "checkedSuffix")) ~= "table" then self.checkedSuffix = {} end
+        self.checkedSuffix[itemID .. ":" .. suffix] = GetTime()
+        return
+    end
     if type(rawget(self, "checkedAt")) ~= "table" then self.checkedAt = {} end
     self.checkedAt[itemID] = GetTime()
+end
+
+--- Is the Yes/No box on? Off unless ticked ("Ask Before Listing").
+function Posting:AsksFirst()
+    return ns.Config:Get("askBeforeListing") == true
+end
+
+--- Was the price of the copy that would be listed checked lately? For a
+--- copy with a random suffix, that suffix's own search counts.
+function Posting:IsFreshCopy(itemID)
+    local key = self:GetSearchKey(itemID)
+    if not key then return self:IsFresh(itemID) end
+    local checked = rawget(self, "checkedSuffix")
+    local at = type(checked) == "table" and checked[itemID .. ":" .. (tonumber(key.itemSuffix) or 0)]
+    return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
 end
 
 --- Was this item's price checked recently enough to list on the click?
@@ -2119,6 +2141,7 @@ end
 --- Forget every check: the auction house closed, and prices move while away.
 function Posting:ForgetChecks()
     self.checkedAt = {}
+    self.checkedSuffix = {}
     self.bulkTried = {}
     self.checkAll = nil
 end
@@ -2305,8 +2328,13 @@ end
 --- price is fresh, it is not a copy with a random suffix, and the box would
 --- not have warned about anything (a listing under what it cost to make).
 function Posting:CanListOnClick(itemID, price)
-    if not self:FastListing() then return false end
     if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
+
+    -- With the box off, a checked price is all it takes: Post and
+    -- RefusesEarly still refuse what the box would have warned about.
+    if not self:AsksFirst() then return self:IsFreshCopy(itemID) end
+
+    if not self:FastListing() then return false end
     if not self:IsFresh(itemID) then return false end
     if self:GetSearchKey(itemID) then return false end
 
@@ -2328,6 +2356,8 @@ end
 -- The search is asynchronous and posting needs a hardware event, so the
 -- confirmation click is what actually creates the listing. That ordering is
 -- deliberate: search, show the fresh number, and let the click commit it.
+-- With "Ask Before Listing" off (the default since 2026-10-28) there is no
+-- box: the answer marks the price checked and the next click lists it.
 function Posting:Request(itemID, quantity, unitPrice)
     local allowed, reason = self:CanPost(itemID)
     if not allowed then
@@ -2359,6 +2389,9 @@ function Posting:Request(itemID, quantity, unitPrice)
 
     if not verify or not ns.Scanner.isAuctionHouseOpen then
         if self:RefusesEarly(itemID, unitPrice, chosen ~= nil) then return false end
+        if not self:AsksFirst() and ns.Scanner.isAuctionHouseOpen then
+            return self:Post(itemID, quantity, unitPrice, chosen ~= nil) and true or false
+        end
         self:Confirm(itemID, quantity, unitPrice, { byHand = chosen ~= nil })
         return true
     end
@@ -2424,6 +2457,14 @@ function Posting:Request(itemID, quantity, unitPrice)
         -- fraction of market after a rival's dump, or under what it cost to
         -- make) is said now rather than after Yes.
         if self:RefusesEarly(itemID, price, chosen ~= nil) then return end
+
+        -- With the box off the check's answer has no click left to list
+        -- with, so it is kept as checked and the next click lists it.
+        if not self:AsksFirst() then
+            self:NoteChecked(itemID, self:GetSearchKey(itemID))
+            ns.Print(L.Format("checked the price of %s. Click again to list it.", Util.GetItemLabel(itemID)))
+            return
+        end
 
         self:Confirm(itemID, quantity, price, { state = state, byHand = chosen ~= nil })
     end
