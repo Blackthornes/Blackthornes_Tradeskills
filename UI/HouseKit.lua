@@ -246,15 +246,17 @@ function HouseKit.CreateEmpty(parent, opts)
     if block.text.SetWordWrap then block.text:SetWordWrap(true) end
 
     local function MakeButton()
-        if block.button then return block.button end
+        if rawget(block, "button") then return rawget(block, "button") end
         local Widgets = ns.Widgets
         if Widgets and Widgets.CreateButton then
             block.button = Widgets.CreateButton(block, " ", function()
-                if block.onClick then block.onClick() end
+                local run = rawget(block, "onClick")
+                if run then run() end
             end, { primary = true, height = 22, width = 120 })
         end
-        if block.button then block.button:SetPoint("TOP", block.text, "BOTTOM", 0, -10) end
-        return block.button
+        local button = rawget(block, "button")
+        if button then button:SetPoint("TOP", block.text, "BOTTOM", 0, -10) end
+        return button
     end
 
     function block:Set(text, buttonText, onClick)
@@ -269,8 +271,8 @@ function HouseKit.CreateEmpty(parent, opts)
                 if button.SetWidth then button:SetWidth(math.max(110, math.ceil(width))) end
                 button:Show()
             end
-        elseif self.button then
-            self.button:Hide()
+        elseif rawget(self, "button") then
+            rawget(self, "button"):Hide()
         end
     end
     -- The old empty lines answered SetText; so does the block.

@@ -2537,3 +2537,28 @@ UI:RegisterTab({
     refresh = Refresh,
     onShow = Refresh,
 })
+
+--------------------------------------------------------------------------------
+-- Choices every Blackthornes addon shares (UI/SharedChoices.lua): a change
+-- made in a sister is written here the way this addon writes it itself.
+--------------------------------------------------------------------------------
+
+if ns.SharedChoices then
+    ns.SharedChoices:Join("Tradeskills", function(choice, value)
+        if not ns.db then return end
+        if choice == "textSize" then
+            if ns.Theme.TEXT_STEPS and ns.Theme.TEXT_STEPS[value] then ns.Config:Set("textSize", value) end
+        elseif choice == "windowStyle" then
+            if value == "titanforged" or value == "blizzard" then ns.Config:Set("windowStyle", value) end
+        elseif choice == "effects" then
+            if value == "full" or value == "subtle" or value == "off" then ns.Config:Set("windowEffects", value) end
+        elseif choice == "useTomTom" then
+            if ns.TomTom then ns.TomTom:SetOn(value and true or false) end
+        elseif choice == "arrowRoute" then
+            if ns.Travel then ns.Travel:SetOn(value and true or false) end
+        elseif choice == "arrowSize" then
+            if ns.WayArrowUI then ns.WayArrowUI:SetSize(value) end
+        end
+        if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
+    end)
+end
