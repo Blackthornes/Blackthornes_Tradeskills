@@ -1692,10 +1692,10 @@ function UI.MerchantPlaque(onClick)
         if leave then leave(self) end
         GameTooltip:Hide()
     end)
-    function button:SetEnabledState(on)
-        self.disabled = not on
-        self:SetAlpha(on and 1 or 0.65)
-        self:SetGlowing(on)
+    button.SetEnabledState = function(plaque, on)
+        plaque.disabled = not on
+        plaque:SetAlpha(on and 1 or 0.65)
+        plaque:SetGlowing(on)
     end
     return button
 end
