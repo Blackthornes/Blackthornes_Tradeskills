@@ -3337,3 +3337,5 @@ L["Window position, text size and What's New"] = "Fensterposition, Textgröße u
 L["Your Time"] = "Deine Zeit"
 L["open an item's charts, the one you name or link"] = "öffnet die Diagramme zu dem Gegenstand, den du nennst oder verlinkst"
 L["Details"] = "Details"
+L["Buy Materials"] = "Materialien kaufen"
+L["Sell Marked"] = "Markierte verkaufen"

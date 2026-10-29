@@ -3339,3 +3339,5 @@ L["Window position, text size and What's New"] = "Положение окна, �
 L["Your Time"] = "Твоё время"
 L["open an item's charts, the one you name or link"] = "открывает графики предмета, который ты назовёшь или дашь ссылкой"
 L["Details"] = "Подробности"
+L["Buy Materials"] = "Купить материалы"
+L["Sell Marked"] = "Продать отмеченное"

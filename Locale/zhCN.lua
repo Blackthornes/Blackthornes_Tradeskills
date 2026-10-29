@@ -3335,3 +3335,5 @@ L["Window position, text size and What's New"] = "窗口位置、文字大小和
 L["Your Time"] = "你的时间"
 L["open an item's charts, the one you name or link"] = "打开你说出或链接的物品的图表"
 L["Details"] = "详情"
+L["Buy Materials"] = "购买材料"
+L["Sell Marked"] = "出售已标记"
