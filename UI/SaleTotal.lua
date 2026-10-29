@@ -6,10 +6,9 @@
 -- It starts at 0 each time the auction house opens and counts up with every
 -- listing that goes up (Posting:ResolvePending calls NoteListed), by what
 -- that listing should bring in after the auction house cut
--- (Profit:NetFromListing). Under it, small, "of 2,450g": what this visit's
--- listings and everything still on the Sell list come to together, or "all
--- listed" once the list is empty. In the header it still shows with the
--- drawer folded.
+-- (Profit:NetFromListing). It reads "Potential Sale Total:" with the number
+-- and no line under it (the owner, 2026-10-29: no second lines unless they
+-- are needed). In the header it still shows with the drawer folded.
 --
 -- A listing sends coins from its row to the number, which rolls up, pops
 -- and glows, with "+45g" rising off it; each round number passed
@@ -118,14 +117,6 @@ function SaleTotal.MoneyText(copper)
     return Util.FormatMoney(copper, { short = true })
 end
 
---- The small line under the number.
-function SaleTotal.UnderText(listed, left)
-    if (left or 0) <= 0 then
-        return (listed or 0) > 0 and L["all listed"] or ""
-    end
-    return L.Format("of %s", SaleTotal.MoneyText((listed or 0) + left))
-end
-
 --------------------------------------------------------------------------------
 -- What was listed this visit
 --------------------------------------------------------------------------------
@@ -141,7 +132,6 @@ function SaleTotal:NewVisit()
     if self.counter then
         self:Settle()
         self:SetNumber(0)
-        self:DrawUnder()
     end
 end
 
@@ -160,7 +150,6 @@ function SaleTotal:NoteListed(itemID, quantity, unitPrice)
         return
     end
     self:Play(itemID, from, self.listed, amount)
-    self:DrawUnder()
 end
 
 --------------------------------------------------------------------------------
@@ -201,7 +190,7 @@ function SaleTotal:Build(bar)
 
     local label = Theme.CreateLabel(counter, "tiny", "accent", "RIGHT")
     label:SetPoint("TOPRIGHT", counter, "TOPRIGHT", 0, -3)
-    label:SetText(L["Sale Total:"])
+    label:SetText(L["Potential Sale Total:"])
     self.label = label
 
     -- The number sits on its own frame, so a pop scales it alone.
@@ -216,10 +205,6 @@ function SaleTotal:Build(bar)
     number:SetJustifyH("RIGHT")
     number:SetPoint("RIGHT", holder, "RIGHT", 0, 0)
     self.number = number
-
-    local under = Theme.CreateLabel(counter, "tiny", "muted", "RIGHT")
-    under:SetPoint("BOTTOMRIGHT", counter, "BOTTOMRIGHT", 0, 3)
-    self.under = under
 
     -- "+45g", rising off the number as a listing lands.
     local gain = Theme.CreateLabel(counter, "tiny", "profit", "RIGHT")
@@ -261,7 +246,6 @@ function SaleTotal:Build(bar)
 
     self.shown = self.listed or 0
     self:SetNumber(self.shown)
-    self:DrawUnder()
     return counter
 end
 
@@ -282,7 +266,7 @@ function SaleTotal:Fit()
     if not self.counter then return end
     local Theme = ns.Theme
     local widest = 0
-    for _, text in ipairs({ self.label, self.number, self.under }) do
+    for _, text in ipairs({ self.label, self.number }) do
         local width = (Theme.TextWidth and Theme.TextWidth(text)) or 0
         if type(width) == "number" and width > widest then widest = width end
     end
@@ -303,11 +287,6 @@ function SaleTotal:SetNumber(copper)
     end
 end
 
-function SaleTotal:DrawUnder()
-    if not self.under then return end
-    self.under:SetText(SaleTotal.UnderText(self.listed, self.left))
-    self:Fit()
-end
 
 --- Light the glow behind the number to `p` of its strength.
 function SaleTotal:Light(p)
@@ -526,14 +505,13 @@ end
 function SaleTotal:Update(lines, heldBack)
     self.left, self.count = SaleTotal.Left(lines)
     self.heldBack = heldBack or 0
-    self:DrawUnder()
 end
 
 function SaleTotal:ShowTooltip(owner)
     if not GameTooltip then return end
     local Theme = ns.Theme
     GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
-    GameTooltip:SetText(L["Sale Total"], Theme.Unpack("accentHi"))
+    GameTooltip:SetText(L["Potential Sale Total"], Theme.Unpack("accentHi"))
     GameTooltip:AddLine(L["What the items you listed this visit should bring in, after the auction house cut. It starts again at 0 each time you open the auction house."],
         1, 1, 1, true)
     GameTooltip:AddLine(" ")
