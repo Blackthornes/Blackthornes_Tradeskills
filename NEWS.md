@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.3.0
+
+- One minimap button now covers every Blackthornes addon you have. Click it to pick one. Turn it off with Combine Addon Buttons on the Look page.
+- Tooltips list what an item can disenchant into, with the count and chance. Disenchant Results on Tooltips on the Look page picks Off, Shift or Always.
+
+Fixes and changes:
+
+- Several bug fixes for text that wrapped over the line under it.
+
 ## 1.2.0
 
 - Price limits: a Never Below price on the Prices tab can have a Highest price and a When Cheaper choice. A list's Rules window also takes Lowest Price as a percent of market or cost.
