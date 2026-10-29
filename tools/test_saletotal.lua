@@ -1,17 +1,16 @@
--- The Sale Total on the drawer's Sell view (2026-10-28).
+-- The Sale Total in the drawer's header, counting up as you list
+-- (2026-10-28, counting up since 2026-10-29).
 --
 -- What must hold:
---   1. Held lines count for nothing; the total is the rest's postTotal.
---   2. Changes lists the items that rose, biggest first, and adds up the
---      drops and the items gone.
---   3. Milestones fall on round numbers: 10g under 100g, then the power of
+--   1. Net takes the auction house cut; Left skips held lines and counts the
+--      rest.
+--   2. Milestones fall on round numbers: 10g under 100g, then the power of
 --      ten below the total.
---   4. The count-up never takes longer than REVEAL_MOST.
---   5. "Up" and "Down" since the last scan, nothing under a gold.
---   6. On by default; off when unticked.
---   7. After a scan the band counts up to the true total, then keeps the
---      total and the best, and says New Best only past a best kept before.
---   8. A change that is no scan rolls straight to the new total.
+--   3. The line under the number: "of" listed plus left, "all listed" once
+--      the list is empty, nothing before anything is listed.
+--   4. On by default; off when unticked.
+--   5. A visit starts at 0, each listing counts up by its net and comes off
+--      what is left, and nothing is written to the save.
 
 local GLOBALS = { "CreateFrame", "GetTime", "GameTooltip" }
 local saved = {}
@@ -48,8 +47,10 @@ local settings = {}
 ns.Config = { Get = function(_, k) return settings[k] end, Set = function(_, k, v) settings[k] = v end }
 ns.Util = {
     Comma = function(n) return tostring(n) end,
-    FormatMoney = function(c) return tostring(math.floor(c)) .. "c" end,
+    FormatMoney = function(c) return tostring(math.floor(c / 10000)) .. "g" end,
 }
+-- The auction house keeps 5%.
+ns.Profit = { NetFromListing = function(_, _, unit) return unit * 0.95 end }
 ns.Theme = {
     FONT = "font", sizes = { title = 16 },
     Fill = function() return Stub() end, Border = function() end,
@@ -69,23 +70,18 @@ ns.Motion = {
 assert(loadfile(lfs_cwd .. "/UI/SaleTotal.lua"))("Blackthornes_TS", ns)
 local ST = ns.SaleTotal
 
--- 1. Worths.
-local worths, total = ST.Worths({
-    { itemID = 1, postTotal = 5 * G },
-    { itemID = 1, postTotal = 2 * G },
-    { itemID = 2, postTotal = 3 * G, held = true },
-    { itemID = 3, postTotal = 1 * G },
+-- 1. Net and Left.
+check(ST.Net(1, 100 * G, 2) == 190 * G, "a listing counts its net, times the stack")
+check(ST.Net(1, 0, 5) == 0, "nothing priced counts nothing")
+local left, count = ST.Left({
+    { itemID = 1, unitPrice = 10 * G, postQuantity = 2 },
+    { itemID = 2, unitPrice = 50 * G, postQuantity = 1, held = true },
+    { itemID = 3, postTotal = 4 * G },
 })
-check(total == 8 * G, "held lines are left out of the total")
-check(worths[1] == 7 * G and worths[2] == nil, "two stacks of one item add up")
+check(left == 19 * G + 4 * G, "held lines are left out; a line with no price uses its total")
+check(count == 2, "held lines are not counted")
 
--- 2. Changes.
-local rises, rest = ST.Changes({ [1] = 2 * G, [3] = 4 * G, [9] = 1 * G }, { [1] = 7 * G, [3] = 1 * G, [4] = 9 * G })
-check(#rises == 2 and rises[1].itemID == 4 and rises[1].amount == 9 * G, "biggest rise first")
-check(rises[2].itemID == 1 and rises[2].amount == 5 * G, "a rise counts only what it rose by")
-check(rest == -4 * G, "drops and items gone are added up apart")
-
--- 3. Milestones.
+-- 2. Milestones.
 check(ST.MilestoneStep(40 * G) == 10 * G, "under 100g milestones are every 10g")
 check(ST.MilestoneStep(450 * G) == 100 * G, "at 450g they are every 100g")
 check(ST.MilestoneStep(1000 * G) == 1000 * G, "at 1,000g every 1,000g")
@@ -93,59 +89,37 @@ check(ST.Crossed(95 * G, 104 * G) == 100 * G, "passing 100g is a milestone")
 check(ST.Crossed(101 * G, 150 * G) == nil, "no round number passed, no milestone")
 check(ST.Crossed(150 * G, 100 * G) == nil, "going down is never a milestone")
 
--- 4. The count-up's pace.
-check(ST.PerStep(3) == ST.LEAST_A_BEAT, "a short list goes a few a beat")
-local steps = math.ceil(200 / ST.PerStep(200))
-check(steps * ST.BEAT <= ST.REVEAL_MOST + 1e-9, "a long list still finishes in time")
+-- 3. The line under the number.
+check(ST.UnderText(0, 0) == "", "nothing listed and nothing left says nothing")
+check(ST.UnderText(10 * G, 0) == "all listed", "an empty list after listing says all listed")
+check(ST.UnderText(10 * G, 30 * G) == "of 40g", "of is listed plus left")
+check(ST.MoneyText(0) == "0g", "nothing shows as 0g")
 
--- 5. Since the last scan.
-check(ST.DeltaText(100 * G, 112 * G) == "Up 12g since last scan", "up")
-check(ST.DeltaText(100 * G, 96 * G) == "Down 4g since last scan", "down")
-check(ST.DeltaText(100 * G, 100 * G + 30) == nil, "under a gold says nothing")
-check(ST.DeltaText(nil, 5 * G) == nil, "no scan before, nothing to compare")
-
--- 6. On by default.
-check(ST:IsOn(), "on while never set")
+-- 4. The switch.
+check(ST:IsOn(), "on by default")
 settings.saleTotal = false
 check(not ST:IsOn(), "off when unticked")
 settings.saleTotal = nil
 
--- 7. A scan, counted up.
-ST:Build(Stub(), Stub(), Stub())
-check(ST:SetShown(true), "the band shows on Sell")
-settings.saleTotalLast = 10 * G
-settings.saleTotalBest = 12 * G
-
-local lines = {
-    { itemID = 1, postTotal = 6 * G },
-    { itemID = 2, postTotal = 4 * G },
-    { itemID = 3, postTotal = 3 * G },
-}
-ST:Progress(0.5)
-ST:Update(lines, 0)
-check(ST.status.text == "Pricing 2 of 3", "while scanning it counts what is priced")
-check(ST.shown == 13 * G, "the first look shows the total as it stands")
-
-lines[1].postTotal = 9 * G
-ST:ScanFinished()
-ST:Update(lines, 1)
-check(ST.shown == 13 * G, "the rise waits for the count-up")
-check(ST.ticking, "the count-up has started")
-ST:Tick(1)
-check(ST.shown == 16 * G, "the rise lands")
-ST:Tick(1)
-check(not ST.ticking, "it stops once all are in")
-check(ST.shown == 16 * G, "it ends on the true total")
-check(settings.saleTotalLast == 16 * G and settings.saleTotalBest == 16 * G, "the total and the best are kept")
-check(ST.delta.text == "Up 6g since last scan", "it says how far it moved")
-check(ST.best.shown, "a new best is told")
-check(ST.status.text == "3 of 3 priced", "all priced")
-
--- 8. No scan: straight to the new total, nothing kept.
-table.remove(lines, 2)
-ST:Update(lines, 0)
-check(ST.shown == 12 * G and not ST.ticking, "a listing rolls straight down")
-check(settings.saleTotalLast == 16 * G, "only a scan moves the kept total")
+-- 5. A visit.
+local bar = Stub()
+ST:Attach(bar, Stub())
+check(ST.counter and ST.counter:IsShown(), "the counter shows in the header")
+check(ST:Width() > 0, "it takes room the header text gives way to")
+ST:Update({ { itemID = 1, unitPrice = 100 * G, postQuantity = 1 },
+            { itemID = 2, unitPrice = 20 * G, postQuantity = 1 } }, 0)
+check(ST.left == 114 * G and ST.count == 2, "the Sell list's net is what is left")
+ST:NoteListed(1, 1, 100 * G)
+check(ST.listed == 95 * G and ST.listings == 1, "a listing counts up by its net")
+check(ST.left == 19 * G, "and comes off what is left")
+check(ST.number.text ~= nil, "the number is drawn")
+ST:NewVisit()
+check(ST.listed == 0 and ST.listings == 0, "a new visit starts at 0")
+check(settings.saleTotalBest == nil and settings.saleTotalLast == nil, "nothing is saved")
+settings.saleTotal = false
+check(ST:SetShown(true) == false and not ST.counter:IsShown(), "unticked, the counter hides")
+check(ST:Width() == 0, "hidden, it takes no room")
+settings.saleTotal = nil
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 print("test_saletotal: ok")
