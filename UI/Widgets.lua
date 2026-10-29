@@ -1494,6 +1494,9 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
 
         button.key = tab.key
         button.fixedWidth = tab.width
+        -- A tab marked right sits flush with the strip's right end (Settings
+        -- is always last there, the owner 2026-10-27).
+        button.right = tab.right and true or false
 
         button:SetScript("OnClick", function(self)
             strip:Select(self.key)
@@ -1558,7 +1561,33 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
         x = x + width + gap
     end
 
-    strip:SetWidth(math.max(x, 1))
+    -- Tabs marked right move to the far end of the strip, keeping their
+    -- order, when the strip has room for them. Again when the window it
+    -- hangs from changes width (strip:SetRoom).
+    local packed = math.max(x, 1)
+    local function PlaceRight(width)
+        local full = packed
+        if hanging and type(width) == "number" and width > packed then
+            local right = width
+            for index = #strip.tabs, 1, -1 do
+                local button = strip.tabs[index]
+                if button.right then
+                    right = right - button.span
+                    button.left = right
+                    right = right - gap
+                    full = width
+                end
+            end
+        end
+        strip:SetWidth(full)
+    end
+    PlaceRight(opts.width)
+    for _, button in ipairs(strip.tabs) do
+        if button.right and hanging then
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", button.left, 0)
+        end
+    end
 
     -- One gold line for the whole strip, gliding to the tab picked, with a
     -- soft glow over it: Farmer's tabs do the same. Both ride on a layer of
@@ -1607,6 +1636,16 @@ function Widgets.CreateTabStrip(parent, tabs, onSelect, opts)
             line:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", x - button.left, 0)
             line:SetWidth(math.max(1, width))
         end)
+    end
+
+    --- The strip's room changed (its window grew): the tabs marked right
+    --- move to its new right end.
+    function strip:SetRoom(width)
+        PlaceRight(width)
+        local picked = self.selected
+        self.selected = false
+        self.lineX, self.lineWidth = false, false
+        if picked then self:Select(picked) end
     end
 
     function strip:Select(key)

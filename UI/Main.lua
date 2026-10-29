@@ -298,7 +298,8 @@ function UI:BuildTabs()
 
     local definitions = {}
     for _, tab in ipairs(self.tabOrder) do
-        definitions[#definitions + 1] = { key = tab.key, text = tab.text }
+        -- Settings is always last, flush right (the owner, 2026-10-27).
+        definitions[#definitions + 1] = { key = tab.key, text = tab.text, right = tab.key == "settings" }
     end
 
     -- Hung below the window, as the game's own windows wear their tabs. The
