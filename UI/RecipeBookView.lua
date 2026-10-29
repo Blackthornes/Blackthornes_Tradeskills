@@ -678,18 +678,18 @@ RecipeBookView._widgets = main._widgets
 --------------------------------------------------------------------------------
 
 -- The switch's height; both views start below it.
-local SWITCH_HEIGHT = 22
+local SWITCH_HEIGHT = 30
 
---- A tab's own view and Recipes to learn behind a switch at its top, drawn
---- like the Characters tab's: the view showing is lit gold and underlined,
---- the other waits in grey and lights under the mouse.
+--- A tab's own view and Recipes to learn behind small tabs at its top
+--- (`Widgets.CreateViewTabs`, the house's view tabs, 2026-10-29): the view
+--- showing opens into the list, the others wait as dark gold metal.
 --
 -- @param spec.mainKey, spec.mainText, spec.mainTip  the tab's own view
 -- @param spec.buildMain(view), spec.refreshMain()  how the tab fills and
 --   redraws its own view
 -- @param spec.learn  the copy of Recipes to learn to show (a NewView), or
 --   the Profit tab's when nil
--- @param spec.learnText  the learn view's name, when not RECIPES TO LEARN
+-- @param spec.learnText  the learn view's name, when not Recipes to Learn
 -- @param spec.extras  optional views shown between the two, each
 --   { key, text, tip (optional), last (optional), build(view), refresh() };
 --   one marked last comes after the learn view instead (Shuffles, 2026-10-25)
@@ -698,7 +698,7 @@ function RecipeBookView.WithSwitch(spec)
     local learn = spec.learn or main
     local extras = spec.extras or {}
     local tab = { view = spec.mainKey }
-    local views, parts
+    local views, strip
 
     local function Extra(key)
         for _, extra in ipairs(extras) do
@@ -728,11 +728,7 @@ function RecipeBookView.WithSwitch(spec)
             view:SetShown(viewKey == tab.view)
         end
 
-        for _, part in ipairs(parts) do
-            local active = part.key == tab.view
-            part.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
-            if part.underline then part.underline:SetShown(active) end
-        end
+        if strip then strip:Select(tab.view, true) end
 
         RefreshView()
     end
@@ -746,91 +742,51 @@ function RecipeBookView.WithSwitch(spec)
                 definitions[#definitions + 1] = { key = extra.key, text = extra.text, tip = extra.tip }
             end
         end
-        definitions[#definitions + 1] = { key = "learn", text = spec.learnText or L["RECIPES TO LEARN"],
+        definitions[#definitions + 1] = { key = "learn", text = spec.learnText or L["Recipes to Learn"],
             tip = L["Recipes you have not learned, and what each is worth"] }
         for _, extra in ipairs(extras) do
             if extra.last then
                 definitions[#definitions + 1] = { key = extra.key, text = extra.text, tip = extra.tip }
             end
         end
-        local built, previous = {}, nil
 
-        for _, definition in ipairs(definitions) do
-            local button = CreateFrame("Button", nil, container)
-            button:SetHeight(18)
-            local level = container:GetFrameLevel()
-            button:SetFrameLevel((type(level) == "number" and level or 1) + 5)
+        local made = Widgets.CreateViewTabs(container, definitions, function(key)
+            tab.ShowView(key)
+        end)
+        made:SetPoint("TOPLEFT", container, "TOPLEFT", 8, -4)
+        made:SetPoint("RIGHT", container, "RIGHT", -8, 0)
+        local level = container:GetFrameLevel()
+        made:SetFrameLevel((type(level) == "number" and level or 1) + 5)
 
-            -- Kept beside the button rather than on it.
-            local part = { key = definition.key }
-
-            part.label = Theme.CreateLabel(button, "tiny", "muted")
-            part.label:SetPoint("LEFT", 0, 0)
-            part.label:SetText(definition.text)
-            local width = Theme.TextWidth and Theme.TextWidth(part.label)
-            button:SetWidth((type(width) == "number" and width or 100) + 4)
-
-            local underline = button:CreateTexture(nil, "OVERLAY")
-            if underline then
-                underline:SetPoint("BOTTOMLEFT", 0, 1)
-                underline:SetPoint("BOTTOMRIGHT", -4, 1)
-                underline:SetHeight(1)
-                underline:SetColorTexture(Theme.Unpack("accent"))
-                underline:Hide()
-                part.underline = underline
-            end
-
-            if previous then
-                button:SetPoint("LEFT", previous, "RIGHT", 14, 0)
-            else
-                button:SetPoint("TOPLEFT", 8, -4)
-            end
-
-            button:SetScript("OnClick", function() tab.ShowView(part.key) end)
-            button:SetScript("OnEnter", function(self)
-                if part.key ~= tab.view then
-                    part.label:SetTextColor(Theme.Unpack("text"))
-                end
-                -- A view with no tip shows none (Road to 300, 2026-10-20).
-                if definition.tip then
+        -- A view's tip shows on its tab's hover; a view with none shows
+        -- none (Road to 300, 2026-10-20).
+        for index, button in ipairs(made.tabs) do
+            local tip = definitions[index].tip
+            if tip then
+                local enter, leave = button:GetScript("OnEnter"), button:GetScript("OnLeave")
+                button:SetScript("OnEnter", function(self)
+                    if enter then enter(self) end
                     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-                    GameTooltip:SetText(definition.tip, 1, 1, 1)
+                    GameTooltip:SetText(tip, 1, 1, 1)
                     GameTooltip:Show()
-                end
-            end)
-            button:SetScript("OnLeave", function()
-                if part.key ~= tab.view then
-                    part.label:SetTextColor(Theme.Unpack("muted"))
-                end
-                GameTooltip:Hide()
-            end)
-
-            built[#built + 1] = part
-            previous = button
+                end)
+                button:SetScript("OnLeave", function(self)
+                    if leave then leave(self) end
+                    GameTooltip:Hide()
+                end)
+            end
         end
 
-        -- A tick box at the right end of the switch, for every view
-        -- (Show Equipment Upgrades, 2026-10-17); the rule stops short of it.
+        -- A tick box at the right end of the tabs, for every view (Show
+        -- Equipment Upgrades, 2026-10-17).
         local corner = spec.corner and spec.corner(container)
         if corner then
-            corner:SetPoint("RIGHT", container, "TOPRIGHT", -8, -13)
-            local level = container:GetFrameLevel()
-            corner:SetFrameLevel((type(level) == "number" and level or 1) + 5)
+            corner:SetPoint("RIGHT", container, "TOPRIGHT", -8, -15)
+            local cornerLevel = container:GetFrameLevel()
+            corner:SetFrameLevel((type(cornerLevel) == "number" and cornerLevel or 1) + 6)
         end
 
-        local rule = container:CreateTexture(nil, "ARTWORK")
-        if rule then
-            rule:SetColorTexture(Theme.Unpack("border"))
-            rule:SetHeight(1)
-            rule:SetPoint("LEFT", previous, "RIGHT", 6, 0)
-            if corner and corner:IsShown() then
-                rule:SetPoint("RIGHT", corner, "LEFT", -10, 0)
-            else
-                rule:SetPoint("RIGHT", container, "RIGHT", -8, 0)
-            end
-        end
-
-        return built
+        return made
     end
 
     function tab.Build(container)
@@ -853,7 +809,7 @@ function RecipeBookView.WithSwitch(spec)
         learn.Build(made.learn)
 
         views = made
-        parts = BuildSwitch(container)
+        strip = BuildSwitch(container)
 
         tab.ShowView(tab.view)
     end

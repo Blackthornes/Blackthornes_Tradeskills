@@ -342,6 +342,8 @@ UI.MOVED_TABS = {
     -- Posting is the drawer's Sell list now; a window left on the old Post
     -- tab opens on Profit.
     post = "profit",
+    -- Stats is the Prices tab's Stats view now (2026-10-29).
+    stats = "prices",
 }
 
 function UI:SelectTab(key)

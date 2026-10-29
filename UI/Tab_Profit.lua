@@ -2261,7 +2261,7 @@ end
 -- Without that file (the tests load this one alone) the tab is the crafts.
 local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     mainKey = "crafts",
-    mainText = L["MY CRAFTS"],
+    mainText = L["My Crafts"],
     mainTip = L["The crafts you know, by profit"],
     buildMain = BuildCrafts,
     refreshMain = Refresh,
@@ -2275,12 +2275,12 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     extras = (function()
         local list = {}
         if ns.YourTimeView then
-            list[#list + 1] = { key = "time", text = L["YOUR TIME"],
+            list[#list + 1] = { key = "time", text = L["Your Time"],
                 tip = L["Farm it, sell the mats, or buy them: which pays best for your time"],
                 build = ns.YourTimeView.Build, refresh = ns.YourTimeView.Refresh }
         end
         if ns.ShuffleView then
-            list[#list + 1] = { key = "shuffles", text = L["SHUFFLES"], last = true,
+            list[#list + 1] = { key = "shuffles", text = L["Shuffles"], last = true,
                 build = ns.ShuffleView.Build, refresh = ns.ShuffleView.Refresh }
         end
         return list[1] and list or nil
