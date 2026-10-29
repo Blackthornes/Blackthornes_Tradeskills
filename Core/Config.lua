@@ -235,9 +235,10 @@ local DEFAULTS = {
         -- between sessions this is what makes the addon self-sufficient.
         autoScan = true,
 
-        -- The Sale Total on the drawer's Sell view, counting up after a scan
-        -- (UI/SaleTotal.lua, the owner 2026-10-28: on for everyone). Never
-        -- rename it, nor saleTotalBest and saleTotalLast, kept beside it.
+        -- The Sale Total in the drawer's header, counting up as you list
+        -- (UI/SaleTotal.lua, the owner 2026-10-28: on for everyone; counts
+        -- up since 2026-10-29). Never rename it, nor saleTotalBest and
+        -- saleTotalLast, left in the save unread.
         saleTotal = true,
 
         -- Read prices out of the searches the player runs in Blizzard's own
