@@ -2173,7 +2173,7 @@ local function BuildCrafts(container)
 
     -- When there is simply no data, the fix is one click away; put it here
     -- rather than making the player go hunting for the header.
-    local emptyScan = Widgets.CreateButton(container, L["Scan auctions"], function()
+    local emptyScan = Widgets.CreateButton(container, L["Scan Auctions"], function()
         UI:TriggerScan()
     end, { width = 130, height = 26, primary = true })
     GrowToFit(emptyScan)

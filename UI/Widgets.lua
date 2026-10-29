@@ -1716,8 +1716,10 @@ end
 -- Sortable column headings
 --------------------------------------------------------------------------------
 
--- Blizzard's own list sort arrow, pointing down; flipped for smallest first.
-local SORT_ARROW = [[Interface\Buttons\UI-SortArrow]]
+-- The house's gold sort arrow (Media/Frame/SortArrow.tga, drawn by
+-- tools/make_frame_art.py, the same in every addon), pointing down; flipped
+-- for smallest first.
+local SORT_ARROW = [[Interface\AddOns\Blackthornes_TS\Media\Frame\SortArrow]]
 
 -- Room a heading keeps beside its words for the sort arrow: 8 wide, 2 off
 -- the words.

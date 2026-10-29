@@ -218,15 +218,11 @@ function UI:BuildHeader()
     rule:SetHeight(1)
     Theme.SetGradientAlpha(rule, "HORIZONTAL", "accent", 0.6, 0.05)
 
-    local status = Theme.CreateLabel(header, "small", "muted")
-    status:SetPoint("LEFT", header, "LEFT", 58, -6)
-    self.statusLabel = status
-
-    -- The installed version, small and faint under that line, so a player
+    -- The installed version, small and faint past the portrait, so a player
     -- can see at a glance which one they run. The header is on every tab,
     -- Settings included.
     local version = Theme.CreateLabel(header, "tiny", "dim")
-    version:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 58, 4)
+    version:SetPoint("LEFT", header, "LEFT", 58, -6)
     version:SetText(ns.VersionLabel())
     self.versionLabel = version
 
@@ -241,13 +237,34 @@ function UI:BuildHeader()
     -- The button stays clickable even when a scan is not currently possible:
     -- a greyed-out control that cannot say why is worse than one that tells
     -- you to open the auction house.
-    local scanButton = Widgets.CreateButton(header, L["Scan auctions"], function()
+    local scanButton = Widgets.CreateButton(header, L["Scan Auctions"], function()
         UI:TriggerScan()
     end, { width = SCAN_BUTTON_WIDTH, height = 24, primary = true })
     FitScanButton(scanButton)
 
     scanButton:SetPoint("TOPRIGHT", close, "TOPLEFT", -8, -1)
     self.scanButton = scanButton
+
+    -- How old the scan is, a small chip beside the scan button (the house
+    -- kit, 2026-10-29: one header row). What the addon knows, items priced
+    -- and recipes known, is on its hover.
+    local status
+    if Widgets.CreateChip then
+        status = Widgets.CreateChip(header, "", nil, { height = 20 })
+        status:SetPoint("RIGHT", scanButton, "LEFT", -8, 0)
+        status:HookScript("OnEnter", function(self)
+            local tip = rawget(self, "tip")
+            if not tip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(tip, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        status:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    else
+        status = Theme.CreateLabel(header, "small", "muted", "RIGHT")
+        status:SetPoint("RIGHT", scanButton, "LEFT", -8, 0)
+    end
+    self.statusLabel = status
 
     -- Inline explanation, so the reason appears in the window rather than only
     -- in the chat frame.
@@ -382,8 +399,9 @@ function UI:UpdateHeader()
             or L.Format("scanned %s", ago)
     end
 
-    self.statusLabel:SetText(L.Format("%s items priced  ·  %s recipes known  ·  %s",
-        Util.Comma(priceCount), Util.Comma(recipeCount), scanText))
+    self.statusLabel:SetText(scanText)
+    self.statusLabel.tip = L.Format("%s items priced  ·  %s recipes known  ·  %s",
+        Util.Comma(priceCount), Util.Comma(recipeCount), scanText)
 
     -- The scan button stays live and explains itself rather than greying out
     -- into something that looks broken.
@@ -391,7 +409,7 @@ function UI:UpdateHeader()
     if scanner.isScanning or scanner.scanQueued or scanner.browseQueued then
         -- A scan waiting its turn is cancelled by this button too, so it
         -- says so rather than offering to start one.
-        self.scanButton:SetText(L["Cancel scan"])
+        self.scanButton:SetText(L["Cancel Scan"])
         FitScanButton(self.scanButton)
         self.scanButton.tooltipText = L["Stop the running scan"]
         -- The progress ("scanning... 42%") lives here while a scan runs, and
@@ -406,7 +424,7 @@ function UI:UpdateHeader()
             end
         end
     else
-        self.scanButton:SetText(L["Scan auctions"])
+        self.scanButton:SetText(L["Scan Auctions"])
         FitScanButton(self.scanButton)
 
         local allowed, reason = ns.Scanner:CanFullScan()

@@ -1461,13 +1461,13 @@ L["No crate matching \"%s\"."] = "Ни один ящик не подходит �
 L["WAYLAID CRATE"] = "WAYLAID CRATE"
 
 -- UI/Main.lua
-L["Scan auctions"] = "Сканировать аукцион"
+L["Scan Auctions"] = "Сканировать аукцион"
 L["cannot scan right now"] = "сейчас сканировать нельзя"
 L["never scanned"] = "ни разу не сканировалось"
 L["scanned %s (stopped at the page limit)"] = "просканировано %s (остановлено на пределе страниц)"
 L["scanned %s"] = "просканировано %s"
 L["%s items priced  ·  %s recipes known  ·  %s"] = "предметов с ценой: %s  ·  рецептов известно: %s  ·  %s"
-L["Cancel scan"] = "Отменить сканирование"
+L["Cancel Scan"] = "Отменить сканирование"
 L["Stop the running scan"] = "Остановить идущее сканирование"
 L["waiting to start..."] = "жду запуска..."
 L["scanning..."] = "сканирую..."
