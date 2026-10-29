@@ -25,7 +25,7 @@ local COLUMNS = {
     -- Learn next (2026-10-12): where an unlearned recipe is learned, what
     -- it costs, and a Show the way button, all lined up at the far right.
     -- Shown only while Learn next is ticked.
-    { key = "way",    label = "", menuText = L["Show the way"], width = 84, button = "way", learnOnly = true },
+    { key = "way",    label = "", menuText = L["Show the Way"], width = 84, button = "way", learnOnly = true },
     { key = "where",  label = L["WHERE"], width = 120, justify = "LEFT", learnOnly = true },
     { key = "learn",  label = L["LEARN"], width = 50, money = true, learnOnly = true },
     { key = "make",   label = L["MAKE"], width = 40, justify = "CENTER" },
@@ -294,7 +294,7 @@ local function CreateRow(row)
     row.cells = {}
     for _, column in ipairs(COLUMNS) do
         if column.button == "way" then
-            row.wayButton = Widgets.CreateButton(row, L["Show the way"], function()
+            row.wayButton = Widgets.CreateButton(row, L["Show the Way"], function()
                 if row.data and row.data.learnNext then ns.LearnNext:ShowTheWay(row.data) end
             end, { width = column.width, height = 16,
                    tooltip = L["Put a pin on your map where this recipe is learned"] })
@@ -832,7 +832,7 @@ local function BuildDetail(parent)
         anchor = learn.materials[index]
     end
 
-    learn.wayButton = Widgets.CreateButton(learn, L["Show the way"], function()
+    learn.wayButton = Widgets.CreateButton(learn, L["Show the Way"], function()
         if state.selected and state.selected.learnNext then ns.LearnNext:ShowTheWay(state.selected) end
     end, { width = 120, height = 24, primary = true,
            tooltip = L["Put a pin on your map where this recipe is learned"] })
@@ -1286,7 +1286,7 @@ end
 local function Build(container)
     -- Before any row or heading is laid out: they read these widths. The
     -- Show the way column is as wide as its button's words.
-    local wayWidth = Theme.MeasureText and Theme.MeasureText("small", L["Show the way"])
+    local wayWidth = Theme.MeasureText and Theme.MeasureText("small", L["Show the Way"])
     if type(wayWidth) == "number" then COLUMNS[1].width = math.max(COLUMNS[1].width, math.ceil(wayWidth + 16)) end
     if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 

@@ -712,7 +712,7 @@ local function BuildGoal(view)
     local heading = Theme.CreateHeading(goal, L["YOUR FAVOR GOAL"])
     heading:SetPoint("TOPLEFT", 8, -4)
 
-    goal.addList = Widgets.CreateButton(goal, L["Add to a List"], function()
+    goal.addList = Widgets.CreateButton(goal, L["Add to List"], function()
         local index, why = ns.MerchantsFavor:AddToList()
         if not index then
             if why then ns.Print(why) end

@@ -1,5 +1,5 @@
 -- Blackthornes -- UI/HouseKit.lua
--- Three small pieces every Blackthornes window shares (the owner said build
+-- Small pieces every Blackthornes window shares (the owner said build
 -- them all, 2026-10-29, from the unified look's mockups):
 --
 --   * View tabs: small tabs that sit on top of a list, one a view
@@ -10,6 +10,8 @@
 --   * Chips: the house filter chip, for "which kinds" on a filter row.
 --   * The empty block: the addon's emblem faint, one short line, and a gold
 --     button when there is a next step ("Clear Search", "Show All").
+--   * Panel gems: the gold fold gem and red close gem for panels that stay
+--     up while you play (Farmer's Kills & Loot, Equipment's Upgrade Hunts).
 --
 -- The same file in all five addons (a fix to it belongs in all five). It
 -- reads only the shared parts of each addon's Theme (Fill, Border,
@@ -281,12 +283,114 @@ function HouseKit.CreateEmpty(parent, opts)
     return block
 end
 
+--------------------------------------------------------------------------------
+-- Panel gems
+--------------------------------------------------------------------------------
+
+local MEDIA = ([[Interface\AddOns\%s\Media\Frame\]]):format(ADDON)
+HouseKit.PANEL_GEM = 16
+
+local function Text(key)
+    local L = ns.L
+    return L and L[key] or key
+end
+
+local function GemButton(parent, art, glowKey, size)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(size, size)
+    local glow = button:CreateTexture(nil, "BACKGROUND")
+    pcall(glow.SetTexture, glow, MEDIA .. "Glow")
+    glow:SetPoint("CENTER")
+    glow:SetSize(size * 2.2, size * 2.2)
+    if glow.SetVertexColor then pcall(glow.SetVertexColor, glow, Color(glowKey)) end
+    if glow.SetBlendMode then pcall(glow.SetBlendMode, glow, "ADD") end
+    local gem = button:CreateTexture(nil, "ARTWORK")
+    pcall(gem.SetTexture, gem, MEDIA .. art)
+    gem:SetAllPoints(button)
+    local lit = button:CreateTexture(nil, "ARTWORK", nil, 1)
+    pcall(lit.SetTexture, lit, MEDIA .. art)
+    lit:SetAllPoints(button)
+    if lit.SetBlendMode then pcall(lit.SetBlendMode, lit, "ADD") end
+    local function Light(p)
+        glow:SetAlpha(0.25 + 0.55 * p)
+        lit:SetAlpha(0.45 * p)
+    end
+    Light(0)
+    button.Light = Light
+    button.glow = glow
+    return button
+end
+
+--- A panel's fold gem and close gem, the house pair, for panels that stay up
+--- while you play (they are not dressed windows, so FoldWindow can't take
+--- them). opts: onFold(folded), onClose, size. Returns { fold, close } with
+--- :SetFolded(on). The close gem sits at the header's right, the fold gem
+--- left of it.
+function HouseKit.CreatePanelGems(header, opts)
+    opts = opts or {}
+    local size = opts.size or HouseKit.PANEL_GEM
+    local gems = { folded = false }
+
+    local close = GemButton(header, "CloseGem", "loss", size)
+    close:SetPoint("RIGHT", header, "RIGHT", -5, 0)
+    gems.close = close
+
+    local fold = GemButton(header, "FoldGem", "accent", size)
+    fold:SetPoint("RIGHT", close, "LEFT", -4, 0)
+    local function Bar(w, h)
+        local bar = fold:CreateTexture(nil, "OVERLAY", nil, 2)
+        bar:SetColorTexture(0.12, 0.08, 0.03, 1)
+        bar:SetSize(w, h)
+        bar:SetPoint("CENTER", 0, 0)
+        return bar
+    end
+    fold.across = Bar(math.floor(size * 0.55), 2)
+    fold.down = Bar(2, math.floor(size * 0.55))
+    fold.down:Hide()
+    gems.fold = fold
+
+    local function Tip(button, text)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(button, "ANCHOR_TOP")
+        GameTooltip:SetText(text, 1, 1, 1)
+        GameTooltip:Show()
+    end
+    local function Hover(button, on, text)
+        if ns.Motion and type(ns.Motion.Blend) == "function" then
+            ns.Motion:Blend(button, "hover", on and 1 or 0, on and 0.12 or 0.18, button.Light)
+        else
+            button.Light(on and 1 or 0)
+        end
+        if on then Tip(button, text()) elseif GameTooltip then GameTooltip:Hide() end
+    end
+    fold:SetScript("OnEnter", function(self)
+        Hover(self, true, function()
+            return gems.folded and Text("Expand this window") or Text("Collapse this window")
+        end)
+    end)
+    fold:SetScript("OnLeave", function(self) Hover(self, false) end)
+    fold:SetScript("OnClick", function()
+        gems:SetFolded(not gems.folded)
+        if opts.onFold then opts.onFold(gems.folded) end
+    end)
+    close:SetScript("OnEnter", function(self) Hover(self, true, function() return Text("Close") end) end)
+    close:SetScript("OnLeave", function(self) Hover(self, false) end)
+    close:SetScript("OnClick", function() if opts.onClose then opts.onClose() end end)
+
+    function gems:SetFolded(on)
+        self.folded = on and true or false
+        if self.folded then self.fold.down:Show() else self.fold.down:Hide() end
+    end
+    return gems
+end
+
 -- Hung on Widgets, so each addon calls them the way it calls the rest.
 local Widgets = ns.Widgets
 if Widgets then
     Widgets.CreateViewTabs = Widgets.CreateViewTabs or HouseKit.CreateViewTabs
     Widgets.CreateEmpty = Widgets.CreateEmpty or HouseKit.CreateEmpty
     Widgets.CreateChip = Widgets.CreateChip or HouseKit.CreateChip
+    Widgets.CreatePanelGems = Widgets.CreatePanelGems or HouseKit.CreatePanelGems
 end
 
 return HouseKit

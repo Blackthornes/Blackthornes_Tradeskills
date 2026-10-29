@@ -13,6 +13,7 @@
 --      second note with the same key replaces the first.
 --   6. A shared choice reaches every other addon, never comes back, and an
 --      addon that raises does not stop the rest.
+--   7. Panel gems fold and close, and say which by a bar or a plus.
 
 local NAMES = { "CreateFrame", "UIParent", "GetTime", "C_Timer", "GetCursorPosition",
     "BlackthornesNotice", "BlackthornesSharedChoices" }
@@ -180,6 +181,24 @@ local took = ns.SharedChoices:Changed("textSize", "large")
 assert(took == 1, "one other addon took it, the broken one skipped")
 assert(#heard == 1 and heard[1] == "two:textSize=large", "it never comes back")
 assert(ns.SharedChoices:Changed("nothing", 1) == 0, "only the shared choices go")
+
+-- 7. Panel gems.
+local header = Object(UIParent)
+local folds, closes = {}, 0
+local gems = ns.Widgets.CreatePanelGems(header, {
+    onFold = function(on) folds[#folds + 1] = on end,
+    onClose = function() closes = closes + 1 end,
+})
+assert(gems.fold and gems.close, "a fold gem and a close gem")
+assert(not gems.fold.down.shown, "open, the fold gem shows a bar")
+gems.fold:GetScript("OnClick")(gems.fold)
+assert(folds[1] == true and gems.folded and gems.fold.down.shown, "a click folds and shows a plus")
+gems.fold:GetScript("OnClick")(gems.fold)
+assert(folds[2] == false and not gems.fold.down.shown, "again opens")
+gems.close:GetScript("OnClick")(gems.close)
+assert(closes == 1, "the close gem closes")
+gems:SetFolded(true)
+assert(gems.folded and #folds == 2, "SetFolded calls nothing back")
 
 for _, name in ipairs(NAMES) do _G[name] = saved[name] end
 print("test_housekit: ok")
