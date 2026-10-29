@@ -73,20 +73,26 @@ end
 
 local widgets = {}
 
--- The row hint, as much of it as fits beside the count on its left.
-local HINT_TEXTS = {
-    L["Right-click a row to queue one, Shift-click to search the auction house"],
-    L["Right-click to queue, Shift-click to search"],
-    L["Right-click a row to queue one"],
-}
-
-local function FitHint()
-    local hint, count, list = widgets.hint, widgets.countLabel, widgets.list
-    if not (hint and count and list and Theme.TextWidth and Theme.FitText) then return end
-    local listWidth = list:GetWidth()
-    local used = Theme.TextWidth(count) or 0
-    local room = type(listWidth) == "number" and listWidth > 0 and (listWidth - used - 24) or nil
-    Theme.FitText(hint, HINT_TEXTS, room)
+-- The row's menu (a right-click, the house kit, 2026-10-29), the usual
+-- one first: a recipe to learn shows the way, one you know is queued.
+local function RowMenu(entry)
+    if entry.heading then return nil end
+    local lines = {}
+    if entry.learnNext then
+        lines[1] = { text = L["Show the Way"], run = function() ns.LearnNext:ShowTheWay(entry) end }
+    else
+        lines[1] = { text = L["Queue One"], run = function()
+            ns.Queue:Add(entry.recipeID, 1)
+            ns.Print(L.Format("queued %dx %s", 1, entry.name or L["craft"]))
+        end }
+    end
+    local itemID = Widgets.RowItemID(entry)
+    if itemID and ns.Scanner and ns.Scanner.isAuctionHouseOpen then
+        lines[#lines + 1] = { text = L["Search the Auction House"], run = function()
+            ns.UI:SearchAuctionHouse(itemID)
+        end }
+    end
+    return lines
 end
 
 -- Defined with the detail panel, used by the controls built inside it.
@@ -1260,7 +1266,6 @@ local function Refresh()
     if #rows > 0 and unread == #rows then
         widgets.countLabel:SetText(L["Open this profession once so the skill up colours can be read."])
     end
-    FitHint()
 
     -- Keep the detail panel in step with the fresh numbers.
     if state.selected and state.selected.learnNext then
@@ -1443,6 +1448,8 @@ local function Build(container)
 
         onEnter = function(row, entry) ShowRowTooltip(row, entry) end,
         onLeave = function() GameTooltip:Hide() end,
+        clickHint = function(entry) return not entry.heading and L["Right-click for more."] or nil end,
+        menu = RowMenu,
 
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
@@ -1451,16 +1458,7 @@ local function Build(container)
         end,
 
         onClick = function(entry, _, mouseButton)
-            if entry.heading then return end
-            if entry.learnNext and mouseButton == "RightButton" then
-                ns.LearnNext:ShowTheWay(entry)
-                return
-            end
-            if mouseButton == "RightButton" then
-                ns.Queue:Add(entry.recipeID, 1)
-                ns.Print(L.Format("queued %dx %s", 1, entry.name or L["craft"]))
-                return
-            end
+            if entry.heading or mouseButton == "RightButton" then return end
 
             state.selected = entry
             UpdateDetail(entry)
@@ -1492,11 +1490,6 @@ local function Build(container)
     local countLabel = Theme.CreateLabel(container, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)
     widgets.countLabel = countLabel
-
-    local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
-    hint:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)
-    hint:SetText(HINT_TEXTS[1])
-    widgets.hint = hint
 
     local detail = BuildDetail(container)
     detail:SetPoint("TOPRIGHT", container, "TOPRIGHT", -8, -40)

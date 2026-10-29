@@ -1688,6 +1688,10 @@ end
 --   updateRow  function(row, data, index) -- fill a row with data
 --   onClick    function(data, index, mouseButton)
 --   onEnter / onLeave  function(row, data)
+--   clickHint  text, or function(data) giving it: what a click does, the
+--              last line, dim, of the row's hover (the house kit, 2026-10-29)
+--   menu       function(data) giving { { text, run }, ... }: a right-click
+--              opens the house row menu with these, the usual one first
 --   isSelected function(data) -- true for the row the detail pane is showing,
 --              which is then drawn lit with a gold edge
 --- Light a scrollbar's thumb gold while the mouse is over the bar.
@@ -2143,6 +2147,32 @@ function Widgets.ItemShiftClick(itemID, link)
     return Widgets.LinkToChat(itemID, link)
 end
 
+--- What a click does, as the last line of a row's hover, dim (the house
+--- kit, 2026-10-29: footers hold only a count and the version).
+function Widgets.AddClickHint(owner, hint, data)
+    if type(hint) == "function" then
+        local ok, text = pcall(hint, data)
+        hint = ok and text or nil
+    end
+    if type(hint) ~= "string" or hint == "" then return end
+    if not (GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(owner)) then return end
+    GameTooltip:AddLine(hint, Theme.Unpack("dim"))
+    GameTooltip:Show()
+end
+
+--- A right-click on a row opens the house row menu with the row's actions,
+--- the usual one first.
+-- @return true when a menu opened
+function Widgets.OpenRowMenu(data, menu)
+    if not (ns.RowMenu and ns.RowMenu.Open) or type(menu) ~= "function" then return false end
+    local ok, lines = pcall(menu, data)
+    if not ok or type(lines) ~= "table" or #lines == 0 then return false end
+    if GameTooltip then GameTooltip:Hide() end
+    local title = type(data) == "table" and (data.name or data.itemName) or nil
+    ns.RowMenu:Open(lines, { title = type(title) == "string" and title or nil })
+    return true
+end
+
 --- Shift-click on a list row: search the auction house for its item, or
 --- link it in chat with the house closed.
 -- @return true when the click was taken
@@ -2357,6 +2387,7 @@ function Widgets.CreateScrollList(parent, opts)
             if opts.onEnter and self.data then
                 self.tipFor = TipIdentity(self.data)
                 opts.onEnter(self, self.data)
+                Widgets.AddClickHint(self, opts.clickHint, self.data)
             end
         end)
 
@@ -2372,6 +2403,11 @@ function Widgets.CreateScrollList(parent, opts)
             -- house searches for it (2026-10-04). Right-click stays
             -- what each list already made it.
             if self.data and Widgets.ShiftClickSearch(self.data, opts.searchItem) then return end
+
+            if self.data and mouseButton == "RightButton" and opts.menu
+                and Widgets.OpenRowMenu(self.data, opts.menu) then
+                return
+            end
 
             if self.data and opts.onClick then
                 opts.onClick(self.data, self.dataIndex, mouseButton, self)

@@ -91,20 +91,22 @@ local state = {
 
 local widgets = {}
 
--- The row hint, as much of it as fits beside the count on its left.
-local HINT_TEXTS = {
-    L["Right-click a row to queue one, Shift-click to search the auction house"],
-    L["Right-click to queue, Shift-click to search"],
-    L["Right-click a row to queue one"],
-}
-
-local function FitHint()
-    local hint, count, list = widgets.hint, widgets.countLabel, widgets.list
-    if not (hint and count and list and Theme.TextWidth and Theme.FitText) then return end
-    local listWidth = list:GetWidth()
-    local used = Theme.TextWidth(count) or 0
-    local room = type(listWidth) == "number" and listWidth > 0 and (listWidth - used - 124) or nil
-    Theme.FitText(hint, HINT_TEXTS, room)
+-- The row's menu (a right-click, the house kit, 2026-10-29): queue one
+-- first, as the right-click did, then search the auction house.
+local function RowMenu(analysis)
+    local lines = {
+        { text = L["Queue One"], run = function()
+            ns.Queue:Add(analysis.recipeID, 1)
+            ns.Print(L.Format("queued 1x %s", analysis.name or L["craft"]))
+            if ns.Demand then ns.Demand:WarnIfLow(analysis.outputItemID, analysis.name) end
+        end },
+    }
+    if analysis.outputItemID and ns.Scanner and ns.Scanner.isAuctionHouseOpen then
+        lines[#lines + 1] = { text = L["Search the Auction House"], run = function()
+            ns.UI:SearchAuctionHouse(analysis.outputItemID)
+        end }
+    end
+    return lines
 end
 
 --------------------------------------------------------------------------------
@@ -1869,7 +1871,6 @@ local function Refresh()
     local ignored = ns.Profit.GetIgnored and #ns.Profit:GetIgnored() or 0
     widgets.countLabel:SetText((#data == 1 and L.Format("%d craft", #data) or L.Format("%d crafts", #data))
         .. (ignored > 0 and L.Format(", %d ignored", ignored) or ""))
-    FitHint()
 end
 
 --------------------------------------------------------------------------------
@@ -2140,6 +2141,8 @@ local function BuildCrafts(container)
         end,
 
         onLeave = function() GameTooltip:Hide() end,
+        clickHint = L["Right-click for more."],
+        menu = RowMenu,
 
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
@@ -2147,13 +2150,7 @@ local function BuildCrafts(container)
         end,
 
         onClick = function(analysis, _, mouseButton)
-            if mouseButton == "RightButton" then
-                -- Right-click is the fast path: queue one without leaving the list.
-                ns.Queue:Add(analysis.recipeID, 1)
-                ns.Print(L.Format("queued 1x %s", analysis.name or L["craft"]))
-                if ns.Demand then ns.Demand:WarnIfLow(analysis.outputItemID, analysis.name) end
-                return
-            end
+            if mouseButton == "RightButton" then return end
 
             state.selected = analysis
             UpdateDetail(ns.Profit:Analyse(analysis.recipeID, nil, Method()))
@@ -2218,11 +2215,6 @@ local function BuildCrafts(container)
     GrowToFit(queueAll)
     queueAll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 2)
     widgets.queueAll = queueAll
-
-    local hint = Theme.CreateLabel(container, "tiny", "dim", "RIGHT")
-    hint:SetPoint("RIGHT", queueAll, "LEFT", -10, 0)
-    hint:SetText(HINT_TEXTS[1])
-    widgets.hint = hint
 
     -- Detail panel
     local detail = BuildDetail(container)
