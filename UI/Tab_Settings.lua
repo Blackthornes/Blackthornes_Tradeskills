@@ -1265,7 +1265,7 @@ local function Build(outer)
     widgets.autoScan:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local saleTotalRow = CreateRow(pages.auction, 2, L["Sale Total:"],
-        L["What everything on your Sell list would bring in at today's prices, after the auction house cut."])
+        L["What the items you listed this visit should bring in, after the auction house cut. It starts again at 0 each time you open the auction house."])
 
     widgets.saleTotal = Widgets.CreateCheckbox(saleTotalRow, L["On"], function(checked)
         Config:Set("saleTotal", checked)
