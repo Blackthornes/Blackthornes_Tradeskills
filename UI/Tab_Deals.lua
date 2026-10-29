@@ -409,7 +409,7 @@ local function BuildDetail(parent)
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
     empty:SetWordWrap(true)
-    empty:SetText(L["Pick a row to see the deal"])
+    empty:SetText(L["Pick a row to see the deal."])
     detail.empty = empty
 
     return detail
@@ -1005,6 +1005,7 @@ local function Build(container)
     emptyLabel:SetWidth(380)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     local countLabel = Theme.CreateLabel(flipsView, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)

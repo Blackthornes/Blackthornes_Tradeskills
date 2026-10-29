@@ -70,7 +70,7 @@ local VIEWS = {
             { key = "odds",  label = L["ODDS"],      width = 84, justify = "CENTER" },
             { key = "where", label = L["WHERE"],     width = 150, justify = "LEFT" },
         },
-        hint = L["Pick a row to see more"],
+        hint = L["Pick a row to see more."],
     },
 }
 
@@ -625,7 +625,7 @@ local function BuildDetail(parent)
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
     empty:SetWordWrap(true)
-    empty:SetText(L["Pick a row to see what it breaks into"])
+    empty:SetText(L["Pick a row to see what it breaks into."])
     detail.empty = empty
 
     return detail
@@ -1565,6 +1565,7 @@ local function Build(container)
     emptyLabel:SetWidth(380)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     local countLabel = Theme.CreateLabel(container, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)

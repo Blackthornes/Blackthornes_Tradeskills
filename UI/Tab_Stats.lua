@@ -1187,6 +1187,9 @@ local function RefreshList()
     widgets.emptyLabel:SetShown(#rows == 0)
     widgets.emptyLabel:SetText(state.search ~= "" and L["Nothing matches that search."]
         or L["Nothing to show yet. Items you craft, star or sell show here."])
+    if state.search ~= "" then
+        if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, L["Clear Search"], function() widgets.search:SetText("") end) end
+    elseif Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, nil) end
 
     if not state.selected and rows[1] then Select(rows[1].itemID) end
 end
@@ -1220,6 +1223,7 @@ local function Build(container)
     emptyLabel:SetWidth(LIST_WIDTH - 20)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     local panel = BuildPanel(container)
     panel:SetPoint("TOPLEFT", container, "TOPLEFT", LIST_WIDTH + 24, -8)

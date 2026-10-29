@@ -2147,6 +2147,58 @@ function Widgets.ItemShiftClick(itemID, link)
     return Widgets.LinkToChat(itemID, link)
 end
 
+--- An empty list's line dressed as the house empty block (the house kit,
+--- 2026-10-29): the emblem faint above it, and under it a gold button when
+--- there's a next step (Widgets.EmptyAction). The line keeps its place and
+--- its text; the emblem and button show and hide with it.
+function Widgets.DressEmpty(label)
+    if not label or rawget(label, "emblem") then return label end
+    local parent = label:GetParent()
+    local emblem = parent:CreateTexture(nil, "ARTWORK")
+    emblem:SetSize(44, 44)
+    emblem:SetPoint("BOTTOM", label, "TOP", 0, 8)
+    pcall(emblem.SetTexture, emblem, ([[Interface\AddOns\%s\Media\Frame\Emblem.tga]]):format(ns.ADDON_NAME or "Blackthornes_TS"))
+    emblem:SetAlpha(0.22)
+    emblem:SetShown(label:IsShown())
+    label.emblem = emblem
+
+    local function Follow(shown)
+        emblem:SetShown(shown and true or false)
+        local button = rawget(label, "emptyButton")
+        if button then button:SetShown(shown and rawget(label, "emptyRun") ~= nil or false) end
+    end
+    local show, hide, setShown = label.Show, label.Hide, label.SetShown
+    label.Show = function(self, ...) show(self, ...) Follow(true) end
+    label.Hide = function(self, ...) hide(self, ...) Follow(false) end
+    label.SetShown = function(self, shown, ...) setShown(self, shown, ...) Follow(shown) end
+    return label
+end
+
+--- The empty block's gold button: `text` and what a click does, or nil to
+--- take it away.
+function Widgets.EmptyAction(label, text, onClick)
+    if not label then return end
+    Widgets.DressEmpty(label)
+    label.emptyRun = (text and onClick) or nil
+    local button = rawget(label, "emptyButton")
+    if not button and text then
+        button = Widgets.CreateButton(label:GetParent(), text, function()
+            local run = rawget(label, "emptyRun")
+            if run then run() end
+        end, { primary = true, height = 22, width = 120 })
+        button:SetPoint("TOP", label, "BOTTOM", 0, -10)
+        label.emptyButton = button
+    end
+    if not button then return end
+    if text then
+        button:SetText(text)
+        local wordsLabel = rawget(button, "label")
+        local words = type(wordsLabel) == "table" and Theme.TextWidth and Theme.TextWidth(wordsLabel)
+        if type(words) == "number" then button:SetWidth(math.max(120, math.ceil(words + 24))) end
+    end
+    button:SetShown(text ~= nil and label:IsShown())
+end
+
 --- What a click does, as the last line of a row's hover, dim (the house
 --- kit, 2026-10-29: footers hold only a count and the version).
 function Widgets.AddClickHint(owner, hint, data)

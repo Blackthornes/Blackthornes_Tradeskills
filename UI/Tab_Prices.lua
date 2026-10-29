@@ -857,7 +857,7 @@ local function BuildDetail(parent)
     empty:SetPoint("CENTER")
     empty:SetWidth(240)
     empty:SetWordWrap(true)
-    empty:SetText(L["Select an item to see its price history"])
+    empty:SetText(L["Pick an item to see its price history."])
     detail.empty = empty
 
     return detail
@@ -1203,6 +1203,7 @@ local function BuildDetails(container)
     emptyLabel:SetWidth(320)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     local countLabel = Theme.CreateLabel(container, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)

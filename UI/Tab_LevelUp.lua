@@ -856,7 +856,7 @@ local function BuildDetail(parent)
     empty:SetPoint("CENTER")
     empty:SetWidth(DETAIL_WIDTH - 40)
     empty:SetWordWrap(true)
-    empty:SetText(L["Pick a recipe to see its materials"])
+    empty:SetText(L["Pick a recipe to see its materials."])
     detail.empty = empty
 
     return detail
@@ -1243,12 +1243,14 @@ local function Refresh()
     widgets.countLabel:SetText(table.concat(parts, "   "))
 
     widgets.emptyLabel:SetShown(#shown == 0)
+    if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, nil) end
 
     if #shown == 0 then
         if ns.Recipes:Count() == 0 then
             widgets.emptyLabel:SetText(L["Open a profession window once so your recipes can be read."])
         elseif state.search ~= "" then
             widgets.emptyLabel:SetText(L.Format("Nothing matching \"%s\".", state.search))
+            if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, L["Clear Search"], function() widgets.search:SetText("") end) end
         elseif state.subCraftsOnly then
             widgets.emptyLabel:SetText(L["Nothing you know here makes a material for another craft."])
         elseif state.craftableOnly then
@@ -1486,6 +1488,7 @@ local function Build(container)
     emptyLabel:SetWidth(340)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     local countLabel = Theme.CreateLabel(container, "tiny", "dim")
     countLabel:SetPoint("BOTTOMLEFT", 8, 8)

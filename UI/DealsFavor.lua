@@ -528,7 +528,7 @@ local function BuildDetail(parent)
     detail.empty:SetPoint("CENTER")
     detail.empty:SetWidth(DETAIL_WIDTH - 40)
     detail.empty:SetWordWrap(true)
-    detail.empty:SetText(L["Pick a crate to see what fills it and what a favor costs"])
+    detail.empty:SetText(L["Pick a crate to see what fills it and what a favor costs."])
 
     detail:HookScript("OnShow", FitDetail)
     return detail
@@ -1079,6 +1079,7 @@ function DealsFavor:Build(view, toolbar)
     emptyLabel:SetWidth(380)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     local hint = Theme.CreateLabel(view, "tiny", "dim", "RIGHT")
     hint:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -DETAIL_WIDTH - 16, 8)

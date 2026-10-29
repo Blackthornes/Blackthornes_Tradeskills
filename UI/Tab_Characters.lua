@@ -729,10 +729,12 @@ local function RefreshCharacters()
     widgets.list:SetData(rows)
 
     widgets.emptyLabel:SetShown(#rows == 0)
+    if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, nil) end
     if #characters == 0 then
         widgets.emptyLabel:SetText(L["No characters recorded yet."])
     elseif #rows == 0 then
         widgets.emptyLabel:SetText(L["No character matches."])
+        if state.search ~= "" and Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, L["Clear Search"], function() widgets.search:SetText("") end) end
     end
 
     local count = totals.count == 1 and L["1 character"] or L.Format("%d characters", totals.count)
@@ -1008,6 +1010,7 @@ local function BuildCharacters(view)
     emptyLabel:SetWidth(360)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     local summary = Theme.CreateLabel(view, "small", "text")
     summary:SetPoint("BOTTOMLEFT", 8, 10)

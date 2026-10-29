@@ -1036,7 +1036,7 @@ local function BuildDetail(parent)
 
     local empty = Theme.CreateLabel(detail, "small", "dim", "CENTER")
     empty:SetPoint("CENTER")
-    empty:SetText(L["Select a craft to see the breakdown"])
+    empty:SetText(L["Pick a craft to see the breakdown."])
     detail.empty = empty
 
     return detail
@@ -1811,6 +1811,7 @@ local function Refresh()
 
     widgets.emptyLabel:SetShown(#data == 0)
     widgets.emptyScan:Hide()
+    if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, nil) end
 
     if #data == 0 then
         if ns.Recipes:Count() == 0 then
@@ -1840,6 +1841,7 @@ local function Refresh()
             -- message would be about crafts the search never named.
             if state.search ~= "" then
                 widgets.emptyLabel:SetText(L.Format("Nothing matching \"%s\".", state.search))
+                if Widgets.EmptyAction then Widgets.EmptyAction(widgets.emptyLabel, L["Clear Search"], function() widgets.search:SetText("") end) end
             elseif #hidden > 0 and (minProfit > 0 or minMargin > 0) then
                 local best = hidden[1]
 
@@ -2008,6 +2010,7 @@ local function BuildCrafts(container)
     end)
     search:SetPoint("LEFT", method, "RIGHT", 8, 0)
     search:SetWidth(Widgets.SEARCH_WIDTH)
+    widgets.search = search
 
     local craftable = Widgets.CreateCheckbox(toolbar, L["Craftable now"], function(checked)
         state.craftableOnly = checked
@@ -2166,6 +2169,7 @@ local function BuildCrafts(container)
     emptyLabel:SetWidth(320)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     -- When there is simply no data, the fix is one click away; put it here
     -- rather than making the player go hunting for the header.

@@ -465,6 +465,7 @@ local function Build(container)
     emptyLabel:SetWidth(360)
     emptyLabel:SetWordWrap(true)
     widgets.emptyLabel = emptyLabel
+    if Widgets.DressEmpty then Widgets.DressEmpty(emptyLabel) end
 
     -- Footer
     local footerDivider = Theme.CreateDivider(container)
