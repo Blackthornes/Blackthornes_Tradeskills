@@ -1344,6 +1344,12 @@ local function Build(outer)
         if ns.EnchantTooltip and ns.EnchantTooltip.Forget then ns.EnchantTooltip:Forget() end
     end)
 
+    -- Asked 2026-10-29: what gear can break into, and the chance of each.
+    local disenchantTipRow = CreateRow(pages.look, 1, L["Disenchant Results on Tooltips:"],
+        L["On gear you can disenchant, shows what it can break into and the chance of each."])
+
+    widgets.disenchantTooltips = ShiftDropdown(disenchantTipRow, "disenchant", "tooltipDisenchantResults")
+
     -- Asked 2026-10-20: what a Waylaid Crate costs to fill, on its tooltip.
     local crateTipRow = CreateRow(pages.look, 1, L["Crate Costs:"])
 
@@ -2336,6 +2342,7 @@ local function Refresh()
     end
     ShowShiftMode(widgets.recipeTooltips)
     ShowShiftMode(widgets.enchantTooltips)
+    ShowShiftMode(widgets.disenchantTooltips)
     ShowShiftMode(widgets.crateTooltips)
     widgets.openWithShops:SetChecked(Config:Get("openWithShops") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
