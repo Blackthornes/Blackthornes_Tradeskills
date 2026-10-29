@@ -2144,6 +2144,26 @@ The rules that came with it:
 - Buttons out on the screen on their own wear the gold plaque
   (`UI/Plaque.lua`).
 
+Tradeskills' part (2026-10-29): the Profit and Level Up switches and the
+auction drawer's Sell, Buy, Lists, Auctions and Favors are view tabs
+(`RecipeBookView.WithSwitch`, `PostPanel`); Sales keeps its View drop-down.
+Stats is no longer its own tab: the Prices tab has Details and Stats view
+tabs (`ns.PricesUI:ShowView`, `StatsUI.view`, `StatsUI:Pick`; `/bts stats`
+and an old saved `stats` tab open it there, `MOVED_TABS`), so there are
+ten tabs. Settings' Look page is LOOK (Goblin Gold, tooltips, columns and
+an ARROW section) and a General page holds WINDOWS, ADDONS and SOUNDS.
+The header is the version past the portrait, the scan's age as a chip
+(items priced and recipes known on its hover) and Scan Auctions in gold.
+A right-click on a Profit, Level Up, Deals or Disenchanting row opens the
+row menu (`Widgets.CreateScrollList`'s `menu`: Queue One, Show the Way,
+Bought to Disenchant, Search the Auction House), and what a click does is
+the row's hover's last line (`clickHint`), not the footer. Empty lists
+wear the house block (`Widgets.DressEmpty`, `EmptyAction` for Clear
+Search). Characters rows are one line, race and class on the hover. The
+transfer box has the close gem; Buy Materials at a vendor and Sell Marked
+wear the gold plaque; Contribute and disenchant notes go in the shared
+note slot. Headings sort with the house arrow (`Media/Frame/SortArrow.tga`).
+
 ## Writing for players
 
 Every word a player reads (labels, buttons, tooltips, Settings rows and
