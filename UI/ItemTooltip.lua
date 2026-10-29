@@ -111,12 +111,13 @@ ItemTooltip.SHIFT_SETTINGS = {
     trend   = "tooltipTrendShift",
     recipe  = "tooltipRecipeShift",
     enchant = "tooltipEnchantShift",
+    disenchant = "tooltipDisenchantShift",
     crate   = "tooltipCrateShift",
 }
 
 local TooltipShift = ns.TooltipShift
 if TooltipShift then
-    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant", "crate" }
+    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant", "crate", "disenchant" }
 
     function TooltipShift.Read(key)
         local name = ItemTooltip.SHIFT_SETTINGS[key]
@@ -361,6 +362,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
         local disenchant = self:DisenchantLine(itemID)
         if disenchant then lines[#lines + 1] = disenchant end
+        self:AddDisenchantResults(lines, itemID)
 
         self:AddCraftedLines(lines, itemID)
         self:AddRecipeLines(lines, itemID)
@@ -415,6 +417,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     local disenchant = self:DisenchantLine(itemID)
     if disenchant then lines[#lines + 1] = disenchant end
+    self:AddDisenchantResults(lines, itemID)
 
     self:AddCraftedLines(lines, itemID)
     self:AddRecipeLines(lines, itemID)
@@ -737,6 +740,57 @@ function ItemTooltip:DisenchantLine(itemID)
     if partial then text = L.Format("%s or more", text) end
 
     return { L["Disenchant value"], text }
+end
+
+--- Does the character playing disenchant? The client's spell checks first;
+--- on Forever they can all say no for a character that disenchants, so
+--- Enchanting on this character's own saved record counts too.
+function ItemTooltip.CanDisenchant()
+    if ns.Disenchanter and ns.Disenchanter.Knows and ns.Disenchanter:Knows() == true then
+        return true
+    end
+    local key = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    local record = key and ns.db and ns.db.characters and ns.db.characters[key]
+    if type(record) ~= "table" or type(record.professions) ~= "table" then return false end
+    for _, profession in pairs(record.professions) do
+        if type(profession) == "table" and profession.learned ~= false then
+            local recipes = ns.Recipes
+            local enchanting
+            if recipes and type(recipes.IsEnchanting) == "function" then
+                enchanting = recipes.IsEnchanting(profession) == true
+            else
+                enchanting = profession.name == "Enchanting"
+            end
+            if enchanting then return true end
+        end
+    end
+    return false
+end
+
+--- What the item can break into and the chance of each, most likely first,
+--- under the disenchant value (2026-10-29). Only for a character that
+--- disenchants, and only for an item that can be broken.
+function ItemTooltip:AddDisenchantResults(lines, itemID)
+    if ns.Config and ns.Config:Get("tooltipDisenchantResults") == false then return end
+    if not (ns.Disenchant and ns.Disenchant.GetOutcomes) then return end
+    local okKnows, knows = pcall(ItemTooltip.CanDisenchant)
+    if not okKnows or not knows then return end
+    local ok, outcomes = pcall(ns.Disenchant.GetOutcomes, ns.Disenchant, itemID)
+    if not ok or type(outcomes) ~= "table" or #outcomes == 0 then return end
+    if not ItemTooltip.Shows("disenchant") then
+        lines.held = true
+        return
+    end
+    for _, outcome in ipairs(outcomes) do
+        local name = (ns.Disenchant.MaterialName and ns.Disenchant:MaterialName(outcome.itemID))
+            or Util.GetItemLabel(outcome.itemID)
+        name = Util.ColorItemName(outcome.itemID, name) or name
+        local low, high = outcome.min, outcome.max
+        if low and high and high > 1 then
+            name = low == high and ("%s x%d"):format(name, low) or ("%s x%d-%d"):format(name, low, high)
+        end
+        lines[#lines + 1] = { INDENT .. name, ("%s%%"):format(Util.Round((outcome.chance or 0) * 100, 1)) }
+    end
 end
 
 --- The cheapest listing the last scan saw, beside the smoothed value
