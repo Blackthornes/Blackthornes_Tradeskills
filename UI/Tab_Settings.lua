@@ -1506,6 +1506,14 @@ local function Build(outer)
     end, true)
     widgets.combineButtons:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The one Blackthornes window (the owner, 2026-10-30): every addon's tabs
+    -- in one window with a rail. Ticked unless unticked; see UI/SharedWindow.lua.
+    local oneRow = CreateRow(pages.general, 1, L["One Window:"])
+    widgets.oneWindow = Widgets.CreateCheckbox(oneRow, L["On"], function(checked)
+        if ns.TSTabs then ns.TSTabs:SetOneWindow(checked) end
+    end, true)
+    widgets.oneWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     CreateSection(pages.general, 1, L["ADDONS"])
     -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
     -- addons the player does not have. Off here is off in all of them.
@@ -2361,6 +2369,9 @@ local function Refresh()
         widgets.styleReload:SetShown(Look.Wanted() ~= Look.Style())
     end
     widgets.combineButtons:SetChecked(not ns.SharedMinimap or ns.SharedMinimap.Combined())
+    if widgets.oneWindow then
+        widgets.oneWindow:SetChecked(ns.SharedWindow and ns.SharedWindow.On() or false)
+    end
 
     -- The three sizes, and the one dragged to when it is none of them.
     local scale = UI.GetWindowScale and UI:GetWindowScale() or 1

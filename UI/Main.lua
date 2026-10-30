@@ -13,6 +13,10 @@ local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
 
+-- Tradeskills' window inside the one Blackthornes window (below).
+local TSTabs = {}
+ns.TSTabs = TSTabs
+
 --- Widen the header's scan button to its label when the words need more
 --- than its usual width (German runs longer), never narrower than that.
 local SCAN_BUTTON_WIDTH = 120
@@ -189,6 +193,8 @@ function UI:Build()
     tinsert(UISpecialFrames, "BlackthornesTSWindow")
 
     self.window = window
+    -- Closed by itself inside the one window: the one window goes too.
+    window:HookScript("OnHide", function(frame) TSTabs:Closed(frame) end)
 
     self:BuildHeader()
     self:BuildTabs()
@@ -552,7 +558,7 @@ function UI:PositionKey()
 end
 
 function UI:SavePosition()
-    if not ns.db or not self.window then return end
+    if not ns.db or not self.window or TSTabs.area then return end
 
     local point, _, relativePoint, x, y = self.window:GetPoint()
 
@@ -567,7 +573,7 @@ end
 -- isAuctionHouseOpen on the same event, and which handler runs first is not
 -- ours to decide.
 function UI:RestorePosition(key)
-    if not self.window then return end
+    if not self.window or TSTabs.area then return end
 
     key = key or self:PositionKey()
 
@@ -658,7 +664,7 @@ end
 --- right, as it does from the grip.
 function UI:ApplyScale(scale)
     local window = self.window
-    if not window then return end
+    if not window or TSTabs.area then return end
 
     scale = math.min(UI.ClampScale(scale or self:GetWindowScale()), UI.FitScale())
 
@@ -850,6 +856,8 @@ end
 
 function UI:Show()
     self:Build()
+    -- With "One Window:" ticked, it opens in the one window instead.
+    if TSTabs:Route() then return end
 
     local opening = not self.window:IsShown()
     self.window:Show()
@@ -872,8 +880,8 @@ function UI:Show()
     -- Fades up into place with its glow flaring, as Farmer's windows open,
     -- and a light runs round the portrait. After the reflow, so it rises
     -- from wherever it is going to sit.
-    if opening and ns.Motion then ns.Motion:Open(self.window) end
-    if opening and ns.Titanforged then ns.Titanforged:Opened(self.window) end
+    if opening and not TSTabs.area and ns.Motion then ns.Motion:Open(self.window) end
+    if opening and not TSTabs.area and ns.Titanforged then ns.Titanforged:Opened(self.window) end
 
     -- The Welcome card, the first time this character opens the window
     -- (UI/Welcome.lua, 2026-10-20).
@@ -1984,6 +1992,7 @@ end
 --- The window on its Settings tab; a second right-click puts it away.
 function UI:OpenSettings()
     self:Build()
+    if TSTabs:Route("settings") then return end
     if self.window:IsShown() and self.activeTab == "settings" then
         self:Hide()
         return
@@ -2006,14 +2015,15 @@ function UI:JoinSharedMinimap()
         settings = function() UI:OpenSettings() end,
         db = function() return ns.db end,
     })
-    -- And the one Blackthornes window (UI/SharedWindow.lua). Until this
-    -- addon's pages move in, its rail button opens its own window.
+    -- And the one Blackthornes window (UI/SharedWindow.lua), which lays
+    -- this window into its area (TSTabs below).
     if ns.SharedWindow then
         ns.SharedWindow:Join({
             key = "tradeskills", order = 2, name = "Tradeskills", icon = [[Interface\Icons\Trade_BlackSmithing]],
             open = function() UI:Toggle() end,
             settings = function() UI:OpenSettings() end,
             db = function() return ns.db end,
+            host = TSTabs.host,
         })
     end
 end
@@ -2253,4 +2263,207 @@ function UI:OnEnable()
             UI.waitTicker = nil
         end
     end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Tradeskills in the one Blackthornes window (the owner said build it,
+-- 2026-10-30). With "One Window:" ticked, the window and its tabs, Settings
+-- among them, are laid into the one window's area, bare of their own rim
+-- and grip, and handed back when it closes or another addon is picked.
+-- The auction house drawer stays its own for now.
+-- ---------------------------------------------------------------------------
+
+TSTabs.area = nil
+TSTabs.wanted = nil
+TSTabs.leaving = false
+TSTabs.switching = false
+
+local function TSShown(frame)
+    if not frame then return false end
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and shown == true
+end
+
+--- The copy of the one window that draws it, or nil.
+function TSTabs.One()
+    local SharedWindow = ns.SharedWindow
+    if not (SharedWindow and SharedWindow.Drawer) then return nil end
+    local ok, drawer = pcall(SharedWindow.Drawer)
+    local api = ok and type(drawer) == "table" and drawer.api or nil
+    return type(api) == "table" and api or nil
+end
+
+--- True while Tradeskills shows in the one window.
+function TSTabs:Hosted()
+    return self.area ~= nil
+end
+
+-- What the window wears, put out of sight inside the one window and back
+-- after: the trim (plate, portrait, close and fold gems, corners), the size
+-- grip and the rim drawn on the frame itself.
+local function TSBare(bare)
+    local frame = UI.window
+    if not frame then return end
+    local trim = rawget(frame, "titan")
+    if trim and trim.SetShown then trim:SetShown(not bare) end
+    local grip = UI.sizeGrip
+    if grip and grip.SetShown then grip:SetShown(not bare) end
+    if bare then
+        if TSTabs.bareRim then return end
+        local kept = {}
+        local ok, regions = pcall(function() return { frame:GetRegions() } end)
+        for _, region in ipairs(ok and regions or {}) do
+            local okLayer, layer = pcall(region.GetDrawLayer, region)
+            if okLayer and layer == "BORDER" and region:IsShown() then
+                region:Hide()
+                kept[#kept + 1] = region
+            end
+        end
+        TSTabs.bareRim = kept
+        pcall(frame.RegisterForDrag, frame)
+    else
+        for _, region in ipairs(TSTabs.bareRim or {}) do region:Show() end
+        TSTabs.bareRim = nil
+        pcall(frame.RegisterForDrag, frame, "LeftButton")
+    end
+end
+
+--- Lay the window into the area, filling it.
+function TSTabs:LayIn()
+    local frame, area = UI.window, self.area
+    if not (frame and area) then return end
+    if ns.Motion then pcall(ns.Motion.Settle, ns.Motion, frame) end
+    if frame:GetParent() ~= area then frame:SetParent(area) end
+    frame:ClearAllPoints()
+    frame:SetAllPoints(area)
+    frame:SetScale(1)
+    TSBare(true)
+    local strip = UI.tabStrip
+    if strip then
+        -- Hung from the one window's own bottom edge, not the area's.
+        local one = area:GetParent()
+        local drop = 8
+        if one then
+            local okA, a = pcall(area.GetBottom, area)
+            local okO, o = pcall(one.GetBottom, one)
+            if okA and okO and type(a) == "number" and type(o) == "number" then drop = a - o end
+        end
+        strip:ClearAllPoints()
+        strip:SetPoint("TOPLEFT", area, "BOTTOMLEFT", TAB_INSET, -drop)
+        local ok, width = pcall(area.GetWidth, area)
+        if ok and type(width) == "number" and width > 0 and strip.SetRoom then
+            strip:SetRoom(width - 2 * TAB_INSET)
+        end
+    end
+end
+
+--- Give the window back its own place, size and scale. After the area is
+--- let go, since the place and scale calls wait while it is set.
+function TSTabs:LayOut()
+    local frame = UI.window
+    if not frame then return end
+    frame:SetParent(UIParent)
+    TSBare(false)
+    local strip = UI.tabStrip
+    if strip then
+        strip:ClearAllPoints()
+        strip:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", TAB_INSET, 0)
+        if strip.SetRoom then strip:SetRoom(WINDOW_WIDTH - 2 * TAB_INSET) end
+    end
+    frame:ClearAllPoints()
+    frame:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    frame:SetScale(UI:GetWindowScale())
+    UI:RestorePosition()
+end
+
+--- Grow the one window until its area holds the window's own size.
+function TSTabs:Grow()
+    local area = self.area
+    local one = area and area:GetParent()
+    if not one then return end
+    local okW, areaW = pcall(area.GetWidth, area)
+    local okH, areaH = pcall(area.GetHeight, area)
+    if okW and type(areaW) == "number" and areaW > 0 and areaW < WINDOW_WIDTH then
+        one:SetWidth(one:GetWidth() + (WINDOW_WIDTH - areaW))
+    end
+    if okH and type(areaH) == "number" and areaH > 0 and areaH < WINDOW_HEIGHT then
+        one:SetHeight(one:GetHeight() + (WINDOW_HEIGHT - areaH))
+    end
+end
+
+--- Open the window, on a tab when one is asked for.
+function TSTabs:Open(key)
+    UI:Show()
+    if key then UI:SelectTab(key) end
+end
+
+--- Tradeskills goes into the one window: called by it (host.enter).
+function TSTabs:Enter(area)
+    if not area then return end
+    self.area = area
+    UI:Build()
+    TSTabs:LayIn()
+    TSTabs:Grow()
+    local key = self.wanted
+    self.wanted = nil
+    TSTabs:Open(key)
+end
+
+--- Tradeskills goes back: called by the one window (host.leave).
+function TSTabs:Leave()
+    if not self.area then return end
+    self.leaving = true
+    if TSShown(UI.window) then
+        local ok, err = pcall(UI.window.Hide, UI.window)
+        if not ok and ns.Debug then ns.Debug("one window leave:", tostring(err)) end
+    end
+    self.area = nil
+    TSTabs:LayOut()
+    if ns.PostPanel and ns.PostPanel.Reflow then pcall(ns.PostPanel.Reflow, ns.PostPanel) end
+    self.leaving = false
+end
+
+--- What Tradeskills gives the one window when it joins.
+TSTabs.host = {
+    enter = function(area) TSTabs:Enter(area) end,
+    leave = function() TSTabs:Leave() end,
+}
+
+--- The window is asked to open. With "One Window:" ticked and Tradeskills
+--- not in it yet, the one window opens on Tradeskills instead, on that tab.
+--- True when it did, so the caller stops there.
+function TSTabs:Route(key)
+    if self.area then return false end
+    local One = TSTabs.One()
+    if not (One and One.Hosts and One.Hosts("tradeskills")) then return false end
+    self.wanted = key
+    local ok, opened = pcall(One.Open, "tradeskills")
+    if ok and opened then return true end
+    self.wanted = nil
+    return false
+end
+
+--- The window closed by itself (Escape, a click on its tab button): inside
+--- the one window, the one window closes with it.
+function TSTabs:Closed(frame)
+    if not self.area or self.leaving or self.switching then return end
+    -- A window built for the first time hides itself before it is laid
+    -- in, and that is no close: only one inside the area counts.
+    if frame and frame.GetParent and frame:GetParent() ~= self.area then return end
+    local One = TSTabs.One()
+    if One and One.Close then pcall(One.Close) end
+end
+
+--- "One Window:" on the General page: written to every loaded addon's save.
+--- Settings stays open, in the one window or on its own.
+function TSTabs:SetOneWindow(on)
+    local SharedWindow = ns.SharedWindow
+    if not SharedWindow then return end
+    local onSettings = UI.window and UI.window:IsShown() and UI.activeTab == "settings"
+    SharedWindow.SetOn(on and true or false)
+    if not on and self.area then
+        local One = TSTabs.One()
+        if One and One.Close then pcall(One.Close) end
+    end
+    if onSettings then UI:OpenSettings() end
 end
