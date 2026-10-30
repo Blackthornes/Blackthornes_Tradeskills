@@ -2006,6 +2006,16 @@ function UI:JoinSharedMinimap()
         settings = function() UI:OpenSettings() end,
         db = function() return ns.db end,
     })
+    -- And the one Blackthornes window (UI/SharedWindow.lua). Until this
+    -- addon's pages move in, its rail button opens its own window.
+    if ns.SharedWindow then
+        ns.SharedWindow:Join({
+            key = "tradeskills", order = 2, name = "Tradeskills", icon = [[Interface\Icons\Trade_BlackSmithing]],
+            open = function() UI:Toggle() end,
+            settings = function() UI:OpenSettings() end,
+            db = function() return ns.db end,
+        })
+    end
 end
 
 --- Point Blizzard's auction browse at one item.
