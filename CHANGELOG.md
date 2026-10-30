@@ -8,7 +8,7 @@ the top; a release is refused if its version has no section here.
 
 For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
 
-- **One Window:** All your Blackthornes addons now share one window. A strip down the left has a button for each addon you have, and the tabs of the one you pick sit beside it. At the auction house, mailbox, vendor and trainer it sits next to the game's window, and it goes back when you close that one. Turn it off with One Window on the General page.
+- **One Window:** All your Blackthornes addons share one window. A strip down the left has a button for each addon you have, and the tabs of the one you pick sit beside it. At the auction house, mailbox, vendor and trainer it sits next to the game's window, and it goes back when you close that one. Turn it off with One Window on the General page.
 - **Auction House tab:** At the auction house the window has an Auction House tab for selling, buying, lists, your auctions and favors, next to Prices, Profit, Queue, Disenchanting and Favors and Writs.
 - **Bug fixes:** Various bug fixes for Tradeskills.
 
