@@ -1219,6 +1219,17 @@ close event for the same place changes nothing. At the auction house only
 Tradeskills is needed (`PLACES.auction.only`). Tested in
 `tools/test_sharedwindow.lua`. Not yet seen in game.
 
+Tradeskills' tabs have moved in (2026-10-30): the host is `TSTabs` in
+`UI/Main.lua` (`TSTabs.host`, given to `SharedWindow:Join`). With One
+Window on, opening the window or Settings opens the one window on
+Tradeskills (`TSTabs:Route`), laid into its area bare of its own rim and
+grip, its tabs hung under the one window. A tab hiding only closes the
+one window when it is in the area and no swap is under way
+(`TSTabs:Closed`, `leaving`), so picking another addon on the rail never
+drops Tradeskills back to its own window. The auction house drawer stays
+its own until the mockup. "One Window:" sits on the General page. Tested
+in `tools/test_onewindow.lua`.
+
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all
