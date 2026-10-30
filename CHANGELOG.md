@@ -12,7 +12,7 @@ For WoW: Forever (interface 16001). Files were added, so restart the game fully 
 - **Stats:** Stats moved into the Prices tab.
 - **Right-click:** Right-click a row in Profit, Level Up, Deals or Disenchanting for a quick menu.
 - **Settings:** Settings has a new General page.
-- **Look:** The top of the window shows how old your last scan is. Each character takes one line. An empty list lets you clear your search.
+- **Bug fixes:** Various bug fixes for Tradeskills.
 
 ## 1.3.0
 

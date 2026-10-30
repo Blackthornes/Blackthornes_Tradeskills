@@ -32,7 +32,7 @@ tool prints a note for a shipped line that reads like an advert.
 
 Fixes and changes:
 
-- The top of the window shows how old your last scan is. Each character takes one line. An empty list lets you clear your search.
+- Various bug fixes for Tradeskills.
 
 ## 1.3.0
 
