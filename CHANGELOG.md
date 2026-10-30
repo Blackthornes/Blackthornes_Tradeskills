@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.4.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
+
+- **Tabs:** Profit, Level Up and the auction house views are tabs now, so they are easier to find.
+- **Stats:** Stats moved into the Prices tab.
+- **Right-click:** Right-click a row in Profit, Level Up, Deals or Disenchanting for a quick menu.
+- **Settings:** Settings has a new General page.
+- **Bug fixes:** Various bug fixes for Tradeskills.
+
 ## 1.3.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).

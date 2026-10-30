@@ -23,6 +23,17 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.4.0
+
+- Profit, Level Up and the auction house views are tabs now, so they are easier to find.
+- Stats moved into the Prices tab.
+- Right-click a row in Profit, Level Up, Deals or Disenchanting for a quick menu.
+- Settings has a new General page.
+
+Fixes and changes:
+
+- Various bug fixes for Tradeskills.
+
 ## 1.3.0
 
 - One minimap button now covers every Blackthornes addon you have. Click it to pick one. Turn it off with Combine Addon Buttons on the Look page.
