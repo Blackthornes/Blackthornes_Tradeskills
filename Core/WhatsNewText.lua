@@ -6,10 +6,10 @@ local _, ns = ...
 
 ns.WHATS_NEW = {
     { version = "1.4.0", lines = {
-        "Profit and Level Up switch views with tabs, and so do Sell, Buy, Lists, Auctions and Favors at the auction house.",
-        "Stats now sits inside the Prices tab as Details and Stats tabs.",
-        "A right-click on a Profit, Level Up, Deals or Disenchanting row opens a menu with Queue One, Show the Way and more.",
-        "A new General page holds Windows, Addons and Sounds.",
+        "Profit, Level Up and the auction house views are tabs now, so they are easier to find.",
+        "Stats moved into the Prices tab.",
+        "Right-click a row in Profit, Level Up, Deals or Disenchanting for a quick menu.",
+        "Settings has a new General page.",
     } },
     { version = "1.3.0", lines = {
         "One minimap button now covers every Blackthornes addon you have. Click it to pick one. Turn it off with Combine Addon Buttons on the Look page.",

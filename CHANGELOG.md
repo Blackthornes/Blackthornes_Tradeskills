@@ -8,11 +8,11 @@ the top; a release is refused if its version has no section here.
 
 For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
 
-- **Tabs:** Profit and Level Up switch views with tabs, and so do Sell, Buy, Lists, Auctions and Favors at the auction house.
-- **Stats:** Stats now sits inside the Prices tab as Details and Stats tabs.
-- **Right-click:** A right-click on a Profit, Level Up, Deals or Disenchanting row opens a menu with Queue One, Show the Way and more.
-- **Settings:** A new General page holds Windows, Addons and Sounds.
-- **Look:** The header shows the version and how old your last scan is. Characters rows take one line. An empty list offers Clear Search. What a click does is on the row hover.
+- **Tabs:** Profit, Level Up and the auction house views are tabs now, so they are easier to find.
+- **Stats:** Stats moved into the Prices tab.
+- **Right-click:** Right-click a row in Profit, Level Up, Deals or Disenchanting for a quick menu.
+- **Settings:** Settings has a new General page.
+- **Look:** The top of the window shows how old your last scan is. Each character takes one line. An empty list lets you clear your search.
 
 ## 1.3.0
 
