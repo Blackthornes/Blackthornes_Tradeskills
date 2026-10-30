@@ -1226,9 +1226,23 @@ Tradeskills (`TSTabs:Route`), laid into its area bare of its own rim and
 grip, its tabs hung under the one window. A tab hiding only closes the
 one window when it is in the area and no swap is under way
 (`TSTabs:Closed`, `leaving`), so picking another addon on the rail never
-drops Tradeskills back to its own window. The auction house drawer stays
-its own until the mockup. "One Window:" sits on the General page. Tested
-in `tools/test_onewindow.lua`.
+drops Tradeskills back to its own window. "One Window:" sits on the
+General page. Tested in `tools/test_onewindow.lua`.
+
+The Auction House tab (the owner approved the mockup and its words,
+2026-10-30): while the one window is docked at the auction house, it
+shows its own row of tabs, Auction House (picked first: the drawer's
+header and its Sell, Buy, Lists, Auctions and Favors), Prices, Profit,
+Queue, Disenchanting, Favors and Writs, then Settings flush right
+(`UI.AUCTION_TABS`, `UI.ahTabStrip`, `UI.ahContainer`); Gather, Level Up,
+Sales and Characters wait until it leaves. `TSTabs:AtAuctionHouse` (from
+`AttachToAuctionHouse`) opens the one window once a visit and docks it;
+`TSTabs:Settle`, also called after every dock and undock through
+`One.Watch`, lays the drawer in (`PostPanel:IntoOne`) or hands it back
+(`OutOfOne`) and swaps the tab rows (`HangStrips`), back to the tab picked
+before. "auctionhouse" is never saved as the tab to open on. In a fight,
+or with One Window off, the drawer stays its own beside the auction house.
+Nothing new is saved. Tested in `tools/test_onewindow.lua`.
 
 ## The shared minimap button
 
