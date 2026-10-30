@@ -1181,6 +1181,44 @@ and Known by. Lines are kept per spell until `Inventory.changes` moves or
 (`tooltipEnchantCosts`, on unless unticked, never rename it); `/bts tip`
 counts them. Tested in `tools/test_enchanttooltip.lua`.
 
+## The one window
+
+The owner approved the mockups and said build it (2026-10-30): one
+house-look window with a rail down its left side, a button for each
+Blackthornes addon loaded (Farmer, Tradeskills, Equipment, Pets, Butler),
+and the picked addon's own tabs beside it; one size, one size grip, one
+fold gem, one place. It was built first in the Classic Era copies and
+copied here by hand for Forever; nothing here reads or changes the Classic
+repos. `UI/SharedWindow.lua` is the same file in all five Forever addons
+(a fix to it belongs in all five), and so is `tools/test_sharedwindow.lua`;
+like the shared minimap button, every copy signs up in
+`_G.BlackthornesWindow`, each addon joins with `SharedWindow:Join` (beside
+its `SharedMinimap:Join`), and the copy with the highest `FILE_VERSION`
+builds the window. Forever counts its own `FILE_VERSION` from 1. An addon
+whose pages have moved in gives `host = { enter(area), leave() }`; until
+then its rail button opens its own window, so every addon works as before.
+On unless unticked ("One Window:" on the General page; nil reads as on,
+and a player who ticked or unticked it keeps that). Saved in every loaded
+addon's account save, account wide, never rename them: `oneWindow`,
+`oneWindowAt` (the newest wins), `oneWindowPick`, `oneWindowLeft`,
+`oneWindowTop`, `oneWindowScale`. Floating pieces (Kills & Loot, arrows,
+plaques, the loot feed, the XP bar, Feed buttons, the upgrade quest panel
+and the like) stay their own.
+
+Docking: while the game's auction house, mailbox, vendor or trainer window
+is open and the one window is up, it sits beside it
+(`SharedWindow.PLACES`, `Arrived`, `Dock`, by screen position only, never
+in a fight), its rail a row of emblems along the top. Moving it there
+saves nothing. When the game's window closes it goes back to its own place
+(`Undock`) and to the addon open before (`Left`, `hub.back`). Forever's
+client can close those windows through the interaction manager without
+the old close event, so `PLAYER_INTERACTION_MANAGER_FRAME_HIDE` undocks
+too (`SharedWindow.InteractionPlace`: `Enum.PlayerInteractionType`'s
+MailInfo, Merchant, Trainer and Auctioneer, else 17, 5, 7 and 21); a later
+close event for the same place changes nothing. At the auction house only
+Tradeskills is needed (`PLACES.auction.only`). Tested in
+`tools/test_sharedwindow.lua`. Not yet seen in game.
+
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all
