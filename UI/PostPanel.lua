@@ -784,9 +784,67 @@ function PostPanel:PlaceBar()
     bar:Show()
 end
 
+--- Lay the drawer into the one window's Auction House tab (UI/Main.lua's
+--- TSTabs:Settle, while the one window sits beside the auction house). Its
+--- own rim, plate, halo and fold go; the tab's area holds it.
+function PostPanel:IntoOne(container)
+    if not container then return end
+    local frame = self:Build()
+    self.inOne = true
+    self.attached = false
+    self.dockedTo, self.dockedLeft = nil, nil
+
+    frame:SetParent(container)
+    frame:ClearAllPoints()
+    frame:SetAllPoints(container)
+    if frame.SetToplevel then frame:SetToplevel(false) end
+    pcall(frame.SetFrameStrata, frame, container:GetFrameStrata() or "MEDIUM")
+    local trim = rawget(frame, "titan")
+    if trim and trim.Hide then trim:Hide() end
+    Theme.SetHalo(frame, 0)
+    if self.body then self.body:Show() end
+
+    local width = container:GetWidth()
+    if not width or width < PANEL_WIDTH then width = PANEL_WIDTH end
+    local bar = self.header
+    if bar then
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPLEFT", frame, "TOPLEFT", EDGE_PAD, -HEADER_TOP)
+        bar:SetWidth(width - 2 * EDGE_PAD)
+        bar:Show()
+    end
+    if self.switch and self.switch.SetRoom then self.switch:SetRoom(width - 28) end
+
+    frame:Show()
+    self:Refresh()
+end
+
+--- Back to the drawer's own frame, as the one window leaves the auction
+--- house or Tradeskills' tab.
+function PostPanel:OutOfOne()
+    if not self.inOne then return end
+    self.inOne = false
+    local frame = self.frame
+    if not frame then return end
+
+    frame:Hide()
+    frame:SetParent(UIParent)
+    frame:ClearAllPoints()
+    frame:SetWidth(PANEL_WIDTH)
+    pcall(frame.SetFrameStrata, frame, "HIGH")
+    if frame.SetToplevel then frame:SetToplevel(true) end
+    local trim = rawget(frame, "titan")
+    if trim and trim.Show then trim:Show() end
+    Theme.SetHalo(frame, frame.haloRest or 0.08)
+    ns.Collapse.Apply(frame)
+    if self.switch and self.switch.SetRoom then self.switch:SetRoom(PANEL_WIDTH - 28) end
+    self:PlaceBar()
+end
+
 --- The close gem: put the drawer away until the auction house is opened
 --- again. Nothing is lost; the next visit brings it back.
 function PostPanel:CloseForVisit()
+    if self.inOne then return end
     self.closedThisVisit = true
     if self.frame then self.frame:Hide() end
     if ns.PriceEditor and ns.PriceEditor.IsShown and ns.PriceEditor:IsShown() then ns.PriceEditor:Hide() end
@@ -1246,7 +1304,7 @@ end
 -- the panel back after the character window closes if no event does.
 function PostPanel:Redock()
     local frame = self.frame
-    if not (frame and self.attached) then return end
+    if not (frame and self.attached) or self.inOne then return end
 
     -- Put away with the close gem: it stays away until the next visit.
     if self.closedThisVisit then return end
@@ -1322,6 +1380,8 @@ end
 
 --- Dock to the right of the auction house, as tall as there is room for.
 function PostPanel:Attach()
+    -- The one window's Auction House tab holds it: nothing to place.
+    if self.inOne then return end
     local frame = self:Build()
     local auctionFrame = ns.UI:FindAuctionFrame()
 
@@ -1384,12 +1444,14 @@ function PostPanel:TargetHeight(fallback)
 end
 
 function PostPanel:IsCollapsed()
+    -- In the one window it is a tab, which never folds on its own.
+    if self.inOne then return false end
     return ns.Collapse.IsCollapsed(COLLAPSE_KEY)
 end
 
 --- Set the height outright, after attaching or folding.
 function PostPanel:ApplyHeight(fallback)
-    if not self.frame then return end
+    if not self.frame or self.inOne then return end
 
     local height = self:TargetHeight(fallback ~= false)
     if height then self.frame:SetHeight(height) end
@@ -1397,7 +1459,7 @@ end
 
 --- Re-measure after the main window is opened, closed or dragged.
 function PostPanel:Reflow()
-    if not self.frame or not self.frame:IsShown() then return end
+    if not self.frame or not self.frame:IsShown() or self.inOne then return end
 
     local height = self:TargetHeight(false)
 
@@ -1919,6 +1981,7 @@ end
 
 function PostPanel:Hide()
     -- The auction house closed: nothing should bring the panel back now.
+    self:OutOfOne()
     self.attached = false
     self.closedThisVisit = false
     self.dockedTo, self.dockedLeft = nil, nil
