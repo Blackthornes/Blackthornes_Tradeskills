@@ -48,7 +48,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 1
+local FILE_VERSION = 2
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -75,12 +75,15 @@ SharedWindow.PRIOR_FOR = 0.5
 -- close each, and the frames it may be (read only). `only` is the one addon
 -- needed there: while it shows, the row of addon buttons is left out.
 -- `interaction` names the window's Enum.PlayerInteractionType, with the
--- number to use when the client has no Enum.
+-- number to use when the client has no Enum. The first frame shown wins,
+-- so an open letter, which stands right of the mailbox, comes before it;
+-- `follow` are the frames that come and go while the place stays open
+-- (watched by HookScript, read only), so the window moves with them.
 SharedWindow.PLACES = {
     auction = { show = "AUCTION_HOUSE_SHOW", hide = "AUCTION_HOUSE_CLOSED", frames = { "AuctionHouseFrame" }, only = "tradeskills",
         interaction = { "Auctioneer", 21 } },
-    mail = { show = "MAIL_SHOW", hide = "MAIL_CLOSED", frames = { "MailFrame" },
-        interaction = { "MailInfo", 17 } },
+    mail = { show = "MAIL_SHOW", hide = "MAIL_CLOSED", frames = { "OpenMailFrame", "MailFrame" },
+        follow = { "OpenMailFrame" }, interaction = { "MailInfo", 17 } },
     vendor = { show = "MERCHANT_SHOW", hide = "MERCHANT_CLOSED", frames = { "MerchantFrame" },
         interaction = { "Merchant", 5 } },
     trainer = { show = "TRAINER_SHOW", hide = "TRAINER_CLOSED", frames = { "ClassTrainerFrame" },
@@ -604,6 +607,29 @@ function SharedWindow.Docked()
     return hub.docked == true
 end
 
+--- The one window while it is docked and up, else nil. Another panel that
+--- sits beside the game's window (Tradeskills' mail panel, Butler's buy
+--- box) goes beside this instead, so the two never cover each other.
+function SharedWindow.DockedFrame()
+    local frame = hub.frame
+    if not (hub.docked and frame) then return nil end
+    local ok, shown = pcall(frame.IsShown, frame)
+    if ok and shown then return frame end
+    return nil
+end
+
+--- Call fn() each time the window docks, moves while docked or undocks.
+--- Kept on the shared table, so whichever copy draws calls it.
+function SharedWindow.Watch(fn)
+    if type(fn) ~= "function" then return end
+    hub.watchers = hub.watchers or {}
+    hub.watchers[#hub.watchers + 1] = fn
+end
+
+local function Tell()
+    for _, fn in ipairs(hub.watchers or {}) do pcall(fn) end
+end
+
 --- The place open now ("auction", "mail", "vendor" or "trainer"), or nil.
 function SharedWindow.Place()
     return hub.place
@@ -682,7 +708,9 @@ function SharedWindow.Dock(again)
     elseif not again then
         return true
     end
-    return Beside(frame, game)
+    local placed = Beside(frame, game)
+    Tell()
+    return placed
 end
 
 --- Back to its own place, with the rail down the left side.
@@ -701,12 +729,34 @@ function SharedWindow.Undock()
     SharedWindow.Lay(frame, false)
     Place(frame)
     SharedWindow.FillRail()
+    Tell()
+end
+
+--- Watch the place's coming and going frames (an open letter), once each:
+--- shown or hidden, the docked window takes its place beside the one shown.
+local function Follow(place)
+    hub.followed = hub.followed or {}
+    for _, name in ipairs(place.follow or {}) do
+        local game = rawget(_G, name)
+        if not hub.followed[name] and type(game) == "table" and type(game.HookScript) == "function" then
+            local function Again()
+                if not hub.docked then return end
+                local drawer = SharedWindow.Drawer()
+                local api = drawer and drawer.api or SharedWindow
+                pcall(api.Dock, true)
+            end
+            local okShow = pcall(game.HookScript, game, "OnShow", Again)
+            local okHide = pcall(game.HookScript, game, "OnHide", Again)
+            if okShow and okHide then hub.followed[name] = true end
+        end
+    end
 end
 
 --- One of the game's windows opened.
 function SharedWindow.Arrived(key)
     if not SharedWindow.PLACES[key] then return end
     hub.place = key
+    Follow(SharedWindow.PLACES[key])
     local frame = hub.frame
     if not (frame and frame:IsShown()) or hub.docked then return end
     -- Up already: what it showed before is what it goes back to. An addon
