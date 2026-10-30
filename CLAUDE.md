@@ -1937,6 +1937,10 @@ himself; never ask him to paste the webhook address anywhere. Without it the
 step does nothing, and a failed post never undoes the upload. The tool is the
 same in all four repos; a fix to it belongs in all four.
 
+Release notes go only to #announcements (the owner, 2026-10-30): the
+release workflow no longer posts in #general. `tools/post_general.py` stays
+in the repo unused, and the #general paragraph below is history.
+
 The owner asked (2026-10-09) for one post in #general per release too,
 and (2026-10-10) for it to be short: a few bullets in plain words, a
 sixth-grade reading level, warm, in his voice (short, contractions, no

@@ -86,16 +86,3 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python tools/announce_discord.py "${{ github.ref_name }}"
-
-      # Tells the players: posts this version's NEWS.md section, a few short
-      # bullets under the addon's name, which points to #announcements, with
-      # the thanks at the end (no link, no card), in #general. Needs the
-      # DISCORD_GENERAL_WEBHOOK_URL repository secret, which the owner sets
-      # himself; without it, or without a NEWS.md section, this step does
-      # nothing. The post gets the clear-to-post scan first. A failure here
-      # shows as a warning and never undoes the upload above.
-      - name: "Post the news in #general"
-        continue-on-error: true
-        env:
-          DISCORD_GENERAL_WEBHOOK_URL: ${{ secrets.DISCORD_GENERAL_WEBHOOK_URL }}
-        run: python tools/post_general.py "${{ github.ref_name }}"
