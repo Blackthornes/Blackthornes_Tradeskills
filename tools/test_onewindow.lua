@@ -9,6 +9,9 @@
 --   Swapping addons on the rail keeps the one window up.
 --   4. Closing the one window gives the window back its own place.
 --   5. "One Window:" on the General page writes every save.
+--   6. Docked at the auction house, the drawer is the Auction House tab,
+--      with only the tabs that help there, Settings last; leaving gives
+--      the drawer and the usual tabs back.
 
 local GLOBALS = { "CreateFrame", "UIParent", "GameTooltip", "GetCursorPosition", "C_Timer",
     "UISpecialFrames", "tinsert", "GetTime", "time" }
@@ -120,8 +123,17 @@ Load("/UI/SharedWindow.lua")
 Load("/UI/Main.lua")
 
 local UI, Tabs, SW = ns.UI, ns.TSTabs, ns.SharedWindow
-ns.PostPanel = { Reflow = noop }
-UI:RegisterTab({ key = "profit", text = "Profit", order = 1, build = noop })
+local panel = { into = 0, outOf = 0, attach = 0 }
+ns.PostPanel = {
+    Reflow = noop,
+    IntoOne = function(_, container) panel.into = panel.into + 1; panel.container = container end,
+    OutOfOne = function() panel.outOf = panel.outOf + 1 end,
+    Attach = function() panel.attach = panel.attach + 1 end,
+}
+for index, key in ipairs({ "profit", "queue", "gather", "disenchanting", "levelup", "deals",
+        "prices", "sales", "characters" }) do
+    UI:RegisterTab({ key = key, text = key, order = index, build = noop })
+end
 UI:RegisterTab({ key = "settings", text = "Settings", order = 99, build = noop })
 
 ns.SharedMinimap = { Join = noop }
@@ -201,6 +213,37 @@ check("opens on its own again", not Tabs:Hosted() and UI.window:GetParent() == U
 UI:Hide()
 Tabs:SetOneWindow(true)
 check("ticked again in every save", ns.db.oneWindow == true and other.oneWindow == true)
+
+print("6. at the auction house")
+local function Keys(strip)
+    local keys = {}
+    for _, button in ipairs(strip.tabs) do keys[#keys + 1] = button.key end
+    return table.concat(keys, ",")
+end
+UI:Show()
+UI:SelectTab("queue")
+_G.AuctionHouseFrame = Region()
+_G.AuctionHouseFrame.GetRight = function() return 600 end
+_G.AuctionHouseFrame.GetTop = function() return 650 end
+hub.place = "auction"
+Tabs:AtAuctionHouse()
+check("docks beside the auction house", SW.Docked())
+check("on the Auction House tab", Tabs.atAuction and UI.activeTab == "auctionhouse")
+check("the drawer is laid in the tab", panel.into == 1 and panel.container == UI.ahContainer
+    and UI.ahContainer:IsShown())
+check("its own row of tabs shows", UI.ahTabStrip:IsShown() and not UI.tabStrip:IsShown())
+check("only the tabs that help, Settings last",
+    Keys(UI.ahTabStrip) == "auctionhouse,prices,profit,queue,disenchanting,deals,settings")
+check("never kept as the tab to open on", ns.db.lastTab == "queue")
+UI:SelectTab("prices")
+check("another tab there", UI.activeTab == "prices" and UI.ahTabStrip.selected == "prices"
+    and not UI.ahContainer:IsShown())
+UI:SelectTab("auctionhouse")
+SW.Left("auction")
+check("leaving hands the drawer back", not Tabs.atAuction and panel.outOf == 1)
+check("the usual tabs come back", UI.tabStrip:IsShown() and not UI.ahTabStrip:IsShown())
+check("on the tab picked before", UI.activeTab == "queue" and UI.tabStrip.selected == "queue")
+_G.AuctionHouseFrame = nil
 
 SW.SetOn(false)
 _G.BlackthornesWindow = nil
