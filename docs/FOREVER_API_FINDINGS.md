@@ -473,3 +473,17 @@ harsh: about eight at once, then result 3, and sends paced every half second
 were still refused with result 8. A 256-byte message was said to be sent. So
 `Logic/RealmPrices.lua` sends one message every 3 seconds and only when
 nothing else of ours is waiting.
+
+## The one window's docking (not yet seen in game)
+
+`UI/SharedWindow.lua` (2026-10-30) docks the one window beside the game's
+own windows by screen position only; it never moves, hides or writes a
+Blizzard frame. What it expects of Forever's retail engine, from the
+retail client, not yet seen in game: `AUCTION_HOUSE_SHOW`/`AUCTION_HOUSE_CLOSED`
+with `AuctionHouseFrame`, `MAIL_SHOW`/`MAIL_CLOSED` with `MailFrame`,
+`MERCHANT_SHOW`/`MERCHANT_CLOSED` with `MerchantFrame`, and
+`TRAINER_SHOW`/`TRAINER_CLOSED` with `ClassTrainerFrame`. The retail
+client can close these through `PLAYER_INTERACTION_MANAGER_FRAME_HIDE`
+(its argument an `Enum.PlayerInteractionType`: MailInfo 17, Merchant 5,
+Trainer 7, Auctioneer 21) without the old close event, so that event
+undocks too. Every event is registered inside a pcall.
