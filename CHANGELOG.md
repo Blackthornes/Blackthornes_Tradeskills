@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.4.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
+
+- **Tabs:** Profit and Level Up switch views with tabs, and so do Sell, Buy, Lists, Auctions and Favors at the auction house.
+- **Stats:** Stats now sits inside the Prices tab as Details and Stats tabs.
+- **Right-click:** A right-click on a Profit, Level Up, Deals or Disenchanting row opens a menu with Queue One, Show the Way and more.
+- **Settings:** A new General page holds Windows, Addons and Sounds.
+- **Look:** The header shows the version and how old your last scan is. Characters rows take one line. An empty list offers Clear Search. What a click does is on the row hover.
+
 ## 1.3.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).

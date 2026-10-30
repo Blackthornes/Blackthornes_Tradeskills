@@ -23,6 +23,17 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.4.0
+
+- Profit and Level Up switch views with tabs, and so do Sell, Buy, Lists, Auctions and Favors at the auction house.
+- Stats now sits inside the Prices tab as Details and Stats tabs.
+- A right-click on a Profit, Level Up, Deals or Disenchanting row opens a menu with Queue One, Show the Way and more.
+- A new General page holds Windows, Addons and Sounds.
+
+Fixes and changes:
+
+- The header shows the version and how old your last scan is. Characters rows take one line. An empty list offers Clear Search. What a click does is on the row hover.
+
 ## 1.3.0
 
 - One minimap button now covers every Blackthornes addon you have. Click it to pick one. Turn it off with Combine Addon Buttons on the Look page.
