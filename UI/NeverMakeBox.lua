@@ -95,7 +95,7 @@ function NeverMakeBox:Ask(entry, anchor)
     local frame = self:Build()
     self.entry = entry
 
-    self.title:SetText(L.Format("Stop making %s?", NeverMakeBox.Name(entry)))
+    self.title:SetText(L.Format("Stop Making %s", NeverMakeBox.Name(entry)))
 
     frame:ClearAllPoints()
     if anchor and anchor.GetRight then
