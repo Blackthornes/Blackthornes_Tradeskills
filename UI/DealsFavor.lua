@@ -274,8 +274,8 @@ local function ShowRowTooltip(row, entry)
 
     GameTooltip:AddLine(" ")
     if entry.total and entry.best then
-        GameTooltip:AddLine(L.Format("The crate costs %s, %s cost %s, and you get %s back. In all: %s.",
-            Plain(entry.cratePrice), BundleText(entry.best), Plain(entry.best.cost),
+        GameTooltip:AddLine(L.Format("The crate costs %s, the bundles %s, and you get %s back. In all: %s.",
+            Plain(entry.cratePrice), Plain(entry.best.cost),
             Plain(entry.money or 0), Plain(entry.total)), 0.85, 0.85, 0.85, true)
     end
     if entry.perFavor then
