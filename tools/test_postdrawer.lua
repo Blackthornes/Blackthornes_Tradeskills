@@ -112,7 +112,7 @@ local lines = {
     { itemID = 9, unitPrice = 400, postQuantity = 2 },
 }
 PostPanel:UpdateListAll(lines)
-check("List all counts what it can list", button.text == "List Next - 2 remaining")
+check("List all counts what it can list", button.text == "List Next (2 left)")
 check("and can be clicked", button.enabled == true)
 
 PostPanel.shownLines = lines
@@ -161,7 +161,7 @@ GameTooltip, button.IsMouseOver, button.GetScript = nil, nil, nil
 
 ns.Posting.WouldCheckAll = function() return true end
 PostPanel:UpdateListAll(lines)
-check("a click that checks prices says so", button.text == "Check Prices - 2 to list")
+check("a click that checks prices says so", button.text == "Check Prices (2 to list)")
 PostPanel.ListNextTooltip(button, tip)
 check("and its hover too", Has("Check prices first"))
 tip.lines = {}
@@ -169,7 +169,7 @@ PostPanel.ListNextTooltip(button, tip, "Waiting: busy.")
 check("a wait goes first", tip.lines[1] == "Waiting: busy.")
 ns.Posting.WouldCheckAll = nil
 PostPanel:UpdateListAll(lines)
-check("back to List Next", button.text == "List Next - 2 remaining")
+check("back to List Next", button.text == "List Next (2 left)")
 
 PostPanel:UpdateListAll({})
 check("nothing to list: no count", button.text == "List Next")

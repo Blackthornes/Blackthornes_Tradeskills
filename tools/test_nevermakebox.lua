@@ -88,7 +88,7 @@ print("\nthe x on a sub-craft asks first")
 Box.Click(sub)
 check("the box is up", Box:IsShown(), true)
 check("nothing set yet", #marked, 0)
-check("names what it makes", Box.title.text, "Stop making Heavy Blasting Powder?")
+check("names what it makes", Box.title.text, "Stop Making Heavy Blasting Powder")
 check("says what happens", Box.note.text,
   "The queue will buy it instead, from now on.\nYou can undo this in Settings, Queue.")
 check("Buy It button", buttons["Buy It"] ~= nil, true)

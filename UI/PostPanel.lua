@@ -948,9 +948,9 @@ function PostPanel:RefreshListAllLabel()
     if count <= 0 then
         label = L["List Next"]
     elseif checks then
-        label = L.Format("Check Prices - %d to list", count)
+        label = L.Format("Check Prices (%d to list)", count)
     else
-        label = L.Format("List Next - %d remaining", count)
+        label = L.Format("List Next (%d left)", count)
     end
     if label == self.listAllLabel then return end
     self.listAllLabel = label
