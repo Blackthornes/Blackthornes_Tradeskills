@@ -133,6 +133,8 @@ local DEFAULTS = {
         -- click on a checked price lists it, and a click on one not checked
         -- yet checks it, then the next click lists. Never rename it.
         askBeforeListing = false,
+        -- "Bypass Disallowed Postings" (2026-10-31): off unless ticked.
+        postAnyway = false,
 
         -- Whether to recommend selling below material cost. Such items are
         -- always shown, just marked red and skipped when picking what is

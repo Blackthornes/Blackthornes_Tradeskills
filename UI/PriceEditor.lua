@@ -118,6 +118,8 @@ function PriceEditor.Notes(line, price, quantity)
         end
     end
 
+    -- Bypass Disallowed Postings: the notes still say why, but it lists.
+    if refused and Posting.PostsAnyway and Posting:PostsAnyway() then refused = false end
     return notes, refused
 end
 
