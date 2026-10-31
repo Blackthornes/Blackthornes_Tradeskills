@@ -23,6 +23,20 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.6.0
+
+- The window stays next to the auction house now.
+- Item icons get a soft ring in the color of their quality.
+- Road to 300 counts what your other characters hold.
+- You get asked before a listing goes up far under the usual price.
+- A new box lets you list items even when they would normally wait.
+
+Fixes and changes:
+
+- A scan far from an item's usual price waits until three scans agree.
+- The crate line in the favor tooltip is shorter.
+- Various bug fixes for Tradeskills.
+
 ## 1.5.0
 
 - All your Blackthornes addons share one window. A strip down the left has a button for each addon you have, and the tabs of the one you pick sit beside it. At the auction house, mailbox, vendor and trainer it sits next to the game's window, and it goes back when you close that one. Turn it off with One Window on the General page.

@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.6.0
+
+For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
+
+- **One Window:** The window now stays beside the auction house. Turn it off with One Window on the General page.
+- **Item icons:** Item icons get a soft ring in the color of their quality, and the vendor map pin card shows its count in the icon's corner.
+- **Road to 300:** It counts what your other characters hold, so you buy less.
+- **Price checks:** Before a listing goes up far under the usual price, you get asked first. A scan that looks far off an item's usual price waits until three scans agree.
+- **Bypass Disallowed Postings:** A tick box on the Auction House page of Settings, off unless you turn it on. Ticked, List posts items even when they would normally wait.
+- **Favor tooltip:** The crate line is shorter.
+- **Bug fixes:** Various bug fixes for Tradeskills.
+
 ## 1.5.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
