@@ -713,6 +713,8 @@ function Theme.CreateItemIcon(parent, size)
     function icon:Show() show(self); ShowArrow(self) end
     function icon:Hide() hide(self); ShowArrow(self) end
     function icon:SetShown(on) setShown(self, on); ShowArrow(self) end
+    -- The thin quality ring round it (UI/ItemLook.lua).
+    if ns.ItemLook then ns.ItemLook.Attach(icon) end
 
     icon:Hide()
     return icon
@@ -742,6 +744,7 @@ function Theme.SetItemIcon(icon, itemID, link)
     end
     icon:SetTexture((ns.Util and ns.Util.GetItemIcon and ns.Util.GetItemIcon(itemID))
         or FALLBACK_ICON)
+    if ns.ItemLook and state then ns.ItemLook.SetItem(icon, link or itemID) end
     icon:Show()
 end
 
@@ -767,6 +770,8 @@ function Theme.SetSpellIcon(icon, spellID, upgrade)
         state.upgrade = texture ~= nil and upgrade == true
         state.itemID, state.link = nil, nil
     end
+    -- A spell has no quality, so no ring.
+    if ns.ItemLook and state then ns.ItemLook.SetQuality(icon, nil) end
     if not texture then
         icon:Hide()
         return

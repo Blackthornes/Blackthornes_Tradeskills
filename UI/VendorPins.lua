@@ -329,7 +329,12 @@ function VendorPinsUI:ShowCard(pin)
     for index, line in ipairs(items) do
         local row = CardRow(card, index)
         Theme.SetItemIcon(row.icon, line.itemID)
-        row.name:SetText(Util.GetItemName(line.itemID) .. " x" .. line.count)
+        if ns.ItemLook then
+            row.name:SetText(Util.GetItemName(line.itemID))
+            ns.ItemLook.SetCount(row.icon, line.count)
+        else
+            row.name:SetText(Util.GetItemName(line.itemID) .. " x" .. line.count)
+        end
         Theme.SetItemNameColor(row.name, line.itemID)
         row.cost:SetText(line[2] or "")
         row.band:SetColorTexture(Theme.Unpack(index % 2 == 1 and "glass" or "glassAlt"))
