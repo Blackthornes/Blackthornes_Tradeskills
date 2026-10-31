@@ -937,7 +937,11 @@ sit at Classic's ranks (`RoadPlan.RANKS`: Journeyman at 50 to 150 and
 level 10, Expert at 125 to 225 and level 20, Artisan at 200 to 300 and
 level 35), with "You're level N." while the level is short
 (`LearnNext:TrainerFor` names the nearest trainer). What the bags, then
-the bank hold comes off once across the steps, and the footer says how
+the bank, then the other characters this one can mail hold (their saved
+bags, bank and, unless `countMailAsStock` is off, mail; each once by
+`Characters:Same`, never the one playing or `linkedFrom`;
+`RoadPlan.AltsHold`, 2026-10-31) comes off once across the steps, a
+step they cover saying "You have enough for this step.", and the footer says how
 much ("To 300:", "What you own already takes off X."). Steps below the
 skill are done and sit at the foot of the list (`RoadPlan.Shown`; "Step N
 of M", the meter and Queue All keep the plan's order). Queue Step queues a known recipe's crafts
