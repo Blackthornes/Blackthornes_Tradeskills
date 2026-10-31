@@ -388,6 +388,17 @@ function UpdateRow(row, line)
         if DetailTooWide(row) then row.detail:SetText(each) end
     end
 
+    -- Far under its usual price (Posting:FarUnderUsual): List Next passes
+    -- it over, so the row says why; its own List asks first (the owner,
+    -- 2026-10-31).
+    local farUnder = not line.held and ns.Posting.FarUnderUsual
+        and ns.Posting:FarUnderUsual(line.itemID, line.unitPrice, line.priceBasis == "chosen")
+    if farUnder then
+        local note = ("|c%s%s|r"):format(ns.COLORS.warn, L["Far under its usual price"])
+        row.detail:SetText(each .. "   " .. note)
+        if DetailTooWide(row) then row.detail:SetText(note) end
+    end
+
     -- Another Blackthornes addon wants it kept: why, in place of the price
     -- (the price is on the tooltip and the List button).
     if line.held then row.detail:SetText(line.held) end
@@ -425,6 +436,8 @@ function UpdateRow(row, line)
 
     row.post.tooltipText = line.held
         and L.Format("%s. A click still lists it.", line.held)
+        or farUnder
+        and L["Far under what it usually sells for. List asks before it goes up."]
         or line.atALoss
         and LossText(line)
         or L.Format("List %d of %d at %s each.",

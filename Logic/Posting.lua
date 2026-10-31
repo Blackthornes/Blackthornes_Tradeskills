@@ -1739,16 +1739,16 @@ end
 -- @param byHand  the price is one the player typed (the price editor): the
 --   fifth-of-market guard stands aside, since selling far under market is
 --   then the point. The vendor floor still holds.
--- @return floor, why
+-- @return floor, why, kind ("vendor" or "market": which floor it is)
 function Posting:GetPriceFloor(itemID, byHand)
-    local floor, why = 0, nil
+    local floor, why, kind = 0, nil, nil
 
     -- Below what a vendor pays, selling it to a vendor is strictly better.
     -- Remembered for the session: this runs for every line, every second,
     -- at the auction house.
     local sellPrice = Util.GetVendorSellPrice(itemID)
     if sellPrice and sellPrice > 0 then
-        floor, why = sellPrice, L["a vendor pays more than that"]
+        floor, why, kind = sellPrice, L["a vendor pays more than that"], "vendor"
     end
 
     -- A fifth of market value. Wide enough for a real undercut war, narrow
@@ -1763,12 +1763,33 @@ function Posting:GetPriceFloor(itemID, byHand)
     if market and market > 0 then
         local fraction = math.floor(market * 0.2)
         if fraction > floor then
-            floor, why = fraction, L["that is a fraction of what it normally sells for"]
+            floor, why, kind = fraction, L["that is a fraction of what it normally sells for"], "market"
         end
     end
 
     if floor < 1 then return nil end
-    return floor, why
+    return floor, why, kind
+end
+
+--- Is this price held back only by the fifth-of-market guard? Then the
+--- player is asked rather than refused (the owner, 2026-10-31: "if I click
+--- list, it should ask if I want to post anyways, then allow me to do it").
+--- The usual price is a running average, so it can sit well above today's
+--- after prices fall. The vendor floor still refuses. With "Bypass
+--- Disallowed Postings" ticked nothing asks: it lists as it would.
+function Posting:FarUnderUsual(itemID, price, byHand)
+    if byHand or type(price) ~= "number" or self:PostsAnyway() then return false end
+    local floor, _, kind = self:GetPriceFloor(itemID)
+    if not (floor and kind == "market" and price < floor) then return false end
+    local hard = self:GetPriceFloor(itemID, true)
+    return not (hard and price < hard)
+end
+
+--- Ask before listing a price far under the usual one. Yes lists it with
+--- the market guard stood aside, as a typed price is.
+function Posting:AskFarUnder(itemID, quantity, price, state)
+    self:Confirm(itemID, quantity, price, { state = state, farUnder = true })
+    return true
 end
 
 --------------------------------------------------------------------------------
@@ -1838,7 +1859,7 @@ end
 --   listed) or "unavailable" (no answer).
 function Posting:Confirm(itemID, quantity, unitPrice, check)
     self:ShowConfirm(itemID, quantity, unitPrice, self:BuildConfirmText(itemID, quantity, unitPrice, check),
-        check and check.byHand)
+        check and (check.byHand or check.farUnder))
 end
 
 --- The confirmation's text, kept apart from the dialog so it can be tested.
@@ -1910,6 +1931,11 @@ function Posting:BuildConfirmText(itemID, quantity, unitPrice, check)
 
     if unitCost and unitPrice < unitCost then
         text = text .. "\n|cffE5604F" .. L.Format("Below the %s it cost to make.", Money(unitCost)) .. "|r"
+    end
+
+    -- Far under the usual price (FarUnderUsual): asked, not refused.
+    if check.farUnder then
+        text = text .. ("\n|c%s%s|r"):format(ns.COLORS.warn, L["This is far under what it usually sells for."])
     end
 
     -- A price the player typed: said so, and how far under market it is,
@@ -2429,6 +2455,9 @@ function Posting:Request(itemID, quantity, unitPrice)
     -- the costs), and says why.
     local fastPrice = chosen and unitPrice or self:GetPostPrice(itemID) or unitPrice
     if self:CanListOnClick(itemID, fastPrice) then
+        if self:FarUnderUsual(itemID, fastPrice, chosen ~= nil) then
+            return self:AskFarUnder(itemID, quantity, fastPrice)
+        end
         if self:RefusesEarly(itemID, fastPrice, chosen ~= nil) then return false end
         return self:Post(itemID, quantity, fastPrice, chosen ~= nil) and true or false
     end
@@ -2436,6 +2465,9 @@ function Posting:Request(itemID, quantity, unitPrice)
     local verify = ns.Config:Get("verifyPriceBeforePosting") ~= false
 
     if not verify or not ns.Scanner.isAuctionHouseOpen then
+        if ns.Scanner.isAuctionHouseOpen and self:FarUnderUsual(itemID, unitPrice, chosen ~= nil) then
+            return self:AskFarUnder(itemID, quantity, unitPrice)
+        end
         if self:RefusesEarly(itemID, unitPrice, chosen ~= nil) then return false end
         if not self:AsksFirst() and ns.Scanner.isAuctionHouseOpen then
             return self:Post(itemID, quantity, unitPrice, chosen ~= nil) and true or false
@@ -2503,7 +2535,12 @@ function Posting:Request(itemID, quantity, unitPrice)
 
         -- A price the listing step will refuse (under what a vendor pays, a
         -- fraction of market after a rival's dump, or under what it cost to
-        -- make) is said now rather than after Yes.
+        -- make) is said now rather than after Yes. Far under the usual
+        -- price alone is asked about instead, box or no box.
+        if self:FarUnderUsual(itemID, price, chosen ~= nil) then
+            self:AskFarUnder(itemID, quantity, price, state)
+            return
+        end
         if self:RefusesEarly(itemID, price, chosen ~= nil) then return end
 
         -- With the box off the check's answer has no click left to list
