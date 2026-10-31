@@ -1223,6 +1223,15 @@ close event for the same place changes nothing. At the auction house only
 Tradeskills is needed (`PLACES.auction.only`). Tested in
 `tools/test_sharedwindow.lua`. Not yet seen in game.
 
+Kept beside (2026-10-31, FILE_VERSION 3): while a game window is open, a
+watcher on the one window (`SharedWindow.Keep`, every `KEEP_EVERY`
+seconds, only while shown, never in a fight) docks it once the game shows
+its window late, and places it beside again when the game's window moves
+or the one window changes width or scale (`hub.spot`). A window too wide
+for the room left was pulled back over the auction house by the screen's
+edge, then narrowed to the Auction House tab where it stood. Dragged by
+hand while docked, it stays. Tested in `tools/test_sharedwindow.lua`.
+
 Tradeskills' tabs have moved in (2026-10-30): the host is `TSTabs` in
 `UI/Main.lua` (`TSTabs.host`, given to `SharedWindow:Join`). With One
 Window on, opening the window or Settings opens the one window on

@@ -22,6 +22,9 @@
 --      letter while it shows and back beside the mailbox when it closes;
 --      watchers hear each dock, move and undock, and DockedFrame gives the
 --      window only while it is docked.
+--  10. Kept beside: while a game window is open, the window docks once the
+--      game shows its window late, and is placed beside it again when the
+--      game's window moves or this one changes width; nothing else moves it.
 
 local NAMES = { "CreateFrame", "UIParent", "C_Timer", "time", "BlackthornesWindow",
     "UISpecialFrames", "GetCursorPosition", "GetTime", "MailFrame", "OpenMailFrame", "MerchantFrame", "AuctionHouseFrame", "Enum" }
@@ -274,6 +277,33 @@ assert(SW.Docked() and frame.rail.shown == false and frame:GetHeight() == height
 SW.Close()
 SW.Left("auction")
 assert(not SW.Docked() and frame:GetHeight() == height and frame.rail.shown == true, "its own size again")
+SW.Open("gamma")
+
+-- 10. Kept beside the auction house. The game shows its window late.
+AuctionHouseFrame.shown = false
+now = now + 5
+SW.Arrived("auction")
+SW.Open("tradeskills")
+assert(not SW.Docked(), "nothing to sit beside yet")
+assert(frame.watch and frame.watch.scripts.OnUpdate, "a watcher looks while shown")
+AuctionHouseFrame.shown = true
+frame.watch.wait = 0
+frame.watch.scripts.OnUpdate(frame.watch, 0.05)
+assert(SW.Docked() and frame.point[4] == 840 + SW.DOCK_GAP, "docks once the game's window shows")
+heard = 0
+assert(SW.Keep() == false and heard == 0, "nothing moved, nothing placed")
+frame.point = { "TOPLEFT", UIParent, "BOTTOMLEFT", 300, 720 }
+assert(SW.Keep() == false and frame.point[4] == 300, "dragged by hand, it stays")
+AuctionHouseFrame.right = 860
+assert(SW.Keep() and frame.point[4] == 860 + SW.DOCK_GAP and heard == 1, "the game's window moved: beside it again")
+frame.point = { "TOPLEFT", UIParent, "BOTTOMLEFT", 300, 720 }
+frame:SetWidth(frame:GetWidth() - 200)
+assert(SW.Keep() and frame.point[4] == 860 + SW.DOCK_GAP, "narrower: placed beside it again")
+frame:SetWidth(frame:GetWidth() + 200)
+AuctionHouseFrame.right = 840
+SW.Close()
+SW.Left("auction")
+assert(not SW.Docked() and SW.Keep() == false, "nothing to keep once it closes")
 SW.Open("gamma")
 
 -- 8. The interaction manager's hide undocks as the close event does.
