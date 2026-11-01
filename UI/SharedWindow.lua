@@ -48,7 +48,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 4
+local FILE_VERSION = 5
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -299,6 +299,30 @@ local function SavePlace(frame)
     end
 end
 
+--- How tall the window may be at its scale: the screen's height less a
+--- margin, never under MIN_ROOM. Nothing taller than the screen is drawn.
+SharedWindow.SCREEN_MARGIN = 60
+SharedWindow.MIN_ROOM = 320
+function SharedWindow.Room(frame)
+    local ok, room = pcall(function()
+        local ui = UIParent:GetHeight() * UIParent:GetEffectiveScale()
+        return math.floor(ui / frame:GetEffectiveScale()) - SharedWindow.SCREEN_MARGIN
+    end)
+    if not ok or type(room) ~= "number" or room <= 0 then return nil end
+    return math.max(room, SharedWindow.MIN_ROOM)
+end
+
+--- Keep the window inside the screen's height; its pages scroll instead.
+function SharedWindow.Fit(frame)
+    frame = frame or hub.frame
+    if not frame then return end
+    local room = SharedWindow.Room(frame)
+    local ok, height = pcall(frame.GetHeight, frame)
+    if room and ok and type(height) == "number" and height > room then
+        frame:SetHeight(room)
+    end
+end
+
 local function Place(frame)
     frame:SetScale(Clamp(Read("oneWindowScale")) / 100)
     frame:ClearAllPoints()
@@ -308,6 +332,7 @@ local function Place(frame)
     else
         frame:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
     end
+    SharedWindow.Fit(frame)
 end
 
 --- The house size grip below the bottom right corner: drag to scale the
@@ -343,6 +368,7 @@ local function MakeGrip(frame)
             frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left * old / (percent / 100), top * old / (percent / 100))
         end
         WriteAll("oneWindowScale", percent)
+        SharedWindow.Fit(frame)
         if hub.docked then SharedWindow.Dock(true) else SavePlace(frame) end
     end
     grip:SetScript("OnEnter", function() Light(true) end)
@@ -694,6 +720,7 @@ function SharedWindow.Refit()
         frame:SetHeight(height + (row and RowRoom() or -RowRoom()))
     end
     hub.row = row
+    SharedWindow.Fit(frame)
     SharedWindow.Lay(frame, true, not row)
 end
 
@@ -745,6 +772,7 @@ function SharedWindow.Dock(again)
         if okW and okH and type(width) == "number" and type(height) == "number" then
             frame:SetSize(width - SharedWindow.RAIL_WIDTH - EDGE,
                 height + (hub.row and RowRoom() or 0))
+            SharedWindow.Fit(frame)
         end
         SharedWindow.Lay(frame, true, not hub.row)
         SharedWindow.FillRail()

@@ -2441,6 +2441,7 @@ function TSTabs:Grow()
     if okH and type(areaH) == "number" and areaH > 0 and areaH < WINDOW_HEIGHT then
         one:SetHeight(one:GetHeight() + (WINDOW_HEIGHT - areaH))
     end
+    if ns.SharedWindow and ns.SharedWindow.Fit then ns.SharedWindow.Fit(one) end
 end
 
 --- Open the window, on a tab when one is asked for.
