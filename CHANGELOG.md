@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.7.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Disenchant worth on tooltips.** The disenchant results on an item's tooltip now show what each material is worth, so you can see which one pays. Set it with Disenchant Results on Tooltips: on the Look page (Off, Shift or Always).
+
 ## 1.6.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
