@@ -15,6 +15,7 @@ ignore:
   # Gets a cloud workspace ready to run the checks. Not for players.
   - .claude
   - docs
+  - Docs
   - tools
   - deploy.ps1
   # Notes for Claude about working on the addon, shared with the other
