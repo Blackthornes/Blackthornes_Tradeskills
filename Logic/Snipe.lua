@@ -11,7 +11,13 @@
 --   "disenchant"  green or better gear the character (or the disenchanter
 --                 picked on the Mail page) can break, against what the
 --                 materials sell for after the cut.
--- A find is a deal when its price is at or under worth * Snipe Below.
+--   "vendor"  any item a vendor pays for, against what the vendor pays (the
+--             same price the Deals tab's vendor flips use). No cut, greys
+--             count, and any listing under it is a find; Snipe Below is not
+--             used. An item with charges whose vendor price isn't sure yet is
+--             left out.
+-- A find is a deal when its price is at or under worth * Snipe Below
+-- (for "vendor", under the vendor price).
 --
 -- Gentle by design: one small search at a time at scan priority (AHQueue
 -- holds it while the player sells or buys), the cheapest page only, and the
@@ -82,7 +88,11 @@ function Snipe:Percent()
     local pct = tonumber(Get("snipePct", 70)) or 70
     return math.max(10, math.min(95, pct))
 end
-function Snipe:Watch() return Get("snipeWatch", "priced") == "disenchant" and "disenchant" or "priced" end
+local WATCHES = { priced = true, disenchant = true, vendor = true }
+function Snipe:Watch()
+    local watch = Get("snipeWatch", "priced")
+    return WATCHES[watch] and watch or "priced"
+end
 function Snipe:Enabled() return Get("snipeTab", false) == true end
 
 function Snipe:IsRunning() return self.running end
@@ -142,6 +152,17 @@ end
 --- Worth of one unit, or nil when it is not watched. kind: priced, disenchant.
 function Snipe:WorthOf(itemID, mode)
     mode = mode or self:Watch()
+    if mode == "vendor" then
+        local d = ns.Disenchant
+        if not (d and d.GetSellPrice) then return nil end
+        if d.SellPriceUnsure then
+            local okU, unsure = pcall(d.SellPriceUnsure, d, itemID)
+            if not okU or unsure then return nil end
+        end
+        local ok, value = pcall(d.GetSellPrice, d, itemID)
+        if not (ok and type(value) == "number" and value > 0) then return nil end
+        return value
+    end
     if mode == "disenchant" then
         local class = ItemClass(itemID)
         if class ~= 2 and class ~= 4 then return nil end
@@ -188,6 +209,32 @@ end
 function Snipe.IsDeal(price, worth, percent)
     if type(price) ~= "number" or type(worth) ~= "number" or worth <= 0 then return false end
     return price <= worth * (percent or 70) / 100
+end
+
+--- A deal for this way of watching: under a vendor's price, or under worth
+--- times Snipe Below.
+function Snipe.IsDealFor(price, worth, kind, percent)
+    if kind == "vendor" then
+        return type(price) == "number" and type(worth) == "number" and price > 0 and price < worth
+    end
+    return Snipe.IsDeal(price, worth, percent)
+end
+
+--- What one unit makes over its price (a vendor find's profit).
+function Snipe.Profit(find)
+    return math.max(0, (find.worth or 0) - (find.price or 0))
+end
+
+--- Best first: biggest profit for vendor finds, else the most under worth.
+function Snipe.Better(a, b)
+    local x, y
+    if a.kind == "vendor" and b.kind == "vendor" then
+        x, y = Snipe.Profit(a), Snipe.Profit(b)
+    else
+        x, y = a.deal or 0, b.deal or 0
+    end
+    if x ~= y then return x > y end
+    return (a.itemID or 0) < (b.itemID or 0)
 end
 
 --- Percent under worth, for sorting and showing.
@@ -407,7 +454,7 @@ function Snipe:OnBrowseResults()
     end
     for id, hit in pairs(cheapest) do
         local worth = mine.batch[id]
-        if Snipe.IsDeal(hit.price, worth, pct) then
+        if Snipe.IsDealFor(hit.price, worth, kind, pct) then
             kept[#kept + 1] = {
                 itemID = id, price = hit.price, qty = hit.qty, worth = worth,
                 deal = Snipe.Deal(hit.price, worth), kind = kind,
@@ -420,10 +467,7 @@ function Snipe:OnBrowseResults()
             end
         end
     end
-    table.sort(kept, function(a, b)
-        if a.deal ~= b.deal then return a.deal > b.deal end
-        return a.itemID < b.itemID
-    end)
+    table.sort(kept, Snipe.Better)
     self.finds = kept
     if fresh then self:Chime() end
     Moved()
@@ -510,7 +554,7 @@ function Snipe:PriceUpdated(total)
     if type(total) ~= "number" or total <= 0 then return self:CancelBuy() end
     -- The real price must still be a deal; if not, let it go.
     local each = total / pending.count
-    if not Snipe.IsDeal(each, pending.find.worth, self:Percent()) or total > self:Left() then
+    if not Snipe.IsDealFor(each, pending.find.worth, pending.find.kind, self:Percent()) or total > self:Left() then
         Drop(pending.itemID)
         return self:CancelBuy()
     end
