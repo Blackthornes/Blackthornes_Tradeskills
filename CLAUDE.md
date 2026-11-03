@@ -2357,3 +2357,36 @@ same.
   modern Lua), not 1.12. Instances hand addons secret values that raise when
   compared, concatenated or formatted, so read client values inside a pcall.
   `docs/FOREVER_API_FINDINGS.md` has what the client actually does.
+
+## Big files (read these in pieces)
+
+Reading a huge file whole fills the context and the thread dies. Sizes are
+from 2026-11-03 and only grow. Find more with `find . -name '*.lua' | xargs wc -lc | sort -n`.
+
+- Never read a file below whole. Use `grep -n` to find the spot, then read
+  about 150 lines at a time (Read with `offset` and `limit`).
+- Never read data tables or locale files whole. Grep them for one key.
+- CLAUDE.md is big too. Grep it for a heading, then read that part only.
+- Generated files (`Data/`) are written by their `tools/` script. Never edit
+  them by hand, and never open them to see what they hold.
+
+Data tables (generated, grep only): `Data/RecipeBook.lua` 2113 lines, 206 KB; `Data/ForeverRecipes.lua` 2029 lines, 184 KB; `Data/VendorSpots.lua` 77 KB; `Data/LearnSpots.lua` 69 KB.
+
+Locale (grep one key, never read): `Locale/ruRU` 3348 lines, 321 KB; `frFR`, `esES`, `deDE`, `zhCN` are each about 3345 lines, 235 to 255 KB.
+
+Code over 2000 lines:
+- `Logic/Posting.lua` 3242 lines, 138 KB: listing and pricing posts.
+- `UI/Widgets.lua` 2702 lines, 105 KB: shared widgets.
+- `UI/Tab_Settings.lua` 2594 lines, 119 KB: Settings pages.
+- `UI/Main.lua` 2588 lines, 100 KB: main window and tabs.
+- `Data/Scanner.lua` 2479 lines, 104 KB: auction scans.
+- `UI/CraftPanel.lua` 2344 lines, 97 KB: craft pane.
+- `UI/Tab_Profit.lua` 2321 lines, 100 KB: Profit tab.
+- `Logic/Queue.lua` 2103 lines, 85 KB: craft queue.
+- `UI/PostPanel.lua` 2011 lines, 83 KB: auction house drawer.
+- `Logic/Butler.lua` 1969 lines, 90 KB: what Butler asks here.
+
+Over 1000 lines, same rule: `Data/Prices.lua`, `Data/Mail.lua`, `Core/Config.lua`, `Logic/Profit.lua`, `Logic/Disenchant.lua`, `Logic/QueueMail.lua`, `UI/Tab_LevelUp.lua`, `UI/Tab_Disenchanting.lua`, `UI/Tab_Sales.lua`, `UI/Tab_Stats.lua`, `UI/Tab_Prices.lua`, `UI/Tab_Queue.lua`, `UI/Tab_Deals.lua`, `UI/Tab_Characters.lua`, `UI/GoldGoal.lua`, `UI/ItemTooltip.lua`, `UI/WhatsNew.lua`, `UI/DealsFavor.lua`, `UI/MailReport.lua`, `UI/RecipeValue.lua`, `Data/Recipes.lua`, `Data/Auctions.lua`, `Logic/RecipeBook.lua`, `tools/test_uifit.lua`, `CHANGELOG.md` (1751 lines).
+Over 800 lines: `UI/ShoppingListsView.lua`, `UI/SharedWindow.lua`, `UI/Theme.lua`, `UI/DealsWrits.lua`, `UI/RecipeBookView.lua`, `Logic/Travel.lua`, `Logic/MailHaul.lua`, `Logic/MerchantsFavor.lua`, `Logic/Writs.lua`, `Logic/GoldLog.lua`, `Core/Util.lua`, `tools/test_craftpane.lua`, `tools/test_mail.lua`.
+
+The same file lives in several addons: `UI/SharedWindow.lua`, `UI/WhatsNew.lua`, `Logic/Travel.lua`. A fix to one belongs in all.
