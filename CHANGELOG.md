@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.9.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Snipe: Below Vendor.** Snipe can now watch for items listed for less than a vendor pays. Pick Below Vendor under Watch: on the Snipe tab. Each find shows what you'd make, and Snipe Below isn't used there. Snipe is still off by default.
+
 ## 1.8.0
 
 For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
