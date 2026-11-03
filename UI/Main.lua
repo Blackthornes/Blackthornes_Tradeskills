@@ -1228,6 +1228,9 @@ function UI:AttachToAuctionHouse()
 
     -- With the one window on, the drawer is its Auction House tab instead.
     if TSTabs:AtAuctionHouse() then return end
+    -- Another addon picked in the one window at the auction house: the
+    -- drawer waits there like a tab, never on top of that addon.
+    if TSTabs.OneStaysHere and TSTabs.One and TSTabs.OneStaysHere(TSTabs.One()) then return end
 
     -- Before the sell list attaches: the list measures itself around this
     -- window, so it needs the window where it is going to sit. Built centred,
@@ -2501,6 +2504,14 @@ function TSTabs:AtAuctionHouse()
     return self.atAuction
 end
 
+--- True while the one window is up and docked beside the auction house.
+function TSTabs.OneStaysHere(One)
+    if not One then return false end
+    local okOpen, isOpen = pcall(One.IsOpen or function() return false end)
+    local okDocked, docked = pcall(One.Docked or function() return false end)
+    return okOpen and isOpen == true and okDocked and docked == true
+end
+
 --- Swap between the usual tabs and the auction house's as the one window
 --- docks at the auction house or leaves it. Called after every dock and
 --- undock (One.Watch), and as Tradeskills goes in or out.
@@ -2527,8 +2538,13 @@ function TSTabs:Settle()
         self.atAuction = false
         if PostPanel and PostPanel.OutOfOne then pcall(PostPanel.OutOfOne, PostPanel) end
         TSTabs:HangStrips()
+        -- Another addon picked on the rail while the one window still sits
+        -- beside the auction house: the drawer stays in the one window like
+        -- a tab, out of sight until Tradeskills is picked again. Out on its
+        -- own it was laid beside the auction house, on top of that addon.
         local okPlace, place = pcall(One and One.Place or function() end)
-        if okPlace and place == "auction" and PostPanel and PostPanel.Attach then
+        if okPlace and place == "auction" and PostPanel and PostPanel.Attach
+            and not TSTabs.OneStaysHere(One) then
             pcall(PostPanel.Attach, PostPanel)
         end
         -- Lit again on the usual row too, which missed any pick made here.
