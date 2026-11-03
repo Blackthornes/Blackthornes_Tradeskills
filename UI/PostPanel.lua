@@ -621,7 +621,7 @@ function PostPanel:Build()
     -- Favors (the owner, 2026-10-20): what a favor goal still needs, shown
     -- only while a goal is set (PostPanel:LayTabs), UI/FavorsView.lua.
     local views = { { "sell", L["Sell"] }, { "buy", L["Buy"] }, { "lists", L["Lists"] }, { "auctions", L["Auctions"] },
-        { "favors", L["Favors"] } }
+        { "favors", L["Favors"] }, { "snipe", L["Snipe"] } }
     local tabs = {}
     for _, view in ipairs(views) do tabs[#tabs + 1] = { key = view[1], text = view[2] } end
     -- The house's small view tabs, each as wide as its word (2026-10-29).
@@ -719,6 +719,9 @@ function PostPanel:Build()
 
     if ns.AuctionsView then
         ns.AuctionsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
+    end
+    if ns.SnipeView then
+        ns.SnipeView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
     end
     if ns.FavorsView then
         ns.FavorsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
@@ -1510,11 +1513,13 @@ end
 --- Switch between the sell list and the shopping list.
 function PostPanel:SetView(view)
     if view == "favors" and not PostPanel.ShowsFavors() then view = "sell" end
-    self.view = (view == "buy" or view == "lists" or view == "auctions" or view == "favors") and view or "sell"
+    if view == "snipe" and not PostPanel.ShowsSnipe() then view = "sell" end
+    self.view = (view == "buy" or view == "lists" or view == "auctions" or view == "favors" or view == "snipe") and view or "sell"
     self.searchStep = nil
     if self.switch then self.switch:Select(self.view, true) end
     self.shoppingAt = nil
     self:Refresh()
+    if ns.AuctionWheel and ns.AuctionWheel.Update then ns.AuctionWheel:Update() end
 end
 
 --- A row worth searching the auction house for: still short, and not a
@@ -1775,7 +1780,8 @@ function PostPanel:Refresh()
     if self.searchAll then self.searchAll:SetShown(self.view == "buy") end
 
     self:UpdateAuctionsTab()
-    if self:LayTabs() and self.view == "favors" and not PostPanel.ShowsFavors() then
+    if self:LayTabs() and ((self.view == "favors" and not PostPanel.ShowsFavors())
+        or (self.view == "snipe" and not PostPanel.ShowsSnipe())) then
         self.view = "sell"
         if self.switch then self.switch:Select(self.view, true) end
     end
@@ -1783,12 +1789,29 @@ function PostPanel:Refresh()
     if View and View.list then View:SetShown(self.view == "lists") end
     local Auctions = ns.AuctionsView
     if Auctions and Auctions.list then Auctions:SetShown(self.view == "auctions") end
+    local Snipe = ns.SnipeView
+    if Snipe and Snipe.parts and (Snipe.shown or false) ~= (self.view == "snipe") then
+        Snipe:SetShown(self.view == "snipe")
+    end
     local Favors = ns.FavorsView
     if Favors and Favors.list and (Favors.shown or false) ~= (self.view == "favors") then
         Favors:SetShown(self.view == "favors")
     end
     if self.footNote then
-        self.footNote:SetShown(self.view ~= "lists" and self.view ~= "auctions" and self.view ~= "favors")
+        self.footNote:SetShown(self.view ~= "lists" and self.view ~= "auctions" and self.view ~= "favors" and self.view ~= "snipe")
+    end
+
+    if self.view == "snipe" then
+        if self.listAll then self.listAll:Hide() end
+        self.list:Hide()
+        self.shoppingList:Hide()
+        self.empty:Hide()
+        if Snipe then
+            Snipe:Refresh()
+            self:SetSummary(Snipe:Summary())
+            self:SetTitle(Snipe:Title())
+        end
+        return
     end
 
     if self.view == "favors" then
@@ -1916,6 +1939,11 @@ function PostPanel.ShowsFavors()
     return MerchantsFavor ~= nil and ns.FavorsView ~= nil and MerchantsFavor.Goal() ~= nil
 end
 
+--- The Snipe switch shows only while its setting is ticked.
+function PostPanel.ShowsSnipe()
+    return ns.SnipeView ~= nil and ns.Config:Get("snipeTab") == true
+end
+
 --- Lay the switch's tabs side by side, sharing the drawer's width, with
 --- Favors only while a goal is set. Laid out again only when that changes.
 -- @return true when the tabs moved
@@ -1923,10 +1951,13 @@ function PostPanel:LayTabs(force)
     local switch = self.switch
     if not (switch and switch.tabs) then return false end
     local withFavors = PostPanel.ShowsFavors()
-    if not force and withFavors == self.tabsWithFavors then return false end
+    local withSnipe = PostPanel.ShowsSnipe()
+    if not force and withFavors == self.tabsWithFavors and withSnipe == self.tabsWithSnipe then return false end
     self.tabsWithFavors = withFavors
+    self.tabsWithSnipe = withSnipe
 
     switch:SetTabShown("favors", withFavors)
+    switch:SetTabShown("snipe", withSnipe)
     if switch.selected then switch:Select(switch.selected, true) end
     return true
 end
