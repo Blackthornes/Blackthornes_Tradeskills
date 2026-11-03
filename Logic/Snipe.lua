@@ -41,6 +41,10 @@ Snipe.QUOTE_WAIT = 10
 Snipe.BUY_WAIT = 15
 -- Most of a stack bought in one click.
 Snipe.MOST_UNITS = 20
+-- An average more than this many times the last scan's cheapest is left out.
+Snipe.SILLY_OVER = 10
+-- A scan stamp is when the scan started; records seen a little before count.
+Snipe.SCAN_SLACK = 3600
 -- Pool building: items looked at a frame.
 Snipe.SLICE = 300
 
@@ -151,11 +155,33 @@ function Snipe:WorthOf(itemID, mode)
         return AfterCut(value)
     end
     if not (ns.Prices and ns.Prices.GetValue) then return nil end
+    -- Greys are worth their vendor price only, never a snipe.
+    if Quality(itemID) == 0 then return nil end
     local ok, value = pcall(ns.Prices.GetValue, ns.Prices, itemID)
     if not (ok and type(value) == "number") then return nil end
     if value < self.MIN_WORTH then return nil end
     if ns.Prices.IsCredible and not ns.Prices.IsCredible(value) then return nil end
+    -- A silly average (68,000g for a grey) made every listing look 100%
+    -- under. One far above the cheapest listing the last scan saw is left out.
+    local low = Snipe.LastLow(itemID)
+    if low and value > low * self.SILLY_OVER then return nil end
     return value
+end
+
+--- The cheapest listing the last scan saw, or nil.
+function Snipe.LastLow(itemID)
+    local record = ns.Prices and ns.Prices.Get and ns.Prices:Get(itemID)
+    if type(record) ~= "table" then return nil end
+    local low = ns.Prices.LowestListed and ns.Prices.LowestListed(record) or record.min
+    if type(low) == "number" and low > 0 then return low end
+end
+
+--- Was it for sale in the last scan?
+function Snipe.InLastScan(itemID, since)
+    local record = ns.Prices and ns.Prices.Get and ns.Prices:Get(itemID)
+    if type(record) ~= "table" or (record.quantity or 0) <= 0 then return false end
+    if since and (record.seen or 0) < since then return false end
+    return true
 end
 
 --- Is this price a deal against its worth?
@@ -188,22 +214,37 @@ function Snipe:BuildPool(done)
         building = false
         return done()
     end
+    local lastScan = ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan()
+    local since = lastScan and (lastScan - self.SCAN_SLACK) or nil
     local at = 1
     local function Step()
         if mine ~= session or not self.running then return end
         local last = math.min(#ids, at + self.SLICE - 1)
         for i = at, last do
             local worth = self:WorthOf(ids[i], mode)
-            if worth then pool[#pool + 1] = { id = ids[i], worth = worth } end
+            if worth then
+                pool[#pool + 1] = { id = ids[i], worth = worth, listed = Snipe.InLastScan(ids[i], since) }
+            end
         end
         at = last + 1
         if at > #ids then
             building = false
+            Snipe.OrderPool(pool)
             return done()
         end
         After(0, Step)
     end
     Step()
+end
+
+--- What was for sale in the last scan first, most valuable first.
+function Snipe.OrderPool(list)
+    table.sort(list, function(a, b)
+        if (a.listed and true or false) ~= (b.listed and true or false) then return a.listed and true or false end
+        if a.worth ~= b.worth then return a.worth > b.worth end
+        return a.id < b.id
+    end)
+    return list
 end
 
 --------------------------------------------------------------------------
@@ -227,6 +268,7 @@ function Snipe:Start()
     if not AuctionOpen() then return end
     session = session + 1
     self.running, self.spent, self.finds = true, 0, {}
+    self.dinged = {}
     self.pending, self.armed, waiting = nil, nil, nil
     Moved()
     self:BuildPool(function() Snipe:Next() end)
@@ -298,6 +340,7 @@ function Snipe:Next()
         send = function()
             if mineSession ~= session or not Snipe.running then return false end
             local ok = pcall(C_AuctionHouse.SearchForItemKeys, keys, {})
+            if ok then mine.sent = Now() end
             return ok
         end,
         onGiveUp = function()
@@ -316,13 +359,26 @@ function Snipe:Later()
     end)
 end
 
+--- Are these rows our own search's? A search the player made (or another
+--- addon made) lists items outside our batch; those rows are left alone, so
+--- a find is never dropped and found again because of them.
+function Snipe.OwnResults(rows, batch)
+    if type(batch) ~= "table" then return false end
+    for _, row in ipairs(rows) do
+        local id = row.itemKey and row.itemKey.itemID
+        if not (id and batch[id]) then return false end
+    end
+    return true
+end
+
 --- The scanner's browse hook: the rows of our search are ready.
 function Snipe:OnBrowseResults()
     local mine = waiting
-    if not (self.running and mine) then return end
+    if not (self.running and mine and mine.sent) then return end
     if not (C_AuctionHouse and C_AuctionHouse.GetBrowseResults) then return end
     local ok, rows = pcall(C_AuctionHouse.GetBrowseResults)
     if not (ok and type(rows) == "table") then return end
+    if not Snipe.OwnResults(rows, mine.batch) then return end
 
     local cheapest = {}
     for _, row in ipairs(rows) do
@@ -346,8 +402,6 @@ function Snipe:OnBrowseResults()
     local pct = self:Percent()
     local kind = self:Watch()
     local kept, fresh = {}, false
-    local had = {}
-    for _, find in ipairs(self.finds) do had[find.itemID] = find end
     for _, find in ipairs(self.finds) do
         if not mine.batch[find.itemID] then kept[#kept + 1] = find end
     end
@@ -358,7 +412,12 @@ function Snipe:OnBrowseResults()
                 itemID = id, price = hit.price, qty = hit.qty, worth = worth,
                 deal = Snipe.Deal(hit.price, worth), kind = kind,
             }
-            if not had[id] then fresh = true end
+            -- One ding a new item, and again only when it gets cheaper.
+            local rang = self.dinged and self.dinged[id]
+            if not rang or hit.price < rang then
+                fresh = true
+                if self.dinged then self.dinged[id] = hit.price end
+            end
         end
     end
     table.sort(kept, function(a, b)
