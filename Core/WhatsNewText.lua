@@ -6,8 +6,7 @@ local _, ns = ...
 
 ns.WHATS_NEW = {
     { version = "1.8.0", lines = {
-        "There's a new Snipe tab in the auction house window. It looks for items selling well under their usual price and lets you buy the best one with a click. It never starts on its own, and you set how much it can spend. It's off until you tick \"Snipe Tab:\" in the auction house settings.",
-        "In the money boxes, Tab now jumps from gold to silver to copper.",
+        "Added a Snipe tab to the Auction House. Snipe actively scans the AH for items posted under their usual price and alerts you. This is an early build of this feature, and it is off by default. You can turn it on in Settings > Auction House > Snipe Tab:.",
     } },
     { version = "1.7.0", lines = {
         "When you hover an item you can disenchant, the tooltip now shows what each material is worth.",

@@ -8,8 +8,7 @@ the top; a release is refused if its version has no section here.
 
 For WoW: Forever (interface 16001). Files were added, so restart the game fully after updating (`/reload` is not enough).
 
-- **Snipe tab.** A new Snipe tab in the auction house drawer hunts for deals under their usual worth and lets you buy the best one with a click. Pick a Spending Cap, how far under to look, and a list to watch. It has Price, Average and Under Average columns, and it only starts when you press Start Sniping. Off unless ticked: "Snipe Tab:" on the Auction House page of Settings. "Wheel Buys:" there lets the mouse wheel buy the best find.
-- **Money boxes.** Tab and Shift-Tab move between the gold, silver and copper boxes.
+- **Snipe tab.** Added a Snipe tab to the Auction House. Snipe actively scans the AH for items posted under their usual price and alerts you. This is an early build of this feature, and it is off by default. You can turn it on in Settings > Auction House > Snipe Tab:.
 - **Bug fixes:** Various bug fixes for Tradeskills.
 
 ## 1.7.0
