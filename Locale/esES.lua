@@ -3348,12 +3348,11 @@ L["This is far under what it usually sells for."] = "Esto está muy por debajo d
 
 -- Snipe tab (strings await the owner's yes)
 L["% of worth"] = "% del valor"
-L["%1$d for sale. %2$s"] = "%1$d a la venta. %2$s"
-L["%1$s each, worth %2$s"] = "%1$s cada uno, vale %2$s"
 L["%d finds"] = "%d hallazgos"
 L["%d%% under"] = "%d%% por debajo"
 L["Asking..."] = "Preguntando..."
-L["Deal"] = "Ganga"
+L["Average"] = "Promedio"
+L["Under Average"] = "Bajo el promedio"
 L["Item"] = "Objeto"
 L["Looking for deals..."] = "Buscando gangas..."
 L["Nothing to snipe yet. Scan the auction house first."] = "Aún no hay nada que cazar. Escanea primero la casa de subastas."

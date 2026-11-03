@@ -13,6 +13,18 @@ local ICON_SIZE = 24
 local STRIP_HEIGHT = 84
 local HEAD_HEIGHT = 18
 local COLUMNS_HEIGHT = 16
+-- Average, Price and Under Average sit in cells laid out from the right, so
+-- their headings line up over them and never overlap.
+local CELL_WIDTH = 68
+local CELL_GAP = 4
+local RIGHT_PAD = 8
+local SORT_ARROW = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS") .. [[\Media\Frame\SortArrow]]
+
+-- Right edge of cell n (1 = Under Average, 2 = Price, 3 = Average).
+local function CellRight(n)
+    return -(RIGHT_PAD + (n - 1) * (CELL_WIDTH + CELL_GAP))
+end
+local NAME_RIGHT = CellRight(3) - CELL_WIDTH - 6
 
 SnipeView.sortKey = "deal"
 SnipeView.sortDown = true
@@ -58,6 +70,7 @@ function SnipeView:SortedFinds()
     table.sort(rows, function(a, b)
         local x, y
         if key == "price" then x, y = a.price or 0, b.price or 0
+        elseif key == "average" then x, y = a.worth or 0, b.worth or 0
         elseif key == "name" then x, y = ItemName(a.itemID), ItemName(b.itemID)
         else x, y = DealOf(a), DealOf(b) end
         if x == y then return (a.itemID or 0) < (b.itemID or 0) end
@@ -71,7 +84,7 @@ function SnipeView:SortBy(key)
     if self.sortKey == key then
         self.sortDown = not self.sortDown
     else
-        self.sortKey, self.sortDown = key, (key == "deal")
+        self.sortKey, self.sortDown = key, (key ~= "name")
     end
     self:Changed()
 end
@@ -84,16 +97,23 @@ local function CreateRow(row)
     row.icon = Theme.CreateItemIcon(row, ICON_SIZE)
     row.icon:SetPoint("LEFT", row, "LEFT", 8, 0)
     row.name = Theme.CreateLabel(row, "small", "text")
-    row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 8 + ICON_SIZE + 8, -4)
-    row.name:SetPoint("TOPRIGHT", row, "TOPRIGHT", -110, -4)
-    row.detail = Theme.CreateLabel(row, "tiny", "muted")
-    row.detail:SetPoint("TOPLEFT", row, "TOPLEFT", 8 + ICON_SIZE + 8, -20)
-    row.detail:SetPoint("TOPRIGHT", row, "TOPRIGHT", -110, -20)
-    row.detail:SetWordWrap(false)
+    row.name:SetPoint("LEFT", row, "LEFT", 8 + ICON_SIZE + 8, 0)
+    row.name:SetPoint("RIGHT", row, "RIGHT", NAME_RIGHT, 0)
+    row.name:SetWordWrap(true)
     row.edge = Theme.AccentStripe(row, 3)
     row.edge:Hide()
-    row.badge = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
-    row.badge:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    local function Cell(n, size)
+        local cell = Theme.CreateLabel(row, size or "small", "text", "RIGHT")
+        cell:SetPoint("RIGHT", row, "RIGHT", CellRight(n), 0)
+        cell:SetWidth(CELL_WIDTH)
+        cell:SetWordWrap(false)
+        return cell
+    end
+    row.badge = Cell(1, "tiny")
+    row.price = Cell(2)
+    row.average = Cell(3)
+    row.qty = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
+    row.qty:SetPoint("TOPRIGHT", row.price, "BOTTOMRIGHT", 0, -1)
 end
 
 local function IsPending(find)
@@ -103,20 +123,22 @@ end
 
 local function UpdateRow(row, find)
     if not find then return end
-    Theme.SetItemIcon(row.icon, find.itemID)
-    local label = ItemName(find.itemID)
-    if Theme.SetRowName then Theme.SetRowName(row.name, label) else row.name:SetText(label) end
-    local r, g, b = Util.GetItemQualityColor and Util.GetItemQualityColor(find.itemID)
-    if not r then r, g, b = Theme.Unpack("text") end
-    row.name:SetTextColor(r, g, b)
-
+    -- Price and deal first, so a find always shows what it costs even when
+    -- its name is still loading.
+    row.price:SetText(Colored(find.price))
+    row.average:SetText(Colored(find.worth))
     local qty = find.qty or 1
-    local text = L.Format("%1$s each, worth %2$s", Colored(find.price), Colored(find.worth))
-    if qty > 1 then text = L.Format("%1$d for sale. %2$s", qty, text) end
-    row.detail:SetText(text)
+    row.qty:SetText(qty > 1 and ("x" .. qty) or "")
 
     local pending = Snipe().pending
-    if IsPending(find) then
+    local busy = IsPending(find)
+    row.price:SetShown(not busy)
+    row.average:SetShown(not busy)
+    row.qty:SetShown(not busy)
+    row.badge:ClearAllPoints()
+    row.badge:SetPoint("RIGHT", row, "RIGHT", CellRight(1), 0)
+    row.badge:SetWidth(busy and (CELL_WIDTH * 3 + CELL_GAP * 2) or CELL_WIDTH)
+    if busy then
         if Snipe().armed == pending then
             row.badge:SetText(L["Click Again"])
         elseif pending.phase == "quoted" then
@@ -131,6 +153,14 @@ local function UpdateRow(row, find)
         row.badge:SetTextColor(Theme.Unpack("profit"))
         row.edge:Hide()
     end
+
+    Theme.SetItemIcon(row.icon, find.itemID)
+    local label = ItemName(find.itemID)
+    if Theme.SetRowName then Theme.SetRowName(row.name, label) else row.name:SetText(label) end
+    local r, g, b
+    if Util.GetItemQualityColor then r, g, b = Util.GetItemQualityColor(find.itemID) end
+    if not (r and g and b) then r, g, b = Theme.Unpack("text") end
+    row.name:SetTextColor(r, g, b)
 end
 
 local function ShowTooltip(row, find)
@@ -223,8 +253,8 @@ function SnipeView:BuildStrip(body, topAnchor)
     -- Watch
     local watchLabel = Row(-56, L["Watch:"])
     local options = {
-        { value = "priced", label = L["Priced Items"] },
-        { value = "disenchant", label = L["To Disenchant"] },
+        { value = "priced", text = L["Priced Items"] },
+        { value = "disenchant", text = L["To Disenchant"] },
     }
     local watch = Widgets.CreateDropdown(strip, options, function(value)
         ns.Config:Set("snipeWatch", value)
@@ -245,21 +275,35 @@ function SnipeView:BuildStrip(body, topAnchor)
     local cols = CreateFrame("Frame", nil, body)
     cols:SetHeight(COLUMNS_HEIGHT)
     self.cols = cols
-    local function Head(key, text, point, x)
+    -- The list sits 14 in from the right for its scroll bar; the heads match.
+    local function Head(key, text, cell)
         local button = CreateFrame("Button", nil, cols)
         button:SetHeight(COLUMNS_HEIGHT)
-        local label = Theme.CreateLabel(button, "tiny", "muted")
-        label:SetPoint("LEFT", button, "LEFT", 0, 0)
-        button.label, button.key, button.text = label, key, text
-        button:SetWidth(90)
-        button:SetPoint(point, cols, point, x, 0)
+        local justify = cell and "RIGHT" or "LEFT"
+        local label = Theme.CreateLabel(button, "tiny", "muted", justify)
+        label:SetAllPoints(button)
+        label:SetWordWrap(false)
+        local arrow = button:CreateTexture(nil, "OVERLAY")
+        arrow:SetTexture(SORT_ARROW)
+        arrow:SetSize(8, 8)
+        arrow:SetVertexColor(Theme.Unpack("accent"))
+        arrow:Hide()
+        button.label, button.arrow, button.key, button.text, button.cell = label, arrow, key, text, cell
+        if cell then
+            button:SetWidth(CELL_WIDTH)
+            button:SetPoint("RIGHT", cols, "RIGHT", CellRight(cell) - 14, 0)
+        else
+            button:SetPoint("LEFT", cols, "LEFT", 8 + ICON_SIZE + 8, 0)
+            button:SetPoint("RIGHT", cols, "RIGHT", NAME_RIGHT - 14, 0)
+        end
         button:SetScript("OnClick", function() self:SortBy(key) end)
         return button
     end
     self.heads = {
-        Head("name", L["Item"], "LEFT", 8 + ICON_SIZE + 8),
-        Head("price", L["Price"], "CENTER", 40),
-        Head("deal", L["Deal"], "RIGHT", -22),
+        Head("name", L["Item"]),
+        Head("average", L["Average"], 3),
+        Head("price", L["Price"], 2),
+        Head("deal", L["Under Average"], 1),
     }
 end
 
@@ -369,9 +413,23 @@ function SnipeView:Refresh(force)
 
     self.head.text:SetText((self:StripOpen() and "- " or "+ ") .. L["SNIPE SETTINGS"])
     for _, head in ipairs(self.heads) do
-        local arrow = ""
-        if head.key == self.sortKey then arrow = self.sortDown and " v" or " ^" end
-        head.label:SetText(head.text .. arrow)
+        local active = head.key == self.sortKey
+        head.label:SetText(head.text)
+        head.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
+        head.arrow:SetShown(active)
+        if active then
+            -- The house arrow points down for biggest first, flipped otherwise.
+            if self.sortDown then head.arrow:SetTexCoord(0, 0.5625, 0, 1)
+            else head.arrow:SetTexCoord(0, 0.5625, 1, 0) end
+            head.arrow:ClearAllPoints()
+            local width = Theme.TextWidth and Theme.TextWidth(head.label) or 0
+            if type(width) ~= "number" then width = 0 end
+            if head.cell then
+                head.arrow:SetPoint("RIGHT", head.label, "RIGHT", -math.ceil(width) - 2, 0)
+            else
+                head.arrow:SetPoint("LEFT", head.label, "LEFT", math.ceil(width) + 2, 0)
+            end
+        end
     end
     Lock(self.cap, running)
     self.pct.editBox:EnableMouse(not running)

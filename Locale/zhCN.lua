@@ -3345,12 +3345,11 @@ L["This is far under what it usually sells for."] = "这远低于平时的售价
 
 -- Snipe tab (strings await the owner's yes)
 L["% of worth"] = "占价值的%"
-L["%1$d for sale. %2$s"] = "在售 %1$d。%2$s"
-L["%1$s each, worth %2$s"] = "每个 %1$s，价值 %2$s"
 L["%d finds"] = "%d 个发现"
 L["%d%% under"] = "低 %d%%"
 L["Asking..."] = "正在询价..."
-L["Deal"] = "捡漏"
+L["Average"] = "均价"
+L["Under Average"] = "低于均价"
 L["Item"] = "物品"
 L["Looking for deals..."] = "正在寻找捡漏..."
 L["Nothing to snipe yet. Scan the auction house first."] = "还没有可捡的。请先扫描拍卖行。"
