@@ -37,9 +37,14 @@ end
 
 --- Whether the wheel should be ours right now.
 function AuctionWheel:Wanted()
-    if not self:IsOn() then return false end
     local panel = ns.PostPanel
-    return panel ~= nil and panel.IsShown ~= nil and panel:IsShown() == true
+    if not (panel ~= nil and panel.IsShown ~= nil and panel:IsShown() == true) then return false end
+    -- The Snipe view has its own switch: wheel up buys the best find.
+    if panel.view == "snipe" then
+        return ns.Config ~= nil and ns.Config:Get("snipeWheel") == true
+            and ns.Config:Get("snipeTab") == true
+    end
+    return self:IsOn()
 end
 
 -- A notch too soon after the last one does nothing.
@@ -54,6 +59,11 @@ end
 function AuctionWheel:List()
     if not self:Wanted() or not self:Ready() then return false end
     local panel = ns.PostPanel
+    if panel.view == "snipe" then
+        -- One notch, one buy click; a big buy still asks "Click Again".
+        if ns.Snipe and ns.Snipe.BuyNext then ns.Snipe:BuyNext() end
+        return true
+    end
     -- Another view showing: Sell's lines read fresh rather than as last drawn.
     if panel.view ~= nil and panel.view ~= "sell" then panel.shownLines = nil end
     panel:ListNext()
@@ -63,6 +73,7 @@ end
 --- Wheel down: the undercut auction with the most money under, as Cancel next.
 function AuctionWheel:Cancel()
     if not self:Wanted() or not self:Ready() then return false end
+    if ns.PostPanel and ns.PostPanel.view == "snipe" then return false end
     if not (ns.MyAuctions and ns.MyAuctions.CancelNext) then return false end
     ns.MyAuctions:CancelNext()
     return true

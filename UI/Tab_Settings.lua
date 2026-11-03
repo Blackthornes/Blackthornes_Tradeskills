@@ -975,6 +975,23 @@ local function Build(outer)
     end, false)
     widgets.mouseWheel:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The Snipe tab (off unless ticked) and wheel buying inside it.
+    local snipeRow = CreateRow(pages.auction, 1, L["Snipe Tab:"], nil)
+    widgets.snipeTab = Widgets.CreateCheckbox(snipeRow, L["On"], function(checked)
+        Config:Set("snipeTab", checked)
+        if ns.PostPanel and ns.PostPanel.LayTabs then ns.PostPanel:LayTabs() end
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.snipeTab:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local snipeWheelRow = CreateRow(pages.auction, 1, L["Wheel Buys:"],
+        L["On the Snipe tab, wheel up buys the best find."])
+    widgets.snipeWheel = Widgets.CreateCheckbox(snipeWheelRow, L["On"], function(checked)
+        Config:Set("snipeWheel", checked)
+        if ns.AuctionWheel then ns.AuctionWheel:Update() end
+    end, false)
+    widgets.snipeWheel:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- The sale alarm and the scan chime moved down to SOUNDS, with a switch
     -- for every other sound (2026-10-02).
     CreateSection(pages.mail, 2, L["AFTER A SALE"])
@@ -2328,6 +2345,8 @@ local function Refresh()
     widgets.askBeforeListing:SetChecked(Config:Get("askBeforeListing") == true)
     widgets.postAnyway:SetChecked(Config:Get("postAnyway") == true)
     widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
+    widgets.snipeTab:SetChecked(Config:Get("snipeTab") == true)
+    widgets.snipeWheel:SetChecked(Config:Get("snipeWheel") == true)
     widgets.overcutting:SetChecked(Config:Get("overcutting") == true)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
     widgets.freeSpaceFirst:SetChecked(Config:Get("craftFreesSpaceFirst") ~= false)
