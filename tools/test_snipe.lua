@@ -70,4 +70,35 @@ Snipe.running = true
 handlers.AUCTION_HOUSE_CLOSED()
 assert(not Snipe:IsRunning(), "closing the auction house stops")
 
+-- 7. Only our own search's rows are read.
+assert(Snipe.OwnResults({ { itemKey = { itemID = 5 } } }, { [5] = 100 }) == true, "our rows")
+assert(Snipe.OwnResults({ { itemKey = { itemID = 5 } }, { itemKey = { itemID = 9 } } }, { [5] = 100 }) == false,
+    "a row outside the batch is someone else's search")
+
+-- 8. Last scan's items first, most valuable first.
+local order = Snipe.OrderPool({
+    { id = 1, worth = 900 }, { id = 2, worth = 100, listed = true },
+    { id = 3, worth = 500, listed = true }, { id = 4, worth = 2000 },
+})
+assert(order[1].id == 3 and order[2].id == 2 and order[3].id == 4 and order[4].id == 1, "listed first, then by worth")
+
+-- 9. Greys and silly averages are left out of Priced Items.
+settings.snipeWatch = "priced"
+local quality, records = {}, {}
+C_Item = { GetItemQualityByID = function(id) return quality[id] end }
+ns.Prices = {
+    GetValue = function(_, id) return records[id] and records[id].value end,
+    Get = function(_, id) return records[id] end,
+    LowestListed = function(r) return r.min end,
+}
+records[10] = { value = 80000, min = 60000, quantity = 2 }
+records[11] = { value = 80000, min = 60000, quantity = 2 }
+records[12] = { value = 6800000000, min = 1000, quantity = 1 }
+quality[10], quality[11], quality[12] = 2, 0, 2
+assert(Snipe:WorthOf(10) == 80000, "a green is watched")
+assert(Snipe:WorthOf(11) == nil, "a grey is not")
+assert(Snipe:WorthOf(12) == nil, "an average over ten times the cheapest is not")
+assert(Snipe.InLastScan(10, 0) == true)
+C_Item, ns.Prices = nil, nil
+
 print("test_snipe: all passed")
