@@ -5,6 +5,10 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.8.0", lines = {
+        "There's a new Snipe tab in the auction house window. It looks for items selling well under their usual price and lets you buy the best one with a click. It never starts on its own, and you set how much it can spend. It's off until you tick \"Snipe Tab:\" in the auction house settings.",
+        "In the money boxes, Tab now jumps from gold to silver to copper.",
+    } },
     { version = "1.7.0", lines = {
         "When you hover an item you can disenchant, the tooltip now shows what each material is worth.",
     } },
@@ -14,9 +18,5 @@ ns.WHATS_NEW = {
         "Road to 300 counts what your other characters hold.",
         "You get asked before a listing goes up far under the usual price.",
         "A new box lets you list items even when they would normally wait.",
-    } },
-    { version = "1.5.0", lines = {
-        "All your Blackthornes addons share one window. A strip down the left has a button for each addon you have, and the tabs of the one you pick sit beside it. At the auction house, mailbox, vendor and trainer it sits next to the game's window, and it goes back when you close that one. Turn it off with One Window on the General page.",
-        "At the auction house the window has an Auction House tab for selling, buying, lists, your auctions and favors, next to Prices, Profit, Queue, Disenchanting and Favors and Writs.",
     } },
 }

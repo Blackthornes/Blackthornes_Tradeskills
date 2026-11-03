@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.8.0
+
+- There's a new Snipe tab in the auction house window. It looks for items selling well under their usual price and lets you buy the best one with a click. It never starts on its own, and you set how much it can spend. It's off until you tick "Snipe Tab:" in the auction house settings.
+- In the money boxes, Tab now jumps from gold to silver to copper.
+
+Fixes and changes:
+
+- Various bug fixes for Tradeskills.
+
 ## 1.7.0
 
 - When you hover an item you can disenchant, the tooltip now shows what each material is worth.
