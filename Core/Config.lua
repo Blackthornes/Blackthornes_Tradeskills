@@ -142,6 +142,16 @@ local DEFAULTS = {
         -- value already saved is kept, so only new installs start with it.
         allowPostingAtALoss = true,
 
+        -- The Snipe tab in the auction house drawer (2026-11-03). Off until
+        -- ticked. Cap is copper per session, 0 until the player sets one.
+        snipeTab = false,
+        snipeCap = 0,
+        snipePct = 70,
+        snipeSound = true,
+        snipeWatch = "priced",
+        snipeStripOpen = true,
+        snipeWheel = false,
+
         -- Refuse a listing that, after the auction house's cut, brings in
         -- less than what the last craft of it cost (asked 2026-10-05). Off
         -- by default. See Logic/CraftedCost.lua.

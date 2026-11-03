@@ -601,6 +601,11 @@ function Scanner:OnBrowseResults()
             pcall(ns.Posting.OnCheckResults, ns.Posting)
         end
 
+        -- The Snipe tab's own small search.
+        if ns.Snipe and ns.Snipe.OnBrowseResults then
+            pcall(ns.Snipe.OnBrowseResults, ns.Snipe)
+        end
+
         self:Report(("picked up %d price(s) from a search the addon did not start")
             :format(learned))
         return

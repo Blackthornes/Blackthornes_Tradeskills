@@ -137,6 +137,7 @@ UI\Main.lua
 UI\ShoppingListsView.lua
 UI\AuctionWheel.lua
 UI\SaleTotal.lua
+Logic\Snipe.lua
 UI\PostPanel.lua
 UI\PriceEditor.lua
 UI\ListRulesWindow.lua
@@ -145,6 +146,7 @@ UI\NeverMakeBox.lua
 UI\BuyQuantity.lua
 UI\AuctionsView.lua
 UI\FavorsView.lua
+UI\SnipeView.lua
 UI\CraftPanel.lua
 UI\ProfessionOpener.lua
 UI\Disenchanter.lua
