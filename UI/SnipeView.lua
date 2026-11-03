@@ -60,7 +60,13 @@ end
 --------------------------------------------------------------------------------
 
 local function DealOf(find)
+    -- A vendor find is ranked by its profit, the others by how far under.
+    if find.kind == "vendor" then return Snipe().Profit(find) end
     return Snipe().Deal(find.price, find.worth) or 0
+end
+
+local function Vendoring()
+    return Snipe():Watch() == "vendor"
 end
 
 function SnipeView:SortedFinds()
@@ -149,7 +155,11 @@ local function UpdateRow(row, find)
         row.badge:SetTextColor(Theme.Unpack("accent"))
         row.edge:Show()
     else
-        row.badge:SetText(L.Format("%d%% under", DealOf(find)))
+        if find.kind == "vendor" then
+            row.badge:SetText(Money(Snipe().Profit(find)))
+        else
+            row.badge:SetText(L.Format("%d%% under", DealOf(find)))
+        end
         row.badge:SetTextColor(Theme.Unpack("profit"))
         row.edge:Hide()
     end
@@ -166,6 +176,10 @@ end
 local function ShowTooltip(row, find)
     if find and Widgets.ShowItemTooltip then
         Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", find.itemID)
+        if find.kind == "vendor" then
+            GameTooltip:AddLine(L.Format("%1$s each, a vendor pays %2$s", Colored(find.price), Colored(find.worth)), 1, 1, 1, true)
+            GameTooltip:Show()
+        end
     end
 end
 
@@ -255,6 +269,7 @@ function SnipeView:BuildStrip(body, topAnchor)
     local options = {
         { value = "priced", text = L["Priced Items"] },
         { value = "disenchant", text = L["To Disenchant"] },
+        { value = "vendor", text = L["Below Vendor"] },
     }
     local watch = Widgets.CreateDropdown(strip, options, function(value)
         ns.Config:Set("snipeWatch", value)
@@ -405,7 +420,7 @@ function SnipeView:Refresh(force)
     local pending = snipe.pending
     local key = table.concat({
         tostring(snipe.version), tostring(running), tostring(snipe:Spent()), tostring(snipe:Cap()),
-        tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()),
+        tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()), snipe:Watch(),
         pending and (pending.phase .. tostring(pending.total)) or "-", tostring(snipe.armed ~= nil),
     }, "|")
     if not force and key == self.key then return end
@@ -414,7 +429,13 @@ function SnipeView:Refresh(force)
     self.head.text:SetText((self:StripOpen() and "- " or "+ ") .. L["SNIPE SETTINGS"])
     for _, head in ipairs(self.heads) do
         local active = head.key == self.sortKey
-        head.label:SetText(head.text)
+        local text = head.text
+        -- Below Vendor: the worth is what a vendor pays, the deal its profit.
+        if Vendoring() then
+            if head.key == "average" then text = L["Vendor"]
+            elseif head.key == "deal" then text = L["Profit"] end
+        end
+        head.label:SetText(text)
         head.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
         head.arrow:SetShown(active)
         if active then
@@ -432,8 +453,11 @@ function SnipeView:Refresh(force)
         end
     end
     Lock(self.cap, running)
-    self.pct.editBox:EnableMouse(not running)
-    self.pct:SetAlpha(running and 0.5 or 1)
+    -- Snipe Below has no say in Below Vendor, so it greys out there.
+    local fixed = running or Vendoring()
+    self.pct.editBox:EnableMouse(not fixed)
+    if fixed then self.pct.editBox:ClearFocus() end
+    self.pct:SetAlpha(fixed and 0.5 or 1)
 
     local rows = self:SortedFinds()
     self.list:SetData(rows)

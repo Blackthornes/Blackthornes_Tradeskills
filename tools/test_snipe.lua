@@ -101,4 +101,53 @@ assert(Snipe:WorthOf(12) == nil, "an average over ten times the cheapest is not"
 assert(Snipe.InLastScan(10, 0) == true)
 C_Item, ns.Prices = nil, nil
 
+-- 10. Below Vendor: worth is what a vendor pays, greys count, any listing
+--     under it is a find, unsure charged items and unpriced ones are out.
+settings.snipeWatch = "vendor"
+assert(Snipe:Watch() == "vendor", "vendor is a watch")
+settings.snipeWatch = "nonsense"
+assert(Snipe:Watch() == "priced", "an unknown watch reads as priced")
+settings.snipeWatch = "vendor"
+local sell, unsure = { [20] = 500, [21] = 300, [22] = 0, [24] = 2 }, { [21] = true }
+ns.Disenchant = {
+    GetSellPrice = function(_, id) return sell[id] end,
+    SellPriceUnsure = function(_, id) return unsure[id] == true end,
+}
+C_Item = { GetItemQualityByID = function() return 0 end }
+assert(Snipe:WorthOf(20) == 500, "a grey's vendor price, no cut")
+assert(Snipe:WorthOf(24) == 2, "no smallest worth in Below Vendor")
+assert(Snipe:WorthOf(21) == nil, "a charged item with an unsure price is out")
+assert(Snipe:WorthOf(22) == nil, "no vendor price, no find")
+assert(Snipe:WorthOf(23) == nil, "unknown, no find")
+assert(Snipe.IsDealFor(499, 500, "vendor", 10) == true, "under vendor is a find whatever Snipe Below says")
+assert(Snipe.IsDealFor(500, 500, "vendor", 95) == false, "at vendor is no profit")
+assert(Snipe.IsDealFor(70, 100, "priced", 70) == true, "other watches keep Snipe Below")
+assert(Snipe.IsDealFor(71, 100, "priced", 70) == false)
+assert(Snipe.Profit({ price = 300, worth = 500 }) == 200)
+local finds = {
+    { itemID = 1, kind = "vendor", price = 90, worth = 100, deal = 10 },
+    { itemID = 2, kind = "vendor", price = 1000, worth = 5000, deal = 80 },
+    { itemID = 3, kind = "vendor", price = 1, worth = 50, deal = 98 },
+}
+table.sort(finds, Snipe.Better)
+assert(finds[1].itemID == 2 and finds[2].itemID == 3 and finds[3].itemID == 1, "biggest profit first")
+local deals = { { itemID = 1, deal = 10 }, { itemID = 2, deal = 50 } }
+table.sort(deals, Snipe.Better)
+assert(deals[1].itemID == 2, "other watches still sort by how far under")
+
+-- 11. A quote that is no longer under a vendor's price is let go.
+Snipe.running, Snipe.spent = true, 0
+settings.snipeCap, settings.snipePct = 100000, 10
+local find = { itemID = 20, kind = "vendor", price = 400, worth = 500, qty = 5 }
+Snipe.finds = { find }
+Snipe.pending = { itemID = 20, count = 2, phase = "asking", find = find }
+Snipe:PriceUpdated(800)
+assert(Snipe.pending and Snipe.pending.phase == "quoted", "400 each is still under 500, Snipe Below ignored")
+Snipe.pending = { itemID = 20, count = 2, phase = "asking", find = find }
+ns.Util.HasFunction = function() return false end
+Snipe:PriceUpdated(1000)
+assert(Snipe.pending == nil and #Snipe.finds == 0, "500 each is no find")
+Snipe:Stop()
+ns.Disenchant, C_Item = nil, nil
+
 print("test_snipe: all passed")
