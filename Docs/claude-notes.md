@@ -669,7 +669,7 @@ it stays closed when that window goes; it never comes back by itself. Only
 an addon closing it on leaving a place, `SharedWindow.Close(true)`, lets it
 go back to the addon open before (`hub.byItself`, read in OnHide). Butler
 passes it from `UI:LeftVendor` and `LeftPlace` (`ButlerTabs:Closed(frame,
-byItself)`). Tested in `tools/test_sharedwindow.lua`.
+byItself)`). Tested in `tools/test_sharedwindow.lua`. Docked or undocked while folded with the fold gem (2026-11-05, FILE_VERSION 6: a player found it squashed after unfolding), the sizes are worked from the size it opens back up to (`SharedWindow.FullSize`, FoldWindow's `state.width`/`state.full`), never the folded strip's, so it opens at the right size.
 
 Tradeskills' tabs have moved in (2026-10-30): the host is `TSTabs` in
 `UI/Main.lua` (`TSTabs.host`, given to `SharedWindow:Join`). With One
