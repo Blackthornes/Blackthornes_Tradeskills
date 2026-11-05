@@ -1618,6 +1618,27 @@ function Queue:BuildEntryCosts()
         if recipe and recipe.outputItemID then made[recipe.outputItemID] = true end
     end
 
+    -- A material already owned in full is neither made nor bought: the
+    -- queue just uses it. On Discord (2026-11-05): 7 bolts in the bags,
+    -- 2 Linen Bags priced the bolts at the auction house and showed a loss,
+    -- 3 bags queued a bolt to make, priced them as made and showed a
+    -- profit, and the bag's tooltip said profit either way. Owned in full,
+    -- it is priced the usual way, the cheaper of making and buying, as the
+    -- tooltip prices it.
+    local needs = {}
+    for _, entry in ipairs(self:GetAll()) do
+        local recipe = ns.Recipes:GetAny(entry.recipeID)
+        for _, reagent in ipairs(recipe and recipe.reagents or {}) do
+            needs[reagent.itemID] = (needs[reagent.itemID] or 0) + reagent.quantity * entry.quantity
+        end
+    end
+    for itemID, needed in pairs(needs) do
+        if not made[itemID] then
+            local owned = ns.Inventory:GetBagCount(itemID) + ns.Inventory:GetBankCount(itemID)
+            if owned >= needed then made[itemID] = "owned" end
+        end
+    end
+
     -- Bought off the auction house, each craft goes further up the
     -- listings (Cost:CostOfMany): 3 at 10s and the rest at 14s make 20
     -- cost more than 20 x 10s, as To buy says. The listings are shared

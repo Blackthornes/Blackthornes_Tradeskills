@@ -423,7 +423,9 @@ end
 -- @param opts.made  { [itemID] = true } for the materials the queue is making.
 --   Given, a material is priced as made when it is in the set and as bought
 --   when it is not, whatever is cheaper today, so a queued craft costs
---   what the queue will actually do. Carried down through sub-crafts.
+--   what the queue will actually do. "owned" in place of true prices it
+--   the usual way, the cheaper of the two, for one owned in full. Carried
+--   down through sub-crafts.
 --
 -- @param opts.recipe  cost this recipe record instead of looking the ID up
 --   among the recipes characters know: a recipe nobody has learned yet
@@ -504,7 +506,7 @@ function Cost:GetCraftCost(recipeID, depth, visited, opts)
                 if perUnit then
                     -- Set to Make on the Level Up tab: made whatever buying costs.
                     local always = self:ItemChoice(itemID) == "make"
-                    if not unitCost or made or always or perUnit < unitCost then
+                    if not unitCost or (made and made[itemID] == true) or always or perUnit < unitCost then
                         unitCost = perUnit
                         source = "craft"
                         crafted = true
