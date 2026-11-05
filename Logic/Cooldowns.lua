@@ -18,11 +18,18 @@
 --     or banked.
 --
 -- What is kept, account wide, in professionCooldowns[characterKey][id] =
--- { name, group, readyAt, recipeID or itemID, told } (never rename it):
+-- { name, group, readyAt, recipeID or itemID, told, seen } (never rename it):
 -- `id` is "spell:N" or "item:N", `readyAt` is time() when it is (or was)
 -- ready, `told` the readyAt last said in chat. Crafts that share one
 -- cooldown (every transmute) are shown once, as their `group`: the name
 -- before the colon ("Transmute: Arcanite" is "Transmute").
+--
+-- `seen` marks a craft not in KNOWN that was seen waiting at least
+-- MIN_SECONDS. While crafting, the profession window says every recipe is
+-- cooling down for the global cooldown (a second or two), so plain cooking
+-- recipes were kept as cooldowns (2026-11-05). A wait that short never
+-- starts one now, and an entry from before with no `seen` is left in the
+-- save but never shown or said (`Cooldowns.Counts`).
 --
 -- One key per character: the character playing writes only under its GUID,
 -- and nothing at all when the client will not say who is playing.
@@ -60,7 +67,8 @@ Cooldowns.ITEMS = {
     [15846] = "Salt Shaker",
 }
 
--- Shorter than this is the global cooldown or a cast, not a craft's.
+-- Shorter than this is the global cooldown or a cast, not a craft's. A
+-- craft not in KNOWN starts being kept only when it has this long left.
 Cooldowns.MIN_SECONDS = 60
 -- After login, how long before the first read and word in chat: the other
 -- addons' login lines (the sister note waits 8 s) come first.
@@ -187,15 +195,17 @@ local function Note(characterKey, id, fields, left)
     if not (store and characterKey) then return end
     local entries = store[characterKey]
     local entry = entries and entries[id]
+    local long = left ~= nil and left >= Cooldowns.MIN_SECONDS
     if not entry then
-        -- Only a craft known to have a cooldown, or one seen cooling down,
-        -- is kept.
-        if not fields.track and not (left and left > 0) then return end
+        -- Only a craft known to have a cooldown, or one seen waiting longer
+        -- than the global cooldown, is kept.
+        if not fields.track and not long then return end
         entries = entries or {}
         store[characterKey] = entries
         entry = {}
         entries[id] = entry
     end
+    if long then entry.seen = true end
     entry.name = fields.name or entry.name
     entry.group = Cooldowns.Group(entry.name) or entry.group
     entry.recipeID = fields.recipeID or entry.recipeID
@@ -223,6 +233,15 @@ local function RecipeName(record, recipeID)
     return nil
 end
 
+--- Is this kept entry a real cooldown? An item's, Classic's own, or a
+--- craft seen waiting longer than the global cooldown.
+function Cooldowns.Counts(id, entry)
+    if type(entry) ~= "table" then return false end
+    if entry.itemID or tostring(id):find("^item:") then return true end
+    if entry.recipeID and Cooldowns.KNOWN[entry.recipeID] then return true end
+    return entry.seen == true
+end
+
 --- Does this craft have a cooldown? Classic's own, or one any character
 --- was seen waiting on. Cost.lua leaves these at their buying price when
 --- only an alt makes them, since one can't be made as often as a queue wants.
@@ -231,7 +250,7 @@ function Cooldowns:HasCooldown(recipeID)
     if Cooldowns.KNOWN[recipeID] then return true end
     local id = "spell:" .. recipeID
     for _, entries in pairs(Store() or {}) do
-        if type(entries) == "table" and entries[id] then return true end
+        if type(entries) == "table" and Cooldowns.Counts(id, entries[id]) then return true end
     end
     return false
 end
@@ -243,7 +262,7 @@ function Cooldowns:NoteRecipe(recipeID, info)
     if not key or type(recipeID) ~= "number" then return end
     local left = Cooldowns.RecipeLeft(recipeID)
     local known = Cooldowns.KNOWN[recipeID]
-    if not known and not (left and left > 0) then
+    if not known and not (left and left >= Cooldowns.MIN_SECONDS) then
         local entries = Store() and Store()[key]
         if not (entries and entries["spell:" .. recipeID]) then return end
     end
@@ -332,7 +351,7 @@ function Cooldowns:Groups(characterKey)
     local groups, list = {}, {}
     local now = Now()
     for id, entry in pairs(type(entries) == "table" and entries or {}) do
-        if type(entry) == "table" and type(entry.readyAt) == "number" then
+        if type(entry) == "table" and type(entry.readyAt) == "number" and Cooldowns.Counts(id, entry) then
             local name = entry.group or entry.name or tostring(id)
             local group = groups[name]
             if not group then
