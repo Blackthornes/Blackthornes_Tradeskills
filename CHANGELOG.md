@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.9.6
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Cooldowns.** Plain cooking recipes no longer show up as cooldowns, and Butler no longer lists them as ready.
+
 ## 1.9.5
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
