@@ -794,6 +794,29 @@ function Recipes:NothingNewMidCraft()
     return signature ~= nil and signature == last.signature
 end
 
+-- With no craft under way, the same window and nothing new is read again at
+-- most this often.
+Recipes.REREAD_SECONDS = 120
+
+--- Whether a list update has nothing new to read, craft or no craft. The
+--- window says its list changed for every bag change (looting, buying, each
+--- single craft), and each full read made fresh tables for every recipe and
+--- had the windows and the craft pane work it all out again. With the window
+--- open for hours that was a steady stream of hitches (a player saw frame
+--- drops three hours in, 2026-11-05). The same window with the same recipes
+--- and skill levels is now read again only mid-run when something moved,
+--- and otherwise at most every REREAD_SECONDS.
+function Recipes:NothingNew()
+    if self:NothingNewMidCraft() then return true end
+    local last = self.lastHarvest
+    if not last or last.generation ~= self.windowGeneration then return false end
+    if type(last.at) ~= "number" or type(GetTime) ~= "function" then return false end
+    local ok, now = pcall(GetTime)
+    if not ok or type(now) ~= "number" or now - last.at >= Recipes.REREAD_SECONDS then return false end
+    local signature = self:HarvestSignature()
+    return signature ~= nil and signature == last.signature
+end
+
 function Recipes:Harvest()
     local trade = ns.Compat:Get().tradeskill
     if trade.mode ~= "modern" then return false end
@@ -906,7 +929,9 @@ function Recipes:Harvest()
         onDone = function()
             self.harvesting = false
             record.recipesCachedAt = time()
-            self.lastHarvest = { generation = generation, signature = signature }
+            local okNow, now = pcall(GetTime)
+            self.lastHarvest = { generation = generation, signature = signature,
+                at = okNow and type(now) == "number" and now or nil }
 
             if ns.SkillUp then ns.SkillUp:EndCapture() end
 
@@ -945,11 +970,8 @@ end
 --------------------------------------------------------------------------------
 
 function Recipes:OnTradeSkillUpdate()
-    -- A profession window is open, so skill levels are certainly loaded now.
-    -- This is the read that fixes a zeroed one from login.
-    self:RefreshProfessions()
-
-    -- The list fires repeatedly while a profession window settles; coalesce.
+    -- The list fires repeatedly while a profession window settles, and on
+    -- every bag change after; coalesce, the professions read included.
     if self.harvestTimer then
         self.harvestTimer:Cancel()
     end
@@ -964,7 +986,10 @@ function Recipes:OnTradeSkillUpdate()
             return
         end
         Recipes.harvestTimer = nil
-        if Recipes:NothingNewMidCraft() then return end
+        -- A profession window is open, so skill levels are certainly loaded
+        -- now. This is the read that fixes a zeroed one from login.
+        Recipes:RefreshProfessions()
+        if Recipes:NothingNew() then return end
         Recipes:Harvest()
     end
 
@@ -1068,6 +1093,10 @@ function Recipes:OnEnable()
     ns.RegisterEvent(self, "TRADE_SKILL_DATA_SOURCE_CHANGING", self.OnWindowChanged)
     ns.RegisterEvent(self, "TRADE_SKILL_DATA_SOURCE_CHANGED", self.OnWindowChanged)
     ns.RegisterEvent(self, "TRADE_SKILL_DATA_SOURCE_CHANGED", self.OnTradeSkillUpdate)
+    -- A recipe learned with the window open lists no more recipes than
+    -- before, so it counts as a new window and is read at once.
+    ns.RegisterEvent(self, "NEW_RECIPE_LEARNED", self.OnWindowChanged)
+    ns.RegisterEvent(self, "NEW_RECIPE_LEARNED", self.OnTradeSkillUpdate)
 
     -- Learning or dropping a profession, read at once rather than at the
     -- next profession window. Not every client has this event; RegisterEvent

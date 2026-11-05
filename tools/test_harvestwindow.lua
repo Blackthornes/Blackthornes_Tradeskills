@@ -21,6 +21,8 @@ UnitLevel = function() return 30 end
 UnitFactionGroup = function() return "Horde" end
 GetRealmName = function() return "Forever PvE" end
 time = time or os.time
+-- No clock until the section that needs one (another suite may leave one).
+GetTime = nil
 
 Enum = { TradeskillRelativeDifficulty = { Optimal = 0, Medium = 1, Easy = 2, Trivial = 3 } }
 
@@ -208,5 +210,58 @@ Fire("TRADE_SKILL_LIST_UPDATE")
 RunTimers()
 check("with no craft under way, an update reads as before", worker ~= nil)
 C_TradeSkillUI.IsRecipeRepeating = nil
+
+print("\nwith the window left open, bag changes do not read every recipe")
+-- A player saw frame drops after three hours with the window open
+-- (2026-11-05): every loot, buy and single craft read every recipe again.
+local clock = 1000
+GetTime = function() return clock end
+while worker.running do worker:Step() end
+worker = nil
+Fire("TRADE_SKILL_SHOW")
+RunTimers()
+worker:Step() worker:Step() worker:Step()
+check("a harvest finished", not worker.running)
+local reads = 0
+local realRefresh = Recipes.RefreshProfessions
+Recipes.RefreshProfessions = function() reads = reads + 1 end
+worker = nil
+for _ = 1, 20 do
+    clock = clock + 1
+    Fire("TRADE_SKILL_LIST_UPDATE")
+end
+check("a burst of updates waits on one timer", #timers == 20
+    and (function() local live = 0 for _, t in ipairs(timers) do if not t.cancelled then live = live + 1 end end return live end)() == 1)
+check("the professions are not read per update", reads == 0)
+RunTimers()
+check("the professions are read once the burst settles", reads == 1)
+check("no craft under way, nothing new: nothing read", worker == nil)
+Recipes.RefreshProfessions = realRefresh
+
+levels[197] = 102
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+check("a skill point still reads at once", worker ~= nil and worker.running)
+while worker.running do worker:Step() end
+
+worker = nil
+Fire("NEW_RECIPE_LEARNED")
+RunTimers()
+check("a recipe learned with the window open reads at once", worker ~= nil and worker.running)
+while worker.running do worker:Step() end
+
+worker = nil
+clock = clock + Recipes.REREAD_SECONDS + 1
+Fire("TRADE_SKILL_LIST_UPDATE")
+RunTimers()
+check("after a while it reads again anyway", worker ~= nil and worker.running)
+while worker.running do worker:Step() end
+
+worker = nil
+Fire("TRADE_SKILL_CLOSE")
+Fire("TRADE_SKILL_SHOW")
+RunTimers()
+check("opening the window again reads it", worker ~= nil and worker.running)
+GetTime = nil
 
 print(("\n%d checks passed"):format(checks))
