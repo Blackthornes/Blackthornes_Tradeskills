@@ -184,4 +184,33 @@ totals = Queue:GetTotals()
 check("beside a priced craft both materials count", totals.cost == 112 * 4 * 78 + 7630)
 check("profit is only the priced craft's", totals.profit == 7550 - 7630 and totals.priceable == false)
 
+print("\nenough bolts already owned")
+
+-- On Discord (2026-11-05): with the bolts all in the bags, no bolt craft
+-- was queued, so the row priced them at the auction house and showed a
+-- loss. One more bag queued a bolt to make, priced them as made and showed
+-- a profit. The bag's tooltip said profit either way. Owned in full, they
+-- are priced the cheaper way, as the tooltip has it.
+ns.db = { queue = {} }
+bags[BOLT] = 3
+queueOneBag()
+check("no bolt crafts are queued", Queue:Find(20) == nil)
+totals = Queue:GetTotals()
+check("the owned bolts cost what making them does (got " .. totals.cost .. ")",
+    totals.cost == 3 * 885 + 4885 + 90)
+check("profit matches the bag's own (got " .. totals.profit .. ")",
+    totals.profit == ns.Profit:Analyse(10).profit)
+
+bags[BOLT] = 2
+queueOneBag()
+check("short of bolts, the missing one is still made", Queue:Find(20) ~= nil
+    and Queue:GetTotals().cost == 7630)
+
+config.autoQueueSubCrafts = false
+queueOneBag()
+check("short with sub-crafts off, the bolts are still bought",
+    Queue:GetTotals().cost == 3090 + 4885 + 90)
+config.autoQueueSubCrafts = nil
+bags[BOLT] = nil
+
 print(("\n%d check(s) passed\n"):format(checks))
