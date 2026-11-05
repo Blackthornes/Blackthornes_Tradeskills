@@ -23,6 +23,14 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.10.0
+
+- Two new settings let Tradeskills stay shut at the auction house and beside your professions until you open it. Both start on. Find them in Settings, on the Auction House page.
+
+Fixes and changes:
+
+- Listings from your other account now count under this account's realm.
+
 ## 1.9.7
 
 Fixes and changes:

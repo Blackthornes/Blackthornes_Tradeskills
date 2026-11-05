@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.10.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Auto open.** Two new settings on the Auction House page under AUTO OPEN: Open at AH: and Open at Professions:. Both start on, so nothing changes unless you untick them. Unticked, Tradeskills stays shut at the auction house or beside your profession window until you open it yourself.
+- **Your other account.** Listings from your other account now count under this account's realm, so Keep in stock sees them.
+
 ## 1.9.7
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
