@@ -889,6 +889,7 @@ end
 
 function UI:Show()
     self:Build()
+    UI:AskedAtAuction()
     -- With "One Window:" ticked, it opens in the one window instead.
     if TSTabs:Route() then return end
 
@@ -1190,6 +1191,10 @@ end
 -- Scanning only works while the auction house is open, so the control belongs
 -- where the player already is rather than only inside our own window.
 function UI:AttachToAuctionHouse()
+    -- "Open at AH:" unticked: nothing comes up until the player opens
+    -- Tradeskills on this visit (UI:AskedAtAuction).
+    if not UI.AuctionWanted() then return end
+
     local auctionFrame, frameName = self:FindAuctionFrame()
     local bar = self:GetAuctionBar()
 
@@ -2153,6 +2158,32 @@ end
 --- as either opens and closes again as it closes (a player's request,
 --- 2026-10-02). Only a window opened this way is closed: one the player
 --- already had open stays open.
+--- "Open at AH:" on the Auction page (`openAtAuction`, on unless unticked;
+--- a player's request, 2026-11-05). Unticked, Tradeskills stays shut at the
+--- auction house until the player opens it there; then the sell list and
+--- the one window's Auction House tab come up as usual for that visit.
+function UI.OpensAtAuction()
+    return ns.Config:Get("openAtAuction") ~= false
+end
+
+--- True while Tradeskills may come up at the auction house: ticked, or the
+--- player opened it on this visit.
+function UI.AuctionWanted()
+    return UI.OpensAtAuction() or UI.ahAsked == true
+end
+
+--- The player opened Tradeskills (UI:Show, or its button in the one
+--- window) while the auction house is open with "Open at AH:" unticked:
+--- what it would have shown by itself comes up now, once a visit.
+function UI:AskedAtAuction()
+    if UI.ahAsked or UI.OpensAtAuction() then return end
+    if not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return end
+    UI.ahAsked = true
+    C_Timer.After(0, function()
+        if ns.Scanner.isAuctionHouseOpen then UI:AttachToAuctionHouse() end
+    end)
+end
+
 function UI:OpenWithShop(which)
     if ns.Config:Get("openWithShops") ~= true then return end
     self:Build()
@@ -2227,6 +2258,7 @@ function UI:OnEnable()
         UI:UpdateHeader()
         -- A new visit opens the one window once more (TSTabs:AtAuctionHouse).
         TSTabs.ahOpened = false
+        UI.ahAsked = false
         UI:AttachToAuctionHouse()
 
         -- Blizzard's auction UI is load-on-demand, so on the first open of a
@@ -2458,6 +2490,7 @@ function TSTabs:Enter(area)
     if not area then return end
     self.area = area
     UI:Build()
+    UI:AskedAtAuction()
     TSTabs:LayIn()
     TSTabs:Grow()
     local key = self.wanted
@@ -2491,7 +2524,7 @@ function TSTabs:AtAuctionHouse()
         self.watching = true
         pcall(One.Watch, function() TSTabs:Settle() end)
     end
-    if not self.ahOpened then
+    if not self.ahOpened and UI.AuctionWanted() then
         self.ahOpened = true
         local okOpen, isOpen = pcall(One.IsOpen)
         if not self.area and not (okOpen and isOpen) then UI.openedFor = "auction" end
@@ -2544,7 +2577,7 @@ function TSTabs:Settle()
         -- own it was laid beside the auction house, on top of that addon.
         local okPlace, place = pcall(One and One.Place or function() end)
         if okPlace and place == "auction" and PostPanel and PostPanel.Attach
-            and not TSTabs.OneStaysHere(One) then
+            and UI.AuctionWanted() and not TSTabs.OneStaysHere(One) then
             pcall(PostPanel.Attach, PostPanel)
         end
         -- Lit again on the usual row too, which missed any pick made here.

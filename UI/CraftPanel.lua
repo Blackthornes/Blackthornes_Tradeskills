@@ -2313,11 +2313,19 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
+--- True unless "Open at Professions:" on the Queue page is unticked.
+function CraftPanel.OpensWithProfession()
+    return ns.Config:Get("openAtProfessions") ~= false
+end
+
 function CraftPanel:OnEnable()
     -- Blizzard's profession UI is load-on-demand, so on the first open of a
     -- session the frame may not exist yet when this event arrives. Re-anchor
     -- shortly after in case it appeared late.
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", function()
+        -- "Open at Professions:" unticked (`openAtProfessions`, a player's
+        -- request, 2026-11-05): the pane waits for /bts pane.
+        if not CraftPanel.OpensWithProfession() then return end
         CraftPanel:Attach()
 
         C_Timer.After(0.5, function()
