@@ -141,6 +141,22 @@ recipeLeft[2000] = 7200
 Cooldowns:NoteRecipe(2000, { name = "Linen Bolt" })
 check("the window saying it cools down keeps it", ns.db.professionCooldowns[ANA]["spell:2000"].readyAt, now + 7200)
 
+print("\nthe global cooldown is no craft's cooldown")
+recipeLeft[2538] = 1.5
+Cooldowns:NoteRecipe(2538, { name = "Charred Wolf Meat" })
+check("a recipe waiting on the global cooldown is not kept", ns.db.professionCooldowns[ANA]["spell:2538"], nil)
+ns.db.professionCooldowns[ANA]["spell:2540"] = { name = "Roasted Boar Meat", group = "Roasted Boar Meat",
+  recipeID = 2540, readyAt = now - 10 }
+local shown = false
+for _, group in ipairs(Cooldowns:Groups(ANA)) do
+  if group.group == "Roasted Boar Meat" then shown = true end
+end
+check("one saved from the global cooldown before is not shown", shown, false)
+check("nor counted as a cooldown craft", Cooldowns:HasCooldown(2540), false)
+check("but left in the save", ns.db.professionCooldowns[ANA]["spell:2540"] ~= nil, true)
+check("a real one seen from the window still counts", Cooldowns:HasCooldown(2000), true)
+ns.db.professionCooldowns[ANA]["spell:2540"] = nil
+
 print("\nother characters")
 ns.db.professionCooldowns[WITHER] = { ["spell:18560"] = { name = "Mooncloth", group = "Mooncloth",
   recipeID = 18560, readyAt = now - 60 } }
