@@ -353,6 +353,45 @@ check("forget removed the copies", forgotten, 3)
 check("and kept my own", bob.ns.db.characters["Player-2-Bob"] ~= nil, true)
 
 --------------------------------------------------------------------------------
+print("\nlistings across accounts with different realm names")
+--------------------------------------------------------------------------------
+
+-- Forever names the realm differently on each of a player's accounts.
+do
+    current = bob
+    local realGetRealmKey = bob.ns.Config.GetRealmKey
+    bob.ns.Config.GetRealmKey = function() return "CAMWOW US2 Realm 3 PvE-Alliance" end
+    local reading = { items = { [2997] = 6 }, updatedAt = clock,
+        listings = { { itemID = 2997, quantity = 6, unit = 900 } } }
+    check("a character from the other account is taken",
+        (AccountLink:Accept("Ana-Realm", { guid = "Player-1-Ana5", name = "Ana",
+            auctions = { ["CAMWOW US2 Realm 7 PvE-Alliance"] = reading } })), true)
+    local mine = bob.ns.db.postedAuctions["CAMWOW US2 Realm 3 PvE-Alliance"]
+    check("  her listings go under this account's realm",
+        mine and mine.byCharacter and mine.byCharacter["Player-1-Ana5"]
+        and mine.byCharacter["Player-1-Ana5"].items[2997], 6)
+    check("  not under the name her account gives",
+        bob.ns.db.postedAuctions["CAMWOW US2 Realm 7 PvE-Alliance"], nil)
+
+    -- The other side stays apart.
+    AccountLink:Accept("Ana-Realm", { guid = "Player-1-Ana6", name = "Ana",
+        auctions = { ["CAMWOW US2 Realm 7 PvE-Horde"] = reading } })
+    check("  a Horde reading stays under its own key",
+        bob.ns.db.postedAuctions["CAMWOW US2 Realm 7 PvE-Horde"].byCharacter["Player-1-Ana6"] ~= nil, true)
+
+    -- Listings saved before the fix are moved over once.
+    bob.ns.db.postedAuctions["CAMWOW US2 Realm 9 PvE-Alliance"] = { items = {}, byCharacter = {
+        ["Player-1-Ana7"] = reading, ["Player-2-Bob"] = reading } }
+    bob.ns.db.characters["Player-1-Ana7"] = { name = "Ana", linkedFrom = "Ana", recipes = {}, inventory = {} }
+    check("an old reading is moved", AccountLink:FileListings(), 1)
+    check("  now under this account's realm",
+        mine.byCharacter["Player-1-Ana7"] ~= nil, true)
+    check("  one of this account's own is left alone",
+        bob.ns.db.postedAuctions["CAMWOW US2 Realm 9 PvE-Alliance"].byCharacter["Player-2-Bob"] ~= nil, true)
+    bob.ns.Config.GetRealmKey = realGetRealmKey
+end
+
+--------------------------------------------------------------------------------
 print("\nguild prices")
 --------------------------------------------------------------------------------
 

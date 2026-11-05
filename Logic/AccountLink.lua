@@ -298,6 +298,27 @@ local function CleanReading(reading)
     }
 end
 
+--- One key for a realm, the same on every account of one player: case,
+--- spaces and Forever's "Realm N" part dropped. The same few lines are in
+--- Queue, QueueMail, GoldGoal and GoldLog.
+local function RealmKey(name)
+    if type(name) ~= "string" or name == "" or name == "?" then return nil end
+    local key = name:lower():gsub("%s", ""):gsub("realm%d+", "")
+    if key == "" then return nil end
+    return key
+end
+
+--- A partner's realm key as this account files it: our own key when it is
+--- the same realm and side, else as sent.
+local function OurRealmKey(theirs)
+    local ours = ns.Config and ns.Config.GetRealmKey and ns.Config:GetRealmKey()
+    if type(ours) == "string" and theirs ~= ours and RealmKey(theirs) and RealmKey(theirs) == RealmKey(ours) then
+        return ours
+    end
+    return theirs
+end
+AccountLink.OurRealmKey = OurRealmKey
+
 --- Store a character a partner sent.
 -- @return true, or nil and why it was refused
 function AccountLink:Accept(sender, payload, hash)
@@ -326,7 +347,13 @@ function AccountLink:Accept(sender, payload, hash)
 
     -- Its listings, under the realm they were read on. A linked character
     -- that no longer shares auctions stops counting toward Keep in stock.
-    local auctions = type(payload.auctions) == "table" and payload.auctions or {}
+    -- Forever names the realm differently on each account ("... Realm 7 PvE"
+    -- on one, "... Realm 3 PvE" on the other), so a realm that is ours by
+    -- RealmKey is filed under our own key, where Keep in stock reads it.
+    local auctions = {}
+    for realmKey, reading in pairs(type(payload.auctions) == "table" and payload.auctions or {}) do
+        if type(realmKey) == "string" then auctions[OurRealmKey(realmKey)] = reading end
+    end
     for realmKey, realm in pairs(ns.db.postedAuctions or {}) do
         if type(realm) == "table" and type(realm.byCharacter) == "table" and auctions[realmKey] == nil then
             realm.byCharacter[guid] = nil
@@ -532,7 +559,41 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
+--- Listings a partner sent before OurRealmKey, kept under their account's
+--- name for the realm, moved under ours so Keep in stock counts them. Only
+--- linked characters, and never over a reading already under our key.
+-- @return how many were moved
+function AccountLink:FileListings()
+    local all = ns.db and ns.db.postedAuctions
+    local characters = ns.db and ns.db.characters
+    if type(all) ~= "table" or type(characters) ~= "table" then return 0 end
+    local ours = ns.Config:GetRealmKey()
+    if type(ours) ~= "string" or ours:find("^UnknownRealm%-") then return 0 end
+    local moved = 0
+    for realmKey, realm in pairs(all) do
+        if realmKey ~= ours and OurRealmKey(realmKey) == ours
+            and type(realm) == "table" and type(realm.byCharacter) == "table" then
+            for guid, reading in pairs(realm.byCharacter) do
+                local record = characters[guid]
+                if type(record) == "table" and record.linkedFrom ~= nil then
+                    local mine = all[ours]
+                    if type(mine) ~= "table" then
+                        mine = { items = {} }
+                        all[ours] = mine
+                    end
+                    mine.byCharacter = mine.byCharacter or {}
+                    if mine.byCharacter[guid] == nil then mine.byCharacter[guid] = reading end
+                    realm.byCharacter[guid] = nil
+                    moved = moved + 1
+                end
+            end
+        end
+    end
+    return moved
+end
+
 function AccountLink:OnEnable()
+    pcall(self.FileListings, self)
     Comm:On("H", function(sender, body, channel) AccountLink:OnHello(sender, body, channel, false) end)
     Comm:On("A", function(sender, body, channel) AccountLink:OnHello(sender, body, channel, true) end)
     Comm:OnTable("M", function(...) AccountLink:OnManifest(...) end)

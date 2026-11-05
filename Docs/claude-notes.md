@@ -1018,7 +1018,14 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   characters arrive as ordinary `characters[guid]` records marked
   `linkedFrom` (never rename it), so everything that reads alts (Farmer
   aside, Equipment's crafting included) sees them. A copy never replaces
-  one of the account's own characters and is never sent on.
+  one of the account's own characters and is never sent on. Their
+  listings (Share Auctions) come under the sender's realm key, which on
+  Forever names another server for each account (see the realm fix in
+  1.9.7), so `AccountLink:Accept` files a realm that matches ours by
+  `RealmKey` under our own `GetRealmKey()`, where Keep in stock reads it
+  (`OurRealmKey`); `FileListings` moves ones saved before, at login
+  (2026-11-05, a player's report). Account link never sends price scans:
+  prices cross accounts only through guild or realm prices.
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
   in `Prices:GetValue`: an item never scanned, or one gone stale while
