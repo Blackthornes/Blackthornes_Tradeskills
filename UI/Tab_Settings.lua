@@ -1449,7 +1449,7 @@ local function Build(outer)
 
     -- What comes up by itself (a player's request, 2026-11-05): ticked
     -- unless unticked, so nothing changed for anyone.
-    CreateSection(pages.auction, 1, L["OPEN BY ITSELF"])
+    CreateSection(pages.auction, 1, L["AUTO OPEN"])
 
     local ahRow = CreateRow(pages.auction, 1, L["Open at AH:"],
         L["Opens Tradeskills when you open the auction house."])
