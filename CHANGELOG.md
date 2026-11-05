@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.9.5
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Profession window.** No more frame drops with the profession window open over a long session.
+
 ## 1.9.4
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
