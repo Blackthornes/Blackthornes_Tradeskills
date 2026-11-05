@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.9.1
+
+Fixes and changes:
+
+- Various bug fixes for Tradeskills.
+
 ## 1.8.0
 
 Fixes and changes:
