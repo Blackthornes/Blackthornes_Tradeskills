@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.9.2
+
+Fixes and changes:
+
+- Vendor map pins show the icon of the material to buy.
+
 ## 1.9.1
 
 Fixes and changes:

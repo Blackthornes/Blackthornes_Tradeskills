@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.9.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Vendor map pins.** They show the icon of the material to buy.
+
 ## 1.9.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
