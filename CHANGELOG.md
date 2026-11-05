@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.9.7
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Realms.** Characters on your second account now count as this realm in Characters, queue mail and gold totals.
+- **Your price.** Use suggested only shows once you type your own price.
+- **Your price.** The labels fit in full, so Suggested and How many are no longer cut short.
+
 ## 1.9.6
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
