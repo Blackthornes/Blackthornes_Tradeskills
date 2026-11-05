@@ -978,6 +978,44 @@ do
     realAnalyse, realGetMethod, realDescribe
 end
 
+-- The game's character window opens beside the profession window, where the
+-- pane docks. While it is up the pane drops below it, so gear can be clicked.
+do
+  check("the pane sits above the game's windows", CraftPanel.StrataFor(false), "HIGH")
+  check("and below them while the character window is up", CraftPanel.StrataFor(true), "LOW")
+
+  local strata = "HIGH"
+  local hooks = {}
+  local sheet = { shown = false }
+  function sheet:IsShown() return self.shown end
+  function sheet:HookScript(event, fn) hooks[event] = fn end
+  local oldSheet = _G.CharacterFrame
+  _G.CharacterFrame = sheet
+
+  local oldFrame = CraftPanel.frame
+  CraftPanel.frame = {
+    SetFrameStrata = function(_, s) strata = s end,
+    GetFrameStrata = function() return strata end,
+  }
+  CraftPanel.watchedSheets = nil
+  CraftPanel:WatchSheets()
+  check("the character window is only hooked", type(hooks.OnShow) == "function" and type(hooks.OnHide) == "function", true)
+
+  sheet.shown = true
+  hooks.OnShow()
+  check("opening the character window puts the pane under it", strata, "LOW")
+  sheet.shown = false
+  hooks.OnHide()
+  check("closing it brings the pane back up", strata, "HIGH")
+
+  hooks = {}
+  CraftPanel:WatchSheets()
+  check("a sheet is hooked once", hooks.OnShow, nil)
+
+  CraftPanel.frame = oldFrame
+  _G.CharacterFrame = oldSheet
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))
