@@ -658,3 +658,16 @@ ns.RegisterCommand("enchant", L["turn the Enchant window on or off"], function(a
         for _, line in ipairs(EnchantWindow:ProbeLines()) do ns.Print(line[1] .. ": " .. line[2]) end
     end
 end)
+
+-- A one-time What's New card while the window is off (asked with the build,
+-- 2026-11-05). Looked at once either way, so it never comes back.
+ns.WHATS_NEW_TIPS = ns.WHATS_NEW_TIPS or {}
+table.insert(ns.WHATS_NEW_TIPS, {
+    key = "enchantWindow",
+    title = L["Enchant Window"],
+    icon = [[Interface\Icons\Trade_Engraving]],
+    paragraphs = { L["Pick an item, then click Enchant. It sits beside your Enchanting window."] },
+    button = L["Turn It On"],
+    due = function() return not EnchantWindow:IsOn() end,
+    run = function() EnchantWindow:SetOn(true) end,
+})
