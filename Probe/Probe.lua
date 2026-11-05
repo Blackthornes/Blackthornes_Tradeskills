@@ -397,6 +397,9 @@ function Probe:PrintReport()
     end
     -- Learn next's Show the way (2026-10-12).
     if ns.Waypoints then Line("show the way", ns.Waypoints:ProbeText()) end
+    if ns.EnchantWindow and ns.EnchantWindow.ProbeLines then
+        for _, line in ipairs(ns.EnchantWindow:ProbeLines()) do Line(line[1], line[2]) end
+    end
 
     if self.professionLines then
         for _, entry in ipairs(self.professionLines) do

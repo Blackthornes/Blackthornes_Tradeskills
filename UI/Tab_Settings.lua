@@ -1818,6 +1818,15 @@ local function Build(outer)
     goldPlace:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(goldPlace)
 
+    -- Enchant window (Trent said build it, 2026-11-05): our own window
+    -- beside the Enchanting window. Off unless ticked (Logic/EnchantWindow.lua).
+    CreateSection(pages.look, 2, L["ENCHANTING"])
+    local enchantRow = CreateRow(pages.look, 2, L["Enchant Window:"], nil)
+    widgets.enchantWindow = Widgets.CreateCheckbox(enchantRow, L["On"], function(checked)
+        if ns.EnchantWindow then ns.EnchantWindow:SetOn(checked) else Config:Set("enchantWindow", checked) end
+    end, false)
+    widgets.enchantWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Sharing (asked 2026-10-07): your characters on another account of
     -- yours, and prices within your guild. Logic/AccountLink.lua and
     -- Logic/GuildPrices.lua; every /bts share command has a control here.
@@ -2472,6 +2481,7 @@ local function Refresh()
     if widgets.shareData then widgets.shareData:SetChecked(Config:Get("shareData") == true) end
     widgets.guildStatus:SetText(ns.GuildPrices and ns.GuildPrices:Status() or "")
     widgets.realmPrices:SetChecked(Config:Get("realmPrices") ~= false)
+    if widgets.enchantWindow then widgets.enchantWindow:SetChecked(Config:Get("enchantWindow") == true) end
     widgets.realmStatus:SetText(ns.RealmPrices and ns.RealmPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")

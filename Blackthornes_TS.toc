@@ -96,6 +96,7 @@ Logic\MerchantsFavor.lua
 Logic\Writs.lua
 Logic\Banks.lua
 Logic\Upgrades.lua
+Logic\EnchantWindow.lua
 Logic\KeepHere.lua
 Logic\SisterKeeps.lua
 Logic\BagsFull.lua
@@ -148,6 +149,7 @@ UI\AuctionsView.lua
 UI\FavorsView.lua
 UI\SnipeView.lua
 UI\CraftPanel.lua
+UI\EnchantWindow.lua
 UI\ProfessionOpener.lua
 UI\Disenchanter.lua
 UI\SellMarked.lua
