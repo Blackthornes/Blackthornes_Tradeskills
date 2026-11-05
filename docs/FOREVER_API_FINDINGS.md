@@ -488,3 +488,13 @@ client can close these through `PLAYER_INTERACTION_MANAGER_FRAME_HIDE`
 (its argument an `Enum.PlayerInteractionType`: MailInfo 17, Merchant 5,
 Trainer 7, Auctioneer 21) without the old close event, so that event
 undocks too. Every event is registered inside a pcall.
+
+## GetRealmName differs between one player's accounts (2026-11-05)
+
+A player's two accounts on one realm got different answers from
+`GetRealmName`: "CAMWOW US2 Realm 7 PvE" on one and "CAMWOW US2 Realm 3
+PvE" on the other (the GUIDs' server numbers differ too, 6933 and 6929),
+though the game shows them as the same realm. Within one account the
+answer stays the same. So a realm is compared by a key with spaces, case
+and the "Realm N" part left out (`RealmKey`, in Tab_Characters, Queue,
+QueueMail, Butler, GoldGoal and GoldLog), never by the raw name.
