@@ -568,6 +568,7 @@ local DEFAULTS = {
         -- unticked since the owner asked 2026-10-28; never rename it. See
         -- Logic/RealmPrices.lua and Config:RealmPricesOnOnce.
         realmPrices = true,
+        enchantWindow = false,
         -- Send your own disenchant results and recipe skills to the
         -- addon's maker (2026-10-18). Off unless ticked; never rename it.
         -- See Logic/Contribute.lua.

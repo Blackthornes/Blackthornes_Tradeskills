@@ -96,6 +96,7 @@ Logic\MerchantsFavor.lua
 Logic\Writs.lua
 Logic\Banks.lua
 Logic\Upgrades.lua
+Logic\EnchantWindow.lua
 Logic\KeepHere.lua
 Logic\SisterKeeps.lua
 Logic\BagsFull.lua
