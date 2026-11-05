@@ -21,7 +21,7 @@ local Theme = ns.Theme
 local Widgets = ns.Widgets
 local Util = ns.Util
 
-local WIDTH = 320
+local WIDTH = 340
 local HEIGHT = 300
 
 -- Below the notes: a gap, the tick box, a gap, the buttons and the margin
@@ -212,6 +212,20 @@ local function RowLabel(parent, text, anchor, y)
     return label
 end
 
+--- Widen the row labels to the longest one, so "Suggested" and "How many"
+--- (and longer words in other languages) show in full, never cut short
+--- (a player saw "Suggest..." and "How ma...", 2026-11-05).
+local function FitLabels(labels)
+    local widest = LABEL_WIDTH
+    for _, label in ipairs(labels) do
+        local width = Theme.TextWidth(label)
+        if width and width + 8 > widest then widest = math.ceil(width + 8) end
+    end
+    for _, label in ipairs(labels) do label:SetWidth(widest) end
+    return widest
+end
+PriceEditor.FitLabels = FitLabels
+
 function PriceEditor:Build()
     if self.frame then return self.frame end
 
@@ -253,11 +267,15 @@ function PriceEditor:Build()
     suggestedValue:SetPoint("LEFT", suggested, "RIGHT", 0, 0)
     self.suggested = suggestedValue
 
+    -- Shown only once a price of your own is typed: while the suggested
+    -- price is the one in use there is nothing to go back to, and a greyed
+    -- out button read as broken (a player's report, 2026-11-05).
     self.reset = Widgets.CreateButton(frame, L["Use suggested"], function()
         PriceEditor:SetPrice(nil)
     end, { width = 100, height = 20 })
     self.reset:SetPoint("RIGHT", frame, "RIGHT", -INSET, 0)
     self.reset:SetPoint("TOP", suggested, "TOP", 0, 4)
+    self.reset:Hide()
 
     -- Each, how many, and the total: change any one and the others follow.
     local each = RowLabel(frame, L["Each"], suggested, -16)
@@ -278,6 +296,7 @@ function PriceEditor:Build()
     self.total = MoneyBoxes(frame, function(copper) PriceEditor:SetTotal(copper) end)
     self.total:SetPoint("LEFT", total, "RIGHT", 0, 0)
     self.total:Hover(L["Total"], L["What they all sell for together, split over how many you list."])
+    FitLabels({ suggested, each, count, total })
 
     local divider = Theme.CreateDivider(frame)
     divider:SetPoint("TOPLEFT", total, "BOTTOMLEFT", 0, -12)
@@ -451,7 +470,7 @@ function PriceEditor:Draw()
 
     local suggested = line.priceBasis == "chosen" and line.suggestedPrice or line.unitPrice
     self.suggested:SetText(suggested and L.Format("%s each", Util.FormatMoney(suggested)) or L["no price yet"])
-    self.reset:SetEnabledState(line.priceBasis == "chosen")
+    self.reset:SetShown(line.priceBasis == "chosen")
 
     local maxQuantity = line.maxQuantity or line.count or 1
     local quantity = line.postQuantity or maxQuantity
