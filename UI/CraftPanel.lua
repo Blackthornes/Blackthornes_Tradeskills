@@ -1001,7 +1001,7 @@ function CraftPanel:Build()
 
     local frame = CreateFrame("Frame", "BlackthornesTSCraftPanel", UIParent)
     frame:SetWidth(PANEL_WIDTH)
-    frame:SetFrameStrata("HIGH")
+    frame:SetFrameStrata(CraftPanel.STRATA)
 
     -- Opaque, so a click on a row cannot fall through to whatever is behind
     -- the pane, and raised on click: the main window shares this strata, and
@@ -1299,6 +1299,9 @@ function CraftPanel:Attach()
         ns.Debug("no profession frame found; using fallback position")
     end
 
+    self:WatchSheets()
+    self:FitUnderSheets()
+
     frame:Show()
     self:Refresh()
 
@@ -1320,6 +1323,61 @@ function CraftPanel:Attach()
     -- Fades in where it docked, its glow flaring; it never rises, since it
     -- sits beside the profession window.
     if opening and ns.Motion then ns.Motion:Open(frame, 0) end
+end
+
+--------------------------------------------------------------------------------
+-- The game's own windows in front
+--------------------------------------------------------------------------------
+
+-- The game opens its character window in the slot beside the profession
+-- window, right where this pane docks. The pane sits in HIGH strata, above
+-- the game's windows, so the character sheet came up behind it and an
+-- enchanter couldn't click their gear (a player's report, 2026-11-05).
+-- While one of these shows, the pane drops below the game's windows and
+-- comes back up when they close. Only hooked, never shown or hidden.
+CraftPanel.SHEETS = { "CharacterFrame" }
+CraftPanel.STRATA = "HIGH"
+CraftPanel.UNDER_STRATA = "LOW"
+
+--- True while one of the game's windows the pane must not cover is up.
+function CraftPanel:SheetShown()
+    for _, name in ipairs(self.SHEETS) do
+        local sheet = _G[name]
+        if type(sheet) == "table" and type(sheet.IsShown) == "function" then
+            local ok, shown = pcall(sheet.IsShown, sheet)
+            if ok and shown then return true end
+        end
+    end
+    return false
+end
+
+--- The strata the pane (and the queued list on it) should be in right now.
+function CraftPanel.StrataFor(sheetShown)
+    return sheetShown and CraftPanel.UNDER_STRATA or CraftPanel.STRATA
+end
+
+--- Put the pane above or below the game's windows, as they stand now.
+function CraftPanel:FitUnderSheets()
+    local frame = self.frame
+    if not frame or type(frame.SetFrameStrata) ~= "function" then return end
+    local want = CraftPanel.StrataFor(self:SheetShown())
+    local now = type(frame.GetFrameStrata) == "function" and frame:GetFrameStrata()
+    if now ~= want then pcall(frame.SetFrameStrata, frame, want) end
+end
+
+--- Hook each sheet once, as soon as it exists.
+function CraftPanel:WatchSheets()
+    self.watchedSheets = self.watchedSheets or {}
+    for _, name in ipairs(self.SHEETS) do
+        local sheet = _G[name]
+        if not self.watchedSheets[name] and type(sheet) == "table"
+            and type(sheet.HookScript) == "function" then
+            self.watchedSheets[name] = true
+            local refit = function() CraftPanel:FitUnderSheets() end
+            pcall(sheet.HookScript, sheet, "OnShow", refit)
+            pcall(sheet.HookScript, sheet, "OnHide", refit)
+        end
+    end
 end
 
 function CraftPanel:IsCollapsed()
