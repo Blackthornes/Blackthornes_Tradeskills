@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.9.5
+
+Fixes and changes:
+
+- No more frame drops with the profession window open over a long session.
+
 ## 1.9.4
 
 Fixes and changes:
