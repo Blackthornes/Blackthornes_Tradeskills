@@ -329,21 +329,27 @@ function GuildPrices:OnAsk(sender, body, channel, now)
     local scanAt = ns.Prices:GetLastScan()
     if not scanAt or now - scanAt > self.ANSWER_SCAN_AGE then return end
     if scanAt <= theirs + self.HEARD_COVERS then return end
-    if self.answeredAt and now - self.answeredAt < self.ANSWER_EVERY then return end
     if self.answering then return end
 
     -- The newer the scan, the sooner: the newest one goes first and the
     -- others hear it go out (OnAnnounce) and stand down.
     local wait = 2 + math.min(self.ANSWER_WAIT - 2, (now - scanAt) / self.ANSWER_SCAN_AGE * (self.ANSWER_WAIT - 2))
         + math.random() * 2
+    -- One catch-up an hour: an ask inside the hour waits for it to pass
+    -- rather than going unanswered (the asker was likely offline for the
+    -- last one, and asks only once, at login; 2026-11-05).
+    if self.answeredAt and now - self.answeredAt < self.ANSWER_EVERY then
+        wait = wait + (self.ANSWER_EVERY - (now - self.answeredAt))
+    end
     self.answering = true
     local askedAt = GetTime()
     C_Timer.After(wait, function()
         GuildPrices.answering = nil
         -- Someone's scan went out since the ask: theirs answered it.
         if GuildPrices.announcedAt and GuildPrices.announcedAt >= askedAt then return end
-        if not GuildPrices:IsOn() then return end
-        GuildPrices:Resend(scanAt)
+        if not GuildPrices:IsOn() or not InGuild() then return end
+        -- A scan of our own since the ask is the newer one to send.
+        GuildPrices:Resend(ns.Prices:GetLastScan() or scanAt)
     end)
 end
 

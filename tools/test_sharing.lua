@@ -464,16 +464,27 @@ do
     end
     check("only one guildmate sent it again", answered, 1)
     current = ana
-    check("asked again within the hour, nothing goes", (function()
-        timers = {}
-        for _, client in ipairs(clients) do
-            if client.ns.GuildPrices.answeredAt then
-                current = client
-                client.ns.GuildPrices:OnAsk("Hal-Realm", Comm.ToBase36(0), "GUILD")
-            end
+    -- Asked again within the hour (by someone who was offline for the
+    -- last catch-up), the answer waits for the hour to pass, never dropped.
+    timers = {}
+    local held
+    for _, client in ipairs(clients) do
+        if client.ns.GuildPrices.answeredAt then
+            current = client
+            client.ns.GuildPrices.answeredAt = clock - 600
+            client.ns.GuildPrices:OnAsk("Hal-Realm", Comm.ToBase36(0), "GUILD", clock)
+            held = client
         end
+    end
+    check("asked again within the hour, the answer waits for it", #timers, 1)
+    check("and goes out once the hour is up", #timers == 1 and timers[1].delay > GuildPrices.ANSWER_EVERY - 600
+        and timers[1].delay < GuildPrices.ANSWER_EVERY - 600 + GuildPrices.ANSWER_WAIT + 5, true)
+    check("but not twice", (function()
+        current = held
+        held.ns.GuildPrices:OnAsk("Ivy-Realm", Comm.ToBase36(0), "GUILD", clock)
         return #timers
-    end)(), 0)
+    end)(), 1)
+    held.ns.GuildPrices.answering = nil
     C_Timer.After = realAfter
     -- Fay stays out of what follows.
     clients[#clients] = nil
