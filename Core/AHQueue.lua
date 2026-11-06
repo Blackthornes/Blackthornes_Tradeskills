@@ -47,6 +47,9 @@ local DROPPED_BACKOFF = 10
 -- whatever asked for it had already given up.
 local DEFAULT_EXPIRY = 20
 
+-- Sends allowed in the window, read by Snipe to leave room for the player.
+AHQueue.BUDGET_MAX = BUDGET_MAX
+
 -- Lower numbers go first. `urgent` means the player clicked something and is
 -- waiting on the answer, and it is the only level allowed to run while
 -- Blizzard's own sell frame is open.

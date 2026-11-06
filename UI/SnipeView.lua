@@ -186,7 +186,7 @@ end
 local function ClickRow(find, _, mouseButton)
     if mouseButton == "RightButton" then return end
     local snipe = Snipe()
-    if not (snipe:IsRunning() and find) then return end
+    if not find then return end
     local pending = snipe.pending
     if pending then
         if pending.find == find and pending.phase == "quoted" then snipe:Pay() end
@@ -377,9 +377,15 @@ function SnipeView:Build(body, frame, topAnchor, opts)
     go:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -(pad + 6), footMiddle)
     self.go = go
 
+    -- Buy It, left of Stop: buys the top find, then pays for it.
+    local buy = Widgets.CreateButton(body, L["Buy It"], function() SnipeView:BuyTop() end,
+        { width = self:BuyWidth(L["Buy It"]), height = 22, primary = true })
+    buy:SetPoint("RIGHT", go, "LEFT", -6, 0)
+    self.buy = buy
+
     local note = Theme.CreateLabel(body, "tiny", "muted")
     note:SetPoint("LEFT", frame, "BOTTOMLEFT", pad + 8, footMiddle)
-    note:SetPoint("RIGHT", go, "LEFT", -8, 0)
+    note:SetPoint("RIGHT", buy, "LEFT", -8, 0)
     note:SetWordWrap(true)
     self.note = note
 
@@ -389,9 +395,47 @@ function SnipeView:Build(body, frame, topAnchor, opts)
     empty:SetWordWrap(true)
     self.empty = empty
 
-    self.parts = { list = list, go = go, note = note, head = self.head, cols = self.cols }
+    self.parts = { list = list, go = go, buy = buy, note = note, head = self.head, cols = self.cols }
     self:Place()
     self:SetShown(false)
+end
+
+--- A width that fits the Buy button's words.
+function SnipeView:BuyWidth(text)
+    local width = 80
+    if Theme.MeasureText then
+        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Click Again"], text }) do
+            local ok, measured = pcall(Theme.MeasureText, "small", word)
+            if ok and type(measured) == "number" then width = math.max(width, measured + 20) end
+        end
+    end
+    return width
+end
+
+--- What the Buy button says, and whether it can be clicked.
+function SnipeView:BuyState()
+    local snipe = Snipe()
+    local pending = snipe and snipe.pending
+    if pending then
+        if snipe.armed == pending then return L["Click Again"], true end
+        if pending.phase == "quoted" then return L.Format("Pay %s", Money(pending.total)), true end
+        return L["Asking..."], false
+    end
+    return L["Buy It"], #self:SortedFinds() > 0
+end
+
+--- Buy It: ask for the top find on the list, or pay for the one asked about.
+function SnipeView:BuyTop()
+    local snipe = Snipe()
+    if not snipe then return end
+    local pending = snipe.pending
+    if pending then
+        if pending.phase == "quoted" then snipe:Pay() end
+    else
+        local top = self:SortedFinds()[1]
+        if top then snipe:Buy(top) end
+    end
+    self:Changed()
 end
 
 function SnipeView:Toggle()
@@ -422,6 +466,7 @@ function SnipeView:Refresh(force)
         tostring(snipe.version), tostring(running), tostring(snipe:Spent()), tostring(snipe:Cap()),
         tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()), snipe:Watch(),
         pending and (pending.phase .. tostring(pending.total)) or "-", tostring(snipe.armed ~= nil),
+        tostring(#(snipe:Finds() or {})),
     }, "|")
     if not force and key == self.key then return end
     self.key = key
@@ -472,6 +517,10 @@ function SnipeView:Refresh(force)
     self.note:SetText(self:Summary())
     self.go:SetText(running and L["Stop"] or L["Start Sniping"])
     self.go:SetEnabledState(true)
+    local label, can = self:BuyState()
+    self.buy:SetText(label)
+    self.buy:SetWidth(self:BuyWidth(label))
+    self.buy:SetEnabledState(can)
 end
 
 function SnipeView:Summary()
