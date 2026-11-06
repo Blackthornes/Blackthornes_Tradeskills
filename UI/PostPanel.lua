@@ -731,7 +731,17 @@ function PostPanel:Build()
         ns.AuctionsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
     end
     if ns.SnipeView then
-        ns.SnipeView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
+        -- A fault in the Snipe tab never stops the rest of the drawer: its
+        -- pieces are put away and the other tabs build as usual.
+        local Snipe = ns.SnipeView
+        local ok, err = pcall(Snipe.Build, Snipe, body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
+        if not ok then
+            for _, part in ipairs({ Snipe.strip, Snipe.head, Snipe.cols, Snipe.list, Snipe.go, Snipe.buy, Snipe.note, Snipe.empty }) do
+                if part and part.Hide then part:Hide() end
+            end
+            Snipe.parts, Snipe.broken = nil, true
+            if ns.Debug then pcall(ns.Debug, "Snipe tab: " .. tostring(err)) end
+        end
     end
     if ns.FavorsView then
         ns.FavorsView:Build(body, frame, divider, { bottom = LIST_BOTTOM, edge = EDGE_PAD, footHeight = FOOT_HEIGHT })
@@ -1973,7 +1983,7 @@ end
 
 --- The Snipe switch shows only while its setting is ticked.
 function PostPanel.ShowsSnipe()
-    return ns.SnipeView ~= nil and ns.Config:Get("snipeTab") == true
+    return ns.SnipeView ~= nil and not ns.SnipeView.broken and ns.Config:Get("snipeTab") == true
 end
 
 --- Lay the switch's tabs side by side, sharing the drawer's width, with
