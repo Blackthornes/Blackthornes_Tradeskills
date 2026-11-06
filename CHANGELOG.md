@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.11.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because files were added.
+
+- **Enchant Window.** A strip under the recipe in your Enchanting window. Pick an item, then click Enchant. Turn it on in Settings, on the Look page, under ENCHANTING: Enchant Window:. It starts off. A one-time What's New card offers to turn it on.
+- **Character window.** The craft pane now drops below the game's character window while it is open, so you can click your gear to enchant it.
+
 ## 1.10.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
