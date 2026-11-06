@@ -90,6 +90,10 @@ function EnchantWindowUI:Build()
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:SetMovable(true)
+    -- On top of the craft pane and its queued crafts, which share its
+    -- strata: a click brings it to the front (Trent, 2026-11-05: it opened
+    -- behind the queued crafts and was hard to move).
+    if frame.SetToplevel then frame:SetToplevel(true) end
     frame:RegisterForDrag("LeftButton")
     frame:Hide()
     self.frame = frame
@@ -321,6 +325,45 @@ function EnchantWindowUI:SavePlace()
     ns.Config:Set("enchantWindowTop", top * scale)
 end
 
+--- What to sit beside: the queued crafts when they show (they hang off the
+--- craft pane's right edge), else the craft pane, else nil.
+function EnchantWindowUI.Beside(panel)
+    if not panel then return nil end
+    local queued, pane = panel.queuedFrame, panel.frame
+    if queued and queued:IsShown() then return queued end
+    if pane and pane:IsShown() then return pane end
+    return nil
+end
+
+--- Above the craft pane and the queued crafts, so neither covers it.
+function EnchantWindowUI:LiftAbove()
+    local frame = self.frame
+    local panel = ns.CraftPanel
+    if not frame or not panel then return end
+    local top = 0
+    for _, other in ipairs({ panel.frame, panel.queuedFrame }) do
+        if other and other.GetFrameLevel then top = math.max(top, other:GetFrameLevel() or 0) end
+    end
+    if (frame:GetFrameLevel() or 0) <= top + 10 then pcall(frame.SetFrameLevel, frame, top + 20) end
+    if frame.Raise then pcall(frame.Raise, frame) end
+end
+
+--- Placed again when the queued crafts come or go, unless dragged.
+function EnchantWindowUI:WatchQueued()
+    local queued = ns.CraftPanel and ns.CraftPanel.queuedFrame
+    if not queued or self.watchingQueued or type(queued.HookScript) ~= "function" then return end
+    self.watchingQueued = true
+    local again = function()
+        local frame = EnchantWindowUI.frame
+        if frame and frame:IsShown() and not ns.Config:Get("enchantWindowLeft") then
+            EnchantWindowUI:Place()
+            EnchantWindowUI:LiftAbove()
+        end
+    end
+    pcall(queued.HookScript, queued, "OnShow", again)
+    pcall(queued.HookScript, queued, "OnHide", again)
+end
+
 --- A dragged place wins; else beside the craft pane, else beside the
 --- game's window, by anchor only.
 function EnchantWindowUI:Place()
@@ -333,9 +376,9 @@ function EnchantWindowUI:Place()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left / scale, top / scale)
         return
     end
-    local pane = ns.CraftPanel and ns.CraftPanel.frame
+    local pane = EnchantWindowUI.Beside(ns.CraftPanel)
     local gap = ns.CraftPanel and ns.CraftPanel.PANEL_GAP or 6
-    if pane and pane:IsShown() then
+    if pane then
         frame:SetPoint("TOPLEFT", pane, "TOPRIGHT", gap, 0)
         return
     end
@@ -392,9 +435,11 @@ function EnchantWindowUI:Update()
         self:Place()
         self:WatchSheets()
         frame:Show()
+        self:LiftAbove()
         if ns.Titanforged then ns.Titanforged:Opened(frame) end
         self:LoadEnchants()
     end
+    self:WatchQueued()
     self:FitStrata()
     self:Refresh()
 end
