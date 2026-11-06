@@ -140,6 +140,7 @@ UI\AuctionWheel.lua
 UI\SaleTotal.lua
 Logic\Snipe.lua
 UI\PostPanel.lua
+UI\HiddenItemsWindow.lua
 UI\PriceEditor.lua
 UI\ListRulesWindow.lua
 UI\KeepBox.lua
