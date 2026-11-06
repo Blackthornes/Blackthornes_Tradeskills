@@ -203,6 +203,48 @@ check("nothing heard yet", ana.ns.RealmPrices:Describe(),
     "Listening for prices from your realm. A price is used once 3 players agree on it.")
 
 --------------------------------------------------------------------------------
+print("\nleft by hand, joined again")
+--------------------------------------------------------------------------------
+
+do
+    current = ana
+    local Realm = ana.ns.RealmPrices
+    local later = {}
+    local savedAfter = C_Timer.After
+    C_Timer.After = function(_, fn) later[#later + 1] = fn end
+    ana.channels["btspricesa"] = nil
+    check("out of it, the status says so", Realm:Describe(),
+        "You're not in the price channel right now. Tradeskills tries again every minute.")
+    check("another channel's leave is ignored",
+        Realm:OnNotice("YOU_LEFT", "2. Trade", "Trade"), false)
+    check("our leave is heard", Realm:OnNotice("YOU_LEFT", "4. BTSPricesA", "BTSPricesA"), true)
+    check("a join waits a moment", #later, 1)
+    later[1]()
+    check("then the channel is joined again", ana.channels["btspricesa"], 4)
+    check("in it, a join has nothing to do", Realm:Join(), true)
+
+    -- The temporary join does not take: the next try uses the other way in.
+    local savedTemp = JoinTemporaryChannel
+    local byName = 0
+    JoinTemporaryChannel = function() end
+    JoinChannelByName = function(name) byName = byName + 1; current.channels[name:lower()] = 4 end
+    ana.channels["btspricesa"] = nil
+    Realm:Join()
+    check("the first try does not land", ana.channels["btspricesa"], nil)
+    Realm:Join()
+    check("the next try joins by name", byName, 1)
+    check("and it is in again", ana.channels["btspricesa"], 4)
+    JoinTemporaryChannel, JoinChannelByName = savedTemp, savedTemp
+
+    ana.settings.realmPrices = false
+    ana.channels["btspricesa"] = nil
+    check("turned off, a leave is left alone", Realm:OnNotice("YOU_LEFT", "4. BTSPricesA", "BTSPricesA"), false)
+    ana.settings.realmPrices = true
+    Realm:Join()
+    C_Timer.After = savedAfter
+end
+
+--------------------------------------------------------------------------------
 print("\nsharing a scan")
 --------------------------------------------------------------------------------
 

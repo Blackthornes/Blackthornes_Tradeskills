@@ -48,6 +48,7 @@ RealmPrices.MAX_ITEM_ID = 10000000
 RealmPrices.MAX_STORED = 20000        -- items kept for a realm
 RealmPrices.SEND_GAP = 3              -- seconds between messages to the channel
 RealmPrices.JOIN_DELAY = 20           -- seconds after login before joining
+RealmPrices.REJOIN_DELAY = 5          -- seconds after the player leaves it by hand
 
 --------------------------------------------------------------------------------
 -- Saved data
@@ -235,17 +236,43 @@ end
 function RealmPrices:Join()
     if not self:IsOn() then return false end
     local name = self:ChannelName()
-    if Comm.ChannelNumber(name) > 0 then return true end
+    if Comm.ChannelNumber(name) > 0 then self.triedTemporary = nil return true end
     if InCombat() then self.joinAfterFight = true return false end
     if not self.filtered and type(ChatFrame_AddMessageEventFilter) == "function" then
         self.filtered = pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_CHANNEL_NOTICE", RealmPrices.FilterNotice)
     end
-    if type(JoinTemporaryChannel) == "function" then
+    -- A player left it by hand (2026-11-06) and the temporary join never
+    -- took again, so a try that did not land is followed by the other way in.
+    local temporary = type(JoinTemporaryChannel) == "function"
+    local byName = type(JoinChannelByName) == "function"
+    if temporary and (not byName or not self.triedTemporary) then
+        self.triedTemporary = true
         pcall(JoinTemporaryChannel, name)
-    elseif type(JoinChannelByName) == "function" then
+    elseif byName then
+        self.triedTemporary = false
         pcall(JoinChannelByName, name)
     end
     return false
+end
+
+--- In the channel now?
+function RealmPrices:InChannel()
+    return Comm.ChannelNumber(self:ChannelName()) > 0
+end
+
+--- The player left our channel (by /leave or the chat menu): join it again
+--- a few seconds later, while the setting is on.
+function RealmPrices:OnNotice(notice, channelString, channelName)
+    notice = Comm.Plain(notice)
+    if notice ~= "YOU_LEFT" or not self:IsOn() then return false end
+    if not (self:IsOurs(channelName) or self:IsOurs(channelString)) then return false end
+    self.triedTemporary = nil
+    if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+        C_Timer.After(self.REJOIN_DELAY, function() RealmPrices:Join() end)
+    else
+        self:Join()
+    end
+    return true
 end
 
 function RealmPrices:Leave()
@@ -397,9 +424,11 @@ end
 
 function RealmPrices:Describe()
     if not self:IsOn() then return L["Realm prices are off."] end
+    local away = not self:InChannel()
+        and L["You're not in the price channel right now. Tradeskills tries again every minute."] or nil
     local count = self:Count()
     if count == 0 then
-        return L["Listening for prices from your realm. A price is used once 3 players agree on it."]
+        return away or L["Listening for prices from your realm. A price is used once 3 players agree on it."]
     end
     local shown = ns.Util and ns.Util.Comma and ns.Util.Comma(count) or tostring(count)
     local players = self:Players()
@@ -418,6 +447,7 @@ function RealmPrices:Describe()
     if mine and mine.at and ns.Util and ns.Util.FormatAgeAgo then
         parts[#parts + 1] = L.Format("You last shared %s.", ns.Util.FormatAgeAgo(time() - mine.at))
     end
+    if away then parts[#parts + 1] = away end
     return table.concat(parts, "  ")
 end
 
@@ -426,6 +456,9 @@ function RealmPrices:OnEnable()
     Comm:On("Y", function(...) RealmPrices:OnAnnounce(...) end)
     Comm:On("Z", function(...) RealmPrices:OnPrices(...) end)
 
+    ns.RegisterEvent(self, "CHAT_MSG_CHANNEL_NOTICE", function(_, _, notice, _, _, channelString, _, _, _, _, channelName)
+        RealmPrices:OnNotice(notice, channelString, channelName)
+    end)
     ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function()
         if RealmPrices.joinAfterFight then
             RealmPrices.joinAfterFight = nil

@@ -1116,6 +1116,11 @@ scans and your guild's (`Prices:GetValue`), before TSM and Auctionator. A
 price far from a fresh one of your own is refused. `Comm` hands handlers the
 channel's name and target as fourth and fifth arguments. Tested in
 `tools/test_realmprices.lua`. Not yet seen in game.
+Left by hand (a player's report, 2026-11-06): a `YOU_LEFT` notice for our
+channel joins it again `REJOIN_DELAY` seconds later (`OnNotice`), a join
+that did not take is followed by `JoinChannelByName` (`triedTemporary`),
+and the Settings status says "You're not in the price channel right now."
+while it is out (`InChannel`).
 
 ## A quick scan when you open the auction house
 
