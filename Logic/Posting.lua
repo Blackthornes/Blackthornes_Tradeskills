@@ -629,6 +629,12 @@ end
 -- Deposits
 --------------------------------------------------------------------------------
 
+--- The least deposit any listing pays on Forever: 1 silver, whether it
+--- holds one item or a whole stack (Forever's rule, seen in game and in
+--- its news, 2026-11-06). A guess made away from the auction house never
+--- goes under it; at the auction house the game's own number is used.
+Posting.MIN_DEPOSIT = 100
+
 --- Deposit per unit, remembered from the last time it could be calculated.
 --
 -- The client only works deposits out at the auction house, but profit has to
@@ -700,7 +706,7 @@ function Posting.DepositFromRecord(record, quantity)
         deposit = math.max(deposit, least)
     end
 
-    return math.max(1, deposit)
+    return math.max(Posting.MIN_DEPOSIT, deposit)
 end
 
 --- About what a listing of `quantity` costs to put up, from what the

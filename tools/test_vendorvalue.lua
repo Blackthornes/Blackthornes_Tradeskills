@@ -78,7 +78,8 @@ assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Cost.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 
--- A deposit of 3c a belt is known from the last listing.
+-- A deposit of 3c a belt is known from the last listing, but a listing on
+-- Forever never pays less than 1s, so a lost one costs the 1s.
 ns.Posting = { GetCachedUnitDeposit = function() return 3 end }
 
 local Profit = ns.Profit
@@ -130,7 +131,7 @@ a = Profit:Analyse(RECIPE)
 check("it is valued at the undercut", a.unitRevenue, 199)
 check("as a listing", a.priceBasis, "undercut")
 check("which pays the cut", a.cut, 199 * 0.05)
-check("and the deposit", a.deposit, 3)
+check("and the 1s deposit", a.deposit, 100)
 
 printed = {}
 commands.why("Linen Belt")
@@ -139,14 +140,14 @@ check("/bts why shows the cut", Printed("auction cut     -"), true)
 print("")
 print("a rival at 85c: a bigger number, but less in the pocket")
 
--- Listed at 84c the belt pays 84 less the 5% cut less a 3c deposit, under
--- 77c. The vendor's 80c is the better sale (2026-10-02: take the max
+-- Listed at 84c the belt pays 84 less the 5% cut less the 1s deposit it
+-- may lose: a loss. The vendor's 80c is the better sale (2026-10-02: take the max
 -- of auction profit and vendor profit).
 ns.Prices:Record(BELT, 85, 85, 4, time(), 85, nil)
 a = Profit:Analyse(RECIPE)
 check("it is valued at what the vendor pays", a.unitRevenue, 80)
 check("as a vendor sale", a.priceBasis, "vendor")
-check("what a listing pays is worked out net", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), 768)
+check("what a listing pays is worked out net", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), -202)
 
 print("")
 print("never scanned, with estimates from materials turned off")

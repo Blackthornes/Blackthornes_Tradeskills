@@ -23,12 +23,25 @@ local SOULBOUND_REASON = L["binds on pickup, so it cannot be sold"]
 
 --- About the deposit for listing `quantity` of an item, from what the
 --- auction house said before; nil until it has said.
+--- The least deposit a listing pays (1s on Forever).
+local function LeastDeposit()
+    local posting = ns.Posting
+    return (posting and tonumber(posting.MIN_DEPOSIT)) or 100
+end
+
 local function HeldDeposit(itemID, quantity)
     local posting = ns.Posting
     if not posting then return nil end
     if posting.EstimateDeposit then return posting:EstimateDeposit(itemID, quantity) end
     local unit = posting.GetCachedUnitDeposit and posting:GetCachedUnitDeposit(itemID)
-    return unit and math.floor(unit * quantity + 0.5) or nil
+    return unit and math.max(LeastDeposit(), math.floor(unit * quantity + 0.5)) or nil
+end
+
+--- The deposit a listing that runs out keeps: what the auction house said
+--- before, else the least any listing pays. An item never listed used to
+--- count as no deposit at all, so a cheap, slow seller looked free to list.
+local function LostDeposit(itemID, quantity)
+    return HeldDeposit(itemID, quantity) or LeastDeposit()
 end
 
 --- Net profit for one craft, if a unit sold at this price.
@@ -42,8 +55,7 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
     local revenue = unitPrice * yield
     local cut = revenue * (ns.Config:Get("auctionCut") or 0.05)
 
-    local held = HeldDeposit(recipe.outputItemID, yield)
-    local deposit = held and held * Profit.LostListings(recipe.outputItemID) or 0
+    local deposit = LostDeposit(recipe.outputItemID, yield) * Profit.LostListings(recipe.outputItemID)
 
     return (revenue - cut) - (cost.total or 0) - deposit
 end
@@ -558,9 +570,26 @@ end
 --- known counts as none, so this never undersells the listing.
 function Profit:NetFromListing(itemID, unitPrice)
     local cut = ns.Config:Get("auctionCut") or 0.05
-    local deposit = ns.Posting:GetCachedUnitDeposit(itemID) or 0
-    if deposit <= 0 then return unitPrice * (1 - cut) end
-    return unitPrice * (1 - cut) - deposit * Profit.LostListings(itemID)
+    local lost = Profit.LostListings(itemID)
+    if lost <= 0 then return unitPrice * (1 - cut) end
+    return unitPrice * (1 - cut) - Profit.LostDepositEach(itemID) * lost
+end
+
+--- What one unit's share of a lost deposit is: the remembered share, but
+--- never under the least deposit (1s) spread over a listing. A listing is
+--- taken as the biggest one seen, else a full stack, else one item, so a
+--- cheap thing listed alone still loses its whole 1s when it runs out.
+function Profit.LostDepositEach(itemID)
+    local posting = ns.Posting
+    local each = (posting and posting.GetCachedUnitDeposit and posting:GetCachedUnitDeposit(itemID)) or 0
+    local record = posting and ns.db and ns.db.deposits and ns.db.deposits[itemID]
+    local size = type(record) == "table" and tonumber(record.quantity) or nil
+    if not size and ns.Util and ns.Util.GetMaxStackSize then
+        local ok, stack = pcall(ns.Util.GetMaxStackSize, itemID)
+        if ok then size = tonumber(stack) end
+    end
+    size = math.max(1, math.floor(size or 1))
+    return math.max(each, LeastDeposit() / size)
 end
 
 --- How many deposits a sale is expected to lose.
@@ -916,7 +945,7 @@ function Profit:Analyse(recipeID, characterKey, method)
         -- The deposit is paid up front and comes back when the item sells,
         -- so only the listings expected to run out first cost it.
         local held = HeldDeposit(recipe.outputItemID, yield)
-        local deposit = held and held * Profit.LostListings(recipe.outputItemID) or 0
+        local deposit = (held or LeastDeposit()) * Profit.LostListings(recipe.outputItemID)
 
         ways.auction = { unit = listPrice, revenue = revenue, cut = cut, deposit = deposit,
             depositHeld = held, depositKnown = held ~= nil, basis = listBasis, uncertain = listUncertain,

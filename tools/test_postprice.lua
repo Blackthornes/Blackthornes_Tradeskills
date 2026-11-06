@@ -84,14 +84,14 @@ check("never listed, empty scan: no price", price, nil)
 check("never listed, empty scan: no basis", basis, nil)
 
 print("")
--- A deposit worked out on the whole stack rarely divides evenly. 39c for 20
--- was cached as 1c each, so every later refresh showed 20c.
+-- A deposit worked out on the whole stack rarely divides evenly. 39s 39c for
+-- 20 must come back as 39s 39c, not a rounded share times 20.
 ns.db = {}
 ns.Scanner.isAuctionHouseOpen = false
-Posting:CacheUnitDeposit(777, 39, 20, 2)
-check("deposit: cached stack keeps its figure", Posting:GetDeposit(777, 20), 39)
+Posting:CacheUnitDeposit(777, 3939, 20, 2)
+check("deposit: cached stack keeps its figure", Posting:GetDeposit(777, 20), 3939)
 Posting:CacheUnitDeposit(778, 3, 20, 2)
-check("deposit: a cheap stack is not free", Posting:GetDeposit(778, 20), 3)
+check("deposit: a cheap stack still pays the 1s", Posting:GetDeposit(778, 20), 100)
 
 if failures > 0 then
     error(string.format("%d post-price check(s) failed", failures), 0)
