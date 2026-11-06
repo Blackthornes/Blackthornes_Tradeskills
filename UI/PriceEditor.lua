@@ -162,6 +162,7 @@ local function MoneyBoxes(parent, onCommit)
     end
 
     function money:SetPoint(...) self.gold:SetPoint(...) end
+    function money:ClearAllPoints() self.gold:ClearAllPoints() end
 
     function money:Get()
         return (self.gold:GetValue() or 0) * 10000 + (self.silver:GetValue() or 0) * 100
