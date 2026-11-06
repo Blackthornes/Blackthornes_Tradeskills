@@ -1,15 +1,21 @@
 -- Blackthornes -- UI/EnchantWindow.lua
--- The Enchant window (Trent said build it, 2026-11-05, from the mockup in
--- the project files, previews/tradeskills-enchant-picker/): pick an enchant,
--- pick an item, click Enchant. Our own frame, set beside the craft pane (or
--- the game's Enchanting window when the pane is shut) by anchor only; the
--- game's window is never hidden, shown or moved, and the game's own
--- "replace this enchant?" and bind boxes are never clicked.
+-- The enchant strip (Trent picked it, 2026-11-05, option B of the mockup in
+-- the project files, previews/tradeskills-enchant-integrated/): a small strip
+-- at the bottom of the game's recipe pane in the Enchanting window, with the
+-- item, its materials and cost, and an Enchant button. It replaced the
+-- floating Enchant window, which opened behind the craft pane's drawer.
+--
+-- Our own frame on UIParent, anchored by position over the bottom of the
+-- recipe pane and lifted above the game's Create buttons so it never covers
+-- them. No Blizzard frame is hidden, shown, moved or reparented; the game's
+-- recipe pick is followed with read-only hooks (and a light look while the
+-- window is open, in case the client has neither hook). It shows only while
+-- the recipe picked is an enchant (recipe type 3), and never in a fight.
 --
 -- What it reads and casts is Logic/EnchantWindow.lua. Off by default
--- (`enchantWindow`); its place is `enchantWindowLeft`/`enchantWindowTop`
--- once dragged, its size `enchantWindowScale` (account wide, never rename
--- them).
+-- (`enchantWindow`). `enchantWindowLeft`, `enchantWindowTop` and
+-- `enchantWindowScale` from the floating window stay in the save, unread;
+-- never rename them.
 --
 -- One hardware click a cast. When the client wants the item picked after
 -- the cast starts, the same button turns into Put It On, a secure button
@@ -24,21 +30,23 @@ local EnchantWindowUI = ns.NewModule("EnchantWindowUI")
 local Theme = ns.Theme
 local Widgets = ns.Widgets
 
-local WIDTH = 300
-local PAD = 16
-local TOP = 34
-local SLOT_HEIGHT = 52
+local HEIGHT = 64
 local SLOT_ICON = 40
-local MATERIAL_ROW = 24
-local BUTTON_HEIGHT = 40
-local FOOT = 30
+local INSET = 8
 local LIST_ROW = 24
 local LIST_HEADING = 20
+-- Space kept between the strip and the game's Create buttons.
+EnchantWindowUI.GAP = 4
+-- A Create button counts as under the strip when its top is this close to
+-- the pane's bottom (it sits in the band the strip would take).
+EnchantWindowUI.BAND = HEIGHT + 40
+EnchantWindowUI.MIN_WIDTH = 240
 -- The picker shows at most this many rows; the wheel moves through the rest.
 EnchantWindowUI.LIST_MOST = 12
 EnchantWindowUI.SETTLE = 0.2
 EnchantWindowUI.GLOW_LOOK = 0.25
-EnchantWindowUI.SCALE_MIN, EnchantWindowUI.SCALE_MAX = 0.5, 1.5
+-- How often the backup look reads the game's pick, while Enchanting is open.
+EnchantWindowUI.PICK_LOOK = 0.3
 
 local STRATA_ABOVE = {
     BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG",
@@ -71,151 +79,168 @@ local function NameOf(link)
     return type(link) == "string" and link:match("|h%[(.-)%]|h") or link
 end
 
+local function Shown(frame)
+    if type(frame) ~= "table" or type(frame.IsVisible) ~= "function" then return false end
+    local ok, shown = pcall(frame.IsVisible, frame)
+    return ok and shown and true or false
+end
+
+local function Field(frame, key)
+    if type(frame) ~= "table" then return nil end
+    local ok, value = pcall(function() return frame[key] end)
+    return ok and type(value) == "table" and value or nil
+end
+
+--------------------------------------------------------------------------------
+-- Where it sits (read only)
+--------------------------------------------------------------------------------
+
+--- The pane to sit in, first that shows wins: { name, frame, game }.
+--- The name is for the probe.
+function EnchantWindowUI.FindAnchor()
+    local pros = _G.ProfessionsFrame
+    local page = Field(pros, "CraftingPage")
+    local form = Field(page, "SchematicForm")
+    if Shown(form) then return { name = "ProfessionsFrame.CraftingPage.SchematicForm", frame = form, game = pros } end
+    if Shown(page) then return { name = "ProfessionsFrame.CraftingPage", frame = page, game = pros } end
+    local old = _G.TradeSkillFrame
+    local detail = _G.TradeSkillDetailScrollFrame
+    if Shown(detail) then return { name = "TradeSkillDetailScrollFrame", frame = detail, game = old } end
+    if Shown(pros) then return { name = "ProfessionsFrame", frame = pros, game = pros } end
+    if Shown(old) then return { name = "TradeSkillFrame", frame = old, game = old } end
+    return nil
+end
+
+--- The game's Create buttons and count box, those that show.
+function EnchantWindowUI.CreateButtons()
+    local page = Field(_G.ProfessionsFrame, "CraftingPage")
+    local found = {}
+    for _, frame in ipairs({
+        Field(page, "CreateButton"), Field(page, "CreateAllButton"), Field(page, "CreateMultipleInputBox"),
+        _G.TradeSkillCreateButton, _G.TradeSkillCreateAllButton, _G.TradeSkillInputBox,
+    }) do
+        if Shown(frame) then found[#found + 1] = frame end
+    end
+    return found
+end
+
+--- How far up from the pane's bottom the strip goes so it clears every
+--- button in `rects` ({ top, bottom }, screen units) under it. Pure.
+function EnchantWindowUI.Lift(paneBottom, rects)
+    local lift = 0
+    for _, rect in ipairs(rects or {}) do
+        local top, bottom = tonumber(rect.top), tonumber(rect.bottom)
+        if top and bottom and bottom < paneBottom + EnchantWindowUI.BAND and top > paneBottom then
+            lift = math.max(lift, top - paneBottom + EnchantWindowUI.GAP)
+        end
+    end
+    return lift
+end
+
+--- A frame's edges in UIParent's units, or nil.
+local function Rect(frame)
+    local ok, top, bottom, left, right, scale = pcall(function()
+        return frame:GetTop(), frame:GetBottom(), frame:GetLeft(), frame:GetRight(), frame:GetEffectiveScale()
+    end)
+    if not ok or not top or not bottom or not left or not right then return nil end
+    local base = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+    local k = (tonumber(scale) or 1) / (base > 0 and base or 1)
+    return { top = top * k, bottom = bottom * k, left = left * k, right = right * k }
+end
+EnchantWindowUI.Rect = Rect
+
+--------------------------------------------------------------------------------
+-- The words on the strip
+--------------------------------------------------------------------------------
+
+--- "Strange Dust 26/1 · Soul Dust 0/2 · 75c": each material with have/need
+--- in green or red, then the cost. Pure, given the rows and a name lookup.
+function EnchantWindowUI.InfoLine(rows, cost, nameOf)
+    local parts = {}
+    local colors = ns.COLORS or {}
+    for _, data in ipairs(rows or {}) do
+        local name = nameOf and nameOf(data.itemID) or tostring(data.itemID)
+        local hex = (data.short or 0) > 0 and (colors.loss or "ffe5604f") or (colors.profit or "ff4fd18b")
+        parts[#parts + 1] = ("%s |c%s%d/%d|r"):format(name or "?", hex, math.min(data.have or 0, 9999), data.need or 0)
+    end
+    if cost and cost > 0 and ns.Util and ns.Util.FormatMoney then
+        parts[#parts + 1] = ns.Util.FormatMoney(cost)
+    end
+    return table.concat(parts, " · ")
+end
+
+local function MaterialName(itemID)
+    local name = ns.Util.GetItemName and ns.Util.GetItemName(itemID)
+    if type(name) ~= "string" then name = NameOf(ns.Util.GetItemLabel and ns.Util.GetItemLabel(itemID)) end
+    return name
+end
+
 --------------------------------------------------------------------------------
 -- Building
 --------------------------------------------------------------------------------
 
-local function Heading(parent, text)
-    local label = Theme.CreateLabel(parent, "normal", "accent")
-    label:SetText(text)
-    return label
-end
-
 function EnchantWindowUI:Build()
     if self.frame then return self.frame end
 
-    local frame = CreateFrame("Frame", "BlackthornesTSEnchantWindow", UIParent)
-    frame:SetSize(WIDTH, 400)
-    frame:SetFrameStrata(ns.CraftPanel and ns.CraftPanel.STRATA or "HIGH")
-    frame:SetClampedToScreen(true)
+    local frame = CreateFrame("Frame", "BlackthornesTSEnchantStrip", UIParent)
+    frame:SetSize(320, HEIGHT)
     frame:EnableMouse(true)
-    frame:SetMovable(true)
-    -- On top of the craft pane and its queued crafts, which share its
-    -- strata: a click brings it to the front (Trent, 2026-11-05: it opened
-    -- behind the queued crafts and was hard to move).
-    if frame.SetToplevel then frame:SetToplevel(true) end
-    frame:RegisterForDrag("LeftButton")
     frame:Hide()
     self.frame = frame
 
     Theme.Fill(frame, "window")
-    if ns.Titanforged then
-        self.trim = ns.Titanforged:Dress(frame, {
-            title = L["Enchant"],
-            close = function() EnchantWindowUI:Close() end,
-        })
-        if ns.FoldWindow then
-            ns.FoldWindow:Add(frame, { onToggle = function(folded)
-                if folded then EnchantWindowUI:HideList() end
-            end })
-        end
-    else
-        Theme.Border(frame, "borderLit")
-    end
+    Theme.Border(frame, "accentHi")
+    if Theme.Halo then Theme.Halo(frame, 6, 0.35, "accent") end
 
-    frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        EnchantWindowUI:SavePlace()
-    end)
     frame:SetScript("OnHide", function()
         EnchantWindowUI:HideList()
         EnchantWindowUI:Disarm()
         EnchantWindowUI:HideGlow()
     end)
 
-    -- Enchant:
-    self.enchantLabel = Heading(frame, L["Enchant:"])
-    self.enchantLabel:SetPoint("TOPLEFT", PAD, -TOP)
-    self.dropdown = Widgets.CreateDropdown(frame, {}, function(value)
-        EnchantWindowUI:PickEnchant(value)
-    end, { width = WIDTH - PAD * 2 })
-    self.dropdown:SetPoint("TOPLEFT", self.enchantLabel, "BOTTOMLEFT", 0, -6)
-
-    -- Item:
-    self.itemLabel = Heading(frame, L["Item:"])
-    self.itemLabel:SetPoint("TOPLEFT", self.dropdown, "BOTTOMLEFT", 0, -12)
-    self.chip = CreateFrame("Frame", nil, frame)
-    self.chip:SetHeight(18)
-    Theme.Fill(self.chip, "glassAlt")
-    Theme.Border(self.chip, "profit", 0.8)
-    self.chip.text = Theme.CreateLabel(self.chip, "small", "profit", "CENTER")
-    self.chip.text:SetPoint("CENTER")
-    self.chip:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
-    self.chip:SetPoint("BOTTOM", self.itemLabel, "BOTTOM", 0, -3)
-    self.chip:Hide()
-
     self:BuildSlot(frame)
 
-    -- Replaces:
-    self.replacesLabel = Theme.CreateLabel(frame, "normal", "accent")
-    self.replacesLabel:SetText(L["Replaces:"])
-    self.replacesLabel:SetPoint("TOPLEFT", self.slot, "BOTTOMLEFT", 0, -8)
-    self.replaces = Theme.CreateLabel(frame, "normal", "muted", "RIGHT")
-    self.replaces:SetPoint("TOPRIGHT", self.slot, "BOTTOMRIGHT", 0, -8)
-    self.replaces:SetPoint("LEFT", self.replacesLabel, "RIGHT", 8, 0)
-    self.replaces:SetWordWrap(true)
-
-    -- Materials:
-    self.materialsLabel = Heading(frame, L["Materials:"])
-    self.materialRows = {}
-
-    -- Cost:
-    self.costLabel = Theme.CreateLabel(frame, "normal", "accent")
-    self.costLabel:SetText(L["Cost:"])
-    self.cost = Theme.CreateLabel(frame, "normal", "text", "RIGHT")
-    self.cost:SetWidth(WIDTH / 2)
-
-    -- Enchant
+    -- Enchant, or Put It On: as wide as the longer of the two.
     self.button = Widgets.CreateButton(frame, L["Enchant"], function()
         EnchantWindowUI:EnchantClicked()
-    end, { primary = true, width = WIDTH - PAD * 2, height = BUTTON_HEIGHT, fontSize = "large" })
-    self.buttonIcon = Theme.CreateItemIcon(self.button, 26)
-    self.buttonIcon:SetPoint("LEFT", 10, 0)
-    self.button.label:ClearAllPoints()
-    self.button.label:SetPoint("LEFT", 46, 0)
-    self.button.label:SetPoint("RIGHT", -10, 0)
-    self.button.label:SetJustifyH("LEFT")
+    end, { primary = true, height = 30 })
+    local wide = 90
+    for _, word in ipairs({ L["Enchant"], L["Put It On"] }) do
+        self.button.label:SetText(word)
+        wide = math.max(wide, (Theme.TextWidth(self.button.label) or 60) + 28)
+    end
+    self.button.label:SetText(L["Enchant"])
+    self.button:SetWidth(wide)
+    self.button:SetPoint("RIGHT", frame, "RIGHT", -10, 0)
 
-    -- Footer: a count on the left, the version on the right.
-    self.footLeft = Theme.CreateLabel(frame, "small", "dim")
-    self.footLeft:SetPoint("BOTTOMLEFT", PAD, 12)
-    self.footRight = Theme.CreateLabel(frame, "small", "dim", "RIGHT")
-    self.footRight:SetPoint("BOTTOMRIGHT", -PAD, 12)
-    self.footRight:SetText(ns.VersionLabel and ns.VersionLabel() or "")
-
-    self:BuildGrip(frame)
-    self:ApplyScale(ns.Config:Get("enchantWindowScale"))
+    -- Item name (and the gain), then the materials and cost under it.
+    self.name = Theme.CreateLabel(frame, "normal", "text")
+    self.name:SetPoint("TOPLEFT", self.slot, "TOPRIGHT", 10, -1)
+    self.name:SetPoint("RIGHT", self.button, "LEFT", -10, 0)
+    self.name:SetWordWrap(true)
+    self.info = Theme.CreateLabel(frame, "small", "muted")
+    self.info:SetPoint("TOPLEFT", self.name, "BOTTOMLEFT", 0, -3)
+    self.info:SetPoint("RIGHT", self.button, "LEFT", -10, 0)
+    self.info:SetWordWrap(true)
     return frame
 end
 
 --- The item slot: click for the list, or drop an item on it.
 function EnchantWindowUI:BuildSlot(frame)
     local slot = CreateFrame("Button", nil, frame)
-    slot:SetHeight(SLOT_HEIGHT)
-    slot:SetPoint("TOPLEFT", self.itemLabel, "BOTTOMLEFT", 0, -6)
-    slot:SetPoint("RIGHT", frame, "RIGHT", -PAD, 0)
+    slot:SetSize(SLOT_ICON + 6, SLOT_ICON + 6)
+    slot:SetPoint("LEFT", 10, 0)
     slot:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     slot.fill = slot:CreateTexture(nil, "BACKGROUND")
     slot.fill:SetAllPoints()
+    Theme.Border(slot, "accent")
     slot.edge = slot:CreateTexture(nil, "BORDER")
     slot.edge:SetPoint("TOPLEFT")
     slot.edge:SetPoint("BOTTOMLEFT")
     slot.edge:SetWidth(3)
     slot.edge:SetColorTexture(Theme.Unpack("accentHi"))
-
-    slot.well = CreateFrame("Frame", nil, slot)
-    slot.well:SetSize(SLOT_ICON + 4, SLOT_ICON + 4)
-    slot.well:SetPoint("LEFT", 12, 0)
-    Theme.Fill(slot.well, "glassAlt")
-    Theme.Border(slot.well, "accent")
-    slot.icon = Theme.CreateItemIcon(slot.well, SLOT_ICON)
+    slot.icon = Theme.CreateItemIcon(slot, SLOT_ICON)
     slot.icon:SetPoint("CENTER")
-
-    slot.name = Theme.CreateLabel(slot, "normal", "text")
-    slot.name:SetPoint("LEFT", slot.well, "RIGHT", 12, 0)
-    slot.name:SetPoint("RIGHT", -10, 0)
-    slot.name:SetWordWrap(true)
 
     slot:SetScript("OnClick", function() EnchantWindowUI:ToggleList() end)
     slot:SetScript("OnReceiveDrag", function() EnchantWindowUI:Dropped() end)
@@ -230,13 +255,17 @@ function EnchantWindowUI:BuildSlot(frame)
         local entry = EnchantWindowUI.item
         if entry and entry.link then
             pcall(GameTooltip.SetHyperlink, GameTooltip, entry.link)
+            if (entry.gain or 0) > 0 then
+                GameTooltip:AddLine(L.Format(L["+%d%% for you"], entry.gain), 0.31, 0.82, 0.55)
+            end
+            GameTooltip:AddDoubleLine(L["Replaces:"], entry.current or L["Nothing"], 1, 0.82, 0, 0.7, 0.7, 0.7)
             GameTooltip:AddLine(L["Click to pick an item. You can also drop one here."], 0.6, 0.6, 0.6, true)
         else
             GameTooltip:SetText(L["Click to pick an item. You can also drop one here."], 1, 1, 1, 1, true)
         end
         GameTooltip:Show()
     end)
-    slot:SetScript("OnLeave", function(self)
+    slot:SetScript("OnLeave", function()
         EnchantWindowUI:PaintSlot()
         GameTooltip:Hide()
     end)
@@ -244,238 +273,150 @@ function EnchantWindowUI:BuildSlot(frame)
     self.slot = slot
 end
 
---- The house size grip below the bottom right corner: drag to change the
---- window's size, right-click for the normal size.
-function EnchantWindowUI:BuildGrip(frame)
-    local grip = Theme.CreatePanel(frame, "panel", "borderLit")
-    grip:SetSize(16, 16)
-    grip:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", -6, -3)
-    grip:SetFrameLevel((frame:GetFrameLevel() or 0) + 20)
-    grip:EnableMouse(true)
-    for row = 0, 2 do
-        for column = 2 - row, 2 do
-            local dot = grip:CreateTexture(nil, "ARTWORK")
-            dot:SetSize(3, 3)
-            dot:SetPoint("BOTTOMRIGHT", grip, "BOTTOMRIGHT", -3 - (2 - column) * 5, 3 + (2 - row) * 5)
-            dot:SetColorTexture(Theme.Unpack("accent"))
-        end
-    end
-    grip:SetScript("OnMouseDown", function(self, mouse)
-        if mouse == "RightButton" then
-            EnchantWindowUI:SetScale(1)
-            return
-        end
-        local x = GetCursorPosition()
-        self.startX, self.startScale = x, frame:GetScale() or 1
-        self:SetScript("OnUpdate", function(grip)
-            local now = GetCursorPosition()
-            local uiScale = UIParent:GetEffectiveScale()
-            if not now or not uiScale or uiScale <= 0 then return end
-            local grown = (now - grip.startX) / uiScale / WIDTH
-            EnchantWindowUI:ApplyScale(grip.startScale + grown, true)
-        end)
-    end)
-    grip:SetScript("OnMouseUp", function(self)
-        self:SetScript("OnUpdate", nil)
-        if self.startX then
-            self.startX = nil
-            EnchantWindowUI:SetScale(frame:GetScale())
-        end
-    end)
-    self.grip = grip
-end
-
-function EnchantWindowUI.ClampScale(value)
-    value = tonumber(value) or 1
-    return math.max(EnchantWindowUI.SCALE_MIN, math.min(EnchantWindowUI.SCALE_MAX, value))
-end
-
---- Scale from the top left corner, so the window grows down and right.
-function EnchantWindowUI:ApplyScale(value, keepCorner)
-    local frame = self.frame
-    if not frame then return end
-    local scale = EnchantWindowUI.ClampScale(value)
-    local left, top = frame:GetLeft(), frame:GetTop()
-    local old = frame:GetScale() or 1
-    frame:SetScale(scale)
-    if keepCorner and left and top then
-        frame:ClearAllPoints()
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left * old / scale, top * old / scale)
-    end
-end
-
-function EnchantWindowUI:SetScale(value)
-    local scale = EnchantWindowUI.ClampScale(value)
-    ns.Config:Set("enchantWindowScale", scale ~= 1 and scale or nil)
-    self:ApplyScale(scale, true)
-    if ns.Config:Get("enchantWindowLeft") then self:SavePlace() end
-end
-
 --------------------------------------------------------------------------------
 -- Place
 --------------------------------------------------------------------------------
 
-function EnchantWindowUI:SavePlace()
-    local frame = self.frame
-    if not frame then return end
-    local left, top = frame:GetLeft(), frame:GetTop()
-    if not left or not top then return end
-    local scale = frame:GetScale() or 1
-    ns.Config:Set("enchantWindowLeft", left * scale)
-    ns.Config:Set("enchantWindowTop", top * scale)
-end
-
---- What to sit beside: the queued crafts when they show (they hang off the
---- craft pane's right edge), else the craft pane, else nil.
-function EnchantWindowUI.Beside(panel)
-    if not panel then return nil end
-    local queued, pane = panel.queuedFrame, panel.frame
-    if queued and queued:IsShown() then return queued end
-    if pane and pane:IsShown() then return pane end
-    return nil
-end
-
---- Above the craft pane and the queued crafts, so neither covers it.
-function EnchantWindowUI:LiftAbove()
-    local frame = self.frame
-    local panel = ns.CraftPanel
-    if not frame or not panel then return end
-    local top = 0
-    for _, other in ipairs({ panel.frame, panel.queuedFrame }) do
-        if other and other.GetFrameLevel then top = math.max(top, other:GetFrameLevel() or 0) end
-    end
-    if (frame:GetFrameLevel() or 0) <= top + 10 then pcall(frame.SetFrameLevel, frame, top + 20) end
-    if frame.Raise then pcall(frame.Raise, frame) end
-end
-
---- Placed again when the queued crafts come or go, unless dragged.
-function EnchantWindowUI:WatchQueued()
-    local queued = ns.CraftPanel and ns.CraftPanel.queuedFrame
-    if not queued or self.watchingQueued or type(queued.HookScript) ~= "function" then return end
-    self.watchingQueued = true
-    local again = function()
-        local frame = EnchantWindowUI.frame
-        if frame and frame:IsShown() and not ns.Config:Get("enchantWindowLeft") then
-            EnchantWindowUI:Place()
-            EnchantWindowUI:LiftAbove()
-        end
-    end
-    pcall(queued.HookScript, queued, "OnShow", again)
-    pcall(queued.HookScript, queued, "OnHide", again)
-end
-
---- A dragged place wins; else beside the craft pane, else beside the
---- game's window, by anchor only.
+--- Over the bottom of the recipe pane, above the Create buttons, by anchor.
+--- Returns true when it found a pane.
 function EnchantWindowUI:Place()
     local frame = self.frame
-    if not frame then return end
-    frame:ClearAllPoints()
-    local scale = frame:GetScale() or 1
-    local left, top = tonumber(ns.Config:Get("enchantWindowLeft")), tonumber(ns.Config:Get("enchantWindowTop"))
-    if left and top then
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left / scale, top / scale)
-        return
-    end
-    local pane = EnchantWindowUI.Beside(ns.CraftPanel)
-    local gap = ns.CraftPanel and ns.CraftPanel.PANEL_GAP or 6
+    if not frame then return false end
+    local anchor = EnchantWindowUI.FindAnchor()
+    self.anchor = anchor
+    if not anchor then return false end
+    local pane = Rect(anchor.frame)
+    local lift = 0
     if pane then
-        frame:SetPoint("TOPLEFT", pane, "TOPRIGHT", gap, 0)
-        return
-    end
-    local game = ns.CraftPanel and ns.CraftPanel:FindTradeSkillFrame()
-    if game then
-        local overhang = ns.CraftPanel:RightOverhang(game) or 0
-        frame:SetPoint("TOPLEFT", game, "TOPRIGHT", overhang + gap, 0)
-        return
-    end
-    frame:SetPoint("RIGHT", UIParent, "RIGHT", -60, 0)
-end
-
---- Under the character sheet while it shows, as the craft pane is.
-function EnchantWindowUI:FitStrata()
-    local frame, pane = self.frame, ns.CraftPanel
-    if not frame or not pane then return end
-    local want = pane.StrataFor(pane:SheetShown())
-    if frame:GetFrameStrata() ~= want then pcall(frame.SetFrameStrata, frame, want) end
-    if self.list then pcall(self.list.SetFrameStrata, self.list, STRATA_ABOVE[want] or "DIALOG") end
-    self:PlaceOverlay()
-end
-
-function EnchantWindowUI:WatchSheets()
-    self.watched = self.watched or {}
-    for _, name in ipairs(ns.CraftPanel and ns.CraftPanel.SHEETS or {}) do
-        local sheet = _G[name]
-        if not self.watched[name] and type(sheet) == "table" and type(sheet.HookScript) == "function" then
-            self.watched[name] = true
-            local refit = function() EnchantWindowUI:FitStrata() end
-            pcall(sheet.HookScript, sheet, "OnShow", refit)
-            pcall(sheet.HookScript, sheet, "OnHide", refit)
+        local rects = {}
+        for _, button in ipairs(EnchantWindowUI.CreateButtons()) do
+            local rect = Rect(button)
+            if rect and rect.right > pane.left and rect.left < pane.right then rects[#rects + 1] = rect end
         end
+        lift = EnchantWindowUI.Lift(pane.bottom, rects)
+        local width = math.max(EnchantWindowUI.MIN_WIDTH, (pane.right - pane.left) - INSET * 2)
+        frame:SetWidth(width)
     end
+    self.lift = lift
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOM", anchor.frame, "BOTTOM", 0, INSET + lift)
+
+    local game = anchor.game or anchor.frame
+    local okStrata, strata = pcall(game.GetFrameStrata, game)
+    local okLevel, level = pcall(anchor.frame.GetFrameLevel, anchor.frame)
+    if okStrata and strata then pcall(frame.SetFrameStrata, frame, strata) end
+    if okLevel and level then pcall(frame.SetFrameLevel, frame, level + 30) end
+    if self.list then pcall(self.list.SetFrameStrata, self.list, STRATA_ABOVE[frame:GetFrameStrata()] or "DIALOG") end
+    self:PlaceOverlay()
+    return true
+end
+
+--- For /bts probe: which frame it anchored to and how far it was lifted.
+function EnchantWindowUI:ProbeLines()
+    local anchor = self.anchor or EnchantWindowUI.FindAnchor()
+    local shown = self.frame and self.frame:IsShown()
+    return {
+        { "enchant strip", (shown and "showing" or "hidden") .. ", anchored to "
+            .. (anchor and anchor.name or "nothing found") },
+        { "enchant strip lift", ("%d over the Create buttons (%d found)"):format(
+            math.floor((self.lift or 0) + 0.5), #EnchantWindowUI.CreateButtons()) },
+        { "enchant strip pick", ("recipe %s, hook %s"):format(tostring(self.recipeID),
+            self.hooked or "none, looks every " .. EnchantWindowUI.PICK_LOOK .. "s") },
+    }
+end
+
+--------------------------------------------------------------------------------
+-- Following the game's pick (read only)
+--------------------------------------------------------------------------------
+
+function EnchantWindowUI:Hook()
+    if self.hooked then return end
+    local page = Field(_G.ProfessionsFrame, "CraftingPage")
+    local form = Field(page, "SchematicForm")
+    local again = function() EnchantWindowUI:Soon(true) end
+    if form and type(hooksecurefunc) == "function" and type(form.Init) == "function" then
+        if pcall(hooksecurefunc, form, "Init", again) then self.hooked = "SchematicForm.Init" end
+    end
+    local registry = _G.EventRegistry
+    if type(registry) == "table" and type(registry.RegisterCallback) == "function" then
+        local ok = pcall(registry.RegisterCallback, registry,
+            "ProfessionsRecipeListMixin.Event.OnRecipeSelected", again, self)
+        if ok then self.hooked = (self.hooked and self.hooked .. ", " or "") .. "OnRecipeSelected" end
+    end
+end
+
+--- A light look at the game's pick while Enchanting is open, for clients
+--- without the hooks; reads one value and does nothing when it is the same.
+function EnchantWindowUI:WatchPick()
+    local watcher = self.pickWatch or CreateFrame("Frame")
+    self.pickWatch = watcher
+    local elapsed = 0
+    watcher:SetScript("OnUpdate", function(_, step)
+        elapsed = elapsed + step
+        if elapsed < EnchantWindowUI.PICK_LOOK then return end
+        elapsed = 0
+        if not EnchantWindowUI.open then
+            watcher:SetScript("OnUpdate", nil)
+            return
+        end
+        local pick = Logic():GamePick()
+        if pick ~= EnchantWindowUI.seenPick then EnchantWindowUI:Update() end
+    end)
 end
 
 --------------------------------------------------------------------------------
 -- Showing
 --------------------------------------------------------------------------------
 
---- Should the window be up now?
-function EnchantWindowUI:Wanted()
-    local logic = Logic()
-    return logic and logic:IsOn() and self.open and not self.closed and logic:EnchantingOpen() and true or false
+--- Should the strip be up for this recipe? Pure on what it is given.
+function EnchantWindowUI.ShouldShow(state)
+    return state.on and state.open and state.enchanting and not state.combat
+        and state.enchant ~= nil and true or false
 end
 
 --- Show, hide or redraw for how things stand.
 function EnchantWindowUI:Update()
-    if not self:Wanted() then
+    local logic = Logic()
+    if not logic then return end
+    local on, open = logic:IsOn(), self.open
+    local enchanting = on and open and logic:EnchantingOpen() or false
+    if enchanting then self:Hook() end
+    if enchanting and not logic.enchants and not self.loading then
+        self:LoadEnchants()
+    end
+    local pick = enchanting and logic:GamePick() or nil
+    self.seenPick = pick
+    local enchant = pick and logic:Find(pick) or nil
+
+    if not EnchantWindowUI.ShouldShow({ on = on, open = open, enchanting = enchanting,
+        combat = InCombat(), enchant = enchant }) then
         if self.frame then self.frame:Hide() end
+        self.recipeID = enchant and enchant.recipeID or nil
         return
     end
     local frame = self:Build()
-    if not frame:IsShown() then
-        self:Place()
-        self:WatchSheets()
-        frame:Show()
-        self:LiftAbove()
-        if ns.Titanforged then ns.Titanforged:Opened(frame) end
-        self:LoadEnchants()
+    if pick ~= self.recipeID then
+        self.recipeID = pick
+        self.item, self.itemsKey = nil, nil
+        self:HideList()
+        logic:Remember(pick)
     end
-    self:WatchQueued()
-    self:FitStrata()
+    if not self:Place() then
+        frame:Hide()
+        return
+    end
+    frame:Show()
     self:Refresh()
 end
 
-function EnchantWindowUI:Close()
-    self.closed = true
-    if self.frame then self.frame:Hide() end
-end
-
---- Read the enchants, then start on the game's pick or the last one used.
+--- Read the enchants a few a frame, then look again.
 function EnchantWindowUI:LoadEnchants()
-    local logic = Logic()
     self.loading = true
-    logic:ReadEnchants(function(list)
+    Logic():ReadEnchants(function()
         EnchantWindowUI.loading = nil
-        local options = {}
-        for _, enchant in ipairs(list) do
-            options[#options + 1] = { text = enchant.shown or enchant.name, value = enchant.recipeID }
-        end
-        EnchantWindowUI.dropdown:SetOptions(options)
-        local start = logic:StartPick()
-        EnchantWindowUI.recipeID = start
-        EnchantWindowUI.dropdown:SetValue(start)
-        EnchantWindowUI.item = nil
         EnchantWindowUI.itemsKey = nil
-        EnchantWindowUI:Refresh(true)
+        EnchantWindowUI:Update()
     end)
-end
-
-function EnchantWindowUI:PickEnchant(recipeID)
-    if recipeID == self.recipeID then return end
-    self.recipeID = recipeID
-    self.item = nil
-    self.itemsKey = nil
-    self:HideList()
-    self:Refresh(true)
 end
 
 --- The items this enchant fits, read again only when the bags, the gear
@@ -514,136 +455,43 @@ function EnchantWindowUI:Refresh(fresh)
     local items = enchant and self:ReadItems(fresh) or {}
     local entry = self.item
 
-    -- The slot.
-    local slot = self.slot
+    -- The slot and the name.
     if entry then
-        Theme.SetItemIcon(slot.icon, ItemIDOf(entry.link), entry.link)
-        slot.name:SetText(NameOf(entry.link) or "")
-        Theme.SetItemNameColor(slot.name, ItemIDOf(entry.link))
-    else
-        Theme.SetItemIcon(slot.icon, nil)
-        if enchant and #items == 0 and not self.loading then
-            slot.name:SetText(L["Nothing you have can take this enchant."])
-        else
-            slot.name:SetText(L["Pick an Item"])
+        Theme.SetItemIcon(self.slot.icon, ItemIDOf(entry.link), entry.link)
+        local name = NameOf(entry.link) or ""
+        if (entry.gain or 0) > 0 then
+            name = name .. " |c" .. ((ns.COLORS or {}).profit or "ff4fd18b") .. ("+%d%%"):format(entry.gain) .. "|r"
         end
-        slot.name:SetTextColor(Theme.Unpack("muted"))
+        self.name:SetText(name)
+        Theme.SetItemNameColor(self.name, ItemIDOf(entry.link))
+    else
+        Theme.SetItemIcon(self.slot.icon, nil)
+        if enchant and #items == 0 and not self.loading then
+            self.name:SetText(L["Nothing you have can take this enchant."])
+        else
+            self.name:SetText(L["Pick an Item"])
+        end
+        self.name:SetTextColor(Theme.Unpack("muted"))
     end
     self:PaintSlot()
 
-    -- The chip: Equipment's gain for the piece picked.
-    if entry and (entry.gain or 0) > 0 then
-        self.chip.text:SetText(L.Format(L["+%d%% for you"], entry.gain))
-        self.chip:SetWidth((self.chip.text:GetStringWidth() or 60) + 16)
-        self.chip:Show()
-    else
-        self.chip:Hide()
-    end
+    -- Materials and cost.
+    local rows, _, _, cost = logic:MaterialState(enchant)
+    self.info:SetText(EnchantWindowUI.InfoLine(rows, cost, MaterialName))
 
-    -- Replaces:
-    if entry and entry.current then
-        self.replaces:SetText(entry.current)
-        self.replaces:SetTextColor(Theme.Unpack("warn"))
-    else
-        self.replaces:SetText(L["Nothing"])
-        self.replaces:SetTextColor(Theme.Unpack("muted"))
-    end
-
-    -- Materials:
-    local y = self:LayMaterials(enchant)
-
-    -- Cost:
-    local _, ready, _, cost = logic:MaterialState(enchant)
-    local showCost = enchant and cost and cost > 0
-    self.costLabel:ClearAllPoints()
-    self.cost:ClearAllPoints()
-    if showCost then
-        self.costLabel:SetPoint("TOPLEFT", self.materialsLabel, "BOTTOMLEFT", 0, -y - 6)
-        self.cost:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, 0)
-        self.cost:SetPoint("TOP", self.costLabel, "TOP", 0, 0)
-        Theme.SetMoneyText(self.cost, cost)
-        self.costLabel:Show()
-        self.cost:Show()
-    else
-        self.costLabel:Hide()
-        self.cost:Hide()
-    end
-
-    -- Enchant, or Put It On.
-    self.button:ClearAllPoints()
-    local above = showCost and self.costLabel or self.materialsLabel
-    local gap = showCost and -12 or (-y - 12)
-    self.button:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, gap)
     self:PaintButton(enchant, entry)
 
-    -- Footer.
-    if not entry and #items > 0 then
-        self.footLeft:SetText(#items == 1 and L["1 item fits"] or L.Format(L["%d items fit"], #items))
-    elseif enchant and ready and ready > 0 and ready < math.huge then
-        self.footLeft:SetText(ready == 1 and L["1 enchant ready"] or L.Format(L["%d enchants ready"], ready))
-    else
-        self.footLeft:SetText("")
-    end
-
-    -- Height: everything laid out, then the foot.
-    local top, bottom = frame:GetTop(), self.button:GetBottom()
-    if top and bottom then
-        frame:SetHeight(math.max(260, (top - bottom) + FOOT))
-    else
-        frame:SetHeight(TOP + 6 + 22 + 12 + 20 + SLOT_HEIGHT + 30 + 20 + y + 30 + BUTTON_HEIGHT + FOOT)
-    end
+    -- Tall enough for a name that wraps.
+    local used = (self.name:GetStringHeight() or 14) + 3 + (self.info:GetStringHeight() or 12) + 14
+    frame:SetHeight(math.max(HEIGHT, math.ceil(used)))
+    self:PlaceOverlay()
 
     if self.list and self.list:IsShown() then self:DrawList() end
-end
-
---- The materials, one row each, have/need in green or red. Returns the
---- height they take.
-function EnchantWindowUI:LayMaterials(enchant)
-    local frame = self.frame
-    self.materialsLabel:ClearAllPoints()
-    self.materialsLabel:SetPoint("TOPLEFT", self.replacesLabel, "BOTTOMLEFT", 0, -12)
-    local rows = Logic():MaterialState(enchant)
-    for index, data in ipairs(rows) do
-        local row = self.materialRows[index]
-        if not row then
-            row = CreateFrame("Frame", nil, frame)
-            row:SetHeight(MATERIAL_ROW - 2)
-            Theme.Fill(row, "glassAlt")
-            Theme.Border(row, "border", 0.6)
-            row.icon = Theme.CreateItemIcon(row, 18)
-            row.icon:SetPoint("LEFT", 3, 0)
-            row.name = Theme.CreateLabel(row, "normal", "text")
-            row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-            row.count = Theme.CreateLabel(row, "normal", "profit")
-            row.count:SetPoint("LEFT", row.name, "RIGHT", 6, 0)
-            row:EnableMouse(true)
-            row:SetScript("OnEnter", function(self)
-                if self.itemID then Widgets.ShowItemOnly(self, self.itemID) end
-            end)
-            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-            self.materialRows[index] = row
-        end
-        row.itemID = data.itemID
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", self.materialsLabel, "BOTTOMLEFT", 0, -6 - (index - 1) * MATERIAL_ROW)
-        Theme.SetItemIcon(row.icon, data.itemID)
-        local name = ns.Util.GetItemName and ns.Util.GetItemName(data.itemID)
-        if type(name) ~= "string" then name = NameOf(ns.Util.GetItemLabel(data.itemID)) end
-        row.name:SetText(name or "?")
-        row.count:SetText(("%d/%d"):format(math.min(data.have, 9999), data.need))
-        row.count:SetTextColor(Theme.Unpack(data.short > 0 and "loss" or "profit"))
-        local wide = 3 + 18 + 6 + (row.name:GetStringWidth() or 60) + 6 + (row.count:GetStringWidth() or 24) + 10
-        row:SetWidth(math.min(WIDTH - PAD * 2, wide))
-        row:Show()
-    end
-    for index = #rows + 1, #self.materialRows do self.materialRows[index]:Hide() end
-    return 6 + #rows * MATERIAL_ROW
 end
 
 function EnchantWindowUI:PaintButton(enchant, entry)
     local logic = Logic()
     local button = self.button
-    Theme.SetItemIcon(self.buttonIcon, entry and ItemIDOf(entry.link), entry and entry.link)
 
     if logic:PutOnTarget() and logic.pending and logic.pending.way == "two" then
         button:SetText(L["Put It On"])
@@ -668,8 +516,10 @@ end
 function EnchantWindowUI:BuildList()
     if self.list then return self.list end
     local list = CreateFrame("Frame", nil, self.frame)
-    list:SetPoint("TOPLEFT", self.slot, "BOTTOMLEFT", 0, -2)
-    list:SetPoint("TOPRIGHT", self.slot, "BOTTOMRIGHT", 0, -2)
+    -- It opens upward, over the recipe, so the game's Create buttons
+    -- under the strip stay clear.
+    list:SetPoint("BOTTOMLEFT", self.frame, "TOPLEFT", 0, 2)
+    list:SetPoint("BOTTOMRIGHT", self.frame, "TOPRIGHT", 0, 2)
     list:SetFrameStrata(STRATA_ABOVE[self.frame:GetFrameStrata()] or "DIALOG")
     list:EnableMouse(true)
     list:EnableMouseWheel(true)
@@ -1018,22 +868,35 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
---- Bags and gear come in bursts: one redraw after they settle, and only
---- while the window shows.
-function EnchantWindowUI:Soon()
-    self.bagsVersion = (self.bagsVersion or 0) + 1
-    if self.waiting or not (self.frame and self.frame:IsShown()) then return end
+--- Bags, gear and the game's pick come in bursts: one look after they
+--- settle. A new pick can show or hide the strip; bags only redraw it.
+function EnchantWindowUI:Soon(pickChanged)
+    if pickChanged then
+        self.pickMoved = true
+    else
+        self.bagsVersion = (self.bagsVersion or 0) + 1
+        if not (self.frame and self.frame:IsShown()) then return end
+    end
+    if self.waiting then return end
     self.waiting = true
     C_Timer.After(EnchantWindowUI.SETTLE, function()
         EnchantWindowUI.waiting = nil
-        EnchantWindowUI:Refresh()
+        if EnchantWindowUI.pickMoved then
+            EnchantWindowUI.pickMoved = nil
+            EnchantWindowUI:Update()
+        else
+            EnchantWindowUI:Refresh()
+        end
     end)
 end
 
 function EnchantWindowUI:OnEnable()
     ns.RegisterEvent(self, "TRADE_SKILL_SHOW", function()
         EnchantWindowUI.open = true
-        EnchantWindowUI.closed = nil
+        if Logic():IsOn() then
+            EnchantWindowUI:Hook()
+            EnchantWindowUI:WatchPick()
+        end
         EnchantWindowUI:Update()
         -- The game's window can arrive a moment after the event.
         C_Timer.After(0.5, function() EnchantWindowUI:Update() end)
@@ -1056,7 +919,8 @@ function EnchantWindowUI:OnEnable()
             overlay:Hide()
         end
         if EnchantWindowUI.button then EnchantWindowUI.button:EnableMouse(true) end
-        EnchantWindowUI:Refresh()
+        -- Nothing happens in a fight: the strip steps away until it ends.
+        EnchantWindowUI:Update()
     end)
-    ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function() EnchantWindowUI:Refresh() end)
+    ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function() EnchantWindowUI:Update() end)
 end
