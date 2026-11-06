@@ -1671,3 +1671,23 @@ note slot. Headings sort with the house arrow (`Media/Frame/SortArrow.tga`).
 
 The owner approved the mockup and its words (2026-11-03). `Logic/Snipe.lua` and `UI/SnipeView.lua`: a Snipe view tab in the auction drawer, off unless ticked ("Snipe Tab:" on the auction page, `snipeTab`; never rename any snipe key: `snipeCap`, `snipePct`, `snipeSound`, `snipeWatch`, `snipeStripOpen`, `snipeWheel`). Start Sniping is a click, never automatic; a session ends on Stop, the auction house closing or the Spending Cap, and clears the finds. It searches a few items at a time, one search at a time, cheapest page only (`AHQueue`), held while the player sells or buys, and keeps listings at or under worth times Snipe Below (default 70). Watch is Priced Items or To Disenchant (green or better gear the character or the Mail page's disenchanter can break; buys are marked through `DisenchantBuys:Intend`). Below Vendor (`snipeWatch` "vendor", 2026-11-03, a player asked) watches against `Disenchant:GetSellPrice` with no cut, greys in, unsure charged prices out, any listing under it a find (`IsDealFor`), Snipe Below greyed, biggest profit a unit first (`Better`). Big buys ask "Click Again". "Wheel Buys:" (`snipeWheel`) makes wheel up buy the best find on that tab only (`AuctionWheel`). The bell is `Media/Sounds/snipe-bell-single.ogg`, once a batch, never in a fight. Tested in `tools/test_snipe.lua`. Handoff and words awaiting his yes: `Docs/handoff/snipe.md`. Not yet seen in game.
 
+
+## The Enchant strip
+
+Trent said build it (2026-11-05) as a window beside the Enchanting
+window, then (2026-11-06) picked option B of a mockup: a strip under the
+game's recipe pane, since the window opened behind the queued crafts and
+did not feel part of it. `UI/EnchantWindow.lua` (`EnchantWindowUI`) is our
+own frame on UIParent, anchored by position to the bottom of the recipe
+pane (`FindAnchor`: `ProfessionsFrame.CraftingPage.SchematicForm`, then
+older frames), lifted clear of the game's Create buttons (`Lift`,
+`CreateButtons`). It shows only for an enchant (`ShouldShow`), never in a
+fight, and follows the game's pick through read-only hooks
+(`SchematicForm.Init`, `OnRecipeSelected`) plus a look every `PICK_LOOK`
+seconds. It holds the item slot (a click opens WORN / IN YOUR BAGS above
+the strip), the name, the materials and cost (`InfoLine`) and Enchant or
+Put It On. What it reads and casts is still `Logic/EnchantWindow.lua`.
+The setting is still `enchantWindow`, off unless ticked; the old window's
+saved place and size stay in the save, unread. `/bts probe` has "enchant
+strip" lines. Tested in `tools/test_enchantstrip.lua`. Not yet seen in
+game.

@@ -144,7 +144,7 @@ function EnchantWindow:ProbeLines()
     local caps = self:Caps()
     local settings = Settings() or {}
     local seen = type(settings.enchantWindowSeen) == "table" and settings.enchantWindowSeen or {}
-    return {
+    local lines = {
         { "enchant window", self:IsOn() and "on" or "off" },
         { "enchant one click", ("CraftEnchant %s, item locations %s, seen %s"):format(
             Yes(caps.craftEnchant), Yes(caps.itemLocation), tostring(seen.one or "not tried")) },
@@ -155,6 +155,15 @@ function EnchantWindow:ProbeLines()
             Yes(caps.enchantItems), tostring(caps.recipeType)) },
         { "enchant way", self:Way() .. (settings.enchantWindowWay and " (picked)" or "") },
     }
+    -- Where the strip sits under the recipe pane, and what it follows.
+    local ui = ns.EnchantWindowUI
+    if ui and type(ui.ProbeLines) == "function" then
+        local ok, more = pcall(ui.ProbeLines, ui)
+        if ok and type(more) == "table" then
+            for _, line in ipairs(more) do lines[#lines + 1] = line end
+        end
+    end
+    return lines
 end
 
 --------------------------------------------------------------------------------
@@ -666,7 +675,7 @@ table.insert(ns.WHATS_NEW_TIPS, {
     key = "enchantWindow",
     title = L["Enchant Window"],
     icon = [[Interface\Icons\Trade_Engraving]],
-    paragraphs = { L["Pick an item, then click Enchant. It sits beside your Enchanting window."] },
+    paragraphs = { L["Pick an item, then click Enchant. It sits under the recipe in your Enchanting window."] },
     button = L["Turn It On"],
     due = function() return not EnchantWindow:IsOn() end,
     run = function() EnchantWindow:SetOn(true) end,
