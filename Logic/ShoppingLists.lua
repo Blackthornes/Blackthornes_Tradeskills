@@ -11,6 +11,9 @@
 -- Saved account wide in `shoppingLists` (never rename it):
 --   { { name = "Potion herbs", items = { { id = 2447, want = 40 }, ... },
 --       id = 3, rules = { ... } }, ... }
+-- An item may also carry `maxPay` (copper): the most Snipe's My Lists pays
+-- for one (2026-11-06). Left out, the list's own Most I'll Pay rule or the
+-- item's worth decides.
 -- `id` is made once for each list (`shoppingListNextId`, never rename
 -- either) and `rules` are the list's rules (Logic/ListRules.lua).
 -- in the order the player made them. Nothing else from the save goes in, and
@@ -228,6 +231,33 @@ function ShoppingLists:SetWant(index, itemID, want)
     return false
 end
 
+--- The most Snipe pays for one of an item on this list (copper); nil or 0
+--- takes it off, so the list's rule or the worth decides again.
+function ShoppingLists:SetMaxPay(index, itemID, copper)
+    local list = self:Get(index)
+    if not list then return false end
+    copper = math.floor(tonumber(copper) or 0)
+    local most = ns.ListRules and ns.ListRules.MAX_MONEY or (214748 * 10000 + 9999)
+    local clean = copper > 0 and math.min(most, copper) or nil
+    for _, item in ipairs(Items(list)) do
+        if type(item) == "table" and item.id == itemID then
+            if item.maxPay ~= clean then
+                item.maxPay = clean
+                Changed()
+            end
+            return true
+        end
+    end
+    return false
+end
+
+--- An item's own Most I'll Pay, cleaned, or nil.
+function ShoppingLists.MaxPayOf(item)
+    local value = type(item) == "table" and tonumber(item.maxPay)
+    if not value or value < 1 then return nil end
+    return math.floor(value)
+end
+
 --------------------------------------------------------------------------------
 -- Reading a list
 --------------------------------------------------------------------------------
@@ -274,7 +304,11 @@ function ShoppingLists:Lines(index)
     if not list then return lines end
     for _, item in ipairs(Items(list)) do
         local id = type(item) == "table" and tonumber(item.id)
-        if id then lines[#lines + 1] = self:Line(id, CleanWant(item.want)) end
+        if id then
+            local line = self:Line(id, CleanWant(item.want))
+            line.maxPay = ShoppingLists.MaxPayOf(item)
+            lines[#lines + 1] = line
+        end
     end
     return lines
 end

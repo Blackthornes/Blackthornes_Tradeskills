@@ -92,12 +92,87 @@ function Snipe:Percent()
     local pct = tonumber(Get("snipePct", 70)) or 70
     return math.max(10, math.min(95, pct))
 end
-local WATCHES = { priced = true, disenchant = true, vendor = true }
+local WATCHES = { priced = true, disenchant = true, vendor = true, lists = true }
 function Snipe:Watch()
     local watch = Get("snipeWatch", "priced")
     return WATCHES[watch] and watch or "priced"
 end
 function Snipe:Enabled() return Get("snipeTab", false) == true end
+
+--------------------------------------------------------------------------
+-- My Lists: the items on the player's shopping lists (2026-11-06)
+--------------------------------------------------------------------------
+
+local function Lists() return ns.ShoppingLists end
+
+--- The list My Lists watches: its id, or nil for All Lists. A list that is
+--- gone reads as All Lists.
+function Snipe:ListChoice()
+    local id = tonumber(Get("snipeList", nil))
+    if not id or not Lists() then return nil end
+    for _, held in ipairs(Lists():Readable()) do
+        if tonumber(held.list.id) == id then return id end
+    end
+    return nil
+end
+
+--- The items My Lists watches, each once: the first list on the Lists view
+--- that holds it gives how many are wanted and its Most I'll Pay.
+-- @return { [itemID] = { id, want, own, rule, list } }, item IDs in order
+function Snipe.ListItems(listID)
+    local out, order = {}, {}
+    if not Lists() then return out, order end
+    for _, held in ipairs(Lists():Readable()) do
+        local list = held.list
+        if not listID or tonumber(list.id) == listID then
+            local rule = ns.ListRules and ns.ListRules.Of and ns.ListRules.Of(list).maxPay or nil
+            for _, item in ipairs(type(list.items) == "table" and list.items or {}) do
+                local id = type(item) == "table" and tonumber(item.id)
+                if id and not out[id] then
+                    out[id] = {
+                        id = id,
+                        want = math.max(1, math.floor(tonumber(item.want) or 1)),
+                        own = Lists().MaxPayOf and Lists().MaxPayOf(item) or nil,
+                        rule = rule,
+                        list = list.name,
+                    }
+                    order[#order + 1] = id
+                end
+            end
+        end
+    end
+    return out, order
+end
+
+--- The most My Lists pays for one: the item's own Most I'll Pay, else its
+--- list's rule, else its worth times Snipe Below.
+-- @return copper and where it came from ("item", "list", "worth"), or nil
+function Snipe:LimitFor(entry)
+    if type(entry) ~= "table" then return nil end
+    if entry.own then return entry.own, "item" end
+    if entry.rule then return entry.rule, "list" end
+    if not (ns.Prices and ns.Prices.GetValue) then return nil end
+    local ok, value = pcall(ns.Prices.GetValue, ns.Prices, entry.id)
+    if not (ok and type(value) == "number" and value > 0) then return nil end
+    if ns.Prices.IsCredible and not ns.Prices.IsCredible(value) then return nil end
+    local limit = math.floor(value * self:Percent() / 100)
+    if limit < 1 then return nil end
+    return limit, "worth"
+end
+
+--- How many of an item the player owns, counted as the Lists view counts.
+function Snipe.Have(itemID)
+    if ns.Inventory and ns.Inventory.GetOwnedCount then
+        local ok, owned = pcall(ns.Inventory.GetOwnedCount, ns.Inventory, itemID)
+        if ok and type(owned) == "number" then return owned end
+    end
+    return 0
+end
+
+--- How many more the player wants (0 once they have enough).
+function Snipe.Need(want, itemID)
+    return math.max(0, (want or 0) - Snipe.Have(itemID))
+end
 
 function Snipe:IsRunning() return self.running end
 function Snipe:Spent() return self.spent end
@@ -215,9 +290,12 @@ function Snipe.IsDeal(price, worth, percent)
     return price <= worth * (percent or 70) / 100
 end
 
---- A deal for this way of watching: under a vendor's price, or under worth
---- times Snipe Below.
+--- A deal for this way of watching: under a vendor's price, at or under
+--- the most My Lists pays, or under worth times Snipe Below.
 function Snipe.IsDealFor(price, worth, kind, percent)
+    if kind == "lists" then
+        return type(price) == "number" and type(worth) == "number" and price > 0 and price <= worth
+    end
     if kind == "vendor" then
         return type(price) == "number" and type(worth) == "number" and price > 0 and price < worth
     end
@@ -251,9 +329,35 @@ end
 -- The pool: what a session looks at, laid out a slice a frame
 --------------------------------------------------------------------------
 
+--- My Lists' pool: every item still wanted that has a limit. Small, so it
+--- is laid out at once.
+function Snipe:BuildListPool()
+    local items, order = Snipe.ListItems(self:ListChoice())
+    local out, onLists, lastScan = {}, #order > 0, ns.Prices and ns.Prices.GetLastScan and ns.Prices:GetLastScan()
+    local since = lastScan and (lastScan - self.SCAN_SLACK) or nil
+    for _, id in ipairs(order) do
+        local entry = items[id]
+        if Snipe.Need(entry.want, id) > 0 then
+            local limit = self:LimitFor(entry)
+            if limit then
+                out[#out + 1] = { id = id, worth = limit, want = entry.want, listed = Snipe.InLastScan(id, since) }
+            end
+        end
+    end
+    return Snipe.OrderPool(out), onLists
+end
+
 function Snipe:BuildPool(done)
     local mine = session
     local mode = self:Watch()
+    if mode == "lists" then
+        local onLists
+        pool, onLists = self:BuildListPool()
+        cursor, building = 1, false
+        self.emptyWhy = (#pool == 0) and (onLists and L["Got all you need"] or L["Put items on a list first."]) or nil
+        return done()
+    end
+    self.emptyWhy = nil
     local ids = {}
     local table_ = ns.Prices and ns.Prices.GetTable and ns.Prices:GetTable() or {}
     for id in pairs(table_) do
@@ -382,7 +486,7 @@ function Snipe:Next()
     if not self.running or waiting or building then return end
     if #pool == 0 then
         -- Nothing to watch: say so once and stop.
-        self:Stop(L["Nothing to snipe yet. Scan the auction house first."])
+        self:Stop(self.emptyWhy or L["Nothing to snipe yet. Scan the auction house first."])
         return
     end
     if cursor > #pool then cursor = 1 end
@@ -392,7 +496,9 @@ function Snipe:Next()
     end
     if not (Util.HasFunction("C_AuctionHouse.MakeItemKey") and ns.AHQueue and ns.AHQueue.Request) then return end
 
-    local batch, keys = {}, {}
+    if self:Watch() == "lists" and not self:DropMet() then return end
+
+    local batch, keys, wants = {}, {}, {}
     local last = math.min(#pool, cursor + self.BATCH - 1)
     for i = cursor, last do
         local row = pool[i]
@@ -400,12 +506,13 @@ function Snipe:Next()
         if ok and key then
             keys[#keys + 1] = key
             batch[row.id] = row.worth
+            wants[row.id] = row.want
         end
     end
     cursor = last + 1
     if #keys == 0 then return After(self.REST, function() Snipe:Next() end) end
 
-    local mine = { batch = batch, at = Now() }
+    local mine = { batch = batch, wants = wants, at = Now() }
     waiting = mine
     local mineSession = session
     ns.AHQueue:Request({
@@ -426,6 +533,34 @@ function Snipe:Next()
     After(self.REPLY_WAIT + 3, function()
         if waiting == mine then waiting = nil; Snipe:Later() end
     end)
+end
+
+--- My Lists: take out what the player has enough of now, from the pool
+--- and the finds. Stops, saying so, once nothing is left.
+-- @return false when it stopped
+function Snipe:DropMet()
+    local kept = {}
+    for _, row in ipairs(pool) do
+        if Snipe.Need(row.want, row.id) > 0 then kept[#kept + 1] = row end
+    end
+    if #kept ~= #pool then
+        pool = kept
+        if cursor > #pool then cursor = 1 end
+    end
+    local finds, dropped = {}, false
+    for _, find in ipairs(self.finds) do
+        if find.kind ~= "lists" or Snipe.Need(find.want, find.itemID) > 0 or find == (self.pending and self.pending.find) then
+            finds[#finds + 1] = find
+        else
+            dropped = true
+        end
+    end
+    if dropped then self.finds = finds; Moved() end
+    if #pool == 0 then
+        self:Stop(L["Got all you need"])
+        return false
+    end
+    return true
 end
 
 function Snipe:Later()
@@ -487,6 +622,7 @@ function Snipe:OnBrowseResults()
             kept[#kept + 1] = {
                 itemID = id, price = hit.price, qty = hit.qty, worth = worth,
                 deal = Snipe.Deal(hit.price, worth), kind = kind,
+                want = mine.wants and mine.wants[id] or nil,
             }
             -- One ding a new item, and again only when it gets cheaper.
             local rang = self.dinged and self.dinged[id]
@@ -538,6 +674,9 @@ end
 function Snipe:UnitsFor(find)
     local left = self:Left()
     local units = math.min(find.qty or 1, self.MOST_UNITS)
+    if find.kind == "lists" and find.want then
+        units = math.min(units, Snipe.Need(find.want, find.itemID))
+    end
     if find.price > 0 then units = math.min(units, math.floor(left / find.price)) end
     return math.max(0, units)
 end
