@@ -5,6 +5,13 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.12.0", lines = {
+        "A Buy It button on the Snipe tab buys the top find.",
+        "Snipe can watch your shopping lists. Pick My Lists under Watch.",
+        "You can set the most you'll pay for each item on your lists.",
+        "The Sell tab shows every item in your bags unless you hid it. Items it won't list say why.",
+        "A Hidden button on the Sell tab shows what you hid, so you can bring items back.",
+    } },
     { version = "1.11.0", lines = {
         "A new strip sits under the recipe in your Enchanting window. Pick an item, then click Enchant. It starts off. Turn it on in Settings, on the Look page.",
     } },

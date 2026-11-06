@@ -4,6 +4,20 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.12.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **Snipe: Buy It.** A gold Buy It button sits left of Start on the Snipe tab. It buys the top find. Big buys ask you to Click Again first.
+- **Snipe: My Lists.** Watch: has a new choice, My Lists, with a List: drop-down. Snipe looks for the items on your shopping lists and stops once you have what the list wants.
+- **Most I'll Pay.** In the Lists view, each item has a Most I'll Pay box, so you can set your own top price for Snipe.
+- **Sell tab.** Every item in your bags now shows on the Sell tab unless you hid it. Items it won't list sit dimmed at the bottom and say why, like "No price yet."
+- **Hidden items.** A Hidden button beside Overcutting opens a list of the items you hid on the Sell tab, with Restore on each.
+- **Snipe.** Buying a find works again, also for items sold one at a time.
+- **Snipe.** Pressing Stop keeps your finds, so you can still buy them.
+- **Sell tab.** Grey items never show there. Sell those to a vendor.
+- **Auction house.** The drawer builds right again, and Snipe's labels only show on the Snipe tab.
+
 ## 1.11.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because files were added.
