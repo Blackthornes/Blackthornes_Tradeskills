@@ -23,6 +23,21 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.12.0
+
+- A Buy It button on the Snipe tab buys the top find.
+- Snipe can watch your shopping lists. Pick My Lists under Watch.
+- You can set the most you'll pay for each item on your lists.
+- The Sell tab shows every item in your bags unless you hid it. Items it won't list say why.
+- A Hidden button on the Sell tab shows what you hid, so you can bring items back.
+
+Fixes and changes:
+
+- Buying a find on the Snipe tab works again.
+- Pressing Stop on the Snipe tab keeps your finds.
+- Grey items no longer show on the Sell tab.
+- The auction house drawer builds right again.
+
 ## 1.11.0
 
 - A new strip sits under the recipe in your Enchanting window. Pick an item, then click Enchant. It starts off. Turn it on in Settings, on the Look page.
