@@ -1818,7 +1818,7 @@ local function Build(outer)
     goldPlace:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(goldPlace)
 
-    -- Enchant window (Trent said build it, 2026-11-05): since 2026-11-06 a
+    -- Enchant window (the owner said build it, 2026-11-05): since 2026-11-06 a
     -- strip under the recipe in the Enchanting window. Off unless ticked (Logic/EnchantWindow.lua).
     CreateSection(pages.look, 2, L["ENCHANTING"])
     local enchantRow = CreateRow(pages.look, 2, L["Enchant Window:"], nil)

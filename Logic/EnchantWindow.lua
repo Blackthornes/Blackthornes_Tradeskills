@@ -1,5 +1,5 @@
 -- Blackthornes Tradeskills -- Logic/EnchantWindow.lua
--- What the Enchant window shows and how it casts (Trent asked 2026-11-05,
+-- What the Enchant window shows and how it casts (the owner asked 2026-11-05,
 -- from a mockup: Retail's enchanting window brought to Forever).
 --
 -- The window (UI/EnchantWindow.lua) sits beside the game's Enchanting window
@@ -115,7 +115,7 @@ end
 
 local function Yes(value) return value and "yes" or "no" end
 
---- The way a click casts: Trent's pick (`/bts enchant way`), else what this
+--- The way a click casts: the owner's pick (`/bts enchant way`), else what this
 --- client was seen to take, else the first one it has.
 function EnchantWindow:Way()
     local settings = Settings() or {}

@@ -1,5 +1,5 @@
 -- Blackthornes -- UI/EnchantWindow.lua
--- The enchant strip (Trent picked it, 2026-11-05, option B of the mockup in
+-- The enchant strip (the owner picked it, 2026-11-05, option B of the mockup in
 -- the project files, previews/tradeskills-enchant-integrated/): a small strip
 -- at the bottom of the game's recipe pane in the Enchanting window, with the
 -- item, its materials and cost, and an Enchant button. It replaced the
