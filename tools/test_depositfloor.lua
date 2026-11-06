@@ -52,18 +52,19 @@ check("forty pay their share", Posting:EstimateDeposit(BELT, 40), 200)
 check("away from the auction house, the same", Posting:GetDeposit(BELT, 1), 100)
 
 print("")
-print("no floor seen")
+print("a cheap item")
 Posting:CacheUnitDeposit(CLOTH, 6, 2, 2)
 Posting:CacheUnitDeposit(CLOTH, 60, 20, 2)
 check("the share each", Posting:GetCachedUnitDeposit(CLOTH), 3)
-check("one pays its share alone", Posting:EstimateDeposit(CLOTH, 1), 3)
+check("one still pays the 1s", Posting:EstimateDeposit(CLOTH, 1), 100)
+check("a stack worth more pays its share", Posting:EstimateDeposit(CLOTH, 50), 150)
 
 print("")
 print("an older record")
-ns.db.deposits[42] = { unit = 2.4, duration = 2, at = 1 }
-check("still read", Posting:EstimateDeposit(42, 5), 12)
-Posting:CacheUnitDeposit(42, 30, 10, 2)
-check("and replaced by a new answer", Posting:EstimateDeposit(42, 10), 30)
+ns.db.deposits[42] = { unit = 24, duration = 2, at = 1 }
+check("still read", Posting:EstimateDeposit(42, 5), 120)
+Posting:CacheUnitDeposit(42, 3000, 10, 2)
+check("and replaced by a new answer", Posting:EstimateDeposit(42, 10), 3000)
 
 print("")
 print("another listing length starts over")

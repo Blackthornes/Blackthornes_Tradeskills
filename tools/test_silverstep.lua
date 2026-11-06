@@ -82,7 +82,7 @@ assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 local Util, Profit = ns.Util, ns.Profit
 
 local function Reset()
-    settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 2, minProfit = 0 }
+    settings = { undercutCopper = 1, auctionCut = 0.05, expectedRelists = 1, minProfit = 0 }
     prices = {}
     recipeByOutput = {}
     craftCost = {}
@@ -163,14 +163,20 @@ end
 
 do
     -- A deposit is a real cost of listing, so it can be what tips the balance.
+    -- It comes back on a sale, so only a listing expected to run out loses
+    -- it, and on Forever that is never less than 1s.
     settings.minProfit = 0
-    craftCost[BAG] = { priceable = true, total = 180, perUnit = 180, yield = 1 }
+    settings.expectedRelists = 2
+    craftCost[BAG] = { priceable = true, total = 100, perUnit = 100, yield = 1 }
     unitDeposit[BAG] = 40
 
-    check("deposit counted: 2s no longer pays, so match", Profit:ChoosePostPrice(BAG), 300)
+    check("1s deposit lost: 2s no longer pays, so match", Profit:ChoosePostPrice(BAG), 300)
 
     unitDeposit[BAG] = nil
-    check("without it, 2s pays and undercuts", Profit:ChoosePostPrice(BAG), 200)
+    check("an unknown deposit still costs the 1s", Profit:ChoosePostPrice(BAG), 300)
+
+    settings.expectedRelists = 1
+    check("sold first time, it comes back: 2s pays", Profit:ChoosePostPrice(BAG), 200)
 end
 
 --------------------------------------------------------------------------------

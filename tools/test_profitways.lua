@@ -74,7 +74,8 @@ assert(loadfile(lfs_cwd .. "/Data/Prices.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Cost.lua"))("Blackthornes_TS", ns)
 assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 
--- A deposit of 3c a belt is known from the last listing.
+-- A deposit of 3c a belt is known from the last listing, but a listing on
+-- Forever never pays less than 1s, so the 1s is what is held and lost.
 ns.Posting = { GetCachedUnitDeposit = function() return 3 end }
 
 local Profit = ns.Profit
@@ -167,9 +168,9 @@ print("one way alone")
 
 a = Profit:Analyse(RECIPE, nil, "auction")
 check("ranked by the AH, the listing's profit", a.via, "auction")
-check("is a loss: 59c less the cut and deposit, less 70c", math.floor(a.profit * 100 + 0.5), -1695)
+check("is a loss: 59c less the cut and 1s deposit, less 70c", math.floor(a.profit * 100 + 0.5), -11395)
 check("priced as the listing", a.priceBasis, "undercut")
-check("with its deposit", a.deposit, 3)
+check("with its 1s deposit", a.deposit, 100)
 
 a = Profit:Analyse(RECIPE, nil, "vendor")
 check("ranked by the vendor, 10c", a.profit, 10)
@@ -210,8 +211,8 @@ print("sold on the first listing, the deposit comes back")
 settings.expectedRelists = 1
 a = Profit:Analyse(RECIPE, nil, "auction")
 check("no deposit is lost", a.deposit, 0)
-check("but the one paid up front is known", a.depositHeld, 3)
-check("so the listing pays 3c more", math.floor(a.profit * 100 + 0.5), -1395)
+check("but the one paid up front is known", a.depositHeld, 100)
+check("so the listing pays 1s more", math.floor(a.profit * 100 + 0.5), -1395)
 check("and a listing's net keeps it all", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), 798)
 printed = {}
 ns.Prices:Record(BELT, 200, 200, 4, time(), 200, nil)
@@ -234,8 +235,8 @@ check("low demand loses one", Profit.LostListings(BELT), 1)
 check("other items lose none", Profit.LostListings(LINEN), 0)
 check("asked with no item, only the setting counts", Profit.LostListings(), 0)
 a = Profit:Analyse(RECIPE, nil, "auction")
-check("the craft pays the 3c deposit", a.deposit, 3)
-check("a listing's net loses it too", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), 768)
+check("the craft pays the 1s deposit", a.deposit, 100)
+check("a listing's net loses it too", math.floor(Profit:NetFromListing(BELT, 84) * 10 + 0.5), -202)
 settings.expectedRelists = 3
 check("a saved number above one still wins", Profit.LostListings(BELT), 2)
 demand[BELT] = "some"
