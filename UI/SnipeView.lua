@@ -11,12 +11,21 @@ local Util = ns.Util
 local ROW_HEIGHT = 36
 local ICON_SIZE = 24
 local STRIP_HEIGHT = 84
+local STRIP_ROW = 26
 local HEAD_HEIGHT = 18
 local COLUMNS_HEIGHT = 16
+-- Labels share one column as wide as the longest (so every box starts at
+-- the same x), within these bounds; a longer label wraps.
+local LABEL_MOST = 170
+local LABEL_GAP = 10
+-- Watch: and List: share one width, measured from their longest choice.
+local CHOICE_LEAST, CHOICE_MOST = 140, 240
 -- Average, Price and Under Average sit in cells laid out from the right, so
 -- their headings line up over them and never overlap.
 local CELL_WIDTH = 68
 local CELL_GAP = 4
+-- Room kept for the sort arrow at a cell head's right edge.
+local ARROW_ROOM = 10
 local RIGHT_PAD = 8
 local SORT_ARROW = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS") .. [[\Media\Frame\SortArrow]]
 
@@ -67,6 +76,16 @@ end
 
 local function Vendoring()
     return Snipe():Watch() == "vendor"
+end
+
+local function Listing()
+    return Snipe():Watch() == "lists"
+end
+
+--- "Most I'll Pay:" without its colon, for a column head.
+local function MostHead()
+    local text = L["Most I'll Pay:"]
+    return (text:gsub("%s*[:\239\188\154]+%s*$", ""))
 end
 
 function SnipeView:SortedFinds()
@@ -179,6 +198,9 @@ local function ShowTooltip(row, find)
         if find.kind == "vendor" then
             GameTooltip:AddLine(L.Format("%1$s each, a vendor pays %2$s", Colored(find.price), Colored(find.worth)), 1, 1, 1, true)
             GameTooltip:Show()
+        elseif find.kind == "lists" then
+            GameTooltip:AddLine(L.Format("%1$s each, you'll pay up to %2$s", Colored(find.price), Colored(find.worth)), 1, 1, 1, true)
+            GameTooltip:Show()
         end
     end
 end
@@ -229,10 +251,17 @@ function SnipeView:BuildStrip(body, topAnchor)
     strip:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", 0, 0)
     self.strip = strip
 
+    -- Each row is a label in the shared column and its box beside it; the
+    -- boxes are placed by LayStrip once the column's width is known.
+    self.rows = {}
     local function Row(y, text)
         local label = Theme.CreateLabel(strip, "small", "text")
         label:SetPoint("TOPLEFT", strip, "TOPLEFT", 8, y)
+        label:SetJustifyH("LEFT")
+        label:SetWordWrap(true)
         label:SetText(text)
+        label.y = y
+        self.rows[#self.rows + 1] = label
         return label
     end
 
@@ -242,7 +271,7 @@ function SnipeView:BuildStrip(body, topAnchor)
         ns.Config:Set("snipeCap", math.max(0, copper or 0))
         self:Changed()
     end)
-    money:SetPoint("LEFT", capLabel, "RIGHT", 10, 0)
+    money.label = capLabel
     money:Set(Snipe():Cap())
     self.cap = money
 
@@ -257,7 +286,7 @@ function SnipeView:BuildStrip(body, topAnchor)
             end
         end,
     })
-    pct:SetPoint("LEFT", belowLabel, "RIGHT", 10, 0)
+    pct.label = belowLabel
     pct:SetValue(Snipe():Percent(), true)
     self.pct = pct
     local sign = Theme.CreateLabel(strip, "small", "muted")
@@ -266,25 +295,38 @@ function SnipeView:BuildStrip(body, topAnchor)
 
     -- Watch
     local watchLabel = Row(-56, L["Watch:"])
-    local options = {
+    self.watchOptions = {
         { value = "priced", text = L["Priced Items"] },
         { value = "disenchant", text = L["To Disenchant"] },
         { value = "vendor", text = L["Below Vendor"] },
+        { value = "lists", text = L["My Lists"] },
     }
-    local watch = Widgets.CreateDropdown(strip, options, function(value)
+    local watch = Widgets.CreateDropdown(strip, self.watchOptions, function(value)
         ns.Config:Set("snipeWatch", value)
         if Snipe().BuildPool and not Snipe():IsRunning() then Snipe().pool = nil end
+        self:LayStrip()
+        self:Place()
         self:Changed()
-    end, { width = 140 })
-    watch:SetPoint("LEFT", watchLabel, "RIGHT", 10, 0)
+    end, { width = CHOICE_LEAST })
+    watch.label = watchLabel
     watch:SetValue(Snipe():Watch())
     self.watch = watch
+
+    -- List: shows under Watch: in My Lists only. 0 stands for All Lists.
+    local listLabel = Row(-56 - STRIP_ROW, L["List:"])
+    local pick = Widgets.CreateDropdown(strip, self:ListOptions(), function(value)
+        ns.Config:Set("snipeList", (tonumber(value) or 0) > 0 and tonumber(value) or nil)
+        self:Changed()
+    end, { width = CHOICE_LEAST })
+    pick.label = listLabel
+    self.listPick = pick
 
     local sound = Widgets.CreateCheckbox(strip, L["Snipe Sound"], function(on)
         ns.Config:Set("snipeSound", on and true or false)
     end, Config("snipeSound", true) ~= false)
     sound:SetPoint("LEFT", watch, "RIGHT", 16, 0)
     self.sound = sound
+    self:LayStrip()
 
     -- Column heads
     local cols = CreateFrame("Frame", nil, body)
@@ -296,13 +338,21 @@ function SnipeView:BuildStrip(body, topAnchor)
         button:SetHeight(COLUMNS_HEIGHT)
         local justify = cell and "RIGHT" or "LEFT"
         local label = Theme.CreateLabel(button, "tiny", "muted", justify)
-        label:SetAllPoints(button)
-        label:SetWordWrap(false)
+        label:SetWordWrap(true)
         local arrow = button:CreateTexture(nil, "OVERLAY")
         arrow:SetTexture(SORT_ARROW)
         arrow:SetSize(8, 8)
         arrow:SetVertexColor(Theme.Unpack("accent"))
         arrow:Hide()
+        if cell then
+            -- A cell's arrow has its own room at the right edge, so the
+            -- words never sit on it, in any language.
+            label:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+            label:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -ARROW_ROOM, 0)
+            arrow:SetPoint("RIGHT", button, "RIGHT", 0, 0)
+        else
+            label:SetAllPoints(button)
+        end
         button.label, button.arrow, button.key, button.text, button.cell = label, arrow, key, text, cell
         if cell then
             button:SetWidth(CELL_WIDTH)
@@ -320,6 +370,75 @@ function SnipeView:BuildStrip(body, topAnchor)
         Head("price", L["Price"], 2),
         Head("deal", L["Under Average"], 1),
     }
+end
+
+--- The List: drop-down's choices: All Lists, then each list by name.
+function SnipeView:ListOptions()
+    local options = { { value = 0, text = L["All Lists"] } }
+    local lists = ns.ShoppingLists
+    for _, held in ipairs(lists and lists:Readable() or {}) do
+        local id = tonumber(held.list.id)
+        if id then options[#options + 1] = { value = id, text = held.list.name } end
+    end
+    return options
+end
+
+local function Measure(text)
+    if not (Theme.MeasureText and text) then return nil end
+    local ok, width = pcall(Theme.MeasureText, "small", text)
+    if ok and type(width) == "number" then return width end
+end
+
+--- How wide the label column is: the longest label, in the client's words.
+function SnipeView.LabelColumn(texts)
+    local widest = 0
+    for _, text in ipairs(texts) do widest = math.max(widest, Measure(text) or 0) end
+    if widest <= 0 then widest = 90 end
+    return math.min(LABEL_MOST, math.ceil(widest))
+end
+
+--- How wide Watch: and List: are: the longest choice of either, plus room
+--- for the arrow.
+function SnipeView.ChoiceWidth(options)
+    local widest = 0
+    for _, option in ipairs(options) do widest = math.max(widest, Measure(option.text) or 0) end
+    return math.max(CHOICE_LEAST, math.min(CHOICE_MOST, math.ceil(widest) + 30))
+end
+
+--- Lay the strip out: one label column, every box at the same x, List:
+--- only in My Lists, and the strip as tall as its rows.
+function SnipeView:LayStrip()
+    if not self.strip then return end
+    local listing = Snipe():Watch() == "lists"
+    local texts = {}
+    for _, label in ipairs(self.rows) do
+        if label ~= self.listPick.label or listing then texts[#texts + 1] = label:GetText() end
+    end
+    local column = SnipeView.LabelColumn(texts)
+    self.labelColumn = column
+    local x = 8 + column + LABEL_GAP
+    for _, label in ipairs(self.rows) do label:SetWidth(column) end
+    for _, box in ipairs({ self.cap, self.pct, self.watch, self.listPick }) do
+        -- Centred on its label's first line, as before.
+        box:ClearAllPoints()
+        box:SetPoint("LEFT", self.strip, "TOPLEFT", x, box.label.y - 6)
+    end
+
+    local options = self:ListOptions()
+    self.listPick:SetOptions(options)
+    local all = {}
+    for _, option in ipairs(self.watchOptions) do all[#all + 1] = option end
+    if listing then for _, option in ipairs(options) do all[#all + 1] = option end end
+    local width = SnipeView.ChoiceWidth(all)
+    self.choiceWidth = width
+    self.watch:SetWidth(width)
+    self.listPick:SetWidth(width)
+    self.listPick:SetValue(Snipe():ListChoice() or 0)
+
+    self.listPick:SetShown(listing)
+    self.listPick.label:SetShown(listing)
+    self.strip:SetHeight(STRIP_HEIGHT + (listing and STRIP_ROW or 0))
+    self.listVersion = ns.ShoppingLists and ns.ShoppingLists.version
 end
 
 function SnipeView:StripOpen()
@@ -466,12 +585,18 @@ function SnipeView:Refresh(force)
         tostring(snipe.version), tostring(running), tostring(snipe:Spent()), tostring(snipe:Cap()),
         tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()), snipe:Watch(),
         pending and (pending.phase .. tostring(pending.total)) or "-", tostring(snipe.armed ~= nil),
-        tostring(#(snipe:Finds() or {})),
+        tostring(#(snipe:Finds() or {})), tostring(snipe:ListChoice()),
+        tostring(ns.ShoppingLists and ns.ShoppingLists.version),
     }, "|")
     if not force and key == self.key then return end
     self.key = key
 
     self.head.text:SetText((self:StripOpen() and "- " or "+ ") .. L["SNIPE SETTINGS"])
+    if ns.ShoppingLists and self.listVersion ~= ns.ShoppingLists.version then
+        self:LayStrip()
+        self:Place()
+    end
+    local tall = false
     for _, head in ipairs(self.heads) do
         local active = head.key == self.sortKey
         local text = head.text
@@ -479,24 +604,30 @@ function SnipeView:Refresh(force)
         if Vendoring() then
             if head.key == "average" then text = L["Vendor"]
             elseif head.key == "deal" then text = L["Profit"] end
+        elseif Listing() then
+            if head.key == "average" then text = MostHead()
+            elseif head.key == "deal" then text = L["Deal"] end
         end
         head.label:SetText(text)
+        if head.cell and (SnipeView.HeadWidth(text) or 0) > CELL_WIDTH - ARROW_ROOM then tall = true end
         head.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
         head.arrow:SetShown(active)
         if active then
             -- The house arrow points down for biggest first, flipped otherwise.
             if self.sortDown then head.arrow:SetTexCoord(0, 0.5625, 0, 1)
             else head.arrow:SetTexCoord(0, 0.5625, 1, 0) end
-            head.arrow:ClearAllPoints()
-            local width = Theme.TextWidth and Theme.TextWidth(head.label) or 0
-            if type(width) ~= "number" then width = 0 end
-            if head.cell then
-                head.arrow:SetPoint("RIGHT", head.label, "RIGHT", -math.ceil(width) - 2, 0)
-            else
-                head.arrow:SetPoint("LEFT", head.label, "LEFT", math.ceil(width) + 2, 0)
+            if not head.cell then
+                -- After the name head's words, measured in the client's font.
+                head.arrow:ClearAllPoints()
+                local width = SnipeView.HeadWidth(text) or 0
+                head.arrow:SetPoint("LEFT", head.label, "LEFT", math.ceil(width) + 3, 0)
             end
         end
     end
+    -- A head too wide for its cell wraps onto a second line.
+    local height = tall and COLUMNS_HEIGHT * 2 - 4 or COLUMNS_HEIGHT
+    self.cols:SetHeight(height)
+    for _, head in ipairs(self.heads) do head:SetHeight(height) end
     Lock(self.cap, running)
     -- Snipe Below has no say in Below Vendor, so it greys out there.
     local fixed = running or Vendoring()
@@ -507,8 +638,7 @@ function SnipeView:Refresh(force)
     local rows = self:SortedFinds()
     self.list:SetData(rows)
     if #rows == 0 then
-        self.empty:SetText(running and L["Looking for deals..."]
-            or L["Nothing to snipe yet. Scan the auction house first."])
+        self.empty:SetText(running and L["Looking for deals..."] or self:EmptyText())
         self.empty:Show()
     else
         self.empty:Hide()
@@ -521,6 +651,24 @@ function SnipeView:Refresh(force)
     self.buy:SetText(label)
     self.buy:SetWidth(self:BuyWidth(label))
     self.buy:SetEnabledState(can)
+end
+
+--- How wide a column head's words are, in the tiny size.
+function SnipeView.HeadWidth(text)
+    if not (Theme.MeasureText and text) then return nil end
+    local ok, width = pcall(Theme.MeasureText, "tiny", text)
+    if ok and type(width) == "number" then return width end
+end
+
+--- What an empty list says while stopped.
+function SnipeView:EmptyText()
+    if not Listing() then return L["Nothing to snipe yet. Scan the auction house first."] end
+    local items, order = Snipe().ListItems(Snipe():ListChoice())
+    if #order == 0 then return L["Put items on a list first."] end
+    for _, id in ipairs(order) do
+        if Snipe().Need(items[id].want, id) > 0 then return "" end
+    end
+    return L["Got all you need"]
 end
 
 function SnipeView:Summary()

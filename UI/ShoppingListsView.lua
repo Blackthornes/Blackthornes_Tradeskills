@@ -206,6 +206,40 @@ local function WantKey(data)
     return tostring(data.key) .. ":" .. tostring(data.itemID)
 end
 
+-- An item row on a list you can change is taller: under the name and what
+-- you have, a third line holds Most I'll Pay (Snipe's My Lists, 2026-11-06).
+-- The scroll list grows a row by its name's rowNeed (Theme.SetRowName).
+local PAY_ROW_NEED = 40
+
+local function TallRow(row, tall)
+    local name = row.name
+    if tall then
+        rawset(name, "rowNeed", PAY_ROW_NEED)
+        rawset(name, "rowNeedText", name:GetText())
+    else
+        rawset(name, "rowNeed", nil)
+        rawset(name, "rowNeedText", nil)
+    end
+end
+
+--- True while one of a row's boxes is being typed in.
+local function Typing(row)
+    if not row:IsShown() then return false end
+    local function Focused(box)
+        local edit = box and box.editBox
+        return edit and edit.HasFocus and edit:HasFocus() and true or false
+    end
+    if row.want and row.want:IsShown() and Focused(row.want) then return true end
+    local pay = rawget(row, "maxPay")
+    if pay and row.payHolder:IsShown() then
+        for _, box in ipairs(pay.boxes) do
+            if Focused(box) then return true end
+        end
+    end
+    return false
+end
+View.Typing = Typing
+
 local function CreateRow(row)
     row.chevron = Theme.CreateLabel(row, "small", "accent", "CENTER")
     row.chevron:SetPoint("LEFT", 4, 0)
@@ -270,6 +304,36 @@ local function CreateRow(row)
     row.sub:SetPoint("RIGHT", row.want, "LEFT", -6, 0)
     row.sub:SetWordWrap(false)
 
+    -- Most I'll Pay: the price Snipe's My Lists stops at for this item.
+    row.payHolder = CreateFrame("Frame", nil, row)
+    row.payHolder:SetPoint("TOPLEFT", row, "TOPLEFT", 40, -28)
+    row.payHolder:SetPoint("RIGHT", row.want, "LEFT", -6, 0)
+    row.payHolder:SetHeight(16)
+    row.payLabel = Theme.CreateLabel(row.payHolder, "tiny", "muted")
+    row.payLabel:SetPoint("LEFT", row.payHolder, "LEFT", 0, 0)
+    row.payLabel:SetText(L["Most I'll Pay:"])
+    local make = ns.PriceEditor and ns.PriceEditor.MoneyBoxes
+    if make then
+        row.maxPay = make(row.payHolder, function(copper)
+            local data = row.data
+            -- Only for the item it was typed for (the want box's rule).
+            if not data or row.maxPayFor ~= WantKey(data) then return end
+            if data.kind == "item" and not data.auto then
+                Lists():SetMaxPay(data.key, data.itemID, copper)
+                View:Refresh(true)
+            end
+        end)
+        for _, box in ipairs(row.maxPay.boxes) do box:SetHeight(16) end
+        local width = Theme.TextWidth and Theme.TextWidth(row.payLabel)
+        row.maxPay:SetPoint("LEFT", row.payLabel, "LEFT",
+            math.ceil(type(width) == "number" and width or 70) + 6, 0)
+        row.payRule = Theme.CreateLabel(row.payHolder, "tiny", "muted")
+        row.payRule:SetPoint("LEFT", row.maxPay.boxes[3], "RIGHT", 14, 0)
+        row.payRule:SetPoint("RIGHT", row.payHolder, "RIGHT", 0, 0)
+        row.payRule:SetWordWrap(false)
+    end
+    row.payHolder:Hide()
+
     -- The tools under an open list.
     row.tools = {}
     local function Tool(text, width, onClick, opts)
@@ -317,9 +381,12 @@ end
 
 local function HideAll(row)
     for _, part in ipairs({ row.chevron, row.icon, row.listSearch, row.total, row.remove,
-        row.itemSearch, row.want, row.name, row.sub }) do
+        row.itemSearch, row.want, row.name, row.sub, row.payHolder }) do
         part:Hide()
     end
+    row.icon:SetAlpha(1)
+    row.name:SetAlpha(1)
+    TallRow(row, false)
     for _, tool in ipairs(row.tools) do tool:Hide() end
     local chip = rawget(row, "chip")
     if chip then chip:Set(nil) end
@@ -399,6 +466,10 @@ local function UpdateRow(row, entry)
     else
         price = L["no price"]
     end
+    -- Got everything the list wants: said plainly and dimmed.
+    if line.need <= 0 and line.want and line.want > 0 then have = L["Got all you need"] end
+    row.icon:SetAlpha(line.need <= 0 and 0.5 or 1)
+    row.name:SetAlpha(line.need <= 0 and 0.5 or 1)
     -- The price goes before anything is cut.
     if Theme.FitText then
         Theme.FitText(row.sub, { have .. "  ·  " .. price, have })
@@ -427,7 +498,9 @@ local function UpdateRow(row, entry)
         end
         row.want:Show()
         row.remove:Show()
+        View:ShowMaxPay(row, entry, key)
     end
+    TallRow(row, not entry.auto and rawget(row, "maxPay") ~= nil)
     row.itemSearch:SetShown(Lists().CanSearch(line))
     if entry.auto then
         row.itemSearch:ClearAllPoints()
@@ -436,6 +509,37 @@ local function UpdateRow(row, entry)
         row.itemSearch:ClearAllPoints()
         row.itemSearch:SetPoint("RIGHT", row.remove, "LEFT", -4, 0)
     end
+end
+
+--- The item's own Most I'll Pay in its boxes, or the list's rule beside
+--- them when it has none.
+function View:ShowMaxPay(row, entry, key)
+    local pay = rawget(row, "maxPay")
+    if not pay then return end
+    local typing = false
+    for _, box in ipairs(pay.boxes) do
+        local edit = box.editBox
+        if edit.HasFocus and edit:HasFocus() then typing = true end
+    end
+    if typing and row.maxPayFor ~= key then
+        -- Another item now: what was typed is dropped, not saved on it.
+        row.maxPayFor = nil
+        pay:Flush()
+        typing = false
+    end
+    local own = entry.line.maxPay
+    if not typing then
+        pay:Set(own or 0)
+        row.maxPayFor = key
+    end
+    local rule
+    if not own and ns.ListRules and ns.ListRules.Of then
+        local list = Lists():Get(entry.key)
+        local ok, rules = pcall(ns.ListRules.Of, list)
+        rule = ok and type(rules) == "table" and tonumber(rules.maxPay) or nil
+    end
+    row.payRule:SetText(rule and rule > 0 and L.Format("List rule, %s", Money(rule)) or "")
+    row.payHolder:Show()
 end
 
 local function ShowTooltip(row, entry)
@@ -927,10 +1031,7 @@ function View:Refresh(force)
     -- Never under a box being typed in: rows are reused, and the number would
     -- land on another item.
     for _, row in ipairs(self.list.rows or {}) do
-        if row:IsShown() and row.want and row.want:IsShown()
-            and row.want.editBox.HasFocus and row.want.editBox:HasFocus() then
-            return
-        end
+        if Typing(row) then return end
     end
     self.drawnVersion, self.drawnAt = version, now
 
@@ -952,10 +1053,7 @@ function View:OnItemInfo()
         if not (View.list and View.shown) then return end
         -- Never under a box being typed in (View:Refresh's rule).
         for _, row in ipairs(View.list.rows or {}) do
-            if row:IsShown() and row.want and row.want:IsShown()
-                and row.want.editBox.HasFocus and row.want.editBox:HasFocus() then
-                return
-            end
+            if Typing(row) then return end
         end
         View.waiting = false
         View.list:Refresh()
