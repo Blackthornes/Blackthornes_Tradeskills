@@ -72,4 +72,15 @@ check("red when you're short", line:find("|cffe5604f0/1|r", 1, true) ~= nil)
 check("ends with the cost", line:sub(-4) == "250c")
 check("no cost when it's free", not UI.InfoLine({}, 0):find("c", 1, true))
 
+print("\nthe probe says where it sits")
+_G.ProfessionsFrame = F(true, { CraftingPage = F(true, { SchematicForm = F(true) }) })
+local lines = UI:ProbeLines()
+local function find(label)
+    for _, l in ipairs(lines) do if l[1] == label then return l[2] end end
+end
+check("names the frame it anchored to", (find("enchant strip") or ""):find("SchematicForm", 1, true) ~= nil)
+check("says how far it lifted", find("enchant strip lift") ~= nil)
+check("says what it follows", (find("enchant strip pick") or ""):find("hook", 1, true) ~= nil)
+_G.ProfessionsFrame = nil
+
 print(("\n%d check(s) passed\n"):format(checks))
