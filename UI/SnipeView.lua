@@ -24,6 +24,8 @@ local CHOICE_LEAST, CHOICE_MOST = 140, 240
 -- their headings line up over them and never overlap.
 local CELL_WIDTH = 68
 local CELL_GAP = 4
+-- Room kept for the sort arrow at a cell head's right edge.
+local ARROW_ROOM = 10
 local RIGHT_PAD = 8
 local SORT_ARROW = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS") .. [[\Media\Frame\SortArrow]]
 
@@ -336,13 +338,21 @@ function SnipeView:BuildStrip(body, topAnchor)
         button:SetHeight(COLUMNS_HEIGHT)
         local justify = cell and "RIGHT" or "LEFT"
         local label = Theme.CreateLabel(button, "tiny", "muted", justify)
-        label:SetAllPoints(button)
         label:SetWordWrap(true)
         local arrow = button:CreateTexture(nil, "OVERLAY")
         arrow:SetTexture(SORT_ARROW)
         arrow:SetSize(8, 8)
         arrow:SetVertexColor(Theme.Unpack("accent"))
         arrow:Hide()
+        if cell then
+            -- A cell's arrow has its own room at the right edge, so the
+            -- words never sit on it, in any language.
+            label:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+            label:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -ARROW_ROOM, 0)
+            arrow:SetPoint("RIGHT", button, "RIGHT", 0, 0)
+        else
+            label:SetAllPoints(button)
+        end
         button.label, button.arrow, button.key, button.text, button.cell = label, arrow, key, text, cell
         if cell then
             button:SetWidth(CELL_WIDTH)
@@ -599,20 +609,18 @@ function SnipeView:Refresh(force)
             elseif head.key == "deal" then text = L["Deal"] end
         end
         head.label:SetText(text)
-        if head.cell and (SnipeView.HeadWidth(text) or 0) > CELL_WIDTH then tall = true end
+        if head.cell and (SnipeView.HeadWidth(text) or 0) > CELL_WIDTH - ARROW_ROOM then tall = true end
         head.label:SetTextColor(Theme.Unpack(active and "accent" or "muted"))
         head.arrow:SetShown(active)
         if active then
             -- The house arrow points down for biggest first, flipped otherwise.
             if self.sortDown then head.arrow:SetTexCoord(0, 0.5625, 0, 1)
             else head.arrow:SetTexCoord(0, 0.5625, 1, 0) end
-            head.arrow:ClearAllPoints()
-            local width = Theme.TextWidth and Theme.TextWidth(head.label) or 0
-            if type(width) ~= "number" then width = 0 end
-            if head.cell then
-                head.arrow:SetPoint("RIGHT", head.label, "RIGHT", -math.ceil(width) - 2, 0)
-            else
-                head.arrow:SetPoint("LEFT", head.label, "LEFT", math.ceil(width) + 2, 0)
+            if not head.cell then
+                -- After the name head's words, measured in the client's font.
+                head.arrow:ClearAllPoints()
+                local width = SnipeView.HeadWidth(text) or 0
+                head.arrow:SetPoint("LEFT", head.label, "LEFT", math.ceil(width) + 3, 0)
             end
         end
     end
