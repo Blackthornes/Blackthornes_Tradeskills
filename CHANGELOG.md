@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.12.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Realm prices.** If you leave the price channel, Tradeskills joins it again a few seconds later. Settings says when you aren't in it.
+
 ## 1.12.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
