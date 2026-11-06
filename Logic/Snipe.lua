@@ -354,6 +354,7 @@ function Snipe:BuildPool(done)
         local onLists
         pool, onLists = self:BuildListPool()
         cursor, building = 1, false
+        self.poolVersion = Lists() and Lists().version
         self.emptyWhy = (#pool == 0) and (onLists and L["Got all you need"] or L["Put items on a list first."]) or nil
         return done()
     end
@@ -496,7 +497,15 @@ function Snipe:Next()
     end
     if not (Util.HasFunction("C_AuctionHouse.MakeItemKey") and ns.AHQueue and ns.AHQueue.Request) then return end
 
-    if self:Watch() == "lists" and not self:DropMet() then return end
+    if self:Watch() == "lists" then
+        -- A list changed while running: lay the pool out again.
+        if Lists() and Lists().version ~= self.poolVersion then
+            pool = self:BuildListPool()
+            cursor = 1
+            self.poolVersion = Lists().version
+        end
+        if not self:DropMet() then return end
+    end
 
     local batch, keys, wants = {}, {}, {}
     local last = math.min(#pool, cursor + self.BATCH - 1)
