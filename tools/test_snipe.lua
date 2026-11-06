@@ -10,6 +10,9 @@
 --  12. Stop keeps the finds, so they can still be bought.
 --  13. Snipe waits while its searches would crowd out the player's click.
 --  14. An item sold one at a time is asked about, then bought with a bid.
+--  15. My Lists: the pool is the lists' items; each limit is the item's own
+--      Most I'll Pay, else the list's rule, else worth times Snipe Below; a
+--      gone list reads as All Lists; an item drops out once you have enough.
 
 local ns = {}
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
@@ -231,5 +234,74 @@ Snipe:Pay()
 handlers.AUCTION_HOUSE_SHOW_ERROR()
 assert(Snipe.pending == nil and #Snipe:Finds() == 0, "refused, let go")
 C_AuctionHouse, GetMoney, ns.AHQueue = nil, nil, nil
+
+-- 15. My Lists.
+local held = {
+    { list = { id = 1, name = "Herbs", items = {
+        { id = 100, want = 10, maxPay = 5000 },
+        { id = 101, want = 5 },
+        { id = 102, want = 2 },
+    } } },
+    { list = { id = 2, name = "Ore", items = {
+        { id = 100, want = 99, maxPay = 1 },
+        { id = 103, want = 4 },
+    } } },
+}
+ns.ShoppingLists = {
+    version = 1,
+    Readable = function() return held end,
+    MaxPayOf = function(item) return tonumber(item.maxPay) end,
+}
+ns.ListRules = { Of = function(list) return list.id == 1 and { maxPay = 3000 } or {} end }
+local owned = {}
+ns.Inventory = { GetOwnedCount = function(_, id) return owned[id] or 0 end }
+ns.Prices = { GetValue = function(_, id) return id == 103 and 10000 or nil end }
+settings.snipeWatch, settings.snipePct = "lists", 70
+assert(Snipe:Watch() == "lists", "My Lists is a watch")
+assert(Snipe:ListChoice() == nil, "no pick reads as All Lists")
+settings.snipeList = 9
+assert(Snipe:ListChoice() == nil, "a gone list reads as All Lists")
+settings.snipeList = 2
+assert(Snipe:ListChoice() == 2, "a list that is there is picked")
+
+settings.snipeList = nil
+local items, order = Snipe.ListItems(Snipe:ListChoice())
+assert(#order == 4 and order[1] == 100 and order[4] == 103, "every item once, in list order")
+assert(items[100].want == 10 and items[100].own == 5000, "the first list that holds it wins")
+assert(Snipe:LimitFor(items[100]) == 5000, "the item's own Most I'll Pay first")
+local limit, from = Snipe:LimitFor(items[101])
+assert(limit == 3000 and from == "list", "then the list's rule")
+limit, from = Snipe:LimitFor(items[103])
+assert(limit == 7000 and from == "worth", "then worth times Snipe Below")
+
+local only = Snipe.ListItems(2)
+assert(only[100].own == 1 and only[101] == nil, "one list only watches that list")
+
+owned[101] = 5
+local pool = Snipe:BuildListPool()
+local inPool = {}
+for _, entry in ipairs(pool) do inPool[entry.id] = entry end
+assert(inPool[101] == nil, "an item you have enough of drops out")
+assert(inPool[100] and inPool[100].worth == 5000 and inPool[100].want == 10, "the limit stands in for worth")
+assert(inPool[102] and inPool[102].worth == 3000, "the list's rule covers an item with no price")
+assert(Snipe.IsDealFor(5000, 5000, "lists", 10) == true, "at the limit is a buy, whatever Snipe Below says")
+assert(Snipe.IsDealFor(5001, 5000, "lists", 95) == false, "over the limit is not")
+
+settings.snipeCap = 1000000
+Snipe.spent = 0
+owned[100] = 7
+assert(Snipe:UnitsFor({ kind = "lists", want = 10, itemID = 100, qty = 20, price = 10 }) == 3,
+    "buys only what the list still needs")
+
+held = {}
+Snipe.running = true
+Snipe:BuildPool(function() end)
+assert(Snipe.emptyWhy == "Put items on a list first.", "no lists says so")
+held = { { list = { id = 1, name = "Herbs", items = { { id = 101, want = 5 } } } } }
+Snipe:BuildPool(function() end)
+assert(Snipe.emptyWhy == "Got all you need", "everything had says so")
+Snipe.running = false
+ns.ShoppingLists, ns.ListRules, ns.Inventory, ns.Prices = nil, nil, nil, nil
+settings.snipeWatch, settings.snipeList, settings.snipeCap = nil, nil, nil
 
 print("test_snipe: all passed")
