@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.12.1
+
+Fixes and changes:
+
+- If you leave the price channel, Tradeskills joins it again a few seconds later. Settings says when you aren't in it.
+
 ## 1.12.0
 
 - A Buy It button on the Snipe tab buys the top find.
