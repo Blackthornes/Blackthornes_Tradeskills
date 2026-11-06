@@ -6,7 +6,10 @@
 --   3. Start refuses without a Spending Cap and never starts by itself.
 --   4. A buy that reaches the cap stops the session and clears the finds.
 --   5. The auction house closing stops a session.
---   6. The wheel (BuyNext) does nothing when not running.
+--   6. The wheel (BuyNext) does nothing with nothing to buy.
+--  12. Stop keeps the finds, so they can still be bought.
+--  13. Snipe waits while its searches would crowd out the player's click.
+--  14. An item sold one at a time is asked about, then bought with a bid.
 
 local ns = {}
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
@@ -149,5 +152,84 @@ Snipe:PriceUpdated(1000)
 assert(Snipe.pending == nil and #Snipe.finds == 0, "500 each is no find")
 Snipe:Stop()
 ns.Disenchant, C_Item = nil, nil
+
+-- 12. Stop keeps the finds; the auction house closing clears them.
+ns.Util.HasFunction = function() return false end
+Snipe.running = true
+Snipe.finds = { { itemID = 1 } }
+Snipe:Stop()
+assert(not Snipe:IsRunning() and #Snipe:Finds() == 1, "Stop keeps the finds")
+handlers.AUCTION_HOUSE_CLOSED()
+assert(#Snipe:Finds() == 0, "closing clears them")
+
+-- 13. Room left for the player's click.
+local sends = 0
+ns.AHQueue = { BUDGET_MAX = 8, RecentSendCount = function() return sends end }
+assert(Snipe.CrowdsPlayer() == false, "nothing sent, no crowding")
+sends = 5
+assert(Snipe.CrowdsPlayer() == true, "five of eight leaves too little room")
+sends = 4
+assert(Snipe.CrowdsPlayer() == false, "four of eight is fine")
+
+-- 14. Buying an item sold one at a time, while stopped.
+local requests, cancelled, bids = {}, {}, {}
+ns.AHQueue = {
+    BUDGET_MAX = 8, PRIORITY = { urgent = 10, scan = 90 },
+    RecentSendCount = function() return 0 end,
+    Request = function(_, r) requests[r.key] = r; return true end,
+    Cancel = function(_, key) cancelled[#cancelled + 1] = key; return true end,
+}
+ns.Util.HasFunction = function() return true end
+local results = {
+    { auctionID = 7, buyoutAmount = 900, quantity = 1, containsOwnerItem = true },
+    { auctionID = 8, buyoutAmount = 300, quantity = 1 },
+    { auctionID = 9, buyoutAmount = 350, quantity = 1 },
+}
+C_AuctionHouse = {
+    GetItemCommodityStatus = function() return 1 end,
+    MakeItemKey = function(id) return { itemID = id } end,
+    SendSearchQuery = function() return true end,
+    GetNumItemSearchResults = function() return #results end,
+    GetItemSearchResultInfo = function(_, i) return results[i] end,
+    PlaceBid = function(id, amount) bids[#bids + 1] = { id, amount } end,
+}
+local purse = 10000
+GetMoney = function() return purse end
+settings.snipeCap, settings.snipeWatch = 5000, "vendor"
+Snipe.running, Snipe.spent = false, 0
+local item = { itemID = 30, kind = "vendor", price = 300, worth = 500, qty = 1 }
+Snipe.finds = { item }
+Snipe:BuyNext()
+assert(Snipe.pending and Snipe.pending.item and Snipe.pending.phase == "asking", "asks while stopped")
+assert(requests["snipe-buy"] and requests["snipe-buy"].priority == 10, "an urgent search of its own")
+assert(cancelled[1] == "snipe", "a waiting snipe search steps aside")
+assert(requests["snipe-buy"].send() == true)
+handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 30 })
+assert(Snipe.pending.phase == "quoted" and Snipe.pending.auctionID == 8, "cheapest not our own")
+assert(Snipe.pending.total == 300)
+assert(Snipe:Pay() == true and bids[1][1] == 8 and bids[1][2] == 300, "bids the buyout")
+purse = 9700
+handlers.PLAYER_MONEY()
+assert(Snipe.pending == nil and Snipe:Spent() == 300 and #Snipe:Finds() == 0, "bought and off the list")
+
+-- 14b. Gone: no listing is a deal any more.
+Snipe.finds = { item }
+Snipe:Buy(item)
+requests["snipe-buy"].send()
+results = { { auctionID = 10, buyoutAmount = 600, quantity = 1 } }
+handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 30 })
+assert(Snipe.pending == nil and #Snipe:Finds() == 0, "gone, dropped")
+assert(said[#said] == "That auction is gone already.")
+
+-- 14c. The game refuses the bid.
+results = { { auctionID = 11, buyoutAmount = 200, quantity = 1 } }
+Snipe.finds = { item }
+Snipe:Buy(item)
+requests["snipe-buy"].send()
+handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 30 })
+Snipe:Pay()
+handlers.AUCTION_HOUSE_SHOW_ERROR()
+assert(Snipe.pending == nil and #Snipe:Finds() == 0, "refused, let go")
+C_AuctionHouse, GetMoney, ns.AHQueue = nil, nil, nil
 
 print("test_snipe: all passed")

@@ -4,7 +4,8 @@
 -- the cheapest listings of items worth sniping, a few items at a time, and
 -- keeps the ones priced well under what they are worth. Nothing starts by
 -- itself: Start is a click, Stop (or the auction house closing, or the
--- Spending Cap) ends it and clears the list.
+-- Spending Cap) ends it. Stop keeps the finds on the list so they can still
+-- be bought; the auction house closing or the Spending Cap clears them.
 --
 -- Two ways to watch:
 --   "priced"  every item with a price of ours, against that price.
@@ -47,6 +48,9 @@ Snipe.QUOTE_WAIT = 10
 Snipe.BUY_WAIT = 15
 -- Most of a stack bought in one click.
 Snipe.MOST_UNITS = 20
+-- Searches left free in the auction house's budget for the player's own
+-- clicks (a buy, a search). Snipe waits while fewer than this are left.
+Snipe.HEADROOM = 3
 -- An average more than this many times the last scan's cheapest is left out.
 Snipe.SILLY_OVER = 10
 -- A scan stamp is when the scan started; records seen a little before count.
@@ -321,11 +325,20 @@ function Snipe:Start()
     self:BuildPool(function() Snipe:Next() end)
 end
 
-function Snipe:Stop(reason)
-    if not self.running then return end
+--- Stop searching. The finds stay on the list (they can still be bought)
+--- unless `clear` is set: the cap was reached or the auction house closed.
+function Snipe:Stop(reason, clear)
+    if clear then
+        if self.pending then self:CancelBuy() end
+        self.finds = {}
+    end
+    if not self.running then
+        if clear then Moved() end
+        return
+    end
     session = session + 1
     self.running = false
-    self.finds, self.pending, self.armed, waiting = {}, nil, nil, nil
+    self.armed, waiting = nil, nil
     pool, building = {}, false
     if ns.AHQueue and ns.AHQueue.Cancel then pcall(ns.AHQueue.Cancel, ns.AHQueue, "snipe") end
     if reason then Say(reason) end
@@ -333,15 +346,31 @@ function Snipe:Stop(reason)
 end
 
 function Snipe:CapReached()
-    self:Stop(L["You've reached your Spending Cap. Snipe stopped."])
+    self:Stop(L["You've reached your Spending Cap. Snipe stopped."], true)
+end
+
+--- The auction house closed: nothing left can be bought.
+function Snipe:Closed()
+    self:Stop(nil, true)
 end
 
 --------------------------------------------------------------------------
 -- Searching, one small batch at a time
 --------------------------------------------------------------------------
 
+--- Has Snipe used so much of the auction house's budget that the player's
+--- own click would have to wait?
+function Snipe.CrowdsPlayer()
+    local q = ns.AHQueue
+    if not (q and q.RecentSendCount) then return false end
+    local ok, count = pcall(q.RecentSendCount, q)
+    if not (ok and type(count) == "number") then return false end
+    return count >= (q.BUDGET_MAX or 8) - Snipe.HEADROOM
+end
+
 local function Busy()
     if Snipe.pending then return true end
+    if Snipe.CrowdsPlayer() then return true end
     if ns.AHQueue and ns.AHQueue.PlayerIsSelling then
         local ok, selling = pcall(ns.AHQueue.PlayerIsSelling, ns.AHQueue)
         if ok and selling then return true end
@@ -513,20 +542,40 @@ function Snipe:UnitsFor(find)
     return math.max(0, units)
 end
 
+local PRICE_SORT
+
+local function PriceSort()
+    if PRICE_SORT then return PRICE_SORT end
+    local enum = rawget(_G, "Enum") and Enum.AuctionHouseSortOrder
+    PRICE_SORT = { { sortOrder = enum and enum.Price or 0, reverseSort = false } }
+    return PRICE_SORT
+end
+
+--- Let a queued snipe search wait for the player's click. Not silent, so it
+--- picks up again on its own.
+local function Yield()
+    local q = ns.AHQueue
+    if q and q.Cancel then pcall(q.Cancel, q, "snipe") end
+end
+
 function Snipe:Buy(find)
-    if not (self.running and find) or self.pending then return end
+    if not find or self.pending then return end
+    if not AuctionOpen() then return end
     local units = self:UnitsFor(find)
-    if units < 1 then return self:CapReached() end
+    if units < 1 then
+        if self.running then return self:CapReached() end
+        Say(L["That costs more than your Spending Cap has left."])
+        return
+    end
 
     if find.kind == "disenchant" and ns.DisenchantBuys and ns.DisenchantBuys.Intend then
         pcall(ns.DisenchantBuys.Intend, ns.DisenchantBuys, find.itemID)
     end
 
     if not IsStack(find.itemID) then
-        -- Sold one at a time: the game's own search, the player buys there.
-        if ns.UI and ns.UI.SearchAuctionHouse then ns.UI:SearchAuctionHouse(find.itemID, 1) end
-        return
+        return self:AskItem(find)
     end
+    Yield()
     if not Util.HasFunction("C_AuctionHouse.StartCommoditiesPurchase") then return end
     local ok = pcall(C_AuctionHouse.StartCommoditiesPurchase, find.itemID, units)
     if not ok then return end
@@ -538,10 +587,99 @@ function Snipe:Buy(find)
     end)
 end
 
+--- Sold one at a time: ask for the item's own listings, cheapest first,
+--- then the next click buys the cheapest one that is still a deal.
+function Snipe:AskItem(find)
+    local q = ns.AHQueue
+    if not (Util.HasFunction("C_AuctionHouse.MakeItemKey")
+        and Util.HasFunction("C_AuctionHouse.SendSearchQuery") and q and q.Request) then
+        -- An old client: the game's own search, the player buys there.
+        if ns.UI and ns.UI.SearchAuctionHouse then ns.UI:SearchAuctionHouse(find.itemID, 1) end
+        return
+    end
+    local ok, key = pcall(C_AuctionHouse.MakeItemKey, find.itemID)
+    if not (ok and key) then return end
+    local mine = { itemID = find.itemID, phase = "asking", find = find, item = true, key = key }
+    self.pending = mine
+    Yield()
+    Moved()
+    q:Request({
+        name = "snipe buy",
+        key = "snipe-buy",
+        priority = q.PRIORITY and q.PRIORITY.urgent or 10,
+        expires = self.QUOTE_WAIT,
+        send = function()
+            if Snipe.pending ~= mine then return false end
+            local sent = pcall(C_AuctionHouse.SendSearchQuery, key, PriceSort(), true)
+            if sent then mine.sent = Now() end
+            return sent
+        end,
+        onGiveUp = function()
+            if Snipe.pending == mine and mine.phase == "asking" then
+                Snipe:CancelBuy()
+                Say(L["the auction house is busy, try again in a moment"])
+            end
+        end,
+    })
+    After(self.QUOTE_WAIT + 3, function()
+        if Snipe.pending == mine and mine.phase == "asking" then Snipe:CancelBuy() end
+    end)
+end
+
+--- The item's listings came in: pick the cheapest one we may buy.
+function Snipe:ItemResults(itemKey)
+    local pending = self.pending
+    if not (pending and pending.item and pending.phase == "asking" and pending.sent) then return end
+    if itemKey and itemKey.itemID and itemKey.itemID ~= pending.itemID then return end
+    if not (Util.HasFunction("C_AuctionHouse.GetNumItemSearchResults")
+        and Util.HasFunction("C_AuctionHouse.GetItemSearchResultInfo")) then
+        return self:CancelBuy()
+    end
+    local okN, count = pcall(C_AuctionHouse.GetNumItemSearchResults, pending.key)
+    if not (okN and type(count) == "number") then return self:CancelBuy() end
+    local find, pct, left = pending.find, self:Percent(), self:Left()
+    local best, anyDeal
+    for i = 1, count do
+        local ok, info = pcall(C_AuctionHouse.GetItemSearchResultInfo, pending.key, i)
+        if ok and type(info) == "table" and info.auctionID and not info.containsOwnerItem then
+            local buyout, qty = info.buyoutAmount, info.quantity or 1
+            if type(buyout) == "number" and buyout > 0 and qty > 0 then
+                local each = buyout / qty
+                if Util.UnitPriceFromStack then
+                    local okU, unit = pcall(Util.UnitPriceFromStack, pending.itemID, buyout, qty)
+                    if okU and type(unit) == "number" and unit > 0 then each = unit end
+                end
+                if Snipe.IsDealFor(each, find.worth, find.kind, pct) then
+                    anyDeal = true
+                    if buyout <= left and (not best or each < best.each) then
+                        best = { auctionID = info.auctionID, total = buyout, count = qty, each = each }
+                    end
+                end
+            end
+        end
+    end
+    if not best then
+        if not anyDeal then
+            Drop(pending.itemID)
+            Say(L["That auction is gone already."])
+        else
+            Say(L["That costs more than your Spending Cap has left."])
+        end
+        return self:CancelBuy()
+    end
+    pending.phase, pending.total, pending.count, pending.auctionID = "quoted", best.total, best.count, best.auctionID
+    Moved()
+    After(self.QUOTE_WAIT * 3, function()
+        if Snipe.pending == pending and pending.phase == "quoted" then Snipe:CancelBuy() end
+    end)
+end
+
 function Snipe:CancelBuy()
     local pending = self.pending
     self.pending, self.armed = nil, nil
-    if pending and Util.HasFunction("C_AuctionHouse.CancelCommoditiesPurchase") then
+    if pending and pending.item then
+        if ns.AHQueue and ns.AHQueue.Cancel then pcall(ns.AHQueue.Cancel, ns.AHQueue, "snipe-buy", true) end
+    elseif pending and Util.HasFunction("C_AuctionHouse.CancelCommoditiesPurchase") then
         pcall(C_AuctionHouse.CancelCommoditiesPurchase)
     end
     Moved()
@@ -581,8 +719,18 @@ function Snipe:Pay()
         end)
         return "confirm"
     end
-    local ok = Util.HasFunction("C_AuctionHouse.ConfirmCommoditiesPurchase")
-        and pcall(C_AuctionHouse.ConfirmCommoditiesPurchase, pending.itemID, pending.count)
+    local ok
+    if pending.item then
+        if type(GetMoney) == "function" then
+            local okM, money = pcall(GetMoney)
+            if okM then pending.moneyBefore = money end
+        end
+        ok = Util.HasFunction("C_AuctionHouse.PlaceBid")
+            and pcall(C_AuctionHouse.PlaceBid, pending.auctionID, pending.total)
+    else
+        ok = Util.HasFunction("C_AuctionHouse.ConfirmCommoditiesPurchase")
+            and pcall(C_AuctionHouse.ConfirmCommoditiesPurchase, pending.itemID, pending.count)
+    end
     if not ok then self:CancelBuy(); return false end
     pending.phase, self.armed = "buying", nil
     Moved()
@@ -601,14 +749,38 @@ function Snipe:Bought()
     self.pending, self.armed = nil, nil
     self.spent = self.spent + (pending.total or 0)
     Drop(pending.itemID)
-    if ns.AHBuys and ns.AHBuys.Record then pcall(ns.AHBuys.Record, ns.AHBuys, pending.itemID, pending.count) end
+    -- AHBuys watches PlaceBid itself, so only a stack buy is recorded here.
+    if not pending.item and ns.AHBuys and ns.AHBuys.Record then
+        pcall(ns.AHBuys.Record, ns.AHBuys, pending.itemID, pending.count)
+    end
     Moved()
-    if self.running and self:Left() <= 0 then self:CapReached() end
+    if self:Left() <= 0 then
+        if self.running then self:CapReached() else self.finds = {}; Moved() end
+    end
+end
+
+--- An item buy went through when the money left the purse.
+function Snipe:MoneyMoved()
+    local pending = self.pending
+    if not (pending and pending.item and pending.phase == "buying" and pending.moneyBefore) then return end
+    if type(GetMoney) ~= "function" then return end
+    local ok, money = pcall(GetMoney)
+    if ok and type(money) == "number" and pending.moneyBefore - money >= pending.total then
+        self:Bought()
+    end
+end
+
+--- The game said no to an item buy (gone, or not enough money).
+function Snipe:BuyError()
+    local pending = self.pending
+    if pending and pending.item and pending.phase == "buying" then
+        Drop(pending.itemID)
+        self:CancelBuy()
+    end
 end
 
 --- The wheel (or any one-click caller): buy the best find, or pay a quote.
 function Snipe:BuyNext()
-    if not self.running then return end
     if self.pending then
         if self.pending.phase == "quoted" then return self:Pay() end
         return
@@ -626,5 +798,12 @@ function Snipe:Init()
     ns.RegisterEvent(self, "COMMODITY_PRICE_UNAVAILABLE", function() Snipe:CancelBuy() end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_SUCCEEDED", function() Snipe:Bought() end)
     ns.RegisterEvent(self, "COMMODITY_PURCHASE_FAILED", function() Snipe:CancelBuy() end)
-    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() Snipe:Stop() end)
+    ns.RegisterEvent(self, "ITEM_SEARCH_RESULTS_UPDATED", function(_, _, itemKey) Snipe:ItemResults(itemKey) end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_PURCHASE_COMPLETED", function()
+        local p = Snipe.pending
+        if p and p.item and p.phase == "buying" then Snipe:Bought() end
+    end)
+    ns.RegisterEvent(self, "PLAYER_MONEY", function() Snipe:MoneyMoved() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW_ERROR", function() Snipe:BuyError() end)
+    ns.RegisterEvent(self, "AUCTION_HOUSE_CLOSED", function() Snipe:Closed() end)
 end
