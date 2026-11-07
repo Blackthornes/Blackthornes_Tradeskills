@@ -50,7 +50,9 @@
 --                  use from its bags (what they use, less what it makes and
 --                  what is in its bank), as the Mail panel works it out.
 --   mailTo,        the alt whose queued crafts this character's bags can
---   mailCount      supply, and how many (QueueMail:GetDeliveries).
+--   mailCount      supply, and how many (QueueMail:GetDeliveries). Can be
+--                  a linked account's character while Share Craft Queue is
+--                  ticked on both accounts (2026-11-07).
 --   bought         how many the account bought on the auction house to
 --                  disenchant (DisenchantBuys:Count, 2026-10-11), nil when
 --                  none.

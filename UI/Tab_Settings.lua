@@ -1857,11 +1857,11 @@ local function Build(outer)
     end)
 
     widgets.linkShares = {}
-    local function ShareRow(key, label, description)
+    local function ShareRow(key, label, description, offByDefault)
         local row = CreateRow(pages.sharing, 1, label, description)
         local box = Widgets.CreateCheckbox(row, L["On"], function(checked)
             Config:Set(key, checked)
-        end, true)
+        end, not offByDefault)
         box:SetPoint("TOPLEFT", CONTROL_X, -2)
         widgets.linkShares[key] = box
     end
@@ -1870,6 +1870,9 @@ local function Build(outer)
     ShareRow("linkShareBags", L["Share Bags, Bank and Mail:"], L["What your characters carry, bank and have in the mail."])
     ShareRow("linkShareGold", L["Share Gold:"], L["How much gold each of your characters has."])
     ShareRow("linkShareAuctions", L["Share Auctions:"], L["What your characters have listed, so Keep in stock counts it."])
+    -- Off unless ticked (Trent, 2026-11-07): see Logic/AccountLink.lua.
+    ShareRow("linkShareQueue", L["Share Craft Queue:"],
+        L["What your queued crafts still need, so your other account knows what to mail."], true)
 
     local syncButton = Widgets.CreateButton(pages.sharing.content, L["Sync"], function()
         if ns.AccountLink then ns.AccountLink:Check() end
@@ -2473,7 +2476,11 @@ local function Refresh()
         if widgets.linkNames:GetText() ~= saved then widgets.linkNames:SetText(saved) end
     end
     for key, box in pairs(widgets.linkShares) do
-        box:SetChecked(Config:Get(key) ~= false)
+        if key == "linkShareQueue" then
+            box:SetChecked(Config:Get(key) == true)
+        else
+            box:SetChecked(Config:Get(key) ~= false)
+        end
     end
     widgets.linkStatus:SetText(ns.AccountLink and ns.AccountLink:Describe() or "")
     widgets.guildPrices:SetChecked(Config:Get("guildPrices") == true)
