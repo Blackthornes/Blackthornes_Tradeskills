@@ -88,6 +88,12 @@ end
 
 --- What the player set: Spending Cap (copper), Snipe Below (percent).
 function Snipe:Cap() return tonumber(Get("snipeCap", 0)) or 0 end
+--- Buys at or over this many copper take a second click. snipeConfirmOver
+--- is unset until the player changes it, which reads as CONFIRM_OVER (10g).
+function Snipe:ConfirmOver()
+    local over = tonumber(Get("snipeConfirmOver", self.CONFIRM_OVER))
+    return math.max(0, math.floor(over or self.CONFIRM_OVER))
+end
 function Snipe:Percent()
     local pct = tonumber(Get("snipePct", 70)) or 70
     return math.max(10, math.min(95, pct))
@@ -1006,7 +1012,7 @@ function Snipe:Pay()
             return false
         end
     end
-    if pending.total >= self.CONFIRM_OVER and self.armed ~= pending then
+    if pending.total >= self:ConfirmOver() and self.armed ~= pending then
         self.armed = pending
         Moved()
         After(self.CONFIRM_FOR, function()

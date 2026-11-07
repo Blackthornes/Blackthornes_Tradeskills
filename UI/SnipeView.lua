@@ -10,7 +10,7 @@ local Util = ns.Util
 
 local ROW_HEIGHT = 36
 local ICON_SIZE = 24
-local STRIP_HEIGHT = 84
+local STRIP_HEIGHT = 110
 local STRIP_ROW = 26
 local HEAD_HEIGHT = 18
 local COLUMNS_HEIGHT = 16
@@ -88,7 +88,59 @@ local function MostHead()
     return (text:gsub("%s*[:\239\188\154]+%s*$", ""))
 end
 
+--- The finds as shown. While the mouse is on the list it holds still: the
+--- rows keep the order they had (gone ones leave), and new finds wait,
+--- counted in self.newCount, until the mouse leaves.
 function SnipeView:SortedFinds()
+    local rows = self:FreshOrder()
+    local held = self.held
+    if not held then
+        self.newCount = 0
+        return rows
+    end
+    local byItem, kept, waiting = {}, {}, 0
+    for _, find in ipairs(rows) do
+        byItem[find.itemID] = find
+        if not held.seen[find.itemID] then waiting = waiting + 1 end
+    end
+    for _, itemID in ipairs(held.order) do
+        if byItem[itemID] then kept[#kept + 1] = byItem[itemID] end
+    end
+    self.newCount = waiting
+    return kept
+end
+
+--- Hold the list as it stands, or let it go (on = false).
+function SnipeView:Hold(on)
+    if on then
+        local held = { order = {}, seen = {} }
+        for _, find in ipairs(self:FreshOrder()) do
+            held.order[#held.order + 1] = find.itemID
+            held.seen[find.itemID] = true
+        end
+        self.held = held
+    else
+        self.held = nil
+    end
+    self.newCount = 0
+    self:Changed()
+end
+
+--- Looks five times a second, only while the list shows, whether the mouse
+--- came onto it or left it.
+function SnipeView:WatchMouse()
+    if not self.list then return end
+    local over = false
+    local ok, result = pcall(self.list.IsMouseOver, self.list)
+    if ok then over = result and true or false end
+    if over and not self.held then
+        self:Hold(true)
+    elseif not over and self.held then
+        self:Hold(false)
+    end
+end
+
+function SnipeView:FreshOrder()
     local rows = {}
     for _, find in ipairs(Snipe():Finds() or {}) do rows[#rows + 1] = find end
     local key, down = self.sortKey, self.sortDown
@@ -275,8 +327,19 @@ function SnipeView:BuildStrip(body, topAnchor)
     money:Set(Snipe():Cap())
     self.cap = money
 
+    -- Double Check Over: a buy that costs this much or more takes a second
+    -- click ("Click Again").
+    local confirmLabel = Row(-30, L["Double Check Over:"])
+    local confirm = ns.PriceEditor.MoneyBoxes(strip, function(copper)
+        ns.Config:Set("snipeConfirmOver", math.max(0, copper or 0))
+        self:Changed()
+    end)
+    confirm.label = confirmLabel
+    confirm:Set(Snipe():ConfirmOver())
+    self.confirm = confirm
+
     -- Snipe Below
-    local belowLabel = Row(-30, L["Snipe Below:"])
+    local belowLabel = Row(-56, L["Snipe Below:"])
     local pct = Widgets.CreateNumberBox(strip, {
         width = 40, height = 20, min = 10, max = 95,
         onChange = function(value)
@@ -289,12 +352,16 @@ function SnipeView:BuildStrip(body, topAnchor)
     pct.label = belowLabel
     pct:SetValue(Snipe():Percent(), true)
     self.pct = pct
+    -- Tab runs Spending Cap, Double Check Over, then Snipe Below.
+    money:TabTo(confirm.gold, nil)
+    confirm:TabTo(pct, money.copper)
+    pct.tabPrev = confirm.copper
     local sign = Theme.CreateLabel(strip, "small", "muted")
     sign:SetPoint("LEFT", pct, "RIGHT", 4, 0)
     sign:SetText(L["% of worth"])
 
     -- Watch
-    local watchLabel = Row(-56, L["Watch:"])
+    local watchLabel = Row(-82, L["Watch:"])
     self.watchOptions = {
         { value = "priced", text = L["Priced Items"] },
         { value = "disenchant", text = L["To Disenchant"] },
@@ -314,7 +381,7 @@ function SnipeView:BuildStrip(body, topAnchor)
     self.watch = watch
 
     -- List: shows under Watch: in My Lists only. 0 stands for All Lists.
-    local listLabel = Row(-56 - STRIP_ROW, L["List:"])
+    local listLabel = Row(-82 - STRIP_ROW, L["List:"])
     local pick = Widgets.CreateDropdown(strip, self:ListOptions(), function(value)
         ns.Config:Set("snipeList", (tonumber(value) or 0) > 0 and tonumber(value) or nil)
         if Snipe():IsRunning() and Snipe():Watch() == "lists" and Snipe().Restart then Snipe():Restart() end
@@ -420,7 +487,7 @@ function SnipeView:LayStrip()
     self.labelColumn = column
     local x = 8 + column + LABEL_GAP
     for _, label in ipairs(self.rows) do label:SetWidth(column) end
-    for _, box in ipairs({ self.cap, self.pct, self.watch, self.listPick }) do
+    for _, box in ipairs({ self.cap, self.confirm, self.pct, self.watch, self.listPick }) do
         -- Centred on its label's first line, as before.
         box:ClearAllPoints()
         box:SetPoint("LEFT", self.strip, "TOPLEFT", x, box.label.y - 6)
@@ -516,6 +583,28 @@ function SnipeView:Build(body, frame, topAnchor, opts)
     empty:SetWordWrap(true)
     self.empty = empty
 
+    -- "3 new" on the list's top right while it holds still; a click lets
+    -- them in at once.
+    if Widgets.CreateChip then
+        local chip = Widgets.CreateChip(body, "", function()
+            SnipeView:Hold(false)
+            SnipeView:Hold(true)
+        end, { height = 18 })
+        chip:SetPoint("TOPRIGHT", list, "TOPRIGHT", -4, -2)
+        chip:SetFrameLevel((list:GetFrameLevel() or 1) + 5)
+        chip:Hide()
+        self.newChip = chip
+    end
+    local watcher = CreateFrame("Frame", nil, body)
+    local since = 0
+    watcher:SetScript("OnUpdate", function(_, elapsed)
+        since = since + (elapsed or 0)
+        if since < 0.2 then return end
+        since = 0
+        if SnipeView.shown then SnipeView:WatchMouse() end
+    end)
+    self.watcher = watcher
+
     self.parts = { list = list, go = go, buy = buy, note = note, head = self.head, cols = self.cols }
     self:Place()
     self:SetShown(false)
@@ -568,6 +657,9 @@ end
 
 function SnipeView:SetShown(on)
     self.shown = on and true or false
+    if not self.shown then self.held, self.newCount = nil, 0 end
+    if self.watcher then self.watcher:SetShown(self.shown) end
+    if self.newChip and not self.shown then self.newChip:Hide() end
     for _, part in pairs(self.parts or {}) do part:SetShown(self.shown) end
     if self.empty and not self.shown then self.empty:Hide() end
     if self.strip then self.strip:SetShown(self.shown and self:StripOpen()) end
@@ -588,7 +680,7 @@ function SnipeView:Refresh(force)
         tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()), snipe:Watch(),
         pending and (pending.phase .. tostring(pending.total)) or "-", tostring(snipe.armed ~= nil),
         tostring(#(snipe:Finds() or {})), tostring(snipe:ListChoice()),
-        tostring(ns.ShoppingLists and ns.ShoppingLists.version),
+        tostring(ns.ShoppingLists and ns.ShoppingLists.version), tostring(self.held ~= nil),
     }, "|")
     if not force and key == self.key then return end
     self.key = key
@@ -639,6 +731,17 @@ function SnipeView:Refresh(force)
 
     local rows = self:SortedFinds()
     self.list:SetData(rows)
+    if self.newChip then
+        local waiting = self.newCount or 0
+        if waiting > 0 then
+            local text = L.Format("%d new", waiting)
+            self.newChip.label:SetText(text)
+            self.newChip:SetText(text)
+            self.newChip:Show()
+        else
+            self.newChip:Hide()
+        end
+    end
     if #rows == 0 then
         self.empty:SetText(running and L["Looking for deals..."] or self:EmptyText())
         self.empty:Show()
