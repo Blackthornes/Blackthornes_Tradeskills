@@ -304,6 +304,7 @@ function SnipeView:BuildStrip(body, topAnchor)
     local watch = Widgets.CreateDropdown(strip, self.watchOptions, function(value)
         ns.Config:Set("snipeWatch", value)
         if Snipe().BuildPool and not Snipe():IsRunning() then Snipe().pool = nil end
+        if Snipe():IsRunning() and Snipe().Restart then Snipe():Restart() end
         self:LayStrip()
         self:Place()
         self:Changed()
@@ -316,6 +317,7 @@ function SnipeView:BuildStrip(body, topAnchor)
     local listLabel = Row(-56 - STRIP_ROW, L["List:"])
     local pick = Widgets.CreateDropdown(strip, self:ListOptions(), function(value)
         ns.Config:Set("snipeList", (tonumber(value) or 0) > 0 and tonumber(value) or nil)
+        if Snipe():IsRunning() and Snipe():Watch() == "lists" and Snipe().Restart then Snipe():Restart() end
         self:Changed()
     end, { width = CHOICE_LEAST })
     pick.label = listLabel
