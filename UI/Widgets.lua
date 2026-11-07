@@ -2599,6 +2599,8 @@ function Widgets.CreateScrollList(parent, opts)
 
         scrollbar:SetMinMaxValues(0, maxOffset)
         scrollbar:SetShown(maxOffset > 0)
+        self.canScroll = maxOffset > 0
+        if self.wheelPass then self:ApplyWheel() end
 
         -- The thumb is as long as the share of the list on screen, as the
         -- scroll frame's is, so it says how much more there is rather than
@@ -2688,6 +2690,21 @@ function Widgets.CreateScrollList(parent, opts)
     end)
 
     list:EnableMouseWheel(true)
+
+    -- While the wheel is bound to something (the auction house drawer's
+    -- wheel listing, UI/AuctionWheel.lua), a list with nothing more to show
+    -- lets the wheel through rather than swallowing the turn.
+    function list:ApplyWheel()
+        if not self.EnableMouseWheel then return end
+        self:EnableMouseWheel(not self.wheelPass or self.canScroll == true)
+    end
+
+    function list:WheelPass(on)
+        on = on == true
+        if self.wheelPass == on then return end
+        self.wheelPass = on
+        self:ApplyWheel()
+    end
     list:SetScript("OnMouseWheel", function(self, delta)
         local _, maxOffset = scrollbar:GetMinMaxValues()
         local newOffset = math.max(0, math.min(maxOffset, self.offset - (delta * 3)))

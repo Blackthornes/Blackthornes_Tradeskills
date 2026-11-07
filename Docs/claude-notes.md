@@ -1301,6 +1301,22 @@ thing (`AuctionWheel.GAP`). A list under the mouse still scrolls; the
 camera does not zoom while it is bound. Tested in
 `tools/test_auctionwheel.lua`. Not yet seen in game.
 
+Kept working (the owner's report, 2026-11-07: it "keeps breaking and
+stops working randomly"). It used to bind once and trust a flag, so
+anything that bound the wheel after it (another addon, the game) took it
+until the drawer closed. `AuctionWheel:Holds` asks the game what each
+wheel key really does (`GetBindingAction(key, true)` against
+`AuctionWheel.ACTIONS`), and `Update` binds again (cleared first, so ours
+is newest) when it isn't ours: as the drawer opens, on `UPDATE_BINDINGS`,
+`AUCTION_HOUSE_SHOW`, `PLAYER_ENTERING_WORLD`, after a fight, from the
+drawer's OnUpdate every `CHECK_EVERY` seconds (`Tick`, only while it
+shows) and when Refresh drops a Snipe or Favors view. The drawer counts
+only while `frame:IsVisible()` (a hidden One Window used to keep it
+bound). While bound, the drawer lists (Sell, shopping, Auctions, Snipe,
+Favors, Lists) take the wheel only when they have more rows to show
+(`list:WheelPass`, `list.canScroll` in `UI/Widgets.lua`'s scroll list), so a
+turn over a short list lists instead of doing nothing.
+
 ## Odd scans and the price floor
 
 A player's Fine Leather Cloak sold for about 10s for days, then one scan saw
