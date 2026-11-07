@@ -36,6 +36,12 @@ local Util = ns.Util
 
 -- Item keys in one search, and the pause between searches.
 Snipe.BATCH = 10
+-- Searches start at BATCH_MOST items at once, the most tried on Forever so
+-- far. A search that goes unanswered, or comes back with only part of its
+-- rows, steps the size back toward BATCH; each full answer steps it up again.
+Snipe.BATCH_MOST = 50
+Snipe.BATCH_STEP = 5
+Snipe.batch = nil
 Snipe.REST = 1.5
 -- Nothing below this worth (copper) is watched.
 Snipe.MIN_WORTH = 5000
@@ -526,7 +532,7 @@ function Snipe:Next()
     end
 
     local batch, keys, wants = {}, {}, {}
-    local last = math.min(#pool, cursor + self.BATCH - 1)
+    local last = math.min(#pool, cursor + self:BatchSize() - 1)
     for i = cursor, last do
         local row = pool[i]
         local ok, key = pcall(C_AuctionHouse.MakeItemKey, row.id)
@@ -554,12 +560,37 @@ function Snipe:Next()
             return ok
         end,
         onGiveUp = function()
-            if waiting == mine then waiting = nil; Snipe:Later() end
+            if waiting == mine then waiting = nil; Snipe:Shrink(); Snipe:Later() end
         end,
     })
     After(self.REPLY_WAIT + 3, function()
-        if waiting == mine then waiting = nil; Snipe:Later() end
+        if waiting == mine then waiting = nil; Snipe:Shrink(); Snipe:Later() end
     end)
+end
+
+--- How many items the next search asks about.
+function Snipe:BatchSize()
+    local size = tonumber(self.batch) or self.BATCH_MOST
+    return math.max(self.BATCH, math.min(self.BATCH_MOST, math.floor(size)))
+end
+
+--- A search went unanswered or came back short: ask about fewer next time.
+function Snipe:Shrink()
+    self.batch = math.max(self.BATCH, math.floor(self:BatchSize() / 2))
+end
+
+--- A search came back whole: ask about a few more next time.
+function Snipe:Grow()
+    self.batch = math.min(self.BATCH_MOST, self:BatchSize() + self.BATCH_STEP)
+end
+
+--- Did the game send every row of the last search? A client without the
+--- call is taken at its word.
+local function FullResults()
+    if not Util.HasFunction("C_AuctionHouse.HasFullBrowseResults") then return true end
+    local ok, full = pcall(C_AuctionHouse.HasFullBrowseResults)
+    if not ok then return true end
+    return full ~= false
 end
 
 --- My Lists: take out what the player has enough of now, from the pool
@@ -637,11 +668,17 @@ function Snipe:OnBrowseResults()
     end
 
     waiting = nil
+    -- Only part of the rows came: a find the page left out may still be
+    -- there, so it stays, and the next search asks about fewer.
+    local full = FullResults()
+    if full then self:Grow() else self:Shrink() end
     local pct = self:Percent()
     local kind = self:Watch()
     local kept, fresh = {}, false
     for _, find in ipairs(self.finds) do
-        if not mine.batch[find.itemID] then kept[#kept + 1] = find end
+        if not mine.batch[find.itemID] or (not full and not cheapest[find.itemID]) then
+            kept[#kept + 1] = find
+        end
     end
     for id, hit in pairs(cheapest) do
         local worth = mine.batch[id]

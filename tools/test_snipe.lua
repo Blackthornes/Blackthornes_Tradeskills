@@ -13,6 +13,7 @@
 --  15. My Lists: the pool is the lists' items; each limit is the item's own
 --      Most I'll Pay, else the list's rule, else worth times Snipe Below; a
 --      gone list reads as All Lists; an item drops out once you have enough.
+--  16. Searches start big, halve when the game can't keep up, grow back.
 
 local ns = {}
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
@@ -303,5 +304,19 @@ assert(Snipe.emptyWhy == "Got all you need", "everything had says so")
 Snipe.running = false
 ns.ShoppingLists, ns.ListRules, ns.Inventory, ns.Prices = nil, nil, nil, nil
 settings.snipeWatch, settings.snipeList, settings.snipeCap = nil, nil, nil
+
+
+-- 16. Batch size.
+Snipe.batch = nil
+assert(Snipe:BatchSize() == Snipe.BATCH_MOST, "starts at the most")
+Snipe:Shrink()
+assert(Snipe:BatchSize() == math.floor(Snipe.BATCH_MOST / 2), "halves")
+for _ = 1, 10 do Snipe:Shrink() end
+assert(Snipe:BatchSize() == Snipe.BATCH, "never under the floor")
+Snipe:Grow()
+assert(Snipe:BatchSize() == Snipe.BATCH + Snipe.BATCH_STEP, "grows by a step")
+for _ = 1, 50 do Snipe:Grow() end
+assert(Snipe:BatchSize() == Snipe.BATCH_MOST, "never over the most")
+Snipe.batch = nil
 
 print("test_snipe: all passed")
