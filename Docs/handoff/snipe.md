@@ -21,6 +21,20 @@ Now: Snipe waits while fewer than `Snipe.HEADROOM` (3) sends are left (`Snipe.Cr
 ## My Lists (2026-11-06)
 Trent said build it from the mockup. A fourth Watch: choice, "My Lists" (`snipeWatch` = "lists"), and a "List:" drop-down under it (All Lists or one list; `snipeList`, the list id, nil for All Lists; a deleted list reads as All Lists). The pool is the lists' items. Each item's limit: its own Most I'll Pay (new optional list item field `maxPay`, copper), else the list's maxPay rule, else worth times Snipe Below. First list that holds an item wins. An item drops out once you have what the list wants, and a buy never takes more. Heads: Item, Price, Most I'll Pay, Deal. Hover "%1$s each, you'll pay up to %2$s"; empty "Put items on a list first."; all had "Got all you need". The Lists view has a "Most I'll Pay:" money box per item (Tab g, s, c; Enter or Tab saves; Escape puts it back), "List rule, %s" when only the list's rule applies, and "Got all you need" dimmed. Labels share one measured column; Watch: and List: one measured width; the sort arrow has its own room beside each head (it sat on Price, Trent's screenshot). Tested in `tools/test_snipe.lua` (15) and `tools/test_snipelayout.lua`. Saved, never rename: `snipeList`, the list item's `maxPay`.
 
+## One-click buying (2026-11-07)
+Trent said build it from the spec (`specs/snipe-one-click.md`) and mockup. Nothing buys by itself: every `PlaceBid` and `ConfirmCommoditiesPurchase` still comes from a click, the key or a wheel turn.
+
+- Ready before the click: while running or the Snipe list shows (`Snipe.viewShown`), `Snipe:Ready` (debounced by `ReadySoon`) asks about the top find quietly (`Buy(find, true)`, `pending.auto`). The top is the list's own order (`Snipe.topFn`, set by `SnipeView:SetShown`). An item is searched at urgent priority and its cheapest valid listing kept; a stack is quoted with `StartCommoditiesPurchase` from a timer. If the game refuses that (a pcall failure, or two quotes that never come), the stack is only "planned" and the quote is asked for on the click (`Snipe:Plan`, `noAutoStack`). `KeepFresh` asks again just before a quote runs out (`REQUOTE_BEFORE`, `READY_KEEP`); a new top lets the old ready go unless it is armed. A failed buy waits `RETRY_AFTER` before the find is tried again. Snipe's own searches rest three times longer while a ready deal waits, and a quiet ready never cancels the scan.
+- Buy It reads "Buy %s x%d for %s" when ready, "Checking..." while it readies; the row says "Ready".
+- Stay on the item: after a buy, a find with more deal listings stays on top (`pending.others`, `find.left`), its row showing "%d left", and is readied again.
+- "Double Check Over:" money box (`snipeConfirmOver`, nil reads 10g): buys over it ask "Click Again".
+- The list holds still under the mouse; new finds wait behind a "%d new" chip.
+- Key binding "Snipe: Buy Top" (`BLACKTHORNESTS_SNIPEBUY`, `Snipe:BuyNext`).
+- Search batches start bigger and step down when the game can't keep up.
+- Saved, never rename: `snipeConfirmOver`.
+- New words awaiting Trent's yes: "Buy %s x%d for %s", "Checking...", "%d left", "Double Check Over:", "%d new", "Snipe: Buy Top" ("Ready" was already in the addon). Their five translations are ours.
+- Tested in `tools/test_snipe.lua` (16 to 20) and `tools/test_snipeready.lua`. Not yet seen in game.
+
 ## Rules kept
 Never starts by itself. Ends on Stop, the auction house closing, or the cap; Stop keeps the list. Small searches, one at a time, cheapest page, held while the player sells or buys. Big buys ask "Click Again". Nothing touches a Blizzard frame. Tested in `tools/test_snipe.lua`.
 

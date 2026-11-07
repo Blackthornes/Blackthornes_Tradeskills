@@ -452,6 +452,15 @@ to the guild, and says what came back and how the sender's name reads. Also
 open: whether a whisper's sender name tells apart two characters with the
 same first name, since Forever allows that.
 
+**Snipe's background quotes and bigger batches (added 2026-11-07).**
+Snipe asks `C_AuctionHouse.StartCommoditiesPurchase` from a timer, before
+the player clicks, so one click can pay. Retail allows that; Forever has not
+been seen to. If the call raises, or two quotes never come
+(`COMMODITY_PRICE_UPDATED`), Snipe stops trying for the session
+(`noAutoStack`) and asks on the click instead. `SearchForItemKeys` batches
+now start larger (up to 50 keys) and halve when the queue gives up; how
+many Forever takes at once is not yet measured.
+
 ## Bank slot events fire with the bank shut
 
 `PLAYERBANKSLOTS_CHANGED` and `PLAYERREAGENTBANKSLOTS_CHANGED` arrive on
