@@ -160,6 +160,21 @@ function Snipe.ListItems(listID)
             end
         end
     end
+    -- All Lists also watches the other account's lists (Share Shopping
+    -- Lists), after this account's own; they have no Most I'll Pay.
+    if not listID and Lists().Linked then
+        for _, linked in ipairs(Lists():Linked()) do
+            for _, item in ipairs(linked.items or {}) do
+                local id = type(item) == "table" and tonumber(item[1])
+                -- How many they still need: what the list wants less what they have.
+                local need = id and math.floor((tonumber(item[2]) or 0) - (tonumber(item[3]) or 0)) or 0
+                if id and need > 0 and not out[id] then
+                    out[id] = { id = id, want = need, list = linked.name }
+                    order[#order + 1] = id
+                end
+            end
+        end
+    end
     return out, order
 end
 
