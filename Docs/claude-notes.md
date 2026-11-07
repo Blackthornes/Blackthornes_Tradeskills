@@ -1084,6 +1084,22 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   or `Queue:Notify` calls `AccountLink:ListsChanged`, which uses
   `SendSoon(LISTS_KEY)`, so it goes in about 5 s. Tested in
   `tools/test_linklists.lua`. Not yet seen in game.
+  Prices across the link (the owner, 2026-11-07: "If they are sharing
+  accounts thats enough already"): no tick box; whenever the accounts name
+  each other (`AccountLink:PricesOn`, `linkNames` set) each one's own scan
+  prices for its realm and side (market, cheapest listing, when seen, up
+  to `PRICES_USE_FOR` old) go across. The manifest carries `prices`
+  ("<last scan b36>@<realm key>" or "off"); E asks for what was seen
+  after a time, O is one plain batch, each complete in itself and at most
+  255 bytes, taken only `PRICES_TAKE_FOR` after asking. Never a price
+  taken from a partner, the guild or the realm, so nothing is relayed.
+  Kept in `linkedPrices[realm key][partner key] = { at, count, items }`
+  (never rename it), pruned after `PRICES_KEEP`. `Prices:GetValue` uses
+  `AccountLink:PriceFor` before the guild and realm, when it was seen
+  after this account's own record. A scan finishing (`WatchScans`) sends
+  in about 5 s (`SendSoon(PRICES_KEY)`). The Sharing status adds "N prices
+  from their scan AGO". Tested in `tools/test_linkprices.lua`. Not yet
+  seen in game.
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
   in `Prices:GetValue`: an item never scanned, or one gone stale while
