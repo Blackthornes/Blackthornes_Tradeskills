@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.13.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Share Craft Queue.** Under Sharing, Your Other Account, tick Share Craft Queue to send what your queued crafts still need to your other account. Its mail suggestions then offer those items to the matching character on the same realm and side. Off unless you tick it.
+
 ## 1.12.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
