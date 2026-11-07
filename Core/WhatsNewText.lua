@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.16.0", lines = {
+        "Two accounts now show when they last synced, in Settings on the Sharing page and on the other account's tooltip.",
+    } },
     { version = "1.15.0", lines = {
         "Snipe can buy the top deal with one click or one key. It never buys on its own.",
         "After a buy, Snipe keeps the item on top while more of it is a good deal.",
@@ -12,12 +15,5 @@ ns.WHATS_NEW = {
     } },
     { version = "1.14.0", lines = {
         "Ready to sell rows now show the auction house deposit. It turns orange when it costs more than the item sells for.",
-    } },
-    { version = "1.12.0", lines = {
-        "A Buy It button on the Snipe tab buys the top find.",
-        "Snipe can watch your shopping lists. Pick My Lists under Watch.",
-        "You can set the most you'll pay for each item on your lists.",
-        "The Sell tab shows every item in your bags unless you hid it. Items it won't list say why.",
-        "A Hidden button on the Sell tab shows what you hid, so you can bring items back.",
     } },
 }
