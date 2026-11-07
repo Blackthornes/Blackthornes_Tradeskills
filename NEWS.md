@@ -23,6 +23,19 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.15.0
+
+New:
+
+- Snipe can buy the top deal with one click or one key. It never buys on its own.
+- After a buy, Snipe keeps the item on top while more of it is a good deal.
+- If you play on two accounts, they can now share sales and shopping lists. It stays off until you turn it on for both.
+
+Fixes and changes:
+
+- Snipe buys stacks cheapest first and stays under your price.
+- The mouse wheel keeps working at the auction house.
+
 ## 1.14.2
 
 Fixes and changes:

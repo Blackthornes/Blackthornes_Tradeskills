@@ -5,6 +5,11 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.15.0", lines = {
+        "Snipe can buy the top deal with one click or one key. It never buys on its own.",
+        "After a buy, Snipe keeps the item on top while more of it is a good deal.",
+        "If you play on two accounts, they can now share sales and shopping lists. It stays off until you turn it on for both.",
+    } },
     { version = "1.14.0", lines = {
         "Ready to sell rows now show the auction house deposit. It turns orange when it costs more than the item sells for.",
     } },
@@ -14,8 +19,5 @@ ns.WHATS_NEW = {
         "You can set the most you'll pay for each item on your lists.",
         "The Sell tab shows every item in your bags unless you hid it. Items it won't list say why.",
         "A Hidden button on the Sell tab shows what you hid, so you can bring items back.",
-    } },
-    { version = "1.11.0", lines = {
-        "A new strip sits under the recipe in your Enchanting window. Pick an item, then click Enchant. It starts off. Turn it on in Settings, on the Look page.",
     } },
 }
