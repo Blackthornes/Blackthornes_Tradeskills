@@ -1036,7 +1036,7 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   (same realm and side, never the one playing) to `GetDeliveries`, less
   `InFlight` to them, so Butler's Advise and Jobs mail steps follow.
   Never relayed. Tested in `tools/test_linkqueue.lua`.
-  Share Sales (Trent, 2026-11-07): `linkShareSales`, off unless ticked
+  Share Sales (the owner, 2026-11-07): `linkShareSales`, off unless ticked
   on both sides, never rename it, never announced. Ticked, each own
   character's payload carries `sales` (`AccountLink:OwnSales`: its own
   `mailLedger` entries of kind sold, expired or removed, never `linked`
@@ -1051,7 +1051,16 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   merges them by time into what the Sales tab (summary, By item, Recent
   sales), `MethodProfit`, `ItemStats` and the Stats tab read; anything
   that writes, and stock decisions (Demand, SellOut, lists), stay on
-  `GetLedger`. A linked entry is never rolled up. Tested in
+  `GetLedger`. A linked entry is never rolled up. A new sale does not
+  wait for the ten-minute `Check` (the owner, 2026-11-07): when
+  `Mail:Reconcile` writes a ledger entry it calls
+  `AccountLink:SalesChanged(guid)`, which, while the tick is on, calls
+  `AccountLink:SendSoon(guid)`. That marks the character and sends a
+  manifest of only the marked characters (`Manifest(only)`) to online
+  partners `SOON_DELAY` (5) seconds after the last call, a burst going
+  as one, never later than `SOON_MOST_WAIT` (30) after the first. Offline
+  partners are left to the usual check. `SendSoon` is the reusable way to
+  send any one character's change quickly. Tested in
   `tools/test_linksales.lua`.
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
