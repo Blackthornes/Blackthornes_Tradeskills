@@ -8,9 +8,14 @@
 --   4. A flick (notches close together) does one thing, not several.
 --   5. In a fight the bindings wait for the fight to end.
 --   6. A press and its release do one thing.
+--   7. Something else binding the wheel later doesn't take it for good: it
+--      is taken back on the next look (drawer tick, binding change, ...).
+--   8. A drawer shown inside a hidden window doesn't hold the wheel.
+--   9. While the wheel is ours, drawer lists with nothing more to show let
+--      the turn through; when it goes back they take it again.
 
 local GLOBALS = { "CreateFrame", "UIParent", "GetTime", "InCombatLockdown",
-    "SetOverrideBindingClick", "ClearOverrideBindings" }
+    "SetOverrideBindingClick", "ClearOverrideBindings", "GetBindingAction" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -38,6 +43,13 @@ InCombatLockdown = function() return fighting end
 local bindings = {}
 SetOverrideBindingClick = function(_, _, key, button) bindings[key] = button end
 ClearOverrideBindings = function() bindings = {} end
+-- What the game would really do with a key: another addon can take it.
+local stolen = {}
+GetBindingAction = function(key)
+    if stolen[key] then return stolen[key] end
+    if bindings[key] then return "CLICK " .. bindings[key] .. ":LeftButton" end
+    return ""
+end
 
 local handlers = {}
 local ns = {}
@@ -48,9 +60,13 @@ local settings = {}
 ns.Config = { Get = function(_, k) return settings[k] end, Set = function(_, k, v) settings[k] = v end }
 
 local shown = false
+local visible = true
 local listed, cancelled = 0, 0
+local passed = nil
 ns.PostPanel = {
     view = "sell",
+    frame = { IsVisible = function() return shown and visible end },
+    list = { WheelPass = function(_, on) passed = on end },
     IsShown = function() return shown end,
     ListNext = function() listed = listed + 1 end,
 }
@@ -127,6 +143,51 @@ assert(next(bindings) == nil, "bindings wait out a fight")
 fighting = false
 handlers.PLAYER_REGEN_ENABLED()
 assert(bindings.MOUSEWHEELUP, "bound once the fight ends")
+Hide()
+
+-- 7. Another addon binds the wheel after we did: taken back on the next look.
+Show()
+assert(bindings.MOUSEWHEELUP and Wheel:Holds(), "ours to start")
+stolen.MOUSEWHEELUP = "CAMERAZOOMIN"
+assert(not Wheel:Holds(), "the game would send wheel up elsewhere now")
+local setAgain = 0
+local realSet = SetOverrideBindingClick
+SetOverrideBindingClick = function(...) setAgain = setAgain + 1; realSet(...) end
+drawer.hooks.OnUpdate(drawer, 0.4)
+assert(setAgain == 0, "no look before CHECK_EVERY")
+-- The other addon lets go, but ours must be the newest again.
+stolen.MOUSEWHEELUP = nil
+bindings = {}
+drawer.hooks.OnUpdate(drawer, 0.7)
+assert(setAgain == 2 and bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "the drawer's tick takes the wheel back")
+-- Held: a tick binds nothing again.
+drawer.hooks.OnUpdate(drawer, 2)
+assert(setAgain == 2, "a tick leaves a held wheel alone")
+-- A binding change taking it is noticed at once.
+bindings = {}
+handlers.UPDATE_BINDINGS()
+assert(bindings.MOUSEWHEELDOWN == Wheel.CANCEL_BUTTON, "a binding change takes it back")
+-- In a fight it waits, then comes back.
+bindings = {}
+fighting = true
+drawer.hooks.OnUpdate(drawer, 2)
+assert(next(bindings) == nil and Wheel.waiting, "a fight makes it wait")
+fighting = false
+handlers.PLAYER_REGEN_ENABLED()
+assert(bindings.MOUSEWHEELUP, "taken back after the fight")
+SetOverrideBindingClick = realSet
+
+-- 9. Lists let a turn through only while the wheel is ours.
+assert(passed == true, "drawer lists let the wheel through while it is ours")
+
+-- 8. The drawer still "shown" but its window hidden: the wheel goes back.
+visible = false
+drawer.hooks.OnHide()
+assert(next(bindings) == nil, "a drawer out of sight gives the wheel back")
+assert(passed == false, "lists take the wheel again once it is given back")
+visible = true
+drawer.hooks.OnShow()
+assert(bindings.MOUSEWHEELUP, "seen again, bound again")
 Hide()
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end

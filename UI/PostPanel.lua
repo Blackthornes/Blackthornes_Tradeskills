@@ -1857,6 +1857,8 @@ function PostPanel:Refresh()
         or (self.view == "snipe" and not PostPanel.ShowsSnipe())) then
         self.view = "sell"
         if self.switch then self.switch:Select(self.view, true) end
+        -- The Snipe view's wheel switch no longer applies.
+        if ns.AuctionWheel then ns.AuctionWheel:Update() end
     end
     local View = ns.ShoppingListsView
     if View and View.list then View:SetShown(self.view == "lists") end

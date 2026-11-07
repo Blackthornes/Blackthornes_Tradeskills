@@ -8,8 +8,19 @@
 -- each cancel. A wheel turn bound to a button is one, so two named buttons
 -- (never shown, never take the mouse) get the wheel through override
 -- bindings, held by our own owner frame only while the drawer shows. A list
--- under the mouse still takes the wheel first, so scrolling still works.
+-- under the mouse still takes the wheel first, so scrolling still works;
+-- a drawer list with nothing more to show lets the turn through.
 -- Bindings can't change in a fight: the change waits for its end.
+--
+-- Kept working (the owner's report, 2026-11-07: "keeps breaking and stops
+-- working randomly"): the wheel used to be bound once and then trusted.
+-- Another addon or the game binding the wheel later took it away for good,
+-- since nothing looked again until the drawer closed. Now the binding the
+-- game would really use (`GetBindingAction(key, true)`) is checked as the
+-- drawer opens, when bindings change, at the auction house, after a fight
+-- and once every `CHECK_EVERY` seconds while the drawer shows, and taken
+-- back when it isn't ours. The drawer counts only while it can be seen
+-- (inside a hidden One Window it can't), and a view change re-checks.
 
 local _, ns = ...
 
@@ -21,6 +32,15 @@ AuctionWheel.GAP = 0.35
 
 AuctionWheel.LIST_BUTTON = "BlackthornesTSWheelList"
 AuctionWheel.CANCEL_BUTTON = "BlackthornesTSWheelCancel"
+
+-- How often the binding is looked at again while the drawer shows.
+AuctionWheel.CHECK_EVERY = 1
+
+-- What the game reports for each wheel key while it is ours.
+AuctionWheel.ACTIONS = {
+    MOUSEWHEELUP = "CLICK " .. AuctionWheel.LIST_BUTTON .. ":LeftButton",
+    MOUSEWHEELDOWN = "CLICK " .. AuctionWheel.CANCEL_BUTTON .. ":LeftButton",
+}
 
 local function Now()
     return type(GetTime) == "function" and GetTime() or 0
@@ -39,6 +59,9 @@ end
 function AuctionWheel:Wanted()
     local panel = ns.PostPanel
     if not (panel ~= nil and panel.IsShown ~= nil and panel:IsShown() == true) then return false end
+    -- Shown but inside a closed window (One Window hidden) is not on screen.
+    local frame = panel.frame
+    if frame and frame.IsVisible and frame:IsVisible() ~= true then return false end
     -- The Snipe view has its own switch: wheel up buys the best find.
     if panel.view == "snipe" then
         return ns.Config ~= nil and ns.Config:Get("snipeWheel") == true
@@ -100,10 +123,40 @@ function AuctionWheel:Build()
     self.cancelButton = MakeButton(self.CANCEL_BUTTON, function() AuctionWheel:Cancel() end)
 end
 
+--- Whether the game would send both wheel turns to our buttons. Unknown
+--- (no way to ask) counts as ours, so nothing is bound again and again.
+function AuctionWheel:Holds()
+    if type(GetBindingAction) ~= "function" then return true end
+    for key, action in pairs(self.ACTIONS) do
+        local ok, now = pcall(GetBindingAction, key, true)
+        if ok and now ~= action then return false end
+    end
+    return true
+end
+
+-- Drawer lists let a turn through only while the wheel is ours.
+function AuctionWheel:PassLists(on)
+    local lists = {}
+    local panel = ns.PostPanel
+    if panel then
+        lists[#lists + 1] = panel.list
+        lists[#lists + 1] = panel.shoppingList
+    end
+    for _, name in ipairs({ "AuctionsView", "SnipeView", "FavorsView", "ShoppingListsView" }) do
+        local view = ns[name]
+        if view then lists[#lists + 1] = view.list end
+    end
+    for _, list in pairs(lists) do
+        if type(list) == "table" and list.WheelPass then pcall(list.WheelPass, list, on) end
+    end
+end
+
 --- Take the wheel or give it back, to match the setting and the drawer.
+--- While it should be ours, also takes it back from anything that bound
+--- the wheel since.
 function AuctionWheel:Update()
     local want = self:Wanted()
-    if want == (self.bound == true) then return end
+    if want == (self.bound == true) and (not want or self:Holds()) then return end
 
     if InFight() then
         self.waiting = true
@@ -114,6 +167,8 @@ function AuctionWheel:Update()
     self:Build()
     if want then
         if type(SetOverrideBindingClick) ~= "function" then return end
+        -- Cleared first, so setting them again makes ours the newest.
+        if self.bound and type(ClearOverrideBindings) == "function" then pcall(ClearOverrideBindings, self.owner) end
         pcall(SetOverrideBindingClick, self.owner, true, "MOUSEWHEELUP", self.LIST_BUTTON, "LeftButton")
         pcall(SetOverrideBindingClick, self.owner, true, "MOUSEWHEELDOWN", self.CANCEL_BUTTON, "LeftButton")
         self.bound = true
@@ -121,6 +176,15 @@ function AuctionWheel:Update()
         if type(ClearOverrideBindings) == "function" then pcall(ClearOverrideBindings, self.owner) end
         self.bound = false
     end
+    self:PassLists(self.bound)
+end
+
+-- A cheap look while the drawer shows: the drawer's OnUpdate runs only then.
+function AuctionWheel:Tick(elapsed)
+    self.sinceCheck = (self.sinceCheck or 0) + (tonumber(elapsed) or 0)
+    if self.sinceCheck < self.CHECK_EVERY then return end
+    self.sinceCheck = 0
+    self:Update()
 end
 
 --- Follow the drawer: called once it is built.
@@ -129,11 +193,16 @@ function AuctionWheel:Watch(frame)
     self.watching = frame
     frame:HookScript("OnShow", function() AuctionWheel:Update() end)
     frame:HookScript("OnHide", function() AuctionWheel:Update() end)
+    frame:HookScript("OnUpdate", function(_, elapsed) AuctionWheel:Tick(elapsed) end)
     self:Update()
 end
 
 if ns.RegisterEvent then
-    ns.RegisterEvent(AuctionWheel, "PLAYER_REGEN_ENABLED", function()
-        if AuctionWheel.waiting then AuctionWheel:Update() end
-    end)
+    -- After a fight, and whenever something may have moved the wheel's
+    -- binding or the drawer, look again.
+    local function Again() AuctionWheel:Update() end
+    ns.RegisterEvent(AuctionWheel, "PLAYER_REGEN_ENABLED", Again)
+    ns.RegisterEvent(AuctionWheel, "UPDATE_BINDINGS", Again)
+    ns.RegisterEvent(AuctionWheel, "AUCTION_HOUSE_SHOW", Again)
+    ns.RegisterEvent(AuctionWheel, "PLAYER_ENTERING_WORLD", Again)
 end
