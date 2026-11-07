@@ -125,7 +125,7 @@ ana.ns.db.recipeSkills = { [2406] = { skill = 110, profession = "Leatherworking"
 print("\nchoosing")
 local C = ana.ns.Contribute
 check("off by default", C:On(), false)
-check("the shipped list names three whole names", #C:Recipients(), 3)
+check("the shipped list names four whole names", #C:Recipients(), 4)
 current = farmer
 check("Blackthornes Farmer receives", farmer.ns.Contribute:Receiving())
 current = wither
