@@ -320,6 +320,25 @@ end
 
 PostPanel._ListTag = ListTag
 
+--- True when the deposit is more than the listing sells for.
+local function DepositOverSale(line)
+    return type(line.deposit) == "number" and type(line.postTotal) == "number"
+        and line.deposit > line.postTotal
+end
+
+--- The deposit for the price line, or "" when none is known yet.
+local function DepositText(line)
+    if type(line.deposit) ~= "number" then return "" end
+    local money = Util.FormatMoney(line.deposit, { noColor = true, short = true })
+    if DepositOverSale(line) then
+        return "   " .. ("|c%s%s|r"):format(ns.COLORS.warn, L.Format("Deposit %s, more than it sells for", money))
+    end
+    return "   " .. L.Format("Deposit %s", money)
+end
+
+PostPanel._DepositText = DepositText
+PostPanel._DepositOverSale = DepositOverSale
+
 function UpdateRow(row, line)
     -- The tag first, so the name knows how much room it has.
     local chip = rawget(row, "chip")
@@ -377,15 +396,23 @@ function UpdateRow(row, line)
         if beats then de = ("|c%s%s|r"):format(ns.COLORS.profit, de) end
     end
 
+    -- The deposit the listing pays (Amenitra's ask, 2026-11-07): the game's
+    -- own number at the auction house, else the last one it gave. Orange
+    -- when it is more than the listing sells for, since that is gold lost.
+    local dep = DepositText(line)
+
     -- Measured, and shortened rather than cut off: with gold-sized prices
-    -- the end of the line ran under the LIST box. The total goes first when
-    -- disenchanting wins (that green is the point), the disenchant value
-    -- first otherwise; the tooltip has both.
-    row.detail:SetText(each .. total .. de)
+    -- the end of the line ran under the LIST box. The deposit goes first,
+    -- then the total when disenchanting wins (that green is the point), the
+    -- disenchant value first otherwise; the tooltip has them all.
+    row.detail:SetText(each .. total .. dep .. de)
 
     if DetailTooWide(row) then
-        row.detail:SetText(beats and (each .. de) or (each .. total))
-        if DetailTooWide(row) then row.detail:SetText(each) end
+        row.detail:SetText(beats and (each .. dep .. de) or (each .. total .. dep))
+        if DetailTooWide(row) then
+            row.detail:SetText(beats and (each .. de) or (each .. total))
+            if DetailTooWide(row) then row.detail:SetText(each) end
+        end
     end
 
     -- Far under its usual price (Posting:FarUnderUsual): List Next passes
@@ -492,6 +519,16 @@ local function ShowRowTooltip(row, line)
     if line.vendorPrice then
         GameTooltip:AddDoubleLine(L["Vendor pays"],
             Util.FormatMoney(line.vendorPrice, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+    end
+
+    if type(line.deposit) == "number" then
+        GameTooltip:AddDoubleLine(L["Deposit"],
+            Util.FormatMoney(line.deposit, { noColor = true }), 0.7, 0.7, 0.7, 1, 1, 1)
+        GameTooltip:AddLine(L["You get the deposit back when it sells. You lose it if it doesn't."], 0.5, 0.5, 0.5, true)
+        if DepositOverSale(line) then
+            local r, g, b = Theme.Unpack("warn")
+            GameTooltip:AddLine(L["The deposit is more than this sells for."], r, g, b, true)
+        end
     end
 
     local disenchant, beats = DisenchantFor(line)

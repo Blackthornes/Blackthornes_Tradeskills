@@ -3423,3 +3423,9 @@ L["Hidden Items"] = "Ausgeblendete Gegenstände"
 L["You hid these from the Sell tab. Click Restore to bring one back."] = "Diese hast du im Verkaufen-Reiter ausgeblendet. Klick auf Wiederherstellen, um einen zurückzuholen."
 L["Restore All"] = "Alle wiederherstellen"
 L["Nothing is hidden."] = "Nichts ist ausgeblendet."
+
+-- The deposit on Ready to sell (2026-11-07).
+L["Deposit %s"] = "Anzahlung %s"
+L["Deposit %s, more than it sells for"] = "Anzahlung %s, mehr als der Verkaufspreis"
+L["You get the deposit back when it sells. You lose it if it doesn't."] = "Du bekommst die Anzahlung zurück, wenn es sich verkauft. Wenn nicht, ist sie weg."
+L["The deposit is more than this sells for."] = "Die Anzahlung ist höher als der Verkaufspreis."

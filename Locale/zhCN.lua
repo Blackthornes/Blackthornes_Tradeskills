@@ -3421,3 +3421,9 @@ L["Hidden Items"] = "已隐藏的物品"
 L["You hid these from the Sell tab. Click Restore to bring one back."] = "这些是你在出售页隐藏的物品。点击恢复即可找回。"
 L["Restore All"] = "全部恢复"
 L["Nothing is hidden."] = "没有隐藏的物品。"
+
+-- The deposit on Ready to sell (2026-11-07).
+L["Deposit %s"] = "保管费 %s"
+L["Deposit %s, more than it sells for"] = "保管费 %s，比卖价还高"
+L["You get the deposit back when it sells. You lose it if it doesn't."] = "卖出后保管费会退还给你。没卖出就拿不回来了。"
+L["The deposit is more than this sells for."] = "保管费比卖价还高。"
