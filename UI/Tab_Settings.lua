@@ -1861,6 +1861,7 @@ local function Build(outer)
         local row = CreateRow(pages.sharing, 1, label, description)
         local box = Widgets.CreateCheckbox(row, L["On"], function(checked)
             Config:Set(key, checked)
+            if key == "linkShareSales" and checked and ns.AccountLink then ns.AccountLink:AskAgain() end
         end, not offByDefault)
         box:SetPoint("TOPLEFT", CONTROL_X, -2)
         widgets.linkShares[key] = box
@@ -1873,6 +1874,8 @@ local function Build(outer)
     -- Off unless ticked (the owner, 2026-11-07): see Logic/AccountLink.lua.
     ShareRow("linkShareQueue", L["Share Craft Queue:"],
         L["What your queued crafts still need, so your other account knows what to mail."], true)
+    ShareRow("linkShareSales", L["Share Sales:"],
+        L["What your other account sold, so your Sales tab shows both."], true)
 
     local syncButton = Widgets.CreateButton(pages.sharing.content, L["Sync"], function()
         if ns.AccountLink then ns.AccountLink:Check() end
@@ -2476,7 +2479,7 @@ local function Refresh()
         if widgets.linkNames:GetText() ~= saved then widgets.linkNames:SetText(saved) end
     end
     for key, box in pairs(widgets.linkShares) do
-        if key == "linkShareQueue" then
+        if key == "linkShareQueue" or key == "linkShareSales" then
             box:SetChecked(Config:Get(key) == true)
         else
             box:SetChecked(Config:Get(key) ~= false)

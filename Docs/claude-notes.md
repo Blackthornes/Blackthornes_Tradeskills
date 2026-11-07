@@ -1036,6 +1036,23 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   (same realm and side, never the one playing) to `GetDeliveries`, less
   `InFlight` to them, so Butler's Advise and Jobs mail steps follow.
   Never relayed. Tested in `tools/test_linkqueue.lua`.
+  Share Sales (Trent, 2026-11-07): `linkShareSales`, off unless ticked
+  on both sides, never rename it, never announced. Ticked, each own
+  character's payload carries `sales` (`AccountLink:OwnSales`: its own
+  `mailLedger` entries of kind sold, expired or removed, never `linked`
+  ones, never the buyer, the newest `MAX_SALES`, by realm key). The
+  receiver keeps them apart in `linkedSales[realmKey][guid] = { at,
+  entries }` (never rename it), filed by `OurRealmKey`, cleaned and
+  deduped (`CleanSales`), each marked `linked` with `who` the sender's
+  GUID, replacing what that character sent before; only while its own
+  tick is on, and dropped by `Forget` and `Recipes:ForgetCharacter`.
+  Ticking it calls `AccountLink:AskAgain` (clears `linkHash` so the
+  partner resends). `Mail:Entries()` (kept by a key with `salesVersion`)
+  merges them by time into what the Sales tab (summary, By item, Recent
+  sales), `MethodProfit`, `ItemStats` and the Stats tab read; anything
+  that writes, and stock decisions (Demand, SellOut, lists), stay on
+  `GetLedger`. A linked entry is never rolled up. Tested in
+  `tools/test_linksales.lua`.
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
   in `Prices:GetValue`: an item never scanned, or one gone stale while
