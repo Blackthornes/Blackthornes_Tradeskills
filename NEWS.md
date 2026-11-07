@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.16.0
+
+New:
+
+- Two accounts now show when they last synced, in Settings on the Sharing page and on the other account's tooltip.
+
+Fixes and changes:
+
+- After you queue a craft, the materials listed for learning its pattern come off your list.
+
 ## 1.15.0
 
 New:
