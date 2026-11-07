@@ -1870,7 +1870,7 @@ local function Build(outer)
     ShareRow("linkShareBags", L["Share Bags, Bank and Mail:"], L["What your characters carry, bank and have in the mail."])
     ShareRow("linkShareGold", L["Share Gold:"], L["How much gold each of your characters has."])
     ShareRow("linkShareAuctions", L["Share Auctions:"], L["What your characters have listed, so Keep in stock counts it."])
-    -- Off unless ticked (Trent, 2026-11-07): see Logic/AccountLink.lua.
+    -- Off unless ticked (the owner, 2026-11-07): see Logic/AccountLink.lua.
     ShareRow("linkShareQueue", L["Share Craft Queue:"],
         L["What your queued crafts still need, so your other account knows what to mail."], true)
 
