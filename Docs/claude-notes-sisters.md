@@ -276,7 +276,11 @@ answers the suffix's own price when one is recent, else the item's.
 - `need`: what this character's own queued crafts use from its bags (use,
   less what it makes, less its bank), as `QueueMail:GetDeliveries` keeps back.
 - `mailTo`, `mailCount`: the alt `GetDeliveries` would send the most of it
-  to, full name, and how many.
+  to, full name, and how many. Since 2026-11-07 it can be a linked
+  account's character (Share Craft Queue ticked on both accounts, same
+  realm by `RealmKey` and side), and `Jobs()` can give the character
+  playing a mail step to one. Never a craft, pickup or Log out step for a
+  linked character; `FillMail` already takes its full name.
 - `bought`: how many the account bought on the auction house to
   disenchant (`DisenchantBuys:Count`), nil for none.
 - `forEnchanting` (the owner asked 2026-10-13): a green the character

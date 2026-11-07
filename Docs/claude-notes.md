@@ -1026,6 +1026,16 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   (`OurRealmKey`); `FileListings` moves ones saved before, at login
   (2026-11-05, a player's report). Account link never sends price scans:
   prices cross accounts only through guild or realm prices.
+  Share Craft Queue (Trent, 2026-11-07, a player with three accounts):
+  `linkShareQueue`, off unless ticked, never rename it, never announced.
+  Ticked, each own character's payload carries `queueNeeds`
+  (`AccountLink:QueueNeeds`: what its queued crafts use, less what it
+  makes and `Queue:HeldBy`; at most `MAX_NEEDS` items) and `mailAt`.
+  The receiver keeps `queueNeeds` only while its own tick is on
+  (`CleanNeeds`), and `QueueMail:LinkedNeeders` adds those characters
+  (same realm and side, never the one playing) to `GetDeliveries`, less
+  `InFlight` to them, so Butler's Advise and Jobs mail steps follow.
+  Never relayed. Tested in `tools/test_linkqueue.lua`.
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
   in `Prices:GetValue`: an item never scanned, or one gone stale while
