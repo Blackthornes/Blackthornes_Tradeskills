@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.15.0
+
+For WoW: Forever (interface 16001). Do a full restart after updating, since Snipe has a new key.
+
+- **Snipe buys in one click.** Snipe gets the top deal ready while you watch, so one click buys it. The new Snipe: Buy Top key does the same. Buy It shows what you will pay, and Checking... while it gets ready. Nothing ever buys by itself. Every buy still takes a click, a key press or a wheel turn.
+- **More of a good deal.** After a buy, the item stays on top while more of its listings are deals, and its row says how many are left.
+- **Double Check Over:** Any buy above the price in this new box asks Click Again.
+- **A list that holds still.** The Snipe list stays put while your mouse is on it. New finds wait behind a small chip.
+- **Stacks.** Snipe now reads a stack's listings and buys the cheapest units first. It stops at the first unit that isn't a deal and stays under Most I'll Pay.
+- **Watch and List.** Changing either one while Snipe runs starts it over with your new choice and keeps the amount you have spent.
+- **Share Sales:** A new tick under Settings, Sharing, Your Other Account. It stays off until you tick it on both accounts. Then the Sales and Stats tabs show both accounts together, and a new sale reaches the other account within seconds. Buyer names never leave the account.
+- **Share Shopping Lists:** A new tick in the same place, also off until you tick it on both accounts. Each account's lists and craft queue list show read only on the other account, with how many it still needs. Snipe's My Lists picks those up too.
+- **Mouse wheel.** With Mouse Wheel ticked, the wheel keeps listing at the auction house even if something else takes it. A drawer list with nothing more to show now lets the turn through.
+- **Sharing your data.** If you chose to share your data, it now goes to one more of our collecting characters. It is still off until you turn it on, and what gets sent is the same.
+
 ## 1.14.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
