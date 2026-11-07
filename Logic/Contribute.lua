@@ -49,6 +49,7 @@ Contribute.RECIPIENTS = {
     "Blackthornes Farmer",
     "Blackthornes Wither",
     "Blackthornes Tradeskills",
+    "Blackthornes Farms",
 }
 
 -- North America only, as in Farmer: GetCurrentRegion's 1 is the Americas,
