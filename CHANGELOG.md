@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.12.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Profit.** Profit now counts the 1 silver minimum deposit Forever's auction house charges, so cheap items show the right profit.
+
 ## 1.12.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
