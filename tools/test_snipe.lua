@@ -14,6 +14,12 @@
 --      Most I'll Pay, else the list's rule, else worth times Snipe Below; a
 --      gone list reads as All Lists; an item drops out once you have enough.
 --  16. Searches start big, halve when the game can't keep up, grow back.
+--  17. The top find is readied in the background, quietly; one click buys
+--      it, and the item stays while more of its listings are deals.
+--  18. A new top lets the old readied deal go, unless it is being confirmed.
+--  19. Stacks are readied too; a client that won't price them in the
+--      background gets them planned, and the click asks, the next one pays.
+--  20. Snipe's own searches slow down while a ready deal waits.
 
 local ns = {}
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
@@ -25,6 +31,17 @@ local handlers = {}
 ns.RegisterEvent = function(_, event, fn) handlers[event] = fn; return true end
 local settings = {}
 ns.Config = { Get = function(_, k) return settings[k] end }
+-- Timers wait until Flush; the clock moves only when told.
+local oldTimer, oldGetTime = C_Timer, GetTime
+local timers, clock, lastWait = {}, 1000, nil
+C_Timer = { After = function(seconds, fn) lastWait = seconds; timers[#timers + 1] = fn end }
+GetTime = function() return clock end
+-- Runs the timers waiting now, once each; ones they set wait for the next.
+local function Flush()
+    local list = timers
+    timers = {}
+    for _, fn in ipairs(list) do fn() end
+end
 
 assert(loadfile(lfs_cwd .. "/Logic/Snipe.lua"))("Blackthornes_TS", ns)
 local Snipe = ns.Snipe
@@ -214,9 +231,11 @@ assert(Snipe.pending.total == 300)
 assert(Snipe:Pay() == true and bids[1][1] == 8 and bids[1][2] == 300, "bids the buyout")
 purse = 9700
 handlers.PLAYER_MONEY()
-assert(Snipe.pending == nil and Snipe:Spent() == 300 and #Snipe:Finds() == 0, "bought and off the list")
+assert(Snipe.pending == nil and Snipe:Spent() == 300, "bought")
+assert(#Snipe:Finds() == 1 and item.left == 1, "350 is still a deal: stays on it, 1 left")
 
 -- 14b. Gone: no listing is a deal any more.
+item.left = nil
 Snipe.finds = { item }
 Snipe:Buy(item)
 requests["snipe-buy"].send()
@@ -233,8 +252,9 @@ requests["snipe-buy"].send()
 handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 30 })
 Snipe:Pay()
 handlers.AUCTION_HOUSE_SHOW_ERROR()
-assert(Snipe.pending == nil and #Snipe:Finds() == 0, "refused, let go")
+assert(Snipe.pending == nil and #Snipe:Finds() == 1 and item.retryAt, "refused: kept, looked at again in a moment")
 C_AuctionHouse, GetMoney, ns.AHQueue = nil, nil, nil
+timers, Snipe.readyQueued = {}, nil
 
 -- 15. My Lists.
 local held = {
@@ -318,5 +338,119 @@ assert(Snipe:BatchSize() == Snipe.BATCH + Snipe.BATCH_STEP, "grows by a step")
 for _ = 1, 50 do Snipe:Grow() end
 assert(Snipe:BatchSize() == Snipe.BATCH_MOST, "never over the most")
 Snipe.batch = nil
+
+-- 17. Readied before the click.
+local requests, cancelled, bids, starts, confirms = {}, {}, {}, {}, {}
+ns.AHQueue = {
+    BUDGET_MAX = 8, PRIORITY = { urgent = 10, scan = 90 },
+    RecentSendCount = function() return 0 end,
+    Request = function(_, r) requests[r.key] = r; return true end,
+    Cancel = function(_, key) cancelled[#cancelled + 1] = key; return true end,
+}
+ns.Util.HasFunction = function(name) return name ~= "C_AuctionHouse.GetQuoteDurationRemaining" end
+local listed, status = {}, 1
+local stack = {}
+C_AuctionHouse = {
+    GetItemCommodityStatus = function() return status end,
+    MakeItemKey = function(id) return { itemID = id } end,
+    SendSearchQuery = function() return true end,
+    GetNumItemSearchResults = function() return #listed end,
+    GetItemSearchResultInfo = function(_, i) return listed[i] end,
+    PlaceBid = function(id, amount) bids[#bids + 1] = { id, amount } end,
+    GetNumCommoditySearchResults = function() return #stack end,
+    GetCommoditySearchResultInfo = function(_, i) return stack[i] end,
+    StartCommoditiesPurchase = function(id, units) starts[#starts + 1] = { id, units } end,
+    ConfirmCommoditiesPurchase = function(id, units) confirms[#confirms + 1] = { id, units } end,
+    CancelCommoditiesPurchase = function() end,
+}
+local wallet = 100000
+GetMoney = function() return wallet end
+settings.snipeCap, settings.snipeWatch, settings.snipePct = 50000, "vendor", 70
+Snipe.running, Snipe.spent, Snipe.pending, Snipe.armed = false, 0, nil, nil
+Snipe.viewShown, timers, Snipe.readyQueued = true, {}, nil
+listed = { { auctionID = 21, buyoutAmount = 300, quantity = 1 }, { auctionID = 22, buyoutAmount = 320, quantity = 1 } }
+local a = { itemID = 40, kind = "vendor", price = 300, worth = 500, qty = 1 }
+Snipe.finds = { a }
+local saidBefore = #said
+Snipe:Ready()
+assert(Snipe.pending and Snipe.pending.auto and Snipe.pending.phase == "asking", "readies on its own")
+assert(#cancelled == 0, "a background ready leaves the scan alone")
+assert(requests["snipe-buy"].send() == true)
+handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 40 })
+assert(Snipe.pending.phase == "quoted" and Snipe.pending.auctionID == 21, "the cheapest listing is ready")
+assert(#bids == 0, "nothing is bought without a click")
+assert(Snipe:WaitingReady())
+Snipe:BuyNext()
+assert(bids[1] and bids[1][1] == 21 and bids[1][2] == 300, "one click buys it")
+wallet = wallet - 300
+handlers.PLAYER_MONEY()
+assert(Snipe.pending == nil and a.left == 1 and #Snipe.finds == 1, "stays on it, 1 left")
+Flush()
+assert(Snipe.pending and Snipe.pending.auto and Snipe.pending.find == a, "readies the same item again")
+requests["snipe-buy"].send()
+listed = { { auctionID = 23, buyoutAmount = 900, quantity = 1 } }
+handlers.ITEM_SEARCH_RESULTS_UPDATED(nil, nil, { itemID = 40 })
+assert(Snipe.pending == nil and #Snipe.finds == 0, "no deal left: off the list")
+assert(#said == saidBefore, "a background ready says nothing")
+timers, Snipe.readyQueued = {}, nil
+
+-- 18. A new top.
+local b = { itemID = 41, kind = "vendor", price = 200, worth = 500, qty = 1 }
+a.left = nil
+Snipe.finds = { a, b }
+Snipe:Ready()
+assert(Snipe.pending and Snipe.pending.find == a)
+Snipe.topFn = function() return b end
+Snipe.armed = Snipe.pending
+Snipe:Ready()
+assert(Snipe.pending and Snipe.pending.find == a, "a deal being confirmed is kept")
+Snipe.armed = nil
+Snipe:Ready()
+assert(Snipe.pending == nil, "the old ready goes")
+Snipe:Ready()
+assert(Snipe.pending and Snipe.pending.find == b, "the new top is readied")
+Snipe:CancelBuy()
+Snipe.topFn, timers, Snipe.readyQueued = nil, {}, nil
+
+-- 19. Stacks.
+status = 2
+stack = { { unitPrice = 100, quantity = 3 }, { unitPrice = 120, quantity = 50 } }
+local c = { itemID = 42, kind = "vendor", price = 100, worth = 500, qty = 53 }
+Snipe.finds, Snipe.spent = { c }, 0
+Snipe:Ready()
+assert(Snipe.pending and Snipe.pending.phase == "listing" and Snipe.pending.auto, "reads the listings first")
+requests["snipe-buy"].send()
+handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, 42)
+assert(starts[1] and starts[1][1] == 42 and starts[1][2] == Snipe.MOST_UNITS, "asks the price for the most at once")
+assert(Snipe.pending.phase == "asking" and Snipe.pending.auto and Snipe.pending.others == 53 - Snipe.MOST_UNITS)
+handlers.COMMODITY_PRICE_UPDATED(nil, nil, nil, 2340)
+assert(Snipe.pending.phase == "quoted" and #confirms == 0, "priced, nothing bought")
+Snipe:BuyNext()
+assert(confirms[1] and confirms[1][2] == Snipe.MOST_UNITS, "one click buys the stack")
+handlers.COMMODITY_PURCHASE_SUCCEEDED()
+assert(#Snipe.finds == 1 and c.left == 33 and c.qty == 33, "33 more still deals")
+timers, Snipe.readyQueued = {}, nil
+Snipe.noAutoStack = true
+Snipe:Ready()
+requests["snipe-buy"].send()
+handlers.COMMODITY_SEARCH_RESULTS_UPDATED(nil, nil, 42)
+assert(Snipe.pending.phase == "planned" and #starts == 1, "planned, no price asked in the background")
+assert(Snipe:BuyNext() == "checking" and #starts == 2, "the click asks")
+assert(Snipe.pending.phase == "asking" and not Snipe.pending.auto)
+handlers.COMMODITY_PRICE_UPDATED(nil, nil, nil, 2340)
+assert(Snipe:BuyNext() == true and #confirms == 2, "the next click pays")
+handlers.COMMODITY_PURCHASE_SUCCEEDED()
+
+-- 20. Slower searches while a ready deal waits.
+Snipe.pending = { auto = true, phase = "quoted", find = c }
+Snipe:Later()
+assert(lastWait == Snipe.REST * 3, "rests longer")
+Snipe.pending = nil
+Snipe:Later()
+assert(lastWait == Snipe.REST, "back to the usual rest")
+
+Snipe.viewShown, Snipe.noAutoStack, Snipe.finds, Snipe.running = nil, nil, {}, false
+C_AuctionHouse, GetMoney, ns.AHQueue = nil, nil, nil
+C_Timer, GetTime = oldTimer, oldGetTime
 
 print("test_snipe: all passed")
