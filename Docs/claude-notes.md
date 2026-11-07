@@ -1062,6 +1062,28 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
   partners are left to the usual check. `SendSoon` is the reusable way to
   send any one character's change quickly. Tested in
   `tools/test_linksales.lua`.
+  Share Shopping Lists (the owner, 2026-11-07, quick build): "Share
+  Shopping Lists:" under YOUR OTHER ACCOUNT, `linkShareLists`, off unless
+  ticked on both sides, never rename it. Only the account's own lists
+  (name, item IDs, want, have) and its craft queue's list
+  (`ShoppingLists:QueueLines`) go (`AccountLink:OwnLists`, at most
+  `MAX_LIST_ITEMS`), never what it took from a partner, so nothing is
+  relayed. The manifest carries their hash under `lists`
+  (`AccountLink.LISTS_KEY`; "off" while unticked; older versions skip the
+  key, it is no GUID); a new hash is asked for with V and answered with U
+  `{ hash, data }`. The receiver keeps them, only while its own tick is
+  on, in `linkedShoppingLists[partner name key] = { from, at, hash, lists,
+  queue }` (never rename it; `CleanLists` strips colour codes, junk and
+  bad counts), dropped when either side unticks (`ListsTicked`,
+  `DropLists`, an "off" hash) or by `Forget`. `ShoppingLists:Linked()`,
+  `LinkedList(key)` and `LinkedLines(key)` show them read only, keyed
+  `link:<partner>:q` and `link:<partner>:<n>`, named "Craft queue (NAME)"
+  and "LIST (NAME)", at the end of the Lists view (Search works, no
+  tools, "Other account has N, needs M"), and Snipe's My Lists takes what
+  they still need. A list change (`ShoppingLists` `Changed`, not `Touch`)
+  or `Queue:Notify` calls `AccountLink:ListsChanged`, which uses
+  `SendSoon(LISTS_KEY)`, so it goes in about 5 s. Tested in
+  `tools/test_linklists.lua`. Not yet seen in game.
 - `Logic/GuildPrices.lua`: on by default since 2026-10-07 (`guildPrices`). Guildmates'
   prices are kept apart in `guildPrices[realm][itemID]` and only fill gaps
   in `Prices:GetValue`: an item never scanned, or one gone stale while
