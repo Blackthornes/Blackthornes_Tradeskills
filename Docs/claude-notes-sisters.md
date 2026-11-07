@@ -204,14 +204,18 @@ quest's Crafted tab) calls, inside a pcall, through its
 
 ```lua
 ns.Queue:Ensure(recipeID, quantity)         -- at least that many queued; true, or nil and why
-ns.Queue:EnsureBuy(itemID, count, forItem)  -- that many on the list to buy for forItem; true, or nil and why
-ns.Queue:ForUpgrade(itemID)                 -- "craft", "buy" or nil: what the queue holds for the gear
+ns.Queue:EnsureBuy(itemID, count, forItem, forRecipe)  -- that many on the list to buy for forItem; true, or nil and why
+ns.Queue:ForUpgrade(itemID, recipeID)       -- "craft", "buy" or nil: what the queue holds for the gear
 ns.Queue:ShowQueue()                        -- opens the window on the Queue tab
 ```
 
 Gear the character or an alt can make is queued; gear it still has to
 learn has its materials put on the list to buy; gear nobody makes goes on
-the list itself. The list to buy is `queueBuys` (account wide, each line
+the list itself. Since 2026-11-07 a pattern's materials come with
+`forRecipe` (`crafts = 1`), so learning it queues the craft
+(`QueueLearned`), `Queue:Ensure` drops lines for that recipe
+(`DropBoughtFor`), and `ForUpgrade(itemID, recipeID)` finds them by
+recipe. Tested in `tools/test_queuebuys.lua`. The list to buy is `queueBuys` (account wide, each line
 kept for its `owner`, never rename it). A line goes when the gear's craft
 is queued (`Queue:Add`), when the gear is owned or worn, with its row's x
 on the Queue tab, or with Clear all. Keep these four stable; if one
