@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.16.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Shared prices on linked accounts.** If you play on two accounts that name each other, each account's newest auction prices now go across too, with no tick box to find. The newer price wins, and nothing taken is passed on to anyone else.
+
 ## 1.16.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
