@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.14.0", lines = {
+        "Ready to sell rows now show the auction house deposit. It turns orange when it costs more than the item sells for.",
+    } },
     { version = "1.12.0", lines = {
         "A Buy It button on the Snipe tab buys the top find.",
         "Snipe can watch your shopping lists. Pick My Lists under Watch.",
@@ -14,8 +17,5 @@ ns.WHATS_NEW = {
     } },
     { version = "1.11.0", lines = {
         "A new strip sits under the recipe in your Enchanting window. Pick an item, then click Enchant. It starts off. Turn it on in Settings, on the Look page.",
-    } },
-    { version = "1.10.0", lines = {
-        "Two new settings let Tradeskills stay shut at the auction house and beside your professions until you open it. Both start on. Find them in Settings, on the Auction House page.",
     } },
 }

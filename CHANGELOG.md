@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.14.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Auction deposit.** Ready to sell rows now show the auction house deposit. It turns orange when the deposit is more than the item sells for.
+
 ## 1.13.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
