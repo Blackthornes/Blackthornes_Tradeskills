@@ -193,9 +193,27 @@ local function CreateRow(row)
     row.qty:SetPoint("TOPRIGHT", row.price, "BOTTOMRIGHT", 0, -1)
 end
 
+--- A find made ready before the click (quoted or planned, not yet asked
+--- for by the player).
+local function ReadyFor(find)
+    local pending = Snipe().pending
+    return pending and pending.auto and pending.find == find
+        and (pending.phase == "quoted" or pending.phase == "planned") and Snipe().armed ~= pending
+end
+
 local function IsPending(find)
     local pending = Snipe().pending
-    return pending and pending.find == find
+    if not (pending and pending.find == find) then return false end
+    -- A quiet ready still shows its price; only its badge changes. One the
+    -- player has clicked once (armed) shows Click Again.
+    if pending.auto and Snipe().armed ~= pending then return false end
+    return true
+end
+
+--- "Buy Linen Cloth x20 for 1g 20s": what one click on Buy It does.
+local function ReadyText(pending)
+    local count = pending.count or (pending.find and pending.find.qty) or 1
+    return L.Format("Buy %s x%d for %s", ItemName(pending.itemID), count, Money(pending.total or pending.expected))
 end
 
 local function UpdateRow(row, find)
@@ -205,7 +223,11 @@ local function UpdateRow(row, find)
     row.price:SetText(Colored(find.price))
     row.average:SetText(Colored(find.worth))
     local qty = find.qty or 1
-    row.qty:SetText(qty > 1 and ("x" .. qty) or "")
+    if find.left and find.left > 0 then
+        row.qty:SetText(L.Format("%d left", find.left))
+    else
+        row.qty:SetText(qty > 1 and ("x" .. qty) or "")
+    end
 
     local pending = Snipe().pending
     local busy = IsPending(find)
@@ -223,6 +245,10 @@ local function UpdateRow(row, find)
         else
             row.badge:SetText(L["Asking..."])
         end
+        row.badge:SetTextColor(Theme.Unpack("accent"))
+        row.edge:Show()
+    elseif ReadyFor(find) then
+        row.badge:SetText(L["Ready"])
         row.badge:SetTextColor(Theme.Unpack("accent"))
         row.edge:Show()
     else
@@ -262,9 +288,13 @@ local function ClickRow(find, _, mouseButton)
     local snipe = Snipe()
     if not find then return end
     local pending = snipe.pending
-    if pending then
-        if pending.find == find and pending.phase == "quoted" then snipe:Pay() end
-    else
+    if pending and pending.find == find then
+        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+    elseif pending and pending.auto and snipe.armed ~= pending then
+        -- A quiet ready for another row gives way to the row clicked.
+        snipe:CancelBuy()
+        snipe:Buy(find)
+    elseif not pending then
         snipe:Buy(find)
     end
 end
@@ -614,7 +644,7 @@ end
 function SnipeView:BuyWidth(text)
     local width = 80
     if Theme.MeasureText then
-        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Click Again"], text }) do
+        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Click Again"], text }) do
             local ok, measured = pcall(Theme.MeasureText, "small", word)
             if ok and type(measured) == "number" then width = math.max(width, measured + 20) end
         end
@@ -628,7 +658,8 @@ function SnipeView:BuyState()
     local pending = snipe and snipe.pending
     if pending then
         if snipe.armed == pending then return L["Click Again"], true end
-        if pending.phase == "quoted" then return L.Format("Pay %s", Money(pending.total)), true end
+        if pending.phase == "quoted" or pending.phase == "planned" then return ReadyText(pending), true end
+        if pending.auto then return L["Checking..."], false end
         return L["Asking..."], false
     end
     return L["Buy It"], #self:SortedFinds() > 0
@@ -638,13 +669,9 @@ end
 function SnipeView:BuyTop()
     local snipe = Snipe()
     if not snipe then return end
-    local pending = snipe.pending
-    if pending then
-        if pending.phase == "quoted" then snipe:Pay() end
-    else
-        local top = self:SortedFinds()[1]
-        if top then snipe:Buy(top) end
-    end
+    -- The same as the Snipe: Buy Top key: pay for what's ready, else ask
+    -- for the top row as the list shows it (Snipe.topFn).
+    snipe:BuyNext()
     self:Changed()
 end
 
@@ -664,6 +691,14 @@ function SnipeView:SetShown(on)
     if self.empty and not self.shown then self.empty:Hide() end
     if self.strip then self.strip:SetShown(self.shown and self:StripOpen()) end
     if self.shown then self.key = nil end
+    local snipe = Snipe()
+    if snipe then
+        -- Snipe readies the top deal while this list shows, by the list's
+        -- own order, so Buy It and the key buy the row on top.
+        snipe.viewShown = self.shown
+        snipe.topFn = self.shown and function() return SnipeView:SortedFinds()[1] end or nil
+        if self.shown and snipe.ReadySoon then snipe:ReadySoon() end
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -678,12 +713,15 @@ function SnipeView:Refresh(force)
     local key = table.concat({
         tostring(snipe.version), tostring(running), tostring(snipe:Spent()), tostring(snipe:Cap()),
         tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()), snipe:Watch(),
-        pending and (pending.phase .. tostring(pending.total)) or "-", tostring(snipe.armed ~= nil),
+        pending and (pending.phase .. tostring(pending.total) .. tostring(pending.auto) .. tostring(pending.count)) or "-",
+        tostring(snipe.armed ~= nil),
         tostring(#(snipe:Finds() or {})), tostring(snipe:ListChoice()),
         tostring(ns.ShoppingLists and ns.ShoppingLists.version), tostring(self.held ~= nil),
     }, "|")
     if not force and key == self.key then return end
     self.key = key
+    -- The order may have moved (a sort, the list let go): ready its top.
+    if snipe.ReadySoon then snipe:ReadySoon() end
 
     self.head.text:SetText((self:StripOpen() and "- " or "+ ") .. L["SNIPE SETTINGS"])
     if ns.ShoppingLists and self.listVersion ~= ns.ShoppingLists.version then
