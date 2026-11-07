@@ -204,6 +204,20 @@ check("knows it and has the skill", c.canDisenchant, true)
 check("then no alt is named", c.enchanter, nil)
 check("short of the skill", Butler:Advise(4).canDisenchant, false)
 
+-- Forever's spell checks can say no for a character that disenchants: the
+-- Enchanting on its own record still counts (a German client's enchanter
+-- was told nobody could break its Always disenchant list, 2026-11-07).
+knows = false
+Butler:Forget()
+check("Enchanting on record, spell check says no", Butler:Advise(1).canDisenchant, true)
+check("and still short of the skill", Butler:Advise(4).canDisenchant, false)
+ns.db.characters[SELF].professions = nil
+Butler:Forget()
+check("no Enchanting and the spell check says no", Butler:Advise(1).canDisenchant, false)
+knows = true
+ns.db.characters[SELF].professions = { { name = "Enchanting", skillLevel = 150 } }
+Butler:Forget()
+
 print("\nthe queue")
 check("own crafts use less what it makes", Butler:Advise(1).need, nil)
 check("own crafts use less what is in the bank", Butler:Advise(3).need, 8)

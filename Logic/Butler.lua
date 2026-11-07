@@ -32,8 +32,9 @@
 --   disenchant     copper a disenchant of one is likely to give
 --                  (Disenchant:GetValue), nil when it cannot be broken or
 --                  its material has no price.
---   canDisenchant  true when the character playing knows Disenchant and has
---                  the Enchanting skill this one needs; false when not, or
+--   canDisenchant  true when the character playing has the Enchanting skill
+--                  this one needs (or knows Disenchant with no skill on
+--                  record yet); false when not, or
 --                  when it cannot be disenchanted at all.
 --   enchanter      when the character playing cannot: the short name of the
 --                  disenchanter typed in Settings, else of the alt on this
@@ -684,9 +685,11 @@ local function Breaking(itemID, kept, quality)
         return skill ~= nil and (needs == nil or skill >= needs)
     end
 
-    -- Knowing the spell with no skill on record yet counts as able.
-    local can = kept.knows ~= false
-        and (Enough(kept.selfSkill) or (kept.selfSkill == nil and kept.knows == true))
+    -- Enchanting on this character's own record is enough: it teaches
+    -- Disenchant, and on Forever the spell checks can say no for one that
+    -- disenchants (as ItemTooltip.CanDisenchant has it). Knowing the spell
+    -- with no skill on record yet counts as able too.
+    local can = Enough(kept.selfSkill) or (kept.selfSkill == nil and kept.knows == true)
     if can then return value, true, nil end
 
     local chosen = kept.chosen

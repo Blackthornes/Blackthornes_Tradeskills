@@ -159,7 +159,13 @@ check("every recipe yellow: nothing", For(1), nil)
 ns.db.characters[SELF].professions = { { name = "Enchanting", skillLevel = 50 } }
 ns.Disenchanter.Knows = function() return false end
 Butler:Forget()
+-- Forever's spell checks can say no for one that disenchants: the
+-- Enchanting on record still counts.
+check("spell check says no, Enchanting on record: still", For(1) ~= nil, true)
+ns.db.characters[SELF].professions = nil
+Butler:Forget()
 check("can't disenchant: nothing", For(1), nil)
+ns.db.characters[SELF].professions = { { name = "Enchanting", skillLevel = 50 } }
 
 print("\nthe disenchanter playing (for Butler's Disenchant greens here)")
 local here = false
