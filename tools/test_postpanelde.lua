@@ -84,7 +84,7 @@ ns.Widgets = {
 
 
 ns.Util = { GetItemQualityColor = function() end, FormatMoney = function(c) return tostring(c) end }
-ns.COLORS = { profit = "ff4fd18b" }
+ns.COLORS = { profit = "ff4fd18b", warn = "ffe8c15a" }
 
 local values = { [1] = 800, [2] = 1400 }
 ns.Disenchant = { GetValue = function(_, itemID) return values[itemID] end }
@@ -146,6 +146,21 @@ do
     PlaceDetail(row, 24)
     check("a wrapped name pushes the price line down", points.TOPLEFT == -30 and points.TOPRIGHT == -30)
     check("and the row grows to hold it", row.name.rowNeed == 40)
+end
+
+-- The deposit on the price line (asked 2026-11-07): plain, orange when it is
+-- more than the listing sells for, and nothing while none is known.
+do
+    local DepositText, Over = PostPanel._DepositText, PostPanel._DepositOverSale
+    check("no deposit known, nothing on the line", DepositText({ postTotal = 78 }) == "")
+    local plain = DepositText({ deposit = 100, postTotal = 120 })
+    check("a deposit under the sale shows plainly", plain:find("Deposit 100", 1, true) and not plain:find("|c", 1, true))
+    check("and is not over the sale", not Over({ deposit = 100, postTotal = 120 }))
+    local warned = DepositText({ deposit = 100, postTotal = 78 })
+    check("a deposit over the sale says so in orange",
+        warned:find("more than it sells for", 1, true) and warned:find("|cffe8c15a", 1, true))
+    check("and is over the sale", Over({ deposit = 100, postTotal = 78 }))
+    check("a bigger deposit shows its real amount", DepositText({ deposit = 420, postTotal = 9000 }):find("Deposit 420", 1, true))
 end
 
 print(("\n%d check(s) passed\n"):format(checks))

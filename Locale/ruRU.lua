@@ -3425,3 +3425,9 @@ L["Hidden Items"] = "Скрытые предметы"
 L["You hid these from the Sell tab. Click Restore to bring one back."] = "Эти предметы скрыты со вкладки «Продажа». Нажми «Восстановить», чтобы вернуть предмет."
 L["Restore All"] = "Восстановить все"
 L["Nothing is hidden."] = "Ничего не скрыто."
+
+-- The deposit on Ready to sell (2026-11-07).
+L["Deposit %s"] = "Залог %s"
+L["Deposit %s, more than it sells for"] = "Залог %s, больше цены продажи"
+L["You get the deposit back when it sells. You lose it if it doesn't."] = "Залог вернётся, когда предмет продастся. Если не продастся, ты его потеряешь."
+L["The deposit is more than this sells for."] = "Залог больше цены продажи."
