@@ -6,4 +6,7 @@
         BlackthornesTS.UI:Toggle()
     </Binding>
     <Binding name="CLICK BlackthornesTSDisenchant:LeftButton" category="ADDONS"/>
+    <Binding name="BLACKTHORNESTS_SNIPEBUY" category="ADDONS">
+        if BlackthornesTS.Snipe then BlackthornesTS.Snipe:BuyNext() end
+    </Binding>
 </Bindings>

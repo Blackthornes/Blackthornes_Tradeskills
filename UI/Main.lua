@@ -938,6 +938,9 @@ end
 _G.BINDING_HEADER_BLACKTHORNESTS = "Blackthornes Tradeskills"
 _G.BINDING_NAME_BLACKTHORNESTS_TOGGLE = L["Open or close the window"]
 _G["BINDING_NAME_CLICK BlackthornesTSDisenchant:LeftButton"] = L["Disenchant the picked item"]
+-- The Snipe key buys the top find, as a click on its gold button does. A key
+-- press counts as the player's own action, so the buy goes through.
+_G.BINDING_NAME_BLACKTHORNESTS_SNIPEBUY = L["Snipe: Buy Top"]
 
 function UI:Toggle()
     self:Build()
