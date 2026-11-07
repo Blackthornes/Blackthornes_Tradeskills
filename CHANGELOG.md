@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.14.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Disenchanting.** A character with Enchanting on record now counts as able to disenchant, even when the game's spell check says no. Butler no longer says none of your characters can break your Always disenchant list.
+
 ## 1.14.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
