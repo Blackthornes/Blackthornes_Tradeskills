@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.14.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Healing potions.** Forever moved them from Alchemy to First Aid, so Road to 300 no longer tells alchemists to make Minor and Lesser Healing Potion. Other Classic recipes Forever removed are left out of the recipe book too.
+
 ## 1.14.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.14.2
+
+Fixes and changes:
+
+- Road to 300 no longer tells alchemists to make healing potions. Forever moved them to First Aid.
+
 ## 1.14.1
 
 Fixes and changes:
