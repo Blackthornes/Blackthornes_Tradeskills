@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.18.0
+
+New:
+
+- Cooking and First Aid now go all the way to 300 on the Road to 300, with the Expert and Artisan steps. Find them in the profession drop-down on the Level Up tab.
+
+Fixes and changes:
+
+- Cooking and First Aid recipes on the road are more accurate, and old campfire recipes are left out.
+
 ## 1.17.0
 
 New:
