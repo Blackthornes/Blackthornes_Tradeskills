@@ -258,5 +258,18 @@ check("which redraws the list, not the tab's view", refreshed, 1)
 tab.ShowView("nonsense")
 check("an unknown view falls back to the tab's own", tab.view, "recipes")
 
+print("\nrecipes to learn: at the average price")
+local savedProfit = ns.Profit
+ns.Profit = { NetFromListing = function(_, _, price) return price * 0.95 end }
+local info = { outputItemID = 9, cost = 50, price = 1000, yield = 1 }
+check("back from one sold at 100", View.BackAt(9, 100, 1), 95)
+check("two made, twice that", View.BackAt(9, 100, 2), 190)
+check("a vendor paying more wins", View.BackAt(9, 100, 1, 120), 120)
+check("pays for itself after (1000 / 45, rounded up)", View.PaybackAt(info, 100), 23)
+check("no profit at the average, no line", View.PaybackAt(info, 50), nil)
+check("no average, no line", View.PaybackAt(info, nil), nil)
+check("a recipe with no price, no line", View.PaybackAt({ outputItemID = 9, cost = 50 }, 100), nil)
+ns.Profit = savedProfit
+
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")
