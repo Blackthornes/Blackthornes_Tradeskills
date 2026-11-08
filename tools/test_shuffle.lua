@@ -179,11 +179,43 @@ local starts = Shuffle:Starts(true)
 check("starts are bag items some recipe uses", #starts == 2 and starts[1].itemID == ORE
     and starts[2].itemID == LINEN)
 
--- Queue It asks for each craft.
-local queued = {}
-ns.Queue = { Ensure = function(_, recipeID, count) queued[#queued + 1] = { recipeID, count }; return true end }
-check("Queue It queues each craft", Shuffle:Queue(belts) == true and #queued == 2
-    and queued[1][1] == 300 and queued[1][2] == 10 and queued[2][1] == 400 and queued[2][2] == 5)
+-- Queue It asks for each craft, the last first.
+local queued, subCrafts = {}, {}
+ns.Queue = {
+    Ensure = function(_, recipeID, count) queued[#queued + 1] = { recipeID, count }; return true end,
+    GetAll = function() return subCrafts end,
+}
+local okQueue, done = Shuffle:Queue(belts)
+check("Queue It queues each craft", okQueue == true and #queued == 2
+    and queued[1][1] == 400 and queued[1][2] == 5 and queued[2][1] == 300 and queued[2][2] == 10
+    and done[1].recipeID == 300 and done[1].crafts == 10 and done[2].crafts == 5)
+
+-- The belts make their bars as a sub-craft: the bars aren't queued again.
+queued = {}
+subCrafts[1] = { recipeID = 300, quantity = 10, isDependency = true, forRecipes = { [400] = true } }
+okQueue, done = Shuffle:Queue(belts)
+check("a craft made as a sub-craft isn't queued twice", okQueue == true and #queued == 1
+    and queued[1][1] == 400 and done[1].crafts == 0)
+
+-- With bars to spare, only the spare ones are queued at the top.
+queued = {}
+local spare = { start = belts.start, crafts = {
+    { recipeID = 300, crafts = 14, known = true, takes = 14, uses = ORE, output = BAR, yield = 1 },
+    { recipeID = 400, crafts = 5, known = true, takes = 10, uses = BAR, output = BELT, yield = 1 },
+} }
+for key, value in pairs(belts) do if spare[key] == nil then spare[key] = value end end
+okQueue, done = Shuffle:Queue(spare)
+check("only what's left over is queued at the top", okQueue == true and #queued == 2
+    and queued[2][1] == 300 and queued[2][2] == 4 and done[1].crafts == 4)
+
+-- Bars already in the bags count the same way.
+queued, subCrafts = {}, {}
+local inventory = ns.Inventory
+ns.Inventory = { GetBagCounts = inventory.GetBagCounts,
+    GetOwnedCount = function(_, itemID) return itemID == BAR and 10 or 0 end }
+okQueue, done = Shuffle:Queue(spare)
+check("bars in the bags cover the belts", okQueue == true and queued[2][2] == 4)
+ns.Inventory = inventory
 check("Queue It does nothing for a way with an unknown craft", Shuffle:Queue(axe) == nil)
 
 -- Add to List, twice.
