@@ -243,6 +243,23 @@ demand[BELT] = "some"
 settings.expectedRelists = 1
 check("some demand loses none", Profit.LostListings(BELT), 0)
 ns.Demand = nil
+
+print("")
+print("a craft that stacks pays only its share of a deposit")
+
+-- A player's report (2026-11-08): an oil that stacks to 20, from 2s of
+-- materials, selling at 2s 60c, read as a 54c loss, since each craft was
+-- charged the whole 1s least deposit. A stack pays one deposit.
+settings.expectedRelists = 2
+local whole = Profit:Analyse(RECIPE, nil, "auction")
+check("sold one a listing, a craft pays the whole 1s", whole.deposit, 100)
+local db = ns.db
+ns.db = { deposits = { [BELT] = { unit = 3, quantity = 20 } } }
+a = Profit:Analyse(RECIPE, nil, "auction")
+check("listed 20 at a time, one craft pays 1s spread over 20", a.deposit, 5)
+check("the deposit held up front is still the listing's 1s", a.depositHeld, 100)
+check("and the profit is 95c better", math.floor((a.profit - whole.profit) * 100 + 0.5), 9500)
+ns.db = db
 settings.expectedRelists = 2
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end

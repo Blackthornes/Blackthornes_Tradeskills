@@ -37,13 +37,6 @@ local function HeldDeposit(itemID, quantity)
     return unit and math.max(LeastDeposit(), math.floor(unit * quantity + 0.5)) or nil
 end
 
---- The deposit a listing that runs out keeps: what the auction house said
---- before, else the least any listing pays. An item never listed used to
---- count as no deposit at all, so a cheap, slow seller looked free to list.
-local function LostDeposit(itemID, quantity)
-    return HeldDeposit(itemID, quantity) or LeastDeposit()
-end
-
 --- Net profit for one craft, if a unit sold at this price.
 --
 -- The same arithmetic Analyse does, split out so the price can be chosen by
@@ -55,7 +48,8 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
     local revenue = unitPrice * yield
     local cut = revenue * (ns.Config:Get("auctionCut") or 0.05)
 
-    local deposit = LostDeposit(recipe.outputItemID, yield) * Profit.LostListings(recipe.outputItemID)
+    local deposit = Profit.LostDepositEach(recipe.outputItemID) * yield
+        * Profit.LostListings(recipe.outputItemID)
 
     return (revenue - cut) - (cost.total or 0) - deposit
 end
@@ -944,8 +938,14 @@ function Profit:Analyse(recipeID, characterKey, method)
 
         -- The deposit is paid up front and comes back when the item sells,
         -- so only the listings expected to run out first cost it.
+        -- Each item's share of a listing's deposit, not a whole listing's:
+        -- one craft goes up in a stack with the rest, and a stack pays one
+        -- deposit. Charging the 1s least deposit to every craft made a
+        -- 2s 60c oil from 2s of materials read as a 54c loss (a player's
+        -- report, 2026-11-08), and ten queued as a 5s loss.
         local held = HeldDeposit(recipe.outputItemID, yield)
-        local deposit = (held or LeastDeposit()) * Profit.LostListings(recipe.outputItemID)
+        local deposit = Profit.LostDepositEach(recipe.outputItemID) * yield
+            * Profit.LostListings(recipe.outputItemID)
 
         ways.auction = { unit = listPrice, revenue = revenue, cut = cut, deposit = deposit,
             depositHeld = held, depositKnown = held ~= nil, basis = listBasis, uncertain = listUncertain,
