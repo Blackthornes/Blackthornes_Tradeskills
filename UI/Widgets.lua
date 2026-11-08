@@ -953,6 +953,13 @@ local function ShortOptionText(text)
     return type(text) == "string" and text:match("^[^:]+:%s+(.+)$") or text
 end
 
+--- Frame strata from lowest to highest, so an opened menu is only ever
+--- raised, never lowered.
+Widgets.MENU_STRATA_RANK = {
+    BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
+    FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
+}
+
 --- Minimal dropdown. options is an array of { text, value }.
 --
 -- An option with `header = true` is a line of dim words that cannot be
@@ -989,7 +996,7 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     end
 
     local menu = Theme.CreatePanel(parent, "panel", "borderLit")
-    menu:SetFrameStrata("DIALOG")
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
     -- A box at the foot of a window opens upward (opts.up), so its menu
     -- stays over the window rather than hanging below it.
     if opts.up then
@@ -1221,7 +1228,13 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
             if menu:GetParent() ~= UIParent then menu:SetParent(UIParent) end
             local scale = dropdown:GetEffectiveScale() / UIParent:GetEffectiveScale()
             if type(scale) == "number" and scale > 0 then menu:SetScale(scale) end
-            menu:SetFrameStrata("DIALOG")
+            -- Over every window, Rules and Settings included: a menu at
+            -- DIALOG opened behind a DIALOG window's rows. Never lowered
+            -- below a strata a caller already set.
+            local now = menu.GetFrameStrata and menu:GetFrameStrata()
+            if (Widgets.MENU_STRATA_RANK[now] or 0) < Widgets.MENU_STRATA_RANK.FULLSCREEN_DIALOG then
+                menu:SetFrameStrata("FULLSCREEN_DIALOG")
+            end
         end)
     end
 
