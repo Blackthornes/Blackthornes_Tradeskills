@@ -1788,3 +1788,12 @@ The setting is still `enchantWindow`, off unless ticked; the old window's
 saved place and size stay in the save, unread. `/bts probe` has "enchant
 strip" lines. Tested in `tools/test_enchantstrip.lua`. Not yet seen in
 game.
+
+## Crafted Only on Sell
+
+A player asked, the owner said build it (2026-11-08): a "Crafted Only" tick
+box on the auction house drawer's Sell view, between Hidden and Overcutting.
+Ticked, Sell shows only lines a recipe of yours makes (`line.isCrafted`,
+`PostPanel.CraftedLines` in `PostPanel:ShownLines`), so List Next and List
+All work through those only. Off unless ticked: `postCraftedOnly`, never
+rename it. Tested in `tools/test_postcraftedonly.lua`. Not yet seen in game.
