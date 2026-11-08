@@ -390,8 +390,21 @@ rows, the step to do now `glassActive`). The plan is worked out only
 while the view shows, its prices a few recipes a frame
 (`RoadPlan.BUDGET`), and kept until its key moves (skill, cap, level,
 recipes, `Inventory.changes`, `Prices.scanCount`, `Queue.version`).
-Nothing new is saved beyond Pick By. Cooking and First Aid stop at their
-last rank. "Pick By:" on the road's bar (the owner said build it, 2026-10-27, from a
+Nothing new is saved beyond Pick By. Cooking and First Aid go to 300
+(the owner said build it, 2026-11-08, from a mockup whose words he
+approved): Expert comes from a book (`how = { kind = "book", item, title,
+sellers = { A, H } }`) and Artisan from a quest chain (`how = { kind =
+"quest", chain = { A = {...}, H = {...} } }`, the last quest's giver
+teaches), on their `RoadPlan.RANKS` rows from the Forever client's game
+tables. `RoadPlan.HowNow` picks the player's side, walks the chain past
+quests done (`C_QuestLog.IsQuestFlaggedCompleted`), names them by the
+game's title and lays a seen spot (`VendorPins:SeenAt`) over the data's;
+Show the Way follows it. The step says "Learn Expert NAME" or "Learn
+Artisan NAME", "Buy BOOK from NAME in ZONE.", "Start with the quest QUEST
+from NAME in ZONE." then "It leads to NAME in ZONE, who teaches you.", and
+on the last quest "Do the quest QUEST for NAME in ZONE. Then they teach
+you."; the Artisan step shows no price. Tested in
+`tools/test_roadto300.lua`. "Pick By:" on the road's bar (the owner said build it, 2026-10-27, from a
 mockup whose words he approved) picks Lowest Cost (the default, as before)
 or Real Cost: each stretch's recipe is then chosen by what it costs less
 what selling a craft brings back (`LevelUp:GetReturns`' best, kept on
