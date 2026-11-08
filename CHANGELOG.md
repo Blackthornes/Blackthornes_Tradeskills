@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.16.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fairer listing deposits in profit.** When you list several crafts together, each craft's profit now takes only its own share of the auction deposit, not the whole thing.
+
 ## 1.16.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
