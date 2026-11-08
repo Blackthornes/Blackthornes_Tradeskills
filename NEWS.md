@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.17.0
+
+New:
+
+- The Sell tab has a Crafted Only tick box. Tick it and you only see things your own recipes make. It starts off.
+
+Fixes and changes:
+
+- Queue It in Shuffles no longer doubles a craft that is also made along the way.
+
 ## 1.16.2
 
 Fixes and changes:
