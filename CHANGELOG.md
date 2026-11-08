@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.18.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Cooking and First Aid on the Road to 300.** The Road to 300 view on the Level Up tab now takes Cooking and First Aid all the way to 300. Expert comes from a book and Artisan from a quest chain, each for your side, and Show the Way leads you to the quest giver or teacher. Both are in the profession drop-down.
+- **Better Cooking and First Aid recipes.** The Road to 300 skips old recipes Forever remade under the same name, such as Basic Campfire. Ingredients nobody sells or lists are priced at what a vendor pays, so meat recipes stay on the road past 75. Recipes you see in your Cooking window now stay on the Cooking road.
+
 ## 1.17.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
