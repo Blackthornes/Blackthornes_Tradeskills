@@ -413,6 +413,12 @@ about X." (`plan.back`, `RoadView.FootText`). "To 300:" still counts the
 gold spent. `roadPickBy` ("lowest" or "real", account wide, never rename
 it; `RoadPlan.PickBy`) is part of the plan's key.
 Tested in `tools/test_roadto300.lua`. Not yet seen in game.
+The drop-down lists them (the owner found only Enchanting and Tailoring,
+2026-11-08): `RoadPlan:Professions` takes a line `ClassicLine` does not
+know by its English name (`Recipes.EnglishProfessionName`, so a second
+Forever ID for Cooking or First Aid still lands on 185 or 129), and adds
+learned ones from the Professions book (`GetProfessions`,
+`GetProfessionInfo`, in a pcall) when the trade skill lines leave them out.
 
 ## Welcome card
 
