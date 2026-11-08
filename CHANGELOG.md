@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.19.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fishing on the Road to 300.** The Road to 300 view on the Level Up tab now takes Fishing to 300. Each step shows the pole to wear, the lure you need, the best spot you have fished, about how many catches are left and about how long that takes at your pace, with Artisan coming from the quest chain. Fishing is in the profession drop-down. There is no queue button for it, since there is nothing to craft.
+- **Price graph in Recipes to Learn and Your Time.** Both views can swap the materials list for the price graph, like My Crafts does, with a button on the heading. Under it is the average for the days shown. Recipes to Learn also says after how many crafts the recipe pays for itself at that price, and Your Time says what farming and crafting makes an hour at that price. Both start off showing the materials.
+- **Linked-account prices.** Prices now go to your linked account after any new price, not only after a full scan, so a scan cut short or a search reaches the other account too. Prices it already holds are no longer dropped when the other account has been quiet for a few days.
+
 ## 1.18.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
