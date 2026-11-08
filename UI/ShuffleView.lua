@@ -268,14 +268,18 @@ local function BuildDetail(parent)
     detail.queue = Widgets.CreateButton(detail, L["Queue It"], function()
         local way = state.selectedWay
         if not way then return end
-        local done, why = ns.Shuffle:Queue(way)
+        local done, queued = ns.Shuffle:Queue(way)
         if done then
-            for _, craft in ipairs(way.crafts) do
-                local recipe = ns.Recipes.GetAll and ns.Recipes:GetAll()[craft.recipeID]
-                ns.Print(L.Format("queued %dx %s", craft.crafts, recipe and recipe.name or L["craft"]))
+            -- What went in at the top: a craft made as a later one's
+            -- sub-craft shows under it in the queue instead.
+            for _, craft in ipairs(type(queued) == "table" and queued or way.crafts) do
+                if craft.crafts > 0 then
+                    local recipe = ns.Recipes.GetAll and ns.Recipes:GetAll()[craft.recipeID]
+                    ns.Print(L.Format("queued %dx %s", craft.crafts, recipe and recipe.name or L["craft"]))
+                end
             end
-        elseif why then
-            ns.Print(why)
+        elseif queued then
+            ns.Print(queued)
         end
     end, { width = 100, height = 22, primary = true })
     detail.queue:SetPoint("LEFT", detail.list, "RIGHT", 8, 0)
