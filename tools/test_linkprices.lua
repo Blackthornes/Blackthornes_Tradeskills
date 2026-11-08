@@ -10,6 +10,9 @@
 --   5. A stranger's prices and another realm's are never taken.
 --   6. Every message fits in one addon message.
 --   7. Old prices are let go.
+--   8. Any new price counts, a search or a scan cut short, not only a
+--      whole scan, and a newer one is asked for without waiting ten minutes.
+--   9. A partner with nothing recent to share leaves what is held alone.
 
 local saved = {}
 for _, name in ipairs({ "time", "GetTime", "UnitName", "C_ChatInfo", "C_Timer", "InCombatLockdown",
@@ -127,6 +130,7 @@ local function Scan(client, prices, at)
         table_[itemID] = { market = price, min = price - 10, rivalMin = price - 10, seen = at, scans = 1,
                            history = {}, quantity = 5 }
     end
+    client.ns.Prices.changes = (client.ns.Prices.changes or 0) + 1   -- as Prices:Record's Touch
     client.ns.db.lastFullScanByRealm = client.ns.db.lastFullScanByRealm or {}
     client.ns.db.lastFullScanByRealm[client.realmKey] = at
 end
@@ -227,6 +231,46 @@ ana.settings.linkNames = "Bob, Dora"
 Scan(dora, { [4000] = 700 }, clock - 30)
 Check(dora); Check(ana); Check(dora)
 check("another realm's prices are not taken", Value(ana, 4000), nil)
+
+--------------------------------------------------------------------------------
+print("\na search counts, and newer prices are asked for at once")
+--------------------------------------------------------------------------------
+
+local function Search(client, itemID, price, at)
+    current = client
+    client.ns.Prices:GetTable()[itemID] = { market = price, min = price, rivalMin = price, seen = at,
+                                            scans = 1, history = {}, quantity = 3 }
+    client.ns.Prices.changes = (client.ns.Prices.changes or 0) + 1   -- as Prices:Record's Touch
+end
+
+clock = clock + 120
+local stamp = ana.ns.db.lastFullScanByRealm["forever-alliance"]
+Search(ana, 2771, 300, clock - 5)
+check("a search leaves the scan stamp alone", ana.ns.db.lastFullScanByRealm["forever-alliance"], stamp)
+current = ana
+check("the manifest follows the newest price", ana.ns.AccountLink:PricesHash():match("^(%w+)@"),
+    ana.ns.Comm.ToBase36(clock - 5))
+Check(ana); Check(bob); Check(ana)
+check("Bob gets Ana's searched price", Value(bob, 2771), 300)
+
+clock = clock + 90
+Search(ana, 2772, 400, clock - 5)
+Check(ana); Check(bob); Check(ana)
+check("a newer price 90 seconds on comes too", Value(bob, 2772), 400)
+
+current = ana
+local hashBefore = ana.ns.AccountLink:PricesHash()
+check("nothing new: the manifest stays the same", ana.ns.AccountLink:PricesHash(), hashBefore)
+
+current = bob
+local heldBefore = bob.ns.AccountLink:PricesHeld("Ana")
+bob.ns.AccountLink:OnPricesHash(bob.ns.AccountLink.partners.ana, "off")
+check("off keeps what Bob holds", bob.ns.AccountLink:PricesHeld("Ana"), heldBefore)
+check("and Bob still uses it", Value(bob, 2772), 400)
+
+current = ana
+local later = clock + 4 * 24 * 3600
+check("with nothing recent the manifest says off", ana.ns.AccountLink:PricesHash(later), "off")
 
 --------------------------------------------------------------------------------
 print("\nunlinked, and pruning")

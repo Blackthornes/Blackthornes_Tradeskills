@@ -88,8 +88,13 @@ AccountLink.MAX_LIST_ITEMS = 1000
 -- `linkedPrices[realm key][partner key] = { at, count, items = { [itemID]
 -- = { market, lowest, seen } } }` (never rename it), and Prices:GetValue
 -- uses one where it was seen after this account's own (PriceFor).
--- The manifest carries `prices`: "<last scan, base 36>@<realm key>", or
--- "off". E asks for what was seen after a time; O is one batch of prices,
+-- The manifest carries `prices`: "<newest own price seen, base 36>@<realm
+-- key>", or "off". It follows the newest price this account would send
+-- (NewestOwnPrice), so a scan cut short or a search counts too, not only a
+-- whole scan. "off" lets nothing go: held prices age out by PRICES_KEEP and
+-- are used only within PRICES_USE_FOR. A newer time than the one last asked
+-- for is asked for at once (PRICES_ANSWER_GAP apart), not after
+-- PRICES_ASK_WAIT. E asks for what was seen after a time; O is one batch of prices,
 -- "<scan time>:id,market,lowest,age;..." in base 36, each batch complete
 -- in itself, so a lost one only loses its own prices.
 AccountLink.PRICES_KEY = "prices"
@@ -1002,21 +1007,50 @@ local function OurRealm()
     return type(key) == "string" and key or nil
 end
 
---- When this account last scanned its realm, or nil.
-local function LastScan()
-    local prices = ns.Prices
-    if not (prices and prices.GetLastScan) then return nil end
-    local ok, at = pcall(prices.GetLastScan, prices)
-    return ok and type(at) == "number" and at or nil
+--- Whether PriceBatches would send this record: an own price with a market
+--- value seen within the window, listed or not sold out.
+local function Sendable(prices, record, floor, now)
+    -- As Guild Prices: an item searched with nothing listed keeps a seen
+    -- time but no market value, and a sold out one an old value.
+    return type(record) == "table" and type(record.seen) == "number"
+        and record.seen > floor and record.seen <= now + 3600 and type(record.market) == "number"
+        and prices.IsCredible(record.market) and (tonumber(record.quantity) or 1) > 0
 end
 
---- "<last scan>@<realm key>" for the manifest, or "off" while not sharing
---- prices or with no scan recent enough to share.
+--- When the newest price this account would send was seen, or nil. Read
+--- again only when the price table moved (Prices.changes).
+function AccountLink:NewestOwnPrice(now)
+    local prices = ns.Prices
+    if not (prices and prices.GetTable and prices.IsCredible) then return nil end
+    now = now or time()
+    local cache = self.newestOwn
+    local changes = prices.changes or 0
+    if not (cache and cache.changes == changes and cache.table == prices:GetTable()) then
+        local table_ = prices:GetTable()
+        local newest
+        if type(table_) == "table" then
+            for itemID, record in pairs(table_) do
+                if type(itemID) == "number" and Sendable(prices, record, 0, now)
+                    and (not newest or record.seen > newest) then
+                    newest = record.seen
+                end
+            end
+        end
+        cache = { changes = changes, table = table_, newest = newest }
+        self.newestOwn = cache
+    end
+    local newest = cache.newest
+    if not newest or now - newest > self.PRICES_USE_FOR then return nil end
+    return math.min(newest, now)
+end
+
+--- "<newest own price seen>@<realm key>" for the manifest, or "off" while
+--- not sharing prices or with no price recent enough to share.
 function AccountLink:PricesHash(now)
     if not self:PricesOn() then return "off" end
-    local at, realm = LastScan(), RealmKey(OurRealm())
     now = now or time()
-    if not at or not realm or now - at > self.PRICES_USE_FOR then return "off" end
+    local at, realm = self:NewestOwnPrice(now), RealmKey(OurRealm())
+    if not at or not realm then return "off" end
     return Comm.ToBase36(math.floor(at)) .. "@" .. realm
 end
 
@@ -1032,11 +1066,7 @@ function AccountLink:PriceBatches(since, now)
 
     local ids = {}
     for itemID, record in pairs(table_) do
-        -- As Guild Prices: an item searched with nothing listed keeps a seen
-        -- time but no market value, and a sold out one an old value.
-        if type(itemID) == "number" and type(record) == "table" and type(record.seen) == "number"
-            and record.seen > floor and record.seen <= now + 3600 and type(record.market) == "number"
-            and prices.IsCredible(record.market) and (tonumber(record.quantity) or 1) > 0 then
+        if type(itemID) == "number" and Sendable(prices, record, floor, now) then
             ids[#ids + 1] = itemID
         end
     end
@@ -1095,24 +1125,31 @@ function AccountLink:AskPrices(state)
     local held = store and store[Comm.NameKey(state.name)]
     local since = type(held) == "table" and tonumber(held.at) or 0
     state.pricesAskedAt = time()
+    state.pricesAskedFor = state.pricesHeard
     Whisper("E", Comm.ToBase36(math.floor(since)), state.name)
 end
 
---- A partner's manifest said when it last scanned and where ("off" when
---- it does not share prices). Ask when that is newer than what is held.
+--- A partner's manifest said when its newest price was seen and where
+--- ("off" when it has none to share). Ask when that is newer than what is
+--- held. "off" keeps what is held: it ages out by itself (PrunePrices).
 function AccountLink:OnPricesHash(state, value)
-    if type(value) ~= "string" or not self:PricesOn() then return end
-    if value == "off" then
-        self:DropPrices(Comm.NameKey(state.name))
-        return
-    end
+    if type(value) ~= "string" or value == "off" or not self:PricesOn() then return end
     local atText, realm = value:match("^(%w+)@(.+)$")
     local at = Comm.FromBase36(atText)
     if not at or realm ~= RealmKey(OurRealm()) then return end
     local store = PriceStore(false)
     local held = store and store[Comm.NameKey(state.name)]
     if type(held) == "table" and tonumber(held.at) and held.at >= at then return end
-    if state.pricesAskedAt and time() - state.pricesAskedAt < self.PRICES_ASK_WAIT then return end
+    state.pricesHeard = at
+    if state.pricesAskedAt then
+        local since = time() - state.pricesAskedAt
+        -- Asked for this one already: wait for the answer a while.
+        -- Something newer since: ask again, though not within the minute
+        -- the partner waits between answers.
+        local newer = not state.pricesAskedFor or at > state.pricesAskedFor
+        if since < self.PRICES_ANSWER_GAP + 5 then return end
+        if not newer and since < self.PRICES_ASK_WAIT then return end
+    end
     self:AskPrices(state)
 end
 
