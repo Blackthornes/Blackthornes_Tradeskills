@@ -1409,6 +1409,19 @@ Favors, Lists) take the wheel only when they have more rows to show
 (`list:WheelPass`, `list.canScroll` in `UI/Widgets.lua`'s scroll list), so a
 turn over a short list lists instead of doing nothing.
 
+Passed over (the owner, 2026-11-08: wheel up "still breaks and stops
+working"): the Sell list's next stack was picked at the price it was
+drawn with, then refused at the checked price (`RefusesEarly`: under the
+floor or its cost) or asked about in the box, and it stayed next, so
+every click and turn hit it again. Now a refused stack, one the game
+won't auction, or one Skipped in the box (not a box replaced by the
+next, `reason == "override"`) is passed over for the visit
+(`Posting:PassOver`, `IsPassedOver`): `GetNextPostable` and
+`GetSummary` skip it. `SetChosenPrice` and `ForgetChecks` (leaving the
+auction house) give it another go. A busy auction house, a throttle or a
+full queue never passes over. Nothing saved. Tested in
+`tools/test_passover.lua`.
+
 ## Odd scans and the price floor
 
 A player's Fine Leather Cloak sold for about 10s for days, then one scan saw
