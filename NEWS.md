@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.16.2
+
+Fixes and changes:
+
+- Each craft's profit now counts only its own share of the auction house deposit.
+
 ## 1.16.1
 
 - If you play on two accounts, they now share the newest auction prices with each other. Nothing to turn on.
