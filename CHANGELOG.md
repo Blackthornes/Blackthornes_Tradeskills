@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.17.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Crafted Only on the Sell tab.** A new Crafted Only tick box at the auction house hides everything your recipes don't make. It starts off.
+- **Various bug fixes for Tradeskills.** Shuffles' Queue It no longer doubles a craft that is also made as a sub-craft.
+
 ## 1.16.2
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
