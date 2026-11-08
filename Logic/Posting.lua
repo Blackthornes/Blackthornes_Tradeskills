@@ -894,6 +894,8 @@ function Posting:SetChosenPrice(itemID, price)
     else
         self.chosenPrice[itemID] = nil
     end
+    local passed = rawget(self, "passedOver")
+    if type(passed) == "table" then passed[itemID] = nil end
     Posting.changes = (Posting.changes or 0) + 1
 end
 
@@ -1439,7 +1441,8 @@ function Posting:GetNextPostable(opts, lines)
 
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not self:IsUnderFloor(line) then
+            and not line.held and not self:IsUnderFloor(line)
+            and not self:IsPassedOver(line.itemID) then
             if skipSettling and self:PendingFor(line.itemID) then
                 settling = true
             else
@@ -1459,7 +1462,8 @@ function Posting:GetSummary(opts, lines)
     local count, total = 0, 0
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not self:IsUnderFloor(line) then
+            and not line.held and not self:IsUnderFloor(line)
+            and not self:IsPassedOver(line.itemID) then
             count = count + 1
             total = total + (line.total or 0)
         end
@@ -1559,6 +1563,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     local sellable, available = self:GetSellInfo(itemID)
     if not sellable then
         ns.Print(L.Format("%s cannot be auctioned", Util.GetItemLabel(itemID)))
+        self:PassOver(itemID)
         return false
     end
 
@@ -1627,6 +1632,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
             Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or L["the price looks wrong"]))
         ns.Warn(L.Format("expected at least %s. Run a scan, or list it by hand.",
             Util.FormatMoney(floor)))
+        self:PassOver(itemID)
         return false
     end
 
@@ -1874,9 +1880,11 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
     -- "override" is the game replacing this dialog with the next one (a
     -- second List click while it was open): not a skip, and clearing the
     -- listing here left the new dialog's Yes with nothing to list.
-    OnCancel = function(_, _, reason)
+    OnCancel = function(self, _, reason)
         if reason == "override" then return end
+        local data = (self and self.data) or Posting.confirming
         Posting.confirming = nil
+        if data then Posting:PassOver(data.itemID) end
         ns.Print(L["skipped."])
     end,
 
@@ -2176,6 +2184,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
         ns.Warn(L.Format("not listing %s at %s: %s. Expected at least %s.",
             Util.GetItemLabel(itemID), Util.FormatMoney(price), why or L["the price looks wrong"],
             Util.FormatMoney(floor)))
+        self:PassOver(itemID)
         return true
     end
 
@@ -2185,6 +2194,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
         ns.Warn(L.Format("not listing %s at %s, the materials cost %s",
             Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(unitCost)))
         ns.Warn(L["turn on 'Recommend selling at a loss' in Settings to allow it."])
+        self:PassOver(itemID)
         return true
     end
 
@@ -2193,6 +2203,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
     if paid then
         ns.Warn(ns.CraftedCost:RefusalText(itemID, price, paid, net) .. ".")
         ns.Warn(L["turn off 'Never below what I paid' in Settings to allow it."])
+        self:PassOver(itemID)
         return true
     end
 
@@ -2256,10 +2267,30 @@ end
 
 --- Forget every check: the auction house closed, and prices move while away.
 function Posting:ForgetChecks()
+    self.passedOver = {}
     self.checkedAt = {}
     self.checkedSuffix = {}
     self.bulkTried = {}
     self.checkAll = nil
+end
+
+--- Passed over for the rest of this visit: its listing was refused at the
+--- price the check found, or the player skipped it in the box. Without this
+--- the same stack stayed next on the list, so every List Next click and
+--- wheel turn refused or asked about it again and nothing after it was ever
+--- listed (the owner's report, 2026-11-08: the wheel "still breaks and
+--- stops working"). Closing the auction house or setting the item's price
+--- by hand gives it another go.
+function Posting:PassOver(itemID)
+    if not itemID then return end
+    if type(rawget(self, "passedOver")) ~= "table" then self.passedOver = {} end
+    self.passedOver[itemID] = true
+    Posting.changes = (Posting.changes or 0) + 1
+end
+
+function Posting:IsPassedOver(itemID)
+    local passed = rawget(self, "passedOver")
+    return type(passed) == "table" and itemID ~= nil and passed[itemID] == true
 end
 
 --- Was this item in a search of the whole list lately? Then one that came
