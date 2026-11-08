@@ -420,6 +420,15 @@ Forever ID for Cooking or First Aid still lands on 185 or 129), and adds
 learned ones from the Professions book (`GetProfessions`,
 `GetProfessionInfo`, in a pcall) when the trade skill lines leave them out.
 
+
+Cooking and First Aid (a player's report via the owner, 2026-11-08: the
+road was all Basic Campfire and stopped at 75): a Classic recipe that
+Forever remade under the same name in the same line (Basic Campfire,
+grey at 5 on Forever) is left out of `RoadPlan:Candidates`, and
+`RoadPlan.Price` values a material nobody lists or sells (raw meat,
+clams) at what a vendor pays for it (`RoadPlan.SellValue`,
+`Util.GetVendorSellPrice`); only a material with neither leaves the
+recipe off the road. Tested in `tools/test_roadto300.lua`.
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first
