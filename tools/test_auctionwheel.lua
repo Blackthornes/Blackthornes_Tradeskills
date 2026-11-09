@@ -4,7 +4,8 @@
 --   1. Off unless ticked: nothing is bound, whatever the drawer does.
 --   2. Ticked, the wheel is bound only while the drawer shows, and given
 --      back when it goes.
---   3. Wheel up lists the next stack, wheel down cancels the next undercut.
+--   3. The tab picks the job: on Sell either turn lists, on Auctions
+--      either turn cancels the next undercut, other tabs leave the wheel be.
 --   4. A flick (notches close together) does one thing, not several.
 --   5. In a fight the bindings wait for the fight to end.
 --   6. A press and its release do one thing.
@@ -93,12 +94,30 @@ Show()
 assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "wheel up is bound to the list button")
 assert(bindings.MOUSEWHEELDOWN == Wheel.CANCEL_BUTTON, "wheel down is bound to the cancel button")
 
--- 3. Each direction does its job, through the named buttons a binding clicks.
+-- 3. The tab showing picks the job, through the named buttons a binding
+-- clicks. On Sell either turn lists; nothing cancels there.
 named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
-assert(listed == 1, "wheel up lists the next stack")
+assert(listed == 1, "wheel up lists the next stack on Sell")
 clock = clock + 1
 named[Wheel.CANCEL_BUTTON].scripts.OnClick(nil, "LeftButton", true)
-assert(cancelled == 1, "wheel down cancels the next undercut")
+assert(listed == 2 and cancelled == 0, "wheel down lists on Sell too, and never cancels there")
+listed = 1
+-- On Auctions either turn cancels the next undercut one; nothing lists.
+ns.PostPanel.view = "auctions"
+clock = clock + 1
+named[Wheel.CANCEL_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+clock = clock + 1
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(cancelled == 2 and listed == 1, "on Auctions both turns cancel and nothing lists")
+-- On a tab with no wheel job, the wheel is the player's.
+ns.PostPanel.view = "buy"
+Wheel:Update()
+assert(next(bindings) == nil, "the wheel isn't taken on Buy")
+clock = clock + 1
+assert(Wheel:List() == false and listed == 1, "nothing lists from Buy")
+ns.PostPanel.view = "sell"
+Wheel:Update()
+assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "taken again back on Sell")
 
 -- 6. The release of the same press does nothing more.
 clock = clock + 1
@@ -114,12 +133,9 @@ for _ = 1, 5 do
 end
 assert(listed == 3, "a flick lists one stack, got " .. listed)
 
--- On another view, Sell's lines are read fresh.
 clock = clock + 1
-ns.PostPanel.view = "auctions"
-ns.PostPanel.shownLines = { "old" }
 named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
-assert(ns.PostPanel.shownLines == nil and listed == 4, "another view reads Sell's lines fresh")
+assert(listed == 4, "Sell lists again")
 
 -- 2. The drawer goes: the wheel is given back, and a stray click does nothing.
 Hide()

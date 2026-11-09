@@ -967,7 +967,7 @@ local function Build(outer)
     -- The mouse wheel (a player asked, the owner said build it, 2026-10-16):
     -- off unless ticked, and only while the auction house is open.
     local wheelRow = CreateRow(pages.auction, 1, L["Mouse Wheel:"],
-        L["At the auction house, wheel up lists the next stack and wheel down cancels the next undercut auction."])
+        L["At the auction house, the wheel lists your next stack on Sell and cancels your next undercut auction on Auctions."])
 
     widgets.mouseWheel = Widgets.CreateCheckbox(wheelRow, L["On"], function(checked)
         Config:Set("mouseWheelListing", checked)
