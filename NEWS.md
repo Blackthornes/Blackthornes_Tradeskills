@@ -23,6 +23,18 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.20.0
+
+- The Recipe Book shows which vendor sells a trade camp recipe, what it costs and the standing it needs.
+- Hover a material in the Recipe Book or Your Time to see the item's tooltip.
+
+Fixes and changes:
+
+- New players match the cheapest listing by default. Your own Undercut By setting stays the same.
+- A tie with someone else's price shows Cheapest in amber until you check places.
+- Vendors that only sell a few at a time are left off your shopping list.
+- Craftsman's Writs get prices on clients that aren't English.
+
 ## 1.19.1
 
 Fixes and changes:
