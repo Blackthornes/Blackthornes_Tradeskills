@@ -484,6 +484,14 @@ were still refused with result 8. A 256-byte message was said to be sent. So
 `Logic/RealmPrices.lua` sends one message every 3 seconds and only when
 nothing else of ours is waiting.
 
+A player's report (2026-11-09): the server can refuse sends to the channel,
+and each refused send prints "[N. BTSPricesA] That operation is not permitted
+in this channel." as a CHAT_MSG_CHANNEL_NOTICE line. Why it refuses for some
+players is not known yet (a new or trial account, or a channel someone else
+muted, are guesses). The notice key was not read, so Logic/RealmPrices.lua
+treats any notice on our channel within a few seconds of a send as a refusal,
+hides it, and backs off.
+
 ## The one window's docking (not yet seen in game)
 
 `UI/SharedWindow.lua` (2026-10-30) docks the one window beside the game's

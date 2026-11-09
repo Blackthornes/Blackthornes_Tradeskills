@@ -12,6 +12,8 @@
 --   7. Not shared again within the hour, or when 3 others covered the scan.
 --   8. Whispers, the guild and other channels are not listened to.
 --   9. Old prices are pruned.
+--  10. When the channel refuses a send, the line is hidden, sending stops
+--      a while (for good after three), and prices still come in.
 
 local saved = {}
 for _, name in ipairs({ "time", "GetTime", "UnitName", "C_ChatInfo", "C_Timer", "InCombatLockdown",
@@ -383,6 +385,69 @@ do
     Realm:OnPrices("Eve-Realm", body, "CHANNEL", "BTSPricesA", "4. BTSPricesA")
     check("nor anything while it is off", Realm.version, before)
     bob.settings.realmPrices = true
+end
+
+--------------------------------------------------------------------------------
+print("\nthe channel says no")
+--------------------------------------------------------------------------------
+
+do
+    -- A channel joined by name is still there at the next login, so no join
+    -- happens and the filter has to go in at load.
+    local before = filters
+    local fay = NewClient("Fay", "Forever-Alliance")
+    check("the filter goes in at load", filters - before >= 2, true)
+    current = fay
+    fay.settings.realmPrices = true
+    fay.channels["btspricesa"] = 4
+    local Fay = fay.ns.RealmPrices
+    check("a notice about another player is filtered too", Fay.FilterNotice(nil, "CHAT_MSG_CHANNEL_NOTICE_USER",
+        "PLAYER_ALREADY_MEMBER", "", "", "4. BTSPricesA", "", 0, 4, "", "BTSPricesA"), true)
+
+    check("our own join line is no refusal", Fay:OnNotice("YOU_CHANGED", "4. BTSPricesA", "BTSPricesA"), false)
+    check("and keeps no quiet", Fay:Quiet(), false)
+
+    Scan(fay, { [2589] = 1000, [2592] = 500 }, clock - 60)
+    check("Fay shares her scan", (Fay:Share()), true)
+    Fay:Drip()
+    check("one message went", Fay.lastSendAt ~= nil, true)
+    check("a line in another channel is ignored", Fay:OnNotice("NOT_PERMITTED", "2. Trade", "Trade"), false)
+    check("a refusal right after a send is heard",
+        Fay:OnNotice("SOMETHING_NEW", "4. BTSPricesA", "BTSPricesA"), true)
+    check("the rest of the share is dropped", Fay.outbox, nil)
+    check("it keeps quiet", Fay:Quiet(), true)
+    check("the status of a share says why", select(2, Fay:Share()), "channel said no")
+    Fay.outbox = { { kind = "Y", text = "1" } }
+    local sends = #network
+    Fay:Drip()
+    check("nothing is sent while quiet", #network, sends)
+    check("and the outbox is let go", Fay.outbox, nil)
+
+    -- The same send refused again counts once.
+    Fay:OnRefused("NOT_PERMITTED")
+    check("a repeat is counted once", Fay.refusals, 1)
+
+    -- Listening goes on.
+    local version = Fay.version
+    local Comm = fay.ns.Comm
+    Fay:OnPrices("Gus-Realm", Comm.ToBase36(clock) .. ":" .. Comm.ToBase36(7070) .. "," .. Comm.ToBase36(800)
+        .. ";", "CHANNEL", "BTSPricesA", "4. BTSPricesA")
+    check("prices from others still come in", Fay.version ~= version, true)
+
+    uptime = uptime + Fay.BACK_OFF + 1
+    check("after a while it may send again", Fay:Quiet(), false)
+    check("a stray notice long after a send is no refusal",
+        Fay:OnNotice("SOMETHING_NEW", "4. BTSPricesA", "BTSPricesA"), false)
+
+    Fay:OnRefused("NOT_PERMITTED")
+    check("a second refusal waits twice as long",
+        Fay.quietUntil - uptime, Fay.BACK_OFF * 2)
+    uptime = uptime + Fay.BACK_OFF * 2 + 1
+    Fay:OnRefused("NOT_PERMITTED")
+    check("a third stops it for the session", Fay.quietUntil, math.huge)
+    uptime = uptime + 24 * 3600
+    check("still quiet a day later", Fay:Quiet(), true)
+    current = ana
 end
 
 --------------------------------------------------------------------------------
