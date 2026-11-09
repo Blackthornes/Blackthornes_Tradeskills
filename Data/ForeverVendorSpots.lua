@@ -10,7 +10,9 @@
 local _, ns = ...
 
 -- [npc ID] = { name, map ID, x, y, side ("A", "H" or ""),
---   { [item ID] = never runs out } }
+--   { [item ID] = never runs out },
+--   { [recipe item ID] = { gold, costs = { { name, amount, currency } },
+--     faction, standing } } or nothing }
 ns.FOREVER_VENDOR_SPOTS = {
     [2115] = { "Joshua Kien", 1420, 32.3, 65.6, "H", { [159] = true, [4540] = true } },
     [2118] = { "Abigail Shiel", 1420, 61, 52.4, "H", { [2320] = true, [2324] = true, [2604] = true, [2678] = true, [2880] = true, [3371] = true, [4289] = true, [4536] = true, [6217] = true, [6260] = true, [6529] = true } },
@@ -46,12 +48,12 @@ ns.FOREVER_VENDOR_SPOTS = {
     [3933] = { "Hai'zan", 1411, 55.6, 73.5, "H", { [117] = true, [2287] = true, [3770] = true, [3771] = true, [4599] = true, [8952] = true } },
     [4553] = { "Ronald Burch", 1458, 62.7, 43.4, "H", { [159] = true, [2678] = true, [2692] = true, [3713] = true, [4470] = true, [4471] = true, [4536] = true, [10284] = true, [11291] = true, [272941] = true } },
     [4554] = { "Tawny Grisette", 1458, 65, 49.6, "H", { [159] = true, [1179] = true, [1205] = true, [1645] = true, [1708] = true, [4604] = true, [4605] = true, [4606] = true, [4607] = true, [4608] = true, [8766] = true, [8948] = true } },
-    [4555] = { "Eleanor Rusk", 1458, 69.2, 48.1, "H", { [159] = true, [1179] = true, [1205] = true, [1645] = true, [1708] = true, [4470] = true, [4471] = true, [5048] = true, [8766] = true, [11291] = true } },
+    [4555] = { "Eleanor Rusk", 1458, 68.6, 48.7, "H", { [159] = true, [1179] = true, [1205] = true, [1645] = true, [1708] = true, [4470] = true, [4471] = true, [5048] = true, [8766] = true, [11291] = true } },
     [4561] = { "Daniel Bartlett", 1458, 64.4, 37.9, "H", { [2320] = true, [2321] = true, [2324] = true, [2325] = true, [2604] = true, [2605] = true, [2678] = true, [2692] = true, [2880] = true, [2928] = true, [3371] = true, [3372] = true, [3466] = true, [3713] = true, [3857] = true, [4289] = true, [4291] = true, [4340] = true, [4341] = true, [4342] = true, [4399] = true, [4400] = true, [4536] = true, [6217] = true, [6260] = true, [6529] = true, [6530] = true, [6532] = true, [8343] = true } },
     [4562] = { "Thomas Mordan", 1458, 69.3, 39.4, "H", { [5565] = true, [16583] = true, [17020] = true, [17021] = true, [17026] = true, [17028] = true, [17029] = true, [17030] = true, [17031] = true, [17032] = true, [17033] = true, [17034] = true, [17035] = true, [17036] = true, [17037] = true, [17038] = true, [21177] = true } },
     [4577] = { "Millie Gregorian", 1458, 70.8, 29.4, "H", { [2320] = true, [2321] = true, [2324] = true, [2325] = true, [2604] = true, [2605] = true, [4291] = true, [4340] = true, [4341] = true, [4342] = true, [6260] = true, [6261] = true, [8343] = true, [10290] = true, [14341] = true } },
     [4585] = { "Ezekiel Graves", 1458, 75.7, 51.5, "H", { [2928] = true, [2930] = true, [3371] = true, [3372] = true, [5060] = true, [5140] = true, [5173] = true, [8923] = true, [8924] = true, [8925] = true } },
-    [4775] = { "Felicia Doan", 1458, 64.1, 50.1, "H", { [2320] = true, [2321] = true, [2324] = true, [2604] = true, [2605] = true, [2678] = true, [2692] = true, [2880] = true, [2928] = true, [3371] = true, [3372] = true, [3466] = true, [3713] = true, [3857] = true, [4289] = true, [4291] = true, [4399] = true, [4400] = true, [4536] = true, [6217] = true, [6260] = true, [6529] = true, [6530] = true, [6532] = true } },
+    [4775] = { "Felicia Doan", 1458, 64.2, 49.9, "H", { [2320] = true, [2321] = true, [2324] = true, [2604] = true, [2605] = true, [2678] = true, [2692] = true, [2880] = true, [2928] = true, [3371] = true, [3372] = true, [3466] = true, [3713] = true, [3857] = true, [4289] = true, [4291] = true, [4399] = true, [4400] = true, [4536] = true, [6217] = true, [6260] = true, [6529] = true, [6530] = true, [6532] = true } },
     [5611] = { "Barkeep Morag", 1454, 54.5, 68.1, "H", { [117] = true, [159] = true, [1179] = true, [1205] = true, [1645] = true, [1708] = true, [2287] = true, [2593] = true, [2594] = true, [2595] = true, [2596] = true, [2723] = true, [3770] = true, [3771] = true, [4599] = true, [8766] = true, [8952] = true } },
     [5748] = { "Killian Sanatha", 1421, 33.1, 17.8, "H", {} },
     [5783] = { "Kalldan Felmoon", 1414, 51.9, 55.4, "", { [2320] = true, [2321] = true, [2325] = true, [2604] = true, [2605] = true, [4289] = true, [4291] = true, [4340] = true, [4341] = true, [4342] = true, [6260] = true, [6261] = true, [8343] = true, [10290] = true, [14341] = true } },
@@ -73,7 +75,7 @@ ns.FOREVER_VENDOR_SPOTS = {
     [254358] = { "Veena Vericloud", 2521, 44.8, 45.4, "", { [159] = true, [1179] = true, [4470] = true, [4471] = true, [5042] = true } },
     [254360] = { "Belandiel Farflight", 2521, 44.8, 45.1, "", { [2320] = true, [2324] = true, [2604] = true, [2678] = true, [2880] = true, [3371] = true, [4289] = true, [4536] = true, [6217] = true, [6260] = true, [6529] = true } },
     [255940] = { "Donaal Downbreeze", 2521, 62.2, 72.7, "", { [117] = true, [159] = true, [1179] = true, [1205] = true, [1645] = true, [1708] = true, [2287] = true, [3770] = true, [3771] = true, [4599] = true, [4604] = true, [4605] = true, [4606] = true, [4607] = true, [4608] = true, [8766] = true, [8948] = true, [8952] = true } },
-    [257005] = { "Valiena Swiftgale", 2521, 59.2, 76.2, "", { [3371] = true, [3372] = true, [8925] = true, [18256] = true } },
+    [257005] = { "Valiena Swiftgale", 2521, 59.2, 76.3, "", { [3371] = true, [3372] = true, [8925] = true, [18256] = true } },
     [257006] = { "Nyalah Brightfire", 2521, 60.7, 72.7, "", { [159] = true, [2678] = true, [4536] = true } },
     [257008] = { "Baelann Swiftcurrent", 2521, 63.2, 75.8, "", { [6529] = true, [6530] = true, [6532] = true, [273636] = true } },
     [257019] = { "Nyassa Swiftdraught", 2521, 43.7, 43.5, "", { [3371] = true, [3372] = true, [8925] = true, [18256] = true } },
@@ -104,7 +106,7 @@ ns.FOREVER_TRAINER_SPOTS = {
     [5943] = { "Rawrk", 1411, 54.1, 42, "H", {} },
     [7088] = { "Thuwd", 1454, 63.1, 45.2, "H", {} },
     [8306] = { "Duhng", 1413, 55.3, 31.8, "H", {} },
-    [11049] = { "Rhiannon Davis", 1458, 70.5, 30.3, "H", {} },
+    [11049] = { "Rhiannon Davis", 1458, 70.3, 30.2, "H", {} },
     [11066] = { "Jhag", 1454, 53.6, 38.3, "H", {} },
     [11074] = { "Hgarth", 1442, 49.1, 57.3, "H", {} },
     [11868] = { "Sayoc", 1454, 81.6, 19.4, "H", {} },
