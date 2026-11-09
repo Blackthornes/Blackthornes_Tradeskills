@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.20.1
+
+Fixes and changes:
+
+- The mouse wheel now follows the auction house tab: on Sell it lists your next stack, on Auctions it cancels your next undercut auction.
+
 ## 1.20.0
 
 - The Recipe Book shows which vendor sells a trade camp recipe, what it costs and the standing it needs.
