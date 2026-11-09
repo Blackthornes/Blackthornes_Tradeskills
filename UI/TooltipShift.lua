@@ -16,8 +16,16 @@
 --     a line back (`shared.hinted`, cleared when the tooltip is).
 --   * One frame, the first copy's, hears Shift go down or up and redraws the
 --     tooltip showing, once, only while some copy has a line on Shift.
+--   * The handlers that redraw live behind the table (`shared.handlers`,
+--     `FILE_VERSION`): the newest copy's win whatever order the addons load
+--     in, and an older copy cannot put its own back over them.
 -- Reads only; never touches a Blizzard frame beyond adding a line and a
 -- HookScript on OnTooltipCleared, and `RefreshData`, the tooltip's own redraw.
+-- Before that redraw the tooltip's lines are read here first, the way the
+-- game's redraw reads them: inside a dungeon their colors come back secret,
+-- and the redraw raised on one from inside the game's own code, where no
+-- pcall of ours reached (a player's report, 2026-11-09). A tooltip whose
+-- lines cannot be read is left as it is, and nothing raises.
 
 local addonName, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -48,6 +56,46 @@ shared.hooked = shared.hooked or setmetatable({}, { __mode = "k" })
 shared.copies = shared.copies or {}
 shared.copies[addonName or "?"] = TooltipShift
 TooltipShift.shared = shared
+
+-- Raise this when the redraw handlers below change, in every copy.
+TooltipShift.FILE_VERSION = 2
+
+-- The redraw handlers live in `shared.handlers`, read through the table's
+-- metatable as `shared.OnModifier` and `shared.AnyShift`. A copy installs
+-- its own only when no newer copy has (`Install`); a copy from before this
+-- file had a version writes the fields plainly, which only fills a gap.
+if type(rawget(shared, "handlers")) ~= "table" then
+    local handlers = {
+        version = 0,
+        OnModifier = rawget(shared, "OnModifier"),
+        AnyShift = rawget(shared, "AnyShift"),
+    }
+    rawset(shared, "handlers", handlers)
+    rawset(shared, "OnModifier", nil)
+    rawset(shared, "AnyShift", nil)
+    setmetatable(shared, {
+        __index = function(_, key)
+            if key == "OnModifier" or key == "AnyShift" then return handlers[key] end
+            return nil
+        end,
+        __newindex = function(table, key, value)
+            if key == "OnModifier" or key == "AnyShift" then
+                if handlers.version == 0 then handlers[key] = value end
+                return
+            end
+            rawset(table, key, value)
+        end,
+    })
+end
+
+local function Install(version, onModifier, anyShift)
+    local handlers = shared.handlers
+    if (handlers.version or 0) > version then return false end
+    handlers.version = version
+    handlers.OnModifier = onModifier
+    handlers.AnyShift = anyShift
+    return true
+end
 
 --- This line's Shift choice as kept, true or false.
 function TooltipShift.Read(key)
@@ -128,7 +176,7 @@ function TooltipShift:Held(tooltip)
 end
 
 --- Any copy, in any Blackthornes addon, with a line on Shift.
-function shared.AnyShift()
+local function AnyShift()
     for _, copy in pairs(shared.copies) do
         local ok, any = pcall(copy.AnyShift, copy)
         if ok and any then return true end
@@ -136,17 +184,52 @@ function shared.AnyShift()
     return false
 end
 
+--- Read the tooltip's lines the way the game's redraw will: its primary
+--- info names the C_TooltipInfo call that built it, and every line's color
+--- is touched. Inside a dungeon a color is a secret table, and touching it
+--- raises here, inside the caller's pcall, instead of inside the game's
+--- redraw where nothing of ours could catch it. True when every line read.
+local function ReadLines(tooltip)
+    local info
+    if type(tooltip.GetPrimaryTooltipInfo) == "function" then
+        info = tooltip:GetPrimaryTooltipInfo()
+    else
+        local list = tooltip.infoList
+        info = type(list) == "table" and list[1] or nil
+    end
+    if type(info) ~= "table" or type(info.getterName) ~= "string" then return false end
+    local api = _G.C_TooltipInfo
+    local getter = type(api) == "table" and api[info.getterName] or nil
+    if type(getter) ~= "function" then return false end
+    local args = type(info.getterArgs) == "table" and info.getterArgs or {}
+    local data = getter((unpack or table.unpack)(args))
+    if type(data) ~= "table" or type(data.lines) ~= "table" then return false end
+    for _, line in ipairs(data.lines) do
+        if type(line) == "table" then
+            if type(line.leftColor) == "table" then line.leftColor:GetRGB() end
+            if type(line.rightColor) == "table" then line.rightColor:GetRGB() end
+        end
+    end
+    return true
+end
+TooltipShift.ReadLines = ReadLines
+
 --- Shift went down or up: redraw the tooltip showing, once, so its Shift
---- lines come and go. Only while some line is on Shift; nothing else moves.
-function shared.OnModifier(key)
+--- lines come and go. Only while some line is on Shift, and only when its
+--- lines read cleanly; nothing else moves, and nothing raises.
+local function OnModifier(key)
     if key ~= "LSHIFT" and key ~= "RSHIFT" then return end
-    if not shared.AnyShift() then return end
+    if not AnyShift() then return end
     local tooltip = _G.GameTooltip
     if type(tooltip) ~= "table" then return end
     pcall(function()
-        if tooltip:IsShown() and tooltip.RefreshData then tooltip:RefreshData() end
+        if not tooltip:IsShown() or type(tooltip.RefreshData) ~= "function" then return end
+        if not ReadLines(tooltip) then return end
+        tooltip:RefreshData()
     end)
 end
+
+Install(TooltipShift.FILE_VERSION, OnModifier, AnyShift)
 
 if not shared.frame and type(CreateFrame) == "function" then
     local ok, frame = pcall(CreateFrame, "Frame")
