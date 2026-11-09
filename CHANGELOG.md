@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.21.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Buy from Snipe.** Each find on the Snipe list has its own Buy button. It checks the price first, then shows what you'll pay, like Buy 20 for 1g 20s. Past your Double Check price it asks you to click again.
+- **Gold In and Out.** The bars follow This Character. Gold from the mailbox is sorted as auction sales, outbid refunds or gold sent from your characters.
+- **Vendor or auction.** An item goes to the vendor when the auction house would pay less than one deposit more.
+- **Price sharing quiets down.** Refusal lines from the price channel are hidden, and sending slows down after a refusal and stops after three. You still hear prices from others.
+- **Shift tooltips.** Holding Shift over a tooltip no longer throws a Lua error.
+
 ## 1.20.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
