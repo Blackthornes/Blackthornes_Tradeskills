@@ -964,10 +964,26 @@ end
 --- True when a vendor pays at least what one would bring on the auction
 --- house after its cut, so it is better sold to a vendor. A player asked
 --- (2026-10-17) for Tradeskills to say so, rather than list it as a loss.
+---
+--- The deposit a listing risks counts too (a player asked, the owner said
+--- build it, 2026-11-09): a listing that runs out keeps it, so beating the
+--- vendor by less than one deposit is not worth the risk. When
+--- `NetFromListing` already takes lost deposits off (more relists expected,
+--- or slow demand), it is not taken twice.
 function Posting.VendorPaysMore(itemID, price, vendorPrice)
     if not price or not vendorPrice or vendorPrice <= 0 then return false end
-    local ok, net = pcall(ns.Profit.NetFromListing, ns.Profit, itemID, price)
+    local Profit = ns.Profit
+    local ok, net = pcall(Profit.NetFromListing, Profit, itemID, price)
     if not ok or type(net) ~= "number" then net = price end
+    if Profit.LostListings and Profit.LostDepositEach then
+        local okLost, lost = pcall(Profit.LostListings, itemID)
+        if okLost and type(lost) == "number" and lost < 1 then
+            local okEach, each = pcall(Profit.LostDepositEach, itemID)
+            if okEach and type(each) == "number" and each > 0 then
+                net = net - each
+            end
+        end
+    end
     return net <= vendorPrice
 end
 
