@@ -27,11 +27,16 @@ local CELL_GAP = 4
 -- Room kept for the sort arrow at a cell head's right edge.
 local ARROW_ROOM = 10
 local RIGHT_PAD = 8
+-- Each row's own Buy button sits at the right end, after Deal.
+local BUY_WIDTH = 76
+local BUY_HEIGHT = 24
+local BUY_GAP = 6
 local SORT_ARROW = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS") .. [[\Media\Frame\SortArrow]]
 
--- Right edge of cell n (1 = Under Average, 2 = Price, 3 = Average).
+-- Right edge of cell n (1 = Under Average, 2 = Price, 3 = Average), left of
+-- the row's Buy button.
 local function CellRight(n)
-    return -(RIGHT_PAD + (n - 1) * (CELL_WIDTH + CELL_GAP))
+    return -(RIGHT_PAD + BUY_WIDTH + BUY_GAP + (n - 1) * (CELL_WIDTH + CELL_GAP))
 end
 local NAME_RIGHT = CellRight(3) - CELL_WIDTH - 6
 
@@ -191,6 +196,78 @@ local function CreateRow(row)
     row.average = Cell(3)
     row.qty = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
     row.qty:SetPoint("TOPRIGHT", row.price, "BOTTOMRIGHT", 0, -1)
+
+    -- The row's own Buy button. Its words wrap inside it rather than end in
+    -- "...", and the button and row grow to hold them.
+    row.buy = Widgets.CreateButton(row, L["Buy"], function()
+        if row.data then SnipeView:RowBuy(row.data) end
+    end, { width = BUY_WIDTH, height = BUY_HEIGHT, primary = true, fontSize = "tiny" })
+    row.buy:SetPoint("RIGHT", row, "RIGHT", -RIGHT_PAD, 0)
+    local label = row.buy.label
+    if label then
+        label:ClearAllPoints()
+        label:SetPoint("CENTER", row.buy, "CENTER", 0, 0)
+        if label.SetWidth then label:SetWidth(BUY_WIDTH - 6) end
+        if label.SetWordWrap then label:SetWordWrap(true) end
+    end
+    row.cells = row.cells or {}
+    row.cells.buy = label
+end
+
+--- What a row's own Buy button says, and whether it can be clicked.
+--- Buy, Checking... while that row asks, "Buy 20 for 1g 20s" once its price
+--- is known, or Click Again past Double Check Over.
+function SnipeView.RowBuyState(find)
+    local snipe = Snipe()
+    local pending = snipe and snipe.pending
+    if pending and pending.find == find then
+        if snipe.armed == pending then return L["Click Again"], true end
+        if pending.phase == "quoted" or pending.phase == "planned" then
+            local count = pending.count or (find and find.qty) or 1
+            return L.Format("Buy %d for %s", count, Colored(pending.total or pending.expected)), true
+        end
+        return L["Checking..."], false
+    end
+    if not pending then return L["Buy"], true end
+    -- A quiet ready for another row gives way to this one.
+    if pending.auto and snipe.armed ~= pending and pending.phase ~= "buying" then return L["Buy"], true end
+    return L["Buy"], false
+end
+
+--- A click on a row's own Buy button: pay for that row when its price is
+--- known, else ask for it now, taking over a quiet ready on another row.
+--- It never buys before the price is known; Snipe keeps every other check.
+function SnipeView:RowBuy(find)
+    local snipe = Snipe()
+    if not (snipe and find) then return end
+    local pending = snipe.pending
+    if pending and pending.find == find then
+        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+    elseif pending and pending.auto and snipe.armed ~= pending and pending.phase ~= "buying" then
+        snipe:CancelBuy()
+        snipe:Buy(find)
+    elseif not pending then
+        snipe:Buy(find)
+    end
+    self:Changed()
+end
+
+--- Sets the row's Buy button words, growing the button (and so the row)
+--- when they wrap.
+local function DressRowBuy(row, find)
+    local button = row.buy
+    if not button then return end
+    local text, can = SnipeView.RowBuyState(find)
+    button:SetText(text)
+    button:SetEnabledState(can)
+    local label = button.label
+    local height = BUY_HEIGHT
+    if label and label.GetStringHeight then
+        local ok, tall = pcall(label.GetStringHeight, label)
+        if ok and type(tall) == "number" and tall + 8 > height then height = math.ceil(tall + 8) end
+    end
+    button:SetHeight(height)
+    if label then label.rowNeed, label.rowNeedText = height, text end
 end
 
 --- A find made ready before the click (quoted or planned, not yet asked
@@ -260,6 +337,8 @@ local function UpdateRow(row, find)
         row.badge:SetTextColor(Theme.Unpack("profit"))
         row.edge:Hide()
     end
+
+    DressRowBuy(row, find)
 
     Theme.SetItemIcon(row.icon, find.itemID)
     local label = ItemName(find.itemID)
@@ -713,7 +792,8 @@ function SnipeView:Refresh(force)
     local key = table.concat({
         tostring(snipe.version), tostring(running), tostring(snipe:Spent()), tostring(snipe:Cap()),
         tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()), snipe:Watch(),
-        pending and (pending.phase .. tostring(pending.total) .. tostring(pending.auto) .. tostring(pending.count)) or "-",
+        pending and (pending.phase .. tostring(pending.total) .. tostring(pending.auto) .. tostring(pending.count)
+            .. tostring(pending.find and pending.find.itemID)) or "-",
         tostring(snipe.armed ~= nil),
         tostring(#(snipe:Finds() or {})), tostring(snipe:ListChoice()),
         tostring(ns.ShoppingLists and ns.ShoppingLists.version), tostring(self.held ~= nil),
