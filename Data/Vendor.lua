@@ -208,12 +208,105 @@ local function GetMerchantItemID(index, info)
     return nil, "unresolved"
 end
 
+-- The game's item class for recipes.
+local CLASS_RECIPE = 9
+-- At most this many costs read for one item (gold aside).
+local MOST_COSTS = 3
+
+local function PlainText(value)
+    local ok, copy = pcall(function()
+        if type(value) == "string" and value ~= "" then return value .. "" end
+    end)
+    return ok and copy or nil
+end
+
+--- "Requires %s - %s" as a pattern that takes the two parts back out, and
+--- which capture is the faction (a language may put the standing first).
+function Vendor.RequiresPattern(template)
+    template = PlainText(template) or PlainText(rawget(_G, "ITEM_REQ_REPUTATION")) or "Requires %s - %s"
+    local order, n = {}, 0
+    local marked = template:gsub("%%(%d?)%$?s", function(place)
+        n = n + 1
+        order[n] = tonumber(place) or n
+        return "\1"
+    end)
+    marked = marked:gsub("[%(%)%.%+%-%*%?%[%]%^%$%%]", "%%%0"):gsub("\1", "(.+)")
+    local factionAt = 1
+    for i, place in ipairs(order) do
+        if place == 1 then factionAt = i end
+    end
+    return "^" .. marked .. "$", factionAt
+end
+
+--- The standing a merchant item asks for, off its tooltip: faction, standing.
+local function ReputationNeeded(index)
+    local tips = rawget(_G, "C_TooltipInfo")
+    if type(tips) ~= "table" or type(tips.GetMerchantItem) ~= "function" then return nil end
+    local ok, data = pcall(tips.GetMerchantItem, index)
+    if not ok or type(data) ~= "table" or type(data.lines) ~= "table" then return nil end
+    local pattern, factionAt = Vendor.RequiresPattern()
+    for _, line in ipairs(data.lines) do
+        local text = type(line) == "table" and PlainText(line.leftText)
+        if text then
+            local a, b = text:match(pattern)
+            if a and b then
+                if factionAt == 2 then return b, a end
+                return a, b
+            end
+        end
+    end
+    return nil
+end
+
+--- What a merchant item costs besides gold: { { name, amount, currency } }.
+-- Merchant's Favor and the like, named as the game names them.
+local function OtherCosts(index)
+    local costs = {}
+    if not Util.HasFunction("GetMerchantItemCostInfo") then return costs end
+    local ok, count = pcall(GetMerchantItemCostInfo, index)
+    count = ok and tonumber(count) or 0
+    for i = 1, math.min(count, MOST_COSTS) do
+        local read, _, amount, link, name = pcall(GetMerchantItemCostItem, index, i)
+        if read then
+            link, name = PlainText(link), PlainText(name)
+            if not name and link then name = link:match("%[(.-)%]") end
+            amount = tonumber(amount)
+            if name and amount and amount > 0 then
+                costs[#costs + 1] = {
+                    name = name, amount = amount,
+                    currency = link and tonumber(link:match("currency:(%d+)")) or nil,
+                    item = link and tonumber(link:match("item:(%d+)")) or nil,
+                }
+            end
+        end
+    end
+    return costs
+end
+
+--- A recipe a merchant sells, whatever it costs, for where recipes are
+--- learned (VendorPins:Learn): { gold, costs, faction, standing } or nil.
+function Vendor.RecipeOffer(index, info, itemID)
+    if not (itemID and type(_G.C_Item) == "table" and type(_G.C_Item.GetItemInfoInstant) == "function") then
+        return nil
+    end
+    local ok, _, _, _, _, _, classID = pcall(_G.C_Item.GetItemInfoInstant, itemID)
+    if not ok or classID ~= CLASS_RECIPE then return nil end
+    local offer = { gold = (info and tonumber(info.price) or 0) > 0 and info.price or nil }
+    if info and info.hasExtendedCost then offer.costs = OtherCosts(index) end
+    if offer.costs and #offer.costs == 0 then offer.costs = nil end
+    offer.faction, offer.standing = ReputationNeeded(index)
+    return offer
+end
+
 function Vendor:Scan()
     if not Util.HasFunction("C_MerchantFrame.GetItemInfo") then return 0 end
 
     -- Rebuilt every scan: merchant slot indices are only valid for the vendor
     -- currently open.
     self.merchantItems = {}
+    -- Every recipe it sells, gold or not (the trade camps' recipes cost
+    -- Merchant's Favor), for where a recipe is learned.
+    self.merchantRecipes = {}
 
     local countOk, numItems
     if Util.HasFunction("GetMerchantNumItems") then
@@ -230,6 +323,12 @@ function Vendor:Scan()
 
     for index = 1, numItems do
         local ok, info = pcall(C_MerchantFrame.GetItemInfo, index)
+
+        if ok and info then
+            local recipeID = GetMerchantItemID(index, info)
+            local offered, offer = pcall(Vendor.RecipeOffer, index, info, recipeID)
+            if offered and offer then self.merchantRecipes[recipeID] = offer end
+        end
 
         if ok and info and info.price and info.price > 0 then
             local itemID, method = GetMerchantItemID(index, info)
@@ -283,7 +382,9 @@ function Vendor:Scan()
     end
 
     -- Where this vendor stands and what it sells, for the vendor map pins.
-    if ns.VendorPins then pcall(ns.VendorPins.Learn, ns.VendorPins, self.merchantItems) end
+    if ns.VendorPins then
+        pcall(ns.VendorPins.Learn, ns.VendorPins, self.merchantItems, self.merchantRecipes)
+    end
 
     self.lastUnresolved = unresolved
     return learned

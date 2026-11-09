@@ -215,6 +215,32 @@ local dropShort, dropWhere = Book:LearnFrom(Book:Get(2158))
 check("a world drop", dropShort, "Drop")
 check("says how widely", dropWhere[1], "World drop (569 kinds of creature)")
 
+-- A Forever recipe the book has no vendor for, sold at a trade camp for
+-- Merchant's Favor: the camp seen in game says where, not "unknown".
+local campRecipe = { forever = true, recipeItems = { 190001 } }
+local unknownShort, unknownWhere = Book:LearnFrom(campRecipe)
+check("never seen anywhere, still unknown", unknownShort, "Unknown")
+check("and says so", unknownWhere[1], "New on Forever. Where to get it isn't known yet.")
+ns.VendorPins = {
+  RecipeSellers = function(_, itemID)
+    if itemID ~= 190001 then return {} end
+    return { { name = "Camp Quartermaster", mapID = 1433, x = 40, y = 60,
+      costs = { { name = "Merchant's Favor", amount = 25 } },
+      faction = "Azeroth Commerce Authority", standing = "Honored" } }
+  end,
+  ZoneName = function() return "Redridge Mountains" end,
+  CostText = function(offer) return offer.costs[1].amount .. " " .. offer.costs[1].name end,
+}
+local campShort, campWhere = Book:LearnFrom(campRecipe)
+check("a camp seen in game sells it", campShort, "Vendor")
+check("where", campWhere[1], "Vendor: Camp Quartermaster, Redridge Mountains")
+check("what it costs", campWhere[2], "25 Merchant's Favor")
+check("the standing it needs", campWhere[3], "Needs Honored with Azeroth Commerce Authority")
+check("no unknown line", campWhere[4], nil)
+ns.VendorPins.RecipeSellers = function() error("broken") end
+check("a broken lookup is no vendor", (Book:LearnFrom(campRecipe)), "Unknown")
+ns.VendorPins = nil
+
 print("\nthe skill Forever asks for")
 -- A Classic recipe a player reported Forever moved (165 -> 140).
 ns.RECIPE_BOOK.RECIPES[4097] = { 165, 165, 4456, 1, 1, { HEAVY, 4 }, "Raptor Hide Belt" }
