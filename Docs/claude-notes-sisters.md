@@ -350,6 +350,20 @@ The playing character's bags are live (`Inventory:GetBagCounts`), the rest
 the saved snapshots (`inventory`, `bank`, `mail` on its record). Keep it
 stable too; Butler's `Logic/Everyone.lua` reads it.
 
+Mail running out (the owner said build it from a mockup, 2026-11-09, for
+Butler's "Mail Running Out"): each inbox read (`Mail:Read`) saves
+`record.mailExpiry = { count, soonest, soon, returns, gone }` on the
+character's record (never rename it; `Mail.Expiry`): how many mails the
+box showed, the soonest `daysLeft` of any, how many run out within
+`Mail.SOON_DAYS` (3) and of those how many go back to the sender
+(`Mail.GoesBack`: the game's `InboxItemCanDelete` when it has one, else a
+player's mail with money or items not sent back once already) or are
+gone for good. `Holdings()` entries carry them as `mailCount`,
+`mailSoonest`, `mailSoonCount`, `mailReturns` and `mailGone` (nil until
+read this way), as of `mailAt`; Butler counts the days since. Tested in
+`tools/test_mailrunsout.lua` and `tools/test_butler.lua`. Not yet seen in
+game. If they change, change Butler's `Logic/MailRunsOut.lua` too.
+
 At a mailbox and the bank (the owner said start, 2026-10-11), Butler's
 `Logic/Errands.lua` calls two more, inside a pcall:
 
