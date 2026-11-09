@@ -46,7 +46,11 @@ local DEFAULTS = {
         --
         -- Commodities only. An item auction cannot be priced in copper at all,
         -- so it steps by a whole silver or matches; see minProfit below.
-        undercutCopper = 1,
+        -- 0 (match the cheapest) by default since 2026-11-09: Forever's
+        -- auction house sells the cheapest first and keeps a line at each
+        -- price, so a 1c undercut only jumps the line. Saves that already
+        -- hold a number keep it (ApplyDefaults fills only what is missing).
+        undercutCopper = 0,
 
         -- What to list a craft at when nothing is competing with it: what
         -- its materials are worth, plus this much. Two cases reach it --

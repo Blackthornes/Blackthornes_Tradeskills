@@ -545,7 +545,7 @@ local function ShowRowTooltip(row, line)
     if line.priceBasis == "overcut" and ns.Profit and ns.Profit.Overcut then
         local rival = ns.Prices:GetScanValue(line.itemID, "rival")
         local ok, over, _, wall, count, ahead = pcall(ns.Profit.Overcut, ns.Profit, line.itemID, rival,
-            ns.Config:Get("undercutCopper") or 1)
+            ns.Config:Get("undercutCopper") or 0)
         if ok and over then
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(L["Overcutting"], Theme.Unpack("accent"))

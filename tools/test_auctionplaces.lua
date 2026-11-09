@@ -121,6 +121,18 @@ for _, row in ipairs(old) do
 end
 check("and the line has no place", View.PlaceText(old[1]) == nil)
 
+-- 4b: a tie the scan saw, with no search yet, is amber and has no Cancel.
+local tie = { mine = true, state = "cheapest", unit = 500, rival = 500, itemID = 999999 }
+MyAuctions:AttachPlace(tie, wall)
+check("a scan tie is marked tied", tie.tied == true and not tie.behind)
+_, color = View.BadgeText(tie)
+check("a scan tie shows amber", color == "warn")
+check("a scan tie gets no Cancel", not View.Cancellable(tie))
+local clear = { mine = true, state = "cheapest", unit = 400, rival = 500, itemID = 999999 }
+MyAuctions:AttachPlace(clear, wall)
+_, color = View.BadgeText(clear)
+check("cheaper than the rest stays green", clear.tied == nil and color == "profit")
+
 -- 5: reading a search never raises, even when the game does.
 C_AuctionHouse = {
     GetNumItemSearchResults = function() error("secret") end,

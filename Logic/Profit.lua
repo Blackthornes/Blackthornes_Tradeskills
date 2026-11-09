@@ -318,7 +318,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
         return Util.RoundToSilver(market), "market"
     end
 
-    local undercut = ns.Config:Get("undercutCopper") or 1
+    local undercut = ns.Config:Get("undercutCopper") or 0
 
     -- Overcutting (the owner, 2026-10-15): post just under the big stack
     -- rather than under a few cheap ones that will sell first anyway.
