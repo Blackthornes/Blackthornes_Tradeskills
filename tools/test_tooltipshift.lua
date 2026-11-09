@@ -194,8 +194,16 @@ Shift:Apply(Shift.ALWAYS, "trend", true, SetOn("tooltipTrend"))
 
 -- The Shift key itself redraws the tooltip, only while a line is on Shift.
 local refreshed = 0
-local savedGameTooltip = _G.GameTooltip
-_G.GameTooltip = { IsShown = function() return true end, RefreshData = function() refreshed = refreshed + 1 end }
+local savedGameTooltip, savedInfo = _G.GameTooltip, _G.C_TooltipInfo
+-- The redraw reads the tooltip's lines first, so the stub needs some to read.
+_G.GameTooltip = {
+    IsShown = function() return true end,
+    RefreshData = function() refreshed = refreshed + 1 end,
+    GetPrimaryTooltipInfo = function() return { getterName = "GetItemByID", getterArgs = { 2589 } } end,
+}
+_G.C_TooltipInfo = { GetItemByID = function()
+    return { lines = { { leftColor = { GetRGB = function() return 1, 1, 1 end } } } }
+end }
 Shift.shared.OnModifier("LSHIFT")
 check("no line on Shift: no redraw", refreshed, 0)
 Shift:Apply(Shift.SHIFT, "recipe", true, SetOn("showRecipeValueOnTooltips"))
@@ -203,7 +211,7 @@ Shift.shared.OnModifier("LSHIFT")
 Shift.shared.OnModifier("LCTRL")
 check("a line on Shift: Shift redraws, Ctrl doesn't", refreshed, 1)
 Shift:Apply(Shift.ALWAYS, "recipe", true, SetOn("showRecipeValueOnTooltips"))
-_G.GameTooltip = savedGameTooltip
+_G.GameTooltip, _G.C_TooltipInfo = savedGameTooltip, savedInfo
 
 --------------------------------------------------------------------------------
 print("\nan enchant tooltip")
@@ -230,6 +238,79 @@ EnchantTooltip:Decorate(spell, nil, 7857)
 check("Shift down: the costs come back", Has(spell, "Materials"), true)
 check("from the kept lines, not built again", built, 1)
 shift = false
+
+--------------------------------------------------------------------------------
+print("\nthe redraw reads the lines first")
+--------------------------------------------------------------------------------
+
+-- A secret value, as an instance hands one out: any touch raises.
+local function Secret(what)
+    local raise = function() error("secret value: " .. what, 2) end
+    return setmetatable({}, { __index = raise, __newindex = raise, __call = raise,
+        __concat = raise, __eq = raise, __lt = raise, __le = raise, __tostring = raise })
+end
+
+local redrawShared = _G.BlackthornesTooltipShift
+Shift:Apply(Shift.SHIFT, "recipe", true, SetOn("showRecipeValueOnTooltips"))
+check("a line is on Shift for the redraw", redrawShared.AnyShift(), true)
+
+local lines
+local savedTooltipInfo = _G.C_TooltipInfo
+_G.C_TooltipInfo = { GetUnit = function() return { lines = lines } end }
+
+local function RedrawTooltip()
+    local tooltip = { _refreshed = 0 }
+    tooltip.IsShown = function() return true end
+    tooltip.GetPrimaryTooltipInfo = function() return { getterName = "GetUnit", getterArgs = { "mouseover" } } end
+    tooltip.RefreshData = function(self) self._refreshed = self._refreshed + 1 end
+    _G.GameTooltip = tooltip
+    return tooltip
+end
+
+local plain = { GetRGB = function() return 1, 1, 1 end }
+lines = { { leftColor = plain }, { leftColor = plain, rightColor = plain } }
+local redraw = RedrawTooltip()
+redrawShared.OnModifier("LSHIFT")
+check("plain lines are redrawn on Shift", redraw._refreshed, 1)
+redrawShared.OnModifier("LCTRL")
+check("another key redraws nothing", redraw._refreshed, 1)
+
+lines = { { leftColor = plain }, { leftColor = Secret("a color") } }
+redraw = RedrawTooltip()
+check("a secret color raises nothing", (pcall(redrawShared.OnModifier, "RSHIFT")), true)
+check("and the tooltip is left as it is", redraw._refreshed, 0)
+
+lines = { { leftColor = plain, rightColor = Secret("a color") } }
+redraw = RedrawTooltip()
+check("a secret right color raises nothing", (pcall(redrawShared.OnModifier, "LSHIFT")), true)
+check("and leaves the tooltip too", redraw._refreshed, 0)
+
+redraw = RedrawTooltip()
+redraw.GetPrimaryTooltipInfo = function() return nil end
+redrawShared.OnModifier("LSHIFT")
+check("a tooltip with no info is left alone", redraw._refreshed, 0)
+
+lines = { { leftColor = plain } }
+redraw = RedrawTooltip()
+redraw.GetPrimaryTooltipInfo = nil
+redraw.infoList = { { getterName = "GetUnit", getterArgs = { "mouseover" } } }
+redrawShared.OnModifier("LSHIFT")
+check("an older client's info list reads the same", redraw._refreshed, 1)
+
+-- Every line back to Always: nothing is left on Shift, so Shift redraws nothing.
+for _, key in ipairs(Shift.KEYS) do Shift:Apply(Shift.ALWAYS, key, true, nil) end
+redraw = RedrawTooltip()
+redrawShared.OnModifier("LSHIFT")
+check("with no line on Shift nothing is redrawn", redraw._refreshed, 0)
+
+-- An older copy of this file, loaded after, writes its handler plainly.
+local newest = redrawShared.OnModifier
+redrawShared.OnModifier = function() error("the old handler ran") end
+check("an older copy cannot put its handler back", redrawShared.OnModifier == newest, true)
+check("the newest copy's version is kept", redrawShared.handlers.version, Shift.FILE_VERSION)
+check("nor an older AnyShift", redrawShared.AnyShift() , false)
+check("the frame still finds the handler", _G.BlackthornesTooltipShift.OnModifier == newest, true)
+_G.GameTooltip, _G.C_TooltipInfo = savedGameTooltip, savedTooltipInfo
 
 _G.BlackthornesTooltipShift, IsShiftKeyDown = savedShared, savedShiftDown
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end
