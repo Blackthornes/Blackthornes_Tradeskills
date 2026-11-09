@@ -16,6 +16,15 @@
 --      being confirmed is passed over, and leaving the auction house forgets
 --      every check.
 --   7. A fresh item's List button never counts down the request spacing.
+--   8. A scan's prices count as checked (2026-11-09: the auto scan ran, then
+--      the first click only checked and said "Click again"): every item a
+--      scan priced lists on one click while the scan is under two minutes
+--      old.
+--   9. The quiet scan the auction house starts by itself never holds listing
+--      back (the same day: wheel turns and clicks did nothing while it ran);
+--      a scan the player asked for still does.
+--  10. One search for the whole list counts as tried only once it is sent,
+--      so one given up in the queue is asked again on the next click.
 
 local GLOBALS = { "CreateFrame", "C_Container", "ItemLocation", "GetTime", "time", "C_Timer",
     "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide", "StaticPopup_Visible",
@@ -409,6 +418,77 @@ settings.askBeforeListing = nil
 Posting:NoteChecked(RING, { itemID = RING, itemSuffix = 7 })
 check("a suffix check is not the plain item's", Posting:IsFresh(RING), false)
 settings.askBeforeListing = true
+
+print("")
+print("a scan's prices list on one click")
+
+Reset()
+settings.askBeforeListing = nil
+recorded[POTION] = 290
+Posting:NoteScanned({ [POTION] = { 290 }, [CLOAK] = { 790 } })
+check("the potion is fresh after the scan", Posting:IsFresh(POTION), true)
+check("the cloak too", Posting:IsFresh(CLOAK), true)
+check("not an item the scan never saw", Posting:IsFresh(OIL), false)
+Posting:Request(POTION, 5, 290)
+check("one click lists it", #posted, 1)
+check("at the scan's price", posted[1] and posted[1].price, 290)
+check("with no search", #searches, 0)
+check("and no Click again", Said("Click again to list it"), false)
+Posting:NoteScanned(nil)
+Posting:NoteScanned({ potion = true })
+check("odd keys are left alone", Posting:IsFresh(OIL), false)
+clock = clock + Posting.FRESH_FOR + 1
+check("two minutes on, the scan's price no longer lists on the click", Posting:IsFresh(POTION), false)
+clock = clock + 100
+settings.askBeforeListing = true
+
+print("")
+print("the quiet auto scan never holds listing back")
+
+Reset()
+ns.Scanner.isScanning = true
+ns.Scanner.quickOnly = true
+check("it does not block", Posting:ScanBlocks(), false)
+check("a click may list", (Posting:CanPost(POTION)), true)
+local _, why = Posting:SecondsUntilPostable(OIL)
+check("the button is not told to wait for it", why ~= "waiting for the scan to finish", true)
+check("the whole list may be checked", (Posting:CheckAll({ { itemID = POTION } })), true)
+Posting.checkAll = nil
+queued = {}
+
+ns.Scanner.quickOnly = false
+check("a scan the player asked for blocks", Posting:ScanBlocks(), true)
+local may, reason = Posting:CanPost(POTION)
+check("a click waits", may, false)
+check("and says why", reason, "wait for the scan to finish")
+check("the whole list waits too", (Posting:CheckAll({ { itemID = POTION } })), false)
+check("the button counts it down", select(2, Posting:SecondsUntilPostable(OIL)), "waiting for the scan to finish")
+check("one not scanning never blocks", (function()
+    ns.Scanner.isScanning = false
+    return Posting:ScanBlocks()
+end)(), false)
+ns.Scanner.quickOnly = nil
+
+print("")
+print("one search for the list counts as tried only once sent")
+
+Reset()
+local two = { { itemID = POTION }, { itemID = OIL } }
+Posting:CheckAll(two)
+check("queued, the button says List Next while it waits", (Posting:WouldCheckAll(two[1], two)), false)
+check("nothing stamped as tried yet", rawget(Posting, "bulkTried") == nil
+    or next(Posting.bulkTried) == nil, true)
+queued[1].onGiveUp()
+check("given up, it does not count as tried", Posting:BulkTried(POTION), false)
+check("so the next click may check the list again", (Posting:WouldCheckAll(two[1], two)), true)
+queued = {}
+Posting:CheckAll(two)
+SendQueued()
+check("sent, it counts as tried", Posting:BulkTried(POTION), true)
+check("for every item asked about", Posting:BulkTried(OIL), true)
+check("not one left out", Posting:BulkTried(RING), false)
+Posting.checkAll = nil
+check("answered, the stamp still holds for two minutes", Posting:BulkTried(POTION), true)
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

@@ -456,6 +456,9 @@ function Scanner:StartBrowseScan()
     self.browsePages = 0
     self.browseRowsSeen = nil
     self.browseLast = nil
+    -- A page by page scan is the player's own, never the quiet auto scan,
+    -- so listing waits for it as before.
+    self.quickOnly = false
     self.scanStartedAt = self.scanStartedAt or GetTime()
 
     -- isBrowsing is deliberately not set yet. It means "our browse query is out
@@ -907,6 +910,7 @@ function Scanner:CommitBrowseResults(results, opts)
     local seen = {}
 
     local items, skipped, implausible = CombineBrowseRows(results, seen)
+    local scanned = {}
 
     for _, item in ipairs(items) do
         -- A browse row is one price, not a book, so market and minimum are
@@ -914,11 +918,15 @@ function Scanner:CommitBrowseResults(results, opts)
         ns.Prices:Record(item.itemID, item.price, item.price, item.quantity, now,
             item.rivalMin, item.ownMin)
         Scanner.RecordRowSuffixes(item, now)
+        scanned[item.itemID] = true
 
         if item.ask then unsettled[#unsettled + 1] = item.itemID end
 
         recorded = recorded + 1
     end
+
+    -- Every item the scan priced lists on one click for a while.
+    if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(scanned) end
 
     if skipped > 0 then
         self:Report(("%d row(s) had no item or price"):format(skipped))
@@ -1213,6 +1221,8 @@ function Scanner:ReadReplicateResults(numItems)
             end
 
             local recorded = ns.Prices:CommitScan(observations, now)
+            -- Every item the scan priced lists on one click for a while.
+            if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(observations) end
 
             -- Each random suffix beside its item, now the item has a price.
             if ns.Prices.CommitSuffixes then
