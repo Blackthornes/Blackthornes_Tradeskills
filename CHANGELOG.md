@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.20.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Where trade camp recipes come from.** Recipes sold for Merchant's Favor show the vendor, zone, cost and any standing they need in the Recipe Book, and Show the Way on the Level Up tab can lead you there. A vendor shows once you open it with this version.
+- **Hover a recipe's materials.** In the Recipe Book and Your Time, hovering a material shows the item's tooltip. Recipe Book material names are white now.
+- **Match the cheapest listing.** New players start with Undercut By at 0c, so posts match the cheapest price. Your saved Undercut By stays as it is. On Your Auctions, a listing tied with someone else's price shows Cheapest in amber until you run Check Places.
+- **Limited stock vendors.** A material a vendor sells only a few of at a time is no longer on your shopping list as a vendor buy. It's priced from the auction house instead.
+- **Craftsman's Writs in other languages.** Writs are found by your game's own item names, so they get prices on clients that aren't English.
+
 ## 1.19.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
