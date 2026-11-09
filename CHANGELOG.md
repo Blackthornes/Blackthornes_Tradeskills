@@ -10,6 +10,7 @@ For WoW: Forever (interface 16001). `/reload` is enough after updating.
 
 - **Drop-down menus open over the window.** Drop-down lists in the Rules window and other windows are no longer hidden behind the window they sit in.
 - **Mouse wheel posting keeps going.** Scrolling to post moves on past a stack the game refused or that was skipped, instead of stopping there.
+- **Mouse wheel posting works after the auto scan.** Scrolling to post lists right after the auto scan finishes, at the price the scan found.
 
 ## 1.19.0
 

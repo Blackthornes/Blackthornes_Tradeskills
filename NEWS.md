@@ -29,6 +29,7 @@ Fixes and changes:
 
 - Drop-down lists now open on top of their window, so none get hidden.
 - Scrolling to post no longer stops on a stack that was skipped or refused.
+- Scrolling to post now works right after the auto scan.
 
 ## 1.19.0
 
