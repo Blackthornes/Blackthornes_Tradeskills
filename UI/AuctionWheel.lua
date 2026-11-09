@@ -1,8 +1,8 @@
 -- The mouse wheel at the auction house (a player asked, the owner said
 -- build it, 2026-10-16). With "Mouse Wheel" ticked (Settings > Auction
 -- house, `mouseWheelListing`, off unless ticked, never rename it), while
--- the drawer is up, wheel up does what List Next does and wheel down what
--- Cancel next does. When the drawer goes, the wheel is the player's again.
+-- the drawer is up, the wheel does the job of the tab showing (see below).
+-- When the drawer goes, the wheel is the player's again.
 --
 -- How: the game asks for a real click or key press for each listing and
 -- each cancel. A wheel turn bound to a button is one, so two named buttons
@@ -21,6 +21,11 @@
 -- and once every `CHECK_EVERY` seconds while the drawer shows, and taken
 -- back when it isn't ours. The drawer counts only while it can be seen
 -- (inside a hidden One Window it can't), and a view change re-checks.
+--
+-- Each tab gives the wheel one job (the owner, 2026-11-09: on Sell a turn
+-- said nothing was undercut instead of listing). On Sell either turn lists
+-- the next stack, on Auctions either turn cancels the next undercut one,
+-- on Snipe wheel up buys. On the other tabs the wheel stays the player's.
 
 local _, ns = ...
 
@@ -55,6 +60,17 @@ function AuctionWheel:IsOn()
     return ns.Config ~= nil and ns.Config:Get("mouseWheelListing") == true
 end
 
+-- What the wheel does on each tab while "Mouse Wheel" is ticked.
+AuctionWheel.JOBS = { sell = "list", auctions = "cancel" }
+
+--- What a turn does on the tab showing: "list", "cancel", "buy" or nil.
+function AuctionWheel:Job()
+    local panel = ns.PostPanel
+    if not panel then return nil end
+    if panel.view == "snipe" then return "buy" end
+    return self.JOBS[panel.view or "sell"]
+end
+
 --- Whether the wheel should be ours right now.
 function AuctionWheel:Wanted()
     local panel = ns.PostPanel
@@ -67,7 +83,7 @@ function AuctionWheel:Wanted()
         return ns.Config ~= nil and ns.Config:Get("snipeWheel") == true
             and ns.Config:Get("snipeTab") == true
     end
-    return self:IsOn()
+    return self:IsOn() and self:Job() ~= nil
 end
 
 -- A notch too soon after the last one does nothing.
@@ -78,28 +94,34 @@ function AuctionWheel:Ready()
     return true
 end
 
---- Wheel up: the next stack on Sell, as List Next.
-function AuctionWheel:List()
+-- Does the tab's job for one turn. Snipe buys on wheel up only.
+function AuctionWheel:Turn(up)
     if not self:Wanted() or not self:Ready() then return false end
-    local panel = ns.PostPanel
-    if panel.view == "snipe" then
+    local job = self:Job()
+    if job == "buy" then
+        if not up then return false end
         -- One notch, one buy click; a big buy still asks "Click Again".
         if ns.Snipe and ns.Snipe.BuyNext then ns.Snipe:BuyNext() end
         return true
+    elseif job == "list" then
+        ns.PostPanel:ListNext()
+        return true
+    elseif job == "cancel" then
+        if not (ns.MyAuctions and ns.MyAuctions.CancelNext) then return false end
+        ns.MyAuctions:CancelNext()
+        return true
     end
-    -- Another view showing: Sell's lines read fresh rather than as last drawn.
-    if panel.view ~= nil and panel.view ~= "sell" then panel.shownLines = nil end
-    panel:ListNext()
-    return true
+    return false
 end
 
---- Wheel down: the undercut auction with the most money under, as Cancel next.
+--- Wheel up: the tab's job (lists on Sell, cancels on Auctions, buys on Snipe).
+function AuctionWheel:List()
+    return self:Turn(true)
+end
+
+--- Wheel down: the tab's job (lists on Sell, cancels on Auctions).
 function AuctionWheel:Cancel()
-    if not self:Wanted() or not self:Ready() then return false end
-    if ns.PostPanel and ns.PostPanel.view == "snipe" then return false end
-    if not (ns.MyAuctions and ns.MyAuctions.CancelNext) then return false end
-    ns.MyAuctions:CancelNext()
-    return true
+    return self:Turn(false)
 end
 
 local function MakeButton(name, onClick)
