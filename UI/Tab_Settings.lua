@@ -2345,7 +2345,7 @@ local function Refresh()
     -- silent = true (inside Put): writing a stored value back into its own
     -- box must not fire the change handler and write it straight back to
     -- the database.
-    Put(widgets.undercut, Config:Get("undercutCopper") or 1)
+    Put(widgets.undercut, Config:Get("undercutCopper") or 0)
     Put(widgets.cut, (Config:Get("auctionCut") or 0.05) * 100)
     Put(widgets.minProfit, (Config:Get("minProfit") or 0) / 100)
     Put(widgets.minMargin, Config:Get("minMarginPercent") or 0)

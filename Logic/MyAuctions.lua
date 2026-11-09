@@ -98,7 +98,7 @@ function MyAuctions:Judge(itemID, unit, link)
         local Profit = ns.Profit
         if Profit and Profit.Overcut then
             local ok, over, _, wall = pcall(Profit.Overcut, Profit, itemID, rival,
-                ns.Config and ns.Config:Get("undercutCopper") or 1)
+                ns.Config and ns.Config:Get("undercutCopper") or 0)
             if ok and over and wall and unit <= wall then return "overcut", rival, wall end
         end
         return "undercut", rival, unit - rival
@@ -507,6 +507,12 @@ function MyAuctions:AttachPlace(row, now)
         end
     end
     row.behind = row.state == "cheapest" and ((row.ahead or 0) > 0 or (row.more or 0) > 0) or nil
+    -- A tie the scan saw (someone else at your price) with no search yet to
+    -- say who is first: shown amber, never given a Cancel, since yours may
+    -- well be first in line.
+    row.tied = row.state == "cheapest" and not row.ahead and not row.more
+        and row.unit and row.rival and row.rival > 0
+        and math.abs(row.rival - row.unit) <= SAME_PRICE or nil
 end
 
 --- Whether Check Places can run now, and why not.
