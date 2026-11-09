@@ -192,6 +192,23 @@ do
     check("no auction price never does", Posting.VendorPaysMore(1, nil, 10), false)
 end
 
+-- A sale that beats the vendor by less than one deposit is not worth the
+-- risk of the listing running out, so it goes to the vendor too.
+do
+    local Profit = ns.Profit
+    local oldEach, oldLost = Profit.LostDepositEach, Profit.LostListings
+    Profit.LostDepositEach = function() return 5 end
+    Profit.LostListings = function() return 0 end
+    -- 100 after the 5% cut is 95: 3 over a vendor's 92, under the 5 deposit
+    check("a win under one deposit goes to the vendor", Posting.VendorPaysMore(1, 100, 92), true)
+    check("a win over one deposit still lists", Posting.VendorPaysMore(1, 100, 80), false)
+    -- one lost deposit already in the net is not taken off a second time
+    Profit.LostListings = function() return 1 end
+    check("a deposit is never counted twice", Posting.VendorPaysMore(1, 100, 89), false)
+    check("and the counted one still counts", Posting.VendorPaysMore(1, 100, 90), true)
+    Profit.LostDepositEach, Profit.LostListings = oldEach, oldLost
+end
+
 print("")
 
 if failures > 0 then
