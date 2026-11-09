@@ -688,7 +688,9 @@ local function CountText(rows)
 end
 
 local function Matches(row, needle)
-    return row.name:lower():find(needle, 1, true) or row.prof:lower():find(needle, 1, true)
+    return row.name:lower():find(needle, 1, true)
+        or (row.english and row.english:lower():find(needle, 1, true))
+        or row.prof:lower():find(needle, 1, true)
         or TierName(row.tier):lower():find(needle, 1, true)
 end
 
