@@ -7,6 +7,10 @@
 --   3. Changes add up in hour and day buckets, per realm, with no names.
 --   4. A period comes back as bars, and the totals leave moves out.
 --   5. Old hours and days are pruned; nothing else is touched.
+--   6. Each change is also kept for the character playing, by GUID, so This
+--      Character's bars and totals are its own; the session too.
+--   7. Gold that came in at the mailbox with no tag goes under the kind of
+--      mail it matches in the inbox reading: a sale, a lost bid, an alt.
 
 local savedTime, savedDate = time, date
 time = os.time
@@ -227,6 +231,83 @@ check("old hours folded away", log.hours[NOW - 86400 * 20], nil)
 check("this hour kept", log.hours[hour] ~= nil, true)
 check("days past 400 dropped", log.days[20240101], nil)
 check("recent days kept", log.days[20261004] ~= nil, true)
+
+print("\nthis character's own bars")
+GL:ResetContext()
+GL.session = {}
+GL.sessionStart = NOW - 1800
+local playing = "Player-1-0A"
+ns.Config.GetCharacterKey = function() return playing end
+GL:Record("auctionSales", 4000, NOW - 600)
+GL:Record("repairs", -500, NOW - 500)
+playing = "Player-1-0B"
+GL:Record("loot", 700, NOW - 400)
+playing = "Ana-Realm A"
+GL:Record("loot", 9, NOW - 300)
+playing = "Player-1-0A"
+
+local allToday = GL:Totals(GL:Bins("today", nil, nil, NOW))
+local anaToday = GL:Totals(GL:Bins("today", nil, nil, NOW, "character"))
+check("all characters still add up every change", allToday.sources.auctionSales.i, 14000)
+check("this character's sales are its own", anaToday.sources.auctionSales.i, 4000)
+check("its spending is its own", anaToday.spending, 500)
+check("another character's loot is left out", anaToday.sources.loot, nil)
+check("a week reads its days", GL:Totals(GL:Bins("week", nil, nil, NOW, "character")).income, 4000)
+local anaSession = GL:Totals(GL:Bins("session", nil, nil, NOW, "character"))
+check("the session keeps to this character", anaSession.income, 4000)
+playing = "Player-1-0B"
+check("the other character sees its own", GL:Totals(GL:Bins("today", nil, nil, NOW, "character")).income, 700)
+playing = "Player-1-0C"
+check("a character with nothing kept shows nothing", GL:Totals(GL:Bins("week", nil, nil, NOW, "character")).income, 0)
+playing = "Bob-Realm A"
+check("no GUID, nothing to show", GL:Totals(GL:Bins("session", nil, nil, NOW, "character")).income, 0)
+playing = "Player-1-0A"
+check("kept under the GUID only", ns.db.goldLog[realm].sourcesByCharacter["Ana-Realm A"], nil)
+
+local mine = ns.db.goldLog[realm].sourcesByCharacter["Player-1-0A"]
+mine.hours[NOW - 86400 * 20] = { loot = { i = 1, o = 0 } }
+mine.days[20240101] = { loot = { i = 1, o = 0 } }
+GL:Prune(NOW)
+check("its old hours pruned", mine.hours[NOW - 86400 * 20], nil)
+check("its old days pruned", mine.days[20240101], nil)
+check("its recent days kept", mine.days[20261006] ~= nil, true)
+
+print("\nauction gold at the mailbox")
+GL:ResetContext()
+ns.MailHaul.baseline = {
+  ["sold:Linen Bag"] = { kind = "sold", name = "Linen Bag", monies = { 200, 450 } },
+  ["outbid:Wool"] = { kind = "outbid", name = "Wool", monies = { 1200 } },
+  ["other:Bob"] = { kind = "other", name = "Bob", monies = { 5000 } },
+  ["other:Zed"] = { kind = "other", name = "Zed", monies = { 75, 450 } },
+}
+check("a sale's gold by its amount", GL:MailMatch(200), "auctionSales")
+check("a lost bid's gold", GL:MailMatch(1200), "auctionBuys")
+check("an alt's gold", GL:MailMatch(5000), "transfer")
+check("a stranger's gold", GL:MailMatch(75), "mail")
+check("two kinds with the same gold: no telling", GL:MailMatch(450), nil)
+check("no mail with that gold", GL:MailMatch(999), nil)
+
+GetMoney = function() return money end
+GL.lastMoney, GL.ready = 1000, true
+money = 1200
+GL:SetWindow("mail", true, NOW)
+GL:OnMoney(NOW)
+check("untagged sale gold at the mailbox is a sale", ns.db.goldLog[realm].hours[hour].auctionSales.i, 200)
+inbox[9] = { sender = "Zed", subject = "Hello", money = 75 }
+GL:NoteTakeMail(9)
+money = 1275
+GL:OnMoney(NOW)
+check("a stranger's gold stays mail", ns.db.goldLog[realm].hours[hour].mail.i, 75)
+GL:Tag("quests", 1, NOW)
+money = 1475
+GL:OnMoney(NOW)
+check("a tag that says otherwise wins", ns.db.goldLog[realm].hours[hour].quests.i, 200)
+ns.MailHaul.baseline = nil
+money = 1675
+GL:OnMoney(NOW)
+check("no inbox reading: mail as before", ns.db.goldLog[realm].hours[hour].mail.i, 275)
+GetMoney = nil
+ns.Config.GetCharacterKey = nil
 
 GetInboxHeaderInfo, InRepairMode = nil, nil
 time, date = savedTime, savedDate

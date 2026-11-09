@@ -160,6 +160,41 @@ local function AddTo(bucketTable, key, source, amount)
     end
 end
 
+-- A player asked (2026-11-09): with This Character picked, the bars and the
+-- list under the chart stayed the realm's. Each change is now also kept for
+-- the character playing, by GUID, in this realm's log as
+-- `sourcesByCharacter[guid] = { hours, days }` (never renamed), in the same
+-- bucket shape and kept as long. Changes from before that were never kept by
+-- character, so This Character starts from the day this was added.
+
+--- The GUID of the character playing, or nil when the client won't say.
+local function PlayingKey()
+    local key = ns.Config and ns.Config.GetCharacterKey and ns.Config:GetCharacterKey()
+    if type(key) ~= "string" or not key:find("^Player%-") then return nil end
+    return key
+end
+
+--- The character playing's own buckets, or nil.
+local function CharacterSources(create, log)
+    local key = PlayingKey()
+    if not key then return nil end
+
+    log = log or GoldLog:GetLog()
+    if type(log.sourcesByCharacter) ~= "table" then
+        if not create then return nil end
+        log.sourcesByCharacter = {}
+    end
+    local record = log.sourcesByCharacter[key]
+    if type(record) ~= "table" then
+        if not create then return nil end
+        record = { hours = {}, days = {} }
+        log.sourcesByCharacter[key] = record
+    end
+    if type(record.hours) ~= "table" then record.hours = {} end
+    if type(record.days) ~= "table" then record.days = {} end
+    return record
+end
+
 --- Write one change down. `amount` is signed: gold in is positive.
 function GoldLog:Record(source, amount, t)
     amount = tonumber(amount)
@@ -172,9 +207,15 @@ function GoldLog:Record(source, amount, t)
     AddTo(log.hours, t - (t % HOUR), source, amount)
     AddTo(log.days, GoldLog.DayKey(t), source, amount)
 
+    local mine = CharacterSources(true, log)
+    if mine then
+        AddTo(mine.hours, t - (t % HOUR), source, amount)
+        AddTo(mine.days, GoldLog.DayKey(t), source, amount)
+    end
+
     local session = self.session
     if session then
-        session[#session + 1] = { t = t, source = source, amount = amount }
+        session[#session + 1] = { t = t, source = source, amount = amount, who = PlayingKey() }
         if #session > MAX_SESSION then table.remove(session, 1) end
     end
 
@@ -223,6 +264,19 @@ function GoldLog:Prune(now)
     for dayKey in pairs(log.questsDone) do
         if type(dayKey) ~= "number" or dayKey < oldest then
             log.questsDone[dayKey] = nil
+        end
+    end
+
+    if type(log.sourcesByCharacter) == "table" then
+        for _, record in pairs(log.sourcesByCharacter) do
+            if type(record) == "table" then
+                for hourStart in pairs(type(record.hours) == "table" and record.hours or {}) do
+                    if type(hourStart) ~= "number" or hourStart < now - KEEP_HOURS then record.hours[hourStart] = nil end
+                end
+                for dayKey in pairs(type(record.days) == "table" and record.days or {}) do
+                    if type(dayKey) ~= "number" or dayKey < oldest then record.days[dayKey] = nil end
+                end
+            end
         end
     end
 end
@@ -307,6 +361,44 @@ function GoldLog:Classify(amount, now)
     return "other"
 end
 
+--- Gold that came in at the mailbox: the sale, lost bid or alt's gold it
+--- matches in the last reading of the inbox, by its exact amount, or nil.
+--
+-- A player's auction sale was filed as Mail (2026-11-09): the gold came in
+-- while the mailbox was open but no tag said whose mail it was (taken by
+-- another mail addon, or read after its gold had left the header). The
+-- mailbox reading still knows each mail's kind and gold, so a gain that
+-- matches one kind and no other goes under that kind.
+function GoldLog:MailMatch(amount)
+    if type(amount) ~= "number" or amount <= 0 then return nil end
+    local baseline = ns.MailHaul and ns.MailHaul.baseline
+    if type(baseline) ~= "table" then return nil end
+
+    local found
+    for _, bucket in pairs(baseline) do
+        if type(bucket) == "table" and type(bucket.monies) == "table" then
+            for _, money in ipairs(bucket.monies) do
+                if money == amount then
+                    local source
+                    if bucket.kind == "sold" then
+                        source = "auctionSales"
+                    elseif bucket.kind == "outbid" then
+                        source = "auctionBuys"
+                    elseif self:IsOwnCharacter(bucket.name) then
+                        source = "transfer"
+                    else
+                        source = "mail"
+                    end
+                    -- Two kinds of mail with the same gold: no telling which.
+                    if found and found ~= source then return nil end
+                    found = source
+                end
+            end
+        end
+    end
+    return found
+end
+
 --- For the tests: forget every tag and window.
 function GoldLog:ResetContext()
     tags = {}
@@ -338,7 +430,12 @@ function GoldLog:OnMoney(now)
     if delta == 0 then return end
 
     now = now or time()
-    self:Record(self:Classify(delta, now), delta, now)
+    local source = self:Classify(delta, now)
+    if source == "mail" and delta > 0 then
+        local ok, match = pcall(self.MailMatch, self, delta)
+        if ok and match then source = match end
+    end
+    self:Record(source, delta, now)
     pcall(self.NoteGold, self, money, now)
 end
 
@@ -495,10 +592,18 @@ end
 -- @param period  "session" | "today" | "week" | "month" | "pick"
 -- @param fromKey, toKey  YYYYMMDD, for "pick"
 -- @return array of bins { label, from, to, sources = { [source] = { i, o } } }
-function GoldLog:Bins(period, fromKey, toKey, now)
+-- @param who  "character" reads only the character playing's changes; else all
+function GoldLog:Bins(period, fromKey, toKey, now, who)
     now = now or time()
     local log = self:GetLog()
     local bins = {}
+
+    local onlyMe = who == "character"
+    local me = onlyMe and PlayingKey() or nil
+    local buckets = log
+    if onlyMe then
+        buckets = CharacterSources(false, log) or { hours = {}, days = {} }
+    end
 
     if period == "session" then
         local started = self.sessionStart or now
@@ -513,11 +618,13 @@ function GoldLog:Bins(period, fromKey, toKey, now)
         end
 
         for _, change in ipairs(self.session or {}) do
-            local index = math.min(count, math.max(1, math.floor((change.t - started) / width) + 1))
-            AddBucket(bins[index], { [change.source] = {
-                i = change.amount > 0 and change.amount or 0,
-                o = change.amount < 0 and -change.amount or 0,
-            } })
+            if not onlyMe or (me and change.who == me) then
+                local index = math.min(count, math.max(1, math.floor((change.t - started) / width) + 1))
+                AddBucket(bins[index], { [change.source] = {
+                    i = change.amount > 0 and change.amount or 0,
+                    o = change.amount < 0 and -change.amount or 0,
+                } })
+            end
         end
 
         return bins
@@ -533,7 +640,7 @@ function GoldLog:Bins(period, fromKey, toKey, now)
         -- local one. Where the zone is offset by a half or quarter hour the
         -- two never meet, and looking a bin's start up as a key found
         -- nothing; each bucket goes to the bin its start falls in instead.
-        for key, bucket in pairs(log.hours) do
+        for key, bucket in pairs(buckets.hours) do
             if type(key) == "number" then
                 local index = math.floor((key - midnight) / HOUR)
                 if index >= 0 and index < 24 then AddBucket(bins[index + 1], bucket) end
@@ -565,7 +672,7 @@ function GoldLog:Bins(period, fromKey, toKey, now)
         local last = starts[math.min(#starts, index + perBin - 1)]
         local bin = NewBin(date(perBin > 1 and "%b %d" or "%d", first), first, GoldLog.DayStart(last, 1))
         for step = index, math.min(#starts, index + perBin - 1) do
-            AddBucket(bin, log.days[GoldLog.DayKey(starts[step])])
+            AddBucket(bin, buckets.days[GoldLog.DayKey(starts[step])])
         end
         bins[#bins + 1] = bin
     end
