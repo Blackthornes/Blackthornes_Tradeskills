@@ -683,6 +683,16 @@ local function VendorsOf(itemID)
     return vendors
 end
 
+--- Vendors seen in game selling a recipe item on the player's side, from
+--- VendorPins (the player's own and the shipped spots). Each keeps what it
+--- costs (gold or a currency) and the standing it needs.
+local function SellersOf(itemID)
+    local pins = ns.VendorPins
+    if not (pins and pins.RecipeSellers) then return {} end
+    local ok, sellers = pcall(pins.RecipeSellers, pins, itemID)
+    return ok and type(sellers) == "table" and sellers or {}
+end
+
 --- How a recipe is learned.
 --
 -- @return short, lines  short is one word for a list cell ("Trainer",
@@ -708,13 +718,31 @@ function RecipeBook:LearnFrom(record)
     for _, itemID in ipairs(record.recipeItems or {}) do
         local row = Book().ITEMS[itemID]
         local vendors = VendorsOf(itemID)
+        local listed = {}
         for _, vendor in ipairs(vendors) do
             short = short or L["Vendor"]
+            listed[vendor.name] = true
             lines[#lines + 1] = vendor.zone ~= "" and L.Format("Vendor: %s, %s", vendor.name, vendor.zone)
                 or L.Format("Vendor: %s", vendor.name)
         end
+        local seen = 0
+        for _, seller in ipairs(SellersOf(itemID)) do
+            if seller.name and not listed[seller.name] then
+                listed[seller.name] = true
+                seen = seen + 1
+                short = short or L["Vendor"]
+                local zone = ns.VendorPins.ZoneName and ns.VendorPins.ZoneName(seller) or ""
+                lines[#lines + 1] = zone ~= "" and L.Format("Vendor: %s, %s", seller.name, zone)
+                    or L.Format("Vendor: %s", seller.name)
+                local cost = ns.VendorPins.CostText and ns.VendorPins.CostText(seller)
+                if cost and cost ~= "" then lines[#lines + 1] = cost end
+                if seller.faction and seller.standing then
+                    lines[#lines + 1] = L.Format("Needs %s with %s", seller.standing, seller.faction)
+                end
+            end
+        end
         if row and (row.d or 0) > drops then drops, named = row.d, row.n end
-        if #vendors == 0 and not (row and row.d) then otherItem = true end
+        if #vendors == 0 and seen == 0 and not (row and row.d) then otherItem = true end
     end
 
     if drops > 0 then
@@ -771,6 +799,9 @@ function RecipeBook:GetRecipePrice(record, extraItemID)
             Offer(ns.Vendor:GetUnitPrice(itemID), "vendor", itemID)
         elseif row and row.v and #VendorsOf(itemID) > 0 then
             Offer(row[2], "vendor", itemID)
+        end
+        for _, seller in ipairs(SellersOf(itemID)) do
+            Offer(seller.gold, "vendor", itemID)
         end
         Offer(ns.Prices and ns.Prices:GetValue(itemID, "lowest"), "auction", itemID)
     end

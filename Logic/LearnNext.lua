@@ -148,6 +148,19 @@ function LearnNext:Place(record)
                 }
             end
         end
+        -- Vendors the game showed selling it (Forever's trade camps sell
+        -- recipes the book has no vendor for), already of the player's side.
+        local pins = ns.VendorPins
+        local ok, sellers = false, nil
+        if pins and pins.RecipeSellers then ok, sellers = pcall(pins.RecipeSellers, pins, itemID) end
+        for _, seller in ipairs(ok and type(sellers) == "table" and sellers or {}) do
+            local zone = pins.ZoneName and pins.ZoneName(seller)
+            vendors[#vendors + 1] = {
+                kind = "vendor", name = seller.name, zone = zone ~= "" and zone or nil,
+                x = seller.x, y = seller.y, mapID = seller.mapID,
+                price = seller.gold, itemID = itemID,
+            }
+        end
     end
 
     -- A trainer first: it is how most recipes are learned, and the cheaper.

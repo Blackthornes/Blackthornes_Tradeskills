@@ -19,6 +19,14 @@ BlackthornesTSDB = {
       ["side"] = "A", ["at"] = 1790000000, ["items"] = { [2678] = true } },
     [341] = { ["name"] = "Bad Spot", ["mapID"] = 1453, ["x"] = 400, ["y"] = 30 },
     [342] = { ["name"] = 12, ["mapID"] = 1453, ["x"] = 1, ["y"] = 1 },
+    [343] = { ["name"] = "Camp Quartermaster", ["mapID"] = 1433, ["x"] = 40.5, ["y"] = 60.25,
+      ["side"] = "A", ["at"] = 1790000001, ["items"] = {},
+      ["recipes"] = {
+        [190001] = { ["costs"] = { { ["name"] = "Merchant's Favor", ["amount"] = 25, ["currency"] = 3001 } },
+          ["faction"] = "Azeroth Commerce Authority", ["standing"] = "Honored" },
+        [190002] = { ["gold"] = 5000 },
+        [190003] = { ["gold"] = "lots", ["costs"] = { { ["name"] = 5 } } },
+      } },
   },
   ["trainerSpots"] = {
     [1430] = { ["name"] = "Tomas", ["mapID"] = 1453, ["x"] = 77.5, ["y"] = 53.1, ["side"] = "A", ["at"] = 1 },
@@ -45,7 +53,8 @@ with tempfile.TemporaryDirectory() as folder:
     with open(tool.OUTPUT, "w", encoding="utf-8") as f:
         f.write('local _, ns = ...\nns.FOREVER_VENDOR_SPOTS = {\n'
                 '    [340] = { "Kendor Kabonka", 1453, 74.7, 36.5, "A", {} },\n'
-                '    [99] = { "Old Shop", 1429, 1, 2, "", {} },\n}\n'
+                '    [99] = { "Old Shop", 1429, 1, 2, "", {} },\n'
+                '    [98] = { "Kept Camp", 1433, 3, 4, "H", {}, { [190009] = { gold = 700 } } },\n}\n'
                 'ns.FOREVER_TRAINER_SPOTS = {\n}\n')
     tool.main([save])
     with open(tool.OUTPUT, encoding="utf-8") as f:
@@ -59,6 +68,14 @@ check("a row with no name is skipped", "[342]" in text, False)
 check("trainers are kept", '[1430] = { "Tomas", 1453, 77.5, 53.1, "A", {} },' in text, True)
 check("when it was seen is not written", "1790000000" in text, False)
 check("nothing else from the save", "999" in text, False)
+check("a recipe sold for a currency is kept",
+      '[190001] = { costs = { { name = "Merchant\'s Favor", amount = 25, currency = 3001 } }, '
+      'faction = "Azeroth Commerce Authority", standing = "Honored" }' in text, True)
+check("a recipe sold for gold is kept", "[190002] = { gold = 5000 }" in text, True)
+check("a recipe with nothing readable is skipped", "190003" in text, False)
+check("a shipped vendor keeps its recipes", "[190009] = { gold = 700 }" in text, True)
+check("a vendor with no recipes has no recipe table",
+      '[340] = { "Kendor Kabonka", 1453, 70.1, 30.2, "A", { [2678] = true } },' in text, True)
 
 print("")
 if failures:

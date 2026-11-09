@@ -42,6 +42,8 @@ VendorPins.version = 0
 VendorPins.MOST_VENDORS = 300
 -- At most this many items a learned vendor.
 VendorPins.MOST_ITEMS = 80
+-- At most this many recipes a learned vendor.
+VendorPins.MOST_RECIPES = 150
 
 local function Plain(value)
     local ok, copy = pcall(function()
@@ -95,7 +97,8 @@ function VendorPins:Known(kind)
     for npcID, row in pairs((trainer and ns.FOREVER_TRAINER_SPOTS or ns.FOREVER_VENDOR_SPOTS) or {}) do
         if type(row) == "table" then
             known[npcID] = { name = row[1], mapID = row[2], x = row[3], y = row[4],
-                side = row[5], items = type(row[6]) == "table" and row[6] or {}, at = 0 }
+                side = row[5], items = type(row[6]) == "table" and row[6] or {},
+                recipes = type(row[7]) == "table" and row[7] or nil, at = 0 }
         end
     end
     for npcID, record in pairs(trainer and self:TrainerStore() or self:Store()) do
@@ -134,12 +137,50 @@ local function PlayerSpot()
     return mapID, math.floor(x * 1000 + 0.5) / 10, math.floor(y * 1000 + 0.5) / 10
 end
 
+--- The recipes a vendor window offers, cleaned for the save:
+--- { [itemID] = { gold, costs = { { name, amount, currency, item } },
+---   faction, standing } }, and a key that says whether they changed.
+local function CleanRecipes(recipes)
+    local kept, count, keys = {}, 0, {}
+    if type(recipes) ~= "table" then return kept, "" end
+    for itemID, offer in pairs(recipes) do
+        if count >= VendorPins.MOST_RECIPES then break end
+        if type(itemID) == "number" and type(offer) == "table" then
+            local row = { gold = Number(offer.gold), faction = Plain(offer.faction),
+                standing = Plain(offer.standing) }
+            local key = { itemID, row.gold or 0, row.faction or "", row.standing or "" }
+            for _, cost in ipairs(type(offer.costs) == "table" and offer.costs or {}) do
+                local name, amount = Plain(cost.name), Number(cost.amount)
+                if name and amount then
+                    row.costs = row.costs or {}
+                    row.costs[#row.costs + 1] = { name = name, amount = amount,
+                        currency = Number(cost.currency), item = Number(cost.item) }
+                    key[#key + 1] = name .. "=" .. amount
+                end
+            end
+            kept[itemID] = row
+            keys[#keys + 1] = table.concat(key, ":")
+            count = count + 1
+        end
+    end
+    table.sort(keys)
+    return kept, table.concat(keys, ";")
+end
+
+local function RecipesKey(recipes)
+    local _, key = CleanRecipes(recipes)
+    return key
+end
+
 --- Kept from a vendor window: which items it sells for gold and where it
 --- stands. Only materials (reagents and trade goods, or what the shipped
---- vendor prices know), so the save holds no gear or food lists.
--- @param items  Vendor.merchantItems: { [itemID] = { price, numAvailable, extendedCost } }
+--- vendor prices know), so the save holds no gear or food lists, and the
+--- recipes it sells whatever they cost (the trade camps' cost Merchant's
+--- Favor), so a recipe can say where it's learned.
+-- @param items    Vendor.merchantItems: { [itemID] = { price, numAvailable, extendedCost } }
+-- @param recipes  optional, Vendor.merchantRecipes: { [itemID] = { gold, costs, faction, standing } }
 -- @return true when kept
-function VendorPins:Learn(items)
+function VendorPins:Learn(items, recipes)
     if type(items) ~= "table" then return false end
     local npcID = self.NpcID(Read(_G.UnitGUID, "npc"))
     local name = Plain(Read(_G.UnitName, "npc"))
@@ -147,7 +188,7 @@ function VendorPins:Learn(items)
     local mapID, x, y = PlayerSpot()
     if not mapID then return false end
 
-    local sells, count, recipes = {}, 0, false
+    local sells, count, recipeVendor = {}, 0, false
     for itemID, item in pairs(items) do
         if count >= self.MOST_ITEMS then break end
         if type(item) == "table" and not item.extendedCost and (item.price or 0) > 0 then
@@ -155,7 +196,7 @@ function VendorPins:Learn(items)
             if not material and type(_G.C_Item) == "table" then
                 local classID = select(6, Read(_G.C_Item.GetItemInfoInstant, itemID))
                 material = classID == 5 or classID == 7
-                recipes = recipes or classID == 9
+                recipeVendor = recipeVendor or classID == 9
             end
             if material then
                 sells[itemID] = (item.numAvailable or -1) < 0
@@ -163,18 +204,21 @@ function VendorPins:Learn(items)
             end
         end
     end
+    local offers, offersKey = CleanRecipes(recipes)
+    if next(offers) ~= nil then recipeVendor = true end
     -- A vendor of recipes alone is kept for where it stands (Show the way).
-    if count == 0 and not recipes then return false end
+    if count == 0 and not recipeVendor then return false end
 
     local store = self:Store()
     local was = store[npcID]
     local side = self.Side(Plain(Read(_G.UnitFactionGroup, "npc")))
-    store[npcID] = { name = name, mapID = mapID, x = x, y = y, side = side, items = sells, at = time() }
+    store[npcID] = { name = name, mapID = mapID, x = x, y = y, side = side, items = sells, at = time(),
+        recipes = next(offers) ~= nil and offers or nil }
 
     -- The same vendor read again (every buy scans it) is no news.
     local same = type(was) == "table" and was.mapID == mapID and was.side == side
         and math.abs((was.x or 0) - x) < 1 and math.abs((was.y or 0) - y) < 1
-        and type(was.items) == "table"
+        and type(was.items) == "table" and RecipesKey(was.recipes) == offersKey
     if same then
         for itemID, unlimited in pairs(sells) do
             if was.items[itemID] ~= unlimited then same = false break end
@@ -208,6 +252,58 @@ function VendorPins:SeenAt(name, zone, kind)
     end
     if not best then return nil end
     return { mapID = best.mapID, x = best.x, y = best.y }
+end
+
+--- The vendors the game showed selling a recipe item, of the player's side
+--- (or neither): { { npcID, name, mapID, x, y, side, gold, costs, faction,
+--- standing } }, the newest seen first. Read only.
+function VendorPins:RecipeSellers(itemID)
+    local sellers = {}
+    if not itemID then return sellers end
+    local mine = self.Side(Plain(Read(_G.UnitFactionGroup, "player")))
+    if mine == "" then mine = nil end
+    for npcID, record in pairs(self:Known()) do
+        local offer = type(record) == "table" and type(record.recipes) == "table" and record.recipes[itemID]
+        local side = record and record.side
+        if type(offer) == "table" and record.mapID and record.x and record.y
+            and (side == nil or side == "" or mine == nil or side == mine) then
+            sellers[#sellers + 1] = {
+                npcID = npcID, name = record.name, mapID = record.mapID, x = record.x, y = record.y,
+                side = side, at = record.at or 0, gold = offer.gold, costs = offer.costs,
+                faction = offer.faction, standing = offer.standing,
+            }
+        end
+    end
+    table.sort(sellers, function(a, b)
+        if a.at ~= b.at then return a.at > b.at end
+        return (a.npcID or 0) < (b.npcID or 0)
+    end)
+    return sellers
+end
+
+--- What a recipe costs at a vendor, in words: "50 Merchant's Favor", or
+--- gold and the rest joined. The game's own name for a currency where it
+--- gives one, so it reads in the player's language.
+function VendorPins.CostText(offer)
+    if type(offer) ~= "table" then return nil end
+    local parts = {}
+    if offer.gold and offer.gold > 0 and ns.Util and ns.Util.FormatMoney then
+        parts[#parts + 1] = ns.Util.FormatMoney(offer.gold, { noColor = true })
+    end
+    for _, cost in ipairs(offer.costs or {}) do
+        local name = cost.name
+        local currencies = rawget(_G, "C_CurrencyInfo")
+        if cost.currency and type(currencies) == "table" and type(currencies.GetCurrencyInfo) == "function" then
+            local info = Read(currencies.GetCurrencyInfo, cost.currency)
+            local ok, shown = pcall(function() return type(info) == "table" and info.name end)
+            name = (ok and Plain(shown)) or name
+        end
+        if type(cost.amount) == "number" and type(name) == "string" and name ~= "" then
+            parts[#parts + 1] = L.Format("%d %s", cost.amount, name)
+        end
+    end
+    if #parts == 0 then return nil end
+    return table.concat(parts, ", ")
 end
 
 --- Kept from a trainer window: where the trainer stands, so Show the way

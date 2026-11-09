@@ -381,6 +381,39 @@ ns.FOREVER_TRAINER_SPOTS = nil
 npc.guid = nil
 check("nobody targeted, nothing kept", VP:LearnTrainer(), false)
 
+print("\nrecipes a trade camp sells for Merchant's Favor")
+local RECIPE = 190001
+npc.guid, npc.name, npc.faction = "Creature-0-1-2-3-7001-0000ABCD", "Camp Quartermaster", "Alliance"
+spot.map, spot.x, spot.y = 1453, 0.405, 0.6025
+check("a vendor with recipes only is kept", VP:Learn({}, {
+  [RECIPE] = { costs = { { name = "Merchant's Favor", amount = 25, currency = 3001 } },
+    faction = "Azeroth Commerce Authority", standing = "Honored" },
+}), true)
+local camp = ns.db.vendorSpots[7001]
+check("the recipe is kept", camp and camp.recipes and camp.recipes[RECIPE] ~= nil, true)
+check("its currency price", camp and camp.recipes[RECIPE].costs[1].amount, 25)
+local sellers = VP:RecipeSellers(RECIPE)
+check("the camp sells it", sellers[1] and sellers[1].name, "Camp Quartermaster")
+check("with the standing it needs", sellers[1] and sellers[1].standing, "Honored")
+check("in words", VP.CostText(sellers[1]), "25 Merchant's Favor")
+check("gold and a currency", VP.CostText({ gold = 500,
+  costs = { { name = "Merchant's Favor", amount = 3 } } }), "500c, 3 Merchant's Favor")
+before = VP.version
+VP:Learn({}, { [RECIPE] = { costs = { { name = "Merchant's Favor", amount = 25, currency = 3001 } },
+  faction = "Azeroth Commerce Authority", standing = "Honored" } })
+check("read again, no news", VP.version, before)
+VP:Learn({}, { [RECIPE] = { costs = { { name = "Merchant's Favor", amount = 30, currency = 3001 } },
+  faction = "Azeroth Commerce Authority", standing = "Honored" } })
+check("a new price is news", VP.version > before, true)
+playerSide = "Horde"
+check("not offered to the other side", #VP:RecipeSellers(RECIPE), 0)
+playerSide = "Alliance"
+ns.FOREVER_VENDOR_SPOTS = { [7002] = { "Shipped Camp", 1453, 1, 2, "A", {},
+  { [190002] = { gold = 700 } } } }
+check("a shipped camp's recipe", VP:RecipeSellers(190002)[1] and VP:RecipeSellers(190002)[1].gold, 700)
+ns.FOREVER_VENDOR_SPOTS = nil
+npc.guid = nil
+
 print("\n/bts vendorpins")
 commands.vendorpins("on")
 check("on", settings.vendorMapPins, true)
