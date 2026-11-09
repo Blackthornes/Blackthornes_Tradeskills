@@ -130,7 +130,7 @@ function Posting:CanPost(itemID)
         return false, L["the auction house must be open"]
     end
 
-    if ns.Scanner.isScanning then
+    if self:ScanBlocks() then
         return false, L["wait for the scan to finish"]
     end
 
@@ -187,7 +187,7 @@ function Posting:SecondsUntilPostable(itemID)
     if self:IsBlocked() then return 0, nil end
     if not ns.Scanner.isAuctionHouseOpen then return 0, nil end
 
-    if ns.Scanner.isScanning then
+    if self:ScanBlocks() then
         return 0, L["waiting for the scan to finish"]
     end
 
@@ -2243,6 +2243,28 @@ function Posting:NoteChecked(itemID, itemKey)
     self.checkedAt[itemID] = GetTime()
 end
 
+--- A scan just priced these items (a table keyed by item ID): each counts
+--- as checked, so one click or wheel turn lists it at the scan's price
+--- while the scan is under two minutes old, with no search first and no
+--- "Click again" (the owner's report, 2026-11-09).
+function Posting:NoteScanned(itemIDs)
+    if type(itemIDs) ~= "table" then return end
+    for itemID in pairs(itemIDs) do
+        if type(itemID) == "number" then self:NoteChecked(itemID) end
+    end
+end
+
+--- Does a running scan hold listing back? Only one the player asked for.
+--- The quiet scan the auction house starts by itself (the auto scan's quick
+--- scan) runs behind the player's listing: it used to refuse every click
+--- and wheel turn for up to thirty seconds, with "wait for the scan to
+--- finish" in chat (the owner's report, 2026-11-09).
+function Posting:ScanBlocks()
+    local scanner = ns.Scanner
+    if not (scanner and scanner.isScanning) then return false end
+    return scanner.quickOnly ~= true
+end
+
 --- Is the Yes/No box on? Off unless ticked ("Ask Before Listing").
 function Posting:AsksFirst()
     return ns.Config:Get("askBeforeListing") == true
@@ -2296,9 +2318,20 @@ end
 --- Was this item in a search of the whole list lately? Then one that came
 --- back without its price is searched for alone, not asked about again.
 function Posting:BulkTried(itemID)
+    if self:CheckPending(itemID) then return true end
     local tried = rawget(self, "bulkTried")
     local at = type(tried) == "table" and itemID and tried[itemID]
     return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+end
+
+--- Is a search for the whole list still out for this item: waiting in the
+--- queue, or sent and not yet answered? One given up or answered is not.
+function Posting:CheckPending(itemID)
+    local check = rawget(self, "checkAll")
+    if type(check) ~= "table" or not itemID or not (check.wanted and check.wanted[itemID]) then
+        return false
+    end
+    return not check.sentAt or (GetTime() - check.sentAt) <= CHECK_ALL_WAIT
 end
 
 --- The cheapest price from someone else in one browse row, or nil when the
@@ -2323,7 +2356,7 @@ function Posting:WouldCheckAll(line, lines)
     if ns.Config:Get("verifyPriceBeforePosting") == false then return false end
 
     local scanner = ns.Scanner
-    if not (scanner and scanner.isAuctionHouseOpen) or scanner.isScanning then return false end
+    if not (scanner and scanner.isAuctionHouseOpen) or self:ScanBlocks() then return false end
     if not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
             and Util.HasFunction("C_AuctionHouse.MakeItemKey")) then
         return false
@@ -2348,7 +2381,7 @@ function Posting:CheckAll(lines)
     if not (scanner and scanner.isAuctionHouseOpen) then
         return false, L["the auction house must be open"]
     end
-    if scanner.isScanning then return false, L["wait for the scan to finish"] end
+    if self:ScanBlocks() then return false, L["wait for the scan to finish"] end
     if not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
             and Util.HasFunction("C_AuctionHouse.MakeItemKey")) then
         return false
@@ -2371,10 +2404,6 @@ function Posting:CheckAll(lines)
     local check = { wanted = wanted, count = #keys, found = 0 }
     self.checkAll = check
 
-    if type(rawget(self, "bulkTried")) ~= "table" then self.bulkTried = {} end
-    local now = GetTime()
-    for itemID in pairs(wanted) do self.bulkTried[itemID] = now end
-
     ns.AHQueue:Request({
         name = ("price check for %d items"):format(#keys),
         key = "price-check-all",
@@ -2388,6 +2417,13 @@ function Posting:CheckAll(lines)
                 return false
             end
             check.sentAt = GetTime()
+            -- Tried only once the search really went out: one that waited
+            -- in the queue and was given up never asked anything, so the
+            -- next click asks again rather than falling to one item at a
+            -- time for two minutes.
+            if type(rawget(Posting, "bulkTried")) ~= "table" then Posting.bulkTried = {} end
+            local now = GetTime()
+            for itemID in pairs(wanted) do Posting.bulkTried[itemID] = now end
             return true
         end,
         onGiveUp = function()
