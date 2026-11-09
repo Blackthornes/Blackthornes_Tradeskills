@@ -111,14 +111,15 @@ end
 -- Writs by name
 --------------------------------------------------------------------------------
 
-local byItem, byName
+local byItem, byName, typedWrit
 
 local function Index()
     if byItem then return end
-    byItem, byName = {}, {}
+    byItem, byName, typedWrit = {}, {}, {}
     for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
         byItem[writ.item] = writ
         byName[writ.name:lower()] = writ
+        if writ.writ then typedWrit[writ.writ] = writ end
     end
 end
 
@@ -154,6 +155,96 @@ end
 -- itemID -> writ entry, or false once its name is known and is no writ.
 local seen = {}
 
+--------------------------------------------------------------------------------
+-- Writs in the client's language
+--------------------------------------------------------------------------------
+-- A Chinese client calls Craftsman's Writ: Blue Overalls "工匠文书：蓝色罩衫"
+-- (a player's report, 2026-11-09), so the English names above find nothing.
+-- The game names the item a writ asks for in the same words, and a writ
+-- whose ID is known (typed in the data, or found before) shows what goes in
+-- front of it. Both read from the client, nothing typed.
+
+local function EnglishClient()
+    local ok, locale = pcall(function() return GetLocale and GetLocale() end)
+    if not ok or type(locale) ~= "string" then return true end
+    return locale:sub(1, 2) == "en"
+end
+Writs.EnglishClient = EnglishClient
+
+local function Trim(text)
+    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- [the client's lower-case name of the item asked for] = writ entry
+local clientNames, clientPrefix, clientReady
+local clientDirty = true
+-- itemIDs whose names came before the client's names could judge them.
+local waiting = {}
+
+local function BuildClientNames()
+    Index()
+    clientDirty = false
+    local names, missing = {}, false
+    for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
+        local name = ItemName(writ.item)
+        if name then names[Trim(name:lower())] = writ else missing = true end
+    end
+
+    local prefix
+    local store = Store()
+    for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
+        local writID = (store and store.writIDs[writ.item]) or writ.writ
+        if writID then
+            local writName, itemName = ItemName(writID), ItemName(writ.item)
+            if writName and itemName then
+                local whole, tail = writName:lower(), Trim(itemName:lower())
+                if #whole > #tail and whole:sub(-#tail) == tail then
+                    prefix = whole:sub(1, #whole - #tail)
+                    break
+                end
+            end
+        end
+    end
+
+    clientNames, clientPrefix = names, prefix
+    clientReady = prefix ~= nil and not missing
+end
+
+--- The writ entry a writ's name in the client's own language is, or nil.
+--- The second answer is false while the client has not given every name
+--- needed to be sure.
+function Writs.WritForClientName(name)
+    if type(name) ~= "string" then return nil, true end
+    if clientDirty then BuildClientNames() end
+    if not clientPrefix then return nil, false end
+
+    local lower = name:lower()
+    if lower:sub(1, #clientPrefix) ~= clientPrefix then return nil, clientReady end
+    local writ = clientNames[Trim(lower:sub(#clientPrefix + 1))]
+    return writ, writ ~= nil or clientReady
+end
+
+--- Judge again the items that came before the client's names did.
+function Writs:RetryWaiting()
+    self.retrySoon = nil
+    local list = waiting
+    waiting = {}
+    for itemID in pairs(list) do
+        seen[itemID] = nil
+        self:Classify(itemID)
+    end
+end
+
+local function RetrySoon()
+    if Writs.retrySoon or not next(waiting) then return end
+    Writs.retrySoon = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.5, function() Writs:RetryWaiting() end)
+    else
+        Writs:RetryWaiting()
+    end
+end
+
 function Writs:Classify(itemID)
     local known = seen[itemID]
     if known ~= nil then return known or nil end
@@ -164,6 +255,18 @@ function Writs:Classify(itemID)
     -- A secret value in an instance raises when read; it is no writ.
     local ok, writ = pcall(Writs.WritForName, name)
     if not ok then writ = nil end
+
+    -- Another language names the writ in its own words. Until the client
+    -- has given every name that takes, judge it again later.
+    if ok and not writ and not EnglishClient() then
+        local okLocal, found, ready = pcall(Writs.WritForClientName, name)
+        if okLocal and found then
+            writ = found
+        elseif okLocal and not ready then
+            waiting[itemID] = true
+            return nil
+        end
+    end
 
     seen[itemID] = writ or false
     if writ then self:NoteWritID(writ, itemID) end
@@ -195,6 +298,22 @@ function Writs:FindWrits()
 end
 
 function Writs:OnItemInfo(itemID)
+    -- A name the client's own writ names are built from has come in.
+    if type(itemID) == "number" and not EnglishClient() then
+        Index()
+        local store = Store()
+        local known = byItem[itemID] or typedWrit[itemID]
+        if not known and store then
+            for _, writID in pairs(store.writIDs) do
+                if writID == itemID then known = true break end
+            end
+        end
+        if known then
+            clientDirty = true
+            RetrySoon()
+        end
+    end
+
     local range = ns.WRIT_ID_RANGE
     if not self.searched or not range or type(itemID) ~= "number" then return end
     if itemID < range[1] or itemID > range[2] or seen[itemID] ~= nil then return end
@@ -726,7 +845,10 @@ function Writs:GetRows()
         rows[#rows + 1] = {
             key = writ.item,
             writ = writ,
-            name = writ.name,
+            -- The client's own name for the item where it has one; search
+            -- still finds the English name.
+            name = (not EnglishClient() and ItemName(writ.item)) or writ.name,
+            english = writ.name,
             prof = writ.prof,
             tier = writ.tier,
             itemID = writ.item,
