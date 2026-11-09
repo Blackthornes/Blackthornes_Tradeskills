@@ -1379,6 +1379,22 @@ searched, `checkedSuffix`), and a click on one not checked searches, says
 installs: a saved value is kept. The old `confirmBeforePosting` is still
 unread.
 
+A scan's prices count as checked (the owner's report, 2026-11-09: it took
+two clicks to list, both saying List, since the auto scan's prices were
+never marked fresh and the first click only searched). When a scan commits
+prices, `Posting:NoteScanned(itemIDs)` stamps every item it priced through
+`NoteChecked`, from both commit paths in `Data/Scanner.lua` (the whole-list
+replicate's `CommitScan` and a page by page scan's `CommitBrowseResults`),
+so for `FRESH_FOR` (two minutes) one click lists at the scan price with no
+search and no "Click again". The search for the whole list (`CheckAll`)
+stamps `bulkTried` only once the request really goes out, inside its
+`send`, never before: one that waited in the queue and was given up asked
+nothing, so the next click asks again instead of falling to one item at a
+time for two minutes. `Posting:CheckPending(itemID)` says whether such a
+search is still queued, or sent and not yet answered within
+`CHECK_ALL_WAIT`; `BulkTried` answers true meanwhile, so the label stays
+List Next while a check is out. Tested in `tools/test_fastlisting.lua`.
+
 ## The mouse wheel at the auction house
 
 A player asked (2026-10-16, the owner said build it, off by default): with
@@ -1421,6 +1437,17 @@ next, `reason == "override"`) is passed over for the visit
 auction house) give it another go. A busy auction house, a throttle or a
 full queue never passes over. Nothing saved. Tested in
 `tools/test_passover.lua`.
+
+The quiet auto scan never holds listing back (the owner's report,
+2026-11-09: after the auction house auto scanned, the wheel did nothing).
+`ConsiderAutoScan`'s `quickOnly` scan held `isScanning` for up to 30
+seconds, and every Posting guard (`CanPost`, `SecondsUntilPostable`,
+`WouldCheckAll`, `CheckAll`) refused with "wait for the scan to finish",
+so each wheel notch and click was swallowed. They now ask
+`Posting:ScanBlocks()`, which is true only for a scan that is not
+`quickOnly`; `StartBrowseScan` sets `quickOnly = false`, so a player's own
+page by page scan still makes listing wait as before. Tested in
+`tools/test_fastlisting.lua`.
 
 ## Odd scans and the price floor
 
