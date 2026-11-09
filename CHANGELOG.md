@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.20.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Mouse wheel follows the auction house tab.** On Sell, turning the wheel either way lists your next stack. On Auctions, either way cancels your next undercut auction. On other tabs the wheel is left alone.
+
 ## 1.20.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
