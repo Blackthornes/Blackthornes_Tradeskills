@@ -971,6 +971,17 @@ this week and the sources stay the realm's, since `GoldLog` is per realm. Like e
 is never announced. Tested in `tools/test_goldgoal.lua`. Not yet seen in
 game.
 
+The Sales tab's gold chart under This Character (a player's report,
+2026-11-09): its bars and key now follow the pick too. `GoldLog:Record`
+also adds each change under the playing character's GUID in
+`goldLog[realm].sourcesByCharacter[guid] = { hours, days }` (same bucket
+shape, pruned the same; never rename it), and `GoldLog:Bins(..., who)`
+reads it when `who` is "character". Days before this update show nothing
+there. Untagged gold at the mailbox that matches an inbox amount takes
+that mail's kind (`GoldLog:MailMatch`: sold is an auction sale, outbid
+an auction buy, your own character a transfer); two kinds with the same
+amount stay Mail. Tested in `tools/test_goldlog.lua`.
+
 Where the gold came from (the owner said build it, 2026-10-20, from a
 mockup whose words he approved): the hover card ends with THIS WEEK
 (Quests with how many were handed in and gold each, Mobs with kills and

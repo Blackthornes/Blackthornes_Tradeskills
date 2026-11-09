@@ -870,7 +870,7 @@ local function RefreshGold()
 
     FillPickedDays()
 
-    local bins = ns.GoldLog:Bins(state.period, state.fromDay, state.toDay)
+    local bins = ns.GoldLog:Bins(state.period, state.fromDay, state.toDay, nil, state.who)
     for _, bin in ipairs(bins) do
         if state.period == "session" or state.period == "today" then
             bin.title = L.Format("%s to %s", date("%H:%M", bin.from), date("%H:%M", bin.to))
