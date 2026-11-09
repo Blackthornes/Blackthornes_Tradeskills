@@ -24,6 +24,12 @@
 --     own is not taken at all.
 --   * It only fills gaps, after your own scans and your guild's prices
 --     (Data/Prices.lua). Used for USE_FOR, kept KEEP, as guild prices are.
+--   * When the server refuses what we send (a player's chat filled with
+--     "[2. BTSPricesA] That operation is not permitted in this channel.",
+--     2026-11-09), the refusal is hidden like the join lines, the rest of the
+--     share is dropped and nothing goes out for BACK_OFF seconds, doubled each
+--     time, and not again this session after MAX_REFUSALS. Listening goes on,
+--     so the player still gets everyone else's prices.
 
 local _, ns = ...
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
@@ -49,6 +55,21 @@ RealmPrices.MAX_STORED = 20000        -- items kept for a realm
 RealmPrices.SEND_GAP = 3              -- seconds between messages to the channel
 RealmPrices.JOIN_DELAY = 20           -- seconds after login before joining
 RealmPrices.REJOIN_DELAY = 5          -- seconds after the player leaves it by hand
+RealmPrices.BACK_OFF = 15 * 60        -- seconds of quiet after the first refusal
+RealmPrices.MAX_BACK_OFF = 6 * HOUR
+RealmPrices.MAX_REFUSALS = 3          -- refusals before it stops sending this session
+RealmPrices.REFUSAL_WINDOW = 10       -- seconds after a send a notice counts against it
+
+-- Notices about our own place in the channel; anything else on our channel
+-- just after we sent is the server saying no.
+RealmPrices.OWN_NOTICES = {
+    YOU_JOINED = true, YOU_CHANGED = true, YOU_LEFT = true, SUSPENDED = true,
+}
+-- Notices that are a refusal whenever they come.
+RealmPrices.REFUSALS = {
+    NOT_PERMITTED = true, THROTTLED = true, MUTED = true, BANNED = true,
+    TRIAL_RESTRICTED = true, NOT_ALLOWED = true,
+}
 
 --------------------------------------------------------------------------------
 -- Saved data
@@ -212,6 +233,11 @@ local function InCombat()
     return ok and inCombat == true
 end
 
+local function Uptime()
+    local ok, now = pcall(GetTime)
+    return ok and type(now) == "number" and now or 0
+end
+
 --- The hidden channel's name: one per side, as the auction house is.
 function RealmPrices:ChannelName()
     local side = "N"
@@ -233,14 +259,21 @@ function RealmPrices.FilterNotice(_, _, _, _, _, channelString, _, _, _, _, chan
     return RealmPrices:IsOurs(channelName) or RealmPrices:IsOurs(channelString)
 end
 
+--- Hide our channel's notices, those about other players in it too. Done
+--- at load, not only on a join: a channel joined by name is still there at
+--- the next login, so no join happened and its lines went to chat.
+function RealmPrices:Filter()
+    if self.filtered or type(ChatFrame_AddMessageEventFilter) ~= "function" then return end
+    self.filtered = pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_CHANNEL_NOTICE", RealmPrices.FilterNotice)
+    pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_CHANNEL_NOTICE_USER", RealmPrices.FilterNotice)
+end
+
 function RealmPrices:Join()
     if not self:IsOn() then return false end
     local name = self:ChannelName()
     if Comm.ChannelNumber(name) > 0 then self.triedTemporary = nil return true end
     if InCombat() then self.joinAfterFight = true return false end
-    if not self.filtered and type(ChatFrame_AddMessageEventFilter) == "function" then
-        self.filtered = pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_CHANNEL_NOTICE", RealmPrices.FilterNotice)
-    end
+    self:Filter()
     -- A player left it by hand (2026-11-06) and the temporary join never
     -- took again, so a try that did not land is followed by the other way in.
     local temporary = type(JoinTemporaryChannel) == "function"
@@ -264,8 +297,9 @@ end
 --- a few seconds later, while the setting is on.
 function RealmPrices:OnNotice(notice, channelString, channelName)
     notice = Comm.Plain(notice)
-    if notice ~= "YOU_LEFT" or not self:IsOn() then return false end
+    if type(notice) ~= "string" or not self:IsOn() then return false end
     if not (self:IsOurs(channelName) or self:IsOurs(channelString)) then return false end
+    if notice ~= "YOU_LEFT" then return self:OnRefused(notice) end
     self.triedTemporary = nil
     if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
         C_Timer.After(self.REJOIN_DELAY, function() RealmPrices:Join() end)
@@ -281,6 +315,40 @@ function RealmPrices:Leave()
     if Comm.ChannelNumber(name) > 0 and type(LeaveChannelByName) == "function" then
         pcall(LeaveChannelByName, name)
     end
+end
+
+--- Is this notice on our channel the server refusing what we sent?
+function RealmPrices:IsRefusal(notice, now)
+    if self.REFUSALS[notice] then return true end
+    if self.OWN_NOTICES[notice] then return false end
+    return self.lastSendAt ~= nil and (now or Uptime()) - self.lastSendAt <= self.REFUSAL_WINDOW
+end
+
+--- The server said no: drop the rest and keep quiet a while. Receiving goes on.
+function RealmPrices:OnRefused(notice, now)
+    now = now or Uptime()
+    if not self:IsRefusal(notice, now) then return false end
+    if self.quietUntil and now < self.quietUntil and self.lastRefusalAt
+        and now - self.lastRefusalAt <= self.REFUSAL_WINDOW then
+        return true    -- the same send refused again; already counted
+    end
+    self.outbox = nil
+    self.lastSendAt = nil
+    self.refusals = (self.refusals or 0) + 1
+    self.lastRefusalAt = now
+    if self.refusals >= self.MAX_REFUSALS then
+        self.quietUntil = math.huge
+    else
+        local wait = math.min(self.MAX_BACK_OFF, self.BACK_OFF * 2 ^ (self.refusals - 1))
+        self.quietUntil = now + wait
+    end
+    ns.Debug(("realm prices: the channel refused a message (%s), quiet for now"):format(notice))
+    return true
+end
+
+--- Keeping quiet after a refusal?
+function RealmPrices:Quiet(now)
+    return self.quietUntil ~= nil and (now or Uptime()) < self.quietUntil
 end
 
 --- Turn it on or off: the setting, and the channel with it.
@@ -316,6 +384,7 @@ function RealmPrices:WhyNotShare(now)
     now = now or time()
     if not self:IsOn() then return "off" end
     if self.outbox and #self.outbox > 0 then return "still sending" end
+    if self:Quiet() then return "channel said no" end
 
     local scanAt = ns.Prices:GetLastScan()
     if not scanAt or now - scanAt > self.SCAN_FRESH then return "no recent scan" end
@@ -353,11 +422,12 @@ end
 function RealmPrices:Drip()
     local outbox = self.outbox
     if not outbox or #outbox == 0 then self.outbox = nil return end
-    if not self:IsOn() then self.outbox = nil return end
+    if not self:IsOn() or self:Quiet() then self.outbox = nil return end
     if InCombat() or Comm:Pending() > 0 then return end
     local id = Comm.ChannelNumber(self:ChannelName())
     if id <= 0 then self:Join() return end
     local message = table.remove(outbox, 1)
+    self.lastSendAt = Uptime()
     Comm:Send(message.kind, message.text, "CHANNEL", tostring(id))
 end
 
@@ -453,10 +523,14 @@ end
 
 function RealmPrices:OnEnable()
     self:Prune()
+    self:Filter()
     Comm:On("Y", function(...) RealmPrices:OnAnnounce(...) end)
     Comm:On("Z", function(...) RealmPrices:OnPrices(...) end)
 
     ns.RegisterEvent(self, "CHAT_MSG_CHANNEL_NOTICE", function(_, _, notice, _, _, channelString, _, _, _, _, channelName)
+        RealmPrices:OnNotice(notice, channelString, channelName)
+    end)
+    ns.RegisterEvent(self, "CHAT_MSG_CHANNEL_NOTICE_USER", function(_, _, notice, _, _, channelString, _, _, _, _, channelName)
         RealmPrices:OnNotice(notice, channelString, channelName)
     end)
     ns.RegisterEvent(self, "PLAYER_REGEN_ENABLED", function()
