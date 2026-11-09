@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.19.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Drop-down menus open over the window.** Drop-down lists in the Rules window and other windows are no longer hidden behind the window they sit in.
+- **Mouse wheel posting keeps going.** Scrolling to post moves on past a stack the game refused or that was skipped, instead of stopping there.
+
 ## 1.19.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

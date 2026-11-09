@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.19.1
+
+Fixes and changes:
+
+- Drop-down lists now open on top of their window, so none get hidden.
+- Scrolling to post no longer stops on a stack that was skipped or refused.
+
 ## 1.19.0
 
 New:
