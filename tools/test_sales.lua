@@ -380,6 +380,15 @@ selectView("item")
 check("'By item' shows one row per item", #listData, 2)
 check("worth the most first", listData[1].itemID, 2589)
 
+local footer = LabelStartingWith("2 items sold in ")
+check("the footer counts the items sold", footer ~= nil, true)
+check("the tiles say how many sales made it",
+    LabelStartingWith("in 3 sales") ~= nil, true)
+check("and that the gold is after the cut",
+    LabelStartingWith("after the auction cut") ~= nil, true)
+check("the tiles are labelled",
+    LabelStartingWith("Items Sold:") ~= nil and LabelStartingWith("Best Seller:") ~= nil, true)
+
 selectView("sales")
 
 print("")
