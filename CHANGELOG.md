@@ -4,6 +4,13 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.21.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Auction or vendor agree.** The item tooltip, Butler and the Sell list now weigh the auction house against a vendor the same way, so the tooltip no longer says Auction for an item the Sell list sends to a vendor.
+- **Mail running out.** Tradeskills now saves when each character's mail runs out, so Butler can warn you.
+
 ## 1.21.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

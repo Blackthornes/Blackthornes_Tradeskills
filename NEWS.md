@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.21.1
+
+Fixes and changes:
+
+- The tooltip and the Sell list agree on auction or vendor.
+- Butler can see when a character's mail is about to run out.
+
 ## 1.21.0
 
 - Each find on the Snipe list has a Buy button that shows what you'll pay.
