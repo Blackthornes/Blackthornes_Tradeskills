@@ -2,7 +2,7 @@
 -- C_Traits, Master Chef's rank raises a cooking recipe's yield for the
 -- character playing, and nothing read leaves everything as it was.
 
-local GLOBALS = { "C_Traits", "C_ClassTalents", "C_Spell", "C_CurrencyInfo", "C_Timer", "Enum" }
+local GLOBALS = { "C_Traits", "C_ClassTalents", "C_Spell", "C_CurrencyInfo", "C_Timer", "Enum", "C_TooltipInfo" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -47,7 +47,19 @@ C_Traits = {
     PurchaseRank = function() purchases = purchases + 1 end,
     CommitConfig = function() purchases = purchases + 1 end,
 }
-C_Spell = { GetSpellName = function() return "Working Overtime" end }
+C_Spell = {
+    GetSpellName = function() return "Working Overtime" end,
+    GetSpellDescription = function(id) if id == 1225459 then return "Reduces vendor prices by 10%." end end,
+    RequestLoadSpellData = noop,
+}
+C_TooltipInfo = {
+    GetTraitEntry = function(entryID, rank)
+        if entryID == OVERTIME + 1 then
+            return { lines = { { leftText = "Working Overtime" }, { leftText = "Rank " .. rank .. "/5" },
+                { leftText = "|cffffffffSkill up chance +" .. (2 * rank) .. "%|r" } } }
+        end
+    end,
+}
 C_CurrencyInfo = { GetCurrencyInfo = function(id) return { name = "c" .. id, quantity = 1, maxQuantity = 10 } end }
 C_Timer = nil
 Enum = nil
@@ -72,6 +84,14 @@ check("the probe names the config", found["legacy"], 1)
 check("the probe lists both nodes", found["legacy node"], 2)
 check("the probe says the points left", found["legacy points"], 1)
 check("the probe reads both currencies", (found["legacy currency 3485"] or 0) + (found["legacy currency 3499"] or 0), 2)
+local text = {}
+for _, line in ipairs(lines) do text[line[1]] = line[2] end
+check("rank 1 words come from the tooltip", text["legacy perk 110284 rank 1"], "Rank 1/5 / Skill up chance +2%")
+check("the last rank is read too", text["legacy perk 110284 rank 5"], "Rank 5/5 / Skill up chance +10%")
+check("a rank in between", text["legacy perk 110284 rank 2"] ~= nil, true)
+check("no tooltip says so", text["legacy perk 110290 rank 1"], "tooltip not given")
+check("a perk not in the config is read by spell ID", text["legacy spell 1225459"], "Bartering: Reduces vendor prices by 10%.")
+check("a spell with no words yet says so", text["legacy spell 1225501"], "For Great Honor: no words yet, run the probe again")
 check("nothing was ever spent", purchases, 0)
 
 print("")

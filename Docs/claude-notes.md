@@ -256,6 +256,12 @@ follows it. Bartering needs nothing: vendor prices come from the real
 merchant window. Nothing read, nothing changes. Nothing is saved and no
 player words are new. `/bts probe` has "legacy" lines (the config, points
 left, each node's rank, Master Chef's yield, currencies 3485 and 3499).
+Since 2026-11-10 it also lists each perk's own words, read without
+points: "legacy perk <node>" (name, spell, entry, rank), its tooltip at
+rank 1, 2 and the last rank (`Legacy:PerkLines`, `RankText` through
+`C_TooltipInfo.GetTraitEntry`) and its spell's text (`SpellText`); any of
+the 21 perks in `PERK_SPELLS` no node showed is read by spell ID
+("legacy spell <id>"). Typed only, never shown to players.
 Tested in `tools/test_legacy.lua`. Not yet seen in game.
 
 ## Learn next

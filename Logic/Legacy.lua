@@ -41,6 +41,24 @@ Legacy.MASTER_CHEF_NAME = "master chef"
 Legacy.MASTER_CHEF_NODE = nil
 Legacy.MASTER_CHEF_MOST = 0.5
 
+-- Every Legacy perk by its spell ID, from the Forever client's game tables
+-- (build 70862). The probe reads each one's words from the game, so how
+-- much a rank gives can be checked without spending a point. Names here are
+-- only labels for the probe; nothing compares them.
+Legacy.PERK_SPELLS = {
+    { 1225451, "Working Overtime" }, { 1225459, "Bartering" },
+    { 1225457, "Master Chef" }, { 1225435, "Bountiful Harvest" },
+    { 1225456, "Performance Bonus" }, { 1225469, "Dedicated Study" },
+    { 1225455, "Luremaster" }, { 1225478, "Well Rested" },
+    { 1225474, "Talented" }, { 1225477, "High Alert" },
+    { 1225472, "Thrill of Adventure" }, { 1225479, "Field Guide" },
+    { 1225490, "Frequent Flier" }, { 1225475, "Field Medicine" },
+    { 1225499, "Gourmand" }, { 1225502, "Permanence" },
+    { 1225500, "The Quick and the Dead" }, { 1225503, "Reagent Economy" },
+    { 1225497, "Reinforce" }, { 1225485, "Diplomat" },
+    { 1225501, "For Great Honor" },
+}
+
 -- Systems and trees tried when looking for the config. The search runs a
 -- slice a frame, once a session (and again after a trait event).
 Legacy.SYSTEMS_LAST = 100
@@ -202,7 +220,7 @@ local function SpellName(spellID)
     return type(name) == "string" and name or nil
 end
 
---- One node: { nodeID, name, spellID, rank, maxRanks }, or nil.
+--- One node: { nodeID, name, spellID, entryID, rank, maxRanks }, or nil.
 function Legacy:Node(nodeID)
     local configID = self.configID
     if not configID then return nil end
@@ -227,7 +245,8 @@ function Legacy:Node(nodeID)
             end
         end
     end
-    return { nodeID = nodeID, name = name, spellID = spellID, rank = rank, maxRanks = maxRanks }
+    return { nodeID = nodeID, name = name, spellID = spellID, entryID = Number(entryID),
+        rank = rank, maxRanks = maxRanks }
 end
 
 --- Every node of the config, in node ID order.
@@ -308,6 +327,71 @@ end
 -- The probe
 --------------------------------------------------------------------------------
 
+--- Text in one line, or nil: secret or odd values are left out.
+local function Plain(text)
+    local ok, out = pcall(function()
+        if type(text) ~= "string" then return nil end
+        local flat = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("%s+", " ")
+        flat = flat:match("^%s*(.-)%s*$")
+        return flat ~= "" and flat or nil
+    end)
+    return ok and out or nil
+end
+
+--- What the game's tooltip says for a perk at one rank, read through
+--- C_TooltipInfo (the same words the Legacy window shows), the name line
+--- left off. Works for a rank not bought. Nil when the client won't say.
+function Legacy:RankText(entryID, rank)
+    if not Number(entryID) then return nil end
+    local data = Call("C_TooltipInfo.GetTraitEntry", entryID, rank, self.configID)
+    if type(data) ~= "table" or type(data.lines) ~= "table" then return nil end
+    local parts = {}
+    for i, line in ipairs(data.lines) do
+        if i > 1 and type(line) == "table" then
+            local left = Plain(line.leftText)
+            if left then parts[#parts + 1] = left end
+        end
+    end
+    return #parts > 0 and table.concat(parts, " / ") or nil
+end
+
+--- A spell's own description, or nil. Asks the client to load it when it
+--- has not yet, so a second probe can read it.
+function Legacy:SpellText(spellID)
+    if not Number(spellID) then return nil end
+    local text = Plain(Call("C_Spell.GetSpellDescription", spellID))
+        or Plain(Call("GetSpellDescription", spellID))
+    if not text then Call("C_Spell.RequestLoadSpellData", spellID) end
+    return text
+end
+
+--- Probe lines for every perk: what rank 1 and the last rank give, from
+--- the tooltip, and the spell's own words. Perks the config did not show
+--- are read by spell ID alone.
+function Legacy:PerkLines(Add)
+    local seen = {}
+    for _, node in ipairs(self.configID and self:Nodes() or {}) do
+        local label = ("legacy perk %d"):format(node.nodeID)
+        local name = tostring(node.name or "?")
+        if node.spellID then seen[node.spellID] = true end
+        Add(label, ("%s, spell %s, entry %s, %d/%d"):format(name, tostring(node.spellID),
+            tostring(node.entryID), node.rank, node.maxRanks))
+        local most = node.maxRanks > 0 and node.maxRanks or 1
+        local ranks = most > 1 and { 1, most } or { 1 }
+        if most > 2 then table.insert(ranks, 2, 2) end
+        for _, rank in ipairs(ranks) do
+            Add(label .. " rank " .. rank, self:RankText(node.entryID, rank) or "tooltip not given")
+        end
+        Add(label .. " spell", self:SpellText(node.spellID) or "no words yet, run the probe again")
+    end
+    for _, perk in ipairs(self.PERK_SPELLS) do
+        if not seen[perk[1]] then
+            Add("legacy spell " .. perk[1], ("%s: %s"):format(perk[2],
+                self:SpellText(perk[1]) or "no words yet, run the probe again"))
+        end
+    end
+end
+
 local function Currency(id)
     local info = Call("C_CurrencyInfo.GetCurrencyInfo", id)
     if type(info) ~= "table" then return "none" end
@@ -335,6 +419,7 @@ function Legacy:ProbeLines()
         Add("legacy cooking", ("Master Chef node %s, yield x%.2f"):format(
             tostring(self:MasterChefNode()), self:CookingYield()))
     end
+    self:PerkLines(Add)
     for _, id in ipairs(self.CURRENCIES) do
         Add("legacy currency " .. id, Currency(id))
     end
