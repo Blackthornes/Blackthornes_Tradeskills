@@ -113,13 +113,25 @@ local function Classic(skillLineID)
     return book and book.ClassicLine and book.ClassicLine(skillLineID) or skillLineID
 end
 
+--- Working Overtime's ranks (a Legacy perk), as what they add to the
+--- chance of a point: 0 with none spent or nothing read.
+function RoadPlan.Overtime()
+    local legacy = ns.Legacy
+    if not (legacy and legacy.SkillUpBonus) then return 0 end
+    local ok, bonus = pcall(legacy.SkillUpBonus, legacy)
+    if ok and type(bonus) == "number" and bonus > 0 then return bonus end
+    return 0
+end
+
 --- The chance a craft gives a point at a skill: 1 below yellow, falling to
---- 0 at grey; 0 below the skill the recipe needs.
+--- 0 at grey; 0 below the skill the recipe needs. Working Overtime adds its
+--- chance between yellow and grey, never past 1 and never at grey.
 function RoadPlan.Chance(record, skill)
     local yellow, grey = record.yellow, record.grey
     if not (yellow and grey) or skill < (record.skill or 0) or skill >= grey then return 0 end
     if skill < yellow then return 1 end
-    return (grey - skill) / math.max(1, grey - yellow)
+    local chance = (grey - skill) / math.max(1, grey - yellow)
+    return math.min(1, chance + RoadPlan.Overtime())
 end
 
 --- What a vendor pays for one of an item, or nil.

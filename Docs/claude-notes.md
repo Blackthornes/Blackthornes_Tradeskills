@@ -264,6 +264,24 @@ the 21 perks in `PERK_SPELLS` no node showed is read by spell ID
 ("legacy spell <id>"). Typed only, never shown to players.
 Tested in `tools/test_legacy.lua`. Not yet seen in game.
 
+Perks in the numbers (the owner said build it, 2026-11-10, after the
+probe): only ranks the player spent count; none spent, every number is as
+before. `Legacy.PERKS` names each perk by spell ID (Master Chef 1225457,
+Working Overtime 1225451, Performance Bonus 1225456), the node the probe
+showed (110289, 110290, 110292) and the English name, and
+`Legacy:PerkNode(key)` finds it in that order, so every language works.
+`Legacy:Rank(key)` gives the spent rank and the most, kept until a trait
+event (`Legacy:Forget`). Working Overtime is `SkillUpBonus()` (4% a rank,
+20% at 5), added in `RoadPlan.Chance` between yellow and grey only
+(`RoadPlan.Overtime`, capped at 1; orange stays sure and grey stays 0).
+Performance Bonus is `FavorBonus()` (5% a rank of double favor, 15% at
+3): `MerchantsFavor:GetRows` keeps `favor` as shown and adds `expected =
+favor * (1 + bonus)`, which cost per favor and `GetPlan`'s crates use.
+Master Chef's yield now reads `Rank` too. `/bts probe` adds "legacy skill
+up" and "legacy favor". No new player words. Tested in
+`tools/test_legacy.lua`, `tools/test_roadto300.lua` and
+`tools/test_merchantsfavor.lua`.
+
 ## Learn next
 
 The owner said build it (2026-10-12), from a mockup he picked
