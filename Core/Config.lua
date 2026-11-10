@@ -253,9 +253,9 @@ local DEFAULTS = {
         -- between sessions this is what makes the addon self-sufficient.
         autoScan = true,
 
-        -- The Sale Total in the drawer's header, counting up as you list
+        -- The Sale Total in the drawer's header, what the Sell list comes to
         -- (UI/SaleTotal.lua, the owner 2026-10-28: on for everyone; counts
-        -- up since 2026-10-29). Never rename it, nor saleTotalBest and
+        -- up 2026-10-29 to 2026-11-10). Never rename it, nor saleTotalBest and
         -- saleTotalLast, left in the save unread.
         saleTotal = true,
 

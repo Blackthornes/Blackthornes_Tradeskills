@@ -1,20 +1,20 @@
 -- The Sale Total in the auction house drawer's header, left of Scan (the
 -- owner said build it, 2026-10-28, from a mockup; on unless unticked; moved
--- into the header and turned to count up, 2026-10-29, from a mockup whose
--- words he approved).
+-- into the header 2026-10-29, from a mockup whose words he approved).
 --
--- It starts at 0 each time the auction house opens and counts up with every
--- listing that goes up (Posting:ResolvePending calls NoteListed), by what
--- that listing should bring in after the auction house cut
--- (Profit:NetFromListing). It reads "Potential Sale Total:" with the number
--- and no line under it (the owner, 2026-10-29: no second lines unless they
--- are needed). In the header it still shows with the drawer folded.
---
--- A listing sends coins from its row to the number, which rolls up, pops
--- and glows, with "+45g" rising off it; each round number passed
--- (MilestoneStep) pops a chip. Effects Subtle keeps the rolling number
--- only; Off shows the new total at once. There is no "best" (the owner,
--- 2026-10-29) and nothing about scans.
+-- Since 2026-11-10 (the owner: "show the potential sale value of all items
+-- that are in the current list that can be posted. It does not change as you
+-- post items") it shows, from the moment the drawer opens, what everything on
+-- the Sell list should bring in: each line's own total as its row shows it
+-- (`postTotal`, "12 @ 12s16c = 1g45s92c"), leaving out lines held for the
+-- other addons and lines with a note, so it follows the list's filters
+-- (Hidden, Hide losses). As a listing goes up its worth moves from the list
+-- into `listed`, so the number holds still; while a listing is still being
+-- confirmed (Posting:AllPending) the bags may not have caught up yet, so
+-- the number waits. Prices that move as a scan runs roll it to the new total
+-- (PostPanel:Refresh calls Update whenever UI.SellListKey moves, and that
+-- key follows Prices.changes). It reads "Potential Sale Total:" with the
+-- number and no line under it. Effects Off shows the new total at once.
 --
 -- Saved, account wide, never rename it: `saleTotal` (the switch, nil reads
 -- as on). `saleTotalBest` and `saleTotalLast` stay in the save, unread.
@@ -27,8 +27,6 @@ local L = ns.L or setmetatable({ Format = string.format }, { __index = function(
 local SaleTotal = ns.NewModule("SaleTotal")
 
 SaleTotal.GAP = 8               -- between the counter and the button right of it
-SaleTotal.COINS = 20            -- coin textures kept for flights
-SaleTotal.COIN_TEXTURE = [[Interface\MoneyFrame\UI-GoldIcon]]
 
 local COPPER_PER_GOLD = 10000
 
@@ -45,55 +43,36 @@ function SaleTotal:IsOn()
     return not (ns.Config and ns.Config:Get("saleTotal") == false)
 end
 
---- What one listing of `quantity` at `unitPrice` should bring in, after the
---- auction house cut.
-function SaleTotal.Net(itemID, unitPrice, quantity)
+--- What one listing of `quantity` at `unitPrice` comes to, as a row shows it.
+function SaleTotal.Worth(unitPrice, quantity)
     unitPrice, quantity = tonumber(unitPrice) or 0, tonumber(quantity) or 1
     if unitPrice <= 0 or quantity <= 0 then return 0 end
-    local each = unitPrice
-    local Profit = ns.Profit
-    if Profit and Profit.NetFromListing then
-        local ok, net = pcall(Profit.NetFromListing, Profit, itemID, unitPrice)
-        if ok and type(net) == "number" then each = net end
-    end
-    return math.max(0, each * quantity)
+    return unitPrice * quantity
 end
 
---- What the lines still on the Sell list should bring in, and how many there
---- are. Held lines (kept for the other addons) count for nothing.
+--- What the lines on the Sell list that can go up come to, and how many
+--- there are. Held lines (kept for the other addons) and lines with a note
+--- (not now) count for nothing.
 function SaleTotal.Left(lines)
     local total, count = 0, 0
     for _, line in ipairs(lines or {}) do
-        if not line.held and line.itemID then
+        if not line.held and not line.noted and line.itemID then
             count = count + 1
-            local quantity = tonumber(line.postQuantity)
-            if line.unitPrice and quantity then
-                total = total + SaleTotal.Net(line.itemID, line.unitPrice, quantity)
-            else
-                total = total + (tonumber(line.postTotal) or 0)
-            end
+            local worth = tonumber(line.postTotal)
+            if not worth then worth = SaleTotal.Worth(line.unitPrice, line.postQuantity) end
+            total = total + math.max(0, worth)
         end
     end
     return total, count
 end
 
---- The round number milestones fall on near `copper`: 10g, 100g, 1,000g
---- and so on, the power of ten below the total, never under 10g.
-function SaleTotal.MilestoneStep(copper)
-    local gold = (tonumber(copper) or 0) / COPPER_PER_GOLD
-    if gold < 100 then return 10 * COPPER_PER_GOLD end
-    local power = math.floor(math.log10(gold) + 1e-9)
-    return (10 ^ power) * COPPER_PER_GOLD
-end
-
---- The milestone passed going from `from` to `to`, or nil.
-function SaleTotal.Crossed(from, to)
-    from, to = tonumber(from) or 0, tonumber(to) or 0
-    if to <= from then return nil end
-    local step = SaleTotal.MilestoneStep(to)
-    local mark = math.floor(to / step) * step
-    if mark > from and mark > 0 then return mark end
-    return nil
+--- Whether a listing is still being confirmed, when the bags may not yet
+--- show it gone.
+function SaleTotal.Confirming()
+    local Posting = ns.Posting
+    if not (Posting and Posting.AllPending) then return false end
+    local ok, list = pcall(Posting.AllPending, Posting)
+    return ok and type(list) == "table" and #list > 0
 end
 
 --- Whole gold, "1,234".
@@ -118,38 +97,38 @@ function SaleTotal.MoneyText(copper)
 end
 
 --------------------------------------------------------------------------------
--- What was listed this visit
+-- What the list and this visit come to
 --------------------------------------------------------------------------------
 
-SaleTotal.listed = 0        -- copper, this visit
+SaleTotal.listed = 0        -- copper listed this visit
 SaleTotal.listings = 0      -- listings that went up, this visit
 SaleTotal.left = 0          -- copper still on the Sell list
 SaleTotal.count = 0         -- lines still on the Sell list
 
---- The auction house opened: start again at 0.
+--- What the counter should read: what went up this visit and what is left.
+function SaleTotal:Total()
+    return (self.listed or 0) + (self.left or 0)
+end
+
+--- The auction house opened: nothing listed yet this visit.
 function SaleTotal:NewVisit()
     self.listed, self.listings = 0, 0
     if self.counter then
         self:Settle()
-        self:SetNumber(0)
+        self:SetNumber(self:Total())
     end
 end
 
---- A listing went up (Posting:ResolvePending). Counts it, and plays it.
+--- A listing went up (Posting:ResolvePending). Its worth joins what was
+--- listed; the list it left is read again on the next Update (the drawer
+--- refreshes once the listing stops being confirmed), so the number holds
+--- still and only glows.
 function SaleTotal:NoteListed(itemID, quantity, unitPrice)
-    local amount = SaleTotal.Net(itemID, unitPrice, quantity)
+    local amount = SaleTotal.Worth(unitPrice, quantity)
     if amount <= 0 then return end
-    local from = self.listed or 0
-    self.listed = from + amount
+    self.listed = (self.listed or 0) + amount
     self.listings = (self.listings or 0) + 1
-    -- What it was worth leaves the list's share at once, so "of" holds
-    -- still until the list catches up.
-    self.left = math.max(0, (self.left or 0) - amount)
-    if not self:Showing() then
-        self:SetNumber(self.listed)
-        return
-    end
-    self:Play(itemID, from, self.listed, amount)
+    if self:Showing() then self:Pop(0.06, 0.25) end
 end
 
 --------------------------------------------------------------------------------
@@ -206,45 +185,11 @@ function SaleTotal:Build(bar)
     number:SetPoint("RIGHT", holder, "RIGHT", 0, 0)
     self.number = number
 
-    -- "+45g", rising off the number as a listing lands.
-    local gain = Theme.CreateLabel(counter, "tiny", "profit", "RIGHT")
-    gain:SetPoint("BOTTOMRIGHT", label, "TOPRIGHT", 0, 1)
-    gain:Hide()
-    self.gain = gain
-
-    -- A milestone passed: the round number, rising off the total.
-    local chip = CreateFrame("Frame", nil, counter)
-    chip:SetSize(60, 16)
-    chip:SetFrameLevel(counter:GetFrameLevel() + 6)
-    Theme.Fill(chip, "ink", 0.95)
-    Theme.Border(chip, "accentHi", 1)
-    local chipText = Theme.CreateLabel(chip, "tiny", "accentHi", "CENTER")
-    chipText:SetPoint("CENTER")
-    chip.text = chipText
-    chip:Hide()
-    self.chip = chip
-
-    -- Coins for the flights, over the whole drawer, made once and reused.
-    self.coins, self.free = {}, {}
-    local drawer = (bar.GetParent and bar:GetParent()) or bar
-    local layer = CreateFrame("Frame", nil, drawer)
-    layer:SetAllPoints(drawer)
-    layer:SetFrameLevel(counter:GetFrameLevel() + 8)
-    self.coinLayer = layer
-    for index = 1, SaleTotal.COINS do
-        local coin = layer:CreateTexture(nil, "OVERLAY")
-        coin:SetTexture(SaleTotal.COIN_TEXTURE)
-        coin:SetSize(12, 12)
-        coin:Hide()
-        self.coins[index] = coin
-        self.free[#self.free + 1] = coin
-    end
-
     counter:SetScript("OnEnter", function(owner) SaleTotal:ShowTooltip(owner) end)
     counter:SetScript("OnLeave", function() GameTooltip:Hide() end)
     counter:SetScript("OnHide", function() SaleTotal:Settle() end)
 
-    self.shown = self.listed or 0
+    self.shown = self:Total()
     self:SetNumber(self.shown)
     return counter
 end
@@ -326,161 +271,11 @@ function SaleTotal:Pop(size, glow)
     end)
 end
 
---- "+45g" rises off the number and fades.
-function SaleTotal:Gain(amount)
-    local gain, Motion = self.gain, ns.Motion
-    if not gain or not Motion or Level() ~= "full" then return end
-    gain:SetText("+" .. SaleTotal.Gold(amount) .. "g")
-    gain:Show()
-    local label = self.label
-    Motion:Run(gain, "rise", 1.1, function(p)
-        gain:ClearAllPoints()
-        gain:SetPoint("BOTTOMRIGHT", label, "TOPRIGHT", 0, 1 + p * 10)
-        gain:SetAlpha(p > 0.6 and (1 - p) / 0.4 or 1)
-    end, { ease = false, done = function() gain:Hide() end })
-end
-
---- Where to send coins at: the number's middle, in the layer's offsets.
-local function Target(self)
-    local layer = self.coinLayer
-    local lx, ly = layer:GetLeft() or 0, layer:GetBottom() or 0
-    local hx, hy = self.holder:GetLeft(), self.holder:GetBottom()
-    local width = self.holder.GetWidth and self.holder:GetWidth() or 40
-    if type(width) ~= "number" then width = 40 end
-    if not hx or not hy then return nil end
-    return hx - lx + width / 2, hy - ly + 9
-end
-
---- A coin flies from `fromX, fromY` (offsets in the drawer) to the number.
-function SaleTotal:Fly(fromX, fromY, delay, done)
-    local Motion = ns.Motion
-    local coin = table.remove(self.free or {})
-    local toX, toY
-    if coin and self.holder and self.coinLayer then toX, toY = Target(self) end
-    if not coin or not Motion or not toX then
-        if coin then table.insert(self.free, coin) end
-        if done then done() end
-        return
-    end
-    local layer = self.coinLayer
-    local lift = 30 + math.random(0, 20)
-
-    coin:ClearAllPoints()
-    coin:SetPoint("CENTER", layer, "BOTTOMLEFT", fromX, fromY)
-    coin:SetAlpha(1)
-    coin:Show()
-    Motion:Run(coin, "fly", 0.5, function(p)
-        local x = fromX + (toX - fromX) * p
-        local y = fromY + (toY - fromY) * p + math.sin(p * math.pi) * lift
-        coin:ClearAllPoints()
-        coin:SetPoint("CENTER", layer, "BOTTOMLEFT", x, y)
-        coin:SetAlpha(p > 0.85 and (1 - p) / 0.15 or 1)
-    end, { delay = delay, ease = Motion.EaseOut, done = function()
-        coin:Hide()
-        local free = SaleTotal.free
-        free[#free + 1] = coin
-        if done then done() end
-    end })
-end
-
---- Where an item's row stands in the drawer, as offsets from its bottom
---- left, or nil when it is scrolled out of sight or gone.
-function SaleTotal:RowSpot(itemID)
-    local PostPanel = ns.PostPanel
-    local layer = self.coinLayer
-    local lx, ly = layer and layer:GetLeft() or 0, layer and layer:GetBottom() or 0
-    local rows = PostPanel and PostPanel.list and PostPanel.list.rows
-    for _, row in ipairs(rows or {}) do
-        local data = row.data
-        if data and data.itemID == itemID and row.IsShown and row:IsShown() then
-            local right, bottom, top = row:GetRight(), row:GetBottom(), row:GetTop()
-            if right and bottom and top then
-                return right - lx - 40, (bottom + top) / 2 - ly
-            end
-        end
-    end
-    return nil
-end
-
---- Pop the chip for a milestone passed.
-function SaleTotal:Milestone(copper)
-    local chip, Motion = self.chip, ns.Motion
-    if not chip or not Motion or Level() ~= "full" then return end
-    chip.text:SetText(SaleTotal.Gold(copper) .. "g")
-    chip:SetWidth(math.max(40, ((ns.Theme.TextWidth and ns.Theme.TextWidth(chip.text)) or 30) + 14))
-    local number = self.number
-    chip:Show()
-    Motion:Run(chip, "rise", 1.4, function(p)
-        chip:ClearAllPoints()
-        chip:SetPoint("BOTTOMRIGHT", number, "TOPLEFT", -4, -6 + p * 14)
-        chip:SetScale(p < 0.2 and (0.6 + 2 * p) or 1)
-        chip:SetAlpha(p > 0.7 and (1 - p) / 0.3 or 1)
-    end, { ease = false, done = function() chip:Hide() end })
-    self:Pop(0.2, 0.6)
-    self:Shower(6)
-end
-
---- A few coins burst up off the number and fall away.
-function SaleTotal:Shower(count)
-    local Motion, layer = ns.Motion, self.coinLayer
-    if not Motion or Level() ~= "full" or not layer or not self.holder then return end
-    local x0, y0 = Target(self)
-    if not x0 then return end
-    for index = 1, count or 8 do
-        local coin = table.remove(self.free)
-        if not coin then return end
-        local dx = (math.random() - 0.5) * 100
-        local up = 30 + math.random() * 30
-        coin:Show()
-        Motion:Run(coin, "fly", 0.9, function(p)
-            coin:ClearAllPoints()
-            coin:SetPoint("CENTER", layer, "BOTTOMLEFT", x0 + dx * p, y0 + up * 4 * p * (1 - p) - 20 * p)
-            coin:SetAlpha(1 - p)
-        end, { delay = index * 0.03, ease = false, done = function()
-            coin:Hide()
-            local free = SaleTotal.free
-            free[#free + 1] = coin
-        end })
-    end
-end
-
---- A listing landed: coins from its row, the number rolling up from `from`
---- to `to`, "+45g", and a chip for a round number passed.
-function SaleTotal:Play(itemID, from, to, amount)
-    local land = function()
-        SaleTotal:Roll(to, 0.35)
-        SaleTotal:Pop(0.1, 0.3)
-        SaleTotal:Gain(amount)
-        local mark = SaleTotal.Crossed(from, to)
-        if mark then SaleTotal:Milestone(mark) end
-    end
-    if Level() ~= "full" then
-        land()
-        return
-    end
-    local x, y = self:RowSpot(itemID)
-    if not x then
-        land()
-        return
-    end
-    self:Fly(x, y, 0, land)
-    if amount >= 2 * COPPER_PER_GOLD then self:Fly(x - 6, y + 4, 0.08) end
-    if amount >= 20 * COPPER_PER_GOLD then self:Fly(x + 4, y - 3, 0.16) end
-end
-
---- Land everything at once: the counter went away mid flight.
+--- Land everything at once: the counter went away mid roll.
 function SaleTotal:Settle()
     if ns.Motion then ns.Motion:Stop(self, nil, true) end
-    for _, coin in ipairs(self.coins or {}) do
-        if ns.Motion then ns.Motion:Stop(coin, nil) end
-        coin:Hide()
-    end
-    self.free = {}
-    for index, coin in ipairs(self.coins or {}) do self.free[index] = coin end
-    if self.chip then self.chip:Hide() end
-    if self.gain then self.gain:Hide() end
     if self.holder then self.holder:SetScale(1) end
-    if self.number and self.shown ~= self.listed then self:SetNumber(self.listed or 0) end
+    if self.number and self.shown ~= self:Total() then self:SetNumber(self:Total()) end
     self:Light(0)
 end
 
@@ -499,12 +294,23 @@ function SaleTotal:SetShown(show)
     return show
 end
 
---- What is still on the Sell list. From PostPanel:Refresh on Sell.
--- @param lines the lines Sell shows; held ones count for nothing
+--- What is still on the Sell list. From PostPanel:Refresh on Sell, which
+--- runs again whenever the list, the bags or the prices move. The number
+--- rolls to the new total, unless a listing is still being confirmed: then
+--- the bags may not show it gone yet, and the number waits.
+-- @param lines the lines Sell shows; held and noted ones count for nothing
 -- @param heldBack how many were kept for the other addons
 function SaleTotal:Update(lines, heldBack)
     self.left, self.count = SaleTotal.Left(lines)
     self.heldBack = heldBack or 0
+    if not self.number or SaleTotal.Confirming() then return end
+    local total = self:Total()
+    if math.floor(total + 0.5) == math.floor((self.shown or 0) + 0.5) then return end
+    if self:Showing() then
+        self:Roll(total, 0.35)
+    else
+        self:SetNumber(total)
+    end
 end
 
 function SaleTotal:ShowTooltip(owner)
@@ -512,7 +318,7 @@ function SaleTotal:ShowTooltip(owner)
     local Theme = ns.Theme
     GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
     GameTooltip:SetText(L["Potential Sale Total"], Theme.Unpack("accentHi"))
-    GameTooltip:AddLine(L["What the items you listed this visit should bring in, after the auction house cut. It starts again at 0 each time you open the auction house."],
+    GameTooltip:AddLine(L["What everything ready to sell should bring in, at the prices on the list. It stays the same as you list things, and follows the prices as a scan runs."],
         1, 1, 1, true)
     GameTooltip:AddLine(" ")
     local r, g, b = Theme.Unpack("muted")
@@ -526,7 +332,7 @@ function SaleTotal:ShowTooltip(owner)
     GameTooltip:Show()
 end
 
---- Each visit to the auction house starts at 0.
+--- Each visit to the auction house starts with nothing listed.
 function SaleTotal:OnInitialize()
     if ns.RegisterEvent then
         ns.RegisterEvent(self, "AUCTION_HOUSE_SHOW", function() SaleTotal:NewVisit() end)

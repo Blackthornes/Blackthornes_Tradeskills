@@ -3347,7 +3347,7 @@ L["Held Back:"] = "Отложено:"
 L["%d (not counted)"] = "%d (не считается)"
 L["Listed:"] = "Выставлено:"
 L["Still to List:"] = "Ещё выставить:"
-L["What the items you listed this visit should bring in, after the auction house cut. It starts again at 0 each time you open the auction house."] = "Сколько должны принести предметы, выставленные за этот визит, за вычетом доли аукциона. Счёт начинается с 0 каждый раз, когда ты открываешь аукцион."
+L["What everything ready to sell should bring in, at the prices on the list. It stays the same as you list things, and follows the prices as a scan runs."] = "Сколько должно принести всё, что готово к продаже, по ценам из списка. Сумма не меняется, пока ты выставляешь товары, и следует за ценами во время сканирования."
 
 -- The shared Blackthornes minimap button (2026-10-28)
 L["Click a name to open it. Right-click for its settings."] = "Нажми на название, чтобы открыть. Правый клик открывает его настройки."

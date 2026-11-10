@@ -3343,7 +3343,7 @@ L["Held Back:"] = "保留："
 L["%d (not counted)"] = "%d（不计入）"
 L["Listed:"] = "已上架："
 L["Still to List:"] = "待上架："
-L["What the items you listed this visit should bring in, after the auction house cut. It starts again at 0 each time you open the auction house."] = "你这次上架的物品扣除拍卖行的抽成后应该能卖多少钱。每次打开拍卖行都会从0重新开始。"
+L["What everything ready to sell should bring in, at the prices on the list. It stays the same as you list things, and follows the prices as a scan runs."] = "按列表上的价格，所有可出售物品应该能卖多少钱。你上架时它保持不变，扫描时会跟着价格变化。"
 
 -- The shared Blackthornes minimap button (2026-10-28)
 L["Click a name to open it. Right-click for its settings."] = "点击名称即可打开。右键点击打开它的设置。"
