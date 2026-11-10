@@ -23,6 +23,13 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.22.0
+
+- Your Potential Sale Total now shows the whole Sell list right away and stays steady while you post.
+- Profit now counts every item in a stack, so big stacks no longer look like huge wins.
+- Sales with no known cost are kept out of your profit.
+- Working Overtime and Performance Bonus now count in your skill point and Merchant's Favor numbers.
+
 ## 1.21.1
 
 Fixes and changes:

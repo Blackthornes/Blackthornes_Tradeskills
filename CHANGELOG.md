@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.22.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Potential Sale Total.** It now shows what everything on your Sell list should bring in, from the start. Held lines and lines with a note are left out. It stays the same while you post, and follows prices as a scan runs. The hover still splits it into Listed, Still to List and Held Back.
+- **Profit by method counts whole stacks.** Each sale now remembers how many items were in it, so a stack of 20 is costed as 20 and not as one. Sales with no known cost show "Not Counted" and sit on their own "Sold, no cost known" line, outside Profit. Farmed sales still count.
+- **Legacy perks.** Working Overtime now counts in the chance a yellow craft gives a skill point, and Performance Bonus counts in Merchant's Favor costs and crate numbers. Only ranks you have spent count. With none spent, nothing changes.
+
 ## 1.21.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
