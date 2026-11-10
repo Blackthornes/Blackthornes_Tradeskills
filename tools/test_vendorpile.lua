@@ -206,6 +206,12 @@ do
     Profit.LostListings = function() return 1 end
     check("a deposit is never counted twice", Posting.VendorPaysMore(1, 100, 89), false)
     check("and the counted one still counts", Posting.VendorPaysMore(1, 100, 90), true)
+    -- the report's own numbers: 300c market, 227c vendor, a 1s deposit
+    Profit.LostDepositEach = function() return 100 end
+    Profit.LostListings = function() return 0 end
+    check("Simple Britches: 300c is 185c after the cut and the risk",
+        Profit:NetAfterRisk(1, 300), 185)
+    check("so a 227c vendor pays more", Posting.VendorPaysMore(1, 300, 227), true)
     Profit.LostDepositEach, Profit.LostListings = oldEach, oldLost
 end
 

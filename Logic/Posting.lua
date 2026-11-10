@@ -969,22 +969,17 @@ end
 --- build it, 2026-11-09): a listing that runs out keeps it, so beating the
 --- vendor by less than one deposit is not worth the risk. When
 --- `NetFromListing` already takes lost deposits off (more relists expected,
---- or slow demand), it is not taken twice.
+--- or slow demand), it is not taken twice. Both live in
+--- `Profit:NetAfterRisk`, which Butler's `auction` reads too.
 function Posting.VendorPaysMore(itemID, price, vendorPrice)
     if not price or not vendorPrice or vendorPrice <= 0 then return false end
     local Profit = ns.Profit
-    local ok, net = pcall(Profit.NetFromListing, Profit, itemID, price)
-    if not ok or type(net) ~= "number" then net = price end
-    if Profit.LostListings and Profit.LostDepositEach then
-        local okLost, lost = pcall(Profit.LostListings, itemID)
-        if okLost and type(lost) == "number" and lost < 1 then
-            local okEach, each = pcall(Profit.LostDepositEach, itemID)
-            if okEach and type(each) == "number" and each > 0 then
-                net = net - each
-            end
-        end
+    local net
+    if Profit and Profit.NetAfterRisk then
+        local ok, value = pcall(Profit.NetAfterRisk, Profit, itemID, price)
+        if ok and type(value) == "number" then net = value end
     end
-    return net <= vendorPrice
+    return (net or price) <= vendorPrice
 end
 
 function Posting:GetLossFloor(itemID, unitCost)

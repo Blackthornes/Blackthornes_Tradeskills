@@ -10,8 +10,9 @@
 -- Every field may be nil when it is not known:
 --
 --   auction        copper for one, sold on the auction house, after the cut
---                  and the deposit (Profit:NetFromListing on the smoothed
---                  market price). nil for greys (vendor only), gear that
+--                  and the deposit (Profit:NetAfterRisk on the smoothed
+--                  market price, the same answer the Sell list weighs
+--                  against a vendor). nil for greys (vendor only), gear that
 --                  binds when picked up, and items never priced.
 --   auctionNow     copper for one sold at today's cheapest listing that is
 --                  not the player's own, after the cut and the deposit, from
@@ -609,6 +610,14 @@ local function Quality(itemID)
     return nil
 end
 
+--- One unit's worth listed at a price, as the Sell list weighs it against
+--- a vendor (Profit:NetAfterRisk), else after the cut alone.
+local function Net(itemID, price)
+    local profit = ns.Profit
+    if profit.NetAfterRisk then return profit:NetAfterRisk(itemID, price) end
+    return profit:NetFromListing(itemID, price)
+end
+
 --- The price of one, by the copy's link when Butler gave one: a random
 --- suffix ("of the Monkey") with a price of its own is worth that.
 local function PriceOf(itemID, link, which)
@@ -627,7 +636,7 @@ local function Auction(itemID, quality, link)
     local price = PriceOf(itemID, link, "market")
     if not price or price <= 0 then return nil end
 
-    local net = ns.Profit:NetFromListing(itemID, price)
+    local net = Net(itemID, price)
     return math.max(0, math.floor(net + 0.5))
 end
 
@@ -640,7 +649,7 @@ local function AuctionNow(itemID, auction, link)
     if prices:IsStale(itemID) then return nil end
     local rival = PriceOf(itemID, link, "rival")
     if not rival or rival <= 0 then return nil end
-    local net = ns.Profit:NetFromListing(itemID, rival)
+    local net = Net(itemID, rival)
     return math.max(0, math.floor(net + 0.5))
 end
 
