@@ -41,7 +41,10 @@ MethodProfit.METHODS = {
     { key = "vendored",     text = L["Vendored"],     hint = L["sold to a vendor"] },
     { key = "disenchanted", text = L["Disenchanted"], hint = L["broken down for materials"] },
     { key = "farmed",       text = L["Farmed"],       hint = L["sold at auction, looted or gathered by you"] },
-    { key = "other",        text = L["Other sales"],  hint = L["sold at auction, cost not known"] },
+    -- No cost known, so what it brought in can't be called profit: shown,
+    -- but kept out of Profit, on a line of its own (the owner, 2026-11-10).
+    { key = "other",        text = L["Other sales"],  hint = L["sold at auction, cost not known"],
+      uncounted = true },
 }
 
 --- Did you loot, gather or fish this yourself? Asked of Blackthornes
@@ -279,8 +282,10 @@ end
 
 --- Everything made between `from` and `to`, by method.
 -- @return { methods = { [key] = group }, total = group }, where a group is
---   { n, income, cost, unknown, profit, list = { item, ... } } and each item
---   the same for one item, best profit first.
+--   { n, income, cost, unknown, profit, uncounted, list = { item, ... } } and
+--   each item the same for one item, best profit first. A group with
+--   `uncounted` (Other sales) is left out of the total's profit; the total
+--   carries `uncounted` (what those brought in) and `uncountedN`.
 function MethodProfit:Summary(from, to)
     local methods = {}
     for _, method in ipairs(self.METHODS) do methods[method.key] = NewGroup() end
@@ -334,9 +339,11 @@ function MethodProfit:Summary(from, to)
     end
 
     local total = NewGroup()
+    total.uncounted, total.uncountedN = 0, 0
     for _, method in ipairs(self.METHODS) do
         local group = methods[method.key]
         group.profit = group.income - group.cost
+        group.uncounted = method.uncounted or nil
 
         group.list = {}
         for _, item in pairs(group.items) do
@@ -351,9 +358,15 @@ function MethodProfit:Summary(from, to)
         total.n = total.n + group.n
         total.income = total.income + group.income
         total.cost = total.cost + group.cost
-        total.unknown = total.unknown + group.unknown
+        if method.uncounted then
+            total.uncounted = total.uncounted + group.income
+            total.uncountedN = total.uncountedN + group.n
+        else
+            total.unknown = total.unknown + group.unknown
+        end
     end
-    total.profit = total.income - total.cost
+    -- Taken in is everything; Profit leaves out what had no known cost.
+    total.profit = total.income - total.uncounted - total.cost
 
     return { methods = methods, total = total }
 end

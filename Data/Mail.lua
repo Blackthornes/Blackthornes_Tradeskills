@@ -435,7 +435,7 @@ function Mail:ReadInvoice(index)
     if not Util.HasFunction("GetInboxInvoiceInfo") then return nil end
 
     local ok, invoiceType, itemName, playerName, bid, buyout, deposit, consignment,
-        moneyDelay = pcall(GetInboxInvoiceInfo, index)
+        moneyDelay, _, _, count = pcall(GetInboxInvoiceInfo, index)
 
     if not ok or not invoiceType then return nil end
 
@@ -450,7 +450,17 @@ function Mail:ReadInvoice(index)
         -- How long the auction house is still holding the gold for. While that
         -- runs, the mail's own money field reads zero.
         moneyDelay = tonumber(moneyDelay),
+        -- How many were in the stack, where the client says (the retail
+        -- engine's eleventh value). Not yet seen on Forever.
+        count = Mail.InvoiceCount(count),
     }
+end
+
+--- A stack size from the invoice, or nil for anything that isn't one.
+function Mail.InvoiceCount(value)
+    local n = tonumber(value)
+    if n and n >= 1 and n < 100000 and n == math.floor(n) then return n end
+    return nil
 end
 
 --- What a sale actually put in your pocket.
@@ -664,6 +674,16 @@ local function Describe(mail, kind, itemName, invoice)
         end
 
         entry.itemID = ns.Mail:ResolveItemName(entry.name)
+
+        -- How many sold. A stack was counted as one, so its cost came out a
+        -- fraction of what it was. The invoice says where the client gives
+        -- it; else the gold against the prices it was listed at.
+        local units = invoice and invoice.count
+        if not units and entry.itemID and entry.gross and ns.Auctions and ns.Auctions.UnitsSold then
+            local ok, n = pcall(ns.Auctions.UnitsSold, ns.Auctions, entry.itemID, entry.gross)
+            units = ok and n or nil
+        end
+        if units and units > 1 then entry.quantity = units end
 
         -- What one cost to make, as it stood when this sold, so a later craft
         -- at a different price does not rewrite what this sale made.

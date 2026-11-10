@@ -5,8 +5,9 @@
 --   3. A vendor's buyback list gives sales: the first look is the baseline,
 --      what is new afterwards was just sold, and a repeat look adds nothing.
 --   4. A disenchant is the materials' worth against what the item cost.
---   5. A period holds only what happened inside it; loot has no cost and
---      counts as all profit, with its units counted as unknown.
+--   5. A period holds only what happened inside it. Sales with no known
+--      cost (Other sales) show, but stay out of Profit on a total of their
+--      own; a stack counts every item in it.
 
 local ns = {}
 ns.NewModule = function(name) local m = {} ns[name] = m return m end
@@ -144,9 +145,23 @@ from = MP.Range("year", nil, nil, now)
 check("a year back", now - from, 365 * 86400)
 from = MP.Range("all", nil, nil, now)
 check("all: from the start", from, 0)
-check("totals add up", MP:Summary(now - 3600, now + 1).total.profit,
-  s.methods.crafted.profit + s.methods.flipped.profit + s.methods.other.profit
+s = MP:Summary(now - 3600, now + 1)
+check("totals add up, Other sales left out", s.total.profit,
+  s.methods.crafted.profit + s.methods.flipped.profit
   + s.methods.vendored.profit + s.methods.disenchanted.profit)
+check("Other sales are marked not counted", s.methods.other.uncounted, true)
+check("what they took in is its own total", s.total.uncounted, s.methods.other.income)
+check("and still in Taken in", s.total.income >= s.total.uncounted, true)
+check("how many", s.total.uncountedN, s.methods.other.n)
+
+print("\nstacks")
+ledger.entries = {
+  { kind = "sold", itemID = CLOTH, net = 2400, deposit = 0, t = now - 100, cost = 30, bought = true, quantity = 20 },
+}
+s = MP:Summary(now - 3600, now + 1)
+check("a stack counts every item", s.methods.flipped.n, 20)
+check("and takes off what all of them cost", s.methods.flipped.cost, 600)
+check("profit for the stack", s.methods.flipped.profit, 1800)
 
 print("\nkeeping")
 local log = MP:GetLog()
