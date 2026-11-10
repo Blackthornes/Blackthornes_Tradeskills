@@ -867,6 +867,35 @@ check("its summary counts the sale too",        Mail:GetSummary(CLOTH).sold, 1)
 
 --------------------------------------------------------------------------------
 print("")
+print("items sold in a window of time")
+--------------------------------------------------------------------------------
+
+-- The Sales tab's By Item view counts only the sales in the period picked.
+Reset()
+inbox = { SoldBag(), SoldBag(), SoldBag() }
+Mail:Read()
+do
+    local stamps = { 100, 200, 300 }
+    local i = 0
+    for _, entry in ipairs(Mail:Entries()) do
+        if entry.kind == "sold" then
+            i = i + 1
+            entry.t = stamps[i]
+        end
+    end
+    local function SoldIn(from, to)
+        local n = 0
+        for _, bucket in ipairs(Mail:GetItems(from, to)) do n = n + bucket.sold end
+        return n
+    end
+    check("every sale with no window",          SoldIn(nil, nil), 3)
+    check("only the sales inside the window",   SoldIn(150, 301), 2)
+    check("the end of the window is left out",  SoldIn(100, 200), 1)
+    check("an empty window has no rows",        #Mail:GetItems(400, 500), 0)
+end
+
+--------------------------------------------------------------------------------
+print("")
 print("two characters with the same kind of mail")
 --------------------------------------------------------------------------------
 
