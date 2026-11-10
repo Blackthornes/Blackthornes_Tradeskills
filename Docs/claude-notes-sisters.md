@@ -364,6 +364,21 @@ read this way), as of `mailAt`; Butler counts the days since. Tested in
 `tools/test_mailrunsout.lua` and `tools/test_butler.lua`. Not yet seen in
 game. If they change, change Butler's `Logic/MailRunsOut.lua` too.
 
+Clear Items and stale alts (a player's report, the owner said build it
+from a mockup, 2026-11-10: Butler's jobs mailed items long gone and gold
+already collected). Each inbox read saves `record.mailMoney` (copper the
+box held), and `Holdings()` entries carry `mailMoney` and `clearedAt`, so
+Butler's gold notes can tell gold was picked up. The Characters tab has
+**Clear Items** left of Forget character (armed, "Click Again", never the
+character playing): `Recipes:ClearItems(key)` (`Recipes.CLEARED_FIELDS`)
+forgets that character's saved bags, bank, mail and gold, keeps
+`seenAt`, sets `clearedAt`; nothing else on the record changes. Butler's
+own menu calls `Butler:ClearHoldings(key or full name)` (true and the full
+name, or false and "playing", "unknown" or "error"). The job holder skips
+an alt whose bags are older than `Butler.STALE_DAYS` (30;
+`Butler.Stale`). Tested in `tools/test_clearitems.lua` and
+`tools/test_butler.lua`. Not yet seen in game.
+
 At a mailbox and the bank (the owner said start, 2026-10-11), Butler's
 `Logic/Errands.lua` calls two more, inside a pcall:
 
