@@ -569,6 +569,25 @@ function Profit:NetFromListing(itemID, unitPrice)
     return unitPrice * (1 - cut) - Profit.LostDepositEach(itemID) * lost
 end
 
+--- What one unit listed at a price is worth when choosing between the
+--- auction house and a vendor: `NetFromListing`, less one deposit when that
+--- counts none. A listing that runs out keeps its deposit, so beating the
+--- vendor by less than one deposit is not worth the risk (2026-11-09). The
+--- Sell list (Posting.VendorPaysMore) and Butler's `auction` read this one
+--- answer, so the two never disagree on the same item.
+function Profit:NetAfterRisk(itemID, unitPrice)
+    local ok, net = pcall(Profit.NetFromListing, Profit, itemID, unitPrice)
+    if not ok or type(net) ~= "number" then net = unitPrice end
+    local okLost, lost = pcall(Profit.LostListings, itemID)
+    if okLost and type(lost) == "number" and lost < 1 then
+        local okEach, each = pcall(Profit.LostDepositEach, itemID)
+        if okEach and type(each) == "number" and each > 0 then
+            net = net - each
+        end
+    end
+    return net
+end
+
 --- What one unit's share of a lost deposit is: the remembered share, but
 --- never under the least deposit (1s) spread over a listing. A listing is
 --- taken as the biggest one seen, else a full stack, else one item, so a

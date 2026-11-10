@@ -141,6 +141,17 @@ check("a plain ID is unchanged", Butler:Advise(1).auction, 9400)
 check("a link with no item gives nil", Butler:Advise("[Band]"), nil)
 ns.Prices.GetLinkValue = nil
 
+-- Butler's auction is the Sell list's own answer (Profit:NetAfterRisk), so
+-- the tooltip and the Sell list never disagree on Auction or vendor
+-- (a player's report, 2026-11-09: 300c market, 227c vendor, 100c deposit).
+ns.Profit.NetAfterRisk = function(_, itemID, unit) return unit * 0.95 - 100 end
+check("auction takes the deposit risk off, as the Sell list does", Butler:Advise(1).auction, 9400)
+prices[6], quality[6] = 300, 2
+check("so 300c with a 1s deposit is worth 185c, under a 227c vendor",
+  Butler:Advise(6).auction, 185)
+ns.Profit.NetAfterRisk = nil
+prices[6], quality[6] = nil, nil
+
 print("\nlisting under what it costs to make")
 check("no Posting module: nothing said", a.belowCost, nil)
 local allowLoss, chosen, paidFor = false, {}, {}
