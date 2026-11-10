@@ -3346,7 +3346,7 @@ L["Held Back:"] = "Reservado:"
 L["%d (not counted)"] = "%d (sin contar)"
 L["Listed:"] = "Publicado:"
 L["Still to List:"] = "Por publicar:"
-L["What the items you listed this visit should bring in, after the auction house cut. It starts again at 0 each time you open the auction house."] = "Lo que deberían darte los objetos que publicaste en esta visita, después de la parte de la casa de subastas. Vuelve a empezar en 0 cada vez que abres la casa de subastas."
+L["What everything ready to sell should bring in, at the prices on the list. It stays the same as you list things, and follows the prices as a scan runs."] = "Lo que debería darte todo lo que está listo para vender, a los precios de la lista. No cambia mientras publicas cosas y sigue los precios mientras corre un escaneo."
 
 -- The shared Blackthornes minimap button (2026-10-28)
 L["Click a name to open it. Right-click for its settings."] = "Haz clic en un nombre para abrirlo. Clic derecho para sus ajustes."

@@ -1,15 +1,14 @@
--- The Sale Total in the drawer's header, counting up as you list
--- (2026-10-28, counting up since 2026-10-29).
+-- The Sale Total in the drawer's header (2026-10-28): since 2026-11-10 it
+-- shows what the Sell list comes to and holds still as you list.
 --
 -- What must hold:
---   1. Net takes the auction house cut; Left skips held lines and counts the
---      rest.
---   2. Milestones fall on round numbers: 10g under 100g, then the power of
---      ten below the total.
---   3. It reads "Potential Sale Total:" with no line under the number.
---   4. On by default; off when unticked.
---   5. A visit starts at 0, each listing counts up by its net and comes off
---      what is left, and nothing is written to the save.
+--   1. Worth is price times count; Left uses each row's own total and skips
+--      held lines and lines with a note.
+--   2. It reads "Potential Sale Total:" with no line under the number.
+--   3. On by default; off when unticked.
+--   4. The number is the whole list before anything is listed, follows the
+--      prices as they move, holds still while a listing is confirmed and as
+--      it goes up, and nothing is written to the save.
 
 local GLOBALS = { "CreateFrame", "GetTime", "GameTooltip" }
 local saved = {}
@@ -48,8 +47,6 @@ ns.Util = {
     Comma = function(n) return tostring(n) end,
     FormatMoney = function(c) return tostring(math.floor(c / 10000)) .. "g" end,
 }
--- The auction house keeps 5%.
-ns.Profit = { NetFromListing = function(_, _, unit) return unit * 0.95 end }
 ns.Theme = {
     FONT = "font", sizes = { title = 16 },
     Fill = function() return Stub() end, Border = function() end,
@@ -69,24 +66,17 @@ ns.Motion = {
 assert(loadfile(lfs_cwd .. "/UI/SaleTotal.lua"))("Blackthornes_TS", ns)
 local ST = ns.SaleTotal
 
--- 1. Net and Left.
-check(ST.Net(1, 100 * G, 2) == 190 * G, "a listing counts its net, times the stack")
-check(ST.Net(1, 0, 5) == 0, "nothing priced counts nothing")
+-- 1. Worth and Left.
+check(ST.Worth(100 * G, 2) == 200 * G, "a listing is its price times the stack")
+check(ST.Worth(0, 5) == 0, "nothing priced counts nothing")
 local left, count = ST.Left({
-    { itemID = 1, unitPrice = 10 * G, postQuantity = 2 },
-    { itemID = 2, unitPrice = 50 * G, postQuantity = 1, held = true },
-    { itemID = 3, postTotal = 4 * G },
+    { itemID = 1, unitPrice = 10 * G, postQuantity = 2, postTotal = 20 * G },
+    { itemID = 2, unitPrice = 50 * G, postQuantity = 1, postTotal = 50 * G, held = true },
+    { itemID = 3, unitPrice = 9 * G, postQuantity = 1, postTotal = 9 * G, noted = true },
+    { itemID = 4, unitPrice = 2 * G, postQuantity = 3 },
 })
-check(left == 19 * G + 4 * G, "held lines are left out; a line with no price uses its total")
-check(count == 2, "held lines are not counted")
-
--- 2. Milestones.
-check(ST.MilestoneStep(40 * G) == 10 * G, "under 100g milestones are every 10g")
-check(ST.MilestoneStep(450 * G) == 100 * G, "at 450g they are every 100g")
-check(ST.MilestoneStep(1000 * G) == 1000 * G, "at 1,000g every 1,000g")
-check(ST.Crossed(95 * G, 104 * G) == 100 * G, "passing 100g is a milestone")
-check(ST.Crossed(101 * G, 150 * G) == nil, "no round number passed, no milestone")
-check(ST.Crossed(150 * G, 100 * G) == nil, "going down is never a milestone")
+check(left == 20 * G + 6 * G, "held and noted lines are left out; no total means price times count")
+check(count == 2, "held and noted lines are not counted")
 
 -- 3. The money text (the label and no line under it are checked below).
 check(ST.MoneyText(0) == "0g", "nothing shows as 0g")
@@ -99,21 +89,39 @@ check(not ST:IsOn(), "off when unticked")
 settings.saleTotal = nil
 
 -- 5. A visit.
+local pending = {}
+ns.Posting = { AllPending = function() return pending end }
 local bar = Stub()
 ST:Attach(bar, Stub())
 check(ST.counter and ST.counter:IsShown(), "the counter shows in the header")
 check(ST.label.text == "Potential Sale Total:", "it reads Potential Sale Total:")
 check(ST.under == nil, "nothing sits under the number")
 check(ST:Width() > 0, "it takes room the header text gives way to")
-ST:Update({ { itemID = 1, unitPrice = 100 * G, postQuantity = 1 },
-            { itemID = 2, unitPrice = 20 * G, postQuantity = 1 } }, 0)
-check(ST.left == 114 * G and ST.count == 2, "the Sell list's net is what is left")
-ST:NoteListed(1, 1, 100 * G)
-check(ST.listed == 95 * G and ST.listings == 1, "a listing counts up by its net")
-check(ST.left == 19 * G, "and comes off what is left")
-check(ST.number.text ~= nil, "the number is drawn")
 ST:NewVisit()
-check(ST.listed == 0 and ST.listings == 0, "a new visit starts at 0")
+local function List(a, b)
+    local lines = {}
+    if a then lines[#lines + 1] = { itemID = 1, unitPrice = a, postQuantity = 1, postTotal = a } end
+    if b then lines[#lines + 1] = { itemID = 2, unitPrice = b, postQuantity = 2, postTotal = 2 * b } end
+    return lines
+end
+ST:Update(List(100 * G, 10 * G), 0)
+check(ST.shown == 120 * G, "before anything is listed it shows the whole list")
+ST:Update(List(100 * G, 15 * G), 0)
+check(ST.shown == 130 * G, "a scan that moves a price moves the total")
+-- Listing item 1: it is confirmed while the bags catch up.
+pending[1] = { itemID = 1 }
+ST:Update(List(nil, 15 * G), 0)
+check(ST.shown == 130 * G, "while a listing is confirmed the number waits")
+pending[1] = nil
+ST:NoteListed(1, 1, 100 * G)
+check(ST.listed == 100 * G and ST.listings == 1, "a listing joins what was listed")
+check(ST.shown == 130 * G, "and the number does not move")
+ST:Update(List(nil, 15 * G), 0)
+check(ST.shown == 130 * G and ST.left == 30 * G, "once the list catches up it still reads the same")
+ST:NewVisit()
+check(ST.listed == 0 and ST.listings == 0, "a new visit starts with nothing listed")
+ST:Update(List(nil, 15 * G), 0)
+check(ST.shown == 30 * G, "a new visit shows what the list holds now")
 check(settings.saleTotalBest == nil and settings.saleTotalLast == nil, "nothing is saved")
 settings.saleTotal = false
 check(ST:SetShown(true) == false and not ST.counter:IsShown(), "unticked, the counter hides")
