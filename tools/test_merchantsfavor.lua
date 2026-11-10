@@ -254,6 +254,20 @@ textiles = Row(rows, "apprentice-textiles")
 check("counting over-stack bundles, the linen is cheapest", textiles.best.itemID == LINEN
     and textiles.perFavor == (2000 + 1200 - 250) / 5)
 
+-- Performance Bonus (a Legacy perk): a 15% chance of double favor at 3
+-- ranks, so each favor costs less on average; the favor shown stays 5.
+local savedLegacy = ns.Legacy
+ns.Legacy = { FavorBonus = function() return 0.15 end }
+rows = MerchantsFavor:GetRows({ skipOverStack = true })
+textiles = Row(rows, "apprentice-textiles")
+check("Performance Bonus keeps the favor shown", textiles.favor == 5)
+check("and counts the favor to expect", math.abs(textiles.expected - 5.75) < 1e-9)
+check("so each favor costs less", math.abs(textiles.perFavor - (2000 + 1600 - 250) / 5.75) < 1e-9)
+ns.Legacy = { FavorBonus = function() return 0 end }
+textiles = Row(MerchantsFavor:GetRows({ skipOverStack = true }), "apprentice-textiles")
+check("no ranks spent: as before", textiles.perFavor == 670 and textiles.expected == 5)
+ns.Legacy = savedLegacy
+
 --------------------------------------------------------------------------------
 print("\nvendor prices in a bundle")
 

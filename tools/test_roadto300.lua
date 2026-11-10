@@ -161,6 +161,17 @@ check("below yellow, every craft", Road.Chance(belt, 60), 1)
 check("halfway from yellow to grey", Road.Chance(belt, 135), 0.5)
 check("grey gives nothing", Road.Chance(belt, 150), 0)
 check("below what it needs, nothing", Road.Chance(belt, 20), 0)
+-- Working Overtime (a Legacy perk): only the ranks spent count.
+ns.Legacy = { SkillUpBonus = function() return 0.2 end }
+check("Working Overtime at 5 ranks adds 20%", math.abs(Road.Chance(belt, 135) - 0.7) < 1e-9, true)
+check("never more than every craft", Road.Chance(belt, 121) <= 1, true)
+check("grey still gives nothing", Road.Chance(belt, 150), 0)
+check("below yellow it is still every craft", Road.Chance(belt, 60), 1)
+ns.Legacy = { SkillUpBonus = function() return 0 end }
+check("no ranks spent: as before", Road.Chance(belt, 135), 0.5)
+ns.Legacy = { SkillUpBonus = function() error("boom") end }
+check("a broken read: as before", Road.Chance(belt, 135), 0.5)
+ns.Legacy = nil
 
 print("\nthe professions")
 local professions = Road:Professions()
