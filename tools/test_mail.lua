@@ -81,7 +81,7 @@ GetInboxInvoiceInfo = function(index)
 
     local i = mail.invoice
     return i.invoiceType or "seller", i.itemName, i.buyer or "Someone",
-        i.bid, i.buyout, i.deposit, i.cut, i.moneyDelay
+        i.bid, i.buyout, i.deposit, i.cut, i.moneyDelay, nil, nil, i.count
 end
 
 -- The client's own subject formats, which is what the classifier matches
@@ -1012,6 +1012,75 @@ Mail:ForgetOutputSet()
 check("until recipes are added",                 Mail:OutputSet()[9999], true)
 ns.Recipes.GetAccountWide = realWide
 Mail:ForgetOutputSet()
+
+--------------------------------------------------------------------------------
+print("")
+print("how many were in a sale")
+--------------------------------------------------------------------------------
+
+check("a count the invoice gives",               Mail.InvoiceCount(20), 20)
+check("not a broken one",                        Mail.InvoiceCount(0), nil)
+check("not a fraction",                          Mail.InvoiceCount(2.5), nil)
+check("not words",                               Mail.InvoiceCount("x"), nil)
+
+Reset()
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 5700,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag",
+                  bid = 6000, buyout = 6000, deposit = 40, cut = 300, count = 20 } },
+}
+Mail:Read()
+check("the invoice's count goes on the sale",    Mail:GetLedger().entries[1].quantity, 20)
+
+-- Without a count, the prices the item was listed at say it.
+ns.Auctions = {
+    UnitsSold = function(_, itemID, gross)
+        if itemID == LINEN_BAG and gross == 6000 then return 20 end
+    end,
+}
+Reset()
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 5700,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag",
+                  bid = 6000, buyout = 6000, deposit = 40, cut = 300 } },
+}
+Mail:Read()
+check("else the listing prices say it",          Mail:GetLedger().entries[1].quantity, 20)
+ns.Auctions = nil
+
+Reset()
+inbox = {
+    { sender = "Auction House", subject = "Auction successful: Linen Bag",
+      money = 285,
+      invoice = { invoiceType = "seller", itemName = "Linen Bag",
+                  bid = 300, buyout = 300, deposit = 40, cut = 15, count = 1 } },
+}
+Mail:Read()
+check("one item leaves the sale as it was",      Mail:GetLedger().entries[1].quantity, nil)
+
+-- Auctions:UnitsSold itself, against prices kept by RememberListed.
+do
+    local ans = { Util = ns.Util, db = {}, RegisterCommand = function() end,
+                  RegisterEvent = function() return true end,
+                  Config = { GetRealmKey = function() return "R" end } }
+    ans.NewModule = function(name) local m = {}; ans[name] = m; return m end
+    assert(loadfile(lfs_cwd .. "/Data/Auctions.lua"))("Blackthornes_TS", ans)
+    local A = ans.Auctions
+    local record = A:GetTable()
+    A:RememberListed(record, { { 1, 300, 20 }, { 2, 50, 5, 250 }, { 2, 60, 5, 300 } }, 1000)
+    A:RememberListed(record, { { 1, 300, 20 } }, 1100)
+    check("a listing seen twice is kept once",   #record.listedPrices[1], 1)
+    check("a whole commodity stack",             A:UnitsSold(1, 6000), 20)
+    check("part of a commodity listing",         A:UnitsSold(1, 1500), 5)
+    check("more than were listed says nothing",  A:UnitsSold(1, 9000), nil)
+    check("gold that fits no price says nothing", A:UnitsSold(1, 1000), nil)
+    check("a stack bought out at its price",     A:UnitsSold(2, 300), 5)
+    check("an item never listed says nothing",   A:UnitsSold(3, 300), nil)
+    A:RememberListed(record, {}, 1000 + A.LISTED_KEEP + 200)
+    check("old prices are let go",               record.listedPrices[1], nil)
+end
 
 print("")
 if failures > 0 then

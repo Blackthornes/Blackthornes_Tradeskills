@@ -2134,6 +2134,8 @@ L["sold to a vendor"] = "an einen Händler verkauft"
 L["broken down for materials"] = "in Materialien zerlegt"
 L["Other sales"] = "Andere Verkäufe"
 L["sold at auction, cost not known"] = "im Auktionshaus verkauft, Kosten unbekannt"
+L["Not Counted"] = "Nicht gezählt"
+L["Sold, no cost known"] = "Verkauft, Kosten unbekannt"
 
 -- Logic/CraftedCost.lua
 L["not listing %s at %s: you paid %s to make one, and after the auction house's cut it brings in %s"] = "%s wird nicht für %s eingestellt: du hast %s für die Herstellung bezahlt, und nach der Gebühr des Auktionshauses bringt es %s"

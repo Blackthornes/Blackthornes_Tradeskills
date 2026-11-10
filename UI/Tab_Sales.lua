@@ -404,6 +404,18 @@ local function ToggleMethod(key)
     if ns.Config and ns.Config.Set then ns.Config:Set("salesMethodsFolded", table.concat(keys, ",")) end
 end
 
+--- A row's profit, or "Not Counted" for sales with no known cost, which
+--- are kept out of Profit (MethodProfit's `uncounted`).
+local function ShowMethodAmount(row, group, uncounted)
+    if uncounted then
+        row.amount:SetText(L["Not Counted"])
+        row.amount:SetTextColor(Theme.Unpack("muted"))
+    else
+        row.amount:SetText(SignedMoney(group.profit))
+        row.amount:SetTextColor(Theme.Unpack("text"))
+    end
+end
+
 --- A method's heading: its profit, and what it is made of.
 local function UpdateMethodRow(row, data)
     Theme.SetItemIcon(row.icon, nil)
@@ -414,7 +426,7 @@ local function UpdateMethodRow(row, data)
     row.name:SetText(data.method.text)
     row.name:SetTextColor(Theme.Unpack("accent"))
 
-    row.amount:SetText(SignedMoney(data.group.profit))
+    ShowMethodAmount(row, data.group, data.group.uncounted)
     row.detail:SetText(MethodDetail(data.group, METHOD_UNITS[data.method.key] or L["%d sold"]))
     row.detail:SetTextColor(Theme.Unpack("muted"))
 
@@ -429,7 +441,7 @@ local function UpdateMethodItemRow(row, data)
     row.name:SetText(data.itemID and ItemLabel(data.itemID) or L["unknown item"])
     ApplyNameColor(row.name, data.itemID)
 
-    row.amount:SetText(SignedMoney(data.item.profit))
+    ShowMethodAmount(row, data.item, data.uncounted)
     row.detail:SetText(MethodDetail(data.item, METHOD_UNITS[data.key] or L["%d sold"]))
     row.detail:SetTextColor(Theme.Unpack("muted"))
     row.when:SetText("")
@@ -916,7 +928,7 @@ local function RefreshMethods()
             data[#data + 1] = { methodRow = true, method = method, group = group, folded = folded[method.key] }
             for _, item in ipairs(folded[method.key] and {} or group.list) do
                 data[#data + 1] = { methodItem = true, key = method.key,
-                    itemID = item.itemID, item = item }
+                    itemID = item.itemID, item = item, uncounted = group.uncounted }
             end
         end
     end
@@ -934,13 +946,20 @@ local function RefreshMethods()
     for _, method in ipairs(ns.MethodProfit.METHODS) do
         local group = summary.methods[method.key]
         if group.n > 0 then
-            lines[#lines + 1] = { method.text, SignedMoney(group.profit),
-                group.profit < 0 and "loss" or "profit" }
+            if group.uncounted then
+                lines[#lines + 1] = { method.text, L["Not Counted"], "muted" }
+            else
+                lines[#lines + 1] = { method.text, SignedMoney(group.profit),
+                    group.profit < 0 and "loss" or "profit" }
+            end
         end
     end
     lines[#lines + 1] = { L["Profit"], SignedMoney(total.profit), total.profit < 0 and "loss" or "profit" }
     lines[#lines + 1] = { L["Taken in"], Util.FormatMoney(total.income), "profit" }
     lines[#lines + 1] = { L["Cost"], Util.FormatMoney(total.cost), total.cost > 0 and "loss" or "muted" }
+    if (total.uncounted or 0) > 0 then
+        lines[#lines + 1] = { L["Sold, no cost known"], Util.FormatMoney(total.uncounted), "muted" }
+    end
 
     ShowStatsButton(detail, nil)
     detail.title:SetText(L["Profit by method"])

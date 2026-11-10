@@ -2132,6 +2132,8 @@ L["sold to a vendor"] = "卖给了商人"
 L["broken down for materials"] = "分解成材料"
 L["Other sales"] = "其他卖出"
 L["sold at auction, cost not known"] = "在拍卖行卖出，成本未知"
+L["Not Counted"] = "不计入"
+L["Sold, no cost known"] = "已卖出，成本未知"
 
 -- Logic/CraftedCost.lua
 L["not listing %s at %s: you paid %s to make one, and after the auction house's cut it brings in %s"] = "不以 %2$s 上架 %1$s：你做一个花了 %3$s，扣掉拍卖行手续费后只能拿到 %4$s"
