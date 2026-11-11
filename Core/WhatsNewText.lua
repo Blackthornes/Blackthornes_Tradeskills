@@ -5,6 +5,12 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.23.0", lines = {
+        "There is a new little window called My Auctions. It shows everything you have up, and when something sells, the row lights up and slides away.",
+        "It starts off. You turn it on in Settings, on the Auction page.",
+        "The Sales tab can show your sales by item, with totals for what you took in.",
+        "You can clear what an old character was carrying, so you do not get sent to log in on it.",
+    } },
     { version = "1.22.0", lines = {
         "Your Potential Sale Total now shows the whole Sell list right away and stays steady while you post.",
         "Profit now counts every item in a stack, so big stacks no longer look like huge wins.",
@@ -13,9 +19,5 @@ ns.WHATS_NEW = {
     } },
     { version = "1.21.0", lines = {
         "Each find on the Snipe list has a Buy button that shows what you'll pay.",
-    } },
-    { version = "1.20.0", lines = {
-        "The Recipe Book shows which vendor sells a trade camp recipe, what it costs and the standing it needs.",
-        "Hover a material in the Recipe Book or Your Time to see the item's tooltip.",
     } },
 }

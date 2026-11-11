@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.23.0
+
+For WoW: Forever (interface 16001). Files were added, so quit the game and start it again after updating.
+
+- **My Auctions.** A small window that lists what you have up on the auction house: the item, how long is left and the price. When something sells, its row lights gold, SOLD stamps on, coins burst out and the row slides away, and Sold Today: counts up. New posts show right away, and the list scrolls to the newest one. Turn it on with Auction Tracker: under AUCTION TRACKER on the Auction page of Settings. It starts off. Sold Effects: (Full, Subtle or Off), Transparent: and Tracker Place: (Set Default) are there too.
+- **Sales by item.** The Sales tab can now show your sales by item, with last sold, each price, taken in, sales and how many sold, plus totals. Clicking an item shows how it has done. The footer counts only what the search shows.
+- **Clear Items.** A Clear Items button on a character's card forgets its saved bags, bank, mail and gold, so old counts stop sending jobs there. It asks you to click again first. Logging in on that character reads it again.
+- **Alts not seen in 30 days.** Butler's jobs skip an alt whose bags were last seen more than 30 days ago.
+- **Smaller least deposit.** Forever's least deposit is 1 copper now, so profit guesses made away from the auction house use it.
+
 ## 1.22.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
