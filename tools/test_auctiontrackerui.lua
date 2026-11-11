@@ -10,6 +10,8 @@
 --   5. A row that runs out fades with no gold.
 --   6. Transparent thins the glass; the place is kept and Set Default
 --      clears it.
+--   7. A new post below the rows that show scrolls into sight; a thumb
+--      shows while the list is longer than the window.
 
 local GLOBALS = { "CreateFrame", "UIParent", "CreateColor", "GameTooltip", "Minimap", "GetTime",
     "time", "C_Timer", "UISpecialFrames", "tinsert", "date" }
@@ -334,6 +336,29 @@ check("transparent off", UIx.seeThroughOn and true or false, false)
 settings.auctionTrackerX, settings.auctionTrackerY = 100, 200
 UIx:ResetPlace()
 check("Set Default clears the place", settings.auctionTrackerX, nil)
+
+-- 7. A new post past the rows that show scrolls into sight, and a thumb
+-- shows while the list is longer than the window.
+for k in pairs(live) do live[k] = nil end
+for i = 1, 10 do
+    live[i] = { auctionID = 100 + i, itemID = 2589, quantity = 1, unit = 10, ends = NOW + 3600 * i }
+end
+AT:OnRead()
+UIx.offset, UIx.seen = 0, nil
+UIx:Refresh(true)
+check("ten up", UIx.upCount, 10)
+check("the thumb shows on a long list", UIx.thumb:IsShown(), true)
+check("the first read keeps the top", UIx.offset, 0)
+live[11] = { auctionID = 200, itemID = 818, quantity = 1, unit = 5000, ends = NOW + 3600 * 40 }
+AT:OnRead()
+UIx:Refresh()
+check("eleven up", UIx.upCount, 11)
+check("the new post scrolled into sight", UIx.offset, 11 - UIx.MOST_ROWS)
+for k in pairs(live) do live[k] = nil end
+live[1] = { auctionID = 300, itemID = 818, quantity = 1, unit = 5000, ends = NOW + 3600 }
+AT:OnRead()
+UIx:Refresh()
+check("the thumb hides on a short list", UIx.thumb:IsShown(), false)
 
 AT:SetOn(false)
 check("off again: hidden", UIx.frame:IsShown(), false)

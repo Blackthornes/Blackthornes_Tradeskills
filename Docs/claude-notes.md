@@ -1929,3 +1929,13 @@ dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
   key] = { day, copper, count }` (today's sales, started again each day).
 - Tested in `tools/test_auctiontracker.lua` and
   `tools/test_auctiontrackerui.lua`. Not yet seen in game.
+- New posts showed late or out of sight (Trent, 2026-11-11). Two causes:
+  `Auctions:Refresh` dropped a non-forced ask inside its 5 s window, so a
+  second post's read never went out; now `RefreshAfter` sends one more
+  forced read when the window ends. And only `MOST_ROWS` (8) rows show,
+  soonest to end first, so a new post (two days left) landed below them
+  with no sign the list scrolled; now `Refresh` scrolls the newest new row
+  into sight (never on the first read, `self.seen`) and `PlaceThumb` draws
+  a slim gold thumb in the right margin while the list is longer than the
+  window. No new words. Tested in `tools/test_verify.lua` and
+  `tools/test_auctiontrackerui.lua`.
