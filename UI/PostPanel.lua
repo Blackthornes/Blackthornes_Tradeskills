@@ -930,6 +930,59 @@ function PostPanel:OutOfOne()
     self:PlaceBar()
 end
 
+--- True while our own auction house window is up in place of the game's
+--- (UI/AuctionWindow.lua, off unless ticked): the drawer's lists are that
+--- window's tabs then, so nothing opens beside the auction house.
+function PostPanel.HeldByOwn()
+    local Own = ns.AuctionWindow
+    if not (Own and Own.HoldsDrawer) then return false end
+    local ok, held = pcall(Own.HoldsDrawer, Own)
+    return ok and held == true
+end
+
+--- Lay the drawer into our own auction house window on one of its views
+--- (UI/AuctionWindow.lua's Sell, My Auctions and Snipe tabs). It goes in as
+--- it goes into the one window. Auctions and Snipe are that window's own
+--- tabs, so the small row keeps only Sell, Buy, Lists and Favors, and is
+--- put away on the other two.
+function PostPanel:IntoOwn(container, view)
+    if not container then return end
+    local first = not self.inOwn
+    self.inOwn = true
+    if first or not self.inOne then
+        self:IntoOne(container)
+    elseif self.frame then
+        self.frame:Show()
+    end
+    self:LayTabs(true)
+    if view ~= "auctions" and view ~= "snipe" then view = self.ownSellView or "sell" end
+    self:SetView(view)
+end
+
+--- Our own auction house window came up while the drawer sat beside the
+--- game's: it goes away, and comes back as that window's tabs.
+function PostPanel:StepAside()
+    if self.inOne or not self.frame then return end
+    self.attached = false
+    self.dockedTo, self.dockedLeft = nil, nil
+    self.frame:Hide()
+end
+
+--- Out of sight while our window shows a tab the drawer has no part in.
+function PostPanel:OwnAway()
+    if self.inOwn and self.frame then self.frame:Hide() end
+end
+
+--- Back to the drawer's own frame, as our window gives way to the game's
+--- or the auction house closes.
+function PostPanel:OutOfOwn()
+    if not self.inOwn then return end
+    self.inOwn = false
+    self:OutOfOne()
+    if self.switch then self.switch:Show() end
+    self:LayTabs(true)
+end
+
 --- The close gem: put the drawer away until the auction house is opened
 --- again. Nothing is lost; the next visit brings it back.
 function PostPanel:CloseForVisit()
@@ -1472,6 +1525,8 @@ end
 function PostPanel:Attach()
     -- The one window's Auction House tab holds it: nothing to place.
     if self.inOne then return end
+    -- Our own auction house window holds the lists as its tabs.
+    if PostPanel.HeldByOwn() then return end
     local frame = self:Build()
     local auctionFrame = ns.UI:FindAuctionFrame()
 
@@ -1605,6 +1660,13 @@ function PostPanel:SetView(view)
     self.view = (view == "buy" or view == "lists" or view == "auctions" or view == "favors" or view == "snipe") and view or "sell"
     self.searchStep = nil
     if self.switch then self.switch:Select(self.view, true) end
+    if self.inOwn then
+        -- In our own auction house window Auctions and Snipe are tabs of
+        -- their own, without the small row; Sell remembers its last list.
+        local apart = self.view == "auctions" or self.view == "snipe"
+        if not apart then self.ownSellView = self.view end
+        if self.switch then self.switch:SetShown(not apart) end
+    end
     self.shoppingAt = nil
     self:Refresh()
     if ns.AuctionWheel and ns.AuctionWheel.Update then ns.AuctionWheel:Update() end
@@ -2068,12 +2130,21 @@ function PostPanel:LayTabs(force)
     if not (switch and switch.tabs) then return false end
     local withFavors = PostPanel.ShowsFavors()
     local withSnipe = PostPanel.ShowsSnipe()
-    if not force and withFavors == self.tabsWithFavors and withSnipe == self.tabsWithSnipe then return false end
+    local own = self.inOwn == true
+    if not force and withFavors == self.tabsWithFavors and withSnipe == self.tabsWithSnipe
+        and own == (self.tabsOwn == true) then
+        return false
+    end
     self.tabsWithFavors = withFavors
     self.tabsWithSnipe = withSnipe
 
     switch:SetTabShown("favors", withFavors)
-    switch:SetTabShown("snipe", withSnipe)
+    switch:SetTabShown("snipe", withSnipe and not own)
+    -- Our own auction house window has My Auctions as a tab of its own.
+    if own ~= (self.tabsOwn == true) then
+        self.tabsOwn = own
+        switch:SetTabShown("auctions", not own)
+    end
     if switch.selected then switch:Select(switch.selected, true) end
     return true
 end
