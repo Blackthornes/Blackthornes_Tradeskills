@@ -1186,7 +1186,18 @@ local function Refresh()
     end
 
     local items = ns.Mail:GetItems(from, to)
-    local totals = Totals(items)
+
+    -- The footer and the Everything panel count only what the search
+    -- shows, so "58 sold" reads the same here as on the item's tooltip.
+    local shown = items
+    if query ~= "" then
+        shown = {}
+        for _, item in ipairs(items) do
+            if Matches(item.itemID, item.name, query) then shown[#shown + 1] = item end
+        end
+    end
+    local totals = Totals(shown)
+    local ledgerTotals = (shown == items) and totals or Totals(items)
 
     -- For the hover's All Time line.
     if state.view == "item" then
@@ -1318,7 +1329,7 @@ local function Refresh()
             else
                 widgets.emptyLabel:SetText(L["Nothing was listed at your last auction house visit."])
             end
-        elseif state.view ~= "visits" and totals.sold == 0 and totals.expired == 0 and totals.cancelled == 0 then
+        elseif state.view ~= "visits" and ledgerTotals.sold == 0 and ledgerTotals.expired == 0 and ledgerTotals.cancelled == 0 then
             widgets.emptyLabel:SetText(ns.Mail:HasReadThisSession()
                 and L["Nothing recorded yet. Sales and expiries are written down when you open the mailbox they arrive in."]
                 or L["Nothing recorded yet. Visit a mailbox after a listing has ended and it will appear here."])
