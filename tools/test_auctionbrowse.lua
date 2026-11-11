@@ -386,11 +386,17 @@ Tick()
 check("Clear Search empties the tab",
     Browse.status == "idle" and widgets.summary.text == "" and widgets.empty.shown == false)
 
-check("no row has a buy or bid click yet", (function()
+check("a click on a row opens the buy panel", (function()
+    local opened
+    ns.AuctionBuy = { Toggle = function(_, entry) opened = entry end }
     for _, opts in ipairs(listOpts) do
-        if opts.rowHeight == 22 and opts.onClick then return false end
+        if opts.rowHeight == 22 and opts.onClick then
+            local entry = { itemID = 10 }
+            opts.onClick(entry, 1, "LeftButton")
+            return opened == entry and opts.isSelected ~= nil
+        end
     end
-    return true
+    return false
 end)())
 
 print("")

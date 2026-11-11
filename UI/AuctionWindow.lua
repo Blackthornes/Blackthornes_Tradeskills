@@ -10,9 +10,9 @@
 -- The Game's Window" lifts the veil for the rest of the visit.
 --
 -- The window, its veil and its way out are here; the Browse tab is
--- UI/AuctionBrowse.lua. The buy panel and the other tabs come in later
--- steps; until then Sell, My Auctions, Deals and Snipe stay in the drawer
--- beside it.
+-- UI/AuctionBrowse.lua and its buy panel UI/AuctionBuy.lua. The other tabs
+-- come in later steps; until then Sell, My Auctions, Deals and Snipe stay in
+-- the drawer beside it.
 
 local _, ns = ...
 

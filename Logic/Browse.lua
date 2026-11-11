@@ -5,7 +5,8 @@
 --
 -- Every search and every further page goes through ns.AHQueue, the one
 -- queue the scans and the other tabs use, so browsing and scanning never
--- spend the game's allowance together. Nothing here buys or bids.
+-- spend the game's allowance together. Nothing here buys or bids; that is
+-- Logic/BrowseBuy.lua.
 --
 -- Not finished, so it does not ship yet: it sits inside the TOC's
 -- do-not-package block with the window.

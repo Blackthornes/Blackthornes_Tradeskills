@@ -1948,9 +1948,9 @@ Players read "Blackthornes UI Auction House" (the owner renamed it from
 
 Not for players yet (the owner, 2026-11-11: it does not ship until it is
 done). Three fences keep it out of every release: the TOC lists
-`UI\Veil.lua`, `Logic\Browse.lua`, `UI\AuctionBrowse.lua` and
-`UI\AuctionWindow.lua` between `#@do-not-package@` lines, `.pkgmeta`
-ignores all four, and `tools/check_package.py` (`NOT_FINISHED`) refuses a
+`UI\Veil.lua`, `Logic\Browse.lua`, `Logic\BrowseBuy.lua`,
+`UI\AuctionBrowse.lua`, `UI\AuctionBuy.lua` and `UI\AuctionWindow.lua`
+between `#@do-not-package@` lines, `.pkgmeta` ignores all six, and `tools/check_package.py` (`NOT_FINISHED`) refuses a
 package that holds or loads any of them. With no
 window loaded, Settings shows no heading or row for it. A checkout still
 loads it, so the owner can try it. Every new file for this feature goes
@@ -1996,10 +1996,28 @@ this is the first.
   stops our paging. Deals Only filters what is already read, no new
   search. Names not loaded yet are filled in on
   `ITEM_KEY_ITEM_INFO_RECEIVED`, settled `NAME_SETTLE`. The footer is the
-  count; the header shows Your Gold:. A row does nothing on a click yet.
-  Tested in `tools/test_auctionbrowse.lua`. Not yet seen in game.
-- Still to come: the buy panel (always two clicks), bids and buyouts on
-  single items, and Sell, My Auctions, Deals, Snipe and Settings as its
+  count; the header shows Your Gold:. A click on a row opens the buy
+  panel. Tested in `tools/test_auctionbrowse.lua`. Not yet seen in game.
+- The buy panel (2026-11-11): `Logic/BrowseBuy.lua` (`ns.BrowseBuy`) asks,
+  reads and buys, `UI/AuctionBuy.lua` (`ns.AuctionBuy`) draws it beside
+  the list (`AuctionBuy.WIDTH`; `AuctionBrowse:SetInset` narrows the
+  list). A click on the same row, a new search, Clear or the auction
+  house closing puts it away. Its search goes through `ns.AHQueue` as
+  "ui-buy" (urgent). An item that stacks (`GetItemCommodityStatus` 2)
+  shows the price steps, How Many: with quick picks (what the craft queue
+  still needs, 20, 200, all), the total and what it saves against the
+  usual price; one sold one at a time lists its auctions, cheapest buyout
+  first, your own greyed, with a bid box. Always two clicks, never one:
+  Buy It or Place Bid only arms (`Start`, `ArmBuyout`, `ArmBid`), Confirm
+  pays (`Confirm`). A stack's price is asked first
+  (`StartCommoditiesPurchase`, `COMMODITY_PRICE_UPDATED`); a price that
+  went up needs Confirm again, picking another auction or changing the
+  number unarms, short of gold nothing arms, and gold that ran out before
+  Confirm pays nothing. No answer in `QUOTE_WAIT` or `BUY_WAIT` lets go.
+  Bids placed this visit are remembered (`bids`) for "You're the top
+  bidder." and "Someone bid more than you." Nothing is saved. Tested in
+  `tools/test_auctionbuy.lua`. Not yet seen in game.
+- Still to come: Sell, My Auctions, Deals, Snipe and Settings as its
   tabs. Until then those stay in the drawer beside it.
 - No separate drawer in the end (the owner, 2026-11-11, from a screenshot
   of the window with the drawer beside it): once Sell, My Auctions, Deals
