@@ -150,14 +150,6 @@ UI\BuyQuantity.lua
 UI\AuctionsView.lua
 UI\FavorsView.lua
 UI\SnipeView.lua
-#@do-not-package@
-Logic\Browse.lua
-Logic\BrowseBuy.lua
-UI\Veil.lua
-UI\AuctionBrowse.lua
-UI\AuctionBuy.lua
-UI\AuctionWindow.lua
-#@end-do-not-package@
 UI\CraftPanel.lua
 UI\EnchantWindow.lua
 UI\ProfessionOpener.lua

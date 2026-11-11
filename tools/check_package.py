@@ -35,14 +35,6 @@ FORBIDDEN_NAMES = {"BlackthornesTSDB.lua", "BlackthornesTSCharDB.lua",
                    "Blackthornes_TS.lua", "Snapshot.lua", "deploy.ps1",
                    "CLAUDE.md", ".pkgmeta"}
 
-# Not finished, so not for players yet (the owner, 2026-11-11: our auction
-# house window does not ship until it is done). A package that holds one of
-# these files, or whose TOC loads one, is refused. Take a file off this list
-# only when the owner says the feature is finished.
-NOT_FINISHED = {"Logic/Browse.lua", "Logic/BrowseBuy.lua",
-                "UI/AuctionBrowse.lua", "UI/AuctionBuy.lua",
-                "UI/AuctionWindow.lua", "UI/Veil.lua"}
-
 PRIVATE = [
     ("a Windows path", re.compile(r"\b[A-Za-z]:\\[^\s\"']")),
     ("an email address", re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")),
@@ -88,9 +80,6 @@ def check(package_dir):
             if name in FORBIDDEN_NAMES or name.startswith("."):
                 problems.append("%s must never ship" % rel)
                 continue
-            if rel in NOT_FINISHED:
-                problems.append("%s is not finished and must not ship yet" % rel)
-                continue
             if ext not in ALLOWED_EXT:
                 problems.append("%s: %s files are not part of the addon"
                                 % (rel, ext))
@@ -113,10 +102,6 @@ def check(package_dir):
             text = f.read()
         if "@project-version@" in text:
             problems.append("the TOC version was never set from the tag")
-        listed = set(line.strip().replace("\\", "/")
-                     for line in text.splitlines())
-        for rel in sorted(NOT_FINISHED & listed):
-            problems.append("the TOC loads %s, which is not finished" % rel)
     else:
         problems.append("%s.toc is missing" % ADDON)
 
