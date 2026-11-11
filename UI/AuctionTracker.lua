@@ -43,9 +43,11 @@ local COIN = [[Interface\Icons\INV_Misc_Coin_01]]
 local GLOW = ([[Interface\AddOns\%s\Media\Frame\Glow]]):format(ADDON)
 
 -- How long each part of a sale takes, in seconds, by Sold Effects.
+-- Full runs one step after another, each slow enough to see: the row
+-- lights, the SOLD stamp lands, then the coins burst and the gold floats up.
 AuctionTrackerUI.SOLD = {
-    full = { light = 0.3, stamp = 0.4, stampAt = 0.25, burstAt = 0.6, hold = 1.5,
-        slide = 0.45, collapse = 0.3, count = 0.8 },
+    full = { light = 0.5, stamp = 0.6, stampAt = 0.7, burstAt = 1.6, burst = 1.3,
+        float = 2.2, hold = 3.6, slide = 0.7, collapse = 0.45, count = 1.4 },
     subtle = { light = 0.35, hold = 0.9, fade = 0.5, collapse = 0.25 },
 }
 -- An auction that ran out or left the list.
@@ -664,7 +666,7 @@ function AuctionTrackerUI:Fade(data, index)
 end
 
 --- "+money" rising off a row and fading.
-function AuctionTrackerUI:Float(widget, amount)
+function AuctionTrackerUI:Float(widget, amount, seconds)
     local label
     for _, candidate in ipairs(self.floats) do
         if not candidate.busy then label = candidate break end
@@ -678,7 +680,7 @@ function AuctionTrackerUI:Float(widget, amount)
     end
     label.busy = true
     label:SetText("+" .. Money(amount))
-    ns.Motion:Run(label, "float", 1.4, function(p)
+    ns.Motion:Run(label, "float", seconds or 1.4, function(p)
         label:ClearAllPoints()
         label:SetPoint("BOTTOM", widget, "TOP", 10, -8 + 30 * p)
         label:SetAlpha(1 - p * p)
@@ -689,7 +691,7 @@ function AuctionTrackerUI:Float(widget, amount)
 end
 
 --- A handful of coins bursting out of a row.
-function AuctionTrackerUI:Burst(widget, count)
+function AuctionTrackerUI:Burst(widget, count, seconds)
     for index = 1, count do
         local coin = self.coins[index]
         if not coin then
@@ -703,7 +705,7 @@ function AuctionTrackerUI:Burst(widget, count)
         local angle = math.pi * (0.1 + 0.8 * (index - 1) / math.max(1, count - 1))
         local reach = 28 + (index % 3) * 9
         local dx, dy = math.cos(angle) * reach, math.sin(angle) * reach
-        ns.Motion:Run(coin, "burst", 0.9, function(p)
+        ns.Motion:Run(coin, "burst", seconds or 0.9, function(p)
             coin:ClearAllPoints()
             coin:SetPoint("CENTER", widget, "CENTER", dx * p, dy * p - 20 * p * p)
             coin:SetAlpha(p < 0.6 and 1 or (1 - p) / 0.4)
@@ -774,6 +776,11 @@ function AuctionTrackerUI:OnSold(row, net, partial)
         self:Refresh(true)
         return
     end
+    -- Bring the row into sight first, so the sale is never out of view.
+    local offset = self.offset or 0
+    if index <= offset or index > offset + self.MOST_ROWS then
+        self.offset = math.max(0, index - math.ceil(self.MOST_ROWS / 2))
+    end
     local data = {}
     for k, v in pairs(self.list[index]) do data[k] = v end
     if self.going[row.key] then return end
@@ -803,8 +810,8 @@ function AuctionTrackerUI:OnSold(row, net, partial)
     if C_Timer and C_Timer.After then
         C_Timer.After(timing.burstAt, function()
             if not widget:IsShown() then return end
-            self:Burst(widget, 9)
-            if net and net > 0 then self:Float(widget, net) end
+            self:Burst(widget, 9, timing.burst)
+            if net and net > 0 then self:Float(widget, net, timing.float) end
         end)
     end
     local slideAt = timing.light + timing.hold
