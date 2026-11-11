@@ -1900,3 +1900,32 @@ Ticked, Sell shows only lines a recipe of yours makes (`line.isCrafted`,
 `PostPanel.CraftedLines` in `PostPanel:ShownLines`), so List Next and List
 All work through those only. Off unless ticked: `postCraftedOnly`, never
 rename it. Tested in `tools/test_postcraftedonly.lua`. Not yet seen in game.
+
+## My Auctions (the auction tracker)
+
+Trent asked, then said build it (2026-11-11, from a mockup whose words he
+approved): a small window of what you have up on the auction house. When
+something sells, the row lights gold, SOLD stamps on, coins burst with the
+gold, the row slides away and Sold Today: counts up. `Logic/AuctionTracker.lua`
+works it out, `UI/AuctionTracker.lua` draws it (house frame, panel gems,
+dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
+
+- The list is read only at the open auction house (`Auctions.live`); away
+  from it, what it saw last (else the saved listings of the character
+  playing), counting down on its own (`BAND_MOST` for a rough band).
+- A sale comes from Sale Alarm's "a buyer has been found" line
+  (`SaleAlarm:LogHeard` calls `AuctionTracker:Sold`), which names the item
+  only: the gold shown is the buyout less 5% (`CUT`). Two listings of one
+  item: the cheapest leaves. Part of a stack: the row stays with fewer.
+  An auction that runs out leaves with no gold. No row of yours, no gold.
+- Sold Effects Full, Subtle (no stamp or burst) or Off (row goes at once),
+  never more than Effects allows (`EffectsLevel`). The sound is Sale Alarm's.
+- Settings, Auction page, AUCTION TRACKER: "Auction Tracker:" (off unless
+  ticked), "Sold Effects:", "Transparent:" (Off, Some, More, Most; glass
+  comes back under the mouse) and "Tracker Place:" Set Default.
+- Saved, account wide, never rename them: `auctionTracker`,
+  `auctionTrackerEffects`, `auctionTrackerSeeThrough`, `auctionTrackerScale`,
+  `auctionTrackerX`, `auctionTrackerY`, and `auctionTrackerSold[character
+  key] = { day, copper, count }` (today's sales, started again each day).
+- Tested in `tools/test_auctiontracker.lua` and
+  `tools/test_auctiontrackerui.lua`. Not yet seen in game.
