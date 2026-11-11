@@ -80,7 +80,9 @@ assert(loadfile(lfs_cwd .. "/Logic/Profit.lua"))("Blackthornes_TS", ns)
 
 -- A deposit of 3c a belt is known from the last listing, but a listing on
 -- Forever never pays less than 1s, so a lost one costs the 1s.
-ns.Posting = { GetCachedUnitDeposit = function() return 3 end }
+-- These checks set a 1s least deposit (Forever's rule from 2026-11-06 to
+-- 2026-11-10) to test the floor; the 1c rule now is in test_mindeposit.lua.
+ns.Posting = { MIN_DEPOSIT = 100, GetCachedUnitDeposit = function() return 3 end }
 
 local Profit = ns.Profit
 

@@ -23,10 +23,10 @@ local SOULBOUND_REASON = L["binds on pickup, so it cannot be sold"]
 
 --- About the deposit for listing `quantity` of an item, from what the
 --- auction house said before; nil until it has said.
---- The least deposit a listing pays (1s on Forever).
+--- The least deposit a listing pays (1c on Forever since 2026-11-10).
 local function LeastDeposit()
     local posting = ns.Posting
-    return (posting and tonumber(posting.MIN_DEPOSIT)) or 100
+    return (posting and tonumber(posting.MIN_DEPOSIT)) or 1
 end
 
 local function HeldDeposit(itemID, quantity)
@@ -589,9 +589,9 @@ function Profit:NetAfterRisk(itemID, unitPrice)
 end
 
 --- What one unit's share of a lost deposit is: the remembered share, but
---- never under the least deposit (1s) spread over a listing. A listing is
+--- never under the least deposit (1c) spread over a listing. A listing is
 --- taken as the biggest one seen, else a full stack, else one item, so a
---- cheap thing listed alone still loses its whole 1s when it runs out.
+--- cheap thing listed alone still loses its whole least deposit when it runs out.
 function Profit.LostDepositEach(itemID)
     local posting = ns.Posting
     local each = (posting and posting.GetCachedUnitDeposit and posting:GetCachedUnitDeposit(itemID)) or 0

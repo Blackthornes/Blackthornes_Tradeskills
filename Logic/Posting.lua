@@ -629,11 +629,16 @@ end
 -- Deposits
 --------------------------------------------------------------------------------
 
---- The least deposit any listing pays on Forever: 1 silver, whether it
---- holds one item or a whole stack (Forever's rule, seen in game and in
---- its news, 2026-11-06). A guess made away from the auction house never
---- goes under it; at the auction house the game's own number is used.
-Posting.MIN_DEPOSIT = 100
+--- The least deposit any listing pays on Forever: 1 copper since the
+--- 2026-11-10 patch (it was 1 silver from 2026-11-06). A guess made away
+--- from the auction house never goes under it; at the auction house the
+--- game's own number is used.
+Posting.MIN_DEPOSIT = 1
+
+--- When the 1 silver floor ended (2026-11-10 00:00 UTC). A least deposit
+--- remembered from before then was that floor, not the item's own, so it
+--- no longer holds a guess up.
+Posting.FLOOR_ENDED = 1794268800
 
 --- Deposit per unit, remembered from the last time it could be calculated.
 --
@@ -665,6 +670,7 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
         quantity = quantity,
         least = deposit,
         leastQuantity = quantity,
+        leastAt = time(),
         duration = duration,
         at = time(),
     }
@@ -681,12 +687,25 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
         end
         local oldLeast = tonumber(old.least)
         local oldLeastQuantity = tonumber(old.leastQuantity)
-        if oldLeast and oldLeastQuantity and oldLeastQuantity < quantity then
+        if oldLeast and oldLeastQuantity and oldLeastQuantity < quantity
+            and Posting.LeastStillHolds(old) then
             record.least, record.leastQuantity = oldLeast, oldLeastQuantity
+            record.leastAt = Posting.LeastSeenAt(old)
         end
     end
 
     ns.db.deposits[itemID] = record
+end
+
+--- When a record's least deposit was seen (older records keep only `at`).
+function Posting.LeastSeenAt(record)
+    return tonumber(record.leastAt) or tonumber(record.at)
+end
+
+--- A least deposit seen before the 1 silver floor ended was that floor.
+function Posting.LeastStillHolds(record)
+    local seen = Posting.LeastSeenAt(record)
+    return seen ~= nil and seen >= Posting.FLOOR_ENDED
 end
 
 --- The deposit a remembered record gives for a listing of `quantity`:
@@ -702,7 +721,8 @@ function Posting.DepositFromRecord(record, quantity)
     -- Without that, its deposit is just the same share for fewer.
     local least = tonumber(record.least)
     local leastQuantity = tonumber(record.leastQuantity)
-    if least and leastQuantity and least > record.unit * leastQuantity + 1 then
+    if least and leastQuantity and least > record.unit * leastQuantity + 1
+        and Posting.LeastStillHolds(record) then
         deposit = math.max(deposit, least)
     end
 

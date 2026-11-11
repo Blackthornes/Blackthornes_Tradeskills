@@ -91,7 +91,7 @@ ns.Scanner.isAuctionHouseOpen = false
 Posting:CacheUnitDeposit(777, 3939, 20, 2)
 check("deposit: cached stack keeps its figure", Posting:GetDeposit(777, 20), 3939)
 Posting:CacheUnitDeposit(778, 3, 20, 2)
-check("deposit: a cheap stack still pays the 1s", Posting:GetDeposit(778, 20), 100)
+check("deposit: a cheap stack pays its own 3c (1c least since 2026-11-10)", Posting:GetDeposit(778, 20), 3)
 
 if failures > 0 then
     error(string.format("%d post-price check(s) failed", failures), 0)
