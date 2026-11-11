@@ -409,6 +409,14 @@ function AuctionTrackerUI:Build()
     footer:SetPoint("BOTTOMLEFT", PAD + 2, 7)
     self.footer = footer
 
+    -- A slim gold thumb in the right margin while more rows are up than
+    -- show, so it's plain the list scrolls with the mouse wheel.
+    local thumb = body:CreateTexture(nil, "ARTWORK")
+    thumb:SetWidth(3)
+    thumb:SetColorTexture(Theme.Unpack("accent", 0.7))
+    thumb:Hide()
+    self.thumb = thumb
+
     -- The once a second clock: only the LEFT words, unless the soonest
     -- auction ran out or the logic moved on.
     local wait = 0
@@ -494,6 +502,22 @@ function AuctionTrackerUI:Refresh(force)
         going.data.going = key
     end
     self.list = list
+
+    -- A new auction (just posted) sorts by time left, so it often lands
+    -- below the rows that show. Scroll it into sight; never on the first
+    -- read, which only fills the window.
+    if self.seen then
+        local newest
+        for index, row in ipairs(list) do
+            if not row.going and not self.seen[row.key] then newest = index end
+        end
+        local offset = self.offset or 0
+        if newest and (newest <= offset or newest > offset + self.MOST_ROWS) then
+            self.offset = math.max(0, newest - self.MOST_ROWS)
+        end
+    end
+    self.seen = here
+
     self.upCount = 0
     for _, row in ipairs(list) do
         if not row.going then self.upCount = self.upCount + 1 end
@@ -557,7 +581,24 @@ function AuctionTrackerUI:Layout(now)
     self.headings:SetShown(not nothing)
     if nothing then y = 44 + self.ROW + 6 end
     self.footer:SetText(L.Format("%d up", self.upCount or 0))
+    self:PlaceThumb(#list, y)
     self.frame:SetHeight(HEADER + 1 + y + 26)
+end
+
+--- The scroll thumb: as tall as the share of rows shown, placed by the
+--- offset, beside the rows (which run from 44 down to `bottom`).
+function AuctionTrackerUI:PlaceThumb(count, bottom)
+    local thumb = self.thumb
+    if not thumb then return end
+    if (count or 0) <= self.MOST_ROWS then thumb:Hide() return end
+    local track = math.max(1, (bottom or 44) - 44)
+    local size = math.max(8, track * self.MOST_ROWS / count)
+    local most = math.max(1, count - self.MOST_ROWS)
+    local top = 44 + (track - size) * math.min(1, (self.offset or 0) / most)
+    thumb:ClearAllPoints()
+    thumb:SetPoint("TOPRIGHT", self.body, "TOPRIGHT", -2, -top)
+    thumb:SetHeight(size)
+    thumb:Show()
 end
 
 --- Once a second: the LEFT words only, unless something moved.

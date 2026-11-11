@@ -552,6 +552,11 @@ function Auctions:Refresh(opts)
     -- throttled request. Coalesce them.
     local now = GetTime()
     if not opts.force and self.lastRefresh and (now - self.lastRefresh) < 5 then
+        -- Swallowed, but not lost: the query already sent is the server's
+        -- list as it stood then, so auctions posted after it (several posts
+        -- in a row, through our post flow or the game's own) would not show
+        -- until the next open. One more read goes out once the window ends.
+        self:RefreshAfter(5 - (now - self.lastRefresh) + 0.1, opts.priority)
         return false
     end
     self.lastRefresh = now
@@ -572,6 +577,18 @@ function Auctions:Refresh(opts)
     })
 
     return true
+end
+
+--- One trailing refresh for requests the five second window swallowed.
+--- Several swallowed requests share it.
+function Auctions:RefreshAfter(delay, priority)
+    if self.trailingRefresh then return end
+    if not (C_Timer and C_Timer.After) then return end
+    self.trailingRefresh = true
+    C_Timer.After(math.max(0.1, delay or 5), function()
+        Auctions.trailingRefresh = nil
+        Auctions:Refresh({ force = true, priority = priority })
+    end)
 end
 
 -- How long after a query goes out we look for the answer ourselves, in seconds.
