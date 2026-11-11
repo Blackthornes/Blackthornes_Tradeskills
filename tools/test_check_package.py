@@ -86,6 +86,12 @@ expect("the unfinished auction window is refused",
        with_({"UI/AuctionWindow.lua": "local _, ns = ...\n"}), False)
 expect("the veil it needs is refused with it",
        with_({"UI/Veil.lua": "local _, ns = ...\n"}), False)
+expect("its Browse search is refused with it",
+       with_({"Logic/Browse.lua": "local _, ns = ...\n"}), False)
+expect("its Browse tab is refused with it",
+       with_({"UI/AuctionBrowse.lua": "local _, ns = ...\n"}), False)
+expect("a TOC that loads the unfinished Browse tab is refused",
+       with_({"Blackthornes_TS.toc": TOC + "UI\\AuctionBrowse.lua\n"}), False)
 expect("a TOC that loads the unfinished window is refused",
        with_({"Blackthornes_TS.toc": TOC + "UI\\AuctionWindow.lua\n"}), False)
 

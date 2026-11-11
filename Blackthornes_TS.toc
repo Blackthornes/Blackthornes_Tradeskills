@@ -151,7 +151,9 @@ UI\AuctionsView.lua
 UI\FavorsView.lua
 UI\SnipeView.lua
 #@do-not-package@
+Logic\Browse.lua
 UI\Veil.lua
+UI\AuctionBrowse.lua
 UI\AuctionWindow.lua
 #@end-do-not-package@
 UI\CraftPanel.lua
