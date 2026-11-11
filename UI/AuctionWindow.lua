@@ -1,6 +1,6 @@
 -- Blackthornes Tradeskills -- UI/AuctionWindow.lua
 -- Our own auction house window, in place of the game's. Off unless ticked
--- ("Our Auction House:" on the Auction page of Settings, ownAuctionHouse).
+-- ("Blackthornes UI Auction House:" on the Auction page of Settings, ownAuctionHouse).
 --
 -- The game's auction window is never hidden, moved or re-parented, and none
 -- of its own functions are called: it is made see-through with the mouse off

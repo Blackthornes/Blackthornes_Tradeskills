@@ -1497,7 +1497,7 @@ local function Build(outer)
     if ns.AuctionWindow then
         CreateSection(pages.auction, 1, L["AUCTION HOUSE WINDOW"])
 
-        local ownAhRow = CreateRow(pages.auction, 1, L["Our Auction House:"],
+        local ownAhRow = CreateRow(pages.auction, 1, L["Blackthornes UI Auction House:"],
             L["Opens in place of the game's auction house. You can switch back any time."])
         widgets.ownAuctionHouse = Widgets.CreateCheckbox(ownAhRow, L["On"], function(checked)
             Config:Set("ownAuctionHouse", checked)
