@@ -149,6 +149,9 @@ local DEFAULTS = {
         -- The Snipe tab in the auction house drawer (2026-11-03). Off until
         -- ticked. Cap is copper per session, 0 until the player sets one.
         snipeTab = false,
+        -- Our own auction house window in place of the game's
+        -- (UI/AuctionWindow.lua). Off unless ticked; never rename it.
+        ownAuctionHouse = false,
         snipeCap = 0,
         snipePct = 70,
         snipeSound = true,

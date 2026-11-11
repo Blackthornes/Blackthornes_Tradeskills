@@ -1939,3 +1939,35 @@ dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
   a slim gold thumb in the right margin while the list is longer than the
   window. No new words. Tested in `tools/test_verify.lua` and
   `tools/test_auctiontrackerui.lua`.
+
+## Our auction house window
+
+The owner asked (2026-11-11) for a full auction house window of our own in
+Tradeskills, optional, and approved its words (the list is in the project
+files, `previews/ts-full-auction-house/words.md`). It is built in steps;
+this is the first.
+
+- `UI/AuctionWindow.lua` (`ns.AuctionWindow`, frame
+  `BlackthornesTSAuctionWindow`): with "Our Auction House:" ticked
+  (Settings, Auction page, AUCTION HOUSE WINDOW; `ownAuctionHouse`, account
+  wide, off unless ticked, never rename it), the game's auction window is
+  made see-through with the mouse off (`UI/Veil.lua`, Equipment's file; a
+  fix to it belongs in both) and our window lies exactly over it
+  (`SetAllPoints`), so the drawer and the one window keep their places.
+- The game's window is never hidden, shown, moved or re-parented, and none
+  of its functions are called. The close gem calls
+  `C_AuctionHouse.CloseAuctionHouse`; `AUCTION_HOUSE_CLOSED` lifts the veil
+  and puts ours away. Escape closes the game's window by itself.
+- "Use The Game's Window" lifts the veil for the rest of the visit
+  (`AuctionWindow.gameWindow`, cleared at the next `AUCTION_HOUSE_SHOW`).
+- The game builds its window late, so `Opened` looks again after
+  `LOOK_AGAIN` seconds; a guarded piece in a fight waits for
+  `PLAYER_REGEN_ENABLED`.
+- So far the window has the plate, the close gem, an empty well and a
+  Browse tab. Still to come: the Browse list, the buy panel (always two
+  clicks), bids and buyouts on single items, one shared queue for searches
+  and scans, and Sell, My Auctions, Deals, Snipe and Settings as its tabs.
+  Until then those stay in the drawer beside it.
+- Never offer a tab under the game's own auction window again (tried and
+  taken out 2026-10-13).
+- Tested in `tools/test_auctionwindow.lua`. Not yet seen in game.

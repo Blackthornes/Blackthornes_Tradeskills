@@ -1491,6 +1491,22 @@ local function Build(outer)
 
     -- What comes up by itself (a player's request, 2026-11-05): ticked
     -- unless unticked, so nothing changed for anyone.
+    CreateSection(pages.auction, 1, L["AUCTION HOUSE WINDOW"])
+
+    -- Our own window in place of the game's (UI/AuctionWindow.lua), off
+    -- unless ticked. Ticked or unticked at the auction house, it changes
+    -- at once.
+    local ownAhRow = CreateRow(pages.auction, 1, L["Our Auction House:"],
+        L["Opens in place of the game's auction house. You can switch back any time."])
+    widgets.ownAuctionHouse = Widgets.CreateCheckbox(ownAhRow, L["On"], function(checked)
+        Config:Set("ownAuctionHouse", checked)
+        if ns.AuctionWindow then
+            ns.AuctionWindow.gameWindow = false
+            ns.AuctionWindow:Update()
+        end
+    end, false)
+    widgets.ownAuctionHouse:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     CreateSection(pages.auction, 1, L["AUTO OPEN"])
 
     local ahRow = CreateRow(pages.auction, 1, L["Open at AH:"],
@@ -2429,6 +2445,7 @@ local function Refresh()
     widgets.postAnyway:SetChecked(Config:Get("postAnyway") == true)
     widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
     widgets.snipeTab:SetChecked(Config:Get("snipeTab") == true)
+    widgets.ownAuctionHouse:SetChecked(Config:Get("ownAuctionHouse") == true)
     widgets.snipeWheel:SetChecked(Config:Get("snipeWheel") == true)
     widgets.overcutting:SetChecked(Config:Get("overcutting") == true)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
