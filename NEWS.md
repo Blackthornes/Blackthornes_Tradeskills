@@ -23,6 +23,18 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.23.0
+
+- There is a new little window called My Auctions. It shows everything you have up, and when something sells, the row lights up and slides away.
+- It starts off. You turn it on in Settings, on the Auction page.
+- The Sales tab can show your sales by item, with totals for what you took in.
+- You can clear what an old character was carrying, so you do not get sent to log in on it.
+
+Fixes and changes:
+
+- Profit guesses use Forever's new 1 copper least deposit.
+- Alts not seen in 30 days are skipped when jobs are planned.
+
 ## 1.22.0
 
 - Your Potential Sale Total now shows the whole Sell list right away and stays steady while you post.
