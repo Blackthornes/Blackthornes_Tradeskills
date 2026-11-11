@@ -61,7 +61,7 @@ check("Buy It pays for what's ready", paid == 1)
 
 ns.Snipe.armed = ns.Snipe.pending
 label = View:BuyState()
-check("over Double Check Over: Click Again", label == "Click Again")
+check("over Double Check Over: Confirm", label == "Confirm")
 ns.Snipe.armed = nil
 
 ns.Snipe.pending = { itemID = 2592, find = finds[2], phase = "quoted", auto = true, item = true, total = 50 }

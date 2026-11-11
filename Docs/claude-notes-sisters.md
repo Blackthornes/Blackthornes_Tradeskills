@@ -369,7 +369,7 @@ from a mockup, 2026-11-10: Butler's jobs mailed items long gone and gold
 already collected). Each inbox read saves `record.mailMoney` (copper the
 box held), and `Holdings()` entries carry `mailMoney` and `clearedAt`, so
 Butler's gold notes can tell gold was picked up. The Characters tab has
-**Clear Items** left of Forget character (armed, "Click Again", never the
+**Clear Items** left of Forget character (armed, "Confirm", never the
 character playing): `Recipes:ClearItems(key)` (`Recipes.CLEARED_FIELDS`)
 forgets that character's saved bags, bank, mail and gold, keeps
 `seenAt`, sets `clearedAt`; nothing else on the record changes. Butler's

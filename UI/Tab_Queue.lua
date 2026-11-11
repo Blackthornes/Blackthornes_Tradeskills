@@ -934,9 +934,9 @@ local function Build(container)
         if ns.Queue:Count() == 0 and not ns.Queue:HasBuys() then return end
 
         armedUntil = GetTime() + 4
-        clear:SetText(L["Click Again"])
+        clear:SetText(L["Confirm"])
         clear:SetConfirming(true)
-        clear.tooltipText = L["Click again to empty the whole craft queue"]
+        clear.tooltipText = L["Click Confirm to empty the whole craft queue"]
 
         C_Timer.After(4, function()
             if armedUntil and GetTime() >= armedUntil then Disarm() end

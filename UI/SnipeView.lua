@@ -216,12 +216,12 @@ end
 
 --- What a row's own Buy button says, and whether it can be clicked.
 --- Buy, Checking... while that row asks, "Buy 20 for 1g 20s" once its price
---- is known, or Click Again past Double Check Over.
+--- is known, or Confirm past Double Check Over.
 function SnipeView.RowBuyState(find)
     local snipe = Snipe()
     local pending = snipe and snipe.pending
     if pending and pending.find == find then
-        if snipe.armed == pending then return L["Click Again"], true end
+        if snipe.armed == pending then return L["Confirm"], true end
         if pending.phase == "quoted" or pending.phase == "planned" then
             local count = pending.count or (find and find.qty) or 1
             return L.Format("Buy %d for %s", count, Colored(pending.total or pending.expected)), true
@@ -282,7 +282,7 @@ local function IsPending(find)
     local pending = Snipe().pending
     if not (pending and pending.find == find) then return false end
     -- A quiet ready still shows its price; only its badge changes. One the
-    -- player has clicked once (armed) shows Click Again.
+    -- player has clicked once (armed) shows Confirm.
     if pending.auto and Snipe().armed ~= pending then return false end
     return true
 end
@@ -316,7 +316,7 @@ local function UpdateRow(row, find)
     row.badge:SetWidth(busy and (CELL_WIDTH * 3 + CELL_GAP * 2) or CELL_WIDTH)
     if busy then
         if Snipe().armed == pending then
-            row.badge:SetText(L["Click Again"])
+            row.badge:SetText(L["Confirm"])
         elseif pending.phase == "quoted" then
             row.badge:SetText(L.Format("Pay %s", Money(pending.total)))
         else
@@ -437,7 +437,7 @@ function SnipeView:BuildStrip(body, topAnchor)
     self.cap = money
 
     -- Double Check Over: a buy that costs this much or more takes a second
-    -- click ("Click Again").
+    -- click ("Confirm").
     local confirmLabel = Row(-30, L["Double Check Over:"])
     local confirm = ns.PriceEditor.MoneyBoxes(strip, function(copper)
         ns.Config:Set("snipeConfirmOver", math.max(0, copper or 0))
@@ -723,7 +723,7 @@ end
 function SnipeView:BuyWidth(text)
     local width = 80
     if Theme.MeasureText then
-        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Click Again"], text }) do
+        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Confirm"], text }) do
             local ok, measured = pcall(Theme.MeasureText, "small", word)
             if ok and type(measured) == "number" then width = math.max(width, measured + 20) end
         end
@@ -736,7 +736,7 @@ function SnipeView:BuyState()
     local snipe = Snipe()
     local pending = snipe and snipe.pending
     if pending then
-        if snipe.armed == pending then return L["Click Again"], true end
+        if snipe.armed == pending then return L["Confirm"], true end
         if pending.phase == "quoted" or pending.phase == "planned" then return ReadyText(pending), true end
         if pending.auto then return L["Checking..."], false end
         return L["Asking..."], false

@@ -307,7 +307,7 @@ local function BuildCard(row)
         end
 
         button.armed = key
-        button:SetText(L["Click Again"])
+        button:SetText(L["Confirm"])
         -- Red while armed, like the craft pane's Clear queue.
         button:SetConfirming(true)
         C_Timer.After(4, function()
@@ -337,7 +337,7 @@ local function BuildCard(row)
         end
 
         button.armed = key
-        button:SetText(L["Click Again"])
+        button:SetText(L["Confirm"])
         button:SetConfirming(true)
         C_Timer.After(4, function()
             if button.armed == key then Disarm(button) end

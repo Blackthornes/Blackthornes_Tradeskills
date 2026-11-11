@@ -23,7 +23,7 @@
 -- Gentle by design: one small search at a time at scan priority (AHQueue
 -- holds it while the player sells or buys), the cheapest page only, and the
 -- next one only after the last answered. Buying is one click a listing; a
--- big one asks for a second click (Click Again). Nothing here touches a
+-- big one asks for a second click (Confirm). Nothing here touches a
 -- Blizzard frame.
 
 local _, ns = ...

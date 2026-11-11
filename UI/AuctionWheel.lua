@@ -100,7 +100,7 @@ function AuctionWheel:Turn(up)
     local job = self:Job()
     if job == "buy" then
         if not up then return false end
-        -- One notch, one buy click; a big buy still asks "Click Again".
+        -- One notch, one buy click; a big buy still asks "Confirm".
         if ns.Snipe and ns.Snipe.BuyNext then ns.Snipe:BuyNext() end
         return true
     elseif job == "list" then
