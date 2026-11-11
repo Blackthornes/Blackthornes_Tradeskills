@@ -1195,11 +1195,8 @@ end
 -- where the player already is rather than only inside our own window.
 function UI:AttachToAuctionHouse()
     -- "Open at AH:" unticked: nothing comes up until the player opens
-    -- Tradeskills on this visit (UI:AskedAtAuction). Our own auction house
-    -- window (UI/AuctionWindow.lua, off unless ticked) holds the lists as
-    -- its tabs, so it needs the Scan strip either way.
-    local held = ns.PostPanel ~= nil and ns.PostPanel.HeldByOwn ~= nil and ns.PostPanel.HeldByOwn()
-    if not held and not UI.AuctionWanted() then return end
+    -- Tradeskills on this visit (UI:AskedAtAuction).
+    if not UI.AuctionWanted() then return end
 
     local auctionFrame, frameName = self:FindAuctionFrame()
     local bar = self:GetAuctionBar()
@@ -1236,10 +1233,6 @@ function UI:AttachToAuctionHouse()
     self:UpdateAuctionButton()
 
     self:AttachPostButton()
-
-    -- Our own auction house window has Sell, My Auctions, Deals and Snipe as
-    -- its tabs: no drawer and no one window beside it.
-    if held then return end
 
     -- With the one window on, the drawer is its Auction House tab instead.
     if TSTabs:AtAuctionHouse() then return end
@@ -2566,9 +2559,6 @@ function TSTabs:Settle()
         local okDocked, docked = pcall(One.Docked)
         on = okPlace and place == "auction" and okDocked and docked == true
     end
-    -- Our own auction house window holds the drawer's lists as its tabs.
-    local held = ns.PostPanel ~= nil and ns.PostPanel.HeldByOwn ~= nil and ns.PostPanel.HeldByOwn()
-    if held then on = false end
     if on == self.atAuction then
         if on then TSTabs:HangStrips() end
         return
@@ -2582,7 +2572,7 @@ function TSTabs:Settle()
         UI:SelectTab("auctionhouse")
     else
         self.atAuction = false
-        if PostPanel and PostPanel.OutOfOne and not held then pcall(PostPanel.OutOfOne, PostPanel) end
+        if PostPanel and PostPanel.OutOfOne then pcall(PostPanel.OutOfOne, PostPanel) end
         TSTabs:HangStrips()
         -- Another addon picked on the rail while the one window still sits
         -- beside the auction house: the drawer stays in the one window like

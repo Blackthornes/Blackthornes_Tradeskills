@@ -1489,24 +1489,6 @@ local function Build(outer)
     roadOpen:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(roadOpen)
 
-    -- Our own window in place of the game's (UI/AuctionWindow.lua), off
-    -- unless ticked. Ticked or unticked at the auction house, it changes
-    -- at once. Not finished, so it is left out of the package players get
-    -- (the TOC's do-not-package lines, .pkgmeta, tools/check_package.py):
-    -- with no window loaded there is no heading and no row here.
-    if ns.AuctionWindow then
-        CreateSection(pages.auction, 1, L["AUCTION HOUSE WINDOW"])
-
-        local ownAhRow = CreateRow(pages.auction, 1, L["Blackthornes UI Auction House:"],
-            L["Opens in place of the game's auction house. You can switch back any time."])
-        widgets.ownAuctionHouse = Widgets.CreateCheckbox(ownAhRow, L["On"], function(checked)
-            Config:Set("ownAuctionHouse", checked)
-            ns.AuctionWindow.gameWindow = false
-            ns.AuctionWindow:Update()
-        end, false)
-        widgets.ownAuctionHouse:SetPoint("TOPLEFT", CONTROL_X, -2)
-    end
-
     -- What comes up by itself (a player's request, 2026-11-05): ticked
     -- unless unticked, so nothing changed for anyone.
     CreateSection(pages.auction, 1, L["AUTO OPEN"])
@@ -2447,9 +2429,6 @@ local function Refresh()
     widgets.postAnyway:SetChecked(Config:Get("postAnyway") == true)
     widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
     widgets.snipeTab:SetChecked(Config:Get("snipeTab") == true)
-    if widgets.ownAuctionHouse then
-        widgets.ownAuctionHouse:SetChecked(Config:Get("ownAuctionHouse") == true)
-    end
     widgets.snipeWheel:SetChecked(Config:Get("snipeWheel") == true)
     widgets.overcutting:SetChecked(Config:Get("overcutting") == true)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)
