@@ -1940,7 +1940,11 @@ dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
   window. No new words. Tested in `tools/test_verify.lua` and
   `tools/test_auctiontrackerui.lua`.
 
-## Our auction house window
+## Blackthornes UI Auction House (our auction house window)
+
+Players read "Blackthornes UI Auction House" (the owner renamed it from
+"Our Auction House", 2026-11-11). The code, the module and the saved key
+`ownAuctionHouse` keep their names; never rename the key.
 
 Not for players yet (the owner, 2026-11-11: it does not ship until it is
 done). Three fences keep it out of every release: the TOC lists
@@ -1958,7 +1962,7 @@ files, `previews/ts-full-auction-house/words.md`). It is built in steps;
 this is the first.
 
 - `UI/AuctionWindow.lua` (`ns.AuctionWindow`, frame
-  `BlackthornesTSAuctionWindow`): with "Our Auction House:" ticked
+  `BlackthornesTSAuctionWindow`): with "Blackthornes UI Auction House:" ticked
   (Settings, Auction page, AUCTION HOUSE WINDOW; `ownAuctionHouse`, account
   wide, off unless ticked, never rename it), the game's auction window is
   made see-through with the mouse off (`UI/Veil.lua`, Equipment's file; a
