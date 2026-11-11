@@ -1860,6 +1860,15 @@ local function Build(outer)
     goldPlace:SetPoint("TOPLEFT", CONTROL_X, -2)
     FitButton(goldPlace)
 
+    -- A window dragged off the screen comes back (a player's report, 2026-11-11).
+    local windowPlacesRow = CreateRow(pages.look, 2, L["Window Places:"])
+    local windowPlaces = Widgets.CreateButton(windowPlacesRow, L["Reset"], function()
+        UI:ResetWindowPlaces()
+        ns.Print(L["Every Tradeskills window is back where it starts."])
+    end, { width = 60, height = 20 })
+    windowPlaces:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(windowPlaces)
+
     -- Enchant window (the owner said build it, 2026-11-05): since 2026-11-06 a
     -- strip under the recipe in the Enchanting window. Off unless ticked (Logic/EnchantWindow.lua).
     CreateSection(pages.look, 2, L["ENCHANTING"])
