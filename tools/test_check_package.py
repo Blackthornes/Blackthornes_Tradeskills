@@ -90,6 +90,10 @@ expect("its Browse search is refused with it",
        with_({"Logic/Browse.lua": "local _, ns = ...\n"}), False)
 expect("its Browse tab is refused with it",
        with_({"UI/AuctionBrowse.lua": "local _, ns = ...\n"}), False)
+expect("its buying is refused with it",
+       with_({"Logic/BrowseBuy.lua": "local _, ns = ...\n"}), False)
+expect("its buy panel is refused with it",
+       with_({"UI/AuctionBuy.lua": "local _, ns = ...\n"}), False)
 expect("a TOC that loads the unfinished Browse tab is refused",
        with_({"Blackthornes_TS.toc": TOC + "UI\\AuctionBrowse.lua\n"}), False)
 expect("a TOC that loads the unfinished window is refused",

@@ -4,7 +4,8 @@
 -- and the footer. Logic/Browse.lua holds the search and its rows; this file
 -- only draws them.
 --
--- Nothing here buys anything. The buy panel is the next step.
+-- Nothing here buys anything. A click on a row opens the buy panel
+-- (UI/AuctionBuy.lua), which sits over the right of the list.
 
 local _, ns = ...
 
@@ -133,8 +134,10 @@ function AuctionBrowse:LayBar()
     if not well then return end
     local ok, width = pcall(well.GetWidth, well)
     if not ok or type(width) ~= "number" or width <= 0 then width = 800 end
-    if width == widgets.barRoom then return end
-    widgets.barRoom = width
+    local inset = widgets.inset or 0
+    local key = width .. ":" .. inset
+    if key == widgets.barRoom then return end
+    widgets.barRoom = key
 
     for _, item in ipairs(widgets.bar) do item.width = WidthOf(item.thing) end
     local lines = self.Flow(widgets.bar, width - 16, function(item, x, line)
@@ -150,7 +153,16 @@ function AuctionBrowse:LayBar()
     self:PlaceHeadings(widgets.scrollbar)
     widgets.list:ClearAllPoints()
     widgets.list:SetPoint("TOPLEFT", well, "TOPLEFT", 8 + CATEGORY_WIDTH + 8, top - 16)
-    widgets.list:SetPoint("BOTTOMRIGHT", well, "BOTTOMRIGHT", -8, FOOTER)
+    widgets.list:SetPoint("BOTTOMRIGHT", well, "BOTTOMRIGHT", -8 - inset, FOOTER)
+end
+
+--- Leave room on the right for the buy panel (0 gives it back).
+function AuctionBrowse:SetInset(inset)
+    inset = tonumber(inset) or 0
+    if inset == (widgets.inset or 0) then return end
+    widgets.inset = inset
+    widgets.barRoom = nil
+    self:LayBar()
 end
 
 function AuctionBrowse:PlaceHeadings(scrollbar)
@@ -159,7 +171,7 @@ function AuctionBrowse:PlaceHeadings(scrollbar)
     widgets.scrollbar = scrollbar and true or false
     headings:ClearAllPoints()
     headings:SetPoint("TOPLEFT", well, "TOPLEFT", 8 + CATEGORY_WIDTH + 8, widgets.top or -38)
-    headings:SetPoint("TOPRIGHT", well, "TOPRIGHT", -8 - (scrollbar and 10 or 0), widgets.top or -38)
+    headings:SetPoint("TOPRIGHT", well, "TOPRIGHT", -8 - (widgets.inset or 0) - (scrollbar and 10 or 0), widgets.top or -38)
 end
 
 --- Put the bar's controls back to what the query says.
@@ -183,6 +195,7 @@ function AuctionBrowse:Search()
     browse.query.minLevel = widgets.low:GetValue()
     browse.query.maxLevel = widgets.high:GetValue()
     if widgets.sorter then widgets.sorter:Reset() end
+    if ns.AuctionBuy then ns.AuctionBuy:Close() end
     browse:Search()
     if widgets.list then widgets.list:ScrollToTop() end
 end
@@ -191,6 +204,7 @@ function AuctionBrowse:Clear()
     local browse = Browse()
     if not browse then return end
     if widgets.sorter then widgets.sorter:Reset() end
+    if ns.AuctionBuy then ns.AuctionBuy:Close() end
     browse:Clear()
     self:SyncBar()
 end
@@ -376,6 +390,13 @@ local function BuildList(well)
             GameTooltip:Show()
         end,
         onLeave = function() GameTooltip:Hide() end,
+        -- A click opens the buy panel for that row; the same row again closes it.
+        onClick = function(entry)
+            if ns.AuctionBuy then ns.AuctionBuy:Toggle(entry) end
+        end,
+        isSelected = function(entry)
+            return ns.BrowseBuy ~= nil and ns.BrowseBuy:IsOpenFor(entry)
+        end,
         onScrollbarShown = function(shown) AuctionBrowse:PlaceHeadings(shown) end,
     })
 

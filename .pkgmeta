@@ -28,7 +28,9 @@ ignore:
   # not ship until it is done). The TOC leaves these out of the package too,
   # and tools/check_package.py refuses a package that has them.
   - Logic/Browse.lua
+  - Logic/BrowseBuy.lua
   - UI/AuctionBrowse.lua
+  - UI/AuctionBuy.lua
   - UI/AuctionWindow.lua
   - UI/Veil.lua
 
