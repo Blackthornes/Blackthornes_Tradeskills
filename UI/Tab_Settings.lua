@@ -1312,6 +1312,48 @@ local function Build(outer)
     end, true)
     widgets.learnFromSearches:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- My Auctions (the owner said build it, 2026-11-11, from a mockup whose
+    -- words he approved): a small window of what you have up. Off unless
+    -- ticked. See Logic/AuctionTracker.lua and UI/AuctionTracker.lua.
+    CreateSection(pages.auction, 2, L["AUCTION TRACKER"])
+    local trackerRow = CreateRow(pages.auction, 2, L["Auction Tracker:"], nil)
+    widgets.auctionTracker = Widgets.CreateCheckbox(trackerRow, L["On"], function(checked)
+        if ns.AuctionTracker then ns.AuctionTracker:SetOn(checked) else Config:Set("auctionTracker", checked) end
+    end, false)
+    widgets.auctionTracker:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local soldFxRow = CreateRow(pages.auction, 2, L["Sold Effects:"], nil)
+    widgets.auctionTrackerEffects = Widgets.CreateDropdown(soldFxRow, {
+        { text = L["Full"], value = "full" },
+        { text = L["Subtle"], value = "subtle" },
+        { text = L["Off"], value = "off" },
+    }, function(value)
+        Config:Set("auctionTrackerEffects", value)
+    end, { width = 110 })
+    widgets.auctionTrackerEffects:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local trackerClearRow = CreateRow(pages.auction, 2, L["Transparent:"], nil)
+    widgets.auctionTrackerSeeThrough = Widgets.CreateDropdown(trackerClearRow, {
+        { text = L["Off"], value = 0 },
+        { text = L["Some"], value = 1 },
+        { text = L["More"], value = 2 },
+        { text = L["Most"], value = 3 },
+    }, function(value)
+        if ns.AuctionTrackerUI then
+            ns.AuctionTrackerUI:SetSeeThrough(value)
+        else
+            Config:Set("auctionTrackerSeeThrough", value)
+        end
+    end, { width = 110 })
+    widgets.auctionTrackerSeeThrough:SetPoint("TOPLEFT", CONTROL_X, 0)
+
+    local trackerPlaceRow = CreateRow(pages.auction, 2, L["Tracker Place:"], nil)
+    local trackerPlace = Widgets.CreateButton(trackerPlaceRow, L["Set Default"], function()
+        if ns.AuctionTrackerUI then ns.AuctionTrackerUI:ResetPlace() end
+    end, { width = 90, height = 20 })
+    trackerPlace:SetPoint("TOPLEFT", CONTROL_X, -2)
+    FitButton(trackerPlace)
+
     CreateSection(pages.look, 1, L["SHOWN IN THE GAME"])
     local professionValueRow = CreateRow(pages.look, 1, L["Value in Profession Window:"],
         L["Shows what each recipe sells for beside its name."])
@@ -2479,6 +2521,14 @@ local function Refresh()
     widgets.goldSeeThrough:SetValue(ns.GoldGoalUI and ns.GoldGoalUI.SeeThroughLevel()
         or tonumber(Config:Get("goldTrackerSeeThrough")) or 0, true)
     widgets.goldGoal:SetValue(goldGoal and math.floor(goldGoal / 10000) or nil, true)
+    widgets.auctionTracker:SetChecked(Config:Get("auctionTracker") == true)
+    do
+        local fx = Config:Get("auctionTrackerEffects")
+        if fx ~= "subtle" and fx ~= "off" then fx = "full" end
+        widgets.auctionTrackerEffects:SetValue(fx, true)
+    end
+    widgets.auctionTrackerSeeThrough:SetValue(ns.AuctionTrackerUI and ns.AuctionTrackerUI.SeeThroughLevel()
+        or tonumber(Config:Get("auctionTrackerSeeThrough")) or 0, true)
     widgets.stale:SetValue(Config:Get("staleAfterSeconds") or (48 * 3600), true)
 
     local linkBox = widgets.linkNames.editBox

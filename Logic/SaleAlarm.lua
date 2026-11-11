@@ -247,6 +247,9 @@ function SaleAlarm:LogHeard(item, via)
     local noted, heard = pcall(ns.Mail.NoteHeardSale, ns.Mail, item)
     self.logged = (self.logged or 0) + 1
     if noted and type(heard) == "table" then self:Restock(heard.itemID, item) end
+    if ns.AuctionTracker and ns.AuctionTracker.Sold then
+        pcall(ns.AuctionTracker.Sold, ns.AuctionTracker, item, noted and type(heard) == "table" and heard.itemID or nil)
+    end
     if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
     return true
 end
