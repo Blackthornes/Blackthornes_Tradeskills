@@ -1942,6 +1942,16 @@ dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
 
 ## Our auction house window
 
+Not for players yet (the owner, 2026-11-11: it does not ship until it is
+done). Three fences keep it out of every release: the TOC lists
+`UI\Veil.lua` and `UI\AuctionWindow.lua` between `#@do-not-package@`
+lines, `.pkgmeta` ignores both files, and `tools/check_package.py`
+(`NOT_FINISHED`) refuses a package that holds or loads either. With no
+window loaded, Settings shows no heading or row for it. A checkout still
+loads it, so the owner can try it. Every new file for this feature goes
+inside the same fences. Take them down only on the owner's word that it is
+finished. Tested in `tools/test_check_package.py`.
+
 The owner asked (2026-11-11) for a full auction house window of our own in
 Tradeskills, optional, and approved its words (the list is in the project
 files, `previews/ts-full-auction-house/words.md`). It is built in steps;

@@ -81,6 +81,43 @@ expect("a GitHub token is refused",
        with_({"Core/Util.lua": "local t = 'ghp_" + "a" * 36 + "'\n"}), False)
 expect("an API key is refused",
        with_({"Core/Util.lua": 'local api_key = "abcdefghijkl"\n'}), False)
+# Our auction house window is not finished, so no package may carry it.
+expect("the unfinished auction window is refused",
+       with_({"UI/AuctionWindow.lua": "local _, ns = ...\n"}), False)
+expect("the veil it needs is refused with it",
+       with_({"UI/Veil.lua": "local _, ns = ...\n"}), False)
+expect("a TOC that loads the unfinished window is refused",
+       with_({"Blackthornes_TS.toc": TOC + "UI\\AuctionWindow.lua\n"}), False)
+
+
+def unfinished_is_fenced():
+    """The real TOC and .pkgmeta both keep the unfinished files out."""
+    global checks, failures
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "Blackthornes_TS.toc"), encoding="utf-8") as f:
+        lines = [line.strip() for line in f.read().splitlines()]
+    with open(os.path.join(root, ".pkgmeta"), encoding="utf-8") as f:
+        pkgmeta = f.read()
+    from check_package import NOT_FINISHED
+    for rel in sorted(NOT_FINISHED):
+        listed = rel.replace("/", "\\")
+        fenced = False
+        if listed in lines:
+            at = lines.index(listed)
+            before = [l for l in lines[:at] if l.startswith("#@")]
+            after = [l for l in lines[at:] if l.startswith("#@")]
+            fenced = (bool(before) and before[-1] == "#@do-not-package@"
+                      and bool(after) and after[0] == "#@end-do-not-package@")
+        for label, ok in (("the TOC keeps %s out of the package" % rel, fenced),
+                          (".pkgmeta ignores %s" % rel, ("- " + rel) in pkgmeta)):
+            checks += 1
+            if not ok:
+                failures += 1
+                print("FAIL: " + label)
+
+
+unfinished_is_fenced()
+
 expect("an unset version is refused",
        with_({"Blackthornes_TS.toc": TOC.replace("v0.2.0", "@project-version@")}),
 False)

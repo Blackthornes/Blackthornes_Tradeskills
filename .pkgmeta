@@ -24,6 +24,11 @@ ignore:
   # The #general Discord posts; tools/post_general.py checks and posts them.
   - NEWS.md
   - README.md
+  # Our auction house window is not finished (the owner, 2026-11-11: it does
+  # not ship until it is done). The TOC leaves these out of the package too,
+  # and tools/check_package.py refuses a package that has them.
+  - UI/AuctionWindow.lua
+  - UI/Veil.lua
 
 # Ship CHANGELOG.md as written. Without this the packager writes its own from
 # the full commit history, which is the private repository's development log
