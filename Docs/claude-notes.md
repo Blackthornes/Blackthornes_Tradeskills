@@ -437,6 +437,11 @@ about X." (`plan.back`, `RoadView.FootText`). "To 300:" still counts the
 gold spent. `roadPickBy` ("lowest" or "real", account wide, never rename
 it; `RoadPlan.PickBy`) is part of the plan's key.
 Tested in `tools/test_roadto300.lua`. Not yet seen in game.
+By real cost a craft never counts for less than `RoadPlan.REAL_FLOOR`
+(a fifth) of its materials (2026-11-11, a player's report: a craft that
+sold for more than it cost had a cost below 0, which looked cheaper a
+point the lower its chance fell, so the road stayed on it to grey, 144
+yellow crafts for 20 points). The step's own gold figure is unchanged.
 The drop-down lists them (the owner found only Enchanting and Tailoring,
 2026-11-08): `RoadPlan:Professions` takes a line `ClassicLine` does not
 know by its English name (`Recipes.EnglishProfessionName`, so a second
