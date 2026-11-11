@@ -39,7 +39,8 @@ FORBIDDEN_NAMES = {"BlackthornesTSDB.lua", "BlackthornesTSCharDB.lua",
 # house window does not ship until it is done). A package that holds one of
 # these files, or whose TOC loads one, is refused. Take a file off this list
 # only when the owner says the feature is finished.
-NOT_FINISHED = {"UI/AuctionWindow.lua", "UI/Veil.lua"}
+NOT_FINISHED = {"Logic/Browse.lua", "UI/AuctionBrowse.lua",
+                "UI/AuctionWindow.lua", "UI/Veil.lua"}
 
 PRIVATE = [
     ("a Windows path", re.compile(r"\b[A-Za-z]:\\[^\s\"']")),

@@ -1948,9 +1948,10 @@ Players read "Blackthornes UI Auction House" (the owner renamed it from
 
 Not for players yet (the owner, 2026-11-11: it does not ship until it is
 done). Three fences keep it out of every release: the TOC lists
-`UI\Veil.lua` and `UI\AuctionWindow.lua` between `#@do-not-package@`
-lines, `.pkgmeta` ignores both files, and `tools/check_package.py`
-(`NOT_FINISHED`) refuses a package that holds or loads either. With no
+`UI\Veil.lua`, `Logic\Browse.lua`, `UI\AuctionBrowse.lua` and
+`UI\AuctionWindow.lua` between `#@do-not-package@` lines, `.pkgmeta`
+ignores all four, and `tools/check_package.py` (`NOT_FINISHED`) refuses a
+package that holds or loads any of them. With no
 window loaded, Settings shows no heading or row for it. A checkout still
 loads it, so the owner can try it. Every new file for this feature goes
 inside the same fences. Take them down only on the owner's word that it is
@@ -1977,11 +1978,34 @@ this is the first.
 - The game builds its window late, so `Opened` looks again after
   `LOOK_AGAIN` seconds; a guarded piece in a fight waits for
   `PLAYER_REGEN_ENABLED`.
-- So far the window has the plate, the close gem, an empty well and a
-  Browse tab. Still to come: the Browse list, the buy panel (always two
-  clicks), bids and buyouts on single items, one shared queue for searches
-  and scans, and Sell, My Auctions, Deals, Snipe and Settings as its tabs.
-  Until then those stay in the drawer beside it.
+- The Browse tab (2026-11-11): `Logic/Browse.lua` (`ns.Browse`) asks and
+  reads, `UI/AuctionBrowse.lua` (`ns.AuctionBrowse`) draws it in the
+  window's well (`AuctionWindow` calls `AuctionBrowse:Build(well)`). A
+  search bar (name, Level: from and to, Rarity:, Usable Only, Deals Only,
+  Search, Clear), the game's own categories down the left
+  (`AuctionCategories`, `Browse:CategoryLines`, `PickCategory`), and a dark
+  glass list with sortable ITEM, HOW MANY, PRICE EACH, USUAL PRICE and DEAL
+  heads.
+  Usual price is our own history (`Prices:GetValue`); `Browse.Deal` is how
+  far under it the cheapest one is. Every search goes through the shared
+  queue, `ns.AHQueue`, as "ui-browse" (urgent), and more pages as
+  "ui-browse-more" (normal), so browsing and scanning never trip the game's
+  limit together. Rows are read `READ_BUDGET` a frame and stop at
+  `MAX_ROWS` (500); with no answer in `ANSWER_WAIT` seconds the search is
+  done as it stands. Someone else's `SendBrowseQuery` (seen by a post-hook)
+  stops our paging. Deals Only filters what is already read, no new
+  search. Names not loaded yet are filled in on
+  `ITEM_KEY_ITEM_INFO_RECEIVED`, settled `NAME_SETTLE`. The footer is the
+  count; the header shows Your Gold:. A row does nothing on a click yet.
+  Tested in `tools/test_auctionbrowse.lua`. Not yet seen in game.
+- Still to come: the buy panel (always two clicks), bids and buyouts on
+  single items, and Sell, My Auctions, Deals, Snipe and Settings as its
+  tabs. Until then those stay in the drawer beside it.
+- No separate drawer in the end (the owner, 2026-11-11, from a screenshot
+  of the window with the drawer beside it): once Sell, My Auctions, Deals
+  and Snipe live in our window, the drawer and the docked one window do
+  not open at the auction house while this setting is on. Until then they
+  stay, so he can still sell.
 - Never offer a tab under the game's own auction window again (tried and
   taken out 2026-10-13).
 - Tested in `tools/test_auctionwindow.lua`. Not yet seen in game.

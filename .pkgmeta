@@ -27,6 +27,8 @@ ignore:
   # Our auction house window is not finished (the owner, 2026-11-11: it does
   # not ship until it is done). The TOC leaves these out of the package too,
   # and tools/check_package.py refuses a package that has them.
+  - Logic/Browse.lua
+  - UI/AuctionBrowse.lua
   - UI/AuctionWindow.lua
   - UI/Veil.lua
 
