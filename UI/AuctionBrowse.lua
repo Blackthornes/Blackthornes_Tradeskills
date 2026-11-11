@@ -150,6 +150,11 @@ function AuctionBrowse:LayBar()
     widgets.categories:ClearAllPoints()
     widgets.categories:SetPoint("TOPLEFT", well, "TOPLEFT", 8, top)
     widgets.categories:SetPoint("BOTTOMLEFT", well, "BOTTOMLEFT", 8, FOOTER)
+    if widgets.divider then
+        widgets.divider:ClearAllPoints()
+        widgets.divider:SetPoint("TOPLEFT", well, "TOPLEFT", 8 + CATEGORY_WIDTH + 3, top)
+        widgets.divider:SetPoint("BOTTOMLEFT", well, "BOTTOMLEFT", 8 + CATEGORY_WIDTH + 3, FOOTER)
+    end
     self:PlaceHeadings(widgets.scrollbar)
     widgets.list:ClearAllPoints()
     widgets.list:SetPoint("TOPLEFT", well, "TOPLEFT", 8 + CATEGORY_WIDTH + 8, top - 16)
@@ -297,6 +302,13 @@ local function BuildCategories(well)
     })
     list:SetWidth(CATEGORY_WIDTH)
     widgets.categories = list
+
+    -- A gold line between the categories and what is for sale (the owner,
+    -- 2026-11-11: the two ran together).
+    local divider = well:CreateTexture(nil, "ARTWORK")
+    divider:SetColorTexture(Theme.Unpack("metal", 0.8))
+    divider:SetWidth(1)
+    widgets.divider = divider
 end
 
 --------------------------------------------------------------------------------

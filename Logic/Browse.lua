@@ -37,6 +37,13 @@ Browse.QUALITIES = {
     { quality = 4, filter = "EpicQuality" },
 }
 
+-- Every rarity the game can filter by, sent when none is picked but another
+-- filter is.
+Browse.EVERY_QUALITY = {
+    "PoorQuality", "CommonQuality", "UncommonQuality", "RareQuality",
+    "EpicQuality", "LegendaryQuality", "ArtifactQuality",
+}
+
 -- Item classes offered when the game's own category list can't be read.
 local FALLBACK_CLASSES = { 2, 4, 1, 0, 7, 9, 12, 15 }
 
@@ -263,7 +270,17 @@ function Browse:BuildQuery()
                 end
             end
         end
-        if query.usable and enum.UsableOnly ~= nil then filters[#filters + 1] = enum.UsableOnly end
+        if query.usable and enum.UsableOnly ~= nil then
+            -- The game's own window sends every rarity it has ticked beside
+            -- Usable Only. Sent with no rarity at all, gear matched none and
+            -- Weapons and Armor came back empty, so every rarity goes too.
+            if query.quality == nil then
+                for _, name in ipairs(self.EVERY_QUALITY) do
+                    if enum[name] ~= nil then filters[#filters + 1] = enum[name] end
+                end
+            end
+            filters[#filters + 1] = enum.UsableOnly
+        end
     end
 
     local category = self:Category()

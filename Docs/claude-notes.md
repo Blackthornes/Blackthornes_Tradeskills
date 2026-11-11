@@ -1998,6 +1998,31 @@ this is the first.
   `ITEM_KEY_ITEM_INFO_RECEIVED`, settled `NAME_SETTLE`. The footer is the
   count; the header shows Your Gold:. A click on a row opens the buy
   panel. Tested in `tools/test_auctionbrowse.lua`. Not yet seen in game.
+  Usable Only with no rarity picked sends every rarity filter beside it
+  (`Browse.EVERY_QUALITY`, 2026-11-11: sent alone, Weapons and Armor came
+  back empty in game; the game's own window always sends its ticked
+  rarities). A gold line (`widgets.divider`) stands between the categories
+  and the list.
+- The tabs (2026-11-11, the owner: no separate drawer once the full window
+  is there): Browse, Sell, My Auctions, Deals, Snipe (only while its
+  setting is ticked) and Settings flush right, hanging under the window
+  (`AuctionWindow.Strip`, one strip with Snipe and one without, since a
+  strip cannot drop a tab; `SelectTab`). Sell, My Auctions and Snipe are
+  the drawer's own lists laid into the window's `host`
+  (`PostPanel:IntoOwn(container, view)`, `OwnAway`, `StepAside`,
+  `OutOfOwn`; inside, the drawer's Sell, Buy and the like stay as small
+  view tabs and its own My Auctions and Snipe tabs hide, `LayTabs`).
+  Deals and Settings borrow the main window's pages (`Borrow`, `GiveBack`:
+  only our own frames are re-parented, and they go home when another tab
+  is picked or the visit ends). While the setting is on and the game's
+  window is not picked (`AuctionWindow:HoldsDrawer`,
+  `PostPanel.HeldByOwn`), `PostPanel:Attach`, `UI:AttachToAuctionHouse` and
+  `TSTabs:Settle` put no drawer and no one window beside the auction
+  house. "Use The Game's Window" or the close gives everything back
+  (`Release`) and, mid-visit, brings the drawer back beside the game's
+  window. Every visit starts on Browse. In the shipped files all of it is
+  inert without `ns.AuctionWindow`. Tested in `tools/test_auctionwindow.lua`.
+  Not yet seen in game.
 - The buy panel (2026-11-11): `Logic/BrowseBuy.lua` (`ns.BrowseBuy`) asks,
   reads and buys, `UI/AuctionBuy.lua` (`ns.AuctionBuy`) draws it beside
   the list (`AuctionBuy.WIDTH`; `AuctionBrowse:SetInset` narrows the

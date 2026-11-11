@@ -132,6 +132,14 @@ check("levels the wrong way round are swapped", query.minLevel == 20 and query.m
 check("rarity and Usable Only are the game's filters",
     #query.filters == 2 and query.filters[1] == 6 and query.filters[2] == 2)
 check("the words go as typed", query.searchString == "cloth")
+Browse.query.quality = nil
+query = Browse:BuildQuery()
+check("Usable Only with no rarity picked sends every rarity too, as the game's window does",
+    #query.filters == 6 and query.filters[1] == 4 and query.filters[5] == 8 and query.filters[6] == 2)
+Browse.query.usable = false
+query = Browse:BuildQuery()
+check("with Usable Only off and no rarity, nothing is filtered", #query.filters == 0)
+Browse.query.quality, Browse.query.usable = 2, true
 Browse.query.minLevel, Browse.query.maxLevel = -5, 900
 query = Browse:BuildQuery()
 check("levels stay inside 1 to 60", query.minLevel == 0 and query.maxLevel == 0)
@@ -361,9 +369,18 @@ Run("ui-browse")
 events.AUCTION_HOUSE_BROWSE_RESULTS_UPDATED()
 Tick()
 
-local well = Stub({ IsVisible = function() return true end })
+local divider
+local well = Stub({
+    IsVisible = function() return true end,
+    CreateTexture = function()
+        divider = Stub({ SetPoint = function(self, point) self.points = (rawget(self, "points") or 0) + 1 end })
+        return divider
+    end,
+})
 Tab:Build(well)
 local widgets = Tab.widgets
+check("a line stands between the categories and the list",
+    widgets.divider == divider and divider ~= nil and (rawget(divider, "points") or 0) >= 2)
 check("the tab builds", widgets.well == well and widgets.list ~= nil and widgets.categories ~= nil)
 check("the list has the search's rows", #widgets.list.data == 2)
 check("the categories are down the side", #widgets.categories.data == 2)

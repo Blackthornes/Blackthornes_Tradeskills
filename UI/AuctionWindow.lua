@@ -9,10 +9,13 @@
 -- was. Closing our window closes the auction house the game's way, and "Use
 -- The Game's Window" lifts the veil for the rest of the visit.
 --
--- The window, its veil and its way out are here; the Browse tab is
--- UI/AuctionBrowse.lua and its buy panel UI/AuctionBuy.lua. The other tabs
--- come in later steps; until then Sell, My Auctions, Deals and Snipe stay in
--- the drawer beside it.
+-- The window, its veil, its tabs and its way out are here. Browse is
+-- UI/AuctionBrowse.lua with its buy panel UI/AuctionBuy.lua. Sell, My
+-- Auctions and Snipe are the drawer's own lists laid into this window
+-- (PostPanel:IntoOwn); Deals and Settings are the main window's own pages,
+-- borrowed while their tab shows and given back after. So while this window
+-- is up nothing opens beside the auction house: no drawer and no one window
+-- (HoldsDrawer, asked by UI/PostPanel.lua and UI/Main.lua).
 
 local _, ns = ...
 
@@ -46,6 +49,35 @@ local function GameFrame()
     local UI = ns.UI
     if UI and UI.FindAuctionFrame then return (UI:FindAuctionFrame()) end
     return nil
+end
+
+-- The tabs, in order. Sell, My Auctions and Snipe are views of the drawer;
+-- Deals and Settings are pages of the main window. Settings is always last.
+local TABS = {
+    { key = "browse", text = L["Browse"] },
+    { key = "sell", text = L["Sell"], view = "sell" },
+    { key = "auctions", text = L["My Auctions"], view = "auctions" },
+    { key = "deals", text = L["Deals"], page = "deals" },
+    { key = "snipe", text = L["Snipe"], view = "snipe" },
+    { key = "settings", text = L["Settings"], page = "settings", right = true },
+}
+local BY_KEY = {}
+for _, tab in ipairs(TABS) do BY_KEY[tab.key] = tab end
+
+--- The Snipe tab shows only while its setting is ticked, as in the drawer.
+local function ShowsSnipe()
+    local PostPanel = ns.PostPanel
+    if not (PostPanel and PostPanel.ShowsSnipe) then return false end
+    local ok, shows = pcall(PostPanel.ShowsSnipe)
+    return ok and shows == true
+end
+
+--- True while this window stands in for the game's: the drawer's lists are
+--- its tabs then, so no drawer and no one window open beside the auction
+--- house. It does not wait for the open event, since the drawer may hear
+--- that event first.
+function AuctionWindow:HoldsDrawer()
+    return Setting() and not self.gameWindow
 end
 
 --- Whether our window should be up right now.
@@ -100,7 +132,7 @@ function AuctionWindow:Build()
     back:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -44, -30)
     frame.back = back
 
-    -- The well the Browse list will sit in.
+    -- The well the Browse list sits in.
     local well = CreateFrame("Frame", nil, frame)
     well:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -60)
     well:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
@@ -109,15 +141,134 @@ function AuctionWindow:Build()
     -- The Browse tab draws itself into the well (UI/AuctionBrowse.lua).
     if ns.AuctionBrowse then ns.AuctionBrowse:Build(well) end
 
-    local strip = Widgets.CreateTabStrip(frame, {
-        { key = "browse", text = L["Browse"], width = 96 },
-    }, function() end, { width = 400, hanging = true })
-    strip:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", TAB_INSET, 0)
-    strip:Select("browse")
-    frame.strip = strip
+    -- Where the other tabs lie: the drawer's lists and the borrowed pages.
+    -- A little wider than the well, so Settings' two columns fit.
+    local host = CreateFrame("Frame", nil, frame)
+    host:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -60)
+    host:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 14)
+    Theme.Recess(host)
+    host:Hide()
+    frame.host = host
+
+    frame.strips = {}
 
     self.frame = frame
     return frame
+end
+
+--- The row of tabs, with Snipe only while its setting is ticked. The strip
+--- cannot drop a tab, so there is one with Snipe and one without, each made
+--- when first needed.
+function AuctionWindow:Strip(room)
+    local frame = self.frame
+    if not frame then return nil end
+    local withSnipe = ShowsSnipe()
+    local strip = frame.strips[withSnipe]
+    if not strip then
+        local defs = {}
+        for _, tab in ipairs(TABS) do
+            if tab.key ~= "snipe" or withSnipe then
+                defs[#defs + 1] = { key = tab.key, text = tab.text, right = tab.right }
+            end
+        end
+        strip = Widgets.CreateTabStrip(frame, defs, function(key)
+            AuctionWindow:SelectTab(key)
+        end, { width = room or 800, hanging = true })
+        strip:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", TAB_INSET, 0)
+        frame.strips[withSnipe] = strip
+    end
+    local other = frame.strips[not withSnipe]
+    if other then other:Hide() end
+    strip:Show()
+    if room and strip.SetRoom then strip:SetRoom(room) end
+    frame.strip = strip
+    return strip
+end
+
+--- Give a borrowed page back to the main window, where it was.
+function AuctionWindow:GiveBack()
+    local key = self.borrowed
+    if not key then return end
+    self.borrowed = nil
+    local UI = ns.UI
+    local tab = UI and UI.tabs and UI.tabs[key]
+    local page = tab and tab.container
+    if not (page and UI.content) then return end
+    page:SetParent(UI.content)
+    page:ClearAllPoints()
+    page:SetPoint("TOPLEFT", 1, -1)
+    page:SetPoint("BOTTOMRIGHT", -1, 1)
+    page:SetShown(UI.activeTab == key)
+end
+
+--- Lay one of the main window's own pages (Deals, Settings) into our
+--- window while its tab shows. Only our own frames are moved.
+-- @return true when the page is in
+function AuctionWindow:Borrow(key)
+    local UI = ns.UI
+    local frame = self.frame
+    if not (UI and frame and frame.host) then return false end
+    if not UI.window and UI.Build then pcall(UI.Build, UI) end
+    local tab = UI.tabs and UI.tabs[key]
+    local page = tab and tab.container
+    if not page then return false end
+    if self.borrowed ~= key then
+        self:GiveBack()
+        page:SetParent(frame.host)
+        page:ClearAllPoints()
+        page:SetAllPoints(frame.host)
+        self.borrowed = key
+    end
+    page:Show()
+    if tab.onShow then pcall(tab.onShow) end
+    if tab.refresh then pcall(tab.refresh) end
+    return true
+end
+
+--- Show one tab. A tab that cannot show (Snipe unticked, a page not there)
+--- falls back to Browse.
+function AuctionWindow:SelectTab(key)
+    local frame = self.frame
+    if not frame then return end
+    local PostPanel = ns.PostPanel
+    local tab = BY_KEY[key] or BY_KEY.browse
+    if tab.key == "snipe" and not ShowsSnipe() then tab = BY_KEY.browse end
+    if tab.view and not (PostPanel and PostPanel.IntoOwn) then tab = BY_KEY.browse end
+
+    local paged = false
+    if tab.page then
+        paged = self:Borrow(tab.page)
+        if not paged then tab = BY_KEY.browse end
+    end
+    if not paged then self:GiveBack() end
+
+    self.tab = tab.key
+    self.lent = true
+    frame.well:SetShown(tab.key == "browse")
+    frame.host:SetShown(tab.key ~= "browse")
+
+    if PostPanel then
+        if tab.view and PostPanel.IntoOwn then
+            pcall(PostPanel.IntoOwn, PostPanel, frame.host, tab.view)
+        elseif PostPanel.inOwn and PostPanel.OwnAway then
+            pcall(PostPanel.OwnAway, PostPanel)
+        elseif PostPanel.StepAside then
+            -- Ticked in the middle of a visit: the drawer beside the
+            -- game's window goes, and comes back as our tabs.
+            pcall(PostPanel.StepAside, PostPanel)
+        end
+    end
+
+    if frame.strip and frame.strip.Select then frame.strip:Select(tab.key) end
+end
+
+--- Everything lent to our window goes back where it lives: the drawer to
+--- its own frame, a borrowed page to the main window.
+function AuctionWindow:Release()
+    self.lent = false
+    self:GiveBack()
+    local PostPanel = ns.PostPanel
+    if PostPanel and PostPanel.OutOfOwn then pcall(PostPanel.OutOfOwn, PostPanel) end
 end
 
 --- Lay the veil and our window as the setting and the visit say. Safe to
@@ -132,6 +283,13 @@ function AuctionWindow:Update()
             if Veil:Uncover(game) == false then self.waiting = true end
         end
         if self.frame then self.frame:Hide() end
+        if self.lent then
+            self:Release()
+            -- The game's window for the rest of the visit: the drawer comes
+            -- back beside it, as it always was.
+            local UI = ns.UI
+            if self.open and UI and UI.AttachToAuctionHouse then pcall(UI.AttachToAuctionHouse, UI) end
+        end
         return
     end
 
@@ -143,26 +301,42 @@ function AuctionWindow:Update()
     local frame = self:Build()
     frame:ClearAllPoints()
     frame:SetAllPoints(game)
-    if frame.strip and frame.strip.SetRoom then
-        local ok, width = pcall(game.GetWidth, game)
-        if ok and type(width) == "number" and width > 2 * TAB_INSET then
-            frame.strip:SetRoom(width - 2 * TAB_INSET)
-        end
-    end
+    local room
+    local ok, width = pcall(game.GetWidth, game)
+    if ok and type(width) == "number" and width > 2 * TAB_INSET then room = width - 2 * TAB_INSET end
+    local had = frame.strip
+    local strip = self:Strip(room)
 
-    if not frame:IsShown() then frame:Show() end
+    if not frame:IsShown() then
+        frame:Show()
+        self:SelectTab(self.tab or "browse")
+    elseif strip ~= had or (self.tab == "snipe" and not ShowsSnipe()) then
+        -- Snipe was ticked or unticked while the window is up.
+        self:SelectTab(self.tab or "browse")
+    end
 end
 
 function AuctionWindow:Opened()
     self.open = true
     self.gameWindow = false
     self.visit = (self.visit or 0) + 1
+    -- Every visit starts on Browse, as the game's window does.
+    self.tab = "browse"
     self:Update()
 
     local visit = self.visit
-    for _, seconds in ipairs(LOOK_AGAIN) do
+    for index, seconds in ipairs(LOOK_AGAIN) do
         After(seconds, function()
-            if AuctionWindow.open and AuctionWindow.visit == visit then AuctionWindow:Update() end
+            if not (AuctionWindow.open and AuctionWindow.visit == visit) then return end
+            AuctionWindow:Update()
+            -- The game's window never turned up, so ours has nothing to lie
+            -- over: the drawer comes up as it always did, for this visit.
+            if index == #LOOK_AGAIN and AuctionWindow:Wanted() and not AuctionWindow:IsShown() then
+                AuctionWindow.gameWindow = true
+                AuctionWindow:Update()
+                local UI = ns.UI
+                if UI and UI.AttachToAuctionHouse then pcall(UI.AttachToAuctionHouse, UI) end
+            end
         end)
     end
 end
