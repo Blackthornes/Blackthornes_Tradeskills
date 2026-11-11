@@ -1,4 +1,7 @@
 -- The auction house's least deposit (a player's report, 2026-10-16).
+-- Since the 2026-11-10 patch the least any listing pays is 1 copper; a
+-- floor remembered from before then was the old 1 silver and no longer
+-- holds a guess up.
 --
 -- A listing pays at least a set deposit, 1s for one Linen Belt and for
 -- twenty alike, so a small listing's share each runs high. The remembered
@@ -23,7 +26,7 @@ ns.Config = { Get = function(_, key) return settings[key] end }
 ns.db = {}
 ns.Scanner = { isAuctionHouseOpen = false }
 
-local clock = 1000
+local clock = 1794268800 + 1000
 time = function() return clock end
 GetTime = function() return clock end
 C_Timer = { After = function() end, NewTimer = function() return { Cancel = function() end } end,
@@ -42,7 +45,7 @@ end
 
 local BELT, CLOTH = 5000, 2589
 
-print("a floor of 1s")
+print("a floor the game asked")
 Posting:CacheUnitDeposit(BELT, 100, 20, 2)
 Posting:CacheUnitDeposit(BELT, 100, 1, 2)
 check("one belt listed last keeps the share of twenty", Posting:GetCachedUnitDeposit(BELT), 5)
@@ -56,8 +59,17 @@ print("a cheap item")
 Posting:CacheUnitDeposit(CLOTH, 6, 2, 2)
 Posting:CacheUnitDeposit(CLOTH, 60, 20, 2)
 check("the share each", Posting:GetCachedUnitDeposit(CLOTH), 3)
-check("one still pays the 1s", Posting:EstimateDeposit(CLOTH, 1), 100)
+check("one pays its own share, no 1s floor now", Posting:EstimateDeposit(CLOTH, 1), 3)
 check("a stack worth more pays its share", Posting:EstimateDeposit(CLOTH, 50), 150)
+
+print("")
+print("a floor from before the patch")
+ns.db.deposits[77] = { unit = 5, quantity = 20, least = 100, leastQuantity = 1, duration = 2, at = 1 }
+check("the old 1s floor no longer holds", Posting:EstimateDeposit(77, 1), 5)
+Posting:CacheUnitDeposit(77, 50, 10, 2)
+check("nor is it kept when a new answer comes", ns.db.deposits[77].least, 50)
+check("a guess for one is its share", Posting:EstimateDeposit(77, 1), 5)
+check("the least now is 1c", Posting.MIN_DEPOSIT, 1)
 
 print("")
 print("an older record")

@@ -1,5 +1,6 @@
--- Forever's 1 silver minimum deposit (its news, 2026-11-06): a listing
--- pays at least 1s, one item or a whole stack. The game takes the right
+-- Forever's minimum deposit: 1 silver from 2026-11-06, 1 copper since
+-- the 2026-11-10 patch. A listing pays at least that, one item or a
+-- whole stack. The game takes the right
 -- amount when you post; these checks are about the guesses Tradeskills
 -- makes away from the auction house, for profit.
 
@@ -32,7 +33,7 @@ local Util, Profit = ns.Util, ns.Profit
 local cached = {}
 ns.db = { deposits = {} }
 ns.Posting = {
-    MIN_DEPOSIT = 100,
+    MIN_DEPOSIT = 1,
     GetCachedUnitDeposit = function(_, itemID) return cached[itemID] end,
 }
 
@@ -54,26 +55,29 @@ local function Tenths(v) return math.floor(v * 10 + 0.5) end
 print("")
 print("one item a listing")
 cached[BAG] = 5
-check("a 5c share still loses the whole 1s", Profit.LostDepositEach(BAG), 100)
-check("so 3s pays 3s less the cut less 1s", Tenths(Profit:NetFromListing(BAG, 300)), 1850)
+check("a 5c share loses its own 5c", Profit.LostDepositEach(BAG), 5)
+check("so 3s pays 3s less the cut less 5c", Tenths(Profit:NetFromListing(BAG, 300)), 2800)
+cached[BAG] = 0.2
+check("a share under 1c still loses the 1c least", Profit.LostDepositEach(BAG), 1)
 
 print("")
 print("a stack")
 cached[CLOTH] = 0.1
 ns.db.deposits[CLOTH] = { unit = 0.1, quantity = 20 }
-check("20 a listing: 5c each", Profit.LostDepositEach(CLOTH), 5)
+check("20 a listing: its own share each", Profit.LostDepositEach(CLOTH), 0.1)
 ns.db.deposits[CLOTH] = nil
-check("no listing seen: a full stack of 200 shares it", Profit.LostDepositEach(CLOTH), 0.5)
+check("no listing seen: a 1c floor shared by 200 is under the share", Profit.LostDepositEach(CLOTH), 0.1)
 cached[CLOTH] = 2
 check("a bigger share each wins over the floor", Profit.LostDepositEach(CLOTH), 2)
 
 print("")
 print("nothing known")
-check("an item never listed costs the 1s", Profit.LostDepositEach(NEW), 100)
+check("an item never listed costs the 1c", Profit.LostDepositEach(NEW), 1)
 
 print("")
 print("the deposit comes back on a sale")
 settings.expectedRelists = 1
+cached[BAG] = 5
 check("sold first time, nothing is lost", Tenths(Profit:NetFromListing(BAG, 300)), 2850)
 settings.expectedRelists = 2
 
