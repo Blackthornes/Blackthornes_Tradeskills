@@ -186,6 +186,7 @@ UI\Tab_Sales.lua
 UI\Tab_Stats.lua
 UI\BankView.lua
 UI\Tab_Characters.lua
+UI\AuctionTracker.lua
 UI\Tab_Settings.lua
 
 Probe\Probe.lua
