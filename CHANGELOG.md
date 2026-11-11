@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.23.1
+
+For WoW: Forever (interface 16001). A /reload is enough after updating.
+
+- **Small fixes.** A few small touch-ups.
+
 ## 1.23.0
 
 For WoW: Forever (interface 16001). Files were added, so quit the game and start it again after updating.
