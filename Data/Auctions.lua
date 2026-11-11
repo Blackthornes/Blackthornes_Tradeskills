@@ -834,6 +834,7 @@ function Auctions:ReadOwned(opts)
     self.ownedIDs = ids
     self.live, self.liveAt = live, readAt
     if ns.MyAuctions and ns.MyAuctions.OnRead then ns.MyAuctions:OnRead(live, opts.final, sold) end
+    if ns.AuctionTracker and ns.AuctionTracker.OnRead then pcall(ns.AuctionTracker.OnRead, ns.AuctionTracker) end
     record.updatedAt = time()
     record.auctionCount = count
 

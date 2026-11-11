@@ -380,6 +380,18 @@ local DEFAULTS = {
         -- and side, or only the "character" playing.
         goldTrackerCount = "all",
 
+        -- My Auctions (asked 2026-11-11, from a mockup): a small window
+        -- listing your own auctions that cheers each sale. Off unless
+        -- ticked. Sold Effects ("full", "subtle" or "off"), Transparent (0
+        -- to 3), its size (percent) and where it sits. Never rename these.
+        -- See Logic/AuctionTracker.lua and UI/AuctionTracker.lua.
+        auctionTracker = false,
+        auctionTrackerEffects = "full",
+        auctionTrackerSeeThrough = 0,
+        auctionTrackerScale = 100,
+        auctionTrackerX = nil,
+        auctionTrackerY = nil,
+
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
         tradeRequests = false,
