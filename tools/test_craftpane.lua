@@ -856,7 +856,7 @@ do
 
   CraftPanel:OnClearClicked()
   check("the first click on Clear queue empties nothing", cleared, 0)
-  check("and asks for a second click", button.text, "Click to clear")
+  check("and asks for a second click", button.text, "Confirm")
   check("with a red border while it waits", button.confirming, true)
 
   CraftPanel:OnClearClicked()

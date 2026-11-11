@@ -1243,12 +1243,12 @@ function CraftPanel:UpdateClearButton()
 
     local armed = self.clearArmedUntil ~= nil and GetTime() < self.clearArmedUntil
 
-    button:SetText(armed and L["Click to clear"] or L["Clear queue"])
+    button:SetText(armed and L["Confirm"] or L["Clear queue"])
     button:SetEnabledState(not empty)
     button:SetConfirming(armed)
 
     button.tooltipText = empty and L["The queue is empty"]
-        or armed and L["Click again to empty the whole craft queue"]
+        or armed and L["Click Confirm to empty the whole craft queue"]
         or L["Empties the whole craft queue. Click twice to clear."]
 end
 

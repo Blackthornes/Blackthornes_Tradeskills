@@ -52,7 +52,7 @@ check("a click on a known price pays", log[1] == "pay")
 
 snipe.armed = snipe.pending
 text, can = View.RowBuyState(finds[1])
-check("over Double Check Over: Click Again", text == "Click Again" and can)
+check("over Double Check Over: Confirm", text == "Confirm" and can)
 text, can = View.RowBuyState(finds[2])
 check("an armed buy is never taken over", not can)
 snipe.armed = nil
