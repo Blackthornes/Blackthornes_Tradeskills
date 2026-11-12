@@ -1574,6 +1574,30 @@ under it, `BuyQuantity.UnitsUpTo`). The Sell list tags a row with its list
 or "Own price" (`PostPanel._ListTag`). Tested in `tools/test_listrules.lua`.
 Not yet seen in game.
 
+## Buy Sets
+
+The owner said build it (2026-11-12, from a mockup whose words he
+approved): each open list of the player's own on the auction house
+drawer's Lists view gets a foot row, "Spend Up To:" (a money box that
+starts empty) and a gold **Buy Sets** button. The list's wants are the
+ratio (2 herbs and 1 vial is one set). `Logic/ListSets.lua` reads each
+item's live listings through `ns.AHQueue` (`Start`, `ReadNext`,
+`Results`), drops listings over Most I'll Pay (the item's own, else the
+list rule's `maxPay`) and the player's own (`Usable`), and fits whole
+sets under the limit cheapest first (`ListSets.Fit`); when one item runs
+short every row drops to match it. The view then shows "Sets That Fit:
+N", "Total: X" and a BUY and COST row an item, the next lit with
+`glassActive`, Buy then Confirm on each (two clicks:
+`StartCommoditiesPurchase`, then `ConfirmCommoditiesPurchase` on the
+quote, `Buy`, `PriceUpdated`, `Confirm`); Stop takes the list's Search
+button's place. A quote that would push the run past the limit stops it
+with "Prices went up past what you set to spend, so Buy Sets stopped."
+Done rows read "Got", dimmed; a short item reads "Only N Up" in red.
+Buy waits while Snipe is mid-buy (`ListSets:Busy`), and the auction house
+closing ends the run. Nothing is saved; the limit lasts the session.
+Events go in from `OnEnable`. Tested in `tools/test_listsets.lua`. Not
+yet seen in game.
+
 ## Price limits
 
 The owner said yes (2026-10-28) to three limits on a price the player

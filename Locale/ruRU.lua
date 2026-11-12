@@ -3513,3 +3513,12 @@ L["Tracker Place:"] = "Место окна:"
 L["Window Places:"] = "Места окон:"
 L["Every Tradeskills window is back where it starts."] = "Все окна Tradeskills вернулись на свои начальные места."
 L["put every Tradeskills window back where it starts"] = "возвращает все окна Tradeskills на начальные места"
+
+-- Buy Sets (Logic/ListSets.lua)
+L["Spend Up To:"] = "Потратить до:"
+L["Buy Sets"] = "Купить наборы"
+L["Sets That Fit:"] = "Подходит наборов:"
+L["Total:"] = "Итого:"
+L["Got"] = "Куплено"
+L["Only %d Up"] = "В продаже только %d"
+L["Prices went up past what you set to spend, so Buy Sets stopped."] = "Цены выросли выше того, что ты готов потратить, поэтому покупка наборов остановлена."

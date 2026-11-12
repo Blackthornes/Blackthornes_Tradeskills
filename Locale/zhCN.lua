@@ -3509,3 +3509,12 @@ L["Tracker Place:"] = "追踪位置："
 L["Window Places:"] = "窗口位置："
 L["Every Tradeskills window is back where it starts."] = "所有 Tradeskills 窗口都已回到初始位置。"
 L["put every Tradeskills window back where it starts"] = "把所有 Tradeskills 窗口放回初始位置"
+
+-- Buy Sets (Logic/ListSets.lua)
+L["Spend Up To:"] = "最多花费："
+L["Buy Sets"] = "购买整套"
+L["Sets That Fit:"] = "可买套数："
+L["Total:"] = "总计："
+L["Got"] = "已买到"
+L["Only %d Up"] = "只有 %d 个在售"
+L["Prices went up past what you set to spend, so Buy Sets stopped."] = "价格涨过了你设定的花费，所以购买整套已停止。"
