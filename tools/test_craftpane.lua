@@ -1093,6 +1093,33 @@ do
   ns.Collapse, ns.Debug, ns.Config = oldCollapse, oldDebug, oldConfig
 end
 
+do
+  -- The one window stays in front of the pane when a profession opens.
+  local function Win(shown)
+    local w = { shown = shown, raised = 0 }
+    function w:IsShown() return self.shown end
+    function w:Raise() self.raised = self.raised + 1 end
+    return w
+  end
+  local oldUI, oldHub = ns.UI, rawget(_G, "BlackthornesWindow")
+  local main, one = Win(false), Win(true)
+  ns.UI = { window = main }
+  _G.BlackthornesWindow = { frame = one }
+  local list = CraftPanel.FrontWindows()
+  check("the one window is raised when it is up", list[1], one)
+  check("a hidden main window is not raised", #list, 1)
+  main.shown = true
+  list = CraftPanel.FrontWindows()
+  check("both are raised, the one window last", list[2], one)
+  check("the main window first", list[1], main)
+  _G.BlackthornesWindow = { frame = main }
+  check("the same frame is raised once", #CraftPanel.FrontWindows(), 1)
+  _G.BlackthornesWindow = nil
+  one.shown = false
+  check("no one window, only the main window", CraftPanel.FrontWindows()[1], main)
+  ns.UI, _G.BlackthornesWindow = oldUI, oldHub
+end
+
 print("")
 if failed > 0 then
   error(string.format("FAIL -- %d of %d craft pane checks wrong", failed, passed + failed))
