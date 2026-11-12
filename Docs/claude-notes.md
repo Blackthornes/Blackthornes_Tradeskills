@@ -1953,3 +1953,19 @@ any release: "scrap this idea". All of it was taken out again, so the
 auction house works as it did before. Never build it again unasked. A
 saved `ownAuctionHouse` may sit in a save that tried it; it is unread,
 never reuse the name.
+
+## Queue crafting time
+
+A player asked, the owner said build it from a mockup (2026-11-12): how
+long the queue takes to cast. `Queue:GetCraftTime()` adds each entry's
+count times one cast (`CraftTime:GetCast`: the player's own casts first,
+then the game's), sub-crafts too, split by crafter (`byCrafter`); a craft
+with no known cast is counted apart (`untimed`, `untimedBy`) and never
+guessed, and `seconds` is nil when nothing is timed. The Queue tab shows a
+time on each craft row (no heading, since the rows have none; "?" in gold
+when not timed yet) and "about X" in its footer; the craft pane's bottom
+line says "N queued · about X · profit Y", the time dropping first when
+room runs short. Both hovers are `ns.QueueTimeTip` (UI/Tab_Queue.lua):
+Crafting Time, each character most first ("You" for the one playing),
+Not timed yet, and a note that only casting counts. Nothing saved, no
+setting. Tested in `tools/test_queuecrafttime.lua`. Not yet seen in game.

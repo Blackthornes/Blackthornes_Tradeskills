@@ -3511,3 +3511,12 @@ L["Tracker Place:"] = "Place du suivi :"
 L["Window Places:"] = "Place des fenêtres :"
 L["Every Tradeskills window is back where it starts."] = "Chaque fenêtre de Tradeskills est revenue à sa place de départ."
 L["put every Tradeskills window back where it starts"] = "remet chaque fenêtre de Tradeskills à sa place de départ"
+
+-- Queue crafting time
+L["You"] = "Toi"
+L["Not timed yet"] = "Pas encore chronométré"
+L["Crafting Time"] = "Temps de fabrication"
+L["Casting only. Walking and waiting aren't counted. A craft gets its time once you make one."] = "Seulement l'incantation. La marche et l'attente ne comptent pas. Une fabrication a son temps dès que tu en fais une."
+L["%d craft  ·  about %s  ·  materials %s  ·  profit %s"] = "%d fabrication  ·  environ %s  ·  composants %s  ·  profit %s"
+L["%d crafts  ·  about %s  ·  materials %s  ·  profit %s"] = "%d fabrications  ·  environ %s  ·  composants %s  ·  profit %s"
+L["%d queued · about %s · profit |c%s%s|r%s"] = "%d dans la file · environ %s · profit |c%s%s|r%s"
