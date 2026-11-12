@@ -737,8 +737,14 @@ function Writs:NoteCustomer(writ, customer)
 end
 
 function Writs:GetCustomer(writ)
+    if not writ then return nil end
     local store = Store()
-    return store and writ and store.writCustomers[writ.item] or nil
+    local mine = store and store.writCustomers[writ.item]
+    if mine then return mine end
+    -- What players' own play learned, shipped at each release
+    -- (Data/ForeverWritCustomers.lua); a spot learned here wins.
+    local shipped = rawget(ns, "WRIT_CUSTOMERS")
+    return type(shipped) == "table" and shipped[writ.item] or nil
 end
 
 --- The writs the open quest window asks for: by its title, and by any

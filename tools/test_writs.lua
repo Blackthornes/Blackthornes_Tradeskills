@@ -664,6 +664,19 @@ check("a spot is kept to a tenth", ns.Writs:GetCustomer(writOf[ROD]).x == 34.6)
 check("a quest log spot never replaces one read at the customer",
     ns.Writs:NoteCustomer(writOf[ROD], { zone = "Darkshore", x = 1, y = 1, fromLog = true }) == false
     and ns.Writs:GetCustomer(writOf[ROD]).zone == "Ashenvale")
+local other
+for _, entry in ipairs(ns.CRAFTSMANS_WRITS) do
+    if entry.item ~= ROD and entry.item ~= WISDOM then other = entry break end
+end
+ns.WRIT_CUSTOMERS = {
+    [ROD] = { name = "Shipped Name", zone = "Barrens", x = 1, y = 1 },
+    [other.item] = { name = "Shipped Customer", zone = "Westfall", mapID = 1436, x = 56.3, y = 47.5 },
+}
+check("a shipped spot stands in until one is learned",
+    ns.Writs:GetCustomer(other).name == "Shipped Customer")
+check("a spot learned in play beats the shipped one",
+    ns.Writs:GetCustomer(writOf[ROD]).name == "Tilda Hand")
+ns.WRIT_CUSTOMERS = nil
 groupBy.onSelect("zone")
 check("Group By is kept in Settings", config.writGroupBy == "zone")
 local function Header(title)
