@@ -3525,7 +3525,7 @@ L["Sets That Fit:"] = "可买套数："
 L["Total:"] = "总计："
 L["Got"] = "已买到"
 L["Only %d Up"] = "只有 %d 个在售"
-L["Prices went up past what you set to spend, so Buy Sets stopped."] = "价格涨过了你设定的花费，所以购买整套已停止。"
+L["Prices exceed your spend limit."] = "价格超出了你的花费上限。"
 -- Queue crafting time
 L["You"] = "你"
 L["Not timed yet"] = "尚未计时"

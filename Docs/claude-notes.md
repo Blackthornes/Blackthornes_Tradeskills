@@ -1616,7 +1616,7 @@ N", "Total: X" and a BUY and COST row an item, the next lit with
 `StartCommoditiesPurchase`, then `ConfirmCommoditiesPurchase` on the
 quote, `Buy`, `PriceUpdated`, `Confirm`); Stop takes the list's Search
 button's place. A quote that would push the run past the limit stops it
-with "Prices went up past what you set to spend, so Buy Sets stopped."
+with "Prices exceed your spend limit."
 Done rows read "Got", dimmed; a short item reads "Only N Up" in red.
 Buy waits while Snipe is mid-buy (`ListSets:Busy`), and the auction house
 closing ends the run. Nothing is saved; the limit lasts the session.
