@@ -3523,3 +3523,8 @@ L["Average paid"] = "平均买入价"
 L["(%d in %d buys)"] = "（%d 个，%d 次购买）"
 L["Bought For on Tooltips:"] = "鼠标提示里的买入价："
 L["What you last paid for an item on the auction house. Hold Shift for the average."] = "你上次在拍卖行买这件物品花了多少钱。按住 Shift 查看平均价。"
+-- Mute All Sounds (2026-11-12)
+L["Mute All Sounds:"] = "全部静音："
+L["turn every Blackthornes sound off or back on (on/off)"] = "关闭或重新打开所有 Blackthornes 音效（on/off）"
+L["All Blackthornes sounds are off. /bts mute off turns them back on."] = "所有 Blackthornes 音效已关闭。输入 /bts mute off 可重新打开。"
+L["Blackthornes sounds are back on."] = "Blackthornes 音效已重新打开。"

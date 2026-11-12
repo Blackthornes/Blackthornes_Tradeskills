@@ -1945,6 +1945,25 @@ dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
   window. No new words. Tested in `tools/test_verify.lua` and
   `tools/test_auctiontrackerui.lua`.
 
+## Mute All Sounds
+
+A player asked, the owner said build it (2026-11-12), in all five addons:
+one box quiets every sound every Blackthornes addon plays. "Mute All
+Sounds:" at the top of SOUNDS on the General page and `/bts mute [on|off]`; off unless ticked. It lives on
+the shared choices board (`UI/SharedChoices.lua`, the same file in all
+five): `SharedChoices:SetMute(on)` sets it and tells the others,
+`ns.Muted()` answers every play call, and each addon keeps it in its own
+account save as `muteSounds` and `muteSoundsAt` (never rename them). Each
+joins with a reader of those two (`Join(name, write, readMute)`), read at
+the first sound after its save loads, the newest winning, so an addon that
+was off when the box was ticked still goes quiet. Every `PlaySound` and
+`PlaySoundFile` asks `ns.Muted()` first, fallbacks too; a new sound must
+as well. Warnings still show on screen and in chat. Here every call goes
+through `ns.PlaySound` and `ns.PlaySoundFile` (`Core/Init.lua`), the saved
+data alarm too (it was left out of the sound switches, never out of the
+mute), and `tools/test_soundchannel.lua` reads that shape. Tested in
+`tools/test_housekit.lua` and `tools/test_sounds.lua`.
+
 ## The auction house window (taken out)
 
 The owner had a full replacement auction house window started

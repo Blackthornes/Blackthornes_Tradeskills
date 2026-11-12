@@ -3527,3 +3527,8 @@ L["Average paid"] = "В среднем заплачено"
 L["(%d in %d buys)"] = "(%d за %d покупок)"
 L["Bought For on Tooltips:"] = "Цена покупки в подсказках:"
 L["What you last paid for an item on the auction house. Hold Shift for the average."] = "Сколько ты в последний раз заплатил за предмет на аукционе. Удерживай Shift, чтобы увидеть среднюю цену."
+-- Mute All Sounds (2026-11-12)
+L["Mute All Sounds:"] = "Выключить все звуки:"
+L["turn every Blackthornes sound off or back on (on/off)"] = "выключить или снова включить все звуки Blackthornes (on/off)"
+L["All Blackthornes sounds are off. /bts mute off turns them back on."] = "Все звуки Blackthornes выключены. /bts mute off включит их снова."
+L["Blackthornes sounds are back on."] = "Звуки Blackthornes снова включены."

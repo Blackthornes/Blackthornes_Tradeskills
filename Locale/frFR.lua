@@ -3525,3 +3525,8 @@ L["Average paid"] = "Prix moyen payé"
 L["(%d in %d buys)"] = "(%d en %d achats)"
 L["Bought For on Tooltips:"] = "Prix d'achat dans les infobulles :"
 L["What you last paid for an item on the auction house. Hold Shift for the average."] = "Ce que tu as payé la dernière fois pour un objet à l'hôtel des ventes. Maintiens Maj pour la moyenne."
+-- Mute All Sounds (2026-11-12)
+L["Mute All Sounds:"] = "Couper tous les sons :"
+L["turn every Blackthornes sound off or back on (on/off)"] = "couper ou remettre tous les sons Blackthornes (on/off)"
+L["All Blackthornes sounds are off. /bts mute off turns them back on."] = "Tous les sons Blackthornes sont coupés. /bts mute off les remet."
+L["Blackthornes sounds are back on."] = "Les sons Blackthornes sont de retour."
