@@ -21,6 +21,12 @@
 --     (recipeSkills). Game IDs and numbers only; no names, nothing taken
 --     from anyone else. Both are the same in every language, so any client
 --     sends.
+--   * Since 2026-11-12 (the owner: "data share with me"), also where the
+--     sender learned each Craftsman's Writ is handed in
+--     (merchantsFavor.writCustomers: the customer's name, the zone, its map
+--     and spot), by the item the writ asks for. Those are words, so only
+--     English clients send them (Writs.EnglishClient), and only for a writ
+--     in the shipped list. A sender from before sends none.
 --   * On the receiving side each sender's latest table replaces the one
 --     before (`sharedData[id]`), so nothing is ever counted twice. It never
 --     joins the receiver's own disenchants or recipe skills, and nothing in
@@ -72,6 +78,9 @@ Contribute.MAX_SKILLS = 5000      -- recipe skills in one table
 Contribute.MAX_ID = 10000000      -- an item ID past this is not an item
 Contribute.MAX_CASTS = 100000
 Contribute.MAX_SKILL = 450
+Contribute.MAX_WRITS = 400        -- writ customers in one table (150 writs ship)
+Contribute.MAX_WORDS = 60         -- a customer's or zone's name past this is junk
+Contribute.MAX_MAP = 100000
 Contribute.LOG_KEEP = 100
 Contribute.LOG_SHOW = 20
 
@@ -88,6 +97,47 @@ end
 
 local function WholeNumber(value, low, high)
     return type(value) == "number" and value == math.floor(value) and value >= low and value <= high
+end
+
+--- Plain words only: no colour codes, links or control characters.
+local function Words(value, most)
+    return type(value) == "string" and #value >= 1 and #value <= most
+        and not value:find("[%c|]") and value:match("%S") ~= nil
+end
+
+local function Spot(value)
+    return type(value) == "number" and value == value and value >= 0 and value <= 100
+end
+
+--- A writ's item, by the shipped list.
+local writItems
+local function WritItem(itemID)
+    if not writItems then
+        writItems = {}
+        for _, writ in ipairs(type(ns.CRAFTSMANS_WRITS) == "table" and ns.CRAFTSMANS_WRITS or {}) do
+            if type(writ) == "table" and writ.item then writItems[writ.item] = true end
+        end
+    end
+    return writItems[itemID] == true
+end
+Contribute.WritItem = WritItem
+
+--- One customer in the shape that goes over the wire, or nil when anything
+--- in it is not what the writ list keeps.
+function Contribute.CleanCustomer(itemID, record, words)
+    if not (WholeNumber(itemID, 1, Contribute.MAX_ID) and WritItem(itemID)) or type(record) ~= "table" then
+        return nil
+    end
+    local most = Contribute.MAX_WORDS
+    local zone = words and record.zone or record.z
+    local name = words and record.name or record.n
+    local map = words and record.mapID or record.m
+    local fromLog = words and record.fromLog or record.l
+    if not Words(zone, most) or not Spot(record.x) or not Spot(record.y) then return nil end
+    if name ~= nil and not Words(name, most) then return nil end
+    if map ~= nil and not WholeNumber(map, 1, Contribute.MAX_MAP) then return nil end
+    return { z = zone, n = name, m = map, x = math.floor(record.x * 10 + 0.5) / 10,
+        y = math.floor(record.y * 10 + 0.5) / 10, l = fromLog == true or nil }
 end
 
 --------------------------------------------------------------------------------
@@ -162,7 +212,7 @@ end
 --- What goes: the player's own disenchant results and recipe skills, as
 --- plain numbers keyed by game IDs.
 function Contribute:Payload()
-    local payload = { d = {}, s = {} }
+    local payload = { d = {}, s = {}, w = {} }
     local log = ns.db and ns.db.disenchantLog
     local items = type(log) == "table" and type(log.items) == "table" and log.items or {}
     local count = 0
@@ -192,6 +242,20 @@ function Contribute:Payload()
             count = count + 1
         end
     end
+    local english = not ns.Writs or not ns.Writs.EnglishClient or ns.Writs.EnglishClient()
+    local favor = ns.db and ns.db.merchantsFavor
+    local customers = english and type(favor) == "table" and favor.writCustomers
+    count = 0
+    for itemID, record in pairs(type(customers) == "table" and customers or {}) do
+        if count >= self.MAX_WRITS then break end
+        local clean = self.CleanCustomer(itemID, record, true)
+        if clean then
+            payload.w[itemID] = clean
+            count = count + 1
+        end
+    end
+    -- Left out when empty, so a sender with no writs keeps the hash it had.
+    if next(payload.w) == nil then payload.w = nil end
     return payload
 end
 
@@ -202,7 +266,7 @@ end
 
 --- Nothing to send while both lists are empty.
 local function Empty(payload)
-    return next(payload.d) == nil and next(payload.s) == nil
+    return next(payload.d) == nil and next(payload.s) == nil and next(payload.w or {}) == nil
 end
 
 --- The table and its hash, built at most every PAYLOAD_KEEP and kept per
@@ -295,7 +359,8 @@ end
 --- Only numbers in the shapes Payload makes; anything else is left out.
 function Contribute:Clean(value)
     if type(value) ~= "table" or type(value.d) ~= "table" or type(value.s) ~= "table" then return nil end
-    local clean, items, skills = { d = {}, s = {} }, 0, 0
+    if value.w ~= nil and type(value.w) ~= "table" then return nil end
+    local clean, items, skills, writs = { d = {}, s = {}, w = {} }, 0, 0, 0
     for itemID, record in pairs(value.d) do
         items = items + 1
         if items > self.MAX_ITEMS then return nil end
@@ -320,6 +385,11 @@ function Contribute:Clean(value)
             clean.s[itemID] = skill
         end
     end
+    for itemID, record in pairs(value.w or {}) do
+        writs = writs + 1
+        if writs > self.MAX_WRITS then return nil end
+        clean.w[itemID] = self.CleanCustomer(itemID, record)
+    end
     return clean
 end
 
@@ -337,6 +407,7 @@ function Contribute:OnTable(sender, value, channel)
             hash = type(value.h) == "string" and #value.h <= 12 and value.h or nil,
             disenchants = clean.d,
             skills = clean.s,
+            writs = next(clean.w) and clean.w or nil,
         }
         self:Trim(store)
         local name = Comm.Plain(sender) or "?"

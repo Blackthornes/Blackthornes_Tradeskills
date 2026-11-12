@@ -176,6 +176,9 @@ first.
 
 - `tools/forever_vendor_spots.py <Blackthornes_TS.lua>`
   (`Data/ForeverVendorSpots.lua`, vendor and trainer spots seen in game).
+- `tools/forever_writ_customers.py --shared <Blackthornes_TS.lua>`
+  (`Data/ForeverWritCustomers.lua`, where each writ is handed in, with the
+  spots players sent in).
 - After a client-table re-pull, `tools/make_forever_recipes.py` as the
   tables routine does.
 

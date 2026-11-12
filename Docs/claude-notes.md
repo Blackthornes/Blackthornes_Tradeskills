@@ -567,6 +567,33 @@ either). `Writs:BagWorth(tier)`, the average, is added to `GetReward`'s
 money, so it comes off a turn-in's cost and shows as Money back. No new
 words. Tested in `tools/test_writs.lua`. Not yet seen in game.
 
+## Where writs are handed in
+
+Trent said build it (2026-11-12, from the mockup in `previews/ts-writ-zones/`
+in the project files). The writ list said each order can be done once a
+day, and nothing said where to hand one in, so the Writs view now learns
+it from play only, account wide: `Writs:NoteCustomer(writ, entry)` keeps
+the customer in `merchantsFavor.writCustomers[item the writ asks for] =
+{ name, zone, mapID, x, y, fromLog, at }` (never rename it), standing at
+the customer, else from the quest log (`fromLog`); a log spot never
+replaces one read at the customer. "Group By:" on the list (`writGroupBy`,
+"none" or "zone", "none" unless picked, never rename it) puts writs under
+zone headings with their count and rep, Show the Way on each heading
+(our marker and arrow), a right-click menu with Skip This Zone and Show
+Again (`merchantsFavor.writSkipZones[zone] = true`, never rename it), and
+Not Seen Yet last. `Writs:GetCustomer` reads the learned spot, else the
+shipped `ns.WRIT_CUSTOMERS` (`Data/ForeverWritCustomers.lua`, written by
+`tools/forever_writ_customers.py [--shared] <save>` at each release's
+fold-in; never by hand). The tool reads only `merchantsFavor.writCustomers`
+and, with `--shared`, `sharedData[id].writs`; only writs in
+`Data/CraftsmansWrits.lua` are kept, `at` and sender ids are never written.
+Shared through the opt-in "Sending data to Blackthornes"
+(`Logic/Contribute.lua`'s `w`, `{ z, n, m, x, y, l }` by item, at most
+`MAX_WRITS`, English clients only, checked field by field by
+`CleanCustomer`, kept apart in `sharedData[id].writs`); never announced.
+Tested in `tools/test_writs.lua`, `tools/test_contribute.lua` and
+`tools/test_forever_writ_customers.py`. Not yet seen in game.
+
 ## The favor goal
 
 The owner said build it (2026-10-20, from a mockup): a Merchant's Favor

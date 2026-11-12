@@ -48,6 +48,7 @@ Data\LearnSpots.lua
 Data\Vendor.lua
 Data\WaylaidCrates.lua
 Data\CraftsmansWrits.lua
+Data\ForeverWritCustomers.lua
 Data\Travel.lua
 Data\TravelZones.lua
 
