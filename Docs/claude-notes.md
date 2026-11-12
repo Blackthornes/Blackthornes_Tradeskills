@@ -1477,12 +1477,12 @@ never marked fresh and the first click only searched). When a scan commits
 prices, `Posting:NoteScanned(itemIDs)` stamps every item it priced through
 `NoteChecked`, from both commit paths in `Data/Scanner.lua` (the whole-list
 replicate's `CommitScan` and a page by page scan's `CommitBrowseResults`),
-so for `FRESH_FOR` (two minutes) one click lists at the scan price with no
+so for `FRESH_FOR` (five minutes since 2026-11-12) one click lists at the scan price with no
 search and no "Click again". The search for the whole list (`CheckAll`)
 stamps `bulkTried` only once the request really goes out, inside its
 `send`, never before: one that waited in the queue and was given up asked
 nothing, so the next click asks again instead of falling to one item at a
-time for two minutes. `Posting:CheckPending(itemID)` says whether such a
+time for five minutes. `Posting:CheckPending(itemID)` says whether such a
 search is still queued, or sent and not yet answered within
 `CHECK_ALL_WAIT`; `BulkTried` answers true meanwhile, so the label stays
 List Next while a check is out. Tested in `tools/test_fastlisting.lua`.
@@ -1516,6 +1516,27 @@ bound). While bound, the drawer lists (Sell, shopping, Auctions, Snipe,
 Favors, Lists) take the wheel only when they have more rows to show
 (`list:WheelPass`, `list.canScroll` in `UI/Widgets.lua`'s scroll list), so a
 turn over a short list lists instead of doing nothing.
+
+Every time, on Sell and Snipe (the owner, 2026-11-12: it "still breaks",
+and no second price check within five minutes of a scan). Five causes,
+all fixed: a long Sell or Snipe list under the mouse scrolled instead of
+listing or buying, so while the wheel is ours `AuctionWheel:PassLists`
+asks every drawer list to let every turn through (`list:WheelPass(on,
+true)`, `wheelPassAlways`; the bar still drags, and the game's own
+auction window still scrolls under the mouse); a list built after the
+wheel was taken was never told, so `Update` tells them again on each
+look; on Snipe a notch down stamped the gap and ate the notch up after
+it, so `Turn` lets a turn with no job go before `Ready`; prices were
+fresh for only two minutes (`FRESH_FOR` is 300 now); and an item a whole
+scan never saw, or a suffix copy, was never fresh, so the first turn
+only searched. A whole scan (`NoteScanned(ids, true)` from a complete
+browse scan and the quick full scan, `Posting:NoteWholeScan`) makes
+everything fresh for `FRESH_FOR` (`Posting:ScannedLately`, read first by
+`IsFresh` and `IsFreshCopy`); `wholeScanAt` is kept through
+`ForgetChecks`, so closing and opening the auction house inside five
+minutes asks nothing. Canceling by wheel was not worked on. Tested in
+`tools/test_wheelpass.lua`, `tools/test_auctionwheel.lua` and
+`tools/test_fastlisting.lua`. Not yet seen in game.
 
 Passed over (the owner, 2026-11-08: wheel up "still breaks and stops
 working"): the Sell list's next stack was picked at the price it was

@@ -18,7 +18,7 @@
 --   7. A fresh item's List button never counts down the request spacing.
 --   8. A scan's prices count as checked (2026-11-09: the auto scan ran, then
 --      the first click only checked and said "Click again"): every item a
---      scan priced lists on one click while the scan is under two minutes
+--      scan priced lists on one click while the scan is under five minutes
 --      old.
 --   9. The quiet scan the auction house starts by itself never holds listing
 --      back (the same day: wheel turns and clicks did nothing while it ran);
@@ -206,6 +206,7 @@ local function Reset()
     keysSearched, browseRows = nil, {}
     Posting.confirming, Posting.pending, Posting.others, Posting.requesting = nil, nil, nil, {}
     Posting:ForgetChecks()
+    Posting.wholeScanAt = nil
     ns.Scanner.isAuctionHouseOpen = true
     settings.fastListing = nil
     settings.allowPostingAtALoss = nil
@@ -264,7 +265,7 @@ Reset()
 recorded[POTION] = 290
 Posting:NoteChecked(POTION)
 clock = clock + Posting.FRESH_FOR + 1
-check("two minutes on, it is not fresh", Posting:IsFresh(POTION), false)
+check("five minutes on, it is not fresh", Posting:IsFresh(POTION), false)
 clock = clock + 100
 
 print("")
@@ -438,8 +439,42 @@ Posting:NoteScanned(nil)
 Posting:NoteScanned({ potion = true })
 check("odd keys are left alone", Posting:IsFresh(OIL), false)
 clock = clock + Posting.FRESH_FOR + 1
-check("two minutes on, the scan's price no longer lists on the click", Posting:IsFresh(POTION), false)
+check("five minutes on, the scan's price no longer lists on the click", Posting:IsFresh(POTION), false)
 clock = clock + 100
+
+print("")
+print("a whole scan in the last five minutes: no second check")
+
+Reset()
+settings.askBeforeListing = nil
+settings.fastListing = true
+check("five minutes it is", Posting.FRESH_FOR, 300)
+recorded[POTION] = 290
+check("before a scan the list would be checked", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), true)
+Posting:NoteScanned({ [POTION] = { 290 } }, true)
+check("an item the whole scan never saw is fresh too", Posting:IsFresh(OIL), true)
+check("and its copies with a suffix", Posting:IsFreshCopy(OIL), true)
+check("so the list is not checked again", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), false)
+check("and CheckAll finds nothing to ask", (Posting:CheckAll({ { itemID = OIL }, { itemID = POTION } })), false)
+check("no search went out", #searches, 0)
+Posting:Request(POTION, 5, 290)
+check("the click lists", #posted, 1)
+check("still with no search", #searches, 0)
+check("and no Click again", Said("Click again to list it"), false)
+clock = clock + 280
+Posting:ForgetChecks()
+check("closing the auction house and coming back keeps it", Posting:IsFresh(OIL), true)
+clock = clock + 21
+check("past five minutes the scan is old", Posting:IsFresh(OIL), false)
+check("and the list would be checked again", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), true)
+
+Reset()
+settings.fastListing = true
+Posting:NoteScanned({ [POTION] = { 290 } })
+check("a scan cut short covers only what it saw", Posting:IsFresh(OIL), false)
+check("what it saw is fresh", Posting:IsFresh(POTION), true)
+settings.fastListing = nil
+clock = clock + 400
 settings.askBeforeListing = true
 
 print("")
@@ -488,7 +523,7 @@ check("sent, it counts as tried", Posting:BulkTried(POTION), true)
 check("for every item asked about", Posting:BulkTried(OIL), true)
 check("not one left out", Posting:BulkTried(RING), false)
 Posting.checkAll = nil
-check("answered, the stamp still holds for two minutes", Posting:BulkTried(POTION), true)
+check("answered, the stamp still holds for five minutes", Posting:BulkTried(POTION), true)
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 

@@ -926,7 +926,7 @@ function Scanner:CommitBrowseResults(results, opts)
     end
 
     -- Every item the scan priced lists on one click for a while.
-    if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(scanned) end
+    if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(scanned, complete) end
 
     if skipped > 0 then
         self:Report(("%d row(s) had no item or price"):format(skipped))
@@ -1222,7 +1222,7 @@ function Scanner:ReadReplicateResults(numItems)
 
             local recorded = ns.Prices:CommitScan(observations, now)
             -- Every item the scan priced lists on one click for a while.
-            if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(observations) end
+            if ns.Posting and ns.Posting.NoteScanned then ns.Posting:NoteScanned(observations, true) end
 
             -- Each random suffix beside its item, now the item has a price.
             if ns.Prices.CommitSuffixes then
