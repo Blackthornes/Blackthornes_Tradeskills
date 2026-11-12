@@ -23,6 +23,16 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.26.0
+
+- Windows now remember where you drag them, so they come back in the same spot.
+- A new button on the Look page puts every window back where it started.
+- Gold an Hour shows whether buying the parts or making them earns more each hour. It starts off.
+- You can group writs by the zone where you hand them in.
+- TSM prices take over sooner, after your own scan is an hour old.
+Fixes and changes:
+- The craft pane moves out of the way when the Character window opens.
+- The auction house drawer can be dragged and remembers where you put it.
 ## 1.25.0
 
 - Buy Sets fills a shopping list in whole sets and stops at the gold you pick.

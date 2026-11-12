@@ -4,6 +4,17 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.26.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Window Spots.** Windows now remember where you drag them, and the one window remembers its spot beside each game window it docks to (the auction house, mailbox, vendor and trainer). Every window stays on screen. A new Window Spots: Set Default row on the Look page (or `/bts windows reset`) puts every Blackthornes window back where it started. Sizes, settings and data stay as they are.
+- **Gold an Hour.** A new Gold an Hour: row on the Pricing page of Settings (or `/bts goldhour on|off`) shows whether buying the parts or making them earns more an hour. Only crafting time counts, not buying or selling. It starts off.
+- **Writs by zone.** The Group By: choice on the Writs list can put writs under zone headings, with Show the Way on each one. Hand-in spots are learned as you play. It starts on no grouping.
+- **Prefer TSM Prices.** TSM's price now takes over once your own scan is an hour old, instead of four hours.
+- **Craft pane steps aside.** The craft pane moves out of the way when the Character window opens.
+- **Drag the auction house drawer.** The sell list drawer at the auction house can be dragged, and it remembers its spot.
+
 ## 1.25.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
