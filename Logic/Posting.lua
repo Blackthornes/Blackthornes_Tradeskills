@@ -1832,7 +1832,10 @@ function Posting:GetPriceFloor(itemID, byHand)
 
     -- A fifth of market value. Wide enough for a real undercut war, narrow
     -- enough to catch an order of magnitude going missing.
-    local market = not byHand and ns.Prices:GetValue(itemID, "market")
+    -- Scans first, so "Prefer TSM Prices" never moves what posting checks.
+    local market = not byHand and ((ns.Prices.GetScanValue
+        and ns.Prices:GetScanValue(itemID, "market"))
+        or ns.Prices:GetValue(itemID, "market"))
     -- Market value moves slowly, so a scan that only saw a few far dearer
     -- listings keeps it high for days. Others listing near this price in a
     -- recent scan says the price is real (the owner, 2026-10-28: a cloak
