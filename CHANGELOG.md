@@ -14,6 +14,7 @@ For WoW: Forever (interface 16001). `/reload` is enough after updating.
 - **Prefer TSM Prices.** TSM's price now takes over once your own scan is an hour old, instead of four hours.
 - **Craft pane steps aside.** The craft pane moves out of the way when the Character window opens.
 - **Drag the auction house drawer.** The sell list drawer at the auction house can be dragged, and it remembers its spot.
+
 ## 1.25.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
