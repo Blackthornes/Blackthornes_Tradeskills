@@ -2732,16 +2732,23 @@ function Widgets.CreateScrollList(parent, opts)
 
     -- While the wheel is bound to something (the auction house drawer's
     -- wheel listing, UI/AuctionWheel.lua), a list with nothing more to show
-    -- lets the wheel through rather than swallowing the turn.
+    -- lets the wheel through rather than swallowing the turn. Asked with
+    -- `always`, a list with more to show lets it through too (2026-11-12:
+    -- a long Sell list under the mouse scrolled when the turn should have
+    -- listed); the bar still drags.
     function list:ApplyWheel()
         if not self.EnableMouseWheel then return end
-        self:EnableMouseWheel(not self.wheelPass or self.canScroll == true)
+        local keep = not self.wheelPass
+            or (self.canScroll == true and not self.wheelPassAlways)
+        self:EnableMouseWheel(keep)
     end
 
-    function list:WheelPass(on)
+    function list:WheelPass(on, always)
         on = on == true
-        if self.wheelPass == on then return end
+        always = on and always == true
+        if self.wheelPass == on and self.wheelPassAlways == always then return end
         self.wheelPass = on
+        self.wheelPassAlways = always
         self:ApplyWheel()
     end
     list:SetScript("OnMouseWheel", function(self, delta)

@@ -8,8 +8,11 @@
 -- each cancel. A wheel turn bound to a button is one, so two named buttons
 -- (never shown, never take the mouse) get the wheel through override
 -- bindings, held by our own owner frame only while the drawer shows. A list
--- under the mouse still takes the wheel first, so scrolling still works;
--- a drawer list with nothing more to show lets the turn through.
+-- under the mouse takes the wheel first, so while the wheel is ours the
+-- drawer's lists let every turn through (2026-11-12: a long Sell or Snipe
+-- list under the mouse scrolled when the turn should have listed or
+-- bought; that was most of "stops working randomly"). Their bars still
+-- drag. The game's own auction window still scrolls under the mouse.
 -- Bindings can't change in a fight: the change waits for its end.
 --
 -- Kept working (the owner's report, 2026-11-07: "keeps breaking and stops
@@ -96,10 +99,13 @@ end
 
 -- Does the tab's job for one turn. Snipe buys on wheel up only.
 function AuctionWheel:Turn(up)
-    if not self:Wanted() or not self:Ready() then return false end
+    if not self:Wanted() then return false end
     local job = self:Job()
+    -- A turn with no job is let go before the gap is counted, so a notch
+    -- down on Snipe never eats the notch up that follows it.
+    if job == "buy" and not up then return false end
+    if job == nil or not self:Ready() then return false end
     if job == "buy" then
-        if not up then return false end
         -- One notch, one buy click; a big buy still asks "Confirm".
         if ns.Snipe and ns.Snipe.BuyNext then ns.Snipe:BuyNext() end
         return true
@@ -169,7 +175,8 @@ function AuctionWheel:PassLists(on)
         if view then lists[#lists + 1] = view.list end
     end
     for _, list in pairs(lists) do
-        if type(list) == "table" and list.WheelPass then pcall(list.WheelPass, list, on) end
+        -- Always: a list with more to show lets the turn through too.
+        if type(list) == "table" and list.WheelPass then pcall(list.WheelPass, list, on, true) end
     end
 end
 
@@ -178,7 +185,11 @@ end
 --- the wheel since.
 function AuctionWheel:Update()
     local want = self:Wanted()
-    if want == (self.bound == true) and (not want or self:Holds()) then return end
+    if want == (self.bound == true) and (not want or self:Holds()) then
+        -- A list built since the wheel was taken lets it through as well.
+        if want then self:PassLists(true) end
+        return
+    end
 
     if InFight() then
         self.waiting = true

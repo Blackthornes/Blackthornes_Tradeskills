@@ -63,11 +63,11 @@ ns.Config = { Get = function(_, k) return settings[k] end, Set = function(_, k, 
 local shown = false
 local visible = true
 local listed, cancelled = 0, 0
-local passed = nil
+local passed, passedAlways = nil, nil
 ns.PostPanel = {
     view = "sell",
     frame = { IsVisible = function() return shown and visible end },
-    list = { WheelPass = function(_, on) passed = on end },
+    list = { WheelPass = function(_, on, always) passed = on; passedAlways = always end },
     IsShown = function() return shown end,
     ListNext = function() listed = listed + 1 end,
 }
@@ -195,6 +195,40 @@ SetOverrideBindingClick = realSet
 
 -- 9. Lists let a turn through only while the wheel is ours.
 assert(passed == true, "drawer lists let the wheel through while it is ours")
+assert(passedAlways == true, "a long list too, so a turn over it never scrolls")
+-- A list built after the wheel was taken is told on the next look.
+local late
+ns.SnipeView = { list = { WheelPass = function(_, on, always) late = on and always end } }
+drawer.hooks.OnUpdate(drawer, 2)
+assert(late == true, "a list built later lets the wheel through too")
+ns.SnipeView = nil
+
+-- 10. Snipe: wheel up buys, every time. A notch down does nothing and never
+-- eats the notch up that follows it.
+local bought = 0
+ns.Snipe = { BuyNext = function() bought = bought + 1 end }
+settings.snipeWheel, settings.snipeTab = true, true
+ns.PostPanel.view = "snipe"
+Wheel:Update()
+assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "the wheel is ours on Snipe")
+clock = clock + 1
+named[Wheel.CANCEL_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 0, "wheel down buys nothing on Snipe")
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 1, "wheel up right after a notch down still buys")
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 1, "a flick still buys once")
+clock = clock + 1
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 2, "and the next turn buys again")
+-- With Mouse Wheel unticked Snipe's own switch still holds the wheel.
+settings.mouseWheelListing = false
+Wheel:Update()
+assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "Snipe keeps the wheel on its own switch")
+settings.mouseWheelListing = true
+ns.PostPanel.view = "sell"
+ns.Snipe = nil
+Wheel:Update()
 
 -- 8. The drawer still "shown" but its window hidden: the wheel goes back.
 visible = false
