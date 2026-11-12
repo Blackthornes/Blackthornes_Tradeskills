@@ -472,6 +472,7 @@ function MailReport:Build()
     visits:SetPoint("BOTTOMLEFT", PAD, 14)
 
     self.frame = frame
+    if ns.SharedWindow and ns.SharedWindow.KeepSpot then ns.SharedWindow.KeepSpot(frame, "ts.mailreport") end
     return frame
 end
 
