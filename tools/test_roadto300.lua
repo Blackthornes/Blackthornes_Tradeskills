@@ -615,6 +615,34 @@ check("says how many you have", Road.Texts(paced.steps[6], "Fishing", 15, 356).t
   "Fish get away here until you reach 130. Put on a item 6530 (+50) first. You have 4.")
 check("never a spot it doesn't know", Road:PlaceFor(westfall, 356), nil)
 
+print("\nskip a recipe")
+local function HasCandidate(id)
+  for _, c in ipairs(Road:Candidates(164)) do if c.record.recipeID == id then return true end end
+  return false
+end
+check("the belt is offered", HasCandidate(3), true)
+check("nothing skipped yet", #Road:SkippedOn(164), 0)
+local beforePlan = Road:Get(professions[1])
+check("skip needs a recipe ID", Road:Skip(nil), false)
+check("skip the belt", Road:Skip(3), true)
+check("kept by name", ns.db.roadSkipped[3], ns.RecipeBook:Get(3).name)
+check("it is skipped", Road:IsSkipped(3), true)
+check("another is not", Road:IsSkipped(4), false)
+check("the road leaves it out", HasCandidate(3), false)
+local skippedPlan = Road:Get(professions[1])
+check("the plan is worked out again", skippedPlan ~= beforePlan, true)
+local beltLeft = false
+for _, step in ipairs(skippedPlan.steps) do
+  if step.kind == "craft" and step.recipeID == 3 then beltLeft = true end
+end
+check("no step for it", beltLeft, false)
+check("listed for its profession", Road:SkippedOn(164)[1], 3)
+check("not for another", #Road:SkippedOn(185), 0)
+check("Show All brings it back", Road:ShowAllOn(164), 1)
+check("offered again", HasCandidate(3), true)
+check("nothing skipped after", Road:IsSkipped(3), false)
+check("Show All with nothing skipped", Road:ShowAllOn(164), 0)
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")

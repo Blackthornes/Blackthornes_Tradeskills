@@ -458,6 +458,19 @@ grey at 5 on Forever) is left out of `RoadPlan:Candidates`, and
 clams) at what a vendor pays for it (`RoadPlan.SellValue`,
 `Util.GetVendorSellPrice`); only a material with neither leaves the
 recipe off the road. Tested in `tools/test_roadto300.lua`.
+
+Skip This Recipe (a player asked, the owner said build it, 2026-11-12:
+a vendor's limited recipe was sold out): a right-click on a craft step
+not done (`RoadView.StepMenu`, through the list's `menu`) offers Queue
+Step, Show the Way and Skip This Recipe. `RoadPlan:Skip` keeps it in
+`roadSkipped[recipeID] = name` (account wide, never rename it; only the
+road reads it), `RoadPlan:Candidates` leaves it out and
+`RoadPlan.skipVersion` (in `Key`) works the road out again with the
+next cheapest. The footer says "1 recipe skipped." (`RoadView.FootText`,
+`SkippedText`) with a Show All button left of Queue All
+(`RoadView:PlaceShowAll`, `RoadPlan:ShowAllOn(line)`), for the profession
+shown only. Tested in `tools/test_roadto300.lua` and
+`tools/test_roadviewfit.lua`.
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first
