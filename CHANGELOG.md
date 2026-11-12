@@ -4,6 +4,21 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.25.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **Buy Sets.** Each open list in the auction house drawer's Lists view has a Spend Up To: box and a Buy Sets button. It fills the list in whole sets, keeps listings above Most I'll Pay out, and buys row by row with Buy, then Confirm.
+- **Mute All Sounds.** A new Mute All Sounds: row on the General page of Settings (or `/bts mute on|off`) quiets every sound from every Blackthornes addon at once. It starts off.
+- **Prefer TSM Prices.** A new Prefer TSM Prices: row on the Sharing page of Settings picks TSM's price over the shared ones while TSM Prices is on.
+- **Where profit comes from.** Level Up and Recipes to Learn show (AH), (Vendor) or (DE) after each profit. The recipe tooltip names the way that won. The Profit: choice on the Profit tab gains Vendor and DE, which leaves the auction house out.
+- **Road to 300.** Right-click a craft step and pick Skip This Recipe. The road works itself out again with the next cheapest one. Show All brings skipped recipes back.
+- **Queue time.** Each craft row on the Queue tab shows how long it takes to cast, and the footer says about how long the whole queue takes. Hover to see it by character.
+- **Demand in Recipes to Learn.** A Demand column on both Recipes to Learn lists, and a Demand line on recipe tooltips, so you can tell a recipe's item sells before you buy it.
+- **What you paid.** Item tooltips can say Bought For: your newest auction house buy and when, and Shift adds the average paid. Choose Off, Shift or Always under Bought For: on Tooltips.
+- **Posting price floor.** Your own scans now keep posting's price floor.
+- **Cured Thick Hide.** The Thunder Bluff and Darnassus trainers now teach it at skill 175.
+
 ## 1.24.0
 
 For WoW: Forever (interface 16001). A /reload is enough after updating.
