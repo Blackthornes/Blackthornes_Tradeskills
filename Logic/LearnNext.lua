@@ -35,6 +35,29 @@ local CITIES = {
     H = { ["Orgrimmar"] = true, ["Thunder Bluff"] = true, ["Undercity"] = true },
 }
 
+-- Thunder Bluff and Darnassus trainers are kept under the zone around them
+-- (Mulgore, Teldrassil) with that zone's map spot, so a spot inside the
+-- city's box counts as the city when picking one. The zone itself stays as
+-- it is, since the map pin reads the spot on that zone's map.
+local CITY_BOXES = {
+    { zone = "Mulgore", city = "Thunder Bluff", x1 = 28, x2 = 46, y1 = 14, y2 = 36 },
+    { zone = "Teldrassil", city = "Darnassus", x1 = 22, x2 = 43, y1 = 38, y2 = 64 },
+}
+
+local function CityOf(place)
+    local x, y = tonumber(place.x), tonumber(place.y)
+    if x and y then
+        for _, box in ipairs(CITY_BOXES) do
+            if place.zone == box.zone and x >= box.x1 and x <= box.x2
+                and y >= box.y1 and y <= box.y2 then
+                return box.city
+            end
+        end
+    end
+    return place.zone
+end
+LearnNext.CityOf = CityOf
+
 local function Spots()
     return ns.LEARN_SPOTS or {}
 end
@@ -89,8 +112,9 @@ local function Nearest(places, side)
     local cities = side and CITIES[side] or {}
     local city
     for _, place in ipairs(places) do
-        if here and place.zone == here then return place end
-        if not city and cities[place.zone] then city = place end
+        local where = CityOf(place)
+        if here and (place.zone == here or where == here) then return place end
+        if not city and cities[where] then city = place end
     end
     return city or places[1]
 end

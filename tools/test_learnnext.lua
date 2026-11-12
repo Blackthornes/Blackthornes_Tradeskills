@@ -423,6 +423,33 @@ check("a profession never read is left out", unread and unread[165], nil)
 ns.SkillUp = nil
 check("never raises", ns.Butler:LearnCost() ~= false, true)
 
+-- Thunder Bluff and Darnassus trainers are kept under Mulgore and
+-- Teldrassil with that zone's map spot: one inside the city still counts
+-- as the city, ahead of a trainer out in another zone.
+local lw = ns.LEARN_SPOTS.TRAINERS[165]
+ns.LEARN_SPOTS.TRAINERS[165] = {
+  { "Far Horde Expert", "Arathi Highlands", 28.3, 45.1, "H", 250 },
+  { "Bloodhoof Journey", "Mulgore", 45.4, 57.9, "H", 150 },
+  { "Bluff Expert", "Mulgore", 38.2, 25.5, "H", 225 },
+}
+local expertRecipe = { trainerCost = 2800, skillLineID = 165, classicSkill = 180, skill = 175 }
+UnitFactionGroup = function() return "Horde" end
+zoneHere = "The Barrens"
+check("Horde out in a zone goes to Thunder Bluff, not Arathi", LN:Place(expertRecipe).name, "Bluff Expert")
+check("its pin stays on the Mulgore map", LN:Place(expertRecipe).zone, "Mulgore")
+zoneHere = "Thunder Bluff"
+check("standing in Thunder Bluff", LN:Place(expertRecipe).name, "Bluff Expert")
+check("a spot out in Mulgore is no city", LN.CityOf({ zone = "Mulgore", x = 46.8, y = 60.8 }), "Mulgore")
+UnitFactionGroup = function() return "Alliance" end
+ns.LEARN_SPOTS.TRAINERS[165] = {
+  { "Far Alli Expert", "Feralas", 30, 40, "A", 250 },
+  { "Grove Expert", "Teldrassil", 30.6, 51.4, "A", 225 },
+}
+zoneHere = "Darkshore"
+check("Alliance out in a zone goes to Darnassus", LN:Place(expertRecipe).name, "Grove Expert")
+ns.LEARN_SPOTS.TRAINERS[165] = lw
+zoneHere = "Elwynn Forest"
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")
