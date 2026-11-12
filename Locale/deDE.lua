@@ -3527,7 +3527,7 @@ L["Sets That Fit:"] = "Passende Sätze:"
 L["Total:"] = "Gesamt:"
 L["Got"] = "Erhalten"
 L["Only %d Up"] = "Nur %d da"
-L["Prices went up past what you set to spend, so Buy Sets stopped."] = "Die Preise sind über deinen Betrag gestiegen, darum hat Sätze kaufen angehalten."
+L["Prices exceed your spend limit."] = "Die Preise übersteigen dein Ausgabelimit."
 -- Queue crafting time
 L["You"] = "Du"
 L["Not timed yet"] = "Noch ohne Zeit"

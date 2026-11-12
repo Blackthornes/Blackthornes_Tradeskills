@@ -397,7 +397,7 @@ function ListSets:PriceUpdated(total)
     if run.spent + total + StillToPay(run, i) > run.limit then
         self:Let(row)
         self:Stop()
-        Say(L["Prices went up past what you set to spend, so Buy Sets stopped."])
+        Say(L["Prices exceed your spend limit."])
         return
     end
     row.state, row.quote = "quoted", total

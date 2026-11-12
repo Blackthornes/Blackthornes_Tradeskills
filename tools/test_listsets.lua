@@ -192,7 +192,7 @@ check("the next row is active", ListSets:Active() == 2)
 ListSets:Press(2)
 handlers.COMMODITY_PRICE_UPDATED(nil, nil, 6, 48)   -- 160 + 48 > 200
 check("a price past the limit stops the run", ListSets.run == nil and #confirmed == 1 and cancelled >= 1)
-check("and says so", said[#said] == "Prices went up past what you set to spend, so Buy Sets stopped.")
+check("and says so", said[#said] == "Prices exceed your spend limit.")
 
 -- A quote that never comes gives the row back.
 ListSets:Start(1, 200)

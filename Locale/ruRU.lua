@@ -3529,7 +3529,7 @@ L["Sets That Fit:"] = "Подходит наборов:"
 L["Total:"] = "Итого:"
 L["Got"] = "Куплено"
 L["Only %d Up"] = "В продаже только %d"
-L["Prices went up past what you set to spend, so Buy Sets stopped."] = "Цены выросли выше того, что ты готов потратить, поэтому покупка наборов остановлена."
+L["Prices exceed your spend limit."] = "Цены превышают твой лимит трат."
 -- Queue crafting time
 L["You"] = "Ты"
 L["Not timed yet"] = "Время ещё неизвестно"
