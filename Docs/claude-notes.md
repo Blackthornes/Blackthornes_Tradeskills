@@ -1191,6 +1191,18 @@ prices have the item ("rival" never). "TSM prices" on the Sharing page
 and Butler's `GetValue` can answer from TSM too; still copper or nil. TSM's
 prices come from its desktop app, which may not cover Forever's realms; then
 it answers nil. Tested in `tools/test_tsmprices.lua`. Not yet seen in game.
+Prefer TSM Prices (a player asked, the owner said build it from a mockup,
+2026-11-12): "Prefer TSM Prices:" under OTHER PRICE ADDONS on the Sharing
+page (`preferTsmPrices`, account wide, off unless ticked, never rename it;
+greyed while `tsmPrices` is off). Ticked, `Prices:PreferredTSM` gives TSM's
+price in `GetValue` once your own scan is missing or more than
+`Prices.PREFER_TSM_AFTER` (4 hours, fixed, not `staleAfterSeconds`) old, and
+the other account, guild, realm and Auctionator are not asked. A price set
+by hand still applies; "rival" never comes from TSM; no TSM price, the usual
+way. Hover: "Uses TSM's price once your own scan is more than 4 hours old.
+Posting prices still come from your scans." No status line. Never word it as
+one source going first. Tested in `tools/test_prefertsm.lua`. Not yet seen
+in game.
 Auctionator comes after TSM (the owner said yes and allowed naming it,
 2026-10-12): `Logic/AuctionatorPrices.lua` reads
 `Auctionator.API.v1.GetAuctionPriceByItemID("Blackthornes_TS", itemID)`
