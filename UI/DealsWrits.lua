@@ -647,7 +647,7 @@ function UpdateWrit(entry)
     else
         parts[#parts + 1] = L["* From guides, until you turn one in."]
     end
-    parts[#parts + 1] = L["Each order can be done once a day. The coin pouch a turn-in gives is not counted."]
+    parts[#parts + 1] = L["Each order can be done once a day."]
     detail.note:SetText(table.concat(parts, " "))
     FitDetail()
 end
