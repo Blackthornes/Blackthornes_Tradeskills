@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.25.0
+
+- Buy Sets fills a shopping list in whole sets and stops at the gold you pick.
+- A new box mutes every sound from all the Blackthornes addons at once. It starts off.
+- Recipes show whether the profit comes from the auction house, a vendor or disenchanting.
+- You can skip a recipe on Road to 300, and the road picks the next one.
+- The Queue shows how long your crafts will take.
+- Tooltips can show what you paid at the auction house, and Recipes to Learn shows demand.
+
 ## 1.24.0
 
 - New Reset button in Settings to bring every window back if one gets lost.
