@@ -887,6 +887,21 @@ local function Build(container)
     goal:Hide()
     widgets.goal = goal
 
+    -- Group By, for the writs: as a plain list, or under the zone each
+    -- writ is handed in.
+    local groupBy = Widgets.CreateDropdown(toolbar, {
+        { text = L.Format("Group By: %s", L["None"]), value = "none" },
+        { text = L.Format("Group By: %s", L["Zone"]), value = "zone" },
+    }, function(value)
+        ns.DealsWrits:SetGroupBy(value)
+        ns.Config:Set("writGroupBy", value)
+        ShowFromTop()
+    end, { width = 140 })
+    groupBy:SetPoint("LEFT", goal, "RIGHT", 8, 0)
+    if ns.DealsWrits then groupBy:SetValue(ns.DealsWrits:GetGroupBy()) end
+    groupBy:Hide()
+    widgets.groupBy = groupBy
+
     local search = Widgets.CreateSearchBox(toolbar, L["Search items"], function(text)
         state.search = text or ""
         if ns.DealsFavor then ns.DealsFavor:SetSearch(state.search) end
@@ -1093,10 +1108,11 @@ function UI.DealsSetView(view)
     widgets.newOnly:SetShown(view == "flips")
     widgets.skipOverStack:SetShown(view == "favor")
     widgets.goal:SetShown(view == "writs")
+    widgets.groupBy:SetShown(view == "writs")
 
     -- Search sits after the menu this view shows, first when it has none.
     if widgets.show and widgets.show.Select then widgets.show:Select(view) end
-    local before = view == "flips" and widgets.sellTo or view == "writs" and widgets.goal or nil
+    local before = view == "flips" and widgets.sellTo or view == "writs" and widgets.groupBy or nil
     widgets.search:ClearAllPoints()
     if before then
         widgets.search:SetPoint("LEFT", before, "RIGHT", 8, 0)

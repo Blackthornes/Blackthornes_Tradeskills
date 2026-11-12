@@ -652,6 +652,60 @@ searched("blacksmith")
 check("search finds a profession's writs", #list.data == 30)
 searched("")
 
+-- Group By: Zone, by where each writ is handed in (learned in play).
+local groupBy = dropdowns[3]
+check("the Group By menu starts as it always was", groupBy.value == "none" and groupBy.shown == true
+    and groupBy.options[2].text == "Group By: Zone")
+local writOf = {}
+for _, entry in ipairs(ns.CRAFTSMANS_WRITS) do writOf[entry.item] = entry end
+ns.Writs:NoteCustomer(writOf[ROD], { name = "Tilda Hand", zone = "Ashenvale", mapID = 1440, x = 34.56, y = 48.12 })
+ns.Writs:NoteCustomer(writOf[WISDOM], { zone = "Duskwood", mapID = 1431, x = 70, y = 40, fromLog = true })
+check("a spot is kept to a tenth", ns.Writs:GetCustomer(writOf[ROD]).x == 34.6)
+check("a quest log spot never replaces one read at the customer",
+    ns.Writs:NoteCustomer(writOf[ROD], { zone = "Darkshore", x = 1, y = 1, fromLog = true }) == false
+    and ns.Writs:GetCustomer(writOf[ROD]).zone == "Ashenvale")
+groupBy.onSelect("zone")
+check("Group By is kept in Settings", config.writGroupBy == "zone")
+local function Header(title)
+    for index, entry in ipairs(list.data) do
+        if entry.header and entry.title == title then return entry, index end
+    end
+end
+local ash, ashAt = Header("Ashenvale")
+check("a zone heading counts its writs and rep", ash and ash.count == 1 and ash.place
+    and ash.place.name == "Tilda Hand" and list.data[ashAt + 1].key == ROD)
+local unseen, unseenAt = Header("Not Seen Yet")
+check("writs not learned yet go last", unseen and unseen.count == #ns.CRAFTSMANS_WRITS - 2
+    and unseenAt > ashAt)
+local headRow = Stub({ CreateTexture = function() return Stub() end })
+list.opts.createRow(headRow)
+list.opts.updateRow(headRow, ash)
+check("a heading shows its name and Show the Way", headRow.zoneName.text == "Ashenvale"
+    and headRow.zoneInfo.text:find("1 writ") ~= nil and headRow.showWay.shown == true)
+local menu
+ns.RowMenu = { Open = function(_, lines, opts) menu = { lines = lines, title = opts.title } end }
+list.opts.onClick(ash, 1, "RightButton")
+check("right-click a heading opens its menu", menu and menu.title == "ASHENVALE"
+    and menu.lines[1].text == "Show the Way" and menu.lines[2].text == "Skip This Zone")
+local shown
+ns.LearnNext = { ShowTheWay = function(_, row) shown = row; return true end }
+menu.lines[1].run()
+check("Show the Way goes to the customer", shown and shown.place.x == 34.6 and shown.place.zone == "Ashenvale")
+menu.lines[2].run()
+ash, ashAt = Header("Ashenvale")
+check("a skipped zone keeps only its heading, after the others", ash.skipped and not list.data[ashAt + 1].key
+    or (list.data[ashAt + 1] and list.data[ashAt + 1].header))
+list.opts.updateRow(headRow, ash)
+check("and offers Show Again", headRow.showAgain.shown == true and headRow.showWay.shown == false
+    and headRow.zoneInfo.text:find("Skipped") ~= nil)
+ns.DealsWrits:SkipZone("Ashenvale", false)
+check("Show Again brings it back", not Header("Ashenvale").skipped)
+groupBy.onSelect("none")
+check("back to no grouping", not list.data[1].header)
+local plainRow = Stub()
+list.opts.createRow(plainRow)
+list.opts.updateRow(plainRow, list.data[1])
+
 show.onSelect("flips")
 check("back to the flips, the goal menu hides", goal.shown == false and #lists == 2)
 

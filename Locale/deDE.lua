@@ -3561,3 +3561,17 @@ L["Buying the parts earns more each time, and it's faster too."] = "Die Teile zu
 L["Nobody sells %s right now, so you make it."] = "Gerade verkauft niemand %s, also stellst du es her."
 L["You can't make %s, so you buy it."] = "Du kannst %s nicht herstellen, also kaufst du es."
 L["Only crafting time counts, not buying or selling."] = "Nur die Herstellzeit zählt, nicht Kaufen oder Verkaufen."
+
+-- Craftsman's Writs, grouped by where each is handed in.
+L["Group By: %s"] = "Gruppieren: %s"
+L["Zone"] = "Gebiet"
+L["Show Again"] = "Wieder zeigen"
+L["Skip This Zone"] = "Gebiet überspringen"
+L["Not Seen Yet"] = "Noch nicht gesehen"
+L["Turn one in to learn where"] = "Gib einen ab, um den Ort zu lernen"
+L["· 1 writ"] = "· 1 Auftrag"
+L["· %d writs"] = "· %d Aufträge"
+L["· Skipped · 1 writ"] = "· Übersprungen · 1 Auftrag"
+L["· Skipped · %d writs"] = "· Übersprungen · %d Aufträge"
+L["· 1 writ · %d rep"] = "· 1 Auftrag · %d Ruf"
+L["· %d writs · %d rep"] = "· %d Aufträge · %d Ruf"

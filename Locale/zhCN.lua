@@ -3559,3 +3559,17 @@ L["Buying the parts earns more each time, and it's faster too."] = "购买材料
 L["Nobody sells %s right now, so you make it."] = "现在没人出售%s，所以你自己制作。"
 L["You can't make %s, so you buy it."] = "你无法制作%s，所以你购买它。"
 L["Only crafting time counts, not buying or selling."] = "只计算制作时间，不算购买和出售。"
+
+-- Craftsman's Writs, grouped by where each is handed in.
+L["Group By: %s"] = "分组：%s"
+L["Zone"] = "区域"
+L["Show Again"] = "重新显示"
+L["Skip This Zone"] = "跳过此区域"
+L["Not Seen Yet"] = "尚未见过"
+L["Turn one in to learn where"] = "交一次就能知道地点"
+L["· 1 writ"] = "· 1 张委托"
+L["· %d writs"] = "· %d 张委托"
+L["· Skipped · 1 writ"] = "· 已跳过 · 1 张委托"
+L["· Skipped · %d writs"] = "· 已跳过 · %d 张委托"
+L["· 1 writ · %d rep"] = "· 1 张委托 · %d 声望"
+L["· %d writs · %d rep"] = "· %d 张委托 · %d 声望"

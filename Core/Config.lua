@@ -245,6 +245,9 @@ local DEFAULTS = {
         -- Deals, Craftsman's Writs: the reputation goal the panel works
         -- towards (UI/DealsWrits.lua).
         writGoal = "honored",
+        -- How the writ list is grouped: "none" (as it always was) or "zone",
+        -- by where each writ is handed in. Never rename it.
+        writGroupBy = "none",
 
         scanBudgetMs = 8,
 

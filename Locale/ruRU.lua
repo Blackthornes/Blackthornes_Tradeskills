@@ -3563,3 +3563,17 @@ L["Buying the parts earns more each time, and it's faster too."] = "Покупа
 L["Nobody sells %s right now, so you make it."] = "Сейчас никто не продаёт %s, поэтому ты делаешь это сам."
 L["You can't make %s, so you buy it."] = "Ты не можешь сделать %s, поэтому покупаешь."
 L["Only crafting time counts, not buying or selling."] = "Считается только время создания, без покупки и продажи."
+
+-- Craftsman's Writs, grouped by where each is handed in.
+L["Group By: %s"] = "Группировать: %s"
+L["Zone"] = "Зона"
+L["Show Again"] = "Показать снова"
+L["Skip This Zone"] = "Пропустить зону"
+L["Not Seen Yet"] = "Ещё не видели"
+L["Turn one in to learn where"] = "Сдай один, чтобы узнать где"
+L["· 1 writ"] = "· 1 заказ"
+L["· %d writs"] = "· заказов: %d"
+L["· Skipped · 1 writ"] = "· Пропущена · 1 заказ"
+L["· Skipped · %d writs"] = "· Пропущена · заказов: %d"
+L["· 1 writ · %d rep"] = "· 1 заказ · %d репутации"
+L["· %d writs · %d rep"] = "· заказов: %d · %d репутации"
