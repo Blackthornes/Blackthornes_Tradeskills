@@ -76,13 +76,31 @@ function View:Entries()
             searchable = Lists().Searchable(lines), lines = lines, rules = rules or 0,
         }
         if not open then return end
+        -- Buy Sets under way on this list (Logic/ListSets.lua): its rows
+        -- show what to buy, and the tools wait.
+        local run = not auto and not linked and ns.ListSets and ns.ListSets:RunFor(key)
+        if run and run.phase == "ready" then
+            entries[#entries + 1] = { kind = "result", key = key, run = run }
+            local active = ns.ListSets:Active()
+            for i, setRow in ipairs(run.rows) do
+                entries[#entries + 1] = { kind = "setitem", key = key, run = run, index = i,
+                    setRow = setRow, itemID = setRow.itemID, active = i == active }
+            end
+            return
+        end
         -- The other account's lists are read only: no tools to change them.
-        if not linked then
+        if not linked and not run then
             entries[#entries + 1] = { kind = "tools", key = key, auto = auto }
         end
+        local wanted = false
         for _, line in ipairs(lines) do
             entries[#entries + 1] = { kind = "item", key = key, auto = auto, linked = linked,
                 line = line, itemID = line.itemID }
+            if (line.want or 0) > 0 then wanted = true end
+        end
+        -- Buy Sets' foot row: Spend Up To: and the button.
+        if not auto and not linked and not run and wanted and ns.ListSets then
+            entries[#entries + 1] = { kind = "sets", key = key }
         end
     end
 
@@ -247,6 +265,12 @@ local function Typing(row)
         return edit and edit.HasFocus and edit:HasFocus() and true or false
     end
     if row.want and row.want:IsShown() and Focused(row.want) then return true end
+    local spend = rawget(row, "spend")
+    if spend and row.spendHolder:IsShown() then
+        for _, box in ipairs(spend.boxes) do
+            if Focused(box) then return true end
+        end
+    end
     local pay = rawget(row, "maxPay")
     if pay and row.payHolder:IsShown() then
         for _, box in ipairs(pay.boxes) do
@@ -266,7 +290,10 @@ local function CreateRow(row)
     row.icon:SetPoint("TOPLEFT", 20, -4)
 
     row.listSearch = Widgets.CreateButton(row, L["Search"], function()
-        if row.data and row.data.kind == "list" then View:SearchList(row.data) end
+        local data = row.data
+        if not (data and data.kind == "list") then return end
+        if ns.ListSets and ns.ListSets:RunFor(data.key) then return ns.ListSets:Stop() end
+        View:SearchList(data)
     end, { width = 66, height = 20, primary = true,
         tooltip = L["Search the auction house for everything on this list you still need."] })
     row.listSearch:SetPoint("RIGHT", row, "RIGHT", -6, 0)
@@ -351,6 +378,8 @@ local function CreateRow(row)
     end
     row.payHolder:Hide()
 
+    View:CreateSetParts(row)
+
     -- The tools under an open list.
     row.tools = {}
     local function Tool(text, width, onClick, opts)
@@ -398,7 +427,8 @@ end
 
 local function HideAll(row)
     for _, part in ipairs({ row.chevron, row.icon, row.listSearch, row.total, row.remove,
-        row.itemSearch, row.want, row.name, row.sub, row.payHolder }) do
+        row.itemSearch, row.want, row.name, row.sub, row.payHolder, row.spendHolder,
+        row.setBuy, row.setCost, row.setAct, row.setActGold, row.setTag, row.headBuy, row.headCost }) do
         part:Hide()
     end
     row.icon:SetAlpha(1)
@@ -435,11 +465,20 @@ local function UpdateRow(row, entry)
         row.name:Show()
         row.total:SetText(entry.total > 0 and Money(entry.total) or "")
         row.total:Show()
-        row.listSearch:SetText(View:SearchLabel(entry))
-        row.listSearch:SetEnabledState(#entry.searchable > 0)
+        if ns.ListSets and ns.ListSets:RunFor(entry.key) then
+            row.listSearch:SetText(L["Stop"])
+            row.listSearch:SetEnabledState(true)
+        else
+            row.listSearch:SetText(View:SearchLabel(entry))
+            row.listSearch:SetEnabledState(#entry.searchable > 0)
+        end
         row.listSearch:Show()
         return
     end
+
+    if entry.kind == "sets" then return View:ShowSpend(row, entry) end
+    if entry.kind == "result" then return View:ShowResult(row, entry) end
+    if entry.kind == "setitem" then return View:ShowSetItem(row, entry) end
 
     if entry.kind == "tools" then
         if entry.auto then
@@ -566,6 +605,186 @@ function View:ShowMaxPay(row, entry, key)
     end
     row.payRule:SetText(rule and rule > 0 and L.Format("List rule, %s", Money(rule)) or "")
     row.payHolder:Show()
+end
+
+--------------------------------------------------------------------------------
+-- Buy Sets (Logic/ListSets.lua): the foot row, the result line and the rows
+--------------------------------------------------------------------------------
+
+View.spend = {}       -- what was typed in Spend Up To:, by list key (memory only)
+
+--- A button just wide enough for its widest word (German runs longer).
+local function FitWidth(words, least)
+    local width = least
+    if Theme.MeasureText then
+        for _, word in ipairs(words) do
+            local ok, w = pcall(Theme.MeasureText, "small", word)
+            if ok and type(w) == "number" then width = math.max(width, math.ceil(w) + 20) end
+        end
+    end
+    return width
+end
+
+local SET_COST_WIDTH = 74
+local SET_BUY_WIDTH = 34
+
+function View:CreateSetParts(row)
+    -- Spend Up To: and Buy Sets, under an open list's items.
+    row.spendHolder = CreateFrame("Frame", nil, row)
+    row.spendHolder:SetAllPoints(row)
+    row.spendLabel = Theme.CreateLabel(row.spendHolder, "small", "accent")
+    row.spendLabel:SetPoint("LEFT", row.spendHolder, "LEFT", 22, 0)
+    row.spendLabel:SetText(L["Spend Up To:"])
+    local make = ns.PriceEditor and ns.PriceEditor.MoneyBoxes
+    if make then
+        row.spend = make(row.spendHolder, function(copper)
+            local data = row.data
+            if data and data.kind == "sets" and row.spendFor == data.key then
+                View.spend[data.key] = copper > 0 and copper or nil
+            end
+        end)
+        local width = Theme.TextWidth and Theme.TextWidth(row.spendLabel)
+        row.spend:SetPoint("LEFT", row.spendLabel, "LEFT",
+            math.ceil(type(width) == "number" and width or 80) + 8, 0)
+    end
+    row.buySets = Widgets.CreateButton(row.spendHolder, L["Buy Sets"], function()
+        local data = row.data
+        if not (data and data.kind == "sets") then return end
+        local spend = rawget(row, "spend")
+        local copper = 0
+        if spend then
+            spend:Flush()
+            copper = spend:Get()
+            View.spend[data.key] = copper > 0 and copper or nil
+        end
+        if copper <= 0 then
+            if spend then spend.gold.editBox:SetFocus() end
+            return
+        end
+        ns.ListSets:Start(data.key, copper)
+    end, { width = FitWidth({ L["Buy Sets"] }, 80), height = 20, primary = true })
+    row.buySets:SetPoint("RIGHT", row.spendHolder, "RIGHT", -6, 0)
+    row.spendHolder:Hide()
+
+    -- The row of each item while Buy Sets runs: BUY, COST and its button.
+    row.setActGold = Widgets.CreateButton(row, L["Buy"], function() View:PressSet(row) end,
+        { width = FitWidth({ L["Buy"], L["Confirm"] }, 64), height = 20, primary = true })
+    row.setActGold:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    row.setAct = Widgets.CreateButton(row, L["Buy"], function() View:PressSet(row) end,
+        { width = FitWidth({ L["Buy"], L["Confirm"] }, 64), height = 20 })
+    row.setAct:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    row.setTag = Theme.CreateLabel(row, "tiny", "profit", "CENTER")
+    row.setTag:SetPoint("CENTER", row.setAct, "CENTER", 0, 0)
+    row.setCost = Theme.CreateLabel(row, "small", "text", "RIGHT")
+    row.setCost:SetPoint("RIGHT", row.setAct, "LEFT", -8, 0)
+    row.setCost:SetWidth(SET_COST_WIDTH)
+    row.setBuy = Theme.CreateLabel(row, "small", "text", "RIGHT")
+    row.setBuy:SetPoint("RIGHT", row.setCost, "LEFT", -8, 0)
+    row.setBuy:SetWidth(SET_BUY_WIDTH)
+
+    -- The result line's column heads, over BUY and COST.
+    row.headCost = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
+    row.headCost:SetPoint("BOTTOMRIGHT", row.setCost, "TOPRIGHT", 0, -2)
+    row.headCost:SetText(L["COST"])
+    row.headBuy = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
+    row.headBuy:SetPoint("BOTTOMRIGHT", row.setBuy, "TOPRIGHT", 0, -2)
+    row.headBuy:SetText(L["BUY"])
+    for _, part in ipairs({ row.setActGold, row.setAct, row.setTag, row.setCost, row.setBuy,
+        row.headCost, row.headBuy }) do
+        part:Hide()
+    end
+end
+
+--- The foot row: Spend Up To: (empty until something is typed) and Buy Sets.
+function View:ShowSpend(row, entry)
+    local spend = rawget(row, "spend")
+    if spend then
+        local typing = false
+        for _, box in ipairs(spend.boxes) do
+            local edit = box.editBox
+            if edit.HasFocus and edit:HasFocus() then typing = true end
+        end
+        if typing and row.spendFor ~= entry.key then
+            row.spendFor = nil
+            spend:Flush()
+            typing = false
+        end
+        if not typing then
+            row.spendFor = entry.key
+            local copper = self.spend[entry.key]
+            if copper then
+                spend:Set(copper)
+            else
+                -- Empty, not 0: nothing happens until a number is typed.
+                for _, box in ipairs(spend.boxes) do box.editBox:SetText("") end
+            end
+        end
+    end
+    row.spendHolder:Show()
+end
+
+--- Sets That Fit: N and Total: X, over the BUY and COST columns.
+function View:ShowResult(row, entry)
+    local run = entry.run
+    row.name:ClearAllPoints()
+    row.name:SetPoint("LEFT", 22, 0)
+    row.name:SetPoint("RIGHT", row.setBuy, "LEFT", -6, 0)
+    row.name:SetText(("%s |c%s%d|r     %s %s"):format(L["Sets That Fit:"], ns.COLORS.accent,
+        run.sets or 0, L["Total:"], Money(run.total or 0)))
+    row.name:Show()
+    row.headBuy:Show()
+    row.headCost:Show()
+end
+
+--- One item while Buy Sets runs: how many to buy, what it costs, and Buy,
+--- Confirm, Got or Only N Up.
+function View:ShowSetItem(row, entry)
+    local setRow = entry.setRow
+    Theme.SetItemIcon(row.icon, setRow.itemID)
+    row.icon:Show()
+    row.name:ClearAllPoints()
+    row.name:SetPoint("LEFT", 40, 0)
+    row.name:SetPoint("RIGHT", row.setBuy, "LEFT", -6, 0)
+    row.name:SetText(Util.GetItemName(setRow.itemID))
+    local r, g, b = Util.GetItemQualityColor(setRow.itemID)
+    if r then row.name:SetTextColor(r, g, b) else View.waiting = true end
+    row.name:Show()
+    row.setBuy:SetText(tostring(setRow.buy or 0))
+    row.setBuy:Show()
+    row.setCost:SetText(Money(setRow.quote or setRow.cost or 0))
+    row.setCost:Show()
+
+    local got = setRow.state == "got"
+    local dim = got and 0.5 or 1
+    row.icon:SetAlpha(dim)
+    row.name:SetAlpha(dim)
+    row.setBuy:SetAlpha(dim)
+    row.setCost:SetAlpha(dim)
+
+    if got then
+        row.setTag:SetText(("|TInterface\\RaidFrame\\ReadyCheck-Ready:12:12|t %s"):format(L["Got"]))
+        row.setTag:SetTextColor(Theme.Unpack("profit"))
+        row.setTag:Show()
+        return
+    end
+    if not setRow.state then return end   -- nothing to buy of this one
+    if setRow.short and not entry.active then
+        row.setTag:SetText(L.Format("Only %d Up", setRow.buy or 0))
+        row.setTag:SetTextColor(Theme.Unpack("loss"))
+        row.setTag:Show()
+        return
+    end
+    local button = entry.active and row.setActGold or row.setAct
+    local quoted = setRow.state == "quoted"
+    button:SetText(quoted and L["Confirm"] or L["Buy"])
+    -- Waiting on the game: the button rests until it answers.
+    button:SetEnabledState(setRow.state == "todo" or quoted)
+    button:Show()
+end
+
+function View:PressSet(row)
+    local data = row.data
+    if data and data.kind == "setitem" and ns.ListSets then ns.ListSets:Press(data.index) end
 end
 
 local function ShowTooltip(row, entry)
@@ -916,7 +1135,7 @@ function View:Build(body, frame, topAnchor, opts)
         updateRow = UpdateRow,
         onEnter = ShowTooltip,
         onLeave = function() GameTooltip:Hide() end,
-        isSelected = function(entry) return entry.kind == "list" and entry.open end,
+        isSelected = function(entry) return (entry.kind == "list" and entry.open) or entry.active == true end,
         onClick = function(entry)
             if entry.kind ~= "list" then return end
             View.open = (View.open ~= entry.key) and entry.key or nil

@@ -3512,6 +3512,14 @@ L["Window Places:"] = "Place des fenêtres :"
 L["Every Tradeskills window is back where it starts."] = "Chaque fenêtre de Tradeskills est revenue à sa place de départ."
 L["put every Tradeskills window back where it starts"] = "remet chaque fenêtre de Tradeskills à sa place de départ"
 
+-- Buy Sets (Logic/ListSets.lua)
+L["Spend Up To:"] = "Dépenser jusqu'à :"
+L["Buy Sets"] = "Acheter des lots"
+L["Sets That Fit:"] = "Lots possibles :"
+L["Total:"] = "Total :"
+L["Got"] = "Acquis"
+L["Only %d Up"] = "Seulement %d en vente"
+L["Prices went up past what you set to spend, so Buy Sets stopped."] = "Les prix ont dépassé ce que tu voulais dépenser, alors Acheter des lots s'est arrêté."
 -- Queue crafting time
 L["You"] = "Toi"
 L["Not timed yet"] = "Pas encore chronométré"

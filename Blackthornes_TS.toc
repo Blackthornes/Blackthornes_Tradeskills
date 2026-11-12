@@ -76,6 +76,7 @@ Logic\QueueMail.lua
 Logic\ShoppingLists.lua
 Logic\ListRules.lua
 Logic\AHBuys.lua
+Logic\ListSets.lua
 Logic\DisenchantBuys.lua
 Logic\MaterialFinder.lua
 Logic\AuctionTracker.lua
