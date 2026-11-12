@@ -1969,6 +1969,25 @@ dark glass rows ITEM / LEFT / PRICE, "%d up" foot, "Nothing up right now.").
   window. No new words. Tested in `tools/test_verify.lua` and
   `tools/test_auctiontrackerui.lua`.
 
+## Mute All Sounds
+
+A player asked, the owner said build it (2026-11-12), in all five addons:
+one box quiets every sound every Blackthornes addon plays. "Mute All
+Sounds:" at the top of SOUNDS on the General page and `/bts mute [on|off]`; off unless ticked. It lives on
+the shared choices board (`UI/SharedChoices.lua`, the same file in all
+five): `SharedChoices:SetMute(on)` sets it and tells the others,
+`ns.Muted()` answers every play call, and each addon keeps it in its own
+account save as `muteSounds` and `muteSoundsAt` (never rename them). Each
+joins with a reader of those two (`Join(name, write, readMute)`), read at
+the first sound after its save loads, the newest winning, so an addon that
+was off when the box was ticked still goes quiet. Every `PlaySound` and
+`PlaySoundFile` asks `ns.Muted()` first, fallbacks too; a new sound must
+as well. Warnings still show on screen and in chat. Here every call goes
+through `ns.PlaySound` and `ns.PlaySoundFile` (`Core/Init.lua`), the saved
+data alarm too (it was left out of the sound switches, never out of the
+mute), and `tools/test_soundchannel.lua` reads that shape. Tested in
+`tools/test_housekit.lua` and `tools/test_sounds.lua`.
+
 ## The auction house window (taken out)
 
 The owner had a full replacement auction house window started
@@ -1977,3 +1996,19 @@ any release: "scrap this idea". All of it was taken out again, so the
 auction house works as it did before. Never build it again unasked. A
 saved `ownAuctionHouse` may sit in a save that tried it; it is unread,
 never reuse the name.
+
+## Queue crafting time
+
+A player asked, the owner said build it from a mockup (2026-11-12): how
+long the queue takes to cast. `Queue:GetCraftTime()` adds each entry's
+count times one cast (`CraftTime:GetCast`: the player's own casts first,
+then the game's), sub-crafts too, split by crafter (`byCrafter`); a craft
+with no known cast is counted apart (`untimed`, `untimedBy`) and never
+guessed, and `seconds` is nil when nothing is timed. The Queue tab shows a
+time on each craft row (no heading, since the rows have none; "?" in gold
+when not timed yet) and "about X" in its footer; the craft pane's bottom
+line says "N queued · about X · profit Y", the time dropping first when
+room runs short. Both hovers are `ns.QueueTimeTip` (UI/Tab_Queue.lua):
+Crafting Time, each character most first ("You" for the one playing),
+Not timed yet, and a note that only casting counts. Nothing saved, no
+setting. Tested in `tools/test_queuecrafttime.lua`. Not yet seen in game.
