@@ -742,7 +742,7 @@ end
 function Snipe:Chime()
     if Get("snipeSound", true) ~= true then return end
     if InCombatLockdown and InCombatLockdown() then return end
-    if PlaySoundFile then pcall(PlaySoundFile, self.SOUND, "Master") end
+    if PlaySoundFile then pcall(ns.PlaySoundFile or PlaySoundFile, self.SOUND, "Master") end
 end
 
 --------------------------------------------------------------------------
