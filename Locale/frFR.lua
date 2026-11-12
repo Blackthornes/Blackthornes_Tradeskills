@@ -3520,3 +3520,8 @@ L["Casting only. Walking and waiting aren't counted. A craft gets its time once 
 L["%d craft  ·  about %s  ·  materials %s  ·  profit %s"] = "%d fabrication  ·  environ %s  ·  composants %s  ·  profit %s"
 L["%d crafts  ·  about %s  ·  materials %s  ·  profit %s"] = "%d fabrications  ·  environ %s  ·  composants %s  ·  profit %s"
 L["%d queued · about %s · profit |c%s%s|r%s"] = "%d dans la file · environ %s · profit |c%s%s|r%s"
+L["Bought for"] = "Acheté pour"
+L["Average paid"] = "Prix moyen payé"
+L["(%d in %d buys)"] = "(%d en %d achats)"
+L["Bought For on Tooltips:"] = "Prix d'achat dans les infobulles :"
+L["What you last paid for an item on the auction house. Hold Shift for the average."] = "Ce que tu as payé la dernière fois pour un objet à l'hôtel des ventes. Maintiens Maj pour la moyenne."

@@ -3522,3 +3522,8 @@ L["Casting only. Walking and waiting aren't counted. A craft gets its time once 
 L["%d craft  ·  about %s  ·  materials %s  ·  profit %s"] = "созданий: %d  ·  около %s  ·  материалы %s  ·  прибыль %s"
 L["%d crafts  ·  about %s  ·  materials %s  ·  profit %s"] = "созданий: %d  ·  около %s  ·  материалы %s  ·  прибыль %s"
 L["%d queued · about %s · profit |c%s%s|r%s"] = "в очереди %d · около %s · прибыль |c%s%s|r%s"
+L["Bought for"] = "Куплено за"
+L["Average paid"] = "В среднем заплачено"
+L["(%d in %d buys)"] = "(%d за %d покупок)"
+L["Bought For on Tooltips:"] = "Цена покупки в подсказках:"
+L["What you last paid for an item on the auction house. Hold Shift for the average."] = "Сколько ты в последний раз заплатил за предмет на аукционе. Удерживай Shift, чтобы увидеть среднюю цену."

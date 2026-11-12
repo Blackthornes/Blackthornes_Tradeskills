@@ -3518,3 +3518,8 @@ L["Casting only. Walking and waiting aren't counted. A craft gets its time once 
 L["%d craft  ·  about %s  ·  materials %s  ·  profit %s"] = "%d 个制造  ·  约 %s  ·  材料 %s  ·  利润 %s"
 L["%d crafts  ·  about %s  ·  materials %s  ·  profit %s"] = "%d 个制造  ·  约 %s  ·  材料 %s  ·  利润 %s"
 L["%d queued · about %s · profit |c%s%s|r%s"] = "队列中 %d 个 · 约 %s · 利润 |c%s%s|r%s"
+L["Bought for"] = "买入价"
+L["Average paid"] = "平均买入价"
+L["(%d in %d buys)"] = "（%d 个，%d 次购买）"
+L["Bought For on Tooltips:"] = "鼠标提示里的买入价："
+L["What you last paid for an item on the auction house. Hold Shift for the average."] = "你上次在拍卖行买这件物品花了多少钱。按住 Shift 查看平均价。"
