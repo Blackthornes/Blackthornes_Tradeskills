@@ -1275,6 +1275,26 @@ function CraftPanel:UpdateSortButton()
     })[self.sortBy]
 end
 
+--- The windows the player had open that stay in front of the pane: the main
+-- window and, with One Window on, the shared window it sits in (built by
+-- whichever addon's UI/SharedWindow.lua is newest, so it is read off the
+-- shared table, not ns.UI.window). Raising only the main window left the one
+-- window under the pane and its Queued list. Shown ones only, the shared
+-- window last, so it ends on top.
+function CraftPanel.FrontWindows()
+    local list = {}
+    local function add(frame)
+        if type(frame) ~= "table" or type(frame.Raise) ~= "function" then return end
+        if type(frame.IsShown) ~= "function" or not frame:IsShown() then return end
+        for _, have in ipairs(list) do if have == frame then return end end
+        list[#list + 1] = frame
+    end
+    add(ns.UI and ns.UI.window)
+    local hub = rawget(_G, "BlackthornesWindow")
+    add(type(hub) == "table" and hub.frame or nil)
+    return list
+end
+
 --- Dock to the right of the profession window, as tall as it is.
 function CraftPanel:Attach()
     local frame = self:Build()
@@ -1289,8 +1309,7 @@ function CraftPanel:Attach()
     -- Opening a profession puts the pane up after the main window, which
     -- left the pane drawn across it. The window the player had open stays
     -- in front; a click on the pane still brings the pane forward.
-    local window = ns.UI and ns.UI.window
-    if window and window:IsShown() and window.Raise then window:Raise() end
+    for _, window in ipairs(CraftPanel.FrontWindows()) do window:Raise() end
 
     -- The tabs can be laid out a moment after the window opens, and the game
     -- moves the window into its slot beside the auction house after that:
