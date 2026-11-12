@@ -2782,7 +2782,7 @@ L["Swaps scans with guildmates who use Tradeskills. Your own scans always win."]
 L["TSM Prices:"] = "TSM 价格："
 L["Uses TradeSkillMaster prices for items you haven't priced."] = "对你没有价格的物品，使用 TradeSkillMaster 的价格。"
 L["Prefer TSM Prices:"] = "优先使用 TSM 价格："
-L["Uses TSM's price once your own scan is more than 4 hours old. Posting prices still come from your scans."] = "当你自己的扫描超过 4 小时后，使用 TSM 的价格。上架价格仍然来自你的扫描。"
+L["Uses TSM's price once your own scan is more than 1 hour old. Posting prices still come from your scans."] = "当你自己的扫描超过 1 小时后，使用 TSM 的价格。上架价格仍然来自你的扫描。"
 L["Auctionator Prices:"] = "Auctionator 价格："
 L["Price Order:"] = "价格顺序："
 L["TSM First"] = "TSM 优先"
