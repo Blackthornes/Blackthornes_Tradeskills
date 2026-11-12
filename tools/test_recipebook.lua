@@ -248,6 +248,10 @@ ns.RECIPE_BOOK.ITEMS[13288] = { 4097, 2500 }
 Book:Invalidate()
 check("a reported Forever skill beats Classic's", Book:GetSkill(4097), 140)
 check("Classic's stands where nobody said", Book:GetSkill(2158), 90)
+-- A trainer recipe: no tooltip will ever correct it (seen in game at 175).
+ns.RECIPE_BOOK.RECIPES[10482] = { 165, 180, 8172, 1, 1, { HEAVY, 1 }, "Cured Thick Hide", t = 2800 }
+Book:Invalidate()
+check("Cured Thick Hide asks for 175", Book:GetSkill(10482), 175)
 check("an unknown recipe has none", Book:GetSkill(424242), nil)
 
 -- The game's own recipe item tooltip.

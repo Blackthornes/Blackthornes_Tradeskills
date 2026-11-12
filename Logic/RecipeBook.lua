@@ -92,6 +92,9 @@ local FOREVER_SKILLS = {
     ["raptor hide belt"] = 140,
     ["raptor hide harness"] = 140,
     ["green whelp armor"] = 150,
+    -- A trainer recipe, so no tooltip ever corrects it: a player saw the
+    -- trainer ask for 175 (2026-11-12), where the estimate said 155.
+    ["cured thick hide"] = 175,
 }
 
 -- Required skills read from recipe items' tooltips, one read per item a
