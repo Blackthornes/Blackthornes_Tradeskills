@@ -63,6 +63,8 @@ Snipe.MOST_UNITS = 20
 -- Searches left free in the auction house's budget for the player's own
 -- clicks (a buy, a search). Snipe waits while fewer than this are left.
 Snipe.HEADROOM = 3
+-- Requests kept back from the top find's price check too, for a click.
+Snipe.BUY_ROOM = 1
 -- An average more than this many times the last scan's cheapest is left out.
 Snipe.SILLY_OVER = 10
 -- A scan stamp is when the scan started; records seen a little before count.
@@ -525,8 +527,28 @@ function Snipe:WaitingReady()
     return p ~= nil and p.auto == true and (p.phase == "quoted" or p.phase == "planned")
 end
 
+--- Is the top find's price check still getting too little room? It may
+--- use the requests searching leaves alone, all but BUY_ROOM.
+function Snipe.CrowdsBuy()
+    local q = ns.AHQueue
+    if not (q and q.RecentSendCount) then return false end
+    local ok, count = pcall(q.RecentSendCount, q)
+    if not (ok and type(count) == "number") then return false end
+    return count >= (q.BUDGET_MAX or 8) - Snipe.BUY_ROOM
+end
+
+--- Is there a top find whose price is not ready yet? Searching holds
+--- while there is, so the click on it pays at once.
+function Snipe:WantsReady()
+    if self.noReady or self.pending or not (self.running or self.viewShown) then return false end
+    local top = self:Top()
+    if not top then return false end
+    return not (top.retryAt and Now() < top.retryAt)
+end
+
 local function Busy()
     if Snipe.pending and not Snipe:WaitingReady() then return true end
+    if Snipe:WantsReady() then return true end
     if Snipe.CrowdsPlayer() then return true end
     if ns.AHQueue and ns.AHQueue.PlayerIsSelling then
         local ok, selling = pcall(ns.AHQueue.PlayerIsSelling, ns.AHQueue)
@@ -544,6 +566,7 @@ function Snipe:Next()
     end
     if cursor > #pool then cursor = 1 end
     if Busy() then
+        if self:WantsReady() then self:ReadySoon() end
         After(self.REST * 2, function() Snipe:Next() end)
         return
     end
@@ -805,11 +828,15 @@ function Snipe:Ready()
         After(top.retryAt - Now() + 0.1, function() Snipe:ReadySoon() end)
         return
     end
-    if self.CrowdsPlayer() then
-        After(self.REST * 2, function() Snipe:ReadySoon() end)
+    if self.CrowdsBuy() then
+        After(self.REST, function() Snipe:ReadySoon() end)
         return
     end
     self:Buy(top, true)
+    -- A check that could not even start must not hold searching for good.
+    if not self.pending and not (top.retryAt and Now() < top.retryAt) then
+        top.retryAt = Now() + self.READY_KEEP
+    end
 end
 
 --- Keep a readied quote fresh: ask again just before it runs out, and
@@ -829,8 +856,61 @@ function Snipe:KeepFresh(pending)
             After(Snipe.CONFIRM_FOR, function() Snipe:KeepFresh(pending) end)
             return
         end
-        Snipe:CancelBuy()
+        Snipe:Refresh(pending)
     end)
+end
+
+--- A readied price got old: ask again in place, so the deal stays ready
+--- for the click and is never let go just for its age.
+local PriceSort   -- set further down
+
+function Snipe:Refresh(pending)
+    if self.pending ~= pending or pending.phase ~= "quoted" then return end
+    local token = {}
+    pending.refreshing = token
+    local function Mine()
+        return Snipe.pending == pending and pending.phase == "quoted" and pending.refreshing == token
+    end
+    if not pending.item then
+        -- A stack: ask the game for the same units again. Until it answers
+        -- the old price can't be paid, so the buttons wait.
+        local ok = Util.HasFunction("C_AuctionHouse.StartCommoditiesPurchase")
+            and pcall(C_AuctionHouse.StartCommoditiesPurchase, pending.itemID, pending.count)
+        if not ok then return self:CancelBuy() end
+        Moved()
+        After(self.QUOTE_WAIT, function() if Mine() then Snipe:CancelBuy() end end)
+        return
+    end
+    -- One listing: read the listings again. The old listing can still be
+    -- paid for meanwhile.
+    local function Later()
+        if not Mine() then return end
+        pending.refreshing = nil
+        Snipe:KeepFresh(pending)
+    end
+    local q = ns.AHQueue
+    if not (q and q.Request and Util.HasFunction("C_AuctionHouse.SendSearchQuery")) then return Later() end
+    q:Request({
+        name = "snipe buy",
+        key = "snipe-buy",
+        priority = q.PRIORITY and q.PRIORITY.urgent or 10,
+        expires = self.QUOTE_WAIT,
+        send = function()
+            if not Mine() then return false end
+            local sent = pcall(C_AuctionHouse.SendSearchQuery, pending.key, PriceSort(), true)
+            if sent then pending.sent = Now() end
+            return sent
+        end,
+        onGiveUp = Later,
+    })
+    After(self.QUOTE_WAIT + 3, Later)
+end
+
+--- Is a readied stack's price being asked for again? It can't be paid
+--- until the answer is in.
+function Snipe:Repricing()
+    local p = self.pending
+    return p ~= nil and p.phase == "quoted" and p.refreshing ~= nil and not p.item
 end
 
 local function IsStack(itemID)
@@ -859,7 +939,7 @@ end
 
 local PRICE_SORT
 
-local function PriceSort()
+function PriceSort()
     if PRICE_SORT then return PRICE_SORT end
     local enum = rawget(_G, "Enum") and Enum.AuctionHouseSortOrder
     PRICE_SORT = { { sortOrder = enum and enum.Price or 0, reverseSort = false } }
@@ -1112,7 +1192,9 @@ end
 --- The item's listings came in: pick the cheapest one we may buy.
 function Snipe:ItemResults(itemKey)
     local pending = self.pending
-    if not (pending and pending.item and pending.phase == "asking" and pending.sent) then return end
+    if not (pending and pending.item and pending.sent) then return end
+    local again = pending.phase == "quoted" and pending.refreshing ~= nil and not pending.stack
+    if not (pending.phase == "asking" or again) then return end
     if itemKey and itemKey.itemID and itemKey.itemID ~= pending.itemID then return end
     if not (Util.HasFunction("C_AuctionHouse.GetNumItemSearchResults")
         and Util.HasFunction("C_AuctionHouse.GetItemSearchResultInfo")) then
@@ -1151,6 +1233,9 @@ function Snipe:ItemResults(itemKey)
         end
         return self:CancelBuy()
     end
+    -- A price that moved under a buy being confirmed asks for the click again.
+    if again and self.armed == pending and best.total ~= pending.total then self.armed = nil end
+    pending.refreshing = nil
     pending.phase, pending.total, pending.count, pending.auctionID = "quoted", best.total, best.count, best.auctionID
     pending.others = deals - 1
     Moved()
@@ -1160,6 +1245,13 @@ end
 function Snipe:CancelBuy()
     local pending = self.pending
     self.pending, self.armed = nil, nil
+    -- A background check that got no price waits a moment before it is
+    -- tried again, and searching goes on meanwhile.
+    if pending and pending.auto and pending.find
+        and (pending.phase == "asking" or pending.phase == "listing")
+        and not (pending.find.retryAt and Now() < pending.find.retryAt) then
+        pending.find.retryAt = Now() + self.RETRY_AFTER
+    end
     if pending and pending.item then
         if ns.AHQueue and ns.AHQueue.Cancel then pcall(ns.AHQueue.Cancel, ns.AHQueue, "snipe-buy", true) end
     elseif pending and Util.HasFunction("C_AuctionHouse.CancelCommoditiesPurchase") then
@@ -1171,7 +1263,19 @@ end
 --- The game answered with the real total.
 function Snipe:PriceUpdated(total)
     local pending = self.pending
-    if not (pending and pending.phase == "asking") then return end
+    if not pending then return end
+    if pending.phase == "quoted" and pending.refreshing and not pending.item then
+        -- The same units priced again: still ours unless they cost more now.
+        if type(total) ~= "number" or total <= 0 or total > self:Left()
+            or total > (pending.expected or pending.total) then
+            return self:CancelBuy()
+        end
+        if self.armed == pending and total ~= pending.total then self.armed = nil end
+        pending.refreshing, pending.total = nil, total
+        Moved()
+        return self:KeepFresh(pending)
+    end
+    if pending.phase ~= "asking" then return end
     if type(total) ~= "number" or total <= 0 then return self:CancelBuy() end
     -- The real price must still be a deal; if not, let it go.
     if total > self:Left() then
@@ -1208,6 +1312,7 @@ function Snipe:Pay()
         return "checking"
     end
     if not (pending and pending.phase == "quoted") then return false end
+    if self:Repricing() then return "checking" end
     if type(GetMoney) == "function" then
         local ok, money = pcall(GetMoney)
         if ok and type(money) == "number" and money < pending.total then

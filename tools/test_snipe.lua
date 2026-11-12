@@ -396,7 +396,7 @@ timers, Snipe.readyQueued = {}, nil
 
 -- 18. A new top.
 local b = { itemID = 41, kind = "vendor", price = 200, worth = 500, qty = 1 }
-a.left = nil
+a.left, a.retryAt = nil, nil
 Snipe.finds = { a, b }
 Snipe:Ready()
 assert(Snipe.pending and Snipe.pending.find == a)

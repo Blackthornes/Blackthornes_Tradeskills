@@ -222,6 +222,8 @@ function SnipeView.RowBuyState(find)
     local pending = snipe and snipe.pending
     if pending and pending.find == find then
         if snipe.armed == pending then return L["Confirm"], true end
+        -- An aged price is being checked again: wait for it.
+        if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
         if pending.phase == "quoted" or pending.phase == "planned" then
             local count = pending.count or (find and find.qty) or 1
             return L.Format("Buy %d for %s", count, Colored(pending.total or pending.expected)), true
@@ -737,6 +739,7 @@ function SnipeView:BuyState()
     local pending = snipe and snipe.pending
     if pending then
         if snipe.armed == pending then return L["Confirm"], true end
+        if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
         if pending.phase == "quoted" or pending.phase == "planned" then return ReadyText(pending), true end
         if pending.auto then return L["Checking..."], false end
         return L["Asking..."], false
