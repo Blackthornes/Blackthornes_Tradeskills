@@ -4,6 +4,15 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.24.0
+
+For WoW: Forever (interface 16001). A /reload is enough after updating.
+
+- **Reset window places.** If a window ever ends up off your screen, press Reset next to "Window Places:" on the Look page of Settings, or type `/bts resetwindows`. Every Tradeskills window goes back to where it starts.
+- **Road to 300.** With Real Cost picked, the plan no longer uses long yellow steps.
+- **Deutsch.** The new words are in Deutsch, and in Simplified Chinese, French, Spanish and Russian.
+
+
 ## 1.23.1
 
 For WoW: Forever (interface 16001). A /reload is enough after updating.

@@ -23,6 +23,12 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.24.0
+
+- New Reset button in Settings to bring every window back if one gets lost.
+- Road to 300 plans smarter steps when you pick Real Cost.
+
+
 ## 1.23.0
 
 - There is a new little window called My Auctions. It shows everything you have up, and when something sells, the row lights up and slides away.
