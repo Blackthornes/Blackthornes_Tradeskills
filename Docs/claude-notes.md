@@ -2108,6 +2108,29 @@ Chat says "Every window is back in its first spot." Tested in
 `tools/test_sharedwindow.lua` and each addon's settings test
 (Tradeskills: `tools/test_resetwindows.lua`).
 
+## Export Prices and Import Prices
+
+A player asked how to merge scan data from another computer (2026-11-13);
+Trent said build it, with the words "Export Prices" and "Import Prices".
+`Logic/PriceTransfer.lua` (`ns.PriceTransfer`) turns this realm and side's
+own credible scans from the last `KEEP_DAYS` (21) days into text, to carry
+by hand. Code format `BTSP1~realm~index/total~checksum~body`, body records
+`id:market:min:seen;` in base 36 (`Comm.ToBase36`, `Comm.Hash` for the
+checksum; no pipes, they are WoW's colour escape). Only item, market, cheapest
+listing and time seen go out: never rival or own prices, the ladder, sales,
+recipes, queue or anything taken from others. `Parse` checks everything
+before `Import` changes anything: format, parts, checksum, realm and side
+(another one is refused), every field, `MAX_RECORDS`, `MAX_PARTS`. `Import`
+takes a price only when it is newer than the one held or none is held; an
+updated record drops what described the old book (`rivalMin`, `ownMin`,
+`ignoredLow`, `ladder`, `ladderAt`, `quantity`, `odd`). The same code twice
+changes nothing, and parts (about `PART_CHARS` each) import alone in any
+order. The buttons sit under Export and Import in EXPORT AND IMPORT on the
+queue page of Settings, using the transfer dialog's modes
+(`UI:ShowPricePart`, "Next Part"). Account link still never sends price
+scans by itself; this is the by-hand way. Tested in
+`tools/test_pricetransfer.lua`. Not yet seen in game.
+
 ## A deposit share left from the 1 silver floor
 
 A player's Sell list said "A vendor pays more" on nearly every row
