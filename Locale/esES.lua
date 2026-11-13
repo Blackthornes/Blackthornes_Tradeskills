@@ -3578,3 +3578,8 @@ L["Puts every Blackthornes window back where it started. Your settings and data 
 L["Every window is back in its first spot."] = "Cada ventana ha vuelto a su primer sitio."
 L["put every Blackthornes window back where it started (reset)"] = "devolver cada ventana de Blackthornes a su sitio de inicio (reset)"
 L["Type /bts windows reset to put every window back in its first spot."] = "Escribe /bts windows reset para devolver cada ventana a su primer sitio."
+L["Disenchant Results:"] = "Resultados de desencantar:"
+L["Says in chat what each disenchant gave."] = "Dice en el chat lo que te dio cada desencantamiento."
+L["show what each disenchant gave in chat: /bts dechat on|off"] = "mostrar en el chat lo que dio cada desencantamiento: /bts dechat on|off"
+L["Disenchant results show in chat."] = "Los resultados de desencantar se muestran en el chat."
+L["Disenchant results no longer show in chat."] = "Los resultados de desencantar ya no se muestran en el chat."
