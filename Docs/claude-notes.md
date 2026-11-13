@@ -2107,3 +2107,23 @@ which clears both keys and calls each addon's own reset
 Chat says "Every window is back in its first spot." Tested in
 `tools/test_sharedwindow.lua` and each addon's settings test
 (Tradeskills: `tools/test_resetwindows.lua`).
+
+## A deposit share left from the 1 silver floor
+
+A player's Sell list said "A vendor pays more" on nearly every row
+(2026-11-13, the owner said build it): a share each remembered while the
+least deposit was 1 silver (2026-11-06 to 2026-11-10; 100c for 11 is
+about 9c each) was still taken off a sale by `Profit:NetAfterRisk`, so a
+12c stone looked worth less than a vendor's 4c. `Posting.IsFloorShare`
+tells such a share apart: `unit * quantity` is the old floor
+(`Posting.OLD_FLOOR`, 100) and it was seen before `Posting.FLOOR_ENDED`
+(`Posting.UnitSeenAt`: the record's `unitAt`, kept from now on; an older
+record's `at` only when its least is for the same count, since a later
+smaller quote moved `at` and kept the share). `GetCachedUnitDeposit` and
+`DepositFromRecord` answer nil for one, so the least deposit stands in
+until the next quote at the auction house, and `CacheUnitDeposit` no
+longer keeps one. The saved record is never rewritten or deleted;
+`unitAt` is an added field. The rule that a win under one deposit goes
+to the vendor is unchanged, and a 1s the game quotes now still counts.
+No new words. Tested in `tools/test_depositfloor.lua` and
+`tools/test_vendorpile.lua`.
