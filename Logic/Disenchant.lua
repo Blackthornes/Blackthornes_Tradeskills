@@ -721,7 +721,7 @@ end
 
 --- A material's name, whether or not the client has it cached.
 function Disenchant:MaterialName(itemID)
-    return MATERIAL_NAME[itemID]
+    return MATERIAL_NAME[itemID] and self:ItemName(itemID) or nil
 end
 
 --- An item's plain name from the saved facts alone, never asking the client:
