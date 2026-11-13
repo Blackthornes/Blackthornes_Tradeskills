@@ -42,6 +42,8 @@ local CITIES = {
 local CITY_BOXES = {
     { zone = "Mulgore", city = "Thunder Bluff", x1 = 28, x2 = 46, y1 = 14, y2 = 36 },
     { zone = "Teldrassil", city = "Darnassus", x1 = 22, x2 = 43, y1 = 38, y2 = 64 },
+    -- The Apothecarium's trainers are placed on Silverpine's map.
+    { zone = "Silverpine Forest", city = "Undercity", x1 = 70, x2 = 76, y1 = 6, y2 = 12 },
 }
 
 local function CityOf(place)
@@ -202,16 +204,27 @@ function LearnNext:Place(record)
 end
 
 --- The nearest trainer of the player's side for a profession who teaches
---- up to a skill, for Road to 300's trainer steps (2026-10-20).
+--- a rank, for Road to 300's trainer steps (2026-10-20).
+-- A trainer's number is the highest recipe it teaches, not the rank's cap,
+-- so a trainer teaches the rank whose cap is `needs` when its recipes go
+-- past the rank before (needs - 75): Expert (225) wants recipes over 150.
+-- Comparing it with the cap sent a 145 Alchemist past Undercity's Expert
+-- to Stonard's Artisan (2026-11-13).
 -- @param line   the Classic skill line
--- @param needs  the skill they must teach to
--- @return { kind = "trainer", name, zone, x, y } or nil
+-- @param needs  the cap of the rank to train (150, 225 or 300)
+-- @return { kind = "trainer", name, zone, x, y, mapID } or nil
 function LearnNext:TrainerFor(line, needs)
     local side = Side()
+    local from = (needs or 0) - 75
     local trainers = {}
     for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
-        if OnSide(row[5], side) and (row[6] or 0) >= (needs or 0) then
-            trainers[#trainers + 1] = { kind = "trainer", name = row[1], zone = row[2], x = row[3], y = row[4] }
+        if OnSide(row[5], side) and (row[6] or 0) > from then
+            local seen = SeenAt(row[1], row[2], "trainer")
+            trainers[#trainers + 1] = {
+                kind = "trainer", name = row[1], zone = row[2],
+                x = seen and seen.x or row[3], y = seen and seen.y or row[4],
+                mapID = seen and seen.mapID,
+            }
         end
     end
     return Nearest(trainers, side)
