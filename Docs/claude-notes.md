@@ -1243,6 +1243,17 @@ way. Hover: "Uses TSM's price once your own scan is more than 4 hours old.
 Posting prices still come from your scans." No status line. Never word it as
 one source going first. Tested in `tools/test_prefertsm.lua`. Not yet seen
 in game.
+TSM Price Source (a player asked, the owner said build it, 2026-11-13):
+"TSM Price Source:" under Prefer TSM Prices on the Sharing page, a text
+box (`tsmPriceSource`, account wide, nil or empty for DBMarket, never
+rename it; greyed while `tsmPrices` is off). It names the price TSM's
+"market" read uses (`TSMPrices:MarketSource`): DBMinBuyout, DBRecent or a
+TSM custom price. A source `TSM_API.IsCustomPriceValid` refuses, or one
+that gives no price for an item, falls back to DBMarket; "min" and
+"lowest" stay DBMinBuyout. Under the box, while refused: "TSM doesn't know
+that price. Using DBMarket." (`SourceRefused`). Saving calls
+`TSMPrices:Forget()`. Farmer has the same box and key on its Loot page.
+Tested in `tools/test_tsmprices.lua`. Not yet seen in game.
 Auctionator comes after TSM (the owner said yes and allowed naming it,
 2026-10-12): `Logic/AuctionatorPrices.lua` reads
 `Auctionator.API.v1.GetAuctionPriceByItemID("Blackthornes_TS", itemID)`
