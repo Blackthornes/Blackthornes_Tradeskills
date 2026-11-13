@@ -3592,3 +3592,9 @@ L["that prices code is from another realm or side"] = "这个价格代码来自�
 L["that prices code is too big"] = "这个价格代码太大了"
 L["took %d new price(s) and %d newer price(s), kept %d you already had newer"] = "采用了 %d 个新价格和 %d 个更新的价格，保留了 %d 个你已有的更新价格"
 L["(part %d of %d)"] = "（第 %d 部分，共 %d 部分）"
+
+L["Disenchant Results:"] = "分解结果："
+L["Says in chat what each disenchant gave."] = "在聊天中显示每次分解得到了什么。"
+L["show what each disenchant gave in chat: /bts dechat on|off"] = "在聊天中显示每次分解得到了什么：/bts dechat on|off"
+L["Disenchant results show in chat."] = "分解结果会显示在聊天中。"
+L["Disenchant results no longer show in chat."] = "分解结果不再显示在聊天中。"

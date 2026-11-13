@@ -3594,3 +3594,9 @@ L["that prices code is from another realm or side"] = "ce code de prix vient d'u
 L["that prices code is too big"] = "ce code de prix est trop gros"
 L["took %d new price(s) and %d newer price(s), kept %d you already had newer"] = "%d nouveau(x) prix et %d prix plus récent(s) pris, %d gardé(s) car tu en avais déjà de plus récents"
 L["(part %d of %d)"] = "(partie %d sur %d)"
+
+L["Disenchant Results:"] = "Résultats de désenchantement :"
+L["Says in chat what each disenchant gave."] = "Dit dans la discussion ce que chaque désenchantement t'a donné."
+L["show what each disenchant gave in chat: /bts dechat on|off"] = "montrer dans la discussion ce que chaque désenchantement a donné : /bts dechat on|off"
+L["Disenchant results show in chat."] = "Les résultats de désenchantement s'affichent dans la discussion."
+L["Disenchant results no longer show in chat."] = "Les résultats de désenchantement ne s'affichent plus dans la discussion."

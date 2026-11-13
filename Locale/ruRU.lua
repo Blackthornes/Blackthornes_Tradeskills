@@ -3596,3 +3596,9 @@ L["that prices code is from another realm or side"] = "этот код цен с
 L["that prices code is too big"] = "этот код цен слишком большой"
 L["took %d new price(s) and %d newer price(s), kept %d you already had newer"] = "взято новых цен: %d, более новых цен: %d, оставлено: %d, потому что у тебя уже были новее"
 L["(part %d of %d)"] = "(часть %d из %d)"
+
+L["Disenchant Results:"] = "Итоги распыления:"
+L["Says in chat what each disenchant gave."] = "Пишет в чат, что дало каждое распыление."
+L["show what each disenchant gave in chat: /bts dechat on|off"] = "показывать в чате, что дало каждое распыление: /bts dechat on|off"
+L["Disenchant results show in chat."] = "Итоги распыления видны в чате."
+L["Disenchant results no longer show in chat."] = "Итоги распыления больше не видны в чате."

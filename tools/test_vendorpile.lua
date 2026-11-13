@@ -215,6 +215,25 @@ do
     Profit.LostDepositEach, Profit.LostListings = oldEach, oldLost
 end
 
+-- A share each left from the old 1 silver floor (100c for 11, about 9c)
+-- is not the item's deposit now. Counted, it sent a 12c stone to a 4c
+-- vendor (a player's sell list, 2026-11-13).
+do
+    local Profit = ns.Profit
+    local oldLost, oldDeposits = Profit.LostListings, ns.db.deposits
+    Profit.LostListings = function() return 0 end
+    local before = Posting.FLOOR_ENDED - 5000
+    local duration = Posting:DurationFor(9100)
+    ns.db.deposits = { [9100] = { unit = 100 / 11, quantity = 11, least = 100,
+        leastQuantity = 11, leastAt = before, duration = duration, at = before } }
+    check("a stale 1s floor share sends nothing to the vendor",
+        Posting.VendorPaysMore(9100, 12, 4), false)
+    ns.db.deposits[9100].leastAt, ns.db.deposits[9100].at = Posting.FLOOR_ENDED + 5, Posting.FLOOR_ENDED + 5
+    check("the game's own 1s, seen since, still does",
+        Posting.VendorPaysMore(9100, 12, 4), true)
+    Profit.LostListings, ns.db.deposits = oldLost, oldDeposits
+end
+
 print("")
 
 if failures > 0 then
