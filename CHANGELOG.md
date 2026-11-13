@@ -4,6 +4,18 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.27.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **Export Prices and Import Prices.** Two new buttons on the Queue page of Settings copy your recent auction prices so you can use them on another computer.
+- **TSM Price Source.** A new TSM Price Source: box on the Sharing page picks which TSM price to use: DBRecent, DBMarket, DBMinBuyout or your own TSM price. It starts on DBRecent.
+- **Disenchant Results.** A new Disenchant Results: row on the Look page (or `/bts dechat on|off`) lets you keep disenchant lines out of chat.
+- **Snipe buys in one click.** The top find's price is ready ahead of time, so Buy pays in one click.
+- **Auction house wheel fix.** The wheel on Sell and Snipe now posts and buys every time, with no second check after a scan.
+- **Vendor-pays-more fix.** An old 1 silver deposit floor no longer counts when a vendor pays more.
+- **One Window fix.** The One Window stays in front of the craft pane when a profession opens.
+
 ## 1.26.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

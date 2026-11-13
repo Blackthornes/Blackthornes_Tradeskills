@@ -23,6 +23,17 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.27.0
+
+- You can copy your recent auction prices to use on another computer, with new buttons on the Queue page.
+- You can pick which TSM price to use, on the Sharing page. It starts on the recent price.
+- You can keep disenchant lines out of chat with a new tick box on the Look page.
+- Snipe pays in one click when you buy.
+Fixes and changes:
+- The auction house wheel works every time on Sell and Snipe.
+- Items a vendor pays more for are no longer held back by an old deposit rule.
+- The One Window stays in front when a profession opens.
+
 ## 1.26.0
 
 - Windows now remember where you drag them, so they come back in the same spot.
