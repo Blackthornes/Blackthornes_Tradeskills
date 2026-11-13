@@ -5,6 +5,12 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.27.0", lines = {
+        "You can copy your recent auction prices to use on another computer, with new buttons on the Queue page.",
+        "You can pick which TSM price to use, on the Sharing page. It starts on the recent price.",
+        "You can keep disenchant lines out of chat with a new tick box on the Look page.",
+        "Snipe pays in one click when you buy.",
+    } },
     { version = "1.26.0", lines = {
         "Windows now remember where you drag them, so they come back in the same spot.",
         "A new button on the Look page puts every window back where it started.",
@@ -19,9 +25,5 @@ ns.WHATS_NEW = {
         "You can skip a recipe on Road to 300, and the road picks the next one.",
         "The Queue shows how long your crafts will take.",
         "Tooltips can show what you paid at the auction house, and Recipes to Learn shows demand.",
-    } },
-    { version = "1.24.0", lines = {
-        "New Reset button in Settings to bring every window back if one gets lost.",
-        "Road to 300 plans smarter steps when you pick Real Cost.",
     } },
 }
