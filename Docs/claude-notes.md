@@ -1223,8 +1223,8 @@ messages (`Core/Comm.lua`, prefix `BTSshare`):
 
 TradeSkillMaster (a player asked, the owner agreed 2026-10-12 and said TSM
 may be named in public for this, a second exception beside TomTom):
-`Logic/TSMPrices.lua` reads `TSM_API.GetCustomPriceValue("DBMarket" or
-"DBMinBuyout", "i:<itemID>")` inside a pcall, no TOC dependency, kept 60 s
+`Logic/TSMPrices.lua` reads `TSM_API.GetCustomPriceValue("DBRecent" or
+"DBMinBuyout", "i:<itemID>")` (DBMarket before 2026-11-13) inside a pcall, no TOC dependency, kept 60 s
 an item. `Prices:GetValue` asks it only when neither your scans nor guild
 prices have the item ("rival" never). "TSM prices" on the Sharing page
 (`tsmPrices`, on unless unticked, never rename it). So Farmer's, Equipment's
@@ -1245,13 +1245,15 @@ one source going first. Tested in `tools/test_prefertsm.lua`. Not yet seen
 in game.
 TSM Price Source (a player asked, the owner said build it, 2026-11-13):
 "TSM Price Source:" under Prefer TSM Prices on the Sharing page, a text
-box (`tsmPriceSource`, account wide, nil or empty for DBMarket, never
-rename it; greyed while `tsmPrices` is off). It names the price TSM's
-"market" read uses (`TSMPrices:MarketSource`): DBMinBuyout, DBRecent or a
-TSM custom price. A source `TSM_API.IsCustomPriceValid` refuses, or one
-that gives no price for an item, falls back to DBMarket; "min" and
-"lowest" stay DBMinBuyout. Under the box, while refused: "TSM doesn't know
-that price. Using DBMarket." (`SourceRefused`). Saving calls
+box (`tsmPriceSource`, account wide, nil or empty for DBRecent, the
+owner's pick the same day; never rename it; greyed while `tsmPrices` is
+off). It names the price TSM's "market" read uses
+(`TSMPrices:MarketSource`): DBMarket, DBMinBuyout or a TSM custom price.
+A source `TSM_API.IsCustomPriceValid` refuses, or one that gives no price
+for an item, falls back to DBRecent, and an item DBRecent has no price for
+reads DBMarket quietly (`FALLBACK_SOURCE`), so a price never goes blank;
+"min" and "lowest" stay DBMinBuyout. Under the box, while refused: "TSM
+doesn't know that price. Using DBRecent." (`SourceRefused`). Saving calls
 `TSMPrices:Forget()`. Farmer has the same box and key on its Loot page.
 Tested in `tools/test_tsmprices.lua`. Not yet seen in game.
 Auctionator comes after TSM (the owner said yes and allowed naming it,
