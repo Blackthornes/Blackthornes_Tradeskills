@@ -64,7 +64,7 @@ check("a stack worth more pays its share", Posting:EstimateDeposit(CLOTH, 50), 1
 
 print("")
 print("a floor from before the patch")
-ns.db.deposits[77] = { unit = 5, quantity = 20, least = 100, leastQuantity = 1, duration = 2, at = 1 }
+ns.db.deposits[77] = { unit = 5, quantity = 40, least = 100, leastQuantity = 1, duration = 2, at = 1 }
 check("the old 1s floor no longer holds", Posting:EstimateDeposit(77, 1), 5)
 Posting:CacheUnitDeposit(77, 50, 10, 2)
 check("nor is it kept when a new answer comes", ns.db.deposits[77].least, 50)
@@ -77,6 +77,42 @@ ns.db.deposits[42] = { unit = 24, duration = 2, at = 1 }
 check("still read", Posting:EstimateDeposit(42, 5), 120)
 Posting:CacheUnitDeposit(42, 3000, 10, 2)
 check("and replaced by a new answer", Posting:EstimateDeposit(42, 10), 3000)
+
+print("")
+print("a share that was only the old 1s floor")
+-- 100c for 11, seen while the floor stood: about 9c each, which made a
+-- 12c item look worth less than the 4c a vendor pays (2026-11-13).
+local STONE = 9100
+local before = Posting.FLOOR_ENDED - 5000
+ns.db.deposits[STONE] = { unit = 100 / 11, quantity = 11, least = 100, leastQuantity = 11,
+    leastAt = before, duration = 2, at = before }
+check("it is told apart", Posting.IsFloorShare(ns.db.deposits[STONE]), true)
+check("no share each is read from it", Posting:GetCachedUnitDeposit(STONE), nil)
+check("and no guess", Posting:EstimateDeposit(STONE, 11), nil)
+check("nor straight from the record", Posting.DepositFromRecord(ns.db.deposits[STONE], 11), nil)
+check("the saved record is left alone", ns.db.deposits[STONE].unit, 100 / 11)
+Posting:CacheUnitDeposit(STONE, 2, 5, 2)
+check("a new answer for fewer replaces it", Posting:GetCachedUnitDeposit(STONE), 0.4)
+check("and counts from then on", Posting:EstimateDeposit(STONE, 10), 4)
+
+-- A smaller quote after the patch kept the old share and moved `at`.
+ns.db.deposits[STONE + 1] = { unit = 100 / 11, quantity = 11, least = 1, leastQuantity = 3,
+    leastAt = clock, duration = 2, at = clock }
+check("carried past the patch, still told apart", Posting:GetCachedUnitDeposit(STONE + 1), nil)
+
+-- The same 1s seen after the patch is the game's own answer.
+ns.db.deposits[STONE + 2] = { unit = 100 / 11, quantity = 11, least = 100, leastQuantity = 11,
+    leastAt = clock, duration = 2, at = clock }
+check("1s quoted after the patch is kept", Posting:GetCachedUnitDeposit(STONE + 2), 100 / 11)
+Posting:CacheUnitDeposit(STONE + 3, 100, 11, 2)
+Posting:CacheUnitDeposit(STONE + 3, 100, 2, 2)
+check("and outlives a smaller quote", Posting:GetCachedUnitDeposit(STONE + 3), 100 / 11)
+check("with when it was seen", ns.db.deposits[STONE + 3].unitAt, clock)
+
+-- A bigger deposit from the floor days was the item's own share.
+ns.db.deposits[STONE + 4] = { unit = 12, quantity = 20, least = 240, leastQuantity = 20,
+    leastAt = before, duration = 2, at = before }
+check("a share over the floor is still read", Posting:GetCachedUnitDeposit(STONE + 4), 12)
 
 print("")
 print("another listing length starts over")

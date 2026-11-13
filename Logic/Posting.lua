@@ -653,7 +653,39 @@ function Posting:GetCachedUnitDeposit(itemID)
     -- A deposit quoted for a different listing length is not this one.
     if record.duration ~= self:DurationFor(itemID) then return nil end
 
+    -- A share left over from the 1 silver floor is not the item's own.
+    if Posting.IsFloorShare(record) then return nil end
+
     return record.unit
+end
+
+--- What the least deposit was, in copper, while the 1 silver floor stood.
+Posting.OLD_FLOOR = 100
+
+--- When a record's share each was worked out. Records made before this
+--- was kept have only `at`, which a later, smaller quote also moves; such
+--- a record's share is only as new as `at` when the quote that set `at`
+--- is the one the share came from (its least is for the same count).
+function Posting.UnitSeenAt(record)
+    local seen = tonumber(record.unitAt)
+    if seen then return seen end
+    if tonumber(record.leastQuantity) ~= tonumber(record.quantity) then return nil end
+    return tonumber(record.at)
+end
+
+--- True for a share each that is only the old 1 silver floor split over a
+--- listing (100c for 11 is about 9c each). That floor ended on 2026-11-10,
+--- so the share says nothing about the item now: left in, it made a cheap
+--- item's sale look worth less than a vendor pays (2026-11-13, a player's
+--- sell list flagged nearly every row). The next quote at the auction
+--- house replaces it.
+function Posting.IsFloorShare(record)
+    if type(record) ~= "table" then return false end
+    local unit, quantity = tonumber(record.unit), tonumber(record.quantity)
+    if not unit or not quantity then return false end
+    if math.abs(unit * quantity - Posting.OLD_FLOOR) > 0.5 then return false end
+    local seen = Posting.UnitSeenAt(record)
+    return seen == nil or seen < Posting.FLOOR_ENDED
 end
 
 function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
@@ -673,6 +705,7 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
         leastAt = time(),
         duration = duration,
         at = time(),
+        unitAt = time(),
     }
 
     -- The auction house asks a least deposit on any listing (players see 1s
@@ -682,8 +715,10 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
     local old = ns.db.deposits[itemID]
     if type(old) == "table" and old.duration == duration then
         local oldQuantity = tonumber(old.quantity)
-        if oldQuantity and oldQuantity > quantity and tonumber(old.unit) then
+        if oldQuantity and oldQuantity > quantity and tonumber(old.unit)
+            and not Posting.IsFloorShare(old) then
             record.unit, record.quantity = old.unit, oldQuantity
+            record.unitAt = Posting.UnitSeenAt(old) or record.unitAt
         end
         local oldLeast = tonumber(old.least)
         local oldLeastQuantity = tonumber(old.leastQuantity)
@@ -713,6 +748,7 @@ end
 --- auction house was seen to ask.
 function Posting.DepositFromRecord(record, quantity)
     if type(record) ~= "table" or not tonumber(record.unit) then return nil end
+    if Posting.IsFloorShare(record) then return nil end
 
     quantity = math.max(1, quantity or 1)
     local deposit = math.floor(record.unit * quantity + 0.5)
