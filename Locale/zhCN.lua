@@ -3575,3 +3575,8 @@ L["Puts every Blackthornes window back where it started. Your settings and data 
 L["Every window is back in its first spot."] = "每个窗口都回到了最初的位置。"
 L["put every Blackthornes window back where it started (reset)"] = "把每个 Blackthornes 窗口放回最初的位置（reset）"
 L["Type /bts windows reset to put every window back in its first spot."] = "输入 /bts windows reset，把每个窗口放回最初的位置。"
+L["Disenchant Results:"] = "分解结果："
+L["Says in chat what each disenchant gave."] = "在聊天中显示每次分解得到了什么。"
+L["show what each disenchant gave in chat: /bts dechat on|off"] = "在聊天中显示每次分解得到了什么：/bts dechat on|off"
+L["Disenchant results show in chat."] = "分解结果会显示在聊天中。"
+L["Disenchant results no longer show in chat."] = "分解结果不再显示在聊天中。"
