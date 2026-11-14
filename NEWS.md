@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.28.0
+
+Fixes and changes:
+- Road to 300 now points you to the trainer who teaches your next rank.
+
 ## 1.27.0
 
 - You can copy your recent auction prices to use on another computer, with new buttons on the Queue page.

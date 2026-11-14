@@ -13,5 +13,6 @@ ns.WRIT_CUSTOMERS = {
     [6048] = { name = "Kzixx", zone = "Duskwood", mapID = 1431, x = 81.7, y = 19.9 },
     [6049] = { name = "Durganon", zone = "Searing Gorge", mapID = 1427, x = 41.1, y = 58.4 },
     [6712] = { name = "Gorgrash", zone = "Hillsbrad Foothills", mapID = 1424, x = 80, y = 48.7 },
+    [10560] = { name = "Narianna", zone = "Moonglade", mapID = 1450, x = 53.3, y = 42.8 },
     [15869] = { name = "Battered Trunk", zone = "Duskwood", mapID = 1431, x = 26.2, y = 36.2 },
 }

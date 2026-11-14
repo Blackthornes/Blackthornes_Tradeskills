@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.28.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Road to 300 finds the right trainer.** Show the Way now sends you to the trainer who teaches your next rank, such as Artisan, instead of one that only teaches an earlier rank.
+
 ## 1.27.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
