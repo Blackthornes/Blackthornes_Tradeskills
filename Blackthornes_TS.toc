@@ -91,6 +91,7 @@ Logic\SellOut.lua
 Logic\GoldLog.lua
 Logic\GoldGoal.lua
 Logic\MethodProfit.lua
+Logic\BuyLog.lua
 Logic\Transfer.lua
 Logic\PriceTransfer.lua
 Logic\SaleAlarm.lua
@@ -188,6 +189,7 @@ UI\Tab_Queue.lua
 UI\Tab_Gather.lua
 UI\Tab_Prices.lua
 UI\GoldChart.lua
+UI\SalesBought.lua
 UI\Tab_Sales.lua
 UI\Tab_Stats.lua
 UI\BankView.lua
