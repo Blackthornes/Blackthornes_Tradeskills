@@ -85,6 +85,7 @@ Logic\AuctionTracker.lua
 Logic\MyAuctions.lua
 Logic\Crafting.lua
 Logic\Posting.lua
+Logic\CraftProfit.lua
 Logic\CraftedCost.lua
 Logic\SellOut.lua
 Logic\GoldLog.lua
