@@ -3652,6 +3652,7 @@ L["Your goal now: %s"] = "Твоя цель сейчас: %s"
 -- Butler's wait on the auction house drawer
 L["Butler Says Wait"] = "Butler советует подождать"
 L["Sell Anyway"] = "Всё равно продать"
+L["Check Price"] = "Проверить цену"
 L["Costs to Make:"] = "Стоит сделать:"
 L["Sells for Now:"] = "Продаётся сейчас:"
 L["Usual Price:"] = "Обычная цена:"

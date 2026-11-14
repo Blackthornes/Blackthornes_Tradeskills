@@ -3648,6 +3648,7 @@ L["Your goal now: %s"] = "当前目标：%s"
 -- Butler's wait on the auction house drawer
 L["Butler Says Wait"] = "Butler 建议等待"
 L["Sell Anyway"] = "仍然出售"
+L["Check Price"] = "查看价格"
 L["Costs to Make:"] = "制作成本："
 L["Sells for Now:"] = "现在售价："
 L["Usual Price:"] = "平时价格："
