@@ -86,6 +86,24 @@ stops".
 
 Smaller: `CanPost`'s `IsThrottled()` can eat a turn right after a listing.
 
+## Checked 2026-11-14: how a pending listing settles
+
+`VerifyPending` marks it `verifying` and `awaiting` and asks
+`ns.Auctions:Refresh({ priority = urgent, force = true })`. When that owned
+auctions query is really sent, `Auctions:ScheduleConfirm` (Data/Auctions.lua
+~925) clears `awaiting` and reads at `CONFIRM_DELAYS` (0.6 to 4.8 s);
+`Auctions:ReadOwned` (~860) settles each pending that is `verifying and not
+awaiting` through `Posting:ResolvePending`. With no read back, the 15 s
+give-up settles it with the warning "could not tell whether that listing
+went up. Check your Auctions tab".
+
+So a pending only settles once a read back gets out through the queue,
+which needs 1.2 s since the last send, and every listing is a send
+(`AHQueue:NoteSend`). The cap is what gives the read back that quiet. Do
+not just lift the cap: a wheel listing every 0.4 s would keep the read back
+waiting and every listing would end in the give-up warning. The fix has to
+get read backs out while the wheel keeps listing.
+
 ## Fix direction
 
 - While a bulk check that covers the item is out (`CheckPending`), a turn
