@@ -601,3 +601,22 @@ use, carried or not, so Butler can say "With Tin Bar." Kept in the
 lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
 `Logic/Sisters.lua` reads them.
 
+
+## Butler Says Wait on the auction house drawer
+
+The owner said build it from a mockup (2026-11-14). Butler folds an item
+away as Wait for a Better Price when today's price is well under its usual
+one, or when it costs more to make than it sells for. The drawer
+(`UI/PostPanel.lua`) shows the same: `Posting:GetPostable` puts
+`line.butlerWait` (`{ short, reason, cost, now, usual }`) on a bag copy
+Butler says waits, read through `SisterKeeps:ButlerWait(itemID, held)`,
+which calls, inside a pcall, read only,
+`_G.BlackthornesButler.Verdicts:Waiting(itemID, bag, slot)`. The row reads
+"Butler Says Wait" and its button Sell Anyway
+(`SisterKeeps:SellAnyway(itemID)`, calling Butler's `Verdicts:SellAnyway`,
+which lasts until the auction house closes). List Next and the summary
+pass waiting rows over. "Show Waiting" (`postShowWaiting`, account wide, on
+unless unticked, never rename it), "Waiting: N" and Sell All Waiting sit in
+a strip under the summary, shown only while something waits. Without
+Butler nothing waits. Tested in `tools/test_butlerwait.lua`. If Butler
+changes those calls, change `Logic/SisterKeeps.lua` too.

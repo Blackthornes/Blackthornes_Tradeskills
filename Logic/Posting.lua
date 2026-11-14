@@ -1344,6 +1344,14 @@ function Posting:GetPostable(opts)
             local noted = note ~= nil and sellable and count and count > 0
             if noted then heldAll = note end
 
+            -- Butler says wait for a better price (Logic/SisterKeeps.lua):
+            -- the row stays with a Sell Anyway button, List Next passes it.
+            local butlerWait
+            if ns.SisterKeeps and sellable and count and count > 0 and not anyway then
+                local ok, wait = pcall(ns.SisterKeeps.ButlerWait, ns.SisterKeeps, itemID, held)
+                if ok and type(wait) == "table" then butlerWait = wait end
+            end
+
             if sellable and count > 0 and (price or not needsPrice or noted)
                     and (opts.showHeld or noted or not heldAll) and (not toVendor or noted) then
                 lines[#lines + 1] = {
@@ -1380,6 +1388,7 @@ function Posting:GetPostable(opts)
                     -- Left out of List all for the Sell tab's own reasons
                     -- (opts.showNoted), not another addon's keep.
                     noted = noted or nil,
+                    butlerWait = butlerWait,
                     kept = kept,
                     keptWhy = keptWhy,
                     -- The copy itself when it has a random suffix: the item
@@ -1508,7 +1517,7 @@ function Posting:GetNextPostable(opts, lines)
 
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not self:IsUnderFloor(line)
+            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
             and not self:IsPassedOver(line.itemID) then
             if skipSettling and self:PendingFor(line.itemID) then
                 settling = true
@@ -1529,7 +1538,7 @@ function Posting:GetSummary(opts, lines)
     local count, total = 0, 0
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not self:IsUnderFloor(line)
+            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
             and not self:IsPassedOver(line.itemID) then
             count = count + 1
             total = total + (line.total or 0)
