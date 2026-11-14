@@ -585,7 +585,8 @@ inside a pcall:
 
 ```lua
 _G.BlackthornesTS.Butler:CraftFor(item, carried)
-  -- { recipeID, name, itemID (what it makes), per, crafts, perItem, needs = { { itemID, count } } }, or nil
+  -- { recipeID, name, itemID (what it makes), per, crafts, perItem, needs = { { itemID, count } },
+  --   others = { { itemID, count } } }, or nil
 _G.BlackthornesTS.Butler:QueueCraft(recipeID, crafts)   -- Queue:Ensure; true, or false and why
 ```
 
@@ -593,7 +594,10 @@ Only recipes the character playing knows (not a dropped profession) that
 use the item. Each is valued by `Profit:Analyse` "best" after the cut and
 deposit (a slow auction at `Butler.SLOW`, a derived or uncontested price
 never), less the other materials (`Cost:GetCraftCost`, owned at their
-worth); `perItem` is that over how many one craft uses. Kept in the
+worth); `perItem` is that over how many one craft uses. `needs` is what
+the bags lack for those crafts; `others` (2026-11-14, for Butler's "Craft
+Details:" tooltip, the owner said build it) is every other material they
+use, carried or not, so Butler can say "With Tin Bar." Kept in the
 lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
 `Logic/Sisters.lua` reads them.
 

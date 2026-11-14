@@ -128,9 +128,14 @@ check("seed taken off", dust and dust.perItem, 633)
 check("needs one line", dust and #dust.needs, 1)
 check("the seed", dust and dust.needs[1].itemID, SEED)
 check("two seeds short", dust and dust.needs[1].count, 2)
+check("others lists the seed too", dust and dust.others and #dust.others, 1)
+check("others: the seed", dust and dust.others[1].itemID, SEED)
+check("others: all the crafts use", dust and dust.others[1].count, 2)
+check("wool uses nothing else", #(wool.others or { 1 }), 0)
 bags[SEED] = 5
 Butler:Forget()
 check("seeds in the bags: needs nothing", #Butler:CraftFor(DUST).needs, 0)
+check("seeds in the bags: others keeps the seed", #Butler:CraftFor(DUST).others, 1)
 
 print("\nprices it won't count on")
 demand[BOLT] = "low"
