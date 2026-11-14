@@ -472,6 +472,14 @@ check("Horde Artisan Alchemy is Stonard's", Trainer(171, 300), "Rogvar")
 local j = Trainer(171, 150)
 check("Horde Journeyman Alchemy teaches Journeyman, not past it", j and TopOf(171, j) > 75 and TopOf(171, j) <= 150, true)
 check("Horde Expert Enchanting", Trainer(333, 225), "Hgarth")
+zoneHere = "Thunder Bluff"
+check("Thunder Bluff Expert Leatherworking stays in the city", Trainer(165, 225), "Una")
+check("Thunder Bluff Artisan Leatherworking stays on Kalimdor", Trainer(165, 300), "Hahrana Ironhide")
+zoneHere = "Undercity"
+check("Undercity Artisan Leatherworking stays on the Eastern Kingdoms",
+  LN.ContinentOf((LN:TrainerFor(165, 300) or {}).zone), "E")
+check("Darnassus is on Kalimdor", LN.ContinentOf("Darnassus"), "K")
+check("an island is on neither", LN.ContinentOf("Zephras Isle"), nil)
 UnitFactionGroup = function() return "Alliance" end
 zoneHere = "Elwynn Forest"
 check("Alliance Expert Enchanting", Trainer(333, 225), "Kitta Firewind")

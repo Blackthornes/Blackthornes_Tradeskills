@@ -107,18 +107,61 @@ local function HereZone()
     return name
 end
 
+-- Kalimdor's zones and cities. Every other zone in the data is on the
+-- Eastern Kingdoms; a zone in neither list (an island) prefers nothing.
+local KALIMDOR = {
+    ["Durotar"] = true, ["Mulgore"] = true, ["The Barrens"] = true,
+    ["Teldrassil"] = true, ["Darkshore"] = true, ["Ashenvale"] = true,
+    ["Thousand Needles"] = true, ["Stonetalon Mountains"] = true,
+    ["Desolace"] = true, ["Feralas"] = true, ["Dustwallow Marsh"] = true,
+    ["Tanaris"] = true, ["Azshara"] = true, ["Felwood"] = true,
+    ["Un'Goro Crater"] = true, ["Moonglade"] = true, ["Silithus"] = true,
+    ["Winterspring"] = true, ["Orgrimmar"] = true, ["Thunder Bluff"] = true,
+    ["Darnassus"] = true, ["Mount Hyjal"] = true,
+}
+local EASTERN = {
+    ["Alterac Mountains"] = true, ["Arathi Highlands"] = true,
+    ["Badlands"] = true, ["Blasted Lands"] = true, ["Tirisfal Glades"] = true,
+    ["Silverpine Forest"] = true, ["Western Plaguelands"] = true,
+    ["Eastern Plaguelands"] = true, ["Hillsbrad Foothills"] = true,
+    ["The Hinterlands"] = true, ["Dun Morogh"] = true,
+    ["Searing Gorge"] = true, ["Burning Steppes"] = true,
+    ["Elwynn Forest"] = true, ["Deadwind Pass"] = true, ["Duskwood"] = true,
+    ["Loch Modan"] = true, ["Redridge Mountains"] = true,
+    ["Stranglethorn Vale"] = true, ["Swamp of Sorrows"] = true,
+    ["Westfall"] = true, ["Wetlands"] = true, ["Stormwind City"] = true,
+    ["Ironforge"] = true, ["Undercity"] = true,
+}
+
+local function ContinentOf(zone)
+    if KALIMDOR[zone] then return "K" end
+    if EASTERN[zone] then return "E" end
+    return nil
+end
+LearnNext.ContinentOf = ContinentOf
+
 --- The best of a list of places { zone, ... }: the zone the character is in,
---- then one of their side's cities, then the first.
+--- then one of their side's cities on their continent, then any place on
+--- their continent, then one of their side's cities, then the first. A
+--- trainer the cities near you don't have is looked for on your own side of
+--- the sea before the list's order sends you over it (2026-11-14: Thunder
+--- Bluff's Artisan Leatherworking pointed at Arathi, not Feralas).
 local function Nearest(places, side)
     local here = HereZone()
+    local home = here and ContinentOf(here)
     local cities = side and CITIES[side] or {}
-    local city
+    local city, homeCity, homeAny
     for _, place in ipairs(places) do
         local where = CityOf(place)
         if here and (place.zone == here or where == here) then return place end
-        if not city and cities[where] then city = place end
+        local near = home and ContinentOf(place.zone) == home
+        if cities[where] then
+            if not city then city = place end
+            if near and not homeCity then homeCity = place end
+        end
+        if near and not homeAny then homeAny = place end
     end
-    return city or places[1]
+    return homeCity or homeAny or city or places[1]
 end
 
 --- Where the game saw a vendor or trainer stand (Logic/VendorPins.lua), or nil.

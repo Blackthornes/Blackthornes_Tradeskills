@@ -285,6 +285,13 @@ check("Classic's stands where nobody said", Book:GetSkill(2158), 90)
 ns.RECIPE_BOOK.RECIPES[10482] = { 165, 180, 8172, 1, 1, { HEAVY, 1 }, "Cured Thick Hide", t = 2800 }
 Book:Invalidate()
 check("Cured Thick Hide asks for 175", Book:GetSkill(10482), 175)
+ns.RECIPE_BOOK.RECIPES[20650] = { 165, 180, 4304, 1, 1, { 4234, 5 }, "Thick Leather" }
+ns.RECIPE_BOOK.RECIPES[22331] = { 165, 230, 8170, 1, 1, { 4304, 6 }, "Rugged Leather" }
+ns.RECIPE_BOOK.RECIPES[19047] = { 165, 230, 15407, 1, 1, { 8170, 1 }, "Cured Rugged Hide" }
+Book:Invalidate()
+check("Thick Leather asks for 175", Book:GetSkill(20650), 175)
+check("Rugged Leather asks for 225", Book:GetSkill(22331), 225)
+check("Cured Rugged Hide asks for 225", Book:GetSkill(19047), 225)
 check("an unknown recipe has none", Book:GetSkill(424242), nil)
 
 -- The game's own recipe item tooltip.
