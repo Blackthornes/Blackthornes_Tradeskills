@@ -245,7 +245,12 @@ do
     check("a plain item does not", Posting:ButlerWaitsNow(PLAIN), false)
     check("List Next still passes the waiting rows", Posting:GetNextPostable(nil, lines).itemID, PLAIN)
     check("and with fast listing", Posting:GetNextPostable({ skipSettling = true }, lines).itemID, PLAIN)
-    bags[0][3] = nil
+    -- Only the waiting rows left on the drawer.
+    local waiting = {}
+    for _, line in ipairs(lines) do
+        if line.itemID ~= PLAIN then waiting[#waiting + 1] = line end
+    end
+    lines = waiting
     check("nothing else left, nothing lists", Posting:GetNextPostable(nil, lines), nil)
     postAnywayOn = true
     check("Bypass Disallowed Postings still lists it", Posting:GetNextPostable(nil, lines).itemID, WAITS)
