@@ -59,6 +59,28 @@ do
         end
     end
 end
+-- The row's post button reads List, Check Price, or Sell Anyway while Butler says wait,
+-- or a short wait label, so it is as wide as the longest of those. Every
+-- row keeps the same width, so the rows stay lined up.
+local POST_WIDTH = BUTTON_WIDTH
+do
+    local measure = Theme and Theme.MeasureText
+    for _, word in ipairs({ L["List"], L["Check Price"], L["Sell Anyway"], L["wait"] }) do
+        local width
+        if type(measure) == "function" then
+            local ok, measured = pcall(measure, "small", word)
+            if ok and type(measured) == "number" then width = measured end
+        end
+        if not width and type(word) == "string" then
+            -- No font to ask yet: about 8 units a letter at "small".
+            local letters = select(2, word:gsub("[^\128-\191]", ""))
+            width = letters * 8
+        end
+        if width then POST_WIDTH = math.max(POST_WIDTH, width + 14) end
+    end
+end
+-- The drawer grows by what the post button gained, so names keep their room.
+PANEL_WIDTH = PANEL_WIDTH + (POST_WIDTH - BUTTON_WIDTH)
 local QUANTITY_WIDTH = 42
 
 -- The red x that ignores an item, at the row's right end past List. A
@@ -67,7 +89,7 @@ local QUANTITY_WIDTH = 42
 local IGNORE_WIDTH = 20
 
 -- Right margin, ignore, gap, button, gap, quantity box, gap before the text.
-local TEXT_INSET = 6 + IGNORE_WIDTH + 6 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 10
+local TEXT_INSET = 6 + IGNORE_WIDTH + 6 + POST_WIDTH + 6 + QUANTITY_WIDTH + 10
 
 -- Clear of the auction window's bevelled edge without opening a gap you could
 -- see the world through.
@@ -211,7 +233,7 @@ local function CreateRow(row)
             ns.SisterKeeps:SellAnyway(row.data.itemID)
         end
         ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
-    end, { width = BUTTON_WIDTH, height = 18 })
+    end, { width = POST_WIDTH, height = 18 })
     row.post:SetPoint("RIGHT", -(6 + IGNORE_WIDTH + 6), 0)
 
     -- How many to list, beside the button that lists them. Empty-handed this
@@ -268,6 +290,19 @@ PostPanel._TypingInList = TypingInList
 
 --- Whether a row's detail line runs past the room it has. False when it
 --- cannot be measured, so nothing is shortened on a guess.
+--- What a row's post button says: Sell Anyway while Butler says wait,
+--- Check Price when the click will look up the price first, else List.
+--- Cheap enough for the label ticker: it never walks the bags.
+local function PostLabel(line)
+    if line and line.butlerWait and not line.held then return L["Sell Anyway"] end
+    local posting = ns.Posting
+    if line and posting and posting.ClickChecksFirst and posting:ClickChecksFirst(line.itemID) then
+        return L["Check Price"]
+    end
+    return L["List"]
+end
+PostPanel._PostLabel = PostLabel
+
 local function DetailTooWide(row)
     local label = row.detail
     -- Theme.TextWidth, because a label's own GetStringWidth can stop at the
@@ -443,7 +478,7 @@ function UpdateRow(row, line)
         row.detail:SetText(wait.short and (tag .. "   " .. wait.short) or tag)
         if DetailTooWide(row) then row.detail:SetText(tag) end
     end
-    if row.post.SetText then row.post:SetText(wait and L["Sell Anyway"] or L["List"]) end
+    if row.post.SetText then row.post:SetText(PostLabel(line)) end
 
     -- The field round the price line, as wide as its words.
     if row.priceField then
@@ -2358,7 +2393,7 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
         if row and row.data and row.post and not row.post.disabled then
             -- Another copy of the item being confirmed does not wait for it.
             local pending = ns.Posting and ns.Posting.pending
-            local label = row.data.butlerWait and not row.data.held and L["Sell Anyway"] or L["List"]
+            local label = PostLabel(row.data)
             if pending and pending.itemID == row.data.itemID then
                 Apply(row.post, label, ns.Posting:SecondsUntilPostable(row.data.itemID))
             else

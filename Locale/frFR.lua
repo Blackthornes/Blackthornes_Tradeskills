@@ -3650,6 +3650,7 @@ L["Your goal now: %s"] = "Ton objectif actuel : %s"
 -- Butler's wait on the auction house drawer
 L["Butler Says Wait"] = "Butler dit d'attendre"
 L["Sell Anyway"] = "Vendre quand même"
+L["Check Price"] = "Vérifier le prix"
 L["Costs to Make:"] = "Coût de fabrication :"
 L["Sells for Now:"] = "Se vend maintenant :"
 L["Usual Price:"] = "Prix habituel :"

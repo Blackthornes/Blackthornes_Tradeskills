@@ -57,7 +57,7 @@ local VERIFY_SHARE_MOST = 3
 -- than five seconds a listing). A price checked this recently lists on the
 -- click itself, with no Yes/No box: the click is the real one the game
 -- wants. Older, it is checked again first.
-local FRESH_FOR = 300
+local FRESH_FOR = 600
 Posting.FRESH_FOR = FRESH_FOR
 
 -- One search for the whole Sell list asks about this many items at most.
@@ -2324,7 +2324,7 @@ end
 
 --- A scan just priced these items (a table keyed by item ID): each counts
 --- as checked, so one click or wheel turn lists it at the scan's price
---- while the scan is under five minutes old, with no search first and no
+--- while the scan is under ten minutes old, with no search first and no
 --- "Click again" (the owner's report, 2026-11-09).
 --- @param whole true when the scan read the whole auction house: see
 ---   NoteWholeScan.
@@ -2336,20 +2336,20 @@ function Posting:NoteScanned(itemIDs, whole)
     end
 end
 
---- A scan of the whole auction house just finished. For FRESH_FOR (five
---- minutes) every price counts as checked, also for an item the scan did
+--- A scan of the whole auction house just finished. For FRESH_FOR (ten
+--- minutes, five until 2026-11-14) every price counts as checked, also for an item the scan did
 --- not see (nobody is selling it) and for a copy with a random suffix, so
 --- a click or wheel turn lists with no second search first (the owner,
 --- 2026-11-12: "I do not want double scans before posting if I've had a
 --- scan in the last 5 minutes"). Before, only the items the scan priced
 --- were marked, so one nobody else sold cost a search of the list, a
 --- search of its own and a "Click again". Kept through closing the auction
---- house: coming back inside five minutes is still inside five minutes.
+--- house: coming back inside ten minutes is still inside ten minutes.
 function Posting:NoteWholeScan()
     self.wholeScanAt = GetTime()
 end
 
---- Did a scan of the whole auction house finish in the last five minutes?
+--- Did a scan of the whole auction house finish in the last ten minutes?
 function Posting:ScannedLately()
     local at = rawget(self, "wholeScanAt")
     return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
@@ -2380,6 +2380,17 @@ function Posting:IsFreshCopy(itemID)
     local checked = rawget(self, "checkedSuffix")
     local at = type(checked) == "table" and checked[itemID .. ":" .. (tonumber(key.itemSuffix) or 0)]
     return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+end
+
+--- Will a click on this row look up the price before it lists? Then the
+--- button says Check Price, not List (the owner, 2026-11-14). Read four
+--- times a second by the label ticker, so it never walks the bags: a copy
+--- with a random suffix is judged by the plain item's check.
+function Posting:ClickChecksFirst(itemID)
+    if not itemID or not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
+    if ns.Config:Get("verifyPriceBeforePosting") == false then return false end
+    if self:AsksFirst() and not self:FastListing() then return true end
+    return not self:IsFresh(itemID)
 end
 
 --- Was this item's price checked recently enough to list on the click?
@@ -2523,7 +2534,7 @@ function Posting:CheckAll(lines)
             -- Tried only once the search really went out: one that waited
             -- in the queue and was given up never asked anything, so the
             -- next click asks again rather than falling to one item at a
-            -- time for five minutes.
+            -- time for ten minutes.
             if type(rawget(Posting, "bulkTried")) ~= "table" then Posting.bulkTried = {} end
             local now = GetTime()
             for itemID in pairs(wanted) do Posting.bulkTried[itemID] = now end

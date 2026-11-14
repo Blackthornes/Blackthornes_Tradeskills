@@ -18,7 +18,7 @@
 --   7. A fresh item's List button never counts down the request spacing.
 --   8. A scan's prices count as checked (2026-11-09: the auto scan ran, then
 --      the first click only checked and said "Click again"): every item a
---      scan priced lists on one click while the scan is under five minutes
+--      scan priced lists on one click while the scan is under ten minutes
 --      old.
 --   9. The quiet scan the auction house starts by itself never holds listing
 --      back (the same day: wheel turns and clicks did nothing while it ran);
@@ -265,7 +265,7 @@ Reset()
 recorded[POTION] = 290
 Posting:NoteChecked(POTION)
 clock = clock + Posting.FRESH_FOR + 1
-check("five minutes on, it is not fresh", Posting:IsFresh(POTION), false)
+check("ten minutes on, it is not fresh", Posting:IsFresh(POTION), false)
 clock = clock + 100
 
 print("")
@@ -439,16 +439,16 @@ Posting:NoteScanned(nil)
 Posting:NoteScanned({ potion = true })
 check("odd keys are left alone", Posting:IsFresh(OIL), false)
 clock = clock + Posting.FRESH_FOR + 1
-check("five minutes on, the scan's price no longer lists on the click", Posting:IsFresh(POTION), false)
+check("ten minutes on, the scan's price no longer lists on the click", Posting:IsFresh(POTION), false)
 clock = clock + 100
 
 print("")
-print("a whole scan in the last five minutes: no second check")
+print("a whole scan in the last ten minutes: no second check")
 
 Reset()
 settings.askBeforeListing = nil
 settings.fastListing = true
-check("five minutes it is", Posting.FRESH_FOR, 300)
+check("ten minutes it is", Posting.FRESH_FOR, 600)
 recorded[POTION] = 290
 check("before a scan the list would be checked", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), true)
 Posting:NoteScanned({ [POTION] = { 290 } }, true)
@@ -461,11 +461,15 @@ Posting:Request(POTION, 5, 290)
 check("the click lists", #posted, 1)
 check("still with no search", #searches, 0)
 check("and no Click again", Said("Click again to list it"), false)
-clock = clock + 280
+clock = clock + Posting.FRESH_FOR - 20
 Posting:ForgetChecks()
 check("closing the auction house and coming back keeps it", Posting:IsFresh(OIL), true)
 clock = clock + 21
-check("past five minutes the scan is old", Posting:IsFresh(OIL), false)
+check("past ten minutes the scan is old", Posting:IsFresh(OIL), false)
+check("the button reads Check Price once it is old", Posting:ClickChecksFirst(OIL), true)
+Posting:NoteScanned({ [POTION] = { 290 } }, true)
+check("and List again after a fresh scan", Posting:ClickChecksFirst(OIL), false)
+clock = clock + Posting.FRESH_FOR + 1
 check("and the list would be checked again", (Posting:WouldCheckAll({ itemID = OIL }, { { itemID = OIL } })), true)
 
 Reset()
