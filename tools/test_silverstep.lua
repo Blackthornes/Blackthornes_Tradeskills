@@ -298,7 +298,13 @@ check("for the same reason",
     (select(3, Profit:ChoosePostPrice(BAG)) or ""):find("0c") ~= nil, true)
 
 prices[BAG] = { market = 400, rival = 350 }
-check("a rival with copper still gets a whole silver", Profit:ChoosePostPrice(BAG), 300)
+check("a rival with copper still gets a whole silver", Profit:ChoosePostPrice(BAG), 400)
+
+-- A player's report (2026-11-14): undercut set to 0, a rival at 38s 99c, and
+-- the gear went up at 38s, 99c under. Matching rounds up, never down.
+prices[BAG] = { market = 4000, rival = 3899 }
+check("38s 99c with undercut off lists at 39s, not 38s", Profit:ChoosePostPrice(BAG), 3900)
+check("and is still a match", select(2, Profit:ChoosePostPrice(BAG)), "match")
 
 --------------------------------------------------------------------------------
 -- Money text: a fraction of a copper either way is no money at all, and
