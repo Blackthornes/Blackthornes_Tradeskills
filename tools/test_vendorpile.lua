@@ -234,6 +234,27 @@ do
     Profit.LostListings, ns.db.deposits = oldLost, oldDeposits
 end
 
+-- "Ignore Deposit:" (a player asked, 2026-11-14): ticked, no deposit is
+-- counted, so profit and the vendor choice see only the auction house cut.
+do
+    local Profit = ns.Profit
+    local oldGet, oldLost = ns.Config.Get, Profit.LostListings
+    local ignore = false
+    ns.Config.Get = function(self, k)
+        if k == "ignoreDeposit" then return ignore end
+        return oldGet(self, k)
+    end
+    Profit.LostListings = function() return 1 end
+    check("off, a deposit is counted", Profit.LostDepositEach(1) > 0, true)
+    ignore = true
+    check("ticked, no deposit is counted", Profit.LostDepositEach(1), 0)
+    check("ticked, a listing nets only the cut", Profit:NetFromListing(1, 300), 285)
+    Profit.LostListings = function() return 0 end
+    check("ticked, no risk is taken off either", Profit:NetAfterRisk(1, 300), 285)
+    check("ticked, a 3c win over the vendor still lists", Posting.VendorPaysMore(1, 100, 92), false)
+    ns.Config.Get, Profit.LostListings = oldGet, oldLost
+end
+
 print("")
 
 if failures > 0 then

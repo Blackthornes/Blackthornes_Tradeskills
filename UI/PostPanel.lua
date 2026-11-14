@@ -205,6 +205,11 @@ local function CreateRow(row)
         CommitTyping(PostPanel.list)
         if not row.data then return end
 
+        -- Butler says wait: Sell Anyway tells Butler first, so it stops
+        -- waiting for this visit, then lists it at the price shown.
+        if row.data.butlerWait and ns.SisterKeeps then
+            ns.SisterKeeps:SellAnyway(row.data.itemID)
+        end
         ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
     end, { width = BUTTON_WIDTH, height = 18 })
     row.post:SetPoint("RIGHT", -(6 + IGNORE_WIDTH + 6), 0)
@@ -430,6 +435,16 @@ function UpdateRow(row, line)
     -- (the price is on the tooltip and the List button).
     if line.held then row.detail:SetText(line.held) end
 
+    -- Butler says wait for a better price (2026-11-14): its few words in
+    -- place of the price, and the button reads Sell Anyway.
+    local wait = not line.held and line.butlerWait
+    if wait then
+        local tag = ("|c%s%s|r"):format(ns.COLORS.warn, L["Butler Says Wait"])
+        row.detail:SetText(wait.short and (tag .. "   " .. wait.short) or tag)
+        if DetailTooWide(row) then row.detail:SetText(tag) end
+    end
+    if row.post.SetText then row.post:SetText(wait and L["Sell Anyway"] or L["List"]) end
+
     -- The field round the price line, as wide as its words.
     if row.priceField then
         local width = Theme.TextWidth(row.detail)
@@ -463,6 +478,8 @@ function UpdateRow(row, line)
 
     row.post.tooltipText = line.held
         and L.Format("%s. A click still lists it.", line.held)
+        or wait
+        and ((wait.reason or wait.short) .. "\n" .. L["Sell Anyway lists it at your price."])
         or farUnder
         and L["Far under what it usually sells for. List asks before it goes up."]
         or line.atALoss
@@ -490,6 +507,26 @@ local function ShowRowTooltip(row, line)
     if line.held then
         GameTooltip:AddLine(line.held, Theme.Unpack("accent"))
         GameTooltip:AddLine(L["List all leaves it. Its List button still lists it."], 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(" ")
+    elseif line.butlerWait then
+        -- Butler says wait (its Verdicts:Waiting): why, and the numbers.
+        local wait = line.butlerWait
+        local r, g, b = Theme.Unpack("warn")
+        GameTooltip:AddLine(L["Butler Says Wait"], r, g, b)
+        if wait.reason then GameTooltip:AddLine(wait.reason, 1, 1, 1, true) end
+        if wait.cost then
+            GameTooltip:AddDoubleLine(L["Costs to Make:"], Util.FormatMoney(wait.cost, { noColor = true }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        if wait.now then
+            GameTooltip:AddDoubleLine(L["Sells for Now:"], Util.FormatMoney(wait.now, { noColor = true }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        if wait.usual then
+            GameTooltip:AddDoubleLine(L["Usual Price:"], Util.FormatMoney(wait.usual, { noColor = true }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        GameTooltip:AddLine(L["Sell Anyway lists it at your price."], 0.5, 0.5, 0.5, true)
         GameTooltip:AddLine(" ")
     elseif line.kept and line.keptWhy then
         GameTooltip:AddLine(L.Format("%d kept back: %s", line.kept, line.keptWhy), Theme.Unpack("accent"))
@@ -740,6 +777,44 @@ function PostPanel:Build()
     if summary.SetJustifyV then summary:SetJustifyV("TOP") end
     self.summary = summary
 
+    -- Butler Says Wait (the owner said build it from a mockup, 2026-11-14):
+    -- a strip under the summary, on Sell only while Butler holds something
+    -- back. How many wait, Show Waiting and Sell All Waiting.
+    local waitStrip = CreateFrame("Frame", nil, body)
+    waitStrip:SetHeight(22)
+    waitStrip:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -4)
+    waitStrip:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
+    waitStrip:Hide()
+    self.waitStrip = waitStrip
+
+    local waitCount = Theme.CreateLabel(waitStrip, "small", "warn")
+    waitCount:SetPoint("LEFT", waitStrip, "LEFT", 0, 0)
+    self.waitCount = waitCount
+
+    local sellWaiting = Widgets.CreateButton(waitStrip, L["Sell All Waiting"], function()
+        PostPanel:SellAllWaiting()
+    end, { height = 20 })
+    if sellWaiting.label and Theme.TextWidth then
+        local width = Theme.TextWidth(sellWaiting.label)
+        sellWaiting:SetWidth(math.max(90, math.ceil((width or 80) + 16)))
+    end
+    sellWaiting:SetPoint("RIGHT", waitStrip, "RIGHT", 0, 0)
+    sellWaiting:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["Sell Anyway lists it at your price."], 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    sellWaiting:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    self.sellWaitingButton = sellWaiting
+
+    local showWaiting = Widgets.CreateCheckbox(waitStrip, L["Show Waiting"], function(checked)
+        ns.Config:Set("postShowWaiting", checked and true or false)
+        PostPanel:Refresh()
+    end, PostPanel:ShowWaiting())
+    showWaiting:SetPoint("RIGHT", sellWaiting, "LEFT", -10, 0)
+    self.showWaitingBox = showWaiting
+    waitCount:SetPoint("RIGHT", showWaiting, "LEFT", -8, 0)
+
     local divider = Theme.CreateDivider(body)
     divider:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -6)
     divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, 0)
@@ -950,7 +1025,64 @@ function PostPanel:ShownLines()
     local hidden = 0
     if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
     if self:CraftedOnly() then lines = PostPanel.CraftedLines(lines) end
+    local waiting = PostPanel.WaitingLines(lines)
+    self.waitingLines = waiting
+    if not self:ShowWaiting() then lines = PostPanel.WithoutWaiting(lines) end
     return lines, hidden, toVendor or 0
+end
+
+--- Show Waiting: true unless unticked, so Butler's held items stay in view.
+function PostPanel:ShowWaiting()
+    return ns.Config == nil or ns.Config:Get("postShowWaiting") ~= false
+end
+
+--- The lines Butler says to wait on.
+function PostPanel.WaitingLines(lines)
+    local kept = {}
+    for _, line in ipairs(lines or {}) do
+        if line.butlerWait then kept[#kept + 1] = line end
+    end
+    return kept
+end
+
+--- The lines left once Butler's waiting ones are taken out.
+function PostPanel.WithoutWaiting(lines)
+    local kept = {}
+    for _, line in ipairs(lines or {}) do
+        if not line.butlerWait then kept[#kept + 1] = line end
+    end
+    return kept
+end
+
+--- Sell All Waiting: tell Butler to let every waiting item go to the
+--- auction house this visit, then show them as ready to list.
+function PostPanel:SellAllWaiting()
+    if not ns.SisterKeeps then return end
+    for _, line in ipairs(self.waitingLines or {}) do
+        if line.itemID then ns.SisterKeeps:SellAnyway(line.itemID) end
+    end
+    self:Refresh()
+end
+
+--- The Butler Says Wait strip: on Sell only, while something waits. The
+--- divider and the list under it move down to make room.
+function PostPanel:UpdateWaitStrip()
+    local strip = self.waitStrip
+    if not strip then return end
+    local count = #(self.waitingLines or {})
+    local shown = self.view == "sell" and count > 0
+    if shown then
+        self.waitCount:SetText(L.Format("Waiting: %d", count))
+        if self.showWaitingBox then self.showWaitingBox:SetChecked(self:ShowWaiting()) end
+    end
+    if self.waitShown == shown then return end
+    self.waitShown = shown
+    strip:SetShown(shown)
+    if self.divider then
+        self.divider:ClearAllPoints()
+        self.divider:SetPoint("TOPLEFT", shown and strip or self.summary, "BOTTOMLEFT", 0, shown and -4 or -6)
+        self.divider:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -14, 0)
+    end
 end
 
 --- List all: list the most valuable stack still on the list. Each click
@@ -1980,6 +2112,7 @@ function PostPanel:Refresh()
     end
 
     if self.searchAll then self.searchAll:SetShown(self.view == "buy") end
+    if self.view ~= "sell" then self:UpdateWaitStrip() end
 
     self:UpdateAuctionsTab()
     if self:LayTabs() and ((self.view == "favors" and not PostPanel.ShowsFavors())
@@ -2073,6 +2206,7 @@ function PostPanel:Refresh()
     if TypingInList(self.list) then return end
 
     local lines, hidden, toVendor = self:ShownLines()
+    self:UpdateWaitStrip()
     self.shownLines = lines
     self:UpdateListAll(lines)
 
@@ -2224,10 +2358,11 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
         if row and row.data and row.post and not row.post.disabled then
             -- Another copy of the item being confirmed does not wait for it.
             local pending = ns.Posting and ns.Posting.pending
+            local label = row.data.butlerWait and not row.data.held and L["Sell Anyway"] or L["List"]
             if pending and pending.itemID == row.data.itemID then
-                Apply(row.post, L["List"], ns.Posting:SecondsUntilPostable(row.data.itemID))
+                Apply(row.post, label, ns.Posting:SecondsUntilPostable(row.data.itemID))
             else
-                Apply(row.post, L["List"], seconds, reason)
+                Apply(row.post, label, seconds, reason)
             end
         end
     end

@@ -598,6 +598,9 @@ end
 --- taken as the biggest one seen, else a full stack, else one item, so a
 --- cheap thing listed alone still loses its whole least deposit when it runs out.
 function Profit.LostDepositEach(itemID)
+    -- "Ignore Deposit:" (a player asked, the owner said build it, 2026-11-14):
+    -- ticked, no deposit is counted anywhere profit or sell advice is worked out.
+    if ns.Config and ns.Config:Get("ignoreDeposit") == true then return 0 end
     local posting = ns.Posting
     local each = (posting and posting.GetCachedUnitDeposit and posting:GetCachedUnitDeposit(itemID)) or 0
     local record = posting and ns.db and ns.db.deposits and ns.db.deposits[itemID]

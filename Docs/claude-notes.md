@@ -2176,3 +2176,18 @@ longer keeps one. The saved record is never rewritten or deleted;
 to the vendor is unchanged, and a 1s the game quotes now still counts.
 No new words. Tested in `tools/test_depositfloor.lua` and
 `tools/test_vendorpile.lua`.
+
+## Every profession dropped
+
+A player's report (2026-11-14, the owner said build it): a priest that
+once had Enchanting and dropped it kept it in her saved professions, so
+Butler named her the enchanter to mail gear to. At login every
+profession reads level 0, so `Recipes:RefreshProfessions` never trusted
+a read with nothing learned while something learned was saved. Now it
+does once the login retries are over (`Recipes.loginSettled`, set by the
+`OnEnable` ticker, which reads once more) or on a later
+`SKILL_LINES_CHANGED`, and only when the professions book
+(`Recipes.BookProfessions`, `GetProfessions`/`GetProfessionInfo` in a
+pcall) names none of the saved ones (`Recipes.DroppedAll`). A wrong read
+mends itself: the next read with something learned brings them back. No
+new words. Tested in `tools/test_droppedprofession.lua`.
