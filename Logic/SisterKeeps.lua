@@ -18,6 +18,13 @@
 --   _G.BlackthornesButler.Ammo:Keeps(itemID)             -- a hunter's own ammo
 --   _G.BlackthornesButler.Learning:Get(itemID)           -- "keep" once bought back
 --   _G.BlackthornesButler.KeepHere:Count(itemID)         -- how many to keep here
+--   _G.BlackthornesButler.Verdicts:Waiting(itemID, bag, slot)
+--                                                        -- { short, reason, cost, now, usual }
+--   _G.BlackthornesButler.Verdicts:SellAnyway(itemID)    -- the drawer's Sell Anyway
+--
+-- Butler's Wait for a Better Price (2026-11-14): a waiting item stays on
+-- the drawer with a Butler Says Wait tag and a Sell Anyway button, and
+-- List Next passes it over (Posting:GetNextPostable).
 --
 -- Tradeskills' own "Keep on This Character" (Logic/KeepHere.lua) is read
 -- with Butler's, the bigger number winning.
@@ -90,6 +97,34 @@ local function Ask(global, module, method, ...)
 end
 
 SisterKeeps.Ask = Ask
+
+--- Why Butler says to wait for a better price on this bag copy, or nil.
+--- `held` is Posting's bag entry ({ bag, slot, link }).
+function SisterKeeps:ButlerWait(itemID, held)
+    if not itemID or type(held) ~= "table" or not held.bag or not held.slot then return nil end
+    local wait = Ask("BlackthornesButler", "Verdicts", "Waiting", itemID, held.bag, held.slot)
+    if type(wait) ~= "table" then return nil end
+    local short = type(wait.short) == "string" and wait.short or nil
+    local reason = type(wait.reason) == "string" and wait.reason or short
+    if not short and not reason then return nil end
+    return {
+        short = short or reason,
+        reason = reason,
+        cost = tonumber(wait.cost),
+        now = tonumber(wait.now),
+        usual = tonumber(wait.usual),
+    }
+end
+
+--- Tell Butler to sell it anyway for this auction house visit. True when
+--- Butler took it.
+function SisterKeeps:SellAnyway(itemID)
+    if not itemID then return false end
+    local found = Sister("BlackthornesButler", "Verdicts")
+    if not found or type(found.SellAnyway) ~= "function" then return false end
+    local ok = pcall(found.SellAnyway, found, itemID)
+    return ok and true or false
+end
 
 local function Number(value)
     value = tonumber(value)

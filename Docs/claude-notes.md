@@ -1040,6 +1040,19 @@ this week and the sources stay the realm's, since `GoldLog` is per realm. Like e
 is never announced. Tested in `tools/test_goldgoal.lua`. Not yet seen in
 game.
 
+A new goal after the cheer (a player lost the Goal reached! window to
+Escape, the owner said build it from a mockup, 2026-11-14): the cheer
+window only cheers now (its Next Goal box is gone, a Done button closes
+it). When it closes and the goal is still the one reached, a small
+Goblin Gold window under the bar (`GoldGoalUI:AskNewGoal`, `ShowAsk`)
+says "You reached your goal of 500g." with Set New Goal and Not Now; Set
+New Goal shows "New Goal:" (filled from `GoldGoal:NextGoal`) with Set and
+Cancel. It is not in UISpecialFrames, so Escape leaves it, and it waits
+out `GoldGoal:Busy`. Right-click the bar opens the RowMenu (GOBLIN GOLD,
+Change Goal), the same window with "Your goal now: 500g". No new setting
+or saved key. Tested in `tools/test_goldgoalnewgoal.lua` and
+`tools/test_goalreachedwindow.lua`. Not yet seen in game.
+
 The Sales tab's gold chart under This Character (a player's report,
 2026-11-09): its bars and key now follow the pick too. `GoldLog:Record`
 also adds each change under the playing character's GUID in
@@ -1256,6 +1269,17 @@ reads DBMarket quietly (`FALLBACK_SOURCE`), so a price never goes blank;
 doesn't know that price. Using DBRecent." (`SourceRefused`). Saving calls
 `TSMPrices:Forget()`. Farmer has the same box and key on its Loot page.
 Tested in `tools/test_tsmprices.lua`. Not yet seen in game.
+TSM BoE Price Source (a player asked, the owner said build it and named it,
+2026-11-14): "TSM BoE Price Source:" under the TSM Price Source box, a
+second text box for gear that binds when worn (`TSMPrices.IsBoEGear`: item
+class 2 or 4, bind type 2; `tsmGearPriceSource`, account wide, nil or empty
+reads the TSM Price Source; never rename it; greyed with the other box).
+`TSMPrices:GearSource`, `GearSourceRefused`. A gear source TSM refuses, or
+one with no price for an item, falls back to the TSM Price Source; gear
+whose bind type the client hasn't loaded yet reads the TSM Price Source
+and isn't kept. "min" and "lowest" stay DBMinBuyout. Farmer has the same
+box and key on its Loot page. Tested in `tools/test_tsmprices.lua`. Not
+yet seen in game.
 Auctionator comes after TSM (the owner said yes and allowed naming it,
 2026-10-12): `Logic/AuctionatorPrices.lua` reads
 `Auctionator.API.v1.GetAuctionPriceByItemID("Blackthornes_TS", itemID)`
@@ -2163,3 +2187,36 @@ longer keeps one. The saved record is never rewritten or deleted;
 to the vendor is unchanged, and a 1s the game quotes now still counts.
 No new words. Tested in `tools/test_depositfloor.lua` and
 `tools/test_vendorpile.lua`.
+
+## Pause, move and tool skips in the queue
+
+A player asked, the owner said build it from a mockup (2026-11-14, his yes
+approved the words). Craft Next skips a craft that needs a tool or station
+you are not near: `Crafting:ToolMissing(recipeID)` asks
+`C_TradeSkillUI.GetRecipeRequirements` in a pcall (an unmet need wins,
+"Needs a NAME"), else learns from the "Requires X" refusal that comes right
+after a craft starts (`Crafting:OnUIError`, `ToolFromError`); a learned skip
+is memory only and goes when the zone or subzone changes (`OnZoneChanged`).
+`/bts probe` has a line for the call. A row's right-click menu (and arrows
+on hover) has Move to Top, Move Up, Move Down, Pause or Resume and Remove
+(`Queue:Move`, `CanMoveTop/Up/Down`, `SetPaused`); a part never goes below
+its parent, and a paused part makes its parent wait (`Queue:Held` returns
+`held, byPart`). Saved: `paused` on each queue entry and the order in
+`ns.db.queueOrder` (never rename either). No sortable columns. Tested in
+`tools/test_queuetools.lua` and `tools/test_queuepause.lua`. Not yet seen
+in game.
+
+## Every profession dropped
+
+A player's report (2026-11-14, the owner said build it): a priest that
+once had Enchanting and dropped it kept it in her saved professions, so
+Butler named her the enchanter to mail gear to. At login every
+profession reads level 0, so `Recipes:RefreshProfessions` never trusted
+a read with nothing learned while something learned was saved. Now it
+does once the login retries are over (`Recipes.loginSettled`, set by the
+`OnEnable` ticker, which reads once more) or on a later
+`SKILL_LINES_CHANGED`, and only when the professions book
+(`Recipes.BookProfessions`, `GetProfessions`/`GetProfessionInfo` in a
+pcall) names none of the saved ones (`Recipes.DroppedAll`). A wrong read
+mends itself: the next read with something learned brings them back. No
+new words. Tested in `tools/test_droppedprofession.lua`.
