@@ -257,7 +257,8 @@
 -- of the item one craft uses), crafts (how many the `carried` copies make,
 -- else the bags'), perItem (copper one of the item is worth made into it),
 -- needs = { { itemID, count } } (other materials the bags lack for those
--- crafts) }. nil when nothing it knows uses the item, or for no craft.
+-- crafts), others = { { itemID, count } } (every other material those
+-- crafts use, carried or not; added 2026-11-14 for Butler's tooltip) }. nil when nothing it knows uses the item, or for no craft.
 -- Butler weighs perItem against its own best price. QueueCraft is
 -- Queue:Ensure: at least that many crafts queued.
 --
@@ -856,12 +857,13 @@ local function Weigh(itemID, recipeID, carried)
     local okCost, cost = pcall(ns.Cost.GetCraftCost, ns.Cost, recipeID, nil, nil, { valueOwned = true })
     if not okCost or type(cost) ~= "table" or not cost.priceable then return nil end
 
-    local others, needs = 0, {}
+    local others, needs, uses = 0, {}, {}
     for _, line in ipairs(cost.reagents or {}) do
         if line.itemID ~= itemID then
             others = others + (line.lineCost or 0)
             local want = (line.quantity or 0) * crafts
             local inBags = line.inBags or 0
+            if want > 0 then uses[#uses + 1] = { itemID = line.itemID, count = want } end
             if want > inBags then needs[#needs + 1] = { itemID = line.itemID, count = want - inBags } end
         end
     end
@@ -874,6 +876,7 @@ local function Weigh(itemID, recipeID, carried)
         crafts = crafts,
         perItem = math.floor((net - others) / per),
         needs = needs,
+        others = uses,
     }
 end
 
@@ -908,8 +911,10 @@ function Butler:CraftFor(item, carried)
         if not best then return nil end
         local needs = {}
         for i, need in ipairs(best.needs) do needs[i] = { itemID = need.itemID, count = need.count } end
+        local others = {}
+        for i, use in ipairs(best.others or {}) do others[i] = { itemID = use.itemID, count = use.count } end
         return { recipeID = best.recipeID, name = best.name, itemID = best.itemID, per = best.per,
-            crafts = best.crafts, perItem = best.perItem, needs = needs }
+            crafts = best.crafts, perItem = best.perItem, needs = needs, others = others }
     end)
     if ok then return answer end
     return nil
