@@ -3603,3 +3603,14 @@ L["Says in chat what each disenchant gave."] = "在聊天中显示每次分解�
 L["show what each disenchant gave in chat: /bts dechat on|off"] = "在聊天中显示每次分解得到了什么：/bts dechat on|off"
 L["Disenchant results show in chat."] = "分解结果会显示在聊天中。"
 L["Disenchant results no longer show in chat."] = "分解结果不再显示在聊天中。"
+
+-- Butler's wait on the auction house drawer
+L["Butler Says Wait"] = "Butler 建议等待"
+L["Sell Anyway"] = "仍然出售"
+L["Costs to Make:"] = "制作成本："
+L["Sells for Now:"] = "现在售价："
+L["Usual Price:"] = "平时价格："
+L["Sell Anyway lists it at your price."] = "仍然出售会按你的价格上架。"
+L["Show Waiting"] = "显示等待中"
+L["Waiting: %d"] = "等待中：%d"
+L["Sell All Waiting"] = "出售全部等待中"

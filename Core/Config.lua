@@ -240,6 +240,9 @@ local DEFAULTS = {
         postHideLosses = false,
         -- Sell's Crafted Only box: only items your recipes make. Off unless ticked.
         postCraftedOnly = false,
+        -- Sell's Show Waiting box: Butler's waiting items stay in the list.
+        -- On unless unticked. Never rename it.
+        postShowWaiting = true,
         -- Profit by method's headings folded away, their keys comma apart
         -- (a player asked, the owner said yes from a mockup, 2026-10-22).
         -- Never rename it.

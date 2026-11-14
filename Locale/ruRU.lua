@@ -3607,3 +3607,14 @@ L["Says in chat what each disenchant gave."] = "Пишет в чат, что д�
 L["show what each disenchant gave in chat: /bts dechat on|off"] = "показывать в чате, что дало каждое распыление: /bts dechat on|off"
 L["Disenchant results show in chat."] = "Итоги распыления видны в чате."
 L["Disenchant results no longer show in chat."] = "Итоги распыления больше не видны в чате."
+
+-- Butler's wait on the auction house drawer
+L["Butler Says Wait"] = "Butler советует подождать"
+L["Sell Anyway"] = "Всё равно продать"
+L["Costs to Make:"] = "Стоит сделать:"
+L["Sells for Now:"] = "Продаётся сейчас:"
+L["Usual Price:"] = "Обычная цена:"
+L["Sell Anyway lists it at your price."] = "«Всё равно продать» выставит по твоей цене."
+L["Show Waiting"] = "Показать ожидающие"
+L["Waiting: %d"] = "Ожидают: %d"
+L["Sell All Waiting"] = "Продать все ожидающие"
