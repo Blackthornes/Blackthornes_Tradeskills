@@ -204,7 +204,7 @@ do
   ns.Util.IsBoundOnPickup = function(id) return id == LEATHER end
   local bop = Book:TooltipLines(PATTERN_BOOTS)
   check("a bound reagent: the rest, plus it by name", Line(bop, "Cost to make")[2],
-    "10c, plus 7 Demonic Rune you get yourself")
+    "10c, plus 7 Demonic Rune")
   check("still shown dim", Line(bop, "Cost to make")[3], true)
   check("no profit made up", Line(bop, "Profit per craft"), nil)
   ns.Util.IsBoundOnPickup = function() return false end

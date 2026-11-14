@@ -842,7 +842,7 @@ function RecipeBook:CostText(value)
         local name = ItemInfo(itemID) or ("item:" .. itemID)
         parts[#parts + 1] = quantity > 1 and (quantity .. " " .. name) or name
     end
-    return L.Format("%s, plus %s you get yourself", Money(detail.partial), table.concat(parts, ", "))
+    return L.Format("%s, plus %s", Money(detail.partial), table.concat(parts, ", "))
 end
 
 function RecipeBook:Value(record, extraItemID)
