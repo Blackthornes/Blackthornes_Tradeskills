@@ -1040,6 +1040,19 @@ this week and the sources stay the realm's, since `GoldLog` is per realm. Like e
 is never announced. Tested in `tools/test_goldgoal.lua`. Not yet seen in
 game.
 
+A new goal after the cheer (a player lost the Goal reached! window to
+Escape, the owner said build it from a mockup, 2026-11-14): the cheer
+window only cheers now (its Next Goal box is gone, a Done button closes
+it). When it closes and the goal is still the one reached, a small
+Goblin Gold window under the bar (`GoldGoalUI:AskNewGoal`, `ShowAsk`)
+says "You reached your goal of 500g." with Set New Goal and Not Now; Set
+New Goal shows "New Goal:" (filled from `GoldGoal:NextGoal`) with Set and
+Cancel. It is not in UISpecialFrames, so Escape leaves it, and it waits
+out `GoldGoal:Busy`. Right-click the bar opens the RowMenu (GOBLIN GOLD,
+Change Goal), the same window with "Your goal now: 500g". No new setting
+or saved key. Tested in `tools/test_goldgoalnewgoal.lua` and
+`tools/test_goalreachedwindow.lua`. Not yet seen in game.
+
 The Sales tab's gold chart under This Character (a player's report,
 2026-11-09): its bars and key now follow the pick too. `GoldLog:Record`
 also adds each change under the playing character's GUID in
