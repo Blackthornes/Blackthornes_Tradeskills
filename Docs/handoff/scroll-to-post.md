@@ -113,9 +113,37 @@ get read backs out while the wheel keeps listing.
   check is out.
 - Test: wheel turns every 0.4 s past the five minute mark keep listing.
 
+## Root cause (confirmed by reading, 2026-11-14)
+
+No request or flag stays set forever. Three things eat wheel turns:
+
+1. `PostPanel:ListNext` (UI/PostPanel.lua, about line 1090) stops on the
+   first postable line. When that line is not fresh the turn goes to a
+   check, also when fresh lines sit under it. `Posting:Request` prints
+   "checking the current price of X..." and queues the same search again
+   on every turn while the check is out.
+2. `OnCheckResults` never marks an item nobody else sells, so after a bulk
+   check those lines still cost a check turn and a list turn each.
+3. A steady wheel lists every 0.35 s, so about 8 listings land inside
+   `POST_VERIFY_DELAY` (3 s). `MAX_CONFIRMING` (6) is reached before the
+   first read back is even asked for, and each listing's `NoteSend` moves
+   `lastSend`, so `MIN_SPACING` holds the urgent read back too. Turns then
+   say "still confirming the last listing" for 3 to 4 s after every 7.
+
+## Chosen fix
+
+- P1: in fast mode `ListNext` lists the first line listable on this click
+  and starts the check for the others without spending the turn.
+- P2: no single search while a bulk check covers the item, and no second
+  search or chat line for an item already being checked.
+- P3: `OnCheckResults` counts a wanted item with no row as checked once
+  the client says the browse results are whole.
+- P4: listings no longer hold back the urgent read back, and the cap is
+  sized for the wheel's steady pace.
+
 ## Status
 
 - [x] Trace `ListNext` to the post call
-- [ ] Root cause confirmed
+- [x] Root cause confirmed
 - [ ] Fix and test
 - [ ] PR
