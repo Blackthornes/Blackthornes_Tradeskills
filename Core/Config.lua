@@ -39,6 +39,9 @@ local DEFAULTS = {
         -- How many times we assume an item is relisted before it sells, so the
         -- deposit is not silently ignored in the profit maths.
         expectedRelists = 1,
+        -- "Ignore Deposit:" on the Pricing page (2026-11-14): off unless
+        -- ticked. Ticked, profit and sell advice leave the deposit out.
+        ignoreDeposit = false,
 
         -- Posting undercuts the cheapest listing by this much, and profit is
         -- calculated at that price. This models what you will actually receive
