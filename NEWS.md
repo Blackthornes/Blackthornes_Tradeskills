@@ -23,6 +23,10 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.30.0
+
+- The Sales tab has a new Bought view. It shows what you spent at the auction house, what you bought most, and what you paid each.
+
 ## 1.29.0
 
 - Butler can tell you why an item should wait, and Sell Anyway sells it when you disagree.

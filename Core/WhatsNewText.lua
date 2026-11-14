@@ -5,6 +5,9 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.30.0", lines = {
+        "The Sales tab has a new Bought view. It shows what you spent at the auction house, what you bought most, and what you paid each.",
+    } },
     { version = "1.29.0", lines = {
         "Butler can tell you why an item should wait, and Sell Anyway sells it when you disagree.",
         "A new goal window helps you pick your next gold goal.",
@@ -18,12 +21,5 @@ ns.WHATS_NEW = {
         "You can pick which TSM price to use, on the Sharing page. It starts on the recent price.",
         "You can keep disenchant lines out of chat with a new tick box on the Look page.",
         "Snipe pays in one click when you buy.",
-    } },
-    { version = "1.26.0", lines = {
-        "Windows now remember where you drag them, so they come back in the same spot.",
-        "A new button on the Look page puts every window back where it started.",
-        "Gold an Hour shows whether buying the parts or making them earns more each hour. It starts off.",
-        "You can group writs by the zone where you hand them in.",
-        "TSM prices take over sooner, after your own scan is an hour old.",
     } },
 }
