@@ -1269,6 +1269,17 @@ reads DBMarket quietly (`FALLBACK_SOURCE`), so a price never goes blank;
 doesn't know that price. Using DBRecent." (`SourceRefused`). Saving calls
 `TSMPrices:Forget()`. Farmer has the same box and key on its Loot page.
 Tested in `tools/test_tsmprices.lua`. Not yet seen in game.
+TSM BoE Price Source (a player asked, the owner said build it and named it,
+2026-11-14): "TSM BoE Price Source:" under the TSM Price Source box, a
+second text box for gear that binds when worn (`TSMPrices.IsBoEGear`: item
+class 2 or 4, bind type 2; `tsmGearPriceSource`, account wide, nil or empty
+reads the TSM Price Source; never rename it; greyed with the other box).
+`TSMPrices:GearSource`, `GearSourceRefused`. A gear source TSM refuses, or
+one with no price for an item, falls back to the TSM Price Source; gear
+whose bind type the client hasn't loaded yet reads the TSM Price Source
+and isn't kept. "min" and "lowest" stay DBMinBuyout. Farmer has the same
+box and key on its Loot page. Tested in `tools/test_tsmprices.lua`. Not
+yet seen in game.
 Auctionator comes after TSM (the owner said yes and allowed naming it,
 2026-10-12): `Logic/AuctionatorPrices.lua` reads
 `Auctionator.API.v1.GetAuctionPriceByItemID("Blackthornes_TS", itemID)`
