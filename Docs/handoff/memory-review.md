@@ -1,7 +1,8 @@
 # Tradeskills memory review (2026-11-14)
 
-Research only. Nothing here has been changed in the code. Every idea keeps
-every feature, and none deletes or renames saved data.
+Items 1 and 2 are built (2026-11-14, Trent said "implement 1 and 2"); the
+rest is still research only. Every idea keeps every feature, and none
+deletes or renames saved data.
 
 Sizes were measured by loading each file into a Lua 5.1 runtime (the
 client's version) and reading `collectgarbage("count")` before and after.
@@ -12,6 +13,13 @@ house they scan.
 ## Ranked: biggest saving for the least risk first
 
 ### 1. The merged recipe book (about 3.4 MB, plus churn)
+
+**Built (a and b):** `NoteSeen` and `LearnSkill` mend the one record in
+place when the read can't move it (same name, item made and profession);
+anything else still throws the book away, and mid-sweep it waits for the
+sweep's end. Reagent tables are shared by item and count and reused
+across builds. Tested in `tools/test_recipebookpatch.lua` against a fresh
+build. Idea c is not built.
 
 `RecipeBook:GetAll()` (Logic/RecipeBook.lua) builds `self.merged`: a
 second full copy of every recipe (2349 of them) as a table of about 18
@@ -46,6 +54,17 @@ Suggestions, in order of how safe they are:
   reader has to be checked first.
 
 ### 2. Saved auction prices: history as small tables (about 1.9 KB an item)
+
+**Built:** `record.history` is now `{ t, m, q, t, m, q, ... }`, a missing
+price or count kept as `false`. Every reader goes through
+`Prices.HistoryCount`, `HistoryReading` and `EachReading`, which read both
+layouts (ItemStats, VendorFlips and PriceGraph carry a fallback for the old
+one). An old record is laid out flat, every number kept, when it next gets
+a reading (`Prices.AddReading`) or when the background pass reaches it
+(`Prices:FlattenSoon`, 20 s after login, 200 records a frame, this realm
+only). No key is renamed. Sharing and the data addon never carry history,
+and `PriceTransfer` starts an empty one, which reads in either layout.
+Tested with an old save in `tools/test_pricehistoryflat.lua`.
 
 Each scanned item's record (`ns.db.prices[realm][itemID]`) keeps its
 last 12 readings as `{ t = , m = , q = }` tables. A record measured

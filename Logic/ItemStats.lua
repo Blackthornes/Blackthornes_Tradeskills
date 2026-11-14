@@ -1,4 +1,5 @@
 -- Blackthornes Tradeskills -- Logic/ItemStats.lua
+
 -- Everything the Stats tab shows about one item, worked out in one place.
 --
 -- The owner asked (2026-10-14) for a Stats tab like Farmer's, one item at
@@ -12,6 +13,20 @@
 -- something it reads moves (ItemStats:Key).
 
 local _, ns = ...
+
+-- Every saved price reading, in either history layout (Data/Prices.lua keeps
+-- them flat; an old save keeps a table per reading).
+local function EachReading(history)
+    local P = ns.Prices
+    if P and P.EachReading then return P.EachReading(history) end
+    local i = 0
+    return function()
+        i = i + 1
+        local point = type(history) == "table" and history[i]
+        if type(point) ~= "table" then return nil end
+        return i, point.t, point.m, point.q
+    end
+end
 
 local ItemStats = ns.NewModule("ItemStats")
 
@@ -69,10 +84,12 @@ local function WorthBefore(itemID, record, now)
         if count > 0 then return math.floor(sum / count + 0.5), market end
     end
 
-    local oldest = isRecord and type(record.history) == "table" and record.history[1]
-    if market and type(oldest) == "table" and Number(oldest.t) and now - oldest.t >= 5 * DAY
-        and Number(oldest.m) then
-        return oldest.m, market
+    local oldestT, oldestM
+    if isRecord then
+        for _, t, m in EachReading(record.history) do oldestT, oldestM = t, m break end
+    end
+    if market and Number(oldestT) and now - oldestT >= 5 * DAY and Number(oldestM) then
+        return oldestM, market
     end
 
     local lowest = isRecord and ns.Prices and ns.Prices.LowestListed
@@ -328,9 +345,9 @@ function ItemStats:Build(itemID, now)
 
     -- The last twelve scans: how many were listed, and the market value.
     stats.stock = {}
-    for _, reading in ipairs(stats.record and type(stats.record.history) == "table" and stats.record.history or {}) do
-        if type(reading) == "table" and Number(reading.t) then
-            stats.stock[#stats.stock + 1] = { t = reading.t, q = Number(reading.q) or 0, m = Number(reading.m) }
+    for _, t, m, q in EachReading(stats.record and stats.record.history) do
+        if Number(t) then
+            stats.stock[#stats.stock + 1] = { t = t, q = Number(q) or 0, m = Number(m) }
         end
     end
 

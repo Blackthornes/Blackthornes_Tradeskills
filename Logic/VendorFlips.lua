@@ -14,6 +14,26 @@
 -- way pushed his bag items out and broke Ready to sell (2026-09-28).
 
 local _, ns = ...
+
+-- Every saved price reading, in either history layout (Data/Prices.lua keeps
+-- them flat; an old save keeps a table per reading).
+local function EachReading(history)
+    local P = ns.Prices
+    if P and P.EachReading then return P.EachReading(history) end
+    local i = 0
+    return function()
+        i = i + 1
+        local point = type(history) == "table" and history[i]
+        if type(point) ~= "table" then return nil end
+        return i, point.t, point.m, point.q
+    end
+end
+
+local function ReadingCount(history)
+    local P = ns.Prices
+    if P and P.HistoryCount then return P.HistoryCount(history) end
+    return type(history) == "table" and #history or 0
+end
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Util = ns.Util
@@ -215,10 +235,11 @@ function VendorFlips.UsualPrice(record)
 
     local values = {}
     local history = record.history
-    for index, entry in ipairs(history) do
-        local latest = index == #history and (record.seen == nil or entry.t == record.seen)
-        if not latest and type(entry.m) == "number" and entry.m > 0 then
-            values[#values + 1] = entry.m
+    local count = ReadingCount(history)
+    for index, t, m in EachReading(history) do
+        local latest = index == count and (record.seen == nil or t == record.seen)
+        if not latest and type(m) == "number" and m > 0 then
+            values[#values + 1] = m
         end
     end
 
