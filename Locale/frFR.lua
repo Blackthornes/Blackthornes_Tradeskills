@@ -3612,6 +3612,15 @@ L["show what each disenchant gave in chat: /bts dechat on|off"] = "montrer dans 
 L["Disenchant results show in chat."] = "Les résultats de désenchantement s'affichent dans la discussion."
 L["Disenchant results no longer show in chat."] = "Les résultats de désenchantement ne s'affichent plus dans la discussion."
 
+-- Craft Cost and Profit
+L["Craft Cost and Profit:"] = "Coût et profit de fabrication :"
+L["Show the profit beside each recipe in the game's profession window, and what the mats cost when you pick one."] = "Montre le profit à côté de chaque recette dans la fenêtre de métier du jeu, et le coût des composants quand tu en choisis une."
+L["Sells For:"] = "Se vend :"
+L["Mats Cost:"] = "Coût des composants :"
+L["Profit:"] = "Profit :"
+L["No price"] = "Pas de prix"
+L["Makes %d"] = "Donne %d"
+L["CRAFT COST AND PROFIT"] = "COÛT ET PROFIT DE FABRICATION"
 -- Queue pause, moves and crafts that need a tool nearby (2026-11-14)
 L["Move to Top"] = "Tout en haut"
 L["Move Up"] = "Monter"

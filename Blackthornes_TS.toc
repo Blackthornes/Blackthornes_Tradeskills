@@ -85,6 +85,7 @@ Logic\AuctionTracker.lua
 Logic\MyAuctions.lua
 Logic\Crafting.lua
 Logic\Posting.lua
+Logic\CraftProfit.lua
 Logic\CraftedCost.lua
 Logic\SellOut.lua
 Logic\GoldLog.lua
@@ -162,6 +163,7 @@ UI\SellMarked.lua
 UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
+UI\CraftProfitCard.lua
 UI\ItemTooltip.lua
 UI\EnchantTooltip.lua
 UI\VendorPins.lua

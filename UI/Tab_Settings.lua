@@ -1420,6 +1420,16 @@ local function Build(outer)
     end, true)
     widgets.professionValue:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    local craftProfitRow = CreateRow(pages.look, 1, L["Craft Cost and Profit:"],
+        L["Show the profit beside each recipe in the game's profession window, and what the mats cost when you pick one."])
+
+    widgets.craftProfit = Widgets.CreateCheckbox(craftProfitRow, L["On"], function(checked)
+        Config:Set("craftProfitInProfessionWindow", checked)
+        if ns.RecipeValue then ns.RecipeValue:Refresh() end
+        if ns.CraftProfitCard then ns.CraftProfitCard:Refresh() end
+    end, true)
+    widgets.craftProfit:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Off, Shift or Always for each tooltip line (asked 2026-10-18, see
     -- UI/TooltipShift.lua). Whether the line is on stays in its own
     -- setting; Shift is kept beside it. The sales lines have no Off.
@@ -2638,6 +2648,7 @@ local function Refresh()
     widgets.saleTotal:SetChecked(Config:Get("saleTotal") ~= false)
     widgets.learnFromSearches:SetChecked(Config:Get("learnFromSearches") ~= false)
     widgets.professionValue:SetChecked(Config:Get("showValueInProfessionWindow") == true)
+    widgets.craftProfit:SetChecked(Config:Get("craftProfitInProfessionWindow") == true)
     ShowShiftMode(widgets.tooltipValue)
     ShowShiftMode(widgets.tooltipSalesShift)
     ShowShiftMode(widgets.tooltipTrend)

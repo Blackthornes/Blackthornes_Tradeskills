@@ -3614,6 +3614,15 @@ L["show what each disenchant gave in chat: /bts dechat on|off"] = "показы�
 L["Disenchant results show in chat."] = "Итоги распыления видны в чате."
 L["Disenchant results no longer show in chat."] = "Итоги распыления больше не видны в чате."
 
+-- Craft Cost and Profit
+L["Craft Cost and Profit:"] = "Стоимость и прибыль:"
+L["Show the profit beside each recipe in the game's profession window, and what the mats cost when you pick one."] = "Показывает прибыль рядом с каждым рецептом в окне профессии игры и стоимость материалов, когда ты выбираешь рецепт."
+L["Sells For:"] = "Продаётся за:"
+L["Mats Cost:"] = "Стоимость материалов:"
+L["Profit:"] = "Прибыль:"
+L["No price"] = "Нет цены"
+L["Makes %d"] = "Даёт %d"
+L["CRAFT COST AND PROFIT"] = "СТОИМОСТЬ И ПРИБЫЛЬ"
 -- Queue pause, moves and crafts that need a tool nearby (2026-11-14)
 L["Move to Top"] = "В самый верх"
 L["Move Up"] = "Выше"
