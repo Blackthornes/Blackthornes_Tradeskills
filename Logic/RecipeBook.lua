@@ -95,6 +95,13 @@ local FOREVER_SKILLS = {
     -- A trainer recipe, so no tooltip ever corrects it: a player saw the
     -- trainer ask for 175 (2026-11-12), where the estimate said 155.
     ["cured thick hide"] = 175,
+    -- The same leather step: a player saw Thick Leather ask for 175 too
+    -- (2026-11-14), where the estimate said 155 and Road to 300 offered it.
+    ["thick leather"] = 175,
+    -- Not yet seen in game: the next leather step, read the same way, so
+    -- Road to 300 never offers it before the trainer would let you make it.
+    ["rugged leather"] = 225,
+    ["cured rugged hide"] = 225,
 }
 
 -- Required skills read from recipe items' tooltips, one read per item a
