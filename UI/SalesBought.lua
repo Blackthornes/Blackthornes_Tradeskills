@@ -286,13 +286,6 @@ function SalesBought:Build(container, toolbar, period, onChange)
     list:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
     w.list = list
 
-    local empty = Theme.CreateLabel(panel, "small", "dim", "CENTER")
-    empty:SetPoint("CENTER", list, "CENTER")
-    empty:SetWidth(340)
-    empty:SetWordWrap(true)
-    empty:SetText(L["No buys in this period."])
-    empty:Hide()
-    w.empty = empty
 
     local queued = false
     ns.RegisterEvent(ns.UI, "GET_ITEM_INFO_RECEIVED", function()
@@ -381,6 +374,5 @@ function SalesBought:Draw()
 
     local data = w.sorter and w.sorter:Sort(shown) or shown
     w.list:SetData(data)
-    w.empty:SetShown(#data == 0)
     return #shown
 end
