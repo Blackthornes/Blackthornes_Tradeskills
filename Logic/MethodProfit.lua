@@ -116,8 +116,12 @@ function MethodProfit:NoteBought(itemID, quantity, paid)
         buys[itemID] = list
     end
 
-    list[#list + 1] = { n = quantity, paid = paid, at = Now() }
+    local at = Now()
+    list[#list + 1] = { n = quantity, paid = paid, at = at }
     while #list > self.MAX_BUYS do table.remove(list, 1) end
+
+    -- The Bought view's own log, with who bought it (Logic/BuyLog.lua).
+    if ns.BuyLog then pcall(ns.BuyLog.Note, ns.BuyLog, itemID, quantity, paid, at) end
 end
 
 --- What one of an item cost on the auction house, on average, over the

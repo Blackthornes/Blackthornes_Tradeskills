@@ -40,13 +40,14 @@ local VIEWS = {
     { text = L["Recent, all"],    value = "all" },
     { text = L["Still listed"],   value = "listed" },
     { text = L["By item"],        value = "item" },
+    { text = L["Bought"],         value = "bought" },
     { text = L["Profit by method"], value = "methods" },
     { text = L["Mailbox visits"], value = "visits" },
     { text = L["Gold in and out"], value = "gold" },
 }
 
 local state = { view = "sales", search = "", selected = nil, period = "week", who = "all",
-    salesPeriod = "all", methodsWho = "all" }
+    salesPeriod = "all", methodsWho = "all", boughtPeriod = "month" }
 
 -- By item's columns, right to left (a player asked for a running count of
 -- how many of each item sold; the owner said build it from a mockup,
@@ -79,6 +80,7 @@ local function SalesView()
 end
 
 local function CurrentPeriod()
+    if state.view == "bought" then return state.boughtPeriod or "month" end
     if SalesView() then return state.salesPeriod or "all" end
     return state.period
 end
@@ -1035,6 +1037,27 @@ end
 local function ApplyLayout()
     local gold = state.view == "gold"
     local methods = state.view == "methods"
+    local bought = state.view == "bought"
+
+    -- The Bought view draws its own tiles and list over the whole width.
+    if bought then
+        for _, key in ipairs({ "list", "detail", "chart", "legend", "search", "who",
+            "character", "characterLabel", "tiles", "headings", "emptyLabel", "carried" }) do
+            if widgets[key] then widgets[key]:Hide() end
+        end
+        widgets.period:Show()
+        widgets.period:Select(CurrentPeriod())
+        local picking = CurrentPeriod() == "pick"
+        widgets.fromDay:SetShown(picking)
+        widgets.toLabel:SetShown(picking)
+        widgets.toDay:SetShown(picking)
+        if ns.SalesBought then
+            ns.SalesBought:Show(true)
+            ns.SalesBought:PlaceCharacter(picking and widgets.toDay or widgets.period)
+        end
+        return
+    end
+    if ns.SalesBought then ns.SalesBought:Show(false) end
 
     widgets.list:SetShown(not gold)
     widgets.detail:SetShown(not gold)
@@ -1264,6 +1287,17 @@ local function Refresh()
 
     if state.view == "methods" then
         RefreshMethods()
+        return
+    end
+
+    if state.view == "bought" then
+        local from, to
+        if CurrentPeriod() ~= "all" then
+            FillPickedDays()
+            from, to = ns.MethodProfit.Range(CurrentPeriod(), state.fromDay, state.toDay)
+        end
+        local count = ns.SalesBought and ns.SalesBought:Refresh(from, to) or 0
+        widgets.summary:SetText(L.Format("%d buys in %s", count, PeriodText()))
         return
     end
 
@@ -1543,7 +1577,13 @@ local function Build(container)
     local period = Widgets.CreateTabStrip(toolbar, periodTabs, function(value)
         -- The sales views keep their own period, so picking one there never
         -- changes what the gold and method views show.
-        if SalesView() then state.salesPeriod = value else state.period = value end
+        if state.view == "bought" then
+            state.boughtPeriod = value
+        elseif SalesView() then
+            state.salesPeriod = value
+        else
+            state.period = value
+        end
         Refresh()
     end, { width = 560 })
     period:SetPoint("LEFT", 0, 0)
@@ -1782,6 +1822,8 @@ local function Build(container)
     local summary = Theme.CreateLabel(container, "small", "text")
     summary:SetPoint("BOTTOMLEFT", 8, 10)
     widgets.summary = summary
+
+    if ns.SalesBought then ns.SalesBought:Build(container, toolbar, period, Refresh) end
 
     local detail = BuildDetail(container)
     detail:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", 0, -8)
