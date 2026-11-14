@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.30.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because files were added.
+
+- **Bought list on the Sales tab.** A new Bought view lists what you bought on the auction house: what you spent, the items you bought most, what you paid each, when, and which character bought it. Pick it from the view tabs at the top of the Sales tab. It keeps a log from now on, starting at your oldest buy.
+
 ## 1.29.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because files were added.
