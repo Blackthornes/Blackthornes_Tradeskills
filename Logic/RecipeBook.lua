@@ -166,7 +166,48 @@ function RecipeBook:NoteSeen(recipeID, data)
         seenAt = time(),
     }
 
-    self.merged = nil
+    -- The book is kept and only this recipe's record is mended when what
+    -- the window showed matches it in everything that places it (name,
+    -- item made, profession). Throwing the whole book away for each
+    -- recipe a window lists left megabytes behind for the game to clear.
+    if not self:PatchSeen(recipeID, seen[recipeID]) then
+        self.merged = nil
+    end
+end
+
+--- Mend one record of the kept book from a fresh window read, as GetAll
+--- would lay it. False when GetAll has to build the book again instead.
+function RecipeBook:PatchSeen(recipeID, entry)
+    local merged = self.merged
+    local record = merged and merged[recipeID]
+    if not record or type(entry) ~= "table" then return false end
+    if entry.name == nil or entry.name ~= record.name then return false end
+    if entry.outputItemID == nil or entry.outputItemID ~= record.outputItemID then return false end
+    if entry.skillLineID == nil or entry.skillLineID ~= record.skillLineID then return false end
+    if record.profession == nil then return false end
+    if type(entry.reagents) ~= "table" or #entry.reagents == 0 then return false end
+
+    record.quantityMin = entry.quantityMin or record.quantityMin or 1
+    record.quantityMax = entry.quantityMax or record.quantityMax or record.quantityMin
+    record.reagents = entry.reagents
+    record.seenInGame = true
+    return true
+end
+
+-- One { itemID, quantity } table for each pair the shipped book uses, kept
+-- for the session: thousands of recipes share a few hundred pairs, and no
+-- reader changes them, so every build reuses the same ones.
+local sharedReagents = {}
+local function SharedReagent(itemID, quantity)
+    if itemID == nil or quantity == nil then return { itemID = itemID, quantity = quantity } end
+    local byQuantity = sharedReagents[itemID]
+    if not byQuantity then byQuantity = {}; sharedReagents[itemID] = byQuantity end
+    local reagent = byQuantity[quantity]
+    if not reagent then
+        reagent = { itemID = itemID, quantity = quantity }
+        byQuantity[quantity] = reagent
+    end
+    return reagent
 end
 
 --------------------------------------------------------------------------------
@@ -202,7 +243,7 @@ function RecipeBook:GetAll()
         local reagents = {}
         local materials = foreverMaterials[recipeID] or row[6] or {}
         for i = 1, #materials - 1, 2 do
-            reagents[#reagents + 1] = { itemID = materials[i], quantity = materials[i + 1] }
+            reagents[#reagents + 1] = SharedReagent(materials[i], materials[i + 1])
         end
 
         local record = {
@@ -536,8 +577,29 @@ function RecipeBook:LearnSkill(itemID)
         teaches = taught and taught:lower() or nil,
         at = time(),
     }
-    -- A sweep rebuilds the book once at its end, not once per item.
-    if not self.sweeping then self.merged = nil end
+    -- The kept book is mended in place when the item names its recipe
+    -- straight out; otherwise it is built again, once at a sweep's end.
+    if not self:PatchSkill(itemID, skills[itemID]) then
+        if self.sweeping then self.rebuildAfterSweep = true else self.merged = nil end
+    end
+    return true
+end
+
+--- Lay one kept skill on the kept book, as GetAll's last pass would.
+--- False when GetAll has to build the book again instead.
+function RecipeBook:PatchSkill(itemID, learned)
+    local merged = self.merged
+    if not merged then return true end
+    if type(learned) ~= "table" or type(learned.skill) ~= "number" then return false end
+    local row = Book().ITEMS[itemID]
+    if not row then return false end
+    local aliases = self.aliases or {}
+    local record = merged[row[1]] or merged[aliases[row[1]] or false]
+    if not record then return false end
+    if learned.profession and record.profession and learned.profession ~= record.profession then
+        return false
+    end
+    record.skill = learned.skill
     return true
 end
 
@@ -571,11 +633,12 @@ function RecipeBook:SweepSkills()
     table.sort(queue)
 
     self.sweeping = true
+    self.rebuildAfterSweep = false
     local index, changed = 1, false
     local function Step()
         if AuctionHouseOpen() then
             self.sweeping = false
-            if changed then self.merged = nil end
+            if self.rebuildAfterSweep then self.merged = nil end
             return
         end
         local last = math.min(index + SWEEP_BATCH - 1, #queue)
@@ -589,7 +652,7 @@ function RecipeBook:SweepSkills()
             return
         end
         self.sweeping = false
-        if changed then self.merged = nil end
+        if self.rebuildAfterSweep then self.merged = nil end
         if changed and ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
     end
     Step()
