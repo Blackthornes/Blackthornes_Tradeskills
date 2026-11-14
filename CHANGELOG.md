@@ -4,6 +4,23 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.29.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because files were added.
+
+- **Butler Says Wait on the auction drawer.** When Butler says to hold an item, the Sell drawer shows why and has a Sell Anyway button. A Waiting strip with Sell All Waiting and a Show Waiting tick sits above the list.
+- **Ignore Deposit.** A new Ignore Deposit box on the Pricing page leaves the deposit out of a sale's cost. It starts off.
+- **Craft Cost and Profit.** A new Craft Cost and Profit: row under Show Value in Profession Window adds cost and profit to the game's profession window. It starts off.
+- **Goblin Gold goals.** A new goal window sets your next gold goal. Right-click the bar for a menu, and use Change Goal to pick another.
+- **Profit by profession and character.** Crafted sales are split by profession, and a Character: menu shows all characters or one of this realm's sellers.
+- **TSM BoE Price Source.** A new TSM BoE Price Source: box on the Sharing page prices gear that binds when worn. Empty uses your main TSM price source.
+- **Queue control.** You can pause crafts, move them and right-click for a menu. Crafts that need a tool nearby are skipped and say "Needs a NAME".
+- **Cost to make on tooltips.** A recipe's cost to make also lists bind on pickup materials, such as "12g 30s, plus 4 Demonic Rune".
+- **Road to 300.** Thick Leather is offered at 175, Show the Way picks a trainer on your own continent first, and two steps of one recipe add up in the queue.
+- **Gear posts round up.** A gear post at 0c undercut rounds up to the next whole silver and never goes under the rival.
+- **Old professions are let go.** A character that dropped every profession is no longer named for crafts.
+- **Fixes.** The Sell button fits its words, such as Check Price and Sell Anyway. Scrolling and List Next skip items Butler says to wait on. The addon uses less memory.
+
 ## 1.28.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
