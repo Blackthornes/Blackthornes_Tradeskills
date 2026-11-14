@@ -23,6 +23,21 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.29.0
+
+- Butler can tell you why an item should wait, and Sell Anyway sells it when you disagree.
+- A new goal window helps you pick your next gold goal.
+- Profit shows your crafted sales by profession and by character.
+- You can pause crafts in the Queue, move them, and skip ones that need a tool.
+- There is a new price box for gear that binds when worn, on the Sharing page.
+- The game's profession window can show what a craft costs and earns. It starts off.
+Fixes and changes:
+- Gear posts at no undercut round up to a whole silver.
+- Road to 300 picks a closer trainer and adds up repeated steps.
+- Tooltips show the cost to make with bind on pickup parts.
+- The addon uses less memory.
+- The mouse wheel works the first time you open the auction house.
+
 ## 1.28.0
 
 Fixes and changes:
