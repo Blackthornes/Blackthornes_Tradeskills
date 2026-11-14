@@ -368,7 +368,7 @@ tab.refresh()  -- still in the Recent view: sales only
 check("the event list shows only what sold", #listData, 3)
 
 assert(selectView, "Tab_Sales did not hand over its view pages' callback")
-check("the views are pages", #viewTabs, 7)
+check("the views are pages", #viewTabs, 8)
 check("the periods are pages", #periodTabs, 8)
 check("with Pick dates last", periodTabs[8].key, "pick")
 check("whose gold: this character or all", whoTabs and #whoTabs, 2)

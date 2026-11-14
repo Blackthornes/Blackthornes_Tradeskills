@@ -67,9 +67,13 @@ local function Money(copper)
     return Util.FormatMoney(copper or 0, { short = true })
 end
 
+--- The item's plain name: the row colours it by quality itself.
 local function NameOf(id)
-    return Util.GetItemLabel(id) or tostring(id)
+    local label = Util.Uncolored(Util.GetItemLabel(id) or tostring(id))
+    if type(label) ~= "string" then return tostring(id) end
+    return label:match("%[(.-)%]") or label
 end
+SalesBought.NameOf = NameOf
 
 local function ColorName(label, id)
     local r, g, b = Util.GetItemQualityColor(id)

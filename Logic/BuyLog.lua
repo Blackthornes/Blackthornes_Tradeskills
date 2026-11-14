@@ -51,7 +51,7 @@ function BuyLog:Note(itemID, quantity, paid, at)
     if not itemID or not quantity or quantity <= 0 or not paid or paid <= 0 then return end
     local log = self:Get()
     at = at or Now()
-    log.since = log.since or at
+    if not log.since or at < log.since then log.since = at end
     log.buys[#log.buys + 1] = { id = itemID, n = quantity, paid = paid, at = at, who = CharacterKey() }
     while #log.buys > self.MAX do table.remove(log.buys, 1) end
     self.version = self.version + 1
