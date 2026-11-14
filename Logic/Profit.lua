@@ -330,9 +330,14 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
     -- Undercut by 0c is the player turning undercutting off (asked on
     -- Discord, 2026-10-09): list at the cheapest rival's own price, for
     -- commodities and item auctions alike, and say that is why.
+    --
+    -- An item auction only takes whole silver, so a rival at 38s 99c can't be
+    -- matched to the copper. Rounding down there was a 99c undercut the player
+    -- had turned off (a player's report, 2026-11-14), so it rounds up to the
+    -- next silver instead: never below the rival's own price.
     if undercut <= 0 then
         local price = math.max(1, math.floor(rival))
-        if not isCommodity then price = Util.RoundToSilver(price) end
+        if not isCommodity then price = Util.CeilToSilver(price) end
         return price, "match", MATCH_BY_CHOICE, uncertain
     end
 
