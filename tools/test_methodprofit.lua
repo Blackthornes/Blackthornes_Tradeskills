@@ -5,8 +5,9 @@
 --   3. A vendor's buyback list gives sales: the first look is the baseline,
 --      what is new afterwards was just sold, and a repeat look adds nothing.
 --   4. A disenchant is the materials' worth against what the item cost.
---   5. A period holds only what happened inside it; loot has no cost and
---      counts as all profit, with its units counted as unknown.
+--   5. A period holds only what happened inside it. Sales with no known
+--      cost (Other sales) show, but stay out of Profit on a total of their
+--      own; a stack counts every item in it.
 
 local ns = {}
 ns.NewModule = function(name) local m = {} ns[name] = m return m end
@@ -60,6 +61,22 @@ check("average of what was paid", MP:BuyCost(CLOTH), 120)
 MP:NoteBought(CLOTH, 0, 500)
 MP:NoteBought(CLOTH, 5, nil)
 check("junk purchases are ignored", MP:BuyCost(CLOTH), 120)
+
+local ORE = 600
+check("nothing bought: no summary", MP:BoughtSummary(ORE), nil)
+MP:NoteBought(ORE, 10, 1000)
+MP:NoteBought(ORE, 10, 1400)
+now = now + 50
+MP:NoteBought(ORE, 4, 600)
+local bought = MP:BoughtSummary(ORE)
+check("the newest buy, each", bought.each, 150)
+check("and when", bought.at, now)
+check("the average over every buy", bought.average, 125)
+check("units in all", bought.units, 24)
+check("buys in all", bought.buys, 3)
+now = now + MP.BUY_LIFE + 1
+check("too old to count: no summary", MP:BoughtSummary(ORE), nil)
+now = now - MP.BUY_LIFE - 51
 check("a craft cost wins", select(2, MP:CostOf(BOLT)), "made")
 check("else what was bought", select(2, MP:CostOf(CLOTH)), "bought")
 check("loot has none", MP:CostOf(LOOT), nil)
@@ -144,9 +161,67 @@ from = MP.Range("year", nil, nil, now)
 check("a year back", now - from, 365 * 86400)
 from = MP.Range("all", nil, nil, now)
 check("all: from the start", from, 0)
-check("totals add up", MP:Summary(now - 3600, now + 1).total.profit,
-  s.methods.crafted.profit + s.methods.flipped.profit + s.methods.other.profit
+s = MP:Summary(now - 3600, now + 1)
+check("totals add up, Other sales left out", s.total.profit,
+  s.methods.crafted.profit + s.methods.flipped.profit
   + s.methods.vendored.profit + s.methods.disenchanted.profit)
+check("Other sales are marked not counted", s.methods.other.uncounted, true)
+check("what they took in is its own total", s.total.uncounted, s.methods.other.income)
+check("and still in Taken in", s.total.income >= s.total.uncounted, true)
+check("how many", s.total.uncountedN, s.methods.other.n)
+
+print("\nstacks")
+ledger.entries = {
+  { kind = "sold", itemID = CLOTH, net = 2400, deposit = 0, t = now - 100, cost = 30, bought = true, quantity = 20 },
+}
+s = MP:Summary(now - 3600, now + 1)
+check("a stack counts every item", s.methods.flipped.n, 20)
+check("and takes off what all of them cost", s.methods.flipped.cost, 600)
+check("profit for the stack", s.methods.flipped.profit, 1800)
+
+print("\nby profession")
+local profs = { [BOLT] = "Tailoring" }
+ns.CraftedCost.ProfessionOf = function(_, id) return profs[id] end
+ledger.entries = {
+  { kind = "sold", itemID = BOLT, net = 1000, deposit = 0, t = now - 100, quantity = 1, cost = 800 },
+  { kind = "sold", itemID = SWORD, net = 500, deposit = 0, t = now - 100, quantity = 1, cost = 100 },
+}
+s = MP:Summary(now - 3600, now + 1)
+local profList = s.methods.crafted.professions or {}
+check("two profession rows", #profList, 2)
+check("a known one first", profList[1] and profList[1].profession, "Tailoring")
+check("no profession goes last", profList[2] and profList[2].key, MP.OTHER_CRAFTS)
+ns.CraftedCost.ProfessionOf = nil
+
+print("\nnames for items with no ID")
+ledger.entries = {
+  { kind = "sold", name = "Mystery", net = 100, deposit = 0, t = now - 100, quantity = 1 },
+  { kind = "sold", name = "Mystery", net = 200, deposit = 0, t = now - 90, quantity = 1 },
+}
+s = MP:Summary(now - 3600, now + 1)
+local otherItems = s.methods.other.list or {}
+check("one row for the name", #otherItems, 1)
+check("it keeps the name", otherItems[1] and otherItems[1].name, "Mystery")
+
+print("\nby character")
+ns.Util.CharacterName = function(key) return ({ A = "Ana Stone", B = "Bo Reed" })[key] or "" end
+ledger.entries = {
+  { kind = "sold", itemID = LOOT, net = 100, deposit = 0, t = now - 100, quantity = 1, who = "A" },
+  { kind = "sold", itemID = LOOT, net = 300, deposit = 0, t = now - 100, quantity = 1, who = "B" },
+}
+local vlog = MP:GetLog()
+vlog.events[#vlog.events + 1] = { t = now - 50, m = "vendored", id = LOOT, n = 1, inc = 7 }
+s = MP:Summary(now - 3600, now + 1, { who = "A" })
+check("only A's sale", s.total.income, 100)
+local all = MP:Summary(now - 3600, now + 1)
+check("no vendor sales for one character", s.methods.vendored.n, 0)
+check("all keeps the vendor sale", all.methods.vendored.n > 0, true)
+check("and both auction sales", all.methods.other.income, 400)
+local sellers = MP:Sellers()
+check("two sellers", #sellers, 2)
+check("by name", sellers[1] and sellers[1].name, "Ana Stone")
+table.remove(vlog.events)
+ns.Util.CharacterName = nil
 
 print("\nkeeping")
 local log = MP:GetLog()

@@ -35,6 +35,31 @@ local CITIES = {
     H = { ["Orgrimmar"] = true, ["Thunder Bluff"] = true, ["Undercity"] = true },
 }
 
+-- Thunder Bluff and Darnassus trainers are kept under the zone around them
+-- (Mulgore, Teldrassil) with that zone's map spot, so a spot inside the
+-- city's box counts as the city when picking one. The zone itself stays as
+-- it is, since the map pin reads the spot on that zone's map.
+local CITY_BOXES = {
+    { zone = "Mulgore", city = "Thunder Bluff", x1 = 28, x2 = 46, y1 = 14, y2 = 36 },
+    { zone = "Teldrassil", city = "Darnassus", x1 = 22, x2 = 43, y1 = 38, y2 = 64 },
+    -- The Apothecarium's trainers are placed on Silverpine's map.
+    { zone = "Silverpine Forest", city = "Undercity", x1 = 70, x2 = 76, y1 = 6, y2 = 12 },
+}
+
+local function CityOf(place)
+    local x, y = tonumber(place.x), tonumber(place.y)
+    if x and y then
+        for _, box in ipairs(CITY_BOXES) do
+            if place.zone == box.zone and x >= box.x1 and x <= box.x2
+                and y >= box.y1 and y <= box.y2 then
+                return box.city
+            end
+        end
+    end
+    return place.zone
+end
+LearnNext.CityOf = CityOf
+
 local function Spots()
     return ns.LEARN_SPOTS or {}
 end
@@ -82,17 +107,61 @@ local function HereZone()
     return name
 end
 
+-- Kalimdor's zones and cities. Every other zone in the data is on the
+-- Eastern Kingdoms; a zone in neither list (an island) prefers nothing.
+local KALIMDOR = {
+    ["Durotar"] = true, ["Mulgore"] = true, ["The Barrens"] = true,
+    ["Teldrassil"] = true, ["Darkshore"] = true, ["Ashenvale"] = true,
+    ["Thousand Needles"] = true, ["Stonetalon Mountains"] = true,
+    ["Desolace"] = true, ["Feralas"] = true, ["Dustwallow Marsh"] = true,
+    ["Tanaris"] = true, ["Azshara"] = true, ["Felwood"] = true,
+    ["Un'Goro Crater"] = true, ["Moonglade"] = true, ["Silithus"] = true,
+    ["Winterspring"] = true, ["Orgrimmar"] = true, ["Thunder Bluff"] = true,
+    ["Darnassus"] = true, ["Mount Hyjal"] = true,
+}
+local EASTERN = {
+    ["Alterac Mountains"] = true, ["Arathi Highlands"] = true,
+    ["Badlands"] = true, ["Blasted Lands"] = true, ["Tirisfal Glades"] = true,
+    ["Silverpine Forest"] = true, ["Western Plaguelands"] = true,
+    ["Eastern Plaguelands"] = true, ["Hillsbrad Foothills"] = true,
+    ["The Hinterlands"] = true, ["Dun Morogh"] = true,
+    ["Searing Gorge"] = true, ["Burning Steppes"] = true,
+    ["Elwynn Forest"] = true, ["Deadwind Pass"] = true, ["Duskwood"] = true,
+    ["Loch Modan"] = true, ["Redridge Mountains"] = true,
+    ["Stranglethorn Vale"] = true, ["Swamp of Sorrows"] = true,
+    ["Westfall"] = true, ["Wetlands"] = true, ["Stormwind City"] = true,
+    ["Ironforge"] = true, ["Undercity"] = true,
+}
+
+local function ContinentOf(zone)
+    if KALIMDOR[zone] then return "K" end
+    if EASTERN[zone] then return "E" end
+    return nil
+end
+LearnNext.ContinentOf = ContinentOf
+
 --- The best of a list of places { zone, ... }: the zone the character is in,
---- then one of their side's cities, then the first.
+--- then one of their side's cities on their continent, then any place on
+--- their continent, then one of their side's cities, then the first. A
+--- trainer the cities near you don't have is looked for on your own side of
+--- the sea before the list's order sends you over it (2026-11-14: Thunder
+--- Bluff's Artisan Leatherworking pointed at Arathi, not Feralas).
 local function Nearest(places, side)
     local here = HereZone()
+    local home = here and ContinentOf(here)
     local cities = side and CITIES[side] or {}
-    local city
+    local city, homeCity, homeAny
     for _, place in ipairs(places) do
-        if here and place.zone == here then return place end
-        if not city and cities[place.zone] then city = place end
+        local where = CityOf(place)
+        if here and (place.zone == here or where == here) then return place end
+        local near = home and ContinentOf(place.zone) == home
+        if cities[where] then
+            if not city then city = place end
+            if near and not homeCity then homeCity = place end
+        end
+        if near and not homeAny then homeAny = place end
     end
-    return city or places[1]
+    return homeCity or homeAny or city or places[1]
 end
 
 --- Where the game saw a vendor or trainer stand (Logic/VendorPins.lua), or nil.
@@ -148,6 +217,19 @@ function LearnNext:Place(record)
                 }
             end
         end
+        -- Vendors the game showed selling it (Forever's trade camps sell
+        -- recipes the book has no vendor for), already of the player's side.
+        local pins = ns.VendorPins
+        local ok, sellers = false, nil
+        if pins and pins.RecipeSellers then ok, sellers = pcall(pins.RecipeSellers, pins, itemID) end
+        for _, seller in ipairs(ok and type(sellers) == "table" and sellers or {}) do
+            local zone = pins.ZoneName and pins.ZoneName(seller)
+            vendors[#vendors + 1] = {
+                kind = "vendor", name = seller.name, zone = zone ~= "" and zone or nil,
+                x = seller.x, y = seller.y, mapID = seller.mapID,
+                price = seller.gold, itemID = itemID,
+            }
+        end
     end
 
     -- A trainer first: it is how most recipes are learned, and the cheaper.
@@ -165,16 +247,27 @@ function LearnNext:Place(record)
 end
 
 --- The nearest trainer of the player's side for a profession who teaches
---- up to a skill, for Road to 300's trainer steps (2026-10-20).
+--- a rank, for Road to 300's trainer steps (2026-10-20).
+-- A trainer's number is the highest recipe it teaches, not the rank's cap,
+-- so a trainer teaches the rank whose cap is `needs` when its recipes go
+-- past the rank before (needs - 75): Expert (225) wants recipes over 150.
+-- Comparing it with the cap sent a 145 Alchemist past Undercity's Expert
+-- to Stonard's Artisan (2026-11-13).
 -- @param line   the Classic skill line
--- @param needs  the skill they must teach to
--- @return { kind = "trainer", name, zone, x, y } or nil
+-- @param needs  the cap of the rank to train (150, 225 or 300)
+-- @return { kind = "trainer", name, zone, x, y, mapID } or nil
 function LearnNext:TrainerFor(line, needs)
     local side = Side()
+    local from = (needs or 0) - 75
     local trainers = {}
     for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
-        if OnSide(row[5], side) and (row[6] or 0) >= (needs or 0) then
-            trainers[#trainers + 1] = { kind = "trainer", name = row[1], zone = row[2], x = row[3], y = row[4] }
+        if OnSide(row[5], side) and (row[6] or 0) > from then
+            local seen = SeenAt(row[1], row[2], "trainer")
+            trainers[#trainers + 1] = {
+                kind = "trainer", name = row[1], zone = row[2],
+                x = seen and seen.x or row[3], y = seen and seen.y or row[4],
+                mapID = seen and seen.mapID,
+            }
         end
     end
     return Nearest(trainers, side)

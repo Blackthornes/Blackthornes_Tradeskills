@@ -160,6 +160,17 @@ local ench = Draw(rows[2])
 check("an enchant makes no item", ench.sells.text, "no item")
 check("an unpriced profit is a dash", ench.profit.text, "--")
 check("an unpriced cost is a dash", ench.cost.text, "--")
+check("no item, no demand", ench.demand.text, "--")
+check("no reading yet is a dash", boots.demand.text, "--")
+local oldDemand = ns.Demand
+ns.Demand = {
+  Get = function(_, id) return id == 2307 and { level = "high" } or nil end,
+  Label = function() return "High" end,
+  Color = function() return "profit" end,
+  Rank = function(_, reading) return reading and 3 or 0 end,
+}
+check("demand for the item it makes", Draw(rows[1]).demand.text, "High")
+ns.Demand = oldDemand
 check("a known one says so", Draw(rows[3]).learn.text, "Known")
 check("a known one keeps its rarity, faded", lastRow.name.color[3] .. "/" .. lastRow.name.color[4], "0.87/0.55")
 Draw(rows[1])
@@ -257,6 +268,19 @@ tab.Refresh()
 check("which redraws the list, not the tab's view", refreshed, 1)
 tab.ShowView("nonsense")
 check("an unknown view falls back to the tab's own", tab.view, "recipes")
+
+print("\nrecipes to learn: at the average price")
+local savedProfit = ns.Profit
+ns.Profit = { NetFromListing = function(_, _, price) return price * 0.95 end }
+local info = { outputItemID = 9, cost = 50, price = 1000, yield = 1 }
+check("back from one sold at 100", View.BackAt(9, 100, 1), 95)
+check("two made, twice that", View.BackAt(9, 100, 2), 190)
+check("a vendor paying more wins", View.BackAt(9, 100, 1, 120), 120)
+check("pays for itself after (1000 / 45, rounded up)", View.PaybackAt(info, 100), 23)
+check("no profit at the average, no line", View.PaybackAt(info, 50), nil)
+check("no average, no line", View.PaybackAt(info, nil), nil)
+check("a recipe with no price, no line", View.PaybackAt({ outputItemID = 9, cost = 50 }, 100), nil)
+ns.Profit = savedProfit
 
 if failures > 0 then error(("%d recipes view check(s) failed"):format(failures)) end
 print("\n  recipes to learn view: all checks passed")

@@ -157,14 +157,14 @@ function SaleAlarm:Play(sound)
     local answer
     if sound ~= "raid" and type(PlaySoundFile) == "function" then
         local file = sound == "coins" and self.COINS_FILE or self.REGISTER_FILE
-        answer = Answer(pcall(PlaySoundFile, file, "Master"))
+        answer = Answer(pcall(ns.PlaySoundFile or PlaySoundFile, file, "Master"))
     end
 
     -- The raid warning: picked, or the one to fall back on when the file did
     -- not play (a new file waits for a full restart).
     if (answer == nil or answer == false) and type(PlaySound) == "function" then
         local kit = (_G.SOUNDKIT and _G.SOUNDKIT.RAID_WARNING) or RAID_WARNING_SOUND
-        answer = Answer(pcall(PlaySound, kit, "Master"))
+        answer = Answer(pcall(ns.PlaySound or PlaySound, kit, "Master"))
     end
 
     self.lastPlayAccepted = answer or false
@@ -247,6 +247,9 @@ function SaleAlarm:LogHeard(item, via)
     local noted, heard = pcall(ns.Mail.NoteHeardSale, ns.Mail, item)
     self.logged = (self.logged or 0) + 1
     if noted and type(heard) == "table" then self:Restock(heard.itemID, item) end
+    if ns.AuctionTracker and ns.AuctionTracker.Sold then
+        pcall(ns.AuctionTracker.Sold, ns.AuctionTracker, item, noted and type(heard) == "table" and heard.itemID or nil)
+    end
     if ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
     return true
 end

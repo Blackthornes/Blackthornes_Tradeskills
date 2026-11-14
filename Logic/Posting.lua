@@ -57,7 +57,7 @@ local VERIFY_SHARE_MOST = 3
 -- than five seconds a listing). A price checked this recently lists on the
 -- click itself, with no Yes/No box: the click is the real one the game
 -- wants. Older, it is checked again first.
-local FRESH_FOR = 120
+local FRESH_FOR = 600
 Posting.FRESH_FOR = FRESH_FOR
 
 -- One search for the whole Sell list asks about this many items at most.
@@ -130,7 +130,7 @@ function Posting:CanPost(itemID)
         return false, L["the auction house must be open"]
     end
 
-    if ns.Scanner.isScanning then
+    if self:ScanBlocks() then
         return false, L["wait for the scan to finish"]
     end
 
@@ -187,7 +187,7 @@ function Posting:SecondsUntilPostable(itemID)
     if self:IsBlocked() then return 0, nil end
     if not ns.Scanner.isAuctionHouseOpen then return 0, nil end
 
-    if ns.Scanner.isScanning then
+    if self:ScanBlocks() then
         return 0, L["waiting for the scan to finish"]
     end
 
@@ -629,11 +629,16 @@ end
 -- Deposits
 --------------------------------------------------------------------------------
 
---- The least deposit any listing pays on Forever: 1 silver, whether it
---- holds one item or a whole stack (Forever's rule, seen in game and in
---- its news, 2026-11-06). A guess made away from the auction house never
---- goes under it; at the auction house the game's own number is used.
-Posting.MIN_DEPOSIT = 100
+--- The least deposit any listing pays on Forever: 1 copper since the
+--- 2026-11-10 patch (it was 1 silver from 2026-11-06). A guess made away
+--- from the auction house never goes under it; at the auction house the
+--- game's own number is used.
+Posting.MIN_DEPOSIT = 1
+
+--- When the 1 silver floor ended (2026-11-10 00:00 UTC). A least deposit
+--- remembered from before then was that floor, not the item's own, so it
+--- no longer holds a guess up.
+Posting.FLOOR_ENDED = 1794268800
 
 --- Deposit per unit, remembered from the last time it could be calculated.
 --
@@ -648,7 +653,39 @@ function Posting:GetCachedUnitDeposit(itemID)
     -- A deposit quoted for a different listing length is not this one.
     if record.duration ~= self:DurationFor(itemID) then return nil end
 
+    -- A share left over from the 1 silver floor is not the item's own.
+    if Posting.IsFloorShare(record) then return nil end
+
     return record.unit
+end
+
+--- What the least deposit was, in copper, while the 1 silver floor stood.
+Posting.OLD_FLOOR = 100
+
+--- When a record's share each was worked out. Records made before this
+--- was kept have only `at`, which a later, smaller quote also moves; such
+--- a record's share is only as new as `at` when the quote that set `at`
+--- is the one the share came from (its least is for the same count).
+function Posting.UnitSeenAt(record)
+    local seen = tonumber(record.unitAt)
+    if seen then return seen end
+    if tonumber(record.leastQuantity) ~= tonumber(record.quantity) then return nil end
+    return tonumber(record.at)
+end
+
+--- True for a share each that is only the old 1 silver floor split over a
+--- listing (100c for 11 is about 9c each). That floor ended on 2026-11-10,
+--- so the share says nothing about the item now: left in, it made a cheap
+--- item's sale look worth less than a vendor pays (2026-11-13, a player's
+--- sell list flagged nearly every row). The next quote at the auction
+--- house replaces it.
+function Posting.IsFloorShare(record)
+    if type(record) ~= "table" then return false end
+    local unit, quantity = tonumber(record.unit), tonumber(record.quantity)
+    if not unit or not quantity then return false end
+    if math.abs(unit * quantity - Posting.OLD_FLOOR) > 0.5 then return false end
+    local seen = Posting.UnitSeenAt(record)
+    return seen == nil or seen < Posting.FLOOR_ENDED
 end
 
 function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
@@ -665,8 +702,10 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
         quantity = quantity,
         least = deposit,
         leastQuantity = quantity,
+        leastAt = time(),
         duration = duration,
         at = time(),
+        unitAt = time(),
     }
 
     -- The auction house asks a least deposit on any listing (players see 1s
@@ -676,17 +715,32 @@ function Posting:CacheUnitDeposit(itemID, deposit, quantity, duration)
     local old = ns.db.deposits[itemID]
     if type(old) == "table" and old.duration == duration then
         local oldQuantity = tonumber(old.quantity)
-        if oldQuantity and oldQuantity > quantity and tonumber(old.unit) then
+        if oldQuantity and oldQuantity > quantity and tonumber(old.unit)
+            and not Posting.IsFloorShare(old) then
             record.unit, record.quantity = old.unit, oldQuantity
+            record.unitAt = Posting.UnitSeenAt(old) or record.unitAt
         end
         local oldLeast = tonumber(old.least)
         local oldLeastQuantity = tonumber(old.leastQuantity)
-        if oldLeast and oldLeastQuantity and oldLeastQuantity < quantity then
+        if oldLeast and oldLeastQuantity and oldLeastQuantity < quantity
+            and Posting.LeastStillHolds(old) then
             record.least, record.leastQuantity = oldLeast, oldLeastQuantity
+            record.leastAt = Posting.LeastSeenAt(old)
         end
     end
 
     ns.db.deposits[itemID] = record
+end
+
+--- When a record's least deposit was seen (older records keep only `at`).
+function Posting.LeastSeenAt(record)
+    return tonumber(record.leastAt) or tonumber(record.at)
+end
+
+--- A least deposit seen before the 1 silver floor ended was that floor.
+function Posting.LeastStillHolds(record)
+    local seen = Posting.LeastSeenAt(record)
+    return seen ~= nil and seen >= Posting.FLOOR_ENDED
 end
 
 --- The deposit a remembered record gives for a listing of `quantity`:
@@ -694,6 +748,7 @@ end
 --- auction house was seen to ask.
 function Posting.DepositFromRecord(record, quantity)
     if type(record) ~= "table" or not tonumber(record.unit) then return nil end
+    if Posting.IsFloorShare(record) then return nil end
 
     quantity = math.max(1, quantity or 1)
     local deposit = math.floor(record.unit * quantity + 0.5)
@@ -702,7 +757,8 @@ function Posting.DepositFromRecord(record, quantity)
     -- Without that, its deposit is just the same share for fewer.
     local least = tonumber(record.least)
     local leastQuantity = tonumber(record.leastQuantity)
-    if least and leastQuantity and least > record.unit * leastQuantity + 1 then
+    if least and leastQuantity and least > record.unit * leastQuantity + 1
+        and Posting.LeastStillHolds(record) then
         deposit = math.max(deposit, least)
     end
 
@@ -894,6 +950,8 @@ function Posting:SetChosenPrice(itemID, price)
     else
         self.chosenPrice[itemID] = nil
     end
+    local passed = rawget(self, "passedOver")
+    if type(passed) == "table" then passed[itemID] = nil end
     Posting.changes = (Posting.changes or 0) + 1
 end
 
@@ -962,11 +1020,22 @@ end
 --- True when a vendor pays at least what one would bring on the auction
 --- house after its cut, so it is better sold to a vendor. A player asked
 --- (2026-10-17) for Tradeskills to say so, rather than list it as a loss.
+---
+--- The deposit a listing risks counts too (a player asked, the owner said
+--- build it, 2026-11-09): a listing that runs out keeps it, so beating the
+--- vendor by less than one deposit is not worth the risk. When
+--- `NetFromListing` already takes lost deposits off (more relists expected,
+--- or slow demand), it is not taken twice. Both live in
+--- `Profit:NetAfterRisk`, which Butler's `auction` reads too.
 function Posting.VendorPaysMore(itemID, price, vendorPrice)
     if not price or not vendorPrice or vendorPrice <= 0 then return false end
-    local ok, net = pcall(ns.Profit.NetFromListing, ns.Profit, itemID, price)
-    if not ok or type(net) ~= "number" then net = price end
-    return net <= vendorPrice
+    local Profit = ns.Profit
+    local net
+    if Profit and Profit.NetAfterRisk then
+        local ok, value = pcall(Profit.NetAfterRisk, Profit, itemID, price)
+        if ok and type(value) == "number" then net = value end
+    end
+    return (net or price) <= vendorPrice
 end
 
 function Posting:GetLossFloor(itemID, unitCost)
@@ -1275,6 +1344,14 @@ function Posting:GetPostable(opts)
             local noted = note ~= nil and sellable and count and count > 0
             if noted then heldAll = note end
 
+            -- Butler says wait for a better price (Logic/SisterKeeps.lua):
+            -- the row stays with a Sell Anyway button, List Next passes it.
+            local butlerWait
+            if ns.SisterKeeps and sellable and count and count > 0 and not anyway then
+                local ok, wait = pcall(ns.SisterKeeps.ButlerWait, ns.SisterKeeps, itemID, held)
+                if ok and type(wait) == "table" then butlerWait = wait end
+            end
+
             if sellable and count > 0 and (price or not needsPrice or noted)
                     and (opts.showHeld or noted or not heldAll) and (not toVendor or noted) then
                 lines[#lines + 1] = {
@@ -1311,6 +1388,7 @@ function Posting:GetPostable(opts)
                     -- Left out of List all for the Sell tab's own reasons
                     -- (opts.showNoted), not another addon's keep.
                     noted = noted or nil,
+                    butlerWait = butlerWait,
                     kept = kept,
                     keptWhy = keptWhy,
                     -- The copy itself when it has a random suffix: the item
@@ -1422,6 +1500,19 @@ function Posting:IsUnderFloor(line)
     return floor ~= nil and line.unitPrice < floor
 end
 
+--- Butler says wait for the copy a listing would draw from, asked fresh.
+--- Posting lists by item from the first free slot, which can be a waiting
+--- copy even when the line shown was a free one, or Butler may have changed
+--- its mind since the list was drawn. Only a click on the row's Sell Anyway
+--- lists a waiting item; List Next and the scroll wheel never do.
+function Posting:ButlerWaitsNow(itemID)
+    if not itemID or not ns.SisterKeeps or not ns.SisterKeeps.ButlerWait then return false end
+    local bag, slot = FindInBags(itemID)
+    if not bag then return false end
+    local ok, wait = pcall(ns.SisterKeeps.ButlerWait, ns.SisterKeeps, itemID, { bag = bag, slot = slot })
+    return ok and type(wait) == "table"
+end
+
 --- The most valuable stack worth listing right now.
 --
 -- Skips anything unpriced, anything under the price floor, and anything
@@ -1439,7 +1530,9 @@ function Posting:GetNextPostable(opts, lines)
 
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not self:IsUnderFloor(line) then
+            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
+            and not self:IsPassedOver(line.itemID)
+            and (anyway or not self:ButlerWaitsNow(line.itemID)) then
             if skipSettling and self:PendingFor(line.itemID) then
                 settling = true
             else
@@ -1459,7 +1552,8 @@ function Posting:GetSummary(opts, lines)
     local count, total = 0, 0
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
-            and not line.held and not self:IsUnderFloor(line) then
+            and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
+            and not self:IsPassedOver(line.itemID) then
             count = count + 1
             total = total + (line.total or 0)
         end
@@ -1559,6 +1653,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
     local sellable, available = self:GetSellInfo(itemID)
     if not sellable then
         ns.Print(L.Format("%s cannot be auctioned", Util.GetItemLabel(itemID)))
+        self:PassOver(itemID)
         return false
     end
 
@@ -1627,6 +1722,7 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
             Util.GetItemLabel(itemID), Util.FormatMoney(unitPrice), why or L["the price looks wrong"]))
         ns.Warn(L.Format("expected at least %s. Run a scan, or list it by hand.",
             Util.FormatMoney(floor)))
+        self:PassOver(itemID)
         return false
     end
 
@@ -1795,7 +1891,10 @@ function Posting:GetPriceFloor(itemID, byHand)
 
     -- A fifth of market value. Wide enough for a real undercut war, narrow
     -- enough to catch an order of magnitude going missing.
-    local market = not byHand and ns.Prices:GetValue(itemID, "market")
+    -- Scans first, so "Prefer TSM Prices" never moves what posting checks.
+    local market = not byHand and ((ns.Prices.GetScanValue
+        and ns.Prices:GetScanValue(itemID, "market"))
+        or ns.Prices:GetValue(itemID, "market"))
     -- Market value moves slowly, so a scan that only saw a few far dearer
     -- listings keeps it high for days. Others listing near this price in a
     -- recent scan says the price is real (the owner, 2026-10-28: a cloak
@@ -1874,9 +1973,11 @@ StaticPopupDialogs["BLACKTHORNES_TS_CONFIRM_POST"] = {
     -- "override" is the game replacing this dialog with the next one (a
     -- second List click while it was open): not a skip, and clearing the
     -- listing here left the new dialog's Yes with nothing to list.
-    OnCancel = function(_, _, reason)
+    OnCancel = function(self, _, reason)
         if reason == "override" then return end
+        local data = (self and self.data) or Posting.confirming
         Posting.confirming = nil
+        if data then Posting:PassOver(data.itemID) end
         ns.Print(L["skipped."])
     end,
 
@@ -2176,6 +2277,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
         ns.Warn(L.Format("not listing %s at %s: %s. Expected at least %s.",
             Util.GetItemLabel(itemID), Util.FormatMoney(price), why or L["the price looks wrong"],
             Util.FormatMoney(floor)))
+        self:PassOver(itemID)
         return true
     end
 
@@ -2185,6 +2287,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
         ns.Warn(L.Format("not listing %s at %s, the materials cost %s",
             Util.GetItemLabel(itemID), Util.FormatMoney(price), Util.FormatMoney(unitCost)))
         ns.Warn(L["turn on 'Recommend selling at a loss' in Settings to allow it."])
+        self:PassOver(itemID)
         return true
     end
 
@@ -2193,6 +2296,7 @@ function Posting:RefusesEarly(itemID, price, byHand)
     if paid then
         ns.Warn(ns.CraftedCost:RefusalText(itemID, price, paid, net) .. ".")
         ns.Warn(L["turn off 'Never below what I paid' in Settings to allow it."])
+        self:PassOver(itemID)
         return true
     end
 
@@ -2232,6 +2336,50 @@ function Posting:NoteChecked(itemID, itemKey)
     self.checkedAt[itemID] = GetTime()
 end
 
+--- A scan just priced these items (a table keyed by item ID): each counts
+--- as checked, so one click or wheel turn lists it at the scan's price
+--- while the scan is under ten minutes old, with no search first and no
+--- "Click again" (the owner's report, 2026-11-09).
+--- @param whole true when the scan read the whole auction house: see
+---   NoteWholeScan.
+function Posting:NoteScanned(itemIDs, whole)
+    if whole == true then self:NoteWholeScan() end
+    if type(itemIDs) ~= "table" then return end
+    for itemID in pairs(itemIDs) do
+        if type(itemID) == "number" then self:NoteChecked(itemID) end
+    end
+end
+
+--- A scan of the whole auction house just finished. For FRESH_FOR (ten
+--- minutes, five until 2026-11-14) every price counts as checked, also for an item the scan did
+--- not see (nobody is selling it) and for a copy with a random suffix, so
+--- a click or wheel turn lists with no second search first (the owner,
+--- 2026-11-12: "I do not want double scans before posting if I've had a
+--- scan in the last 5 minutes"). Before, only the items the scan priced
+--- were marked, so one nobody else sold cost a search of the list, a
+--- search of its own and a "Click again". Kept through closing the auction
+--- house: coming back inside ten minutes is still inside ten minutes.
+function Posting:NoteWholeScan()
+    self.wholeScanAt = GetTime()
+end
+
+--- Did a scan of the whole auction house finish in the last ten minutes?
+function Posting:ScannedLately()
+    local at = rawget(self, "wholeScanAt")
+    return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+end
+
+--- Does a running scan hold listing back? Only one the player asked for.
+--- The quiet scan the auction house starts by itself (the auto scan's quick
+--- scan) runs behind the player's listing: it used to refuse every click
+--- and wheel turn for up to thirty seconds, with "wait for the scan to
+--- finish" in chat (the owner's report, 2026-11-09).
+function Posting:ScanBlocks()
+    local scanner = ns.Scanner
+    if not (scanner and scanner.isScanning) then return false end
+    return scanner.quickOnly ~= true
+end
+
 --- Is the Yes/No box on? Off unless ticked ("Ask Before Listing").
 function Posting:AsksFirst()
     return ns.Config:Get("askBeforeListing") == true
@@ -2240,6 +2388,7 @@ end
 --- Was the price of the copy that would be listed checked lately? For a
 --- copy with a random suffix, that suffix's own search counts.
 function Posting:IsFreshCopy(itemID)
+    if self:ScannedLately() then return true end
     local key = self:GetSearchKey(itemID)
     if not key then return self:IsFresh(itemID) end
     local checked = rawget(self, "checkedSuffix")
@@ -2247,8 +2396,20 @@ function Posting:IsFreshCopy(itemID)
     return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
 end
 
+--- Will a click on this row look up the price before it lists? Then the
+--- button says Check Price, not List (the owner, 2026-11-14). Read four
+--- times a second by the label ticker, so it never walks the bags: a copy
+--- with a random suffix is judged by the plain item's check.
+function Posting:ClickChecksFirst(itemID)
+    if not itemID or not (ns.Scanner and ns.Scanner.isAuctionHouseOpen) then return false end
+    if ns.Config:Get("verifyPriceBeforePosting") == false then return false end
+    if self:AsksFirst() and not self:FastListing() then return true end
+    return not self:IsFresh(itemID)
+end
+
 --- Was this item's price checked recently enough to list on the click?
 function Posting:IsFresh(itemID)
+    if itemID and self:ScannedLately() then return true end
     local checked = rawget(self, "checkedAt")
     local at = type(checked) == "table" and itemID and checked[itemID]
     return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
@@ -2256,18 +2417,49 @@ end
 
 --- Forget every check: the auction house closed, and prices move while away.
 function Posting:ForgetChecks()
+    self.passedOver = {}
     self.checkedAt = {}
     self.checkedSuffix = {}
     self.bulkTried = {}
     self.checkAll = nil
 end
 
+--- Passed over for the rest of this visit: its listing was refused at the
+--- price the check found, or the player skipped it in the box. Without this
+--- the same stack stayed next on the list, so every List Next click and
+--- wheel turn refused or asked about it again and nothing after it was ever
+--- listed (the owner's report, 2026-11-08: the wheel "still breaks and
+--- stops working"). Closing the auction house or setting the item's price
+--- by hand gives it another go.
+function Posting:PassOver(itemID)
+    if not itemID then return end
+    if type(rawget(self, "passedOver")) ~= "table" then self.passedOver = {} end
+    self.passedOver[itemID] = true
+    Posting.changes = (Posting.changes or 0) + 1
+end
+
+function Posting:IsPassedOver(itemID)
+    local passed = rawget(self, "passedOver")
+    return type(passed) == "table" and itemID ~= nil and passed[itemID] == true
+end
+
 --- Was this item in a search of the whole list lately? Then one that came
 --- back without its price is searched for alone, not asked about again.
 function Posting:BulkTried(itemID)
+    if self:CheckPending(itemID) then return true end
     local tried = rawget(self, "bulkTried")
     local at = type(tried) == "table" and itemID and tried[itemID]
     return type(at) == "number" and (GetTime() - at) <= FRESH_FOR
+end
+
+--- Is a search for the whole list still out for this item: waiting in the
+--- queue, or sent and not yet answered? One given up or answered is not.
+function Posting:CheckPending(itemID)
+    local check = rawget(self, "checkAll")
+    if type(check) ~= "table" or not itemID or not (check.wanted and check.wanted[itemID]) then
+        return false
+    end
+    return not check.sentAt or (GetTime() - check.sentAt) <= CHECK_ALL_WAIT
 end
 
 --- The cheapest price from someone else in one browse row, or nil when the
@@ -2292,7 +2484,7 @@ function Posting:WouldCheckAll(line, lines)
     if ns.Config:Get("verifyPriceBeforePosting") == false then return false end
 
     local scanner = ns.Scanner
-    if not (scanner and scanner.isAuctionHouseOpen) or scanner.isScanning then return false end
+    if not (scanner and scanner.isAuctionHouseOpen) or self:ScanBlocks() then return false end
     if not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
             and Util.HasFunction("C_AuctionHouse.MakeItemKey")) then
         return false
@@ -2317,7 +2509,7 @@ function Posting:CheckAll(lines)
     if not (scanner and scanner.isAuctionHouseOpen) then
         return false, L["the auction house must be open"]
     end
-    if scanner.isScanning then return false, L["wait for the scan to finish"] end
+    if self:ScanBlocks() then return false, L["wait for the scan to finish"] end
     if not (Util.HasFunction("C_AuctionHouse.SearchForItemKeys")
             and Util.HasFunction("C_AuctionHouse.MakeItemKey")) then
         return false
@@ -2340,10 +2532,6 @@ function Posting:CheckAll(lines)
     local check = { wanted = wanted, count = #keys, found = 0 }
     self.checkAll = check
 
-    if type(rawget(self, "bulkTried")) ~= "table" then self.bulkTried = {} end
-    local now = GetTime()
-    for itemID in pairs(wanted) do self.bulkTried[itemID] = now end
-
     ns.AHQueue:Request({
         name = ("price check for %d items"):format(#keys),
         key = "price-check-all",
@@ -2357,6 +2545,13 @@ function Posting:CheckAll(lines)
                 return false
             end
             check.sentAt = GetTime()
+            -- Tried only once the search really went out: one that waited
+            -- in the queue and was given up never asked anything, so the
+            -- next click asks again rather than falling to one item at a
+            -- time for ten minutes.
+            if type(rawget(Posting, "bulkTried")) ~= "table" then Posting.bulkTried = {} end
+            local now = GetTime()
+            for itemID in pairs(wanted) do Posting.bulkTried[itemID] = now end
             return true
         end,
         onGiveUp = function()

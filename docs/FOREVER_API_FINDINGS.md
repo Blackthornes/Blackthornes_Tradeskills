@@ -452,6 +452,15 @@ to the guild, and says what came back and how the sender's name reads. Also
 open: whether a whisper's sender name tells apart two characters with the
 same first name, since Forever allows that.
 
+**Snipe's background quotes and bigger batches (added 2026-11-07).**
+Snipe asks `C_AuctionHouse.StartCommoditiesPurchase` from a timer, before
+the player clicks, so one click can pay. Retail allows that; Forever has not
+been seen to. If the call raises, or two quotes never come
+(`COMMODITY_PRICE_UPDATED`), Snipe stops trying for the session
+(`noAutoStack`) and asks on the click instead. `SearchForItemKeys` batches
+now start larger (up to 50 keys) and halve when the queue gives up; how
+many Forever takes at once is not yet measured.
+
 ## Bank slot events fire with the bank shut
 
 `PLAYERBANKSLOTS_CHANGED` and `PLAYERREAGENTBANKSLOTS_CHANGED` arrive on
@@ -474,6 +483,14 @@ harsh: about eight at once, then result 3, and sends paced every half second
 were still refused with result 8. A 256-byte message was said to be sent. So
 `Logic/RealmPrices.lua` sends one message every 3 seconds and only when
 nothing else of ours is waiting.
+
+A player's report (2026-11-09): the server can refuse sends to the channel,
+and each refused send prints "[N. BTSPricesA] That operation is not permitted
+in this channel." as a CHAT_MSG_CHANNEL_NOTICE line. Why it refuses for some
+players is not known yet (a new or trial account, or a channel someone else
+muted, are guesses). The notice key was not read, so Logic/RealmPrices.lua
+treats any notice on our channel within a few seconds of a send as a refusal,
+hides it, and backs off.
 
 ## The one window's docking (not yet seen in game)
 

@@ -578,6 +578,20 @@ function Widgets.ShowItemOnly(owner, itemID, fallback)
     GameTooltip:Show()
 end
 
+--- Let a material line show its item's own tooltip on hover. The line keeps
+--- `itemID` and `itemName`, set each time it is filled; a line with no item
+--- (the "and N more" line) shows nothing.
+function Widgets.HoverItemLine(line)
+    if not line or not line.EnableMouse then return line end
+    line:EnableMouse(true)
+    line:SetScript("OnEnter", function(self)
+        local itemID = rawget(self, "itemID")
+        if itemID then Widgets.ShowItemOnly(self, itemID, rawget(self, "itemName")) end
+    end)
+    line:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return line
+end
+
 --------------------------------------------------------------------------------
 -- Checkbox
 --------------------------------------------------------------------------------
@@ -953,6 +967,13 @@ local function ShortOptionText(text)
     return type(text) == "string" and text:match("^[^:]+:%s+(.+)$") or text
 end
 
+--- Frame strata from lowest to highest, so an opened menu is only ever
+--- raised, never lowered.
+Widgets.MENU_STRATA_RANK = {
+    BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
+    FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
+}
+
 --- Minimal dropdown. options is an array of { text, value }.
 --
 -- An option with `header = true` is a line of dim words that cannot be
@@ -989,7 +1010,7 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
     end
 
     local menu = Theme.CreatePanel(parent, "panel", "borderLit")
-    menu:SetFrameStrata("DIALOG")
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
     -- A box at the foot of a window opens upward (opts.up), so its menu
     -- stays over the window rather than hanging below it.
     if opts.up then
@@ -1055,8 +1076,19 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 entry.mark:Hide()
 
                 local function Light(value) entry.highlight:SetAlpha(value) end
-                entry:SetScript("OnEnter", function(self) Motion:Blend(self, "hover", 1, 0.08, Light) end)
-                entry:SetScript("OnLeave", function(self) Motion:Blend(self, "hover", 0, 0.15, Light) end)
+                -- An option may carry a hover of its own (`option.tooltip`).
+                entry:SetScript("OnEnter", function(self)
+                    Motion:Blend(self, "hover", 1, 0.08, Light)
+                    if self.tip and GameTooltip then
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetText(self.tip, 1, 1, 1, 1, true)
+                        GameTooltip:Show()
+                    end
+                end)
+                entry:SetScript("OnLeave", function(self)
+                    Motion:Blend(self, "hover", 0, 0.15, Light)
+                    if self.tip and GameTooltip then GameTooltip:Hide() end
+                end)
 
                 entries[index] = entry
             end
@@ -1075,6 +1107,7 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 entry.label:SetTextColor(Theme.Unpack(color))
                 entry.mark:SetShown(IsOn(option))
                 entry:EnableMouse(not option.header)
+                entry.tip = option.tooltip
                 entry:Show()
             else
                 entry:Hide()
@@ -1221,7 +1254,13 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
             if menu:GetParent() ~= UIParent then menu:SetParent(UIParent) end
             local scale = dropdown:GetEffectiveScale() / UIParent:GetEffectiveScale()
             if type(scale) == "number" and scale > 0 then menu:SetScale(scale) end
-            menu:SetFrameStrata("DIALOG")
+            -- Over every window, Rules and Settings included: a menu at
+            -- DIALOG opened behind a DIALOG window's rows. Never lowered
+            -- below a strata a caller already set.
+            local now = menu.GetFrameStrata and menu:GetFrameStrata()
+            if (Widgets.MENU_STRATA_RANK[now] or 0) < Widgets.MENU_STRATA_RANK.FULLSCREEN_DIALOG then
+                menu:SetFrameStrata("FULLSCREEN_DIALOG")
+            end
         end)
     end
 
@@ -2599,6 +2638,8 @@ function Widgets.CreateScrollList(parent, opts)
 
         scrollbar:SetMinMaxValues(0, maxOffset)
         scrollbar:SetShown(maxOffset > 0)
+        self.canScroll = maxOffset > 0
+        if self.wheelPass then self:ApplyWheel() end
 
         -- The thumb is as long as the share of the list on screen, as the
         -- scroll frame's is, so it says how much more there is rather than
@@ -2688,6 +2729,28 @@ function Widgets.CreateScrollList(parent, opts)
     end)
 
     list:EnableMouseWheel(true)
+
+    -- While the wheel is bound to something (the auction house drawer's
+    -- wheel listing, UI/AuctionWheel.lua), a list with nothing more to show
+    -- lets the wheel through rather than swallowing the turn. Asked with
+    -- `always`, a list with more to show lets it through too (2026-11-12:
+    -- a long Sell list under the mouse scrolled when the turn should have
+    -- listed); the bar still drags.
+    function list:ApplyWheel()
+        if not self.EnableMouseWheel then return end
+        local keep = not self.wheelPass
+            or (self.canScroll == true and not self.wheelPassAlways)
+        self:EnableMouseWheel(keep)
+    end
+
+    function list:WheelPass(on, always)
+        on = on == true
+        always = on and always == true
+        if self.wheelPass == on and self.wheelPassAlways == always then return end
+        self.wheelPass = on
+        self.wheelPassAlways = always
+        self:ApplyWheel()
+    end
     list:SetScript("OnMouseWheel", function(self, delta)
         local _, maxOffset = scrollbar:GetMinMaxValues()
         local newOffset = math.max(0, math.min(maxOffset, self.offset - (delta * 3)))

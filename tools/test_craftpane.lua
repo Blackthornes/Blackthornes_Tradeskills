@@ -856,7 +856,7 @@ do
 
   CraftPanel:OnClearClicked()
   check("the first click on Clear queue empties nothing", cleared, 0)
-  check("and asks for a second click", button.text, "Click to clear")
+  check("and asks for a second click", button.text, "Confirm")
   check("with a red border while it waits", button.confirming, true)
 
   CraftPanel:OnClearClicked()
@@ -979,41 +979,145 @@ do
 end
 
 -- The game's character window opens beside the profession window, where the
--- pane docks. While it is up the pane drops below it, so gear can be clicked.
+-- pane docks. While it is up the pane docks past it, or folds under it when
+-- there is no room, and goes back when it closes.
 do
   check("the pane sits above the game's windows", CraftPanel.StrataFor(false), "HIGH")
-  check("and below them while the character window is up", CraftPanel.StrataFor(true), "LOW")
+  check("and below a sheet whose spot can't be read", CraftPanel.StrataFor("under"), "LOW")
+  check("but above it once docked past it", CraftPanel.StrataFor("past"), "HIGH")
 
-  local strata = "HIGH"
+  local P = CraftPanel.SheetPlace
+  -- Profession window 0..700, sheet 706..1050, pane 350 wide, gap 6.
+  check("no sheet: docked as always", P(false, 0, 700, 706, 1050, 1920, 350, 6), "dock")
+  check("sheet beside, room past it: dock past", P(true, 0, 700, 706, 1050, 1920, 350, 6), "past")
+  check("sheet beside, no room: fold under it", P(true, 0, 700, 706, 1050, 1300, 350, 6), "fold")
+  check("exactly enough room still docks past", P(true, 0, 700, 706, 1050, 1406, 350, 6), "past")
+  check("sheet to the left of the window: docked as always", P(true, 400, 1100, 0, 350, 1920, 350, 6), "dock")
+  check("spot unknown: drawn under the sheet", P(true, nil, 700, 706, 1050, 1920, 350, 6), "under")
+
+  -- A tiny world to place a pane in.
+  local function Region(l, r)
+    return { l = l, r = r, shown = true,
+      IsShown = function(self) return self.shown end,
+      GetLeft = function(self) return self.l end,
+      GetRight = function(self) return self.r end,
+      GetEffectiveScale = function() return 1 end,
+      GetTop = function() return 800 end, GetBottom = function() return 100 end,
+      GetHeight = function() return 700 end, GetWidth = function(self) return self.r - self.l end }
+  end
+  local trade = Region(0, 700)
+  local sheet = Region(706, 1050)
+  sheet.shown = false
   local hooks = {}
-  local sheet = { shown = false }
-  function sheet:IsShown() return self.shown end
   function sheet:HookScript(event, fn) hooks[event] = fn end
-  local oldSheet = _G.CharacterFrame
-  _G.CharacterFrame = sheet
 
-  local oldFrame = CraftPanel.frame
+  local oldSheet, oldParent, oldTimer = _G.CharacterFrame, _G.UIParent, _G.C_Timer
+  local oldFind, oldDesired, oldOverhang, oldRefresh =
+    CraftPanel.FindTradeSkillFrame, CraftPanel.DesiredHeight, CraftPanel.RightOverhang, CraftPanel.Refresh
+  local oldFrame, oldBody, oldPlace, oldSqueezed = CraftPanel.frame, CraftPanel.body, CraftPanel.place, CraftPanel.squeezed
+  local oldCollapse, oldDebug, oldConfig = ns.Collapse, ns.Debug, ns.Config
+  _G.CharacterFrame = sheet
+  _G.UIParent = Region(0, 1920)
+  _G.C_Timer = nil
+  ns.Debug = function() end
+  ns.Collapse = { HEIGHT = 50,
+    IsCollapsed = function() return false end,
+    Height = function(_, full) return full end }
+  CraftPanel.FindTradeSkillFrame = function() return trade, "TradeSkillFrame" end
+  CraftPanel.DesiredHeight = function() return 600 end
+  CraftPanel.RightOverhang = function() return 0 end
+  local refreshed = 0
+  CraftPanel.Refresh = function() refreshed = refreshed + 1 end
+
+  local point, height, strata, bodyShown
   CraftPanel.frame = {
+    ClearAllPoints = function() point = nil end,
+    SetPoint = function(_, p, rel, rp, x, y) point = { p, rel, rp, x, y } end,
+    SetHeight = function(_, h) height = h end,
+    GetHeight = function() return height end,
     SetFrameStrata = function(_, s) strata = s end,
     GetFrameStrata = function() return strata end,
+    GetEffectiveScale = function() return 1 end,
+    IsShown = function() return true end,
   }
+  CraftPanel.body = { SetShown = function(_, v) bodyShown = v end }
+  CraftPanel.squeezed, CraftPanel.place = nil, nil
+
   CraftPanel.watchedSheets = nil
   CraftPanel:WatchSheets()
   check("the character window is only hooked", type(hooks.OnShow) == "function" and type(hooks.OnHide) == "function", true)
 
+  CraftPanel:Place()
+  check("no sheet: docked to the profession window", point[2], trade)
+  check("full height", height, 600)
+
   sheet.shown = true
   hooks.OnShow()
-  check("opening the character window puts the pane under it", strata, "LOW")
+  check("opening the character window docks the pane past it", point[2], sheet)
+  check("at its top right", point[3], "TOPRIGHT")
+  check("still above the game's windows", strata, "HIGH")
+  check("still full height", height, 600)
+  check("still open", bodyShown, true)
+
+  _G.UIParent = Region(0, 1300)
+  refreshed = 0
+  hooks.OnShow()
+  check("no room past it: folded", CraftPanel:IsCollapsed(), true)
+  check("to its title strip", height, 50)
+  check("under the sheet", point[2] == sheet and point[3], "BOTTOMLEFT")
+  check("the folding part is put away", bodyShown, false)
+  check("the saved fold is left alone", ns.Collapse.IsCollapsed(), false)
+
   sheet.shown = false
   hooks.OnHide()
-  check("closing it brings the pane back up", strata, "HIGH")
+  check("closing it puts the pane back", point[2], trade)
+  check("open again", CraftPanel:IsCollapsed(), false)
+  check("full height again", height, 600)
+  check("the folding part comes back", bodyShown, true)
+  check("and the list is filled again", refreshed, 1)
+
+  -- Reflow notices a sheet that moved since the pane was placed.
+  _G.UIParent = Region(0, 1920)
+  sheet.shown = true
+  CraftPanel:Reflow()
+  check("a refresh places it past a sheet that came up", point[2], sheet)
 
   hooks = {}
   CraftPanel:WatchSheets()
   check("a sheet is hooked once", hooks.OnShow, nil)
 
-  CraftPanel.frame = oldFrame
-  _G.CharacterFrame = oldSheet
+  _G.CharacterFrame, _G.UIParent, _G.C_Timer = oldSheet, oldParent, oldTimer
+  CraftPanel.FindTradeSkillFrame, CraftPanel.DesiredHeight, CraftPanel.RightOverhang, CraftPanel.Refresh =
+    oldFind, oldDesired, oldOverhang, oldRefresh
+  CraftPanel.frame, CraftPanel.body, CraftPanel.place, CraftPanel.squeezed = oldFrame, oldBody, oldPlace, oldSqueezed
+  ns.Collapse, ns.Debug, ns.Config = oldCollapse, oldDebug, oldConfig
+end
+
+do
+  -- The one window stays in front of the pane when a profession opens.
+  local function Win(shown)
+    local w = { shown = shown, raised = 0 }
+    function w:IsShown() return self.shown end
+    function w:Raise() self.raised = self.raised + 1 end
+    return w
+  end
+  local oldUI, oldHub = ns.UI, rawget(_G, "BlackthornesWindow")
+  local main, one = Win(false), Win(true)
+  ns.UI = { window = main }
+  _G.BlackthornesWindow = { frame = one }
+  local list = CraftPanel.FrontWindows()
+  check("the one window is raised when it is up", list[1], one)
+  check("a hidden main window is not raised", #list, 1)
+  main.shown = true
+  list = CraftPanel.FrontWindows()
+  check("both are raised, the one window last", list[2], one)
+  check("the main window first", list[1], main)
+  _G.BlackthornesWindow = { frame = main }
+  check("the same frame is raised once", #CraftPanel.FrontWindows(), 1)
+  _G.BlackthornesWindow = nil
+  one.shown = false
+  check("no one window, only the main window", CraftPanel.FrontWindows()[1], main)
+  ns.UI, _G.BlackthornesWindow = oldUI, oldHub
 end
 
 print("")

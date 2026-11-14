@@ -39,6 +39,9 @@ local DEFAULTS = {
         -- How many times we assume an item is relisted before it sells, so the
         -- deposit is not silently ignored in the profit maths.
         expectedRelists = 1,
+        -- "Ignore Deposit:" on the Pricing page (2026-11-14): off unless
+        -- ticked. Ticked, profit and sell advice leave the deposit out.
+        ignoreDeposit = false,
 
         -- Posting undercuts the cheapest listing by this much, and profit is
         -- calculated at that price. This models what you will actually receive
@@ -46,7 +49,11 @@ local DEFAULTS = {
         --
         -- Commodities only. An item auction cannot be priced in copper at all,
         -- so it steps by a whole silver or matches; see minProfit below.
-        undercutCopper = 1,
+        -- 0 (match the cheapest) by default since 2026-11-09: Forever's
+        -- auction house sells the cheapest first and keeps a line at each
+        -- price, so a 1c undercut only jumps the line. Saves that already
+        -- hold a number keep it (ApplyDefaults fills only what is missing).
+        undercutCopper = 0,
 
         -- What to list a craft at when nothing is competing with it: what
         -- its materials are worth, plus this much. Two cases reach it --
@@ -231,6 +238,11 @@ local DEFAULTS = {
         -- Ready to sell at the auction house: leave out the rows at a loss
         -- (UI/PostPanel.lua, "Hide losses"). Off until ticked.
         postHideLosses = false,
+        -- Sell's Crafted Only box: only items your recipes make. Off unless ticked.
+        postCraftedOnly = false,
+        -- Sell's Show Waiting box: Butler's waiting items stay in the list.
+        -- On unless unticked. Never rename it.
+        postShowWaiting = true,
         -- Profit by method's headings folded away, their keys comma apart
         -- (a player asked, the owner said yes from a mockup, 2026-10-22).
         -- Never rename it.
@@ -239,6 +251,9 @@ local DEFAULTS = {
         -- Deals, Craftsman's Writs: the reputation goal the panel works
         -- towards (UI/DealsWrits.lua).
         writGoal = "honored",
+        -- How the writ list is grouped: "none" (as it always was) or "zone",
+        -- by where each writ is handed in. Never rename it.
+        writGroupBy = "none",
 
         scanBudgetMs = 8,
 
@@ -247,9 +262,9 @@ local DEFAULTS = {
         -- between sessions this is what makes the addon self-sufficient.
         autoScan = true,
 
-        -- The Sale Total in the drawer's header, counting up as you list
+        -- The Sale Total in the drawer's header, what the Sell list comes to
         -- (UI/SaleTotal.lua, the owner 2026-10-28: on for everyone; counts
-        -- up since 2026-10-29). Never rename it, nor saleTotalBest and
+        -- up 2026-10-29 to 2026-11-10). Never rename it, nor saleTotalBest and
         -- saleTotalLast, left in the save unread.
         saleTotal = true,
 
@@ -266,6 +281,12 @@ local DEFAULTS = {
         -- exactly as the client draws it. Off unless ticked since the owner
         -- asked (2026-10-20); a save that already has it on keeps it.
         showValueInProfessionWindow = false,
+
+        -- Show each recipe's profit in Blizzard's profession window instead
+        -- of its sell price, and a card under the reagents with what it sells
+        -- for, what the mats cost and the profit (the owner picked option B,
+        -- 2026-11-14). Off unless ticked.
+        craftProfitInProfessionWindow = false,
 
         -- Put what an item is worth on the auction house onto the item's
         -- own tooltip, wherever the game draws one. Off leaves every
@@ -300,6 +321,11 @@ local DEFAULTS = {
         -- UI/ItemTooltip.lua. Never rename it.
         tooltipCrateCosts = true,
 
+        -- What you paid on the auction house, on an item's tooltip (a
+        -- player asked, 2026-11-12). See ItemTooltip:AddBoughtLines. Never
+        -- rename it.
+        tooltipBoughtFor = true,
+
         -- Off, Shift or Always for each tooltip line (asked 2026-10-18):
         -- true keeps that line for while Shift is held. Whether a line is on
         -- stays in its own setting above, and the sales lines' Shift is
@@ -310,6 +336,7 @@ local DEFAULTS = {
         tooltipEnchantShift = false,
         tooltipDisenchantShift = true,
         tooltipCrateShift = false,
+        tooltipBoughtShift = false,
 
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does
@@ -374,6 +401,18 @@ local DEFAULTS = {
         -- and side, or only the "character" playing.
         goldTrackerCount = "all",
 
+        -- My Auctions (asked 2026-11-11, from a mockup): a small window
+        -- listing your own auctions that cheers each sale. Off unless
+        -- ticked. Sold Effects ("full", "subtle" or "off"), Transparent (0
+        -- to 3), its size (percent) and where it sits. Never rename these.
+        -- See Logic/AuctionTracker.lua and UI/AuctionTracker.lua.
+        auctionTracker = false,
+        auctionTrackerEffects = "full",
+        auctionTrackerSeeThrough = 0,
+        auctionTrackerScale = 100,
+        auctionTrackerX = nil,
+        auctionTrackerY = nil,
+
         -- Say in chat when someone in Trade asks for something one of the
         -- characters makes (asked 2026-10-12). See Logic/CraftRequests.lua.
         tradeRequests = false,
@@ -416,6 +455,8 @@ local DEFAULTS = {
         mailReportSound = true,
         -- The chime when a disenchant turns up something new or lucky.
         disenchantSound = true,
+        -- What each disenchant gave, said in chat (Logic/DisenchantLog.lua).
+        disenchantChat = true,
         -- The cheer when Set goal makes a Farmer goal.
         goalSound = true,
         -- Farmer goals made with Set goal move with the queue, and go
@@ -536,10 +577,14 @@ local DEFAULTS = {
         -- shows the graph where the materials list goes.
         priceGraphWindow = "day",
         profitShowsGraph = false,
+        recipeShowsGraph = false,
+        yourTimeShowsGraph = false,
 
         -- The Profit tab's TIME and GOLD/HR columns (asked 2026-10-09),
         -- from its "Per hour" tick box.
         profitShowsPerHour = false,
+        -- Gold an hour, buying the parts or making them (Logic/HourPlans.lua).
+        profitGoldAnHour = false,
 
         -- The columns a player hid (asked 2026-10-09): "list.key" for each,
         -- separated by commas. Empty shows every column. Right-click a
@@ -558,6 +603,14 @@ local DEFAULTS = {
         -- Each character's queued crafts' needs, for the other account's mail
         -- suggestions. Off unless ticked (the owner, 2026-11-07); never rename it.
         linkShareQueue = false,
+        -- Each character's own auction sales, for the other account's Sales
+        -- and Stats tabs. Off unless ticked (the owner, 2026-11-07); never
+        -- rename it.
+        linkShareSales = false,
+        -- This account's shopping lists and craft queue list, shown read only
+        -- on the other account. Off unless ticked (the owner, 2026-11-07);
+        -- never rename it.
+        linkShareLists = false,
         -- Share scans with guildmates and fill gaps with theirs. On by
         -- default (the owner, 2026-10-07). See Logic/GuildPrices.lua.
         guildPrices = true,
@@ -579,6 +632,14 @@ local DEFAULTS = {
         -- Fill gaps with TradeSkillMaster's prices when it is loaded (asked
         -- 2026-10-12). See Logic/TSMPrices.lua.
         tsmPrices = true,
+        -- Use TSM's price once your own scan is more than an hour old
+        -- (the owner, 2026-11-12). Off unless ticked; never rename it.
+        -- See Prices:PreferredTSM.
+        preferTsmPrices = false,
+        -- The TSM price "market" reads, typed by the player (2026-11-13):
+        -- `tsmPriceSource`, nil or empty for DBRecent; never rename it.
+        -- `tsmGearPriceSource`, nil or empty for the TSM Price Source; never rename it.
+        -- See TSMPrices:MarketSource.
         -- Then Auctionator's (asked 2026-10-12). See Logic/AuctionatorPrices.lua.
         auctionatorPrices = true,
         -- Which of those two is asked first: "tsm" or "auctionator"
@@ -627,6 +688,12 @@ local DEFAULTS = {
     -- craft, their item bought instead (2026-10-07). Account wide,
     -- the name kept for Settings. See Cost:SetNeverSubCraft.
     neverSubCrafts = {},
+
+    -- recipeID -> the craft's name: recipes the player skipped on Road to
+    -- 300 (a player asked, 2026-11-12: a vendor's limited recipe was sold
+    -- out), so the road picks the next one. Account wide; only the road
+    -- reads it; never rename it. See RoadPlan:Skip.
+    roadSkipped = {},
 
     -- recipeID -> the craft's name: crafts always made to go into another
     -- craft, whatever buying costs (2026-10-13, Make on the Level Up tab).
@@ -1327,7 +1394,7 @@ function Config:WarnAccountDataLost()
 
     if type(PlaySound) == "function" then
         local kits = type(_G.SOUNDKIT) == "table" and _G.SOUNDKIT or {}
-        pcall(PlaySound, kits.RAID_WARNING or 8959, "Master")
+        pcall(ns.PlaySound or PlaySound, kits.RAID_WARNING or 8959, "Master")
     end
 end
 

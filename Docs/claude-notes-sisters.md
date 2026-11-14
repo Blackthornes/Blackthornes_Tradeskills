@@ -204,14 +204,18 @@ quest's Crafted tab) calls, inside a pcall, through its
 
 ```lua
 ns.Queue:Ensure(recipeID, quantity)         -- at least that many queued; true, or nil and why
-ns.Queue:EnsureBuy(itemID, count, forItem)  -- that many on the list to buy for forItem; true, or nil and why
-ns.Queue:ForUpgrade(itemID)                 -- "craft", "buy" or nil: what the queue holds for the gear
+ns.Queue:EnsureBuy(itemID, count, forItem, forRecipe)  -- that many on the list to buy for forItem; true, or nil and why
+ns.Queue:ForUpgrade(itemID, recipeID)       -- "craft", "buy" or nil: what the queue holds for the gear
 ns.Queue:ShowQueue()                        -- opens the window on the Queue tab
 ```
 
 Gear the character or an alt can make is queued; gear it still has to
 learn has its materials put on the list to buy; gear nobody makes goes on
-the list itself. The list to buy is `queueBuys` (account wide, each line
+the list itself. Since 2026-11-07 a pattern's materials come with
+`forRecipe` (`crafts = 1`), so learning it queues the craft
+(`QueueLearned`), `Queue:Ensure` drops lines for that recipe
+(`DropBoughtFor`), and `ForUpgrade(itemID, recipeID)` finds them by
+recipe. Tested in `tools/test_queuebuys.lua`. The list to buy is `queueBuys` (account wide, each line
 kept for its `owner`, never rename it). A line goes when the gear's craft
 is queued (`Queue:Add`), when the gear is owned or worn, with its row's x
 on the Queue tab, or with Clear all. Keep these four stable; if one
@@ -345,6 +349,35 @@ Butler's gold top-ups).
 The playing character's bags are live (`Inventory:GetBagCounts`), the rest
 the saved snapshots (`inventory`, `bank`, `mail` on its record). Keep it
 stable too; Butler's `Logic/Everyone.lua` reads it.
+
+Mail running out (the owner said build it from a mockup, 2026-11-09, for
+Butler's "Mail Running Out"): each inbox read (`Mail:Read`) saves
+`record.mailExpiry = { count, soonest, soon, returns, gone }` on the
+character's record (never rename it; `Mail.Expiry`): how many mails the
+box showed, the soonest `daysLeft` of any, how many run out within
+`Mail.SOON_DAYS` (3) and of those how many go back to the sender
+(`Mail.GoesBack`: the game's `InboxItemCanDelete` when it has one, else a
+player's mail with money or items not sent back once already) or are
+gone for good. `Holdings()` entries carry them as `mailCount`,
+`mailSoonest`, `mailSoonCount`, `mailReturns` and `mailGone` (nil until
+read this way), as of `mailAt`; Butler counts the days since. Tested in
+`tools/test_mailrunsout.lua` and `tools/test_butler.lua`. Not yet seen in
+game. If they change, change Butler's `Logic/MailRunsOut.lua` too.
+
+Clear Items and stale alts (a player's report, the owner said build it
+from a mockup, 2026-11-10: Butler's jobs mailed items long gone and gold
+already collected). Each inbox read saves `record.mailMoney` (copper the
+box held), and `Holdings()` entries carry `mailMoney` and `clearedAt`, so
+Butler's gold notes can tell gold was picked up. The Characters tab has
+**Clear Items** left of Forget character (armed, "Confirm", never the
+character playing): `Recipes:ClearItems(key)` (`Recipes.CLEARED_FIELDS`)
+forgets that character's saved bags, bank, mail and gold, keeps
+`seenAt`, sets `clearedAt`; nothing else on the record changes. Butler's
+own menu calls `Butler:ClearHoldings(key or full name)` (true and the full
+name, or false and "playing", "unknown" or "error"). The job holder skips
+an alt whose bags are older than `Butler.STALE_DAYS` (30;
+`Butler.Stale`). Tested in `tools/test_clearitems.lua` and
+`tools/test_butler.lua`. Not yet seen in game.
 
 At a mailbox and the bank (the owner said start, 2026-10-11), Butler's
 `Logic/Errands.lua` calls two more, inside a pcall:
@@ -552,7 +585,8 @@ inside a pcall:
 
 ```lua
 _G.BlackthornesTS.Butler:CraftFor(item, carried)
-  -- { recipeID, name, itemID (what it makes), per, crafts, perItem, needs = { { itemID, count } } }, or nil
+  -- { recipeID, name, itemID (what it makes), per, crafts, perItem, needs = { { itemID, count } },
+  --   others = { { itemID, count } } }, or nil
 _G.BlackthornesTS.Butler:QueueCraft(recipeID, crafts)   -- Queue:Ensure; true, or false and why
 ```
 
@@ -560,7 +594,29 @@ Only recipes the character playing knows (not a dropped profession) that
 use the item. Each is valued by `Profit:Analyse` "best" after the cut and
 deposit (a slow auction at `Butler.SLOW`, a derived or uncontested price
 never), less the other materials (`Cost:GetCraftCost`, owned at their
-worth); `perItem` is that over how many one craft uses. Kept in the
+worth); `perItem` is that over how many one craft uses. `needs` is what
+the bags lack for those crafts; `others` (2026-11-14, for Butler's "Craft
+Details:" tooltip, the owner said build it) is every other material they
+use, carried or not, so Butler can say "With Tin Bar." Kept in the
 lookup. Tested in `tools/test_butlercraft.lua`. Keep both stable; Butler's
 `Logic/Sisters.lua` reads them.
 
+
+## Butler Says Wait on the auction house drawer
+
+The owner said build it from a mockup (2026-11-14). Butler folds an item
+away as Wait for a Better Price when today's price is well under its usual
+one, or when it costs more to make than it sells for. The drawer
+(`UI/PostPanel.lua`) shows the same: `Posting:GetPostable` puts
+`line.butlerWait` (`{ short, reason, cost, now, usual }`) on a bag copy
+Butler says waits, read through `SisterKeeps:ButlerWait(itemID, held)`,
+which calls, inside a pcall, read only,
+`_G.BlackthornesButler.Verdicts:Waiting(itemID, bag, slot)`. The row reads
+"Butler Says Wait" and its button Sell Anyway
+(`SisterKeeps:SellAnyway(itemID)`, calling Butler's `Verdicts:SellAnyway`,
+which lasts until the auction house closes). List Next and the summary
+pass waiting rows over. "Show Waiting" (`postShowWaiting`, account wide, on
+unless unticked, never rename it), "Waiting: N" and Sell All Waiting sit in
+a strip under the summary, shown only while something waits. Without
+Butler nothing waits. Tested in `tools/test_butlerwait.lua`. If Butler
+changes those calls, change `Logic/SisterKeeps.lua` too.

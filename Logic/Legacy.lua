@@ -8,10 +8,19 @@
 -- suggests a build (the owner, 2026-10-22: "we just read what they have
 -- set").
 --
--- Used for one thing so far: Master Chef, which gives extra results when
--- cooking, so a cooking recipe's yield on the Profit tab follows it
--- (Cost:GetCraftCost). Bartering needs nothing here: vendor prices are read
--- off the real merchant window, which already has the discount.
+-- Used for three perks, each only for the ranks the player has spent
+-- (none spent means no change anywhere):
+--   Master Chef: cooking gives extra results, so a cooking recipe's yield
+--     on the Profit tab follows it (Cost:GetCraftCost).
+--   Working Overtime: a better chance at a skill point from a craft, so
+--     the road to the cap counts fewer crafts (RoadPlan.Chance).
+--   Performance Bonus: a chance a crate turn-in gives double Merchant's
+--     Favor, so gold a favor point counts the expected favor
+--     (MerchantsFavor:GetRows).
+-- Perks are found by their spell ID first, then their node ID, then their
+-- English name, so every language works. Bartering needs nothing here:
+-- vendor prices are read off the real merchant window, which already has
+-- the discount.
 --
 -- Every client call is inside a pcall. When nothing can be read, every
 -- answer is the plain one (no bonus), so the addon works as before.
@@ -34,12 +43,42 @@ Legacy.NODE_LAST = Legacy.NODE_RANGES[1][2]
 -- charges.
 Legacy.CURRENCIES = { 3485, 3499 }
 
--- Master Chef: "cooking gives an extra result", up to 50% at its last rank
--- (beta values). Found by its English name; MASTER_CHEF_NODE can pin the
--- node once a probe shows its ID, for clients in other languages.
+-- Master Chef: "cooking gives an extra result", 10% a rank, 50% at its
+-- last rank (the probe, 2026-11-10). MASTER_CHEF_NODE can pin another node
+-- by hand; the perk table below finds it otherwise.
 Legacy.MASTER_CHEF_NAME = "master chef"
 Legacy.MASTER_CHEF_NODE = nil
 Legacy.MASTER_CHEF_MOST = 0.5
+
+-- The perks read for numbers, from the probe of the live client
+-- (2026-11-10): spell and node IDs, English name as the last fallback, and
+-- what one rank gives.
+--   Working Overtime: skill up chance +4% a rank (5 ranks, 20%).
+--   Performance Bonus: 5% a rank chance of 100% more Merchant's Favor from
+--     a crate turn-in (3 ranks, 15%).
+Legacy.PERKS = {
+    masterChef = { spell = 1225457, node = 110289, name = "master chef" },
+    workingOvertime = { spell = 1225451, node = 110290, name = "working overtime", per = 0.04 },
+    performanceBonus = { spell = 1225456, node = 110292, name = "performance bonus", per = 0.05 },
+}
+
+-- Every Legacy perk by its spell ID, from the Forever client's game tables
+-- (build 70862). The probe reads each one's words from the game, so how
+-- much a rank gives can be checked without spending a point. Names here are
+-- only labels for the probe; nothing compares them.
+Legacy.PERK_SPELLS = {
+    { 1225451, "Working Overtime" }, { 1225459, "Bartering" },
+    { 1225457, "Master Chef" }, { 1225435, "Bountiful Harvest" },
+    { 1225456, "Performance Bonus" }, { 1225469, "Dedicated Study" },
+    { 1225455, "Luremaster" }, { 1225478, "Well Rested" },
+    { 1225474, "Talented" }, { 1225477, "High Alert" },
+    { 1225472, "Thrill of Adventure" }, { 1225479, "Field Guide" },
+    { 1225490, "Frequent Flier" }, { 1225475, "Field Medicine" },
+    { 1225499, "Gourmand" }, { 1225502, "Permanence" },
+    { 1225500, "The Quick and the Dead" }, { 1225503, "Reagent Economy" },
+    { 1225497, "Reinforce" }, { 1225485, "Diplomat" },
+    { 1225501, "For Great Honor" },
+}
 
 -- Systems and trees tried when looking for the config. The search runs a
 -- slice a frame, once a session (and again after a trait event).
@@ -178,7 +217,7 @@ function Legacy:Search(done)
         index = stop + 1
         if self.configID or index > #list then
             self.searching, self.searched = false, true
-            self.stale = true
+            self:Forget()
             if done then done() end
             return
         end
@@ -202,7 +241,7 @@ local function SpellName(spellID)
     return type(name) == "string" and name or nil
 end
 
---- One node: { nodeID, name, spellID, rank, maxRanks }, or nil.
+--- One node: { nodeID, name, spellID, entryID, rank, maxRanks }, or nil.
 function Legacy:Node(nodeID)
     local configID = self.configID
     if not configID then return nil end
@@ -227,7 +266,8 @@ function Legacy:Node(nodeID)
             end
         end
     end
-    return { nodeID = nodeID, name = name, spellID = spellID, rank = rank, maxRanks = maxRanks }
+    return { nodeID = nodeID, name = name, spellID = spellID, entryID = Number(entryID),
+        rank = rank, maxRanks = maxRanks }
 end
 
 --- Every node of the config, in node ID order.
@@ -266,47 +306,152 @@ function Legacy:PointsLeft()
 end
 
 --------------------------------------------------------------------------------
--- Master Chef
+-- Perks read for numbers
 --------------------------------------------------------------------------------
+
+--- A perk's node ID, found once: by its spell ID in the config, then its
+--- pinned node ID, then its English name. nil when the config is not read
+--- or the perk is not in it.
+function Legacy:PerkNode(key)
+    local perk = self.PERKS[key]
+    if not (perk and self.configID) then return nil end
+    self.perkNodes = self.perkNodes or {}
+    if self.perkNodes[key] then return self.perkNodes[key] end
+    local nodes = self:Nodes()
+    local found
+    for _, node in ipairs(nodes) do
+        if node.spellID and node.spellID == perk.spell then found = node.nodeID break end
+    end
+    if not found then
+        for _, node in ipairs(nodes) do
+            if node.nodeID == perk.node then found = node.nodeID break end
+        end
+    end
+    if not found and perk.name then
+        for _, node in ipairs(nodes) do
+            local ok, match = pcall(function() return node.name and node.name:lower() == perk.name end)
+            if ok and match then found = node.nodeID break end
+        end
+    end
+    self.perkNodes[key] = found
+    return found
+end
+
+--- The ranks spent in a perk and its most ranks: 0 when none are spent or
+--- nothing can be read. Kept until a trait event or the config is found.
+function Legacy:Rank(key)
+    self.perkRanks = self.perkRanks or {}
+    local kept = self.perkRanks[key]
+    if kept then return kept[1], kept[2] end
+    local rank, most = 0, 0
+    local nodeID = key == "masterChef" and self:MasterChefNode() or self:PerkNode(key)
+    local node = nodeID and self:Node(nodeID)
+    if node and (node.rank or 0) > 0 then
+        rank, most = node.rank, node.maxRanks or 0
+        if most > 0 then rank = math.min(rank, most) end
+    end
+    -- A read before the config is found is not kept, so it is read again.
+    if self.configID then self.perkRanks[key] = { rank, most } end
+    return rank, most
+end
 
 --- Master Chef's node, found once by ID or name.
 function Legacy:MasterChefNode()
     if self.masterChefNode then return self.masterChefNode end
-    if self.MASTER_CHEF_NODE then
-        self.masterChefNode = self.MASTER_CHEF_NODE
-        return self.masterChefNode
-    end
-    for _, node in ipairs(self:Nodes()) do
-        local ok, match = pcall(function() return node.name and node.name:lower() == self.MASTER_CHEF_NAME end)
-        if ok and match then
-            self.masterChefNode = node.nodeID
-            return node.nodeID
-        end
-    end
-    return nil
+    local nodeID = self.MASTER_CHEF_NODE or self:PerkNode("masterChef")
+    self.masterChefNode = nodeID
+    return nodeID
 end
 
 --- How many cooking results one craft gives, as a multiplier: 1 with no
---- Master Chef (or nothing read), up to 1.5 at its last rank. Kept until a
---- trait event or a new session.
+--- Master Chef (or nothing read), up to 1.5 at its last rank.
 function Legacy:CookingYield()
-    if self.cookingYield and not self.stale then return self.cookingYield end
-    local yield = 1
-    if self.configID then
-        local nodeID = self:MasterChefNode()
-        local node = nodeID and self:Node(nodeID)
-        if node and node.rank > 0 then
-            local most = node.maxRanks > 0 and node.maxRanks or 5
-            yield = 1 + self.MASTER_CHEF_MOST * math.min(node.rank, most) / most
-        end
-    end
-    self.cookingYield, self.stale = yield, false
-    return yield
+    local rank, most = self:Rank("masterChef")
+    if rank <= 0 then return 1 end
+    if most <= 0 then most = 5 end
+    return 1 + self.MASTER_CHEF_MOST * math.min(rank, most) / most
+end
+
+--- Working Overtime: what it adds to the chance of a skill point from a
+--- craft, 0 to 0.2 (0 with no ranks spent).
+function Legacy:SkillUpBonus()
+    return self:Rank("workingOvertime") * self.PERKS.workingOvertime.per
+end
+
+--- Performance Bonus: the chance a crate turn-in gives double favor, 0 to
+--- 0.15 (0 with no ranks spent).
+function Legacy:FavorBonus()
+    return self:Rank("performanceBonus") * self.PERKS.performanceBonus.per
 end
 
 --------------------------------------------------------------------------------
 -- The probe
 --------------------------------------------------------------------------------
+
+--- Text in one line, or nil: secret or odd values are left out.
+local function Plain(text)
+    local ok, out = pcall(function()
+        if type(text) ~= "string" then return nil end
+        local flat = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("%s+", " ")
+        flat = flat:match("^%s*(.-)%s*$")
+        return flat ~= "" and flat or nil
+    end)
+    return ok and out or nil
+end
+
+--- What the game's tooltip says for a perk at one rank, read through
+--- C_TooltipInfo (the same words the Legacy window shows), the name line
+--- left off. Works for a rank not bought. Nil when the client won't say.
+function Legacy:RankText(entryID, rank)
+    if not Number(entryID) then return nil end
+    local data = Call("C_TooltipInfo.GetTraitEntry", entryID, rank, self.configID)
+    if type(data) ~= "table" or type(data.lines) ~= "table" then return nil end
+    local parts = {}
+    for i, line in ipairs(data.lines) do
+        if i > 1 and type(line) == "table" then
+            local left = Plain(line.leftText)
+            if left then parts[#parts + 1] = left end
+        end
+    end
+    return #parts > 0 and table.concat(parts, " / ") or nil
+end
+
+--- A spell's own description, or nil. Asks the client to load it when it
+--- has not yet, so a second probe can read it.
+function Legacy:SpellText(spellID)
+    if not Number(spellID) then return nil end
+    local text = Plain(Call("C_Spell.GetSpellDescription", spellID))
+        or Plain(Call("GetSpellDescription", spellID))
+    if not text then Call("C_Spell.RequestLoadSpellData", spellID) end
+    return text
+end
+
+--- Probe lines for every perk: what rank 1 and the last rank give, from
+--- the tooltip, and the spell's own words. Perks the config did not show
+--- are read by spell ID alone.
+function Legacy:PerkLines(Add)
+    local seen = {}
+    for _, node in ipairs(self.configID and self:Nodes() or {}) do
+        local label = ("legacy perk %d"):format(node.nodeID)
+        local name = tostring(node.name or "?")
+        if node.spellID then seen[node.spellID] = true end
+        Add(label, ("%s, spell %s, entry %s, %d/%d"):format(name, tostring(node.spellID),
+            tostring(node.entryID), node.rank, node.maxRanks))
+        local most = node.maxRanks > 0 and node.maxRanks or 1
+        local ranks = most > 1 and { 1, most } or { 1 }
+        if most > 2 then table.insert(ranks, 2, 2) end
+        for _, rank in ipairs(ranks) do
+            Add(label .. " rank " .. rank, self:RankText(node.entryID, rank) or "tooltip not given")
+        end
+        Add(label .. " spell", self:SpellText(node.spellID) or "no words yet, run the probe again")
+    end
+    for _, perk in ipairs(self.PERK_SPELLS) do
+        if not seen[perk[1]] then
+            Add("legacy spell " .. perk[1], ("%s: %s"):format(perk[2],
+                self:SpellText(perk[1]) or "no words yet, run the probe again"))
+        end
+    end
+end
 
 local function Currency(id)
     local info = Call("C_CurrencyInfo.GetCurrencyInfo", id)
@@ -334,7 +479,12 @@ function Legacy:ProbeLines()
         end
         Add("legacy cooking", ("Master Chef node %s, yield x%.2f"):format(
             tostring(self:MasterChefNode()), self:CookingYield()))
+        Add("legacy skill up", ("Working Overtime node %s, chance +%d%%"):format(
+            tostring(self:PerkNode("workingOvertime")), math.floor(self:SkillUpBonus() * 100 + 0.5)))
+        Add("legacy favor", ("Performance Bonus node %s, double favor %d%%"):format(
+            tostring(self:PerkNode("performanceBonus")), math.floor(self:FavorBonus() * 100 + 0.5)))
     end
+    self:PerkLines(Add)
     for _, id in ipairs(self.CURRENCIES) do
         Add("legacy currency " .. id, Currency(id))
     end
@@ -345,9 +495,14 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
-function Legacy:Changed()
+--- Drops every kept answer, so the next ask reads the config again.
+function Legacy:Forget()
     self.stale = true
-    self.masterChefNode = nil
+    self.masterChefNode, self.perkNodes, self.perkRanks = nil, nil, nil
+end
+
+function Legacy:Changed()
+    self:Forget()
     if not self.configID and self.searched and not self.searching then
         self.searched = false
         self:Search()

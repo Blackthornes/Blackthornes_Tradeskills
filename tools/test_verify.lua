@@ -318,6 +318,29 @@ check("and is not counted as read", characters, 0)
 ns.Config.GetCharacterKey = nil
 
 print("")
+print("a refresh asked for inside the five second window is not lost")
+
+local savedGetTime = GetTime
+GetTime = function() return clock end
+clock, timers, listed = 100, {}, {}
+Auctions.lastRefresh, Auctions.trailingRefresh = nil, nil
+local queries = 0
+C_AuctionHouse.QueryOwnedAuctions = function() queries = queries + 1 end
+Auctions:Refresh({ force = true })
+check("the first read went out", queries, 1)
+RunUntil(101)
+check("a second post inside the window waits", Auctions:Refresh(), false)
+Auctions:Refresh()
+RunUntil(104.9)
+check("nothing more yet", queries, 1)
+RunUntil(106)
+check("one more read once the window ends", queries, 2)
+RunUntil(120)
+check("and only one", queries, 2)
+C_AuctionHouse.QueryOwnedAuctions = function() end
+GetTime = savedGetTime
+
+print("")
 
 if failures > 0 then
     print(("FAIL -- %d check(s) failed"):format(failures))

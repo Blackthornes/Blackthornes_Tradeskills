@@ -29,7 +29,7 @@ end
 -- section changes this line too, and tools/check_release.py refuses a tag it
 -- does not match. Played straight from the repository there is no packager
 -- to fill in the TOC's version, so this is the one shown.
-ns.RELEASED_VERSION = "1.14.0"
+ns.RELEASED_VERSION = "1.28.0"
 
 -- The TOC carries @project-version@, which the release packager rewrites to
 -- the tag it is building, "v0.2.0" say. Running straight from the repository
@@ -98,6 +98,20 @@ end
 
 local function Keep(line)
     if kept then kept[#kept + 1] = Plain(line) end
+end
+
+-- Every sound goes through these two, so Mute All Sounds (UI/SharedChoices.lua)
+-- quiets them all, fallbacks too. Muted, they answer false: "won't play".
+function ns.PlaySound(...)
+    if ns.Muted and ns.Muted() then return false end
+    if type(PlaySound) ~= "function" then return false end
+    return PlaySound(...)
+end
+
+function ns.PlaySoundFile(...)
+    if ns.Muted and ns.Muted() then return false end
+    if type(PlaySoundFile) ~= "function" then return false end
+    return PlaySoundFile(...)
 end
 
 function ns.Print(...)
@@ -492,7 +506,7 @@ end
 -- Everything else is a check or a developer tool, listed by /bts help all.
 local PLAYER_COMMANDS = {
     "scan", "cancel", "top", "why", "price", "stock", "sold", "de",
-    "haul", "mail", "salealarm", "pane", "professions", "size", "export", "import", "share",
+    "haul", "mail", "salealarm", "pane", "professions", "size", "windows", "export", "import", "share",
 }
 
 local function HelpLine(name)

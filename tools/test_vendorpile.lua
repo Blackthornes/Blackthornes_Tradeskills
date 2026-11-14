@@ -192,6 +192,69 @@ do
     check("no auction price never does", Posting.VendorPaysMore(1, nil, 10), false)
 end
 
+-- A sale that beats the vendor by less than one deposit is not worth the
+-- risk of the listing running out, so it goes to the vendor too.
+do
+    local Profit = ns.Profit
+    local oldEach, oldLost = Profit.LostDepositEach, Profit.LostListings
+    Profit.LostDepositEach = function() return 5 end
+    Profit.LostListings = function() return 0 end
+    -- 100 after the 5% cut is 95: 3 over a vendor's 92, under the 5 deposit
+    check("a win under one deposit goes to the vendor", Posting.VendorPaysMore(1, 100, 92), true)
+    check("a win over one deposit still lists", Posting.VendorPaysMore(1, 100, 80), false)
+    -- one lost deposit already in the net is not taken off a second time
+    Profit.LostListings = function() return 1 end
+    check("a deposit is never counted twice", Posting.VendorPaysMore(1, 100, 89), false)
+    check("and the counted one still counts", Posting.VendorPaysMore(1, 100, 90), true)
+    -- the report's own numbers: 300c market, 227c vendor, a 1s deposit
+    Profit.LostDepositEach = function() return 100 end
+    Profit.LostListings = function() return 0 end
+    check("Simple Britches: 300c is 185c after the cut and the risk",
+        Profit:NetAfterRisk(1, 300), 185)
+    check("so a 227c vendor pays more", Posting.VendorPaysMore(1, 300, 227), true)
+    Profit.LostDepositEach, Profit.LostListings = oldEach, oldLost
+end
+
+-- A share each left from the old 1 silver floor (100c for 11, about 9c)
+-- is not the item's deposit now. Counted, it sent a 12c stone to a 4c
+-- vendor (a player's sell list, 2026-11-13).
+do
+    local Profit = ns.Profit
+    local oldLost, oldDeposits = Profit.LostListings, ns.db.deposits
+    Profit.LostListings = function() return 0 end
+    local before = Posting.FLOOR_ENDED - 5000
+    local duration = Posting:DurationFor(9100)
+    ns.db.deposits = { [9100] = { unit = 100 / 11, quantity = 11, least = 100,
+        leastQuantity = 11, leastAt = before, duration = duration, at = before } }
+    check("a stale 1s floor share sends nothing to the vendor",
+        Posting.VendorPaysMore(9100, 12, 4), false)
+    ns.db.deposits[9100].leastAt, ns.db.deposits[9100].at = Posting.FLOOR_ENDED + 5, Posting.FLOOR_ENDED + 5
+    check("the game's own 1s, seen since, still does",
+        Posting.VendorPaysMore(9100, 12, 4), true)
+    Profit.LostListings, ns.db.deposits = oldLost, oldDeposits
+end
+
+-- "Ignore Deposit:" (a player asked, 2026-11-14): ticked, no deposit is
+-- counted, so profit and the vendor choice see only the auction house cut.
+do
+    local Profit = ns.Profit
+    local oldGet, oldLost = ns.Config.Get, Profit.LostListings
+    local ignore = false
+    ns.Config.Get = function(self, k)
+        if k == "ignoreDeposit" then return ignore end
+        return oldGet(self, k)
+    end
+    Profit.LostListings = function() return 1 end
+    check("off, a deposit is counted", Profit.LostDepositEach(1) > 0, true)
+    ignore = true
+    check("ticked, no deposit is counted", Profit.LostDepositEach(1), 0)
+    check("ticked, a listing nets only the cut", Profit:NetFromListing(1, 300), 285)
+    Profit.LostListings = function() return 0 end
+    check("ticked, no risk is taken off either", Profit:NetAfterRisk(1, 300), 285)
+    check("ticked, a 3c win over the vendor still lists", Posting.VendorPaysMore(1, 100, 92), false)
+    ns.Config.Get, Profit.LostListings = oldGet, oldLost
+end
+
 print("")
 
 if failures > 0 then

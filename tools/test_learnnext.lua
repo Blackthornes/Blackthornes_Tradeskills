@@ -423,6 +423,81 @@ check("a profession never read is left out", unread and unread[165], nil)
 ns.SkillUp = nil
 check("never raises", ns.Butler:LearnCost() ~= false, true)
 
+-- Thunder Bluff and Darnassus trainers are kept under Mulgore and
+-- Teldrassil with that zone's map spot: one inside the city still counts
+-- as the city, ahead of a trainer out in another zone.
+local lw = ns.LEARN_SPOTS.TRAINERS[165]
+ns.LEARN_SPOTS.TRAINERS[165] = {
+  { "Far Horde Expert", "Arathi Highlands", 28.3, 45.1, "H", 250 },
+  { "Bloodhoof Journey", "Mulgore", 45.4, 57.9, "H", 150 },
+  { "Bluff Expert", "Mulgore", 38.2, 25.5, "H", 225 },
+}
+local expertRecipe = { trainerCost = 2800, skillLineID = 165, classicSkill = 180, skill = 175 }
+UnitFactionGroup = function() return "Horde" end
+zoneHere = "The Barrens"
+check("Horde out in a zone goes to Thunder Bluff, not Arathi", LN:Place(expertRecipe).name, "Bluff Expert")
+check("its pin stays on the Mulgore map", LN:Place(expertRecipe).zone, "Mulgore")
+zoneHere = "Thunder Bluff"
+check("standing in Thunder Bluff", LN:Place(expertRecipe).name, "Bluff Expert")
+check("a spot out in Mulgore is no city", LN.CityOf({ zone = "Mulgore", x = 46.8, y = 60.8 }), "Mulgore")
+UnitFactionGroup = function() return "Alliance" end
+ns.LEARN_SPOTS.TRAINERS[165] = {
+  { "Far Alli Expert", "Feralas", 30, 40, "A", 250 },
+  { "Grove Expert", "Teldrassil", 30.6, 51.4, "A", 225 },
+}
+zoneHere = "Darkshore"
+check("Alliance out in a zone goes to Darnassus", LN:Place(expertRecipe).name, "Grove Expert")
+ns.LEARN_SPOTS.TRAINERS[165] = lw
+zoneHere = "Elwynn Forest"
+
+-- Road to 300's trainer steps read the real trainers by rank (2026-11-13:
+-- a 145 Alchemist was sent past Undercity's Expert to Stonard's Artisan).
+print("")
+print("road to 300 trainers")
+local fake = ns.LEARN_SPOTS
+local real = {}
+assert(loadfile(lfs_cwd .. "/Data/LearnSpots.lua"))("Blackthornes_TS", real)
+ns.LEARN_SPOTS = real.LEARN_SPOTS
+local function TopOf(line, name)
+  for _, row in ipairs(ns.LEARN_SPOTS.TRAINERS[line]) do
+    if row[1] == name then return row[6] end
+  end
+end
+local function Trainer(line, cap) local t = LN:TrainerFor(line, cap) return t and t.name end
+UnitFactionGroup = function() return "Horde" end
+zoneHere = "Durotar"
+check("Horde Expert Alchemy is Undercity's, not Stonard's", Trainer(171, 225), "Doctor Herbert Halsey")
+check("its spot counts as Undercity", LN.CityOf({ zone = "Silverpine Forest", x = 72.3, y = 9.2 }), "Undercity")
+check("Horde Artisan Alchemy is Stonard's", Trainer(171, 300), "Rogvar")
+local j = Trainer(171, 150)
+check("Horde Journeyman Alchemy teaches Journeyman, not past it", j and TopOf(171, j) > 75 and TopOf(171, j) <= 150, true)
+check("Horde Expert Enchanting", Trainer(333, 225), "Hgarth")
+zoneHere = "Thunder Bluff"
+check("Thunder Bluff Expert Leatherworking stays in the city", Trainer(165, 225), "Una")
+check("Thunder Bluff Artisan Leatherworking stays on Kalimdor", Trainer(165, 300), "Hahrana Ironhide")
+zoneHere = "Undercity"
+check("Undercity Artisan Leatherworking stays on the Eastern Kingdoms",
+  LN.ContinentOf((LN:TrainerFor(165, 300) or {}).zone), "E")
+check("Darnassus is on Kalimdor", LN.ContinentOf("Darnassus"), "K")
+check("an island is on neither", LN.ContinentOf("Zephras Isle"), nil)
+UnitFactionGroup = function() return "Alliance" end
+zoneHere = "Elwynn Forest"
+check("Alliance Expert Enchanting", Trainer(333, 225), "Kitta Firewind")
+for _, line in ipairs({ 164, 165, 171, 186, 197, 202, 333 }) do
+  for _, side in ipairs({ "Alliance", "Horde" }) do
+    UnitFactionGroup = function() return side end
+    for _, cap in ipairs({ 150, 225 }) do
+      local name = Trainer(line, cap)
+      check(string.format("%s %d to %d has a trainer", side, line, cap), name ~= nil, true)
+      check(string.format("%s %d to %d trainer teaches that rank", side, line, cap),
+        name and TopOf(line, name) > cap - 75, true)
+    end
+  end
+end
+ns.LEARN_SPOTS = fake
+UnitFactionGroup = function() return "Alliance" end
+zoneHere = "Elwynn Forest"
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")

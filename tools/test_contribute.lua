@@ -125,7 +125,7 @@ ana.ns.db.recipeSkills = { [2406] = { skill = 110, profession = "Leatherworking"
 print("\nchoosing")
 local C = ana.ns.Contribute
 check("off by default", C:On(), false)
-check("the shipped list names three whole names", #C:Recipients(), 3)
+check("the shipped list names five whole names", #C:Recipients(), 5)
 current = farmer
 check("Blackthornes Farmer receives", farmer.ns.Contribute:Receiving())
 current = wither
@@ -203,6 +203,37 @@ C:Hello()
 Run()
 check("new data is taken once", #wither.chat + #farmer.chat, lines + 1)
 check("and replaces the old", farmer.ns.db.sharedData[id].skills[2407], 125)
+
+print("\nwhere writs are handed in")
+for _, client in ipairs({ ana, farmer }) do client.ns.CRAFTSMANS_WRITS = { { item = 4371 }, { item = 2580 } } end
+ana.ns.db.merchantsFavor = { writCustomers = {
+    [4371] = { name = "Tilda Hand", zone = "Ashenvale", mapID = 1440, x = 34.56, y = 48.1, at = 5 },
+    [2580] = { zone = "Duskwood", mapID = 1431, x = 70, y = 40, fromLog = true },
+    [9999] = { name = "Not A Writ", zone = "Ashenvale", x = 1, y = 1 },
+    [4372] = { name = "Bad|cffff0000", zone = "Ashenvale", x = 1, y = 1 },
+} }
+ana.ns.Contribute.built = nil
+clock = clock + 3600
+current = ana
+C:Hello()
+Run()
+local writs = farmer.ns.db.sharedData[id].writs
+check("writ spots are taken", writs ~= nil and writs[4371] ~= nil and writs[4371].n, "Tilda Hand")
+check("with the zone, map and spot", writs and writs[4371].z == "Ashenvale" and writs[4371].m == 1440
+    and writs[4371].x == 34.6)
+check("a quest log spot says so", writs and writs[2580].l, true)
+check("an item that is no writ is left out", writs and writs[9999] == nil)
+check("and so is one with colour codes", writs and writs[4372] == nil)
+check("they never join the receiver's own", farmer.ns.db.merchantsFavor == nil)
+check("a spot off the map is refused", farmer.ns.Contribute.CleanCustomer(4371, { z = "Ashenvale", x = 101, y = 5 }) == nil)
+check("a table without writs is still taken", farmer.ns.Contribute:Clean({ d = {}, s = {} }) ~= nil)
+check("writs that are not a table are junk", farmer.ns.Contribute:Clean({ d = {}, s = {}, w = "x" }) == nil)
+local wasLocale = GetLocale
+GetLocale = function() return "deDE" end
+ana.ns.Writs = { EnglishClient = function() return GetLocale():sub(1, 2) == "en" end }
+check("other languages send no writ spots", ana.ns.Contribute:Payload().w == nil)
+GetLocale = wasLocale
+ana.ns.Writs = nil
 
 print("\nstrangers and junk")
 current = ana

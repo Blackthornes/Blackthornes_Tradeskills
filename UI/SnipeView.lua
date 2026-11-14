@@ -10,7 +10,7 @@ local Util = ns.Util
 
 local ROW_HEIGHT = 36
 local ICON_SIZE = 24
-local STRIP_HEIGHT = 84
+local STRIP_HEIGHT = 110
 local STRIP_ROW = 26
 local HEAD_HEIGHT = 18
 local COLUMNS_HEIGHT = 16
@@ -27,11 +27,16 @@ local CELL_GAP = 4
 -- Room kept for the sort arrow at a cell head's right edge.
 local ARROW_ROOM = 10
 local RIGHT_PAD = 8
+-- Each row's own Buy button sits at the right end, after Deal.
+local BUY_WIDTH = 76
+local BUY_HEIGHT = 24
+local BUY_GAP = 6
 local SORT_ARROW = [[Interface\AddOns\]] .. (ns.ADDON_NAME or "Blackthornes_TS") .. [[\Media\Frame\SortArrow]]
 
--- Right edge of cell n (1 = Under Average, 2 = Price, 3 = Average).
+-- Right edge of cell n (1 = Under Average, 2 = Price, 3 = Average), left of
+-- the row's Buy button.
 local function CellRight(n)
-    return -(RIGHT_PAD + (n - 1) * (CELL_WIDTH + CELL_GAP))
+    return -(RIGHT_PAD + BUY_WIDTH + BUY_GAP + (n - 1) * (CELL_WIDTH + CELL_GAP))
 end
 local NAME_RIGHT = CellRight(3) - CELL_WIDTH - 6
 
@@ -88,7 +93,59 @@ local function MostHead()
     return (text:gsub("%s*[:\239\188\154]+%s*$", ""))
 end
 
+--- The finds as shown. While the mouse is on the list it holds still: the
+--- rows keep the order they had (gone ones leave), and new finds wait,
+--- counted in self.newCount, until the mouse leaves.
 function SnipeView:SortedFinds()
+    local rows = self:FreshOrder()
+    local held = self.held
+    if not held then
+        self.newCount = 0
+        return rows
+    end
+    local byItem, kept, waiting = {}, {}, 0
+    for _, find in ipairs(rows) do
+        byItem[find.itemID] = find
+        if not held.seen[find.itemID] then waiting = waiting + 1 end
+    end
+    for _, itemID in ipairs(held.order) do
+        if byItem[itemID] then kept[#kept + 1] = byItem[itemID] end
+    end
+    self.newCount = waiting
+    return kept
+end
+
+--- Hold the list as it stands, or let it go (on = false).
+function SnipeView:Hold(on)
+    if on then
+        local held = { order = {}, seen = {} }
+        for _, find in ipairs(self:FreshOrder()) do
+            held.order[#held.order + 1] = find.itemID
+            held.seen[find.itemID] = true
+        end
+        self.held = held
+    else
+        self.held = nil
+    end
+    self.newCount = 0
+    self:Changed()
+end
+
+--- Looks five times a second, only while the list shows, whether the mouse
+--- came onto it or left it.
+function SnipeView:WatchMouse()
+    if not self.list then return end
+    local over = false
+    local ok, result = pcall(self.list.IsMouseOver, self.list)
+    if ok then over = result and true or false end
+    if over and not self.held then
+        self:Hold(true)
+    elseif not over and self.held then
+        self:Hold(false)
+    end
+end
+
+function SnipeView:FreshOrder()
     local rows = {}
     for _, find in ipairs(Snipe():Finds() or {}) do rows[#rows + 1] = find end
     local key, down = self.sortKey, self.sortDown
@@ -139,11 +196,103 @@ local function CreateRow(row)
     row.average = Cell(3)
     row.qty = Theme.CreateLabel(row, "tiny", "muted", "RIGHT")
     row.qty:SetPoint("TOPRIGHT", row.price, "BOTTOMRIGHT", 0, -1)
+
+    -- The row's own Buy button. Its words wrap inside it rather than end in
+    -- "...", and the button and row grow to hold them.
+    row.buy = Widgets.CreateButton(row, L["Buy"], function()
+        if row.data then SnipeView:RowBuy(row.data) end
+    end, { width = BUY_WIDTH, height = BUY_HEIGHT, primary = true, fontSize = "tiny" })
+    row.buy:SetPoint("RIGHT", row, "RIGHT", -RIGHT_PAD, 0)
+    local label = row.buy.label
+    if label then
+        label:ClearAllPoints()
+        label:SetPoint("CENTER", row.buy, "CENTER", 0, 0)
+        if label.SetWidth then label:SetWidth(BUY_WIDTH - 6) end
+        if label.SetWordWrap then label:SetWordWrap(true) end
+    end
+    row.cells = row.cells or {}
+    row.cells.buy = label
+end
+
+--- What a row's own Buy button says, and whether it can be clicked.
+--- Buy, Checking... while that row asks, "Buy 20 for 1g 20s" once its price
+--- is known, or Confirm past Double Check Over.
+function SnipeView.RowBuyState(find)
+    local snipe = Snipe()
+    local pending = snipe and snipe.pending
+    if pending and pending.find == find then
+        if snipe.armed == pending then return L["Confirm"], true end
+        -- An aged price is being checked again: wait for it.
+        if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
+        if pending.phase == "quoted" or pending.phase == "planned" then
+            local count = pending.count or (find and find.qty) or 1
+            return L.Format("Buy %d for %s", count, Colored(pending.total or pending.expected)), true
+        end
+        return L["Checking..."], false
+    end
+    if not pending then return L["Buy"], true end
+    -- A quiet ready for another row gives way to this one.
+    if pending.auto and snipe.armed ~= pending and pending.phase ~= "buying" then return L["Buy"], true end
+    return L["Buy"], false
+end
+
+--- A click on a row's own Buy button: pay for that row when its price is
+--- known, else ask for it now, taking over a quiet ready on another row.
+--- It never buys before the price is known; Snipe keeps every other check.
+function SnipeView:RowBuy(find)
+    local snipe = Snipe()
+    if not (snipe and find) then return end
+    local pending = snipe.pending
+    if pending and pending.find == find then
+        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+    elseif pending and pending.auto and snipe.armed ~= pending and pending.phase ~= "buying" then
+        snipe:CancelBuy()
+        snipe:Buy(find)
+    elseif not pending then
+        snipe:Buy(find)
+    end
+    self:Changed()
+end
+
+--- Sets the row's Buy button words, growing the button (and so the row)
+--- when they wrap.
+local function DressRowBuy(row, find)
+    local button = row.buy
+    if not button then return end
+    local text, can = SnipeView.RowBuyState(find)
+    button:SetText(text)
+    button:SetEnabledState(can)
+    local label = button.label
+    local height = BUY_HEIGHT
+    if label and label.GetStringHeight then
+        local ok, tall = pcall(label.GetStringHeight, label)
+        if ok and type(tall) == "number" and tall + 8 > height then height = math.ceil(tall + 8) end
+    end
+    button:SetHeight(height)
+    if label then label.rowNeed, label.rowNeedText = height, text end
+end
+
+--- A find made ready before the click (quoted or planned, not yet asked
+--- for by the player).
+local function ReadyFor(find)
+    local pending = Snipe().pending
+    return pending and pending.auto and pending.find == find
+        and (pending.phase == "quoted" or pending.phase == "planned") and Snipe().armed ~= pending
 end
 
 local function IsPending(find)
     local pending = Snipe().pending
-    return pending and pending.find == find
+    if not (pending and pending.find == find) then return false end
+    -- A quiet ready still shows its price; only its badge changes. One the
+    -- player has clicked once (armed) shows Confirm.
+    if pending.auto and Snipe().armed ~= pending then return false end
+    return true
+end
+
+--- "Buy Linen Cloth x20 for 1g 20s": what one click on Buy It does.
+local function ReadyText(pending)
+    local count = pending.count or (pending.find and pending.find.qty) or 1
+    return L.Format("Buy %s x%d for %s", ItemName(pending.itemID), count, Money(pending.total or pending.expected))
 end
 
 local function UpdateRow(row, find)
@@ -153,7 +302,11 @@ local function UpdateRow(row, find)
     row.price:SetText(Colored(find.price))
     row.average:SetText(Colored(find.worth))
     local qty = find.qty or 1
-    row.qty:SetText(qty > 1 and ("x" .. qty) or "")
+    if find.left and find.left > 0 then
+        row.qty:SetText(L.Format("%d left", find.left))
+    else
+        row.qty:SetText(qty > 1 and ("x" .. qty) or "")
+    end
 
     local pending = Snipe().pending
     local busy = IsPending(find)
@@ -165,12 +318,16 @@ local function UpdateRow(row, find)
     row.badge:SetWidth(busy and (CELL_WIDTH * 3 + CELL_GAP * 2) or CELL_WIDTH)
     if busy then
         if Snipe().armed == pending then
-            row.badge:SetText(L["Click Again"])
+            row.badge:SetText(L["Confirm"])
         elseif pending.phase == "quoted" then
             row.badge:SetText(L.Format("Pay %s", Money(pending.total)))
         else
             row.badge:SetText(L["Asking..."])
         end
+        row.badge:SetTextColor(Theme.Unpack("accent"))
+        row.edge:Show()
+    elseif ReadyFor(find) then
+        row.badge:SetText(L["Ready"])
         row.badge:SetTextColor(Theme.Unpack("accent"))
         row.edge:Show()
     else
@@ -182,6 +339,8 @@ local function UpdateRow(row, find)
         row.badge:SetTextColor(Theme.Unpack("profit"))
         row.edge:Hide()
     end
+
+    DressRowBuy(row, find)
 
     Theme.SetItemIcon(row.icon, find.itemID)
     local label = ItemName(find.itemID)
@@ -210,9 +369,13 @@ local function ClickRow(find, _, mouseButton)
     local snipe = Snipe()
     if not find then return end
     local pending = snipe.pending
-    if pending then
-        if pending.find == find and pending.phase == "quoted" then snipe:Pay() end
-    else
+    if pending and pending.find == find then
+        if pending.phase == "quoted" or pending.phase == "planned" then snipe:Pay() end
+    elseif pending and pending.auto and snipe.armed ~= pending then
+        -- A quiet ready for another row gives way to the row clicked.
+        snipe:CancelBuy()
+        snipe:Buy(find)
+    elseif not pending then
         snipe:Buy(find)
     end
 end
@@ -275,8 +438,19 @@ function SnipeView:BuildStrip(body, topAnchor)
     money:Set(Snipe():Cap())
     self.cap = money
 
+    -- Double Check Over: a buy that costs this much or more takes a second
+    -- click ("Confirm").
+    local confirmLabel = Row(-30, L["Double Check Over:"])
+    local confirm = ns.PriceEditor.MoneyBoxes(strip, function(copper)
+        ns.Config:Set("snipeConfirmOver", math.max(0, copper or 0))
+        self:Changed()
+    end)
+    confirm.label = confirmLabel
+    confirm:Set(Snipe():ConfirmOver())
+    self.confirm = confirm
+
     -- Snipe Below
-    local belowLabel = Row(-30, L["Snipe Below:"])
+    local belowLabel = Row(-56, L["Snipe Below:"])
     local pct = Widgets.CreateNumberBox(strip, {
         width = 40, height = 20, min = 10, max = 95,
         onChange = function(value)
@@ -289,12 +463,16 @@ function SnipeView:BuildStrip(body, topAnchor)
     pct.label = belowLabel
     pct:SetValue(Snipe():Percent(), true)
     self.pct = pct
+    -- Tab runs Spending Cap, Double Check Over, then Snipe Below.
+    money:TabTo(confirm.gold, nil)
+    confirm:TabTo(pct, money.copper)
+    pct.tabPrev = confirm.copper
     local sign = Theme.CreateLabel(strip, "small", "muted")
     sign:SetPoint("LEFT", pct, "RIGHT", 4, 0)
     sign:SetText(L["% of worth"])
 
     -- Watch
-    local watchLabel = Row(-56, L["Watch:"])
+    local watchLabel = Row(-82, L["Watch:"])
     self.watchOptions = {
         { value = "priced", text = L["Priced Items"] },
         { value = "disenchant", text = L["To Disenchant"] },
@@ -304,6 +482,7 @@ function SnipeView:BuildStrip(body, topAnchor)
     local watch = Widgets.CreateDropdown(strip, self.watchOptions, function(value)
         ns.Config:Set("snipeWatch", value)
         if Snipe().BuildPool and not Snipe():IsRunning() then Snipe().pool = nil end
+        if Snipe():IsRunning() and Snipe().Restart then Snipe():Restart() end
         self:LayStrip()
         self:Place()
         self:Changed()
@@ -313,9 +492,10 @@ function SnipeView:BuildStrip(body, topAnchor)
     self.watch = watch
 
     -- List: shows under Watch: in My Lists only. 0 stands for All Lists.
-    local listLabel = Row(-56 - STRIP_ROW, L["List:"])
+    local listLabel = Row(-82 - STRIP_ROW, L["List:"])
     local pick = Widgets.CreateDropdown(strip, self:ListOptions(), function(value)
         ns.Config:Set("snipeList", (tonumber(value) or 0) > 0 and tonumber(value) or nil)
+        if Snipe():IsRunning() and Snipe():Watch() == "lists" and Snipe().Restart then Snipe():Restart() end
         self:Changed()
     end, { width = CHOICE_LEAST })
     pick.label = listLabel
@@ -418,7 +598,7 @@ function SnipeView:LayStrip()
     self.labelColumn = column
     local x = 8 + column + LABEL_GAP
     for _, label in ipairs(self.rows) do label:SetWidth(column) end
-    for _, box in ipairs({ self.cap, self.pct, self.watch, self.listPick }) do
+    for _, box in ipairs({ self.cap, self.confirm, self.pct, self.watch, self.listPick }) do
         -- Centred on its label's first line, as before.
         box:ClearAllPoints()
         box:SetPoint("LEFT", self.strip, "TOPLEFT", x, box.label.y - 6)
@@ -514,6 +694,28 @@ function SnipeView:Build(body, frame, topAnchor, opts)
     empty:SetWordWrap(true)
     self.empty = empty
 
+    -- "3 new" on the list's top right while it holds still; a click lets
+    -- them in at once.
+    if Widgets.CreateChip then
+        local chip = Widgets.CreateChip(body, "", function()
+            SnipeView:Hold(false)
+            SnipeView:Hold(true)
+        end, { height = 18 })
+        chip:SetPoint("TOPRIGHT", list, "TOPRIGHT", -4, -2)
+        chip:SetFrameLevel((list:GetFrameLevel() or 1) + 5)
+        chip:Hide()
+        self.newChip = chip
+    end
+    local watcher = CreateFrame("Frame", nil, body)
+    local since = 0
+    watcher:SetScript("OnUpdate", function(_, elapsed)
+        since = since + (elapsed or 0)
+        if since < 0.2 then return end
+        since = 0
+        if SnipeView.shown then SnipeView:WatchMouse() end
+    end)
+    self.watcher = watcher
+
     self.parts = { list = list, go = go, buy = buy, note = note, head = self.head, cols = self.cols }
     self:Place()
     self:SetShown(false)
@@ -523,7 +725,7 @@ end
 function SnipeView:BuyWidth(text)
     local width = 80
     if Theme.MeasureText then
-        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Click Again"], text }) do
+        for _, word in ipairs({ L["Buy It"], L["Asking..."], L["Checking..."], L["Confirm"], text }) do
             local ok, measured = pcall(Theme.MeasureText, "small", word)
             if ok and type(measured) == "number" then width = math.max(width, measured + 20) end
         end
@@ -536,8 +738,10 @@ function SnipeView:BuyState()
     local snipe = Snipe()
     local pending = snipe and snipe.pending
     if pending then
-        if snipe.armed == pending then return L["Click Again"], true end
-        if pending.phase == "quoted" then return L.Format("Pay %s", Money(pending.total)), true end
+        if snipe.armed == pending then return L["Confirm"], true end
+        if snipe.Repricing and snipe:Repricing() then return L["Checking..."], false end
+        if pending.phase == "quoted" or pending.phase == "planned" then return ReadyText(pending), true end
+        if pending.auto then return L["Checking..."], false end
         return L["Asking..."], false
     end
     return L["Buy It"], #self:SortedFinds() > 0
@@ -547,13 +751,9 @@ end
 function SnipeView:BuyTop()
     local snipe = Snipe()
     if not snipe then return end
-    local pending = snipe.pending
-    if pending then
-        if pending.phase == "quoted" then snipe:Pay() end
-    else
-        local top = self:SortedFinds()[1]
-        if top then snipe:Buy(top) end
-    end
+    -- The same as the Snipe: Buy Top key: pay for what's ready, else ask
+    -- for the top row as the list shows it (Snipe.topFn).
+    snipe:BuyNext()
     self:Changed()
 end
 
@@ -566,10 +766,21 @@ end
 
 function SnipeView:SetShown(on)
     self.shown = on and true or false
+    if not self.shown then self.held, self.newCount = nil, 0 end
+    if self.watcher then self.watcher:SetShown(self.shown) end
+    if self.newChip and not self.shown then self.newChip:Hide() end
     for _, part in pairs(self.parts or {}) do part:SetShown(self.shown) end
     if self.empty and not self.shown then self.empty:Hide() end
     if self.strip then self.strip:SetShown(self.shown and self:StripOpen()) end
     if self.shown then self.key = nil end
+    local snipe = Snipe()
+    if snipe then
+        -- Snipe readies the top deal while this list shows, by the list's
+        -- own order, so Buy It and the key buy the row on top.
+        snipe.viewShown = self.shown
+        snipe.topFn = self.shown and function() return SnipeView:SortedFinds()[1] end or nil
+        if self.shown and snipe.ReadySoon then snipe:ReadySoon() end
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -584,12 +795,16 @@ function SnipeView:Refresh(force)
     local key = table.concat({
         tostring(snipe.version), tostring(running), tostring(snipe:Spent()), tostring(snipe:Cap()),
         tostring(self.sortKey), tostring(self.sortDown), tostring(self:StripOpen()), snipe:Watch(),
-        pending and (pending.phase .. tostring(pending.total)) or "-", tostring(snipe.armed ~= nil),
+        pending and (pending.phase .. tostring(pending.total) .. tostring(pending.auto) .. tostring(pending.count)
+            .. tostring(pending.find and pending.find.itemID)) or "-",
+        tostring(snipe.armed ~= nil),
         tostring(#(snipe:Finds() or {})), tostring(snipe:ListChoice()),
-        tostring(ns.ShoppingLists and ns.ShoppingLists.version),
+        tostring(ns.ShoppingLists and ns.ShoppingLists.version), tostring(self.held ~= nil),
     }, "|")
     if not force and key == self.key then return end
     self.key = key
+    -- The order may have moved (a sort, the list let go): ready its top.
+    if snipe.ReadySoon then snipe:ReadySoon() end
 
     self.head.text:SetText((self:StripOpen() and "- " or "+ ") .. L["SNIPE SETTINGS"])
     if ns.ShoppingLists and self.listVersion ~= ns.ShoppingLists.version then
@@ -637,6 +852,17 @@ function SnipeView:Refresh(force)
 
     local rows = self:SortedFinds()
     self.list:SetData(rows)
+    if self.newChip then
+        local waiting = self.newCount or 0
+        if waiting > 0 then
+            local text = L.Format("%d new", waiting)
+            self.newChip.label:SetText(text)
+            self.newChip:SetText(text)
+            self.newChip:Show()
+        else
+            self.newChip:Hide()
+        end
+    end
     if #rows == 0 then
         self.empty:SetText(running and L["Looking for deals..."] or self:EmptyText())
         self.empty:Show()

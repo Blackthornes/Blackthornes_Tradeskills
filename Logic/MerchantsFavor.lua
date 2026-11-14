@@ -424,9 +424,20 @@ end
 -- @param opts { skipOverStack }
 -- @return rows, cheapest favor first; crates nobody knows the reward for,
 --   or that are not priced, come last
+--- Performance Bonus's chance of double favor (a Legacy perk): 0 with no
+--- ranks spent or nothing read.
+function MerchantsFavor.Bonus()
+    local legacy = ns.Legacy
+    if not (legacy and legacy.FavorBonus) then return 0 end
+    local ok, bonus = pcall(legacy.FavorBonus, legacy)
+    if ok and type(bonus) == "number" and bonus > 0 then return bonus end
+    return 0
+end
+
 function MerchantsFavor:GetRows(opts)
     opts = opts or {}
     local rows = {}
+    local bonus = MerchantsFavor.Bonus()
 
     for _, crate in ipairs(ns.WAYLAID_CRATES or {}) do
         local itemID = self:GetCrateID(crate)
@@ -479,8 +490,12 @@ function MerchantsFavor:GetRows(opts)
         local total
         if cratePrice and best then total = cratePrice + best.cost - (money or 0) end
 
+        -- Performance Bonus (a Legacy perk) gives double favor now and
+        -- then; what each favor costs counts the favor to expect. The
+        -- favor shown stays the plain amount.
+        local expected = favor and favor * (1 + bonus)
         local perFavor
-        if total and favor and favor > 0 then perFavor = total / favor end
+        if total and expected and expected > 0 then perFavor = total / expected end
 
         rows[#rows + 1] = {
             key = crate.key,
@@ -494,6 +509,7 @@ function MerchantsFavor:GetRows(opts)
             best = best,
             bundleCost = best and best.cost,
             favor = favor,
+            expected = expected,
             money = money,
             source = source,
             turnIns = turnIns,
@@ -622,7 +638,7 @@ function MerchantsFavor:GetPlan(goal, rows)
     if not best then return plan end
 
     local bundle = best.best
-    plan.crates = math.ceil(plan.need / best.favor)
+    plan.crates = math.ceil(plan.need / (best.expected or best.favor))
     plan.cratesHave = math.min(plan.crates, best.have or 0)
     plan.materialHave = MerchantsFavor.Owned(bundle.itemID)
     plan.bundlesHave = math.min(plan.crates, math.floor(plan.materialHave / math.max(1, bundle.count)))
@@ -665,7 +681,7 @@ MerchantsFavor.SOUNDS = {
 local function Play(which)
     if type(PlaySound) ~= "function" then return end
     for _, id in ipairs(MerchantsFavor.SOUNDS[which] or {}) do
-        local ok, willPlay = pcall(PlaySound, id, "Master")
+        local ok, willPlay = pcall(ns.PlaySound or PlaySound, id, "Master")
         if ok and willPlay then return end
     end
 end

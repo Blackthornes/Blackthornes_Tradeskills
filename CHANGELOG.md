@@ -4,6 +4,192 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.28.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Road to 300 finds the right trainer.** Show the Way now sends you to the trainer who teaches your next rank, such as Artisan, instead of one that only teaches an earlier rank.
+
+## 1.27.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **Export Prices and Import Prices.** Two new buttons on the Queue page of Settings copy your recent auction prices so you can use them on another computer.
+- **TSM Price Source.** A new TSM Price Source: box on the Sharing page picks which TSM price to use: DBRecent, DBMarket, DBMinBuyout or your own TSM price. It starts on DBRecent.
+- **Disenchant Results.** A new Disenchant Results: row on the Look page (or `/bts dechat on|off`) lets you keep disenchant lines out of chat.
+- **Snipe buys in one click.** The top find's price is ready ahead of time, so Buy pays in one click.
+- **Auction house wheel fix.** The wheel on Sell and Snipe now posts and buys every time, with no second check after a scan.
+- **Vendor-pays-more fix.** An old 1 silver deposit floor no longer counts when a vendor pays more.
+- **One Window fix.** The One Window stays in front of the craft pane when a profession opens.
+
+## 1.26.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Window Spots.** Windows now remember where you drag them, and the one window remembers its spot beside each game window it docks to (the auction house, mailbox, vendor and trainer). Every window stays on screen. A new Window Spots: Set Default row on the Look page (or `/bts windows reset`) puts every Blackthornes window back where it started. Sizes, settings and data stay as they are.
+- **Gold an Hour.** A new Gold an Hour: row on the Pricing page of Settings (or `/bts goldhour on|off`) shows whether buying the parts or making them earns more an hour. Only crafting time counts, not buying or selling. It starts off.
+- **Writs by zone.** The Group By: choice on the Writs list can put writs under zone headings, with Show the Way on each one. Hand-in spots are learned as you play. It starts on no grouping.
+- **Prefer TSM Prices.** TSM's price now takes over once your own scan is an hour old, instead of four hours.
+- **Craft pane steps aside.** The craft pane moves out of the way when the Character window opens.
+- **Drag the auction house drawer.** The sell list drawer at the auction house can be dragged, and it remembers its spot.
+
+## 1.25.0
+
+For WoW: Forever (interface 16001). A full restart is needed after updating, because a file was added.
+
+- **Buy Sets.** Each open list in the auction house drawer's Lists view has a Spend Up To: box and a Buy Sets button. It fills the list in whole sets, keeps listings above Most I'll Pay out, and buys row by row with Buy, then Confirm.
+- **Mute All Sounds.** A new Mute All Sounds: row on the General page of Settings (or `/bts mute on|off`) quiets every sound from every Blackthornes addon at once. It starts off.
+- **Prefer TSM Prices.** A new Prefer TSM Prices: row on the Sharing page of Settings picks TSM's price over the shared ones while TSM Prices is on.
+- **Where profit comes from.** Level Up and Recipes to Learn show (AH), (Vendor) or (DE) after each profit. The recipe tooltip names the way that won. The Profit: choice on the Profit tab gains Vendor and DE, which leaves the auction house out.
+- **Road to 300.** Right-click a craft step and pick Skip This Recipe. The road works itself out again with the next cheapest one. Show All brings skipped recipes back.
+- **Queue time.** Each craft row on the Queue tab shows how long it takes to cast, and the footer says about how long the whole queue takes. Hover to see it by character.
+- **Demand in Recipes to Learn.** A Demand column on both Recipes to Learn lists, and a Demand line on recipe tooltips, so you can tell a recipe's item sells before you buy it.
+- **What you paid.** Item tooltips can say Bought For: your newest auction house buy and when, and Shift adds the average paid. Choose Off, Shift or Always under Bought For: on Tooltips.
+- **Posting price floor.** Your own scans now keep posting's price floor.
+- **Cured Thick Hide.** The Thunder Bluff and Darnassus trainers now teach it at skill 175.
+
+## 1.24.0
+
+For WoW: Forever (interface 16001). A /reload is enough after updating.
+
+- **Reset window places.** If a window ever ends up off your screen, press Reset next to "Window Places:" on the Look page of Settings, or type `/bts resetwindows`. Every Tradeskills window goes back to where it starts.
+- **Road to 300.** With Real Cost picked, the plan no longer uses long yellow steps.
+- **Deutsch.** The new words are in Deutsch, and in Simplified Chinese, French, Spanish and Russian.
+
+
+## 1.23.1
+
+For WoW: Forever (interface 16001). A /reload is enough after updating.
+
+- **Small fixes.** A few small touch-ups.
+
+## 1.23.0
+
+For WoW: Forever (interface 16001). Files were added, so quit the game and start it again after updating.
+
+- **My Auctions.** A small window that lists what you have up on the auction house: the item, how long is left and the price. When something sells, its row lights gold, SOLD stamps on, coins burst out and the row slides away, and Sold Today: counts up. New posts show right away, and the list scrolls to the newest one. Turn it on with Auction Tracker: under AUCTION TRACKER on the Auction page of Settings. It starts off. Sold Effects: (Full, Subtle or Off), Transparent: and Tracker Place: (Set Default) are there too.
+- **Sales by item.** The Sales tab can now show your sales by item, with last sold, each price, taken in, sales and how many sold, plus totals. Clicking an item shows how it has done. The footer counts only what the search shows.
+- **Clear Items.** A Clear Items button on a character's card forgets its saved bags, bank, mail and gold, so old counts stop sending jobs there. It asks you to click again first. Logging in on that character reads it again.
+- **Alts not seen in 30 days.** Butler's jobs skip an alt whose bags were last seen more than 30 days ago.
+- **Smaller least deposit.** Forever's least deposit is 1 copper now, so profit guesses made away from the auction house use it.
+
+## 1.22.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Potential Sale Total.** It now shows what everything on your Sell list should bring in, from the start. Held lines and lines with a note are left out. It stays the same while you post, and follows prices as a scan runs. The hover still splits it into Listed, Still to List and Held Back.
+- **Profit by method counts whole stacks.** Each sale now remembers how many items were in it, so a stack of 20 is costed as 20 and not as one. Sales with no known cost show "Not Counted" and sit on their own "Sold, no cost known" line, outside Profit. Farmed sales still count.
+- **Legacy perks.** Working Overtime now counts in the chance a yellow craft gives a skill point, and Performance Bonus counts in Merchant's Favor costs and crate numbers. Only ranks you have spent count. With none spent, nothing changes.
+
+## 1.21.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Auction or vendor agree.** The item tooltip, Butler and the Sell list now weigh the auction house against a vendor the same way, so the tooltip no longer says Auction for an item the Sell list sends to a vendor.
+- **Mail running out.** Tradeskills now saves when each character's mail runs out, so Butler can warn you.
+
+## 1.21.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Buy from Snipe.** Each find on the Snipe list has its own Buy button. It checks the price first, then shows what you'll pay, like Buy 20 for 1g 20s. Past your Double Check price it asks you to click again.
+- **Gold In and Out.** The bars follow This Character. Gold from the mailbox is sorted as auction sales, outbid refunds or gold sent from your characters.
+- **Vendor or auction.** An item goes to the vendor when the auction house would pay less than one deposit more.
+- **Price sharing quiets down.** Refusal lines from the price channel are hidden, and sending slows down after a refusal and stops after three. You still hear prices from others.
+- **Shift tooltips.** Holding Shift over a tooltip no longer throws a Lua error.
+
+## 1.20.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Mouse wheel follows the auction house tab.** On Sell, turning the wheel either way lists your next stack. On Auctions, either way cancels your next undercut auction. On other tabs the wheel is left alone.
+
+## 1.20.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Where trade camp recipes come from.** Recipes sold for Merchant's Favor show the vendor, zone, cost and any standing they need in the Recipe Book, and Show the Way on the Level Up tab can lead you there. A vendor shows once you open it with this version.
+- **Hover a recipe's materials.** In the Recipe Book and Your Time, hovering a material shows the item's tooltip. Recipe Book material names are white now.
+- **Match the cheapest listing.** New players start with Undercut By at 0c, so posts match the cheapest price. Your saved Undercut By stays as it is. On Your Auctions, a listing tied with someone else's price shows Cheapest in amber until you run Check Places.
+- **Limited stock vendors.** A material a vendor sells only a few of at a time is no longer on your shopping list as a vendor buy. It's priced from the auction house instead.
+- **Craftsman's Writs in other languages.** Writs are found by your game's own item names, so they get prices on clients that aren't English.
+
+## 1.19.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Drop-down menus open over the window.** Drop-down lists in the Rules window and other windows are no longer hidden behind the window they sit in.
+- **Mouse wheel posting keeps going.** Scrolling to post moves on past a stack the game refused or that was skipped, instead of stopping there.
+- **Mouse wheel posting works after the auto scan.** Scrolling to post lists right after the auto scan finishes, at the price the scan found.
+
+## 1.19.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fishing on the Road to 300.** The Road to 300 view on the Level Up tab now takes Fishing to 300. Each step shows the pole to wear, the lure you need, the best spot you have fished, about how many catches are left and about how long that takes at your pace, with Artisan coming from the quest chain. Fishing is in the profession drop-down. There is no queue button for it, since there is nothing to craft.
+- **Price graph in Recipes to Learn and Your Time.** Both views can swap the materials list for the price graph, like My Crafts does, with a button on the heading. Under it is the average for the days shown. Recipes to Learn also says after how many crafts the recipe pays for itself at that price, and Your Time says what farming and crafting makes an hour at that price. Both start off showing the materials.
+- **Linked-account prices.** Prices now go to your linked account after any new price, not only after a full scan, so a scan cut short or a search reaches the other account too. Prices it already holds are no longer dropped when the other account has been quiet for a few days.
+
+## 1.18.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Cooking and First Aid on the Road to 300.** The Road to 300 view on the Level Up tab now takes Cooking and First Aid all the way to 300. Expert comes from a book and Artisan from a quest chain, each for your side, and Show the Way leads you to the quest giver or teacher. Both are in the profession drop-down.
+- **Better Cooking and First Aid recipes.** The Road to 300 skips old recipes Forever remade under the same name, such as Basic Campfire. Ingredients nobody sells or lists are priced at what a vendor pays, so meat recipes stay on the road past 75. Recipes you see in your Cooking window now stay on the Cooking road.
+
+## 1.17.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Crafted Only on the Sell tab.** A new Crafted Only tick box at the auction house hides everything your recipes don't make. It starts off.
+- **Various bug fixes for Tradeskills.** Shuffles' Queue It no longer doubles a craft that is also made as a sub-craft.
+
+## 1.16.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Fairer listing deposits in profit.** When you list several crafts together, each craft's profit now takes only its own share of the auction deposit, not the whole thing.
+
+## 1.16.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Shared prices on linked accounts.** If you play on two accounts that name each other, each account's newest auction prices now go across too, with no tick box to find. The newer price wins, and nothing taken is passed on to anyone else.
+
+## 1.16.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Last Synced.** If you play on two accounts, the Sharing page of Settings and the other account's tooltip now say when you last synced. It says Not yet until the first time.
+- **Queue and patterns you learn later.** Once a pattern's craft is queued, the materials listed for that pattern come off your shopping list.
+
+## 1.15.0
+
+For WoW: Forever (interface 16001). Do a full restart after updating, since Snipe has a new key.
+
+- **Snipe buys in one click.** Snipe gets the top deal ready while you watch, so one click buys it. The new Snipe: Buy Top key does the same. Buy It shows what you will pay, and Checking... while it gets ready. Nothing ever buys by itself. Every buy still takes a click, a key press or a wheel turn.
+- **More of a good deal.** After a buy, the item stays on top while more of its listings are deals, and its row says how many are left.
+- **Double Check Over:** Any buy above the price in this new box asks Click Again.
+- **A list that holds still.** The Snipe list stays put while your mouse is on it. New finds wait behind a small chip.
+- **Stacks.** Snipe now reads a stack's listings and buys the cheapest units first. It stops at the first unit that isn't a deal and stays under Most I'll Pay.
+- **Watch and List.** Changing either one while Snipe runs starts it over with your new choice and keeps the amount you have spent.
+- **Share Sales:** A new tick under Settings, Sharing, Your Other Account. It stays off until you tick it on both accounts. Then the Sales and Stats tabs show both accounts together, and a new sale reaches the other account within seconds. Buyer names never leave the account.
+- **Share Shopping Lists:** A new tick in the same place, also off until you tick it on both accounts. Each account's lists and craft queue list show read only on the other account, with how many it still needs. Snipe's My Lists picks those up too.
+- **Mouse wheel.** With Mouse Wheel ticked, the wheel keeps listing at the auction house even if something else takes it. A drawer list with nothing more to show now lets the turn through.
+- **Sharing your data.** If you chose to share your data, it now goes to one more of our collecting characters. It is still off until you turn it on, and what gets sent is the same.
+
+## 1.14.2
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Healing potions.** Forever moved them from Alchemy to First Aid, so Road to 300 no longer tells alchemists to make Minor and Lesser Healing Potion. Other Classic recipes Forever removed are left out of the recipe book too.
+
+## 1.14.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Disenchanting.** A character with Enchanting on record now counts as able to disenchant, even when the game's spell check says no. Butler no longer says none of your characters can break your Always disenchant list.
+
 ## 1.14.0
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.

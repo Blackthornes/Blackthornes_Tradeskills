@@ -20,7 +20,17 @@
 -- Until a turn-in is seen, what the guides report stands in, marked as
 -- such. None of this has been seen in game yet.
 --
--- Only item IDs, amounts, when, and the character's GUID are kept; no names.
+-- Only item IDs, amounts, when, and the character's GUID are kept; no
+-- player names. The one name kept is a writ's customer, below.
+--
+-- Customers (a viewer's idea, the owner said build it, 2026-11-12): when a
+-- writ is handed in, the NPC taking it, the zone and the spot are kept,
+-- account wide, in merchantsFavor.writCustomers[item the writ asks for] =
+-- { name, zone, mapID, x, y, at }. A writ taken into the quest log notes
+-- the log's map spot for it first (fromLog), and the NPC's own spot
+-- replaces that. Learned only from play, never from outside data. The writ
+-- list groups by them (Group By: Zone), and a zone can be skipped
+-- (merchantsFavor.writSkipZones[zone] = true).
 --
 -- Sealed writs (the owner, 2026-10-19: "we need our addons to learn how
 -- these work"): mobs drop a Sealed Journeyman's or Expert's Writ, and
@@ -77,6 +87,8 @@ Writs.DEFAULT_GOAL = "honored"
 --   writRewards[guid][tier]   = { rep, money, turnIns, at }
 --   writBags[tier]            = { [coin bag item ID] = time first seen }
 --   coinBags[itemID]          = { opens, copper (in all), at }
+--   writCustomers[itemID]     = { name, zone, mapID, x, y, at, fromLog }
+--   writSkipZones[zone]       = true
 local function Store()
     local db = ns.db
     if not db then return nil end
@@ -88,6 +100,8 @@ local function Store()
     store.sealedWrits = store.sealedWrits or {}
     store.writBags = store.writBags or {}
     store.coinBags = store.coinBags or {}
+    store.writCustomers = store.writCustomers or {}
+    store.writSkipZones = store.writSkipZones or {}
     return store
 end
 
@@ -111,14 +125,15 @@ end
 -- Writs by name
 --------------------------------------------------------------------------------
 
-local byItem, byName
+local byItem, byName, typedWrit
 
 local function Index()
     if byItem then return end
-    byItem, byName = {}, {}
+    byItem, byName, typedWrit = {}, {}, {}
     for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
         byItem[writ.item] = writ
         byName[writ.name:lower()] = writ
+        if writ.writ then typedWrit[writ.writ] = writ end
     end
 end
 
@@ -154,6 +169,96 @@ end
 -- itemID -> writ entry, or false once its name is known and is no writ.
 local seen = {}
 
+--------------------------------------------------------------------------------
+-- Writs in the client's language
+--------------------------------------------------------------------------------
+-- A Chinese client calls Craftsman's Writ: Blue Overalls "工匠文书：蓝色罩衫"
+-- (a player's report, 2026-11-09), so the English names above find nothing.
+-- The game names the item a writ asks for in the same words, and a writ
+-- whose ID is known (typed in the data, or found before) shows what goes in
+-- front of it. Both read from the client, nothing typed.
+
+local function EnglishClient()
+    local ok, locale = pcall(function() return GetLocale and GetLocale() end)
+    if not ok or type(locale) ~= "string" then return true end
+    return locale:sub(1, 2) == "en"
+end
+Writs.EnglishClient = EnglishClient
+
+local function Trim(text)
+    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- [the client's lower-case name of the item asked for] = writ entry
+local clientNames, clientPrefix, clientReady
+local clientDirty = true
+-- itemIDs whose names came before the client's names could judge them.
+local waiting = {}
+
+local function BuildClientNames()
+    Index()
+    clientDirty = false
+    local names, missing = {}, false
+    for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
+        local name = ItemName(writ.item)
+        if name then names[Trim(name:lower())] = writ else missing = true end
+    end
+
+    local prefix
+    local store = Store()
+    for _, writ in ipairs(ns.CRAFTSMANS_WRITS or {}) do
+        local writID = (store and store.writIDs[writ.item]) or writ.writ
+        if writID then
+            local writName, itemName = ItemName(writID), ItemName(writ.item)
+            if writName and itemName then
+                local whole, tail = writName:lower(), Trim(itemName:lower())
+                if #whole > #tail and whole:sub(-#tail) == tail then
+                    prefix = whole:sub(1, #whole - #tail)
+                    break
+                end
+            end
+        end
+    end
+
+    clientNames, clientPrefix = names, prefix
+    clientReady = prefix ~= nil and not missing
+end
+
+--- The writ entry a writ's name in the client's own language is, or nil.
+--- The second answer is false while the client has not given every name
+--- needed to be sure.
+function Writs.WritForClientName(name)
+    if type(name) ~= "string" then return nil, true end
+    if clientDirty then BuildClientNames() end
+    if not clientPrefix then return nil, false end
+
+    local lower = name:lower()
+    if lower:sub(1, #clientPrefix) ~= clientPrefix then return nil, clientReady end
+    local writ = clientNames[Trim(lower:sub(#clientPrefix + 1))]
+    return writ, writ ~= nil or clientReady
+end
+
+--- Judge again the items that came before the client's names did.
+function Writs:RetryWaiting()
+    self.retrySoon = nil
+    local list = waiting
+    waiting = {}
+    for itemID in pairs(list) do
+        seen[itemID] = nil
+        self:Classify(itemID)
+    end
+end
+
+local function RetrySoon()
+    if Writs.retrySoon or not next(waiting) then return end
+    Writs.retrySoon = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.5, function() Writs:RetryWaiting() end)
+    else
+        Writs:RetryWaiting()
+    end
+end
+
 function Writs:Classify(itemID)
     local known = seen[itemID]
     if known ~= nil then return known or nil end
@@ -164,6 +269,18 @@ function Writs:Classify(itemID)
     -- A secret value in an instance raises when read; it is no writ.
     local ok, writ = pcall(Writs.WritForName, name)
     if not ok then writ = nil end
+
+    -- Another language names the writ in its own words. Until the client
+    -- has given every name that takes, judge it again later.
+    if ok and not writ and not EnglishClient() then
+        local okLocal, found, ready = pcall(Writs.WritForClientName, name)
+        if okLocal and found then
+            writ = found
+        elseif okLocal and not ready then
+            waiting[itemID] = true
+            return nil
+        end
+    end
 
     seen[itemID] = writ or false
     if writ then self:NoteWritID(writ, itemID) end
@@ -195,6 +312,22 @@ function Writs:FindWrits()
 end
 
 function Writs:OnItemInfo(itemID)
+    -- A name the client's own writ names are built from has come in.
+    if type(itemID) == "number" and not EnglishClient() then
+        Index()
+        local store = Store()
+        local known = byItem[itemID] or typedWrit[itemID]
+        if not known and store then
+            for _, writID in pairs(store.writIDs) do
+                if writID == itemID then known = true break end
+            end
+        end
+        if known then
+            clientDirty = true
+            RetrySoon()
+        end
+    end
+
     local range = ns.WRIT_ID_RANGE
     if not self.searched or not range or type(itemID) ~= "number" then return end
     if itemID < range[1] or itemID > range[2] or seen[itemID] ~= nil then return end
@@ -521,6 +654,179 @@ function Writs:OnTurnIn(_, _, money)
     end
 end
 
+--------------------------------------------------------------------------------
+-- Customers: who takes each writ, and where
+--------------------------------------------------------------------------------
+
+local function Plain(value)
+    if type(value) ~= "string" then return nil end
+    local ok, empty = pcall(function() return value == "" end)
+    if not ok or empty then return nil end
+    return value
+end
+
+local function Number(value)
+    if type(value) ~= "number" then return nil end
+    local ok = pcall(function() return value + 0 end)
+    return ok and value or nil
+end
+
+--- The writ a quest's title names, in English or the client's words.
+function Writs.WritForTitle(title)
+    title = Plain(title)
+    if not title then return nil end
+    local ok, writ = pcall(Writs.WritForName, title)
+    if ok and writ then return writ end
+    if not EnglishClient() then
+        local okLocal, found = pcall(Writs.WritForClientName, title)
+        if okLocal and found then return found end
+    end
+    return nil
+end
+
+--- Where the player stands: map ID, the map's name, x and y (0-100).
+function Writs.PlayerSpot()
+    local map = C_Map
+    if type(map) ~= "table" or type(map.GetBestMapForUnit) ~= "function" then return nil end
+    local ok, mapID = pcall(map.GetBestMapForUnit, "player")
+    mapID = ok and Number(mapID) or nil
+    if not mapID then return nil end
+    local x, y
+    if type(map.GetPlayerMapPosition) == "function" then
+        local okPos, pos = pcall(map.GetPlayerMapPosition, mapID, "player")
+        if okPos and pos then
+            local okXY, px, py = pcall(function() return pos:GetXY() end)
+            if okXY then x, y = Number(px), Number(py) end
+        end
+    end
+    return mapID, Writs.MapName(mapID), x and x * 100, y and y * 100
+end
+
+function Writs.MapName(mapID)
+    local map = C_Map
+    if not mapID or type(map) ~= "table" or type(map.GetMapInfo) ~= "function" then return nil end
+    local ok, info = pcall(map.GetMapInfo, mapID)
+    if not ok or type(info) ~= "table" then return nil end
+    local okName, name = pcall(function() return info.name end)
+    return okName and Plain(name) or nil
+end
+
+local function Round(value)
+    return value and math.floor(value * 10 + 0.5) / 10 or nil
+end
+
+--- Keep where a writ is handed in. A spot the quest log gave (fromLog)
+--- never replaces one read standing at the customer.
+function Writs:NoteCustomer(writ, customer)
+    local store = Store()
+    if not (store and writ and customer and customer.zone) then return false end
+    local old = store.writCustomers[writ.item]
+    if customer.fromLog and old and not old.fromLog then return false end
+    local entry = {
+        name = customer.name, zone = customer.zone, mapID = customer.mapID,
+        x = Round(customer.x), y = Round(customer.y), at = time and time() or 0,
+        fromLog = customer.fromLog or nil,
+    }
+    if old and old.name == entry.name and old.zone == entry.zone and old.x == entry.x
+        and old.y == entry.y and not old.fromLog == not entry.fromLog then
+        return false
+    end
+    store.writCustomers[writ.item] = entry
+    Changed()
+    return true
+end
+
+function Writs:GetCustomer(writ)
+    if not writ then return nil end
+    local store = Store()
+    local mine = store and store.writCustomers[writ.item]
+    if mine then return mine end
+    -- What players' own play learned, shipped at each release
+    -- (Data/ForeverWritCustomers.lua); a spot learned here wins.
+    local shipped = rawget(ns, "WRIT_CUSTOMERS")
+    return type(shipped) == "table" and shipped[writ.item] or nil
+end
+
+--- The writs the open quest window asks for: by its title, and by any
+--- Craftsman's Writ among the items it wants.
+function Writs:WindowWrits()
+    local found, list = {}, {}
+    local function Add(writ)
+        if writ and not found[writ.item] then
+            found[writ.item] = true
+            list[#list + 1] = writ
+        end
+    end
+    if type(GetTitleText) == "function" then
+        local ok, title = pcall(GetTitleText)
+        if ok then Add(Writs.WritForTitle(title)) end
+    end
+    if type(GetNumQuestItems) == "function" and type(GetQuestItemLink) == "function" then
+        local ok, count = pcall(GetNumQuestItems)
+        count = ok and Number(count) or 0
+        for i = 1, math.min(count, 10) do
+            local okLink, link = pcall(GetQuestItemLink, "required", i)
+            local itemID = okLink and Plain(link) and tonumber(link:match("item:(%d+)"))
+            if itemID then
+                local okWrit, writ = pcall(self.Classify, self, itemID)
+                if okWrit then Add(writ) end
+            end
+        end
+    end
+    return list
+end
+
+--- At the customer (the quest window asking for the writ, or handing out
+--- what it pays): keep who and where.
+function Writs:OnQuestWindow()
+    local writs = self:WindowWrits()
+    if #writs == 0 then return end
+    local name
+    if type(UnitName) == "function" then
+        local ok, npc = pcall(UnitName, "npc")
+        name = ok and Plain(npc) or nil
+    end
+    local mapID, zone, x, y = Writs.PlayerSpot()
+    if not zone then return end
+    for _, writ in ipairs(writs) do
+        self:NoteCustomer(writ, { name = name, zone = zone, mapID = mapID, x = x, y = y })
+    end
+end
+
+--- A writ taken into the quest log: its spot on the map, when the log
+--- gives one, stands in until the customer is met.
+function Writs:OnQuestAccepted(questID)
+    questID = Number(questID)
+    local log = C_QuestLog
+    if not questID or type(log) ~= "table" then return end
+    local title
+    if type(log.GetTitleForQuestID) == "function" then
+        local ok, text = pcall(log.GetTitleForQuestID, questID)
+        title = ok and text or nil
+    end
+    local writ = Writs.WritForTitle(title)
+    if not writ or type(log.GetNextWaypoint) ~= "function" then return end
+    local ok, mapID, x, y = pcall(log.GetNextWaypoint, questID)
+    mapID, x, y = ok and Number(mapID), ok and Number(x), ok and Number(y)
+    local zone = mapID and Writs.MapName(mapID)
+    if not (zone and x and y) then return end
+    self:NoteCustomer(writ, { zone = zone, mapID = mapID, x = x * 100, y = y * 100, fromLog = true })
+end
+
+--- Skipped zones, by the zone's name.
+function Writs:IsZoneSkipped(zone)
+    local store = Store()
+    return store and zone and store.writSkipZones[zone] == true or false
+end
+
+function Writs:SetZoneSkipped(zone, skipped)
+    local store = Store()
+    if not (store and Plain(zone)) then return false end
+    store.writSkipZones[zone] = skipped and true or nil
+    Changed()
+    return true
+end
+
 -- A vendor, mailbox, auction house or trade window can move money and items
 -- together; nothing is learned while one is open.
 local busy = {}
@@ -726,7 +1032,10 @@ function Writs:GetRows()
         rows[#rows + 1] = {
             key = writ.item,
             writ = writ,
-            name = writ.name,
+            -- The client's own name for the item where it has one; search
+            -- still finds the English name.
+            name = (not EnglishClient() and ItemName(writ.item)) or writ.name,
+            english = writ.name,
             prof = writ.prof,
             tier = writ.tier,
             itemID = writ.item,
@@ -857,6 +1166,9 @@ function Writs:OnEnable()
     ns.RegisterEvent(self, "GET_ITEM_INFO_RECEIVED", Quietly(self.OnItemInfo))
     ns.RegisterEvent(self, "PLAYER_ENTERING_WORLD", Quietly(self.OnFaction))
     ns.RegisterEvent(self, "PLAYER_MONEY", Quietly(self.OnMoney))
+    ns.RegisterEvent(self, "QUEST_PROGRESS", Quietly(self.OnQuestWindow))
+    ns.RegisterEvent(self, "QUEST_COMPLETE", Quietly(self.OnQuestWindow))
+    ns.RegisterEvent(self, "QUEST_ACCEPTED", Quietly(self.OnQuestAccepted))
 
     for _, pair in ipairs({
         { "MERCHANT_SHOW", "MERCHANT_CLOSED", "merchant" },

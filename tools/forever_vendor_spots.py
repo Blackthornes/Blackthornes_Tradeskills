@@ -9,7 +9,9 @@ Run from the repository root:
 A saved file is the addon's account save, Blackthornes_TS.lua from the
 game's WTF/Account/<account>/SavedVariables folder. Only its `vendorSpots`
 and `trainerSpots` tables are read (Logic/VendorPins.lua: NPC ID -> name,
-map ID, x, y, side and, for a vendor, the materials it sells; kept whenever
+map ID, x, y, side and, for a vendor, the materials it sells and the
+recipes it sells with their gold or currency price and the standing they
+need; kept whenever
 a vendor or trainer window opens), so nothing about the player or their
 characters is copied.
 
@@ -31,6 +33,8 @@ from lupa.lua51 import lua_type
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT = os.path.join(ROOT, "Data", "ForeverVendorSpots.lua")
 SIDES = ("A", "H", "")
+MOST_RECIPES = 150
+MOST_COSTS = 3
 
 
 # A save is read as data: run in an empty table with nothing to call, so a
@@ -50,9 +54,64 @@ end
 """
 
 
+def short_text(value, most=60):
+    """Plain text of at most `most` characters, else None."""
+    if isinstance(value, str) and value and len(value) <= most and "\n" not in value:
+        return value
+    return None
+
+
+def whole(value, low=0, high=10 ** 9):
+    """A whole number in range, else None."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    if n != value and not (isinstance(value, float) and value.is_integer()):
+        return None
+    return n if low <= n <= high else None
+
+
+def clean_recipes(table):
+    """A vendor's recipe offers as {itemID: {gold, costs, faction, standing}}:
+    only plain fields of the right kind, at most MOST_RECIPES."""
+    found = {}
+    for item_id in keys(table):
+        if len(found) >= MOST_RECIPES:
+            break
+        item = whole(item_id, 1)
+        offer = table[item_id]
+        if item is None or lua_type(offer) != "table":
+            continue
+        gold = whole(offer["gold"], 1) if offer["gold"] is not None else None
+        costs = []
+        for i in range(1, MOST_COSTS + 1):
+            cost = offer["costs"][i] if lua_type(offer["costs"]) == "table" else None
+            if lua_type(cost) != "table":
+                break
+            name, amount = short_text(cost["name"]), whole(cost["amount"], 1)
+            if not name or amount is None:
+                continue
+            kept = {"name": name, "amount": amount}
+            currency = whole(cost["currency"], 1) if cost["currency"] is not None else None
+            if currency:
+                kept["currency"] = currency
+            item_cost = whole(cost["item"], 1) if cost["item"] is not None else None
+            if item_cost:
+                kept["item"] = item_cost
+            costs.append(kept)
+        faction, standing = short_text(offer["faction"]), short_text(offer["standing"])
+        if not (faction and standing):
+            faction = standing = None
+        if gold is None and not costs and not faction:
+            continue
+        found[item] = {"gold": gold, "costs": costs, "faction": faction, "standing": standing}
+    return found
+
+
 def clean(row):
-    """One vendor as (name, mapID, x, y, side, at, {itemID: unlimited}), or
-    None when a field is not what it should be."""
+    """One vendor as (name, mapID, x, y, side, at, {itemID: unlimited},
+    {itemID: recipe offer}), or None when a field is not what it should be."""
     try:
         name = row["name"]
         if not isinstance(name, str) or not name or len(name) > 60:
@@ -66,7 +125,8 @@ def clean(row):
         items = {}
         for item_id in keys(row["items"]):
             items[int(item_id)] = bool(row["items"][item_id])
-        return (name, map_id, round(x, 1), round(y, 1), side, at, items)
+        recipes = clean_recipes(row["recipes"])
+        return (name, map_id, round(x, 1), round(y, 1), side, at, items, recipes)
     except (TypeError, ValueError, KeyError):
         return None
 
@@ -114,7 +174,7 @@ def shipped(lua, table):
         for item_id in keys(row[6]):
             items[int(item_id)] = bool(row[6][item_id])
         found[int(npc_id)] = (row[1], int(row[2]), float(row[3]), float(row[4]),
-                              row[5] or "", 0, items)
+                              row[5] or "", 0, items, clean_recipes(row[7]))
     return found
 
 
@@ -127,14 +187,37 @@ def num(x):
     return ("%.1f" % x).rstrip("0").rstrip(".")
 
 
+def offer_text(offer):
+    parts = []
+    if offer["gold"]:
+        parts.append(f"gold = {offer['gold']}")
+    if offer["costs"]:
+        costs = []
+        for cost in offer["costs"]:
+            fields = [f"name = {lua_string(cost['name'])}", f"amount = {cost['amount']}"]
+            if cost.get("currency"):
+                fields.append(f"currency = {cost['currency']}")
+            if cost.get("item"):
+                fields.append(f"item = {cost['item']}")
+            costs.append("{ " + ", ".join(fields) + " }")
+        parts.append("costs = { " + ", ".join(costs) + " }")
+    if offer["faction"]:
+        parts.append(f"faction = {lua_string(offer['faction'])}, standing = {lua_string(offer['standing'])}")
+    return "{ " + ", ".join(parts) + " }"
+
+
 def rows(spots):
     lines = []
     for npc_id in sorted(spots):
-        name, map_id, x, y, side, _, items = spots[npc_id]
+        name, map_id, x, y, side, _, items, recipes = spots[npc_id]
         sells = ", ".join(f"[{i}] = {'true' if items[i] else 'false'}" for i in sorted(items))
         sells = "{ " + sells + " }" if sells else "{}"
-        lines.append(f"    [{npc_id}] = {{ {lua_string(name)}, {map_id}, {num(x)}, {num(y)}, "
-                     f"{lua_string(side)}, {sells} }},")
+        line = (f"    [{npc_id}] = {{ {lua_string(name)}, {map_id}, {num(x)}, {num(y)}, "
+                f"{lua_string(side)}, {sells}")
+        if recipes:
+            offers = ", ".join(f"[{i}] = {offer_text(recipes[i])}" for i in sorted(recipes))
+            line += ", { " + offers + " }"
+        lines.append(line + " },")
     return lines
 
 
@@ -152,7 +235,9 @@ def render(vendors, trainers):
         "local _, ns = ...",
         "",
         "-- [npc ID] = { name, map ID, x, y, side (\"A\", \"H\" or \"\"),",
-        "--   { [item ID] = never runs out } }",
+        "--   { [item ID] = never runs out },",
+        "--   { [recipe item ID] = { gold, costs = { { name, amount, currency } },",
+        "--     faction, standing } } or nothing }",
         "ns.FOREVER_VENDOR_SPOTS = {",
     ]
     lines += rows(vendors)

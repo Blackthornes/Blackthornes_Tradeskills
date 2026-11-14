@@ -214,6 +214,17 @@ check("an item not kept falls back to its scans", kind, "market")
 check("with both of them", #series, 2)
 series, kind = G.Series(WOOL, "day", now)
 check("a kept item with no prices draws nothing yet", kind, nil)
+local today = math.floor(now / 86400)
+local keptPrices = ns.db.prices[realm]
+ns.db.prices[realm] = { [OTHER] = { trend = { today - 3, 80, today - 2, 0, today - 1, 85, today, 88 } } }
+series, kind = G.Series(OTHER, "week", now)
+check("with no scans it falls back to the daily values", kind, "market")
+check("each day with a value", #series, 3)
+check("today's drawn at now", series[3].t, now)
+check("an earlier day at its end", series[2].t, today * 86400 - 1)
+series = G.Series(OTHER, "day", now)
+check("the 24 hour view keeps only yesterday's end and today", #series, 2)
+ns.db.prices[realm] = keptPrices
 check("the window is 24 hours by default", G.GetWindow(), "day")
 check("ticks say now at the right", G.TickText("day", now, true), "now")
 check("there is a 14 day view", G.WINDOWS.fortnight and G.WINDOWS.fortnight.seconds, 14 * 24 * HOUR)

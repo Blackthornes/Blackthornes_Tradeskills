@@ -552,6 +552,11 @@ function Auctions:Refresh(opts)
     -- throttled request. Coalesce them.
     local now = GetTime()
     if not opts.force and self.lastRefresh and (now - self.lastRefresh) < 5 then
+        -- Swallowed, but not lost: the query already sent is the server's
+        -- list as it stood then, so auctions posted after it (several posts
+        -- in a row, through our post flow or the game's own) would not show
+        -- until the next open. One more read goes out once the window ends.
+        self:RefreshAfter(5 - (now - self.lastRefresh) + 0.1, opts.priority)
         return false
     end
     self.lastRefresh = now
@@ -572,6 +577,18 @@ function Auctions:Refresh(opts)
     })
 
     return true
+end
+
+--- One trailing refresh for requests the five second window swallowed.
+--- Several swallowed requests share it.
+function Auctions:RefreshAfter(delay, priority)
+    if self.trailingRefresh then return end
+    if not (C_Timer and C_Timer.After) then return end
+    self.trailingRefresh = true
+    C_Timer.After(math.max(0.1, delay or 5), function()
+        Auctions.trailingRefresh = nil
+        Auctions:Refresh({ force = true, priority = priority })
+    end)
 end
 
 -- How long after a query goes out we look for the answer ourselves, in seconds.
@@ -614,6 +631,88 @@ end
 --   item is not there. A read that has not seen the server's reply yet must not
 --   be allowed to say a listing failed, so only the last read of a sequence --
 --   or the client's own announcement, where there is one -- may do that.
+-- How long a listing's price is kept for its sale mail. An auction runs two
+-- days at most and its gold comes within a day or two of the sale; a month
+-- covers a mail read late.
+Auctions.LISTED_KEEP = 31 * 86400
+-- Prices kept for one item; the newest stay.
+Auctions.LISTED_MOST = 12
+
+--- Remember the price and size of each listing as it was read.
+--
+-- Saved in `record.listedPrices[itemID]` as `{ u = unit, q = quantity,
+-- s = stack buyout (item auctions only), at }`. Never rename it.
+function Auctions:RememberListed(record, seen, now)
+    local kept = record.listedPrices or {}
+    record.listedPrices = kept
+    now = now or time()
+
+    for _, row in ipairs(seen or {}) do
+        local itemID, unit, quantity, stack = row[1], row[2], row[3], row[4]
+        local list = kept[itemID] or {}
+        kept[itemID] = list
+        local found
+        for _, old in ipairs(list) do
+            if old.u == unit and old.q == quantity then
+                old.at, old.s, found = now, stack or old.s, true
+                break
+            end
+        end
+        if not found then
+            list[#list + 1] = { u = unit, q = quantity, s = stack, at = now }
+        end
+    end
+
+    for itemID, list in pairs(kept) do
+        for i = #list, 1, -1 do
+            if now - (tonumber(list[i].at) or 0) > self.LISTED_KEEP then table.remove(list, i) end
+        end
+        if #list > self.LISTED_MOST then
+            table.sort(list, function(a, b) return (a.at or 0) > (b.at or 0) end)
+            for i = #list, self.LISTED_MOST + 1, -1 do list[i] = nil end
+        end
+        if #list == 0 then kept[itemID] = nil end
+    end
+end
+
+--- How many were in a sale, from the gold it brought and the prices this
+--- item was listed at. nil when the prices don't say, or say two things.
+-- @param gross the winning bid, before the cut
+function Auctions:UnitsSold(itemID, gross)
+    gross = tonumber(gross)
+    if not itemID or not gross or gross <= 0 then return nil end
+    local record = self:GetTable()
+    local list = record.listedPrices and record.listedPrices[itemID]
+    if not list then return nil end
+
+    -- A whole item auction bought out at its stack price says it exactly.
+    local exact
+    for _, row in ipairs(list) do
+        if row.s and row.s == gross and row.q then
+            if exact and exact ~= row.q then exact = false break end
+            exact = row.q
+        end
+    end
+    if exact then return exact end
+    if exact == false then return nil end
+
+    -- Else the gold over a listed unit price, a whole number of them (part of
+    -- a commodity listing can sell), no more than were listed. A copper a
+    -- unit is allowed for the rounding a stack price leaves.
+    local answer
+    for _, row in ipairs(list) do
+        local unit, most = tonumber(row.u), tonumber(row.q)
+        if unit and unit > 0 and most then
+            local n = math.floor(gross / unit + 0.5)
+            if n >= 1 and n <= most and math.abs(gross - n * unit) <= n then
+                if answer and answer ~= n then return nil end
+                answer = n
+            end
+        end
+    end
+    return answer
+end
+
 function Auctions:ReadOwned(opts)
     opts = opts or {}
 
@@ -636,6 +735,7 @@ function Auctions:ReadOwned(opts)
     local live = {}
     -- Auctions marked sold, so a cancel that lost the race to a buyer says so.
     local sold = {}
+    local seenPrices = {}
     local readAt = time()
 
     for index = 1, count do
@@ -697,6 +797,17 @@ function Auctions:ReadOwned(opts)
                 end
                 listings[#listings + 1] = listing
 
+                -- Kept for the sale mail: an invoice may not say how many
+                -- were in the stack, and its gold read against this price
+                -- does (Auctions:UnitsSold).
+                if unit and unit > 0 then
+                    local stack = tonumber(info.buyoutAmount)
+                    if stack and ns.Scanner and ns.Scanner.IsCommodity and ns.Scanner:IsCommodity(itemID) then
+                        stack = nil
+                    end
+                    seenPrices[#seenPrices + 1] = { itemID, unit, quantity, stack }
+                end
+
                 if info.auctionID then
                     local linkOk, link = pcall(function()
                         return type(info.itemLink) == "string" and info.itemLink or nil
@@ -732,6 +843,7 @@ function Auctions:ReadOwned(opts)
 
     record.items = items
     record.prices = prices
+    self:RememberListed(record, seenPrices, readAt)
 
     record.byCharacter = record.byCharacter or {}
     record.byCharacter[CharacterKey()] = { items = items, updatedAt = time(), listings = listings }
@@ -739,6 +851,7 @@ function Auctions:ReadOwned(opts)
     self.ownedIDs = ids
     self.live, self.liveAt = live, readAt
     if ns.MyAuctions and ns.MyAuctions.OnRead then ns.MyAuctions:OnRead(live, opts.final, sold) end
+    if ns.AuctionTracker and ns.AuctionTracker.OnRead then pcall(ns.AuctionTracker.OnRead, ns.AuctionTracker) end
     record.updatedAt = time()
     record.auctionCount = count
 

@@ -10,8 +10,9 @@
 -- Every field may be nil when it is not known:
 --
 --   auction        copper for one, sold on the auction house, after the cut
---                  and the deposit (Profit:NetFromListing on the smoothed
---                  market price). nil for greys (vendor only), gear that
+--                  and the deposit (Profit:NetAfterRisk on the smoothed
+--                  market price, the same answer the Sell list weighs
+--                  against a vendor). nil for greys (vendor only), gear that
 --                  binds when picked up, and items never priced.
 --   auctionNow     copper for one sold at today's cheapest listing that is
 --                  not the player's own, after the cut and the deposit, from
@@ -32,8 +33,9 @@
 --   disenchant     copper a disenchant of one is likely to give
 --                  (Disenchant:GetValue), nil when it cannot be broken or
 --                  its material has no price.
---   canDisenchant  true when the character playing knows Disenchant and has
---                  the Enchanting skill this one needs; false when not, or
+--   canDisenchant  true when the character playing has the Enchanting skill
+--                  this one needs (or knows Disenchant with no skill on
+--                  record yet); false when not, or
 --                  when it cannot be disenchanted at all.
 --   enchanter      when the character playing cannot: the short name of the
 --                  disenchanter typed in Settings, else of the alt on this
@@ -107,10 +109,20 @@
 --                  everything else is the last snapshot.
 --   bagsAt,        when each was last read (time()), nil when never; the
 --   bankAt, mailAt live bags say now.
+--   mailCount,     mail runs out (2026-11-09, Butler's "Mail Running
+--   mailSoonest,   Out"), as of mailAt: how many mails the box showed, the
+--   mailSoonCount, soonest days left of any (a number with a fraction, nil
+--   mailReturns,   for an empty box), how many run out within 3 days, and
+--   mailGone       of those how many go back to the sender or are gone for
+--                  good. All nil when the box was never read this way.
 --   gold, goldAt   copper on the character when last seen, and when
 --                  (the bags' snapshot time); live for the character
 --                  playing. nil when never recorded (2026-10-11, for
 --                  Butler's gold top-ups).
+--   mailMoney      copper waiting in that character's mailbox as of
+--                  mailAt, nil when never read this way (2026-11-10).
+--   clearedAt      when the player last cleared this character's saved
+--                  items (Butler:ClearHoldings), else nil.
 --
 -- At a mailbox and the bank (2026-10-11), Butler asks two more things:
 --
@@ -245,7 +257,8 @@
 -- of the item one craft uses), crafts (how many the `carried` copies make,
 -- else the bags'), perItem (copper one of the item is worth made into it),
 -- needs = { { itemID, count } } (other materials the bags lack for those
--- crafts) }. nil when nothing it knows uses the item, or for no craft.
+-- crafts), others = { { itemID, count } } (every other material those
+-- crafts use, carried or not; added 2026-11-14 for Butler's tooltip) }. nil when nothing it knows uses the item, or for no craft.
 -- Butler weighs perItem against its own best price. QueueCraft is
 -- Queue:Ensure: at least that many crafts queued.
 --
@@ -602,6 +615,14 @@ local function Quality(itemID)
     return nil
 end
 
+--- One unit's worth listed at a price, as the Sell list weighs it against
+--- a vendor (Profit:NetAfterRisk), else after the cut alone.
+local function Net(itemID, price)
+    local profit = ns.Profit
+    if profit.NetAfterRisk then return profit:NetAfterRisk(itemID, price) end
+    return profit:NetFromListing(itemID, price)
+end
+
 --- The price of one, by the copy's link when Butler gave one: a random
 --- suffix ("of the Monkey") with a price of its own is worth that.
 local function PriceOf(itemID, link, which)
@@ -620,7 +641,7 @@ local function Auction(itemID, quality, link)
     local price = PriceOf(itemID, link, "market")
     if not price or price <= 0 then return nil end
 
-    local net = ns.Profit:NetFromListing(itemID, price)
+    local net = Net(itemID, price)
     return math.max(0, math.floor(net + 0.5))
 end
 
@@ -633,7 +654,7 @@ local function AuctionNow(itemID, auction, link)
     if prices:IsStale(itemID) then return nil end
     local rival = PriceOf(itemID, link, "rival")
     if not rival or rival <= 0 then return nil end
-    local net = ns.Profit:NetFromListing(itemID, rival)
+    local net = Net(itemID, rival)
     return math.max(0, math.floor(net + 0.5))
 end
 
@@ -684,9 +705,11 @@ local function Breaking(itemID, kept, quality)
         return skill ~= nil and (needs == nil or skill >= needs)
     end
 
-    -- Knowing the spell with no skill on record yet counts as able.
-    local can = kept.knows ~= false
-        and (Enough(kept.selfSkill) or (kept.selfSkill == nil and kept.knows == true))
+    -- Enchanting on this character's own record is enough: it teaches
+    -- Disenchant, and on Forever the spell checks can say no for one that
+    -- disenchants (as ItemTooltip.CanDisenchant has it). Knowing the spell
+    -- with no skill on record yet counts as able too.
+    local can = Enough(kept.selfSkill) or (kept.selfSkill == nil and kept.knows == true)
     if can then return value, true, nil end
 
     local chosen = kept.chosen
@@ -834,12 +857,13 @@ local function Weigh(itemID, recipeID, carried)
     local okCost, cost = pcall(ns.Cost.GetCraftCost, ns.Cost, recipeID, nil, nil, { valueOwned = true })
     if not okCost or type(cost) ~= "table" or not cost.priceable then return nil end
 
-    local others, needs = 0, {}
+    local others, needs, uses = 0, {}, {}
     for _, line in ipairs(cost.reagents or {}) do
         if line.itemID ~= itemID then
             others = others + (line.lineCost or 0)
             local want = (line.quantity or 0) * crafts
             local inBags = line.inBags or 0
+            if want > 0 then uses[#uses + 1] = { itemID = line.itemID, count = want } end
             if want > inBags then needs[#needs + 1] = { itemID = line.itemID, count = want - inBags } end
         end
     end
@@ -852,6 +876,7 @@ local function Weigh(itemID, recipeID, carried)
         crafts = crafts,
         perItem = math.floor((net - others) / per),
         needs = needs,
+        others = uses,
     }
 end
 
@@ -886,8 +911,10 @@ function Butler:CraftFor(item, carried)
         if not best then return nil end
         local needs = {}
         for i, need in ipairs(best.needs) do needs[i] = { itemID = need.itemID, count = need.count } end
+        local others = {}
+        for i, use in ipairs(best.others or {}) do others[i] = { itemID = use.itemID, count = use.count } end
         return { recipeID = best.recipeID, name = best.name, itemID = best.itemID, per = best.per,
-            crafts = best.crafts, perItem = best.perItem, needs = needs }
+            crafts = best.crafts, perItem = best.perItem, needs = needs, others = others }
     end)
     if ok then return answer end
     return nil
@@ -975,7 +1002,17 @@ local function Holdings()
                 mail = Counts(record.mail),
                 bankAt = Stamp(record.bankAt),
                 mailAt = Stamp(record.mailAt),
+                mailMoney = Stamp(record.mailMoney),
+                clearedAt = Stamp(record.clearedAt),
             }
+            local expiry = record.mailExpiry
+            if type(expiry) == "table" then
+                entry.mailCount = Stamp(expiry.count)
+                entry.mailSoonest = Stamp(expiry.soonest)
+                entry.mailSoonCount = Stamp(expiry.soon)
+                entry.mailReturns = Stamp(expiry.returns)
+                entry.mailGone = Stamp(expiry.gone)
+            end
             -- Gold as last seen, for Butler's gold top-ups (2026-10-11):
             -- the character playing's purse is live.
             entry.gold = type(record.gold) == "number" and record.gold or nil
@@ -1055,6 +1092,36 @@ local function CharacterNamed(name)
         end
     end
     return best
+end
+
+--- Butler's "Clear Items" on a character's jobs line (2026-11-10): forget
+-- that character's saved bags, bank, mail and gold (Recipes:ClearItems).
+-- `who` is a character key or its full name. Never the character playing.
+-- Never raises.
+-- @return true and the full name, or false and why
+function Butler:ClearHoldings(who)
+    local ok, done, name = pcall(function()
+        local recipes = ns.Recipes
+        if not (recipes and recipes.ClearItems) or type(who) ~= "string" then return false, "unknown" end
+        local records = Characters()
+        local key = records[who] and who or nil
+        if not key then
+            local wanted = who:lower()
+            for candidate in pairs(records) do
+                local full = recipes.GetCharacterName and recipes:GetCharacterName(candidate)
+                if type(full) == "string" and full:lower() == wanted then key = candidate break end
+            end
+        end
+        if not key then return false, "unknown" end
+        local full = recipes.GetCharacterName and recipes:GetCharacterName(key) or key
+        if key == SelfKey() or (ns.Characters and ns.Characters:IsPlaying(key)) then
+            return false, "playing"
+        end
+        if not recipes:ClearItems(key) then return false, "unknown" end
+        return true, full
+    end)
+    if ok then return done, name end
+    return false, "error"
 end
 
 --- Fill the game's Send Mail page for one of the player's characters.
@@ -1194,7 +1261,8 @@ end
 local function Holder(records, crafterKey, itemID, Playing, selfKey)
     local bestKey, bestCount = nil, 0
     for key, record in pairs(records) do
-        if key ~= crafterKey and type(record) == "table" and not record.linkedFrom and not Playing(key) then
+        if key ~= crafterKey and type(record) == "table" and not record.linkedFrom and not Playing(key)
+            and not Butler.Stale(record) then
             local count = 0
             if type(record.inventory) == "table" then count = count + (tonumber(record.inventory[itemID]) or 0) end
             if type(record.bank) == "table" then count = count + (tonumber(record.bank[itemID]) or 0) end
@@ -1215,6 +1283,19 @@ local function Holder(records, crafterKey, itemID, Playing, selfKey)
     return nil
 end
 
+--- True when a character's bags were last seen more than STALE_DAYS ago
+-- (2026-11-10, a player was sent to mail hundreds of items alts had long
+-- since used): what it held then is no reason to log in on it. A record
+-- never stamped stays as it was.
+Butler.STALE_DAYS = 30
+function Butler.Stale(record, now)
+    local at = type(record) == "table" and tonumber(record.inventoryAt) or nil
+    if not at then return false end
+    now = now or (type(time) == "function" and time()) or nil
+    if not now then return false end
+    return now - at > Butler.STALE_DAYS * 86400
+end
+
 --- Copper for one from a vendor, or nil when no vendor is known to sell it.
 local function VendorPrice(itemID)
     local vendor = ns.Vendor
@@ -1223,6 +1304,14 @@ local function VendorPrice(itemID)
     price = ok and tonumber(price) or nil
     if price and price > 0 then return price end
     return nil
+end
+
+--- True when the only shops seen selling it have limited stock.
+local function Limited(itemID)
+    local vendor = ns.Vendor
+    if not (vendor and vendor.IsLimited) then return false end
+    local ok, limited = pcall(vendor.IsLimited, vendor, itemID)
+    return ok and limited == true
 end
 
 local function Jobs()
@@ -1289,8 +1378,10 @@ local function Jobs()
                         -- `vendor`: copper for one when a vendor sells it, so
                         -- Butler lists it under Buy from a vendor (the owner,
                         -- 2026-10-13).
+                        -- Not a shop with limited stock: it sells a few
+                        -- now and then, so that goes under Buy or gather.
                         missing[#missing + 1] = { itemID = reagent.itemID, count = want - held,
-                            vendor = VendorPrice(reagent.itemID) }
+                            vendor = not Limited(reagent.itemID) and VendorPrice(reagent.itemID) or nil }
                     end
                 end
                 -- Bag slots making it frees, for the character playing only

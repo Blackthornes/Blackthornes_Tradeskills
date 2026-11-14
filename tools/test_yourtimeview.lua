@@ -183,5 +183,13 @@ View.Redraw()
 check("the footer says to turn it on", View._widgets.summary.text,
   "Turn on Blackthornes Farmer to see your farming time.")
 
+print("\nyour time: at the average price")
+ns.CraftTime = { PerHour = function(profit, seconds) return profit * 3600 / seconds end }
+ns.RecipeBookView = { BackAt = function(_, price, yield) return price * (yield or 1) end }
+local entry = { outputItemID = 11, yield = 2, bought = 100, farmSeconds = 1700, craftSeconds = 100 }
+check("an hour farming and crafting at the average", View.PerHourAt(entry, 500), 1800)
+check("no farming time, no line", View.PerHourAt({ outputItemID = 11, craftSeconds = 5 }, 500), nil)
+check("no average, no line", View.PerHourAt(entry, nil), nil)
+
 print(("\n%s"):format(failures == 0 and "all checks passed" or (failures .. " failure(s)")))
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end

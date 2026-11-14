@@ -130,7 +130,7 @@ end
 function AuctionsView.BadgeText(row)
     if row.alt then return L["Log in to cancel"], "dim" end
     if row.cancelling then return L["Cancelling"], "warn" end
-    if row.state == "cheapest" then return L["Cheapest"], row.behind and "warn" or "profit" end
+    if row.state == "cheapest" then return L["Cheapest"], (row.behind or row.tied) and "warn" or "profit" end
     if row.state == "overcut" then return L["Overcut"], "profit" end
     if row.state == "unknown" then return L["Unknown"], "muted" end
     return nil
@@ -326,6 +326,11 @@ local function ShowTooltip(row, entry)
             GameTooltip:AddLine(L.Format("Checked %s.", Util.FormatAgeAgo(math.max(0, time() - entry.placeAt))),
                 0.7, 0.7, 0.7)
         end
+    end
+    if entry.state == "cheapest" and entry.tied then
+        local r, g, b = Theme.Unpack("warn")
+        GameTooltip:AddLine(L["Someone else lists at your price too. Check Places shows whose sells first."],
+            r, g, b, true)
     end
     if entry.state == "overcut" then
         GameTooltip:AddLine(L["Posted just under the big stack. The cheaper ones should sell first."], 0.7, 0.7, 0.7, true)

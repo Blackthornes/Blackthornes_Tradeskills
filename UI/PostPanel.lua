@@ -59,6 +59,28 @@ do
         end
     end
 end
+-- The row's post button reads List, Check Price, or Sell Anyway while Butler says wait,
+-- or a short wait label, so it is as wide as the longest of those. Every
+-- row keeps the same width, so the rows stay lined up.
+local POST_WIDTH = BUTTON_WIDTH
+do
+    local measure = Theme and Theme.MeasureText
+    for _, word in ipairs({ L["List"], L["Check Price"], L["Sell Anyway"], L["wait"] }) do
+        local width
+        if type(measure) == "function" then
+            local ok, measured = pcall(measure, "small", word)
+            if ok and type(measured) == "number" then width = measured end
+        end
+        if not width and type(word) == "string" then
+            -- No font to ask yet: about 8 units a letter at "small".
+            local letters = select(2, word:gsub("[^\128-\191]", ""))
+            width = letters * 8
+        end
+        if width then POST_WIDTH = math.max(POST_WIDTH, width + 14) end
+    end
+end
+-- The drawer grows by what the post button gained, so names keep their room.
+PANEL_WIDTH = PANEL_WIDTH + (POST_WIDTH - BUTTON_WIDTH)
 local QUANTITY_WIDTH = 42
 
 -- The red x that ignores an item, at the row's right end past List. A
@@ -67,7 +89,7 @@ local QUANTITY_WIDTH = 42
 local IGNORE_WIDTH = 20
 
 -- Right margin, ignore, gap, button, gap, quantity box, gap before the text.
-local TEXT_INSET = 6 + IGNORE_WIDTH + 6 + BUTTON_WIDTH + 6 + QUANTITY_WIDTH + 10
+local TEXT_INSET = 6 + IGNORE_WIDTH + 6 + POST_WIDTH + 6 + QUANTITY_WIDTH + 10
 
 -- Clear of the auction window's bevelled edge without opening a gap you could
 -- see the world through.
@@ -205,8 +227,13 @@ local function CreateRow(row)
         CommitTyping(PostPanel.list)
         if not row.data then return end
 
+        -- Butler says wait: Sell Anyway tells Butler first, so it stops
+        -- waiting for this visit, then lists it at the price shown.
+        if row.data.butlerWait and ns.SisterKeeps then
+            ns.SisterKeeps:SellAnyway(row.data.itemID)
+        end
         ns.Posting:Request(row.data.itemID, row.data.postQuantity, row.data.unitPrice)
-    end, { width = BUTTON_WIDTH, height = 18 })
+    end, { width = POST_WIDTH, height = 18 })
     row.post:SetPoint("RIGHT", -(6 + IGNORE_WIDTH + 6), 0)
 
     -- How many to list, beside the button that lists them. Empty-handed this
@@ -263,6 +290,19 @@ PostPanel._TypingInList = TypingInList
 
 --- Whether a row's detail line runs past the room it has. False when it
 --- cannot be measured, so nothing is shortened on a guess.
+--- What a row's post button says: Sell Anyway while Butler says wait,
+--- Check Price when the click will look up the price first, else List.
+--- Cheap enough for the label ticker: it never walks the bags.
+local function PostLabel(line)
+    if line and line.butlerWait and not line.held then return L["Sell Anyway"] end
+    local posting = ns.Posting
+    if line and posting and posting.ClickChecksFirst and posting:ClickChecksFirst(line.itemID) then
+        return L["Check Price"]
+    end
+    return L["List"]
+end
+PostPanel._PostLabel = PostLabel
+
 local function DetailTooWide(row)
     local label = row.detail
     -- Theme.TextWidth, because a label's own GetStringWidth can stop at the
@@ -430,6 +470,16 @@ function UpdateRow(row, line)
     -- (the price is on the tooltip and the List button).
     if line.held then row.detail:SetText(line.held) end
 
+    -- Butler says wait for a better price (2026-11-14): its few words in
+    -- place of the price, and the button reads Sell Anyway.
+    local wait = not line.held and line.butlerWait
+    if wait then
+        local tag = ("|c%s%s|r"):format(ns.COLORS.warn, L["Butler Says Wait"])
+        row.detail:SetText(wait.short and (tag .. "   " .. wait.short) or tag)
+        if DetailTooWide(row) then row.detail:SetText(tag) end
+    end
+    if row.post.SetText then row.post:SetText(PostLabel(line)) end
+
     -- The field round the price line, as wide as its words.
     if row.priceField then
         local width = Theme.TextWidth(row.detail)
@@ -463,6 +513,8 @@ function UpdateRow(row, line)
 
     row.post.tooltipText = line.held
         and L.Format("%s. A click still lists it.", line.held)
+        or wait
+        and ((wait.reason or wait.short) .. "\n" .. L["Sell Anyway lists it at your price."])
         or farUnder
         and L["Far under what it usually sells for. List asks before it goes up."]
         or line.atALoss
@@ -490,6 +542,26 @@ local function ShowRowTooltip(row, line)
     if line.held then
         GameTooltip:AddLine(line.held, Theme.Unpack("accent"))
         GameTooltip:AddLine(L["List all leaves it. Its List button still lists it."], 0.5, 0.5, 0.5, true)
+        GameTooltip:AddLine(" ")
+    elseif line.butlerWait then
+        -- Butler says wait (its Verdicts:Waiting): why, and the numbers.
+        local wait = line.butlerWait
+        local r, g, b = Theme.Unpack("warn")
+        GameTooltip:AddLine(L["Butler Says Wait"], r, g, b)
+        if wait.reason then GameTooltip:AddLine(wait.reason, 1, 1, 1, true) end
+        if wait.cost then
+            GameTooltip:AddDoubleLine(L["Costs to Make:"], Util.FormatMoney(wait.cost, { noColor = true }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        if wait.now then
+            GameTooltip:AddDoubleLine(L["Sells for Now:"], Util.FormatMoney(wait.now, { noColor = true }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        if wait.usual then
+            GameTooltip:AddDoubleLine(L["Usual Price:"], Util.FormatMoney(wait.usual, { noColor = true }),
+                0.7, 0.7, 0.7, 1, 1, 1)
+        end
+        GameTooltip:AddLine(L["Sell Anyway lists it at your price."], 0.5, 0.5, 0.5, true)
         GameTooltip:AddLine(" ")
     elseif line.kept and line.keptWhy then
         GameTooltip:AddLine(L.Format("%d kept back: %s", line.kept, line.keptWhy), Theme.Unpack("accent"))
@@ -545,7 +617,7 @@ local function ShowRowTooltip(row, line)
     if line.priceBasis == "overcut" and ns.Profit and ns.Profit.Overcut then
         local rival = ns.Prices:GetScanValue(line.itemID, "rival")
         local ok, over, _, wall, count, ahead = pcall(ns.Profit.Overcut, ns.Profit, line.itemID, rival,
-            ns.Config:Get("undercutCopper") or 1)
+            ns.Config:Get("undercutCopper") or 0)
         if ok and over then
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(L["Overcutting"], Theme.Unpack("accent"))
@@ -635,6 +707,11 @@ function PostPanel:Build()
     self.header = header
     self.title = title
 
+    -- Dragged by its plate or header (a player asked, the owner said build
+    -- it, 2026-11-12): where it is dropped is kept beside the auction house
+    -- (PostPanel:SaveSpot) and it stays on screen.
+    self:MakeDraggable(frame, header)
+
     -- Everything under the title, so the collapse button can fold it away in
     -- one go and leave the title strip showing.
     local body = CreateFrame("Frame", nil, frame)
@@ -702,22 +779,76 @@ function PostPanel:Build()
     overcut:HookScript("OnLeave", function() GameTooltip:Hide() end)
     self.overcutBox = overcut
 
+    -- Crafted Only (a player asked, the owner said build it, 2026-11-08):
+    -- Sell shows only items your characters can make, and List Next and
+    -- List All follow it. Off unless ticked, kept between sessions.
+    local craftedOnly = Widgets.CreateCheckbox(body, L["Crafted Only"], function(checked)
+        ns.Config:Set("postCraftedOnly", checked and true or false)
+        PostPanel:Refresh()
+    end, PostPanel:CraftedOnly())
+    craftedOnly:SetPoint("TOPRIGHT", overcut, "TOPLEFT", -10, 0)
+    craftedOnly:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["Shows only things your characters can make. List Next lists only these too."], 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    craftedOnly:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    self.craftedOnlyBox = craftedOnly
+
     -- Hidden (2026-11-06, the owner approved the mockup): the items the
     -- player hid with a row's x, the only ones kept off Sell. Opens the
     -- list to bring one back; shows on Sell only while something is hidden.
     local hiddenButton = Widgets.CreateButton(body, L.Format("Hidden (%d)", 0), function(button)
         if ns.HiddenItemsWindow then ns.HiddenItemsWindow:Toggle(PostPanel.frame) end
     end, { height = 20 })
-    hiddenButton:SetPoint("RIGHT", overcut, "LEFT", -10, 0)
+    hiddenButton:SetPoint("RIGHT", craftedOnly, "LEFT", -10, 0)
     hiddenButton:Hide()
     self.hiddenButton = hiddenButton
 
     local summary = Theme.CreateLabel(body, "tiny", "muted")
     summary:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -6)
-    summary:SetPoint("RIGHT", overcut, "LEFT", -8, 0)
+    summary:SetPoint("RIGHT", craftedOnly, "LEFT", -8, 0)
     summary:SetWordWrap(true)
     if summary.SetJustifyV then summary:SetJustifyV("TOP") end
     self.summary = summary
+
+    -- Butler Says Wait (the owner said build it from a mockup, 2026-11-14):
+    -- a strip under the summary, on Sell only while Butler holds something
+    -- back. How many wait, Show Waiting and Sell All Waiting.
+    local waitStrip = CreateFrame("Frame", nil, body)
+    waitStrip:SetHeight(22)
+    waitStrip:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -4)
+    waitStrip:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
+    waitStrip:Hide()
+    self.waitStrip = waitStrip
+
+    local waitCount = Theme.CreateLabel(waitStrip, "small", "warn")
+    waitCount:SetPoint("LEFT", waitStrip, "LEFT", 0, 0)
+    self.waitCount = waitCount
+
+    local sellWaiting = Widgets.CreateButton(waitStrip, L["Sell All Waiting"], function()
+        PostPanel:SellAllWaiting()
+    end, { height = 20 })
+    if sellWaiting.label and Theme.TextWidth then
+        local width = Theme.TextWidth(sellWaiting.label)
+        sellWaiting:SetWidth(math.max(90, math.ceil((width or 80) + 16)))
+    end
+    sellWaiting:SetPoint("RIGHT", waitStrip, "RIGHT", 0, 0)
+    sellWaiting:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L["Sell Anyway lists it at your price."], 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    sellWaiting:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    self.sellWaitingButton = sellWaiting
+
+    local showWaiting = Widgets.CreateCheckbox(waitStrip, L["Show Waiting"], function(checked)
+        ns.Config:Set("postShowWaiting", checked and true or false)
+        PostPanel:Refresh()
+    end, PostPanel:ShowWaiting())
+    showWaiting:SetPoint("RIGHT", sellWaiting, "LEFT", -10, 0)
+    self.showWaitingBox = showWaiting
+    waitCount:SetPoint("RIGHT", showWaiting, "LEFT", -8, 0)
 
     local divider = Theme.CreateDivider(body)
     divider:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -6)
@@ -928,7 +1059,65 @@ function PostPanel:ShownLines()
     local lines, toVendor = ns.Posting:GetPostable({ includeAll = true, showHeld = true, showNoted = true })
     local hidden = 0
     if self:HidingLosses() then lines, hidden = PostPanel.WithoutLosses(lines) end
+    if self:CraftedOnly() then lines = PostPanel.CraftedLines(lines) end
+    local waiting = PostPanel.WaitingLines(lines)
+    self.waitingLines = waiting
+    if not self:ShowWaiting() then lines = PostPanel.WithoutWaiting(lines) end
     return lines, hidden, toVendor or 0
+end
+
+--- Show Waiting: true unless unticked, so Butler's held items stay in view.
+function PostPanel:ShowWaiting()
+    return ns.Config == nil or ns.Config:Get("postShowWaiting") ~= false
+end
+
+--- The lines Butler says to wait on.
+function PostPanel.WaitingLines(lines)
+    local kept = {}
+    for _, line in ipairs(lines or {}) do
+        if line.butlerWait then kept[#kept + 1] = line end
+    end
+    return kept
+end
+
+--- The lines left once Butler's waiting ones are taken out.
+function PostPanel.WithoutWaiting(lines)
+    local kept = {}
+    for _, line in ipairs(lines or {}) do
+        if not line.butlerWait then kept[#kept + 1] = line end
+    end
+    return kept
+end
+
+--- Sell All Waiting: tell Butler to let every waiting item go to the
+--- auction house this visit, then show them as ready to list.
+function PostPanel:SellAllWaiting()
+    if not ns.SisterKeeps then return end
+    for _, line in ipairs(self.waitingLines or {}) do
+        if line.itemID then ns.SisterKeeps:SellAnyway(line.itemID) end
+    end
+    self:Refresh()
+end
+
+--- The Butler Says Wait strip: on Sell only, while something waits. The
+--- divider and the list under it move down to make room.
+function PostPanel:UpdateWaitStrip()
+    local strip = self.waitStrip
+    if not strip then return end
+    local count = #(self.waitingLines or {})
+    local shown = self.view == "sell" and count > 0
+    if shown then
+        self.waitCount:SetText(L.Format("Waiting: %d", count))
+        if self.showWaitingBox then self.showWaitingBox:SetChecked(self:ShowWaiting()) end
+    end
+    if self.waitShown == shown then return end
+    self.waitShown = shown
+    strip:SetShown(shown)
+    if self.divider then
+        self.divider:ClearAllPoints()
+        self.divider:SetPoint("TOPLEFT", shown and strip or self.summary, "BOTTOMLEFT", 0, shown and -4 or -6)
+        self.divider:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -14, 0)
+    end
 end
 
 --- List all: list the most valuable stack still on the list. Each click
@@ -1371,6 +1560,73 @@ function PostPanel:Placement(auctionFrame)
     return side, left, fits
 end
 
+--------------------------------------------------------------------------------
+-- A spot of the player's own
+--------------------------------------------------------------------------------
+
+--- The spot the player dragged the drawer to, as an offset from the auction
+-- window's top right corner in the drawer's own units, or nil.
+function PostPanel:Spot()
+    local db = ns.db
+    local spot = db and db.postPanelSpot
+    if type(spot) == "table" and type(spot.x) == "number" and type(spot.y) == "number" then
+        return spot
+    end
+    return nil
+end
+
+--- Keep where the drawer was dropped, beside the auction window it sits by.
+function PostPanel:SaveSpot()
+    local frame = self.frame
+    local auctionFrame = ns.UI and ns.UI:FindAuctionFrame()
+    if not (frame and auctionFrame and ns.db) then return end
+    local ok, left, top, ours, right, atop, theirs = pcall(function()
+        return frame:GetLeft(), frame:GetTop(), frame:GetEffectiveScale(),
+            auctionFrame:GetRight(), auctionFrame:GetTop(), auctionFrame:GetEffectiveScale()
+    end)
+    if not (ok and left and top and right and atop and ours and theirs and ours > 0) then return end
+    ns.db.postPanelSpot = {
+        x = (left * ours - right * theirs) / ours,
+        y = (top * ours - atop * theirs) / ours,
+    }
+    self.dockedTo = nil
+    self:Redock()
+end
+
+--- Forget the dragged spot: the drawer goes back beside the auction house.
+function PostPanel:ResetSpot()
+    if ns.db then ns.db.postPanelSpot = nil end
+    self.dockedTo = nil
+    if self.frame and self.attached and not self.inOne then self:Redock() end
+end
+
+--- Let the drawer be dragged by itself and its header. Never in a fight.
+function PostPanel:MakeDraggable(frame, header)
+    if frame.SetMovable then frame:SetMovable(true) end
+    if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
+    local function Start()
+        if PostPanel.inOne then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+        PostPanel.dragging = true
+        frame:StartMoving()
+    end
+    local function Stop()
+        if not PostPanel.dragging then return end
+        PostPanel.dragging = nil
+        frame:StopMovingOrSizing()
+        PostPanel:SaveSpot()
+    end
+    for _, piece in ipairs({ frame, header }) do
+        if piece and piece.RegisterForDrag then
+            pcall(piece.RegisterForDrag, piece, "LeftButton")
+            if piece.HookScript then
+                piece:HookScript("OnDragStart", Start)
+                piece:HookScript("OnDragStop", Stop)
+            end
+        end
+    end
+end
+
 --- Put the panel where Placement says, showing or hiding it to match.
 --
 -- Cheap enough for the one-second auction house ticker, which is what brings
@@ -1384,6 +1640,28 @@ function PostPanel:Redock()
 
     local auctionFrame = ns.UI:FindAuctionFrame()
     if not auctionFrame then return end
+
+    if self.dragging then return end
+
+    -- Dragged somewhere by the player: kept there, beside the auction house.
+    local spot = self:Spot()
+    if spot then
+        if self.dockedTo ~= auctionFrame or self.dockedSpotX ~= spot.x or self.dockedSpotY ~= spot.y then
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT", auctionFrame, "TOPRIGHT", spot.x, spot.y)
+            self.dockedTo, self.dockedOffset, self.dockedLeft = auctionFrame, spot.x, nil
+            self.dockedSpotX, self.dockedSpotY = spot.x, spot.y
+            self:ApplyHeight(true)
+        end
+        if not frame:IsShown() then
+            frame:Show()
+            self:ApplyHeight(true)
+            self:Refresh()
+            if ns.Motion then ns.Motion:Open(frame, 0) end
+        end
+        return
+    end
+    self.dockedSpotX, self.dockedSpotY = nil, nil
 
     local host, left, fits = self:Placement(auctionFrame)
 
@@ -1550,6 +1828,20 @@ end
 PostPanel.view = "sell"
 
 --- Is Hide losses ticked? Off until the player ticks it.
+--- Crafted Only: true while Sell shows only items a recipe makes.
+function PostPanel:CraftedOnly()
+    return ns.Config ~= nil and ns.Config:Get("postCraftedOnly") == true
+end
+
+--- The lines whose item one of your characters' recipes makes.
+function PostPanel.CraftedLines(lines)
+    local kept = {}
+    for _, line in ipairs(lines or {}) do
+        if line.isCrafted then kept[#kept + 1] = line end
+    end
+    return kept
+end
+
 function PostPanel:HidingLosses()
     return ns.Config ~= nil and ns.Config:Get("postHideLosses") == true
 end
@@ -1796,6 +2088,10 @@ function PostPanel:Refresh()
             self.overcutBox:SetShown(showBox)
             self.overcutBox:SetChecked(ns.Config:Get("overcutting") == true)
         end
+        if self.craftedOnlyBox then
+            self.craftedOnlyBox:SetShown(showBox)
+            self.craftedOnlyBox:SetChecked(self:CraftedOnly())
+        end
         -- Hidden: the items the player hid, on Sell while there are any.
         local hiddenCount = 0
         if self.hiddenButton then
@@ -1822,7 +2118,7 @@ function PostPanel:Refresh()
                 if beside == "hidden" then
                     self.summary:SetPoint("RIGHT", self.hiddenButton, "LEFT", -8, 0)
                 elseif beside == "box" then
-                    self.summary:SetPoint("RIGHT", self.overcutBox or self.hideLosses, "LEFT", -8, 0)
+                    self.summary:SetPoint("RIGHT", self.craftedOnlyBox or self.overcutBox or self.hideLosses, "LEFT", -8, 0)
                 elseif beside == "paste" and View and View.paste then
                     self.summary:SetPoint("RIGHT", View.paste, "LEFT", -8, 0)
                 else
@@ -1851,12 +2147,15 @@ function PostPanel:Refresh()
     end
 
     if self.searchAll then self.searchAll:SetShown(self.view == "buy") end
+    if self.view ~= "sell" then self:UpdateWaitStrip() end
 
     self:UpdateAuctionsTab()
     if self:LayTabs() and ((self.view == "favors" and not PostPanel.ShowsFavors())
         or (self.view == "snipe" and not PostPanel.ShowsSnipe())) then
         self.view = "sell"
         if self.switch then self.switch:Select(self.view, true) end
+        -- The Snipe view's wheel switch no longer applies.
+        if ns.AuctionWheel then ns.AuctionWheel:Update() end
     end
     local View = ns.ShoppingListsView
     if View and View.list then View:SetShown(self.view == "lists") end
@@ -1942,6 +2241,7 @@ function PostPanel:Refresh()
     if TypingInList(self.list) then return end
 
     local lines, hidden, toVendor = self:ShownLines()
+    self:UpdateWaitStrip()
     self.shownLines = lines
     self:UpdateListAll(lines)
 
@@ -2093,10 +2393,11 @@ function PostPanel:UpdateWaitLabels(seconds, reason)
         if row and row.data and row.post and not row.post.disabled then
             -- Another copy of the item being confirmed does not wait for it.
             local pending = ns.Posting and ns.Posting.pending
+            local label = PostLabel(row.data)
             if pending and pending.itemID == row.data.itemID then
-                Apply(row.post, L["List"], ns.Posting:SecondsUntilPostable(row.data.itemID))
+                Apply(row.post, label, ns.Posting:SecondsUntilPostable(row.data.itemID))
             else
-                Apply(row.post, L["List"], seconds, reason)
+                Apply(row.post, label, seconds, reason)
             end
         end
     end

@@ -1,4 +1,5 @@
 -- Blackthornes Tradeskills -- Logic/ItemStats.lua
+
 -- Everything the Stats tab shows about one item, worked out in one place.
 --
 -- The owner asked (2026-10-14) for a Stats tab like Farmer's, one item at
@@ -12,6 +13,20 @@
 -- something it reads moves (ItemStats:Key).
 
 local _, ns = ...
+
+-- Every saved price reading, in either history layout (Data/Prices.lua keeps
+-- them flat; an old save keeps a table per reading).
+local function EachReading(history)
+    local P = ns.Prices
+    if P and P.EachReading then return P.EachReading(history) end
+    local i = 0
+    return function()
+        i = i + 1
+        local point = type(history) == "table" and history[i]
+        if type(point) ~= "table" then return nil end
+        return i, point.t, point.m, point.q
+    end
+end
 
 local ItemStats = ns.NewModule("ItemStats")
 
@@ -27,6 +42,15 @@ local function Ask(module, fn, ...)
     local ok, a, b, c = pcall(module[fn], module, ...)
     if not ok then return nil end
     return a, b, c
+end
+
+--- This realm's ledger entries, with the other account's shared sales
+--- when Share Sales is on (Mail:Entries), else the ledger alone.
+local function LedgerEntries()
+    local entries = Ask(ns.Mail, "Entries")
+    if type(entries) == "table" then return entries end
+    local ledger = Ask(ns.Mail, "GetLedger")
+    return type(ledger) == "table" and type(ledger.entries) == "table" and ledger.entries or {}
 end
 
 local function Number(value)
@@ -60,10 +84,12 @@ local function WorthBefore(itemID, record, now)
         if count > 0 then return math.floor(sum / count + 0.5), market end
     end
 
-    local oldest = isRecord and type(record.history) == "table" and record.history[1]
-    if market and type(oldest) == "table" and Number(oldest.t) and now - oldest.t >= 5 * DAY
-        and Number(oldest.m) then
-        return oldest.m, market
+    local oldestT, oldestM
+    if isRecord then
+        for _, t, m in EachReading(record.history) do oldestT, oldestM = t, m break end
+    end
+    if market and Number(oldestT) and now - oldestT >= 5 * DAY and Number(oldestM) then
+        return oldestM, market
     end
 
     local lowest = isRecord and ns.Prices and ns.Prices.LowestListed
@@ -219,11 +245,11 @@ local function Weeks(itemID, now)
     local weeks = {}
     for index = 1, ItemStats.WEEKS do weeks[index] = { units = 0, net = 0 } end
 
-    local ledger = Ask(ns.Mail, "GetLedger")
+    local entries = LedgerEntries()
     local names = Ask(ns.Mail, "NameIndex") or {}
     local any = false
 
-    for _, entry in ipairs(type(ledger) == "table" and ledger.entries or {}) do
+    for _, entry in ipairs(entries) do
         local t = Number(entry.t)
         if entry.kind == "sold" and t and t <= now and (entry.itemID or names[entry.name]) == itemID then
             local index = math.floor((now - t) / WEEK) + 1
@@ -319,9 +345,9 @@ function ItemStats:Build(itemID, now)
 
     -- The last twelve scans: how many were listed, and the market value.
     stats.stock = {}
-    for _, reading in ipairs(stats.record and type(stats.record.history) == "table" and stats.record.history or {}) do
-        if type(reading) == "table" and Number(reading.t) then
-            stats.stock[#stats.stock + 1] = { t = reading.t, q = Number(reading.q) or 0, m = Number(reading.m) }
+    for _, t, m, q in EachReading(stats.record and stats.record.history) do
+        if Number(t) then
+            stats.stock[#stats.stock + 1] = { t = t, q = Number(q) or 0, m = Number(m) }
         end
     end
 
@@ -348,8 +374,7 @@ end
 --- tab builds again only then.
 function ItemStats:Key(itemID)
     local record = ns.Prices and Ask(ns.Prices, "Get", itemID)
-    local ledger = Ask(ns.Mail, "GetLedger")
-    local entries = type(ledger) == "table" and ledger.entries or {}
+    local entries = LedgerEntries()
     local last = entries[#entries]
     return table.concat({
         tostring(itemID),

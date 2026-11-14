@@ -48,12 +48,14 @@ Data\LearnSpots.lua
 Data\Vendor.lua
 Data\WaylaidCrates.lua
 Data\CraftsmansWrits.lua
+Data\ForeverWritCustomers.lua
 Data\Travel.lua
 Data\TravelZones.lua
 
 Logic\Legacy.lua
 Logic\Cost.lua
 Logic\CraftTime.lua
+Logic\HourPlans.lua
 Logic\Disenchant.lua
 Logic\DisenchantLog.lua
 Logic\SkillUp.lua
@@ -76,17 +78,21 @@ Logic\QueueMail.lua
 Logic\ShoppingLists.lua
 Logic\ListRules.lua
 Logic\AHBuys.lua
+Logic\ListSets.lua
 Logic\DisenchantBuys.lua
 Logic\MaterialFinder.lua
+Logic\AuctionTracker.lua
 Logic\MyAuctions.lua
 Logic\Crafting.lua
 Logic\Posting.lua
+Logic\CraftProfit.lua
 Logic\CraftedCost.lua
 Logic\SellOut.lua
 Logic\GoldLog.lua
 Logic\GoldGoal.lua
 Logic\MethodProfit.lua
 Logic\Transfer.lua
+Logic\PriceTransfer.lua
 Logic\SaleAlarm.lua
 Logic\MailHaul.lua
 Logic\Demand.lua
@@ -157,6 +163,7 @@ UI\SellMarked.lua
 UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
+UI\CraftProfitCard.lua
 UI\ItemTooltip.lua
 UI\EnchantTooltip.lua
 UI\VendorPins.lua
@@ -185,6 +192,10 @@ UI\Tab_Sales.lua
 UI\Tab_Stats.lua
 UI\BankView.lua
 UI\Tab_Characters.lua
+UI\AuctionTracker.lua
 UI\Tab_Settings.lua
 
 Probe\Probe.lua
+
+## DEBUG: remove the next line before release (scroll trace, Docs/handoff/scroll-to-post.md)
+Debug\ScrollTrace.lua

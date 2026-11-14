@@ -189,9 +189,42 @@ check("known by nobody", Line(lines, "Known by")[2], "nobody on this account")
 check("cost to make", Line(lines, "Cost to make")[2], "80c")
 check("sells for, after the cut", Line(lines, "Sells for")[2], "200c after the cut")
 check("disenchants for", Line(lines, "Disenchants for")[2], "120c")
-check("profit per craft", Line(lines, "Profit per craft")[2], "120c")
+check("profit per craft names the AH too", Line(lines, "Profit per craft")[2], "120c  (by auction)")
 check("in green", Line(lines, "Profit per craft").color, "profit")
 check("pays for itself", Line(lines, "Pays for itself")[2], "after 8 crafts")
+check("no Demand line without a reading", Line(lines, "Demand"), nil)
+
+-- A reagent that binds on pickup has no price anywhere (Demonic Rune in
+-- Felcloth Robe, a player's report 2026-11-14): the rest is shown, plus that
+-- reagent by name, and still no profit is made up.
+do
+  local oldLeather, oldBound = prices[LEATHER], ns.Util.IsBoundOnPickup
+  prices[LEATHER] = nil
+  itemInfo[LEATHER] = { "Demonic Rune", 7 }
+  ns.Util.IsBoundOnPickup = function(id) return id == LEATHER end
+  local bop = Book:TooltipLines(PATTERN_BOOTS)
+  check("a bound reagent: the rest, plus it by name", Line(bop, "Cost to make")[2],
+    "10c, plus 7 Demonic Rune")
+  check("still shown dim", Line(bop, "Cost to make")[3], true)
+  check("no profit made up", Line(bop, "Profit per craft"), nil)
+  ns.Util.IsBoundOnPickup = function() return false end
+  check("an unscanned reagent still says so", Line(Book:TooltipLines(PATTERN_BOOTS), "Cost to make")[2],
+    "materials not scanned")
+  ns.Util.IsBoundOnPickup = oldBound
+  itemInfo[LEATHER] = nil
+  prices[LEATHER] = oldLeather
+end
+
+-- How well the item it makes sells, as on My crafts.
+local oldDemand = ns.Demand
+ns.Demand = {
+    Get = function(_, id) return id == BOOTS and { level = "high" } or nil end,
+    Label = function() return "High" end,
+    Color = function() return "profit" end,
+}
+check("demand for the item it makes", Line(Book:TooltipLines(PATTERN_BOOTS), "Demand")[2], "High")
+check("in its colour", Line(Book:TooltipLines(PATTERN_BOOTS), "Demand").color, "profit")
+ns.Demand = oldDemand
 accountWide[2158] = { outputItemID = BOOTS, knownBy = { "alt" } }
 Book.known = nil
 check("an alt who knows it is named", Line(Book:TooltipLines(PATTERN_BOOTS), "Known by")[2], "Ana")
@@ -215,6 +248,32 @@ local dropShort, dropWhere = Book:LearnFrom(Book:Get(2158))
 check("a world drop", dropShort, "Drop")
 check("says how widely", dropWhere[1], "World drop (569 kinds of creature)")
 
+-- A Forever recipe the book has no vendor for, sold at a trade camp for
+-- Merchant's Favor: the camp seen in game says where, not "unknown".
+local campRecipe = { forever = true, recipeItems = { 190001 } }
+local unknownShort, unknownWhere = Book:LearnFrom(campRecipe)
+check("never seen anywhere, still unknown", unknownShort, "Unknown")
+check("and says so", unknownWhere[1], "New on Forever. Where to get it isn't known yet.")
+ns.VendorPins = {
+  RecipeSellers = function(_, itemID)
+    if itemID ~= 190001 then return {} end
+    return { { name = "Camp Quartermaster", mapID = 1433, x = 40, y = 60,
+      costs = { { name = "Merchant's Favor", amount = 25 } },
+      faction = "Azeroth Commerce Authority", standing = "Honored" } }
+  end,
+  ZoneName = function() return "Redridge Mountains" end,
+  CostText = function(offer) return offer.costs[1].amount .. " " .. offer.costs[1].name end,
+}
+local campShort, campWhere = Book:LearnFrom(campRecipe)
+check("a camp seen in game sells it", campShort, "Vendor")
+check("where", campWhere[1], "Vendor: Camp Quartermaster, Redridge Mountains")
+check("what it costs", campWhere[2], "25 Merchant's Favor")
+check("the standing it needs", campWhere[3], "Needs Honored with Azeroth Commerce Authority")
+check("no unknown line", campWhere[4], nil)
+ns.VendorPins.RecipeSellers = function() error("broken") end
+check("a broken lookup is no vendor", (Book:LearnFrom(campRecipe)), "Unknown")
+ns.VendorPins = nil
+
 print("\nthe skill Forever asks for")
 -- A Classic recipe a player reported Forever moved (165 -> 140).
 ns.RECIPE_BOOK.RECIPES[4097] = { 165, 165, 4456, 1, 1, { HEAVY, 4 }, "Raptor Hide Belt" }
@@ -222,6 +281,17 @@ ns.RECIPE_BOOK.ITEMS[13288] = { 4097, 2500 }
 Book:Invalidate()
 check("a reported Forever skill beats Classic's", Book:GetSkill(4097), 140)
 check("Classic's stands where nobody said", Book:GetSkill(2158), 90)
+-- A trainer recipe: no tooltip will ever correct it (seen in game at 175).
+ns.RECIPE_BOOK.RECIPES[10482] = { 165, 180, 8172, 1, 1, { HEAVY, 1 }, "Cured Thick Hide", t = 2800 }
+Book:Invalidate()
+check("Cured Thick Hide asks for 175", Book:GetSkill(10482), 175)
+ns.RECIPE_BOOK.RECIPES[20650] = { 165, 180, 4304, 1, 1, { 4234, 5 }, "Thick Leather" }
+ns.RECIPE_BOOK.RECIPES[22331] = { 165, 230, 8170, 1, 1, { 4304, 6 }, "Rugged Leather" }
+ns.RECIPE_BOOK.RECIPES[19047] = { 165, 230, 15407, 1, 1, { 8170, 1 }, "Cured Rugged Hide" }
+Book:Invalidate()
+check("Thick Leather asks for 175", Book:GetSkill(20650), 175)
+check("Rugged Leather asks for 225", Book:GetSkill(22331), 225)
+check("Cured Rugged Hide asks for 225", Book:GetSkill(19047), 225)
 check("an unknown recipe has none", Book:GetSkill(424242), nil)
 
 -- The game's own recipe item tooltip.

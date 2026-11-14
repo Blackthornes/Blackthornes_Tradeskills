@@ -1175,7 +1175,19 @@ function CraftPanel:Build()
     summaryHover:SetAllPoints(summary)
     summaryHover:EnableMouse(true)
     summaryHover:SetScript("OnEnter", function(hover)
-        if not CraftPanel.summaryNote or not summary:IsShown() then return end
+        if not summary:IsShown() then return end
+        -- The crafting time card, with the profit note under it when there is one.
+        local info = CraftPanel.craftTime
+        if info and info.seconds and ns.QueueTimeTip then
+            ns.QueueTimeTip.Show(hover, info)
+            if CraftPanel.summaryNote then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine(CraftPanel.summaryNote, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+            return
+        end
+        if not CraftPanel.summaryNote then return end
         GameTooltip:SetOwner(hover, "ANCHOR_TOP")
         GameTooltip:SetText(CraftPanel.summaryNote, 1, 1, 1, 1, true)
         GameTooltip:Show()
@@ -1243,12 +1255,12 @@ function CraftPanel:UpdateClearButton()
 
     local armed = self.clearArmedUntil ~= nil and GetTime() < self.clearArmedUntil
 
-    button:SetText(armed and L["Click to clear"] or L["Clear queue"])
+    button:SetText(armed and L["Confirm"] or L["Clear queue"])
     button:SetEnabledState(not empty)
     button:SetConfirming(armed)
 
     button.tooltipText = empty and L["The queue is empty"]
-        or armed and L["Click again to empty the whole craft queue"]
+        or armed and L["Click Confirm to empty the whole craft queue"]
         or L["Empties the whole craft queue. Click twice to clear."]
 end
 
@@ -1263,44 +1275,33 @@ function CraftPanel:UpdateSortButton()
     })[self.sortBy]
 end
 
+--- The windows the player had open that stay in front of the pane: the main
+-- window and, with One Window on, the shared window it sits in (built by
+-- whichever addon's UI/SharedWindow.lua is newest, so it is read off the
+-- shared table, not ns.UI.window). Raising only the main window left the one
+-- window under the pane and its Queued list. Shown ones only, the shared
+-- window last, so it ends on top.
+function CraftPanel.FrontWindows()
+    local list = {}
+    local function add(frame)
+        if type(frame) ~= "table" or type(frame.Raise) ~= "function" then return end
+        if type(frame.IsShown) ~= "function" or not frame:IsShown() then return end
+        for _, have in ipairs(list) do if have == frame then return end end
+        list[#list + 1] = frame
+    end
+    add(ns.UI and ns.UI.window)
+    local hub = rawget(_G, "BlackthornesWindow")
+    add(type(hub) == "table" and hub.frame or nil)
+    return list
+end
+
 --- Dock to the right of the profession window, as tall as it is.
 function CraftPanel:Attach()
     local frame = self:Build()
-    local tradeSkillFrame, frameName = self:FindTradeSkillFrame()
     local opening = not frame:IsShown()
 
-    frame:ClearAllPoints()
-
-    if tradeSkillFrame then
-        -- One anchor and a measured height, rather than a point on the
-        -- profession window's top and another on its bottom. Anchoring TOPLEFT
-        -- and BOTTOM over-constrains the frame -- a BOTTOM point fixes the
-        -- horizontal centre, which TOPLEFT has already decided -- and the
-        -- client silently drops one of the two. That is how the sell list
-        -- ended up docked at half the height it asked for.
-        --
-        -- Offset past the profession tabs down the window's right-hand edge,
-        -- which stick out beyond the frame GetRight() reports. Still anchored
-        -- to the frame rather than to a screen position, so the pane keeps
-        -- moving with the window.
-        local overhang = self:RightOverhang(tradeSkillFrame)
-
-        frame:SetPoint("TOPLEFT", tradeSkillFrame, "TOPRIGHT", overhang + PANEL_GAP, 0)
-        frame:SetHeight(ns.Collapse.Height(COLLAPSE_KEY,
-            self:DesiredHeight(tradeSkillFrame) or PANEL_FALLBACK_HEIGHT))
-
-        ns.Debug("docked craft pane to", frameName, "clearing", overhang)
-    else
-        -- Blizzard's profession UI is load-on-demand and may not exist yet.
-        -- A pane in a slightly odd place beats one that silently never appears.
-        frame:SetPoint("RIGHT", UIParent, "RIGHT", -40, 0)
-        frame:SetHeight(ns.Collapse.Height(COLLAPSE_KEY, PANEL_FALLBACK_HEIGHT))
-
-        ns.Debug("no profession frame found; using fallback position")
-    end
-
     self:WatchSheets()
-    self:FitUnderSheets()
+    self:Place()
 
     frame:Show()
     self:Refresh()
@@ -1308,8 +1309,7 @@ function CraftPanel:Attach()
     -- Opening a profession puts the pane up after the main window, which
     -- left the pane drawn across it. The window the player had open stays
     -- in front; a click on the pane still brings the pane forward.
-    local window = ns.UI and ns.UI.window
-    if window and window:IsShown() and window.Raise then window:Raise() end
+    for _, window in ipairs(CraftPanel.FrontWindows()) do window:Raise() end
 
     -- The tabs can be laid out a moment after the window opens, and the game
     -- moves the window into its slot beside the auction house after that:
@@ -1330,39 +1330,195 @@ end
 --------------------------------------------------------------------------------
 
 -- The game opens its character window in the slot beside the profession
--- window, right where this pane docks. The pane sits in HIGH strata, above
--- the game's windows, so the character sheet came up behind it and an
--- enchanter couldn't click their gear (a player's report, 2026-11-05).
--- While one of these shows, the pane drops below the game's windows and
--- comes back up when they close. Only hooked, never shown or hidden.
+-- window, right where this pane docks, so an enchanter couldn't click their
+-- gear (a player's report, 2026-11-05). Dropping the pane under the sheet
+-- (the first fix) only swapped which one was hidden: the sheet then covered
+-- Craft next (2026-11-12). Now, while a sheet stands to the right of the
+-- profession window, the pane docks past it, and slides back when it closes.
+-- When the screen has no room past it, the pane folds to its title strip just
+-- under the sheet, so it never covers it; the saved fold is left alone and
+-- comes back when the sheet closes. The sheets are only hooked and read,
+-- never shown, hidden or moved.
 CraftPanel.SHEETS = { "CharacterFrame" }
 CraftPanel.STRATA = "HIGH"
 CraftPanel.UNDER_STRATA = "LOW"
 
---- True while one of the game's windows the pane must not cover is up.
-function CraftPanel:SheetShown()
+-- When the sheet shows, the game places it a moment later, so look again.
+CraftPanel.SHEET_LOOKS = { 0, 0.2 }
+
+--- The game's window the pane must not cover, while one is up.
+function CraftPanel:ShownSheet()
     for _, name in ipairs(self.SHEETS) do
         local sheet = _G[name]
         if type(sheet) == "table" and type(sheet.IsShown) == "function" then
             local ok, shown = pcall(sheet.IsShown, sheet)
-            if ok and shown then return true end
+            if ok and shown then return sheet end
         end
     end
-    return false
+    return nil
 end
 
---- The strata the pane (and the queued list on it) should be in right now.
-function CraftPanel.StrataFor(sheetShown)
-    return sheetShown and CraftPanel.UNDER_STRATA or CraftPanel.STRATA
+--- True while one of the game's windows the pane must not cover is up.
+function CraftPanel:SheetShown()
+    return self:ShownSheet() ~= nil
 end
 
---- Put the pane above or below the game's windows, as they stand now.
-function CraftPanel:FitUnderSheets()
+--- The strata the pane (and the queued list on it) should be in.
+-- @param place a place from SheetPlace, or true/false for "a sheet is up":
+--   only "under" (a sheet up whose spot can't be read) goes below it.
+function CraftPanel.StrataFor(place)
+    if place == true or place == "under" then return CraftPanel.UNDER_STRATA end
+    return CraftPanel.STRATA
+end
+
+--- Where the pane goes, from screen edges in pixels.
+-- "dock"  beside the profession window, as always (no sheet, or the sheet is
+--         not to its right, so it doesn't sit where the pane docks)
+-- "past"  docked to the right of the sheet
+-- "fold"  folded to its title strip under the sheet: no room past it
+-- "under" docked as always but drawn below the sheet: its spot can't be read
+function CraftPanel.SheetPlace(sheetShown, tradeLeft, tradeRight, sheetLeft, sheetRight,
+                               screenRight, paneWidth, gap)
+    if not sheetShown then return "dock" end
+    if type(tradeLeft) ~= "number" or type(tradeRight) ~= "number"
+        or type(sheetLeft) ~= "number" or type(sheetRight) ~= "number" then
+        return "under"
+    end
+    -- On the profession window's left, or mostly over it: not in the slot
+    -- the pane docks in.
+    if sheetLeft < (tradeLeft + tradeRight) / 2 then return "dock" end
+    if type(screenRight) ~= "number" or type(paneWidth) ~= "number" then return "past" end
+    if sheetRight + (gap or 0) + paneWidth <= screenRight then return "past" end
+    return "fold"
+end
+
+-- An edge of a frame in screen pixels, or nil when the client won't say.
+local function Edge(frame, method)
+    if type(frame) ~= "table" or type(frame[method]) ~= "function" then return nil end
+    local ok, value = pcall(frame[method], frame)
+    if not ok or type(value) ~= "number" then return nil end
+    local scale = 1
+    if type(frame.GetEffectiveScale) == "function" then
+        local okScale, s = pcall(frame.GetEffectiveScale, frame)
+        if okScale and type(s) == "number" and s > 0 then scale = s end
+    end
+    return value * scale
+end
+
+--- Where the pane should go right now, and the sheet it goes by.
+function CraftPanel:SheetSpot(tradeSkillFrame)
+    local sheet = self:ShownSheet()
+    if not sheet then return "dock" end
+    if not tradeSkillFrame then return "under", sheet end
+
+    local paneScale = 1
     local frame = self.frame
-    if not frame or type(frame.SetFrameStrata) ~= "function" then return end
-    local want = CraftPanel.StrataFor(self:SheetShown())
-    local now = type(frame.GetFrameStrata) == "function" and frame:GetFrameStrata()
-    if now ~= want then pcall(frame.SetFrameStrata, frame, want) end
+    if frame and type(frame.GetEffectiveScale) == "function" then
+        local ok, s = pcall(frame.GetEffectiveScale, frame)
+        if ok and type(s) == "number" and s > 0 then paneScale = s end
+    end
+
+    local place = CraftPanel.SheetPlace(true,
+        Edge(tradeSkillFrame, "GetLeft"), Edge(tradeSkillFrame, "GetRight"),
+        Edge(sheet, "GetLeft"), Edge(sheet, "GetRight"),
+        Edge(UIParent, "GetRight"), PANEL_WIDTH * paneScale, PANEL_GAP * paneScale)
+    return place, sheet
+end
+
+--- Folded down to its title, by the player or for want of room.
+function CraftPanel:IsCollapsed()
+    return self.squeezed == true or ns.Collapse.IsCollapsed(COLLAPSE_KEY)
+end
+
+--- The height the pane takes, given its full height.
+function CraftPanel:HeightFor(full)
+    if self.squeezed then return ns.Collapse.HEIGHT end
+    return ns.Collapse.Height(COLLAPSE_KEY, full)
+end
+
+--- Show the folding part only while the pane is open, saved fold or not.
+function CraftPanel:ApplyBody()
+    local body = self.body
+    if body and type(body.SetShown) == "function" then
+        body:SetShown(not self:IsCollapsed())
+    end
+end
+
+--- Put the pane where it belongs: beside the profession window, past a
+--- sheet, or folded under one. Runs when it opens and when a sheet comes or
+--- goes, never on a timer.
+function CraftPanel:Place()
+    local frame = self.frame
+    if not frame then return end
+
+    local tradeSkillFrame, frameName = self:FindTradeSkillFrame()
+    local place, sheet = self:SheetSpot(tradeSkillFrame)
+    local wasSqueezed = self.squeezed == true
+
+    self.place = place
+    self.squeezed = place == "fold"
+
+    frame:ClearAllPoints()
+
+    if place == "past" then
+        frame:SetPoint("TOPLEFT", sheet, "TOPRIGHT", PANEL_GAP, 0)
+        ns.Debug("docked craft pane past the character window")
+    elseif place == "fold" then
+        frame:SetPoint("TOPLEFT", sheet, "BOTTOMLEFT", 0, -PANEL_GAP)
+        ns.Debug("folded craft pane under the character window")
+    elseif tradeSkillFrame then
+        -- One anchor and a measured height, rather than a point on the
+        -- profession window's top and another on its bottom. Anchoring TOPLEFT
+        -- and BOTTOM over-constrains the frame -- a BOTTOM point fixes the
+        -- horizontal centre, which TOPLEFT has already decided -- and the
+        -- client silently drops one of the two. That is how the sell list
+        -- ended up docked at half the height it asked for.
+        --
+        -- Offset past the profession tabs down the window's right-hand edge,
+        -- which stick out beyond the frame GetRight() reports. Still anchored
+        -- to the frame rather than to a screen position, so the pane keeps
+        -- moving with the window.
+        local overhang = self:RightOverhang(tradeSkillFrame)
+        frame:SetPoint("TOPLEFT", tradeSkillFrame, "TOPRIGHT", overhang + PANEL_GAP, 0)
+        ns.Debug("docked craft pane to", frameName, "clearing", overhang)
+    else
+        -- Blizzard's profession UI is load-on-demand and may not exist yet.
+        -- A pane in a slightly odd place beats one that silently never appears.
+        frame:SetPoint("RIGHT", UIParent, "RIGHT", -40, 0)
+        ns.Debug("no profession frame found; using fallback position")
+    end
+
+    local full = tradeSkillFrame and self:DesiredHeight(tradeSkillFrame)
+    frame:SetHeight(self:HeightFor(full or PANEL_FALLBACK_HEIGHT))
+    self:ApplyBody()
+
+    if type(frame.SetFrameStrata) == "function" then
+        local want = CraftPanel.StrataFor(place)
+        local now = type(frame.GetFrameStrata) == "function" and frame:GetFrameStrata()
+        if now ~= want then pcall(frame.SetFrameStrata, frame, want) end
+    end
+
+    -- Opened back up: the list was skipped while folded.
+    if wasSqueezed and not self.squeezed and frame:IsShown() then self:Refresh() end
+end
+
+--- Kept for anything that still asks: places the pane by the sheets.
+function CraftPanel:FitUnderSheets()
+    self:Place()
+end
+
+--- A sheet came or went: place the pane now, and again once the game has
+--- moved the sheet into its slot.
+function CraftPanel:SheetMoved()
+    if not self.frame or not self.frame:IsShown() then return end
+    self:Place()
+    if C_Timer and C_Timer.After then
+        for _, delay in ipairs(self.SHEET_LOOKS) do
+            C_Timer.After(delay, function()
+                if CraftPanel.frame and CraftPanel.frame:IsShown() then CraftPanel:Place() end
+            end)
+        end
+    end
 end
 
 --- Hook each sheet once, as soon as it exists.
@@ -1373,15 +1529,11 @@ function CraftPanel:WatchSheets()
         if not self.watchedSheets[name] and type(sheet) == "table"
             and type(sheet.HookScript) == "function" then
             self.watchedSheets[name] = true
-            local refit = function() CraftPanel:FitUnderSheets() end
-            pcall(sheet.HookScript, sheet, "OnShow", refit)
-            pcall(sheet.HookScript, sheet, "OnHide", refit)
+            local moved = function() CraftPanel:SheetMoved() end
+            pcall(sheet.HookScript, sheet, "OnShow", moved)
+            pcall(sheet.HookScript, sheet, "OnHide", moved)
         end
     end
-end
-
-function CraftPanel:IsCollapsed()
-    return ns.Collapse.IsCollapsed(COLLAPSE_KEY)
 end
 
 --- Set the height outright, after folding or unfolding.
@@ -1391,7 +1543,8 @@ function CraftPanel:ApplyHeight()
     local tradeSkillFrame = self:FindTradeSkillFrame()
     local full = tradeSkillFrame and self:DesiredHeight(tradeSkillFrame)
 
-    self.frame:SetHeight(ns.Collapse.Height(COLLAPSE_KEY, full or PANEL_FALLBACK_HEIGHT))
+    self.frame:SetHeight(self:HeightFor(full or PANEL_FALLBACK_HEIGHT))
+    self:ApplyBody()
 end
 
 --- Re-measure, for a profession window that changed size after it opened.
@@ -1401,8 +1554,14 @@ function CraftPanel:Reflow()
     local tradeSkillFrame = self:FindTradeSkillFrame()
     if not tradeSkillFrame then return end
 
+    -- A sheet came, went or moved since the pane was placed: place it again.
+    if self:SheetSpot(tradeSkillFrame) ~= (self.place or "dock") then
+        self:Place()
+        return
+    end
+
     local height = self:DesiredHeight(tradeSkillFrame)
-    if height then height = ns.Collapse.Height(COLLAPSE_KEY, height) end
+    if height then height = self:HeightFor(height) end
 
     -- Only when it actually moved: setting the height relayouts the list, and
     -- this runs on every refresh.
@@ -1449,7 +1608,9 @@ function CraftPanel:GetNextReadyHere()
     local ready = {}
 
     for _, entry in ipairs(ns.Queue:GetAll()) do
-        if ns.Crafting:GetReadiness(entry.recipeID) then
+        local can = ns.Crafting.CanCraftNext and ns.Crafting:CanCraftNext(entry)
+        if can == nil then can = ns.Crafting:GetReadiness(entry.recipeID) end
+        if can then
             -- No open set means the client would not say which profession is
             -- showing. Offering the craft is then the best available guess,
             -- and matches what the Queue tab does.
@@ -1723,6 +1884,7 @@ function CraftPanel:UpdateSummary()
 
     local queued = ns.Queue:Count()
     self.summaryNote = nil
+    self.craftTime = nil
 
     if queued == 0 then
         self.summary:SetText(L["Nothing queued"])
@@ -1744,7 +1906,20 @@ function CraftPanel:UpdateSummary()
     -- The profit in its own colour: green when the queue pays, red when not.
     -- Kept short: it shares the bottom line with Clear queue and Queue tab,
     -- and an amount too long for it loses coins rather than its end.
+    -- How long the queue takes to cast comes first, and is the first thing
+    -- dropped when the line runs short.
     local texts = {}
+    local craftTime = ns.Queue.GetCraftTime and ns.Queue:GetCraftTime() or nil
+    self.craftTime = craftTime
+    if craftTime and craftTime.seconds then
+        local about = ns.CraftTime.Format(craftTime.seconds)
+        for _, coins in ipairs({ 3, 2, 1 }) do
+            texts[#texts + 1] = L.Format("%d queued · about %s · profit |c%s%s|r%s", totals.crafts,
+                about, colour,
+                Util.FormatMoney(totals.profit, { noColor = true, short = true, parts = coins }),
+                marker)
+        end
+    end
     for _, coins in ipairs({ 3, 2, 1 }) do
         texts[#texts + 1] = L.Format("%d queued · profit |c%s%s|r%s", totals.crafts, colour,
             Util.FormatMoney(totals.profit, { noColor = true, short = true, parts = coins }),

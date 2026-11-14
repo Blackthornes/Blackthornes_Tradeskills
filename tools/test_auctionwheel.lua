@@ -4,13 +4,19 @@
 --   1. Off unless ticked: nothing is bound, whatever the drawer does.
 --   2. Ticked, the wheel is bound only while the drawer shows, and given
 --      back when it goes.
---   3. Wheel up lists the next stack, wheel down cancels the next undercut.
+--   3. The tab picks the job: on Sell either turn lists, on Auctions
+--      either turn cancels the next undercut, other tabs leave the wheel be.
 --   4. A flick (notches close together) does one thing, not several.
 --   5. In a fight the bindings wait for the fight to end.
 --   6. A press and its release do one thing.
+--   7. Something else binding the wheel later doesn't take it for good: it
+--      is taken back on the next look (drawer tick, binding change, ...).
+--   8. A drawer shown inside a hidden window doesn't hold the wheel.
+--   9. While the wheel is ours, drawer lists with nothing more to show let
+--      the turn through; when it goes back they take it again.
 
 local GLOBALS = { "CreateFrame", "UIParent", "GetTime", "InCombatLockdown",
-    "SetOverrideBindingClick", "ClearOverrideBindings" }
+    "SetOverrideBindingClick", "ClearOverrideBindings", "GetBindingAction" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
 
@@ -38,6 +44,13 @@ InCombatLockdown = function() return fighting end
 local bindings = {}
 SetOverrideBindingClick = function(_, _, key, button) bindings[key] = button end
 ClearOverrideBindings = function() bindings = {} end
+-- What the game would really do with a key: another addon can take it.
+local stolen = {}
+GetBindingAction = function(key)
+    if stolen[key] then return stolen[key] end
+    if bindings[key] then return "CLICK " .. bindings[key] .. ":LeftButton" end
+    return ""
+end
 
 local handlers = {}
 local ns = {}
@@ -48,9 +61,13 @@ local settings = {}
 ns.Config = { Get = function(_, k) return settings[k] end, Set = function(_, k, v) settings[k] = v end }
 
 local shown = false
+local visible = true
 local listed, cancelled = 0, 0
+local passed, passedAlways = nil, nil
 ns.PostPanel = {
     view = "sell",
+    frame = { IsVisible = function() return shown and visible end },
+    list = { WheelPass = function(_, on, always) passed = on; passedAlways = always end },
     IsShown = function() return shown end,
     ListNext = function() listed = listed + 1 end,
 }
@@ -77,12 +94,30 @@ Show()
 assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "wheel up is bound to the list button")
 assert(bindings.MOUSEWHEELDOWN == Wheel.CANCEL_BUTTON, "wheel down is bound to the cancel button")
 
--- 3. Each direction does its job, through the named buttons a binding clicks.
+-- 3. The tab showing picks the job, through the named buttons a binding
+-- clicks. On Sell either turn lists; nothing cancels there.
 named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
-assert(listed == 1, "wheel up lists the next stack")
+assert(listed == 1, "wheel up lists the next stack on Sell")
 clock = clock + 1
 named[Wheel.CANCEL_BUTTON].scripts.OnClick(nil, "LeftButton", true)
-assert(cancelled == 1, "wheel down cancels the next undercut")
+assert(listed == 2 and cancelled == 0, "wheel down lists on Sell too, and never cancels there")
+listed = 1
+-- On Auctions either turn cancels the next undercut one; nothing lists.
+ns.PostPanel.view = "auctions"
+clock = clock + 1
+named[Wheel.CANCEL_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+clock = clock + 1
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(cancelled == 2 and listed == 1, "on Auctions both turns cancel and nothing lists")
+-- On a tab with no wheel job, the wheel is the player's.
+ns.PostPanel.view = "buy"
+Wheel:Update()
+assert(next(bindings) == nil, "the wheel isn't taken on Buy")
+clock = clock + 1
+assert(Wheel:List() == false and listed == 1, "nothing lists from Buy")
+ns.PostPanel.view = "sell"
+Wheel:Update()
+assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "taken again back on Sell")
 
 -- 6. The release of the same press does nothing more.
 clock = clock + 1
@@ -98,12 +133,9 @@ for _ = 1, 5 do
 end
 assert(listed == 3, "a flick lists one stack, got " .. listed)
 
--- On another view, Sell's lines are read fresh.
 clock = clock + 1
-ns.PostPanel.view = "auctions"
-ns.PostPanel.shownLines = { "old" }
 named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
-assert(ns.PostPanel.shownLines == nil and listed == 4, "another view reads Sell's lines fresh")
+assert(listed == 4, "Sell lists again")
 
 -- 2. The drawer goes: the wheel is given back, and a stray click does nothing.
 Hide()
@@ -127,6 +159,85 @@ assert(next(bindings) == nil, "bindings wait out a fight")
 fighting = false
 handlers.PLAYER_REGEN_ENABLED()
 assert(bindings.MOUSEWHEELUP, "bound once the fight ends")
+Hide()
+
+-- 7. Another addon binds the wheel after we did: taken back on the next look.
+Show()
+assert(bindings.MOUSEWHEELUP and Wheel:Holds(), "ours to start")
+stolen.MOUSEWHEELUP = "CAMERAZOOMIN"
+assert(not Wheel:Holds(), "the game would send wheel up elsewhere now")
+local setAgain = 0
+local realSet = SetOverrideBindingClick
+SetOverrideBindingClick = function(...) setAgain = setAgain + 1; realSet(...) end
+drawer.hooks.OnUpdate(drawer, 0.4)
+assert(setAgain == 0, "no look before CHECK_EVERY")
+-- The other addon lets go, but ours must be the newest again.
+stolen.MOUSEWHEELUP = nil
+bindings = {}
+drawer.hooks.OnUpdate(drawer, 0.7)
+assert(setAgain == 2 and bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "the drawer's tick takes the wheel back")
+-- Held: a tick binds nothing again.
+drawer.hooks.OnUpdate(drawer, 2)
+assert(setAgain == 2, "a tick leaves a held wheel alone")
+-- A binding change taking it is noticed at once.
+bindings = {}
+handlers.UPDATE_BINDINGS()
+assert(bindings.MOUSEWHEELDOWN == Wheel.CANCEL_BUTTON, "a binding change takes it back")
+-- In a fight it waits, then comes back.
+bindings = {}
+fighting = true
+drawer.hooks.OnUpdate(drawer, 2)
+assert(next(bindings) == nil and Wheel.waiting, "a fight makes it wait")
+fighting = false
+handlers.PLAYER_REGEN_ENABLED()
+assert(bindings.MOUSEWHEELUP, "taken back after the fight")
+SetOverrideBindingClick = realSet
+
+-- 9. Lists let a turn through only while the wheel is ours.
+assert(passed == true, "drawer lists let the wheel through while it is ours")
+assert(passedAlways == true, "a long list too, so a turn over it never scrolls")
+-- A list built after the wheel was taken is told on the next look.
+local late
+ns.SnipeView = { list = { WheelPass = function(_, on, always) late = on and always end } }
+drawer.hooks.OnUpdate(drawer, 2)
+assert(late == true, "a list built later lets the wheel through too")
+ns.SnipeView = nil
+
+-- 10. Snipe: wheel up buys, every time. A notch down does nothing and never
+-- eats the notch up that follows it.
+local bought = 0
+ns.Snipe = { BuyNext = function() bought = bought + 1 end }
+settings.snipeWheel, settings.snipeTab = true, true
+ns.PostPanel.view = "snipe"
+Wheel:Update()
+assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "the wheel is ours on Snipe")
+clock = clock + 1
+named[Wheel.CANCEL_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 0, "wheel down buys nothing on Snipe")
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 1, "wheel up right after a notch down still buys")
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 1, "a flick still buys once")
+clock = clock + 1
+named[Wheel.LIST_BUTTON].scripts.OnClick(nil, "LeftButton", true)
+assert(bought == 2, "and the next turn buys again")
+-- With Mouse Wheel unticked Snipe's own switch still holds the wheel.
+settings.mouseWheelListing = false
+Wheel:Update()
+assert(bindings.MOUSEWHEELUP == Wheel.LIST_BUTTON, "Snipe keeps the wheel on its own switch")
+settings.mouseWheelListing = true
+ns.PostPanel.view = "sell"
+ns.Snipe = nil
+Wheel:Update()
+
+-- 8. The drawer still "shown" but its window hidden: the wheel goes back.
+visible = false
+drawer.hooks.OnHide()
+assert(next(bindings) == nil, "a drawer out of sight gives the wheel back")
+assert(passed == false, "lists take the wheel again once it is given back")
+visible = true
+drawer.hooks.OnShow()
+assert(bindings.MOUSEWHEELUP, "seen again, bound again")
 Hide()
 
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end

@@ -45,6 +45,7 @@ local state = {
     goal = nil,         -- read from Settings the first time it is asked
     selected = nil,
     buy = 1,            -- the Buy box, for this session only
+    groupBy = nil,      -- "none" or "zone", read from Settings when first asked
 }
 
 local widgets = {}
@@ -201,6 +202,80 @@ local function CreateRow(row)
     PlaceRow(row)
 end
 
+--- A zone heading's pieces, made the first time a row shows one.
+local function MakeHeader(row)
+    if rawget(row, "headerMade") then return end
+    row.headerMade = true
+    row.headBand = row:CreateTexture(nil, "BACKGROUND", nil, 2)
+    row.headBand:SetAllPoints(row)
+    row.headEdge = row:CreateTexture(nil, "BORDER")
+    row.headEdge:SetPoint("TOPLEFT", 0, 0)
+    row.headEdge:SetPoint("BOTTOMLEFT", 0, 0)
+    row.headEdge:SetWidth(3)
+
+    row.zoneName = Theme.CreateLabel(row, "small", "accent")
+    row.zoneName:SetPoint("LEFT", 8, 0)
+    row.zoneInfo = Theme.CreateLabel(row, "tiny", "dim")
+    row.zoneInfo:SetPoint("LEFT", row.zoneName, "RIGHT", 4, 0)
+
+    row.showWay = Widgets.CreateButton(row, L["Show the Way"], function()
+        if row.entry then DealsWrits:ShowTheWay(row.entry) end
+    end, { primary = true, height = 18, width = 100 })
+    row.showWay:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    row.showAgain = Widgets.CreateButton(row, L["Show Again"], function()
+        if row.entry then DealsWrits:SkipZone(row.entry.zone, false) end
+    end, { height = 18, width = 100 })
+    row.showAgain:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    -- Wide enough for the words in any language, never cut.
+    for _, button in ipairs({ row.showWay, row.showAgain }) do
+        local label = rawget(button, "label")
+        local width = label and label.GetStringWidth and label:GetStringWidth() or 0
+        button:SetWidth(math.max(100, (tonumber(width) or 0) + 20))
+    end
+    row.learnHint = Theme.CreateLabel(row, "tiny", "dim", "RIGHT")
+    row.learnHint:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row.learnHint:SetText(L["Turn one in to learn where"])
+end
+
+local function HeaderInfo(entry)
+    if entry.notSeen then
+        return entry.count == 1 and L["· 1 writ"] or L.Format("· %d writs", entry.count)
+    end
+    if entry.skipped then
+        return entry.count == 1 and L["· Skipped · 1 writ"] or L.Format("· Skipped · %d writs", entry.count)
+    end
+    if entry.count == 1 then return L.Format("· 1 writ · %d rep", entry.rep) end
+    return L.Format("· %d writs · %d rep", entry.count, entry.rep)
+end
+
+local function ShowHeader(row, entry)
+    MakeHeader(row)
+    row.entry = entry
+    local shown = { row.headBand, row.headEdge, row.zoneName, row.zoneInfo }
+    for _, piece in ipairs(shown) do piece:Show() end
+    row.headBand:SetColorTexture(Theme.Unpack("glassActive"))
+    row.headEdge:SetColorTexture(Theme.Unpack(entry.skipped and "dim" or "accent"))
+    row.zoneName:SetText(entry.title)
+    row.zoneInfo:SetText(HeaderInfo(entry))
+    row.zoneName:SetAlpha(entry.skipped and 0.5 or 1)
+    row.zoneInfo:SetAlpha(entry.skipped and 0.5 or 1)
+    row.showWay:SetShown((not entry.skipped and not entry.notSeen and entry.place) and true or false)
+    row.showAgain:SetShown(entry.skipped and true or false)
+    row.learnHint:SetShown(entry.notSeen and true or false)
+    local right = row.showWay:IsShown() and row.showWay or row.showAgain:IsShown() and row.showAgain
+        or row.learnHint
+    row.zoneInfo:SetPoint("RIGHT", right, "LEFT", -8, 0)
+    row.zoneInfo:SetWordWrap(false)
+end
+
+local function HideHeader(row)
+    if not rawget(row, "headerMade") then return end
+    for _, piece in ipairs({ row.headBand, row.headEdge, row.zoneName, row.zoneInfo,
+            row.showWay, row.showAgain, row.learnHint }) do
+        piece:Hide()
+    end
+end
+
 local function FillCell(cell, key, entry)
     if key == "onAH" then
         local count = entry.onAHAtPrice or entry.onAHTotal
@@ -228,6 +303,22 @@ end
 
 local function UpdateRow(row, entry)
     if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
+    -- A zone heading: its own pieces, none of a writ's.
+    local header = entry.header and true or false
+    row.icon:SetShown(not header)
+    row.name:SetShown(not header)
+    for _, cell in ipairs(row.cells) do cell:SetShown(not header) end
+    if header then
+        if row.make then row.make:Hide() end
+        ShowHeader(row, entry)
+        return
+    end
+    HideHeader(row)
+    -- Writs under a zone sit in a little, as in the mockup.
+    local indent = state.groupBy == "zone" and 10 or 0
+    row.icon:SetPoint("LEFT", 8 + indent, 0)
+    row.name:SetPoint("LEFT", 8 + ICON_GUTTER + indent, 0)
 
     Theme.SetRowName(row.name, NameText(entry))
     Theme.SetItemIcon(row.icon, entry.itemID)
@@ -647,7 +738,7 @@ function UpdateWrit(entry)
     else
         parts[#parts + 1] = L["* From guides, until you turn one in."]
     end
-    parts[#parts + 1] = L["Each order can be done once a day. The coin pouch a turn-in gives is not counted."]
+    parts[#parts + 1] = L["Each order can be done once a day."]
     detail.note:SetText(table.concat(parts, " "))
     FitDetail()
 end
@@ -688,8 +779,66 @@ local function CountText(rows)
 end
 
 local function Matches(row, needle)
-    return row.name:lower():find(needle, 1, true) or row.prof:lower():find(needle, 1, true)
+    return row.name:lower():find(needle, 1, true)
+        or (row.english and row.english:lower():find(needle, 1, true))
+        or row.prof:lower():find(needle, 1, true)
         or TierName(row.tier):lower():find(needle, 1, true)
+end
+
+--- Where a writ is handed in, or nil while none is learned.
+local function CustomerOf(row)
+    return ns.Writs.GetCustomer and ns.Writs:GetCustomer(row.writ) or nil
+end
+
+--- The rows under zone headings: zones in the order of their best writ,
+--- skipped zones after (heading only), then the writs not seen yet.
+function DealsWrits.GroupByZone(rows)
+    local zones, order, unseen = {}, {}, {}
+    for _, row in ipairs(rows) do
+        local customer = CustomerOf(row)
+        local zone = customer and customer.zone
+        if zone then
+            local group = zones[zone]
+            if not group then
+                group = { zone = zone, rows = {} }
+                zones[zone] = group
+                order[#order + 1] = group
+            end
+            group.rows[#group.rows + 1] = row
+            if not group.place and customer.x and customer.y then
+                group.place = { zone = zone, mapID = customer.mapID, x = customer.x, y = customer.y,
+                    name = customer.name }
+                group.writName = row.name
+            end
+        else
+            unseen[#unseen + 1] = row
+        end
+    end
+
+    local out, skipped = {}, {}
+    for _, group in ipairs(order) do
+        local rep = 0
+        for _, row in ipairs(group.rows) do rep = rep + (row.rep or 0) end
+        local header = {
+            header = true, key = "zone:" .. group.zone, zone = group.zone,
+            title = ns.Writs.ShownZone and ns.Writs.ShownZone(group.zone) or group.zone,
+            count = #group.rows, rep = rep, place = group.place, writName = group.writName,
+            skipped = ns.Writs:IsZoneSkipped(group.zone),
+        }
+        if header.skipped then
+            skipped[#skipped + 1] = header
+        else
+            out[#out + 1] = header
+            for _, row in ipairs(group.rows) do out[#out + 1] = row end
+        end
+    end
+    for _, header in ipairs(skipped) do out[#out + 1] = header end
+    if #unseen > 0 then
+        out[#out + 1] = { header = true, key = "zone:unseen", notSeen = true,
+            title = L["Not Seen Yet"], count = #unseen }
+        for _, row in ipairs(unseen) do out[#out + 1] = row end
+    end
+    return out
 end
 
 function DealsWrits:Refresh()
@@ -707,7 +856,7 @@ function DealsWrits:Refresh()
     end
 
     if widgets.sorter then rows = widgets.sorter:Sort(rows) end
-    widgets.list:SetData(rows)
+    widgets.list:SetData(DealsWrits:GetGroupBy() == "zone" and DealsWrits.GroupByZone(rows) or rows)
 
     widgets.emptyLabel:SetShown(#rows == 0)
     if #rows == 0 then widgets.emptyLabel:SetText(L.Format("No writ matching \"%s\".", state.search)) end
@@ -724,6 +873,44 @@ function DealsWrits:Refresh()
     end
     state.selected = fresh
     UpdateWrit(fresh)
+end
+
+function DealsWrits:SetGroupBy(key)
+    state.groupBy = key == "zone" and "zone" or "none"
+end
+
+function DealsWrits:GetGroupBy()
+    if state.groupBy == nil then
+        state.groupBy = ns.Config:Get("writGroupBy") == "zone" and "zone" or "none"
+    end
+    return state.groupBy
+end
+
+--- Point the way to a zone heading's hand-in spot.
+function DealsWrits:ShowTheWay(header)
+    if not (header and header.place and ns.LearnNext and ns.LearnNext.ShowTheWay) then return false end
+    return ns.LearnNext:ShowTheWay({ place = header.place, name = header.writName or header.title })
+end
+
+function DealsWrits:SkipZone(zone, skipped)
+    if not zone then return end
+    ns.Writs:SetZoneSkipped(zone, skipped)
+    self:Refresh()
+end
+
+--- A zone heading's right-click menu, its name on top.
+function DealsWrits:HeaderMenu(header)
+    if not (header and header.zone and ns.RowMenu) then return end
+    local lines = {
+        { text = L["Show the Way"], disabled = not header.place,
+            run = function() DealsWrits:ShowTheWay(header) end },
+    }
+    if header.skipped then
+        lines[#lines + 1] = { text = L["Show Again"], run = function() DealsWrits:SkipZone(header.zone, false) end }
+    else
+        lines[#lines + 1] = { text = L["Skip This Zone"], run = function() DealsWrits:SkipZone(header.zone, true) end }
+    end
+    ns.RowMenu:Open(lines, { title = header.title:upper() })
 end
 
 function DealsWrits:SetSearch(text)
@@ -806,10 +993,14 @@ function DealsWrits:Build(view, toolbar)
         rowHeight = ROW_HEIGHT,
         createRow = CreateRow,
         updateRow = UpdateRow,
-        onEnter = function(row, entry) ShowRowTooltip(row, entry) end,
+        onEnter = function(row, entry) if not entry.header then ShowRowTooltip(row, entry) end end,
         onLeave = function() GameTooltip:Hide() end,
-        isSelected = function(entry) return SameRow(entry, state.selected) end,
+        isSelected = function(entry) return not entry.header and SameRow(entry, state.selected) end,
         onClick = function(entry, _, mouseButton)
+            if entry.header then
+                if mouseButton == "RightButton" then DealsWrits:HeaderMenu(entry) end
+                return
+            end
             state.selected = entry
             UpdateWrit(entry)
             if mouseButton == "RightButton" then SearchBoth(entry) end

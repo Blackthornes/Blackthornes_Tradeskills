@@ -23,10 +23,10 @@ local SOULBOUND_REASON = L["binds on pickup, so it cannot be sold"]
 
 --- About the deposit for listing `quantity` of an item, from what the
 --- auction house said before; nil until it has said.
---- The least deposit a listing pays (1s on Forever).
+--- The least deposit a listing pays (1c on Forever since 2026-11-10).
 local function LeastDeposit()
     local posting = ns.Posting
-    return (posting and tonumber(posting.MIN_DEPOSIT)) or 100
+    return (posting and tonumber(posting.MIN_DEPOSIT)) or 1
 end
 
 local function HeldDeposit(itemID, quantity)
@@ -35,13 +35,6 @@ local function HeldDeposit(itemID, quantity)
     if posting.EstimateDeposit then return posting:EstimateDeposit(itemID, quantity) end
     local unit = posting.GetCachedUnitDeposit and posting:GetCachedUnitDeposit(itemID)
     return unit and math.max(LeastDeposit(), math.floor(unit * quantity + 0.5)) or nil
-end
-
---- The deposit a listing that runs out keeps: what the auction house said
---- before, else the least any listing pays. An item never listed used to
---- count as no deposit at all, so a cheap, slow seller looked free to list.
-local function LostDeposit(itemID, quantity)
-    return HeldDeposit(itemID, quantity) or LeastDeposit()
 end
 
 --- Net profit for one craft, if a unit sold at this price.
@@ -55,7 +48,8 @@ local function ProfitAtPrice(recipe, cost, unitPrice)
     local revenue = unitPrice * yield
     local cut = revenue * (ns.Config:Get("auctionCut") or 0.05)
 
-    local deposit = LostDeposit(recipe.outputItemID, yield) * Profit.LostListings(recipe.outputItemID)
+    local deposit = Profit.LostDepositEach(recipe.outputItemID) * yield
+        * Profit.LostListings(recipe.outputItemID)
 
     return (revenue - cut) - (cost.total or 0) - deposit
 end
@@ -324,7 +318,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
         return Util.RoundToSilver(market), "market"
     end
 
-    local undercut = ns.Config:Get("undercutCopper") or 1
+    local undercut = ns.Config:Get("undercutCopper") or 0
 
     -- Overcutting (the owner, 2026-10-15): post just under the big stack
     -- rather than under a few cheap ones that will sell first anyway.
@@ -336,9 +330,14 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
     -- Undercut by 0c is the player turning undercutting off (asked on
     -- Discord, 2026-10-09): list at the cheapest rival's own price, for
     -- commodities and item auctions alike, and say that is why.
+    --
+    -- An item auction only takes whole silver, so a rival at 38s 99c can't be
+    -- matched to the copper. Rounding down there was a 99c undercut the player
+    -- had turned off (a player's report, 2026-11-14), so it rounds up to the
+    -- next silver instead: never below the rival's own price.
     if undercut <= 0 then
         local price = math.max(1, math.floor(rival))
-        if not isCommodity then price = Util.RoundToSilver(price) end
+        if not isCommodity then price = Util.CeilToSilver(price) end
         return price, "match", MATCH_BY_CHOICE, uncertain
     end
 
@@ -575,11 +574,33 @@ function Profit:NetFromListing(itemID, unitPrice)
     return unitPrice * (1 - cut) - Profit.LostDepositEach(itemID) * lost
 end
 
+--- What one unit listed at a price is worth when choosing between the
+--- auction house and a vendor: `NetFromListing`, less one deposit when that
+--- counts none. A listing that runs out keeps its deposit, so beating the
+--- vendor by less than one deposit is not worth the risk (2026-11-09). The
+--- Sell list (Posting.VendorPaysMore) and Butler's `auction` read this one
+--- answer, so the two never disagree on the same item.
+function Profit:NetAfterRisk(itemID, unitPrice)
+    local ok, net = pcall(Profit.NetFromListing, Profit, itemID, unitPrice)
+    if not ok or type(net) ~= "number" then net = unitPrice end
+    local okLost, lost = pcall(Profit.LostListings, itemID)
+    if okLost and type(lost) == "number" and lost < 1 then
+        local okEach, each = pcall(Profit.LostDepositEach, itemID)
+        if okEach and type(each) == "number" and each > 0 then
+            net = net - each
+        end
+    end
+    return net
+end
+
 --- What one unit's share of a lost deposit is: the remembered share, but
---- never under the least deposit (1s) spread over a listing. A listing is
+--- never under the least deposit (1c) spread over a listing. A listing is
 --- taken as the biggest one seen, else a full stack, else one item, so a
---- cheap thing listed alone still loses its whole 1s when it runs out.
+--- cheap thing listed alone still loses its whole least deposit when it runs out.
 function Profit.LostDepositEach(itemID)
+    -- "Ignore Deposit:" (a player asked, the owner said build it, 2026-11-14):
+    -- ticked, no deposit is counted anywhere profit or sell advice is worked out.
+    if ns.Config and ns.Config:Get("ignoreDeposit") == true then return 0 end
     local posting = ns.Posting
     local each = (posting and posting.GetCachedUnitDeposit and posting:GetCachedUnitDeposit(itemID)) or 0
     local record = posting and ns.db and ns.db.deposits and ns.db.deposits[itemID]
@@ -625,10 +646,41 @@ end
 Profit.WAYS = { "vendor", "auction", "disenchant" }
 
 -- What the Profit tab's switch offers, in its order.
-Profit.METHODS = { "best", "auction", "vendor", "disenchant" }
+-- "vendordisenchant" (a player asked, 2026-11-12) leaves the auction house
+-- out and takes whichever of vendor and disenchant pays more.
+Profit.METHODS = { "best", "auction", "vendor", "vendordisenchant", "disenchant" }
+
+-- The ways each method that weighs more than one way picks from, in tie
+-- order. A method not listed here counts its own way alone.
+Profit.METHOD_WAYS = {
+    best = Profit.WAYS,
+    vendordisenchant = { "vendor", "disenchant" },
+}
 
 -- Short names, for the VIA column and the switch.
 Profit.WAY_LABELS = { auction = L["AH"], vendor = L["Vendor"], disenchant = L["DE"] }
+
+--- The source tag that rides after a profit number where there is no VIA
+--- column: "(AH)", "(Vendor)" or "(DE)", in that way's colour. "" for none.
+--- Colours text the way a profit came by (AH blue, Vendor cream gold, DE
+--- purple); the text as it is when the way has no colour.
+function Profit.WayColored(way, text)
+    local Theme = ns.Theme
+    local color = way and Theme and Theme.colors and Theme.colors["way_" .. way]
+    if type(color) == "table" and color[1] then
+        return string.format("|cff%02x%02x%02x%s|r", math.floor(color[1] * 255 + 0.5),
+            math.floor(color[2] * 255 + 0.5), math.floor(color[3] * 255 + 0.5), text)
+    end
+    return text
+end
+
+--- "(AH)", "(Vendor)" or "(DE)" in the way's colour, put after a profit
+--- number; "" when no way is known.
+function Profit.WayTag(way)
+    local label = way and Profit.WAY_LABELS[way]
+    if not label then return "" end
+    return Profit.WayColored(way, L.Format("(%s)", label))
+end
 
 -- How /bts why names where a material's price came from (Cost's sources).
 local SOURCE_NOTES = {
@@ -640,6 +692,7 @@ local NO_WAY_REASON = {
     auction = L["no auction price"],
     vendor = L["no vendor price"],
     disenchant = L["cannot be disenchanted"],
+    vendordisenchant = L["no vendor price"],
 }
 
 --- Can one of your characters disenchant this? Read from what each last
@@ -904,7 +957,8 @@ function Profit:Analyse(recipeID, characterKey, method)
 
     -- Ranked by disenchanting, a craft no auction or vendor prices may
     -- still be worth breaking down.
-    local countsDisenchant = (method == "best" or method == "disenchant")
+    local countsDisenchant = (method == "best" or method == "disenchant"
+        or method == "vendordisenchant")
         and analysis.disenchantValue ~= nil
 
     if not unitRevenue and not countsDisenchant then
@@ -944,8 +998,14 @@ function Profit:Analyse(recipeID, characterKey, method)
 
         -- The deposit is paid up front and comes back when the item sells,
         -- so only the listings expected to run out first cost it.
+        -- Each item's share of a listing's deposit, not a whole listing's:
+        -- one craft goes up in a stack with the rest, and a stack pays one
+        -- deposit. Charging the 1s least deposit to every craft made a
+        -- 2s 60c oil from 2s of materials read as a 54c loss (a player's
+        -- report, 2026-11-08), and ten queued as a 5s loss.
         local held = HeldDeposit(recipe.outputItemID, yield)
-        local deposit = (held or LeastDeposit()) * Profit.LostListings(recipe.outputItemID)
+        local deposit = Profit.LostDepositEach(recipe.outputItemID) * yield
+            * Profit.LostListings(recipe.outputItemID)
 
         ways.auction = { unit = listPrice, revenue = revenue, cut = cut, deposit = deposit,
             depositHeld = held, depositKnown = held ~= nil, basis = listBasis, uncertain = listUncertain,
@@ -979,8 +1039,8 @@ function Profit:Analyse(recipeID, characterKey, method)
     if method == nil then
         -- The sale the Sell tab would make, decided above.
         via = basis == "vendor" and "vendor" or "auction"
-    elseif method == "best" then
-        for _, way in ipairs(self.WAYS) do
+    elseif self.METHOD_WAYS[method] then
+        for _, way in ipairs(self.METHOD_WAYS[method]) do
             local option = ways[way]
             -- Disenchanting counts only when one of your characters can.
             local usable = option and (way ~= "disenchant" or option.canDisenchant == true)
@@ -1023,6 +1083,13 @@ function Profit:Analyse(recipeID, characterKey, method)
     end
     analysis.timeSeconds = seconds
     analysis.goldPerHour = ns.CraftTime and ns.CraftTime.PerHour(analysis.profit, seconds) or nil
+
+    -- Buy the parts or make them, whichever earns more an hour (a Discord
+    -- player, 2026-11-12). Only while "Gold an Hour:" is ticked, and only
+    -- for a craft whose own cast is timed (Logic/HourPlans.lua).
+    if analysis.knownByMe and ns.HourPlans and ns.HourPlans:IsOn() then
+        analysis.hourPlans = ns.HourPlans:For(recipeID, analysis)
+    end
 
     -- Margin is profit against revenue; ROI is profit against the gold you must
     -- actually front. They rank very differently and both are worth seeing.

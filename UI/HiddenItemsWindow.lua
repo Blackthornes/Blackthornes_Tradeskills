@@ -133,6 +133,7 @@ function HiddenItems:Build()
 
     self.offset = 0
     self.frame = frame
+    if ns.SharedWindow and ns.SharedWindow.KeepSpot then ns.SharedWindow.KeepSpot(frame, "ts.hidden") end
     return frame
 end
 

@@ -70,6 +70,7 @@ ns.Config = {
     Get = function(_, key)
         if key == "auctionCut" then return 0.05 end
         if key == "minProfit" then return 0 end
+        if key == "undercutCopper" then return 1 end
         return nil
     end,
     GetCharacterKey = function() return "Tester-Realm" end,

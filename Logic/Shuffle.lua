@@ -393,7 +393,8 @@ function Shuffle:Craft(node, entry, cache)
     steps[#steps + 1] = step
     parts[#parts + 1] = step.verb
     chain[#chain + 1] = output
-    list[#list + 1] = { recipeID = entry.id, crafts = crafts, known = entry.known }
+    list[#list + 1] = { recipeID = entry.id, crafts = crafts, known = entry.known,
+        takes = crafts * need, uses = node.itemID, output = output, yield = YieldOf(recipe) }
 
     return { itemID = output, count = count, spent = spentNow, leftover = leftover,
         steps = steps, parts = parts, chain = chain, crafts = list, buys = buys }
@@ -534,12 +535,45 @@ end
 --- Queue It only when every craft is known.
 function Shuffle:Queue(way)
     if not Shuffle.CanQueue(way) then return nil end
-    for _, craft in ipairs(way.crafts) do
-        local ok, done, why = pcall(ns.Queue.Ensure, ns.Queue, craft.recipeID, craft.crafts)
-        if not ok then return nil, nil end
-        if not done then return nil, why end
+    -- Last craft first: a later craft can make an earlier one as its own
+    -- sub-craft (bags make their bolts), so the earlier one then only
+    -- queues what is left over for selling, never the whole count again.
+    local crafts, done = way.crafts, {}
+    for index = #crafts, 1, -1 do
+        local craft, after = crafts[index], crafts[index + 1]
+        local count = craft.crafts
+        if after and Shuffle.Covered(craft, after) then
+            count = count - math.ceil((after.takes or 0) / (craft.yield or 1))
+        end
+        if count > 0 then
+            local ok, queued, why = pcall(ns.Queue.Ensure, ns.Queue, craft.recipeID, count)
+            if not ok then return nil, nil end
+            if not queued then return nil, why end
+        end
+        table.insert(done, 1, { recipeID = craft.recipeID, crafts = math.max(0, count) })
     end
-    return true
+    return true, done
+end
+
+--- True when what `after` uses of `craft`'s output is already seen to:
+--- the queue makes it as a sub-craft of `after`, or the bags hold it.
+function Shuffle.Covered(craft, after)
+    if not after.takes or after.takes <= 0 then return false end
+    local ok, all = pcall(ns.Queue.GetAll, ns.Queue)
+    if ok and type(all) == "table" then
+        for _, entry in ipairs(all) do
+            if entry.isDependency and entry.recipeID == craft.recipeID
+                and type(entry.forRecipes) == "table" and entry.forRecipes[after.recipeID] then
+                return true
+            end
+        end
+    end
+    local output = craft.output or after.uses
+    if output and ns.Inventory and ns.Inventory.GetOwnedCount then
+        local okCount, have = pcall(ns.Inventory.GetOwnedCount, ns.Inventory, output)
+        if okCount and type(have) == "number" and have >= after.takes then return true end
+    end
+    return false
 end
 
 --- Put the start and the materials to buy on a shopping list named for the

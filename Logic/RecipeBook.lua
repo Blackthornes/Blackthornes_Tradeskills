@@ -92,6 +92,16 @@ local FOREVER_SKILLS = {
     ["raptor hide belt"] = 140,
     ["raptor hide harness"] = 140,
     ["green whelp armor"] = 150,
+    -- A trainer recipe, so no tooltip ever corrects it: a player saw the
+    -- trainer ask for 175 (2026-11-12), where the estimate said 155.
+    ["cured thick hide"] = 175,
+    -- The same leather step: a player saw Thick Leather ask for 175 too
+    -- (2026-11-14), where the estimate said 155 and Road to 300 offered it.
+    ["thick leather"] = 175,
+    -- Not yet seen in game: the next leather step, read the same way, so
+    -- Road to 300 never offers it before the trainer would let you make it.
+    ["rugged leather"] = 225,
+    ["cured rugged hide"] = 225,
 }
 
 -- Required skills read from recipe items' tooltips, one read per item a
@@ -156,7 +166,48 @@ function RecipeBook:NoteSeen(recipeID, data)
         seenAt = time(),
     }
 
-    self.merged = nil
+    -- The book is kept and only this recipe's record is mended when what
+    -- the window showed matches it in everything that places it (name,
+    -- item made, profession). Throwing the whole book away for each
+    -- recipe a window lists left megabytes behind for the game to clear.
+    if not self:PatchSeen(recipeID, seen[recipeID]) then
+        self.merged = nil
+    end
+end
+
+--- Mend one record of the kept book from a fresh window read, as GetAll
+--- would lay it. False when GetAll has to build the book again instead.
+function RecipeBook:PatchSeen(recipeID, entry)
+    local merged = self.merged
+    local record = merged and merged[recipeID]
+    if not record or type(entry) ~= "table" then return false end
+    if entry.name == nil or entry.name ~= record.name then return false end
+    if entry.outputItemID == nil or entry.outputItemID ~= record.outputItemID then return false end
+    if entry.skillLineID == nil or entry.skillLineID ~= record.skillLineID then return false end
+    if record.profession == nil then return false end
+    if type(entry.reagents) ~= "table" or #entry.reagents == 0 then return false end
+
+    record.quantityMin = entry.quantityMin or record.quantityMin or 1
+    record.quantityMax = entry.quantityMax or record.quantityMax or record.quantityMin
+    record.reagents = entry.reagents
+    record.seenInGame = true
+    return true
+end
+
+-- One { itemID, quantity } table for each pair the shipped book uses, kept
+-- for the session: thousands of recipes share a few hundred pairs, and no
+-- reader changes them, so every build reuses the same ones.
+local sharedReagents = {}
+local function SharedReagent(itemID, quantity)
+    if itemID == nil or quantity == nil then return { itemID = itemID, quantity = quantity } end
+    local byQuantity = sharedReagents[itemID]
+    if not byQuantity then byQuantity = {}; sharedReagents[itemID] = byQuantity end
+    local reagent = byQuantity[quantity]
+    if not reagent then
+        reagent = { itemID = itemID, quantity = quantity }
+        byQuantity[quantity] = reagent
+    end
+    return reagent
 end
 
 --------------------------------------------------------------------------------
@@ -192,7 +243,7 @@ function RecipeBook:GetAll()
         local reagents = {}
         local materials = foreverMaterials[recipeID] or row[6] or {}
         for i = 1, #materials - 1, 2 do
-            reagents[#reagents + 1] = { itemID = materials[i], quantity = materials[i + 1] }
+            reagents[#reagents + 1] = SharedReagent(materials[i], materials[i + 1])
         end
 
         local record = {
@@ -526,8 +577,29 @@ function RecipeBook:LearnSkill(itemID)
         teaches = taught and taught:lower() or nil,
         at = time(),
     }
-    -- A sweep rebuilds the book once at its end, not once per item.
-    if not self.sweeping then self.merged = nil end
+    -- The kept book is mended in place when the item names its recipe
+    -- straight out; otherwise it is built again, once at a sweep's end.
+    if not self:PatchSkill(itemID, skills[itemID]) then
+        if self.sweeping then self.rebuildAfterSweep = true else self.merged = nil end
+    end
+    return true
+end
+
+--- Lay one kept skill on the kept book, as GetAll's last pass would.
+--- False when GetAll has to build the book again instead.
+function RecipeBook:PatchSkill(itemID, learned)
+    local merged = self.merged
+    if not merged then return true end
+    if type(learned) ~= "table" or type(learned.skill) ~= "number" then return false end
+    local row = Book().ITEMS[itemID]
+    if not row then return false end
+    local aliases = self.aliases or {}
+    local record = merged[row[1]] or merged[aliases[row[1]] or false]
+    if not record then return false end
+    if learned.profession and record.profession and learned.profession ~= record.profession then
+        return false
+    end
+    record.skill = learned.skill
     return true
 end
 
@@ -561,11 +633,12 @@ function RecipeBook:SweepSkills()
     table.sort(queue)
 
     self.sweeping = true
+    self.rebuildAfterSweep = false
     local index, changed = 1, false
     local function Step()
         if AuctionHouseOpen() then
             self.sweeping = false
-            if changed then self.merged = nil end
+            if self.rebuildAfterSweep then self.merged = nil end
             return
         end
         local last = math.min(index + SWEEP_BATCH - 1, #queue)
@@ -579,7 +652,7 @@ function RecipeBook:SweepSkills()
             return
         end
         self.sweeping = false
-        if changed then self.merged = nil end
+        if self.rebuildAfterSweep then self.merged = nil end
         if changed and ns.UI and ns.UI.RefreshActiveTab then pcall(ns.UI.RefreshActiveTab, ns.UI) end
     end
     Step()
@@ -683,6 +756,16 @@ local function VendorsOf(itemID)
     return vendors
 end
 
+--- Vendors seen in game selling a recipe item on the player's side, from
+--- VendorPins (the player's own and the shipped spots). Each keeps what it
+--- costs (gold or a currency) and the standing it needs.
+local function SellersOf(itemID)
+    local pins = ns.VendorPins
+    if not (pins and pins.RecipeSellers) then return {} end
+    local ok, sellers = pcall(pins.RecipeSellers, pins, itemID)
+    return ok and type(sellers) == "table" and sellers or {}
+end
+
 --- How a recipe is learned.
 --
 -- @return short, lines  short is one word for a list cell ("Trainer",
@@ -708,13 +791,31 @@ function RecipeBook:LearnFrom(record)
     for _, itemID in ipairs(record.recipeItems or {}) do
         local row = Book().ITEMS[itemID]
         local vendors = VendorsOf(itemID)
+        local listed = {}
         for _, vendor in ipairs(vendors) do
             short = short or L["Vendor"]
+            listed[vendor.name] = true
             lines[#lines + 1] = vendor.zone ~= "" and L.Format("Vendor: %s, %s", vendor.name, vendor.zone)
                 or L.Format("Vendor: %s", vendor.name)
         end
+        local seen = 0
+        for _, seller in ipairs(SellersOf(itemID)) do
+            if seller.name and not listed[seller.name] then
+                listed[seller.name] = true
+                seen = seen + 1
+                short = short or L["Vendor"]
+                local zone = ns.VendorPins.ZoneName and ns.VendorPins.ZoneName(seller) or ""
+                lines[#lines + 1] = zone ~= "" and L.Format("Vendor: %s, %s", seller.name, zone)
+                    or L.Format("Vendor: %s", seller.name)
+                local cost = ns.VendorPins.CostText and ns.VendorPins.CostText(seller)
+                if cost and cost ~= "" then lines[#lines + 1] = cost end
+                if seller.faction and seller.standing then
+                    lines[#lines + 1] = L.Format("Needs %s with %s", seller.standing, seller.faction)
+                end
+            end
+        end
         if row and (row.d or 0) > drops then drops, named = row.d, row.n end
-        if #vendors == 0 and not (row and row.d) then otherItem = true end
+        if #vendors == 0 and seen == 0 and not (row and row.d) then otherItem = true end
     end
 
     if drops > 0 then
@@ -772,6 +873,9 @@ function RecipeBook:GetRecipePrice(record, extraItemID)
         elseif row and row.v and #VendorsOf(itemID) > 0 then
             Offer(row[2], "vendor", itemID)
         end
+        for _, seller in ipairs(SellersOf(itemID)) do
+            Offer(seller.gold, "vendor", itemID)
+        end
         Offer(ns.Prices and ns.Prices:GetValue(itemID, "lowest"), "auction", itemID)
     end
 
@@ -789,6 +893,28 @@ end
 --   price, priceHow  the cheapest way to get the recipe
 --   payback     crafts until the profit has paid for the recipe
 -- }
+--- The words for Cost to make. A craft whose only unpriced reagents bind on
+--- pickup shows what the rest cost, plus those reagents by name and count,
+--- since they can never be bought (a player's report, 2026-11-14).
+function RecipeBook:CostText(value)
+    local function Money(c) return ns.Util.FormatMoney(c, { short = true }) end
+    if value.cost then return Money(value.cost) end
+    local detail = value.costDetail
+    if not (detail and detail.onlyBound and detail.partial) then
+        return L["materials not scanned"]
+    end
+    local parts = {}
+    for _, itemID in ipairs(detail.bound) do
+        local quantity = 0
+        for _, entry in ipairs(detail.reagents or {}) do
+            if entry.itemID == itemID then quantity = quantity + (entry.quantity or 0) end
+        end
+        local name = ItemInfo(itemID) or ("item:" .. itemID)
+        parts[#parts + 1] = quantity > 1 and (quantity .. " " .. name) or name
+    end
+    return L.Format("%s, plus %s", Money(detail.partial), table.concat(parts, ", "))
+end
+
 function RecipeBook:Value(record, extraItemID)
     if not record then return nil end
 
@@ -957,8 +1083,7 @@ function RecipeBook:TooltipLines(itemID)
 
     local value = self:Value(record, itemID)
 
-    lines[#lines + 1] = { L["Cost to make"], value.cost and Money(value.cost) or L["materials not scanned"],
-        not value.cost }
+    lines[#lines + 1] = { L["Cost to make"], self:CostText(value), not value.cost }
 
     if not record.outputItemID then
         lines[#lines + 1] = { L["Makes"], L["no item to sell"], true }
@@ -980,9 +1105,24 @@ function RecipeBook:TooltipLines(itemID)
         lines[#lines + 1] = { L["Vendors for"], Money(returns.vendor) }
     end
 
+    -- How well the item it makes sells (Logic/Demand.lua), so a player can
+    -- tell before buying the recipe (asked 2026-11-12).
+    if ns.Demand and ns.Demand.Get then
+        local ok, reading = pcall(ns.Demand.Get, ns.Demand, record.outputItemID)
+        if ok and reading then
+            lines[#lines + 1] = { L["Demand"], ns.Demand:Label(reading), color = ns.Demand:Color(reading) }
+        end
+    end
+
     if value.profit then
         local text = Money(value.profit)
-        if value.backWay and value.backWay ~= "auction" then
+        -- Always name the way that won, the AH too, in its colour (asked
+        -- 2026-11-12, so a player can see where the money comes from).
+        local Profit = ns.Profit
+        local word = value.backWay and Profit and Profit.WAY_LABELS and Profit.WAY_LABELS[value.backWay]
+        if word then
+            text = L.Format("%s  (by %s)", text, Profit.WayColored(value.backWay, word))
+        elseif value.backWay then
             text = L.Format("%s  (by %s)", text, WAY_NAMES[value.backWay] or value.backWay)
         end
         lines[#lines + 1] = { L["Profit per craft"], text, color = value.profit >= 0 and "profit" or "loss" }
