@@ -66,13 +66,25 @@ every turn lists inside the click. After that:
   check is out takes every turn; a steady wheel prints "checking the
   current price..." and lists nothing.
 
-## Still to check
+## Checked 2026-11-14: a listing always settles, but a steady wheel stalls
 
-1. A listing that never settles (`VerifyPending`, `Logic/Posting.lua:2797`;
-   `Post` 1618 to 1821; `DropPending` 257): `GetNextPostable` skips lines
-   with a pending listing and `ConfirmingFull` refuses at 6, so a pending
-   entry that never clears stops the wheel for good.
-2. `CanPost`'s `IsThrottled()` eating a turn right after a listing.
+`VerifyPending` (2797) runs 3 s after a listing (`POST_VERIFY_DELAY`), may
+be put off by `ShareVerify` (2858) up to 3 s more (`VERIFY_SHARE_MOST`)
+while newer listings are due within 1.6 s (`VERIFY_SHARE`), gives up after
+15 s (`VERIFY_GIVE_UP`) and drops anything older than 60 s. So nothing
+stays pending for good. That theory is out.
+
+What does stop the wheel, even with fresh prices: `CanPost` refuses with
+"still confirming the last listing" once `MAX_CONFIRMING` (6) other items
+are pending (`ConfirmingFull`, 279). Turns are 0.35 s apart and each lists
+a different item, so after about 7 listings (2.8 s) the cap is hit. The
+first read back is put off to as late as 6 s after the first listing, and
+every listing calls `AHQueue:NoteSend()`, so the urgent read also needs
+1.2 s of quiet. Net: about 3 s of listing, then about 3 to 4 s where every
+turn is refused, then it works again. This fits "works for a while, then
+stops".
+
+Smaller: `CanPost`'s `IsThrottled()` can eat a turn right after a listing.
 
 ## Fix direction
 
