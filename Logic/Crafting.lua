@@ -225,12 +225,20 @@ function Crafting:GetQueueReadiness()
 
     for _, entry in ipairs(ns.Queue:GetAll()) do
         total = total + 1
-        if self:GetReadiness(entry.recipeID) then
+        if self:CanCraftNext(entry) then
             ready = ready + 1
         end
     end
 
     return ready, total
+end
+
+--- Can Craft Next make this entry now? Its materials are here, no tool or
+--- station is missing, and the player has not paused it or a part of it.
+function Crafting:CanCraftNext(entry)
+    if not entry then return false end
+    if ns.Queue.Held and ns.Queue:Held(entry) then return false end
+    return self:GetReadiness(entry.recipeID) and true or false
 end
 
 --------------------------------------------------------------------------------
@@ -303,6 +311,8 @@ end
 function Crafting:PickNext(ready)
     if #ready == 0 then return nil end
     if #ready == 1 or not self:FreesSpaceFirst() then return ready[1] end
+    -- The player's own order (Move to Top, Up, Down) is kept as it is.
+    if ns.Queue.HasOwnOrder and ns.Queue:HasOwnOrder() then return ready[1] end
 
     local byRecipe = {}
     for _, entry in ipairs(ns.Queue:GetAll()) do
@@ -365,7 +375,7 @@ end
 function Crafting:GetNextReady()
     local ready = {}
     for _, entry in ipairs(ns.Queue:GetAll()) do
-        if self:GetReadiness(entry.recipeID) then
+        if self:CanCraftNext(entry) then
             ready[#ready + 1] = entry
         end
     end
