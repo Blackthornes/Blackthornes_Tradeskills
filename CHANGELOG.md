@@ -19,7 +19,7 @@ For WoW: Forever (interface 16001). A full restart is needed after updating, bec
 - **Road to 300.** Thick Leather is offered at 175, Show the Way picks a trainer on your own continent first, and two steps of one recipe add up in the queue.
 - **Gear posts round up.** A gear post at 0c undercut rounds up to the next whole silver and never goes under the rival.
 - **Old professions are let go.** A character that dropped every profession is no longer named for crafts.
-- **Fixes.** The Sell button fits its words, such as Check Price and Sell Anyway. Scrolling and List Next skip items Butler says to wait on. The addon uses less memory.
+- **Fixes.** The Sell button fits its words, such as Check Price and Sell Anyway. Scrolling and List Next skip items Butler says to wait on. The addon uses less memory. The mouse wheel works the first time you open the auction house.
 
 ## 1.28.0
 

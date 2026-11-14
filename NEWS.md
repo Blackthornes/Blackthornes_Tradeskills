@@ -36,6 +36,7 @@ Fixes and changes:
 - Road to 300 picks a closer trainer and adds up repeated steps.
 - Tooltips show the cost to make with bind on pickup parts.
 - The addon uses less memory.
+- The mouse wheel works the first time you open the auction house.
 
 ## 1.28.0
 
