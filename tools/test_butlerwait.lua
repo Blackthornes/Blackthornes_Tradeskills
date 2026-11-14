@@ -84,6 +84,7 @@ ns.Config = {
         if k == "allowPostingAtALoss" then return false end
         if k == "sellHoldsSisterKeeps" then return sisterKeepsOn end
         if k == "sellHoldsAltUpgrades" then return altUpgradesOn end
+        if k == "postAnyway" then return postAnywayOn end
         return nil
     end,
     GetPriceTable = function() return {} end,
@@ -225,6 +226,40 @@ do
     check("the row no longer waits", LineFor(lines, WAITS).butlerWait, nil)
     check("the loss still waits", LineFor(lines, LOSS).butlerWait ~= nil, true)
     check("and lists again", (Posting:GetSummary(nil, lines)), 2)
+end
+
+print("\nThe scroll wheel and List Next ask Butler again")
+Reset()
+do
+    -- The list was drawn before Butler said wait (or a free row shares its
+    -- item with a waiting copy): the line carries no butlerWait, but the
+    -- copy a listing would draw from does.
+    BlackthornesButler = nil
+    ns.SisterKeeps:Forget()
+    ns.Inventory.changes = (ns.Inventory.changes or 0) + 1
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    check("drawn without Butler, nothing waits", LineFor(lines, WAITS).butlerWait, nil)
+    Butler()
+    ns.SisterKeeps:Forget()
+    check("Butler waits on the copy listing would use", Posting:ButlerWaitsNow(WAITS), true)
+    check("a plain item does not", Posting:ButlerWaitsNow(PLAIN), false)
+    check("List Next still passes the waiting rows", Posting:GetNextPostable(nil, lines).itemID, PLAIN)
+    check("and with fast listing", Posting:GetNextPostable({ skipSettling = true }, lines).itemID, PLAIN)
+    -- Only the waiting rows left on the drawer.
+    local waiting = {}
+    for _, line in ipairs(lines) do
+        if line.itemID ~= PLAIN then waiting[#waiting + 1] = line end
+    end
+    lines = waiting
+    check("nothing else left, nothing lists", Posting:GetNextPostable(nil, lines), nil)
+    postAnywayOn = true
+    check("Bypass Disallowed Postings still lists it", Posting:GetNextPostable(nil, lines).itemID, WAITS)
+    postAnywayOn = nil
+    check("after Sell Anyway it lists", (function()
+        ns.SisterKeeps:SellAnyway(WAITS); ns.SisterKeeps:Forget()
+        local line = Posting:GetNextPostable(nil, lines)
+        return line and line.itemID
+    end)(), WAITS)
 end
 
 print("\nNo Butler, or one that raises")

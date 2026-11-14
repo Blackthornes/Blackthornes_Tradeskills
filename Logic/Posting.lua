@@ -1500,6 +1500,19 @@ function Posting:IsUnderFloor(line)
     return floor ~= nil and line.unitPrice < floor
 end
 
+--- Butler says wait for the copy a listing would draw from, asked fresh.
+--- Posting lists by item from the first free slot, which can be a waiting
+--- copy even when the line shown was a free one, or Butler may have changed
+--- its mind since the list was drawn. Only a click on the row's Sell Anyway
+--- lists a waiting item; List Next and the scroll wheel never do.
+function Posting:ButlerWaitsNow(itemID)
+    if not itemID or not ns.SisterKeeps or not ns.SisterKeeps.ButlerWait then return false end
+    local bag, slot = FindInBags(itemID)
+    if not bag then return false end
+    local ok, wait = pcall(ns.SisterKeeps.ButlerWait, ns.SisterKeeps, itemID, { bag = bag, slot = slot })
+    return ok and type(wait) == "table"
+end
+
 --- The most valuable stack worth listing right now.
 --
 -- Skips anything unpriced, anything under the price floor, and anything
@@ -1518,7 +1531,8 @@ function Posting:GetNextPostable(opts, lines)
     for _, line in ipairs(lines or self:GetPostable(opts)) do
         if line.unitPrice and (allowLoss or not line.atALoss) and (anyway or not line.belowCrafted)
             and not line.held and not line.butlerWait and not self:IsUnderFloor(line)
-            and not self:IsPassedOver(line.itemID) then
+            and not self:IsPassedOver(line.itemID)
+            and (anyway or not self:ButlerWaitsNow(line.itemID)) then
             if skipSettling and self:PendingFor(line.itemID) then
                 settling = true
             else
