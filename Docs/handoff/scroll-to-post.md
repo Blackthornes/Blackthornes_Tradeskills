@@ -33,31 +33,46 @@ or `checkedAt[itemID]` (plain items) or `checkedSuffix[id:suffix]`
 - Binding lost: `Update` re-checks it (2026-11-07).
 - Freshness key mismatch: `GetSearchKey` is nil for plain items, so
   `IsFreshCopy` falls back to `checkedAt`, which `NoteChecked` writes.
-- Supersede starvation in `ScanItem`: a repeat within 20 s answers
-  "recent"; an unsent one is replaced by the newest.
+- Supersede starvation: the single check goes through `Util.WhenAuctionReady`
+  with `key = "item-search"`, urgent, `expires = 6`, so a newer one replaces
+  the queued one. No pile-up of dead sends.
+- `ScanItem`'s `ClearSearchState()` throwing away the bulk answer: it only
+  clears `searchTimeout`, `pendingItem` and `abandonedItem`.
+- The 6 s stand-down after a listing: it holds back non-urgent requests
+  only; price checks are urgent.
 
-## Leading cause (being verified)
+## Queue facts (Core/AHQueue.lua)
+
+1.2 s between sends (`MIN_SPACING`), 8 sends per 15 s (`BUDGET_MAX`,
+`BUDGET_WINDOW`), 10 s backoff after a dropped search (blocks everything),
+a queued single check gives up after 6 s ("the auction house stayed busy").
+`Posting:Request` has a 5 s fallback of its own. `CanPost` refuses on
+`IsThrottled()` ("the auction house is busy") and `ConfirmingFull`
+(`MAX_CONFIRMING` 6, "still confirming the last listing").
+
+## What holds from the code
 
 "Works for a while" is the five minutes after a scan (`wholeScanAt`):
-every turn lists. After that:
+every turn lists inside the click. After that:
 
-- Turn 1 starts the bulk `CheckAll`. A turn 0.35 s later sees
-  `BulkTried` true (through `CheckPending`) and falls through to
-  `Request`, which starts a single `ScanItem`. `ScanItem` calls
-  `Scanner:ClearSearchState()` and sends an item search, so the bulk
-  browse answer may be thrown away. `bulkTried` then holds for 300 s, so
-  every item left takes the slow path: one turn to check, a second to
-  list, and a steady wheel only prints "checking the current price...".
-- `OnCheckResults` marks an item checked only when someone else sells it,
-  the price is credible and near the usual price. Items nobody else
-  sells, or where your own listing is cheapest, stay not fresh but
-  `BulkTried`, so they always take the two-turn path.
-- Suffix copies are left out of `CheckAll` and are never `IsFresh` after
-  the window, so they always take the two-turn path.
+- Turn 1 starts the bulk `CheckAll` and lists nothing.
+- `OnCheckResults` marks an item checked only when someone else sells it
+  at a credible price near the usual price. Items nobody else sells, or
+  where your own listing is cheapest, stay not fresh but `BulkTried` for
+  300 s: one turn to check (answer comes later, outside the click, "Click
+  again to list it"), a second to list.
+- Suffix copies are left out of `CheckAll`: always two turns.
+- `ListNext` always stops on the first postable line, so one line whose
+  check is out takes every turn; a steady wheel prints "checking the
+  current price..." and lists nothing.
 
-Still to rule out: a pending listing that never settles (`VerifyPending`,
-`Logic/Posting.lua:2797`), `MAX_CONFIRMING` (6), `Util.WhenAuctionReady`
-(`Core/Util.lua:766`) under throttle.
+## Still to check
+
+1. A listing that never settles (`VerifyPending`, `Logic/Posting.lua:2797`;
+   `Post` 1618 to 1821; `DropPending` 257): `GetNextPostable` skips lines
+   with a pending listing and `ConfirmingFull` refuses at 6, so a pending
+   entry that never clears stops the wheel for good.
+2. `CanPost`'s `IsThrottled()` eating a turn right after a listing.
 
 ## Fix direction
 
