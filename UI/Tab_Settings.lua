@@ -563,6 +563,14 @@ local function Build(outer)
     widgets.cut:SetPoint("TOPLEFT", CONTROL_X, 0)
     AddUnit(cutRow, widgets.cut, "%")
 
+    local depositRow = CreateRow(pages.pricing, 1, L["Ignore Deposit:"],
+        L["Leaves the deposit out of profit and selling advice."])
+    widgets.ignoreDeposit = Widgets.CreateCheckbox(depositRow, L["On"], function(checked)
+        Config:Set("ignoreDeposit", checked)
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.ignoreDeposit:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local unscannedRow = CreateRow(pages.pricing, 1, L["Markup With No Rivals:"],
         L["When nobody else sells it, your price is the material cost plus this."])
 
@@ -2545,6 +2553,7 @@ local function Refresh()
     Put(widgets.fastSellerExtra, type(extra) == "number" and extra or 2)
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
+    widgets.ignoreDeposit:SetChecked(Config:Get("ignoreDeposit") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
     widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") == true)
     widgets.altKeeps:SetChecked(Config:Get("sellHoldsAltUpgrades") == true)
