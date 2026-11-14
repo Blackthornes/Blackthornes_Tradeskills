@@ -43,6 +43,8 @@ AuctionWheel.CANCEL_BUTTON = "BlackthornesTSWheelCancel"
 
 -- How often the binding is looked at again while the drawer shows.
 AuctionWheel.CHECK_EVERY = 1
+-- Extra looks after the auction house opens, while the drawer settles.
+AuctionWheel.LOOK_AFTER = { 0.2, 0.6, 1.5 }
 
 -- What the game reports for each wheel key while it is ours.
 AuctionWheel.ACTIONS = {
@@ -220,6 +222,39 @@ function AuctionWheel:Tick(elapsed)
     self:Update()
 end
 
+-- While the auction house is open, look on our own frame too. The drawer's
+-- OnUpdate can miss the moment it first shows, which left the wheel unbound
+-- until something else asked again.
+function AuctionWheel:AuctionOpened()
+    self.atAuction = true
+    -- Bind fresh on every visit, even when it thinks it still holds the wheel.
+    if self.bound and not InFight() then
+        if type(ClearOverrideBindings) == "function" and self.owner then pcall(ClearOverrideBindings, self.owner) end
+        self.bound = false
+    end
+    self:Build()
+    self.sinceCheck = 0
+    if not self.ticking then
+        self.ticking = true
+        self.owner:SetScript("OnUpdate", function(_, elapsed) AuctionWheel:Tick(elapsed) end)
+    end
+    self:Update()
+    if C_Timer and C_Timer.After then
+        for _, delay in ipairs(self.LOOK_AFTER) do
+            C_Timer.After(delay, function() AuctionWheel:Update() end)
+        end
+    end
+end
+
+function AuctionWheel:AuctionClosed()
+    self.atAuction = false
+    if self.ticking and self.owner then
+        self.owner:SetScript("OnUpdate", nil)
+        self.ticking = false
+    end
+    self:Update()
+end
+
 --- Follow the drawer: called once it is built.
 function AuctionWheel:Watch(frame)
     if not frame or self.watching == frame then return end
@@ -236,6 +271,7 @@ if ns.RegisterEvent then
     local function Again() AuctionWheel:Update() end
     ns.RegisterEvent(AuctionWheel, "PLAYER_REGEN_ENABLED", Again)
     ns.RegisterEvent(AuctionWheel, "UPDATE_BINDINGS", Again)
-    ns.RegisterEvent(AuctionWheel, "AUCTION_HOUSE_SHOW", Again)
+    ns.RegisterEvent(AuctionWheel, "AUCTION_HOUSE_SHOW", function() AuctionWheel:AuctionOpened() end)
+    ns.RegisterEvent(AuctionWheel, "AUCTION_HOUSE_CLOSED", function() AuctionWheel:AuctionClosed() end)
     ns.RegisterEvent(AuctionWheel, "PLAYER_ENTERING_WORLD", Again)
 end
