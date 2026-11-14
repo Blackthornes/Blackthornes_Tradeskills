@@ -39,6 +39,9 @@ local DEFAULTS = {
         -- How many times we assume an item is relisted before it sells, so the
         -- deposit is not silently ignored in the profit maths.
         expectedRelists = 1,
+        -- "Ignore Deposit:" on the Pricing page (2026-11-14): off unless
+        -- ticked. Ticked, profit and sell advice leave the deposit out.
+        ignoreDeposit = false,
 
         -- Posting undercuts the cheapest listing by this much, and profit is
         -- calculated at that price. This models what you will actually receive
@@ -237,6 +240,9 @@ local DEFAULTS = {
         postHideLosses = false,
         -- Sell's Crafted Only box: only items your recipes make. Off unless ticked.
         postCraftedOnly = false,
+        -- Sell's Show Waiting box: Butler's waiting items stay in the list.
+        -- On unless unticked. Never rename it.
+        postShowWaiting = true,
         -- Profit by method's headings folded away, their keys comma apart
         -- (a player asked, the owner said yes from a mockup, 2026-10-22).
         -- Never rename it.
@@ -626,6 +632,7 @@ local DEFAULTS = {
         preferTsmPrices = false,
         -- The TSM price "market" reads, typed by the player (2026-11-13):
         -- `tsmPriceSource`, nil or empty for DBRecent; never rename it.
+        -- `tsmGearPriceSource`, nil or empty for the TSM Price Source; never rename it.
         -- See TSMPrices:MarketSource.
         -- Then Auctionator's (asked 2026-10-12). See Logic/AuctionatorPrices.lua.
         auctionatorPrices = true,
