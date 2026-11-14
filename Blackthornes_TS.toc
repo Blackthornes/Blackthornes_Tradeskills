@@ -196,6 +196,3 @@ UI\AuctionTracker.lua
 UI\Tab_Settings.lua
 
 Probe\Probe.lua
-
-## DEBUG: remove the next line before release (scroll trace, Docs/handoff/scroll-to-post.md)
-Debug\ScrollTrace.lua
