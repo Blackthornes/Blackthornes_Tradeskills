@@ -3602,3 +3602,13 @@ L["Says in chat what each disenchant gave."] = "在聊天中显示每次分解�
 L["show what each disenchant gave in chat: /bts dechat on|off"] = "在聊天中显示每次分解得到了什么：/bts dechat on|off"
 L["Disenchant results show in chat."] = "分解结果会显示在聊天中。"
 L["Disenchant results no longer show in chat."] = "分解结果不再显示在聊天中。"
+
+-- Craft Cost and Profit
+L["Craft Cost and Profit:"] = "制作成本和利润："
+L["Show the profit beside each recipe in the game's profession window, and what the mats cost when you pick one."] = "在游戏的专业窗口里，每个配方旁边显示利润，选中一个时显示材料花费。"
+L["Sells For:"] = "卖出价："
+L["Mats Cost:"] = "材料成本："
+L["Profit:"] = "利润："
+L["No price"] = "没有价格"
+L["Makes %d"] = "制作 %d 个"
+L["CRAFT COST AND PROFIT"] = "制作成本和利润"

@@ -3604,3 +3604,13 @@ L["Says in chat what each disenchant gave."] = "Sagt im Chat, was jede Entzauber
 L["show what each disenchant gave in chat: /bts dechat on|off"] = "im Chat zeigen, was jede Entzauberung gebracht hat: /bts dechat on|off"
 L["Disenchant results show in chat."] = "Entzauberungsergebnisse erscheinen im Chat."
 L["Disenchant results no longer show in chat."] = "Entzauberungsergebnisse erscheinen nicht mehr im Chat."
+
+-- Craft Cost and Profit
+L["Craft Cost and Profit:"] = "Herstellkosten und Gewinn:"
+L["Show the profit beside each recipe in the game's profession window, and what the mats cost when you pick one."] = "Zeigt den Gewinn neben jedem Rezept im Berufsfenster des Spiels und was die Materialien kosten, wenn du eins wählst."
+L["Sells For:"] = "Verkauft sich für:"
+L["Mats Cost:"] = "Materialkosten:"
+L["Profit:"] = "Gewinn:"
+L["No price"] = "Kein Preis"
+L["Makes %d"] = "Ergibt %d"
+L["CRAFT COST AND PROFIT"] = "HERSTELLKOSTEN UND GEWINN"
