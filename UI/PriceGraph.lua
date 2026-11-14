@@ -16,6 +16,20 @@
 -- each price instead, which still shows the shape.
 
 local _, ns = ...
+
+-- Every saved price reading, in either history layout (Data/Prices.lua keeps
+-- them flat; an old save keeps a table per reading).
+local function EachReading(history)
+    local P = ns.Prices
+    if P and P.EachReading then return P.EachReading(history) end
+    local i = 0
+    return function()
+        i = i + 1
+        local point = type(history) == "table" and history[i]
+        if type(point) ~= "table" then return nil end
+        return i, point.t, point.m, point.q
+    end
+end
 local L = ns.L or setmetatable({ Format = string.format }, { __index = function(_, key) return key end })
 
 local Theme = ns.Theme
@@ -85,10 +99,9 @@ function PriceGraph.Series(itemID, windowKey, now)
     if not tracked then
         local record = ns.Prices and ns.Prices:Get(itemID)
         local market = {}
-        for _, reading in ipairs(record and type(record.history) == "table" and record.history or {}) do
-            if type(reading) == "table" and type(reading.t) == "number" and type(reading.m) == "number"
-                and reading.t > now - window.seconds then
-                market[#market + 1] = { t = reading.t, p = reading.m }
+        for _, t, m in EachReading(record and record.history) do
+            if type(t) == "number" and type(m) == "number" and t > now - window.seconds then
+                market[#market + 1] = { t = t, p = m }
             end
         end
         if #market >= 2 then return market, "market", tracked end

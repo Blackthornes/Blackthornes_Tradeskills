@@ -113,6 +113,104 @@ local MAX_HISTORY = 12
 local PRUNE_AFTER_SECONDS = 21 * 24 * 3600
 
 --------------------------------------------------------------------------------
+-- Price history readings
+--
+-- A record's history is kept flat, three numbers a reading: { t, m, q, t, m,
+-- q, ... } (2026-11-14, the memory review: a small table per reading cost
+-- about 1.9 KB an item). A missing price or count is kept as false, so the
+-- list never has holes. A save from before keeps { t =, m =, q = } tables;
+-- those always read, and are laid out flat, every number kept, the next time
+-- the item gets a reading or the background pass reaches it. Read history
+-- only through these, never by index.
+--------------------------------------------------------------------------------
+
+local function IsFlat(history)
+    return type(history[1]) ~= "table"
+end
+
+--- How many readings a history holds, in either layout.
+function Prices.HistoryCount(history)
+    if type(history) ~= "table" then return 0 end
+    if IsFlat(history) then return math.floor(#history / 3) end
+    return #history
+end
+
+local function Value(v)
+    if v == false then return nil end
+    return v
+end
+
+-- What a missing value is kept as (`x == nil and false or x` gives nil back).
+local function Kept(v)
+    if v == nil then return false end
+    return v
+end
+
+--- Reading i (1 is the oldest): t, m, q. Missing values come back nil.
+function Prices.HistoryReading(history, i)
+    if type(history) ~= "table" then return nil end
+    if IsFlat(history) then
+        local base = (i - 1) * 3
+        return Value(history[base + 1]), Value(history[base + 2]), Value(history[base + 3])
+    end
+    local point = history[i]
+    if type(point) ~= "table" then return nil end
+    return point.t, point.m, point.q
+end
+
+--- Every reading, oldest first: for i, t, m, q in Prices.EachReading(history).
+function Prices.EachReading(history)
+    local count = Prices.HistoryCount(history)
+    local i = 0
+    return function()
+        i = i + 1
+        if i > count then return nil end
+        return i, Prices.HistoryReading(history, i)
+    end
+end
+
+--- Lays an old history out flat, in place on the record. Every number is
+-- kept; an entry that is not a reading table (never written by us) is left
+-- out only if it holds nothing at all. Returns true when it changed.
+function Prices.FlattenHistory(record)
+    local history = type(record) == "table" and record.history
+    if type(history) ~= "table" or IsFlat(history) then return false end
+    local flat = {}
+    for i = 1, #history do
+        local point = history[i]
+        if type(point) == "table" then
+            local t, m, q = point.t, point.m, point.q
+            if t ~= nil or m ~= nil or q ~= nil then
+                flat[#flat + 1] = Kept(t)
+                flat[#flat + 1] = Kept(m)
+                flat[#flat + 1] = Kept(q)
+            end
+        end
+    end
+    record.history = flat
+    return true
+end
+
+--- Adds a reading at the end and keeps the newest MAX_HISTORY.
+function Prices.AddReading(record, t, m, q)
+    if type(record.history) ~= "table" then record.history = {} end
+    Prices.FlattenHistory(record)
+    local history = record.history
+    local n = #history
+    history[n + 1] = Kept(t)
+    history[n + 2] = Kept(m)
+    history[n + 3] = Kept(q)
+    local extra = #history - MAX_HISTORY * 3
+    if extra > 0 then
+        local size = #history
+        for i = 1, size - extra do history[i] = history[i + extra] end
+        for i = size, size - extra + 1, -1 do history[i] = nil end
+    end
+end
+
+Prices.MAX_HISTORY = MAX_HISTORY
+
+--------------------------------------------------------------------------------
 -- Market value
 --------------------------------------------------------------------------------
 
@@ -412,11 +510,7 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     Prices.NoteDaily(record, scannedAt, quantity)
     Prices.NoteTrend(record, scannedAt)
 
-    local history = record.history
-    history[#history + 1] = { t = scannedAt, m = record.market, q = quantity }
-    while #history > MAX_HISTORY do
-        table.remove(history, 1)
-    end
+    Prices.AddReading(record, scannedAt, record.market, quantity)
 
     -- The hour by hour graph keeps the cheapest posting, as buying sees it.
     if ns.PriceHistory then
@@ -475,13 +569,7 @@ function Prices:RecordEmpty(itemID, scannedAt)
     record.scans = (record.scans or 0) + 1
     Prices.NoteDaily(record, scannedAt, 0)
 
-    record.history = record.history or {}
-
-    local history = record.history
-    history[#history + 1] = { t = scannedAt, m = record.market, q = 0 }
-    while #history > MAX_HISTORY do
-        table.remove(history, 1)
-    end
+    Prices.AddReading(record, scannedAt, record.market, 0)
 
     -- Sold out counts on the volume bars: none listed this hour.
     if ns.PriceHistory then ns.PriceHistory:NoteListed(itemID, 0, scannedAt) end
@@ -1290,16 +1378,19 @@ end
 -- is only ever presented as a confidence hint, never as a sale rate.
 function Prices:GetLiquidity(itemID)
     local record = self:GetTable()[itemID]
-    if not record or not record.history or #record.history < 2 then
+    local history = record and record.history
+    local count = Prices.HistoryCount(history)
+    if count < 2 then
         return nil
     end
 
-    local history = record.history
     local drops, total = 0, 0
 
-    for i = 2, #history do
-        local previous = history[i - 1].q or 0
-        local current = history[i].q or 0
+    for i = 2, count do
+        local _, _, previous = Prices.HistoryReading(history, i - 1)
+        local _, _, current = Prices.HistoryReading(history, i)
+        previous = tonumber(previous) or 0
+        current = tonumber(current) or 0
 
         if previous > 0 then
             if current < previous then
@@ -1341,12 +1432,11 @@ local function StockMovement(record)
     if not record or type(record.history) ~= "table" then return nil end
 
     local kept = {}
-    for _, point in ipairs(record.history) do
-        local q = point.q
-        if type(point.t) == "number" and type(q) == "number" and q > 0 then
+    for _, t, _, q in Prices.EachReading(record.history) do
+        if type(t) == "number" and type(q) == "number" and q > 0 then
             local last = kept[#kept]
-            if not last or point.t - last.t >= SALES_GAP then
-                kept[#kept + 1] = point
+            if not last or t - last.t >= SALES_GAP then
+                kept[#kept + 1] = { t = t, q = q }
             end
         end
     end
@@ -1840,9 +1930,46 @@ function Prices:TakeImplausibleCount()
     return count, last
 end
 
+-- Old histories laid out flat a few records a frame after login, so a big
+-- save is never worked through in one frame. Only this realm's table; another
+-- realm's lays itself out as its items get readings there.
+Prices.FLATTEN_BUDGET = 200
+Prices.FLATTEN_DELAY = 20
+
+function Prices:FlattenSoon()
+    local prices = self:GetTable()
+    local ids = {}
+    for itemID, record in pairs(prices) do
+        if type(record) == "table" and type(record.history) == "table"
+            and type(record.history[1]) == "table" then
+            ids[#ids + 1] = itemID
+        end
+    end
+    if #ids == 0 then return 0 end
+
+    local at = 0
+    local function Step()
+        local stop = math.min(#ids, at + Prices.FLATTEN_BUDGET)
+        for i = at + 1, stop do
+            local record = prices[ids[i]]
+            if record then Prices.FlattenHistory(record) end
+        end
+        at = stop
+        if at < #ids and type(C_Timer) == "table" and C_Timer.After then
+            C_Timer.After(0, Step)
+        end
+    end
+
+    if type(C_Timer) == "table" and C_Timer.After then
+        C_Timer.After(Prices.FLATTEN_DELAY, Step)
+    end
+    return #ids
+end
+
 function Prices:OnEnable()
     self:Scrub()
     self:Prune()
+    self:FlattenSoon()
 end
 
 --------------------------------------------------------------------------------

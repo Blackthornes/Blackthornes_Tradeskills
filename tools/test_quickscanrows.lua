@@ -164,7 +164,7 @@ local linenRows = { { 10, 400, LINEN }, { 5, 200, LINEN } }
 realm = "TestRealm-Alliance"
 QuickScan(linenRows)
 check("the first realm's market starts afresh", Prices:Get(LINEN).market == 40)
-check("its history is kept", #Prices:Get(LINEN).history == 2)
+check("its history is kept", Prices.HistoryCount(Prices:Get(LINEN).history) == 2)
 
 realm = "TestRealm-Horde"
 QuickScan(linenRows)
