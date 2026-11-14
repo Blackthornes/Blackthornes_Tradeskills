@@ -2138,6 +2138,9 @@ L["broken down for materials"] = "brisé en composants"
 L["Other sales"] = "Autres ventes"
 L["sold at auction, cost not known"] = "vendu aux enchères, coût inconnu"
 L["Not Counted"] = "Non compté"
+L["Character:"] = "Personnage :"
+L["Other Crafts"] = "Autres artisanats"
+L["Sold by your characters on this realm."] = "Vendu par tes personnages sur ce royaume."
 L["Sold, no cost known"] = "Vendu, coût inconnu"
 
 -- Logic/CraftedCost.lua
