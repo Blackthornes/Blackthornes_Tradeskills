@@ -2188,6 +2188,24 @@ to the vendor is unchanged, and a 1s the game quotes now still counts.
 No new words. Tested in `tools/test_depositfloor.lua` and
 `tools/test_vendorpile.lua`.
 
+## Pause, move and tool skips in the queue
+
+A player asked, the owner said build it from a mockup (2026-11-14, his yes
+approved the words). Craft Next skips a craft that needs a tool or station
+you are not near: `Crafting:ToolMissing(recipeID)` asks
+`C_TradeSkillUI.GetRecipeRequirements` in a pcall (an unmet need wins,
+"Needs a NAME"), else learns from the "Requires X" refusal that comes right
+after a craft starts (`Crafting:OnUIError`, `ToolFromError`); a learned skip
+is memory only and goes when the zone or subzone changes (`OnZoneChanged`).
+`/bts probe` has a line for the call. A row's right-click menu (and arrows
+on hover) has Move to Top, Move Up, Move Down, Pause or Resume and Remove
+(`Queue:Move`, `CanMoveTop/Up/Down`, `SetPaused`); a part never goes below
+its parent, and a paused part makes its parent wait (`Queue:Held` returns
+`held, byPart`). Saved: `paused` on each queue entry and the order in
+`ns.db.queueOrder` (never rename either). No sortable columns. Tested in
+`tools/test_queuetools.lua` and `tools/test_queuepause.lua`. Not yet seen
+in game.
+
 ## Every profession dropped
 
 A player's report (2026-11-14, the owner said build it): a priest that
