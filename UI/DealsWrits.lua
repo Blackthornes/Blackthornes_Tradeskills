@@ -1034,7 +1034,8 @@ function DealsWrits:Build(view, toolbar)
     widgets.detail = detail
 
     -- Writs and items the client had not cached arrive a few at a time,
-    -- and a turn-in moves the standing; one redraw for a burst.
+    -- a turn-in moves the standing, and a hand-in spot can be learned
+    -- while the list shows; one redraw for a burst.
     local queued = false
     local function Soon()
         if queued or not list:IsVisible() then return end
@@ -1046,6 +1047,7 @@ function DealsWrits:Build(view, toolbar)
     end
     ns.RegisterEvent(widgets, "GET_ITEM_INFO_RECEIVED", Soon)
     ns.RegisterEvent(widgets, "UPDATE_FACTION", Soon)
+    ns.Writs:Watch(Soon)
 
     ns.Writs:FindWrits()
 end

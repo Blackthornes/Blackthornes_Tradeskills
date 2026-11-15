@@ -108,8 +108,16 @@ end
 --- Bumped whenever something a list shows has changed, so it rebuilds.
 Writs.version = 0
 
+--- Told when version moves, so a list that shows can redraw.
+Writs.watchers = {}
+
+function Writs:Watch(fn)
+    if type(fn) == "function" then Writs.watchers[#Writs.watchers + 1] = fn end
+end
+
 local function Changed()
     Writs.version = Writs.version + 1
+    for _, fn in ipairs(Writs.watchers) do pcall(fn) end
 end
 
 local function Now()
