@@ -982,14 +982,14 @@ function Snipe:Buy(find, auto)
     end
     if self:AskStack(find, auto) then return end
     -- An old client with no listings to read: ask for the units as before.
-    self:StartStack(find, units, nil, auto)
+    self:StartStack(find, units, nil, auto, not auto)
 end
 
 --- A stack readied without a quote, for a client that won't let the price
 --- be asked for in the background: the click asks, the next click pays.
-function Snipe:Plan(find, units, expected)
+function Snipe:Plan(find, units, expected, clicked)
     local mine = { itemID = find.itemID, count = units, phase = "planned", find = find,
-        expected = expected, total = expected, auto = true, stack = true }
+        expected = expected, total = expected, auto = not clicked or nil, stack = true }
     self.pending = mine
     Moved()
     After(self.READY_KEEP, function()
@@ -998,28 +998,37 @@ function Snipe:Plan(find, units, expected)
 end
 
 --- Ask the auction house to price `units` of a stack. `expected` is what
---- those units cost by the listings, when they were read.
-function Snipe:StartStack(find, units, expected, auto)
+--- those units cost by the listings, when they were read. `fromClick` is
+--- true only when this runs inside the player's own click: Forever answers
+--- a stack's price only then, so an ask made anywhere else (a timer, or the
+--- listings coming in after a click) that gets no price turns into a
+--- planned buy, and the next click asks.
+function Snipe:StartStack(find, units, expected, auto, fromClick)
     if not auto then Yield() end
     if not Util.HasFunction("C_AuctionHouse.StartCommoditiesPurchase") then return end
     local ok = pcall(C_AuctionHouse.StartCommoditiesPurchase, find.itemID, units)
     if not ok then
-        if auto then self.noAutoStack = true; return self:Plan(find, units, expected) end
+        if not fromClick then self.noAutoStack = true; return self:Plan(find, units, expected, not auto) end
         return
     end
     local mine = { itemID = find.itemID, count = units, phase = "asking", find = find,
-        expected = expected, auto = auto, stack = true }
+        expected = expected, auto = auto, stack = true, fromClick = fromClick }
     self.pending = mine
     Moved()
     After(self.QUOTE_WAIT, function()
         if Snipe.pending == mine and mine.phase == "asking" then
-            -- No price twice in a row from the background: this client wants
-            -- a click to ask, so stacks are only planned from now on.
-            if mine.auto then
-                Snipe.autoStackMisses = (Snipe.autoStackMisses or 0) + 1
-                if Snipe.autoStackMisses >= 2 then Snipe.noAutoStack = true end
+            if not mine.fromClick then
+                -- No price for an ask outside a click: this client wants a
+                -- click to ask, so stacks are only planned from now on.
+                Snipe.noAutoStack = true
+                if Util.HasFunction("C_AuctionHouse.CancelCommoditiesPurchase") then
+                    pcall(C_AuctionHouse.CancelCommoditiesPurchase)
+                end
+                Snipe.pending = nil
+                return Snipe:Plan(find, units, expected, not mine.auto)
             end
             Snipe:CancelBuy()
+            Tell(mine, L["the auction house is busy, try again in a moment"])
         end
     end)
 end
@@ -1141,10 +1150,12 @@ function Snipe:StackResults(itemID)
     end
     -- Deal units past this buy: the find stays on the list for them.
     local all = Snipe.UnitsFromListings(listings, find, pct, math.huge, math.huge)
-    if pending.auto and self.noAutoStack then
-        self:Plan(find, units, cost)
+    -- This runs from the listings event, never inside a click, so a client
+    -- known to ask only on a click gets a planned buy straight away.
+    if self.noAutoStack then
+        self:Plan(find, units, cost, not pending.auto)
     else
-        self:StartStack(find, units, cost, pending.auto)
+        self:StartStack(find, units, cost, pending.auto, false)
     end
     if self.pending and self.pending.find == find then self.pending.others = math.max(0, all - units) end
 end
@@ -1308,7 +1319,7 @@ function Snipe:Pay()
         -- and the next click pays.
         self.pending = nil
         Intend(pending.find)
-        self:StartStack(pending.find, pending.count, pending.expected, false)
+        self:StartStack(pending.find, pending.count, pending.expected, false, true)
         return "checking"
     end
     if not (pending and pending.phase == "quoted") then return false end
