@@ -713,6 +713,19 @@ check("and offers Show Again", headRow.showAgain.shown == true and headRow.showW
     and headRow.zoneInfo.text:find("Skipped") ~= nil)
 ns.DealsWrits:SkipZone("Ashenvale", false)
 check("Show Again brings it back", not Header("Ashenvale").skipped)
+-- A spot learned while the list shows (a writ taken, a hand-in window)
+-- redraws it after the burst settles, with no other event.
+local fresh
+for _, entry in ipairs(ns.CRAFTSMANS_WRITS) do
+    if entry.item ~= ROD and entry.item ~= WISDOM then fresh = entry break end
+end
+Flush()
+ns.Writs:NoteCustomer(fresh, { name = "New Customer", zone = "Stranglethorn Vale", mapID = 1434, x = 28, y = 76 })
+check("a new spot waits for the burst", not Header("Stranglethorn Vale"))
+Flush()
+local stv = Header("Stranglethorn Vale")
+check("a spot learned while the list shows moves its writ out of Not Seen Yet",
+    stv and stv.count == 1 and Header("Not Seen Yet").count == #ns.CRAFTSMANS_WRITS - 3)
 groupBy.onSelect("none")
 check("back to no grouping", not list.data[1].header)
 local plainRow = Stub()
