@@ -220,6 +220,7 @@ local function NewVisit()
     return {
         startedAt = time(),
         gold = { sold = 0, outbid = 0, other = 0 },
+        ownGold = 0,       -- gold mailed from your own characters, never income
         total = 0,
         mailTotal = 0,     -- gold worked out from the mail itself
         moneyIn = 0,       -- gold your purse actually went up by
@@ -290,7 +291,9 @@ function MailHaul:Settle()
     visit.mailTotal = mailGold
 
     if visit.lastMoney ~= nil then
-        visit.total = visit.moneyIn
+        -- Gold one of your own characters mailed raised the purse too, but
+        -- it was yours already, so it is not counted as money made.
+        visit.total = math.max(0, visit.moneyIn - (visit.ownGold or 0))
     else
         visit.total = mailGold
     end
@@ -325,12 +328,24 @@ end
 
 --- Fold what was collected into the visit.
 -- @return gold collected by these events
+--- Whether this mail came from one of the player's own characters (any
+--- character Tradeskills keeps a record of, linked accounts included).
+function MailHaul.FromOwnCharacter(event)
+    if type(event) ~= "table" or event.kind ~= "other" then return false end
+    if type(event.name) ~= "string" or event.name == "" then return false end
+    local log = ns.GoldLog
+    if not (log and log.IsOwnCharacter) then return false end
+    local ok, own = pcall(log.IsOwnCharacter, log, event.name)
+    return ok and own == true
+end
+
 function MailHaul:Record(events)
     local visit = self.visit
     local gained = 0
 
     for _, event in ipairs(events) do
         local bucket = (event.kind == "sold" or event.kind == "outbid") and event.kind or "other"
+        local fromOwn = MailHaul.FromOwnCharacter(event)
         local eventGold = 0
 
         local collected = visit.collected[event.key or "?"] or { amounts = {}, items = {} }
@@ -358,8 +373,12 @@ function MailHaul:Record(events)
             end
         end
 
-        visit.gold[bucket] = visit.gold[bucket] + eventGold
-        gained = gained + eventGold
+        if fromOwn then
+            visit.ownGold = (visit.ownGold or 0) + eventGold
+        else
+            visit.gold[bucket] = visit.gold[bucket] + eventGold
+            gained = gained + eventGold
+        end
 
         local itemKind = (event.kind == "sold" or event.kind == "outbid") and "other" or event.kind
         local hadItems = false
@@ -377,7 +396,7 @@ function MailHaul:Record(events)
         if event.kind == "other" and (eventGold > 0 or hadItems) then
             local sender = tostring(event.name or "?")
             if not visit.senders[sender] then visit.letters = visit.letters + 1 end
-            visit.senders[sender] = (visit.senders[sender] or 0) + eventGold
+            visit.senders[sender] = (visit.senders[sender] or 0) + (fromOwn and 0 or eventGold)
         end
     end
 
@@ -395,7 +414,7 @@ function MailHaul:Reverse(events)
     -- sales set aside below. If it does, the gold really arrived and the
     -- mail that appeared is a new one that only looks the same.
     self:CheckMoney()
-    local counted = visit.gold.sold + visit.gold.outbid + visit.gold.other
+    local counted = visit.gold.sold + visit.gold.outbid + visit.gold.other + (visit.ownGold or 0)
     local paid = Money() ~= nil and visit.moneyIn >= counted and counted > 0
 
     for _, event in ipairs(events) do
@@ -403,13 +422,18 @@ function MailHaul:Reverse(events)
 
         if collected then
             local bucket = (event.kind == "sold" or event.kind == "outbid") and event.kind or "other"
+            local fromOwn = MailHaul.FromOwnCharacter(event)
 
             for _, amount in ipairs(event.monies) do
                 for index, was in ipairs(collected.amounts) do
                     if was == amount then
                         table.remove(collected.amounts, index)
-                        visit.gold[bucket] = math.max(0, visit.gold[bucket] - amount)
-                        undone = undone + amount
+                        if fromOwn then
+                            visit.ownGold = math.max(0, (visit.ownGold or 0) - amount)
+                        else
+                            visit.gold[bucket] = math.max(0, visit.gold[bucket] - amount)
+                            undone = undone + amount
+                        end
                         self:Log(("%.0f came back to %s, not counted"):format(amount, event.key))
 
                         -- The sale is set aside rather than forgotten. With
