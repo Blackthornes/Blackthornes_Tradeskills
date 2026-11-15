@@ -507,6 +507,32 @@ Take(1)
 check("gold spent at the mailbox is left out",         MailHaul:Current().total, 2000)
 Close()
 
+-- Gold one of your own characters mailed you was yours already, so the
+-- purse going up by it is not money made (a player's report, 2026-11-15).
+local hadGoldLog = ns.GoldLog
+ns.GoldLog = { IsOwnCharacter = function(_, name) return name == "Alt Surname" end }
+inbox = {
+    { sender = "Alt Surname", subject = "gold for you", money = 50000 },
+    { sender = "Friend Person", subject = "thanks", money = 700 },
+    Sold("Linen Bag", 3000),
+}
+Open()
+purse = purse + 50000
+Take(1)
+check("gold from your own alt is not counted",         MailHaul:Current().total, 0)
+check("nor put under other mail",                      MailHaul:Current().gold.other, 0)
+purse = purse + 700
+Take(1)
+purse = purse + 3000
+Take(1)
+local altHaul = Close()
+check("the rest still counts",                         altHaul.total, 3700)
+check("a friend's gold is still other mail",           altHaul.gold.other, 700)
+check("and the sale is still a sale",                  altHaul.gold.sold, 3000)
+
+-- Put the gold log back as the other checks expect it.
+ns.GoldLog = hadGoldLog
+
 -- A look-alike moving into view after the first sale's gold reached the
 -- purse is a new mail. Taking it too is a second sale, not the first again.
 inbox = { Sold("Runecloth Bag", 90000), Sold("Linen Bag", 1000) }
