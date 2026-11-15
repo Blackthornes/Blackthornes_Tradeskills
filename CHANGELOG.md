@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.30.1
+
+For WoW: Forever (interface 16001). `/reload` is enough.
+
+- **Mail between your own characters is not profit.** Gold you mail from one of your characters to another no longer counts as income in the mailbox report.
+- **Writ hand-in spots show right away.** When the addon learns where a writ is handed in, the writ list redraws at once instead of waiting.
+- **Snipe Buy no longer sticks on "asking".** A stack buy now finishes instead of hanging.
+
 ## 1.30.0
 
 For WoW: Forever (interface 16001). A full restart is needed after updating, because files were added.
