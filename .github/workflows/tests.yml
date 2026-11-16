@@ -47,6 +47,9 @@ jobs:
       - name: Vendor and trainer spots fold in from a save
         run: python tools/test_forever_vendor_spots.py
 
+      - name: Classic recipes are put right from the client's tables
+        run: python tools/test_forever_recipes.py
+
       - name: Where writs are handed in folds in from a save
         run: python tools/test_forever_writ_customers.py
 
