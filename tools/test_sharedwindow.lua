@@ -32,7 +32,9 @@
 --      window keeps where it was dragged; Set Default puts every one back.
 --  13. The free side: it docks on the right when that fits, on the left
 --      when only that fits, and shrinks to the bigger gap when neither
---      does (never under the smallest size); undocked it has its own size.
+--      does (a little only; with far too little room it keeps its size and
+--      overlaps; once resized by hand it never shrinks); undocked it has
+--      its own size.
 --  15. Shelves: pieces in their first spot line up down the top shelf in
 --      order, a dragged or hidden one takes no room, the ones after it are
 --      laid again when one shows, hides or changes height, the right shelf
@@ -469,15 +471,45 @@ do
     MerchantFrame.left, MerchantFrame.right = 2000, 2300
     UIParent.width = 2350
     assert(SW.Keep() and frame.point[4] == 2000 - w - SW.DOCK_GAP, "room on the left only: the left")
+    -- A little short on both sides: a little smaller, on the right.
+    local gap = math.floor(w * 0.95)
+    MerchantFrame.left, MerchantFrame.right = gap, gap + 300
+    UIParent.width = 2 * gap + 300
+    assert(SW.Keep() and math.abs(frame.point[4] - ((gap + 300) * own / frame.scale + SW.DOCK_GAP)) < 1e-6,
+        "neither fits: the right, the bigger gap on a tie")
+    assert(frame.scale < own and frame.scale >= own * SW.SHRINK_LEAST - 1e-9, "shrunk a little to fit")
+    -- Far too little room: it keeps its size and stays on the screen.
     MerchantFrame.left, MerchantFrame.right = 300, 600
     UIParent.width = 900
-    assert(SW.Keep() and math.abs(frame.point[4] - (600 * own / frame.scale + SW.DOCK_GAP)) < 1e-6,
-        "neither fits: the right, the bigger gap on a tie")
-    assert(frame.scale < own and frame.scale >= SW.SCALE_MIN / 100, "shrunk to fit, not under the smallest size")
-    MerchantFrame.left, MerchantFrame.right = 20, 40
-    UIParent.width = 60
     SW.Keep()
-    assert(math.abs(frame.scale - SW.SCALE_MIN / 100) < 1e-9, "never under the smallest size")
+    assert(frame.scale == own, "never shrunk out of reading: it keeps its size")
+    -- (The stand-in frames give an effective scale of 1.)
+    assert(frame.point[4] >= 0 and frame.point[4] + w <= 900 + 1e-6, "and stays on the screen")
+    -- Resized by hand while docked: that size wins, even with no room.
+    MerchantFrame.left, MerchantFrame.right = gap, gap + 300
+    UIParent.width = 2 * gap + 300
+    SW.Keep()
+    assert(frame.scale < own, "shrunk a little before the grip")
+    local shrunk = frame.scale
+    local grip = frame.grip
+    -- Grabbing the grip starts from the saved size, not the shrunk one.
+    local savedCursor = GetCursorPosition
+    GetCursorPosition = function() return 500, 500 end
+    grip.scripts.OnMouseDown(grip, "LeftButton")
+    grip.scripts.OnUpdate(grip)
+    grip.scripts.OnMouseUp(grip)
+    GetCursorPosition = savedCursor
+    assert(dbA.oneWindowScale == own * 100 and frame.scale == own,
+        "a grab with no move keeps the saved size and shows it")
+    SW.Undock()
+    SW.Dock()
+    assert(frame.scale < own, "shrunk a little again on a fresh dock")
+    grip.scripts.OnClick(grip, "RightButton")
+    assert(dbA.oneWindowScale == 100 and frame.scale == 1, "the grip's size is kept, not the shrunk one")
+    dbA.oneWindowScale = own * 100
+    SW.Dock(true)
+    assert(frame.scale == own and shrunk < own, "after the grip it no longer shrinks")
+    SW.Undock()
     UIParent.width = 5000
     assert(SW.Keep() and frame.scale == own, "room again: its own size")
     MerchantFrame.left, MerchantFrame.right = 1000, 1300
