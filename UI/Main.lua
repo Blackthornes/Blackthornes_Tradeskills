@@ -382,7 +382,7 @@ function UI:BuildTabs()
     -- the craft pane as its Crafting tab, or the mail list as its Mail tab.
     self.dockStrips, self.dockContainers = {}, {}
     for place, dock in pairs(UI.DOCK_TABS) do
-        local defs = { { key = dock.key, text = L[dock.text] } }
+        local defs = { { key = dock.key, text = dock.text } }
         for _, key in ipairs(dock.tabs) do
             local tab = self.tabs[key]
             if tab then defs[#defs + 1] = { key = key, text = tab.text, right = key == "settings" } end
@@ -398,7 +398,7 @@ function UI:BuildTabs()
         holder:SetPoint("BOTTOMRIGHT", -1, 1)
         holder:Hide()
         self.dockContainers[place] = holder
-        self.tabs[dock.key] = { key = dock.key, text = L[dock.text], container = holder }
+        self.tabs[dock.key] = { key = dock.key, text = dock.text, container = holder }
     end
 end
 
@@ -407,9 +407,9 @@ end
 -- helps there, Settings last. `panel` names the module that moves in
 -- (its IntoOne and OutOfOne). The tab names wait for the owner's yes.
 UI.DOCK_TABS = {
-    profession = { key = "crafting", text = "Crafting", panel = "CraftPanel",
+    profession = { key = "crafting", text = L["Crafting"], panel = "CraftPanel",
         tabs = { "queue", "profit", "prices", "settings" } },
-    mail = { key = "mail", text = "Mail", panel = "QueueMailPanel",
+    mail = { key = "mail", text = L["Mail"], panel = "QueueMailPanel",
         tabs = { "queue", "prices", "settings" } },
 }
 
