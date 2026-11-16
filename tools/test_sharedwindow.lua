@@ -37,6 +37,8 @@
 --      order, a dragged or hidden one takes no room, the ones after it are
 --      laid again when one shows, hides or changes height, the right shelf
 --      stands left of the game's quest list, and nothing moves in a fight.
+--  16. The gear at the foot of the rail shows once an addon has the All
+--      Addons page and opens it there, on the addon showing when it can.
 --  14. Two game windows at once (the character sheet at a vendor, heard by
 --      HookScript): it docks beside the newest and goes back beside the
 --      other when that one closes.
@@ -576,6 +578,28 @@ do
     local _, rx3 = SW.ShelfSpot("travel.test")
     assert(rx3 == SW.SHELVES.right.x, "quest list hidden: in from the edge")
     BlackthornesShelves.pieces = {}
+end
+
+-- 16. The gear.
+do
+    SW.FillRail()
+    assert(not rawget(frame.rail, "gear") or not frame.rail.gear:IsShown(), "no gear while no addon has the page")
+    local opened = {}
+    b.allAddons = function() opened[#opened + 1] = "beta" end
+    c.allAddons = function() opened[#opened + 1] = "gamma" end
+    SW.FillRail()
+    local gear = rawget(frame.rail, "gear")
+    assert(gear and gear:IsShown() and gear.point[1] == "BOTTOM", "the gear at the foot of the rail")
+    SW.Open("gamma")
+    gear.scripts.OnClick(gear, "LeftButton")
+    assert(opened[#opened] == "gamma", "opened on the addon showing")
+    SW.Open("alpha")
+    gear.scripts.OnClick(gear, "LeftButton")
+    assert(opened[#opened] == "beta", "else the first that has it")
+    b.allAddons, c.allAddons = nil, nil
+    SW.FillRail()
+    assert(not gear:IsShown(), "gone again with the page")
+    SW.Open("gamma")
 end
 
 SW.SetOn(false)

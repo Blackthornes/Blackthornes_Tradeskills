@@ -52,6 +52,11 @@ local FILE_VERSION = 8
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
+-- The words through the addon's translation table where it has one.
+local L = ns.L or setmetatable({}, { __index = function(_, key) return key end })
+-- The gear at the foot of the rail: the settings every Blackthornes addon
+-- shares, shown once (2026-11-16, the owner said build it).
+SharedWindow.GEAR_ICON = [[Interface\Icons\INV_Misc_Gear_01]]
 SharedWindow.RAIL_WIDTH = 84
 SharedWindow.RAIL_BUTTON = 76
 SharedWindow.WIDTH = 860
@@ -659,6 +664,70 @@ function SharedWindow.FillRail()
         step = step + size + (docked and 6 or 4)
     end
     for index = #list + 1, #rail.buttons do rail.buttons[index]:Hide() end
+    SharedWindow.PlaceGear(rail, docked, size, icon, step)
+end
+
+--- The addon whose Settings show the All Addons page: the one showing now
+--- when it can, else the first on the rail that can.
+function SharedWindow.AllAddonsEntry()
+    if hub.current and type(hub.current.allAddons) == "function" then return hub.current end
+    for _, entry in ipairs(SharedWindow.Entries()) do
+        if type(entry.allAddons) == "function" then return entry end
+    end
+    return nil
+end
+
+--- Open the settings every Blackthornes addon shares.
+function SharedWindow.OpenAllAddons()
+    local entry = SharedWindow.AllAddonsEntry()
+    if not entry then return false end
+    if hub.current ~= entry and SharedWindow.On() then SharedWindow.Pick(entry.key) end
+    return pcall(entry.allAddons)
+end
+
+--- The gear: at the foot of the rail, or the end of the row when docked.
+--- Shown while any addon has the All Addons page.
+function SharedWindow.PlaceGear(rail, docked, size, icon, step)
+    local gear = rawget(rail, "gear")
+    if not SharedWindow.AllAddonsEntry() then
+        if gear then gear:Hide() end
+        return
+    end
+    if not gear then
+        gear = MakeButton(rail, 0)
+        gear.gear = true
+        gear:SetScript("OnClick", function() SharedWindow.OpenAllAddons() end)
+        gear:SetScript("OnEnter", function(self)
+            PaintButton(self, true)
+            local tip = rawget(_G, "GameTooltip")
+            if hub.docked and tip then
+                pcall(function()
+                    tip:SetOwner(self, "ANCHOR_BOTTOM")
+                    tip:SetText(L["All Addons"])
+                    tip:Show()
+                end)
+            end
+        end)
+        rail.gear = gear
+    end
+    gear.entry = nil
+    gear:SetSize(size, size)
+    gear.icon:SetSize(icon, icon)
+    gear.icon:ClearAllPoints()
+    gear.icon:SetTexture(SharedWindow.GEAR_ICON)
+    gear.name:SetText(L["All Addons"])
+    gear:ClearAllPoints()
+    if docked then
+        gear.icon:SetPoint("CENTER")
+        gear.name:Hide()
+        gear:SetPoint("LEFT", rail, "LEFT", step, 0)
+    else
+        gear.icon:SetPoint("TOP", 0, -10)
+        gear.name:Show()
+        gear:SetPoint("BOTTOM", rail, "BOTTOM", 0, 0)
+    end
+    PaintButton(gear, false)
+    gear:Show()
 end
 
 --------------------------------------------------------------------------------

@@ -52,6 +52,10 @@ local PAGES = {
       tip = L["Your other account and guild prices"] },
     { key = "data", text = L["DATA"],
       tip = L["What is saved and clearing old prices"] },
+    -- The settings every Blackthornes addon shares (2026-11-16): reached
+    -- by the one window's gear while One Window is on, so it is left off
+    -- the switch then; on the switch while each addon has its own window.
+    { key = "all", text = L["All Addons"] },
     { key = "general", text = L["GENERAL"],
       tip = L["Window position, text size and What's New"] },
     { key = "about", text = L["ABOUT"],
@@ -331,19 +335,31 @@ local function PaintSwitch()
     end
 end
 
---- Lay the switch out left to right, each part as wide as its name.
+--- True while the one window is on: All Addons is behind its gear then.
+local function AllAddonsHidden()
+    local tabs = ns.TSTabs
+    local One = tabs and tabs.One and tabs.One()
+    return One ~= nil and One.On() == true
+end
+
+--- Lay the switch out left to right, each part as wide as its name. All
+--- Addons is left off while the one window is on (its gear opens it).
 local function LayoutSwitch()
     local previous
     for _, part in ipairs(widgets.switch or {}) do
-        local width = Theme.TextWidth and Theme.TextWidth(part.label)
-        part.button:SetWidth((type(width) == "number" and width or 100) + 4)
-        part.button:ClearAllPoints()
-        if previous then
-            part.button:SetPoint("LEFT", previous, "RIGHT", 22, 0)
-        else
-            part.button:SetPoint("LEFT", widgets.bar, "LEFT", COLUMN_ONE_X, 0)
+        local hidden = part.key == "all" and AllAddonsHidden()
+        part.button:SetShown(not hidden)
+        if not hidden then
+            local width = Theme.TextWidth and Theme.TextWidth(part.label)
+            part.button:SetWidth((type(width) == "number" and width or 100) + 4)
+            part.button:ClearAllPoints()
+            if previous then
+                part.button:SetPoint("LEFT", previous, "RIGHT", 22, 0)
+            else
+                part.button:SetPoint("LEFT", widgets.bar, "LEFT", COLUMN_ONE_X, 0)
+            end
+            previous = part.button
         end
-        previous = part.button
     end
 end
 
@@ -447,9 +463,11 @@ local function BuildBar(outer)
         button:SetScript("OnEnter", function(self)
             part.hovered = true
             PaintSwitch()
-            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-            GameTooltip:SetText(definition.tip, 1, 1, 1, 1, true)
-            GameTooltip:Show()
+            if definition.tip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+                GameTooltip:SetText(definition.tip, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
         end)
         button:SetScript("OnLeave", function()
             part.hovered = false
@@ -1587,13 +1605,16 @@ local function Build(outer)
     end, false)
     widgets.openWithShops:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    -- The General page (2026-10-29): the same WINDOWS and ADDONS sections
-    -- in every Blackthornes addon, then the sounds.
+    -- All Addons: the rows every Blackthornes addon shares, shown once in
+    -- the one window behind its gear (the owner said build it,
+    -- 2026-11-16). General keeps Tradeskills' own: Window Size and the
+    -- sounds. No setting was renamed and no saved choice changed.
+    CreateSection(pages.all, 1, L["ALL BLACKTHORNES ADDONS"])
     CreateSection(pages.general, 1, L["WINDOWS"])
     -- Asked 2026-10-10: the game's own look for players who would rather
     -- the windows matched the rest of their screen. Read at login, so it
     -- waits for /reload as Text size does. See UI/BlizzardLook.lua.
-    local styleRow = CreateRow(pages.general, 1, L["Window Style:"])
+    local styleRow = CreateRow(pages.all, 1, L["Window Style:"])
 
     widgets.windowStyle = Widgets.CreateDropdown(styleRow, {
         { text = "Titanforged", value = "titanforged" },
@@ -1614,7 +1635,7 @@ local function Build(outer)
 
     -- Asked 2026-10-07 ("I'm getting old"): bigger letters in the same
     -- window. Every size is read as text is drawn, so it waits for /reload.
-    local textRow = CreateRow(pages.general, 1, L["Text Size:"])
+    local textRow = CreateRow(pages.all, 1, L["Text Size:"])
 
     widgets.textSize = Widgets.CreateDropdown(textRow, {
         { text = L["Normal"], value = "normal" },
@@ -1646,7 +1667,7 @@ local function Build(outer)
     end, { width = 150 })
     widgets.windowSize:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    local effectsRow = CreateRow(pages.general, 1, L["Effects:"])
+    local effectsRow = CreateRow(pages.all, 1, L["Effects:"])
 
     widgets.effects = Widgets.CreateDropdown(effectsRow, {
         { text = L["Full"], value = "full" },
@@ -1661,7 +1682,7 @@ local function Build(outer)
 
     -- A player asked (2026-10-28): one minimap button for every Blackthornes
     -- addon loaded. Ticked unless unticked; see UI/SharedMinimap.lua.
-    local combineRow = CreateRow(pages.general, 1, L["Combine Addon Buttons:"])
+    local combineRow = CreateRow(pages.all, 1, L["Combine Addon Buttons:"])
     widgets.combineButtons = Widgets.CreateCheckbox(combineRow, L["On"], function(checked)
         if ns.SharedMinimap then ns.SharedMinimap.SetCombined(checked) end
     end, true)
@@ -1669,16 +1690,15 @@ local function Build(outer)
 
     -- The one Blackthornes window (the owner, 2026-10-30): every addon's tabs
     -- in one window with a rail. Ticked unless unticked; see UI/SharedWindow.lua.
-    local oneRow = CreateRow(pages.general, 1, L["One Window:"])
+    local oneRow = CreateRow(pages.all, 1, L["One Window:"])
     widgets.oneWindow = Widgets.CreateCheckbox(oneRow, L["On"], function(checked)
         if ns.TSTabs then ns.TSTabs:SetOneWindow(checked) end
     end, true)
     widgets.oneWindow:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    CreateSection(pages.general, 1, L["ADDONS"])
     -- Core/SisterNote.lua: one chat line, once, naming the Blackthornes
     -- addons the player does not have. Off here is off in all of them.
-    local sistersRow = CreateRow(pages.general, 1, L["Sister Addons:"],
+    local sistersRow = CreateRow(pages.all, 1, L["Sister Addons:"],
         L["Says once in chat which Blackthornes addons you don't have."])
 
     widgets.sisters = Widgets.CreateCheckbox(sistersRow, L["On"], function(checked)
@@ -1688,25 +1708,28 @@ local function Build(outer)
 
     -- UI/WhatsNew.lua: one window after an update for every Blackthornes
     -- addon. Off here is off in all of them, as the sister note is.
-    local whatsNewRow = CreateRow(pages.general, 1, L["What's New:"])
+    CreateSection(pages.all, 2, L["WHAT'S NEW"])
+    local whatsNewRow = CreateRow(pages.all, 2, L["What's New:"])
     widgets.whatsnew = Widgets.CreateButton(whatsNewRow, L["Open"], function()
         ns.WhatsNew:Toggle()
     end, { width = 60, height = 20 })
     FitButton(widgets.whatsnew)
     widgets.whatsnew:SetPoint("TOPLEFT", CONTROL_X, 0)
 
-    local whatsNewPopupRow = CreateRow(pages.general, 1, L["What's New After Updates:"],
+    -- One drop-down for the two What's New boxes: Off, Show, or Show With
+    -- Motion, over the same two saved choices (Off leaves motion as it was).
+    local afterRow = CreateRow(pages.all, 2, L["After Updates:"],
         L["Opens What's New the first time you play after an update."])
-    widgets.whatsNewPopup = Widgets.CreateCheckbox(whatsNewPopupRow, L["On"], function(checked)
-        ns.WhatsNew:SetOn(checked)
-    end, true)
-    widgets.whatsNewPopup:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local whatsNewMotionRow = CreateRow(pages.general, 1, L["What's New Motion:"])
-    widgets.whatsNewMotion = Widgets.CreateCheckbox(whatsNewMotionRow, L["On"], function(checked)
-        ns.WhatsNew:SetMotionOn(checked)
-    end, true)
-    widgets.whatsNewMotion:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.whatsNewAfter = Widgets.CreateDropdown(afterRow, {
+        { text = L["Off"], value = "off" },
+        { text = L["Show"], value = "show" },
+        { text = L["Show With Motion"], value = "motion" },
+    }, function(value)
+        if not ns.WhatsNew then return end
+        ns.WhatsNew:SetOn(value ~= "off")
+        if value ~= "off" then ns.WhatsNew:SetMotionOn(value == "motion") end
+    end, { width = 170 })
+    widgets.whatsNewAfter:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     -- Every sound the addon plays, each with its own switch, all on to start
     -- with. The one sound not here is the warning that saved data failed to
@@ -1733,7 +1756,7 @@ local function Build(outer)
 
     -- One box quiets every sound every Blackthornes addon plays, this
     -- warning about saved data included (UI/SharedChoices.lua).
-    local muteRow = CreateRow(pages.general, 2, L["Mute All Sounds:"], nil)
+    local muteRow = CreateRow(pages.all, 1, L["Mute All Sounds:"], nil)
     widgets.muteSounds = Widgets.CreateCheckbox(muteRow, L["On"], function(checked)
         UI:SetMuteSounds(checked)
     end, false)
@@ -1941,7 +1964,7 @@ local function Build(outer)
     FitButton(goldPlace)
 
     -- A window dragged off the screen comes back (a player's report, 2026-11-11).
-    local windowPlacesRow = CreateRow(pages.look, 2, L["Window Spots:"],
+    local windowPlacesRow = CreateRow(pages.all, 1, L["Window Spots:"],
         L["Puts every Blackthornes window back where it started. Your settings and data stay the same."])
     local windowPlaces = Widgets.CreateButton(windowPlacesRow, L["Set Default"], function()
         UI:ResetAllWindows()
@@ -2558,6 +2581,9 @@ local function Refresh()
 
     RefreshIgnored()
 
+    -- One Window may have been ticked or unticked since: All Addons comes
+    -- off or back on the switch.
+    LayoutSwitch()
     if widgets.shownPage ~= CurrentPage() then ShowPage(CurrentPage()) end
 
     if widgets.paintHiddenColumns then widgets.paintHiddenColumns() end
@@ -2655,8 +2681,10 @@ local function Refresh()
     widgets.upgradeArrows:SetChecked(Config:Get("showUpgradeArrows") ~= false)
     widgets.sisters:SetChecked(ns.SisterNote:IsOn())
     if ns.WhatsNew then
-        widgets.whatsNewPopup:SetChecked(ns.WhatsNew:IsOn())
-        widgets.whatsNewMotion:SetChecked(ns.WhatsNew:IsMotionOn())
+        local after = "show"
+        if not ns.WhatsNew:IsOn() then after = "off"
+        elseif ns.WhatsNew:IsMotionOn() then after = "motion" end
+        widgets.whatsNewAfter:SetValue(after)
     end
     ShowShiftMode(widgets.recipeTooltips)
     ShowShiftMode(widgets.enchantTooltips)
@@ -2967,4 +2995,16 @@ if ns.SharedChoices then
         if not ns.db or not ns.db.settings then return nil end
         return ns.db.settings.muteSounds == true, ns.db.settings.muteSoundsAt
     end)
+end
+
+--- Settings on the All Addons page (the one window's gear): the page is
+--- saved as the one to show, then the Settings tab opens on it.
+function UI:OpenAllAddons()
+    ns.Config:Set("settingsPage", "all")
+    if self.window and self.window:IsShown() and self.activeTab == "settings" then
+        if pages.all then ShowPage("all") end
+        return
+    end
+    self:OpenSettings()
+    if pages.all and widgets.bar then ShowPage("all") end
 end

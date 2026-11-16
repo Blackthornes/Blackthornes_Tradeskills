@@ -2179,6 +2179,8 @@ function UI:JoinSharedMinimap()
             key = "tradeskills", order = 2, name = "Tradeskills", icon = [[Interface\Icons\Trade_BlackSmithing]],
             open = function() UI:Toggle() end,
             settings = function() UI:OpenSettings() end,
+            -- The settings every Blackthornes addon shares (the rail's gear).
+            allAddons = function() UI:OpenAllAddons() end,
             db = function() return ns.db end,
             host = TSTabs.host,
         })
