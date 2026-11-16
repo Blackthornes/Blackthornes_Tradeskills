@@ -8,7 +8,10 @@ the top; a release is refused if its version has no section here.
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
 
-- **Fixes.** Various bug fixes for Tradeskills.
+- **Suffix gear prices.** Tooltips for random suffix gear now show the price for that suffix.
+- **Road to 300.** Artisan Enchanting now shows where the trainer is inside Uldaman, with Show the Way.
+- **Import Prices.** Codes from your other account on the same realm now import.
+- **Artisan crates.** Crates show their favor and silver.
 
 ## 1.31.0
 

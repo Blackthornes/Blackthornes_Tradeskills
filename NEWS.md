@@ -26,7 +26,10 @@ tool prints a note for a shipped line that reads like an advert.
 ## 1.31.1
 
 Fixes and changes:
-- Various bug fixes for Tradeskills.
+- Tooltips for random suffix gear show the price for that suffix.
+- Road to 300 shows where the Artisan Enchanting trainer is, with Show the Way.
+- Import Prices works between your own accounts on the same realm.
+- Artisan crates show their favor and silver.
 
 ## 1.31.0
 
