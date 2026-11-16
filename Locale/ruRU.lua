@@ -461,7 +461,6 @@ L["the auction house took one at a time, so the rest go up one per click."] = "�
 L["listed %s"] = "выставлено: %s"
 L["%s: you have %d listed now. This was the first check since the auction house opened, so the new listing could not be told apart from older ones."] = "%s: сейчас у тебя выставлено %d. Это первая проверка с открытия аукциона, поэтому новый лот не отличить от старых."
 L["%s did not appear in your auctions."] = "%s не появился в твоих аукционах."
-L["It had copper in its price, so the next click lists it in whole silver."] = "В цене была медь, поэтому следующий клик выставит его в целых серебряных."
 L["listing several at once may not work here, so the next click lists one."] = "выставлять несколько сразу здесь может не получиться, поэтому следующее нажатие выставит один."
 L["the auction house may be refusing listings; try Blizzard's own Sell tab."] = "аукцион, возможно, отказывает в лотах; попробуй собственную вкладку Blizzard «Продажа»."
 L["could not tell whether that listing went up. Check your Auctions tab"] = "не удалось понять, выставился ли лот. Загляни на свою вкладку аукционов"
