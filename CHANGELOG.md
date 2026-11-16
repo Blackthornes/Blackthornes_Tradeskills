@@ -4,6 +4,12 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.30.2
+
+For WoW: Forever (interface 16001). `/reload` is enough.
+
+- **Recipe materials and skills match the game.** Recipe amounts and professions now come from the game's own tables, so more recipes show the right materials.
+
 ## 1.30.1
 
 For WoW: Forever (interface 16001). `/reload` is enough.
