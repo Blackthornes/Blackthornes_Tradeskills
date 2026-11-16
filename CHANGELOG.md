@@ -4,6 +4,20 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.31.0
+
+For WoW: Forever (interface 16001). `/reload` is not enough: a file was added, so close the game fully and start it again after updating.
+
+- **Crate Shopping List.** A new Crate Shopping List: box on the Auction House page of Settings adds a Waylaid Crates group to the Buy tab of the auction house drawer. It lists the cheapest bundle to buy for each crate in your bags, adds up crates that need the same material and takes off what you have. Groups fold and sort by item, amount or cost. It starts off.
+- **Crafting and Mail tabs.** With One Window on, the craft pane shows as a Crafting tab beside the profession window, and the mail list shows as a Mail tab at the mailbox while it has something on it.
+- **Slim craft strip.** When there is no room beside the profession window, a slim craft strip sits inside it instead.
+- **Queue page.** The Queue page of Settings groups its choices into Restocking, Sub-Crafts and Alts, and The List, with Stock From Sales and Raise When Sold Out in one box.
+- **Settings pages.** Settings has new Tooltips and Windows pages, with each row moved to the page where you would look for it.
+- **All Addons page.** The settings every Blackthornes addon shares (Window Style, Text Size, Effects, Mute All Sounds, Combine Addon Buttons, One Window, Window Spots, Sister Addons and What's New) now sit on one All Addons page, behind the gear on the one window's rail. The two What's New boxes became one After Updates: drop-down. Nothing was renamed and your choices carry over.
+- **One window docks in more places.** It sits on the free side of the game's window, shrinks only a little when there is no room, and lets you resize it by hand with the grip. Each addon keeps its own height when you switch between them.
+- **Shared shelves.** Small pieces you never dragged, such as arrows, bars and cards, line up on a top or right shelf instead of starting on one spot.
+- **Fixes.** Crate bundles that need more than one stack now count, because the game fills a crate from two stacks. The Skip bundles over a stack box on the Merchant's Favor view of the Deals tab is gone. Fixed the "invalid key to 'next'" error from the background worker. A long item name in the Your Time note wraps instead of running off its card.
+
 ## 1.30.3
 
 For WoW: Forever (interface 16001). `/reload` is enough.

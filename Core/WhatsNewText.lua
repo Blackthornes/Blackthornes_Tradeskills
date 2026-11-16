@@ -5,6 +5,13 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.31.0", lines = {
+        "There's a Crate Shopping List for Waylaid Crates on the auction house Buy tab. It starts off.",
+        "The craft pane and mail list can be tabs in the one window.",
+        "A slim craft strip sits inside the profession window when there's no room beside it.",
+        "The Queue page and Settings are sorted into clearer groups, with an All Addons page.",
+        "The window can dock in more places and you can resize it by hand.",
+    } },
     { version = "1.30.0", lines = {
         "The Sales tab has a new Bought view. It shows what you spent at the auction house, what you bought most, and what you paid each.",
     } },
@@ -15,11 +22,5 @@ ns.WHATS_NEW = {
         "You can pause crafts in the Queue, move them, and skip ones that need a tool.",
         "There is a new price box for gear that binds when worn, on the Sharing page.",
         "The game's profession window can show what a craft costs and earns. It starts off.",
-    } },
-    { version = "1.27.0", lines = {
-        "You can copy your recent auction prices to use on another computer, with new buttons on the Queue page.",
-        "You can pick which TSM price to use, on the Sharing page. It starts on the recent price.",
-        "You can keep disenchant lines out of chat with a new tick box on the Look page.",
-        "Snipe pays in one click when you buy.",
     } },
 }

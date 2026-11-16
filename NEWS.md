@@ -23,6 +23,18 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.31.0
+
+- There's a Crate Shopping List for Waylaid Crates on the auction house Buy tab. It starts off.
+- The craft pane and mail list can be tabs in the one window.
+- A slim craft strip sits inside the profession window when there's no room beside it.
+- The Queue page and Settings are sorted into clearer groups, with an All Addons page.
+- The window can dock in more places and you can resize it by hand.
+Fixes and changes:
+- Crate bundles over a stack now count.
+- Fixed an error from the background worker.
+- Long Your Time notes wrap.
+
 ## 1.30.3
 
 Fixes and changes:
