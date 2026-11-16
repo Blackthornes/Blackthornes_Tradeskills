@@ -255,6 +255,27 @@ do
     ns.Config.Get, Profit.LostListings = oldGet, oldLost
 end
 
+-- A player's report (2026-11-16): "A vendor pays more" showed while a known
+-- disenchant value beat the vendor. Breaking it pays more, so no vendor.
+do
+    local Profit = ns.Profit
+    local oldLost, oldDE, oldEach = Profit.LostListings, ns.Disenchant, Profit.LostDepositEach
+    Profit.LostListings = function() return 0 end
+    Profit.LostDepositEach = function() return 5 end
+    local deValue = 662
+    ns.Disenchant = { GetValue = function() return deValue end }
+    check("a disenchant worth more than the vendor keeps it off the vendor",
+        Posting.VendorPaysMore(1, 800, 659), false)
+    deValue = 50
+    check("a disenchant worth less still lets the vendor win",
+        Posting.VendorPaysMore(1, 100, 92), true)
+    deValue = nil
+    check("no disenchant value changes nothing", Posting.VendorPaysMore(1, 100, 92), true)
+    ns.Disenchant = { GetValue = function() error("boom") end }
+    check("a disenchant error changes nothing", Posting.VendorPaysMore(1, 100, 92), true)
+    Profit.LostListings, ns.Disenchant, Profit.LostDepositEach = oldLost, oldDE, oldEach
+end
+
 print("")
 
 if failures > 0 then
