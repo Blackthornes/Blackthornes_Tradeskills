@@ -48,7 +48,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 8
+local FILE_VERSION = 9
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -70,6 +70,14 @@ SharedWindow.ROW_HEIGHT = 40
 SharedWindow.ROW_BUTTON = 34
 SharedWindow.ROW_ICON = 26
 SharedWindow.DOCK_GAP = 6
+-- Docked with no room on either side, the window may shrink to this share
+-- of the player's own size and no smaller; past that it keeps its size and
+-- sits over the game's window's edge instead (2026-11-16: it had shrunk
+-- too small to read beside the auction house).
+SharedWindow.SHRINK_LEAST = 0.85
+-- And never under this size in percent (the grip's 100 is the normal size),
+-- whatever the player's own: other docked pieces read it too.
+SharedWindow.DOCK_SCALE_MIN = 75
 -- How often, while a game window is open, the window looks that it still
 -- sits beside it.
 SharedWindow.KEEP_EVERY = 0.2
@@ -404,7 +412,8 @@ local function MakeGrip(frame)
         end
         WriteAll("oneWindowScale", percent)
         SharedWindow.Fit(frame)
-        if hub.docked then SharedWindow.Dock(true) else SavePlace(frame) end
+        -- A size picked by hand wins: docked, it no longer shrinks to fit.
+        if hub.docked then hub.sized = true; SharedWindow.Dock(true) else SavePlace(frame) end
     end
     grip:SetScript("OnEnter", function() Light(true) end)
     grip:SetScript("OnLeave", function() if not grip.dragging then Light(false) end end)
@@ -413,7 +422,9 @@ local function MakeGrip(frame)
         if mouseButton ~= "LeftButton" then return end
         self.dragging = true
         local startX = GetCursorPosition()
-        local startScale = Clamp((frame:GetScale() or 1) * 100)
+        -- From the saved size, not the size shown: docked, it may be
+        -- shrunk to fit, and starting there would save the shrunk size.
+        local startScale = Clamp(Read("oneWindowScale"))
         local width = SharedWindow.WIDTH
         self:SetScript("OnUpdate", function()
             local x = GetCursorPosition()
@@ -865,9 +876,11 @@ end
 --- takes there (2026-11-16, the owner said build it): the right when it
 --- fits, as before; else the left when that fits (bags open on the
 --- right); else the side with more room, scaled down to fit the gap, never
---- under SCALE_MIN. All in screen pixels. Gives side ("right" or "left")
+--- under SHRINK_LEAST of its own size (it keeps its size and overlaps
+--- then). Once resized by hand while docked it never shrinks (`sized`).
+--- All in screen pixels. Gives side ("right" or "left")
 --- and the effective scale to use.
-function SharedWindow.PickSide(gameLeft, gameRight, width, ours, reach, screen)
+function SharedWindow.PickSide(gameLeft, gameRight, width, ours, reach, screen, sized)
     reach = reach or 0
     local need = (width + reach) * ours + SharedWindow.DOCK_GAP
     if not screen or type(gameLeft) ~= "number" then return "right", ours end
@@ -876,11 +889,14 @@ function SharedWindow.PickSide(gameLeft, gameRight, width, ours, reach, screen)
     if rightRoom >= need then return "right", ours end
     if leftRoom >= need then return "left", ours end
     local side = leftRoom > rightRoom and "left" or "right"
+    if sized then return side, ours end
     local room = math.max(leftRoom, rightRoom) - SharedWindow.DOCK_GAP
     local fit = room / (width + reach)
-    -- Never smaller than the size grip's smallest size.
-    local least = ours * SharedWindow.SCALE_MIN / Clamp(Read("oneWindowScale"))
-    if fit < least then fit = least end
+    -- Never much smaller than the player's own size: when it would be,
+    -- it keeps its size and overlaps rather than shrink out of reading.
+    local least = math.max(ours * SharedWindow.SHRINK_LEAST,
+        ours * SharedWindow.DOCK_SCALE_MIN / Clamp(Read("oneWindowScale")))
+    if fit < least then return side, ours end
     if fit > ours then fit = ours end
     return side, fit
 end
@@ -918,7 +934,7 @@ local function Beside(frame, game)
     local side, fit = "right", ours
     if type(width) == "number" and width > 0 then
         side, fit = SharedWindow.PickSide(type(left) == "number" and left * scale or nil,
-            right * scale, width, ours, reach, RightEdge(right * scale, ScreenWidth()))
+            right * scale, width, ours, reach, RightEdge(right * scale, ScreenWidth()), hub.sized)
     end
     if fit < ours then
         local okScale, own = pcall(frame.GetScale, frame)
@@ -931,8 +947,15 @@ local function Beside(frame, game)
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
             math.max(0, left * scale / ours - width - reach - SharedWindow.DOCK_GAP / ours), top * scale / ours)
     else
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT",
-            right * scale / ours + reach + SharedWindow.DOCK_GAP, top * scale / ours)
+        local x = right * scale / ours + reach + SharedWindow.DOCK_GAP
+        -- Too wide for the gap: slide back over the game's window, never
+        -- off the screen's right edge.
+        local screen = ScreenWidth()
+        if screen and type(width) == "number" then
+            local last = screen / ours - width
+            if x > last then x = math.max(0, last) end
+        end
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, top * scale / ours)
     end
     return true
 end
@@ -1137,6 +1160,7 @@ function SharedWindow.Undock()
     if not (frame and hub.docked) then return end
     hub.docked = false
     hub.spot = nil
+    hub.sized = nil
     local row = hub.row ~= false
     hub.row = nil
     local width, height = SharedWindow.FullSize(frame)
