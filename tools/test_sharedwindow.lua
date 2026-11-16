@@ -514,6 +514,7 @@ end
 
 -- 15. Shelves.
 do
+    BlackthornesShelves.pieces = {}
     UIParent.width = 1000
     local function Piece(h)
         local f = Object()

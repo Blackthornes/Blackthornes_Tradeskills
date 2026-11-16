@@ -1206,7 +1206,7 @@ SharedWindow.SHELVES = {
 SharedWindow.SHELF_ORDER = {
     goldbar = 10, arrow = 20, xpbar = 30, shards = 40, sellmarked = 50, mailtally = 55,
     goldgoal = 60, upgrade = 70, notice = 90,
-    auctions = 10, travel = 20,
+    auctions = 10, travel = 20, upgrades = 30, upgradequest = 40,
 }
 -- The game's quest list, read only: the right shelf stands left of it.
 SharedWindow.QUEST_LIST = { "ObjectiveTrackerFrame", "QuestWatchFrame", "WatchFrame" }
@@ -1326,6 +1326,25 @@ function SharedWindow.ShelfSpot(key)
     end
     local x = name == "right" and RightShelfX() or shelf.x
     return shelf.anchor, x, y
+end
+
+--- Join and stand at the shelf place in one call, for a piece's "no saved
+--- spot" branch. Gives true when placed. `piece.place` is what lays it
+--- again later (usually the piece's own restore, which comes back here).
+function SharedWindow.ShelfPlace(frame, key, piece)
+    if type(frame) ~= "table" or type(key) ~= "string" then return false end
+    piece = piece or {}
+    piece.frame = piece.frame or frame
+    SharedWindow.ShelfJoin(key, piece)
+    local point, x, y = SharedWindow.ShelfSpot(key)
+    local ok, scale = pcall(frame.GetEffectiveScale, frame)
+    if not (ok and type(scale) == "number" and scale > 0) then scale = ParentScale() end
+    scale = scale / ParentScale()
+    local placed = pcall(function()
+        frame:ClearAllPoints()
+        frame:SetPoint(point, UIParent, point, x / scale, y / scale)
+    end)
+    return placed
 end
 
 --- Something on a shelf came, went or changed height: lay again every

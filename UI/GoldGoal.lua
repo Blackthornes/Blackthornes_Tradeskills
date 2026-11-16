@@ -123,7 +123,17 @@ function GoldGoalUI:Place()
     if x and y then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
     else
-        frame:SetPoint("TOP", UIParent, "TOP", 0, -120 / scale)
+        -- Never dragged: the first place on the shared top shelf.
+        local sw = ns.SharedWindow
+        local placed = sw and sw.ShelfPlace and sw.ShelfPlace(frame, "goldbar.tradeskills", {
+            free = function()
+                return not (tonumber(ns.Config:Get("goldTrackerX")) and tonumber(ns.Config:Get("goldTrackerY")))
+            end,
+            place = function() GoldGoalUI:Place() end,
+        })
+        if not placed then
+            frame:SetPoint("TOP", UIParent, "TOP", 0, -120 / scale)
+        end
     end
 end
 

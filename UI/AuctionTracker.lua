@@ -117,7 +117,19 @@ function AuctionTrackerUI:Place()
     if x and y then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
     else
-        frame:SetPoint("RIGHT", UIParent, "RIGHT", -40 / scale, 60 / scale)
+        -- Never dragged: the first place on the shared right shelf, left
+        -- of the game's quest list.
+        local sw = ns.SharedWindow
+        local placed = sw and sw.ShelfPlace and sw.ShelfPlace(frame, "auctions.tradeskills", {
+            shelf = "right",
+            free = function()
+                return not (tonumber(Get("auctionTrackerX")) and tonumber(Get("auctionTrackerY")))
+            end,
+            place = function() AuctionTrackerUI:Place() end,
+        })
+        if not placed then
+            frame:SetPoint("RIGHT", UIParent, "RIGHT", -40 / scale, 60 / scale)
+        end
     end
 end
 

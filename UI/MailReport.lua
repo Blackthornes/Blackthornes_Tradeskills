@@ -947,7 +947,18 @@ local function PlaceTally(tally)
     if mailFrame and mailFrame.IsShown and mailFrame:IsShown() then
         tally:SetPoint("BOTTOMLEFT", mailFrame, "TOPLEFT", 0, 6)
     else
-        tally:SetPoint("TOP", UIParent, "TOP", 0, -140)
+        -- No game mailbox to sit on: the next free place on the top shelf.
+        local sw = ns.SharedWindow
+        local placed = sw and sw.ShelfPlace and sw.ShelfPlace(tally, "mailtally.tradeskills", {
+            free = function()
+                local mail = _G.MailFrame
+                return not (mail and mail.IsShown and mail:IsShown())
+            end,
+            place = function() PlaceTally(tally) end,
+        })
+        if not placed then
+            tally:SetPoint("TOP", UIParent, "TOP", 0, -140)
+        end
     end
 end
 
