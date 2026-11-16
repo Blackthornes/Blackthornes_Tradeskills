@@ -4,6 +4,16 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.30.3
+
+For WoW: Forever (interface 16001). `/reload` is enough.
+
+- **Prices match what a craft makes.** When one craft makes two or more, the Rival, Your Listing and Post prices in the Profit detail now say x2 (or x3), and hovering shows how many each craft makes.
+- **Forget Character and Clear Items work again.** Both buttons on the Characters tab no longer hit an error when you arm them.
+- **Vendor pays more is more careful.** An item stays off the Sell list when breaking it down is worth more. A lost deposit no longer makes a vendor look better than the auction house.
+- **Demand compares like with like.** Potions, food and bandages are rated against their own kind, so they no longer all read High.
+- **Gear posts keep exact copper.** A 0c undercut now matches a gear rival to the copper, and a copper undercut takes off just that copper. If a listing with copper fails to go up, the rest of the session lists gear in whole silver.
+
 ## 1.30.2
 
 For WoW: Forever (interface 16001). `/reload` is enough.
