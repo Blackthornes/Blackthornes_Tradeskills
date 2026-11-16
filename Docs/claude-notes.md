@@ -2220,3 +2220,15 @@ does once the login retries are over (`Recipes.loginSettled`, set by the
 pcall) names none of the saved ones (`Recipes.DroppedAll`). A wrong read
 mends itself: the next read with something learned brings them back. No
 new words. Tested in `tools/test_droppedprofession.lua`.
+
+## Demand within each item's kind
+
+A player asked (2026-11-16) why every potion read High; the owner said build
+it. A market High (`Demand.MarketLevel(share, itemID)`) now also needs the
+item to be in the top third of its own kind (`Demand.Kind`: consumables,
+gear, trade goods, other, from the item's class). The other old Highs read
+Some. Low, your own sales record and the queue's "rarely sells" warning are
+unchanged. The kinds' bars are worked out from the price table over frames
+(`Util.NewWorker`) when a scan finishes or the hour turns; a kind with fewer
+than 8 items read keeps the plain bar. No new player words. Tested in
+`tools/test_demand.lua`.
