@@ -1028,6 +1028,18 @@ local function Build(outer)
     end, false)
     widgets.neverBelowPaid:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The owner asked (2026-11-16): crafts list at the least that still
+    -- makes Minimum Profit when others sell for less (Logic/Profit.lua).
+    local minProfitPostRow = CreateRow(pages.pricing, 1, L["Post at Minimum Profit:"],
+        L["When others sell for less, your crafts list at the lowest price that still makes your Minimum Profit."])
+
+    widgets.postAtMinProfit = Widgets.CreateCheckbox(minProfitPostRow, L["On"], function(checked)
+        Config:Set("postAtMinProfit", checked)
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.postAtMinProfit:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Logic/SisterKeeps.lua (2026-10-16): what the other Blackthornes
     -- addons want kept stays off List all.
     local sisterKeepsRow = CreateRow(pages.pricing, 1, L["Keep What Other Addons Need:"],
@@ -2724,6 +2736,7 @@ local function Refresh()
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.ignoreDeposit:SetChecked(Config:Get("ignoreDeposit") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
+    widgets.postAtMinProfit:SetChecked(Config:Get("postAtMinProfit") == true)
     widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") == true)
     widgets.altKeeps:SetChecked(Config:Get("sellHoldsAltUpgrades") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)

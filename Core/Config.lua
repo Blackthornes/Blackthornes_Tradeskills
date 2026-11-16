@@ -149,6 +149,11 @@ local DEFAULTS = {
         -- value already saved is kept, so only new installs start with it.
         allowPostingAtALoss = true,
 
+        -- "Post at Minimum Profit:" (the owner, 2026-11-16): when others sell
+        -- a craft for less, list it at the least that still makes
+        -- minProfit (Profit:MinimumProfitPrice). Off unless ticked.
+        postAtMinProfit = false,
+
         -- The Snipe tab in the auction house drawer (2026-11-03). Off until
         -- ticked. Cap is copper per session, 0 until the player sets one.
         snipeTab = false,

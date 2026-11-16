@@ -240,6 +240,84 @@ local MATCH_BY_CHOICE = L["your Undercut By is set to 0c, so it matches the chea
 --- ChoosePostPrice from the auction house alone, before the player's own
 --- price is applied. Same returns.
 function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
+    local price, basis, why, uncertain = self:ChooseRivalPostPrice(itemID, knownCost, link)
+    local least, leastWhy = self:MinimumProfitPrice(itemID, price, basis)
+    if least then return least, "minprofit", leastWhy, uncertain end
+    return price, basis, why, uncertain
+end
+
+--------------------------------------------------------------------------------
+-- Post at Minimum Profit
+--------------------------------------------------------------------------------
+
+-- The owner asked (2026-11-16): when others sell a craft for less than it
+-- can earn, list it at the least that still makes the Minimum Profit
+-- instead of following them down. Off unless ticked (`postAtMinProfit`,
+-- never rename it). Only when a rival set the price (matched, undercut or
+-- overcut) and the craft's cost is known; the Prices tab and list prices
+-- still come first, since ChoosePostPrice applies them after this.
+Profit.RIVAL_BASES = { match = true, undercut = true, overcut = true }
+
+function Profit:PostAtMinimumProfit()
+    return ns.Config:Get("postAtMinProfit") == true
+end
+
+--- The lowest price one craft can list at and still earn `minProfit`
+--- (after the cut and the deposits ProfitAtPrice counts), rounded up to a
+--- price the auction takes. Nil when the recipe or its cost is unknown.
+function Profit:LeastProfitablePrice(itemID, minProfit)
+    if not itemID then return nil end
+    local recipeID = ns.Cost:FindAnyRecipeForItem(itemID)
+    local recipe = recipeID and ns.Recipes:GetAny(recipeID)
+    local cost = recipeID and ns.Cost:GetCraftCost(recipeID)
+    if not recipe or not cost or not cost.priceable then return nil end
+
+    local yield = cost.yield or 1
+    local keep = 1 - (ns.Config:Get("auctionCut") or 0.05)
+    if yield <= 0 or keep <= 0 then return nil end
+
+    -- Profit grows in a straight line with the price, so the break point
+    -- is worked out once, then nudged up past any rounding.
+    local zero = ProfitAtPrice(recipe, cost, 0)
+    if not zero then return nil end
+    local price = math.max(1, math.ceil(((minProfit or 0) - zero) / (yield * keep)))
+
+    local status
+    if ns.Scanner.GetCommodityStatus then
+        status = ns.Scanner:GetCommodityStatus(itemID)
+    else
+        status = ns.Scanner:IsCommodity(itemID)
+    end
+    local function Round(p)
+        if status == false then return Util.ItemAuctionPriceUp(p) end
+        return p
+    end
+    price = Round(price)
+    for _ = 1, 3 do
+        local profit = ProfitAtPrice(recipe, cost, price)
+        if not profit or profit >= (minProfit or 0) then break end
+        price = Round(price + 1)
+    end
+    return price
+end
+
+--- When Post at Minimum Profit is on and a rival's price leaves less than
+--- the Minimum Profit, the price to list at instead and why.
+-- @return price, why  -- nil when the rival's price is fine or it is off
+function Profit:MinimumProfitPrice(itemID, price, basis)
+    if not price or not Profit.RIVAL_BASES[basis] or not self:PostAtMinimumProfit() then return nil end
+    local minProfit = math.max(0, ns.Config:Get("minProfit") or 0)
+    local least = self:LeastProfitablePrice(itemID, minProfit)
+    if not least or price >= least then return nil end
+    if minProfit <= 0 then
+        return least, L["others sell for less, so it lists where you break even"]
+    end
+    return least, L.Format("others sell for less, so it lists at the least that still makes your %s profit",
+        Util.FormatMoney(minProfit, { noColor = true }))
+end
+
+--- The market's price before Post at Minimum Profit has its say.
+function Profit:ChooseRivalPostPrice(itemID, knownCost, link)
     if not itemID then return nil, nil end
 
     -- The copy's own suffix price when the link names one with a recent
