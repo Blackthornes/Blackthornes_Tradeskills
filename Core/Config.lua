@@ -47,8 +47,8 @@ local DEFAULTS = {
         -- calculated at that price. This models what you will actually receive
         -- rather than a smoothed market average you would never get.
         --
-        -- Commodities only. An item auction cannot be priced in copper at all,
-        -- so it steps by a whole silver or matches; see minProfit below.
+        -- Item auctions take copper too (from one silver up), and only
+        -- undercut when the sale still clears minProfit below.
         -- 0 (match the cheapest) by default since 2026-11-09: Forever's
         -- auction house sells the cheapest first and keeps a line at each
         -- price, so a 1c undercut only jumps the line. Saves that already
@@ -218,10 +218,9 @@ local DEFAULTS = {
         staleAfterSeconds = 48 * 3600,
 
         -- Hides crafts earning less than this, and does a second job on item
-        -- auctions: those only take whole silver, so the smallest undercut
-        -- available is a whole silver rather than a copper. That silver is
-        -- only given up when the sale would still clear this. At zero, any
-        -- craft still in profit undercuts.
+        -- auctions: they only undercut a rival when the sale would still
+        -- clear this, and match otherwise. At zero, any craft still in
+        -- profit undercuts.
         minProfit = 0,
         minMarginPercent = 0,
 

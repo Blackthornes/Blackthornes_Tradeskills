@@ -225,17 +225,24 @@ Reset()
 Prices:Record(HERB, 40, 40, 50, time(), 40, nil)
 
 do
-    -- 3 herbs at 40c is 120c; 50% over that is 180c, which PostItem would
-    -- swallow silently because of the 80 copper on the end.
+    -- 3 herbs at 40c is 120c; 50% over that is 180c. Item auctions take
+    -- copper, so it stays 1s 80c.
     local price, basis = Profit:ChoosePostPrice(BELT)
 
-    check("the estimate is rounded to whole silver", price, 200)
+    check("the estimate keeps its copper", price, 180)
     check("basis is still derived", basis, "derived")
-    check("and it is a price an item auction accepts", Util.IsWholeSilver(price), true)
+    check("and it is a price an item auction accepts", Util.IsItemAuctionPrice(price), true)
+end
 
+do
+    -- Once a copper price has failed this session, whole silver again.
+    Util.wholeSilverOnly = true
+    local price = Profit:ChoosePostPrice(BELT)
+    Util.wholeSilverOnly = false
+
+    check("after a copper price failed: whole silver", price, 200)
     -- Rounded UP, unlike an undercut. Down would be 1s, under the 1s 20c the
-    -- materials cost, and Posting refuses to list below material cost -- so
-    -- the estimate would have produced a price it then would not use.
+    -- materials cost, and Posting refuses to list below material cost.
     check("rounded up, so it stays above material cost", price > 120, true)
 end
 

@@ -326,6 +326,13 @@ rather than inferred.
 
 ## Item auctions take whole silver only; commodities take copper
 
+**Update 2026-11-16: Forever takes copper on item auctions now.** The owner
+posted gear with copper in its price and it went up, from one silver. Prices
+keep their copper (`Util.ItemAuctionPrice`); if a listing with copper ever
+fails to appear, `Posting:FallBackToWholeSilver` sets `Util.wholeSilverOnly`
+and the rest of the session lists in whole silver. The notes below are what
+was seen before.
+
 **This is Blizzard behaviour, not a Forever quirk**, and it is documented.
 Warcraft Wiki on `C_AuctionHouse.PostItem`'s `bid`/`buyout`:
 

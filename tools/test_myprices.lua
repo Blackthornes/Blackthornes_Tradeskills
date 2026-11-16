@@ -21,8 +21,8 @@ ns.Util = {
     FormatAge = function() return "" end,
     HasFunction = function() return false end,
     GetItemLabel = function(i) return "item" .. tostring(i) end,
-    RoundToSilver = function(p) return math.floor(p / 100) * 100 end,
-    CeilToSilver = function(p) return math.ceil(p / 100) * 100 end,
+    ItemAuctionPrice = function(p) return math.floor(p / 100) * 100 end,
+    ItemAuctionPriceUp = function(p) return math.ceil(p / 100) * 100 end,
 }
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
 ns.RegisterCommand = function() end

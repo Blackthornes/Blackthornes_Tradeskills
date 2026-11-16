@@ -136,24 +136,20 @@ end
 --- Round a no-competition price for the kind of auction it will be listed as.
 --
 -- Upwards on an item auction, unlike an undercut. There is no rival to get
--- beneath, and rounding down by up to a silver can put a cheap craft under
--- what its materials cost, which Posting would then refuse to list.
+-- beneath, and rounding down (to a whole silver, if the server ever stops
+-- taking copper) can put a cheap craft under what its materials cost.
 local function RoundForSale(price, isCommodity)
     if isCommodity then return price end
-    return Util.CeilToSilver(price)
+    return Util.ItemAuctionPriceUp(price)
 end
 
 --- The unit price to list an item at, and why.
 --
--- Commodities take any price down to the copper, so undercutting works the way
--- it always has. Item auctions only take whole gold and silver, which makes
--- the smallest undercut available a whole silver rather than a copper. On a
--- cheap item that is a large fraction of the price to give away in order to
--- beat sellers you could simply have matched.
---
--- So an item auction matches the cheapest rival at the silver it is listed at,
--- and only drops the extra silver when the sale would still clear the minimum
--- profit setting. Anything the profit cannot be worked out for matches, since
+-- Commodities and item auctions both take any price down to the copper
+-- (item auctions from one silver up; see Util.ItemAuctionPrice for the whole
+-- silver fallback). An item auction matches the cheapest rival, and only
+-- undercuts it when the sale would still clear the minimum profit
+-- setting. Anything the profit cannot be worked out for matches, since
 -- the unknown case is the one where giving gold away is least defensible.
 --
 -- @return price, basis, why, uncertain  -- basis is "undercut", "match",
@@ -213,9 +209,9 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
 
     local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost, link)
 
-    -- Highest: never list above it. An item auction takes whole silver only,
-    -- so it rounds down. Under the Lowest Price it means nothing and is left out.
-    local top = high and (status == false and Util.RoundToSilver(high) or high)
+    -- Highest: never list above it, rounded down to a price an item
+    -- auction takes. Under the Lowest Price it means nothing and is left out.
+    local top = high and (status == false and Util.ItemAuctionPrice(high) or high)
     if top and floor and top < floor then top = nil end
 
     if floor and (not price or price < floor) then
@@ -315,7 +311,7 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
 
         if isCommodity then return market, "market", nil, uncertain end
 
-        return Util.RoundToSilver(market), "market"
+        return Util.ItemAuctionPrice(market), "market"
     end
 
     local undercut = ns.Config:Get("undercutCopper") or 0
@@ -331,13 +327,12 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
     -- Discord, 2026-10-09): list at the cheapest rival's own price, for
     -- commodities and item auctions alike, and say that is why.
     --
-    -- An item auction only takes whole silver, so a rival at 38s 99c can't be
-    -- matched to the copper. Rounding down there was a 99c undercut the player
-    -- had turned off (a player's report, 2026-11-14), so it rounds up to the
-    -- next silver instead: never below the rival's own price.
+    -- An item auction matches to the copper too: a rival at 2g 45s 37c is
+    -- matched at 2g 45s 37c (a player's report, 2026-11-16). Only in the
+    -- whole silver fallback does it round up, never below the rival.
     if undercut <= 0 then
         local price = math.max(1, math.floor(rival))
-        if not isCommodity then price = Util.CeilToSilver(price) end
+        if not isCommodity then price = Util.ItemAuctionPriceUp(price) end
         return price, "match", MATCH_BY_CHOICE, uncertain
     end
 
@@ -345,8 +340,8 @@ function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
         return math.max(1, math.floor(rival - undercut)), "undercut", nil, uncertain
     end
 
-    local matchPrice = Util.RoundToSilver(rival)
-    local underPrice = Util.RoundToSilver(math.max(1, math.floor(rival - undercut)))
+    local matchPrice = Util.ItemAuctionPrice(rival)
+    local underPrice = Util.ItemAuctionPrice(math.max(1, math.floor(rival - undercut)))
 
     -- A rival already sitting at the lowest price the server allows leaves
     -- nothing below it, so matching is the only move.

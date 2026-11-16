@@ -145,7 +145,7 @@ itemAuction[BAG] = true
 ns.Prices:Record(BAG, 600, 600, 3, time(), 600, nil)
 do
     local price, basis, why = Profit:ChoosePostPrice(BAG)
-    check("it undercuts to the next silver down", price, 500)
+    check("it undercuts by the copper", price, 599)
     check("rather than matching", basis, "undercut")
     check("with no word of an unknown cost", why, nil)
 end

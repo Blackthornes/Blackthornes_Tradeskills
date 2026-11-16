@@ -457,6 +457,7 @@ L["the auction house took one at a time, so the rest go up one per click."] = "�
 L["listed %s"] = "已上架 %s"
 L["%s: you have %d listed now. This was the first check since the auction house opened, so the new listing could not be told apart from older ones."] = "%s：你现在上架了 %d 件。这是拍卖行打开后的第一次检查，所以分不出这件新拍卖和旧拍卖。"
 L["%s did not appear in your auctions."] = "%s 没有出现在你的拍卖里。"
+L["It had copper in its price, so the next click lists it in whole silver."] = "它的价格带有铜币，所以下次点击会以整银价格上架。"
 L["listing several at once may not work here, so the next click lists one."] = "在这里一次上架好几件可能不行，所以下次点击只上架一件。"
 L["the auction house may be refusing listings; try Blizzard's own Sell tab."] = "拍卖行可能在拒绝上架；试试暴雪自己的出售标签页。"
 L["could not tell whether that listing went up. Check your Auctions tab"] = "看不出那件拍卖有没有上架。看看你的拍卖标签页"
