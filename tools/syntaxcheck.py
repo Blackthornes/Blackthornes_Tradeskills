@@ -7,7 +7,7 @@ The TOC check is here for the same reason. A TOC line naming a file that does
 not exist is not an error in the game either: the file is simply never loaded,
 and whatever was in it is missing with nothing to say so. That happened on
 2026-09-20 -- a stray carriage return left behind by an edit turned
-`Core\Persist.lua` into a name nothing matched, and the whole persistence
+`Core/Persist.lua` into a name nothing matched, and the whole persistence
 layer stopped loading while every Lua file still compiled perfectly.
 
 Requires: python -m pip install --user lupa
@@ -102,7 +102,9 @@ def main() -> int:
         relative = os.path.relpath(path, ROOT)
 
         if ok:
-            print("  OK    %s" % relative)
+            # Only failures are listed; 500 "OK" lines hid them.
+            if "-v" in sys.argv[1:]:
+                print("  OK    %s" % relative)
         else:
             failures += 1
             print("  FAIL  %s: %s" % (relative, err))
