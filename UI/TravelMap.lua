@@ -281,36 +281,7 @@ function TravelMap:Step(elapsed)
     self.since = 0
     local ok, err = pcall(self.Draw, self)
     if not ok and ns.Debug then ns.Debug("travel map:", tostring(err)) end
-    -- Never in a fight: the old lines are cleared once it ends, so keep looking.
-    if TravelMap.Idle() and not InFight() then self:Rest() end
 end
-
---- True with no trip to draw: nothing can change on the map until one is set.
-function TravelMap.Idle()
-    local ok, trip = pcall(TravelMap.Trip)
-    return ok and not (trip and trip.plan)
-end
-
---- With no trip set, the driver's frame hides, so nothing runs each frame;
---- one look a second brings it back when a trip starts.
-function TravelMap:Rest()
-    local driver = self.driver
-    local timer = rawget(_G, "C_Timer")
-    if not driver or self.resting or type(timer) ~= "table" or type(timer.After) ~= "function" then return end
-    self.resting = true
-    driver:Hide()
-    local function Look()
-        if TravelMap.Idle() then
-            timer.After(TravelMap.REST_LOOK, Look)
-            return
-        end
-        TravelMap.resting = false
-        TravelMap.since = LOOK
-        driver:Show()
-    end
-    timer.After(TravelMap.REST_LOOK, Look)
-end
-TravelMap.REST_LOOK = 1
 
 function TravelMap:OnEnable()
     local driver = CreateFrame("Frame", nil, UIParent)

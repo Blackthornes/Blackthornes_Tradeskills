@@ -20,11 +20,6 @@ first, and its player words approved. Mockups are in the project files under
   ("Farm some X and this fills in.") was one line that never wrapped, so a
   long item name ran off the card. It wraps and the card grows.
 
-- **Travel map driver.** `UI/TravelMap.lua` ran a handler every frame for
-  the whole session, trip or no trip. With no trip set its frame now hides
-  and one look a second brings it back (`TravelMap:Rest`). Tested in
-  `tools/test_travelmaprest.lua`. The file is in every addon; this copy's
-  change should be matched in the others.
 - **CLAUDE.md is 11 KB, down from 16 KB.** The standing rules keep a short
   form there; their full wording moved word for word to "Standing rules in
   full" in `Docs/claude-notes.md`.
@@ -33,6 +28,9 @@ first, and its player words approved. Mockups are in the project files under
 
 - Every `OnUpdate` (35) and every repeating timer (18). The always-on ones
   are throttled or sleep when nothing shows; the rest stop themselves.
+  `UI/TravelMap.lua` runs each frame with no trip set, but it only adds a
+  number and looks twice a second; it was left alone so the copy stays the
+  same as the other addons'.
 - Every handler on a burst event (`GET_ITEM_INFO_RECEIVED`, `BAG_UPDATE*`,
   `PLAYER_MONEY`, `TRADE_SKILL_LIST_UPDATE`, `MAIL_INBOX_UPDATE`). Each one
   returns early when its window is hidden or nothing is waiting, and
