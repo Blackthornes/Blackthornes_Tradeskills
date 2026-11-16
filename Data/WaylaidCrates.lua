@@ -20,13 +20,15 @@
 --            harvest). A crate the game names under another ID is still
 --            found by its name (MerchantsFavor:FindCrates).
 --   favor,   what players report a turn-in pays, silver in copper. A crate
---   silver   filled with plain goods (herbs, ore, cloth, dust) pays 5, 10 or 15
---            favor by tier, one filled with crafted goods 10, 20 or 30, and
+--   silver   filled with plain goods (herbs, ore, cloth, dust) pays 5, 10, 15
+--            or 20 favor by tier, one filled with crafted goods 10, 20, 30 or
+--            40, and
 --            the silver is 50 copper a favor (checked 2026-10-16 against
---            players' turn-in reports; Expert's silver follows the rule). Only a reward this addon has seen paid
+--            players' turn-in reports; Expert's silver follows the rule).
+--            Artisan pays 20 or 40 favor and 10 or 20 silver (refreshed crate
+--            data, 2026-11-16). Only a reward this addon has seen paid
 --            (MerchantsFavor's learned rewards) counts as known; these are
---            shown as reported until then. Artisan crates are not in the game
---            yet, so nobody knows what they pay and nothing is filled in.
+--            shown as reported until then.
 --
 -- `words` are what the crate's name must hold, lower case, so a name the
 -- game words a little differently ("Expert Earthly Herbs", "Earthly Expert")
@@ -129,38 +131,37 @@ ns.WAYLAID_CRATES = {
       bundles = { { 4387, 8 }, { 10559, 5 }, { 10560, 12 }, { 10561, 5 } } },
       -- Iron Strut, Mithril Tube, Unstable Trigger, Mithril Casing
 
-    -- Artisan: not in the game yet. The bundles are what players expect;
-    -- the rewards are left out until a turn-in is seen.
+    -- Artisan
     { key = "artisan-curiosities", tier = 4, label = "Artisan Curiosities", id = 248699,
-      words = { "artisan", "curiosities" },
+      words = { "artisan", "curiosities" }, favor = 20, silver = 1000,
       bundles = { { 11176, 20 }, { 11175, 4 }, { 14343, 6 }, { 14344, 2 } } },
       -- Dream Dust, Greater Nether Essence, Small and Large Brilliant Shard
     { key = "artisan-earthly", tier = 4, label = "Artisan Earthly Herbs", id = 248695,
-      words = { "artisan", "earthly" },
+      words = { "artisan", "earthly" }, favor = 20, silver = 1000,
       bundles = { { 13464, 10 }, { 8838, 20 }, { 8839, 10 }, { 8845, 10 }, { 8846, 10 } } },
       -- Blindweed, Ghost Mushroom, Gromsblood, Golden Sansam
     { key = "artisan-flowering", tier = 4, label = "Artisan Flowering Herbs", id = 248696,
-      words = { "artisan", "flowering" },
+      words = { "artisan", "flowering" }, favor = 20, silver = 1000,
       bundles = { { 13465, 20 }, { 13466, 20 }, { 13467, 20 }, { 13463, 20 } } },
       -- Mountain Silversage, Plaguebloom, Icecap, Dreamfoil
     { key = "artisan-ore", tier = 4, label = "Artisan Ore", id = 248697,
-      words = { "artisan", "ore" },
+      words = { "artisan", "ore" }, favor = 20, silver = 1000,
       bundles = { { 7911, 10 }, { 10620, 20 }, { 11370, 20 } } },
       -- Thorium Ore, Dark Iron Ore
     { key = "artisan-textiles", tier = 4, label = "Artisan Textiles", id = 248698,
-      words = { "artisan", "textiles" },
+      words = { "artisan", "textiles" }, favor = 20, silver = 1000,
       bundles = { { 14047, 40 }, { 4304, 20 }, { 8170, 20 } } },
       -- Runecloth, Rugged Leather
     { key = "artisan-fabrics", tier = 4, label = "Artisan Fabrics", id = 248711,
-      words = { "artisan", "fabrics" },
+      words = { "artisan", "fabrics" }, favor = 40, silver = 2000,
       bundles = { { 14048, 8 }, { 8172, 2 } } },
       -- Bolt of Runecloth, Cured Thick Hide
     { key = "artisan-ingots", tier = 4, label = "Artisan Ingots", id = 248712,
-      words = { "artisan", "ingots" },
+      words = { "artisan", "ingots" }, favor = 40, silver = 2000,
       bundles = { { 11371, 2 }, { 6037, 10 }, { 12359, 20 } } },
       -- Thorium Bar, Dark Iron Bar
     { key = "artisan-parts", tier = 4, label = "Artisan Parts", id = 248713,
-      words = { "artisan", "parts" },
+      words = { "artisan", "parts" }, favor = 40, silver = 2000,
       bundles = { { 15994, 5 }, { 18631, 5 }, { 16000, 2 } } },
       -- Thorium Widget, Thorium Tube
 }

@@ -752,7 +752,11 @@ function Writs:GetCustomer(writ)
     -- What players' own play learned, shipped at each release
     -- (Data/ForeverWritCustomers.lua); a spot learned here wins.
     local shipped = rawget(ns, "WRIT_CUSTOMERS")
-    return type(shipped) == "table" and shipped[writ.item] or nil
+    local found = type(shipped) == "table" and shipped[writ.item] or nil
+    if found then return found end
+    -- Then the typed hand-in spots (Data/CraftsmansWrits.lua).
+    local typed = rawget(ns, "WRIT_HAND_INS")
+    return type(typed) == "table" and typed[writ.item] or nil
 end
 
 --- The writs the open quest window asks for: by its title, and by any

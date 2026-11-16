@@ -16,7 +16,7 @@
 -- sealed crate's item ID. Filling a crate is seen the same way (a Waylaid
 -- Crate goes, a Sealed one comes), which says which sealed crate each kind
 -- turns into. Until a turn-in is seen, the rewards players report stand in,
--- marked as such; Artisan crates have none. None of this has been seen in
+-- marked as such; a crate with none typed has none. None of this has been seen in
 -- game yet: Merchant's Favor may be a currency or an item, so both are
 -- watched.
 --
@@ -197,7 +197,7 @@ end
 --
 -- @return favor, money (copper), source, turnIns
 --   source is "learned" (seen paid, turnIns times), "reported" (what players
---   say, not seen here yet) or nil when nobody knows (Artisan crates).
+--   say, not seen here yet) or nil when nobody knows.
 function MerchantsFavor:GetReward(crate)
     local store = Store()
     local sealed = store and store.links[crate.key]

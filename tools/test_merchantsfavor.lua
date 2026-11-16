@@ -5,8 +5,8 @@
 --   * crate names are read whole word by whole word, whatever the order;
 --   * a favor costs the crate + its cheapest bundle - the silver back, over
 --     the favor it pays, a bundle over one stack counting like any other;
---   * the rewards players report stand in until a turn-in is seen, and
---     Artisan crates, which nobody has handed in, have none and sort last;
+--   * the rewards players report stand in until a turn-in is seen, and a
+--     crate nobody knows the reward of has none and sorts last;
 --   * filling a crate says which sealed crate it becomes, and a sealed crate
 --     leaving the bags with favor and money coming in is what it paid; the
 --     smallest favor seen is kept, as a perk doubles some turn-ins;
@@ -199,6 +199,12 @@ Crate("apprentice-herbs").id = nil
 Crate("expert-ore").id = nil
 Crate("artisan-ore").id = nil
 
+check("Artisan crates pay 20 favor and 10s, 40 and 20s for crafted goods",
+    Crate("artisan-ore").favor == 20 and Crate("artisan-ore").silver == 1000
+    and Crate("artisan-parts").favor == 40 and Crate("artisan-parts").silver == 2000)
+-- Artisan Ore stands in below for a crate whose reward nobody knows yet.
+Crate("artisan-ore").favor, Crate("artisan-ore").silver = nil, nil
+
 --------------------------------------------------------------------------------
 print("\nreading crate names")
 
@@ -249,7 +255,7 @@ check("a crate the game has not shown yet has no price", herbs.itemID == nil and
 check("but its cheapest bundle is still worked out", herbs.bundleCost == 100 and herbs.best.itemID == SILVERLEAF)
 
 local artisan = Row(rows, "artisan-ore")
-check("Artisan crates have no reward", artisan.favor == nil and artisan.source == nil)
+check("a crate nobody knows the reward of has none", artisan.favor == nil and artisan.source == nil)
 check("unknown and unpriced crates sort after priced ones", rows[1].key == "apprentice-textiles"
     and rows[#rows].tier == 4)
 
@@ -578,7 +584,7 @@ check("ON AH counts the crates listed at this price", row.cells[6].text == "4" a
 
 local unknown = Row(list.data, "artisan-ore")
 list.opts.updateRow(row, unknown)
-check("an Artisan crate's favor is a question mark", row.cells[5].text == "?" and row.cells[5].color == "warn"
+check("an unknown crate's favor is a question mark", row.cells[5].text == "?" and row.cells[5].color == "warn"
     and row.cells[1].text == "")
 
 local function Showing(pattern)

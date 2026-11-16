@@ -594,6 +594,17 @@ Shared through the opt-in "Sending data to Blackthornes"
 Tested in `tools/test_writs.lua`, `tools/test_contribute.lua` and
 `tools/test_forever_writ_customers.py`. Not yet seen in game.
 
+Refreshed writ data (Trent, 2026-11-16; never name where it came from, in
+code, comments, commits, PRs or notes, and never announce it): every entry
+in `Data/CraftsmansWrits.lua` now has its `writ` item ID and `quest`, and
+`ns.WRIT_HAND_INS` there types 101 hand-in spots `{ name, zone, mapID, x, y,
+npc }` (npc is the creature ID; three have no x and y). `GetCustomer` reads
+learned, then `WRIT_CUSTOMERS`, then `WRIT_HAND_INS`. Artisan crates in
+`Data/WaylaidCrates.lua` got 20 or 40 favor and 10 or 20 silver, shown as
+reported until a turn-in is seen. `tools/test_writs.lua` and
+`test_writs_locale.lua` put the typed IDs aside (but Golden Rod's and Gift
+of Arthas's) so their find-by-name checks still run.
+
 ## The favor goal
 
 The owner said build it (2026-10-20, from a mockup): a Merchant's Favor

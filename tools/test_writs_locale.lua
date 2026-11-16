@@ -79,6 +79,12 @@ ns.Inventory = {
 ns.db = {}
 
 assert(loadfile(lfs_cwd .. "/Data/CraftsmansWrits.lua"))("Blackthornes_TS", ns)
+-- This file finds writs by name, so the typed writ IDs are put aside, all
+-- but Gift of Arthas, whose writ teaches the client's words for "writ".
+for _, writ in ipairs(ns.CRAFTSMANS_WRITS) do
+    if writ.item ~= 9088 then writ.writ = nil end
+end
+ns.WRIT_HAND_INS = nil
 assert(loadfile(lfs_cwd .. "/Logic/Writs.lua"))("Blackthornes_TS", ns)
 local Writs = ns.Writs
 UnitFactionGroup = UnitFactionGroup or function() return "Alliance" end

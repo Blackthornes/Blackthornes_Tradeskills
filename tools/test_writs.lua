@@ -126,6 +126,15 @@ C_Reputation = {
 ns.db = {}
 
 assert(loadfile(lfs_cwd .. "/Data/CraftsmansWrits.lua"))("Blackthornes_TS", ns)
+-- The typed writ IDs and hand-in spots are checked on their own below. The
+-- rest of this file finds writs by name, as the game hands them out, so all
+-- but the Golden Rod's ID are put aside, and the spots with them.
+local typedIDs, typedQuests, handIns = {}, {}, ns.WRIT_HAND_INS
+for _, writ in ipairs(ns.CRAFTSMANS_WRITS) do
+    typedIDs[writ.item], typedQuests[writ.item] = writ.writ, writ.quest
+    if writ.item ~= 11128 then writ.writ = nil end
+end
+ns.WRIT_HAND_INS = nil
 assert(loadfile(lfs_cwd .. "/Logic/Writs.lua"))("Blackthornes_TS", ns)
 
 local Writs = ns.Writs
@@ -157,6 +166,26 @@ for _, n in pairs(seenItems) do once = once and n == 1 end
 check("no item is asked for by two writs", once)
 check("9 Journeyman, 12 Expert and 9 Artisan in each", counts.Alchemy1 == 9 and counts.Alchemy2 == 12
     and counts.Alchemy3 == 9 and counts.Tailoring2 == 12)
+
+local idsOk, questsOk, usedIDs, usedQuests = true, true, {}, {}
+for item, id in pairs(seenItems) do
+    local writID, quest = typedIDs[item], typedQuests[item]
+    idsOk = idsOk and type(writID) == "number" and writID >= ns.WRIT_ID_RANGE[1]
+        and writID <= ns.WRIT_ID_RANGE[2] and not usedIDs[writID]
+    questsOk = questsOk and type(quest) == "number" and not usedQuests[quest]
+    if writID then usedIDs[writID] = true end
+    if quest then usedQuests[quest] = true end
+end
+check("every writ has its own item ID, inside Forever's range", idsOk)
+check("and its own quest", questsOk)
+local spots, spotsOk = 0, type(handIns) == "table"
+for item, spot in pairs(handIns or {}) do
+    spots = spots + 1
+    spotsOk = spotsOk and seenItems[item] == 1 and type(spot.name) == "string" and type(spot.zone) == "string"
+        and type(spot.mapID) == "number" and ((spot.x == nil and spot.y == nil)
+        or (spot.x > 0 and spot.x < 100 and spot.y > 0 and spot.y < 100))
+end
+check("101 typed hand-in spots, each for a writ, with a zone and map", spots == 101 and spotsOk)
 
 --------------------------------------------------------------------------------
 print("\nreading writ names")
@@ -676,7 +705,18 @@ check("a shipped spot stands in until one is learned",
     ns.Writs:GetCustomer(other).name == "Shipped Customer")
 check("a spot learned in play beats the shipped one",
     ns.Writs:GetCustomer(writOf[ROD]).name == "Tilda Hand")
+ns.WRIT_HAND_INS = {
+    [ROD] = { name = "Typed Name", zone = "Duskwood", mapID = 1431, x = 2, y = 2 },
+    [other.item] = { name = "Typed Customer", zone = "Duskwood", mapID = 1431, x = 2, y = 2 },
+    [WISDOM] = { name = "Typed Wisdom", zone = "Duskwood", mapID = 1431, x = 2, y = 2 },
+}
+check("a shipped spot beats a typed one", ns.Writs:GetCustomer(other).name == "Shipped Customer")
 ns.WRIT_CUSTOMERS = nil
+check("a typed spot stands in when nothing else is known",
+    ns.Writs:GetCustomer(other).name == "Typed Customer")
+check("a spot learned in play beats a typed one", ns.Writs:GetCustomer(writOf[ROD]).name == "Tilda Hand"
+    and ns.Writs:GetCustomer(writOf[WISDOM]).zone == "Duskwood" and ns.Writs:GetCustomer(writOf[WISDOM]).x == 70)
+ns.WRIT_HAND_INS = nil
 groupBy.onSelect("zone")
 check("Group By is kept in Settings", config.writGroupBy == "zone")
 local function Header(title)
