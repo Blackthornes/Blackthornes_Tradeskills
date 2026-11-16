@@ -178,6 +178,13 @@ and 5 (rows only move), then 1 and 2 (the shared window, five repos), then
 
 ## For the other addons' threads
 
+- **A possible change in all five: rest the travel map.** With no trip
+  set, `TravelMap:Step` could hide the driver's frame and let one
+  `C_Timer.After` look a second bring it back when a trip starts (never
+  resting in a fight, so old lines still clear when it ends). It was
+  written and tested here, then taken out so the shared copy stays the
+  same. The idle cost today is near zero, so this is tidiness, not a fix.
+
 - Check whether the test runner prints every check. Tradeskills' was the
   only one over 20 KB, but the quiet runner here can be copied as is.
 - All six CLAUDE.md files load into every thread, about 103 KB together
