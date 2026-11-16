@@ -23,6 +23,15 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.30.3
+
+Fixes and changes:
+- Craft prices in the Profit detail now show x2 when a craft makes more than one.
+- Forget Character and Clear Items work again on the Characters tab.
+- Items no longer sit off the Sell list for the wrong reason when breaking them down pays more.
+- Potions, food and bandages are rated against their own kind for demand.
+- Gear posts keep their exact copper price when you undercut.
+
 ## 1.30.2
 
 Fixes and changes:
