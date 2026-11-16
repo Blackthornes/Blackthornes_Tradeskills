@@ -2730,9 +2730,7 @@ L["Says in chat when someone in Trade asks for something you can make."] = "有�
 L["Sister Addons:"] = "姊妹插件："
 L["Says once in chat which Blackthornes addons you don't have."] = "在聊天框说一次你还没有哪些 Blackthornes 插件。"
 L["What's New:"] = "更新内容："
-L["What's New After Updates:"] = "更新后显示更新内容："
 L["Opens What's New the first time you play after an update."] = "更新后第一次玩时打开更新内容。"
-L["What's New Motion:"] = "更新内容动画："
 L["Window Size:"] = "窗口大小："
 L["Text Size:"] = "文字大小："
 L["Window Style:"] = "窗口样式："
@@ -3360,7 +3358,6 @@ L["Crafting, prices and the auction house"] = "制造、价格和拍卖行"
 L["Right-click for settings"] = "右键点击打开设置"
 L["Got It"] = "知道了"
 L["Set Goal"] = "设定目标"
-L["ADDONS"] = "插件"
 L["ARROW"] = "箭头"
 L["My Crafts"] = "我的制造"
 L["Recipes to Learn"] = "要学的配方"
@@ -3659,6 +3656,16 @@ L["%d in %d buys"] = "%2$d 次购买共 %1$d"
 L["Click to search for it at the auction house."] = "点击在拍卖行搜索它。"
 L["yesterday"] = "昨天"
 L["Each craft makes %d."] = "每次制作产出 %d 个。"
+
+-- The settings every Blackthornes addon shares (2026-11-16).
+L["All Addons"] = "全部插件"
+L["ALL BLACKTHORNES ADDONS"] = "所有 BLACKTHORNES 插件"
+L["WHAT'S NEW"] = "更新内容"
+L["After Updates:"] = "更新后："
+L["Show With Motion"] = "带动画显示"
+
+-- The one window's tab at the profession window (2026-11-16).
+L["Crafting"] = "制作"
 
 -- Tooltips and Windows pages in Settings (2026-11-16).
 L["TOOLTIPS"] = "提示"

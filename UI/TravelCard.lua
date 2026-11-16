@@ -154,7 +154,20 @@ function TravelCard:RestorePlace()
     local x, y = db and tonumber(db.travelCardX), db and tonumber(db.travelCardY)
     if x and y then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
-    else
+        return
+    end
+    -- Never dragged: the next free place on the right shelf, left of the
+    -- game's quest list (UI/SharedWindow.lua's shelves).
+    local sw = ns.SharedWindow
+    local placed = sw and sw.ShelfPlace and sw.ShelfPlace(frame, "travel.shared", {
+        shelf = "right",
+        free = function()
+            local saved = DB()
+            return not (saved and tonumber(saved.travelCardX) and tonumber(saved.travelCardY))
+        end,
+        place = function() TravelCard:RestorePlace() end,
+    })
+    if not placed then
         frame:SetPoint("RIGHT", UIParent, "RIGHT", -60, 60)
     end
 end

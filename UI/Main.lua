@@ -376,6 +376,48 @@ function UI:BuildTabs()
     self.ahContainer = ahContainer
     -- Not in tabOrder, so only the auction house row offers it.
     self.tabs.auctionhouse = { key = "auctionhouse", text = L["Auction House"], container = ahContainer }
+
+    -- The same for the profession window and the mailbox (the owner said
+    -- build it, 2026-11-16): docked there, the one window wears a row with
+    -- the craft pane as its Crafting tab, or the mail list as its Mail tab.
+    self.dockStrips, self.dockContainers = {}, {}
+    for place, dock in pairs(UI.DOCK_TABS) do
+        local defs = { { key = dock.key, text = dock.text } }
+        for _, key in ipairs(dock.tabs) do
+            local tab = self.tabs[key]
+            if tab then defs[#defs + 1] = { key = key, text = tab.text, right = key == "settings" } end
+        end
+        local dockStrip = Widgets.CreateTabStrip(window, defs, function(key)
+            UI:SelectTab(key)
+        end, { width = stripWidth, hanging = true })
+        dockStrip:SetPoint("TOPLEFT", window, "BOTTOMLEFT", TAB_INSET, 0)
+        dockStrip:Hide()
+        self.dockStrips[place] = dockStrip
+        local holder = CreateFrame("Frame", nil, content)
+        holder:SetPoint("TOPLEFT", 1, -1)
+        holder:SetPoint("BOTTOMRIGHT", -1, 1)
+        holder:Hide()
+        self.dockContainers[place] = holder
+        self.tabs[dock.key] = { key = dock.key, text = dock.text, container = holder }
+    end
+end
+
+-- Docked beside the profession window or the mailbox, Tradeskills' row:
+-- the panel that used to hang beside the game's window first, then what
+-- helps there, Settings last. `panel` names the module that moves in
+-- (its IntoOne and OutOfOne). The tab names wait for the owner's yes.
+UI.DOCK_TABS = {
+    profession = { key = "crafting", text = L["Crafting"], panel = "CraftPanel",
+        tabs = { "queue", "profit", "prices", "settings" } },
+    mail = { key = "mail", text = L["Mail"], panel = "QueueMailPanel",
+        tabs = { "queue", "prices", "settings" } },
+}
+
+--- The strip showing now: the auction house's, a dock place's, or the usual.
+function UI:ActiveStrip()
+    if TSTabs.atAuction and self.ahTabStrip then return self.ahTabStrip end
+    local dock = TSTabs.atDock and self.dockStrips and self.dockStrips[TSTabs.atDock]
+    return dock or self.tabStrip
 end
 
 -- The tabs beside Auction House while the one window sits at the auction
@@ -409,14 +451,20 @@ function UI:SelectTab(key)
         end
     end
     if self.ahContainer then self.ahContainer:SetShown(key == "auctionhouse") end
+    local docked = false
+    for place, holder in pairs(self.dockContainers or {}) do
+        local mine = UI.DOCK_TABS[place].key == key
+        holder:SetShown(mine)
+        docked = docked or mine
+    end
 
     self.activeTab = key
-    local strip = TSTabs.atAuction and self.ahTabStrip or self.tabStrip
+    local strip = self:ActiveStrip()
     strip:Select(key)
 
-    -- The Auction House tab is only there at the auction house, so it is
-    -- never the tab the window opens on next time.
-    if ns.db and key ~= "auctionhouse" then ns.db.lastTab = key end
+    -- The Auction House, Crafting and Mail tabs are only there while docked
+    -- at their place, so none is the tab the window opens on next time.
+    if ns.db and key ~= "auctionhouse" and not docked then ns.db.lastTab = key end
 
     if tab.onShow then tab.onShow() end
     if tab.refresh then tab.refresh() end
@@ -2179,6 +2227,8 @@ function UI:JoinSharedMinimap()
             key = "tradeskills", order = 2, name = "Tradeskills", icon = [[Interface\Icons\Trade_BlackSmithing]],
             open = function() UI:Toggle() end,
             settings = function() UI:OpenSettings() end,
+            -- The settings every Blackthornes addon shares (the rail's gear).
+            allAddons = function() UI:OpenAllAddons() end,
             db = function() return ns.db end,
             host = TSTabs.host,
         })
@@ -2545,15 +2595,23 @@ function TSTabs:HangStrips()
         if okA and okO and type(a) == "number" and type(o) == "number" then drop = a - o end
     end
     local ok, width = pcall(area.GetWidth, area)
-    for _, strip in ipairs({ UI.tabStrip, UI.ahTabStrip }) do
+    for _, strip in ipairs(TSTabs.AllStrips()) do
         strip:ClearAllPoints()
         strip:SetPoint("TOPLEFT", area, "BOTTOMLEFT", TAB_INSET, -drop)
         if ok and type(width) == "number" and width > 0 and strip.SetRoom then
             strip:SetRoom(width - 2 * TAB_INSET)
         end
     end
-    if UI.ahTabStrip then UI.ahTabStrip:SetShown(self.atAuction) end
-    if UI.tabStrip then UI.tabStrip:SetShown(not self.atAuction) end
+    local showing = UI:ActiveStrip()
+    for _, strip in ipairs(TSTabs.AllStrips()) do strip:SetShown(strip == showing) end
+end
+
+--- Every row of tabs the window has: the usual, the auction house's and
+--- each dock place's.
+function TSTabs.AllStrips()
+    local list = { UI.tabStrip, UI.ahTabStrip }
+    for _, strip in pairs(UI.dockStrips or {}) do list[#list + 1] = strip end
+    return list
 end
 
 --- Give the window back its own place, size and scale. After the area is
@@ -2563,13 +2621,12 @@ function TSTabs:LayOut()
     if not frame then return end
     frame:SetParent(UIParent)
     TSBare(false)
-    for _, strip in ipairs({ UI.tabStrip, UI.ahTabStrip }) do
+    for _, strip in ipairs(TSTabs.AllStrips()) do
         strip:ClearAllPoints()
         strip:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", TAB_INSET, 0)
         if strip.SetRoom then strip:SetRoom(WINDOW_WIDTH - 2 * TAB_INSET) end
+        strip:SetShown(strip == UI.tabStrip)
     end
-    if UI.ahTabStrip then UI.ahTabStrip:Hide() end
-    if UI.tabStrip then UI.tabStrip:Show() end
     frame:ClearAllPoints()
     frame:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
     frame:SetScale(UI:GetWindowScale())
@@ -2650,6 +2707,38 @@ function TSTabs:AtAuctionHouse()
     return self.atAuction
 end
 
+--- The profession window or the mailbox opened (CraftPanel:Attach,
+--- QueueMailPanel). With the one window on, it opens there once a visit,
+--- on Tradeskills, and the panel becomes that place's first tab. True while
+--- that is so, so the panel stays in the one window. In a fight nothing
+--- moves and the panel hangs beside the game's window as before.
+function TSTabs:AtDock(place)
+    local One = TSTabs.One()
+    if not (One and One.Hosts and One.Hosts("tradeskills")) then return false end
+    if InCombatLockdown and InCombatLockdown() then return self.atDock == place end
+    if not self.watching and One.Watch then
+        self.watching = true
+        pcall(One.Watch, function() TSTabs:Settle() end)
+    end
+    self.dockOpened = self.dockOpened or {}
+    if not self.dockOpened[place] then
+        self.dockOpened[place] = true
+        local okOpen, isOpen = pcall(One.IsOpen)
+        if not self.area and not (okOpen and isOpen) then UI.openedFor = place end
+        pcall(One.Open, "tradeskills")
+    end
+    local okPlace, now = pcall(One.Place)
+    local okDocked, docked = pcall(One.Docked)
+    if okPlace and now == place and not (okDocked and docked) then pcall(One.Dock) end
+    TSTabs:Settle()
+    return self.atDock == place
+end
+
+--- The game's window closed: the next visit opens the one window again.
+function TSTabs:DockClosed(place)
+    if self.dockOpened then self.dockOpened[place] = nil end
+end
+
 --- True while the one window is up and docked beside the auction house.
 function TSTabs.OneStaysHere(One)
     if not One then return false end
@@ -2662,6 +2751,7 @@ end
 --- docks at the auction house or leaves it. Called after every dock and
 --- undock (One.Watch), and as Tradeskills goes in or out.
 function TSTabs:Settle()
+    TSTabs:SettleDock()
     local One = TSTabs.One()
     local on = false
     if self.area and One then
@@ -2701,6 +2791,65 @@ function TSTabs:Settle()
         end
         if key and UI.tabs and UI.tabs[key] then UI:SelectTab(key) end
         self.beforeAH = nil
+    end
+end
+
+--- The same swap for the profession window and the mailbox (UI.DOCK_TABS):
+--- docked there with Tradeskills in the one window, the panel that hung
+--- beside the game's window moves in as the first tab; leaving, it goes
+--- back and the tab open before comes back.
+function TSTabs:SettleDock()
+    local One = TSTabs.One()
+    local want = nil
+    if self.area and One then
+        local okPlace, place = pcall(One.Place)
+        local okDocked, docked = pcall(One.Docked)
+        if okPlace and okDocked and docked == true and UI.DOCK_TABS[place] then want = place end
+    end
+    -- The Mail tab only while the list has something on it.
+    if want then
+        local panel = ns[UI.DOCK_TABS[want].panel]
+        if panel and panel.HasWork then
+            local ok, work = pcall(panel.HasWork, panel)
+            if not (ok and work) then want = nil end
+        end
+    end
+    if want == self.atDock then
+        if want then TSTabs:HangStrips() end
+        return
+    end
+    local was = self.atDock
+    if was then
+        local panel = ns[UI.DOCK_TABS[was].panel]
+        if panel and panel.OutOfOne then pcall(panel.OutOfOne, panel) end
+    end
+    self.atDock = want
+    TSTabs:HangStrips()
+    if want then
+        local dock = UI.DOCK_TABS[want]
+        local key = UI.activeTab
+        local wasDockTab = false
+        for _, other in pairs(UI.DOCK_TABS) do
+            if other.key == key then wasDockTab = true end
+        end
+        if not wasDockTab and key ~= "auctionhouse" then self.beforeDock = key end
+        local panel = ns[dock.panel]
+        local holder = UI.dockContainers and UI.dockContainers[want]
+        if panel and panel.IntoOne and holder then pcall(panel.IntoOne, panel, holder) end
+        UI:SelectTab(dock.key)
+    else
+        local key = self.beforeDock
+        self.beforeDock = nil
+        if not (key and UI.tabs and UI.tabs[key]) then key = (ns.db and ns.db.lastTab) or "profit" end
+        key = UI.MOVED_TABS[key] or key
+        if not (UI.tabs and UI.tabs[key]) then key = "profit" end
+        if not self.atAuction then UI:SelectTab(key) end
+        -- The game's window may still be open (another addon picked on the
+        -- rail): the panel goes back beside it, as before.
+        if was then
+            local panel = ns[UI.DOCK_TABS[was].panel]
+            if panel and panel.BackBeside then pcall(panel.BackBeside, panel) end
+        end
     end
 end
 

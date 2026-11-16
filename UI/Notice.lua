@@ -51,9 +51,42 @@ local function Now()
     return type(fn) == "function" and fn() or os.time()
 end
 
+-- The stack takes the last place on the top shelf, so the pieces above it
+-- never jump when a note comes or goes. Joined at the first layout, since
+-- this file can load before UI/SharedWindow.lua.
+local joined = false
+local function JoinShelf()
+    if joined then return end
+    local sw = ns.SharedWindow
+    if not (sw and sw.ShelfJoin) then return end
+    joined = true
+    pcall(sw.ShelfJoin, "notice", {
+        shelf = "top",
+        shown = function() return #shared.cards > 0 end,
+        height = function()
+            local n = #shared.cards
+            return n > 0 and n * (Notice.HEIGHT + Notice.GAP) - Notice.GAP or 0
+        end,
+        place = function() Notice.Layout() end,
+    })
+end
+
+--- Where the stack starts: its place on the shared top shelf (see the
+--- shelves in UI/SharedWindow.lua), under the arrow, bars and the other
+--- small pieces that sit in their first spot; Notice.TOP without one.
+function Notice.Start()
+    JoinShelf()
+    local sw = ns.SharedWindow
+    if sw and sw.ShelfSpot then
+        local ok, _, _, y = pcall(sw.ShelfSpot, "notice")
+        if ok and type(y) == "number" then return y end
+    end
+    return Notice.TOP
+end
+
 --- Lay every addon's cards out, newest at the top.
 function Notice.Layout()
-    local y = Notice.TOP
+    local y = Notice.Start()
     for _, card in ipairs(shared.cards) do
         card:ClearAllPoints()
         card:SetPoint("TOP", UIParent, "TOP", 0, y)

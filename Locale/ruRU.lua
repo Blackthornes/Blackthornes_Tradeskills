@@ -2734,9 +2734,7 @@ L["Says in chat when someone in Trade asks for something you can make."] = "Пи
 L["Sister Addons:"] = "Сестринские аддоны:"
 L["Says once in chat which Blackthornes addons you don't have."] = "Один раз пишет в чат, каких аддонов Blackthornes у тебя нет."
 L["What's New:"] = "Что нового:"
-L["What's New After Updates:"] = "Что нового после обновлений:"
 L["Opens What's New the first time you play after an update."] = "Открывает Что нового, когда ты впервые играешь после обновления."
-L["What's New Motion:"] = "Движение в Что нового:"
 L["Window Size:"] = "Размер окна:"
 L["Text Size:"] = "Размер текста:"
 L["Window Style:"] = "Стиль окон:"
@@ -3364,7 +3362,6 @@ L["Crafting, prices and the auction house"] = "Ремесло, цены и ау�
 L["Right-click for settings"] = "Правый щелчок для настроек"
 L["Got It"] = "Понятно"
 L["Set Goal"] = "Задать цель"
-L["ADDONS"] = "АДДОНЫ"
 L["ARROW"] = "СТРЕЛКА"
 L["My Crafts"] = "Мои создания"
 L["Recipes to Learn"] = "Рецепты для изучения"
@@ -3663,6 +3660,16 @@ L["%d in %d buys"] = "%d за %d покупок"
 L["Click to search for it at the auction house."] = "Нажми, чтобы найти это на аукционе."
 L["yesterday"] = "вчера"
 L["Each craft makes %d."] = "Каждое создание даёт %d шт."
+
+-- The settings every Blackthornes addon shares (2026-11-16).
+L["All Addons"] = "Все аддоны"
+L["ALL BLACKTHORNES ADDONS"] = "ВСЕ АДДОНЫ BLACKTHORNES"
+L["WHAT'S NEW"] = "ЧТО НОВОГО"
+L["After Updates:"] = "После обновления:"
+L["Show With Motion"] = "Показывать с анимацией"
+
+-- The one window's tab at the profession window (2026-11-16).
+L["Crafting"] = "Ремесло"
 
 -- Tooltips and Windows pages in Settings (2026-11-16).
 L["TOOLTIPS"] = "ПОДСКАЗКИ"

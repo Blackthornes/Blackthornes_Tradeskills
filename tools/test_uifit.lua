@@ -945,7 +945,8 @@ check("no Tracker Place button: Window Spots does it", RowButton("Tracker Place:
 check("no Gold Tracker Place button", RowButton("Gold Tracker Place:"), nil)
 check("Window Spots is still offered", RowButton("Window Spots:") ~= nil, true)
 check("Road to 300 is still offered", RowButton("Road to 300:") ~= nil, true)
-check("Road to 300 sits on About, with What's New", Holder(RowButton("Road to 300:")) == Holder(RowButton("What's New:")), true)
+check("What's New sits on All Addons, with Window Spots", Holder(RowButton("What's New:")) == Holder(RowButton("Window Spots:")), true)
+check("Road to 300 stays on About", Holder(RowButton("Road to 300:")) ~= Holder(RowButton("What's New:")), true)
 
 --- The box on the row whose label says `text`.
 local function RowDropdown(text)
@@ -984,7 +985,7 @@ check("makes All Lines say Mixed", allLines.strings[1].text, "Mixed")
 -- row, each tick still its own saved setting.
 local openAt = RowDropdown("Open By Itself At:")
 check("one Open By Itself At row", openAt ~= nil, true)
-check("on Windows, with Window Spots", Holder(openAt) == Holder(RowButton("Window Spots:")), true)
+check("on Windows, with Window Size", Holder(openAt) == Holder(RowDropdown("Window Size:")), true)
 settings.openAtAuction, settings.openWithShops, settings.openAtProfessions = nil, nil, nil
 UI.tabs.settings.refresh()
 check("a new player's ticks", openAt:GetValue().openAtAuction == true and openAt:GetValue().openWithShops == nil

@@ -2733,9 +2733,7 @@ L["Says in chat when someone in Trade asks for something you can make."] = "Avis
 L["Sister Addons:"] = "Addons hermanos:"
 L["Says once in chat which Blackthornes addons you don't have."] = "Dice una vez en el chat qué addons de Blackthornes no tienes."
 L["What's New:"] = "Novedades:"
-L["What's New After Updates:"] = "Novedades tras actualizar:"
 L["Opens What's New the first time you play after an update."] = "Abre Novedades la primera vez que juegas tras una actualización."
-L["What's New Motion:"] = "Movimiento de Novedades:"
 L["Window Size:"] = "Tamaño de la ventana:"
 L["Text Size:"] = "Tamaño del texto:"
 L["Window Style:"] = "Estilo de ventana:"
@@ -3363,7 +3361,6 @@ L["Crafting, prices and the auction house"] = "Fabricación, precios y la casa d
 L["Right-click for settings"] = "Clic derecho para los ajustes"
 L["Got It"] = "Entendido"
 L["Set Goal"] = "Poner objetivo"
-L["ADDONS"] = "ADDONS"
 L["ARROW"] = "FLECHA"
 L["My Crafts"] = "Mis fabricaciones"
 L["Recipes to Learn"] = "Recetas por aprender"
@@ -3662,6 +3659,16 @@ L["%d in %d buys"] = "%d en %d compras"
 L["Click to search for it at the auction house."] = "Haz clic para buscarlo en la casa de subastas."
 L["yesterday"] = "ayer"
 L["Each craft makes %d."] = "Cada fabricación da %d."
+
+-- The settings every Blackthornes addon shares (2026-11-16).
+L["All Addons"] = "Todos los addons"
+L["ALL BLACKTHORNES ADDONS"] = "TODOS LOS ADDONS BLACKTHORNES"
+L["WHAT'S NEW"] = "NOVEDADES"
+L["After Updates:"] = "Tras actualizar:"
+L["Show With Motion"] = "Mostrar con movimiento"
+
+-- The one window's tab at the profession window (2026-11-16).
+L["Crafting"] = "Fabricar"
 
 -- Tooltips and Windows pages in Settings (2026-11-16).
 L["TOOLTIPS"] = "TOOLTIPS"
