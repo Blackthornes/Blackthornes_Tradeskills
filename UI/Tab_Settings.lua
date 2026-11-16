@@ -662,7 +662,9 @@ local function Build(outer)
     end, true)
     widgets.valueOwned:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    CreateSection(pages.queue, 1, L["WHAT GETS QUEUED"])
+    -- The Queue page in three groups (the owner said build it, 2026-11-16,
+    -- from a mockup): how many to keep, sub-crafts and alts, the list.
+    CreateSection(pages.queue, 1, L["RESTOCKING"])
     local postedRow = CreateRow(pages.queue, 1, L["Keep in Stock:"],
         L["The most of each craft to keep. Listings, bags, bank, mail and queue all count. At 0 it keeps about two days of your sales. Set one per profession below or per item on the Profit tab."])
 
@@ -687,22 +689,30 @@ local function Build(outer)
     end, true)
     widgets.restockOnSale:SetPoint("TOPLEFT", CONTROL_X, -2)
 
-    local sellOutRow = CreateRow(pages.queue, 1, L["Raise When Sold Out:"],
-        L["When every copy you listed sells, Keep in Stock goes up by 1. When it comes back unsold 3 times in a row, it goes down by 1, but never below where it started."])
+    -- Stock From Sales and Raise When Sold Out in one box (the owner said
+    -- build it, 2026-11-16, from a mockup). Each keeps its own saved key,
+    -- learnStockFromSales and raiseStockOnSellOut, and every player's pair
+    -- shows as one of the four choices; only a key that changes is written.
+    local fromSalesRow = CreateRow(pages.queue, 1, L["Stock From Sales:"],
+        L["Follow Sales: at 0, Keep in Stock follows about two days of your sales. Without it, crafts with no number are never queued. Raise When Sold Out: when every copy you listed sells, Keep in Stock goes up by 1. After 3 unsold in a row it goes down by 1, never below where it started."])
 
-    widgets.raiseOnSellOut = Widgets.CreateCheckbox(sellOutRow, L["On"], function(checked)
-        Config:Set("raiseStockOnSellOut", checked)
-    end, true)
-    widgets.raiseOnSellOut:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local learnRow = CreateRow(pages.queue, 1, L["Stock From Sales:"],
-        L["At 0, Keep in Stock follows about two days of your sales. Off, crafts with no number are never queued."])
-
-    widgets.learnStock = Widgets.CreateCheckbox(learnRow, L["On"], function(checked)
-        Config:Set("learnStockFromSales", checked)
+    widgets.stockFromSales = Widgets.CreateDropdown(fromSalesRow, {
+        { text = L["Off"], value = "off" },
+        { text = L["Follow Sales"], value = "sales" },
+        { text = L["Raise When Sold Out"], value = "sellout" },
+        { text = L["Both"], value = "both" },
+    }, function(value)
+        local learn = value == "sales" or value == "both"
+        local raise = value == "sellout" or value == "both"
+        if (Config:Get("learnStockFromSales") ~= false) ~= learn then
+            Config:Set("learnStockFromSales", learn)
+        end
+        if (Config:Get("raiseStockOnSellOut") == true) ~= raise then
+            Config:Set("raiseStockOnSellOut", raise)
+        end
         UI:RefreshActiveTab()
-    end, true)
-    widgets.learnStock:SetPoint("TOPLEFT", CONTROL_X, -2)
+    end, { width = COLUMN_WIDTH - CONTROL_X })
+    widgets.stockFromSales:SetPoint("TOPLEFT", CONTROL_X, 0)
 
     -- One row each (the owner, 2026-10-15): the number, and beside it the
     -- tick box that turns it on. Same saved keys as the two rows before.
@@ -742,15 +752,7 @@ local function Build(outer)
     end, true)
     widgets.fastSellerBoost:SetPoint("TOPLEFT", CONTROL_X + 82, -2)
 
-    local hideMaxedRow = CreateRow(pages.queue, 1, L["Hide Maxed Crafts:"],
-        L["Hides crafts at their limit."])
-
-    widgets.hideMaxed = Widgets.CreateCheckbox(hideMaxedRow, L["On"], function(checked)
-        Config:Set("hideAtPostLimit", checked)
-        UI:RefreshActiveTab()
-    end, true)
-    widgets.hideMaxed:SetPoint("TOPLEFT", CONTROL_X, -2)
-
+    CreateSection(pages.queue, 1, L["SUB-CRAFTS AND ALTS"])
     local subCraftRow = CreateRow(pages.queue, 1, L["Queue Sub-Crafts:"],
         L["Also queues materials that are cheaper to make than buy."])
 
@@ -763,34 +765,6 @@ local function Build(outer)
         ns.Queue:Notify()
     end, true)
     widgets.subCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local freeSpaceRow = CreateRow(pages.queue, 1, L["Free Bag Space First:"],
-        L["Craft Next picks the craft that frees the most bag slots."])
-
-    widgets.freeSpaceFirst = Widgets.CreateCheckbox(freeSpaceRow, L["On"], function(checked)
-        Config:Set("craftFreesSpaceFirst", checked)
-        UI:RefreshActiveTab()
-        if ns.CraftPanel and ns.CraftPanel.UpdateCraftButton then ns.CraftPanel:UpdateCraftButton() end
-    end, true)
-    widgets.freeSpaceFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local altCraftRow = CreateRow(pages.queue, 1, L["Suggest Other Characters:"],
-        L["Points out materials an alt can make for less."])
-
-    widgets.altCrafts = Widgets.CreateCheckbox(altCraftRow, L["On"], function(checked)
-        Config:Set("suggestOtherCharacters", checked)
-        UI:RefreshActiveTab()
-    end, true)
-    widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
-
-    local followRow = CreateRow(pages.queue, 1, L["Goals Follow the Queue:"],
-        L["With Farmer, goals from Set Goal change with the queue."])
-
-    widgets.followGoals = Widgets.CreateCheckbox(followRow, L["On"], function(checked)
-        Config:Set("farmerGoalsFollowQueue", checked)
-        if checked then ns.FarmerGoals:Follow() end
-    end, true)
-    widgets.followGoals:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     local shareRow = CreateRow(pages.queue, 1, L["Alts Make Sub-Crafts:"],
         L["Puts a sub-craft on the alt who can make it, and the mailbox lists what to send."])
@@ -807,6 +781,44 @@ local function Build(outer)
         end
     end, false)
     widgets.shareQueue:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local altCraftRow = CreateRow(pages.queue, 1, L["Suggest Other Characters:"],
+        L["Points out materials an alt can make for less."])
+
+    widgets.altCrafts = Widgets.CreateCheckbox(altCraftRow, L["On"], function(checked)
+        Config:Set("suggestOtherCharacters", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.altCrafts:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    CreateSection(pages.queue, 1, L["THE LIST"])
+    local hideMaxedRow = CreateRow(pages.queue, 1, L["Hide Maxed Crafts:"],
+        L["Hides crafts at their limit."])
+
+    widgets.hideMaxed = Widgets.CreateCheckbox(hideMaxedRow, L["On"], function(checked)
+        Config:Set("hideAtPostLimit", checked)
+        UI:RefreshActiveTab()
+    end, true)
+    widgets.hideMaxed:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local freeSpaceRow = CreateRow(pages.queue, 1, L["Free Bag Space First:"],
+        L["Craft Next picks the craft that frees the most bag slots."])
+
+    widgets.freeSpaceFirst = Widgets.CreateCheckbox(freeSpaceRow, L["On"], function(checked)
+        Config:Set("craftFreesSpaceFirst", checked)
+        UI:RefreshActiveTab()
+        if ns.CraftPanel and ns.CraftPanel.UpdateCraftButton then ns.CraftPanel:UpdateCraftButton() end
+    end, true)
+    widgets.freeSpaceFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
+
+    local followRow = CreateRow(pages.queue, 1, L["Goals Follow the Queue:"],
+        L["With Farmer, goals from Set Goal change with the queue."])
+
+    widgets.followGoals = Widgets.CreateCheckbox(followRow, L["On"], function(checked)
+        Config:Set("farmerGoalsFollowQueue", checked)
+        if checked then ns.FarmerGoals:Follow() end
+    end, true)
+    widgets.followGoals:SetPoint("TOPLEFT", CONTROL_X, -2)
 
     CreateSection(pages.mail, 1, L["AT THE MAILBOX"])
     local queueMailRow = CreateRow(pages.mail, 1, L["Queue Mail:"],
@@ -2634,8 +2646,11 @@ local function Refresh()
 
     widgets.restockWhenLow:SetChecked(Config:Get("restockWhenLow") == true)
     widgets.restockOnSale:SetChecked(Config:Get("restockOnSale") ~= false)
-    widgets.raiseOnSellOut:SetChecked(Config:Get("raiseStockOnSellOut") == true)
-    widgets.learnStock:SetChecked(Config:Get("learnStockFromSales") ~= false)
+    do
+        local learn = Config:Get("learnStockFromSales") ~= false
+        local raise = Config:Get("raiseStockOnSellOut") == true
+        widgets.stockFromSales:SetValue(learn and (raise and "both" or "sales") or (raise and "sellout" or "off"))
+    end
     Put(widgets.restockAt, Config:Get("restockAt") or 0)
     widgets.fastSellerBoost:SetChecked(Config:Get("fastSellerBoost") == true)
     local extra = Config:Get("fastSellerExtra")
