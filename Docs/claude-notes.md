@@ -2129,7 +2129,7 @@ setting. Tested in `tools/test_queuecrafttime.lua`. Not yet seen in game.
 
 A player asked, the owner said build it (2026-11-12), in all five
 addons: windows remember where they were dragged. `UI/SharedWindow.lua`
-(FILE_VERSION 7; `UI/WhatsNew.lua` FILE_VERSION 7 too) keeps the one
+(FILE_VERSION 8; `UI/WhatsNew.lua` FILE_VERSION 7) keeps the one
 window's spot beside each game window it docks to, once the player drags
 it there (`SharedWindow.Dropped`, account wide in every save as
 `oneWindowDockSpots[place]`), and small windows signed up with
@@ -2387,3 +2387,58 @@ first.
 - After a client-table re-pull, `tools/make_forever_recipes.py` as the
   tables routine does.
 
+
+## Shelves, dock places and the All Addons page (2026-11-16)
+
+The owner said "build them all" for the UI cleanup ideas (2026-11-16). What
+landed in `UI/SharedWindow.lua` (FILE_VERSION 8, the same file in all five;
+`UI/WhatsNew.lua` stays FILE_VERSION 7):
+
+- **More dock places.** `PLACES` adds `bank`, `stable`, `character` (the
+  character sheet, hooked once by `SharedWindow.HookPlaces`) and
+  `profession`. The newest place open wins; closing it falls back to the
+  one still open. Never Hide/Show a game frame: they are only read.
+- **The free side.** `SharedWindow.PickSide` measures room right and left
+  of the game's window (bags count) and picks the side that fits; if
+  neither does, the one window shrinks to the gap, never below its
+  smallest size. A spot dragged by hand (`oneWindowDockSpots`) still wins.
+- **Shelves.** One board for floating pieces, `_G.BlackthornesShelves`,
+  so no two start on the same spot. `top` runs down the screen's top
+  middle (gold bar, arrows, XP bar, shards, sell marked, mail tally, gold
+  goal, upgrade banner, notes last); `right` runs down the right side, left
+  of the quest list (auctions, Guide Me, Upgrade Tracker, upgrade quest).
+  Order is `SHELF_ORDER` by kind; an unknown kind gets 80. Call
+  `SharedWindow.ShelfPlace(frame, shelf, piece)` only when the piece has
+  no saved spot: a dragged piece keeps its spot and leaves the shelf.
+  Re-laid after a fight, never on a timer. `SharedWindow.Layer(frame,
+  kind)` is the one ladder: panel LOW, popup MEDIUM, window DIALOG.
+  Pieces: Farmer arrow, recap, rank-up; Equipment quest arrow, banner,
+  Upgrade Done, Upgrade Tracker, quest panel; Pets arrow, Pet XP bar,
+  Shard Tracker; Tradeskills gold bar, auctions, mail tally, arrow;
+  Butler arrow; the shared Guide Me card and `UI/Notice.lua`.
+- **The gear on the rail** opens the All Addons settings page of the
+  addon showing (each joins with `allAddons = function() ... end`).
+- **All Addons page.** The rows every General page repeated moved to one
+  page, `all`, first in the switch: Window Style, Text Size, Effects, Mute
+  All Sounds, Combine Addon Buttons, One Window, Window Spots, Sister
+  Addons, and What's New with one "After Updates:" drop-down (Show With
+  Motion, Show, Off; `SettingsPages.AfterUpdatesControl`) in place of its
+  two boxes. Same saved keys, nothing renamed, no saved choice changed.
+  Window Size stays on General: it is per addon. The page hides from the
+  switch while One Window is on (the gear reaches it). Farmer's page is
+  left to the Farmer settings thread.
+- **SettingsPages** (Farmer, Equipment, Pets, Butler): the page switch
+  wraps to a second line, and `opts.barCap` caps `BarWidth` (Farmer
+  passes 724). `Page:SetHidden(key, hidden)` hides a page from the switch.
+- **Tradeskills only:** at the profession window the craft pane is the
+  one window's Crafting tab (`UI.DOCK_TABS`, `TSTabs:AtDock`,
+  `CraftPanel:IntoOne/OutOfOne/BackBeside`), with Queue, Profit, Prices
+  and Settings beside it. At the mailbox the mail list is its Mail tab
+  while it has something on it (`QueueMailPanel:HasWork`). Off One
+  Window, or in a fight, both hang beside the game's window as before.
+- The new words (All Addons, ALL BLACKTHORNES ADDONS, WHAT'S NEW, After
+  Updates:, Show With Motion, Show, Off, Crafting, Mail) wait for the
+  owner's yes; change them in all six languages if he picks others.
+- Tested in `tools/test_sharedwindow.lua` (sections 13 to 16),
+  `tools/test_settingsscroll.lua`, each addon's settings test and
+  Tradeskills' `tools/test_onewindow.lua` (section 7).
