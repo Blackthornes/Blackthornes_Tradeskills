@@ -4,6 +4,15 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.31.1
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Suffix gear prices.** Tooltips for random suffix gear now show the price for that suffix.
+- **Road to 300.** Artisan Enchanting now shows where the trainer is inside Uldaman, with Show the Way.
+- **Import Prices.** Codes from your other account on the same realm now import.
+- **Artisan crates.** Crates show their favor and silver.
+
 ## 1.31.0
 
 For WoW: Forever (interface 16001). `/reload` is not enough: a file was added, so close the game fully and start it again after updating.
