@@ -159,7 +159,7 @@ local plan = MerchantsFavor:GetPlan()
 local best = plan.best
 check("60 still to go", plan.goal == 100 and plan.have == 40 and plan.need == 60 and not plan.reached)
 check("the cheapest favor is the crate picked",
-    best == MerchantsFavor:GetRows({ skipOverStack = true })[1] or best.key == MerchantsFavor:GetRows({ skipOverStack = true })[1].key)
+    best == MerchantsFavor:GetRows()[1] or best.key == MerchantsFavor:GetRows()[1].key)
 check("enough crates for the favor", plan.crates == math.ceil(60 / best.favor))
 local each = best.cratePrice + best.best.cost - best.money
 check("gold is a crate and a bundle each, less the silver back", plan.gold == plan.crates * each)

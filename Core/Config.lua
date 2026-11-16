@@ -152,6 +152,9 @@ local DEFAULTS = {
         -- The Snipe tab in the auction house drawer (2026-11-03). Off until
         -- ticked. Cap is copper per session, 0 until the player sets one.
         snipeTab = false,
+        -- The auction house's Buy tab lists what the Waylaid Crates in your
+        -- bags need (UI/PostPanel.lua, 2026-11-16). Off unless ticked.
+        crateShoppingList = false,
         snipeCap = 0,
         snipePct = 70,
         snipeSound = true,
@@ -224,10 +227,8 @@ local DEFAULTS = {
         minProfit = 0,
         minMarginPercent = 0,
 
-        -- Deals, Merchant's Favor: leave bundles needing more than one stack
-        -- of a material out of the cheapest, as Forever could not fill a
-        -- crate from them when last reported (UI/DealsFavor.lua).
-        favorSkipOverStack = true,
+        -- favorSkipOverStack (Deals, Merchant's Favor) is gone: the game fills
+        -- a crate from two stacks now (2026-11-16). Old saves keep the value.
 
         -- Deals, Merchant's Favor: the favor goal (2026-10-20), typed on
         -- the tab as "favorGoal", nil until one is set. The auction house

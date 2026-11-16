@@ -880,8 +880,15 @@ function PostPanel:Build()
         updateRow = PostPanel.UpdateShoppingRow,
         onEnter = PostPanel.ShowShoppingTooltip,
         onLeave = function() GameTooltip:Hide() end,
+        -- A group's bar on the crate list reads like a picked row: dark
+        -- gold glass with a gold edge down its left.
+        isSelected = function(line) return type(line) == "table" and line.kind == "group" end,
         onClick = function(line)
-            if PostPanel:CanSearch(line) then ns.UI:SearchAuctionHouse(line.itemID, line.shortfall) end
+            if type(line) == "table" and line.kind == "group" then
+                PostPanel:FoldGroup(line.group)
+            elseif PostPanel:CanSearch(line) then
+                ns.UI:SearchAuctionHouse(line.itemID, line.shortfall)
+            end
         end,
     })
     shopping:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
@@ -1731,6 +1738,8 @@ end
 
 --- Dock to the right of the auction house, as tall as there is room for.
 function PostPanel:Attach()
+    -- Each visit works the crate list out again.
+    self.crateAt, self.shoppingAt = nil, nil
     -- The one window's Auction House tab holds it: nothing to place.
     if self.inOne then return end
     local frame = self:Build()
@@ -1886,9 +1895,14 @@ end
 function PostPanel.SearchableIDs(lines)
     local ids, counts = {}, {}
     for _, line in ipairs(lines or {}) do
-        if PostPanel:CanSearch(line) and type(line.itemID) == "number" and not counts[line.itemID] then
-            ids[#ids + 1] = line.itemID
-            counts[line.itemID] = line.shortfall
+        if PostPanel:CanSearch(line) and type(line.itemID) == "number" then
+            if counts[line.itemID] then
+                -- The crates and the queue both want it: buy for both.
+                counts[line.itemID] = counts[line.itemID] + line.shortfall
+            else
+                ids[#ids + 1] = line.itemID
+                counts[line.itemID] = line.shortfall
+            end
         end
     end
     return ids, counts
@@ -1912,7 +1926,7 @@ function PostPanel:SearchAll()
     end
     self.searchStep = nil
 
-    local ids, counts = PostPanel.SearchableIDs(self:ShoppingLines())
+    local ids, counts = PostPanel.SearchableIDs(self:BuyLines())
     if #ids == 0 then
         ns.Print(L["Nothing on this list to look for on the auction house."])
         return
@@ -1942,7 +1956,7 @@ function PostPanel:UpdateSearchAll(lines)
         label = L.Format("Next %d/%d", step.pos, #step.ids)
         button:SetEnabledState(true)
     else
-        local ids = PostPanel.SearchableIDs(lines or self:ShoppingLines())
+        local ids = PostPanel.SearchableIDs(lines or self:BuyLines())
         label = #ids > 0 and L.Format("Search all %d", #ids) or L["Search all"]
         button:SetEnabledState(#ids > 0)
     end
@@ -1975,18 +1989,348 @@ function PostPanel.CreateShoppingRow(row)
 end
 
 function PostPanel.UpdateShoppingRow(row, line)
+    if PostPanel.UpdateGroupedRow(row, line) then return end
     ns.CraftPanel.UpdateShoppingRow(row, line)
     row.search:SetShown(PostPanel:CanSearch(line))
 end
 
 --- The Queue tab's tooltip, and what a click does.
 function PostPanel.ShowShoppingTooltip(row, line)
-    if ns.UI and ns.UI.ShowMaterialTooltip then ns.UI.ShowMaterialTooltip(row, line) end
+    if type(line) == "table" and (line.kind == "group" or line.kind == "heading" or line.kind == "note") then return end
+    if type(line) == "table" and line.kind == "crate" then
+        PostPanel.ShowCrateTooltip(row, line)
+    elseif ns.UI and ns.UI.ShowMaterialTooltip then
+        ns.UI.ShowMaterialTooltip(row, line)
+    end
     if PostPanel:CanSearch(line) then
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(L["Click to search the auction house"], 0.78, 0.64, 0.30)
         GameTooltip:Show()
     end
+end
+
+--------------------------------------------------------------------------------
+-- The crate list on Buy (the owner said build it, 2026-11-16, from a
+-- mockup): with "Crate Shopping List:" ticked and Waylaid Crates in your
+-- bags, Buy shows a "Waylaid Crates: N" group of what they still need
+-- (MerchantsFavor:CrateShoppingLines) above a "Craft Queue:" group of the
+-- queue's list. Each group folds, and sorts by ITEM, BUY or COST. Off, Buy
+-- is the queue's list as before.
+--------------------------------------------------------------------------------
+
+-- The crate lines are worked out at most this often, and again at each
+-- visit (Attach) and once the bags change (CrateBagsChanged).
+local CRATE_REFRESH_SECONDS = 5
+
+-- Per group, this session only: folded, and the column sorting it.
+PostPanel.folded = {}
+PostPanel.buySort = {}
+
+function PostPanel.ShowsCrates()
+    return ns.Config ~= nil and ns.Config:Get("crateShoppingList") == true
+        and ns.MerchantsFavor ~= nil and ns.MerchantsFavor.CrateShoppingLines ~= nil
+end
+
+--- What the crates in your bags still need, and how many crates there are.
+function PostPanel:CrateLines(queueLines)
+    if not PostPanel.ShowsCrates() then return {}, 0 end
+    local favor = ns.MerchantsFavor
+    local now = GetTime()
+    if not self.crateLines or not self.crateAt or self.crateHeld ~= favor.held
+        or now - self.crateAt >= CRATE_REFRESH_SECONDS then
+        local ok, lines, crates = pcall(favor.CrateShoppingLines, favor, queueLines)
+        if not ok then lines, crates = {}, 0 end
+        self.crateLines, self.crateCount = lines or {}, crates or 0
+        self.crateAt, self.crateHeld = now, favor.held
+    end
+    return self.crateLines, self.crateCount
+end
+
+--- The bags changed (a crate filled, a buy came in): work it out again.
+function PostPanel:CrateBagsChanged()
+    self.crateAt = nil
+    if not PostPanel.ShowsCrates() or self.view ~= "buy" then return end
+    if self.frame and self.frame:IsShown() then self:Refresh() end
+end
+
+--- Every line on Buy that can be bought, both groups: what Search all and
+--- the summary line count.
+function PostPanel:BuyLines()
+    local queueLines = self:ShoppingLines()
+    local crateLines = self:CrateLines(queueLines)
+    if #crateLines == 0 then return queueLines end
+    local lines = {}
+    for _, line in ipairs(crateLines) do lines[#lines + 1] = line end
+    for _, line in ipairs(queueLines) do lines[#lines + 1] = line end
+    return lines
+end
+
+local SORTS = {
+    name = function(line) return (Util.GetItemName(line.itemID) or ""):lower() end,
+    buy = function(line) return line.shortfall or 0 end,
+    cost = function(line) return line.estimatedCost or 0 end,
+}
+
+--- A sorted copy of a group's lines, by the column picked, else as given.
+function PostPanel:SortedGroup(group, lines)
+    local sort = self.buySort[group]
+    local value = sort and SORTS[sort.key]
+    if not value then return lines end
+    local copy, keys = {}, {}
+    for index, line in ipairs(lines) do
+        copy[index] = line
+        keys[line] = value(line)
+    end
+    table.sort(copy, function(a, b)
+        local x, y = keys[a], keys[b]
+        if x == y then return (a.itemID or 0) < (b.itemID or 0) end
+        if sort.ascending then return x < y end
+        return x > y
+    end)
+    return copy
+end
+
+--- A click on a column name: that column, biggest first (names A to Z),
+--- then turned round, then the list's own order, as other lists sort.
+function PostPanel:SortGroup(group, key)
+    local sort = self.buySort[group]
+    if not sort or sort.key ~= key then
+        self.buySort[group] = { key = key, ascending = key == "name" }
+    elseif sort.ascending == (key == "name") then
+        sort.ascending = not sort.ascending
+    else
+        self.buySort[group] = nil
+    end
+    self:Refresh()
+end
+
+function PostPanel:FoldGroup(group)
+    self.folded[group] = not self.folded[group] or nil
+    self:Refresh()
+end
+
+local function GroupTotal(lines)
+    local total = 0
+    for _, line in ipairs(lines) do
+        if (line.shortfall or 0) > 0 and line.estimatedCost then total = total + line.estimatedCost end
+    end
+    return total
+end
+
+--- What the Buy list draws: with crates, each group's bar, its column
+--- names and its lines; without, the queue's lines alone.
+-- @return data, lines (both groups, the ones that can be bought), crates
+function PostPanel:BuyData()
+    local queueLines = self:ShoppingLines()
+    local crateLines, crates = self:CrateLines(queueLines)
+    self.grouped = crates > 0
+    if crates == 0 then return queueLines, queueLines, 0 end
+
+    local data, lines = {}, {}
+    local function Group(group, label, groupLines, note)
+        data[#data + 1] = { kind = "group", group = group, label = label, total = GroupTotal(groupLines),
+            folded = self.folded[group] == true }
+        if self.folded[group] then return end
+        if note then
+            data[#data + 1] = { kind = "note", text = note }
+            return
+        end
+        data[#data + 1] = { kind = "heading", group = group }
+        for _, line in ipairs(self:SortedGroup(group, groupLines)) do data[#data + 1] = line end
+    end
+
+    local short = false
+    for _, line in ipairs(crateLines) do
+        lines[#lines + 1] = line
+        if (line.shortfall or 0) > 0 then short = true end
+    end
+    Group("crates", L.Format("Waylaid Crates: %d", crates), crateLines,
+        not short and L["Every crate in your bags is ready to fill."] or nil)
+
+    if #queueLines > 0 then
+        for _, line in ipairs(queueLines) do lines[#lines + 1] = line end
+        Group("queue", L["Craft Queue:"], queueLines)
+    end
+    return data, lines, crates
+end
+
+--- The group bar, the column names and the note, on the shopping row:
+--- the parts made the first time one is needed.
+local function GroupParts(row)
+    local parts = rawget(row, "groupParts")
+    if parts then return parts end
+    parts = {}
+
+    parts.fold = row:CreateTexture(nil, "OVERLAY")
+    parts.fold:SetSize(12, 12)
+    parts.fold:SetPoint("LEFT", row, "LEFT", 8, 0)
+
+    parts.total = Theme.CreateLabel(row, "small", "text", "RIGHT")
+    parts.total:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+
+    parts.note = Theme.CreateLabel(row, "small", "muted", "CENTER")
+    parts.note:SetPoint("LEFT", row, "LEFT", 8, 0)
+    parts.note:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    parts.note:SetWordWrap(true)
+
+    -- The crate list's cost column, left of BUY.
+    parts.cost = Theme.CreateLabel(row, "small", "text", "RIGHT")
+    parts.cost:SetWidth(76)
+    parts.cost:SetPoint("TOPRIGHT", row.count, "TOPLEFT", -4, 0)
+
+    -- Have: everything this line needs is in your bags already.
+    parts.have = Theme.CreateLabel(row, "small", "profit", "CENTER")
+    parts.have:SetPoint("CENTER", row.search, "CENTER")
+    parts.have:SetText(L["Have"])
+
+    -- ITEM, BUY and COST, each a click to sort the group.
+    parts.headings = {}
+    local function Heading(key, text, justify)
+        local button = CreateFrame("Button", nil, row)
+        button:SetHeight(16)
+        local label = Theme.CreateLabel(button, "tiny", "muted", justify)
+        label:SetAllPoints(button)
+        label:SetText(text)
+        button.label = label
+        button:SetScript("OnClick", function()
+            local line = rawget(row, "data")
+            if type(line) == "table" and line.group then PostPanel:SortGroup(line.group, key) end
+        end)
+        parts.headings[key] = button
+        return button
+    end
+    local item = Heading("name", L["ITEM"], "LEFT")
+    item:SetPoint("TOPLEFT", row, "TOPLEFT", 25, -6)
+    item:SetWidth(120)
+    local buy = Heading("buy", L["BUY"], "RIGHT")
+    buy:SetPoint("TOPRIGHT", row.count, "TOPRIGHT", 0, -2)
+    buy:SetWidth(54)
+    local cost = Heading("cost", L["COST"], "RIGHT")
+    cost:SetPoint("TOPRIGHT", parts.cost, "TOPRIGHT", 0, -2)
+    cost:SetWidth(76)
+
+    row.groupParts = parts
+    return parts
+end
+
+local function ShowParts(row, parts, which)
+    parts.fold:SetShown(which == "group")
+    parts.total:SetShown(which == "group")
+    parts.note:SetShown(which == "note")
+    parts.cost:SetShown(which == "line")
+    parts.have:Hide()
+    for _, button in pairs(parts.headings) do button:SetShown(which == "heading") end
+    local plain = which == "line"
+    row.icon:SetShown(plain)
+    row.count:SetShown(plain)
+    row.tag:SetShown(plain)
+    row.name:SetShown(which == "line" or which == "group")
+    if which == "heading" or which == "note" then Theme.SetRowName(row.name, "") end
+    if not plain then
+        row.search:Hide()
+        row.bar:Set(nil)
+        Theme.SetItemIcon(row.icon, nil)
+    end
+end
+
+--- A Buy row while the crate list shows. False when it does not, and the
+--- row is drawn as before.
+function PostPanel.UpdateGroupedRow(row, line)
+    local parts = rawget(row, "groupParts")
+    if not PostPanel.grouped or type(line) ~= "table" then
+        if parts then
+            ShowParts(row, parts, "plain")
+            parts.cost:Hide()
+            row.icon:Show()
+            row.count:Show()
+            row.tag:Show()
+            row.name:Show()
+            row.name:SetPoint("TOPRIGHT", row.count, "TOPLEFT", -4, 0)
+        end
+        return false
+    end
+    parts = GroupParts(row)
+
+    if line.kind == "group" then
+        ShowParts(row, parts, "group")
+        pcall(parts.fold.SetTexture, parts.fold, line.folded
+            and [[Interface\Buttons\UI-PlusButton-Up]] or [[Interface\Buttons\UI-MinusButton-Up]])
+        row.name:SetPoint("TOPRIGHT", parts.total, "TOPLEFT", -4, 0)
+        Theme.SetRowName(row.name, line.label)
+        row.name:SetTextColor(Theme.Unpack("accent"))
+        parts.total:SetText(line.total > 0 and Util.FormatMoney(line.total, { short = true }) or "")
+        return true
+    end
+    if line.kind == "heading" then
+        ShowParts(row, parts, "heading")
+        local sort = PostPanel.buySort[line.group]
+        for key, button in pairs(parts.headings) do
+            button.label:SetTextColor(Theme.Unpack(sort and sort.key == key and "accent" or "muted"))
+        end
+        return true
+    end
+    if line.kind == "note" then
+        ShowParts(row, parts, "note")
+        parts.note:SetText(line.text)
+        return true
+    end
+
+    ShowParts(row, parts, "line")
+    row.name:SetPoint("TOPRIGHT", parts.cost, "TOPLEFT", -4, 0)
+    ns.CraftPanel.UpdateShoppingRow(row, line)
+    local short = line.shortfall or 0
+    local look = ns.CraftPanel:ShoppingLook(line)
+
+    row.count:SetText(short > 0 and tostring(short) or "")
+    row.count:SetTextColor(Theme.Unpack("text"))
+    if short > 0 and line.estimatedCost then
+        local money = Util.FormatMoney(line.estimatedCost, { short = true })
+        parts.cost:SetText(line.fromVendor and L.Format("|c%svendor|r %s", ns.COLORS.accent, money) or money)
+    else
+        parts.cost:SetText(short > 0 and L["no price"] or "")
+    end
+    -- Under the name, only what the cost column cannot say: in the bank,
+    -- in the mail, on an alt.
+    row.tag:SetText(look.colour == "warn" and look.tag or "")
+
+    local canSearch = PostPanel:CanSearch(line)
+    row.search:SetShown(canSearch)
+    parts.have:SetShown(short <= 0 and look.colour == "profit")
+    return true
+end
+
+--- The hover on a crate line: which crates it fills, what they need, what
+--- you have, what one costs, and the next cheapest bundle.
+function PostPanel.ShowCrateTooltip(row, line)
+    Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", line.itemID)
+    GameTooltip:AddLine(" ")
+    local fills = {}
+    for _, fill in ipairs(line.fills or {}) do fills[#fills + 1] = ("%d %s"):format(fill.count, fill.label) end
+    local r, g, b = 0.7, 0.7, 0.7
+    GameTooltip:AddDoubleLine(L["Fills:"], table.concat(fills, ", "), r, g, b, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["Needed:"], tostring(line.needed or 0), r, g, b, 1, 1, 1)
+    GameTooltip:AddDoubleLine(L["You Have:"], tostring(line.have or 0), r, g, b, 1, 1, 1)
+    if line.unitCost then
+        GameTooltip:AddDoubleLine(L["Each:"], Util.FormatMoney(line.unitCost, { short = true }), r, g, b, 1, 1, 1)
+    end
+    if line.others and #line.others > 0 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(L["Other Choice:"], Theme.Unpack("accent"))
+        local seen = {}
+        for _, other in ipairs(line.others) do
+            local key = other.itemID .. ":" .. other.count
+            if not seen[key] then
+                seen[key] = true
+                GameTooltip:AddDoubleLine(("%d %s"):format(other.count, Util.GetItemName(other.itemID) or "?"),
+                    L.Format("%s a crate", Util.FormatMoney(other.cost, { short = true })), 1, 1, 1, 1, 1, 1)
+            end
+        end
+    end
+    if PostPanel:CanSearch(line) then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(L["Click to search the auction house"], 0.78, 0.64, 0.30)
+    end
+    GameTooltip:Show()
 end
 
 --- The shopping list, at most once every couple of seconds.
@@ -2025,16 +2369,18 @@ function PostPanel:RefreshShopping()
     self.list:Hide()
     self.shoppingList:Show()
 
-    local lines = self:ShoppingLines()
+    local data, lines, crates = self:BuyData()
     local text, short = self:ShoppingSummary(lines)
+    -- Only crates, every one ready: the group says so, the line stays empty.
+    if short == 0 and crates > 0 then text = "" end
 
     self.title:SetText(self:IsCollapsed() and short > 0
         and L.Format("Shopping list (%d)", short) or L["Shopping list"])
 
-    self.shoppingList:SetData(lines)
-    self.empty:SetShown(#lines == 0)
+    self.shoppingList:SetData(data)
+    self.empty:SetShown(#data == 0)
 
-    if #lines == 0 then
+    if #data == 0 then
         self.empty:SetText(ns.Queue:Count() == 0
             and L["Nothing queued.\n\nQueue crafts and the materials they need show up here."]
             or L["You already have everything the queue needs."])
