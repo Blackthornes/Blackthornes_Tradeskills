@@ -192,32 +192,28 @@ do
     check("no auction price never does", Posting.VendorPaysMore(1, nil, 10), false)
 end
 
--- A sale that beats the vendor by less than one deposit is not worth the
--- risk of the listing running out, so it goes to the vendor too.
+-- Only the auction house cut counts. A deposit a listing might lose never
+-- sends an item to the vendor (a player's report, 2026-11-16).
 do
     local Profit = ns.Profit
     local oldEach, oldLost = Profit.LostDepositEach, Profit.LostListings
     Profit.LostDepositEach = function() return 5 end
     Profit.LostListings = function() return 0 end
-    -- 100 after the 5% cut is 95: 3 over a vendor's 92, under the 5 deposit
-    check("a win under one deposit goes to the vendor", Posting.VendorPaysMore(1, 100, 92), true)
-    check("a win over one deposit still lists", Posting.VendorPaysMore(1, 100, 80), false)
-    -- one lost deposit already in the net is not taken off a second time
-    Profit.LostListings = function() return 1 end
-    check("a deposit is never counted twice", Posting.VendorPaysMore(1, 100, 89), false)
-    check("and the counted one still counts", Posting.VendorPaysMore(1, 100, 90), true)
-    -- the report's own numbers: 300c market, 227c vendor, a 1s deposit
+    -- 100 after the 5% cut is 95
+    check("a win under one deposit still lists", Posting.VendorPaysMore(1, 100, 92), false)
+    check("a vendor under the cut price never wins", Posting.VendorPaysMore(1, 100, 94), false)
+    check("a vendor at the cut price wins", Posting.VendorPaysMore(1, 100, 95), true)
     Profit.LostDepositEach = function() return 100 end
-    Profit.LostListings = function() return 0 end
+    check("a big deposit changes nothing", Posting.VendorPaysMore(1, 100, 94), false)
+    -- the report's own numbers: 300c market, 227c vendor, a 1s deposit
     check("Simple Britches: 300c is 185c after the cut and the risk",
         Profit:NetAfterRisk(1, 300), 185)
-    check("so a 227c vendor pays more", Posting.VendorPaysMore(1, 300, 227), true)
+    check("so the auction house's 285c beats a 227c vendor", Posting.VendorPaysMore(1, 300, 227), false)
     Profit.LostDepositEach, Profit.LostListings = oldEach, oldLost
 end
 
--- A share each left from the old 1 silver floor (100c for 11, about 9c)
--- is not the item's deposit now. Counted, it sent a 12c stone to a 4c
--- vendor (a player's sell list, 2026-11-13).
+-- A share each left from the old 1 silver floor sends nothing to the vendor
+-- either (a player's sell list, 2026-11-13).
 do
     local Profit = ns.Profit
     local oldLost, oldDeposits = Profit.LostListings, ns.db.deposits
@@ -228,14 +224,11 @@ do
         leastQuantity = 11, leastAt = before, duration = duration, at = before } }
     check("a stale 1s floor share sends nothing to the vendor",
         Posting.VendorPaysMore(9100, 12, 4), false)
-    ns.db.deposits[9100].leastAt, ns.db.deposits[9100].at = Posting.FLOOR_ENDED + 5, Posting.FLOOR_ENDED + 5
-    check("the game's own 1s, seen since, still does",
-        Posting.VendorPaysMore(9100, 12, 4), true)
     Profit.LostListings, ns.db.deposits = oldLost, oldDeposits
 end
 
 -- "Ignore Deposit:" (a player asked, 2026-11-14): ticked, no deposit is
--- counted, so profit and the vendor choice see only the auction house cut.
+-- counted, so profit sees only the auction house cut.
 do
     local Profit = ns.Profit
     local oldGet, oldLost = ns.Config.Get, Profit.LostListings
@@ -258,22 +251,19 @@ end
 -- A player's report (2026-11-16): "A vendor pays more" showed while a known
 -- disenchant value beat the vendor. Breaking it pays more, so no vendor.
 do
-    local Profit = ns.Profit
-    local oldLost, oldDE, oldEach = Profit.LostListings, ns.Disenchant, Profit.LostDepositEach
-    Profit.LostListings = function() return 0 end
-    Profit.LostDepositEach = function() return 5 end
+    local oldDE = ns.Disenchant
     local deValue = 662
     ns.Disenchant = { GetValue = function() return deValue end }
     check("a disenchant worth more than the vendor keeps it off the vendor",
-        Posting.VendorPaysMore(1, 800, 659), false)
+        Posting.VendorPaysMore(1, 600, 659), false)
     deValue = 50
     check("a disenchant worth less still lets the vendor win",
-        Posting.VendorPaysMore(1, 100, 92), true)
+        Posting.VendorPaysMore(1, 100, 96), true)
     deValue = nil
-    check("no disenchant value changes nothing", Posting.VendorPaysMore(1, 100, 92), true)
+    check("no disenchant value changes nothing", Posting.VendorPaysMore(1, 100, 96), true)
     ns.Disenchant = { GetValue = function() error("boom") end }
-    check("a disenchant error changes nothing", Posting.VendorPaysMore(1, 100, 92), true)
-    Profit.LostListings, ns.Disenchant, Profit.LostDepositEach = oldLost, oldDE, oldEach
+    check("a disenchant error changes nothing", Posting.VendorPaysMore(1, 100, 96), true)
+    ns.Disenchant = oldDE
 end
 
 print("")
