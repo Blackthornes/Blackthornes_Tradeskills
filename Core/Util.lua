@@ -820,37 +820,47 @@ function Util.FormatAgeAgo(seconds)
     return L.Format("%s ago", age)
 end
 
---- Round a price down to something an item auction will actually accept.
+--- Item auctions (gear, bags, wands) are listed one at a time.
 --
--- C_AuctionHouse.PostItem takes whole gold and silver only: a price carrying
--- any copper at all silently fails, which the client surfaces as an internal
--- error rather than anything readable. Commodities are unaffected and keep
--- copper precision, so this is only ever applied to item auctions.
+-- Forever takes copper in their price, down to a floor of one silver (tried
+-- in game 2026-11-16, after a player's report), so a 0c undercut can match a
+-- rival to the copper. Older versions rounded to whole silver because the
+-- server once refused copper there. Should a listing with copper in it ever
+-- fail to go up, Posting sets `wholeSilverOnly` and these go back to whole
+-- silver for the rest of the session, so the next click still lists.
+Util.wholeSilverOnly = false
+
+--- A price an item auction will take, rounded down.
 --
 -- Below a silver there is nothing to round down to, so the floor is one
 -- silver. That can land above market value on a near-worthless item, but it
--- is the only price the server will take.
-function Util.RoundToSilver(price)
+-- is the lowest price the server will take.
+function Util.ItemAuctionPrice(price)
     if type(price) ~= "number" then return nil end
     if price < COPPER_PER_SILVER then return COPPER_PER_SILVER end
-    return math.floor(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    if Util.wholeSilverOnly then
+        return math.floor(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    end
+    return math.floor(price)
 end
 
---- Round a price UP to something an item auction will accept.
+--- A price an item auction will take, rounded UP.
 --
--- Rounding down is right when there is a rival to get beneath: the price has
--- to be below theirs to sell first. With no rival there is nothing to get
--- beneath, and rounding down instead throws away up to a silver of a price
--- that was only ever an estimate -- enough, on a cheap craft, to put it under
--- what the materials cost and have the listing refused.
-function Util.CeilToSilver(price)
+-- Rounding down is right when there is a rival to get beneath. With no rival,
+-- or when matching one, rounding down would only give gold away.
+function Util.ItemAuctionPriceUp(price)
     if type(price) ~= "number" then return nil end
     if price <= COPPER_PER_SILVER then return COPPER_PER_SILVER end
-    return math.ceil(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    if Util.wholeSilverOnly then
+        return math.ceil(price / COPPER_PER_SILVER) * COPPER_PER_SILVER
+    end
+    return math.ceil(price)
 end
 
 --- Is this price one an item auction will accept?
-function Util.IsWholeSilver(price)
-    return type(price) == "number" and price >= COPPER_PER_SILVER
-        and price % COPPER_PER_SILVER == 0
+function Util.IsItemAuctionPrice(price)
+    if type(price) ~= "number" or price < COPPER_PER_SILVER or price % 1 ~= 0 then
+        return false
+    end
+    return not Util.wholeSilverOnly or price % COPPER_PER_SILVER == 0
 end

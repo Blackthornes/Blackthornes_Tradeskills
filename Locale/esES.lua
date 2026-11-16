@@ -460,6 +460,7 @@ L["the auction house took one at a time, so the rest go up one per click."] = "l
 L["listed %s"] = "publicado %s"
 L["%s: you have %d listed now. This was the first check since the auction house opened, so the new listing could not be told apart from older ones."] = "%s: ahora tienes %d publicados. Era la primera revisión desde que se abrió la casa de subastas, así que no se pudo separar la subasta nueva de las viejas."
 L["%s did not appear in your auctions."] = "%s no apareció en tus subastas."
+L["It had copper in its price, so the next click lists it in whole silver."] = "Su precio tenía cobre, así que el próximo clic lo pone en plata entera."
 L["listing several at once may not work here, so the next click lists one."] = "publicar varios a la vez puede que no funcione aquí, así que el siguiente clic publica uno."
 L["the auction house may be refusing listings; try Blizzard's own Sell tab."] = "puede que la casa de subastas esté rechazando subastas; prueba la pestaña Vender de Blizzard."
 L["could not tell whether that listing went up. Check your Auctions tab"] = "no se pudo saber si esa subasta se publicó. Mira tu pestaña Subastas"

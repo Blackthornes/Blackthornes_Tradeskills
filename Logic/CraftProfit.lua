@@ -47,7 +47,7 @@ function CraftProfit.IsGrey(itemID)
     return tonumber(quality) == POOR
 end
 
---- Sold one listing at a time (gear), so the auction house takes whole silver.
+--- Sold one listing at a time (gear, bags, wands), as an item auction.
 local function IsItemAuction(itemID)
     local status = ns.Scanner and ns.Scanner.GetCommodityStatus
         and Try(ns.Scanner.GetCommodityStatus, ns.Scanner, itemID)

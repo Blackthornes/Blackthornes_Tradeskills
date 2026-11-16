@@ -62,8 +62,8 @@ ns.Util = {
     GetVendorSellPrice = function() return nil end,
     UnitPriceFromStack = function(_, buyout, quantity) return math.floor(buyout / (quantity or 1)) end,
     HasFunction = function() return false end,
-    RoundToSilver = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,
-    IsWholeSilver = function(p) return p >= 100 and p % 100 == 0 end,
+    ItemAuctionPrice = function(p) if p < 100 then return 100 end return math.floor(p / 100) * 100 end,
+    IsItemAuctionPrice = function(p) return p >= 100 and p % 100 == 0 end,
     WhenAuctionReady = function(action) action() end,
     LinkSuffix = function(link)
         local suffix = link and tonumber(link:match("item:%d*:%d*:%d*:%d*:%d*:%d*:(%-?%d+)"))

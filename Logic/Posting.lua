@@ -915,14 +915,14 @@ end
 -- as a tick box and never sets on its own.
 Posting.chosenPrice = {}
 
---- A price the auction house will take for this item: whole silver for an
---- item auction, any copper for a commodity. Rounded down, since the point
+--- A price the auction house will take for this item: one silver or more
+--- for an item auction, any copper for a commodity. Rounded down, since the point
 --- of a price typed by hand is that it sells at or under what was asked.
 function Posting:NormalisePrice(price, isCommodity)
     price = tonumber(price)
     if not price or price < 1 then return nil end
     price = math.floor(price)
-    if isCommodity == false then return Util.RoundToSilver(price) end
+    if isCommodity == false then return Util.ItemAuctionPrice(price) end
     return price
 end
 
@@ -1696,13 +1696,13 @@ function Posting:Post(itemID, quantity, unitPrice, byHand)
         return false
     end
 
-    -- Last line of defence on the price, wherever it came from. PostItem takes
-    -- whole gold and silver and silently swallows anything with copper in it,
-    -- which is the internal error the client shows for a listing that never
-    -- happens. A price arriving here from a caller has not necessarily been
-    -- through the chooser, so it is rounded again rather than trusted.
-    if not isCommodity and not Util.IsWholeSilver(unitPrice) then
-        local rounded = Util.RoundToSilver(unitPrice)
+    -- Last line of defence on the price, wherever it came from. An item
+    -- auction needs at least a silver, and whole silver once a copper price
+    -- has failed this session (Util.wholeSilverOnly). A price arriving here
+    -- from a caller has not necessarily been through the chooser, so it is
+    -- checked again rather than trusted.
+    if not isCommodity and not Util.IsItemAuctionPrice(unitPrice) then
+        local rounded = Util.ItemAuctionPrice(unitPrice)
 
         ns.Print(L.Format("item auctions only take whole silver, so %s becomes %s",
             Util.FormatMoney(unitPrice), Util.FormatMoney(rounded)))
@@ -2991,7 +2991,9 @@ function Posting:ResolvePending(posted, appeared, target)
         -- The server answered and it is not there: it genuinely did not go up.
         ns.Warn(L.Format("%s did not appear in your auctions.",
             Util.GetItemLabel(pending.itemID)))
-        if pending.many and not pending.joined then
+        if Posting:FallBackToWholeSilver(pending) then
+            ns.Warn(L["It had copper in its price, so the next click lists it in whole silver."])
+        elseif pending.many and not pending.joined then
             ns.Warn(L["listing several at once may not work here, so the next click lists one."])
         else
             ns.Warn(L["the auction house may be refusing listings; try Blizzard's own Sell tab."])
@@ -3004,6 +3006,19 @@ function Posting:ResolvePending(posted, appeared, target)
         ns.UI:RefreshActiveTab()
         ns.UI:UpdatePostButton()
     end
+end
+
+--- A gear listing with copper in its price that did not go up: list in
+--- whole silver for the rest of the session, so the next click still works.
+--- Forever took copper when tried (2026-11-16); this is the safety net if it
+--- ever stops. True when it just switched.
+function Posting:FallBackToWholeSilver(pending)
+    if Util.wholeSilverOnly or not pending or pending.isCommodity then return false end
+    local price = tonumber(pending.unitPrice)
+    if not price or price % 100 == 0 then return false end
+    Util.wholeSilverOnly = true
+    Posting.changes = (Posting.changes or 0) + 1
+    return true
 end
 
 --- Sample the auction house throttle over a few seconds.

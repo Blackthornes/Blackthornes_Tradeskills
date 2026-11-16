@@ -158,7 +158,12 @@ print("")
 print("the sums")
 
 check("6s each stays 6s on a commodity", Posting:NormalisePrice(600, true), 600)
-check("6s 50c on gear rounds down to whole silver", Posting:NormalisePrice(650, false), 600)
+check("6s 50c on gear keeps its copper", Posting:NormalisePrice(650, false), 650)
+check("6s 50.7c on gear rounds down to the copper", Posting:NormalisePrice(650.7, false), 650)
+check("50c on gear is lifted to the one silver floor", Posting:NormalisePrice(50, false), 100)
+ns.Util.wholeSilverOnly = true
+check("after a copper price failed, 6s 50c on gear is 6s", Posting:NormalisePrice(650, false), 600)
+ns.Util.wholeSilverOnly = false
 check("nothing typed is no price", Posting:NormalisePrice(0, true), nil)
 check("40s over 6 is 6s 66c each", Posting:PriceFromTotal(4000, 6, true), 666)
 check("36s over 6 is 6s each", Posting:PriceFromTotal(3600, 6, true), 600)
