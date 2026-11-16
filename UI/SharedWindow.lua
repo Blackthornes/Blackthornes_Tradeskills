@@ -48,7 +48,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 9
+local FILE_VERSION = 10
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -264,6 +264,7 @@ function SharedWindow.Pick(key)
     end
     hub.current = entry
     WriteAll("oneWindowPick", key)
+    SharedWindow.Settle(frame)
     if type(entry.host.enter) == "function" then pcall(entry.host.enter, frame.area) end
     if hub.docked then SharedWindow.Refit() end
     SharedWindow.FillRail()
@@ -364,6 +365,40 @@ function SharedWindow.Fit(frame)
     if room and height and height > room then
         frame:SetHeight(room)
     end
+end
+
+--- The window's own size before any addon grows it: the usual one, or
+--- docked, less the rail and plus the row of addon buttons when it shows.
+function SharedWindow.BaseSize()
+    local width, height = SharedWindow.WIDTH, SharedWindow.HEIGHT
+    if hub.docked then
+        width = width - SharedWindow.RAIL_WIDTH - EDGE
+        if hub.row then height = height + SharedWindow.ROW_HEIGHT + EDGE end
+    end
+    return width, height
+end
+
+--- Back to the window's own size, its top left corner kept, so the addon
+--- shown next grows it only as far as it needs. Every addon only grows
+--- the window, so before this one tall page (Butler with gold goals) left
+--- its height behind for every addon after it, with empty room at the
+--- bottom (2026-11-16). Folded, the fold keeps the size it opens back to.
+function SharedWindow.Settle(frame)
+    frame = frame or hub.frame
+    if not frame then return end
+    local state = rawget(frame, "blackthornesFold")
+    if type(state) == "table" and state.folded then return end
+    local width, height = SharedWindow.BaseSize()
+    local okW, oldW = pcall(frame.GetWidth, frame)
+    local okH, oldH = pcall(frame.GetHeight, frame)
+    if okW and okH and oldW == width and oldH == height then return end
+    local ok, left, top = pcall(function() return frame:GetLeft(), frame:GetTop() end)
+    frame:SetSize(width, height)
+    if ok and type(left) == "number" and type(top) == "number" then
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    end
+    SharedWindow.Fit(frame)
 end
 
 local function Place(frame)

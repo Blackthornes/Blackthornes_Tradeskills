@@ -169,7 +169,15 @@ assert(dbA.oneWindowPick == "alpha" and dbC.oneWindowPick == "alpha", "the pick 
 assert(not SW.Pick("beta"), "one that has not moved in is not picked")
 assert(log[#log] == "open beta", "it opens its own window")
 
+-- A tall addon stretched the window; the next one starts from the usual
+-- size, its top left corner kept (2026-11-16).
+frame:SetHeight(1000)
+frame.left, frame.top = 100, 600
 assert(SW.Pick("gamma"), "picks the next")
+assert(frame:GetHeight() == SW.HEIGHT and frame:GetWidth() == SW.WIDTH, "back to the usual size for the next addon")
+assert(frame.point and frame.point[1] == "TOPLEFT" and frame.point[4] == 100 and frame.point[5] == 600,
+    "its top left corner stays put")
+assert(select(2, SW.BaseSize()) == SW.HEIGHT, "the usual height undocked")
 assert(log[#log - 1] == "leave alpha" and log[#log] == "enter gamma", "the last one lets go first")
 frame.rail.buttons[1].scripts.OnClick(frame.rail.buttons[1], "RightButton")
 assert(log[#log] == "settings alpha", "right-click opens its settings")
