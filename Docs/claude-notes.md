@@ -793,6 +793,18 @@ before. "auctionhouse" is never saved as the tab to open on. In a fight,
 or with One Window off, the drawer stays its own beside the auction house.
 Nothing new is saved. Tested in `tools/test_onewindow.lua`.
 
+
+Each addon gets its own height (the owner, 2026-11-16, after Butler's tall
+page with gold goals left every addon after it stretched to the screen's
+foot with empty room). Every addon's host only grows the window
+(`Grow`), so `SharedWindow.Pick` first puts it back to its own size
+(`SharedWindow.Settle`, `SharedWindow.BaseSize`: the usual size, or
+docked less the rail and plus the row), its top left corner kept, and the
+addon shown next grows it only as far as it needs. Butler's gold goals add
+at most `UI.GOALS_MAX_EXTRA` (200) and scroll past it, and
+`ButlerTabs:Grow` gives room back when they shrink, never below
+`BaseSize`. FILE_VERSION 10. Tested in `tools/test_sharedwindow.lua`
+(and Butler's `tools/test_onewindow.lua`).
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all
