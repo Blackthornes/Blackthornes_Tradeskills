@@ -2999,7 +2999,7 @@ function Posting:ResolvePending(posted, appeared, target)
         ns.Warn(L.Format("%s did not appear in your auctions.",
             Util.GetItemLabel(pending.itemID)))
         if Posting:FallBackToWholeSilver(pending) then
-            ns.Warn(L["It had copper in its price, so the next click lists it in whole silver."])
+            -- Quietly: the next click lists it in whole silver.
         elseif pending.many and not pending.joined then
             ns.Warn(L["listing several at once may not work here, so the next click lists one."])
         else
