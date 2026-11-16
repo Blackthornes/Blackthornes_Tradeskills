@@ -155,6 +155,41 @@ ItemTooltip:AddDemandLines(lines, 1)
 check("held: all of them", #lines, 5)
 settings.tooltipSalesShift = nil
 
+-- "TSM Sold a Day:" (2026-11-16): TSM's count when ticked and TSM has one.
+GetTime = function() return 0 end
+local tsmSold = { [1] = 12.6 }
+TSM_API = { GetCustomPriceValue = function(source, item)
+  if source ~= "DBRegionSoldPerDay" then return nil end
+  return tsmSold[tonumber(item:match("%d+"))]
+end }
+assert(loadfile(lfs_cwd .. "/Logic/TSMPrices.lua"))("Blackthornes_TS", ns)
+lines = {}
+ItemTooltip:AddDemandLines(lines, 1)
+check("not ticked: still your scans", lines[2][2], "about 34 (from your scans)")
+settings.tsmSoldPerDay = true
+ns.TSMPrices:Forget()
+lines = {}
+ItemTooltip:AddDemandLines(lines, 1)
+check("ticked: from TSM", lines[2][2], "about 13 (from TSM)")
+tsmSold[1] = 0.3
+ns.TSMPrices:Forget()
+lines = {}
+ItemTooltip:AddDemandLines(lines, 1)
+check("under one a day from TSM", lines[2][2], "less than 1 (from TSM)")
+tsmSold[1] = nil
+ns.TSMPrices:Forget()
+lines = {}
+ItemTooltip:AddDemandLines(lines, 1)
+check("TSM has none: your scans", lines[2][2], "about 34 (from your scans)")
+tsmSold[1] = 12.6
+settings.tsmPrices = false
+ns.TSMPrices:Forget()
+lines = {}
+ItemTooltip:AddDemandLines(lines, 1)
+check("TSM Prices off: your scans", lines[2][2], "about 34 (from your scans)")
+settings.tsmPrices, settings.tsmSoldPerDay, TSM_API, GetTime = nil, nil, nil, nil
+ns.TSMPrices = nil
+
 check("too few days for a trend", ItemTooltip.Trend({ false, false, false, 4, 5, 6, 1 }), nil)
 check("level is steady", ItemTooltip.Trend({ 10, 10, 10, 10, 10, 10, 1 }), 0)
 check("a day not scanned is a flat mark", ItemTooltip.Bars({ false, 1 }):match("^|T[^:]+:1:") ~= nil, true)

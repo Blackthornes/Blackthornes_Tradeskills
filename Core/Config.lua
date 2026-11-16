@@ -641,6 +641,10 @@ local DEFAULTS = {
         -- (the owner, 2026-11-12). Off unless ticked; never rename it.
         -- See Prices:PreferredTSM.
         preferTsmPrices = false,
+        -- The tooltip's "Sold a day" from TSM's DBRegionSoldPerDay (a
+        -- player asked, the owner said build it, 2026-11-16). Off unless
+        -- ticked; never rename it. See TSMPrices:SoldPerDay.
+        tsmSoldPerDay = false,
         -- The TSM price "market" reads, typed by the player (2026-11-13):
         -- `tsmPriceSource`, nil or empty for DBRecent; never rename it.
         -- `tsmGearPriceSource`, nil or empty for the TSM Price Source; never rename it.
