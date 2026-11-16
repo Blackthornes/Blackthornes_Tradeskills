@@ -23,6 +23,11 @@ tell a friend: no hype, no questions to the reader, no exclamation marks
 outside the thanks line, no dashes as punctuation, no "now you can". The
 tool prints a note for a shipped line that reads like an advert.
 
+## 1.31.1
+
+Fixes and changes:
+- Various bug fixes for Tradeskills.
+
 ## 1.31.0
 
 - There's a Crate Shopping List for Waylaid Crates on the auction house Buy tab. It starts off.
