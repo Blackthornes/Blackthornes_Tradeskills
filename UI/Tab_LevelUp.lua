@@ -511,7 +511,10 @@ local function LearnLines(entry)
         lines[#lines + 1] = { item or L["Recipe"], price }
         lines[#lines + 1] = { L["Sold by"], place.name or "" }
     end
-    if place.zone then
+    if place.inside then
+        -- Inside a dungeon: the dungeon's name, not its door's spot.
+        lines[#lines + 1] = { L["Where"], place.inside }
+    elseif place.zone then
         lines[#lines + 1] = { L["Where"], place.x and ("%s (%s, %s)"):format(place.zone, place.x, place.y)
             or place.zone }
     end

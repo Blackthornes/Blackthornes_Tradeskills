@@ -483,14 +483,27 @@ check("an island is on neither", LN.ContinentOf("Zephras Isle"), nil)
 UnitFactionGroup = function() return "Alliance" end
 zoneHere = "Elwynn Forest"
 check("Alliance Expert Enchanting", Trainer(333, 225), "Kitta Firewind")
+-- Artisan Enchanting is taught only inside Uldaman (2026-11-16: the step
+-- named no trainer): its door in the Badlands is pinned, Uldaman named.
+for _, side in ipairs({ "Alliance", "Horde" }) do
+  UnitFactionGroup = function() return side end
+  local annora = LN:TrainerFor(333, 300) or {}
+  check(side .. " Artisan Enchanting is Annora", annora.name, "Annora")
+  check(side .. " Annora is inside Uldaman", annora.inside, "Uldaman")
+  check(side .. " Annora's pin is the Badlands door", annora.zone == "Badlands" and annora.x ~= nil, true)
+  check(side .. " Annora's place reads Uldaman", LN.ZoneName(annora), "Uldaman")
+end
+UnitFactionGroup = function() return "Horde" end
+check("an outdoor trainer still wins where one teaches the rank", (LN:TrainerFor(171, 300) or {}).inside, nil)
 for _, line in ipairs({ 164, 165, 171, 186, 197, 202, 333 }) do
   for _, side in ipairs({ "Alliance", "Horde" }) do
     UnitFactionGroup = function() return side end
-    for _, cap in ipairs({ 150, 225 }) do
+    for _, cap in ipairs({ 150, 225, 300 }) do
       local name = Trainer(line, cap)
       check(string.format("%s %d to %d has a trainer", side, line, cap), name ~= nil, true)
+      local top = name and (TopOf(line, name) or (LN:TrainerFor(line, cap) or {}).inside and 300)
       check(string.format("%s %d to %d trainer teaches that rank", side, line, cap),
-        name and TopOf(line, name) > cap - 75, true)
+        top and top > cap - 75, true)
     end
   end
 end

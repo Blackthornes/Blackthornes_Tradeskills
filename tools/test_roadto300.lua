@@ -206,6 +206,18 @@ check("its range", texts.range, "at 50, raises your cap to 150")
 check("the nearest trainer of your side", texts.lines[1], "Blacksmithing trainer in Ironforge")
 check("who teaches that far", Road:PlaceFor(journeyman, 164).name, "Journey Jo")
 
+-- A trainer inside a dungeon is named by the dungeon (2026-11-16: Artisan
+-- Enchanting's step named no trainer; Annora stands in Uldaman).
+do
+  local saved = ns.LearnNext.TrainerFor
+  ns.LearnNext.TrainerFor = function() return { kind = "trainer", name = "Annora", zone = "Badlands", x = 44.4, y = 12.2, inside = "Uldaman" } end
+  local artisan = { kind = "trainer", rank = { 200, 35, 50000, 300 }, at = 200, cap = 300, level = 35 }
+  check("a dungeon trainer is named by the dungeon",
+    Road.Texts(artisan, "Enchanting", 36, 333).lines[1], "Enchanting trainer in Uldaman")
+  check("and Show the Way still has a spot", Road:PlaceFor(artisan, 333).zone, "Badlands")
+  ns.LearnNext.TrainerFor = saved
+end
+
 local grinding = steps[plan.current + 1]
 check("a known recipe first, while it is cheapest", grinding.recipeID, 2)
 check("from the skill now", grinding.from, 62)

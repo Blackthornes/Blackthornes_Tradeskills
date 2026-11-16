@@ -172,6 +172,35 @@ local function SeenAt(name, zone, kind)
     return ok and type(seen) == "table" and seen or nil
 end
 
+--- Trainers who stand inside a dungeon, by Classic skill line: the data's
+--- spots leave them out, since a dungeon has no outdoor spot (2026-11-16:
+--- Road to 300's Artisan Enchanting step named no trainer, as Annora in
+--- Uldaman is the only one). Same shape as a TRAINERS row, plus the
+--- dungeon's name; the spot is its entrance in the zone outside, so the pin
+--- and the arrow lead to the door. Used only when no outdoor trainer of the
+--- player's side teaches that high.
+-- { name, zone outside, x, y, faction, highest Classic skill, dungeon }
+LearnNext.INSIDE_TRAINERS = {
+    [333] = { { "Annora", "Badlands", 44.4, 12.2, "", 300, "Uldaman" } },
+}
+
+--- A trainer row as a place to go: its spot where the game saw it stand,
+--- else the data's; a dungeon's trainer carries `inside`.
+local function TrainerPlace(row)
+    local seen = not row[7] and SeenAt(row[1], row[2], "trainer")
+    return {
+        kind = "trainer", name = row[1], zone = row[2], inside = row[7],
+        x = seen and seen.x or row[3], y = seen and seen.y or row[4],
+        mapID = seen and seen.mapID,
+    }
+end
+
+--- Where a trainer place is, in words: the dungeon for one inside, else
+--- the zone.
+function LearnNext.ZoneName(place)
+    return place and (place.inside or place.zone) or nil
+end
+
 --- Where a recipe is learned: the trainer or vendor to go to.
 --
 -- @return { kind = "trainer" | "vendor", name, zone, x, y, price, itemID,
@@ -241,6 +270,17 @@ function LearnNext:Place(record)
     -- the data has no spot for. Still listed, with no spot to pin, rather
     -- than left out of the list.
     if record.trainerCost and sideTop and (record.classicSkill or record.skill or 0) > sideTop then
+        -- One inside a dungeon, pinned at its door (Annora in Uldaman).
+        local line = ns.RecipeBook.ClassicLine and ns.RecipeBook.ClassicLine(record.skillLineID)
+            or record.skillLineID
+        local needs = record.classicSkill or record.skill or 0
+        for _, row in ipairs(LearnNext.INSIDE_TRAINERS[line] or {}) do
+            if OnSide(row[5], side) and (row[6] or 0) >= needs then
+                local inside = TrainerPlace(row)
+                inside.price = record.trainerCost
+                return inside
+            end
+        end
         return { kind = "trainer", name = L["an Artisan trainer"], price = record.trainerCost }
     end
     return nil
@@ -262,12 +302,14 @@ function LearnNext:TrainerFor(line, needs)
     local trainers = {}
     for _, row in ipairs((Spots().TRAINERS or {})[line] or {}) do
         if OnSide(row[5], side) and (row[6] or 0) > from then
-            local seen = SeenAt(row[1], row[2], "trainer")
-            trainers[#trainers + 1] = {
-                kind = "trainer", name = row[1], zone = row[2],
-                x = seen and seen.x or row[3], y = seen and seen.y or row[4],
-                mapID = seen and seen.mapID,
-            }
+            trainers[#trainers + 1] = TrainerPlace(row)
+        end
+    end
+    if #trainers == 0 then
+        for _, row in ipairs(LearnNext.INSIDE_TRAINERS[line] or {}) do
+            if OnSide(row[5], side) and (row[6] or 0) > from then
+                trainers[#trainers + 1] = TrainerPlace(row)
+            end
         end
     end
     return Nearest(trainers, side)
