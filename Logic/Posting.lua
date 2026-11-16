@@ -1029,6 +1029,13 @@ end
 --- `Profit:NetAfterRisk`, which Butler's `auction` reads too.
 function Posting.VendorPaysMore(itemID, price, vendorPrice)
     if not price or not vendorPrice or vendorPrice <= 0 then return false end
+    -- Breaking it into enchanting materials can pay more than the vendor.
+    -- When a known disenchant value beats the vendor, the vendor does not pay more.
+    local DE = ns.Disenchant
+    if DE and DE.GetValue then
+        local ok, de = pcall(DE.GetValue, DE, itemID)
+        if ok and type(de) == "number" and de > vendorPrice then return false end
+    end
     local Profit = ns.Profit
     local net
     if Profit and Profit.NetAfterRisk then
