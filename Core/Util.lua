@@ -179,6 +179,7 @@ end
 
 local workerFrame = CreateFrame("Frame", "BlackthornesTSWorkerFrame")
 local activeWorkers = {}
+local stepList = {}
 
 local workerProto = {}
 workerProto.__index = workerProto
@@ -252,11 +253,23 @@ workerFrame:SetScript("OnUpdate", function()
         return
     end
 
+    -- Step a copy of the list. A worker's handlers may start or cancel
+    -- workers (itself too), and adding a key to a table while pairs() walks
+    -- it raises "invalid key to 'next'".
+    local n = 0
     for worker in pairs(activeWorkers) do
-        if worker.running then
-            StepWorker(worker)
-        else
-            activeWorkers[worker] = nil
+        n = n + 1
+        stepList[n] = worker
+    end
+    for i = 1, n do
+        local worker = stepList[i]
+        stepList[i] = nil
+        if activeWorkers[worker] then
+            if worker.running then
+                StepWorker(worker)
+            else
+                activeWorkers[worker] = nil
+            end
         end
     end
 end)
