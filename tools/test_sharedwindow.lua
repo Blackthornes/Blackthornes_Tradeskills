@@ -30,9 +30,19 @@
 --      lets it go back to the addon open before.
 --  12. Dragged while docked it keeps that spot by the game's window; a small
 --      window keeps where it was dragged; Set Default puts every one back.
+--  13. The free side: it docks on the right when that fits, on the left
+--      when only that fits, and shrinks to the bigger gap when neither
+--      does (never under the smallest size); undocked it has its own size.
+--  15. Shelves: pieces in their first spot line up down the top shelf in
+--      order, a dragged or hidden one takes no room, the ones after it are
+--      laid again when one shows, hides or changes height, the right shelf
+--      stands left of the game's quest list, and nothing moves in a fight.
+--  14. Two game windows at once (the character sheet at a vendor, heard by
+--      HookScript): it docks beside the newest and goes back beside the
+--      other when that one closes.
 
 local NAMES = { "CreateFrame", "UIParent", "C_Timer", "time", "BlackthornesWindow",
-    "UISpecialFrames", "GetCursorPosition", "GetTime", "MailFrame", "OpenMailFrame", "MerchantFrame", "AuctionHouseFrame", "Enum" }
+    "UISpecialFrames", "GetCursorPosition", "GetTime", "MailFrame", "OpenMailFrame", "MerchantFrame", "AuctionHouseFrame", "Enum", "CharacterFrame", "ContainerFrame1", "BlackthornesShelves", "ObjectiveTrackerFrame" }
 local saved = {}
 for _, name in ipairs(NAMES) do saved[name] = _G[name] end
 
@@ -334,7 +344,8 @@ Enum = nil
 assert(SW.InteractionPlace(17) == "mail" and SW.InteractionPlace(5) == "vendor"
     and SW.InteractionPlace(7) == "trainer" and SW.InteractionPlace(21) == "auction",
     "the numbers stand in without an Enum")
-assert(SW.InteractionPlace(8) == nil and SW.InteractionPlace("mail") == nil, "a bank or junk is no place")
+assert(SW.InteractionPlace(8) == "bank" and SW.InteractionPlace(22) == "stable", "the bank and stable too")
+assert(SW.InteractionPlace(3) == nil and SW.InteractionPlace("mail") == nil, "a gossip or junk is no place")
 Enum = { PlayerInteractionType = { MailInfo = 40, Merchant = 41, Trainer = 42, Auctioneer = 43 } }
 assert(SW.InteractionPlace(40) == "mail" and SW.InteractionPlace(17) == nil, "the client's Enum wins")
 now = now + 5
@@ -440,6 +451,130 @@ do
     SW.ResetAllSpots()
     assert(dbA.windowSpots == nil, "Set Default forgets it")
     assert(small.point[1] == "CENTER" and small.point[5] == 40, "and puts it back where it started")
+end
+
+-- 13. The free side.
+do
+    local savedW, savedS = UIParent.width, UIParent.GetEffectiveScale
+    MerchantFrame.left, MerchantFrame.right, MerchantFrame.top = 100, 400, 650
+    UIParent.width = 5000
+    now = now + 5
+    SW.Arrived("vendor")
+    SW.Open("alpha")
+    assert(SW.Docked() and frame.point[4] == 400 + SW.DOCK_GAP, "room on the right: the right")
+    local w = frame:GetWidth()
+    local own = SW.Clamp(dbA.oneWindowScale) / 100
+    MerchantFrame.left, MerchantFrame.right = 2000, 2300
+    UIParent.width = 2350
+    assert(SW.Keep() and frame.point[4] == 2000 - w - SW.DOCK_GAP, "room on the left only: the left")
+    MerchantFrame.left, MerchantFrame.right = 300, 600
+    UIParent.width = 900
+    assert(SW.Keep() and math.abs(frame.point[4] - (600 * own / frame.scale + SW.DOCK_GAP)) < 1e-6,
+        "neither fits: the right, the bigger gap on a tie")
+    assert(frame.scale < own and frame.scale >= SW.SCALE_MIN / 100, "shrunk to fit, not under the smallest size")
+    MerchantFrame.left, MerchantFrame.right = 20, 40
+    UIParent.width = 60
+    SW.Keep()
+    assert(math.abs(frame.scale - SW.SCALE_MIN / 100) < 1e-9, "never under the smallest size")
+    UIParent.width = 5000
+    assert(SW.Keep() and frame.scale == own, "room again: its own size")
+    MerchantFrame.left, MerchantFrame.right = 1000, 1300
+    ContainerFrame1 = Object()
+    ContainerFrame1.left = 1500
+    assert(SW.Keep() and frame.point[4] == 1000 - w - SW.DOCK_GAP, "bags open on the right: the left")
+    ContainerFrame1:Hide()
+    assert(SW.Keep() and frame.point[4] == 1300 + SW.DOCK_GAP, "bags shut: the right again")
+    ContainerFrame1 = nil
+    MerchantFrame.left, MerchantFrame.right = 2000, 2300
+    UIParent.width = 2350
+    SW.Keep()
+    -- 14. The character sheet opens at the vendor.
+    CharacterFrame = Object()
+    CharacterFrame.left, CharacterFrame.right, CharacterFrame.top = 50, 380, 700
+    SW.HookPlaces()
+    SW.HookPlaces()
+    assert(#CharacterFrame.hooks.OnShow == 1, "the sheet is watched once")
+    UIParent.width = 5000
+    CharacterFrame:Fire("OnShow")
+    assert(SW.Place() == "character" and SW.Docked() and frame.point[4] == 380 + SW.DOCK_GAP,
+        "beside the character sheet")
+    CharacterFrame:Fire("OnHide")
+    assert(SW.Place() == "vendor" and SW.Docked() and frame.point[4] == 2300 + SW.DOCK_GAP,
+        "back beside the vendor")
+    SW.Close()
+    SW.Left("vendor")
+    assert(not SW.Docked() and SW.Place() == nil, "the vendor closes: no place")
+    CharacterFrame:Fire("OnShow")
+    assert(SW.Place() == "character" and not SW.Docked(), "closed, the sheet docks nothing")
+    CharacterFrame:Fire("OnHide")
+    assert(SW.Place() == nil, "and lets go")
+    UIParent.width = savedW
+    SW.Open("gamma")
+end
+
+-- 15. Shelves.
+do
+    UIParent.width = 1000
+    local function Piece(h)
+        local f = Object()
+        f.height = h
+        return f
+    end
+    local arrow, bar, gold = Piece(160), Piece(30), Piece(20)
+    local laid = {}
+    local barFree = true
+    SW.ShelfJoin("arrow.test", { frame = arrow, place = function() laid[#laid + 1] = "arrow" end })
+    SW.ShelfJoin("xpbar.test", { frame = bar, free = function() return barFree end,
+        place = function() laid[#laid + 1] = "bar" end })
+    SW.ShelfJoin("goldbar.test", { frame = gold, place = function() laid[#laid + 1] = "gold" end })
+    local stack = 0
+    SW.ShelfJoin("notice", { shown = function() return stack > 0 end, height = function() return stack end })
+    local top = SW.SHELVES.top
+    local point, x, y = SW.ShelfSpot("goldbar.test")
+    assert(point == "TOP" and x == 0 and y == top.y, "the first piece takes the shelf's top")
+    local _, _, ya = SW.ShelfSpot("arrow.test")
+    assert(ya == top.y - 20 - top.gap, "the arrow under the gold bar")
+    local _, _, yb = SW.ShelfSpot("xpbar.test")
+    assert(yb == ya - 160 - top.gap, "the bar under the arrow")
+    local _, _, yn = SW.ShelfSpot("notice")
+    assert(yn == yb - 30 - top.gap, "notes last")
+    barFree = false
+    local _, _, yn2 = SW.ShelfSpot("notice")
+    assert(yn2 == yb, "a dragged piece takes no room")
+    barFree = true
+    arrow:Hide()
+    local _, _, yb2 = SW.ShelfSpot("xpbar.test")
+    assert(yb2 == ya, "a hidden piece takes no room")
+    laid = {}
+    SW.ShelfChanged("arrow.test")
+    assert(#laid == 1 and laid[1] == "bar", "only the shown pieces after it are laid again")
+    laid = {}
+    arrow:Show()
+    arrow:Fire("OnShow")
+    assert(#laid == 1 and laid[1] == "bar", "showing is heard by itself")
+    SW.ShelfJoin("arrow.test", { frame = arrow, place = function() end })
+    assert(#arrow.hooks.OnShow == 1, "joined again, it is watched once")
+    local fight = _G.InCombatLockdown
+    _G.InCombatLockdown = function() return true end
+    laid = {}
+    SW.ShelfChanged("goldbar.test")
+    assert(#laid == 0, "nothing moves in a fight")
+    _G.InCombatLockdown = fight
+    SW.events.scripts.OnEvent(SW.events, "PLAYER_REGEN_ENABLED")
+    assert(#laid >= 1, "laid once the fight ends")
+    local card = Object()
+    card.height = 80
+    SW.ShelfJoin("travel.test", { shelf = "right", frame = card })
+    local rp, rx, ry = SW.ShelfSpot("travel.test")
+    assert(rp == "TOPRIGHT" and rx == SW.SHELVES.right.x and ry == SW.SHELVES.right.y, "the right shelf, in from the edge")
+    ObjectiveTrackerFrame = Object()
+    ObjectiveTrackerFrame.left = 760
+    local _, rx2 = SW.ShelfSpot("travel.test")
+    assert(rx2 == 760 - 1000 - SW.SHELVES.right.gap, "left of the quest list")
+    ObjectiveTrackerFrame:Hide()
+    local _, rx3 = SW.ShelfSpot("travel.test")
+    assert(rx3 == SW.SHELVES.right.x, "quest list hidden: in from the edge")
+    BlackthornesShelves.pieces = {}
 end
 
 SW.SetOn(false)
