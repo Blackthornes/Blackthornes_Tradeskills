@@ -2387,3 +2387,25 @@ first.
 - After a client-table re-pull, `tools/make_forever_recipes.py` as the
   tables routine does.
 
+
+## Settings pages after the UI cleanup (2026-11-16)
+
+The owner said build it (from `Docs/handoff/ui-cleanup-tradeskills.md`,
+items 5 and 6). Pages: Pricing, Queue, Mail & Vendors, Auction House,
+Tooltips, Windows, Sharing, Data, About. Look and General are gone; a saved
+`settingsPage` of `look` or `general` opens Tooltips or Windows
+(`FORMER_PAGES` in `UI/Tab_Settings.lua`). No saved key was renamed.
+
+- Tooltips: "All Lines:" on top sets every Off, Shift or Always line at
+  once through each line's own box (`SetAllTooltipLines`), and shows Mixed
+  while they differ (`ShowAllLinesMode`). Nothing new is saved. Off skips
+  the sales lines, which have no Off. Then the profession window rows, the
+  Enchant Window, and the chat lines.
+- Windows: the old General WINDOWS rows, "Open By Itself At:" (one box with
+  three ticks, each its own key: `openAtAuction`, `openWithShops`,
+  `openAtProfessions`), Window Spots, then My Auctions, Goblin Gold and the
+  arrow; sounds and columns on the right.
+- The TSM and Auctionator rows sit on Pricing under OTHER PRICE ADDONS.
+- About takes ADDONS (sister note, What's New) and Road to 300.
+- Gone: the Recipes to Learn and Stats buttons (each tab is a click away),
+  and Tracker Place and Gold Tracker Place (Window Spots resets both).
