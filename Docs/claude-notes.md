@@ -475,6 +475,18 @@ next cheapest. The footer says "1 recipe skipped." (`RoadView.FootText`,
 (`RoadView:PlaceShowAll`, `RoadPlan:ShowAllOn(line)`), for the profession
 shown only. Tested in `tools/test_roadto300.lua` and
 `tools/test_roadviewfit.lua`.
+
+Trainers inside a dungeon (2026-11-16, the owner's screenshot: "Train Artisan
+Enchanting" named no trainer and had no Show the Way). `Data/LearnSpots.lua`
+drops any trainer with no outdoor spot, and Classic's only Artisan
+Enchanting trainer is Annora inside Uldaman. `LearnNext.INSIDE_TRAINERS`
+(hand kept, `{ name, zone outside, x, y, faction, top, dungeon }`) is read
+only when no outdoor trainer of your side teaches the rank, by
+`LearnNext:TrainerFor` and `LearnNext:Place`. The place carries `inside`:
+the words name the dungeon ("Enchanting trainer in Uldaman"), the pin and
+arrow go to the door in the Badlands (44.4, 12.2, not yet seen in game).
+`tools/test_learnnext.lua` now checks every profession's 300 trainer too.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first

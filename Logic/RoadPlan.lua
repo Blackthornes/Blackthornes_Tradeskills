@@ -1275,7 +1275,9 @@ function RoadPlan.Texts(step, professionName, level, line)
         elseif not step.locked and not step.how then
             local place = not step.done and RoadPlan:PlaceFor(step, line)
             if place and place.zone then
-                texts.lines[1] = L.Format("%s trainer in %s", professionName, place.zone)
+                -- A trainer inside a dungeon is named by the dungeon, though
+                -- the pin goes on its door (LearnNext.INSIDE_TRAINERS).
+                texts.lines[1] = L.Format("%s trainer in %s", professionName, place.inside or place.zone)
             end
         end
         return texts
@@ -1291,7 +1293,7 @@ function RoadPlan.Texts(step, professionName, level, line)
         if step.learn.kind == "trainer" then
             -- Where the trainer stands, as the row's Show the Way aims (the
             -- owner, 2026-10-23: a lone "Trainer" said nothing).
-            local zone = step.learn.zone
+            local zone = step.learn.inside or step.learn.zone
             texts.lines[#texts.lines + 1] = zone
                 and L.Format("Learn it from the %s trainer in %s.", professionName, zone)
                 or L.Format("Learn it from the %s trainer.", professionName)
