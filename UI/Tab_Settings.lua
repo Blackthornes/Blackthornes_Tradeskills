@@ -89,6 +89,13 @@ end
 
 local widgets = {}
 
+-- The Queue page's lists box, made in Build and filled in Refresh.
+local ShowQueueList, FindQueueList
+local IGNORED_ROW_HEIGHT = 22
+local STOCK_ROW_HEIGHT = 26
+-- "Show:" is short, so the box starts early and has room for a list's name.
+local LIST_BOX_X = 60
+
 --- An Off / Shift / Always box (see the Look page) set to the saved mode,
 --- without calling its onSelect.
 local function ShowShiftMode(dropdown)
@@ -182,12 +189,15 @@ local function AddFoundGlow(page, frame)
 end
 
 --- Let the search find `frame` by its words, on `page`.
-local function Searchable(page, frame, words)
+--- `onFound()`, when given, is called when the search shows this one (the
+--- Queue page's lists: it picks the list the words belong to).
+local function Searchable(page, frame, words, onFound)
     searchables[#searchables + 1] = {
         page = page.key,
         frame = frame,
         words = (words or ""):lower(),
         glow = AddFoundGlow(page, frame),
+        onFound = onFound,
     }
 end
 
@@ -432,14 +442,21 @@ local function Search(text)
     local query = (text or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     widgets.query = query ~= "" and query or nil
 
-    local counts, firstFound = {}, {}
+    local counts, firstFound, onFound = {}, {}, {}
     for _, entry in ipairs(searchables) do
         local found = widgets.query and entry.words:find(widgets.query, 1, true) ~= nil
-        entry.glow:SetShown(found and true or false)
+        -- One glow on a frame several entries share (the lists' Show: row).
+        local lit = found and not (entry.onFound and onFound[entry.page])
+        entry.glow:SetShown(lit and true or false)
         if found then
             counts[entry.page] = (counts[entry.page] or 0) + 1
             firstFound[entry.page] = firstFound[entry.page] or entry.frame
+            if entry.onFound then onFound[entry.page] = onFound[entry.page] or entry.onFound end
         end
+    end
+    if widgets.queueListFound and not onFound.queue then
+        widgets.queueListFound = nil
+        ShowQueueList()
     end
 
     -- No counts beside the names: the switch has to stay clear of the
@@ -455,6 +472,7 @@ local function Search(text)
         end
     end
     if show ~= CurrentPage() then ShowPage(show) else PaintSwitch() end
+    if onFound[show] then onFound[show]() end
     if widgets.query and firstFound[show] then ScrollTo(show, firstFound[show]) end
 end
 
@@ -1177,148 +1195,105 @@ local function Build(outer)
     end, { width = 110 })
     widgets.stale:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Six lists in one box (the owner said build it, 2026-11-16, from a
+    -- mockup): "Show:" picks the list drawn, each name with how many are in
+    -- it. Each list keeps its own hint, rows and buttons in a holder of its
+    -- own, and only the one picked shows (ShowQueueList). The pick is kept
+    -- in `settingsQueueList`, as the page is in settingsPage.
+    CreateSection(pages.queue, 2, L["YOUR LISTS"])
+    local listRow = CreateRow(pages.queue, 2, L["Show:"], nil)
+    widgets.queueList = Widgets.CreateDropdown(listRow, {}, function(key)
+        Config:Set("settingsQueueList", key)
+        widgets.queueListFound = nil
+        ShowQueueList()
+    end, { width = COLUMN_WIDTH - LIST_BOX_X })
+    widgets.queueList:SetPoint("TOPLEFT", LIST_BOX_X, 0)
+    widgets.queueLists = {}
+
+    --- One list's holder: its hint (or a line to hang rows on), and the
+    --- words for when it is empty.
+    local function ListGroup(key, title, hintText, emptyText, words, step)
+        local holder = CreateFrame("Frame", nil, pages.queue.content)
+        holder:SetPoint("TOPLEFT", listRow, "BOTTOMLEFT", 0, -8)
+        holder:SetSize(COLUMN_WIDTH, 1)
+        holder:Hide()
+
+        local hint
+        if hintText then
+            hint = Theme.CreateLabel(holder, "tiny", "muted")
+            hint:SetPoint("TOPLEFT", 0, 0)
+            hint:SetWidth(COLUMN_WIDTH)
+            hint:SetWordWrap(true)
+            hint:SetText(hintText)
+        else
+            -- Rows hang 6 under their hint; this one sits 6 up so they start at the top.
+            hint = CreateFrame("Frame", nil, holder)
+            hint:SetSize(COLUMN_WIDTH, 1)
+            hint:SetPoint("TOPLEFT", 0, 7)
+        end
+
+        local empty = Theme.CreateLabel(holder, "small", "dim")
+        empty:SetWidth(COLUMN_WIDTH)
+        empty:SetWordWrap(true)
+        empty:SetText(emptyText)
+
+        local group = { key = key, title = title, holder = holder, hint = hint,
+            empty = empty, count = 0, shown = 0, step = step or (IGNORED_ROW_HEIGHT + 2) }
+        widgets.queueLists[#widgets.queueLists + 1] = group
+        widgets.queueLists[key] = group
+        Searchable(pages.queue, listRow, words, function() FindQueueList(key) end)
+        return group
+    end
+
     -- Keep in stock by profession (a player asked, the owner agreeing
     -- 2026-10-13): one box per profession your characters craft with,
-    -- empty for the usual number. Rows made in Refresh, as the lists
-    -- below are.
-    widgets.ignoredParent = pages.queue.content
-    local stockSection = CreateSection(pages.queue, 2, L["KEEP IN STOCK BY PROFESSION"])
-    Searchable(pages.queue, stockSection, L["Keep in stock by profession per profession alchemy blacksmithing tailoring leatherworking stock limit"])
-
-    local stockHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    stockHint:SetPoint("TOPLEFT", stockSection, "BOTTOMLEFT", 0, ROW_GAP)
-    stockHint:SetWidth(COLUMN_WIDTH)
-    stockHint:SetWordWrap(true)
-    stockHint:SetText(L["Leave a box empty to use Keep in Stock. A number on one item in the Profit tab still wins."])
-    widgets.stockHint = stockHint
-
-    widgets.stockEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.stockEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.stockEmpty:SetWordWrap(true)
-    widgets.stockEmpty:SetText(L["None yet. Open a profession window on each character once, and its professions show here."])
-    widgets.stockRows = {}
-
-    local stockEnd = CreateFrame("Frame", nil, pages.queue.content)
-    stockEnd:SetSize(COLUMN_WIDTH, 1)
-    stockEnd:SetPoint("TOPLEFT", widgets.stockEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.stockEnd = stockEnd
-    pages.queue.last[2] = stockEnd
+    -- empty for the usual number. Rows made in Refresh, as the lists are.
+    local stock = ListGroup("stock", L["Keep in Stock by Profession"],
+        L["Leave a box empty to use Keep in Stock. A number on one item in the Profit tab still wins."],
+        L["None yet. Open a profession window on each character once, and its professions show here."],
+        L["Keep in stock by profession per profession alchemy blacksmithing tailoring leatherworking stock limit"],
+        STOCK_ROW_HEIGHT)
+    widgets.stockHint, widgets.stockEmpty, widgets.stockRows = stock.hint, stock.empty, {}
 
     -- Items Raise When Sold Out changed (the owner, 2026-10-16), with
-    -- Reset to put each back. Rows made in Refresh, as the lists below are.
-    local changed = CreateSection(pages.queue, 2, L["CHANGED WHEN SOLD OUT"])
-    widgets.changedSection = changed
-    Searchable(pages.queue, changed, L["Changed when sold out raise when sold out keep in stock reset"])
+    -- Reset to put each back.
+    local changed = ListGroup("changed", L["Changed When Sold Out"],
+        L["Keep in Stock numbers that Raise When Sold Out changed. Click Reset to put one back."],
+        L["None yet."],
+        L["Changed when sold out raise when sold out keep in stock reset"])
+    widgets.changedHint, widgets.changedEmpty, widgets.changedRows = changed.hint, changed.empty, {}
 
-    local changedHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    changedHint:SetPoint("TOPLEFT", changed, "BOTTOMLEFT", 0, ROW_GAP)
-    changedHint:SetWidth(COLUMN_WIDTH)
-    changedHint:SetWordWrap(true)
-    changedHint:SetText(L["Keep in Stock numbers that Raise When Sold Out changed. Click Reset to put one back."])
-    widgets.changedHint = changedHint
+    -- Crafts never made to go into another craft (2026-10-07), marked from
+    -- the Level Up tab or the x on a queued sub-craft.
+    local never = ListGroup("never", L["Never Made as Sub-Crafts"],
+        L["These are bought, not made, when another craft needs them. Click Allow to put one back."],
+        L["None. Click Make beside a craft on the Level Up tab (tick Sub-crafts only), or the x on a sub-craft in the queue."],
+        L["Never made as sub-crafts bought instead intermediates allow light leather"])
+    widgets.neverHint, widgets.neverEmpty, widgets.neverRows = never.hint, never.empty, {}
 
-    widgets.changedEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.changedEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.changedEmpty:SetWordWrap(true)
-    widgets.changedEmpty:SetText(L["None yet."])
-    widgets.changedRows = {}
-
-    local changedEnd = CreateFrame("Frame", nil, pages.queue.content)
-    changedEnd:SetSize(COLUMN_WIDTH, 1)
-    changedEnd:SetPoint("TOPLEFT", widgets.changedEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.changedEnd = changedEnd
-    pages.queue.last[2] = changedEnd
-
-    -- Crafts never made to go into another craft (2026-10-07),
-    -- marked from the Level Up tab or the x on a queued sub-craft. Laid out
-    -- as Ignored crafts below is, rows made in Refresh.
-    local never = CreateSection(pages.queue, 2, L["NEVER MADE AS SUB-CRAFTS"])
-    widgets.neverSection = never
-    Searchable(pages.queue, never, L["Never made as sub-crafts bought instead intermediates allow light leather"])
-
-    local neverHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    neverHint:SetPoint("TOPLEFT", never, "BOTTOMLEFT", 0, ROW_GAP)
-    neverHint:SetWidth(COLUMN_WIDTH)
-    neverHint:SetWordWrap(true)
-    neverHint:SetText(L["These are bought, not made, when another craft needs them. Click Allow to put one back."])
-    widgets.neverHint = neverHint
-
-    widgets.neverEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.neverEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.neverEmpty:SetWordWrap(true)
-    widgets.neverEmpty:SetText(L["None. Click Make beside a craft on the Level Up tab (tick Sub-crafts only), or the x on a sub-craft in the queue."])
-    widgets.neverRows = {}
-
-    local neverEnd = CreateFrame("Frame", nil, pages.queue.content)
-    neverEnd:SetSize(COLUMN_WIDTH, 1)
-    neverEnd:SetPoint("TOPLEFT", widgets.neverEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.neverEnd = neverEnd
-    pages.queue.last[2] = neverEnd
-
-    -- Crafts taken off the Profit tab with its Ignore button. The rows are
-    -- made in Refresh, one per craft, since the list grows and shrinks.
-    local ignored = CreateSection(pages.queue, 2, L["IGNORED CRAFTS"])
-    widgets.ignoredSection = ignored
-    Searchable(pages.queue, ignored, L["Ignored crafts Restore puts one back on the Profit tab"])
-
-    local ignoredHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    ignoredHint:SetPoint("TOPLEFT", ignored, "BOTTOMLEFT", 0, ROW_GAP)
-    ignoredHint:SetWidth(COLUMN_WIDTH)
-    ignoredHint:SetWordWrap(true)
-    ignoredHint:SetText(L["These never show on the Profit tab, on any character. Click Restore to bring one back."])
-    widgets.ignoredHint = ignoredHint
-
-    widgets.ignoredEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.ignoredEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.ignoredEmpty:SetWordWrap(true)
-    widgets.ignoredEmpty:SetText(L["None. Pick a craft on the Profit tab and click Ignore."])
-    widgets.ignoredRows = {}
-
-    -- Where the ignored crafts end, moved under the last of them in Refresh,
-    -- so the section below follows the list as it grows and shrinks.
-    local ignoredEnd = CreateFrame("Frame", nil, pages.queue.content)
-    ignoredEnd:SetSize(COLUMN_WIDTH, 1)
-    ignoredEnd:SetPoint("TOPLEFT", widgets.ignoredEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.ignoredEnd = ignoredEnd
+    -- Crafts taken off the Profit tab with its Ignore button.
+    local ignored = ListGroup("ignored", L["Ignored Crafts"],
+        L["These never show on the Profit tab, on any character. Click Restore to bring one back."],
+        L["None. Pick a craft on the Profit tab and click Ignore."],
+        L["Ignored crafts Restore puts one back on the Profit tab"])
+    widgets.ignoredHint, widgets.ignoredEmpty, widgets.ignoredRows = ignored.hint, ignored.empty, {}
 
     -- Items taken off Ready to sell at the auction house with the x on
-    -- their row (2026-10-04). Laid out as Ignored crafts is.
-    pages.queue.last[2] = ignoredEnd
-    local ignoredItems = CreateSection(pages.queue, 2, L["IGNORED ITEMS"])
-    widgets.ignoredItemsSection = ignoredItems
-    Searchable(pages.queue, ignoredItems, L["Ignored items Restore puts one back on Ready to sell"])
-
-    local ignoredItemsHint = Theme.CreateLabel(pages.queue.content, "tiny", "muted")
-    ignoredItemsHint:SetPoint("TOPLEFT", ignoredItems, "BOTTOMLEFT", 0, ROW_GAP)
-    ignoredItemsHint:SetWidth(COLUMN_WIDTH)
-    ignoredItemsHint:SetWordWrap(true)
-    ignoredItemsHint:SetText(L["These are never offered for sale on Ready to sell, on any character. Click Restore to bring one back."])
-    widgets.ignoredItemsHint = ignoredItemsHint
-
-    widgets.ignoredItemsEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.ignoredItemsEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.ignoredItemsEmpty:SetWordWrap(true)
-    widgets.ignoredItemsEmpty:SetText(L["None. Click the x on an item in Ready to sell at the auction house."])
-    widgets.ignoredItemsRows = {}
-
-    local ignoredItemsEnd = CreateFrame("Frame", nil, pages.queue.content)
-    ignoredItemsEnd:SetSize(COLUMN_WIDTH, 1)
-    ignoredItemsEnd:SetPoint("TOPLEFT", widgets.ignoredItemsEmpty, "BOTTOMLEFT", 0, 0)
-    widgets.ignoredItemsEnd = ignoredItemsEnd
+    -- their row (2026-10-04).
+    local ignoredItems = ListGroup("items", L["Ignored Items"],
+        L["These are never offered for sale on Ready to sell, on any character. Click Restore to bring one back."],
+        L["None. Click the x on an item in Ready to sell at the auction house."],
+        L["Ignored items Restore puts one back on Ready to sell"])
+    widgets.ignoredItemsHint, widgets.ignoredItemsEmpty, widgets.ignoredItemsRows =
+        ignoredItems.hint, ignoredItems.empty, {}
 
     -- What this character keeps back from the Sell list (Logic/KeepHere.lua,
     -- a player asked, the owner said build it 2026-10-18). Set by
     -- right-clicking a Sell list row; Clear takes one off.
-    pages.queue.last[2] = ignoredItemsEnd
-    local keepHere = CreateSection(pages.queue, 2, L["KEEP ON THIS CHARACTER"])
-    widgets.keepHereSection = keepHere
-    Searchable(pages.queue, keepHere, L["Keep on this character Sell list right-click"])
-
-    widgets.keepHereEmpty = Theme.CreateLabel(pages.queue.content, "small", "dim")
-    widgets.keepHereEmpty:SetWidth(COLUMN_WIDTH)
-    widgets.keepHereEmpty:SetWordWrap(true)
-    widgets.keepHereEmpty:SetText(L["Right-click an item on the Sell list to keep some on this character."])
-    widgets.keepHereRows = {}
+    local keepHere = ListGroup("keep", L["Keep on This Character"], nil,
+        L["Right-click an item on the Sell list to keep some on this character."],
+        L["Keep on this character Sell list right-click"])
+    widgets.keepHereSection, widgets.keepHereEmpty, widgets.keepHereRows = keepHere.hint, keepHere.empty, {}
 
     local data = CreateSection(pages.data, 1, L["SAVED DATA"])
 
@@ -2324,7 +2299,6 @@ local function Put(box, value)
     box:SetValue(value, true)
 end
 
-local IGNORED_ROW_HEIGHT = 22
 local RESTORE_WIDTH = 70
 
 --- One line per ignored craft or item: its name, and Restore at the
@@ -2334,7 +2308,7 @@ local function IgnoredRow(rows, hint, index, onRestore, restoreTip, buttonText)
     local row = rows[index]
     if row then return row end
 
-    row = CreateFrame("Frame", nil, widgets.ignoredParent)
+    row = CreateFrame("Frame", nil, hint:GetParent())
     row:SetSize(COLUMN_WIDTH, IGNORED_ROW_HEIGHT)
     row:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0,
         -6 - (index - 1) * (IGNORED_ROW_HEIGHT + 2))
@@ -2435,11 +2409,8 @@ local function RefreshNeverSubCrafts()
         L["Make it as a sub-craft again whenever that is cheaper than buying it"],
         nil, L["Allow"])
 
-    widgets.neverEnd:ClearAllPoints()
-    widgets.neverEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    widgets.queueLists.never.count, widgets.queueLists.never.shown = #list, #list
 end
-
-local STOCK_ROW_HEIGHT = 26
 
 --- One profession's line: dark glass by place, its name, its number box
 --- (empty for the usual number) and an x while it has one of its own.
@@ -2447,7 +2418,7 @@ local function StockRow(index)
     local row = widgets.stockRows[index]
     if row then return row end
 
-    row = CreateFrame("Frame", nil, widgets.ignoredParent)
+    row = CreateFrame("Frame", nil, widgets.stockHint:GetParent())
     row:SetSize(COLUMN_WIDTH, STOCK_ROW_HEIGHT)
     row:SetPoint("TOPLEFT", widgets.stockHint, "BOTTOMLEFT", 0,
         -6 - (index - 1) * STOCK_ROW_HEIGHT)
@@ -2518,9 +2489,12 @@ local function RefreshStockProfessions()
     widgets.stockEmpty:SetPoint("TOPLEFT", widgets.stockHint, "BOTTOMLEFT", 0, -6)
     widgets.stockEmpty:SetShown(#professions == 0)
 
-    local last = #professions > 0 and widgets.stockRows[#professions] or widgets.stockEmpty
-    widgets.stockEnd:ClearAllPoints()
-    widgets.stockEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    -- Counted by the professions with a number of their own.
+    local own = 0
+    for _, profession in ipairs(professions) do
+        if ns.Auctions:GetProfessionLimit(profession) ~= nil then own = own + 1 end
+    end
+    widgets.queueLists.stock.count, widgets.queueLists.stock.shown = own, #professions
 end
 
 local function RefreshChangedStock()
@@ -2539,8 +2513,7 @@ local function RefreshChangedStock()
         function(itemID) return Util.GetItemQualityColor(itemID) end,
         L["Reset"])
 
-    widgets.changedEnd:ClearAllPoints()
-    widgets.changedEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    widgets.queueLists.changed.count, widgets.queueLists.changed.shown = #list, #list
 end
 
 local function RefreshIgnored()
@@ -2566,8 +2539,7 @@ local function RefreshIgnored()
             if itemID then return Util.GetItemQualityColor(itemID) end
         end)
 
-    widgets.ignoredEnd:ClearAllPoints()
-    widgets.ignoredEnd:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, 0)
+    widgets.queueLists.ignored.count, widgets.queueLists.ignored.shown = #crafts, #crafts
 
     if not widgets.ignoredItemsHint or not (ns.Posting and ns.Posting.GetIgnored) then return end
 
@@ -2583,10 +2555,7 @@ local function RefreshIgnored()
         L["Offer this item on Ready to sell again"],
         function(itemID) return Util.GetItemQualityColor(itemID) end)
 
-    if widgets.ignoredItemsEnd then
-        widgets.ignoredItemsEnd:ClearAllPoints()
-        widgets.ignoredItemsEnd:SetPoint("TOPLEFT", lastIgnored, "BOTTOMLEFT", 0, 0)
-    end
+    widgets.queueLists.items.count, widgets.queueLists.items.shown = #items, #items
 
     if not widgets.keepHereSection or not ns.KeepHere then return end
     local keeps = {}
@@ -2598,12 +2567,68 @@ local function RefreshIgnored()
         function(itemID) ns.KeepHere:Set(itemID, 0) end, nil,
         function(itemID) return Util.GetItemQualityColor(itemID) end,
         L["Clear"])
+    widgets.queueLists.keep.count, widgets.queueLists.keep.shown = #keeps, #keeps
+end
+
+--- The list the box shows: one the search found, the one picked, else the
+--- first with something in it, else the first.
+local function QueueListShown()
+    local lists = widgets.queueLists
+    local key = widgets.queueListFound or ns.Config:Get("settingsQueueList")
+    if lists[key] then return key end
+    for _, group in ipairs(lists) do
+        if group.count > 0 then return group.key end
+    end
+    return lists[1].key
+end
+
+--- Show the list picked, size its holder to what it holds so the page
+--- scrolls to its foot, and name each list in the box with its count.
+ShowQueueList = function()
+    local lists = widgets.queueLists
+    if not (lists and lists[1]) then return end
+    local key = QueueListShown()
+
+    local options = {}
+    for _, group in ipairs(lists) do
+        options[#options + 1] = { text = L.Format("%s (%d)", group.title, group.count), value = group.key }
+    end
+    widgets.queueList:SetOptions(options)
+    widgets.queueList:SetValue(key)
+
+    for _, group in ipairs(lists) do
+        local on = group.key == key
+        group.holder:SetShown(on)
+        if on then
+            local top = 0
+            if group.hint.GetStringHeight then
+                local height = group.hint:GetStringHeight()
+                top = (type(height) == "number" and math.ceil(height) or 14) + 6
+            end
+            local body
+            if group.shown > 0 then
+                body = group.shown * group.step
+            else
+                local height = group.empty.GetStringHeight and group.empty:GetStringHeight()
+                body = type(height) == "number" and math.ceil(height) or 14
+            end
+            group.holder:SetHeight(math.max(1, top + body))
+        end
+    end
+    FitScroll("queue")
+end
+
+--- The search found one of the lists: show it, without keeping the pick.
+FindQueueList = function(key)
+    widgets.queueListFound = key
+    ShowQueueList()
 end
 
 local function Refresh()
     if not widgets.undercut then return end
 
     RefreshIgnored()
+    ShowQueueList()
 
     if widgets.shownPage ~= CurrentPage() then ShowPage(CurrentPage()) end
 

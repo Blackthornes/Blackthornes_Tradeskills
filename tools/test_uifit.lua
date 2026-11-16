@@ -996,6 +996,38 @@ Pick(openAt, 1)
 check("unticking Auction House saves it off", settings.openAtAuction, false)
 openAt.scripts.OnMouseDown(openAt)
 
+-- Stock From Sales and Raise When Sold Out in one box: each keeps its key.
+local fromSales = RowDropdown("Stock From Sales:")
+check("one Stock From Sales box", fromSales ~= nil, true)
+settings.learnStockFromSales, settings.raiseStockOnSellOut = false, true
+UI.tabs.settings.refresh()
+check("an old pair shows as its choice", fromSales:GetValue(), "sellout")
+settings.learnStockFromSales, settings.raiseStockOnSellOut = nil, nil
+UI.tabs.settings.refresh()
+check("a new player follows sales", fromSales:GetValue(), "sales")
+Pick(fromSales, 4)
+check("Both turns on raising", settings.raiseStockOnSellOut, true)
+check("and leaves following sales unwritten", settings.learnStockFromSales, nil)
+Pick(fromSales, 1)
+check("Off turns both off", settings.learnStockFromSales == false and settings.raiseStockOnSellOut == false, true)
+check("no Raise When Sold Out row of its own", RowDropdown("Raise When Sold Out:") == nil and Offered("Raise When Sold Out:") == nil, true)
+
+-- Six lists in one box.
+local listBox = RowDropdown("Show:")
+check("the Queue page's lists are one box", listBox ~= nil, true)
+check("with six lists in it", #listBox.options, 6)
+check("each named with its count", listBox.options[4].text, "Ignored Crafts (0)")
+Pick(listBox, 4)
+check("picking one keeps it", settings.settingsQueueList, "ignored")
+check("and the box shows it", listBox:GetValue(), "ignored")
+find.editBox:SetText("sell list right-click")
+find.editBox.scripts.OnTextChanged(find.editBox)
+check("a search shows the list it found", listBox:GetValue(), "keep")
+check("without changing the pick", settings.settingsQueueList, "ignored")
+find.editBox:SetText("")
+find.editBox.scripts.OnTextChanged(find.editBox)
+check("clearing it goes back to the pick", listBox:GetValue(), "ignored")
+
 -- The confirmation's Yes is the click that lists, so there is no switch
 -- to turn it off: one was offered and never did anything.
 check("no switch that does nothing: every listing is confirmed", Offered("Confirm before each listing"), nil)
