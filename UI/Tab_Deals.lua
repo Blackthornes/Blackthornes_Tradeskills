@@ -926,16 +926,6 @@ local function Build(container)
     newOnly:SetPoint("LEFT", dealsOnly, "RIGHT", 12, 0)
     widgets.newOnly = newOnly
 
-    local skipOverStack = Widgets.CreateCheckbox(toolbar, L["Skip bundles over a stack"], function(checked)
-        ns.DealsFavor:SetSkipOverStack(checked)
-        ns.Config:Set("favorSkipOverStack", checked and true or false)
-        ShowFromTop()
-    end, not ns.DealsFavor or ns.DealsFavor:GetSkipOverStack())
-    skipOverStack:SetPoint("LEFT", search, "RIGHT", 12, 0)
-    skipOverStack.tooltipText = L["Leaves out bundles bigger than one stack, like 40 Linen Cloth."]
-    skipOverStack:Hide()
-    widgets.skipOverStack = skipOverStack
-
     -- Column headings
     local headings = CreateFrame("Frame", nil, flipsView)
     headings:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 0, -8)
@@ -1106,7 +1096,6 @@ function UI.DealsSetView(view)
     widgets.sellTo:SetShown(view == "flips")
     widgets.dealsOnly:SetShown(view == "flips")
     widgets.newOnly:SetShown(view == "flips")
-    widgets.skipOverStack:SetShown(view == "favor")
     widgets.goal:SetShown(view == "writs")
     widgets.groupBy:SetShown(view == "writs")
 

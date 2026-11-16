@@ -415,15 +415,6 @@ function MerchantsFavor.Owned(itemID)
     return inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
 end
 
---- Every crate, with what it costs to buy and fill and what a favor costs.
---
--- A bundle needing more than one stack of its material is marked overStack:
--- the game cannot fill a crate from more than one stack (a known Forever
--- issue, 2026-09-18), so with opts.skipOverStack it is never the cheapest.
---
--- @param opts { skipOverStack }
--- @return rows, cheapest favor first; crates nobody knows the reward for,
---   or that are not priced, come last
 --- Performance Bonus's chance of double favor (a Legacy perk): 0 with no
 --- ranks spent or nothing read.
 function MerchantsFavor.Bonus()
@@ -434,8 +425,15 @@ function MerchantsFavor.Bonus()
     return 0
 end
 
-function MerchantsFavor:GetRows(opts)
-    opts = opts or {}
+--- Every crate, with what it costs to buy and fill and what a favor costs.
+--
+-- The game fills a crate from two stacks now (the owner, 2026-11-16), so a
+-- bundle bigger than one stack, like 40 Linen Cloth, counts like any other.
+-- Old saves may still hold favorSkipOverStack; it is left alone and unread.
+--
+-- @return rows, cheapest favor first; crates nobody knows the reward for,
+--   or that are not priced, come last
+function MerchantsFavor:GetRows()
     local rows = {}
     local bonus = MerchantsFavor.Bonus()
 
@@ -455,7 +453,6 @@ function MerchantsFavor:GetRows(opts)
         for _, bundle in ipairs(crate.bundles) do
             local materialID, count = bundle[1], bundle[2]
             local unit, from = UnitCost(materialID)
-            local stack = Util.GetMaxStackSize(materialID)
 
             local entry = {
                 itemID = materialID,
@@ -463,7 +460,6 @@ function MerchantsFavor:GetRows(opts)
                 unit = unit,
                 cost = unit and unit * count or nil,
                 vendor = from == "vendor",
-                overStack = (stack ~= nil and count > stack) or false,
             }
             entry.buy = entry.cost
 
@@ -480,8 +476,7 @@ function MerchantsFavor:GetRows(opts)
             end
             bundles[#bundles + 1] = entry
 
-            local usable = not (entry.overStack and opts.skipOverStack)
-            if entry.cost and usable and (not best or entry.cost < best.cost) then best = entry end
+            if entry.cost and (not best or entry.cost < best.cost) then best = entry end
         end
         if best then best.best = true end
 
@@ -543,7 +538,7 @@ function MerchantsFavor:RowForItem(itemID)
     local now = Now()
     local kept = self.tipRows
     if not kept or kept.version ~= MerchantsFavor.version or now - kept.at > ROW_KEEP then
-        local rows = self:GetRows({ skipOverStack = ns.Config and ns.Config:Get("favorSkipOverStack") ~= false })
+        local rows = self:GetRows()
         kept = { version = MerchantsFavor.version, at = now, byKey = {} }
         for _, row in ipairs(rows) do kept.byKey[row.key] = row end
         self.tipRows = kept
@@ -627,7 +622,7 @@ function MerchantsFavor:GetPlan(goal, rows)
     plan.reached = have ~= nil and have >= goal
     if plan.need <= 0 then return plan end
 
-    rows = rows or self:GetRows({ skipOverStack = ns.Config and ns.Config:Get("favorSkipOverStack") ~= false })
+    rows = rows or self:GetRows()
     for _, row in ipairs(rows) do
         if row.perFavor and row.favor and row.favor > 0 and row.best then
             plan.best = row

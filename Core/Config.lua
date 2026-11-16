@@ -224,10 +224,8 @@ local DEFAULTS = {
         minProfit = 0,
         minMarginPercent = 0,
 
-        -- Deals, Merchant's Favor: leave bundles needing more than one stack
-        -- of a material out of the cheapest, as Forever could not fill a
-        -- crate from them when last reported (UI/DealsFavor.lua).
-        favorSkipOverStack = true,
+        -- favorSkipOverStack (Deals, Merchant's Favor) is gone: the game fills
+        -- a crate from two stacks now (2026-11-16). Old saves keep the value.
 
         -- Deals, Merchant's Favor: the favor goal (2026-10-20), typed on
         -- the tab as "favorGoal", nil until one is set. The auction house

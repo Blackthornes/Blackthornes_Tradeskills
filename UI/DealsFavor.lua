@@ -40,7 +40,6 @@ ns.Columns:Register("favor", L["Deals: Merchant's Favor"], COLUMNS)
 
 local state = {
     search = "",
-    skipOverStack = nil,    -- read from Settings the first time it is asked
     selected = nil,
     buy = 1,                -- the Buy box, for this session only
 }
@@ -563,7 +562,6 @@ function UpdateDetail(entry)
     detail.subtitle:SetTextColor(Theme.Unpack(entry.source == "learned" and "text"
         or entry.source == "reported" and "muted" or "warn"))
 
-    local overStack = false
     for index = 1, BUNDLE_LINES do
         local bundle = entry.bundles[index]
         local line = detail.bundles.lines[index]
@@ -572,17 +570,11 @@ function UpdateDetail(entry)
             local labelColor, valueColor = "muted", "muted"
             if bundle.best then
                 labelColor, valueColor = "text", "profit"
-            elseif bundle.overStack then
-                labelColor, valueColor = "dim", "dim"
             end
             if bundle.made then
                 label = L.Format("%s (make)", label)
             elseif bundle.vendor then
                 label = L.Format("%s (vendor)", label)
-            end
-            if bundle.overStack then
-                label = label .. " *"
-                overStack = true
             end
             SetLine(line, label, bundle.cost and Plain(bundle.cost) or L["not priced"], labelColor, valueColor)
         else
@@ -617,11 +609,6 @@ function UpdateDetail(entry)
         entry.perFavor and Plain(Round(entry.perFavor)) or L["not known"], "text", "accent")
 
     local parts = {}
-    if overStack then
-        parts[#parts + 1] = DealsFavor:GetSkipOverStack()
-            and L["* Needs more than one stack, so it's left out."]
-            or L["* Needs more than one stack. That may not work."]
-    end
     if entry.have > 0 then
         parts[#parts + 1] = L.Format("You have %d of these crates.", entry.have)
     end
@@ -931,7 +918,7 @@ end
 function DealsFavor:Refresh()
     if not widgets.list then return end
 
-    local rows = ns.MerchantsFavor:GetRows({ skipOverStack = DealsFavor:GetSkipOverStack() })
+    local rows = ns.MerchantsFavor:GetRows()
 
     if state.search ~= "" then
         local needle = state.search:lower()
@@ -979,17 +966,6 @@ end
 
 function DealsFavor:SetSearch(text)
     state.search = text or ""
-end
-
-function DealsFavor:SetSkipOverStack(on)
-    state.skipOverStack = on and true or false
-end
-
-function DealsFavor:GetSkipOverStack()
-    if state.skipOverStack == nil then
-        state.skipOverStack = ns.Config:Get("favorSkipOverStack") ~= false
-    end
-    return state.skipOverStack
 end
 
 function DealsFavor:ScrollToTop()
