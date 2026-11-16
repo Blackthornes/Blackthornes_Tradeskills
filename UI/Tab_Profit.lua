@@ -343,6 +343,15 @@ end
 
 --- What the STOCK column's "0/3" means (a player asked, the owner said yes,
 --- 2026-10-22): how many you have, and how many you keep and why.
+--- A price for one item, with " x2" after it when one craft makes more,
+--- so the profit (for the whole craft) adds up.
+local function WithYield(text, yield)
+    if type(yield) == "number" and yield > 1 then
+        return text .. " x" .. yield
+    end
+    return text
+end
+
 local function StockLine(analysis)
     local stock = analysis.stock or 0
     if analysis.postLimit and analysis.postLimit > 0 then
@@ -994,6 +1003,21 @@ local function BuildDetail(parent)
     hourHover:SetScript("OnEnter", function(self) ShowHourPlans(self, state.selected) end)
     hourHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
     detail.hourHover = hourHover
+    -- Hovering the price says how many one craft makes, when it is more
+    -- than one.
+    local yieldHover = CreateFrame("Frame", nil, summary)
+    yieldHover:SetPoint("TOPLEFT", detail.rivalLabel, "TOPLEFT", 0, 2)
+    yieldHover:SetPoint("BOTTOMRIGHT", detail.postValue, "BOTTOMRIGHT", 0, -2)
+    yieldHover:EnableMouse(true)
+    yieldHover:SetScript("OnEnter", function(self)
+        local yield = detail.yield
+        if not (type(yield) == "number" and yield > 1) then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L.Format("Each craft makes %d.", yield), 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    yieldHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    detail.yieldHover = yieldHover
     for index = 13, 14 do
         detail.summaryRows[index].label:Hide()
         detail.summaryRows[index].value:Hide()
@@ -1552,6 +1576,7 @@ function UpdateDetail(analysis)
     if analysis.priceable then
         detail.summary:Show()
         detail.costValue:SetText(Util.FormatMoney(analysis.totalCost))
+        detail.yield = analysis.yield
 
         if analysis.undercut then
             -- An item auction that cannot be undercut by less than a silver is
@@ -1559,7 +1584,7 @@ function UpdateDetail(analysis)
             -- price below the rival's.
             detail.rivalLabel:SetText(analysis.matchedRival
                 and L["Matching rival"] or L["Cheapest rival"])
-            detail.rivalValue:SetText(Util.FormatMoney(analysis.competitorPrice))
+            detail.rivalValue:SetText(WithYield(Util.FormatMoney(analysis.competitorPrice), analysis.yield))
             detail.rivalValue:SetTextColor(Theme.Unpack("muted"))
         elseif analysis.priceUncontested then
             -- Nobody is competing, so the price above is the markup over
@@ -1603,7 +1628,7 @@ function UpdateDetail(analysis)
         if analysis.ownListing then
             detail.ownLabel:Show()
             detail.ownValue:Show()
-            detail.ownValue:SetText(Util.FormatMoney(analysis.ownListing))
+            detail.ownValue:SetText(WithYield(Util.FormatMoney(analysis.ownListing), analysis.yield))
 
             -- Undercut by a rival: your listing is not the one that sells.
             local beaten = analysis.competitorPrice
@@ -1622,7 +1647,7 @@ function UpdateDetail(analysis)
 
         detail.postLabel:SetText(toVendor and L["Vendor pays"]
             or toEnchanter and L["Disenchants to"] or L["You post at"])
-        detail.postValue:SetText(Util.FormatMoney(analysis.unitRevenue))
+        detail.postValue:SetText(WithYield(Util.FormatMoney(analysis.unitRevenue), analysis.yield))
         detail.postValue:SetTextColor(Theme.Unpack("accent"))
 
         if toVendor then
@@ -2470,6 +2495,7 @@ end
 ns.ProfitTab = {
     ShowView = ShowView,
     StockLine = StockLine,
+    WithYield = WithYield,
     ShowRecipesToLearn = function(profession)
         if not (ns.UI and ns.UI.Show) then
             ns.Print(L["the window is not ready yet, try again in a moment"])

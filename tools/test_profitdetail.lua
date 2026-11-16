@@ -313,4 +313,26 @@ check("a learned one says where it came from",
     StockLine({ stock = 0, learnedLimit = 3 }) == "You have 0. You keep 3 (learned from your sales).")
 check("no number, no line", StockLine({ stock = 2 }) == nil)
 
+print("\nthe yield shows when one craft makes more")
+local WithYield = ns.ProfitTab.WithYield
+check("two a craft adds x2", WithYield("10g", 2) == "10g x2")
+check("one a craft adds nothing", WithYield("10g", 1) == "10g")
+check("no yield adds nothing", WithYield("10g", nil) == "10g")
+
+analyses[1] = setmetatable({ recipeID = 5, yield = 2 }, { __index = analyses[1] })
+list.opts.onClick(analyses[1], 1, "LeftButton")
+local marked = false
+for _, label in ipairs(labels) do
+    if label.shown ~= false and tostring(label.text or ""):find(" x2$") then marked = true end
+end
+check("a price in the summary shows x2", marked)
+
+analyses[1] = setmetatable({ recipeID = 6, yield = 1 }, { __index = analyses[1] })
+list.opts.onClick(analyses[1], 1, "LeftButton")
+local still = false
+for _, label in ipairs(labels) do
+    if tostring(label.text or ""):find(" x%d+$") then still = true end
+end
+check("one a craft shows no x", not still)
+
 print(("\n%d check(s) passed\n"):format(checks))
