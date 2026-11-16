@@ -1315,6 +1315,17 @@ function CraftPanel:Attach(besideOnly)
     self:WatchSheets()
     self:Place()
 
+    if self.stripMode then
+        -- No room beside the window: the strip inside it shows instead
+        -- (UI/CraftStrip.lua). Looked at again once the window settles.
+        if C_Timer and C_Timer.After then
+            for _, delay in ipairs({ 0.2, 1 }) do
+                C_Timer.After(delay, function() CraftPanel:Reflow() end)
+            end
+        end
+        return
+    end
+
     frame:Show()
     self:Refresh()
 
@@ -1469,6 +1480,15 @@ function CraftPanel:Place()
     local wasSqueezed = self.squeezed == true
 
     self.place = place
+
+    -- No room beside it: the slim strip inside the profession window
+    -- (UI/CraftStrip.lua) stands in for the pane.
+    if self:WantsStrip(tradeSkillFrame, place) then
+        self:EnterStrip()
+        if self.stripMode then return end
+    end
+    if self.stripMode then self:LeaveStrip() end
+
     self.squeezed = place == "fold"
 
     frame:ClearAllPoints()
@@ -1523,15 +1543,66 @@ end
 --- A sheet came or went: place the pane now, and again once the game has
 --- moved the sheet into its slot.
 function CraftPanel:SheetMoved()
-    if not self.frame or not self.frame:IsShown() or self.inOne then return end
-    self:Place()
+    if not self:IsShown() or self.inOne then return end
+    self:Reflow()
     if C_Timer and C_Timer.After then
         for _, delay in ipairs(self.SHEET_LOOKS) do
             C_Timer.After(delay, function()
-                if CraftPanel.frame and CraftPanel.frame:IsShown() then CraftPanel:Place() end
+                if CraftPanel:IsShown() then CraftPanel:Reflow() end
             end)
         end
     end
+end
+
+--------------------------------------------------------------------------------
+-- No room beside it: the strip inside the profession window
+--------------------------------------------------------------------------------
+
+--- True when the pane has no room beside the profession window: folded
+--- under the character sheet, or past the screen's edge.
+function CraftPanel:WantsStrip(tradeSkillFrame, place)
+    local Strip = ns.CraftStrip
+    if not (Strip and Strip.NoRoom) or self.inOne or not tradeSkillFrame then return false end
+    if place ~= "fold" and place ~= "dock" then return false end
+    local scale = 1
+    local frame = self.frame
+    if frame and type(frame.GetEffectiveScale) == "function" then
+        local ok, s = pcall(frame.GetEffectiveScale, frame)
+        if ok and type(s) == "number" and s > 0 then scale = s end
+    end
+    local overhang = 0
+    if place == "dock" then
+        local ok, over = pcall(self.RightOverhang, self, tradeSkillFrame)
+        if ok and type(over) == "number" then overhang = over end
+    end
+    local tradeScale = 1
+    if type(tradeSkillFrame.GetEffectiveScale) == "function" then
+        local ok, s = pcall(tradeSkillFrame.GetEffectiveScale, tradeSkillFrame)
+        if ok and type(s) == "number" and s > 0 then tradeScale = s end
+    end
+    return Strip.NoRoom(place, Edge(tradeSkillFrame, "GetRight"), overhang * tradeScale,
+        PANEL_GAP * scale, PANEL_WIDTH * scale, Edge(UIParent, "GetRight"))
+end
+
+--- The pane steps aside and the strip shows. Falls back to the pane when
+--- the strip finds nowhere to sit.
+function CraftPanel:EnterStrip()
+    local Strip = ns.CraftStrip
+    if not (Strip and Strip:Show()) then
+        self.stripMode = false
+        return
+    end
+    self.stripMode = true
+    self.squeezed = false
+    self:StopSlicedRefresh()
+    if self.queuedFrame then self.queuedFrame:Hide() end
+    if self.frame then self.frame:Hide() end
+end
+
+--- Room again: the strip goes and the pane comes back.
+function CraftPanel:LeaveStrip()
+    self.stripMode = false
+    if ns.CraftStrip then ns.CraftStrip:Hide() end
 end
 
 --- Hook each sheet once, as soon as it exists.
@@ -1563,14 +1634,25 @@ end
 
 --- Re-measure, for a profession window that changed size after it opened.
 function CraftPanel:Reflow()
-    if not self.frame or not self.frame:IsShown() or self.inOne then return end
+    if not self.frame or self.inOne then return end
+    if not self.frame:IsShown() and not self.stripMode then return end
 
     local tradeSkillFrame = self:FindTradeSkillFrame()
     if not tradeSkillFrame then return end
 
-    -- A sheet came, went or moved since the pane was placed: place it again.
-    if self:SheetSpot(tradeSkillFrame) ~= (self.place or "dock") then
+    -- A sheet came, went or moved since the pane was placed, or the room
+    -- beside the window came or went: place it again.
+    local spot = self:SheetSpot(tradeSkillFrame)
+    if spot ~= (self.place or "dock") or self:WantsStrip(tradeSkillFrame, spot) ~= (self.stripMode == true) then
         self:Place()
+        if self.stripMode then return end
+        if self.frame:IsShown() then return end
+        self.frame:Show()
+        self:Refresh()
+        return
+    end
+    if self.stripMode then
+        if ns.CraftStrip then ns.CraftStrip:Place() end
         return
     end
 
@@ -1812,6 +1894,12 @@ end
 
 function CraftPanel:Refresh()
     self:StopSlicedRefresh()
+    if self.stripMode then
+        -- Room may have come back: Reflow puts the pane back and fills it.
+        self:Reflow()
+        if self.stripMode and ns.CraftStrip then ns.CraftStrip:Update() end
+        return
+    end
 
     local opts = self:BeginRefresh()
     if not opts then return end
@@ -1831,6 +1919,10 @@ local SLICE_MS = 3
 -- as a jerky craft bar (2026-10-09). Clicks and typing still refresh at once
 -- (Refresh); only the refreshes events ask for are spread out.
 function CraftPanel:RefreshInSlices()
+    if self.stripMode then
+        if ns.CraftStrip then ns.CraftStrip:Update() end
+        return
+    end
     if not (Util and type(Util.NewWorker) == "function") then return self:Refresh() end
 
     -- One already under way finishes, then goes again with what changed since.
@@ -2509,6 +2601,7 @@ function CraftPanel:Hide()
     -- A refresh still spread over frames would price on for a pane nobody
     -- sees, and throw the result away at the end.
     self:StopSlicedRefresh()
+    if self.stripMode then self:LeaveStrip() end
     if self.frame then self.frame:Hide() end
 end
 
@@ -2518,6 +2611,7 @@ end
 function CraftPanel:IntoOne(container)
     if not container then return end
     local frame = self:Build()
+    if self.stripMode then self:LeaveStrip() end
     self.inOne = true
     self.squeezed = false
     frame:SetParent(container)
@@ -2568,6 +2662,7 @@ function CraftPanel:BackBeside()
 end
 
 function CraftPanel:IsShown()
+    if self.stripMode then return true end
     return self.frame ~= nil and self.frame:IsShown()
 end
 

@@ -2723,6 +2723,20 @@ function TSTabs:AtDock(place)
     self.dockOpened = self.dockOpened or {}
     if not self.dockOpened[place] then
         self.dockOpened[place] = true
+        -- No room beside the profession window for the one window at a
+        -- size that can be read: it stays shut, and the slim strip inside
+        -- the profession window shows (UI/CraftStrip.lua). Opened already,
+        -- the one window docks as always.
+        local Strip = ns.CraftStrip
+        local okOpenNow, openNow = pcall(One.IsOpen)
+        if place == "profession" and not (okOpenNow and openNow) and Strip and Strip.OneHasRoom then
+            local okRoom, room = pcall(Strip.OneHasRoom, Strip, One)
+            if okRoom and room == false then
+                self.noRoomAt = place
+                return false
+            end
+        end
+        self.noRoomAt = nil
         local okOpen, isOpen = pcall(One.IsOpen)
         if not self.area and not (okOpen and isOpen) then UI.openedFor = place end
         pcall(One.Open, "tradeskills")

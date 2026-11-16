@@ -158,6 +158,7 @@ UI\FavorsView.lua
 UI\SnipeView.lua
 UI\CraftPanel.lua
 UI\EnchantWindow.lua
+UI\CraftStrip.lua
 UI\ProfessionOpener.lua
 UI\Disenchanter.lua
 UI\SellMarked.lua

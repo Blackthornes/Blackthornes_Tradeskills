@@ -3690,3 +3690,9 @@ L["Raise When Sold Out"] = "Subir al agotarse"
 L["SUB-CRAFTS AND ALTS"] = "PRODUCTOS INTERMEDIOS Y ALTERS"
 L["THE LIST"] = "LA LISTA"
 L["YOUR LISTS"] = "TUS LISTAS"
+
+-- The slim strip inside the profession window (UI/CraftStrip.lua)
+L["Next: %s x%d"] = "Siguiente: %s x%d"
+L["Craft Next"] = "Fabricar el siguiente"
+L["Open Queue"] = "Abrir la cola"
+L["Opens your whole craft queue."] = "Abre toda tu cola de fabricación."

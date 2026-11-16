@@ -3687,3 +3687,9 @@ L["Raise When Sold Out"] = "卖光就提高"
 L["SUB-CRAFTS AND ALTS"] = "子制造和小号"
 L["THE LIST"] = "列表"
 L["YOUR LISTS"] = "你的列表"
+
+-- The slim strip inside the profession window (UI/CraftStrip.lua)
+L["Next: %s x%d"] = "下一个：%s x%d"
+L["Craft Next"] = "制造下一个"
+L["Open Queue"] = "打开队列"
+L["Opens your whole craft queue."] = "打开你的整个制造队列。"
