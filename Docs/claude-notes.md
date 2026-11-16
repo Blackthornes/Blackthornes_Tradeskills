@@ -2579,3 +2579,17 @@ stacks now, so the Deals tab's "Skip bundles over a stack" box, the
 `favorSkipOverStack`; nothing reads it.
 
 Tested in `tools/test_merchantsfavor.lua` and `tools/test_postdrawer.lua`.
+
+## Post at Minimum Profit
+
+The owner asked (2026-11-16): when others sell a craft for less than it can
+earn, list it at the least that still makes the Minimum Profit instead of
+following them down. "Post at Minimum Profit:" on the Pricing page under
+WHEN TO SELL, saved as `postAtMinProfit` (never rename it), off unless
+ticked. `Profit:ChooseMarketPostPrice` asks `Profit:MinimumProfitPrice`
+after the rival price (`ChooseRivalPostPrice`); only a matched, undercut or
+overcut price with a known craft cost is raised, to
+`Profit:LeastProfitablePrice` (cost, the cut and deposits counted, rounded
+up for item auctions), basis "minprofit". At Minimum Profit 0 it is the
+break even price. Prices tab and list prices still apply after it. Tested
+in `tools/test_minprofitpost.lua`.
