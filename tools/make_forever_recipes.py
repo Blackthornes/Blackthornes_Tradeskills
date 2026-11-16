@@ -26,6 +26,14 @@ items that teach it, back out of the book. Forever moved the healing
 potions from Alchemy to First Aid this way, so Alchemy's old rows must not
 be offered to an alchemist.
 
+A Classic recipe the client still has takes its profession (from
+SkillLineAbility) and its materials (from SpellReagents) from the client
+whenever they differ from the book's: Forever changed some amounts and
+moved a few recipes to another profession, so the file puts those rows
+right. The book's line stays when it is one of the spell's lines; a spell
+with no materials in the tables keeps the book's. Material lists are
+compared as pairs, so a different order alone changes nothing.
+
 The data file adds its recipes to ns.RECIPE_BOOK, in the book's own row
 shape, each marked f = 1, with y and g for when it turns yellow and grey.
 Nothing says where most of them are learned; a profession window seen in
@@ -84,9 +92,11 @@ def lua_string(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
 
 
-def book_recipes(path):
+def book_recipes(path, rows_out=None):
     """The recipes Data/RecipeBook.lua already has ({ ID: name }) and the
-    recipe items it already has ({ item ID: recipe ID })."""
+    recipe items it already has ({ item ID: recipe ID }). With rows_out, also
+    fills it with each recipe's skill line and materials ({ ID: (line,
+    [item, count, ...]) })."""
     text = open(path, encoding="utf-8").read()
     split = text.index("Book.ITEMS")
     recipes = {}
@@ -94,11 +104,17 @@ def book_recipes(path):
         recipes[int(m.group(1))] = m.group(2)
     for m in re.findall(r"^\s+\[(\d+)\] = \{ \d+,", text[:split], re.M):
         recipes.setdefault(int(m), "")
+    if rows_out is not None:
+        for m in re.finditer(r"^\s+\[(\d+)\] = \{ (\d+), -?\d+, -?\d+, -?\d+, -?\d+, \{([^}]*)\}",
+                             text[:split], re.M):
+            mats = [int(v) for v in re.findall(r"-?\d+", m.group(3))]
+            rows_out[int(m.group(1))] = (int(m.group(2)), mats)
     items = {int(a): int(b) for a, b in re.findall(r"^\s+\[(\d+)\] = \{ (\d+),", text[split:], re.M)}
     return recipes, items
 
 
-def collect(folder, book, book_items):
+def collect(folder, book, book_items, book_rows=None):
+    book_rows = book_rows or {}
     names = {number(r["ID"]): r["Name_lang"] for r in rows(folder, "SpellName")}
 
     effects = collections.defaultdict(list)
@@ -106,11 +122,14 @@ def collect(folder, book, book_items):
         effects[number(r["SpellID"])].append(r)
 
     abilities, seen = {}, 0
+    lines = collections.defaultdict(list)
     for r in rows(folder, "SkillLineAbility"):
         line, spell = number(r["SkillLine"]), number(r["Spell"])
         if line not in PROFESSIONS:
             continue
         seen += 1
+        if line not in lines[spell]:
+            lines[spell].append(line)
         if spell < FOREVER_FIRST or spell in book or spell in abilities:
             continue
         name = names.get(spell) or ""
@@ -129,7 +148,7 @@ def collect(folder, book, book_items):
     reagents = {}
     for r in rows(folder, "SpellReagents"):
         spell = number(r["SpellID"])
-        if spell not in abilities or spell in reagents:
+        if spell in reagents or (spell not in abilities and spell not in book_rows):
             continue
         mats = []
         for i in range(8):
@@ -190,11 +209,32 @@ def collect(folder, book, book_items):
         for item in teaches.get(spell, ()):
             items[item] = (spell, sparse[item][1])
     gone_items = {item: spell for item, spell in book_items.items() if spell in gone}
-    return recipes, items, gone, gone_items
+
+    # Classic recipes the book has wrong for Forever: the profession it sits
+    # under (SkillLineAbility) and what it takes (SpellReagents) come from
+    # the client. A spell with no row in a table keeps the book's.
+    fixes = {}
+    for spell, (line, mats) in book_rows.items():
+        if spell in gone:
+            continue
+        new_line = line
+        if lines.get(spell) and line not in lines[spell]:
+            new_line = lines[spell][0]
+        new_mats = mats
+        forever = reagents.get(spell)
+        if forever and pairs_of(forever) != pairs_of(mats):
+            new_mats = forever
+        if new_line != line or new_mats is not mats:
+            fixes[spell] = (new_line, new_mats, line, book.get(spell, ""))
+    return recipes, items, gone, gone_items, fixes
 
 
-def render(recipes, items, build, gone=None, gone_items=None):
-    gone, gone_items = gone or {}, gone_items or {}
+def pairs_of(mats):
+    return sorted(zip(mats[0::2], mats[1::2]))
+
+
+def render(recipes, items, build, gone=None, gone_items=None, fixes=None):
+    gone, gone_items, fixes = gone or {}, gone_items or {}, fixes or {}
     out = [
         "-- Blackthornes Tradeskills -- Data/ForeverRecipes.lua",
         "-- The recipes WoW: Forever added, which the Classic book",
@@ -202,7 +242,8 @@ def render(recipes, items, build, gone=None, gone_items=None):
         "-- shape. f = 1 marks them; y and g are when they turn yellow and grey.",
         "-- A profession window seen in game still wins (Logic/RecipeBook.lua).",
         "-- Classic recipes the Forever client no longer has are taken back out",
-        "-- (gone below), with the recipe items that teach them.",
+        "-- (gone below), with the recipe items that teach them. Classic recipes",
+        "-- whose profession or materials Forever changed are put right (fixes).",
         "--",
         "-- Generated by tools/make_forever_recipes.py from the Forever client's",
         f"-- game tables{f' (build {build})' if build else ''}. Do not edit by hand: rerun the tool.",
@@ -236,6 +277,11 @@ def render(recipes, items, build, gone=None, gone_items=None):
     out += ["}", "", "-- Classic recipes Forever took out (the healing potions went to First Aid)", "local gone = {"]
     for spell in sorted(gone):
         out.append(f"    [{spell}] = true, -- {gone[spell]}" if gone[spell] else f"    [{spell}] = true,")
+    out += ["}", "", "-- [recipe ID] = { profession, { materials } }: Classic recipes Forever changed", "local fixes = {"]
+    for spell in sorted(fixes):
+        line, mats, _, name = fixes[spell]
+        body = f"    [{spell}] = {{ {line}, {{ {', '.join(str(v) for v in mats)} }} }},"
+        out.append(f"{body} -- {name}" if name else body)
     out += [
         "}",
         "",
@@ -244,6 +290,10 @@ def render(recipes, items, build, gone=None, gone_items=None):
         "end",
         "for id, row in pairs(ITEMS) do",
         "    if type(row) == \"table\" and gone[row[1]] then ITEMS[id] = nil end",
+        "end",
+        "for id, fix in pairs(fixes) do",
+        "    local row = RECIPES[id]",
+        "    if type(row) == \"table\" then row[1] = fix[1]; row[6] = fix[2] end",
         "end",
         "for id, row in pairs(recipes) do",
         "    if RECIPES[id] == nil then RECIPES[id] = row end",
@@ -269,9 +319,10 @@ def main(argv):
     if len(args) != 1:
         raise SystemExit(__doc__)
 
-    book, book_items = book_recipes(BOOK)
-    recipes, items, gone, gone_items = collect(args[0], book, book_items)
-    text = render(recipes, items, build, gone, gone_items)
+    book_rows = {}
+    book, book_items = book_recipes(BOOK, book_rows)
+    recipes, items, gone, gone_items, fixes = collect(args[0], book, book_items, book_rows)
+    text = render(recipes, items, build, gone, gone_items, fixes)
     if stdout:
         sys.stdout.write(text)
         return
@@ -279,6 +330,9 @@ def main(argv):
         f.write(text)
     print(f"Wrote {len(recipes)} recipes and {len(items)} recipe items to {OUTPUT};"
           f" took out {len(gone)} recipes and {len(gone_items)} recipe items Forever no longer has")
+    by_line = collections.Counter(old for _, _, old, _ in fixes.values())
+    print(f"Put right {len(fixes)} Classic recipes: " +
+          ", ".join(f"{line}: {n}" for line, n in sorted(by_line.items())))
 
 
 if __name__ == "__main__":
