@@ -931,12 +931,70 @@ for text, button in pairs(buttons) do
 end
 table.sort(spills)
 check("no settings button runs past its column", table.concat(spills, ", "), "")
-local recipesButton
-for _, button in ipairs(allButtons) do
-    local label = button:GetParent() and button:GetParent().strings and button:GetParent().strings[1]
-    if label and label.text == "Recipes to Learn:" then recipesButton = button end
+-- The Tooltips and Windows pages (the owner said build it, 2026-11-16).
+-- The buttons that only opened a tab went; every row moved, none renamed.
+local function RowButton(text)
+    for _, button in ipairs(allButtons) do
+        local label = button:GetParent() and button:GetParent().strings and button:GetParent().strings[1]
+        if label and label.text == text then return button end
+    end
 end
-check("Recipes to learn has its own row", recipesButton ~= nil, true)
+check("no Recipes to Learn button (the tab is one click away)", RowButton("Recipes to Learn:"), nil)
+check("no Stats button", RowButton("Stats:"), nil)
+check("no Tracker Place button: Window Spots does it", RowButton("Tracker Place:"), nil)
+check("no Gold Tracker Place button", RowButton("Gold Tracker Place:"), nil)
+check("Window Spots is still offered", RowButton("Window Spots:") ~= nil, true)
+check("Road to 300 is still offered", RowButton("Road to 300:") ~= nil, true)
+check("Road to 300 sits on About, with What's New", Holder(RowButton("Road to 300:")) == Holder(RowButton("What's New:")), true)
+
+--- The box on the row whose label says `text`.
+local function RowDropdown(text)
+    for _, box in ipairs(made.CreateDropdown) do
+        local label = box:GetParent().strings and box:GetParent().strings[1]
+        if label and label.text == text then return box end
+    end
+end
+local function Pick(box, index)
+    box.scripts.OnMouseDown(box)
+    local entry = box.menu.children[index]
+    entry.scripts.OnClick(entry)
+end
+
+local allLines = RowDropdown("All Lines:")
+check("Tooltips has All Lines", allLines ~= nil, true)
+check("on the same page as the lines", Holder(allLines) == Holder(RowDropdown("Value on Tooltips:")), true)
+settings.showValueOnItemTooltips, settings.tooltipTrend = true, false
+ns.db.tooltipShift = {}
+UI.tabs.settings.refresh()
+check("lines that differ show Mixed", allLines.strings[1].text, "Mixed")
+Pick(allLines, 3)
+check("Always turns each line on", settings.tooltipTrend, true)
+check("and keeps none on Shift", next(ns.db.tooltipShift), nil)
+check("each line's box shows it", RowDropdown("Price Trend on Tooltips:").strings[1].text, "Always")
+check("All Lines says Always", allLines.strings[1].text, "Always")
+Pick(allLines, 1)
+check("Off turns each line off", settings.showValueOnItemTooltips, false)
+check("but the sales lines have no Off", RowDropdown("Sales Details:").strings[1].text, "Always")
+check("All Lines says Off", allLines.strings[1].text, "Off")
+Pick(RowDropdown("Price Trend on Tooltips:"), 2)
+check("one line changed by hand", ns.db.tooltipShift.trend, true)
+check("makes All Lines say Mixed", allLines.strings[1].text, "Mixed")
+
+-- Open at AH, Open at Professions and Open With AH and Vendors became one
+-- row, each tick still its own saved setting.
+local openAt = RowDropdown("Open By Itself At:")
+check("one Open By Itself At row", openAt ~= nil, true)
+check("on Windows, with Window Spots", Holder(openAt) == Holder(RowButton("Window Spots:")), true)
+settings.openAtAuction, settings.openWithShops, settings.openAtProfessions = nil, nil, nil
+UI.tabs.settings.refresh()
+check("a new player's ticks", openAt:GetValue().openAtAuction == true and openAt:GetValue().openWithShops == nil
+    and openAt:GetValue().openAtProfessions == true, true)
+Pick(openAt, 2)
+check("ticking Vendors saves Open With AH and Vendors", settings.openWithShops, true)
+check("and leaves the others unwritten", settings.openAtAuction == nil and settings.openAtProfessions == nil, true)
+Pick(openAt, 1)
+check("unticking Auction House saves it off", settings.openAtAuction, false)
+openAt.scripts.OnMouseDown(openAt)
 
 -- The confirmation's Yes is the click that lists, so there is no switch
 -- to turn it off: one was offered and never did anything.
