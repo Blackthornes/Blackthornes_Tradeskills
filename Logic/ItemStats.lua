@@ -235,7 +235,7 @@ local function Market(itemID, record, perDay)
     if market.listed and market.perDay and market.perDay > 0 then
         market.daysToSell = market.listed / market.perDay
     end
-    if ns.Demand and ns.Demand.MarketLevel then market.level = ns.Demand.MarketLevel(share) end
+    if ns.Demand and ns.Demand.MarketLevel then market.level = ns.Demand.MarketLevel(share, itemID) end
     return market
 end
 
