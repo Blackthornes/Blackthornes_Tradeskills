@@ -237,15 +237,56 @@ end
 --- The link of the copy a tooltip shows, or nil. Only asked for its random
 --- suffix ("of the Monkey"), so a copy is priced as the copy it is.
 function ItemTooltip:LinkForTooltip(tooltip, data)
+    local link
     local fromData = Field(data, "hyperlink")
-    if type(fromData) == "string" then return fromData end
-
-    for _, getter in ipairs({ Field(_G.TooltipUtil, "GetDisplayedItem"), Field(tooltip, "GetItem") }) do
-        if type(getter) == "function" then
-            local ok, _, link = pcall(getter, tooltip)
-            if ok and type(link) == "string" then return link end
+    if type(fromData) == "string" then
+        link = fromData
+    else
+        -- Not ipairs: a client without the first getter would stop the walk
+        -- before the second.
+        local getters = { Field(_G.TooltipUtil, "GetDisplayedItem"), Field(tooltip, "GetItem") }
+        for i = 1, 2 do
+            local getter = getters[i]
+            if type(getter) == "function" then
+                local ok, _, got = pcall(getter, tooltip)
+                if ok and type(got) == "string" then link = got; break end
+            end
         end
     end
+
+    -- The auction house's list draws each row with SetItemKey(itemID,
+    -- itemLevel, itemSuffix), and the link the tooltip then hands back names
+    -- no suffix: "Zircon Band of Power" was priced as every Zircon Band
+    -- together. The suffix is still in the call that drew it.
+    if not (link and Util.LinkSuffix and Util.LinkSuffix(link)) then
+        local itemID, suffix = ItemTooltip.KeySuffix(tooltip)
+        if itemID and suffix then
+            return ("item:%d:0:0:0:0:0:%d"):format(itemID, suffix)
+        end
+    end
+    return link
+end
+
+--- The item and random suffix of a tooltip drawn from an auction house item
+--- key (`GetItemKey`'s arguments), or nil. Read inside a pcall.
+function ItemTooltip.KeySuffix(tooltip)
+    local info
+    local getInfo = Field(tooltip, "GetPrimaryTooltipInfo")
+    if type(getInfo) == "function" then
+        local ok, got = pcall(getInfo, tooltip)
+        if ok then info = got end
+    end
+    info = info or Field(tooltip, "processingInfo")
+    if Field(info, "getterName") ~= "GetItemKey" then return nil end
+
+    local args = Field(info, "getterArgs")
+    local ok, itemID, suffix = pcall(function()
+        local id, roll = args[1], args[3]
+        if type(id) ~= "number" or type(roll) ~= "number" then return nil end
+        if id <= 0 or roll == 0 then return nil end
+        return id + 0, roll + 0
+    end)
+    if ok and itemID and suffix then return itemID, suffix end
     return nil
 end
 
@@ -349,6 +390,17 @@ function ItemTooltip:LinesFor(itemID, count, link)
         value = ns.Prices:GetValue(itemID, "market")
     end
 
+    -- A random suffix with a price of its own ("of the Monkey" can sell for
+    -- far more than "of the Spirit"): the value and lowest posting are this
+    -- suffix's, as the auction house lists it, not every suffix's together.
+    local roll = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link)
+    local rollValue = roll and ns.Prices.GetSuffixValue and ns.Prices:GetSuffixValue(itemID, roll, "market")
+    local rollEntry
+    if rollValue and rollValue > 0 then
+        value = rollValue
+        rollEntry = ns.Prices.GetSuffixEntry and ns.Prices:GetSuffixEntry(itemID, roll) or {}
+    end
+
     -- A stored zero is a scan that saw no listings, not an item the market
     -- values at nothing.
     if not value or value <= 0 then
@@ -378,7 +430,13 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     -- An old price is still the best anyone has, so it is shown -- with its
     -- age, which is the part that decides whether to trust it.
-    if ns.Prices.IsStale and ns.Prices:IsStale(itemID) then
+    if rollEntry then
+        local seen = tonumber(rollEntry.seen)
+        local fresh = ns.Config and ns.Config:Get("staleAfterSeconds") or (48 * 3600)
+        if seen and time() - seen > fresh then
+            text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(time() - seen))
+        end
+    elseif ns.Prices.IsStale and ns.Prices:IsStale(itemID) then
         local age = ns.Prices:GetAge(itemID)
         if age then
             text = L.Format("%s  (%s)", text, Util.FormatAgeAgo(age))
@@ -387,15 +445,15 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     lines[#lines + 1] = { L["Auction value"], text }
 
-    -- A random suffix with a price of its own ("of the Monkey" can sell for
-    -- far more than "of the Spirit"): what this one goes for.
-    local roll = link and ns.Prices.SuffixOf and ns.Prices.SuffixOf(link)
-    local rollValue = roll and ns.Prices:GetSuffixValue(itemID, roll, "market")
-    if rollValue and rollValue > 0 then
-        lines[#lines + 1] = { L["This one"], Util.FormatMoney(rollValue, { short = true }) }
+    local lowest
+    if rollEntry then
+        local min = tonumber(rollEntry.min)
+        if min and min > 0 then
+            lowest = { L["Lowest posting"], Util.FormatMoney(min, { short = true }) }
+        end
+    else
+        lowest = self:LowestLine(itemID)
     end
-
-    local lowest = self:LowestLine(itemID)
     if lowest then lines[#lines + 1] = lowest end
 
     local trend = self:TrendLine(itemID)
