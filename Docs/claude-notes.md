@@ -2464,3 +2464,25 @@ Tooltips, Windows, Sharing, Data, About. Look and General are gone; a saved
 - About takes ADDONS (sister note, What's New) and Road to 300.
 - Gone: the Recipes to Learn and Stats buttons (each tab is a click away),
   and Tracker Place and Gold Tracker Place (Window Spots resets both).
+
+## The Queue page's groups and lists box (2026-11-16)
+
+Items 7 and 8 of `Docs/handoff/ui-cleanup-tradeskills.md`, the owner said
+build it.
+
+- Column one is three groups: RESTOCKING (Keep in Stock, Restock What
+  Sells, Stock From Sales, Restock When Down To, Extra for Fast Sellers),
+  SUB-CRAFTS AND ALTS, THE LIST. Nothing is greyed under Restock What
+  Sells: Keep in Stock and the rest also set what the Profit tab and List
+  All keep, so they matter with it off.
+- "Stock From Sales:" is one box over two saved keys, never renamed:
+  `learnStockFromSales` (on unless off) and `raiseStockOnSellOut` (off
+  unless on). Off, Follow Sales, Raise When Sold Out, Both; every old pair
+  is one of the four, and only a key that changes is written.
+- Column two is "Show:" over the six lists (`widgets.queueLists`, each in a
+  holder of its own, sized in `ShowQueueList` so the page scrolls to its
+  foot). Each name carries its count (Keep in Stock by Profession counts
+  the professions with their own number). The pick is kept in
+  `settingsQueueList`; with none, the first list with something in it. A
+  search that matches a list shows it without keeping the pick
+  (`Searchable`'s `onFound`).
