@@ -124,6 +124,22 @@ local damaged = parts[1]:gsub("(~)(%w+)(;)", "%1%2%3", 1):sub(1, -3) .. "zz;"
 ok = b.PriceTransfer:Import(damaged)
 check("damaged code refused", ok, false)
 
+print("One realm, two accounts")
+-- Forever names the server behind a realm, and a player's accounts on one
+-- realm can sit on different ones.
+local w1 = NewClient("CAMWOW EU1 Realm 7 Normal-Alliance")
+w1.Prices:GetTable()[300] = { market = 5000, seen = clock - 50, scans = 1, history = {} }
+local w2 = NewClient("CAMWOW EU1 Realm 3 Normal-Alliance")
+ok = w2.PriceTransfer:Import(w1.PriceTransfer:Export()[1])
+check("the other account's server is this realm", ok, true)
+check("its price came over", w2.Prices:GetTable()[300] and w2.Prices:GetTable()[300].market, 5000)
+ok = NewClient("CAMWOW EU1 Realm 3 Normal-Horde").PriceTransfer:Import(w1.PriceTransfer:Export()[1])
+check("the other side there is still refused", ok, false)
+ok = NewClient("CAMWOW EU1 Realm 3 PvP-Alliance").PriceTransfer:Import(w1.PriceTransfer:Export()[1])
+check("another kind of realm is still refused", ok, false)
+ok = NewClient("camwow eu1 realm 9 normal-alliance").PriceTransfer:Import(w1.PriceTransfer:Export()[1])
+check("case does not matter", ok, true)
+
 print("One bad record refuses all")
 local realm = "TestRealm-Alliance"
 local body = "2s:3k::" .. a.Comm.ToBase36(clock - 100) .. ";zz:zz:zz"   -- last record is short
