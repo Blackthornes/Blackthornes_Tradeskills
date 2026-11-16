@@ -777,7 +777,13 @@ function ItemTooltip:AddDemandLines(lines, itemID)
 
     local prices = ns.Prices
 
-    if prices and type(prices.GetUnitsSoldPerDay) == "function" then
+    -- TSM's count when "TSM Sold a Day:" is ticked and TSM has one; else
+    -- the player's own scans, as before.
+    local fromTSM = ns.TSMPrices and type(ns.TSMPrices.SoldPerDay) == "function"
+        and ns.TSMPrices:SoldPerDay(itemID)
+    if type(fromTSM) == "number" then
+        lines[#lines + 1] = { INDENT .. L["Sold a day"], L.Format("%s (from TSM)", AboutText(fromTSM)) }
+    elseif prices and type(prices.GetUnitsSoldPerDay) == "function" then
         local ok, perDay = pcall(prices.GetUnitsSoldPerDay, prices, itemID)
         if ok and type(perDay) == "number" then
             lines[#lines + 1] = { INDENT .. L["Sold a day"], L.Format("%s (from your scans)", AboutText(perDay)) }

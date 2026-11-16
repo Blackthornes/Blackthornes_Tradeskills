@@ -1319,6 +1319,17 @@ whose bind type the client hasn't loaded yet reads the TSM Price Source
 and isn't kept. "min" and "lowest" stay DBMinBuyout. Farmer has the same
 box and key on its Loot page. Tested in `tools/test_tsmprices.lua`. Not
 yet seen in game.
+TSM Sold a Day (a player asked, the owner said build it from a mockup,
+2026-11-16): "TSM Sold a Day:" under TSM BoE Price Source on the Pricing
+page, a tick box (`tsmSoldPerDay`, account wide, off unless ticked; never
+rename it; greyed while `tsmPrices` is off). Hover: "Takes the Sold a day
+number on item tooltips from TSM." (the owner had a second sentence about
+the region taken out). `TSMPrices:SoldPerDay` reads `DBRegionSoldPerDay`
+(`SOLD_SOURCE`), not rounded, kept 60 s; the tooltip's Sold a day then says
+"about N (from TSM)", and falls back to "(from your scans)" when TSM has no
+number. Listed now and Last 7 days stay on the player's scans. Tested in
+`tools/test_tooltipsales.lua`. Not yet seen in game: whether TSM's Forever
+data carries DBRegionSoldPerDay, and its scale, are unconfirmed.
 Auctionator comes after TSM (the owner said yes and allowed naming it,
 2026-10-12): `Logic/AuctionatorPrices.lua` reads
 `Auctionator.API.v1.GetAuctionPriceByItemID("Blackthornes_TS", itemID)`

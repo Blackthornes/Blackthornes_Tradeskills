@@ -82,6 +82,9 @@ local function GreyPreferTSM(widgets, tsmOn)
         source.editBox:EnableMouse(tsmOn and true or false)
         if not tsmOn then source.editBox:ClearFocus() end
     end
+    -- "TSM Sold a Day:" too.
+    if widgets.tsmSoldRow then widgets.tsmSoldRow:SetAlpha(tsmOn and 1 or 0.4) end
+    if widgets.tsmSoldPerDay then widgets.tsmSoldPerDay:EnableMouse(tsmOn and true or false) end
     -- "TSM BoE Price Source:" too.
     local gearRow, gear = widgets.tsmGearRow, widgets.tsmGearPriceSource
     if gearRow then gearRow:SetAlpha(tsmOn and 1 or 0.4) end
@@ -2197,6 +2200,20 @@ local function Build(outer)
     widgets.tsmGearNote:SetWidth(COLUMN_WIDTH)
     widgets.tsmGearNote:SetWordWrap(true)
 
+    -- The tooltip's "Sold a day" from TSM (a player asked, the owner said
+    -- build it, 2026-11-16). Off unless ticked, greyed while TSM Prices is
+    -- off. `tsmSoldPerDay`, account wide; never rename it. See
+    -- TSMPrices:SoldPerDay.
+    local soldRow = CreateRow(pages.pricing, 2, L["TSM Sold a Day:"],
+        L["Takes the Sold a day number on item tooltips from TSM."])
+    widgets.tsmSoldPerDay = Widgets.CreateCheckbox(soldRow, L["On"], function(checked)
+        Config:Set("tsmSoldPerDay", checked)
+        if ns.TSMPrices then ns.TSMPrices:Forget() end
+        UI:RefreshActiveTab()
+    end, false)
+    widgets.tsmSoldPerDay:SetPoint("TOPLEFT", CONTROL_X, -2)
+    widgets.tsmSoldRow = soldRow
+
     local auctionatorRow = CreateRow(pages.pricing, 2, L["Auctionator Prices:"],
         L["Uses Auctionator prices for items nothing else has priced, or when its price is newer than your old one."])
     widgets.auctionatorPrices = Widgets.CreateCheckbox(auctionatorRow, L["On"], function(checked)
@@ -2869,6 +2886,7 @@ local function Refresh()
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")
     widgets.preferTsmPrices:SetChecked(Config:Get("preferTsmPrices") == true)
+    widgets.tsmSoldPerDay:SetChecked(Config:Get("tsmSoldPerDay") == true)
     GreyPreferTSM(widgets, Config:Get("tsmPrices") ~= false)
     local sourceBox = widgets.tsmPriceSource.editBox
     if not (sourceBox.HasFocus and sourceBox:HasFocus()) then
