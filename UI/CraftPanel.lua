@@ -1485,7 +1485,7 @@ function CraftPanel:Place()
     -- (UI/CraftStrip.lua) stands in for the pane.
     if self:WantsStrip(tradeSkillFrame, place) then
         self:EnterStrip()
-        return
+        if self.stripMode then return end
     end
     if self.stripMode then self:LeaveStrip() end
 
