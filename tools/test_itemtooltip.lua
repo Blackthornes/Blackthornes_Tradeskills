@@ -475,4 +475,60 @@ ns.settings.tooltipBoughtFor = nil
 ns.MethodProfit = nil
 time = realTime
 
+-- Random suffix gear (a player asked, 2026-11-16): the auction house listed
+-- Zircon Band of Power at 1g 13s 99c, the tooltip said 21s 61c, every
+-- Zircon Band together. The value and lowest posting are this suffix's.
+local ZIRCON_BAND = 11967
+local POWER = 1205
+ITEMS[ZIRCON_BAND] = { classID = 4, bindType = 2 }
+PRICES[ZIRCON_BAND] = 2161
+time = function() return 1000000 end
+ns.Util.LinkSuffix = function(link)
+    local roll = tonumber(link:match("item:%d+:[%-%d]*:[%-%d]*:[%-%d]*:[%-%d]*:[%-%d]*:([%-%d]+)") or "")
+    if roll and roll ~= 0 then return roll end
+end
+ns.Prices.SuffixOf = function(link) return ns.Util.LinkSuffix(link) end
+local suffixRows = { [POWER] = { market = 11399, min = 11399, seen = 1000000 - 120 } }
+ns.Prices.GetSuffixEntry = function(_, itemID, roll) return itemID == ZIRCON_BAND and suffixRows[roll] or nil end
+ns.Prices.GetSuffixValue = function(_, itemID, roll, which)
+    local entry = itemID == ZIRCON_BAND and suffixRows[roll]
+    return entry and entry[which]
+end
+ns.Prices.Get = function(_, itemID) if itemID == ZIRCON_BAND then return { min = 2075 } end end
+
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "|cff1eff00|Hitem:11967:0:0:0:0:0:1205:0|h[Zircon Band of Power]|h|r")
+check("a suffix's own auction value", Find(lines, "Auction value")[2], "<11399>")
+check("and its own lowest posting", Find(lines, "Lowest posting")[2], "<11399>")
+check("said once, not twice", Find(lines, "This one"), nil)
+
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "item:11967:0:0:0:0:0:0")
+check("no suffix, the item's value", Find(lines, "Auction value")[2], "<2161>")
+check("and the item's lowest", Find(lines, "Lowest posting")[2], "<2075>")
+
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "item:11967:0:0:0:0:0:999")
+check("a suffix never seen, the item's value", Find(lines, "Auction value")[2], "<2161>")
+
+suffixRows[POWER].seen = 1000000 - 72 * 3600
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, "item:11967:0:0:0:0:0:1205")
+check("an old suffix price says its age", Find(lines, "Auction value")[2], "<11399>  (72h ago)")
+suffixRows[POWER].seen = 1000000 - 120
+
+-- The auction house list draws a row with SetItemKey, and the link it hands
+-- back names no suffix. The suffix comes from the call's arguments.
+local keyTip = Tooltip(ZIRCON_BAND)
+function keyTip:GetPrimaryTooltipInfo()
+    return { getterName = "GetItemKey", getterArgs = { ZIRCON_BAND, 18, POWER, 18 } }
+end
+check("an item key row reads its suffix", ItemTooltip:LinkForTooltip(keyTip, { hyperlink = "item:11967:0:0:0" }),
+    "item:11967:0:0:0:0:0:1205")
+lines = ItemTooltip:LinesFor(ZIRCON_BAND, nil, ItemTooltip:LinkForTooltip(keyTip, nil))
+check("and is priced as that suffix", Find(lines, "Auction value")[2], "<11399>")
+local plainTip = Tooltip(ZIRCON_BAND)
+check("a link with its suffix is kept", ItemTooltip:LinkForTooltip(plainTip, { hyperlink = "item:11967:0:0:0:0:0:77" }),
+    "item:11967:0:0:0:0:0:77")
+check("no item key, the plain link", ItemTooltip:LinkForTooltip(plainTip, nil):match("Hitem:11967") ~= nil, true)
+function keyTip:GetPrimaryTooltipInfo() error("secret") end
+check("a key that raises costs nothing", ItemTooltip.KeySuffix(keyTip), nil)
+time = realTime
+
 print("test_itemtooltip: ok")

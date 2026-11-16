@@ -15,8 +15,12 @@ scans (`C_AuctionHouse.GetReplicateItemLink`, asked only for green or better
 weapons and armour, `Scanner.MayHaveSuffix`), browse rows (the key's
 `itemSuffix`) and item searches (each listing's `itemLink`).
 `Prices:GetLinkValue(link, which)` is a copy's price: its suffix's, else
-`GetValue`'s, with the player's own price still winning. The tooltip adds
-"This one" for a copy whose suffix has a price, and Butler's `Advise` takes
+`GetValue`'s, with the player's own price still winning. The tooltip's Auction value and Lowest posting are the copy's suffix's
+when it has a price (2026-11-16, a player's report; the "This one" line
+is gone, its locale key kept), and an auction house row drawn with
+`SetItemKey` reads its suffix from the tooltip's `GetItemKey` arguments
+(`ItemTooltip.KeySuffix`), since that link names none. Trend and the
+Demand lines stay by item. And Butler's `Advise` takes
 the bag link. `GetValue(itemID)` is unchanged, so Farmer and Equipment read
 as before. The screens that follow a copy's suffix (the owner, 2026-10-15:
 "people want Tradeskills to respect suffixes on greens"): Post's suggested
