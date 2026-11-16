@@ -163,6 +163,14 @@ function EnchantWindow:ProbeLines()
             for _, line in ipairs(more) do lines[#lines + 1] = line end
         end
     end
+    -- The craft strip shares the foot of the recipe pane (UI/CraftStrip.lua).
+    local strip = ns.CraftStrip
+    if strip and type(strip.ProbeLines) == "function" then
+        local ok, more = pcall(strip.ProbeLines, strip)
+        if ok and type(more) == "table" then
+            for _, line in ipairs(more) do lines[#lines + 1] = line end
+        end
+    end
     return lines
 end
 

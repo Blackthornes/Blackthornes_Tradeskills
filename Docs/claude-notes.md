@@ -2486,3 +2486,32 @@ build it.
   `settingsQueueList`; with none, the first list with something in it. A
   search that matches a list shows it without keeping the pick
   (`Searchable`'s `onFound`).
+
+## The craft strip inside the profession window (2026-11-16)
+
+Recommendation 4 of `Docs/handoff/ui-cleanup-tradeskills.md`, the owner
+said build it and approved the words. `UI/CraftStrip.lua` (in the TOC
+after `UI/EnchantWindow.lua`): a slim strip at the foot of the game's
+recipe pane with "Next: <craft> x<count>", Craft Next (Stop crafting while
+busy) and Open Queue (`Queue:ShowQueue`). Placed like the enchant strip
+(`EnchantWindowUI.FindAnchor`, `CreateButtons`, `Lift`, `Rect`), lifted
+over the enchant strip when that shows. Our own frame; nothing of the
+game's is hidden, shown or moved.
+
+When it shows:
+- Pane beside the profession window (One Window off, or in a fight) with
+  no room: `CraftPanel:WantsStrip` asks `CraftStrip.NoRoom` (folded under
+  the character sheet, or the pane would run past the screen's right
+  edge). `CraftPanel:EnterStrip` hides the pane and sets `stripMode`;
+  `IsShown` stays true, `Refresh` reflows and updates the strip, and
+  `Reflow`/`SheetMoved` bring the pane back when room returns.
+- One Window on: `TSTabs:AtDock("profession")` doesn't open the one window
+  when `CraftStrip:OneHasRoom` says it can't fit on either side at
+  `CraftStrip.READABLE` (75) percent, or the shared window's
+  `DOCK_SCALE_MIN` if it gives one. The pane then goes beside, finds no
+  room, and the strip shows. A one window already open docks as always
+  (that is the shared file's call).
+
+New words: "Next: %s x%d", "Craft Next", "Open Queue", "Opens your whole
+craft queue." Probe lines join the enchant probe. Tested in
+`tools/test_craftstrip.lua`.
