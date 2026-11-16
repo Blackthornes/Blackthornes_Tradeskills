@@ -176,6 +176,23 @@ first.
 - After a client-table re-pull, `tools/make_forever_recipes.py` as the
   tables routine does.
 
+## Running the checks (keep the output small)
+
+A full test run used to print every passing check, about 590 KB, and that
+alone ran threads out of room (found 2026-11-16). `tools/runtests.py` is now
+quiet: a passing suite prints nothing and a failing one prints its last 25
+lines. Keep it that way, and never pipe a tool's whole output into a thread.
+
+- `python tools/runtests.py` runs everything and prints one line.
+- `python tools/runtests.py mail queue` runs only the suites with those
+  words in their file name. Use this while fixing.
+- `python tools/runtests.py -v uifit | tail -40` prints every check; always
+  with a name and `tail`.
+- `python tools/syntaxcheck.py` lists failures only (`-v` for every file).
+- A new test may print each check as before; the runner holds the lines.
+- `Data/ForeverVendorSpots.lua` has lines near 6000 characters: grep it with
+  `-o` or `cut -c1-200`, never plain.
+
 ## Big files (read these in pieces)
 
 Reading a huge file whole fills the context and the thread dies. Sizes are

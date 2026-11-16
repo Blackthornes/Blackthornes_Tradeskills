@@ -34,7 +34,7 @@ excludes them.
 ```bash
 python tools/syntaxcheck.py   # parse every Lua file with a real 5.1 parser
 python tools/lintcalls.py     # find calls to methods, and constants, never defined
-python tools/runtests.py      # run the pure-logic tests outside WoW
+python tools/runtests.py      # run the pure-logic tests outside WoW (quiet unless one fails; -v prints every check)
 ```
 
 These checks matter because WoW quietly turns off an addon when one of its
