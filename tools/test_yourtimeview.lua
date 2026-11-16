@@ -177,6 +177,19 @@ check("picked again, cleared", detail.title.text, "Your time")
 list.opts.onClick(rows[2], nil, "RightButton")
 check("right-click queues one", queued and queued[1] == 2 and queued[2] == 1, true)
 
+print("\nyour time: a long note is never cut off")
+ns.Theme.TextWidth = function(label) return #label.text * 6 end
+for _, way in ipairs(detail.ways) do
+  way.SetHeight = function(self, height) self.height = height end
+end
+list.opts.onClick(rows[3], nil, "LeftButton")
+-- 36 letters at 6 wide is 216, in a card 66 wide less 8 a side: five lines.
+check("the note takes the lines it needs", detail.ways[1].height, 30 + 5 * 12)
+ns.Theme.TextWidth = function() return 40 end
+list.opts.onClick(rows[1], nil, "LeftButton")
+check("a note that fits keeps the card's height", detail.ways[1].height, 42)
+ns.Theme.TextWidth = nil
+
 print("\nyour time: no Farmer")
 hasFarmer = false
 View.Redraw()

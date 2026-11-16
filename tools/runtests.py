@@ -63,13 +63,21 @@ def main() -> int:
         lua.execute(CAPTURE)
 
     scripts = test_files()
+    picked = scripts
     if wanted:
         # Any part of a file name picks it: "mail" runs every test_*mail*.lua.
-        scripts = [p for p in scripts
-                   if any(w.lower() in os.path.basename(p).lower() for w in wanted)]
-    if not scripts:
+        picked = [p for p in scripts
+                  if any(w.lower() in os.path.basename(p).lower() for w in wanted)]
+        # The suites share one Lua state and some lean on a global an earlier
+        # one left behind (time, GetTime, CreateFrame). So the ones before the
+        # last pick still run, in order and unreported, and a picked suite
+        # sees just what it sees in a full run. The lot takes two seconds.
+        if picked:
+            scripts = scripts[:scripts.index(picked[-1]) + 1]
+    if not picked:
         print("no test files found in tools/", file=sys.stderr)
         return 1
+    report = set(picked)
 
     failed = []
 
@@ -77,15 +85,22 @@ def main() -> int:
         name = os.path.basename(path)
         if not verbose:
             lua.execute("__lines = {}")
+        elif path not in report:
+            lua.execute("__print = print; print = function() end")
         try:
             lua.execute("dofile([[%s]])" % path.replace("\\", "/"))
         except Exception as error:          # a Lua error, surfaced as LuaError
-            failed.append(name)
-            print("\nFAIL -- %s\n%s" % (name, str(error)[:2000]), file=sys.stderr)
-            if not verbose:
-                tail = lua.eval("__tail(%d)" % TAIL)
-                if tail:
-                    print("  last lines it printed:\n%s" % tail[-3000:], file=sys.stderr)
+            if path in report:
+                failed.append(name)
+                print("\nFAIL -- %s\n%s" % (name, str(error)[:2000]), file=sys.stderr)
+                if not verbose:
+                    tail = lua.eval("__tail(%d)" % TAIL)
+                    if tail:
+                        print("  last lines it printed:\n%s" % tail[-3000:], file=sys.stderr)
+        if verbose and path not in report:
+            lua.execute("print = __print")
+
+    scripts = picked
 
     print("\n%d suite(s) run, %d failure(s)" % (len(scripts), len(failed)))
 
