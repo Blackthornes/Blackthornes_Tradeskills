@@ -1118,6 +1118,18 @@ local function Build(outer)
     end, false)
     widgets.snipeTab:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The crate list on Buy (the owner said build it, 2026-11-16).
+    local crateListRow = CreateRow(pages.auction, 1, L["Crate Shopping List:"],
+        L["Shows what your Waylaid Crates need on the Buy list at the auction house."])
+    widgets.crateShoppingList = Widgets.CreateCheckbox(crateListRow, L["On"], function(checked)
+        Config:Set("crateShoppingList", checked)
+        if ns.PostPanel and ns.PostPanel.Refresh then
+            ns.PostPanel.crateAt = nil
+            ns.PostPanel:Refresh()
+        end
+    end, false)
+    widgets.crateShoppingList:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local snipeWheelRow = CreateRow(pages.auction, 1, L["Wheel Buys:"],
         L["On the Snipe tab, wheel up buys the best find."])
     widgets.snipeWheel = Widgets.CreateCheckbox(snipeWheelRow, L["On"], function(checked)
@@ -2720,6 +2732,7 @@ local function Refresh()
     widgets.postAnyway:SetChecked(Config:Get("postAnyway") == true)
     widgets.mouseWheel:SetChecked(Config:Get("mouseWheelListing") == true)
     widgets.snipeTab:SetChecked(Config:Get("snipeTab") == true)
+    widgets.crateShoppingList:SetChecked(Config:Get("crateShoppingList") == true)
     widgets.snipeWheel:SetChecked(Config:Get("snipeWheel") == true)
     widgets.overcutting:SetChecked(Config:Get("overcutting") == true)
     widgets.subCrafts:SetChecked(Config:Get("autoQueueSubCrafts") ~= false)

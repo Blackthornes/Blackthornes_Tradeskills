@@ -11,6 +11,9 @@
 --   4. Search all on Buy (2026-10-14) looks up every line the auction house
 --      sells at once, with each shortfall, or one a click where the game
 --      takes one a search; vendor materials are left out.
+--   5. With Crate Shopping List ticked and crates in the bags (2026-11-16),
+--      Buy shows a Waylaid Crates group above a Craft Queue group; Search all
+--      covers both, adding what both want; folding and sorting a group work.
 
 local ns = {}
 ns.NewModule = function(name) local m = {}; ns[name] = m; return m end
@@ -217,5 +220,95 @@ PostPanel:SearchAll()
 check("nothing to look for: says so", said ~= nil and #single == 3)
 PostPanel:UpdateSearchAll()
 check("and greyed", search.text == "Search all" and search.enabled == false)
+
+-- 5
+local savedGetTime = GetTime
+GetTime = function() return 100 end
+ns.Util.GetItemName = function(itemID) return ({ [30] = "Linen Cloth", [31] = "Bruiseweed", [20] = "Coarse Thread" })[itemID] end
+local crateLines = {
+    { kind = "crate", itemID = 30, needed = 80, have = 23, shortfall = 57, estimatedCost = 570 },
+    { kind = "crate", itemID = 31, needed = 10, have = 0, shortfall = 10, estimatedCost = 180 },
+    { kind = "crate", itemID = 20, needed = 4, have = 0, shortfall = 4, estimatedCost = 40 },
+}
+ns.MerchantsFavor = { held = {}, CrateShoppingLines = function() return crateLines, 4 end }
+shopping = { { itemID = 20, shortfall = 6, estimatedCost = 60 }, { itemID = 24, shortfall = 2, estimatedCost = 20 } }
+
+local data, lines, crates = PostPanel:BuyData()
+check("off by default: Buy is the queue's list alone", crates == 0 and data == shopping and not PostPanel.grouped)
+
+settings.crateShoppingList = true
+PostPanel.crateAt = nil
+data, lines, crates = PostPanel:BuyData()
+check("ticked: the crate group comes first", crates == 4 and PostPanel.grouped and data[1].kind == "group"
+    and data[1].group == "crates" and data[1].label == "Waylaid Crates: 4" and data[1].total == 790)
+check("then its column names and lines", data[2].kind == "heading" and data[3] == crateLines[1])
+check("then the craft queue group", data[6].kind == "group" and data[6].label == "Craft Queue:"
+    and data[6].total == 80 and data[7].kind == "heading" and data[8] == shopping[1])
+check("both groups can be bought", #lines == 5)
+
+many = nil
+ns.ShoppingLists.SearchMany = function(_, ids, counts) many = { ids = ids, counts = counts }; return true end
+PostPanel:SearchAll()
+check("Search all covers both, adding what both want", many and #many.ids == 4
+    and many.counts[20] == 10 and many.counts[30] == 57 and many.counts[24] == 2)
+
+PostPanel.Refresh = function() end
+PostPanel:SortGroup("crates", "cost")
+data = PostPanel:BuyData()
+check("COST sorts the group, dearest first", data[3] == crateLines[1] and data[5] == crateLines[3])
+PostPanel:SortGroup("crates", "cost")
+data = PostPanel:BuyData()
+check("a second click turns it round", data[3] == crateLines[3] and data[5] == crateLines[1])
+PostPanel:SortGroup("crates", "cost")
+PostPanel:SortGroup("crates", "name")
+data = PostPanel:BuyData()
+check("ITEM sorts A to Z", data[3] == crateLines[2] and data[4] == crateLines[3])
+PostPanel.buySort = {}
+
+PostPanel:FoldGroup("crates")
+data = PostPanel:BuyData()
+check("a folded group is its bar", data[1].folded == true and data[2].kind == "group" and data[2].group == "queue")
+PostPanel:FoldGroup("crates")
+
+for _, line in ipairs(crateLines) do line.shortfall = 0 end
+data = PostPanel:BuyData()
+check("every crate ready: the group says so", data[2].kind == "note"
+    and data[2].text == "Every crate in your bags is ready to fill." and data[3].group == "queue")
+
+-- The rows draw each kind without an error.
+local function Label() return Stub({ SetText = function(self, text) self.text = text end,
+    SetShown = function(self, on) self.shown = on end, Show = function(self) self.shown = true end,
+    Hide = function(self) self.shown = false end }) end
+local row = Stub({ count = Label(), tag = Label(), name = Label(), icon = Label(), search = Label(),
+    bar = Stub(), CreateTexture = function() return Label() end })
+CreateFrame = function() return Stub() end
+ns.Theme.SetRowName = function(label, text) label:SetText(text) end
+ns.Theme.CreateLabel = function() return Label() end
+ns.Theme.SetItemIcon = function() end
+ns.CraftPanel = { UpdateShoppingRow = function() end, ShoppingLook = function(_, line)
+    return { colour = (line.shortfall or 0) > 0 and "loss" or "profit" } end }
+PostPanel.grouped = true
+check("a group row shows its name", PostPanel.UpdateGroupedRow(row, data[1]) and row.name.text == "Waylaid Crates: 4")
+check("a heading row hides the item parts", PostPanel.UpdateGroupedRow(row, { kind = "heading", group = "crates" })
+    and row.icon.shown == false and row.search.shown == false)
+check("a note row says it", PostPanel.UpdateGroupedRow(row, data[2]) and row.groupParts.note.text
+    == "Every crate in your bags is ready to fill.")
+check("a line ready shows Have", PostPanel.UpdateGroupedRow(row, crateLines[1]) and row.groupParts.have.shown == true
+    and row.count.text == "")
+crateLines[2].shortfall = 10
+check("a line short shows BUY and COST", PostPanel.UpdateGroupedRow(row, crateLines[2]) and row.count.text == "10"
+    and row.groupParts.cost.text == "180" and row.groupParts.have.shown == false)
+PostPanel.grouped = false
+check("off: drawn as before", PostPanel.UpdateGroupedRow(row, crateLines[2]) == false
+    and row.groupParts.cost.shown == false)
+
+crateLines = {}
+ns.MerchantsFavor.CrateShoppingLines = function() return crateLines, 0 end
+PostPanel.crateAt = nil
+data, lines, crates = PostPanel:BuyData()
+check("no crates: no group", crates == 0 and data == shopping and not PostPanel.grouped)
+settings.crateShoppingList = nil
+GetTime = savedGetTime
+ns.MerchantsFavor = nil
 
 print(("\n%d check(s) passed\n"):format(checks))

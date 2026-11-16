@@ -4,7 +4,7 @@
 -- What this pins down:
 --   * crate names are read whole word by whole word, whatever the order;
 --   * a favor costs the crate + its cheapest bundle - the silver back, over
---     the favor it pays, and a bundle over one stack is left out when asked;
+--     the favor it pays, a bundle over one stack counting like any other;
 --   * the rewards players report stand in until a turn-in is seen, and
 --     Artisan crates, which nobody has handed in, have none and sort last;
 --   * filling a crate says which sealed crate it becomes, and a sealed crate
@@ -15,7 +15,10 @@
 --     vendor price is marked;
 --   * the game's item ID for a crate beats the typed one;
 --   * the Deals tab's Show menu swaps in the view, which lists, sorts and
---     explains the crates, and its tick box is kept in Settings.
+--     explains the crates;
+--   * the Buy tab's crate list asks each crate in the bags for its cheapest
+--     bundle you can buy, adds crates needing the same, and takes off what
+--     you have after the queue's share.
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -378,6 +381,47 @@ check("a secret currency is ignored, not an error", ok)
 C_CurrencyInfo.GetCurrencyInfo = raising
 
 --------------------------------------------------------------------------------
+print("\nthe crate list on the auction house's Buy tab")
+
+-- Two Apprentice Textiles and one Apprentice Herbs in the bags, 23 Linen
+-- Cloth with them, and the craft queue wanting 3 of the linen.
+local keptHeld = MerchantsFavor.held
+bags = { [TEXTILES] = 2, [HERBS] = 1, [LINEN] = 23 }
+MerchantsFavor.held = nil
+MerchantsFavor:OnBags()
+local queueLines = { { itemID = LINEN, needed = 3 } }
+local crateLines, crateCount = MerchantsFavor:CrateShoppingLines(queueLines)
+local function CrateLine(itemID)
+    for _, line in ipairs(crateLines) do if line.itemID == itemID then return line end end
+end
+check("every crate in the bags is counted", crateCount == 3 and #crateLines == 2)
+local linen = CrateLine(LINEN)
+check("both textiles crates share the linen, the cheapest bundle", linen and linen.needed == 80
+    and linen.fills[1].count == 2 and linen.fills[1].label == "Apprentice Textiles")
+check("what the queue needs is taken off what you have", linen.have == 20 and linen.shortfall == 60)
+check("and the rest is priced", linen.unitCost == 30 and linen.estimatedCost == 1800)
+check("the hover's other choice is the leather", linen.others[1].itemID == LEATHER
+    and linen.others[1].count == 20 and linen.others[1].cost == 1600)
+local silverleaf = CrateLine(SILVERLEAF)
+check("the herbs crate takes Silverleaf", silverleaf and silverleaf.needed == 20 and silverleaf.shortfall == 20
+    and silverleaf.estimatedCost == 100)
+
+makes[LINEN] = { 999, 1 }
+crateLines = MerchantsFavor:CrateShoppingLines(queueLines)
+check("a craft that makes it cheaper does not change the list", CrateLine(LINEN).unitCost == 30)
+makes[LINEN] = nil
+
+bags[LINEN], bags[SILVERLEAF] = 83, 20
+crateLines = MerchantsFavor:CrateShoppingLines(queueLines)
+check("with enough on hand nothing is short", CrateLine(LINEN).shortfall == 0
+    and CrateLine(SILVERLEAF).shortfall == 0 and CrateLine(LINEN).estimatedCost == nil)
+
+bags = {}
+MerchantsFavor:OnBags()
+crateLines, crateCount = MerchantsFavor:CrateShoppingLines(queueLines)
+check("no crates, no list", #crateLines == 0 and crateCount == 0)
+MerchantsFavor.held = keptHeld
+
 print("\nthe view on the Deals tab")
 
 bags = { [HERBS] = 1 }

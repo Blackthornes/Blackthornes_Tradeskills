@@ -462,6 +462,9 @@ function MerchantsFavor:GetRows()
                 vendor = from == "vendor",
             }
             entry.buy = entry.cost
+            -- Bought, before a craft may beat it: the crate list on the
+            -- Buy tab sticks to things you can buy.
+            entry.buyUnit, entry.buyVendor = entry.unit, entry.vendor
 
             -- Made from bought materials, when that is cheaper (a player
             -- asked, 2026-10-18): only for a craft one of the player's
@@ -544,6 +547,101 @@ function MerchantsFavor:RowForItem(itemID)
         self.tipRows = kept
     end
     return kept.byKey[kind.crate.key]
+end
+
+--------------------------------------------------------------------------------
+-- The crate list on the auction house's Buy tab (the owner said build it,
+-- 2026-11-16, from a mockup)
+--------------------------------------------------------------------------------
+
+--- The bundles a crate can take that you can buy, cheapest first.
+local function BoughtBundles(row)
+    local bought = {}
+    for _, bundle in ipairs(row and row.bundles or {}) do
+        if bundle.buy then bought[#bought + 1] = bundle end
+    end
+    table.sort(bought, function(a, b)
+        if a.buy ~= b.buy then return a.buy < b.buy end
+        return a.itemID < b.itemID
+    end)
+    return bought
+end
+
+--- What the Waylaid Crates in your bags still need, one line per material,
+--- in the Buy list's shape (Queue:BuildShoppingList), so the same rows and
+--- Search all take them. Each crate takes its cheapest bundle you can buy;
+--- crates needing the same material share a line. What you have in your
+--- bags and bank, and bought and waiting in the mail, is taken off, after
+--- what the craft queue needs of it.
+--
+-- @param queueLines  the craft queue's shopping list, or nil
+-- @return lines, crates (how many crates are in the bags)
+function MerchantsFavor:CrateShoppingLines(queueLines)
+    local held = self.held
+    if not held then return {}, 0 end
+
+    local counts, crates = {}, 0
+    for itemID, count in pairs(held) do
+        local kind = self:Classify(itemID)
+        if kind and kind.kind == "crate" and (count or 0) > 0 then
+            counts[kind.crate.key] = (counts[kind.crate.key] or 0) + count
+            crates = crates + count
+        end
+    end
+    if crates == 0 then return {}, 0 end
+
+    local queued = {}
+    for _, line in ipairs(queueLines or {}) do
+        if type(line.itemID) == "number" then queued[line.itemID] = (queued[line.itemID] or 0) + (line.needed or 0) end
+    end
+
+    local byItem, order = {}, {}
+    for _, row in ipairs(self:GetRows()) do
+        local count = counts[row.key]
+        local bought = count and BoughtBundles(row)
+        local best = bought and bought[1]
+        if best then
+            local line = byItem[best.itemID]
+            if not line then
+                line = { kind = "crate", itemID = best.itemID, needed = 0, fills = {}, others = {},
+                    unitCost = best.buyUnit, fromVendor = best.buyVendor == true }
+                byItem[best.itemID] = line
+                order[#order + 1] = line
+            end
+            line.needed = line.needed + best.count * count
+            line.fills[#line.fills + 1] = { label = L[row.crate.label], count = count }
+            local other = bought[2]
+            if other then
+                line.others[#line.others + 1] = { itemID = other.itemID, count = other.count, cost = other.buy }
+            end
+        end
+    end
+
+    local inventory, buys = ns.Inventory, ns.AHBuys
+    for _, line in ipairs(order) do
+        local itemID = line.itemID
+        local inBags = inventory and inventory.GetBagCount and inventory:GetBagCount(itemID) or 0
+        local inBank = inventory and inventory.GetBankCount and inventory:GetBankCount(itemID) or 0
+        local waiting = buys and buys.GetPending and buys:GetPending(itemID) or 0
+        local spare = math.max(0, inBags + inBank + waiting - (queued[itemID] or 0))
+
+        line.have = spare
+        line.inBags, line.inBank = inBags, inBank
+        line.shortfall = math.max(0, line.needed - spare)
+        line.needsBankTrip = line.shortfall == 0 and inBags < line.needed and inBags + inBank >= line.needed
+        line.vendorLimited = not line.fromVendor and ns.Vendor and ns.Vendor.IsLimited
+            and ns.Vendor:IsLimited(itemID) == true or false
+
+        if line.shortfall > 0 and line.unitCost then
+            local cost
+            if not line.fromVendor and ns.Prices and ns.Prices.GetCostFor then
+                cost = ns.Prices:GetCostFor(itemID, line.shortfall, 0)
+            end
+            line.estimatedCost = cost or line.unitCost * line.shortfall
+        end
+    end
+
+    return order, crates
 end
 
 --------------------------------------------------------------------------------
@@ -825,6 +923,9 @@ function MerchantsFavor:OnEnable()
     ns.RegisterEvent(self, "BAG_UPDATE_DELAYED", Quietly(function(module)
         module:OnBags()
         module:CheckGoal()
+        -- A crate filled or a buy came in: the Buy tab's crate list.
+        local panel = ns.PostPanel
+        if panel and panel.CrateBagsChanged then panel:CrateBagsChanged() end
     end))
     ns.RegisterEvent(self, "PLAYER_MONEY", Quietly(self.OnMoney))
     ns.RegisterEvent(self, "CURRENCY_DISPLAY_UPDATE", Quietly(self.OnCurrency))

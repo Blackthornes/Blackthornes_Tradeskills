@@ -152,6 +152,9 @@ local DEFAULTS = {
         -- The Snipe tab in the auction house drawer (2026-11-03). Off until
         -- ticked. Cap is copper per session, 0 until the player sets one.
         snipeTab = false,
+        -- The auction house's Buy tab lists what the Waylaid Crates in your
+        -- bags need (UI/PostPanel.lua, 2026-11-16). Off unless ticked.
+        crateShoppingList = false,
         snipeCap = 0,
         snipePct = 70,
         snipeSound = true,

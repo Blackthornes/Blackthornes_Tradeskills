@@ -2527,3 +2527,28 @@ When it shows:
 New words: "Next: %s x%d", "Craft Next", "Open Queue", "Opens your whole
 craft queue." Probe lines join the enchant probe. Tested in
 `tools/test_craftstrip.lua`.
+
+## Crate Shopping List (the Buy tab at the auction house)
+
+The owner asked and said build it (2026-11-16, from a mockup; design notes
+in `Docs/handoff/ts-crate-list.md`). With "Crate Shopping List:" ticked on
+the Auction House page (`crateShoppingList`, off by default; never rename
+it) and Waylaid Crates in the bags, the drawer's Buy tab
+(`UI/PostPanel.lua`, `BuyData`) shows a "Waylaid Crates: N" group above a
+"Craft Queue:" group. `MerchantsFavor:CrateShoppingLines(queueLines)` gives
+one line per material in the queue list's shape (`kind = "crate"`, with
+`fills` and `others` for the hover): each crate's cheapest bundle you can
+buy (`buyUnit`, not a craft's price), crates needing the same material
+added together, and bags, bank and bought-in-the-mail taken off after the
+queue's share. Each group folds and sorts by ITEM, BUY or COST (session
+only); Search all and the summary count both groups, adding what both
+want. Worked out again at every visit (`Attach`), after `BAG_UPDATE_DELAYED`
+(`PostPanel:CrateBagsChanged`) and at most every 5 seconds otherwise. Off,
+or with no crates, Buy is the queue's list as before.
+
+The same day the over-a-stack limit went: the game fills a crate from two
+stacks now, so the Deals tab's "Skip bundles over a stack" box, the
+`overStack` marks and `GetRows`' `skipOverStack` are gone. Old saves keep
+`favorSkipOverStack`; nothing reads it.
+
+Tested in `tools/test_merchantsfavor.lua` and `tools/test_postdrawer.lua`.
