@@ -13,7 +13,7 @@
 --      with only the tabs that help there, Settings last; leaving gives
 --      the drawer and the usual tabs back.
 
-local GLOBALS = { "CreateFrame", "UIParent", "GameTooltip", "GetCursorPosition", "C_Timer",
+local GLOBALS = { "ProfessionsFrame", "MailFrame", "CreateFrame", "UIParent", "GameTooltip", "GetCursorPosition", "C_Timer",
     "UISpecialFrames", "tinsert", "GetTime", "time" }
 local saved = {}
 for _, key in ipairs(GLOBALS) do saved[key] = _G[key] end
@@ -244,6 +244,55 @@ check("leaving hands the drawer back", not Tabs.atAuction and panel.outOf == 1)
 check("the usual tabs come back", UI.tabStrip:IsShown() and not UI.ahTabStrip:IsShown())
 check("on the tab picked before", UI.activeTab == "queue" and UI.tabStrip.selected == "queue")
 _G.AuctionHouseFrame = nil
+
+print("7. at the profession window and the mailbox")
+local craft = { into = 0, outOf = 0, back = 0 }
+ns.CraftPanel = {
+    IntoOne = function(_, container) craft.into = craft.into + 1; craft.container = container end,
+    OutOfOne = function() craft.outOf = craft.outOf + 1 end,
+    BackBeside = function() craft.back = craft.back + 1 end,
+}
+local mail = { into = 0, work = false }
+ns.QueueMailPanel = {
+    HasWork = function() return mail.work end,
+    IntoOne = function() mail.into = mail.into + 1 end,
+    OutOfOne = noop, BackBeside = noop,
+}
+UI:SelectTab("queue")
+_G.ProfessionsFrame = Region()
+_G.ProfessionsFrame.GetRight = function() return 600 end
+_G.ProfessionsFrame.GetTop = function() return 650 end
+hub.place = "profession"
+Tabs:AtDock("profession")
+check("docks beside the profession window", SW.Docked())
+check("on the Crafting tab", Tabs.atDock == "profession" and UI.activeTab == "crafting")
+check("the craft pane is laid in the tab", craft.into == 1
+    and craft.container == UI.dockContainers.profession and UI.dockContainers.profession:IsShown())
+check("its own row of tabs shows", UI.dockStrips.profession:IsShown() and not UI.tabStrip:IsShown())
+check("Crafting first, Settings last", Keys(UI.dockStrips.profession) == "crafting,queue,profit,prices,settings")
+check("never kept as the tab to open on", ns.db.lastTab == "queue")
+check("opened only once a visit", Tabs.dockOpened.profession == true)
+SW.Left("profession")
+check("leaving hands the pane back", Tabs.atDock == nil and craft.outOf == 1 and craft.back == 1)
+check("the usual tabs come back", UI.tabStrip:IsShown() and UI.activeTab == "queue")
+Tabs:DockClosed("profession")
+check("a new visit opens it again", Tabs.dockOpened.profession == nil)
+_G.ProfessionsFrame = nil
+
+_G.MailFrame = Region()
+_G.MailFrame.GetRight = function() return 600 end
+_G.MailFrame.GetTop = function() return 650 end
+hub.place = "mail"
+pcall(SW.Dock)
+Tabs:SettleDock()
+check("nothing to mail: no Mail tab", Tabs.atDock == nil and mail.into == 0)
+mail.work = true
+Tabs:SettleDock()
+check("something to mail: the Mail tab", Tabs.atDock == "mail" and UI.activeTab == "mail" and mail.into == 1)
+mail.work = false
+Tabs:SettleDock()
+check("all sent: back to the tab before", Tabs.atDock == nil and UI.activeTab == "queue")
+_G.MailFrame = nil
 
 SW.SetOn(false)
 _G.BlackthornesWindow = nil

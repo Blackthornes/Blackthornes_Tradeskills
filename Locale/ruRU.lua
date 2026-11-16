@@ -3685,3 +3685,6 @@ L["ALL BLACKTHORNES ADDONS"] = "ВСЕ АДДОНЫ BLACKTHORNES"
 L["WHAT'S NEW"] = "ЧТО НОВОГО"
 L["After Updates:"] = "После обновления:"
 L["Show With Motion"] = "Показывать с анимацией"
+
+-- The one window's tab at the profession window (2026-11-16).
+L["Crafting"] = "Ремесло"

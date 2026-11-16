@@ -1296,8 +1296,20 @@ function CraftPanel.FrontWindows()
 end
 
 --- Dock to the right of the profession window, as tall as it is.
-function CraftPanel:Attach()
+function CraftPanel:Attach(besideOnly)
     local frame = self:Build()
+    -- With the one window on, the pane is its Crafting tab (UI/Main.lua's
+    -- TSTabs:AtDock), not a pane beside the profession window.
+    local tabs = ns.TSTabs
+    if not besideOnly and not self.inOne and tabs and tabs.AtDock then
+        local ok, there = pcall(tabs.AtDock, tabs, "profession")
+        if ok and there and self.inOne then return end
+    end
+    if self.inOne then
+        frame:Show()
+        self:Refresh()
+        return
+    end
     local opening = not frame:IsShown()
 
     self:WatchSheets()
@@ -1427,6 +1439,7 @@ end
 
 --- Folded down to its title, by the player or for want of room.
 function CraftPanel:IsCollapsed()
+    if self.inOne then return false end
     return self.squeezed == true or ns.Collapse.IsCollapsed(COLLAPSE_KEY)
 end
 
@@ -1449,7 +1462,7 @@ end
 --- goes, never on a timer.
 function CraftPanel:Place()
     local frame = self.frame
-    if not frame then return end
+    if not frame or self.inOne then return end
 
     local tradeSkillFrame, frameName = self:FindTradeSkillFrame()
     local place, sheet = self:SheetSpot(tradeSkillFrame)
@@ -1510,7 +1523,7 @@ end
 --- A sheet came or went: place the pane now, and again once the game has
 --- moved the sheet into its slot.
 function CraftPanel:SheetMoved()
-    if not self.frame or not self.frame:IsShown() then return end
+    if not self.frame or not self.frame:IsShown() or self.inOne then return end
     self:Place()
     if C_Timer and C_Timer.After then
         for _, delay in ipairs(self.SHEET_LOOKS) do
@@ -1539,6 +1552,7 @@ end
 --- Set the height outright, after folding or unfolding.
 function CraftPanel:ApplyHeight()
     if not self.frame then return end
+    if self.inOne then self:ApplyBody() return end
 
     local tradeSkillFrame = self:FindTradeSkillFrame()
     local full = tradeSkillFrame and self:DesiredHeight(tradeSkillFrame)
@@ -1549,7 +1563,7 @@ end
 
 --- Re-measure, for a profession window that changed size after it opened.
 function CraftPanel:Reflow()
-    if not self.frame or not self.frame:IsShown() then return end
+    if not self.frame or not self.frame:IsShown() or self.inOne then return end
 
     local tradeSkillFrame = self:FindTradeSkillFrame()
     if not tradeSkillFrame then return end
@@ -2399,7 +2413,9 @@ end
 
 --- Show the queued crafts beside the pane while anything is queued.
 function CraftPanel:RefreshQueued()
-    local wanted = self.frame and self.frame:IsShown()
+    -- In the one window the Queue tab sits beside Crafting, so the list
+    -- doesn't hang out past the window.
+    local wanted = self.frame and self.frame:IsShown() and not self.inOne
         and not self:IsCollapsed() and ns.Queue:Count() > 0
         and CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
 
@@ -2496,6 +2512,61 @@ function CraftPanel:Hide()
     if self.frame then self.frame:Hide() end
 end
 
+--- Lay the pane into the one window's Crafting tab (UI/Main.lua's
+--- TSTabs:SettleDock, while the one window sits beside the profession
+--- window). Its own rim, halo and fold go; the tab's area holds it.
+function CraftPanel:IntoOne(container)
+    if not container then return end
+    local frame = self:Build()
+    self.inOne = true
+    self.squeezed = false
+    frame:SetParent(container)
+    frame:ClearAllPoints()
+    frame:SetAllPoints(container)
+    if frame.SetToplevel then frame:SetToplevel(false) end
+    pcall(frame.SetFrameStrata, frame, container:GetFrameStrata() or "MEDIUM")
+    local trim = rawget(frame, "titan")
+    if trim and trim.Hide then trim:Hide() end
+    Theme.SetHalo(frame, 0)
+    self:ApplyBody()
+    if self.queuedFrame then self.queuedFrame:Hide() end
+    if ns.Crafting and ns.Crafting.isTradeSkillOpen then
+        frame:Show()
+        self:Refresh()
+    end
+end
+
+--- Back to the pane's own frame, as the one window leaves the profession
+--- window or Tradeskills' tab. Hidden until BackBeside or the next open.
+function CraftPanel:OutOfOne()
+    if not self.inOne then return end
+    self.inOne = false
+    local frame = self.frame
+    if not frame then return end
+    self:StopSlicedRefresh()
+    frame:Hide()
+    frame:SetParent(UIParent)
+    frame:ClearAllPoints()
+    frame:SetWidth(PANEL_WIDTH)
+    pcall(frame.SetFrameStrata, frame, CraftPanel.STRATA)
+    if frame.SetToplevel then frame:SetToplevel(true) end
+    local trim = rawget(frame, "titan")
+    if trim and trim.Show then trim:Show() end
+    Theme.SetHalo(frame, 0.08)
+    self:ApplyBody()
+end
+
+--- The one window moved on while the profession window is still open:
+--- the pane goes back beside it, as before.
+function CraftPanel:BackBeside()
+    if self.inOne then return end
+    local trade = self:FindTradeSkillFrame()
+    local open = trade and type(trade.IsShown) == "function" and trade:IsShown()
+    if open and ns.Crafting and ns.Crafting.isTradeSkillOpen and CraftPanel.OpensWithProfession() then
+        self:Attach(true)
+    end
+end
+
 function CraftPanel:IsShown()
     return self.frame ~= nil and self.frame:IsShown()
 end
@@ -2570,6 +2641,9 @@ function CraftPanel:OnEnable()
 
     ns.RegisterEvent(self, "TRADE_SKILL_CLOSE", function()
         CraftPanel:Hide()
+        local tabs = ns.TSTabs
+        if tabs and tabs.DockClosed then tabs:DockClosed("profession") end
+        if ns.UI and ns.UI.CloseWithShop then pcall(ns.UI.CloseWithShop, ns.UI, "profession") end
     end)
 
     -- A name drawn before the client had its item gets its rarity colour
