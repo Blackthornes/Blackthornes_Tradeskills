@@ -27,154 +27,63 @@ All read only, inside a pcall, no TOC dependency unless noted. If one changes, c
 - **Sharing:** `Core/Comm.lua` and `Core/Serialize.lua` are the same in Farmer (prefix `BTSshare` vs `BFRshare`); a fix belongs in both. The recipient name lists in `Logic/Contribute.lua` match Farmer's and Equipment's; change all three together.
 - **Shared files** the same in all five Forever addons (a fix belongs in all): `UI/SharedWindow.lua`, `UI/SharedMinimap.lua`, `UI/WhatsNew.lua`, `UI/About.lua`, `UI/HouseKit.lua`, `UI/TooltipShift.lua`, `UI/FoldWindow.lua`, `UI/BlizzardLook.lua`, `UI/SharedChoices.lua` (Mute All Sounds lives there: every sound goes through `ns.PlaySound` or `ns.PlaySoundFile` in `Core/Init.lua`, a new one too; see "Mute All Sounds" in Docs/claude-notes.md), `Core/SisterNote.lua`, `Logic/Travel.lua`.
 
-## One key per character
+## Standing rules (short form; full wording in Docs/claude-notes.md, "Standing rules in full")
 
-The owner asked (2026-10-11) that a character can never be mistaken for
-another again. Old records had sent errands to the character playing:
-Butler filled a mail to itself and told a player to mail Medium Leather to,
-and log out for, the character they were on (an old "Name-Realm" record of
-Tradeskills' beside the GUID one), and a reload wiped alts' saved gear in
-Equipment. The rule, in every addon:
+Every rule below still holds in full. Before work that touches one, grep its
+name under "Standing rules in full" in `Docs/claude-notes.md` and read it.
+They are the same in every addon's notes; keep them the same.
 
-- **A character is its GUID** (`UnitGUID("player")`) in saved data and in
-  every call between the addons. Never a first name, "Name-Realm" or a
-  short name: Forever lets characters share a first name. Names are for
-  showing and for a mail's To line only, always first and last.
-- **A GUID the client won't read (a dungeon) means "not sure who's
-  playing":** write nothing under another key, and offer nothing for an
-  alt. Tradeskills remembers each character's GUID in its own file
-  (`BlackthornesTSCharDB.guid`) for that case.
-- **Old records stay readable and count as the same character; nothing is
-  deleted.** Tradeskills folds an old "Name-Realm" record into the GUID one
-  at login, once (`Config:AdoptLegacyCharacter`): it is kept whole in
-  `formerCharacters[old key]` with `retiredInto` (never rename either), what
-  the GUID record lacks is filled from it when it carries that GUID, and
-  the queue's references to the old key follow. Farmer reads a goal tagged
-  "Name-Realm" as the character's and tags it with the GUID once the
-  character gathers toward it or changes it.
-- **One test per addon answers "the same character?" and "the one
-  playing?"; never compare keys or names by hand.** Tradeskills:
-  `Characters:Same`, `:IsPlaying` and `:Canonical` (`Core/Characters.lua`),
-  and `playing` on each `Butler:Holdings()` entry. Butler:
-  `Errands:IsMe(name)` (full name, first name alone, any old record's name,
-  any case, with or without a realm). Farmer: `Goals:IsOwner`. Equipment:
-  `Alts.PlayerGUID()`.
-- **Every errand that targets a character asks that test right before it
-  acts and refuses the character playing:** a mail, a gold top-up, a Log
-  out, an alt's upgrade, a learned habit, the disenchanter.
-- Tested in Tradeskills' `tools/test_onecharacter.lua`, Butler's
-  `tools/test_notme.lua`, Farmer's `tools/test_goals.lua` and Equipment's
-  `tools/test_alts.lua`. This rule is in every addon's notes; keep them the
-  same.
-
-## Writing for players
-
-Every word a player reads (labels, buttons, tooltips, Settings rows and
-their descriptions, empty lists, chat lines, slash command help) reads the
-way a friend who plays would say it: plain, warm and human. Write it at a sixth grade reading level. Short
-sentences in everyday words, contractions welcome. Say what the player
-sees or does, not how the addon works inside. No hype or sales words
-("seamlessly", "effortlessly", "now you can", "powerful"), no filler, no
-em-dashes, and no questions to the reader. The German in
-`Locale/deDE.lua` changes with the English, in the same informal "du"
-voice. Farmer's play cheers keep their "!" (drop-quality cheers, goal
-marks, streaks, "Up to #N!", "Goal done: X!"), and `About.NOTE` is the
-owner's own wording. This rule is in every addon's notes; keep them the
-same.
-
-## The owner's standing rules (all the addons)
-
-- **Every list is dark glass** (the owner, 2026-10-12: "keep this as the
-  standard across all Blackthornes addons", after Farmer's Kills & Loot
-  panel was given the look of Tradeskills' queue). Rows or lines take
-  `glass` and `glassAlt` in turn, by place, with a 1 px `border` line
-  (alpha 0.6) under each; under the mouse `glassHover` and a gold edge,
-  only on that row; the row picked or open is `glassActive` with a bright
-  gold edge down its left. Never the older `row`/`rowAlt` bands for a
-  list, a panel's lines or cards. A gradient fades through
-  `Theme.LightGradient` or is hidden, never with SetAlpha alone (it stayed
-  lit on Forever). This rule is in every addon's notes; keep them the same.
-- **"Always check that it's clear to post."** Anything that goes public (a
-  release, a CurseForge page, a post) is checked for private or unexpected
-  content first, and nothing is published or uploaded without the owner's
-  go-ahead. He tags releases himself.
-- **Changelogs come from git history.** Work out what changed since the last
-  tag from the merged PRs and commits (`git log vX.Y.Z..origin/main --merges`);
-  never ask the owner what went in. Claude drafts the CHANGELOG section in a PR;
-  The owner merges, pulls `main`, tags and pushes.
-- **A checkout shows the real version number** (the owner,
-  2026-10-12). `ns.RELEASED_VERSION` in `Core/Init.lua` is the newest
-  `## X.Y.Z` in CHANGELOG.md, shown when the packager has not filled in the
-  TOC's `@project-version@` (he plays from a clone). The release PR that
-  writes the CHANGELOG section changes it too; `tools/check_release.py`
-  refuses a tag it does not match, and `tools/test_check_release.py` fails
-  while the two disagree. This rule is in every addon's notes.
+- **One key per character.** A character is its GUID in saved data and in
+  every call between addons, never a name. A GUID that can't be read means
+  "not sure who's playing": write nothing, offer nothing for an alt. Old
+  "Name-Realm" records stay readable and nothing is deleted
+  (`formerCharacters`, `retiredInto`, never rename). Ask
+  `Characters:Same`, `:IsPlaying` or `:Canonical`, never compare by hand,
+  and every errand refuses the character playing. Tested in
+  `tools/test_onecharacter.lua`.
+- **Writing for players.** Every word a player reads is plain, warm and
+  human, at a sixth grade level: short sentences, everyday words, what the
+  player sees or does. No hype, no filler, no em-dashes, no questions to
+  the reader. deDE changes with the English, in "du". `About.NOTE` is the
+  owner's own wording.
+- **Every list is dark glass.** `glass` and `glassAlt` in turn with a 1 px
+  `border` line (0.6) under each, `glassHover` and a gold edge under the
+  mouse, `glassActive` and a bright gold left edge for the picked row.
+  Never `row`/`rowAlt`. Gradients fade through `Theme.LightGradient` or
+  hide, never SetAlpha alone.
+- **Check that it's clear to post.** Nothing is published or uploaded
+  without the owner's go-ahead. He tags releases himself.
+- **Changelogs come from git history** (`git log vX.Y.Z..origin/main
+  --merges`), never from asking the owner. Claude drafts the section in a PR.
+- **A checkout shows the real version.** `ns.RELEASED_VERSION` in
+  `Core/Init.lua` is the newest `## X.Y.Z` in CHANGELOG.md; the release PR
+  changes both, and `tools/check_release.py` refuses a mismatch.
 - **Every reply that ships code says the PR is ready and whether the game
-  needs `/reload` or a full restart** (a full restart when a file is added,
+  needs `/reload` or a full restart** (full restart when a file is added,
   removed or renamed, or the TOC changes). Merging, pulling and tagging go
   through the project's own steps, never by hand on github.com or in
   GitHub Desktop.
-- **Grey (poor quality) items are priced at vendor only,** never from the
-  auction house. Everything else is worth max(auction, vendor). Farmer applies
-  this to every value it shows; follow it here if Tradeskills ever values grey
-  items.
-- **CurseForge descriptions are features only.** Leave out privacy or
-  "your data stays yours" notes and any explanation of public emotes or their
-  switches: "they don't care to know this." Those belong in the README and
-  CHANGELOG.
-- **Smooth play comes first, but never at the cost of looks** (the owner,
-  2026-10-09, after a hitch while crafting). Nothing on a timer or
-  OnUpdate rebuilds or re-places a whole list, map or set of markers when
-  only one thing moved: keep what is drawn, and redo only rows or pins
-  whose inputs changed (a per-row key, a version number). Bag, loot,
-  cast, skill and profession-list events arrive in bursts, several per
-  craft or loot: coalesce them, read only what they changed, and skip
-  work for windows that are hidden. Work over hundreds of items (recipes,
-  sources, saved spots) is spread over frames (a worker with a small
-  per-frame budget) rather than done in one frame, and shown when done.
-  Clicks and typing still answer at once. The two causes found: Farmer's
-  minimap markers gathered, sorted and re-placed every saved spot once a
-  second because the clock second was in their redraw key (now only the
-  fade moves, `MapMarkers:FadeMinimap`); and on every craft Tradeskills
-  re-read every recipe in the profession window and repriced the whole
-  craft pane in one frame (now `Recipes:NothingNewMidCraft` skips the
-  re-read mid-run and `CraftPanel:RefreshInSlices` spreads the pane over
-  frames). Visuals and usability are never traded away for speed. This
-  rule is in every addon's notes; keep them the same.
-- **Never shorten a character's last name** (the owner, 2026-10-11:
-  "they must be included in WoW Forever"). Forever names are first and
-  last together, so every place a character is named shows the whole name,
-  made to fit by growing or wrapping (`Theme.SetRowName`, `FitText` with a
-  wording that drops words, never the surname), never "Bob B." or the
-  first name alone. `Recipes:GetShortCharacterName` keeps its name for
-  Equipment and Butler but returns the full name.
-- **The client is WoW: Forever, a retail engine** (`## Interface: 16001`,
-  modern Lua), not 1.12. Instances hand addons secret values that raise when
-  compared, concatenated or formatted, so read client values inside a pcall.
-  `docs/FOREVER_API_FINDINGS.md` has what the client actually does.
-
-## Fold in fresh data at each release
-
-Every release of this addon starts with a fold-in of fresh data from the
-live game (the owner, 2026-11-07), even when nothing else about the data
-changed: the release thread stages the owner's account save and the game's
-English caches, read only, from his live Forever folder (the path is in the
-project's release steps), runs the tools below, runs the tests and commits
-the data in the release PR as "Refresh shipped data". Never announced (no
-CHANGELOG, NEWS, What's New or post), never the save or caches committed,
-nothing else copied out of them. A release whose only change is new data
-does not ship on its own. If his PC can't be reached, the thread asks him
-once (Try again or Skip it); it never skips without saying. If the game
-patched since the client tables were last pulled, those are refreshed
-first.
-
-- `tools/forever_vendor_spots.py <Blackthornes_TS.lua>`
-  (`Data/ForeverVendorSpots.lua`, vendor and trainer spots seen in game).
-- `tools/forever_writ_customers.py --shared <Blackthornes_TS.lua>`
-  (`Data/ForeverWritCustomers.lua`, where each writ is handed in, with the
-  spots players sent in).
-- After a client-table re-pull, `tools/make_forever_recipes.py` as the
-  tables routine does.
+- **Grey items are priced at vendor only;** everything else is
+  max(auction, vendor).
+- **CurseForge descriptions are features only:** no privacy notes, no
+  explaining public emotes or their switches.
+- **Smooth play comes first, but never at the cost of looks.** Nothing on
+  a timer or OnUpdate rebuilds a whole list when one thing moved; redo
+  only what changed. Coalesce burst events (bag, loot, cast, skill,
+  profession list), skip hidden windows, and spread work over hundreds of
+  items across frames. Clicks and typing answer at once.
+- **Never shorten a character's last name.** Show the whole name, made to
+  fit by growing or wrapping (`Theme.SetRowName`, `FitText`).
+- **The client is WoW: Forever, a retail engine** (`## Interface: 16001`),
+  not 1.12. Read client values inside a pcall; instances hand out secret
+  values that raise. See `docs/FOREVER_API_FINDINGS.md`.
+- **Fold in fresh data at each release.** Its own step before every
+  release, from the owner's live game folder, read only, committed as
+  "Refresh shipped data", never announced, never the save or caches
+  committed. If his PC can't be reached, ask once (Try again or Skip it).
+  Tools: `tools/forever_vendor_spots.py <Blackthornes_TS.lua>`,
+  `tools/forever_writ_customers.py --shared <Blackthornes_TS.lua>`, and
+  `tools/make_forever_recipes.py` after a client-table re-pull.
 
 ## Running the checks (keep the output small)
 
@@ -183,7 +92,8 @@ alone ran threads out of room (found 2026-11-16). `tools/runtests.py` is now
 quiet: a passing suite prints nothing and a failing one prints its last 25
 lines. Keep it that way, and never pipe a tool's whole output into a thread.
 
-- `python tools/runtests.py` runs everything and prints one line.
+- `python tools/runtests.py` runs everything and prints one line (`-q`, as
+  the sister addons take it, is accepted and changes nothing).
 - `python tools/runtests.py mail queue` runs only the suites with those
   words in their file name. Use this while fixing.
 - `python tools/runtests.py -v uifit | tail -40` prints every check; always

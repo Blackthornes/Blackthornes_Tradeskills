@@ -54,6 +54,8 @@ TAIL = 25
 def main() -> int:
     args = sys.argv[1:]
     verbose = "-v" in args or "--verbose" in args
+    # -q is taken and does nothing: quiet is how it runs. The sister addons
+    # take -q for the same thing, so one command works in every repo.
     wanted = [a for a in args if not a.startswith("-")]
 
     lua = luamod.LuaRuntime(unpack_returned_tuples=True)

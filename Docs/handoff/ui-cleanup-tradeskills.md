@@ -20,6 +20,15 @@ first, and its player words approved. Mockups are in the project files under
   ("Farm some X and this fills in.") was one line that never wrapped, so a
   long item name ran off the card. It wraps and the card grows.
 
+- **Travel map driver.** `UI/TravelMap.lua` ran a handler every frame for
+  the whole session, trip or no trip. With no trip set its frame now hides
+  and one look a second brings it back (`TravelMap:Rest`). Tested in
+  `tools/test_travelmaprest.lua`. The file is in every addon; this copy's
+  change should be matched in the others.
+- **CLAUDE.md is 11 KB, down from 16 KB.** The standing rules keep a short
+  form there; their full wording moved word for word to "Standing rules in
+  full" in `Docs/claude-notes.md`.
+
 ## Checked and found sound
 
 - Every `OnUpdate` (35) and every repeating timer (18). The always-on ones
@@ -173,9 +182,6 @@ and 5 (rows only move), then 1 and 2 (the shared window, five repos), then
 
 - Check whether the test runner prints every check. Tradeskills' was the
   only one over 20 KB, but the quiet runner here can be copied as is.
-- All six CLAUDE.md files load into every thread, about 103 KB together.
-  One key per character, Mute All Sounds, Writing for players, the standing
-  rules, Window spots and the fold-in rule are repeated word for word in
-  each. Keeping the full text in one repo and a two-line pointer in the
-  others would cut that by more than half. This is the owner's call: the
-  files say to keep them the same.
+- All six CLAUDE.md files load into every thread, about 103 KB together
+  before this pass. Each addon is cutting its own to a short form of the
+  rules, as done here.
