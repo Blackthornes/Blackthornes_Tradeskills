@@ -1021,12 +1021,9 @@ end
 --- house after its cut, so it is better sold to a vendor. A player asked
 --- (2026-10-17) for Tradeskills to say so, rather than list it as a loss.
 ---
---- The deposit a listing risks counts too (a player asked, the owner said
---- build it, 2026-11-09): a listing that runs out keeps it, so beating the
---- vendor by less than one deposit is not worth the risk. When
---- `NetFromListing` already takes lost deposits off (more relists expected,
---- or slow demand), it is not taken twice. Both live in
---- `Profit:NetAfterRisk`, which Butler's `auction` reads too.
+--- Only the auction house cut counts here. A deposit a listing might lose
+--- never sends an item to the vendor (the owner, 2026-11-16, after a player
+--- saw "A vendor pays more" while the auction house paid more).
 function Posting.VendorPaysMore(itemID, price, vendorPrice)
     if not price or not vendorPrice or vendorPrice <= 0 then return false end
     -- Breaking it into enchanting materials can pay more than the vendor.
@@ -1036,13 +1033,13 @@ function Posting.VendorPaysMore(itemID, price, vendorPrice)
         local ok, de = pcall(DE.GetValue, DE, itemID)
         if ok and type(de) == "number" and de > vendorPrice then return false end
     end
-    local Profit = ns.Profit
-    local net
-    if Profit and Profit.NetAfterRisk then
-        local ok, value = pcall(Profit.NetAfterRisk, Profit, itemID, price)
-        if ok and type(value) == "number" then net = value end
+    local cut = 0.05
+    local Config = ns.Config
+    if Config and Config.Get then
+        local ok, value = pcall(Config.Get, Config, "auctionCut")
+        if ok and type(value) == "number" then cut = value end
     end
-    return (net or price) <= vendorPrice
+    return price * (1 - cut) <= vendorPrice
 end
 
 function Posting:GetLossFloor(itemID, unitCost)
