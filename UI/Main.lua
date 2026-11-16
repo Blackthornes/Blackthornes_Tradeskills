@@ -2321,7 +2321,7 @@ end
 --- as either opens and closes again as it closes (a player's request,
 --- 2026-10-02). Only a window opened this way is closed: one the player
 --- already had open stays open.
---- "Open at AH:" on the Auction page (`openAtAuction`, on unless unticked;
+--- "Open By Itself At:" Auction House on the Windows page (`openAtAuction`, on unless unticked;
 --- a player's request, 2026-11-05). Unticked, Tradeskills stays shut at the
 --- auction house until the player opens it there; then the sell list and
 --- the one window's Auction House tab come up as usual for that visit.
@@ -2884,7 +2884,7 @@ function TSTabs:Closed(frame)
     if One and One.Close then pcall(One.Close) end
 end
 
---- "One Window:" on the General page: written to every loaded addon's save.
+--- "One Window:" on the Windows page: written to every loaded addon's save.
 --- Settings stays open, in the one window or on its own.
 function TSTabs:SetOneWindow(on)
     local SharedWindow = ns.SharedWindow
