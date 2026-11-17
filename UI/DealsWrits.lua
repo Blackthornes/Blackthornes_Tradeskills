@@ -259,7 +259,7 @@ end
 --- place so the open orders stand out. The sort and the zones stay put.
 local function ShowDone(row, done)
     local room = 0
-    if done then room = MakeTag(row):GetWidth() + 6 end
+    if done then room = (tonumber((MakeTag(row):GetWidth())) or 0) + 6 end
     if room ~= (rawget(row, "tagRoom") or 0) then
         row.tagRoom = room
         row.name:SetPoint("RIGHT", row, "RIGHT", (rawget(row, "nameRight") or -4) - room, 0)

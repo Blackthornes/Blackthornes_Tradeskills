@@ -359,6 +359,13 @@ function Probe:PrintReport()
     Line("item stack size", Yes(Util.HasFunction("C_Item.GetItemMaxStackSizeByID")))
     Line("prices learned", ns.Vendor and ns.Vendor:Count() or 0)
 
+    -- Writs done today (2026-11-17): when new orders come in, and the game's
+    -- own done flag for turn-ins made with the addon off.
+    if ns.Writs and ns.Writs.ProbeLines then
+        Heading("Writs")
+        for _, line in ipairs(ns.Writs.ProbeLines()) do Line(line[1], line[2]) end
+    end
+
     if self.auctionSample and #self.auctionSample.items > 0 then
         local first = self.auctionSample.items[1]
         Line("sample item", ("%s -> commodity=%s deposit=%s"):format(
