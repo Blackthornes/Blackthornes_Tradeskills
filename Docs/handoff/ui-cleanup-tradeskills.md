@@ -7,7 +7,7 @@ first, and its player words approved. Mockups are in the project files under
 
 ## Fixed in this pass
 
-- **Threads running out of room.** `python tools/runtests.py` printed every
+- **Sessions running out of room.** `python tools/runtests.py` printed every
   passing check: 11,707 lines, 591 KB, on every run. The sister addons print
   4 to 20 KB. It is now quiet (one line when all pass, the last 25 lines of a
   suite that fails), suites can be picked by name, and `-v` prints
@@ -176,7 +176,7 @@ name showing its count.
 and 5 (rows only move), then 1 and 2 (the shared window, five repos), then
 7, 8 and 4.
 
-## For the other addons' threads
+## For the other addons
 
 - **A possible change in all five: rest the travel map.** With no trip
   set, `TravelMap:Step` could hide the driver's frame and let one
@@ -187,6 +187,6 @@ and 5 (rows only move), then 1 and 2 (the shared window, five repos), then
 
 - Check whether the test runner prints every check. Tradeskills' was the
   only one over 20 KB, but the quiet runner here can be copied as is.
-- All six CLAUDE.md files load into every thread, about 103 KB together
+- All six CLAUDE.md files load into every session, about 103 KB together
   before this pass. Each addon is cutting its own to a short form of the
   rules, as done here.

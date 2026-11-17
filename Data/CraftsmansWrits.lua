@@ -8,8 +8,7 @@
 -- reputation and a pouch of silver. Each order can be done once a day.
 -- Logic/Writs.lua works out what reaching a reputation goal costs.
 --
--- What is typed here, and where it came from (online guides, 2026-10-09,
--- not yet seen in game):
+-- What is typed here (2026-10-09):
 --
 --   item, name  what the writ asks for, by its Classic item ID
 --   prof, tier  its profession and level: 1 Journeyman, 2 Expert, 3 Artisan

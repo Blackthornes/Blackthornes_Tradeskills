@@ -6,7 +6,7 @@ description: Check a change to this addon before committing or opening a PR. Pro
 # Verify a change to Tradeskills
 
 Run this before every commit you push for review, and always before a PR.
-The game itself is on Trent's PC, so most changes can only be run in our
+The game itself is on the owner's PC, so most changes can only be run in our
 fake game here. The point is to prove what we can, and to say plainly what
 only the real game can show.
 
@@ -55,7 +55,7 @@ Then run the whole suite once (`python tools/runtests.py -q`) before the PR.
 
 ## 4. Three tries, then ask
 
-If a check still fails after three rounds of fixes, stop. Tell Trent what
+If a check still fails after three rounds of fixes, stop. Tell the owner what
 fails and what you tried, in plain words. Never skip, delete or loosen a
 test, add a wait, or rerun until it passes to get green. A flaky test gets
 its cause found; if it cannot be, take it out and write down why in the PR.
@@ -67,9 +67,8 @@ Every PR body ends with these lines:
     Checked: tests | fake game | in game | none yet
     Not checked: <what only the real game can show, or "nothing">
 
-Pick every word that is true on the Checked line. "in game" only when Trent
-(or a screenshot from his PC) showed it working. Notes in
-Docs/claude-notes.md keep saying "Not yet seen in game" until he has.
+Pick every word that is true on the Checked line. "in game" only when the owner
+(or a screenshot from his PC) showed it working.
 
 ## 6. When something slips through
 

@@ -1,4 +1,4 @@
--- The Enchant window's logic (Trent said build it, 2026-11-05), as far as it
+-- The Enchant window's logic (the owner said build it, 2026-11-05), as far as it
 -- can be seen without a game client: off by default, what blocks the
 -- Enchant button and why, the three ways a click casts and the order they
 -- are tried in, the Put It On macro, reading what is on an item now, and

@@ -1,6 +1,6 @@
 # Tradeskills memory review (2026-11-14)
 
-Items 1 and 2 are built (2026-11-14, Trent said "implement 1 and 2"); the
+Items 1 and 2 are built (2026-11-14, the owner said "implement 1 and 2"); the
 rest is still research only. Every idea keeps every feature, and none
 deletes or renames saved data.
 

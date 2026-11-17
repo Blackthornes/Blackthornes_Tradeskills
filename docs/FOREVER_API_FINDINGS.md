@@ -514,12 +514,12 @@ muted, are guesses). The notice key was not read, so Logic/RealmPrices.lua
 treats any notice on our channel within a few seconds of a send as a refusal,
 hides it, and backs off.
 
-## The one window's docking (not yet seen in game)
+## The one window's docking
 
 `UI/SharedWindow.lua` (2026-10-30) docks the one window beside the game's
 own windows by screen position only; it never moves, hides or writes a
 Blizzard frame. What it expects of Forever's retail engine, from the
-retail client, not yet seen in game: `AUCTION_HOUSE_SHOW`/`AUCTION_HOUSE_CLOSED`
+retail client: `AUCTION_HOUSE_SHOW`/`AUCTION_HOUSE_CLOSED`
 with `AuctionHouseFrame`, `MAIL_SHOW`/`MAIL_CLOSED` with `MailFrame`,
 `MERCHANT_SHOW`/`MERCHANT_CLOSED` with `MerchantFrame`, and
 `TRAINER_SHOW`/`TRAINER_CLOSED` with `ClassTrainerFrame`. The retail

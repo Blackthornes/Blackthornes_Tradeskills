@@ -1,4 +1,4 @@
--- The Enchant strip under the game's recipe pane (Trent, 2026-11-06: the
+-- The Enchant strip under the game's recipe pane (the owner, 2026-11-06: the
 -- floating window opened behind the queued crafts and was hard to move, and
 -- he wanted it to feel part of the Enchanting window). It sits at the bottom
 -- of the recipe pane, lifted clear of the game's Create buttons.
