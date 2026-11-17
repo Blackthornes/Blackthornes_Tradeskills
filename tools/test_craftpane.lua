@@ -1121,6 +1121,28 @@ do
 end
 
 do
+  -- Alt-click on a row opens the Keep in Stock box and queues nothing;
+  -- a craft with nothing to hold opens nothing (2026-11-17).
+  local oldAlt, oldBox, oldQueue, oldTip = rawget(_G, "IsAltKeyDown"), ns.StockBox, ns.Queue, rawget(_G, "GameTooltip")
+  local opened, added = {}, 0
+  _G.IsAltKeyDown = function() return true end
+  _G.GameTooltip = { Hide = function() end }
+  ns.StockBox = { Open = function(_, itemID, name) opened[#opened + 1] = { itemID = itemID, name = name } end }
+  ns.Queue = setmetatable({ Add = function() added = added + 1 end, Remove = function() added = added + 1 end },
+    { __index = oldQueue })
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "LeftButton")
+  check("Alt-click opens the Keep in Stock box", opened[1] and opened[1].itemID, 5001)
+  check("for that craft", opened[1] and opened[1].name, "Runecloth Bag")
+  CraftPanel.OnRowClick({ recipeID = 101, outputItemID = 5001, name = "Runecloth Bag" }, nil, "RightButton")
+  check("Alt-right-click opens it too", #opened, 2)
+  check("Alt-click queues and removes nothing", added, 0)
+  CraftPanel.OnRowClick({ recipeID = 104, name = "Enchant Bracer" }, nil, "LeftButton")
+  check("a craft with nothing to hold opens nothing", #opened, 2)
+  check("and queues nothing", added, 0)
+  _G.IsAltKeyDown, ns.StockBox, ns.Queue, _G.GameTooltip = oldAlt, oldBox, oldQueue, oldTip
+end
+
+do
   -- A player's report (2026-11-17): folded to its title with nothing
   -- queued, the pane's strip still sat over other addons' windows. Folded
   -- and empty, it stays out of sight; the first craft queued brings it back.

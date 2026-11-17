@@ -104,6 +104,12 @@ local function RowMenu(analysis)
             if ns.Demand then ns.Demand:WarnIfLow(analysis.outputItemID, analysis.name) end
         end },
     }
+    -- The Keep in Stock box (UI/StockBox.lua, 2026-11-17).
+    if analysis.outputItemID and ns.StockBox then
+        lines[#lines + 1] = { text = L["Set Keep in Stock"], run = function()
+            ns.StockBox:Open(analysis.outputItemID, analysis.name)
+        end }
+    end
     if analysis.outputItemID and ns.Scanner and ns.Scanner.isAuctionHouseOpen then
         lines[#lines + 1] = { text = L["Search the Auction House"], run = function()
             ns.UI:SearchAuctionHouse(analysis.outputItemID)
@@ -2500,6 +2506,13 @@ local switch = ns.RecipeBookView and ns.RecipeBookView.WithSwitch({
     -- every way to turn one item into gold, after RECIPES TO LEARN.
     extras = (function()
         local list = {}
+        -- All Recipes (UI/AllRecipesView.lua, the owner said build it
+        -- 2026-11-17): every recipe you know, right after My Crafts.
+        if ns.AllRecipesView then
+            list[#list + 1] = { key = "all", text = L["All Recipes"],
+                tip = L["Every recipe you know, grey ones too"],
+                build = ns.AllRecipesView.Build, refresh = ns.AllRecipesView.Refresh }
+        end
         if ns.YourTimeView then
             list[#list + 1] = { key = "time", text = L["Your Time"],
                 tip = L["Farm it, sell the mats, or buy them: which pays best for your time"],
@@ -2528,6 +2541,7 @@ end
 --- Recipes to learn, optionally on one profession.
 ns.ProfitTab = {
     ShowView = ShowView,
+    RowMenu = RowMenu,
     StockLine = StockLine,
     WithYield = WithYield,
     ShowRecipesToLearn = function(profession)
