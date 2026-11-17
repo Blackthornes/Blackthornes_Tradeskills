@@ -2836,3 +2836,22 @@ with "binds on pickup, so it cannot be sold". `SkillUp:GetRecommended`
 ranks by `Profit:GetMethod()` so `/bts skillup` lists the stars the tab
 draws. No new player words. Tested in `tools/test_soulbound.lua`. Not yet
 seen in game.
+
+## Leave Out of Report (2026-11-17)
+
+The owner said build it from a mockup (2026-11-17). On the Sales tab's
+Mailbox visits view, a right-click on a visit opens the house row menu
+titled MAILBOX VISIT: See Report (what a left click does) and Leave Out of
+Report, or Count It Again once left out. It sets `leftOut = true` on the
+saved visit in `ns.db.mailHauls[realm]` (never rename it; nothing is
+deleted, and the visit still drops off the end with the rest). The list's
+rows are views of their records (`record` on the view), so
+`MailHaul:SetLeftOut` writes to the record and to `MailHaul.last` when it
+is that visit's copy. `MailHaul.IsLeftOut` is the one test. Left out
+visits are skipped by `MailHaul:Records` (best haul and best sale, so the
+fanfare too), `MailHaul:TotalSince` (Today, Last 7 days) and the visits
+line's collected, which adds "%d left out". The row is dimmed with a Left
+Out tag in place of "best haul". A replayed report of a left out visit
+shows a plain glass ribbon, no record glow or sound, and Count It Again
+beside Close, which redraws the report quietly (`opts.still`). Tested in
+`tools/test_mailhaul.lua` and `tools/test_sales.lua`. Not yet seen in game.
