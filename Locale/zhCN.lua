@@ -3754,6 +3754,18 @@ L["Every crate in your bags is ready to fill."] = "你包里的每个箱子都�
 L["Only My Crafts:"] = "只显示我的制造："
 L["Shows only the crafts this character makes. Crafts for your other characters stay in the queue and show when you log in on them."] = "只显示这个角色要做的制造。其他角色的制造仍在队列中，登录那个角色时就会显示。"
 L["Nothing queued for this character.\nCrafts for your other characters show when you log in on them."] = "这个角色没有排队的制造。\n其他角色的制造在登录那个角色时显示。"
+
+-- Learn next's Have Skill and Learn From (2026-11-17)
+L["Have Skill"] = "技能够了"
+L["Only shows recipes your skill is high enough to learn now."] = "只显示你现在技能够高、可以学的配方。"
+L["Learn From:"] = "学习来源："
+L["Pick where the recipes are learned. Trainers and vendors can show you the way."] = "选择配方从哪里学。训练师和商人可以为你指路。"
+L["Trainer or Vendor"] = "训练师或商人"
+L["Quest or Other"] = "任务或其他"
+L["Any Way"] = "任意方式"
+L["Learn: %s at the auction house"] = "学习：拍卖行 %s"
+L["Shift-click to search the auction house."] = "按住 Shift 点击在拍卖行搜索。"
+L["No recipes to learn here with these filters."] = "用这些筛选，这里没有要学的配方。"
 L["All Recipes"] = "所有配方"
 L["Every recipe you know, grey ones too"] = "你知道的每个配方，灰色的也有"
 L["Hide Ignored:"] = "隐藏已忽略："

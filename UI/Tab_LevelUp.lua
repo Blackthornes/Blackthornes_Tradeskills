@@ -66,6 +66,9 @@ local state = {
     includeTrivial = false,
     subCraftsOnly = false,
     learnNext = true,
+    haveSkill = false,      -- Learn next's "Have Skill" (2026-11-17)
+    learnFrom = "trainerVendor", -- and its "Learn From:"
+    learnBuilt = nil,       -- Learn next's rows as built, before those two
     wishlistFirst = true,   -- "Wishlist First" on the LEARN NEXT line (UI/Wishlist.lua)
     selected = nil,
 }
@@ -80,10 +83,12 @@ local widgets = {}
 -- The row's menu (a right-click, the house kit, 2026-10-29), the usual
 -- one first: a recipe to learn shows the way, one you know is queued.
 local function RowMenu(entry)
-    if entry.heading then return nil end
+    if entry.heading or entry.learnEmpty then return nil end
     local lines = {}
     if entry.learnNext then
-        lines[1] = { text = L["Show the Way"], run = function() ns.LearnNext:ShowTheWay(entry) end }
+        if ns.LearnNext.CanShowWay(entry) then
+            lines[1] = { text = L["Show the Way"], run = function() ns.LearnNext:ShowTheWay(entry) end }
+        end
         -- The recipe wishlist (2026-11-17): "Add to Wishlist" or "Take Off Wishlist".
         local wish = ns.WishlistUI and ns.WishlistUI.MenuLine(entry.recipeID)
         if wish then lines[#lines + 1] = wish end
@@ -99,7 +104,8 @@ local function RowMenu(entry)
             ns.UI:SearchAuctionHouse(itemID)
         end }
     end
-    return lines
+    -- A drop or quest row with the auction house shut has nothing to offer.
+    return #lines > 0 and lines or nil
 end
 
 -- Defined with the detail panel, used by the controls built inside it.
@@ -360,6 +366,85 @@ local function CreateRow(row)
     PlaceRow(row)
 end
 
+local ResetLearnFilters
+
+--- Is this one of the Learn From choices?
+local function LearnFromKnown(value)
+    for _, choice in ipairs(ns.LearnNext.LEARN_FROM) do
+        if choice == value then return true end
+    end
+    return false
+end
+
+--- The Learn From choices, each with how many rows it keeps.
+local function LearnFromOptions(counts)
+    local words = {
+        trainerVendor = L["Trainer or Vendor"], trainer = L["Trainer"], vendor = L["Vendor"],
+        drop = L["Drop"], quest = L["Quest or Other"], any = L["Any Way"],
+    }
+    local options = {}
+    for _, choice in ipairs(ns.LearnNext.LEARN_FROM) do
+        options[#options + 1] = { text = words[choice], value = choice, note = counts and counts[choice] or nil }
+    end
+    return options
+end
+
+--- Have Skill and Learn From on the LEARN NEXT line (the owner said build
+--- it, 2026-11-17), made the first time a row is that line.
+local function MakeHeadingFilters(row)
+    if row.haveSkill then return end
+    local learnFrom = Widgets.CreateDropdown(row, LearnFromOptions(nil), function(value)
+        state.learnFrom = value
+        ns.Config:Set("levelUpLearnFrom", value)
+        Refresh(true)
+    end, { width = 150 })
+    learnFrom:SetHeight(18)
+    learnFrom:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    learnFrom:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(L["Pick where the recipes are learned. Trainers and vendors can show you the way."], 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    learnFrom:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    row.learnFrom = learnFrom
+
+    local label = Theme.CreateLabel(row, "small", "text", "RIGHT")
+    label:SetPoint("RIGHT", learnFrom, "LEFT", -6, 0)
+    label:SetText(L["Learn From:"])
+    row.learnFromLabel = label
+
+    local haveSkill = Widgets.CreateCheckbox(row, L["Have Skill"], function(checked)
+        state.haveSkill = checked
+        ns.Config:Set("levelUpHaveSkill", checked)
+        Refresh(true)
+    end, state.haveSkill)
+    haveSkill:SetPoint("RIGHT", label, "LEFT", -12, 0)
+    haveSkill:HookScript("OnEnter", function(box)
+        GameTooltip:SetOwner(box, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(L["Only shows recipes your skill is high enough to learn now."], 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    haveSkill:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    row.haveSkill = haveSkill
+
+    -- The note wraps in what is left of the line.
+    row.headingNote:ClearAllPoints()
+    row.headingNote:SetPoint("LEFT", row.heading, "RIGHT", 12, 0)
+    row.headingNote:SetPoint("RIGHT", haveSkill, "LEFT", -12, 0)
+end
+
+--- The line under LEARN NEXT when the filters leave nothing: words and
+--- Show All, made the first time a row is that line.
+local function MakeLearnEmpty(row)
+    if row.emptyText then return end
+    row.emptyText = Theme.CreateLabel(row, "small", "muted")
+    row.emptyText:SetPoint("LEFT", 28, 0)
+    row.emptyText:SetText(L["No recipes to learn here with these filters."])
+    row.showAll = Widgets.CreateButton(row, L["Show All"], function() ResetLearnFilters() end,
+        { height = 16 })
+    row.showAll:SetPoint("LEFT", row.emptyText, "RIGHT", 12, 0)
+end
+
 --- Move a recipe to learn's icon and name over for its star, or back.
 local function PlaceStar(row, starred)
     local room = starred and ns.WishlistUI.STAR_ROOM or 0
@@ -369,16 +454,54 @@ local function PlaceStar(row, starred)
     row.name:SetPoint("LEFT", 28 + room, 0)
 end
 
---- The LEARN NEXT heading row: everything else on it hidden.
-local function ShowHeadingRow(row, heading)
+--- The LEARN NEXT heading row, or the line saying the filters left
+--- nothing: everything else on it hidden.
+local function ShowHeadingRow(row, heading, empty)
     row.heading:SetShown(heading)
-    row.headingNote:SetShown(heading)
+    -- The recipe wishlist's "Wishlist First" (UI/Wishlist.lua) keeps the far
+    -- right of the line; Have Skill and Learn From stand to its left.
+    local boxShown = false
     if ns.WishlistUI and rawget(row, "firstBox") then
-        local boxShown = heading and ns.WishlistUI.Shown()
+        boxShown = heading and ns.WishlistUI.Shown() and true or false
         row.firstBox:SetShown(boxShown)
         if boxShown then row.firstBox:SetChecked(state.wishlistFirst) end
-        row.headingNote:SetPoint("RIGHT", row, "RIGHT", boxShown and -(row.firstBox:GetWidth() + 20) or -8, 0)
     end
+    if heading then
+        MakeHeadingFilters(row)
+        row.haveSkill:SetChecked(state.haveSkill)
+        row.learnFrom:SetOptions(LearnFromOptions(state.learnCounts))
+        row.learnFrom:SetValue(state.learnFrom)
+        row.learnFrom:ClearAllPoints()
+        if boxShown then
+            row.learnFrom:SetPoint("RIGHT", row.firstBox, "LEFT", -12, 0)
+        else
+            row.learnFrom:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        end
+    end
+    -- On a narrow list the note would wrap past the line: it steps aside
+    -- and the filters keep their room.
+    local noteFits = true
+    if heading then
+        pcall(function()
+            local room = row:GetWidth() - row.heading:GetStringWidth() - row.haveSkill:GetWidth()
+                - row.learnFromLabel:GetStringWidth() - row.learnFrom:GetWidth() - 60
+                - (boxShown and row.firstBox:GetWidth() + 12 or 0)
+            noteFits = room >= 220
+        end)
+    end
+    row.headingNote:SetShown(heading and noteFits)
+    for _, part in ipairs({ row.haveSkill, row.learnFrom, row.learnFromLabel }) do
+        if part then part:SetShown(heading) end
+    end
+    if not heading and row.learnFrom and row.learnFrom.menu then row.learnFrom.menu:Hide() end
+    if empty then MakeLearnEmpty(row) end
+    if row.emptyText then
+        row.emptyText:SetShown(empty == true)
+        -- Show All only when it would change something.
+        row.showAll:SetShown(empty == true and not (not state.haveSkill
+            and state.learnFrom == ns.LearnNext.LEARN_FROM_DEFAULT))
+    end
+    heading = heading or empty == true
     row.icon:SetShown(not heading)
     row.name:SetShown(not heading)
     if heading then
@@ -423,7 +546,7 @@ local function UpdateRow(row, entry)
         or row.layoutVersion ~= layoutVersion then PlaceRow(row) end
     row.data = entry
 
-    ShowHeadingRow(row, entry.heading == true)
+    ShowHeadingRow(row, entry.heading == true, entry.learnEmpty == true)
     local hasStar = ns.WishlistUI ~= nil and rawget(row, "star") ~= nil
     local starred = hasStar and entry.learnNext == true and ns.WishlistUI.Shown()
     if hasStar then
@@ -431,7 +554,7 @@ local function UpdateRow(row, entry)
         PlaceStar(row, starred)
         if starred then row.star:Paint(false) end
     end
-    if entry.heading then
+    if entry.heading or entry.learnEmpty then
         if row.subButton then row.subButton:Hide() end
         if row.wayButton then row.wayButton:Hide() end
         return
@@ -528,7 +651,8 @@ local function UpdateRow(row, entry)
     end
 
     if row.wayButton then
-        row.wayButton:SetShown(entry.learnNext == true and not entry.locked and not row.wayHidden)
+        row.wayButton:SetShown(entry.learnNext == true and not entry.locked and not row.wayHidden
+            and ns.LearnNext.CanShowWay(entry))
     end
 
     if entry.learnNext then UpdateLearnCells(row, entry) end
@@ -552,6 +676,12 @@ local function LearnLines(entry)
     if place.kind == "trainer" then
         lines[#lines + 1] = { L["Trainer"], price }
         lines[#lines + 1] = { L["Taught by"], place.name or "" }
+    elseif place.kind == "drop" or place.kind == "quest" then
+        -- No one to go to: the recipe item and where it comes from.
+        local item = place.itemID and Util.GetItemLabel(place.itemID)
+        item = item and Util.Uncolored and Util.Uncolored(item) or item
+        lines[#lines + 1] = { item or L["Recipe"], price }
+        lines[#lines + 1] = { L["Where"], (ns.LearnNext.WhereText(place)) }
     else
         local item = place.itemID and Util.GetItemLabel(place.itemID)
         item = item and Util.Uncolored and Util.Uncolored(item) or item
@@ -573,7 +703,7 @@ local function LearnLines(entry)
 end
 
 local function ShowRowTooltip(row, entry)
-    if entry.heading then return end
+    if entry.heading or entry.learnEmpty then return end
     ns.Widgets.ShowItemTooltip(row, "ANCHOR_LEFT", entry.outputItemID, entry.name or L["craft"])
     GameTooltip:AddLine(" ")
 
@@ -643,10 +773,24 @@ local function ShowRowTooltip(row, entry)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(entry.locked and L.Format("You can learn this at %d.", entry.needs)
             or L["You can learn this now."], Theme.Unpack(entry.locked and "warn" or "accent"))
-        for _, line in ipairs(LearnLines(entry)) do
-            GameTooltip:AddDoubleLine(line[1], line[2], 0.7, 0.7, 0.7, 1, 1, 1)
+        if ns.LearnNext.CanShowWay(entry) then
+            for _, line in ipairs(LearnLines(entry)) do
+                GameTooltip:AddDoubleLine(line[1], line[2], 0.7, 0.7, 0.7, 1, 1, 1)
+            end
+            GameTooltip:AddLine(L["Right-click to show the way. Shift-click to search the auction house."], 0.5, 0.5, 0.5)
+        else
+            -- A drop or quest: the recipe book's own lines ("Drops from
+            -- ..."), and what the recipe costs at the auction house.
+            local item = entry.place and entry.place.itemID and Util.GetItemLabel(entry.place.itemID)
+            if item then GameTooltip:AddLine(item, 1, 1, 1) end
+            local ok, _, lines = pcall(ns.RecipeBook.LearnFrom, ns.RecipeBook, entry.record)
+            for _, line in ipairs(ok and lines or {}) do GameTooltip:AddLine(line, 1, 1, 1, true) end
+            if entry.price then
+                GameTooltip:AddLine(L.Format("Learn: %s at the auction house",
+                    Util.FormatMoney(entry.price, { noColor = true })), 1, 1, 0)
+            end
+            GameTooltip:AddLine(L["Shift-click to search the auction house."], 0.5, 0.5, 0.5)
         end
-        GameTooltip:AddLine(L["Right-click to show the way. Shift-click to search the auction house."], 0.5, 0.5, 0.5)
         GameTooltip:Show()
         return
     end
@@ -995,6 +1139,7 @@ local function UpdateLearnDetail(detail, entry)
         end
     end
 
+    learn.wayButton:SetShown(ns.LearnNext.CanShowWay(entry))
     learn.wayButton:SetEnabledState(entry.place ~= nil)
 
     local wishShown = ns.WishlistUI ~= nil and ns.WishlistUI.Shown()
@@ -1254,29 +1399,52 @@ local function LearnSkills()
 end
 
 --- Learn next's rows (2026-10-12), under the recipes known.
-local function LearnRows()
-    if not (LearnShown() and ns.LearnNext) then return {} end
-    local ok, rows = pcall(ns.LearnNext.GetRows, ns.LearnNext, {
-        skills = LearnSkills(), search = state.search,
-    })
-    if not ok then
-        ns.Debug("Learn next:", tostring(rows))
-        return {}
+-- Built with every way a recipe is got; Have Skill and Learn From
+-- (2026-11-17) then pick from those rows, so ticking one reads nothing
+-- again (`reuse`).
+local function LearnRows(reuse)
+    state.learnCounts = nil
+    if not (LearnShown() and ns.LearnNext) then
+        state.learnBuilt = nil
+        return {}, 0
     end
-    if state.craftableOnly then
-        local kept = {}
-        for _, row in ipairs(rows) do
-            if (row.craftableNow or 0) > 0 and not row.locked then kept[#kept + 1] = row end
+    local rows = reuse and state.learnBuilt
+    if not rows then
+        local ok, built = pcall(ns.LearnNext.GetRows, ns.LearnNext, {
+            skills = LearnSkills(), search = state.search, anyWay = true,
+        })
+        if not ok then
+            ns.Debug("Learn next:", tostring(built))
+            built = {}
         end
-        rows = kept
+        rows = built
+        if state.craftableOnly then
+            local kept = {}
+            for _, row in ipairs(rows) do
+                if (row.craftableNow or 0) > 0 and not row.locked then kept[#kept + 1] = row end
+            end
+            rows = kept
+        end
+        state.learnBuilt = rows
     end
+    local kept, counts = ns.LearnNext.Filter(rows, { haveSkill = state.haveSkill, learnFrom = state.learnFrom })
+    state.learnCounts = counts
     -- Wishlist First (2026-11-17): starred recipes at the top, in the
-    -- order they had; the rest below as before. Sorts what was built.
-    if state.wishlistFirst and ns.WishlistUI then rows = ns.WishlistUI.StarredFirst(rows) end
-    return rows
+    -- order they had; the rest below as before. Sorts what was kept.
+    if state.wishlistFirst and ns.WishlistUI then kept = ns.WishlistUI.StarredFirst(kept) end
+    return kept, #rows
 end
 
-function Refresh()
+--- Show All under LEARN NEXT: both filters back as they start.
+ResetLearnFilters = function()
+    state.haveSkill = false
+    state.learnFrom = ns.LearnNext.LEARN_FROM_DEFAULT
+    ns.Config:Set("levelUpHaveSkill", false)
+    ns.Config:Set("levelUpLearnFrom", state.learnFrom)
+    Refresh(true)
+end
+
+Refresh = function(reuseLearn)
     if not widgets.list then return end
 
     local known = ns.LevelUp:GetRanked({
@@ -1287,13 +1455,16 @@ function Refresh()
         subCraftsOnly = state.subCraftsOnly,
         search = state.search,
     })
-    local learnRows = LearnRows()
+    local learnRows, built = LearnRows(reuseLearn)
 
     local shown = {}
     for _, row in ipairs(known) do shown[#shown + 1] = row end
-    if #learnRows > 0 then
+    -- The LEARN NEXT line stays while the filters hide every row, so they
+    -- can be changed back.
+    if LearnShown() and built > 0 then
         shown[#shown + 1] = { heading = true }
         for _, row in ipairs(learnRows) do shown[#shown + 1] = row end
+        if #learnRows == 0 then shown[#shown + 1] = { learnEmpty = true } end
     end
 
     widgets.list:SetData(shown)
@@ -1445,6 +1616,10 @@ local function Build(container)
     -- yet that raise the skill now, under the ones known. Kept between
     -- sessions.
     state.learnNext = ns.Config:Get("levelUpLearnNext") ~= false
+    -- Its Have Skill and Learn From, on the LEARN NEXT line (2026-11-17).
+    state.haveSkill = ns.Config:Get("levelUpHaveSkill") == true
+    local from = ns.Config:Get("levelUpLearnFrom")
+    state.learnFrom = LearnFromKnown(from) and from or ns.LearnNext.LEARN_FROM_DEFAULT
     state.wishlistFirst = ns.Config:Get("levelUpWishlistFirst") ~= false
     local learnNext = Widgets.CreateCheckbox(toolbar, L["Learn next"], function(checked)
         state.learnNext = checked
@@ -1539,8 +1714,18 @@ local function Build(container)
 
         onEnter = function(row, entry) ShowRowTooltip(row, entry) end,
         onLeave = function() GameTooltip:Hide() end,
-        clickHint = function(entry) return not entry.heading and L["Right-click for more."] or nil end,
+        clickHint = function(entry)
+            return not (entry.heading or entry.learnEmpty) and L["Right-click for more."] or nil
+        end,
         menu = RowMenu,
+        -- A drop or quest recipe searches for its recipe item.
+        searchItem = function(entry)
+            local place = entry.learnNext and entry.place
+            if place and (place.kind == "drop" or place.kind == "quest") and place.itemID then
+                return place.itemID
+            end
+            return Widgets.RowItemID(entry)
+        end,
 
         -- The row the detail pane is showing stays lit.
         isSelected = function(entry)
@@ -1549,7 +1734,7 @@ local function Build(container)
         end,
 
         onClick = function(entry, _, mouseButton)
-            if entry.heading or mouseButton == "RightButton" then return end
+            if entry.heading or entry.learnEmpty or mouseButton == "RightButton" then return end
 
             state.selected = entry
             UpdateDetail(entry)

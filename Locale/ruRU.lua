@@ -3758,6 +3758,18 @@ L["Every crate in your bags is ready to fill."] = "Каждый ящик в тв
 L["Only My Crafts:"] = "Только мои создания:"
 L["Shows only the crafts this character makes. Crafts for your other characters stay in the queue and show when you log in on them."] = "Показывает только то, что создаёт этот персонаж. Создания для других персонажей остаются в очереди и видны, когда ты заходишь за них."
 L["Nothing queued for this character.\nCrafts for your other characters show when you log in on them."] = "Для этого персонажа в очереди ничего нет.\nСоздания для других персонажей видны, когда ты заходишь за них."
+
+-- Learn next's Have Skill and Learn From (2026-11-17)
+L["Have Skill"] = "Хватает навыка"
+L["Only shows recipes your skill is high enough to learn now."] = "Показывает только рецепты, для которых твоего навыка уже хватает."
+L["Learn From:"] = "Где учить:"
+L["Pick where the recipes are learned. Trainers and vendors can show you the way."] = "Выбери, где учить рецепты. К учителям и торговцам мы можем показать путь."
+L["Trainer or Vendor"] = "Учитель или торговец"
+L["Quest or Other"] = "Задание или другое"
+L["Any Way"] = "Любой способ"
+L["Learn: %s at the auction house"] = "Изучить: %s на аукционе"
+L["Shift-click to search the auction house."] = "Shift-клик ищет на аукционе."
+L["No recipes to learn here with these filters."] = "С этими фильтрами здесь нечего изучать."
 L["All Recipes"] = "Все рецепты"
 L["Every recipe you know, grey ones too"] = "Все рецепты, что ты знаешь, и серые тоже"
 L["Hide Ignored:"] = "Скрыть скрытые:"

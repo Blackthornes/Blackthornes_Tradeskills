@@ -352,6 +352,29 @@ on Forever's Mulgore (x 31 to 49, y 27 to 45). Thunder Bluff's spots seen in
 game (`Data/ForeverVendorSpots.lua`, map 1456) were right and still win.
 Tested in `tools/test_bluffspots.lua`. Not yet seen in game.
 
+### Have Skill and Learn From (2026-11-17)
+
+The owner said build it, all choices, from a mockup. Both sit on the
+LEARN NEXT line itself (`MakeHeadingFilters` in `UI/Tab_LevelUp.lua`, made
+the first time a list row is that line), not the toolbar. "Have Skill"
+(`levelUpHaveSkill`, off) leaves out the rows out of reach (`row.locked`).
+"Learn From:" (`levelUpLearnFrom`, never rename either) is one of
+`LearnNext.LEARN_FROM`: `trainerVendor` (the default, the list as before),
+`trainer`, `vendor`, `drop`, `quest`, `any`, each with its count on the
+menu (`option.note`, a dim right-hand word any dropdown in `UI/Widgets.lua`
+can carry). The tab builds the rows once with `GetRows{ anyWay = true }`
+and keeps them (`state.learnBuilt`); the filters run `LearnNext.Filter` on
+those (`Refresh(true)`), so ticking reads nothing again. Every way a recipe
+is got is on `place.ways` (a recipe a trainer and a vendor both teach
+matches either); drop and quest come from `RecipeBook:LearnWays`, the same
+reading as `LearnFrom`. A drop or quest recipe with no trainer or vendor
+gets `place.kind = "drop"` or `"quest"`, its recipe item's lowest auction
+price (else "--"), no Show the Way (`LearnNext.CanShowWay`), the recipe
+book's lines on its hover, and shift-click searches its recipe item. When
+the filters leave nothing the line stays, with a `learnEmpty` row and Show
+All (`ResetLearnFilters`). Butler and Road to 300 don't read these.
+Tested in `tools/test_learnnext.lua` and `tools/test_learnfilters.lua`.
+
 ## Show the way across zones and the sea
 
 The owner said build it (2026-10-21, from a mockup) in every addon: with

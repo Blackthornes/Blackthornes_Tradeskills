@@ -3,8 +3,9 @@
 -- character playing has not learned that would raise their skill now, with
 -- where to learn each, so the Level Up tab keeps going past what they know.
 --
--- Only recipes a trainer or a vendor teaches: a drop or a quest cannot be
--- shown the way to. The skill each needs and when it turns yellow and grey
+-- Only recipes a trainer or a vendor teaches by default: a drop or a quest
+-- cannot be shown the way to. "Learn From:" on the LEARN NEXT line
+-- (2026-11-17) can list those too, with no Show the Way. The skill each needs and when it turns yellow and grey
 -- are Forever's (Data/LearnSpots.lua, laid over the book in
 -- Logic/RecipeBook.lua); a recipe still a few points out of reach is listed
 -- after the rest, "At 120". The trainer or vendor picked is on the player's
@@ -264,9 +265,16 @@ function LearnNext:Place(record)
         end
     end
 
+    -- Every way the player's side has, for "Learn From:": a recipe both
+    -- a trainer and a vendor teach matches either.
+    local ways = { trainer = #trainers > 0 or nil, vendor = #vendors > 0 or nil }
+
     -- A trainer first: it is how most recipes are learned, and the cheaper.
     local place = Nearest(trainers, side) or Nearest(vendors, side)
-    if place then return place end
+    if place then
+        place.ways = ways
+        return place
+    end
 
     -- A trainer teaches it (it has a trainer's price) but none the data
     -- places teaches that high: Classic's Artisan trainers stand in places
@@ -281,10 +289,12 @@ function LearnNext:Place(record)
             if OnSide(row[5], side) and (row[6] or 0) >= needs then
                 local inside = TrainerPlace(row)
                 inside.price = record.trainerCost
+                inside.ways = { trainer = true }
                 return inside
             end
         end
-        return { kind = "trainer", name = L["an Artisan trainer"], price = record.trainerCost }
+        return { kind = "trainer", name = L["an Artisan trainer"], price = record.trainerCost,
+                 ways = { trainer = true } }
     end
     return nil
 end
@@ -344,9 +354,38 @@ local function Makes(record)
     return possible == math.huge and 0 or possible
 end
 
+--- A recipe got from a drop or a quest (Learn From:, 2026-11-17): no
+--- one to go to, so no spot; what its recipe item costs at the auction
+--- house when a price is known.
+local function ItemPlace(record, ways)
+    local kind = ways.drop and "drop" or ways.quest and "quest" or nil
+    if not kind then return nil end
+    local itemID = record.recipeItems and record.recipeItems[1]
+    local best
+    for _, id in ipairs(record.recipeItems or {}) do
+        local ok, price = false, nil
+        if ns.Prices and ns.Prices.GetValue then ok, price = pcall(ns.Prices.GetValue, ns.Prices, id, "lowest") end
+        price = ok and tonumber(price) or nil
+        if price and price > 0 and (not best or price < best) then best, itemID = price, id end
+    end
+    return { kind = kind, itemID = itemID, price = best, auction = best ~= nil, ways = ways }
+end
+
 --- One row, in the Level Up list's shape, plus where to learn it.
-function LearnNext:BuildRow(record, skill)
+--
+-- @param anyWay  also drop and quest recipes, with every way each is got
+--   in `place.ways` (Learn From:, 2026-11-17)
+function LearnNext:BuildRow(record, skill, anyWay)
     local place = self:Place(record)
+    if anyWay then
+        local more = ns.RecipeBook and ns.RecipeBook.LearnWays and ns.RecipeBook:LearnWays(record) or {}
+        if place then
+            place.ways = place.ways or {}
+            place.ways.drop, place.ways.quest = more.drop, more.quest
+        else
+            place = ItemPlace(record, more)
+        end
+    end
     if not place then return nil end
 
     local value = ns.RecipeBook:Value(record) or {}
@@ -381,6 +420,7 @@ end
 --
 -- @param opts.skills  { [Classic skill line] = the character's skill }
 -- @param opts.search  part of a name, any case
+-- @param opts.anyWay  drop and quest recipes too (LearnNext.Filter picks)
 -- @return rows (BuildRow's)
 function LearnNext:GetRows(opts)
     opts = opts or {}
@@ -403,7 +443,7 @@ function LearnNext:GetRows(opts)
             -- skill is grey all the same: Classic's go grey within this.
             if tier == "unknown" and skill >= needs + LearnNext.UNKNOWN_GREY then tier = "trivial" end
             if tier ~= "trivial" then
-                local row = self:BuildRow(record, skill)
+                local row = self:BuildRow(record, skill, opts.anyWay)
                 if row then
                     if row.locked then locked[#locked + 1] = row else open[#open + 1] = row end
                 end
@@ -422,11 +462,71 @@ function LearnNext:GetRows(opts)
     return open
 end
 
---- The words for where: "Trainer" or "Vendor", and the zone beside a vendor.
+--- The words for where: "Trainer" or "Vendor", and the zone beside a vendor;
+--- "Drop" or "Quest or other" for a recipe no one teaches.
 function LearnNext.WhereText(place)
     if not place then return "", nil end
     if place.kind == "trainer" then return L["Trainer"], nil end
+    if place.kind == "drop" then return L["Drop"], nil end
+    if place.kind == "quest" then return L["Quest or other"], nil end
     return L["Vendor"], place.zone
+end
+
+--- Can Show the Way lead to it: a trainer or vendor, never a drop or quest.
+function LearnNext.CanShowWay(row)
+    local kind = row and row.place and row.place.kind
+    return kind == "trainer" or kind == "vendor"
+end
+
+--------------------------------------------------------------------------------
+-- Have Skill and Learn From (the owner said build it, 2026-11-17)
+--------------------------------------------------------------------------------
+
+--- The Learn From choices, in the menu's order. "trainerVendor" is the
+--- first and the default: the list as it was before the filters.
+LearnNext.LEARN_FROM = { "trainerVendor", "trainer", "vendor", "drop", "quest", "any" }
+LearnNext.LEARN_FROM_DEFAULT = "trainerVendor"
+
+local FROM_WAYS = {
+    trainerVendor = { "trainer", "vendor" },
+    trainer = { "trainer" }, vendor = { "vendor" },
+    drop = { "drop" }, quest = { "quest" },
+}
+
+--- Is a row learned the way picked? A recipe got more than one way
+--- matches each.
+function LearnNext.Matches(row, from)
+    if from == "any" then return true end
+    local place = row and row.place
+    if not place then return false end
+    local ways = place.ways or { [place.kind or ""] = true }
+    for _, way in ipairs(FROM_WAYS[from] or FROM_WAYS.trainerVendor) do
+        if ways[way] then return true end
+    end
+    return false
+end
+
+--- The rows already built, filtered: Have Skill leaves out those still out
+--- of reach, then Learn From keeps the way picked. Nothing is read again.
+--
+-- @param opts.haveSkill  leave out locked rows
+-- @param opts.learnFrom  one of LEARN_FROM
+-- @return kept, counts ({ [choice] = rows it would keep, after Have Skill })
+function LearnNext.Filter(rows, opts)
+    opts = opts or {}
+    local from = opts.learnFrom
+    if not FROM_WAYS[from] and from ~= "any" then from = LearnNext.LEARN_FROM_DEFAULT end
+    local kept, counts = {}, {}
+    for _, choice in ipairs(LearnNext.LEARN_FROM) do counts[choice] = 0 end
+    for _, row in ipairs(rows or {}) do
+        if not (opts.haveSkill and row.locked) then
+            for _, choice in ipairs(LearnNext.LEARN_FROM) do
+                if LearnNext.Matches(row, choice) then counts[choice] = counts[choice] + 1 end
+            end
+            if LearnNext.Matches(row, from) then kept[#kept + 1] = row end
+        end
+    end
+    return kept, counts
 end
 
 --- What to pin the map for: the recipe item's name or the recipe's.

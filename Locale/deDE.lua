@@ -3756,6 +3756,18 @@ L["Every crate in your bags is ready to fill."] = "Jede Kiste in deinen Taschen 
 L["Only My Crafts:"] = "Nur meine Herstellungen:"
 L["Shows only the crafts this character makes. Crafts for your other characters stay in the queue and show when you log in on them."] = "Zeigt nur die Herstellungen, die dieser Charakter macht. Herstellungen für deine anderen Charaktere bleiben auf der Liste und erscheinen, wenn du dich mit ihnen einloggst."
 L["Nothing queued for this character.\nCrafts for your other characters show when you log in on them."] = "Nichts auf der Liste für diesen Charakter.\nHerstellungen für deine anderen Charaktere erscheinen, wenn du dich mit ihnen einloggst."
+
+-- Learn next's Have Skill and Learn From (2026-11-17)
+L["Have Skill"] = "Fertigkeit reicht"
+L["Only shows recipes your skill is high enough to learn now."] = "Zeigt nur Rezepte, für die deine Fertigkeit jetzt hoch genug ist."
+L["Learn From:"] = "Lernen bei:"
+L["Pick where the recipes are learned. Trainers and vendors can show you the way."] = "Wähle, wo du die Rezepte lernst. Zu Lehrern und Händlern zeigen wir dir den Weg."
+L["Trainer or Vendor"] = "Lehrer oder Händler"
+L["Quest or Other"] = "Quest oder anderes"
+L["Any Way"] = "Alle Wege"
+L["Learn: %s at the auction house"] = "Lernen: %s im Auktionshaus"
+L["Shift-click to search the auction house."] = "Shift-Klick sucht im Auktionshaus."
+L["No recipes to learn here with these filters."] = "Mit diesen Filtern gibt es hier keine Rezepte zu lernen."
 L["All Recipes"] = "Alle Rezepte"
 L["Every recipe you know, grey ones too"] = "Jedes Rezept, das du kennst, auch graue"
 L["Hide Ignored:"] = "Ignorierte ausblenden:"

@@ -438,6 +438,12 @@ local DEFAULTS = {
         -- Level Up's "Can afford" (2026-10-22): only crafts whose missing
         -- materials the gold carried can buy. Never rename it.
         levelUpCanAfford = false,
+        -- Learn next's "Have Skill" and "Learn From:" on the LEARN NEXT line
+        -- (2026-11-17): leave out recipes still out of reach, and which way
+        -- they are learned ("trainerVendor", "trainer", "vendor", "drop",
+        -- "quest" or "any"). Never rename either.
+        levelUpHaveSkill = false,
+        levelUpLearnFrom = "trainerVendor",
         -- The recipe wishlist (2026-11-17): stars on recipes to learn, and
         -- a note at a vendor or trainer that teaches one. Off unless ticked.
         -- "Wishlist First" on Level Up's LEARN NEXT line and on Recipes to
