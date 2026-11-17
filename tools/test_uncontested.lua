@@ -307,9 +307,11 @@ local function ScanWool(prices)
     for _, price in ipairs(prices) do
         listings[#listings + 1] = { unitPrice = price, quantity = 20 }
     end
-    local market, min, quantity, rival, own, ignored =
+    -- A search reads the book, so its steps go with it, as every caller
+    -- of Summarise passes them (a reading with none is a browse row).
+    local market, min, quantity, rival, own, ignored, ladder =
         Prices:Summarise(listings, Prices:GetValue(WOOL, "market"))
-    Prices:Record(WOOL, market, min, quantity, time(), rival, own, ignored)
+    Prices:Record(WOOL, market, min, quantity, time(), rival, own, ignored, ladder)
 end
 
 Reset()
