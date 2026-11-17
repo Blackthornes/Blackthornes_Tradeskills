@@ -1816,15 +1816,65 @@ local function ReadLine(skillLineID)
     return nil
 end
 
+--- Cooking and First Aid from the Professions book, each { name,
+--- skillLineID, skillLevel, maxSkillLevel }: Forever's trade skill lines
+--- leave the secondary professions out, so Butler's line never showed them
+--- (a player asked, 2026-11-17). As Logic/RoadPlan.lua reads them.
+local function FromBook()
+    local found = {}
+    local getAll, getInfo = rawget(_G, "GetProfessions"), rawget(_G, "GetProfessionInfo")
+    if type(getAll) ~= "function" or type(getInfo) ~= "function" then return found end
+    local ok, indexes = pcall(function() return { getAll() } end)
+    if not ok then return found end
+    for i = 1, 6 do
+        local index = indexes[i]
+        if type(index) == "number" then
+            local read, entry = pcall(function()
+                local name, _, rank, maxRank, _, _, skillLine = getInfo(index)
+                if type(name) ~= "string" or name == "" then return nil end
+                return {
+                    name = name .. "",
+                    skillLineID = type(skillLine) == "number" and skillLine + 0 or nil,
+                    skillLevel = type(rank) == "number" and rank + 0 or 0,
+                    maxSkillLevel = type(maxRank) == "number" and maxRank + 0 or 0,
+                }
+            end)
+            if read and entry and entry.maxSkillLevel > 0 then found[#found + 1] = entry end
+        end
+    end
+    return found
+end
+
+--- The learned professions Recipes knows, then the book's that it lacks.
+local function Learned()
+    local recipes = ns.Recipes
+    local list, seen = {}, {}
+    if recipes and recipes.GetLearnedProfessions then
+        local ok, learned = pcall(recipes.GetLearnedProfessions, recipes)
+        for _, entry in ipairs(ok and type(learned) == "table" and learned or {}) do
+            if type(entry) == "table" and entry.name then
+                list[#list + 1] = entry
+                seen[entry.name] = true
+            end
+        end
+    end
+    for _, entry in ipairs(FromBook()) do
+        if not seen[entry.name] then
+            list[#list + 1] = entry
+            seen[entry.name] = true
+        end
+    end
+    return list
+end
+
 --- The character's learned professions, found by skill line, by the
 --- client's name and by the English name of either of Forever's two IDs.
 local function LearnedLookup()
     local byLine, byName, byEnglish = {}, {}, {}
     local recipes = ns.Recipes
-    if not (recipes and recipes.GetLearnedProfessions) then return byLine, byName, byEnglish end
-    local ok, list = pcall(recipes.GetLearnedProfessions, recipes)
+    if not recipes then return byLine, byName, byEnglish end
     local english = recipes.SKILL_LINE_PROFESSIONS or {}
-    for _, entry in ipairs(ok and type(list) == "table" and list or {}) do
+    for _, entry in ipairs(Learned()) do
         if type(entry) == "table" and (tonumber(entry.maxSkillLevel) or 0) > 0 and entry.name then
             local info = { professionName = entry.name, skillLevel = entry.skillLevel,
                 maxSkillLevel = entry.maxSkillLevel }
@@ -1923,10 +1973,8 @@ local function NextSkillUp()
     end
     -- A profession at its cap with nothing on the Level Up tab (gathering
     -- ones have no crafts) still says it is capped, from the saved read.
-    local recipes = ns.Recipes
-    if recipes and recipes.GetLearnedProfessions then
-        local ok, list = pcall(recipes.GetLearnedProfessions, recipes)
-        for _, entry in ipairs(ok and type(list) == "table" and list or {}) do
+    if ns.Recipes then
+        for _, entry in ipairs(Learned()) do
             local skill, max = type(entry) == "table" and tonumber(entry.skillLevel), type(entry) == "table" and tonumber(entry.maxSkillLevel)
             if skill and max and max > 0 and skill >= max and entry.name and not seen[entry.name] then
                 seen[entry.name] = true
