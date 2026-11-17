@@ -4,6 +4,14 @@ Versions follow [semantic versioning](https://semver.org): the middle number
 moves for new behaviour, the last for fixes alone. The newest version goes at
 the top; a release is refused if its version has no section here.
 
+## 1.32.0
+
+For WoW: Forever (interface 16001). `/reload` is enough after updating.
+
+- **Post at Minimum Profit.** A new Post at Minimum Profit: box on the Pricing page of Settings, under When to Sell. When others sell a craft for less than it can earn, your listing goes at the lowest price that still makes your Minimum Profit. It starts off.
+- **TSM Sold a Day.** A new TSM Sold a Day: box on the Pricing page of Settings takes the Sold a day number on item tooltips from TSM. It starts off and is greyed while TSM Prices is off.
+- **Window spot.** The one window stays where you drag it.
+
 ## 1.31.1
 
 For WoW: Forever (interface 16001). `/reload` is enough after updating.
