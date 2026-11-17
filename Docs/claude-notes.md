@@ -928,6 +928,22 @@ a dark round face (the owner picked it over the anvil, 2026-10-28):
 `Media/Frame/MinimapBadge.tga`, drawn by `tools/make_minimap_art.py` (the
 same tool in all five; rerun it, never edit the TGA). Not yet seen in game.
 
+The launcher for addon bars (asked 2026-11-17, the owner said build it;
+`UI/SharedMinimap.lua` FILE_VERSION 4, the same in all five): when another
+addon has already loaded LibDataBroker-1.1, the copy that draws signs up one
+launcher named "Blackthornes" with it, once (`SharedMinimap.Launcher`,
+`hub.launcher`; tried again at each Apply and at PLAYER_LOGIN, since a bar
+may load after us). LibStub is read with `rawget` and the library asked for
+quietly (`silent = true`) inside a pcall; we never ship LibStub or the
+library, so without them nothing changes. Icon `Media/Frame/MinimapBadge`,
+label "Blackthornes AddOns". Clicks (`SharedMinimap.LauncherClick`): left
+opens the shared menu beside the bar's frame (`ToggleMenu(anchor)`,
+`hub.menuAnchor`), right opens the All Addons settings
+(`SharedWindow.OpenAllAddons`, else the first addon's settings), middle runs
+Farmer's `middle` (brings back its panels). The tooltip reuses the shared
+button's lines, no new words. Never name the bar addon that asked. Tested in
+`tools/test_sharedminimap.lua` (part 7). Not yet seen in game.
+
 ## Off, Shift or Always on tooltips
 
 A player asked (2026-10-18, the owner said yes): each tooltip line
