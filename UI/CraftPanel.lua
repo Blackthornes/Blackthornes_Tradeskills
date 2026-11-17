@@ -963,15 +963,30 @@ local function ShowRowTooltip(row, line)
 
     GameTooltip:AddLine(L["Left-click to queue, right-click to remove, Shift-click to search the auction house."], 0.5, 0.5, 0.5, true)
     GameTooltip:AddLine(L["Ctrl-right-click to stop suggesting it."], 0.5, 0.5, 0.5, true)
+    -- The Keep in Stock box (UI/StockBox.lua, 2026-11-17), for a craft that
+    -- makes something to hold.
+    if line.outputItemID and ns.StockBox then
+        GameTooltip:AddLine(L["Alt-click to set Keep in Stock."], Theme.Unpack("accent"))
+    end
     GameTooltip:Show()
 end
 
 --- Left-click queues, right-click takes it back off, Ctrl-right-click
---- ignores the craft.
+--- ignores the craft, Alt-click opens the Keep in Stock box.
 --
 -- The + button is the discoverable way in; this is for working down a list
 -- quickly, where reaching for the same small button every time is the slow part.
 local function OnRowClick(line, _, mouseButton, row)
+    -- Alt-click sets how many to keep (the owner said build it, 2026-11-17).
+    -- Never queues: a craft with nothing to hold just does nothing.
+    if IsAltKeyDown and IsAltKeyDown() then
+        if line.outputItemID and ns.StockBox then
+            GameTooltip:Hide()
+            ns.StockBox:Open(line.outputItemID, line.name, CraftPanel.frame)
+        end
+        return
+    end
+
     if mouseButton == "RightButton" then
         -- Ignoring is the Profit tab's own list (a player asked, 2026-10-14),
         -- so a craft ignored in either place is gone from both and Settings
@@ -991,6 +1006,9 @@ local function OnRowClick(line, _, mouseButton, row)
 
     QueueMore(line, 1)
 end
+
+-- For the tests.
+CraftPanel.OnRowClick = OnRowClick
 
 --------------------------------------------------------------------------------
 -- Panel
