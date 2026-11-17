@@ -449,8 +449,8 @@ end
 -- get you anything you do not already own. Three sources count against it:
 --
 --   posted  units listed on the auction house
---   onHand  units in bags and bank (equipped gear is not counted -- it is in
---           use, not stock)
+--   onHand  units in bags and bank that could be sold (equipped gear and
+--           soulbound copies are not counted -- they can never be listed)
 --   inMail  units waiting in the mailbox, which is where an expired auction
 --           lands; owned, but in neither of the two above
 --   queued  units the craft queue will produce, so queueing 2 and looking again
@@ -485,7 +485,11 @@ function Auctions:GetRoom(itemID, ignoreRecipeID, useLearned)
         limit = learned or 0
     end
     local posted = self:GetPostedCount(itemID)
-    local onHand = ns.Inventory:GetBagCount(itemID) + ns.Inventory:GetBankCount(itemID)
+    local inventory = ns.Inventory
+    local onHand = (inventory.GetSellableBagCount and inventory:GetSellableBagCount(itemID)
+            or inventory:GetBagCount(itemID))
+        + (inventory.GetSellableBankCount and inventory:GetSellableBankCount(itemID)
+            or inventory:GetBankCount(itemID))
     local inMail = ns.Inventory:GetMailCount(itemID)
 
     local queued = 0
