@@ -2822,3 +2822,28 @@ with "binds on pickup, so it cannot be sold". `SkillUp:GetRecommended`
 ranks by `Profit:GetMethod()` so `/bts skillup` lists the stars the tab
 draws. No new player words. Tested in `tools/test_soulbound.lua`. Not yet
 seen in game.
+
+## Minimums by profession
+
+The owner said build it (2026-11-17, from a mockup): each profession can
+have its own Minimum Profit and Minimum Margin. Saved account wide as
+`professionMinimums` (never rename it): `[English profession] = { profit =
+copper, margin = percent }`, either missing for the usual. One lookup,
+`Profit:MinimumsFor(recipe, analysis, itemID or profession name)`, returns
+profit, margin and the profession's name when its own number was used;
+else `minProfit` and `minMarginPercent`. The profession comes from the
+recipe's skill line (`Recipes.EnglishProfessionName`), else
+`Auctions:ProfessionOf`. Used by `Profit:GetRanked` (Profit tab, Queue
+All; numbers a caller passes still hold for every craft),
+`SkillUp:IsWorthIt`, `Profit:MinimumProfitPrice` and the undercut check in
+`ChooseRivalPostPrice`; the last two name the profession in their "why"
+line. Deals, Disenchanting and Vendor Flips stay on the usual numbers.
+Pricing page: "Minimums by Profession:" under Minimum Margin, one dark
+glass row per profession (`MinimumRow` in `UI/Tab_Settings.lua`, like
+`StockRow`), profit in silver with a g/s/c preview, margin with %, an x
+that clears both (`Profit:ClearProfessionMinimums`). The Profit tab's empty
+list names the profession picked when it has its own numbers, or says
+some have their own with all shown. Export carries `M<Name>:profit:margin`
+("-" for empty) in the limits section. Tested in
+`tools/test_professionminimums.lua`, `tools/test_uifit.lua` and
+`tools/test_disenchantbutton.lua`. Not yet seen in game.
