@@ -79,6 +79,17 @@ local function EncodeLimits()
         parts[#parts + 1] = "P" .. profession:gsub("%s", "") .. FIELD_SEP .. limit
     end
 
+    -- Minimums by profession (2026-11-17): "M", the squashed name, then
+    -- profit in copper and margin in percent, "-" for one left empty. An
+    -- older Tradeskills reads neither shape here, so it skips these too.
+    for profession, own in pairs(ns.db.professionMinimums or {}) do
+        if type(own) == "table" and (tonumber(own.profit) or tonumber(own.margin)) then
+            parts[#parts + 1] = "M" .. profession:gsub("%s", "")
+                .. FIELD_SEP .. (tonumber(own.profit) or "-")
+                .. FIELD_SEP .. (tonumber(own.margin) or "-")
+        end
+    end
+
     return table.concat(parts, RECORD_SEP)
 end
 
@@ -111,6 +122,7 @@ function Transfer:Describe()
 
     for _ in pairs(ns.db.postLimits or {}) do limits = limits + 1 end
     for _ in pairs(ns.db.professionStockLimits or {}) do limits = limits + 1 end
+    for _ in pairs(ns.db.professionMinimums or {}) do limits = limits + 1 end
 
     -- Counted the way the code writes them: only switches and numbers
     -- travel, so a changed text setting is not promised.
@@ -206,6 +218,15 @@ function Transfer:Import(code)
                     local profession = squashed and ProfessionFromCode(squashed)
                     if profession and ns.Auctions.SetProfessionLimit then
                         ns.Auctions:SetProfessionLimit(profession, tonumber(number))
+                        limitsApplied = limitsApplied + 1
+                    end
+
+                    local squashedMin, profit, margin = record:match(
+                        "^M(%a+)" .. FIELD_SEP .. "([%d%-]+)" .. FIELD_SEP .. "([%d%-]+)$")
+                    local minProfession = squashedMin and ProfessionFromCode(squashedMin)
+                    if minProfession and ns.Profit and ns.Profit.SetProfessionMinimum then
+                        ns.Profit:SetProfessionMinimum(minProfession, "profit", tonumber(profit))
+                        ns.Profit:SetProfessionMinimum(minProfession, "margin", tonumber(margin))
                         limitsApplied = limitsApplied + 1
                     end
                 end

@@ -546,6 +546,47 @@ de.hideTooHigh.onClick(false)
 check("unticked, the deal is listed", #de.list.data == 1)
 
 --------------------------------------------------------------------------------
+print("\nthe Profit tab with every craft hidden by minimums")
+--------------------------------------------------------------------------------
+
+-- Minimums by profession (2026-11-17): with all professions shown and some
+-- having their own numbers, the empty list says so instead of naming the
+-- one usual number (here 0, which would hide nothing).
+local savedRanked, savedRows = ns.Profit.GetRanked, craftRows
+local hiddenRows = { { recipeID = 9, name = "Thick Armor Kit", priceable = true, profit = 812 } }
+ns.Profit.GetRanked = function(_, opts)
+    if opts and opts.minProfit == 0 then return hiddenRows end
+    return {}
+end
+
+local function ProfitEmptyText()
+    local found
+    local function Look(frame)
+        for _, child in ipairs(frame.children or {}) do
+            if child.kind == "FontString" and child.shown and type(child.text) == "string"
+                and (child.text:find("hidden by", 1, true) or child.text:find("Nothing matches", 1, true)) then
+                found = child.text
+            end
+            Look(child)
+        end
+    end
+    Look(containers.profit)
+    return found
+end
+
+SelectTab("profit")
+check("no profession numbers: today's words stay", ProfitEmptyText() == "Nothing matches these filters.")
+
+ns.Profit.HasProfessionMinimums = function() return true end
+ns.Profit.MinimumsFor = function() return 1000, 20, nil end
+SelectTab("profit")
+check("some professions have their own: the list says so", ProfitEmptyText()
+    == "1 craft hidden by your minimums in Settings.\nSome professions have their own.\nThe best right now makes 812.")
+
+ns.Profit.GetRanked, craftRows = savedRanked, savedRows
+ns.Profit.HasProfessionMinimums, ns.Profit.MinimumsFor = nil, nil
+
+--------------------------------------------------------------------------------
 print("\nwhat an item breaks into")
 --------------------------------------------------------------------------------
 
