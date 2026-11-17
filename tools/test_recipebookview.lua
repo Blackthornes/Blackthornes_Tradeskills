@@ -10,7 +10,7 @@
 --   6. The Level Up tab's copy keeps its own filters and asks for skill
 --      order; the switch shows one view at a time and redraws only that one.
 --   7. With showSkill it shows the picked profession's skill, or all of
---      yours under All professions; the Profit tab's copy shows none.
+--      yours under All professions; the Profit tab's copy shows it too.
 
 local ns = {}
 ns.COLORS = setmetatable({}, { __index = function() return "ffffffff" end })
@@ -51,7 +51,10 @@ ns.Theme = {
   AccentStripe = function() end,
   CreateHeading = function() return Label() end,
   CreateDivider = function() return Stub() end,
-  SetMoneyText = function(label, copper) label:SetText(tostring(copper) .. "c") end,
+  SetMoneyText = function(label, copper, opts)
+    label.moneyShort = opts and opts.short or false
+    label:SetText(tostring(copper) .. "c")
+  end,
   ProfitColor = function() return 1, 1, 1 end,
   Unpack = function() return 1, 1, 1, 1 end,
 }
@@ -156,6 +159,11 @@ check("disenchant", boots.disenchant.text, "120c")
 check("profit", boots.profit.text, "120c")
 check("recipe price", boots.price.text, "900c")
 check("learn from", boots.learn.text, "Drop")
+-- A player missed a big profit shown as one coin ("1g"): every amount in
+-- the list shows its gold, silver and copper, as the other lists do.
+for _, key in ipairs({ "cost", "sells", "disenchant", "profit", "price" }) do
+  check(key .. " shows every coin", boots[key].moneyShort, false)
+end
 local ench = Draw(rows[2])
 check("an enchant makes no item", ench.sells.text, "no item")
 check("an unpriced profit is a dash", ench.profit.text, "--")
@@ -238,13 +246,23 @@ check("its own profession", second._state.profession, "Enchanting")
 check("does not move the other's", View._state.profession, "Leatherworking")
 
 print("\nthe skill at the top right")
-check("the Profit copy shows none", View._widgets.skill, nil)
+check("the Profit copy shows it too", View._widgets.skill ~= nil, true)
 ns.Recipes.GetLearnedProfessions = function()
   return { { name = "Enchanting", skillLevel = 206, maxSkillLevel = 225 },
            { name = "Tailoring", skillLevel = 150, maxSkillLevel = 150 } }
 end
 local third = View.New({ order = "skill", showSkill = true })
+local fitted
+ns.Widgets.FitColumns = function(columns) fitted = columns end
+ns.Profit = ns.Profit or {}
+local oldLabels = ns.Profit.WAY_LABELS
+ns.Profit.WAY_LABELS = { auction = "AH", vendor = "Vendor", disenchant = "DE" }
 third.Build(Frame())
+local samples = {}
+for _, column in ipairs(fitted or {}) do samples[column.key] = column.sample end
+check("PROFIT is measured whole, with its longest tag", samples.profit, "-99g 99s 99c (Vendor)")
+check("money columns are measured with two gold digits", samples.sells, "99g 99s 99c")
+ns.Widgets.FitColumns, ns.Profit.WAY_LABELS = nil, oldLabels
 third.SetProfession("ench")
 third.Refresh()
 check("the picked profession's skill", third._widgets.skill.text, "ENCHANTING  206 / 225")
