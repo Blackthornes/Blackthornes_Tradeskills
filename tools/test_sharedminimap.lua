@@ -10,9 +10,12 @@
 --   5. A row's left-click opens, right-click opens settings, middle and
 --      shift go to their own jobs, and fall back to open when not given.
 --   6. The menu lays out a row for each addon, sized to its longest name.
+--   7. The addon bar launcher: nothing without LibStub or the library
+--      (asked quietly), one "Blackthornes" launcher once another addon
+--      loaded it, signed up only once, and its clicks match the button.
 
 local NAMES = { "CreateFrame", "UIParent", "Minimap", "GameTooltip", "C_Timer", "time",
-    "BlackthornesMinimap", "UISpecialFrames", "IsShiftKeyDown", "GetCursorPosition" }
+    "BlackthornesMinimap", "UISpecialFrames", "IsShiftKeyDown", "GetCursorPosition", "LibStub" }
 local saved = {}
 for _, name in ipairs(NAMES) do saved[name] = _G[name] end
 
@@ -44,6 +47,7 @@ UISpecialFrames = {}
 local clock = 1000
 time = function() return clock end
 BlackthornesMinimap = nil
+LibStub = nil
 
 local ns = {
     Theme = {
@@ -123,6 +127,54 @@ assert(not menu:IsShown(), "a second click closes it")
 assert(SM.MenuWidth({}, nil) == 200, "never under the least width")
 assert(SM.MenuWidth({ 300 }, nil) == 300 + 10 + 24 + 10 + 10 + 12 + 4, "the longest name fits")
 assert(SM.MenuWidth({ 100 }, 180) == 250, "the plate and close gem fit")
+
+-- 7. The launcher for addon bars.
+assert(BlackthornesMinimap.launcher == nil, "no LibStub, no launcher")
+local asked = {}
+LibStub = setmetatable({}, { __call = function(_, name, silent)
+    asked[#asked + 1] = { name = name, silent = silent }
+    return nil
+end })
+SM.Apply()
+assert(BlackthornesMinimap.launcher == nil, "LibStub without the library, no launcher")
+assert(asked[1].name == "LibDataBroker-1.1" and asked[1].silent == true, "asked quietly")
+local made = {}
+local broker = {}
+function broker:NewDataObject(name, object)
+    made[#made + 1] = name
+    return object
+end
+LibStub = setmetatable({}, { __call = function() return broker end })
+SM.Apply()
+SM.Apply()
+local launcher = BlackthornesMinimap.launcher
+assert(#made == 1 and made[1] == "Blackthornes", "signed up once: " .. table.concat(made, ","))
+assert(launcher.type == "launcher" and launcher.icon:find("MinimapBadge"), "a launcher with the badge")
+local allAddons = 0
+ns.SharedWindow = { OpenAllAddons = function() allAddons = allAddons + 1; return true end }
+for k in pairs(a.calls) do a.calls[k] = nil end
+for k in pairs(b.calls) do b.calls[k] = nil end
+b.middle = function() b.calls[#b.calls + 1] = "middle" end
+launcher.OnClick(Object(), "RightButton")
+assert(allAddons == 1 and #a.calls == 0, "right-click opens the All Addons page")
+ns.SharedWindow = nil
+launcher.OnClick(Object(), "RightButton")
+assert(table.concat(a.calls, ",") == "settings", "else the first addon's settings")
+launcher.OnClick(Object(), "MiddleButton")
+assert(#b.calls == 0, "middle-click is Farmer's only")
+local farmerCalls = {}
+BlackthornesMinimap.entries.farmer = { key = "farmer", order = 0, name = "Blackthornes Farmer",
+    middle = function() farmerCalls[#farmerCalls + 1] = "middle" end }
+launcher.OnClick(Object(), "MiddleButton")
+assert(#farmerCalls == 1, "middle-click brings back Farmer's panels")
+local bar = Object()
+launcher.OnClick(bar, "LeftButton")
+assert(menu:IsShown() and BlackthornesMinimap.menuAnchor == bar, "left-click opens the menu by the bar")
+launcher.OnClick(bar, "LeftButton")
+assert(not menu:IsShown(), "and closes it")
+local lines = {}
+launcher.OnTooltipShow({ AddLine = function(_, text) lines[#lines + 1] = text end })
+assert(lines[1] == "Blackthornes AddOns" and #lines >= 3, "the tooltip names the addons")
 
 for _, name in ipairs(NAMES) do _G[name] = saved[name] end
 print("test_sharedminimap: ok")
