@@ -780,6 +780,19 @@ the Look page, Shift or Always (`tooltipSalesShift`, true for Shift, off
 unless picked, never rename it; see "Off, Shift or Always on tooltips"). Tested in `tools/test_tooltipsales.lua`. The
 bars are the game's inline texture escape.
 
+Looks at one item (2026-11-17): a single item or commodity look may read
+only the first page of the book, so its count can be far under a full
+scan's. Each fall from a full count to a look's count had been added up as
+sales (Mithril Tube showed about 500 a day). A look the client does not call
+complete (`Scanner.HasFullResults`, asking `HasFullCommoditySearchResults`
+or `HasFullItemSearchResults`; anything but a plain yes is a part read)
+passes `partial` to `Prices:Record`: the price and book are learned, but
+the count is kept as missing in `history` (false, the layout unchanged)
+and stays out of `daily` and the volume bars. `StockMovement`,
+`GetLiquidity` and the Stats tab's stock chart pass over a reading with no
+count. Old saves read as before; a look's small count already in one ages
+out of the twelve kept readings. Tested in `tools/test_soldlooks.lua`.
+
 ## The Stats tab
 
 The owner asked (2026-10-14, from a mockup) for a tab like Farmer's
