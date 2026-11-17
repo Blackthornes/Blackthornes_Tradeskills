@@ -677,6 +677,28 @@ reported until a turn-in is seen. `tools/test_writs.lua` and
 `test_writs_locale.lua` put the typed IDs aside (but Golden Rod's and Gift
 of Arthas's) so their find-by-name checks still run.
 
+## Writs done today
+
+A player asked, the owner tapped Build it on the mockup (2026-11-17): the
+Craftsman's Writs list marks each order the character playing turned in
+today and says when new orders come in. Saved account wide as
+`merchantsFavor.writsDone[guid][questID] = resetAt` (never rename), written
+from `QUEST_TURNED_IN` by the writ's `quest` in `Data/CraftsmansWrits.lua`
+(`Writs:MarkDone`), and from `C_QuestLog.IsQuestFlaggedCompleted` at login
+and when the list opens (`Writs:ReadFlagged`), only when `UnitGUID` reads.
+Done means `time() < resetAt`; no clean-up, the next turn-in writes over
+its own mark. The reset is `Writs.SecondsToReset` (`C_DateAndTime.GetSecondsUntilDailyReset`,
+then `GetQuestResetTime`, in a pcall). Without one the clock words hide and
+a turn-in counts for a day (a mark from an earlier session clears once the
+game's done flag reads false). The row gets a green Done Today tag and
+fades in place; the line over the list (moved up from the foot, as in the
+mockup) says "Done Today: N of M" (of the priced writs) and "New Orders
+In:"; a zone heading adds "· N done today"; the tooltip and the picked
+writ's note say when it can be done again. The clocks move once a minute
+only while the list shows (`DealsWrits:Tick`); a mark running out redraws
+the list once. `/bts probe` prints the three calls under "Writs". Tested in
+`tools/test_writs.lua`. Not yet seen in game.
+
 ## The favor goal
 
 The owner said build it (2026-10-20, from a mockup): a Merchant's Favor

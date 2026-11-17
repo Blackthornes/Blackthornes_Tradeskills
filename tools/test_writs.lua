@@ -479,7 +479,7 @@ local function Label()
     return label
 end
 
-CreateFrame = function() return Stub() end
+CreateFrame = function() return Stub({ CreateTexture = function() return Stub() end }) end
 GameTooltip = Stub({ lines = {}, AddLine = function(self, text) self.lines[#self.lines + 1] = text end })
 
 ns.Theme = {
@@ -771,6 +771,130 @@ check("back to no grouping", not list.data[1].header)
 local plainRow = Stub()
 list.opts.createRow(plainRow)
 list.opts.updateRow(plainRow, list.data[1])
+
+--------------------------------------------------------------------------------
+print("\nwrits done today")
+
+-- A player asked to see which orders were turned in today, and when new
+-- ones come in (from a mockup the owner said build, 2026-11-17).
+local savedDone = { time = time, UnitGUID = UnitGUID, C_DateAndTime = C_DateAndTime,
+    C_QuestLog = C_QuestLog, GetQuestResetTime = GetQuestResetTime }
+local now = 1800000000
+time = function() return now end
+local untilReset = 6 * 3600 + 12 * 60 + 30
+C_DateAndTime = { GetSecondsUntilDailyReset = function() return untilReset end }
+UnitGUID = nil
+local rodQuest = writOf[ROD].quest
+local rewardsBefore = ns.db.merchantsFavor.writRewards
+local function Bare(text) return (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") end
+local function Find(pattern)
+    for _, label in ipairs(labels) do
+        if Bare(label.text):find(pattern) then return label end
+    end
+end
+local function Mine() return (ns.db.merchantsFavor.writsDone or {})["Player-1-0001"] end
+
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+check("no GUID to read, nothing is written", Mine() == nil)
+UnitGUID = function() error("secret value") end
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+check("a GUID that raises (a dungeon) writes nothing", Mine() == nil)
+
+UnitGUID = function() return "Player-1-0001" end
+Fire("QUEST_TURNED_IN", 12345, 0, 0)
+check("a quest that is no writ is not marked", Mine() == nil)
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+check("a writ turned in is marked until the daily reset", Mine() and Mine()[rodQuest] == now + untilReset)
+check("the rewards learned are left alone", ns.db.merchantsFavor.writRewards == rewardsBefore)
+Flush()
+local rod = Row(list.data, ROD)
+check("its row says done", rod.done == true and rod.doneUntil == now + untilReset)
+check("the list keeps its order", list.data[1].key == ROD)
+
+local doneRow = Stub()
+list.opts.createRow(doneRow)
+doneRow.name.SetAlpha = function(self, value) self.alpha = value end
+list.opts.updateRow(doneRow, rod)
+check("the row gets the Done Today tag", doneRow.tag and doneRow.tag.shown == true
+    and doneRow.tag.label.text == "Done Today")
+check("and fades in place", doneRow.name.alpha == 0.5 and doneRow.name.text == "Golden Rod")
+list.opts.updateRow(doneRow, Row(list.data, WISDOM))
+check("an open writ has no tag and no fade", doneRow.tag.shown == false and doneRow.name.alpha == 1)
+
+check("the line over the list counts the priced writs done today",
+    Find("^Done Today: 1 of %d+$") ~= nil)
+check("and says when new orders come in", Find("^New Orders In: 6h 12m$") ~= nil)
+
+GameTooltip.lines = {}
+list.opts.onEnter(doneRow, rod)
+local said = false
+for _, line in ipairs(GameTooltip.lines) do
+    said = said or line == "Done today. You can do it again in 6h 12m."
+end
+check("the tooltip says when it can be done again", said)
+
+list.opts.onClick(rod, 1, "LeftButton")
+check("the picked writ's note says it was turned in today",
+    Find("You turned this one in today%. You can do it again in 6h 12m%.$") ~= nil)
+list.opts.onClick(Row(list.data, WISDOM), 1, "LeftButton")
+check("an open writ's note keeps the old line and adds the clock",
+    Find("Each order can be done once a day%. New orders in 6h 12m%.$") ~= nil)
+
+groupBy.onSelect("zone")
+local ashDone = Header("Ashenvale")
+check("a zone heading counts its writs done today", ashDone.done == 1)
+list.opts.updateRow(headRow, ashDone)
+check("and says so after its counts", Bare(headRow.zoneInfo.text):find("· 1 done today$") ~= nil)
+groupBy.onSelect("none")
+
+ns.Config.GetCharacterKey = function() return "Player-1-0002" end
+ns.DealsWrits:Refresh()
+check("another character's day is its own", not Row(list.data, ROD).done)
+ns.Config.GetCharacterKey = function() return "Player-1-0001" end
+ns.DealsWrits:Refresh()
+
+untilReset = 5 * 60 + 10
+ns.DealsWrits:Tick()
+check("once a minute only the clock moves", Find("^New Orders In: 5m$") ~= nil and Row(list.data, ROD).done)
+now = now + 6 * 3600 + 13 * 60
+untilReset = 24 * 3600 - 60
+local before = list.data
+ns.DealsWrits:Tick()
+check("past the reset the list redraws once and the mark stops counting",
+    list.data ~= before and not Row(list.data, ROD).done and Find("^Done Today: 0 of %d+$") ~= nil)
+check("the old mark is kept, not wiped", Mine()[rodQuest] ~= nil)
+untilReset = 30
+ns.DealsWrits:Refresh()
+check("under a minute to go", Find("^New Orders In: under 1m$") ~= nil)
+
+-- Turned in with the addon off: the game's own done flag.
+untilReset = 3600
+local flagged = { [writOf[WISDOM].quest] = true }
+C_QuestLog = { IsQuestFlaggedCompleted = function(id) return flagged[id] == true end }
+ns.Writs:ReadFlagged()
+check("a writ the game says is done today is marked", Mine()[writOf[WISDOM].quest] == now + 3600)
+Flush()
+check("and its row says done", Row(list.data, WISDOM).done == true)
+
+-- The game will not say when the reset is: the clock hides, the tag stays.
+C_DateAndTime = nil
+GetQuestResetTime = nil
+Fire("QUEST_TURNED_IN", rodQuest, 0, 0)
+Flush()
+check("with no reset time a turn-in still counts for a day", Mine()[rodQuest] == now + 86400
+    and Row(list.data, ROD).done == true)
+check("and the clock hides", Find("^New Orders In:") == nil or not Find("^New Orders In:").shown)
+list.opts.onClick(Row(list.data, ROD), 1, "LeftButton")
+check("and the note keeps the old line", Find("Each order can be done once a day%.$") ~= nil)
+flagged = {}
+ns.Writs:ReadFlagged()
+check("a stand-in mark from this session is not cleared by the flag", Row(ns.Writs:GetRows(), ROD).done == true)
+GetQuestResetTime = function() return 7200 end
+check("the older reset call answers too", ns.Writs.SecondsToReset() == 7200)
+GetQuestResetTime = function() error("secret value") end
+check("a reset call that raises is no clock", ns.Writs.SecondsToReset() == nil)
+
+for key, value in pairs(savedDone) do _G[key] = value end
 
 show.onSelect("flips")
 check("back to the flips, the goal menu hides", goal.shown == false and #lists == 2)
