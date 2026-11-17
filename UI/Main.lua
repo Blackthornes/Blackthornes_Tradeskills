@@ -2744,6 +2744,14 @@ function TSTabs:AtDock(place)
         pcall(One.Watch, function() TSTabs:Settle() end)
     end
     self.dockOpened = self.dockOpened or {}
+    -- "Small Craft Queue:" ticked (a player's request, 2026-11-17): the
+    -- profession window keeps the small pane beside it, and the one window
+    -- stays shut there. Opened already, the pane moves into it as always.
+    if place == "profession" and not self.dockOpened[place]
+        and ns.Config and ns.Config:Get("craftPaneBeside") == true then
+        local okOpenNow, openNow = pcall(One.IsOpen)
+        if not (okOpenNow and openNow) then return false end
+    end
     if not self.dockOpened[place] then
         self.dockOpened[place] = true
         -- No room beside the profession window for the one window at a

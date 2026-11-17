@@ -3677,6 +3677,8 @@ L["Mixed"] = "Gemischt"
 L["IN THE PROFESSION WINDOW"] = "IM BERUFSFENSTER"
 L["Open By Itself At:"] = "Von selbst öffnen bei:"
 L["Opens Tradeskills by itself at each place you tick."] = "Öffnet Tradeskills von selbst an jedem Ort, den du ankreuzt."
+L["Small Craft Queue:"] = "Kleine Herstellungsliste:"
+L["Shows the small craft queue beside your profession window, even when the One Window is on."] = "Zeigt die kleine Herstellungsliste neben deinem Berufsfenster, auch wenn Ein Fenster an ist."
 L["Vendors"] = "Händler"
 L["Professions"] = "Berufe"
 -- The Queue page's groups and lists box (2026-11-16).

@@ -3679,6 +3679,8 @@ L["Mixed"] = "По-разному"
 L["IN THE PROFESSION WINDOW"] = "В ОКНЕ ПРОФЕССИИ"
 L["Open By Itself At:"] = "Открывать само у:"
 L["Opens Tradeskills by itself at each place you tick."] = "Открывает Tradeskills само в каждом отмеченном месте."
+L["Small Craft Queue:"] = "Малая очередь создания:"
+L["Shows the small craft queue beside your profession window, even when the One Window is on."] = "Показывает малую очередь создания рядом с окном профессии, даже когда Одно окно включено."
 L["Vendors"] = "Торговцев"
 L["Professions"] = "Профессий"
 -- The Queue page's groups and lists box (2026-11-16).
