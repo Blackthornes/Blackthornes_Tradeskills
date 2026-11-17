@@ -32,9 +32,8 @@ local function Now()
     return (type(GetTime) == "function" and GetTime()) or os.time()
 end
 
-local function Stamp()
-    return tostring(ns.Prices and ns.Prices.changes) .. ":" .. tostring(ns.Config and ns.Config.changes)
-end
+local function PriceStamp() return ns.Prices and ns.Prices.changes end
+local function ConfigStamp() return ns.Config and ns.Config.changes end
 
 --- Is the output a grey? Greys only ever go to a vendor.
 function CraftProfit.IsGrey(itemID)
@@ -171,22 +170,38 @@ end
 --   quantity, unitCost, lineCost, way ("auction"/"vendor"), bound } },
 --   cost, partial, onlyBound, bound, unpriced, sells, sellsEach, sellsWay,
 --   profit, boundProfit }, or nil for a recipe nobody knows
+--
+-- A price arriving, a setting changing or `KEEP` running out makes every row
+-- out of date at once, and working them all out in the same frame was a
+-- hitch (2026-11-17). So a recipe that already has figures gets new ones at
+-- most `PER_FRAME` at a time; the rest keep showing theirs for a moment and
+-- are redone on the next asks. A recipe with no figures yet is always worked
+-- out, so a row never shows "No price" just to wait its turn.
+CraftProfit.PER_FRAME = 4
+local frameAt, worked = nil, 0
+
 function CraftProfit:For(recipeID)
     if not recipeID then return nil end
-    local stamp, now = Stamp(), Now()
+    local prices, config, now = PriceStamp(), ConfigStamp(), Now()
     local entry = kept[recipeID]
-    if entry and entry.stamp == stamp and now - entry.at < self.KEEP then
+    if entry and entry.prices == prices and entry.config == config and now - entry.at < self.KEEP then
         return entry.result
     end
+    if frameAt ~= now then frameAt, worked = now, 0 end
+    if entry and worked >= self.PER_FRAME then
+        return entry.result
+    end
+    worked = worked + 1
     local ok, result = pcall(Work, recipeID)
     if not ok then result = nil end
-    kept[recipeID] = { stamp = stamp, at = now, result = result }
+    kept[recipeID] = { prices = prices, config = config, at = now, result = result }
     return result
 end
 
 --- Forget what was kept, so the next ask works it out again.
 function CraftProfit:Forget()
     kept = {}
+    frameAt, worked = nil, 0
 end
 
 --- An item's plain name in its quality colour, never a bracketed link.
