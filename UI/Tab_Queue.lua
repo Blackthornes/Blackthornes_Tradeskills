@@ -728,6 +728,8 @@ local function ShowMaterialTooltip(row, line)
             local label
             if wanted.forRecipe then
                 label = L.Format("To learn and skill up, %s", wanted.forRecipeName or L["a recipe"])
+            elseif wanted.forRoad then
+                label = L.Format("To learn and skill up, %s", wanted.forRoadName or L["a recipe"])
             else
                 forUpgrade = true
                 label = wanted.forItem == line.itemID and L["To buy for your upgrade"]

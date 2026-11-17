@@ -500,6 +500,26 @@ the words name the dungeon ("Enchanting trainer in Uldaman"), the pin and
 arrow go to the door in the Badlands (44.4, 12.2, not yet seen in game).
 `tools/test_learnnext.lua` now checks every profession's 300 trainer too.
 
+The whole road's shopping up front (a player's report, 2026-11-17, from
+the digest: Alchemy's road listed each step's herbs and vials on that step
+only, so they gathered and bought for step one and went back out for each
+step after). `RoadPlan.Shopping` adds up every material of the steps left
+(`plan.shopping`, what you own coming off once as on the steps, `vendor`
+when `Vendor:KeepsInStock`; `plan.shopCost` is what is left to buy), and
+`RoadPlan.Listed` puts it first in the list as a `kind = "shop"` row, "Get
+everything before you start", one `NeedText` line a material and "A vendor
+sells X. Buy them all in one stop.", while two or more craft steps are left.
+Queue Step (with the plan) also lists the vendor-stocked materials of every
+step after it that is not already queued (`RoadPlan.VendorAfter`) through
+`Queue:SetRoadBuys(line, counts, name)`: queue buy lines with `forRoad` (the
+skill line) and `forRoadName` (never rename either), set to exactly those
+counts, so the next Queue Step moves them on and nothing is counted twice;
+Queue All clears them. Herbs and other gathered materials are not listed
+to buy (the shop row tells you how many to gather). Every crafting road
+gets this, not only Alchemy; fishing does not. Tested in
+`tools/test_roadto300.lua` and `tools/test_queuebuys.lua`. Not yet seen in
+game.
+
 ## Welcome card
 
 The owner said build it (2026-10-20, from the same mockup): the first
