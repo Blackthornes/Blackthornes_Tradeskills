@@ -3624,6 +3624,8 @@ L["(part %d of %d)"] = "(часть %d из %d)"
 
 L["Disenchant Results:"] = "Итоги распыления:"
 L["Says in chat what each disenchant gave."] = "Пишет в чат, что дало каждое распыление."
+L["Craft Messages:"] = "Сообщения о создании:"
+L["Says in chat each time you make something from your queue."] = "Пишет в чат каждый раз, когда ты создаёшь что-то из очереди."
 L["show what each disenchant gave in chat: /bts dechat on|off"] = "показывать в чате, что дало каждое распыление: /bts dechat on|off"
 L["Disenchant results show in chat."] = "Итоги распыления видны в чате."
 L["Disenchant results no longer show in chat."] = "Итоги распыления больше не видны в чате."

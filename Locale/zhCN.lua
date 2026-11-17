@@ -3620,6 +3620,8 @@ L["(part %d of %d)"] = "（第 %d 部分，共 %d 部分）"
 
 L["Disenchant Results:"] = "分解结果："
 L["Says in chat what each disenchant gave."] = "在聊天中显示每次分解得到了什么。"
+L["Craft Messages:"] = "制作消息："
+L["Says in chat each time you make something from your queue."] = "每次制作队列中的物品时在聊天中显示。"
 L["show what each disenchant gave in chat: /bts dechat on|off"] = "在聊天中显示每次分解得到了什么：/bts dechat on|off"
 L["Disenchant results show in chat."] = "分解结果会显示在聊天中。"
 L["Disenchant results no longer show in chat."] = "分解结果不再显示在聊天中。"

@@ -20,7 +20,8 @@ local clock = 100
 local savedGetTime = GetTime
 GetTime = function() return clock end
 
-ns.Config = { Get = function() return nil end }
+local settings = {}
+ns.Config = { Get = function(_, key) return settings[key] end }
 
 local recipes = {
     [100] = { recipeID = 100, outputItemID = 1000, quantityMin = 1, quantityMax = 2 },
@@ -112,6 +113,17 @@ Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
 check("an enchant line has the count", printed[#printed] == "made 1 of recipe400, 1 left")
 Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
 check("the last enchant says all done", printed[#printed] == "made 1 of recipe400, all done")
+
+print("\nCraft Messages off keeps the craft lines out of chat")
+
+settings.craftChat = false
+local before = #printed
+ns.db.queue = { { recipeID = 400, quantity = 2 } }
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
+check("the queue still counts down while quiet", quantity(400) == 1)
+Crafting:OnCastSucceeded("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 400)
+check("no craft line is said while it is off", #printed == before)
+settings.craftChat = nil
 
 GetTime = savedGetTime
 

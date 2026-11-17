@@ -3622,6 +3622,8 @@ L["(part %d of %d)"] = "(Teil %d von %d)"
 
 L["Disenchant Results:"] = "Entzauberungsergebnisse:"
 L["Says in chat what each disenchant gave."] = "Sagt im Chat, was jede Entzauberung gebracht hat."
+L["Craft Messages:"] = "Handwerksmeldungen:"
+L["Says in chat each time you make something from your queue."] = "Sagt im Chat jedes Mal, wenn du etwas von deiner Liste herstellst."
 L["show what each disenchant gave in chat: /bts dechat on|off"] = "im Chat zeigen, was jede Entzauberung gebracht hat: /bts dechat on|off"
 L["Disenchant results show in chat."] = "Entzauberungsergebnisse erscheinen im Chat."
 L["Disenchant results no longer show in chat."] = "Entzauberungsergebnisse erscheinen nicht mehr im Chat."

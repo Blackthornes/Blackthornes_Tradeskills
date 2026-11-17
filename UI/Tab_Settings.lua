@@ -1702,6 +1702,15 @@ local function Build(outer)
     end, true)
     widgets.disenchantChat:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The "made 1 of X, 4 left" lines while crafting from the queue (a
+    -- player asked, the owner said build it, 2026-11-17).
+    local craftChatRow = CreateRow(pages.tooltips, 2, L["Craft Messages:"],
+        L["Says in chat each time you make something from your queue."])
+    widgets.craftChat = Widgets.CreateCheckbox(craftChatRow, L["On"], function(checked)
+        Config:Set("craftChat", checked)
+    end, true)
+    widgets.craftChat:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- All Addons: the rows every Blackthornes addon shares, shown once in
     -- the one window behind its gear (the owner said build it,
     -- 2026-11-16). Windows keeps Tradeskills' own: Window Size, what opens
@@ -3168,6 +3177,7 @@ local function Refresh()
     widgets.realmPrices:SetChecked(Config:Get("realmPrices") ~= false)
     if widgets.enchantWindow then widgets.enchantWindow:SetChecked(Config:Get("enchantWindow") == true) end
     if widgets.disenchantChat then widgets.disenchantChat:SetChecked(Config:Get("disenchantChat") ~= false) end
+    if widgets.craftChat then widgets.craftChat:SetChecked(Config:Get("craftChat") ~= false) end
     widgets.realmStatus:SetText(ns.RealmPrices and ns.RealmPrices:Describe() or "")
     widgets.tsmPrices:SetChecked(Config:Get("tsmPrices") ~= false)
     widgets.tsmStatus:SetText(ns.TSMPrices and ns.TSMPrices:Describe() or "")
