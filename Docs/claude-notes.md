@@ -2645,3 +2645,24 @@ TSM Sold a Day). The same in every addon; keep them the same.
   (`UI/SharedWindow.lua` FILE_VERSION 12, in all five).
 - **Three tries, then ask.** A check still failing after three rounds stops
   the thread. Never skip, loosen or rerun a test to get green.
+
+## Craft Cost and Profit in the profession window: keeping it smooth (2026-11-17)
+
+A player saw crafting stutter with "Craft Cost and Profit:" ticked (18 to 25%
+of the game's time, worst as a craft finished; under 2% with it off). Fixed in
+`UI/RecipeValue.lua`, `Logic/CraftProfit.lua` and `UI/CraftProfitCard.lua`:
+
+- The recipe list's redraw hook calls `RecipeValue:RefreshSoon()`: a burst of
+  redraws (a finished craft) is one refresh on the next frame. The 0.25 s
+  ticker stays as the backstop.
+- `RowKey` keeps the recipe, the text, the row's edges and every shown text
+  region's words, but no longer asks each region where it sits (that forces
+  a layout on every row, four times a second).
+- A row's profit text is spelled once per figures table (`figures.rowText`).
+- `CraftProfit:For` redoes at most `PER_FRAME` (4) recipes that already have
+  figures per frame after a price, a setting or `KEEP` moves them; the rest
+  show their old figures a moment. A recipe with none is always worked out.
+- `CraftProfitCard:Place` re-anchors only when the anchor frame, side,
+  strata or level changed (`self.placed`).
+
+Tested in `tools/test_craftstutter.lua`. Not yet seen in game.

@@ -150,7 +150,10 @@ function RecipeValue:TextFor(recipeID)
     if self:ShowsProfit() and ns.CraftProfit then
         local figures = ns.CraftProfit:For(recipeID)
         if not figures then return nil end
-        return ns.CraftProfit.RowText(figures)
+        -- The figures are one kept table until a price or setting moves, so
+        -- the text is spelled once for them, not four times a second a row.
+        if figures.rowText == nil then figures.rowText = ns.CraftProfit.RowText(figures) end
+        return figures.rowText
     end
 
     local value = self:ValueFor(recipeID)
@@ -826,15 +829,20 @@ RecipeValue.MIN_NAME_WIDTH = MIN_NAME_WIDTH
 local drawn = setmetatable({}, { __mode = "k" })
 
 --- One string for what a row's value placement depends on: the recipe, the
---- value, the row's edges, and every piece of text on it with where it sits.
+--- value, the row's edges, and every piece of text showing on it.
+---
+--- The text regions' own edges are left out. Asking a region where it sits
+--- makes the game work out the row's layout there and then, and on every
+--- visible row four times a second, while a craft finishes and the list
+--- redraws, that was a stutter (Craft Cost and Profit, 2026-11-17). A region
+--- only moves when the row does, its words change or it shows or hides, and
+--- each of those is still in the key; the name's width is ours to set.
 local function RowKey(row, label, recipeID, text)
     local parts = { tostring(recipeID), text,
         tostring(Try(Field(row, "GetLeft"), row)), tostring(Try(Field(row, "GetRight"), row)) }
 
     for _, region in ipairs(TextRegions(row, label)) do
         parts[#parts + 1] = TextOf(region) or ""
-        parts[#parts + 1] = tostring(Try(Field(region, "GetLeft"), region))
-        parts[#parts + 1] = tostring(Try(Field(region, "GetWidth"), region))
     end
 
     return table.concat(parts, "\031")
@@ -1035,12 +1043,31 @@ function RecipeValue:HookContainer(container)
     end
 
     local ok = pcall(hook, container, "Update", function()
-        RecipeValue:Refresh()
+        RecipeValue:RefreshSoon()
     end)
 
     self.hooked[container] = ok
 
     return ok
+end
+
+--- One refresh on the next frame, however many times the list redraws first.
+--
+-- A finished craft changes the bags and the counts beside many recipes, and
+-- the game redraws the list several times for it in one go. Refreshing on
+-- each redraw read and placed every row again and again (2026-11-17). The
+-- ticker stays the backstop either way.
+function RecipeValue:RefreshSoon()
+    if self.soon then return end
+    if not C_Timer or type(C_Timer.After) ~= "function" then
+        self:Refresh()
+        return
+    end
+    self.soon = true
+    C_Timer.After(0, function()
+        RecipeValue.soon = nil
+        RecipeValue:Refresh()
+    end)
 end
 
 function RecipeValue:Start()
