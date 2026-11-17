@@ -841,6 +841,16 @@ local function Build(outer)
     end, true)
     widgets.hideMaxed:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    local onlyMineRow = CreateRow(pages.queue, 1, L["Only My Crafts:"],
+        L["Shows only the crafts this character makes. Crafts for your other characters stay in the queue and show when you log in on them."])
+
+    widgets.onlyMine = Widgets.CreateCheckbox(onlyMineRow, L["On"], function(checked)
+        Config:Set("queueOnlyMine", checked)
+        UI:RefreshActiveTab()
+        if ns.CraftPanel and ns.CraftPanel.OnQueueChanged then ns.CraftPanel:OnQueueChanged() end
+    end, true)
+    widgets.onlyMine:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local freeSpaceRow = CreateRow(pages.queue, 1, L["Free Bag Space First:"],
         L["Craft Next picks the craft that frees the most bag slots."])
 
@@ -2750,6 +2760,7 @@ local function Refresh()
     local extra = Config:Get("fastSellerExtra")
     Put(widgets.fastSellerExtra, type(extra) == "number" and extra or 2)
     widgets.hideMaxed:SetChecked(Config:Get("hideAtPostLimit") ~= false)
+    widgets.onlyMine:SetChecked(Config:Get("queueOnlyMine") == true)
     widgets.allowLoss:SetChecked(Config:Get("allowPostingAtALoss") == true)
     widgets.ignoreDeposit:SetChecked(Config:Get("ignoreDeposit") == true)
     widgets.neverBelowPaid:SetChecked(Config:Get("neverBelowCraftedCost") == true)
