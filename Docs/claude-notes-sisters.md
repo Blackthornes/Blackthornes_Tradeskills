@@ -579,6 +579,24 @@ can't cover. Tested in `tools/test_butlerskillup.lua` and
 `tools/test_canafford.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
 
+Butler's "Keep Level Up Materials:" on its Keep page (a player asked, the
+owner said build it, 2026-11-17; off unless ticked in Butler) keeps what
+the Level Up list still needs, inside a pcall:
+
+```lua
+_G.BlackthornesTS.Butler:LevelUpMaterials()   -- { [itemID] = profession name }, or nil
+```
+
+Every material of a recipe the character playing knows (not a dropped
+profession) while the craft is orange or yellow (`optimal` or `medium`,
+the same tiers as `NextSkillUp`), Cooking and First Aid too (their names
+from the Professions book, through `ProfessionOf`). Read straight from
+`Recipes:GetAll` and `SkillUp:GetForRecipe`, not `LevelUp:GetRanked`, so
+no prices are worked out and it stays cheap. An item two professions use
+names the first by name. Kept 60 s or until the recipes are read again; a
+fresh table each time. Tested in `tools/test_butlerlevelupmats.lua`. Keep
+it stable; Butler's `Logic/Sisters.lua` reads it.
+
 Butler's recipe wishlist row (the owner said build it, 2026-11-17, from
 a mockup with the words he approved) reads the starred recipes the open
 vendor or trainer teaches, inside a pcall, read only:
