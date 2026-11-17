@@ -64,6 +64,7 @@ Logic\CraftOrFarm.lua
 Logic\Shuffle.lua
 Logic\LevelUp.lua
 Logic\RecipeBook.lua
+Logic\UsedIn.lua
 Logic\Waypoints.lua
 Logic\Travel.lua
 Logic\TomTom.lua

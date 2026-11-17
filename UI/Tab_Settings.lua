@@ -115,6 +115,7 @@ end
 local TOOLTIP_LINES = {
     "tooltipValue", "tooltipSalesShift", "tooltipTrend", "recipeTooltips",
     "enchantTooltips", "disenchantTooltips", "crateTooltips", "boughtTooltips",
+    "usedInTooltips",
 }
 
 --- "All Lines:" shows the choice every line shares, or Mixed while they
@@ -1555,6 +1556,12 @@ local function Build(outer)
 
     widgets.boughtTooltips = ShiftDropdown(boughtTipRow, "bought", "tooltipBoughtFor")
 
+    -- Asked 2026-11-17: which professions use a material.
+    local usedInTipRow = CreateRow(pages.tooltips, 1, L["Used In Recipes:"],
+        L["Shows which professions use a material and how many of your recipes need it. Hold Shift for the recipe names."])
+
+    widgets.usedInTooltips = ShiftDropdown(usedInTipRow, "usedin", "tooltipUsedIn")
+
     CreateSection(pages.tooltips, 2, L["IN THE PROFESSION WINDOW"])
     local professionValueRow = CreateRow(pages.tooltips, 2, L["Value in Profession Window:"],
         L["Shows what each recipe sells for beside its name."])
@@ -2831,6 +2838,7 @@ local function Refresh()
     ShowShiftMode(widgets.disenchantTooltips)
     ShowShiftMode(widgets.crateTooltips)
     ShowShiftMode(widgets.boughtTooltips)
+    ShowShiftMode(widgets.usedInTooltips)
     ShowAllLinesMode()
     widgets.openByItself:SetValue({
         openAtAuction = Config:Get("openAtAuction") ~= false,

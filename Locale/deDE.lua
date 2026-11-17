@@ -3531,6 +3531,13 @@ L["Average paid"] = "Im Schnitt bezahlt"
 L["(%d in %d buys)"] = "(%d in %d Käufen)"
 L["Bought For on Tooltips:"] = "Kaufpreis in Tooltips:"
 L["What you last paid for an item on the auction house. Hold Shift for the average."] = "Was du zuletzt im Auktionshaus für einen Gegenstand bezahlt hast. Halte Shift für den Durchschnitt."
+-- Used In on tooltips (2026-11-17)
+L["Used in"] = "Verwendet in"
+L["and %d more"] = "und %d weitere"
+L["Your characters don't use it yet."] = "Deine Charaktere nutzen es noch nicht."
+L["For example"] = "Zum Beispiel"
+L["Used In Recipes:"] = "In Rezepten verwendet:"
+L["Shows which professions use a material and how many of your recipes need it. Hold Shift for the recipe names."] = "Zeigt, welche Berufe ein Material brauchen und wie viele deiner Rezepte es nutzen. Halte Shift für die Namen der Rezepte."
 -- Mute All Sounds (2026-11-12)
 L["Mute All Sounds:"] = "Alle Sounds stumm:"
 L["turn every Blackthornes sound off or back on (on/off)"] = "alle Blackthornes-Sounds aus- oder wieder einschalten (on/off)"

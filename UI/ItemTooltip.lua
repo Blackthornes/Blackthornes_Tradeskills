@@ -114,11 +114,12 @@ ItemTooltip.SHIFT_SETTINGS = {
     disenchant = "tooltipDisenchantShift",
     crate   = "tooltipCrateShift",
     bought  = "tooltipBoughtShift",
+    usedin  = "tooltipUsedInShift",
 }
 
 local TooltipShift = ns.TooltipShift
 if TooltipShift then
-    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant", "crate", "disenchant", "bought" }
+    TooltipShift.KEYS = { "value", "sales", "trend", "recipe", "enchant", "crate", "disenchant", "bought", "usedin" }
 
     function TooltipShift.Read(key)
         local name = ItemTooltip.SHIFT_SETTINGS[key]
@@ -137,7 +138,7 @@ end
 if TooltipShift then
     local anyShift = TooltipShift.AnyShift
     function TooltipShift:AnyShift()
-        if ItemTooltip.crateHeld or ItemTooltip.boughtHeld then return true end
+        if ItemTooltip.crateHeld or ItemTooltip.boughtHeld or ItemTooltip.usedInHeld then return true end
         return anyShift(self)
     end
 end
@@ -419,6 +420,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
         self:AddCraftedLines(lines, itemID)
         self:AddBoughtLines(lines, itemID)
+        self:AddUsedInLines(lines, itemID)
         self:AddRecipeLines(lines, itemID)
         self:AddSealedLines(lines, itemID)
         self:AddCrateLines(lines, itemID)
@@ -481,6 +483,7 @@ function ItemTooltip:LinesFor(itemID, count, link)
 
     self:AddCraftedLines(lines, itemID)
     self:AddBoughtLines(lines, itemID)
+    self:AddUsedInLines(lines, itemID)
     self:AddRecipeLines(lines, itemID)
     self:AddSealedLines(lines, itemID)
     self:AddCrateLines(lines, itemID)
@@ -657,6 +660,56 @@ function ItemTooltip:AddBoughtLines(lines, itemID)
     lines[#lines + 1] = { L["Average paid"],
         Util.FormatMoney(bought.average, { short = true }) .. "  "
             .. L.Format("(%d in %d buys)", bought.units, bought.buys) }
+end
+
+--- Which professions use a material (asked 2026-11-17, Logic/UsedIn.lua):
+--- "Used in" with each profession your characters know a recipe for and how
+--- many, and with Shift held up to three recipe names for each. When none
+--- of them use it, the professions that could, in grey, and with Shift one
+--- recipe for example. Nothing for an item no recipe uses.
+function ItemTooltip:AddUsedInLines(lines, itemID)
+    self.usedInHeld = nil
+    if ns.Config and ns.Config:Get("tooltipUsedIn") == false then return end
+    local usedIn = ns.UsedIn
+    if not (usedIn and usedIn.For) then return end
+
+    local ok, answer = pcall(usedIn.For, usedIn, itemID)
+    if not ok or type(answer) ~= "table" then return end
+
+    if not ItemTooltip.Shows("usedin") then
+        lines.held = true
+        return
+    end
+
+    local wrap = usedIn.Wrap
+    local grey = not answer.mine or nil
+    local function Add(label, text, muted)
+        for i, part in ipairs(wrap(text)) do
+            lines[#lines + 1] = { i == 1 and label or " ", part, muted }
+        end
+    end
+
+    if answer.mine then
+        Add(L["Used in"], answer.counts)
+    else
+        Add(L["Used in"], answer.list, grey)
+        Add(" ", L["Your characters don't use it yet."], grey)
+    end
+
+    local shift = ns.TooltipShift
+    if shift and not shift.ShiftDown() then
+        lines.held = true
+        self.usedInHeld = true
+        return
+    end
+
+    if answer.mine then
+        for _, profession in ipairs(answer.professions) do
+            Add("   " .. profession[1], profession[2])
+        end
+    elseif answer.example then
+        Add(L["For example"], answer.example)
+    end
 end
 
 --- How well it sells (Logic/Demand.lua), coloured by level. Nothing when

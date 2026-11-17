@@ -331,6 +331,10 @@ local DEFAULTS = {
         -- rename it.
         tooltipBoughtFor = true,
 
+        -- Which professions use a material, on its tooltip (asked
+        -- 2026-11-17). See ItemTooltip:AddUsedInLines. Never rename it.
+        tooltipUsedIn = true,
+
         -- Off, Shift or Always for each tooltip line (asked 2026-10-18):
         -- true keeps that line for while Shift is held. Whether a line is on
         -- stays in its own setting above, and the sales lines' Shift is
@@ -342,6 +346,7 @@ local DEFAULTS = {
         tooltipDisenchantShift = true,
         tooltipCrateShift = false,
         tooltipBoughtShift = false,
+        tooltipUsedInShift = false,
 
         -- A green arrow on the icon of any gear that is an upgrade for the
         -- character playing, as Blackthornes Equipment judges it. Does
