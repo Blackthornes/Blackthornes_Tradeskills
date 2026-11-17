@@ -36,17 +36,20 @@ end
 -- Right to left, measured from the list's right edge. Money sits to the
 -- right, so its coins line up; the rest is centred under its heading.
 -- `width` is the least each gets: Widgets.FitColumns widens it to fit the
--- heading and a full amount.
+-- heading and a full amount. Every amount shows its gold, silver and copper
+-- (a big profit read as one coin, "1g", was easy to miss), so money is
+-- measured with two gold digits, and PROFIT with its "(Vendor)" tag too.
+local MONEY_SAMPLE = "99g 99s 99c"
 local COLUMNS = {
     { key = "learn",      label = L["LEARN FROM"], width = 92, justify = "CENTER" },
-    { key = "price",      label = L["RECIPE"],     width = 66, money = true },
+    { key = "price",      label = L["RECIPE"],     width = 66, money = true, sample = MONEY_SAMPLE },
     { key = "profit",     label = L["PROFIT"],     width = 104, money = true },
     -- How well the item it makes sells (Logic/Demand.lua), as on My crafts,
     -- so a player can tell before buying the recipe.
     { key = "demand",     label = L["DEMAND"],     width = 50, justify = "CENTER" },
-    { key = "disenchant", label = L["DISENCHANT"], width = 66, money = true },
-    { key = "sells",      label = L["SELLS"],      width = 66, money = true },
-    { key = "cost",       label = L["COST"],       width = 66, money = true },
+    { key = "disenchant", label = L["DISENCHANT"], width = 66, money = true, sample = MONEY_SAMPLE },
+    { key = "sells",      label = L["SELLS"],      width = 66, money = true, sample = MONEY_SAMPLE },
+    { key = "cost",       label = L["COST"],       width = 66, money = true, sample = MONEY_SAMPLE },
     { key = "skill",      label = L["SKILL"],      width = 36, justify = "CENTER" },
 }
 
@@ -162,7 +165,7 @@ local function NewView(opts)
             cell:SetTextColor(Theme.Unpack("dim"))
             return
         end
-        Theme.SetMoneyText(cell, copper, { short = true })
+        Theme.SetMoneyText(cell, copper)
         cell:SetTextColor(Theme.Unpack(colorKey or "text"))
     end
 
@@ -222,7 +225,7 @@ local function NewView(opts)
         end
 
         if entry.profit then
-            Theme.SetMoneyText(cells.profit, entry.profit, { short = true,
+            Theme.SetMoneyText(cells.profit, entry.profit, {
                 suffix = ns.Profit and ns.Profit.WayTag(entry.backWay) or nil })
             cells.profit:SetTextColor(Theme.ProfitColor(entry.profit))
         else
@@ -670,6 +673,20 @@ local function NewView(opts)
     --- Fill `view`, a frame covering a tab below its view switch.
     function instance.Build(view)
         -- Before any row or heading is laid out: they read these widths.
+        -- PROFIT carries its longest way tag, in this client's words.
+        local tag, widest = "", -1
+        local labels = ns.Profit and ns.Profit.WAY_LABELS or {}
+        for _, label in pairs(labels) do
+            local text = L.Format("(%s)", label)
+            local width = type(Theme.MeasureText) == "function" and Theme.MeasureText("small", text) or #text
+            if type(width) ~= "number" then width = #text end
+            if width > widest then tag, widest = text, width end
+        end
+        for _, column in ipairs(COLUMNS) do
+            if column.key == "profit" then
+                column.sample = "-" .. MONEY_SAMPLE .. (tag ~= "" and " " .. tag or "")
+            end
+        end
         if Widgets.FitColumns then Widgets.FitColumns(COLUMNS) end
 
         local right = -DETAIL_WIDTH - 16
@@ -819,7 +836,9 @@ end
 RecipeBookView.New = NewView
 
 -- The Profit tab's copy, which /bts recipes and the Settings button open.
-local main = NewView()
+-- It shows your skill above the list too, so a recipe's SKILL reads
+-- against it on either tab.
+local main = NewView({ showSkill = true })
 RecipeBookView.Build = main.Build
 RecipeBookView.Refresh = main.Refresh
 RecipeBookView.SetProfession = main.SetProfession
