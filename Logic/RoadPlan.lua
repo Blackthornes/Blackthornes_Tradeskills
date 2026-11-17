@@ -471,7 +471,7 @@ function RoadPlan:Plan(opts)
                     local buy = need - fromBags - fromBank - fromAlts
                     step.needs[#step.needs + 1] = {
                         itemID = reagent.itemID, count = need, bags = fromBags, bank = fromBank,
-                        alts = fromAlts, buy = buy,
+                        alts = fromAlts, buy = buy, unit = reagent.unit,
                     }
                     cost = cost + buy * reagent.unit
                     saved = saved + (fromBags + fromBank + fromAlts) * reagent.unit
@@ -503,10 +503,89 @@ function RoadPlan:Plan(opts)
         end
     end
 
+    local shopping, shopCost = RoadPlan.Shopping(steps)
+
     return {
         steps = steps, current = current, total = total, saved = saved, back = back, stuck = stuck,
         skill = now, max = opts.max, line = line, pickBy = real and "real" or "lowest",
+        shopping = shopping, shopCost = shopCost,
     }
+end
+
+--- Does a vendor keep this in stock (vials, thread)? Read safely.
+local function FromVendor(itemID)
+    local vendor = ns.Vendor
+    if not (vendor and vendor.KeepsInStock) then return false end
+    local ok, keeps = pcall(vendor.KeepsInStock, vendor, itemID)
+    return ok and keeps == true
+end
+
+--- Every material the road still needs, added up across the steps left
+--- (a player's report, 2026-11-17: Alchemy's road showed each step's herbs
+--- and vials on that step only, so they gathered for step one and had to
+--- go back out for every step after). Each { itemID, count, bags, bank,
+--- alts, buy, vendor }, in the order the road first needs them; what you
+--- own comes off once, as on the steps.
+-- @return the list, and what is left to buy costs
+function RoadPlan.Shopping(steps)
+    local list, byItem, cost = {}, {}, 0
+    for _, step in ipairs(steps or {}) do
+        if not step.done and step.kind == "craft" then
+            for _, need in ipairs(step.needs or {}) do
+                local line = byItem[need.itemID]
+                if not line then
+                    line = { itemID = need.itemID, count = 0, bags = 0, bank = 0, alts = 0, buy = 0,
+                        vendor = FromVendor(need.itemID) }
+                    byItem[need.itemID] = line
+                    list[#list + 1] = line
+                end
+                line.count = line.count + need.count
+                line.bags = line.bags + need.bags
+                line.bank = line.bank + need.bank
+                line.alts = line.alts + (need.alts or 0)
+                line.buy = line.buy + need.buy
+                cost = cost + need.buy * (need.unit or 0)
+            end
+        end
+    end
+    return list, cost
+end
+
+--- Is a step already on the queue (Queue All, or its own Queue Step)?
+--- Then the queue counts its materials, and the road's line must not.
+local function Queued(step)
+    local queue = ns.Queue
+    local want = step.queueCrafts or step.crafts or 0
+    if not queue then return false end
+    local ok, held = pcall(function()
+        if not step.learn then
+            local _, entry = queue:Find(step.recipeID, true)
+            return entry ~= nil and (entry.quantity or 0) >= want
+        end
+        for _, line in ipairs(queue:GetBuys()) do
+            if line.forRecipe == step.recipeID and (tonumber(line.forCrafts) or 0) >= want then return true end
+        end
+        return false
+    end)
+    return ok and held == true
+end
+
+--- How many of each vendor-stocked material the craft steps after `step`
+--- still need, for Queue Step to put on the list in one go. A step already
+--- queued is left out: the queue counts it.
+function RoadPlan.VendorAfter(plan, step)
+    local counts, after = {}, false
+    for _, other in ipairs(plan and plan.steps or {}) do
+        if after and not other.done and other.kind == "craft" and not Queued(other) then
+            for _, need in ipairs(other.needs or {}) do
+                if need.count > 0 and FromVendor(need.itemID) then
+                    counts[need.itemID] = (counts[need.itemID] or 0) + need.count
+                end
+            end
+        end
+        if other == step then after = true end
+    end
+    return counts
 end
 
 --- How many of an item the character playing's other characters hold:
@@ -552,6 +631,20 @@ function RoadPlan.Shown(steps)
     end
     for _, step in ipairs(done) do open[#open + 1] = step end
     return open
+end
+
+--- The list's rows: Shown's, with the whole road's shopping first while
+--- more than one craft step is left to buy for.
+function RoadPlan.Listed(plan)
+    local rows = RoadPlan.Shown(plan and plan.steps)
+    if not plan or plan.fishing or #(plan.shopping or {}) == 0 then return rows end
+    local crafts = 0
+    for _, step in ipairs(plan.steps or {}) do
+        if not step.done and step.kind == "craft" and #(step.needs or {}) > 0 then crafts = crafts + 1 end
+    end
+    if crafts < 2 then return rows end
+    table.insert(rows, 1, { kind = "shop", needs = plan.shopping, cost = plan.shopCost or 0 })
+    return rows
 end
 
 --------------------------------------------------------------------------------
@@ -668,6 +761,7 @@ function RoadPlan:Get(profession, onReady)
             line = profession.line, skill = profession.skill, max = profession.max,
             level = level, candidates = candidates, pickBy = RoadPlan.PickBy(),
         })
+        plan.professionName = profession.name
         kept[profession.line] = { key = key, plan = plan }
         return plan
     end
@@ -711,10 +805,17 @@ end
 
 --- Queue Step: the step's crafts in the queue, or for a recipe still to
 --- learn, its materials on the list to buy (as Learn next's Queue materials).
+-- With the plan, the vendor-stocked materials (vials, thread) of every
+-- step after this one go on the list too, so one stop at the vendor buys
+-- them all (a player's report, 2026-11-17). Set, not added: queueing the
+-- next step moves the line on, and the queue counts that step's own.
 -- @return true when something went on
-function RoadPlan:QueueStep(step)
+function RoadPlan:QueueStep(step, plan)
     local queue = ns.Queue
     if not (step and step.kind == "craft" and queue) then return false end
+    if plan and queue.SetRoadBuys then
+        pcall(queue.SetRoadBuys, queue, plan.line, RoadPlan.VendorAfter(plan, step), plan.professionName)
+    end
     if not step.learn and queue.Ensure then
         local ok, done = pcall(queue.Ensure, queue, step.recipeID, step.queueCrafts or step.crafts)
         return ok and done and true or false
@@ -739,6 +840,11 @@ function RoadPlan:QueueAll(plan)
     local count = 0
     for _, step in ipairs(plan and plan.steps or {}) do
         if not step.done and step.kind == "craft" and self:QueueStep(step) then count = count + 1 end
+    end
+    -- Every step is queued now, so the queue counts all their vials.
+    local queue = ns.Queue
+    if plan and queue and queue.SetRoadBuys then
+        pcall(queue.SetRoadBuys, queue, plan.line, {}, plan.professionName)
     end
     return count
 end
@@ -1279,6 +1385,20 @@ function RoadPlan.Texts(step, professionName, level, line)
                 -- the pin goes on its door (LearnNext.INSIDE_TRAINERS).
                 texts.lines[1] = L.Format("%s trainer in %s", professionName, place.inside or place.zone)
             end
+        end
+        return texts
+    end
+
+    if step.kind == "shop" then
+        texts.title = L["Get everything before you start"]
+        local fromVendor = {}
+        for _, need in ipairs(step.needs or {}) do
+            texts.lines[#texts.lines + 1] = RoadPlan.NeedText(need)
+            if need.vendor and need.buy > 0 then fromVendor[#fromVendor + 1] = ItemName(need.itemID) end
+        end
+        if #fromVendor > 0 then
+            texts.lines[#texts.lines + 1] = L.Format("A vendor sells %s. Buy them all in one stop.",
+                table.concat(fromVendor, ", "))
         end
         return texts
     end

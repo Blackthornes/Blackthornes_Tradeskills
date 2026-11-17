@@ -1602,6 +1602,47 @@ function Queue:EnsureBuy(itemID, count, forItem, forRecipe)
     return true
 end
 
+--- Road to 300's vendor materials for the steps after the one queued
+--- (vials, thread), so one stop at the vendor buys the whole road's.
+--- Lines tied to that road (`forRoad` = its skill line, never rename it)
+--- are set to exactly `counts`: the rest come off. Set, not added, so the
+--- next Queue Step moves them on and the queue counts that step's own.
+-- @param line    the profession's skill line
+-- @param counts  { [itemID] = count }
+-- @param name    the profession's name, for the tooltip
+function Queue:SetRoadBuys(line, counts, name)
+    line = tonumber(line)
+    if not (line and ns.db) then return false end
+    counts = type(counts) == "table" and counts or {}
+    local selfKey = SelfKey()
+    local buys, left, changed = Buys(next(counts) ~= nil), {}, false
+    for itemID, count in pairs(counts) do
+        count = math.floor(tonumber(count) or 0)
+        if count > 0 then left[itemID] = count end
+    end
+    for index = #buys, 1, -1 do
+        local entry = buys[index]
+        if type(entry) == "table" and entry.forRoad == line and MineToSee(entry, selfKey) then
+            local want = left[entry.itemID]
+            if not want then
+                table.remove(buys, index)
+                changed = true
+            else
+                if entry.count ~= want then entry.count, changed = want, true end
+                if name then entry.forRoadName = name end
+                left[entry.itemID] = nil
+            end
+        end
+    end
+    for itemID, count in pairs(left) do
+        buys[#buys + 1] = { itemID = itemID, count = count, forRoad = line, forRoadName = name,
+            owner = selfKey, addedAt = time() }
+        changed = true
+    end
+    if changed then self:Notify() end
+    return changed
+end
+
 --- Take an item off this character's list to buy (the x on its row).
 function Queue:RemoveBuys(itemID)
     local buys, removed = Buys(false), false
@@ -2083,7 +2124,8 @@ function Queue:BuildShoppingList()
         required[line.itemID] = (required[line.itemID] or 0) + line.count
         local forItems = wanted[line.itemID] or {}
         forItems[#forItems + 1] = { forItem = line.forItem, count = line.count,
-            forRecipe = line.forRecipe, forRecipeName = line.forRecipeName }
+            forRecipe = line.forRecipe, forRecipeName = line.forRecipeName,
+            forRoad = line.forRoad, forRoadName = line.forRoadName }
         wanted[line.itemID] = forItems
     end
 

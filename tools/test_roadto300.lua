@@ -690,6 +690,90 @@ check("offered again", HasCandidate(3), true)
 check("nothing skipped after", Road:IsSkipped(3), false)
 check("Show All with nothing skipped", Road:ShowAllOn(164), 0)
 
+print("\nthe whole road's shopping, up front")
+-- A player's report (2026-11-17): Alchemy's road listed each step's herbs
+-- and vials on its own step. They gathered and bought for step one, then
+-- had to go back out for every step after. The road adds it all up first,
+-- and the vendor's vials for the whole road go on the list at the start.
+local HERB, VIAL = 2447, 3371
+local savedVendor = ns.Vendor
+ns.Vendor = {
+  GetUnitPrice = function(_, id) return id == VIAL and 4 or nil end,
+  IsLimited = function() return false end,
+  GetTable = function() return {} end,
+  KeepsInStock = function(_, id) return id == VIAL end,
+}
+local function Brew(id, name, skill, yellow, grey)
+  return { record = { recipeID = id, name = name, skill = skill, yellow = yellow, grey = grey,
+    reagents = { { itemID = HERB, quantity = 1 }, { itemID = VIAL, quantity = 1 } } }, known = true,
+    price = { cost = 14, back = 0, reagents = {
+      { itemID = HERB, quantity = 1, unit = 10 }, { itemID = VIAL, quantity = 1, unit = 4 } } } }
+end
+local brew = Road:Plan({
+  line = 171, skill = 1, max = 75, level = 10, owned = { [HERB] = { 5, 0, 0 }, [VIAL] = { 2, 0, 0 } },
+  candidates = { Brew(201, "First Brew", 1, 30, 45), Brew(202, "Second Brew", 25, 60, 75) },
+})
+local brewSteps, herbs, vials = {}, 0, 0
+for _, step in ipairs(brew.steps) do
+  if not step.done and step.kind == "craft" then
+    brewSteps[#brewSteps + 1] = step
+    for _, need in ipairs(step.needs) do
+      if need.itemID == HERB then herbs = herbs + need.count end
+      if need.itemID == VIAL then vials = vials + need.count end
+    end
+  end
+end
+check("the road has more than one brewing step", #brewSteps >= 2, true)
+local shop = {}
+for _, need in ipairs(brew.shopping or {}) do shop[need.itemID] = need end
+check("every herb on the road, added up", shop[HERB] and shop[HERB].count, herbs)
+check("every vial on the road, added up", shop[VIAL] and shop[VIAL].count, vials)
+check("what the bags hold comes off once", shop[HERB] and shop[HERB].buy, herbs - 5)
+check("the vials are the vendor's", shop[VIAL] and shop[VIAL].vendor, true)
+check("the herbs are not", shop[HERB] and shop[HERB].vendor or false, false)
+check("its cost is what is left to buy", brew.shopCost, (herbs - 5) * 10 + (vials - 2) * 4)
+local listed = Road.Listed(brew)
+check("it is the first row of the list", listed[1] and listed[1].kind, "shop")
+check("then the step to do now", listed[2], brewSteps[1])
+local shopTexts = Road.Texts(listed[1], "Alchemy", 10, 171)
+check("it says to get everything first", shopTexts.title, "Get everything before you start")
+check("one line for each material, and one for the vendor", #shopTexts.lines, 3)
+check("the vendor line names the vials", shopTexts.lines[3]:find("item " .. VIAL, 1, true) ~= nil, true)
+
+local roadBuys, ensuredBrew = nil, {}
+ns.Queue = {
+  Ensure = function(_, id, count) ensuredBrew[id] = count return true end,
+  EnsureBuy = function() return true end,
+  SetRoadBuys = function(_, line, counts, name) roadBuys = { line = line, counts = counts, name = name } end,
+}
+Road:QueueStep(brewSteps[1], brew)
+check("Queue Step still queues its own crafts", ensuredBrew[201], brewSteps[1].crafts)
+check("the rest of the road's vials go on the list", roadBuys and roadBuys.counts[VIAL],
+  vials - brewSteps[1].needs[2].count)
+check("never the herbs (you gather those)", roadBuys and roadBuys.counts[HERB], nil)
+check("kept for this profession's road", roadBuys and roadBuys.line, 171)
+Road:QueueStep(brewSteps[#brewSteps], brew)
+check("the last step leaves no more vials to buy", roadBuys and next(roadBuys.counts), nil)
+ns.Queue.Find = function(_, id)
+  if id == brewSteps[#brewSteps].recipeID then return 1, { quantity = brewSteps[#brewSteps].queueCrafts } end
+end
+ns.Queue.GetBuys = function() return {} end
+Road:QueueStep(brewSteps[1], brew)
+local before = 0
+for i = 2, #brewSteps do
+  if brewSteps[i].recipeID ~= brewSteps[#brewSteps].recipeID then before = before + brewSteps[i].needs[2].count end
+end
+check("a step already queued is left to the queue", roadBuys and (roadBuys.counts[VIAL] or 0), before)
+ns.Queue.Find, ns.Queue.GetBuys = nil, nil
+roadBuys = nil
+Road:QueueAll(brew)
+check("Queue All queues every step, so the road's own line goes", roadBuys and next(roadBuys.counts), nil)
+local only = { kind = "craft", needs = { { itemID = HERB, count = 3, bags = 0, bank = 0, buy = 3 } } }
+local single = { steps = { { kind = "craft", done = true, needs = {} }, only, { kind = "trainer" } },
+  shopping = { { itemID = HERB, count = 3, buy = 3 } } }
+check("one step left needs no list of its own", Road.Listed(single)[1], only)
+ns.Vendor, ns.Queue = savedVendor, nil
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")

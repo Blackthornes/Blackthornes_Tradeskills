@@ -135,7 +135,9 @@ local function UpdateRow(row, step)
     local plan = RoadView.plan
     local current = plan and plan.steps[plan.current] == step
 
-    if step.kind == "craft" and step.outputItemID then
+    if step.kind == "shop" then
+        row.icon:Hide()
+    elseif step.kind == "craft" and step.outputItemID then
         Theme.SetItemIcon(row.icon, step.outputItemID)
         row.icon:Show()
     elseif step.kind == "fish" then
@@ -414,7 +416,7 @@ function RoadView:Refresh()
         return
     end
 
-    widgets.list:SetData(ns.RoadPlan.Shown(plan.steps))
+    widgets.list:SetData(ns.RoadPlan.Listed(plan))
     if plan.current then
         widgets.stepOf:SetText(L.Format("Step %d of %d", plan.current, #plan.steps))
     else
@@ -491,7 +493,7 @@ end
 
 --- Queue Step, with a line in chat.
 function RoadView:QueueStep(step)
-    if not ns.RoadPlan:QueueStep(step) then return end
+    if not ns.RoadPlan:QueueStep(step, self.plan) then return end
     if step.learn then
         ns.Print(L.Format("Put the materials for %d %s on your list to buy. When you learn the recipe, the crafts move to your queue.", step.crafts, step.name))
     else
