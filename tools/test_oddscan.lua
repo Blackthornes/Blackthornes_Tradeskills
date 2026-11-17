@@ -76,5 +76,45 @@ Prices.Smooth(cloak, 10000)
 Prices.Smooth(cloak, 9952)
 check("a poisoned price comes back after three scans", cloak.market, 9952)
 
+-- A player's report (2026-11-17): Wool Cloth said "A vendor pays more: 33c
+-- each" while thousands sold near 1s 33c. A browse row is only the cheapest
+-- listing; one cheap one replaced the rival price on record, and three such
+-- rows in a row made it the usual price too.
+print("\na lone cheap listing on the browse page")
+do
+    local store = {}
+    ns.Config.GetPriceTable = function() return store end
+    local WOOL = 2592
+    -- A search for the item read the book: thousands near 1s 33c.
+    Prices:Record(WOOL, 133, 130, 27793, 1000, 132, nil, nil, { 132, 400, 133, 2000 })
+    for i = 1, 3 do
+        Prices:Record(WOOL, 30, 30, 27793, 1000 + i * 120, 30, nil)
+    end
+    local wool = store[WOOL]
+    check("three browse rows leave the usual price", wool.market, 133)
+    check("and the cheapest rival on record", wool.rivalMin, 132)
+    check("and count as no odd scan", wool.odd, nil)
+    check("the cheap one is noted as a lone low", wool.ignoredLow, 30)
+    check("it is still the cheapest to buy", wool.min, 30)
+    check("the book's steps stay", wool.ladder and wool.ladder[1], 132)
+
+    -- A browse row near the usual price is believed as before.
+    Prices:Record(WOOL, 120, 120, 27793, 2000, 120, nil)
+    check("a browse row near the usual price moves the rival", wool.rivalMin, 120)
+    check("and averages in", wool.market, 129)
+
+    -- A search that reads the whole book still counts toward an odd move.
+    for i = 1, 3 do
+        Prices:Record(WOOL, 30, 30, 900, 3000 + i, 30, nil, nil, { 30, 900 })
+    end
+    check("three searches still move a real drop", wool.market, 30)
+
+    -- A browse row far above the usual is still counted (the cheapest is
+    -- above it, so every listing is).
+    store[7] = { market = 100, scans = 1, history = {} }
+    for i = 1, 3 do Prices:Record(7, 400, 400, 5, 4000 + i, 400, nil) end
+    check("three high browse rows still move it up", store[7].market, 400)
+end
+
 if failures > 0 then error(("%d check(s) failed"):format(failures)) end
 print("\ntest_oddscan: ok")

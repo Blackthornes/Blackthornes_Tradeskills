@@ -1042,6 +1042,21 @@ function Posting.VendorPaysMore(itemID, price, vendorPrice)
     return price * (1 - cut) <= vendorPrice
 end
 
+--- True when the item's usual price (its smoothed market value) beats a
+--- vendor after the cut. A player's report (2026-11-17): one cheap Wool
+--- Cloth listing made the Sell list say "A vendor pays more: 33c each"
+--- while thousands sold near 1s 33c, and Butler said to wait for a better
+--- price. Butler weighs the same market value (Logic/Butler.lua `auction`
+--- against `auctionNow`), so the two now agree: wait, don't vendor it.
+function Posting.UsuallyPaysMore(itemID, vendorPrice)
+    if not itemID or not vendorPrice or vendorPrice <= 0 then return false end
+    local prices = ns.Prices
+    if not (prices and prices.GetValue) then return false end
+    local ok, market = pcall(prices.GetValue, prices, itemID, "market")
+    if not ok or type(market) ~= "number" or market <= 0 then return false end
+    return not Posting.VendorPaysMore(itemID, market, vendorPrice)
+end
+
 function Posting:GetLossFloor(itemID, unitCost)
     local vendorPrice = Util.GetVendorSellPrice(itemID)
 
@@ -1308,6 +1323,16 @@ function Posting:GetPostable(opts)
             -- cut: it goes to the vendor pile, not this list. A price the
             -- player typed this session still lists.
             local toVendor = not anyway and basis ~= "chosen" and Posting.VendorPaysMore(itemID, price, vendorPrice)
+
+            -- Only today's cheapest loses to the vendor, and the usual price
+            -- beats it: wait, as Butler does, rather than sell to a vendor.
+            if toVendor and Posting.UsuallyPaysMore(itemID, vendorPrice) then
+                toVendor = false
+                if not chosen and count and count > 0 and not heldAll then
+                    heldAll = L["Waiting, others are selling for less"]
+                    if not opts.showHeld then skipped[itemID] = "waiting, others sell for less than usual" end
+                end
+            end
             if toVendor and sellable and count and count > 0
                     and not (heldAll and not opts.showHeld) then
                 vendorPile = vendorPile + 1

@@ -907,6 +907,7 @@ function Scanner:CommitBrowseResults(results, opts)
     local recorded = 0
     local now = time()
     local unsettled = {}
+    local lonelyLow = {}
     local seen = {}
 
     local items, skipped, implausible = CombineBrowseRows(results, seen)
@@ -915,12 +916,20 @@ function Scanner:CommitBrowseResults(results, opts)
     for _, item in ipairs(items) do
         -- A browse row is one price, not a book, so market and minimum are
         -- the same figure here: the item's cheapest row.
-        ns.Prices:Record(item.itemID, item.price, item.price, item.quantity, now,
+        local _, held = ns.Prices:Record(item.itemID, item.price, item.price, item.quantity, now,
             item.rivalMin, item.ownMin)
         Scanner.RecordRowSuffixes(item, now)
-        scanned[item.itemID] = true
 
         if item.ask then unsettled[#unsettled + 1] = item.itemID end
+
+        -- One cheap listing far under the usual price (Prices.BrowseLow):
+        -- a search for the item settles it, and until then a click asks
+        -- first rather than list at the scan's price.
+        if held == "lone low" then
+            lonelyLow[#lonelyLow + 1] = item.itemID
+        else
+            scanned[item.itemID] = true
+        end
 
         recorded = recorded + 1
     end
@@ -946,6 +955,7 @@ function Scanner:CommitBrowseResults(results, opts)
         end
     end
 
+    for _, itemID in ipairs(lonelyLow) do unsettled[#unsettled + 1] = itemID end
     self:FollowUpOwned(unsettled)
 
     local soldOut = 0

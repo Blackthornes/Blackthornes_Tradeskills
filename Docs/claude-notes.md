@@ -1666,6 +1666,25 @@ price near what others list it for is never called a mistake. A 1 copper
 slip is still refused. Saved prices are read as they are. Tested in
 `tools/test_oddscan.lua` and `tools/test_ownprice.lua`.
 
+A lone cheap listing on a browse page (a player's report on 1.31.1,
+2026-11-17): Wool Cloth said "A vendor pays more: 33c each" while about
+27,000 sold near 1s 33c, and Butler said to wait. A browse row is only the
+cheapest listing, so one cheap one replaced the rival price on record, and
+three in a row made it the usual price. Now `Prices:Record` with no ladder
+(a browse row) whose price is over `ODD_RATIO` times under the usual
+(`Prices.BrowseLow`) keeps market, `rivalMin`, the ladder and `odd` as they
+were, and sets only `min` and `ignoredLow`; it returns `record, "lone low"`.
+`CommitBrowseResults` sends such items to `FollowUpOwned` (a search reads
+the book and `IsLoneLow` judges it) and does not mark them checked. Every
+reading from `Summarise` passes its ladder (empty table when none), so only
+browse rows hit this. A browse row far above the usual still counts. And
+the Sell list waits instead of sending to the vendor when only today's
+price loses to the vendor but the usual one beats it
+(`Posting.UsuallyPaysMore`, the same market value Butler's `auction` reads),
+with the existing "Waiting, others are selling for less". Tested in
+`tools/test_oddscan.lua`, `tools/test_browserows.lua` and
+`tools/test_vendorpile.lua`. Not yet seen in game.
+
 ## Overcutting
 
 The owner said build it (2026-10-15, from a mockup, and picked the name):

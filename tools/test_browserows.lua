@@ -165,6 +165,22 @@ check("the player's own browse learns one price for the item", Scanner:CapturePa
 check("its cheapest row, every row counted",
     Prices:Get(GLOVES) ~= nil and Prices:Get(GLOVES).min == 5000 and Prices:Get(GLOVES).quantity == 4)
 
+-- One cheap listing far under the usual price (a player's report,
+-- 2026-11-17, Wool Cloth): the scan keeps the price on record and settles
+-- it with a search for the item.
+Reset()
+local WOOL = 2592
+Prices:Record(WOOL, 133, 130, 27793, 99000, 132, nil, nil, { 132, 400 })
+Scanner:CommitBrowseResults({
+    { itemKey = { itemID = WOOL, itemSuffix = 0 }, minPrice = 30, totalQuantity = 27793 },
+})
+do
+    local wool = Prices:Get(WOOL)
+    check("a lone cheap browse row keeps the rival on record", wool.rivalMin == 132 and wool.market == 133)
+    check("and is settled by a search for the item",
+        followedUp ~= nil and followedUp[1] == WOOL and #followedUp == 1)
+end
+
 print("")
 print("a page that lands early")
 

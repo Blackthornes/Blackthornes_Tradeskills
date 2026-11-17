@@ -56,6 +56,21 @@ function Prices.Smooth(record, marketValue)
     record.market = math.floor(market * (1 - EMA_ALPHA) + marketValue * EMA_ALPHA + 0.5)
 end
 
+--- True when a browse row's price (only the cheapest listing, no book) is
+--- far under the item's usual price. A player's report (2026-11-17): Wool
+--- Cloth showed "A vendor pays more: 33c each" while thousands sold near
+--- 1s 33c. One cheap listing was the browse row's price, it replaced the
+--- cheapest rival on record, and three such rows in a row made it the
+--- usual price too. A search for the item reads the whole book and can
+--- tell a lone low listing (IsLoneLow); a browse row cannot. So such a row
+--- keeps the price on record, counts as no odd scan, and is noted as
+--- `ignoredLow` until a search or a full scan settles it.
+function Prices.BrowseLow(record, price)
+    local market = type(record) == "table" and record.market
+    if type(market) ~= "number" or market <= 0 or type(price) ~= "number" then return false end
+    return price * Prices.ODD_RATIO < market
+end
+
 -- Fraction of an item's listed quantity treated as "the market" when pricing.
 -- Only the cheap end of the book matters: nobody sells at the 40th percentile.
 local MARKET_DEPTH = 0.25
@@ -483,6 +498,13 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     if not record then
         record = { scans = 0, history = {} }
         prices[itemID] = record
+    end
+
+    -- A browse row far under the usual price is kept apart (Prices.BrowseLow).
+    if ladder == nil and Prices.BrowseLow(record, marketValue) then
+        record.min = minBuyout
+        record.ignoredLow = marketValue
+        return record, "lone low"
     end
 
     -- EMA, seeded on first sight so a brand new item is not anchored to zero.

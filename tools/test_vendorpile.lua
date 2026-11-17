@@ -266,6 +266,28 @@ do
     ns.Disenchant = oldDE
 end
 
+-- A player's report (2026-11-17): one Wool Cloth listing at about 34c made
+-- the Sell list say "A vendor pays more: 33c each" while its usual price was
+-- 1s 33c, and Butler said to wait for a better price. It waits instead.
+do
+    local WOOL = 2592
+    prices[WOOL] = { market = 133, rival = 35 }
+    commodities[WOOL] = true
+    vendorPaid[WOOL] = 33
+    bags[0][#bags[0] + 1] = { itemID = WOOL, stackCount = 29, quality = 1 }
+    local lines, toVendor = Posting:GetPostable({ includeAll = true, showHeld = true })
+    local line = LineFor(lines, WOOL)
+    check("wool is not sent to the vendor", toVendor, 1)
+    check("its row stays on the list", line ~= nil, true)
+    check("saying it waits", line and line.held, "Waiting, others are selling for less")
+    check("List all never picks it",
+        (Posting:GetNextPostable({ includeAll = true }, lines) or {}).itemID ~= WOOL, true)
+    check("a usual price over the vendor pays more", Posting.UsuallyPaysMore(WOOL, 33), true)
+    check("a usual price under it does not", Posting.UsuallyPaysMore(SCRAPS, 15), false)
+    bags[0][#bags[0]] = nil
+    prices[WOOL] = nil
+end
+
 print("")
 
 if failures > 0 then
