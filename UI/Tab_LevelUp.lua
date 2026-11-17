@@ -100,7 +100,8 @@ local function RowMenu(entry)
             ns.UI:SearchAuctionHouse(itemID)
         end }
     end
-    return lines
+    -- A drop or quest row with the auction house shut has nothing to offer.
+    return #lines > 0 and lines or nil
 end
 
 -- Defined with the detail panel, used by the controls built inside it.
