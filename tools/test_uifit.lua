@@ -964,6 +964,48 @@ end
 check("the pages run own first, then the shared ones",
     table.concat(order, ", "):match("PRICING.*ABOUT") or table.concat(order, ", "),
     "PRICING, QUEUE, MAIL & VENDORS, AUCTION HOUSE, DATA, TOOLTIPS, SOUNDS, WINDOWS, SHARING, ALL ADDONS, ABOUT")
+
+-- Seen in game 2026-11-17: with eleven pages ABOUT was drawn on top of the
+-- search box. A name that would reach the search box starts a new line.
+--- Each switch name's line and right edge, worked out from its anchors.
+local function SwitchPlaces()
+    local places, right, line = {}, 0, 0
+    for _, child in ipairs(bar.children) do
+        local text = child.strings[1] and child.strings[1].text
+        if child.shown and text and text == text:upper() and text ~= "" and child.frameType == "Button" then
+            local _, relativeTo, _, x = child:GetPoint(1)
+            if relativeTo == bar then
+                line, right = line + 1, x
+            else
+                right = right + x
+            end
+            right = right + child:GetWidth()
+            places[#places + 1] = { text = text, line = line, right = right }
+        end
+    end
+    return places
+end
+local holderTop = select(5, Holder(undercut):GetPoint(1))
+bar:SetWidth(700)
+bar.scripts.OnSizeChanged(bar)
+local room = bar:GetWidth() - 16 - describe:GetWidth() - 16 - find:GetWidth() - 16
+local clear, lines = true, 0
+for _, place in ipairs(SwitchPlaces()) do
+    if place.line == 1 and place.right > room then clear = false end
+    lines = math.max(lines, place.line)
+end
+check("a narrow bar keeps the switch clear of the search box", clear, true)
+check("by putting the rest on a second line", lines >= 2, true)
+check("the bar grows to hold it", bar:GetHeight() > 34, true)
+check("and the pages start under it", select(5, Holder(undercut):GetPoint(1)) < holderTop, true)
+check("the search box stays on the first line", select(5, describe:GetPoint(1)), -17)
+bar:SetWidth(4000)
+bar.scripts.OnSizeChanged(bar)
+lines = 0
+for _, place in ipairs(SwitchPlaces()) do lines = math.max(lines, place.line) end
+check("a wide bar puts every name on one line", lines, 1)
+check("and the pages move back up", select(5, Holder(undercut):GetPoint(1)), holderTop)
+
 local muteBoxes = {}
 for _, box in ipairs(made.CreateCheckbox) do
     local label = box:GetParent().strings[1]
