@@ -843,6 +843,25 @@ function RecipeBook:LearnFrom(record)
     return short or L["Unknown"], lines
 end
 
+--- The ways a recipe item is got besides a trainer or vendor, for Learn
+--- next's "Learn From:" (2026-11-17): the same reading as LearnFrom's.
+--
+-- @return { drop = true when a creature drops it, quest = true when it
+--   comes from a quest, reputation or the other faction }
+function RecipeBook:LearnWays(record)
+    local ways = {}
+    if not record then return ways end
+    for _, itemID in ipairs(record.recipeItems or {}) do
+        local row = Book().ITEMS[itemID]
+        if row and (row.d or 0) > 0 then ways.drop = true end
+        if #VendorsOf(itemID) == 0 and #SellersOf(itemID) == 0 and not (row and row.d)
+            and not record.forever then
+            ways.quest = true
+        end
+    end
+    return ways
+end
+
 --------------------------------------------------------------------------------
 -- What it is worth
 --------------------------------------------------------------------------------
