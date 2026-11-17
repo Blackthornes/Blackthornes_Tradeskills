@@ -232,8 +232,10 @@ check("on the Auction House tab", Tabs.atAuction and UI.activeTab == "auctionhou
 check("the drawer is laid in the tab", panel.into == 1 and panel.container == UI.ahContainer
     and UI.ahContainer:IsShown())
 check("its own row of tabs shows", UI.ahTabStrip:IsShown() and not UI.tabStrip:IsShown())
-check("only the tabs that help, Settings last",
-    Keys(UI.ahTabStrip) == "auctionhouse,prices,profit,queue,disenchanting,deals,settings")
+-- Every tab stays a click away at the auction house (a player's report,
+-- 2026-11-17: Sales was missing there). The ones that help there first.
+check("the tabs that help first, then every other, Settings last",
+    Keys(UI.ahTabStrip) == "auctionhouse,prices,profit,queue,disenchanting,deals,gather,levelup,sales,characters,settings")
 check("never kept as the tab to open on", ns.db.lastTab == "queue")
 UI:SelectTab("prices")
 check("another tab there", UI.activeTab == "prices" and UI.ahTabStrip.selected == "prices"
@@ -269,9 +271,23 @@ check("on the Crafting tab", Tabs.atDock == "profession" and UI.activeTab == "cr
 check("the craft pane is laid in the tab", craft.into == 1
     and craft.container == UI.dockContainers.profession and UI.dockContainers.profession:IsShown())
 check("its own row of tabs shows", UI.dockStrips.profession:IsShown() and not UI.tabStrip:IsShown())
-check("Crafting first, Settings last", Keys(UI.dockStrips.profession) == "crafting,queue,profit,prices,settings")
+-- Favors and Writs and Sales were missing here, so with the auction house
+-- and the profession window both open neither could be reached (a player's
+-- report, 2026-11-17).
+check("Crafting first, then every tab, Settings last", Keys(UI.dockStrips.profession)
+    == "crafting,queue,profit,prices,gather,disenchanting,levelup,deals,sales,characters,settings")
 check("never kept as the tab to open on", ns.db.lastTab == "queue")
 check("opened only once a visit", Tabs.dockOpened.profession == true)
+local function HasTab(strip, key)
+    for _, button in ipairs(strip.tabs) do if button.key == key then return true end end
+    return false
+end
+UI:SelectTab("deals")
+check("Favors and Writs opens there", UI.activeTab == "deals"
+    and HasTab(UI.dockStrips.profession, "deals") and UI.dockStrips.profession:IsShown())
+UI:SelectTab("sales")
+check("Sales opens there", UI.activeTab == "sales" and HasTab(UI.dockStrips.profession, "sales"))
+UI:SelectTab("crafting")
 SW.Left("profession")
 check("leaving hands the pane back", Tabs.atDock == nil and craft.outOf == 1 and craft.back == 1)
 check("the usual tabs come back", UI.tabStrip:IsShown() and UI.activeTab == "queue")

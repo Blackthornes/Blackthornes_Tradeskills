@@ -2505,6 +2505,13 @@ landed in `UI/SharedWindow.lua` (FILE_VERSION 8, the same file in all five;
   and Settings beside it. At the mailbox the mail list is its Mail tab
   while it has something on it (`QueueMailPanel:HasWork`). Off One
   Window, or in a fight, both hang beside the game's window as before.
+- **Every tab on every row** (a player's report, 2026-11-17: with the
+  auction house and the profession window both open, Favors and Writs and
+  Sales could not be reached). The auction house row and each dock row are
+  their own tab, the tabs that help there (`UI.AUCTION_TABS`,
+  `UI.DOCK_TABS[place].tabs`) and then every other tab in the usual order,
+  Settings last (`UI:EveryTab`). Tested in `tools/test_onewindow.lua`
+  (sections 6 and 7). Not yet seen in game.
 - The new words (All Addons, ALL BLACKTHORNES ADDONS, WHAT'S NEW, After
   Updates:, Show With Motion, Show, Off, Crafting, Mail) wait for the
   owner's yes; change them in all six languages if he picks others.

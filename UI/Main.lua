@@ -356,7 +356,7 @@ function UI:BuildTabs()
     -- (the owner, 2026-10-30): Auction House first, holding the drawer,
     -- then what helps there, Settings last. TSTabs:Settle swaps the rows.
     local ahDefinitions = { { key = "auctionhouse", text = L["Auction House"] } }
-    for _, key in ipairs(UI.AUCTION_TABS) do
+    for _, key in ipairs(self:EveryTab(UI.AUCTION_TABS)) do
         local tab = self.tabs[key]
         if tab then
             ahDefinitions[#ahDefinitions + 1] = { key = key, text = tab.text, right = key == "settings" }
@@ -383,7 +383,7 @@ function UI:BuildTabs()
     self.dockStrips, self.dockContainers = {}, {}
     for place, dock in pairs(UI.DOCK_TABS) do
         local defs = { { key = dock.key, text = dock.text } }
-        for _, key in ipairs(dock.tabs) do
+        for _, key in ipairs(self:EveryTab(dock.tabs)) do
             local tab = self.tabs[key]
             if tab then defs[#defs + 1] = { key = key, text = tab.text, right = key == "settings" } end
         end
@@ -404,7 +404,7 @@ end
 
 -- Docked beside the profession window or the mailbox, Tradeskills' row:
 -- the panel that used to hang beside the game's window first, then what
--- helps there, Settings last. `panel` names the module that moves in
+-- helps there, then every other tab, Settings last. `panel` names the module that moves in
 -- (its IntoOne and OutOfOne). The tab names wait for the owner's yes.
 UI.DOCK_TABS = {
     profession = { key = "crafting", text = L["Crafting"], panel = "CraftPanel",
@@ -412,6 +412,29 @@ UI.DOCK_TABS = {
     mail = { key = "mail", text = L["Mail"], panel = "QueueMailPanel",
         tabs = { "queue", "prices", "settings" } },
 }
+
+--- A dock row's tabs: the ones that help there first, in their order, then
+--- every other tab in the usual order, Settings last. Every tab stays a
+--- click away wherever the window docks (a player's report, 2026-11-17:
+--- with the auction house and the profession window both open, Favors and
+--- Writs and Sales could not be reached).
+function UI:EveryTab(first)
+    local keys, seen = {}, { settings = true }
+    for _, key in ipairs(first or {}) do
+        if not seen[key] then
+            seen[key] = true
+            keys[#keys + 1] = key
+        end
+    end
+    for _, tab in ipairs(self.tabOrder) do
+        if not seen[tab.key] then
+            seen[tab.key] = true
+            keys[#keys + 1] = tab.key
+        end
+    end
+    keys[#keys + 1] = "settings"
+    return keys
+end
 
 --- The strip showing now: the auction house's, a dock place's, or the usual.
 function UI:ActiveStrip()
@@ -421,7 +444,7 @@ function UI:ActiveStrip()
 end
 
 -- The tabs beside Auction House while the one window sits at the auction
--- house, in this order. Gather, Level Up, Sales and Characters wait.
+-- house, in this order. Every other tab follows them (UI:EveryTab).
 UI.AUCTION_TABS = { "prices", "profit", "queue", "disenchanting", "deals", "settings" }
 
 --------------------------------------------------------------------------------
