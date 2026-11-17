@@ -986,6 +986,18 @@ local function Build(outer)
     end, false)
     widgets.vendorMapPins:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- The recipe wishlist (the owner said build it, 2026-11-17): stars on
+    -- recipes to learn, and a note at a vendor or trainer that teaches one.
+    -- Off to start; off, nothing of it shows. See Logic/Wishlist.lua.
+    CreateSection(pages.mail, 2, L["RECIPES"])
+    local wishlistRow = CreateRow(pages.mail, 2, L["Recipe Wishlist:"],
+        L["Star recipes you want to learn. A vendor or trainer that teaches one will tell you."])
+
+    widgets.recipeWishlist = Widgets.CreateCheckbox(wishlistRow, L["On"], function(checked)
+        if ns.Wishlist then ns.Wishlist:SetOn(checked) else Config:Set("recipeWishlistOn", checked) end
+    end, false)
+    widgets.recipeWishlist:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- Asked 2026-10-06: the buy window opened at 1 after a Buy list search.
     CreateSection(pages.auction, 1, L["BUYING AND POSTING"])
     local fillBuyRow = CreateRow(pages.auction, 1, L["Fill In Buy Amount:"],
@@ -3101,6 +3113,7 @@ local function Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
     widgets.vendorMapPins:SetChecked(Config:Get("vendorMapPins") == true)
+    widgets.recipeWishlist:SetChecked(Config:Get("recipeWishlistOn") == true)
     widgets.arrowRoute:SetChecked(type(ns.db) == "table" and ns.db.arrowRoute ~= false)
     widgets.useTomTom:SetChecked(type(ns.db) ~= "table" or ns.db.useTomTom ~= false)
     widgets.arrowSize:SetValue(ns.WayArrowUI and ns.WayArrowUI.Size() or 100, true)

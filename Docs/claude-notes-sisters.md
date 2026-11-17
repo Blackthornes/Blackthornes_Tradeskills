@@ -579,6 +579,29 @@ can't cover. Tested in `tools/test_butlerskillup.lua` and
 `tools/test_canafford.lua`. Keep both stable; Butler's `Logic/Jobs.lua`
 reads them.
 
+Butler's recipe wishlist row (the owner said build it, 2026-11-17, from
+a mockup with the words he approved) reads the starred recipes the open
+vendor or trainer teaches, inside a pcall, read only:
+
+```lua
+_G.BlackthornesTS.Butler:WishlistHere()
+  -- { { recipeID, name, itemID, price, needs, short, kind = "vendor" or "trainer", index } }, or nil
+```
+
+nil with "Recipe Wishlist:" off or nothing open; an empty list when the
+window teaches nothing starred. `itemID` is the recipe item (vendor only),
+`price` copper for one, `needs` the skill it asks for, `short` that skill
+when the character playing is short of it, `index` its place in the
+vendor's or trainer's list now (nil for a trainer line it can't teach yet).
+Butler adds a "Buy a recipe on your wishlist" or "Learn a recipe on your
+wishlist" row per recipe and buys (`BuyMerchantItem(index, 1)`) or trains
+(`BuyTrainerService(index)`) by index itself, one a click; it never changes
+the wishlist. While `_G.BlackthornesButler.Wishlist` exists and Butler's
+window comes up at the vendor (`UI.ButlerBuysHere`), Tradeskills' own card
+under the window stays hidden (`WishlistCard.ButlerShows`), so an older
+Butler leaves the card showing. Tested in `tools/test_wishlist.lua`. Keep
+it stable; Butler's `Logic/Wishlist.lua` reads it.
+
 Butler's "Craft When It Pays More" (a player asked, the owner said build
 it, 2026-10-19; off unless ticked in Butler) asks, only while it is on,
 inside a pcall:

@@ -126,6 +126,8 @@ local function NewView(opts)
         includeKnown = false,
         selected = nil,
         waiting = false,
+        -- "Wishlist First" in the top bar (UI/Wishlist.lua, 2026-11-17).
+        wishlistFirst = ns.Config == nil or ns.Config:Get("recipeBookWishlistFirst") ~= false,
     }
 
     local widgets = {}
@@ -149,6 +151,14 @@ local function NewView(opts)
         row.name:SetPoint("LEFT", 30, 0)
         row.name:SetWordWrap(false)
 
+        -- The recipe wishlist's star (2026-11-17), in a column of its own
+        -- at the left: Profit's small star badge means something else.
+        if ns.WishlistUI then
+            row.star = ns.WishlistUI.CreateStar(row, function() return row.data and row.data.recipeID end)
+            row.star:SetPoint("LEFT", 4, 0)
+            row.star:Hide()
+        end
+
         row.cells = {}
         for _, column in ipairs(COLUMNS) do
             local cell = Theme.CreateLabel(row, "small", "muted", column.justify or "RIGHT")
@@ -171,6 +181,19 @@ local function NewView(opts)
 
     local function UpdateRow(row, entry)
         if row.columnsVersion ~= ns.Columns.version then PlaceRow(row) end
+
+        local ui = ns.WishlistUI
+        local starred = ui ~= nil and rawget(row, "star") ~= nil and ui.Shown()
+        if ui and rawget(row, "star") then
+            row.star:SetShown(starred)
+            if starred then row.star:Paint(false) end
+            local room = starred and ui.STAR_ROOM or 0
+            if row.starRoom ~= room then
+                row.starRoom = room
+                row.icon:SetPoint("LEFT", 8 + room, 0)
+                row.name:SetPoint("LEFT", 30 + room, 0)
+            end
+        end
 
         -- No item made (an enchant): the recipe item's icon stands in.
         local iconItem = entry.outputItemID or (entry.record.recipeItems and entry.record.recipeItems[1])
@@ -619,6 +642,22 @@ local function NewView(opts)
         })
         if widgets.sorter then rows = widgets.sorter:Sort(rows) end
 
+        -- The recipe wishlist (2026-11-17): the box shows only while it is on,
+        -- and starred recipes go first, each part in the order it had.
+        local wishing = ns.WishlistUI ~= nil and ns.WishlistUI.Shown()
+        if ns.Wishlist and wishing then ns.Wishlist:Prune() end
+        if widgets.firstBox then
+            widgets.firstBox:SetShown(wishing)
+            widgets.firstBox:SetChecked(state.wishlistFirst)
+            if widgets.skill then
+                widgets.skill:SetPoint("LEFT", wishing and widgets.firstBox or widgets.known, "RIGHT", 12, 0)
+            end
+        end
+        if widgets.nameHeading then
+            widgets.nameHeading:SetPoint("LEFT", wishing and 30 + ns.WishlistUI.STAR_ROOM or 30, 0)
+        end
+        if wishing and state.wishlistFirst then rows = ns.WishlistUI.StarredFirst(rows) end
+
         widgets.list:SetData(rows)
 
         widgets.empty:SetShown(#rows == 0)
@@ -713,6 +752,20 @@ local function NewView(opts)
             instance.Refresh()
         end, false)
         known:SetPoint("LEFT", search, "RIGHT", 12, 0)
+        widgets.known = known
+
+        if ns.WishlistUI then
+            local firstBox = Widgets.CreateCheckbox(view, L["Wishlist First"], function(checked)
+                state.wishlistFirst = checked and true or false
+                if ns.Config then ns.Config:Set("recipeBookWishlistFirst", state.wishlistFirst) end
+                instance.Refresh()
+            end, state.wishlistFirst)
+            firstBox:SetPoint("LEFT", known, "RIGHT", 12, 0)
+            firstBox:HookScript("OnEnter", function(box) ns.WishlistUI.FirstTip(box) end)
+            firstBox:HookScript("OnLeave", function() GameTooltip:Hide() end)
+            firstBox:Hide()
+            widgets.firstBox = firstBox
+        end
 
         if opts.showSkill then
             local skill = Theme.CreateLabel(view, "normal", "accent", "RIGHT")
@@ -730,6 +783,7 @@ local function NewView(opts)
         local nameHeading = Theme.CreateLabel(headings, "tiny", "muted")
         nameHeading:SetPoint("LEFT", 30, 0)
         nameHeading:SetText(L["RECIPE"])
+        widgets.nameHeading = nameHeading
 
         headings.cells = {}
         for _, column in ipairs(COLUMNS) do
@@ -785,6 +839,11 @@ local function NewView(opts)
 
             onEnter = ShowRowTooltip,
             onLeave = function() GameTooltip:Hide() end,
+            -- The recipe wishlist's line (2026-11-17), while it is on.
+            menu = function(entry)
+                local wish = ns.WishlistUI and ns.WishlistUI.MenuLine(entry.recipeID)
+                return wish and { wish } or nil
+            end,
 
             onScrollbarShown = function(shown)
                 headings:SetPoint("TOPRIGHT", view, "TOPRIGHT", right - (shown and 10 or 0), -40)

@@ -207,6 +207,7 @@ local function GetMerchantItemID(index, info)
 
     return nil, "unresolved"
 end
+Vendor.GetMerchantItemID = GetMerchantItemID
 
 -- The game's item class for recipes.
 local CLASS_RECIPE = 9
@@ -327,7 +328,11 @@ function Vendor:Scan()
         if ok and info then
             local recipeID = GetMerchantItemID(index, info)
             local offered, offer = pcall(Vendor.RecipeOffer, index, info, recipeID)
-            if offered and offer then self.merchantRecipes[recipeID] = offer end
+            if offered and offer then
+                -- Its place in the list, for the wishlist card's Buy (Logic/Wishlist.lua).
+                offer.index = index
+                self.merchantRecipes[recipeID] = offer
+            end
         end
 
         if ok and info and info.price and info.price > 0 then

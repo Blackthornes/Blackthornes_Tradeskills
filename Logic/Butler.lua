@@ -222,6 +222,22 @@
 -- count for the buy box (UI:SearchAuctionHouse) and it answers true, "one",
 -- so Butler's next click sends the rest. Never raises.
 --
+-- Butler's recipe wishlist row (the owner said build it, 2026-11-17)
+-- reads the starred recipes the open vendor or trainer teaches:
+--
+--   _G.BlackthornesTS.Butler:WishlistHere()   -- a list, or nil; reads only
+--
+-- { { recipeID, name, itemID (the recipe item, at a vendor), price (copper
+-- for one, or nil), needs (the skill it asks for), short (that skill when
+-- the character playing is short of it, else nil), kind = "vendor" or
+-- "trainer", index (its place in the vendor's or trainer's list now; nil
+-- for a trainer line it can't teach yet) } }, in the window's order. nil
+-- with "Recipe Wishlist:" off or no vendor or trainer open; an empty list
+-- when it teaches nothing starred. Butler buys (BuyMerchantItem) or trains
+-- (BuyTrainerService) by index itself, one a click, and never changes the
+-- wishlist. While Butler's Wishlist module is loaded, Tradeskills' own card
+-- under the window stays hidden (UI/Wishlist.lua).
+--
 -- Butler's "Cheapest Skill-Up" line (a player asked, the owner said build
 -- it, 2026-10-19) shows the Level Up tab's top pick for each profession:
 --
@@ -2012,6 +2028,27 @@ function Butler:VendorPrice(itemID)
     itemID = tonumber(itemID)
     if not itemID then return nil end
     return VendorPrice(itemID)
+end
+
+--- The starred recipes the open vendor or trainer teaches, for Butler's
+--- wishlist row; nil while the wishlist is off or nothing is open. Never
+--- raises, writes nothing; a fresh table each time.
+function Butler:WishlistHere()
+    local ok, list = pcall(function()
+        local wishlist = ns.Wishlist
+        if not wishlist then return nil end
+        local here, kind = wishlist:Here()
+        if not (here and kind) then return nil end
+        local copy = {}
+        for _, entry in ipairs(here) do
+            copy[#copy + 1] = { recipeID = entry.recipeID, name = entry.name, itemID = entry.itemID,
+                price = entry.price, needs = entry.needs, short = entry.short, kind = entry.kind,
+                index = entry.index }
+        end
+        return copy
+    end)
+    if ok and type(list) == "table" then return list end
+    return nil
 end
 
 --- Look up items on the auction house, from Butler's Search click. Every

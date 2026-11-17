@@ -71,6 +71,7 @@ Logic\TomTom.lua
 Logic\WayArrow.lua
 Logic\VendorPins.lua
 Logic\LearnNext.lua
+Logic\Wishlist.lua
 Logic\RoadPlan.lua
 Logic\Welcome.lua
 Logic\Queue.lua
@@ -168,6 +169,7 @@ UI\CastBarOnTop.lua
 UI\CraftProgress.lua
 UI\RecipeValue.lua
 UI\CraftProfitCard.lua
+UI\Wishlist.lua
 UI\ItemTooltip.lua
 UI\EnchantTooltip.lua
 UI\VendorPins.lua
