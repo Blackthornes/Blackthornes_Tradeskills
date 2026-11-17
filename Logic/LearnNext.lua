@@ -38,9 +38,12 @@ local CITIES = {
 -- Thunder Bluff and Darnassus trainers are kept under the zone around them
 -- (Mulgore, Teldrassil) with that zone's map spot, so a spot inside the
 -- city's box counts as the city when picking one. The zone itself stays as
--- it is, since the map pin reads the spot on that zone's map.
+-- it is, since the map pin reads the spot on that zone's map. Thunder
+-- Bluff's box is where the city's own map sits on Forever's Mulgore map
+-- (the client's UiMapAssignment table), which reaches further than
+-- Classic's (tools/classic_maps.py).
 local CITY_BOXES = {
-    { zone = "Mulgore", city = "Thunder Bluff", x1 = 28, x2 = 46, y1 = 14, y2 = 36 },
+    { zone = "Mulgore", city = "Thunder Bluff", x1 = 31, x2 = 49, y1 = 27, y2 = 45 },
     { zone = "Teldrassil", city = "Darnassus", x1 = 22, x2 = 43, y1 = 38, y2 = 64 },
     -- The Apothecarium's trainers are placed on Silverpine's map.
     { zone = "Silverpine Forest", city = "Undercity", x1 = 70, x2 = 76, y1 = 6, y2 = 12 },

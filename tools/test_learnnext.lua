@@ -430,7 +430,7 @@ local lw = ns.LEARN_SPOTS.TRAINERS[165]
 ns.LEARN_SPOTS.TRAINERS[165] = {
   { "Far Horde Expert", "Arathi Highlands", 28.3, 45.1, "H", 250 },
   { "Bloodhoof Journey", "Mulgore", 45.4, 57.9, "H", 150 },
-  { "Bluff Expert", "Mulgore", 38.2, 25.5, "H", 225 },
+  { "Bluff Expert", "Mulgore", 38.9, 34.0, "H", 225 },
 }
 local expertRecipe = { trainerCost = 2800, skillLineID = 165, classicSkill = 180, skill = 175 }
 UnitFactionGroup = function() return "Horde" end
@@ -439,7 +439,8 @@ check("Horde out in a zone goes to Thunder Bluff, not Arathi", LN:Place(expertRe
 check("its pin stays on the Mulgore map", LN:Place(expertRecipe).zone, "Mulgore")
 zoneHere = "Thunder Bluff"
 check("standing in Thunder Bluff", LN:Place(expertRecipe).name, "Bluff Expert")
-check("a spot out in Mulgore is no city", LN.CityOf({ zone = "Mulgore", x = 46.8, y = 60.8 }), "Mulgore")
+check("a spot in the city counts as the city", LN.CityOf({ zone = "Mulgore", x = 38.9, y = 34.0 }), "Thunder Bluff")
+check("a spot out in Mulgore is no city", LN.CityOf({ zone = "Mulgore", x = 46.1, y = 63.9 }), "Mulgore")
 UnitFactionGroup = function() return "Alliance" end
 ns.LEARN_SPOTS.TRAINERS[165] = {
   { "Far Alli Expert", "Feralas", 30, 40, "A", 250 },
