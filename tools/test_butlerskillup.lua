@@ -13,6 +13,8 @@
 --   7. A recipe tagged with the skill-line ID that carries no levels still
 --      finds its profession: through the other ID, or the last good read
 --      Recipes keeps (Forever lists each profession under two IDs).
+--   8. Cooking and First Aid, which only the Professions book lists, get
+--      their line too.
 
 local ns = {}
 ns.NewModule = function(name) local m = {} ns[name] = m return m end
@@ -138,6 +140,36 @@ check("Enchanting capped from the saved read", list[1].profession .. " " .. tost
 check("Mining capped from its row", list[2].profession .. " " .. tostring(list[2].capped) .. " " .. list[2].english, "Mining true Mining")
 check("a capped one has no recipe", list[1].recipeID, nil)
 check("a capped one is not queued", list[1].queued, false)
+ns.Recipes = nil
+
+-- 8. Cooking and First Aid only in the Professions book: Forever's trade
+-- skill lines leave the secondary professions out, so the line read and
+-- the saved read both miss them (a player's Cooking never showed).
+ns.Recipes = {
+  SKILL_LINE_PROFESSIONS = { [185] = "Cooking", [129] = "First Aid", [197] = "Tailoring" },
+  GetLearnedProfessions = function()
+    return { { name = "Tailoring", skillLineID = 197, skillLevel = 61, maxSkillLevel = 75, learned = true } }
+  end,
+}
+INFO[129] = nil
+local BOOK = {
+  [1] = { "Tailoring", nil, 61, 75, nil, nil, 197 },
+  [5] = { "Cooking", nil, 40, 75, nil, nil, 185 },
+  [6] = { "First Aid", nil, 75, 75, nil, nil, 129 },
+}
+GetProfessions = function() return 1, nil, nil, nil, 5, 6 end
+GetProfessionInfo = function(index) return (unpack or table.unpack)(BOOK[index]) end
+rows = {
+  { recipeID = 9, skillLineID = 185, tier = "optimal", cost = 12, name = "Roasted Boar Meat", outputItemID = 2888 },
+  { recipeID = 3, skillLineID = 197, tier = "optimal", cost = 90, name = "Brown Linen Pants", outputItemID = 4343 },
+}
+ns.Queue.version = 12
+local byName = {}
+for _, entry in ipairs(Butler:NextSkillUp() or {}) do byName[entry.profession] = entry end
+check("Cooking from the book", byName.Cooking and (byName.Cooking.name .. " " .. byName.Cooking.skill .. "/" .. byName.Cooking.max), "Roasted Boar Meat 40/75")
+check("First Aid capped from the book", byName["First Aid"] and tostring(byName["First Aid"].capped), "true")
+check("Tailoring still there", byName.Tailoring and byName.Tailoring.name, "Brown Linen Pants")
+GetProfessions, GetProfessionInfo = nil, nil
 ns.Recipes = nil
 
 -- 6.
