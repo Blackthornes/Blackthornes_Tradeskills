@@ -33,6 +33,12 @@ local SECTION_GAP = -22
 
 -- The category switch along the top, and the room it takes.
 local BAR_HEIGHT = 34
+-- Each more line the switch wraps to when its names would reach the search
+-- box (seen in game 2026-11-17: ABOUT ran under it). The bar grows by it.
+local LINE_HEIGHT = 26
+-- Between two names on the switch, and round the search box.
+local SWITCH_GAP = 22
+local TOOLS_GAP = 16
 
 -- A player's request (2026-10-07): the one long page grew crowded, so the
 -- settings sit on category pages picked along the top, like Recipes /
@@ -418,24 +424,64 @@ local function AllAddonsHidden()
     return One ~= nil and One.On() == true
 end
 
+--- How tall the bar stands: one line, and a line more for each the switch
+--- wraps to.
+local function BarHeight()
+    return BAR_HEIGHT + ((widgets.switchLines or 1) - 1) * LINE_HEIGHT
+end
+
+--- The room the search box and Show Descriptions take at the bar's right.
+local function ToolsWidth()
+    local describe = widgets.describe
+    local tick = describe and Theme.TextWidth and describe.label and Theme.TextWidth(describe.label)
+    tick = (type(tick) == "number" and tick or 110) + 24
+    local find = widgets.find and widgets.find:GetWidth()
+    find = (type(find) == "number" and find > 0) and find or (Widgets.SEARCH_WIDTH or 170)
+    return TOOLS_GAP + find + TOOLS_GAP + tick + 16
+end
+
 --- Lay the switch out left to right, each part as wide as its name. All
---- Addons is left off while the one window is on (its gear opens it).
+--- Addons is left off while the one window is on (its gear opens it). A
+--- name that would reach the search box starts a new line under the first,
+--- and the bar and the pages under it move down by a line.
 local function LayoutSwitch()
-    local previous
+    local bar = widgets.bar
+    if not bar then return end
+    local width = bar:GetWidth()
+    local room = (type(width) == "number" and width > 0)
+        and (width - COLUMN_ONE_X - ToolsWidth()) or math.huge
+    local previous, x, line = nil, 0, 1
     for _, part in ipairs(widgets.switch or {}) do
         local hidden = part.key == "all" and AllAddonsHidden()
         part.button:SetShown(not hidden)
         if not hidden then
-            local width = Theme.TextWidth and Theme.TextWidth(part.label)
-            part.button:SetWidth((type(width) == "number" and width or 100) + 4)
+            local measured = Theme.TextWidth and Theme.TextWidth(part.label)
+            local w = (type(measured) == "number" and measured or 100) + 4
+            part.button:SetWidth(w)
             part.button:ClearAllPoints()
+            if previous and x + SWITCH_GAP + w > room then
+                line = line + 1
+                previous, x = nil, 0
+            end
             if previous then
-                part.button:SetPoint("LEFT", previous, "RIGHT", 22, 0)
+                part.button:SetPoint("LEFT", previous, "RIGHT", SWITCH_GAP, 0)
+                x = x + SWITCH_GAP + w
             else
-                part.button:SetPoint("LEFT", widgets.bar, "LEFT", COLUMN_ONE_X, 0)
+                part.button:SetPoint("LEFT", bar, "TOPLEFT", COLUMN_ONE_X,
+                    -BAR_HEIGHT / 2 - (line - 1) * LINE_HEIGHT)
+                x = w
             end
             previous = part.button
         end
+    end
+    local changed = (widgets.switchLines or 1) ~= line
+    widgets.switchLines = line
+    if bar:GetHeight() ~= BarHeight() then bar:SetHeight(BarHeight()) end
+    if changed then
+        for _, page in pairs(pages) do
+            page.holder:SetPoint("TOPLEFT", 0, -BarHeight() - 2)
+        end
+        if widgets.shownPage then FitScroll(widgets.shownPage) end
     end
 end
 
@@ -561,18 +607,28 @@ local function BuildBar(outer)
 
         widgets.switch[#widgets.switch + 1] = part
     end
-    LayoutSwitch()
 
     -- The house order for an option bar: search, then tick boxes.
     widgets.describe = Widgets.CreateCheckbox(bar, L["Show Descriptions"], function(checked)
         ns.Config:Set("settingsDescriptions", checked)
         ShowDescriptions(checked)
     end, false)
-    widgets.describe:SetPoint("RIGHT", bar, "RIGHT", -16, 0)
+    -- Held to the first line, so a switch that wraps leaves them in place.
+    widgets.describe:SetPoint("RIGHT", bar, "TOPRIGHT", -16, -BAR_HEIGHT / 2)
 
     widgets.find = Widgets.CreateSearchBox(bar, L["Find a setting"], Search)
     widgets.find:SetWidth(Widgets.SEARCH_WIDTH or 170)
-    widgets.find:SetPoint("RIGHT", widgets.describe, "LEFT", -16, 0)
+    widgets.find:SetPoint("RIGHT", widgets.describe, "LEFT", -TOOLS_GAP, 0)
+
+    LayoutSwitch()
+    -- The bar's width comes from the window: lay the switch out again
+    -- whenever it changes (a resize, the one window, a bigger font).
+    bar:SetScript("OnSizeChanged", function()
+        if widgets.laying then return end
+        widgets.laying = true
+        LayoutSwitch()
+        widgets.laying = false
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -615,7 +671,7 @@ local function Build(outer)
     -- hiding a page hides its bar too.
     for _, definition in ipairs(PAGES) do
         local holder = CreateFrame("Frame", nil, outer)
-        holder:SetPoint("TOPLEFT", 0, -BAR_HEIGHT - 2)
+        holder:SetPoint("TOPLEFT", 0, -BarHeight() - 2)
         holder:SetPoint("BOTTOMRIGHT", 0, 0)
         holder:Hide()
 
