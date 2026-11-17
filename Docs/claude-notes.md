@@ -2640,8 +2640,8 @@ TSM Sold a Day). The same in every addon; keep them the same.
   (Farmer and Tradeskills: shared data comes back the same, broken text
   never raises), and `tools/test_properties.lua` (Tradeskills: Characters:Same;
   Butler: Errands:IsMe). Fixed seeds, so a failure repeats. The window test
-  found that `SharedWindow.Clamp` lets not-a-number through (2026-11-17); the
-  one line fix waits on the owner's yes, and the test leaves 0/0 out until
-  then.
+  found that `SharedWindow.Clamp` let not-a-number through (2026-11-17); the
+  owner said fix it, and a bad size in a save now reads as 100
+  (`UI/SharedWindow.lua` FILE_VERSION 12, in all five).
 - **Three tries, then ask.** A check still failing after three rounds stops
   the thread. Never skip, loosen or rerun a test to get green.

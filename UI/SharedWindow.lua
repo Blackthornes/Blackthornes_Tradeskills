@@ -48,7 +48,7 @@ local ADDON, ns = ...
 local SharedWindow = {}
 ns.SharedWindow = SharedWindow
 
-local FILE_VERSION = 11
+local FILE_VERSION = 12
 SharedWindow.FILE_VERSION = FILE_VERSION
 
 local PLATE = "Blackthornes"
@@ -312,7 +312,10 @@ end
 --------------------------------------------------------------------------------
 
 local function Clamp(percent)
-    percent = tonumber(percent) or 100
+    percent = tonumber(percent)
+    -- Not a number (0/0) fails every comparison below and would come back
+    -- as the window's size; a bad save reads as the first size instead.
+    if not percent or percent ~= percent then percent = 100 end
     if percent < SharedWindow.SCALE_MIN then return SharedWindow.SCALE_MIN end
     if percent > SharedWindow.SCALE_MAX then return SharedWindow.SCALE_MAX end
     return percent

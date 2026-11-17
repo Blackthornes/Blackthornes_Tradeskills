@@ -12,7 +12,6 @@
 --   2. Saving a spot twice keeps the same spot (nothing creeps).
 --   3. The window's size setting always lands between SCALE_MIN and
 --      SCALE_MAX, whatever is in the save, and clamping twice changes nothing.
---      (Not yet for not-a-number; see the note above the list in part 3.)
 
 local NAMES = { "CreateFrame", "UIParent", "C_Timer", "hooksecurefunc", "BlackthornesWindow",
     "UISpecialFrames", "InCombatLockdown" }
@@ -106,10 +105,9 @@ for i = 1, TRIES do
 end
 
 -- 3. The size setting stays in range, whatever is saved.
--- Not a number (0/0) is left out for now: this test found that Clamp lets it
--- through (2026-11-17), and the one line fix in UI/SharedWindow.lua waits on
--- the owner's yes. Put 0 / 0 back in this list with that fix.
-local odd = { nil, "", "abc", -1e9, 1e9, 0, -0.5, math.huge, -math.huge, true, {} }
+-- Not a number (0/0) is here since this test found Clamp let it through
+-- (2026-11-17, fixed in FILE_VERSION 12).
+local odd = { nil, "", "abc", -1e9, 1e9, 0, -0.5, 0 / 0, math.huge, -math.huge, true, {} }
 for i = 1, TRIES do odd[#odd + 1] = (math.random() - 0.5) * 1000 end
 for i = 1, #odd + 1 do
     local value = odd[i]
