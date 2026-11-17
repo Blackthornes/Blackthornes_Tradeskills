@@ -1988,17 +1988,18 @@ end
 function CraftPanel:UpdateSummary()
     if not self.summary then return end
 
-    local queued = ns.Queue:Count()
+    -- With "Only My Crafts:" ticked, only this character's crafts count.
+    local shownList = ns.Queue:Count() > 0 and ns.Queue.Shown and ns.Queue:Shown() or nil
     self.summaryNote = nil
     self.craftTime = nil
 
-    if queued == 0 then
+    if ns.Queue:Count() == 0 or (shownList and #shownList == 0) then
         self.summary:SetText(L["Nothing queued"])
         self.summary:SetTextColor(Theme.Unpack("dim"))
         return
     end
 
-    local totals = ns.Queue:GetTotals()
+    local totals = ns.Queue:GetTotals(shownList)
     local colour = (totals.profit or 0) < 0 and ns.COLORS.loss or ns.COLORS.profit
 
     -- A craft with no price is left out of the profit. A * says so, and the
@@ -2015,7 +2016,7 @@ function CraftPanel:UpdateSummary()
     -- How long the queue takes to cast comes first, and is the first thing
     -- dropped when the line runs short.
     local texts = {}
-    local craftTime = ns.Queue.GetCraftTime and ns.Queue:GetCraftTime() or nil
+    local craftTime = ns.Queue.GetCraftTime and ns.Queue:GetCraftTime(shownList) or nil
     self.craftTime = craftTime
     if craftTime and craftTime.seconds then
         local about = ns.CraftTime.Format(craftTime.seconds)
@@ -2511,12 +2512,12 @@ function CraftPanel:RefreshQueued()
         and not self:IsCollapsed() and ns.Queue:Count() > 0
         and CraftPanel.QueuedFits(self.frame:GetRight(), UIParent and UIParent:GetRight())
 
-    if not wanted then
+    -- With "Only My Crafts:" ticked, only this character's crafts.
+    local entries = wanted and (ns.Queue.Shown and ns.Queue:Shown() or ns.Queue:GetAll())
+    if not entries or #entries == 0 then
         if self.queuedFrame then self.queuedFrame:Hide() end
         return
     end
-
-    local entries = ns.Queue:GetAll()
 
     local frame = self:BuildQueued()
     frame:SetHeight(self.frame:GetHeight())

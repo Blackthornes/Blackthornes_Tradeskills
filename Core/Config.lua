@@ -526,6 +526,11 @@ local DEFAULTS = {
         -- See Crafting:PickNext.
         craftFreesSpaceFirst = true,
 
+        -- The Queue tab and the craft pane show only the crafts this
+        -- character makes (a player asked, 2026-11-17). The queue itself
+        -- stays shared; nothing is taken off it. See Queue:Shown.
+        queueOnlyMine = false,
+
         -- Point out a material another of your characters can make for less
         -- than it costs to buy. Only a suggestion; the queue still buys it, so
         -- it is on by default. Named anew when the default changed, so a false
