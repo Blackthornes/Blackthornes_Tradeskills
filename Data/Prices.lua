@@ -465,7 +465,12 @@ end
 --   saw the listings. nil from a reading that saw only the cheapest price (a
 --   browse row): the ladder on record is kept while its first step is still
 --   the cheapest rival, and dropped when it is not.
-function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder)
+-- @param partial true when `quantity` may be only part of what is listed (a
+--   look at one item the client did not call complete). The price is learned
+--   as usual, but the count stays out of the readings Sold a day measures,
+--   the seven day counts and the volume bars: a fall from a full scan's count
+--   to a first page's count is not sales.
+function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, rivalMin, ownMin, ignoredLow, ladder, partial)
     -- Lets a list know prices moved without comparing every record.
     Prices:Touch(itemID)
 
@@ -529,15 +534,16 @@ function Prices:Record(itemID, marketValue, minBuyout, quantity, scannedAt, riva
     record.quantity = quantity
     record.seen = scannedAt
     record.scans = (record.scans or 0) + 1
-    Prices.NoteDaily(record, scannedAt, quantity)
+    local counted = not partial and quantity or nil
+    Prices.NoteDaily(record, scannedAt, counted)
     Prices.NoteTrend(record, scannedAt)
 
-    Prices.AddReading(record, scannedAt, record.market, quantity)
+    Prices.AddReading(record, scannedAt, record.market, counted)
 
     -- The hour by hour graph keeps the cheapest posting, as buying sees it.
     if ns.PriceHistory then
         ns.PriceHistory:Note(itemID, Prices.LowestListed(record), scannedAt)
-        ns.PriceHistory:NoteListed(itemID, quantity, scannedAt)
+        if counted then ns.PriceHistory:NoteListed(itemID, counted, scannedAt) end
     end
 
     -- The Stats tab's ninety days: the cheapest of each day, and its sales.
@@ -1407,18 +1413,22 @@ function Prices:GetLiquidity(itemID)
     end
 
     local drops, total = 0, 0
+    local previous
 
-    for i = 2, count do
-        local _, _, previous = Prices.HistoryReading(history, i - 1)
+    -- A reading with no count (a look that read only part of the book) is
+    -- passed over, so the next count is measured from the last one known.
+    for i = 1, count do
         local _, _, current = Prices.HistoryReading(history, i)
-        previous = tonumber(previous) or 0
-        current = tonumber(current) or 0
+        current = tonumber(current)
 
-        if previous > 0 then
-            if current < previous then
-                drops = drops + (previous - current)
+        if current then
+            if previous and previous > 0 then
+                if current < previous then
+                    drops = drops + (previous - current)
+                end
+                total = total + previous
             end
-            total = total + previous
+            previous = current
         end
     end
 

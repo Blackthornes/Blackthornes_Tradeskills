@@ -343,10 +343,12 @@ function ItemStats:Build(itemID, now)
     stats.sources = Sources(itemID)
     stats.methods = Methods(itemID, now)
 
-    -- The last twelve scans: how many were listed, and the market value.
+    -- The last twelve scans: how many were listed, and the market value. A
+    -- scan with no count (a look that read only part of the book) is left
+    -- out rather than drawn as none listed.
     stats.stock = {}
     for _, t, m, q in EachReading(stats.record and stats.record.history) do
-        if Number(t) then
+        if Number(t) and Number(q) then
             stats.stock[#stats.stock + 1] = { t = t, q = Number(q) or 0, m = Number(m) }
         end
     end

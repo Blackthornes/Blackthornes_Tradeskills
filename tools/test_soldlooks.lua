@@ -160,4 +160,8 @@ check("a save with a look's count already in it still reads", near(Prices:GetUni
 priceTable[4001] = { scans = 2, history = { { t = 0, q = 150 }, { t = 7200, m = 10 }, { t = 14400, q = 140 } } }
 check("a reading with no count is passed over", near(Prices:GetUnitsSoldPerDay(4001), 10 / (14400 / 86400)))
 
+print("\nthe older sales hint")
+priceTable[4002] = { scans = 3, history = { 0, 10, 100, 3600, 10, false, 7200, 10, 90 } }
+check("a reading with no count is not read as a sell-out", near(Prices:GetLiquidity(4002) * 100, 10))
+
 print(("\n%d check(s) passed\n"):format(checks))

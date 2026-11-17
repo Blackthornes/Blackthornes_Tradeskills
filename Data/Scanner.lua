@@ -1653,7 +1653,7 @@ end
 --
 -- Returns true only when the database actually changed, so callers can report
 -- what happened rather than what was attempted.
-function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder)
+function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder, partial)
     if not itemID or not marketValue or marketValue <= 0 then return false end
 
     self.passiveSeen = self.passiveSeen or {}
@@ -1667,7 +1667,7 @@ function Scanner:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMi
 
     self.passiveSeen[itemID] = { at = now, price = marketValue }
 
-    ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin, ignoredLow, ladder)
+    ns.Prices:Record(itemID, marketValue, minBuyout, quantity or 0, time(), rivalMin, ownMin, ignoredLow, ladder, partial)
 
     self.passiveCount = (self.passiveCount or 0) + 1
 
@@ -1834,7 +1834,19 @@ function Scanner:SettleNameSearch()
 end
 
 --- Record the order book of a search the player ran on a single item.
-function Scanner:CapturePassiveListings(itemID, listings)
+--- Did a look at one item read the whole book? Asks the client's
+-- HasFull...SearchResults with the look's item id or key. Anything but a
+-- plain yes (no such call, an error, false) is taken as a part read, so the
+-- look's count stays out of Sold a day; its price is still learned.
+function Scanner.HasFullResults(path, arg)
+    if not Util.HasFunction(path) then return false end
+    local fn = C_AuctionHouse and C_AuctionHouse[path:match("[^.]+$")]
+    if type(fn) ~= "function" then return false end
+    local ok, full = pcall(fn, arg)
+    return ok and full == true
+end
+
+function Scanner:CapturePassiveListings(itemID, listings, partial)
     if not self:PassiveCaptureEnabled() then return false end
 
     -- Empty is not recorded; see the rules above.
@@ -1848,7 +1860,8 @@ function Scanner:CapturePassiveListings(itemID, listings)
     -- said before this is the estimate a purchase is held to.
     if ns.Prices.KeepBeforeLook then ns.Prices:KeepBeforeLook(itemID) end
 
-    local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder)
+    local learned = self:RecordPassive(itemID, marketValue, minBuyout, quantity, rivalMin, ownMin, ignoredLow, ladder,
+        partial)
 
     if learned and ns.Persist then ns.Persist:SaveLater() end
 
@@ -2025,12 +2038,16 @@ function Scanner:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
     -- emptied by the credibility filter would otherwise unlearn it.
     if #raw > 0 then self:LearnCommodity(itemID, true) end
 
+    -- Only part of the book may have come back. Its count is then not what
+    -- is listed, and Sold a day must not read the gap as sales.
+    local partial = not Scanner.HasFullResults("C_AuctionHouse.HasFullCommoditySearchResults", itemID)
+
     if not ours then
-        self:CapturePassiveListings(itemID, listings)
+        self:CapturePassiveListings(itemID, listings, partial)
         return
     end
 
-    self:FinishItemScan(itemID, listings, true)
+    self:FinishItemScan(itemID, listings, true, partial)
 end
 
 function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
@@ -2115,19 +2132,22 @@ function Scanner:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
     -- commodity, and that is now known without ever holding one.
     if #raw > 0 then self:LearnCommodity(itemID, false) end
 
+    -- As on the commodity path: a book only partly read gives no count.
+    local partial = not Scanner.HasFullResults("C_AuctionHouse.HasFullItemSearchResults", key)
+
     if not ours then
-        if self:CapturePassiveListings(itemID, listings) and next(bySuffix) and ns.Prices.CommitSuffixes then
+        if self:CapturePassiveListings(itemID, listings, partial) and next(bySuffix) and ns.Prices.CommitSuffixes then
             ns.Prices:CommitSuffixes(itemID, bySuffix, time())
         end
         return
     end
 
-    self:FinishItemScan(itemID, listings, false)
+    self:FinishItemScan(itemID, listings, false, partial)
     -- After the item's own price, so the suffixes have one to sit beside.
     if next(bySuffix) and ns.Prices.CommitSuffixes then ns.Prices:CommitSuffixes(itemID, bySuffix, time()) end
 end
 
-function Scanner:FinishItemScan(itemID, listings, isCommodity)
+function Scanner:FinishItemScan(itemID, listings, isCommodity, partial)
     local pending = self.pendingItem
     self.pendingItem = nil
 
@@ -2143,7 +2163,7 @@ function Scanner:FinishItemScan(itemID, listings, isCommodity)
     local status = "fresh"
 
     if marketValue then
-        ns.Prices:Record(itemID, marketValue, minBuyout, quantity, nil, rivalMin, ownMin, ignoredLow, ladder)
+        ns.Prices:Record(itemID, marketValue, minBuyout, quantity, nil, rivalMin, ownMin, ignoredLow, ladder, partial)
     else
         -- The search came back with nothing in it. Recording that is the whole
         -- point of asking: it clears the rival price, so the next listing
