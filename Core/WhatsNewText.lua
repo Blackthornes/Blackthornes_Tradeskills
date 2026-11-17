@@ -5,6 +5,10 @@
 local _, ns = ...
 
 ns.WHATS_NEW = {
+    { version = "1.32.0", lines = {
+        "There's a Post at Minimum Profit box on the Pricing page. It lists your crafts at the lowest price that still makes your Minimum Profit. It starts off.",
+        "There's a TSM Sold a Day box on the Pricing page. It takes the Sold a day number on tooltips from TSM. It starts off.",
+    } },
     { version = "1.31.0", lines = {
         "There's a Crate Shopping List for Waylaid Crates on the auction house Buy tab. It starts off.",
         "The craft pane and mail list can be tabs in the one window.",
@@ -14,13 +18,5 @@ ns.WHATS_NEW = {
     } },
     { version = "1.30.0", lines = {
         "The Sales tab has a new Bought view. It shows what you spent at the auction house, what you bought most, and what you paid each.",
-    } },
-    { version = "1.29.0", lines = {
-        "Butler can tell you why an item should wait, and Sell Anyway sells it when you disagree.",
-        "A new goal window helps you pick your next gold goal.",
-        "Profit shows your crafted sales by profession and by character.",
-        "You can pause crafts in the Queue, move them, and skip ones that need a tool.",
-        "There is a new price box for gear that binds when worn, on the Sharing page.",
-        "The game's profession window can show what a craft costs and earns. It starts off.",
     } },
 }
