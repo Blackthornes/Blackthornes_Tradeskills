@@ -46,20 +46,25 @@ local PAGES = {
       tip = L["The mailbox, your disenchanter, selling to vendors and the mail report"] },
     { key = "auction", text = L["AUCTION HOUSE"],
       tip = L["Buying, posting and scanning"] },
-    -- Look and General became Tooltips and Windows (the owner said build
-    -- it, 2026-11-16). A saved page of "look" or "general" opens the new one.
+    { key = "data", text = L["DATA"],
+      tip = L["What is saved and clearing old prices"] },
+    -- From here on, the pages every Blackthornes addon shares, in the same
+    -- order in all five (the owner said build it, 2026-11-17): Tooltips,
+    -- Sounds, Windows, Sharing, All Addons, About. Look and General became
+    -- Tooltips and Windows (2026-11-16); a saved "look" or "general" opens
+    -- the new one.
     { key = "tooltips", text = L["TOOLTIPS"],
       tip = L["What shows on item tooltips, in the profession window and in chat"] },
+    { key = "sounds", text = L["SOUNDS"],
+      tip = L["Every sound the addon plays, each with its own switch"] },
     { key = "windows", text = L["WINDOWS"],
-      tip = L["Window look and size, what opens by itself, the small windows, the arrow and sounds"] },
+      tip = L["Window look and size, what opens by itself, the small windows and the arrow"] },
+    { key = "sharing", text = L["SHARING"],
+      tip = L["Your other account and guild prices"] },
     -- The settings every Blackthornes addon shares (2026-11-16): reached
     -- by the one window's gear while One Window is on, so it is left off
     -- the switch then; on the switch while each addon has its own window.
-    { key = "all", text = L["All Addons"] },
-    { key = "sharing", text = L["SHARING"],
-      tip = L["Your other account and guild prices"] },
-    { key = "data", text = L["DATA"],
-      tip = L["What is saved and clearing old prices"] },
+    { key = "all", text = L["ALL ADDONS"] },
     { key = "about", text = L["ABOUT"],
       tip = L["How these addons are made, the version, the Discord, What's New and the other Blackthornes addons"] },
 }
@@ -1974,11 +1979,19 @@ local function Build(outer)
     -- Every sound the addon plays, each with its own switch, all on to start
     -- with. The one sound not here is the warning that saved data failed to
     -- load, which is about losing data rather than an effect.
-    CreateSection(pages.windows, 2, L["SOUNDS"])
+    -- They have their own page since 2026-11-17, with Mute All Sounds on
+    -- top: the same switch as on All Addons, so ticking one ticks both.
+    CreateSection(pages.sounds, 1, L["SOUNDS"])
     widgets.sounds = {}
 
+    local muteHereRow = CreateRow(pages.sounds, 1, L["Mute All Sounds:"], nil)
+    widgets.muteSoundsHere = Widgets.CreateCheckbox(muteHereRow, L["On"], function(checked)
+        UI:SetMuteSounds(checked)
+    end, false)
+    widgets.muteSoundsHere:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     local function SoundRow(key, label, description, test)
-        local row = CreateRow(pages.windows, 2, label, description)
+        local row = CreateRow(pages.sounds, 1, label, description)
         local box = Widgets.CreateCheckbox(row, L["On"], function(checked)
             Config:Set(key, checked)
         end, true)
@@ -2005,7 +2018,7 @@ local function Build(outer)
     -- The sale alarm picks its sound (asked 2026-10-11: players found the
     -- raid warning too much and asked for an old cash register). Off is the
     -- saleAlarm switch; the sound is saleSound. Picking one plays it.
-    local saleRow = CreateRow(pages.windows, 2, L["An Auction Sells:"],
+    local saleRow = CreateRow(pages.sounds, 1, L["An Auction Sells:"],
         L["Plays a sound when one of your auctions sells."])
 
     local function SaleSound()
@@ -3132,6 +3145,7 @@ local function Refresh()
         box:SetChecked(Config:Get(key) ~= false)
     end
     widgets.muteSounds:SetChecked(ns.Muted and ns.Muted() or false)
+    widgets.muteSoundsHere:SetChecked(ns.Muted and ns.Muted() or false)
     widgets.saleAlarm:Refresh()
     widgets.cooldownAlerts:SetChecked(Config:Get("cooldownAlerts") ~= false)
     widgets.tradeRequests:SetChecked(Config:Get("tradeRequests") == true)
@@ -3267,6 +3281,7 @@ function UI:SetMuteSounds(on)
         ns.Config:Set("muteSoundsAt", at)
     end
     if widgets and widgets.muteSounds then widgets.muteSounds:SetChecked(on) end
+    if widgets and widgets.muteSoundsHere then widgets.muteSoundsHere:SetChecked(on) end
 end
 
 function UI:ClearPriceData()

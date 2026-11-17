@@ -954,6 +954,35 @@ pricingButton.scripts.OnClick(pricingButton)
 check("a click on the switch shows its page", Holder(undercut).shown, true)
 check("and saves it", settings.settingsPage, "pricing")
 
+-- One layout for all five addons (the owner said build it, 2026-11-17):
+-- its own pages first, then the shared ones in the same order.
+local order = {}
+for _, child in ipairs(bar.children) do
+    local text = child.strings[1] and child.strings[1].text
+    if text and text == text:upper() and text ~= "" then order[#order + 1] = text end
+end
+check("the pages run own first, then the shared ones",
+    table.concat(order, ", "):match("PRICING.*ABOUT") or table.concat(order, ", "),
+    "PRICING, QUEUE, MAIL & VENDORS, AUCTION HOUSE, DATA, TOOLTIPS, SOUNDS, WINDOWS, SHARING, ALL ADDONS, ABOUT")
+local muteBoxes = {}
+for _, box in ipairs(made.CreateCheckbox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "Mute All Sounds:" then muteBoxes[#muteBoxes + 1] = box end
+end
+check("Mute All Sounds shows on two pages", #muteBoxes, 2)
+check("one of them on Sounds", Holder(muteBoxes[1]) ~= Holder(muteBoxes[2]), true)
+local scanTick
+for _, box in ipairs(made.CreateCheckbox) do
+    local label = box:GetParent().strings[1]
+    if label and label.text == "A Scan Finishes:" then scanTick = box end
+end
+check("the sounds left Windows for their own page", Holder(scanTick) == Holder(muteBoxes[1])
+    or Holder(scanTick) == Holder(muteBoxes[2]), true)
+ns.UI:SetMuteSounds(true)
+check("ticking Mute ticks both boxes", muteBoxes[1]:GetChecked() and muteBoxes[2]:GetChecked(), true)
+ns.UI:SetMuteSounds(false)
+check("and unticking clears both", not muteBoxes[1]:GetChecked() and not muteBoxes[2]:GetChecked(), true)
+
 --- The control on the row whose label says `text`, if Settings offers one.
 local function Offered(text)
     for _, kind in ipairs({ "CreateCheckbox", "CreateNumberBox" }) do
