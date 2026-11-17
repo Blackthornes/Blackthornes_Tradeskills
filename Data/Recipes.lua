@@ -519,6 +519,11 @@ function Recipes:ForgetCharacter(characterKey)
         if type(record) == "table" and record.byCharacter then
             record.byCharacter[characterKey] = nil
         end
+        -- And at the neutral auction house (Data/Auctions.lua).
+        local neutral = type(record) == "table" and record.neutral
+        if type(neutral) == "table" and neutral.byCharacter then
+            neutral.byCharacter[characterKey] = nil
+        end
     end
 
     -- And a linked character's shared sales leave the Sales tab.

@@ -416,6 +416,11 @@ dust or shard.
 
 ## Still unverified
 
+- `UnitFactionGroup("npc")` at a goblin auctioneer (Booty Bay, Gadgetzan,
+  Everlook) is taken to give no side, which is how Tradeskills tells the
+  neutral auction house from your own (`Auctions:CurrentHouse`). Not yet
+  seen in game (2026-11-17).
+
 **The daily reset and quest done flags (added 2026-11-17).** The Deals tab's
 Craftsman's Writs mark each order done today and say when new orders come
 in. The reset clock reads `C_DateAndTime.GetSecondsUntilDailyReset()`, then

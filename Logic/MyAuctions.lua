@@ -206,8 +206,11 @@ function MyAuctions:Rows()
     end
 
     -- Other characters, as last read: never this one, which is read live.
+    -- Only this house's: a listing at the other house is not in its scan.
+    local here = Auctions.CurrentHouse and Auctions:CurrentHouse() or "home"
     for _, listing in ipairs(listings) do
-        if not listing.ended and not IsPlaying(listing.who) then
+        if not listing.ended and not IsPlaying(listing.who)
+            and (listing.house or "home") == here then
             local row = {}
             for k, v in pairs(listing) do row[k] = v end
             row.alt = true

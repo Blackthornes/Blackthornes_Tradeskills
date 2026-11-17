@@ -185,6 +185,29 @@ ticked, the owner 2026-10-13). Saved, never renamed: `sellOutWatch[realm][charac
 `sellOutUnsold[itemID]`.
 Tested in `tools/test_sellout.lua`. Not yet seen in game.
 
+## The neutral auction house keeps its own reading
+
+A player found (2026-11-17, a clear bug the owner said fix) that after a
+visit to a neutral auction house Keep in stock and Sales thought nothing
+was listed, and names showed as "item 12345". The game shows only the
+auctions at the house you stand at, and each visit wrote one reading over
+the other. Now `Auctions:CurrentHouse()` reads the auctioneer once a visit
+(`UnitFactionGroup("npc")`: Alliance or Horde is "home", no side is
+"neutral", an auctioneer that can't be read is "home") and
+`Auctions:HouseTable(kind)` gives that house's reading: the home house's
+stays where it always was (`postedAuctions[realm]`, so old saves read as
+home) and the neutral one's is `postedAuctions[realm].neutral`, the same
+shape (never rename it). A reading replaces only its own house's.
+`GetPostedCount` and `GetListings` add both (each listing carries
+`house`); `GetOwnPostedCount`, `GetOwnMinPrice` and `GetAge` read the house
+open now. The drawer's other characters list only this house's; the
+tracker lists live rows plus your own from the other house. Saved listings
+keep the item's `link`, so Still listed and the tracker name an item the
+client has not sent yet; the tracker also redraws on
+`GET_ITEM_INFO_RECEIVED`. Neutral readings are not sent to a linked
+account (its message is unchanged). Tested in
+`tools/test_neutralhouse.lua`. Not yet seen in game.
+
 ## Your auctions and undercuts
 
 A player asked (2026-10-14, the owner said build it, from a mockup) for an
@@ -926,6 +949,22 @@ settings. Its face is the Blackthornes sign, a gold B in a ring of thorns on
 a dark round face (the owner picked it over the anvil, 2026-10-28):
 `Media/Frame/MinimapBadge.tga`, drawn by `tools/make_minimap_art.py` (the
 same tool in all five; rerun it, never edit the TGA). Not yet seen in game.
+
+The launcher for addon bars (asked 2026-11-17, the owner said build it;
+`UI/SharedMinimap.lua` FILE_VERSION 4, the same in all five): when another
+addon has already loaded LibDataBroker-1.1, the copy that draws signs up one
+launcher named "Blackthornes" with it, once (`SharedMinimap.Launcher`,
+`hub.launcher`; tried again at each Apply and at PLAYER_LOGIN, since a bar
+may load after us). LibStub is read with `rawget` and the library asked for
+quietly (`silent = true`) inside a pcall; we never ship LibStub or the
+library, so without them nothing changes. Icon `Media/Frame/MinimapBadge`,
+label "Blackthornes AddOns". Clicks (`SharedMinimap.LauncherClick`): left
+opens the shared menu beside the bar's frame (`ToggleMenu(anchor)`,
+`hub.menuAnchor`), right opens the All Addons settings
+(`SharedWindow.OpenAllAddons`, else the first addon's settings), middle runs
+Farmer's `middle` (brings back its panels). The tooltip reuses the shared
+button's lines, no new words. Never name the bar addon that asked. Tested in
+`tools/test_sharedminimap.lua` (part 7). Not yet seen in game.
 
 ## Off, Shift or Always on tooltips
 
