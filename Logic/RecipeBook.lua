@@ -862,6 +862,22 @@ function RecipeBook:LearnWays(record)
     return ways
 end
 
+--- Every way a recipe is learned, for the Learn Next view's "Learn From:"
+--- (LearnNext.Matches reads it as `place.ways`): LearnWays plus a trainer
+--- (or the profession itself) and a vendor, as LearnFrom reads them.
+function RecipeBook:AllWays(record)
+    local ways = self:LearnWays(record)
+    if not record then return ways end
+    if record.trainerCost or record.starter then ways.trainer = true end
+    for _, itemID in ipairs(record.recipeItems or {}) do
+        if #VendorsOf(itemID) > 0 or #SellersOf(itemID) > 0 then
+            ways.vendor = true
+            break
+        end
+    end
+    return ways
+end
+
 --------------------------------------------------------------------------------
 -- What it is worth
 --------------------------------------------------------------------------------
