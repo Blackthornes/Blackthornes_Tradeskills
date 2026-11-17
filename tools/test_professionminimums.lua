@@ -169,12 +169,12 @@ end
 -- Post at Minimum Profit: costs 1000, 5% cut. Leatherworking asks 1000c.
 settings.postAtMinProfit = true
 Profit:SetProfessionMinimum("Leatherworking", "profit", 1000)
-local price, basis, why = Profit:ChoosePostPrice(KIT)
+local price, basis, why = Profit:ChoosePostPrice(KIT, nil, nil, true)
 check("lists at the least that makes Leatherworking's 1000c", price, 2106)
 check("its basis is minprofit", basis, "minprofit")
 check("why names the profession", why ~= nil and why:find("for Leatherworking", 1, true) ~= nil, true)
 
-price, basis, why = Profit:ChoosePostPrice(MEAT)
+price, basis, why = Profit:ChoosePostPrice(MEAT, nil, nil, true)
 check("Cooking with no number uses the usual 500c", price, 1579)
 check("why stays as it is today", why ~= nil and why:find("profit for", 1, true) == nil, true)
 settings.postAtMinProfit = false

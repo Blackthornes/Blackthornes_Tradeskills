@@ -169,7 +169,10 @@ end
 --   there for when it is used and when it is ignored.
 -- @param link optional: the copy to be listed. A random suffix ("of the
 --   Monkey") is priced as that suffix sells, when a recent price is kept.
-function Profit:ChoosePostPrice(itemID, knownCost, link)
+-- @param forSale optional: true only when listing something already in the
+--   bags (Posting:GetPostPrice). Post at Minimum Profit has its say only
+--   then, so the Profit tab and other craft lists keep the market's price.
+function Profit:ChoosePostPrice(itemID, knownCost, link, forSale)
     if not itemID then return nil, nil end
 
     -- A price the player set on the Prices tab (2026-10-06): "use"
@@ -193,7 +196,7 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
             listName = listName or limitsName
         end
     end
-    if not mine and not high then return self:ChooseMarketPostPrice(itemID, knownCost, link) end
+    if not mine and not high then return self:ChooseMarketPostPrice(itemID, knownCost, link, forSale) end
 
     local status
     if ns.Scanner.GetCommodityStatus then
@@ -207,7 +210,7 @@ function Profit:ChoosePostPrice(itemID, knownCost, link)
         return floor, "mine", L["your own price, set on the Prices tab"], status == nil
     end
 
-    local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost, link)
+    local price, basis, why, uncertain = self:ChooseMarketPostPrice(itemID, knownCost, link, forSale)
 
     -- Highest: never list above it, rounded down to a price an item
     -- auction takes. Under the Lowest Price it means nothing and is left out.
@@ -238,9 +241,11 @@ end
 local MATCH_BY_CHOICE = L["your Undercut By is set to 0c, so it matches the cheapest listing"]
 
 --- ChoosePostPrice from the auction house alone, before the player's own
---- price is applied. Same returns.
-function Profit:ChooseMarketPostPrice(itemID, knownCost, link)
+--- price is applied. Same returns. Post at Minimum Profit only when
+--- `forSale` (see ChoosePostPrice).
+function Profit:ChooseMarketPostPrice(itemID, knownCost, link, forSale)
     local price, basis, why, uncertain = self:ChooseRivalPostPrice(itemID, knownCost, link)
+    if not forSale then return price, basis, why, uncertain end
     local least, leastWhy = self:MinimumProfitPrice(itemID, price, basis)
     if least then return least, "minprofit", leastWhy, uncertain end
     return price, basis, why, uncertain
@@ -375,6 +380,9 @@ end
 -- never rename it). Only when a rival set the price (matched, undercut or
 -- overcut) and the craft's cost is known; the Prices tab and list prices
 -- still come first, since ChoosePostPrice applies them after this.
+-- Only for listing what is already in the bags (the owner, 2026-11-17):
+-- the Profit tab, Queue, Level Up and the other craft lists keep the
+-- market's price, so turning it on never makes every craft look worth it.
 Profit.RIVAL_BASES = { match = true, undercut = true, overcut = true }
 
 function Profit:PostAtMinimumProfit()
@@ -1086,7 +1094,9 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- Priced through the same chooser the Sell tab posts at, so the profit
     -- shown here is the profit of the listing that would actually be made.
     -- On an item auction that may be a match rather than an undercut, because
-    -- the server will not take a price with copper in it.
+    -- the server will not take a price with copper in it. No sale flag:
+    -- Post at Minimum Profit is for listing what is in the bags, and here it
+    -- would make every craft look worth making.
     local unitRevenue, basis, _, uncertain
     if not soulbound then
         unitRevenue, basis, _, uncertain = self:ChoosePostPrice(recipe.outputItemID, cost)

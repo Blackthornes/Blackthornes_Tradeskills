@@ -50,8 +50,14 @@ ns.Cost = {
 }
 
 local postPrice = {}
-ns.Posting = {
-  GetPostPrice = function(_, itemID) local p = postPrice[itemID] if p then return p[1], p[2] end end,
+-- The tooltip asks the market's price (no Post at Minimum Profit), so it
+-- asks Profit with no sale flag.
+local askedForSale
+ns.Profit = {
+  ChoosePostPrice = function(_, itemID, _, _, forSale)
+    askedForSale = forSale
+    local p = postPrice[itemID] if p then return p[1], p[2] end
+  end,
 }
 
 ns.db = {}
@@ -105,6 +111,7 @@ check("nothing for an item never crafted", #CC:Lines(SHIRT), 0)
 postPrice[BOLT] = { 2000, "undercut" }
 local lines = CC:Lines(BOLT)
 check("three lines", #lines, 3)
+check("the profit line uses the market's price, not the sale floor", askedForSale, nil)
 check("made for", lines[1][1], "Made for")
 check("last posted", lines[2][1], "Last posted")
 check("profit now", lines[3][1], "Profit now")
