@@ -640,6 +640,84 @@ check("faded out after 30",                            tally.shown, false)
 check("and ready to show fully next time",             tally.alpha, 1)
 MailHaul:Closed()
 
+--------------------------------------------------------------------------------
+print("")
+print("a visit left out of the totals stays saved but stops counting")
+--------------------------------------------------------------------------------
+
+do
+    local realm = ns.Config:GetRealmKey()
+    local kept = ns.db.mailHauls[realm]
+    local keptLast = MailHaul.last
+    MailHaul.last = nil
+    local small = { t = now - 3000, who = "A", total = 1000, best = { name = "Linen Bag", amount = 400 } }
+    local alt = { t = now - 2000, who = "A", total = 50000, recordHaul = true, previousBest = 1000,
+        best = { name = "Gold", amount = 30000 }, sales = {}, items = {}, gold = { other = 50000 },
+        salesCount = 0, itemCount = 0, letters = 3 }
+    local recent = { t = now - 60, who = "A", total = 2000, best = { name = "Linen Bag", amount = 900 } }
+    ns.db.mailHauls[realm] = { small, alt, recent }
+
+    local bestHaul, bestSale = MailHaul:Records()
+    check("before: the alt's gold is the best haul",        bestHaul, 50000)
+    check("before: and the best sale",                       bestSale, 30000)
+
+    -- The Sales tab hands over a view of the record, not the record.
+    local row = setmetatable({ haul = true, record = alt }, { __index = alt })
+    check("leaving it out changes it",                       MailHaul:SetLeftOut(row, true), true)
+    check("the mark is on the saved visit",                  alt.leftOut, true)
+    check("not written on the row's view",                   rawget(row, "leftOut"), nil)
+    check("the row reads it through",                        MailHaul.IsLeftOut(row), true)
+    check("still saved, nothing deleted",                    #MailHaul:GetHistory(), 3)
+    check("one left out",                                    MailHaul:LeftOutCount(), 1)
+    bestHaul, bestSale = MailHaul:Records()
+    check("best haul skips it",                              bestHaul, 2000)
+    check("best sale skips it",                              bestSale, 900)
+    check("today and the week skip it",                      MailHaul:TotalSince(now - 7200), 3000)
+    check("leaving it out twice changes nothing",            MailHaul:SetLeftOut(alt, true), false)
+
+    -- Its report, opened again: the plain ribbon, Count It Again, no fanfare.
+    played = {}
+    MailReport:Show(row, { replay = true })
+    Settle()
+    local frame = MailReport.frame
+    check("the plain ribbon shows",                          frame.leftOutRibbon.shown, true)
+    check("with its words",                                  frame.leftOutRibbon.text.text,
+        "Left out of your totals. It stays saved here.")
+    check("not the best haul ribbon",                        frame.ribbon.shown, false)
+    check("Count It Again sits beside Close",                frame.countAgain.shown, true)
+    local fanfare = false
+    for _, sound in ipairs(played) do if sound == MailReport.SOUNDS.record then fanfare = true end end
+    check("no record fanfare",                               fanfare, false)
+    check("best haul at the bottom skips it",               (frame.stats.text or ""):find(Util.FormatMoney(2000, { short = true }), 1, true) ~= nil, true)
+
+    played = {}
+    frame.countAgain.disabled = false
+    frame.countAgain.scripts.OnClick(frame.countAgain, "LeftButton")
+    check("Count It Again puts it back",                     alt.leftOut, nil)
+    check("the plain ribbon goes",                           frame.leftOutRibbon.shown, false)
+    check("its record ribbon is back",                       frame.ribbon.shown, true)
+    check("the button goes",                                 frame.countAgain.shown, false)
+    check("redrawn quietly, no sound",                       #played, 0)
+    check("the total shows in full at once",                 frame.amount.text, Util.FormatMoney(50000))
+    check("counted again in the best haul",                  (MailHaul:Records()), 50000)
+
+    MailReport:Show(setmetatable({ haul = true, record = recent }, { __index = recent }), { replay = true })
+    check("a counted visit opens with no new button",        frame.countAgain.shown, false)
+    MailReport:Show(alt)
+    check("a fresh report never shows it",                   frame.countAgain.shown, false)
+    frame:Hide()
+
+    -- The report of the visit just closed is a copy; it follows its record.
+    MailHaul.last = { t = recent.t, who = recent.who, total = recent.total }
+    MailHaul:SetLeftOut(recent, true)
+    check("the just-closed copy follows",                    MailHaul.last.leftOut, true)
+    MailHaul:SetLeftOut(MailHaul.last, false)
+    check("and counting the copy again counts the record",   recent.leftOut, nil)
+
+    ns.db.mailHauls[realm] = kept
+    MailHaul.last = keptLast
+end
+
 MailHaul:InvalidateMatchers()
 
 if failures > 0 then
