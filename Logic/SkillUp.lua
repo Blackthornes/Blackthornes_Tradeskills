@@ -471,7 +471,9 @@ function SkillUp:IsWorthIt(analysis)
     local profit = analysis.profit or 0
     if profit <= 0 then return false end
 
-    return profit >= (ns.Config:Get("minProfit") or 0)
+    -- The craft's profession's own Minimum Profit, when it has one.
+    local minProfit = ns.Profit and ns.Profit.MinimumsFor and ns.Profit:MinimumsFor(analysis)
+    return profit >= (minProfit or ns.Config:Get("minProfit") or 0)
 end
 
 --- Everything starred right now, best profit first.
