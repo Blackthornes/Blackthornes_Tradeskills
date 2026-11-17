@@ -1095,6 +1095,19 @@ local function Build(outer)
     end, false)
     widgets.altKeeps:SetPoint("TOPLEFT", CONTROL_X, -2)
 
+    -- Off unless ticked (a player asked, the owner said build it
+    -- 2026-11-17): what a known craft makes worth more stays off List all.
+    local craftFirstRow = CreateRow(pages.pricing, 1, L["Craft First:"],
+        L["Keeps items in your bags when a craft you know makes them worth more."])
+
+    widgets.craftFirst = Widgets.CreateCheckbox(craftFirstRow, L["On"], function(checked)
+        Config:Set("sellHoldsCraftFirst", checked)
+        if ns.SisterKeeps then ns.SisterKeeps:Forget() end
+        UI:RefreshActiveTab()
+        if ns.PostPanel and ns.PostPanel.Refresh then ns.PostPanel:Refresh() end
+    end, false)
+    widgets.craftFirst:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- The old "Confirm before each listing" switch (confirmBeforePosting)
     -- never did anything and its saved value is left where it is. The Yes/No
     -- box is "Ask Before Listing" below, a key of its own.
@@ -3012,6 +3025,7 @@ local function Refresh()
     widgets.postAtMinProfit:SetChecked(Config:Get("postAtMinProfit") == true)
     widgets.sisterKeeps:SetChecked(Config:Get("sellHoldsSisterKeeps") == true)
     widgets.altKeeps:SetChecked(Config:Get("sellHoldsAltUpgrades") == true)
+    widgets.craftFirst:SetChecked(Config:Get("sellHoldsCraftFirst") == true)
     widgets.verifyPrice:SetChecked(Config:Get("verifyPriceBeforePosting") ~= false)
     widgets.fastListing:SetChecked(Config:Get("fastListing") ~= false)
     widgets.askBeforeListing:SetChecked(Config:Get("askBeforeListing") == true)

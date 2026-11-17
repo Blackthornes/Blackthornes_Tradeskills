@@ -87,6 +87,7 @@ ns.Config = {
         if k == "allowPostingAtALoss" then return false end
         if k == "sellHoldsSisterKeeps" then return sisterKeepsOn end
         if k == "sellHoldsAltUpgrades" then return altUpgradesOn end
+        if k == "sellHoldsCraftFirst" then return craftFirstOn end
         return nil
     end,
     GetPriceTable = function() return {} end,
@@ -434,6 +435,40 @@ check("a second build asks nothing again", asked, first)
 ns.Inventory.changes = 2
 Posting:GetPostable({ includeAll = true })
 check("a bag change asks again", asked > first, true)
+
+print("\nCraft First: what a known craft makes worth more stays in the bags")
+-- A player's Truesilver Ore went up while Butler said smelt it (2026-11-17).
+local BAR = 6037
+local barWorth
+ns.Butler = { CraftFor = function(_, id)
+    if id == PLAIN and barWorth then return { recipeID = 1, name = "Smelt", itemID = BAR, perItem = barWorth } end
+end }
+Reset()
+craftFirstOn, barWorth = nil, 2000
+check("off unless ticked", ns.SisterKeeps:CraftFirst(), false)
+check("unticked, the ore sells", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
+Reset()
+craftFirstOn = true
+do
+    local lines = Posting:GetPostable({ includeAll = true, showHeld = true })
+    local line = LineFor(lines, PLAIN)
+    check("ticked, the ore is held whole", line and line.held ~= nil, true)
+    check("and says what it is worth as", line and line.held and line.held:find("Worth more as item6037: ", 1, true) == 1, true)
+    check("it keeps its count for its own List button", line and line.count, 7)
+    check("List all never picks it", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN), nil)
+end
+Reset()
+craftFirstOn, sisterKeepsOn = true, false
+check("held without Keep What Other Addons Need", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN), nil)
+Reset()
+craftFirstOn, barWorth = true, 900
+check("worth less made than listed after the cut, it sells",
+    LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
+Reset()
+craftFirstOn = true
+ns.Butler = { CraftFor = Boom }
+check("a craft check that raises changes nothing", LineFor(Posting:GetPostable({ includeAll = true }), PLAIN) ~= nil, true)
+ns.Butler, craftFirstOn = nil, nil
 
 BlackthornesFarmer, BlackthornesEquipment, BlackthornesPets, BlackthornesButler = nil, nil, nil, nil
 sisterKeepsOn = nil

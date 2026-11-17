@@ -1159,6 +1159,22 @@ value (`showAltUpgrades`, off unless ticked, never rename it;
 `Upgrades:ShowsAlts`, `SetShowsAlts`, `CreateAltCheckbox`), shown only
 while Equipment is loaded.
 
+## Craft First on the Sell list
+
+A player's Truesilver Ore kept coming up on the Sell tab while Butler said
+smelt it (2026-11-17). The owner said build it, off unless ticked: "I don't
+want to put in more things that prevent people from selling on the AH."
+"Craft First:" on the Pricing page, under Keep Upgrades for Alts, saved as
+`sellHoldsCraftFirst` (never rename it). While ticked,
+`SisterKeeps:CraftReason` asks `Butler:CraftFor` (the same check Butler's
+Craft group uses: recipes the character playing knows, the made item's best
+price less other materials) and holds the whole stack when one made is worth
+more than one listed brings after the cut (`Profit:NetFromListing`). The row
+shows dimmed, "Worth more as <item>: <money> each", and its own List button
+still lists it; List all and List Next skip it. Works without Butler and
+without Keep What Other Addons Need. Tested in `tools/test_sisterkeeps.lua`.
+Not yet seen in game.
+
 ## Keep on this character
 
 A player asked (2026-10-18, the owner said build it, "bigger number"):

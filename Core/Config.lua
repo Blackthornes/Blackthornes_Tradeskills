@@ -184,6 +184,12 @@ local DEFAULTS = {
         -- by default). Never rename it.
         sellHoldsAltUpgrades = false,
 
+        -- "Craft First" (2026-11-17, off unless ticked): an item a craft
+        -- the character knows makes worth more stays off List all, dimmed
+        -- with why; its own List button still lists it
+        -- (SisterKeeps:CraftReason). Never rename it.
+        sellHoldsCraftFirst = false,
+
         -- "Show Equipment Upgrades" on Profit, Level Up and the Queue: a
         -- craft that is an upgrade for another character says so after its
         -- name (Upgrades:AltText). Off unless ticked (the owner,

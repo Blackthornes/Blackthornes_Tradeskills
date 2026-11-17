@@ -55,6 +55,13 @@ function SisterKeeps:IsOn()
     return ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsSisterKeeps") == true or false
 end
 
+--- "Craft First" (a player asked, the owner said build it 2026-11-17,
+--- off unless ticked): an item a known craft makes worth more stays off
+--- List all. Never rename `sellHoldsCraftFirst`.
+function SisterKeeps:CraftFirst()
+    return ns.Config and ns.Config.Get and ns.Config:Get("sellHoldsCraftFirst") == true or false
+end
+
 --- Gear another character could wear is held back only while "Keep
 --- Upgrades for Alts" is ticked (off unless ticked, the owner 2026-10-16).
 function SisterKeeps:HoldsAltUpgrades()
@@ -266,6 +273,7 @@ function SisterKeeps:Hold(itemID, held, count, price)
 
     local link = held and held.link
     local key = itemID .. ":" .. count .. ":" .. tostring(price or "") .. ":" .. tostring(self:IsOn())
+        .. ":" .. tostring(self:CraftFirst())
     if type(link) == "string" then
         local ok, itemString = pcall(function()
             local found = string.match(link, "item[%-?%d:]+")
@@ -282,9 +290,39 @@ function SisterKeeps:Hold(itemID, held, count, price)
     return answer[1], answer[2]
 end
 
+--- Why to craft it first, or nil: a recipe the character playing knows
+--- (Butler:CraftFor, the check Butler's Craft group uses) makes one of it
+--- worth more than one listed at `price` brings after the cut. Only while
+--- "Craft First" is ticked.
+function SisterKeeps:CraftReason(itemID, count, price)
+    if not self:CraftFirst() then return nil end
+    price = tonumber(price)
+    local butler = ns.Butler
+    if not (price and price > 0 and butler and butler.CraftFor) then return nil end
+    local ok, craft = pcall(butler.CraftFor, butler, itemID, count)
+    if not ok or type(craft) ~= "table" then return nil end
+    local perItem = Number(craft.perItem)
+    if not perItem or perItem <= 0 then return nil end
+    local net = price * 0.95
+    if ns.Profit and ns.Profit.NetFromListing then
+        local fine, value = pcall(ns.Profit.NetFromListing, ns.Profit, itemID, price)
+        if fine and type(value) == "number" then net = value end
+    end
+    if perItem <= net then return nil end
+    local name = craft.itemID and ns.Util and ns.Util.GetItemName
+        and ns.Util.GetItemName(craft.itemID, craft.name) or craft.name
+    if type(name) ~= "string" or name == "" then return nil end
+    local copper = math.floor(perItem + 0.5)
+    local money = ns.Util and ns.Util.FormatMoney and ns.Util.FormatMoney(copper) or tostring(copper)
+    return L.Format("Worth more as %s: %s each", name, money)
+end
+
 function SisterKeeps:Work(itemID, held, count, price)
     local butler, butlerWhy = ButlerHold(itemID, count)
     if butler and butler >= count then return count, butlerWhy end
+
+    local craftWhy = self:CraftReason(itemID, count, price)
+    if craftWhy then return count, craftWhy end
     if not self:IsOn() then
         if butler and butler > 0 then return butler, butlerWhy end
         return 0, nil
