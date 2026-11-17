@@ -1070,6 +1070,11 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 entry.label = Theme.CreateLabel(entry, "small", "text")
                 entry.label:SetPoint("LEFT", 8, 0)
                 entry.label:SetPoint("RIGHT", -8, 0)
+                -- A dim number or word on the right (`option.note`), such as
+                -- how many rows the choice keeps.
+                entry.note = Theme.CreateLabel(entry, "small", "muted", "RIGHT")
+                entry.note:SetPoint("RIGHT", -8, 0)
+                entry.note:Hide()
 
                 -- The option picked now wears the gold edge.
                 entry.mark = Theme.AccentStripe(entry, 2)
@@ -1100,7 +1105,12 @@ function Widgets.CreateDropdown(parent, options, onSelect, opts)
                 local y = -4 - slot * MENU_ROW_HEIGHT
                 entry:SetPoint("TOPLEFT", 1, y)
                 entry:SetPoint("TOPRIGHT", scrolls and -7 or -1, y)
-                Theme.FitText(entry.label, { option.text, ShortOptionText(option.text) }, room)
+                local note = option.note ~= nil and tostring(option.note) or nil
+                entry.note:SetText(note or "")
+                entry.note:SetShown(note ~= nil)
+                local noteRoom = note and (entry.note:GetStringWidth() or 0) + 8 or 0
+                Theme.FitText(entry.label, { option.text, ShortOptionText(option.text) },
+                    room and (room - noteRoom) or nil)
                 -- A ticked option in a multiple choice menu is lit and an
                 -- unticked one dimmed, so it reads as on and off.
                 local color = IsOn(option) and "accent" or (option.header or multi) and "dim" or "text"

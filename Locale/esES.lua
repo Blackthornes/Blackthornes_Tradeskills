@@ -3728,3 +3728,15 @@ L["Every crate in your bags is ready to fill."] = "Cada caja de tus bolsas está
 L["Only My Crafts:"] = "Solo mis fabricaciones:"
 L["Shows only the crafts this character makes. Crafts for your other characters stay in the queue and show when you log in on them."] = "Muestra solo las fabricaciones que hace este personaje. Las de tus otros personajes siguen en la cola y aparecen cuando entras con ellos."
 L["Nothing queued for this character.\nCrafts for your other characters show when you log in on them."] = "Nada en cola para este personaje.\nLas fabricaciones de tus otros personajes aparecen cuando entras con ellos."
+
+-- Learn next's Have Skill and Learn From (2026-11-17)
+L["Have Skill"] = "Habilidad suficiente"
+L["Only shows recipes your skill is high enough to learn now."] = "Solo muestra las recetas que tu habilidad ya te deja aprender."
+L["Learn From:"] = "Aprender de:"
+L["Pick where the recipes are learned. Trainers and vendors can show you the way."] = "Elige dónde se aprenden las recetas. Para instructores y vendedores te podemos mostrar el camino."
+L["Trainer or Vendor"] = "Instructor o vendedor"
+L["Quest or Other"] = "Misión u otro"
+L["Any Way"] = "Cualquiera"
+L["Learn: %s at the auction house"] = "Aprender: %s en la casa de subastas"
+L["Shift-click to search the auction house."] = "Mayús-clic para buscar en la casa de subastas."
+L["No recipes to learn here with these filters."] = "No hay recetas para aprender aquí con estos filtros."

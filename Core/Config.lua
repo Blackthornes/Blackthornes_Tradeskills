@@ -433,6 +433,12 @@ local DEFAULTS = {
         -- Level Up's "Can afford" (2026-10-22): only crafts whose missing
         -- materials the gold carried can buy. Never rename it.
         levelUpCanAfford = false,
+        -- Learn next's "Have Skill" and "Learn From:" on the LEARN NEXT line
+        -- (2026-11-17): leave out recipes still out of reach, and which way
+        -- they are learned ("trainerVendor", "trainer", "vendor", "drop",
+        -- "quest" or "any"). Never rename either.
+        levelUpHaveSkill = false,
+        levelUpLearnFrom = "trainerVendor",
         -- Road to 300's "Pick By:" (2026-10-27): "lowest" ranks recipes by
         -- what their materials cost, "real" takes off what a craft sells
         -- back for. Never rename it.

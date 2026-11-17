@@ -512,6 +512,56 @@ ns.LEARN_SPOTS = fake
 UnitFactionGroup = function() return "Alliance" end
 zoneHere = "Elwynn Forest"
 
+print("\nHave Skill and Learn From (2026-11-17)")
+do
+  local book, items = ns.RECIPE_BOOK.RECIPES, ns.RECIPE_BOOK.ITEMS
+  book[11] = { 165, 100, 111, 1, 1, { LEATHER, 1 }, "Quest Bracer" }
+  items[5002] = { 11, 300 }
+  book[12] = { 165, 100, 112, 1, 1, { LEATHER, 1 }, "Both Bracer", t = 200 }
+  items[5003] = { 12, 50, v = { "Alli", "Wetlands", "A" } }
+  prices[5001] = 240
+  ns.RecipeBook.merged = nil
+
+  local plain = LN:GetRows({ skills = { [165] = 100 } })
+  local all = LN:GetRows({ skills = { [165] = 100 }, anyWay = true })
+  local kept, counts = LN.Filter(all, {})
+  check("the default keeps today's list", Names(kept), Names(plain))
+  check("drop and quest rows are built for the filter", #all, #plain + 2)
+  local vest = Find(all, "Dropped Vest")
+  check("a drop row says Drop", (LN.WhereText(vest and vest.place)), "Drop")
+  check("a drop row shows its auction price", vest and vest.price, 240)
+  check("a drop row has no Show the Way", LN.CanShowWay(vest), false)
+  local quest = Find(all, "Quest Bracer")
+  check("a quest row says Quest or other", (LN.WhereText(quest and quest.place)), "Quest or other")
+  check("a quest row with no price shows none", quest and quest.price, nil)
+  check("a trainer row still shows the way", LN.CanShowWay(Find(all, "Trained Boots")), true)
+
+  check("Drop keeps only drops", Names((LN.Filter(all, { learnFrom = "drop" }))), "Dropped Vest")
+  check("Quest or Other keeps only quests", Names((LN.Filter(all, { learnFrom = "quest" }))), "Quest Bracer")
+  local both = Find(all, "Both Bracer")
+  check("taught by a trainer and a vendor: under Trainer",
+    Find((LN.Filter(all, { learnFrom = "trainer" })), "Both Bracer") == both, true)
+  check("and under Vendor", Find((LN.Filter(all, { learnFrom = "vendor" })), "Both Bracer") == both, true)
+  check("Any Way keeps every row", #(LN.Filter(all, { learnFrom = "any" })), #all)
+  check("an unknown choice falls back to the default", Names((LN.Filter(all, { learnFrom = "nope" }))), Names(plain))
+  check("count for Any Way", counts.any, #all)
+  check("count for Drop", counts.drop, 1)
+  check("count for Trainer or Vendor", counts.trainerVendor, #plain)
+
+  local locked = 0
+  for _, row in ipairs(plain) do if row.locked then locked = locked + 1 end end
+  check("the list has a row out of reach to hide", locked > 0, true)
+  local reach, reachCounts = LN.Filter(all, { haveSkill = true })
+  local anyLocked = false
+  for _, row in ipairs(reach) do if row.locked then anyLocked = true end end
+  check("Have Skill leaves out rows out of reach", anyLocked, false)
+  check("and only those", #reach, #plain - locked)
+  check("counts follow Have Skill", reachCounts.trainerVendor, #plain - locked)
+
+  book[11], items[5002], book[12], items[5003], prices[5001] = nil, nil, nil, nil, nil
+  ns.RecipeBook.merged = nil
+end
+
 for _, key in ipairs(GLOBALS) do _G[key] = saved[key] end
 
 print("")
