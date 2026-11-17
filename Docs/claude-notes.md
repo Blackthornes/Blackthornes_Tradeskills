@@ -2708,6 +2708,20 @@ New words: "Next: %s x%d", "Craft Next", "Open Queue", "Opens your whole
 craft queue." Probe lines join the enchant probe. Tested in
 `tools/test_craftstrip.lua`.
 
+## The folded craft pane waits for a queue (2026-11-17)
+
+A player's report: folded to its title, the craft pane beside the
+profession window still sat over other addons' windows. Now, folded by the
+player (`craftPaneCollapsed`, not the fold under a sheet) with nothing
+queued, `CraftPanel:Attach` leaves the pane hidden and sets
+`waitingForQueue`; `OnQueueChanged` brings it back (folded) at the first
+craft queued while the profession window is open, and hides it again when
+the queue empties. `/bts pane` shows it anyway (`shownByHand`, until the
+profession window closes). Open (not folded), the pane shows as always,
+since it is where crafts are queued. The one window's Crafting tab and the
+craft strip are unchanged. No new setting or words. Tested in
+`tools/test_craftpane.lua`. Not yet seen in game.
+
 ## Crate Shopping List (the Buy tab at the auction house)
 
 The owner asked and said build it (2026-11-16, from a mockup; design notes
