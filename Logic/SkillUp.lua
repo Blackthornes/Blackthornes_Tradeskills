@@ -481,7 +481,10 @@ function SkillUp:GetRecommended()
     if not ns.Profit then return starred end
 
     for recipeID in pairs(ns.Recipes:GetAll()) do
-        local analysis = ns.Profit:Analyse(recipeID)
+        -- Ranked the way the Profit tab ranks, so the stars listed here are
+        -- the stars it draws (a soulbound craft can pay by vendor or DE).
+        local method = ns.Profit.GetMethod and ns.Profit:GetMethod() or nil
+        local analysis = ns.Profit:Analyse(recipeID, nil, method)
 
         if analysis and analysis.recommended then
             starred[#starred + 1] = analysis

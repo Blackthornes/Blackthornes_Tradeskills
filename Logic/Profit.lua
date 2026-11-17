@@ -917,16 +917,22 @@ function Profit:Analyse(recipeID, characterKey, method)
     end
 
     -- Binds on pickup: the thing made is soulbound the moment it exists, so
-    -- there is no sale to cost and no profit to rank on. Out of the list the
-    -- same way an unpriced craft is, which keeps it off the skill-up star too,
-    -- while "Show unpriced" and the craft pane still show it with its skill-up
-    -- colour for anyone levelling on it. Unknown (not cached yet) is kept: the
-    -- tab redraws when the item arrives, and a craft that may well sell should
-    -- not vanish on a guess.
-    if Util.IsBoundOnPickup and Util.IsBoundOnPickup(recipe.outputItemID) then
+    -- it can never be listed. A vendor still buys it and it can still be
+    -- disenchanted (a player's report, 2026-11-17), so only the auction
+    -- house is left out: ranked by AH, or as the sale the Sell tab would
+    -- make (method nil), it stays out of the list and off the skill-up star,
+    -- while "Show unpriced" and the craft pane still show it with its
+    -- skill-up colour. Under Best, Vendor, DE and Vendor and DE it is costed
+    -- like any craft, from the ways left. Unknown (not cached yet) is kept:
+    -- the tab redraws when the item arrives, and a craft that may well sell
+    -- should not vanish on a guess.
+    local soulbound = Util.IsBoundOnPickup and Util.IsBoundOnPickup(recipe.outputItemID) == true
+    if soulbound then
         analysis.soulbound = true
-        analysis.reason = SOULBOUND_REASON
-        return analysis
+        if method == nil or method == "auction" then
+            analysis.reason = SOULBOUND_REASON
+            return analysis
+        end
     end
 
     -- Revenue is what you will actually be paid, which means undercutting the
@@ -936,7 +942,7 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- "rival" excludes your own auctions. If the only listing is yours there is
     -- nobody to undercut, so we hold at market rather than walking our own
     -- price down a copper at a time.
-    local competitor = ns.Prices:GetValue(recipe.outputItemID, "rival")
+    local competitor = not soulbound and ns.Prices:GetValue(recipe.outputItemID, "rival") or nil
 
     -- Shown for context so the full picture is visible: the overall cheapest
     -- listing and your own, alongside the rival price actually being undercut.
@@ -948,8 +954,10 @@ function Profit:Analyse(recipeID, characterKey, method)
     -- shown here is the profit of the listing that would actually be made.
     -- On an item auction that may be a match rather than an undercut, because
     -- the server will not take a price with copper in it.
-    local unitRevenue, basis, _, uncertain =
-        self:ChoosePostPrice(recipe.outputItemID, cost)
+    local unitRevenue, basis, _, uncertain
+    if not soulbound then
+        unitRevenue, basis, _, uncertain = self:ChoosePostPrice(recipe.outputItemID, cost)
+    end
 
     -- The listing on its own, kept for analysis.ways before a vendor that
     -- pays more takes its place below.
@@ -992,7 +1000,7 @@ function Profit:Analyse(recipeID, characterKey, method)
         analysis.matchedRival = basis == "match"
     else
         analysis.undercut = false
-        analysis.youHoldLowest = ns.Prices:HoldsLowest(recipe.outputItemID)
+        analysis.youHoldLowest = not soulbound and ns.Prices:HoldsLowest(recipe.outputItemID) or nil
     end
 
     -- What you already hold, listed or otherwise. Crafting past this gets
@@ -1038,7 +1046,7 @@ function Profit:Analyse(recipeID, characterKey, method)
         -- A craft can land here with priced materials when the estimate is
         -- switched off, and with unpriced ones either way; the reason below
         -- covers both, since the output is what has no price in each.
-        analysis.reason = L["output has no price data"]
+        analysis.reason = soulbound and SOULBOUND_REASON or L["output has no price data"]
         return analysis
     end
 
