@@ -478,6 +478,10 @@ local DEFAULTS = {
         -- request, 2026-11-05). Account wide; never rename either.
         openAtAuction = true,
         openAtProfessions = true,
+        -- "Small Craft Queue:" (a player's request, 2026-11-17): ticked, the
+        -- profession window opens the small craft pane beside it, not the
+        -- one window. Off unless ticked. Account wide; never rename it.
+        craftPaneBeside = false,
 
         -- A chime when a run of crafts (two or more) finishes.
         craftDoneSound = true,

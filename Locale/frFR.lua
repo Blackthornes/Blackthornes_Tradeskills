@@ -3685,6 +3685,8 @@ L["Mixed"] = "Mélangé"
 L["IN THE PROFESSION WINDOW"] = "DANS LA FENÊTRE DE MÉTIER"
 L["Open By Itself At:"] = "S'ouvre tout seul à :"
 L["Opens Tradeskills by itself at each place you tick."] = "Ouvre Tradeskills tout seul à chaque endroit coché."
+L["Small Craft Queue:"] = "Petite file de fabrication :"
+L["Shows the small craft queue beside your profession window, even when the One Window is on."] = "Affiche la petite file de fabrication à côté de ta fenêtre de métier, même quand Fenêtre unique est activée."
 L["Vendors"] = "Marchands"
 L["Professions"] = "Métiers"
 -- The Queue page's groups and lists box (2026-11-16).

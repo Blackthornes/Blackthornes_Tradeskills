@@ -911,6 +911,13 @@ at most `UI.GOALS_MAX_EXTRA` (200) and scroll past it, and
 `BaseSize`. FILE_VERSION 10. Tested in `tools/test_sharedwindow.lua`
 (and Butler's `tools/test_onewindow.lua`).
 
+Small Craft Queue (a player's request, 2026-11-17): "Small Craft Queue:" on
+the Windows page (`craftPaneBeside`, off unless ticked, never rename it).
+Ticked, `TSTabs:AtDock("profession")` leaves the one window shut and the
+small craft pane opens beside the profession window; the one window stays
+on everywhere else. Opened by hand there, the pane moves into it as always.
+Tested in `tools/test_onewindow.lua` (part 8).
+
 Butler at the vendor (a player's report in #bug-reports, the owner pressed
 Start Fix, 2026-11-17; `UI/SharedWindow.lua` FILE_VERSION 13, in all five):
 `PLACES.vendor.prefer = "butler"`. Up on another addon as a vendor opens,
@@ -924,6 +931,7 @@ Butler's own open (`UI:AtVendor`) then finds itself shown and does nothing,
 in either order. Without Butler nothing changes. Tested in
 `tools/test_sharedwindow.lua` (all five) and Butler's `tools/test_onewindow.lua`.
 Not yet seen in game.
+
 ## The shared minimap button
 
 A player asked, the owner said build it from a mockup (2026-10-28), in all

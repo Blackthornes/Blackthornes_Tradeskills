@@ -1737,6 +1737,15 @@ local function Build(outer)
     end, { width = 150, multi = true, placeholder = L["None"] })
     widgets.openByItself:SetPoint("TOPLEFT", CONTROL_X, 0)
 
+    -- Only the small craft queue at the profession window, the one window
+    -- staying on everywhere else (a player's request, 2026-11-17).
+    local smallRow = CreateRow(pages.windows, 1, L["Small Craft Queue:"],
+        L["Shows the small craft queue beside your profession window, even when the One Window is on."])
+    widgets.craftPaneBeside = Widgets.CreateCheckbox(smallRow, L["On"], function(checked)
+        Config:Set("craftPaneBeside", checked and true or false)
+    end, false)
+    widgets.craftPaneBeside:SetPoint("TOPLEFT", CONTROL_X, -2)
+
     -- A window dragged off the screen comes back (a player's report, 2026-11-11).
     local windowPlacesRow = CreateRow(pages.all, 1, L["Window Spots:"],
         L["Puts every Blackthornes window back where it started. Your settings and data stay the same."])
@@ -2828,6 +2837,7 @@ local function Refresh()
         openWithShops = Config:Get("openWithShops") == true,
         openAtProfessions = Config:Get("openAtProfessions") ~= false,
     })
+    widgets.craftPaneBeside:SetChecked(Config:Get("craftPaneBeside") == true)
     widgets.effects:SetValue(ns.Motion and ns.Motion.Level() or "full")
     local textSize = Config:Get("textSize")
     widgets.textSize:SetValue(Theme.TEXT_STEPS[textSize] and textSize or "normal", true)
